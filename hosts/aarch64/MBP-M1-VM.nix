@@ -23,7 +23,7 @@
       MatchUdevType=mouse
       MatchName=Parallels Scrolling Mouse
       MatchDevicePath=/dev/input/event1
-      AttrScrollDistance=8
+      AttrScrollDistance=100
     '';
   };
   # Networking
