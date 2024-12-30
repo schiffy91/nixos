@@ -1,0 +1,44 @@
+#!/bin/sh
+set -e
+
+logger -t tpmd "Starting TPM2 enrollment check..."
+
+# Check TPM2 device
+if [ ! -e "/dev/tpmrm0" ]; then
+    logger -t tpmd "No TPM2 device found"
+    exit 0
+fi
+
+# Check TPM version
+if [ ! -f "/sys/class/tpm/tpm0/device/tpm_version_major" ]; then
+    logger -t tpmd "TPM device information not available"
+    exit 0
+fi
+
+tpm2_present=$(cat /sys/class/tpm/tpm0/device/tpm_version_major)
+if [ "$tpm2_present" -ne 2 ]; then
+    logger -t tpmd "TPM2 not present (version: $tpm2_present)"
+    exit 0
+fi
+
+# Check LUKS partition
+if ! cryptsetup isLuks /dev/disk/by-label/crypted; then
+    logger -t tpmd "Partition is not LUKS formatted"
+    exit 0
+fi
+
+# Check existing enrollment
+if systemd-cryptenroll --tpm2-device=list | grep -q /dev/disk/by-label/crypted; then
+    logger -t tpmd "Device already enrolled with TPM2"
+    exit 0
+fi
+
+# Enroll
+logger -t tpmd "Enrolling LUKS partition with TPM2..."
+if ! systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+7 /dev/disk/by-label/crypted; then
+    logger -t tpmd "TPM2 enrollment failed"
+    exit 1
+fi
+
+logger -t tpmd "TPM2 enrollment successful"
+exit 0
