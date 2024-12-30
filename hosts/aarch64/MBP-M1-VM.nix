@@ -15,6 +15,17 @@
     libinput
     evtest
   ];
+  # Logitech Mouse requires 2-3 clicks to scroll. Argh!
+  services.xserver.libinput = {
+    enable = true;
+    additionalOptions = ''
+      [Parallels Scrolling Mouse]
+      MatchUdevType=mouse
+      MatchName=Parallels Scrolling Mouse
+      MatchDevicePath=/dev/input/event1
+      AttrScrollDistance=8
+    '';
+  };
   # Networking
   networking.useDHCP = lib.mkDefault true;
 }
