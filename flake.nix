@@ -19,7 +19,7 @@
         (lib.nixosSystem {
           specialArgs = { inherit self inputs; };
           system = "${getArchitecture hostFile}-linux";
-          modules = modules ++ [ { networking.hostName = lib.mkForce (getHostName hostFile); } hostFile ./variables.nix ];
+          modules = [ ./variables.nix ] ++ modules ++ [ hostFile { networking.hostName = lib.mkForce (getHostName hostFile); } ];
         });
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
