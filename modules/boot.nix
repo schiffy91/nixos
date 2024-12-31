@@ -1,6 +1,6 @@
 { pkgs, lib, inputs, config, ... }:
 {
-  imports = inputs.lanzaboote.nixosModules.lanzaboote;
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
   boot = {
     lanzaboote = lib.mkDefault {
       enable = lib.mkDefault false; # overriden by secure-boot target in ../flake.nix, which can be chosen by running bin/nixos-secure-boot --enable
