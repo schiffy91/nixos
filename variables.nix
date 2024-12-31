@@ -3,6 +3,7 @@
   options = {
     variables = lib.mkOption {
       description = "Variables to be overriden";
+      default = { };
       type = lib.types.submodule {
         secrets = lib.mkOption {
           description = "Variables related to secrets storage";
@@ -11,6 +12,7 @@
         };
         user = lib.mkOption {
           description = "Variables related to the user configuration";
+          default = { };
           type = lib.types.submodule {
             options = {
               admin = lib.mkOption {
@@ -28,6 +30,7 @@
         };
         disk = lib.mkOption {
           description = "Variables related to disk device path and swap size.";
+          default = { };
           type = lib.types.submodule {
             options = {
               device = lib.mkOption {
