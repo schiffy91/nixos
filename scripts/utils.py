@@ -222,7 +222,7 @@ class Utils:
     @classmethod
     def get_config_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start=f'{key}="', end='";', trim_whitespace=True)
     @classmethod
-    def get_default_option_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start='default="', end='";', start_from=key, trim_whitespace=True)
+    def get_default_option_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start='"', end='";', start_from=key, trim_whitespace=True)
     @classmethod
     def get_default_option_value_from_variables(cls, key): return cls.get_default_option_value_from_file(Config.get_variables_path(), key=key)
     @classmethod
