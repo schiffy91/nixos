@@ -77,7 +77,6 @@ class Shell:
         self.mkdir(self.dirname(path))
         return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
     def file_read(self, path): return Utils.stdout(self.run(f"cat '{path}'"))
-    def file_read_string_between(self, path, start, end, start_from=None, trim_whitespace=False): return Utils.get_string_between(self.file_read(path), start, end, start_from=start_from, trim_whitespace=trim_whitespace)
     # Git
     def git_add_safe_directory(self, path):
         path = self.readlink(path)
@@ -164,9 +163,9 @@ class Config:
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
     @classmethod
-    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_default_option_value_from_variables("hashedPasswordFile")
+    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("hashedPasswordFile")
     @classmethod
-    def get_secrets_path(cls): return Utils.get_default_option_value_from_variables("secrets")
+    def get_secrets_path(cls): return Utils.get_value_from_variables("secrets")
     @classmethod
     def get_variables_path(cls): return f"{Config.get_nixos_path()}/variables.nix"
     @classmethod
@@ -220,11 +219,11 @@ class Utils:
     @classmethod
     def abort(cls): return sys.exit(1)
     @classmethod
-    def get_config_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start=f'{key}="', end='";', trim_whitespace=True)
+    def get_value_from_path(cls, path, key, start='="', end='";', trim_whitespace=True):
+        file_contents = cls.sh.file_read(path)
+        return Utils.get_string_between(file_contents, start=start, end=end, start_from=key, trim_whitespace=trim_whitespace)
     @classmethod
-    def get_default_option_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start='"', end='";', start_from=key, trim_whitespace=True)
-    @classmethod
-    def get_default_option_value_from_variables(cls, key): return cls.get_default_option_value_from_file(Config.get_variables_path(), start_from=key)
+    def get_value_from_variables(cls, key): return cls.get_value_from_path(Config.get_variables_path(), key)
     @classmethod
     def get_string_between(cls, text, start, end, start_from=None, trim_whitespace=False):
         def trimmer(x): return x.replace(" ", "") if trim_whitespace else x

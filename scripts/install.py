@@ -37,7 +37,7 @@ class Installer:
         sh.rm(f"{remote_tmp_path}")
     @classmethod
     def run_disko(cls, mode):
-        version = cls.sh.file_read_string_between(Config.get_flake_path(), start="github:nix-community/disko/", end='";')
+        version = Utils.get_value_from_path(Config.get_flake_path(), key="github:nix-community/disko", start="/", end='";')
         command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{version} --verbose -- " \
                 f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-mount --mode {mode}"
         return cls.sh.run(command, capture_output=False)
@@ -59,11 +59,11 @@ class Installer:
     @classmethod
     def get_nixos_path(cls, remote=False): return f"{cls.get_remote_root_path()}{cls.get_user_path()}/nixos" if remote else f"{cls.get_user_path()}/nixos"
     @classmethod
-    def get_disk_path(cls): return Utils.get_config_value_from_file(Config.get_host_path(), key="variables.disk.device")
+    def get_disk_path(cls): return Utils.get_value_from_path(Config.get_host_path(), "variables.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Utils.get_default_option_value_from_variables("tmpPasswordFile")
+    def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
     @classmethod
-    def get_username(cls): return Utils.get_default_option_value_from_variables("admin")
+    def get_username(cls): return Utils.get_value_from_variables("admin")
     @classmethod
     def disk_mount(cls): return cls.run_disko("mount")
     @classmethod
