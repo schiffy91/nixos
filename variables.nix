@@ -1,19 +1,16 @@
 {lib, ...}:
-let
-  mkString = string: lib.mkOption { type = lib.types.str; default = string; };
-  mkObject = object: lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = object; };
-in {
-  options.variables = mkObject {
-    secrets = mkString "/etc/nixos/secrets";
-    user = mkObject {
-      admin = mkString "alexanderschiffhauer";
-      hashedPasswordFile = mkString "hashed_password.txt";
+{
+  variables = {
+    secrets = "/etc/nixos/secrets";
+    user = {
+      admin = "alexanderschiffhauer";
+      hashedPasswordFile = "hashed_password.txt";
     };
-    disk = mkObject {
-      device = mkString "OVERRIDE_THIS_VALUE_IN_HOST";
-      swapSize = mkString "OVERRIDE_THIS_VALUE_IN_HOST";
-      tmpPasswordFile = mkString "/tmp/plain_text_password.txt";
-      pkiBundle = mkString "/var/lib/sbctl";
+    disk = {
+      device = "OVERRIDE_THIS_VALUE_IN_HOST";
+      swapSize = "OVERRIDE_THIS_VALUE_IN_HOST";
+      tmpPasswordFile = "/tmp/plain_text_password.txt";
+      pkiBundle = "/var/lib/sbctl";
     };
   };
 }
