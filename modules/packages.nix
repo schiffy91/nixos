@@ -13,7 +13,7 @@
       _1password-gui
       _1password-cli
       alacritty
-      inputs.ghostty.packages.${inputs.nixpkgs.system}.default
+      inputs.ghostty.packages.${pkgs.system}.default
     ];
     programs._1password.enable = true;
     programs._1password-gui = {
