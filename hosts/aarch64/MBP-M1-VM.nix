@@ -18,5 +18,5 @@
   # https://github.com/NixOS/nixpkgs/issues/364391
   boot.kernelPackages = lib.mkIf config.hardware.parallels.enable (lib.mkForce pkgs.linuxPackages_6_6);
   # Networking
-  networking.useDHCP = true;
+  networking.useDHCP = lib.mkForce true;
 }
