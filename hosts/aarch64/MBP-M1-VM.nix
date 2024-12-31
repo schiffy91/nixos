@@ -1,7 +1,7 @@
 { pkgs, lib, ... }:
 {
   # Disk information
-  diskOverrides.device = "/dev/sda"; # This line must exist, but feel free to change the location
+  diskOverrides.device = "/dev/nvme0n1"; # This line must exist, but feel free to change the location
   diskOverrides.swapSize = "1G"; # Small swap for a VM
   # VM
   # TODO Update to a newer kernel after Parallels updates their drivers
