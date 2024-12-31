@@ -26,6 +26,7 @@
         # "snd_hda_intel"
         # "snd_hda_codec"
       ];
+      framebufferSupport = true;  # Correct option
     };
     kernelModules = [
       "virtio_balloon"
@@ -63,15 +64,12 @@
   hardware.parallels.enable = false;
 
   ##### Services #####
-  # Enable qemu guest agent
+  # Enable QEMU guest agent and Spice vdagent service
   services = {
     qemuGuest.enable = true;
     spice-vdagentd.enable = true; # For clipboard sharing with Spice
     # Other services can be added here
   };
-
-  # Enable spice-vdagent program
-  programs.spice-vdagent.enable = true;
 
   ##### Networking #####
   networking.useDHCP = lib.mkForce true;
