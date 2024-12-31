@@ -16,7 +16,7 @@
   hardware.parallels.enable = lib.mkDefault false;
   # TODO Update to a newer kernel after Parallels updates their drivers
   # https://github.com/NixOS/nixpkgs/issues/364391
-  boot.kernelPackages = if config.hardware.parallels.enable then pkgs.linuxPackages_6_6 else pkgs.linuxPackages_latest;
+  boot.kernelPackages = lib.mkIf config.hardware.parallels.enable (lib.mkForce pkgs.linuxPackages_6_6);
   # Networking
   networking.useDHCP = lib.mkDefault true;
 }

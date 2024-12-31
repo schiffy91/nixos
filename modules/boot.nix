@@ -36,6 +36,6 @@
       "systemd.show_status=auto"    # Hide systemd boot status unless there's an error
       "rd.systemd.show_status=auto" # Same as above, but for the initrd phase
     ];
-    kernelPackages = pkgs.linuxPackages_latest;
+    kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
   };
 }
