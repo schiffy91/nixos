@@ -1,8 +1,8 @@
 { config, pkgs, ... }:
 {  
   # Disk information
-  diskOverrides.device = "/dev/nvme0n1"; # This line must exist, but feel free to change the location
-  diskOverrides.swapSize = "65G";
+  config.variables.disk.device = "/dev/nvme0n1"; # This line must exist, but feel free to change the location
+  config.variables.disk.swapSize = "65G";
 
   # Nvidia drivers
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
