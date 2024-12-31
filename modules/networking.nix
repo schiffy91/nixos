@@ -1,9 +1,9 @@
 { config, lib, ... }: {
   networking = lib.mkDefault { 
-    networkmanager.enable = lib.mkDefault true;
+    networkmanager.enable = true;
     firewall = lib.mkDefault { 
-      enable = lib.mkDefault true;
-      allowedTCPPorts = lib.mkDefault [ 22 80 ]; # SSH and HTTP
+      enable = true;
+      allowedTCPPorts = [ 22 80 ]; # SSH and HTTP
     };
   };
   services = lib.mkDefault {
