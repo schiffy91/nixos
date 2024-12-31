@@ -17,7 +17,7 @@
   programs._1password.enable = lib.mkDefault true;
   programs._1password-gui = lib.mkDefault {
     enable = true;
-    polkitPolicyOwners = [ "${config.userConfig.rootUser}" ];
+    polkitPolicyOwners = [ "${config.variables.user.admin}" ];
   };
   environment.etc."1password/custom_allowed_browsers" = lib.mkDefault {
     text = "chromium";

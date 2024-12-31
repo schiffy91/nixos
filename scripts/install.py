@@ -59,7 +59,7 @@ class Installer:
     @classmethod
     def get_nixos_path(cls, remote=False): return f"{cls.get_remote_root_path()}{cls.get_user_path()}/nixos" if remote else f"{cls.get_user_path()}/nixos"
     @classmethod
-    def get_disk_path(cls): return Utils.get_config_value_from_file(Config.get_host_path(), key="config.variables.disk.device")
+    def get_disk_path(cls): return Utils.get_config_value_from_file(Config.get_host_path(), key="variables.disk.device")
     @classmethod
     def get_plain_text_password_path(cls): return Utils.get_default_option_value_from_variables("tmpPasswordFile")
     @classmethod
