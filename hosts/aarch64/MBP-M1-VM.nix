@@ -6,7 +6,7 @@
   # VM
   # TODO Update to a newer kernel after Parallels updates their drivers
   # https://github.com/NixOS/nixpkgs/issues/364391
-  boot.kernelPackages = lib.mkForce pkgs.linuxPackages_6_6;
+  #boot.kernelPackages = lib.mkForce pkgs.linuxPackages_6_6;
   boot.initrd.availableKernelModules = [ "xhci_pci" "sr_mod" ];
   # ARM64 Packages
   environment.systemPackages = with pkgs; [
