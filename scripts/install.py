@@ -30,8 +30,8 @@ class Installer:
         sh.run(cmd=cmd, env=env, capture_output=False)
         # Symlink and permission within chroot
         with sh.chroot(remote_root):
-            sh.mv(install_path, nixos_path) # Move nixos to home directory
             Config.secure(username, sh) # Pass in sh for chroot
+            sh.mv(install_path, nixos_path) # Move nixos to home directory
             sh.symlink(nixos_path, install_path) # Smylink ~/nixos to e.g. /etc/nixos
         # Cleanup
         sh.rm(f"{remote_tmp_path}")
