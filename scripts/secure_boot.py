@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import sys
-from nixos_utils import *
+from scripts.utls import *
 
 sh = Shell(root_required=True)
 

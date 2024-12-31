@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from nixos_utils import *
+from scripts.utls import *
 
 class Installer:
     sh = Shell()
