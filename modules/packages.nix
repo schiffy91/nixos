@@ -13,6 +13,7 @@
       _1password-gui
       _1password-cli
       alacritty
+      ghostty.packages.${nixpkgs.system}.default
     ];
     programs._1password.enable = true;
     programs._1password-gui = {
@@ -33,7 +34,6 @@
       print-manager
       drkonqi
       spectacle
-      konsole
     ];
     services.printing.browsed.enable = false;
   };

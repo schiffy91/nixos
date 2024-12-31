@@ -3,6 +3,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     disko = { url = "github:nix-community/disko/v1.10.0"; inputs.nixpkgs.follows = "nixpkgs"; };
+    ghostty = { url = "github:ghostty-org/ghostty"; };
     #TODO nixpkgs currently uses v0.14; update to v0.16 after the package is updated in nixpkgs.
     sbctl-pkg.url = "github:NixOS/nixpkgs/93dc9803a1ee435e590b02cde9589038d5cc3a4e";
     #TODO Lanzaboote is not in nixpgs, and it's latest release version uses sbctl v0.14; update to a stable release after its pushed to github.
