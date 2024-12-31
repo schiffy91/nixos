@@ -42,15 +42,6 @@
         efiSysMountPoint = "/boot";
       };
     };
-    kernelParams = [
-      "quiet"
-      "splash"
-      "loglevel=3"                  # Reduce kernel log verbosity
-      "vt.global_cursor_default=0"  # Hide the console cursor during boot
-      "rd.udev.log_priority=3"      # Minimize udev messages
-      "systemd.show_status=auto"    # Hide systemd boot status unless there's an error
-      "rd.systemd.show_status=auto" # Same as above, but for the initrd phase
-    ];
     # Use the latest kernel packages
     kernelPackages = pkgs.linuxPackages_latest;
   };
