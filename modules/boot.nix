@@ -3,32 +3,32 @@
   imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
   config = {
     boot = {
-      lanzaboote = {
-        enable = lib.mkDefault false; # run /etc/nixos/scripts/secure-boot enable after initial install
-        pkiBundle = "/var/lib/sbctl";
+      lanzaboote = lib.mkDefault {
+        enable = lib.mkDefault false; # overriden by secure-boot target in ../flake.nix, which can be chosen by running bin/nixos-secure-boot --enable
+        pkiBundle = lib.mkDefault config.variables.disk.pkiBundle;
       };
-      loader = {
-        timeout = 5;
-        systemd-boot = {
+      loader = lib.mkDefault {
+        timeout = lib.mkDefault 5;
+        systemd-boot = lib.mkDefault {
           enable = lib.mkIf (!config.boot.lanzaboote.enable) true;
-          configurationLimit = 3;
-          consoleMode = "max";
-          editor = false;
+          configurationLimit = lib.mkDefault 3;
+          consoleMode = lib.mkDefault "max";
+          editor = lib.mkDefault false;
         };
-        efi = {
-          canTouchEfiVariables = true;
-          efiSysMountPoint = "/boot";
+        efi = lib.mkDefault {
+          canTouchEfiVariables = lib.mkDefault true;
+          efiSysMountPoint = lib.mkDefault "/boot";
         };
       };
-      initrd = {
-        systemd.enable = true;
-        verbose = false;
+      initrd = lib.mkDefault {
+        systemd.enable = lib.mkDefault true;
+        verbose = lib.mkDefault false;
       };
-      plymouth = {
-        enable = true;
-        theme = "breeze";
+      plymouth = lib.mkDefault {
+        enable =lib.mkDefault  true;
+        theme = lib.mkDefault "breeze";
       };
-      kernelParams = [ # Hide most messages during boot
+      kernelParams = lib.mkDefault [ # Hide most messages during boot
         "quiet"
         "splash"
         "loglevel=3"                  # Reduce kernel log verbosity

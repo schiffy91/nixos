@@ -1,7 +1,7 @@
-{ config, ... }: {
+{ config, lib, ... }: {
   config = {
-    time.timeZone = "America/Los_Angeles";
-    i18n.defaultLocale = "en_US.UTF-8";
-    console.keyMap = "us";
+    time.timeZone = lib.mkDefault "America/Los_Angeles";
+    i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
+    console.keyMap = lib.mkDefault "us";
   };
 }
