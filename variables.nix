@@ -7,7 +7,7 @@ in {
     secrets = mkString "/etc/nixos/secrets";
     user = mkObject {
       admin = mkString "alexanderschiffhauer";
-      hashed_password = mkString "hashed_password.txt";
+      hashedPasswordFile = mkString "hashed_password.txt";
     };
     disk = mkObject {
       device = mkString "OVERRIDE_THIS_VALUE_IN_HOST";
