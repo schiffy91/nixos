@@ -1,8 +1,8 @@
 { pkgs, lib, config, ... }:
 {
   # Disk information
-  config.variables.disk.device = "/dev/nvme0n1";
-  config.variables.disk.swapSize = "1G"; # Small swap for a VM
+  variables.disk.device = "/dev/nvme0n1";
+  variables.disk.swapSize = "1G"; # Small swap for a VM
   # VM
   boot.initrd.availableKernelModules = [ "virtio_pci" "xhci_pci" "usb_storage" "usbhid" ];
   # ARM64 Packages
