@@ -148,8 +148,10 @@ class NixOSConfig:
             host_path = Interactive.ask_for_host_path()
             cls.reset_config(host_path, "standard")
             rebuild_file_system = True
-        cls.secure(cls.sh.whoami(), cls.get_nixos_path(), cls.get_secrets_path())
-        environment = "NIXOS_INSTALL_BOOTLOADER=1" if rebuild_file_system else ""
+        environment = ""
+        if rebuild_file_system:
+            environment = "NIXOS_INSTALL_BOOTLOADER=1"
+            cls.secure(cls.sh.whoami(), cls.get_nixos_path(), cls.get_secrets_path())
         return cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.readlink(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}")
     # Readwrite
     @classmethod
