@@ -14,6 +14,7 @@
     chromium
     libinput
     evtest
+    solaar
   ];
 
   hardware.logitech.wireless.enable = true;
