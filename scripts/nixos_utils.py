@@ -228,7 +228,7 @@ class Utils:
     @classmethod
     def get_string_between(cls, text, start, end, start_from=None, trim_whitespace=False):
         def trimmer(x): return x.replace(" ", "") if trim_whitespace else x
-        text, start, end, start_from = [ trimmer(text), trimmer(start), trimmer(end), trimmer(start_from) ]
+        text, start, end, start_from = [ trimmer(text), trimmer(start), trimmer(end), trimmer(start_from) if start_from else start_from ]
         text = text[text.find(start_from):] if start_from else text
         pattern = re.escape(start) + r"(.*?)" + re.escape(end)
         match = re.search(pattern, text, re.DOTALL)
