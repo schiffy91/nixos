@@ -22,7 +22,7 @@
           modules = modules ++ [ { networking.hostName = lib.mkForce (getHostName hostFile); } hostFile ./variables.nix ];
         });
     in { 
-      Configurations = lib.listToAttrs (lib.concatMap (hostFile:
+      nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let name = getHostName hostFile; in 
         [ 
           { name = "${name}-mount"; value = mkTarget hostFile [ ./modules/disk.nix ]; }
