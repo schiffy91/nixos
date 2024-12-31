@@ -41,16 +41,16 @@ def require_signed_boot_loader():
 
 def disable_secure_boot():
     remove_old_efi_entries()
-    NixOSConfig.set_target("standard")
-    return NixOSConfig.update(rebuild_file_system=True)
+    Config.set_target("standard")
+    return Config.update(rebuild_file_system=True)
 
 def enable_secure_boot():
     remove_old_efi_entries()
     create_keys()
     if not are_keys_enrolled():
         enroll_keys()
-    NixOSConfig.set_target("secure-boot")
-    NixOSConfig.update(rebuild_file_system=True)
+    Config.set_target("secure-boot")
+    Config.update(rebuild_file_system=True)
     require_signed_boot_loader()
 
 def main():

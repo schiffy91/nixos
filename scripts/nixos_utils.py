@@ -1,4 +1,4 @@
-import sys, subprocess, json, getpass, glob, contextlib
+import sys, subprocess, json, getpass, glob, contextlib, re
 
 class Shell:
     def __init__(self, root_required=False):
@@ -77,18 +77,13 @@ class Shell:
         self.mkdir(self.dirname(path))
         return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
     def file_read(self, path): return Utils.stdout(self.run(f"cat '{path}'"))
-    def file_get(self, path, start, end):
-        try: return Utils.string_get(self.file_read(path), start, end)
-        except BaseException: return None
-    def file_get_value(self, path, key):
-        try: return Utils.string_get(self.file_read(path).replace(" ", ""), f"{key}=\"", "\"")
-        except BaseException: return None
+    def file_read_string_between(self, path, start, end, start_from=None, trim_whitespace=False): return Utils.get_string_between(self.file_read(path), start, end, start_from=start_from, trim_whitespace=trim_whitespace)
     # Git
     def git_add_safe_directory(self, path):
         path = self.readlink(path)
         self.run(f"git config --global --add safe.directory '{path}'") # Git doesn't think sudo is the owner of a git path despite having admin privileges. SMH
 
-class NixOSConfig:
+class Config:
     sh = Shell()
     @classmethod
     def exists(cls): return cls.sh.exists(cls.get_config_path())
@@ -126,15 +121,16 @@ class NixOSConfig:
             sh.chown(path, user)
             sh.chmod(path, mode)
     @classmethod
-    def secure(cls, username, nixos_path, path_to_secrets, sh=None):
+    def secure(cls, username, sh=None):
         sh = cls.sh if sh is None else sh
         ignore_pattern = "*/{secrets}*" # Ignore secrets
+        nixos_path = cls.get_nixos_path()
         sh.chown(nixos_path, username) # $username owns everything in ~/nixos
         for directory_path in [nixos_path] + sh.find_directories(nixos_path, ignore_pattern=ignore_pattern): sh.chmod(directory_path, 755) # Directories are traversable
         for file_path in sh.find_files(nixos_path, ignore_pattern=ignore_pattern): sh.chmod(file_path, 644) # Owner can read write files
         for executable in sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern): sh.chmod(executable, 755)# Owner can execute
         for git_object in sh.find_files(f"{nixos_path}/.git/objects"): sh.chmod(git_object, 444)
-        cls.secure_secrets(path_to_secrets, sh) # Secure the secrets using our shell (in case of chroot)
+        cls.secure_secrets(cls.get_secrets_path(), sh) # Secure the secrets using our shell (in case of chroot)
         sh.git_add_safe_directory(nixos_path)
     @classmethod
     def update(cls, rebuild_file_system=False):
@@ -151,7 +147,7 @@ class NixOSConfig:
         environment = ""
         if rebuild_file_system:
             environment = "NIXOS_INSTALL_BOOTLOADER=1"
-            cls.secure(cls.sh.whoami(), cls.get_nixos_path(), cls.get_secrets_path())
+            cls.secure(cls.sh.whoami(), cls.get_secrets_path())
         return cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.readlink(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}")
     # Readwrite
     @classmethod
@@ -162,53 +158,31 @@ class NixOSConfig:
     def set_target(cls, target): return cls.set("target", target)
     @classmethod
     def get_target(cls): return cls.get("target")
-    # Readonly only
+    # Readonly
     @classmethod
     def get_host(cls): return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
     @classmethod
-    def get_hashed_password_path(cls): return cls.sh.file_get_value(f"{cls.get_nixos_path()}/modules/users.nix", key="hashedPasswordFile")
+    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_default_option_value_from_variables("hashedPasswordFile")
     @classmethod
-    def get_secrets_path(cls): return cls.sh.dirname(cls.get_hashed_password_path())
+    def get_secrets_path(cls): return Utils.get_default_option_value_from_variables("secrets")
+    @classmethod
+    def get_variables_path(cls): return f"{Config.get_nixos_path()}/modules/variables.nix"
     @classmethod
     def get_config_path(cls): return f"{cls.get_nixos_path()}/config.json"
     @classmethod
+    def get_flake_path(cls): return f"{Config.get_nixos_path()}/flake.nix"
+    @classmethod
     def get_nixos_path(cls): return "/etc/nixos"
 
-class NixOSInstaller:
+class Installer:
     sh = Shell()
     @classmethod
-    def get_remote_root_path(cls): return "/mnt"
-    @classmethod
-    def get_install_path(cls, remote=False): return f"{cls.get_remote_root_path()}{NixOSConfig.get_nixos_path()}" if remote else NixOSConfig.get_nixos_path()
-    @classmethod
-    def get_etc_path(cls, remote=False): return f"{cls.get_remote_root_path()}/etc" if remote else "/etc"
-    @classmethod
-    def get_store_path(cls, remote=False): return f"{cls.get_remote_root_path()}/nix/store" if remote else "/nix/store"
-    @classmethod
-    def get_nix_tmp_path(cls, remote=False): return f"{cls.get_remote_root_path()}/nix/tmp" if remote else "/nix/tmp"
-    @classmethod
-    def get_home_path(cls, remote=False): return f"{cls.get_remote_root_path()}/home" if remote else "/home"
-    @classmethod
-    def get_user_path(cls, remote=False): return f"{cls.get_remote_root_path()}/home/{cls.get_username()}" if remote else f"/home/{cls.get_username()}"
-    @classmethod
-    def get_nixos_path(cls, remote=False): return f"{cls.get_remote_root_path()}{cls.get_user_path()}/nixos" if remote else f"{cls.get_user_path()}/nixos"
-    @classmethod
-    def get_disk_path(cls): return cls.sh.file_get_value(NixOSConfig.get_host_path(), key="diskOverrides.device")
-    @classmethod
-    def get_plain_text_password_path(cls): return cls.sh.file_get_value(f"{cls.get_install_path()}/modules/disk.nix", key="passwordFile")
-    @classmethod
-    def get_username(cls): return cls.sh.file_get_value(f"{cls.get_install_path()}/modules/users.nix", key="rootUser")
-    @classmethod
-    def disk_mount(cls): return cls.run_disko("mount")
-    @classmethod
-    def disk_erase_and_mount(cls): return cls.run_disko("destroy,format,mount")
-    @classmethod
     def run_disko(cls, mode):
-        version = cls.sh.file_get(f"{NixOSConfig.get_nixos_path()}/flake.nix", start="github:nix-community/disko/", end='";')
+        version = cls.sh.file_read_string_between(Config.get_flake_path(), start="github:nix-community/disko/", end='";')
         command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{version} --verbose -- " \
-                f"--show-trace --flake {NixOSConfig.get_nixos_path()}#{NixOSConfig.get_host()}-mount --mode {mode}"
+                f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-mount --mode {mode}"
         return cls.sh.run(command, capture_output=False)
     @classmethod
     def install_nixos(cls):
@@ -221,10 +195,9 @@ class NixOSInstaller:
         remote_install_path = cls.get_install_path(remote=True) # /mnt/etc/nixos
         remote_tmp_path = cls.get_nix_tmp_path(remote=True) # /mnt/nix/tmp
         username = cls.get_username() # alexanderschiffhauer
-        secrets = sh.basename(sh.dirname(NixOSConfig.get_hashed_password_path())) # secrets
         # nixos-install args
-        host = NixOSConfig.get_host()
-        target = NixOSConfig.get_target()
+        host = Config.get_host()
+        target = Config.get_target()
         env = f"TMPDIR={remote_tmp_path}"
         flake_arg = f"--flake {remote_install_path}#{host}-{target}"
         root_arg = f"--root {remote_root}"
@@ -239,10 +212,37 @@ class NixOSInstaller:
         # Symlink and permission within chroot
         with sh.chroot(remote_root):
             sh.mv(install_path, nixos_path) # Move nixos to home directory
-            NixOSConfig.secure(username, nixos_path, f"{nixos_path}/{secrets}", sh) # Secure
+            Config.secure(username, sh) # Pass in sh for chroot
             sh.symlink(nixos_path, install_path) # Smylink ~/nixos to e.g. /etc/nixos
         # Cleanup
         sh.rm(f"{remote_tmp_path}")
+    # Readonly
+    @classmethod
+    def get_remote_root_path(cls): return "/mnt"
+    @classmethod
+    def get_install_path(cls, remote=False): return f"{cls.get_remote_root_path()}{Config.get_nixos_path()}" if remote else Config.get_nixos_path()
+    @classmethod
+    def get_etc_path(cls, remote=False): return f"{cls.get_remote_root_path()}/etc" if remote else "/etc"
+    @classmethod
+    def get_store_path(cls, remote=False): return f"{cls.get_remote_root_path()}/nix/store" if remote else "/nix/store"
+    @classmethod
+    def get_nix_tmp_path(cls, remote=False): return f"{cls.get_remote_root_path()}/nix/tmp" if remote else "/nix/tmp"
+    @classmethod
+    def get_home_path(cls, remote=False): return f"{cls.get_remote_root_path()}/home" if remote else "/home"
+    @classmethod
+    def get_user_path(cls, remote=False): return f"{cls.get_remote_root_path()}/home/{cls.get_username()}" if remote else f"/home/{cls.get_username()}"
+    @classmethod
+    def get_nixos_path(cls, remote=False): return f"{cls.get_remote_root_path()}{cls.get_user_path()}/nixos" if remote else f"{cls.get_user_path()}/nixos"
+    @classmethod
+    def get_disk_path(cls): return Utils.get_config_value_from_file(Config.get_host_path(), key="config.variables.disk.device")
+    @classmethod
+    def get_plain_text_password_path(cls): return Utils.get_default_option_value_from_variables("tmpPasswordFile")
+    @classmethod
+    def get_username(cls): return Utils.get_default_option_value_from_variables("admin")
+    @classmethod
+    def disk_mount(cls): return cls.run_disko("mount")
+    @classmethod
+    def disk_erase_and_mount(cls): return cls.run_disko("destroy,format,mount")
 
 class Interactive:
     sh = Shell()
@@ -257,7 +257,7 @@ class Interactive:
             Utils.print("Invalid input. Enter 'y' or 'n'.")
     @classmethod
     def ask_for_host_path(cls):
-        hosts_paths = glob.glob(f"{NixOSConfig.get_nixos_path()}/hosts/**/*.nix", recursive=True)
+        hosts_paths = glob.glob(f"{Config.get_nixos_path()}/hosts/**/*.nix", recursive=True)
         formatted_hosts_paths = [ cls.sh.basename(host_path).replace(".nix", "") for host_path in hosts_paths ]
         potential_matches = [ formatted_hosts_path for formatted_hosts_path in formatted_hosts_paths if formatted_hosts_path == cls.sh.hostname() ]
         if potential_matches:
@@ -288,9 +288,19 @@ class Utils:
     @classmethod
     def abort(cls): return sys.exit(1)
     @classmethod
-    def string_get(cls, string, start, end):
-        try: return string.split(start)[1].split(end)[0]
-        except BaseException: return None
+    def get_config_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start=f'{key}="', end='";', trim_whitespace=True)
+    @classmethod
+    def get_default_option_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start='default="', end='";', start_from=key, trim_whitespace=True)
+    @classmethod
+    def get_default_option_value_from_variables(cls, key): return cls.get_default_option_value_from_file(Config.get_variables_path(), key=key)
+    @classmethod
+    def get_string_between(cls, text, start, end, start_from=None, trim_whitespace=False):
+        def trimmer(x): return x.replace(" ", "") if trim_whitespace else x
+        text, start, end, start_from = [ trimmer(text), trimmer(start), trimmer(end), trimmer(start_from) ]
+        text = text[text.find(start_from):] if start_from else text
+        pattern = re.escape(start) + r"(.*?)" + re.escape(end)
+        match = re.search(pattern, text, re.DOTALL)
+        return match.group(1) if match else None
     @classmethod
     def stdout(cls, completed_process): return completed_process.stdout.strip()
     @classmethod

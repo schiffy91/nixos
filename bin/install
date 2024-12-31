@@ -21,5 +21,5 @@ if [ "$1" = "--debug" ]; then
     sudo nix --extra-experimental-features "nix-command flakes" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data /etc/nixos
 # Otherwise, install
 else
-    sudo python3 -B /etc/nixos/scripts/nixos_bootstrap.py
+    sudo python3 -B /etc/nixos/scripts/install.py
 fi

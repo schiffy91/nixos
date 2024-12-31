@@ -1,4 +1,4 @@
-{config, lib, ...}:
+{lib, ...}:
 {
   options = {
     variables = lib.mkOption {
@@ -7,7 +7,7 @@
         secrets = lib.mkOption {
           description = "Variables related to secrets storage";
           type = lib.types.str;
-          default = "/etc/nixos/secrets/";
+          default = "/etc/nixos/secrets";
         };
         user = lib.mkOption {
           description = "Variables related to the user configuration";
@@ -19,9 +19,9 @@
                 default = "alexanderschiffhauer";
               };
               hashedPasswordFile = lib.mkOption {
-                description = "The permanent location of the admin's hashed password file. Note that `basename(dirname(hashedPasswordFile))` will be used as the secrets location.";
+                description = "The relative location of the admin's hashed password file with respect to the secrets.";
                 type = lib.types.str;
-                default = "${config.variables.secrets}/hashed_password.txt";
+                default = "hashed_password.txt";
               };
             };
           };

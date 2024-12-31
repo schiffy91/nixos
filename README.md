@@ -120,7 +120,7 @@ To add a new host configuration:
 
 3. Add your host to `flake.nix`:
    ```nix
-   nixosConfigurations = {
+   Configurations = {
      // ...existing hosts...
      your-hostname = lib.nixosSystem {
        system = "x86_64-linux"; # or "aarch64-linux"

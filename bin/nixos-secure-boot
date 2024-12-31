@@ -1,2 +1,0 @@
-#!/bin/sh
-sudo python3 /etc/nixos/scripts/nixos_secure_boot.py "$@"

@@ -3,6 +3,6 @@ from nixos_utils import *
 
 def main():
     Utils.require_root()
-    return NixOSConfig.update()
+    return Config.update()
 
 if __name__ == "__main__": main()
