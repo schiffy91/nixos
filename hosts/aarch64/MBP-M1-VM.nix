@@ -26,7 +26,6 @@
         # "snd_hda_intel"
         # "snd_hda_codec"
       ];
-      framebuffer = true;
     };
     kernelModules = [
       "virtio_balloon"
