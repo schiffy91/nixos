@@ -1,8 +1,6 @@
 {lib, ...}:
-let
-  mkObject = object: lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = object; };
-in {
-  options.variables = mkObject {
+{
+  options.variables = lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = {
     secrets = "/etc/nixos/secrets";
     user = {
       admin = "alexanderschiffhauer";
