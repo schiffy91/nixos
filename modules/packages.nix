@@ -1,5 +1,5 @@
 { config, lib, inputs, pkgs, ... }: {
-  nixpkgs.config.allowUnfree = lib.mkDefault true;
+  nixpkgs.config.allowUnfree = true;
   environment.systemPackages = lib.mkDefault (with pkgs; [
     micro
     wget
@@ -11,19 +11,19 @@
     efibootmgr
     _1password-gui
     _1password-cli
-    #alacritty
-    #inputs.ghostty.packages.${pkgs.system}.default
+    # alacritty
+    # inputs.ghostty.packages.${pkgs.system}.default
   ]);
-  programs._1password.enable = lib.mkDefault true;
-  programs._1password-gui = lib.mkDefault {
+  programs._1password.enable = true;
+  programs._1password-gui = {
     enable = true;
     polkitPolicyOwners = [ "${config.variables.user.admin}" ];
   };
-  environment.etc."1password/custom_allowed_browsers" = lib.mkDefault {
+  environment.etc."1password/custom_allowed_browsers" = {
     text = "chromium";
     mode = "0755";
   };
-  environment.plasma6.excludePackages = lib.mkDefault (with pkgs.kdePackages; [ 
+  environment.plasma6.excludePackages = (with pkgs.kdePackages; [
     kate
     gwenview
     khelpcenter
@@ -34,5 +34,5 @@
     drkonqi
     spectacle
   ]);
-  services.printing.browsed.enable = lib.mkDefault false;
+  services.printing.browsed.enable = false;
 }

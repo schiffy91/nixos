@@ -1,5 +1,5 @@
 { lib, ... }: {
-  time.timeZone = lib.mkDefault "America/Los_Angeles";
-  i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
-  console.keyMap = lib.mkDefault "us";
+  time.timeZone = "America/Los_Angeles";
+  i18n.defaultLocale = "en_US.UTF-8";
+  console.keyMap = "us";
 }

@@ -1,12 +1,11 @@
-{ config, lib, ... }:
-{
+{ config, lib, ... }: {
   users.extraUsers.${config.variables.user.admin} = lib.mkDefault {
-    isNormalUser = lib.mkDefault true;
-    extraGroups = lib.mkDefault [ "wheel" "libvirtd" ];
-    hashedPasswordFile = lib.mkDefault config.variables.user.hashedPasswordFile;
+    isNormalUser = true;
+    extraGroups = [ "wheel" "libvirtd" ];
+    hashedPasswordFile = config.variables.user.hashedPasswordFile;
   };
   services.displayManager.autoLogin = {
-    enable = lib.mkDefault true;
-    user = lib.mkDefault config.variables.user.admin;
+    enable = true;
+    user = config.variables.user.admin;
   };
 }

@@ -7,36 +7,35 @@
     };
   };
   services = lib.mkDefault {
-    avahi = lib.mkDefault {
-      enable = lib.mkDefault true;
-      nssmdns4 = lib.mkDefault true;
-      openFirewall = lib.mkDefault true;
-      publish = lib.mkDefault {
-        enable = lib.mkDefault true;
-        userServices = lib.mkDefault true;
-        addresses = lib.mkDefault true;
+    avahi = {
+      enable = true;
+      nssmdns4 = true;
+      openFirewall = true;
+      publish = {
+        enable = true;
+        userServices = true;
+        addresses = true;
       };
     };
-    openssh = lib.mkDefault {
-      settings = lib.mkDefault {
-        PasswordAuthentication = lib.mkDefault false;
-        AllowUsers = lib.mkDefault null;
-        UseDns = lib.mkDefault true;
-        X11Forwarding = lib.mkDefault false;
-        PermitRootLogin = lib.mkDefault "prohibit-password";
+    openssh = {
+      settings = {
+        PasswordAuthentication = false;
+        AllowUsers = null;
+        UseDns = true;
+        X11Forwarding = false;
+        PermitRootLogin = "prohibit-password";
       };
     };
   };
   programs.ssh = lib.mkDefault {
-    startAgent = lib.mkDefault true;
-    extraConfig = lib.mkDefault
-    ''
-    Host *
-        IdentityAgent ~/.1password/agent.sock
-        ForwardAgent yes
-    '';
+    startAgent = true;
+    extraConfig = ''
+      Host *
+          IdentityAgent ~/.1password/agent.sock
+          ForwardAgent yes
+      '';
   };
-  users.users.${config.variables.user.admin}.openssh.authorizedKeys.keys = lib.mkDefault [
+  users.users.${config.variables.user.admin}.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI= ${config.variables.user.admin}"
   ];
 }

@@ -5,7 +5,7 @@
     disk = {
       main = {
         type = "disk";
-        device = lib.mkDefault config.variables.disk.device;
+        device = config.variables.disk.device;
         content = {
           type = "gpt";
           partitions = {
@@ -24,7 +24,7 @@
               content = {
                 type = "luks";
                 name = "crypted";
-                passwordFile = lib.mkDefault config.variables.disk.tmpPasswordFile;
+                passwordFile = config.variables.disk.tmpPasswordFile;
                 settings.allowDiscards = true;
                 content = {
                   type = "btrfs";
@@ -44,7 +44,7 @@
                     };
                     "/swap" = {
                       mountpoint = "/.swapvol";
-                      swap.swapfile.size = lib.mkDefault config.variables.disk.swapSize;
+                      swap.swapfile.size = config.variables.disk.swapSize;
                     };
                     "/var" = {
                       mountpoint = "/var";
