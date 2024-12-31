@@ -43,7 +43,7 @@
       };
     };
     # Use the latest kernel packages
-    kernelPackages = pkgs.linuxPackages_latest;
+    kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
   };
 
   ##### Hardware Configuration #####
