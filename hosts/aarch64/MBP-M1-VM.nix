@@ -20,7 +20,6 @@
         "virtiofs"
         "drm"
         "drm_kms_helper"
-        "fbcon"
         "usbhid"
         # Audio modules (uncomment if needed)
         # "snd_hda_intel"
