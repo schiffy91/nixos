@@ -1,7 +1,7 @@
 {lib, ...}:
 let
   mkString = string: lib.mkOption { type = lib.types.str; default = string; };
-  mkObject = object: lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = {}; options = object; };
+  mkObject = object: lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = object; };
 in {
   options.variables = mkObject {
     secrets = mkString "/etc/nixos/secrets";
