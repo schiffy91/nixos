@@ -8,7 +8,7 @@ in {
       admin = "alexanderschiffhauer";
       hashedPasswordFile = "hashed_password.txt";
     };
-    disk = mkObject {
+    disk = {
       device = "OVERRIDE_THIS_VALUE_IN_HOST";
       swapSize = "OVERRIDE_THIS_VALUE_IN_HOST";
       tmpPasswordFile = "/tmp/plain_text_password.txt";
