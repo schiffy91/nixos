@@ -48,7 +48,7 @@
 
   ##### Hardware Configuration #####
   # GPU acceleration
-  hardware.opengl.enable = true;
+  hardware.graphics.enable = true;
 
   # Explicitly disable Parallels support
   hardware.parallels.enable = false;
