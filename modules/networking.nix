@@ -27,8 +27,16 @@
   users.users.${config.userConfig.rootUser}.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI= ${config.userConfig.rootUser}"
   ];
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
+  services = {
+    avahi = {
+      enable = true;
+      nssmdns4 = true;
+      openFirewall = true;
+      publish = {
+        enable = true;
+        userServices = true;
+        addresses = true;
+      };
+    };
   };
 }
