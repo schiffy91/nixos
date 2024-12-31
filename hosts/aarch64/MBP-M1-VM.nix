@@ -8,17 +8,14 @@
   # https://github.com/NixOS/nixpkgs/issues/364391
   boot.kernelPackages = lib.mkForce pkgs.linuxPackages_6_6;
   boot.initrd.availableKernelModules = [ "xhci_pci" "sr_mod" ];
-  hardware.parallels.enable = true;
   # ARM64 Packages
   environment.systemPackages = with pkgs; [
     chromium
-    libinput
-    evtest
-    solaar
   ];
-
-  hardware.logitech.wireless.enable = true;
-
+  # Qemu
+  services.spice-vdagentd.enable = true;
+  # Parallels
+  #hardware.parallels.enable = lib.mkDefault false;
   # Networking
   networking.useDHCP = lib.mkDefault true;
 }
