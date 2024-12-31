@@ -219,7 +219,7 @@ class Utils:
     @classmethod
     def abort(cls): return sys.exit(1)
     @classmethod
-    def get_value_from_path(cls, path, key, start='="', end='";', trim_whitespace=True):
+    def get_value_from_path(cls, path, key, start='"', end='"', trim_whitespace=True):
         file_contents = cls.sh.file_read(path)
         return Utils.get_string_between(file_contents, start=start, end=end, start_from=key, trim_whitespace=trim_whitespace)
     @classmethod

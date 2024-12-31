@@ -37,7 +37,7 @@ class Installer:
         sh.rm(f"{remote_tmp_path}")
     @classmethod
     def run_disko(cls, mode):
-        version = Utils.get_value_from_path(Config.get_flake_path(), key="github:nix-community/disko", start="/", end='";')
+        version = Utils.get_value_from_path(Config.get_flake_path(), key="github:nix-community/disko", start="/", end='"')
         command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{version} --verbose -- " \
                 f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-mount --mode {mode}"
         return cls.sh.run(command, capture_output=False)
