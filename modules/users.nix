@@ -1,5 +1,5 @@
-{ config, lib, ... }: {
-  users.extraUsers.${config.variables.user.admin} = lib.mkDefault {
+{ config, ... }: {
+  users.extraUsers.${config.variables.user.admin} = {
     isNormalUser = true;
     extraGroups = [ "wheel" "libvirtd" ];
     hashedPasswordFile = config.variables.user.hashedPasswordFile;

@@ -1,7 +1,7 @@
-{ lib, ... }: {
+{ ... }: {
   hardware.pulseaudio.enable = false;
   security.rtkit.enable = true;
-  services.pipewire = lib.mkDefault {
+  services.pipewire = {
     enable = true;
     alsa.enable = true;
     pulse.enable = true;

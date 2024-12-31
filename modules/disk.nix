@@ -1,7 +1,7 @@
-{ lib, config, inputs, ... }:
+{ config, inputs, ... }:
 {
   imports = [ inputs.disko.nixosModules.disko ];
-  disko.devices = lib.mkDefault {
+  disko.devices = {
     disk = {
       main = {
         type = "disk";

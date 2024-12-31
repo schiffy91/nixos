@@ -1,12 +1,12 @@
-{ config, lib, ... }: {
-  networking = lib.mkDefault { 
+{ config, ... }: {
+  networking = { 
     networkmanager.enable = true;
-    firewall = lib.mkDefault { 
+    firewall = { 
       enable = true;
       allowedTCPPorts = [ 22 80 ]; # SSH and HTTP
     };
   };
-  services = lib.mkDefault {
+  services = {
     avahi = {
       enable = true;
       nssmdns4 = true;
@@ -27,7 +27,7 @@
       };
     };
   };
-  programs.ssh = lib.mkDefault {
+  programs.ssh = {
     startAgent = true;
     extraConfig = ''
       Host *

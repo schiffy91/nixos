@@ -1,6 +1,6 @@
-{ config, lib, inputs, pkgs, ... }: {
+{ config, inputs, pkgs, ... }: {
   nixpkgs.config.allowUnfree = true;
-  environment.systemPackages = lib.mkDefault (with pkgs; [
+  environment.systemPackages = (with pkgs; [
     micro
     wget
     devbox
