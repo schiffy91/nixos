@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import sys
-from scripts.utls import *
+from utils import *
 
 sh = Shell(root_required=True)
 

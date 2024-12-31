@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from scripts.utls import *
+from utils import *
 
 def main():
     Utils.require_root()

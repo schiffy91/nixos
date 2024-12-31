@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from scripts.utls import *
+from utils import *
 
 class Installer:
     sh = Shell()
