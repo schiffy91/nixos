@@ -224,7 +224,7 @@ class Utils:
     @classmethod
     def get_default_option_value_from_file(cls, path, key): return cls.sh.file_read_string_between(path, start='"', end='";', start_from=key, trim_whitespace=True)
     @classmethod
-    def get_default_option_value_from_variables(cls, key): return cls.get_default_option_value_from_file(Config.get_variables_path(), key=key)
+    def get_default_option_value_from_variables(cls, key): return cls.get_default_option_value_from_file(Config.get_variables_path(), start_from=key)
     @classmethod
     def get_string_between(cls, text, start, end, start_from=None, trim_whitespace=False):
         def trimmer(x): return x.replace(" ", "") if trim_whitespace else x
