@@ -13,7 +13,7 @@
     chromium
   ];
   # Qemu
-  services.spice-vdagentd.enable = true;
+  #services.spice-vdagentd.enable = true;
   # Parallels
   #hardware.parallels.enable = lib.mkDefault false;
   # Networking
