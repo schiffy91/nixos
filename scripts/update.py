@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from utils import *
+from utils import Utils, Config
 
 def main():
     Utils.require_root()
