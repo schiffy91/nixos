@@ -123,8 +123,8 @@ class Config:
     def secure(cls, username, sh=None):
         sh = cls.sh if sh is None else sh
         ignore_pattern = "*/{secrets}*" # Ignore secrets
-        nixos_path = cls.get_nixos_path()
-        sh.chown(nixos_path, username) # $username owns everything in ~/nixos
+        nixos_path = cls.get_nixos_path() # /etc/nixos
+        sh.chown(nixos_path, username) # $username owns everything in /etc/nixos
         for directory_path in [nixos_path] + sh.find_directories(nixos_path, ignore_pattern=ignore_pattern): sh.chmod(directory_path, 755) # Directories are traversable
         for file_path in sh.find_files(nixos_path, ignore_pattern=ignore_pattern): sh.chmod(file_path, 644) # Owner can read write files
         for executable in sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern): sh.chmod(executable, 755)# Owner can execute
