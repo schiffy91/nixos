@@ -24,7 +24,7 @@
     "snd_hda_core"
   ];
   boot.initrd.kernelModules = [
-    "virtio_ramfb_gl"
+    "virtio_ramfb"
     "virtio_balloon"
     "virtio_rng"
   ];
