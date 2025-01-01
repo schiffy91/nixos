@@ -5,14 +5,14 @@ class Installer:
     sh = Shell()
     @classmethod
     def install_nixos(cls):
-        source = cls.get_install_path()
-        destination = f"{cls.get_mount_point()}/{source}"
+        source = Config.get_nixos_path()
+        destination = f"{cls.get_mount_point()}/{cls.get_install_path()}"
         cls.sh.cpdir(source, destination)
         cmd = f"nixos-install --flake {destination}#{Config.get_host()}-{Config.get_host()} --root {cls.get_mount_point()} --no-channel-copy --show-trace --no-root-password --cores 0"
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()):
-            cls.sh.symlink(source, Config.get_nixos_path())
+            cls.sh.symlink(cls.get_install_path(), Config.get_nixos_path())
             Config.secure(cls.get_username(), sh=cls.sh)
         cls.sh.rm(tmp)
     @classmethod
