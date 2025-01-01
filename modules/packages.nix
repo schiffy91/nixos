@@ -12,8 +12,6 @@
     _1password-gui
     _1password-cli
     blackbox-terminal
-    #alacritty
-    #inputs.ghostty.packages.${pkgs.system}.default # Too rough arou
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
@@ -25,7 +23,6 @@
     mode = "0755";
   };
   environment.plasma6.excludePackages = (with pkgs.kdePackages; [
-    konsole
     kate
     gwenview
     khelpcenter
