@@ -4,7 +4,6 @@
   variables.disk.device = "/dev/vda";
   variables.disk.swapSize = "1G"; # Small swap for a VM
   ##### UTM #####
-  environment.variables.LIBGL_ALWAYS_SOFTWARE = "1"; # OpenGL drivers are buggy
   services.qemuGuest.enable = true;
   services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
   ##### Boot Configuration #####
@@ -12,7 +11,6 @@
     "xhci_pci"
     "virtio_pci"
     "virtio_pci_modern_dev"
-    "virtio_gpu"
     "drm"
     "drm_kms_helper"
     "virtio_mmio"
@@ -22,12 +20,18 @@
     "usbhid"
     "9p"
     "9pnet_virtio"
+    "intel_hda"
+    "snd_hda_codec"
+    "snd_hda_core"
   ];
   boot.initrd.kernelModules = [
+    "virtio_ramfb_gl"
     "virtio_balloon"
-    "virtio_console"
     "virtio_rng"
-    "virtio_gpu"
+  ];
+  boot.kernelParams = [
+    "console=tty1"
+    "video=virtio-ramfb:1920x1080"
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
