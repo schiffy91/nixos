@@ -197,6 +197,7 @@ class Interactive:
         while True:
             for i, name in enumerate(formatted_hosts_paths): Utils.print(f"{i+1}) {name}")
             try: return hosts_paths[int(input("> ")) - 1]
+            except KeyboardInterrupt: Utils.abort()
             except BaseException: Utils.print_error("Invalid choice.")
     @classmethod
     def ask_for_password(cls):
