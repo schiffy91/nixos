@@ -2,7 +2,7 @@
   users.extraUsers.${config.variables.user.admin} = {
     isNormalUser = true;
     extraGroups = [ "wheel" "libvirtd" ];
-    hashedPasswordFile = config.variables.user.hashedPasswordFile;
+    hashedPasswordFile = "${config.variables.secrets}/${config.variables.user.hashedPasswordFile}";
   };
   services.displayManager.autoLogin = {
     enable = true;
