@@ -6,7 +6,7 @@ class Installer:
     @classmethod
     def install_nixos(cls):
         source = cls.get_install_path()
-        destination = {cls.get_mount_point()}/{source}
+        destination = f"{cls.get_mount_point()}/{source}"
         cls.sh.cpdir(source, destination)
         cmd = f"nixos-install --flake {destination}#{Config.get_host()}-{Config.get_host()} --root {cls.get_mount_point()} --no-channel-copy --show-trace --no-root-password --cores 0"
         tmp = f"{cls.get_mount_point()}/nix/tmp"
