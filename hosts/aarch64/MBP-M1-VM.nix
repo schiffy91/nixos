@@ -20,7 +20,6 @@
     "usbhid"
     "9p"
     "9pnet_virtio"
-    "intel_hda"
     "snd_hda_codec"
     "snd_hda_core"
   ];
