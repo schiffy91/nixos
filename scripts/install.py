@@ -16,11 +16,11 @@ class Installer:
             Config.secure(cls.get_username(), sh=cls.sh)
         cls.sh.rm(tmp)
     @classmethod
-    def run_disko(cls, mode):
+    def run_disko(cls, mode, args=""):
         disko_key = "github:nix-community/disko/"
         version = Utils.get_value_from_path(Config.get_flake_path(), key=disko_key, start=disko_key, end='"')
         command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{version} --verbose -- " \
-                f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-mount --mode {mode} --root-mountpoint {cls.get_mount_point()}"
+                f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-mount --mode {mode} --root-mountpoint {cls.get_mount_point()} {args}"
         return cls.sh.run(command, capture_output=False)
     # Helpers
     @classmethod
@@ -36,7 +36,7 @@ class Installer:
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod
-    def erase_and_mount_disk(cls): return cls.run_disko("destroy,format,mount")
+    def erase_and_mount_disk(cls): return cls.run_disko("destroy,format,mount", "--yes-wipe-all-disks")
 
 def main():
     Utils.require_root()
