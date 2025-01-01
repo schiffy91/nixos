@@ -68,11 +68,11 @@
 
   ##### Filesystem Configurations #####
   # Configure VirtFS mount
-  fileSystems."/mnt/shared_folder" = {
-    device = "shared_folder";  # Mount tag from UTM
-    fsType = "virtiofs";
-    options = [ "rw" "defaults" ];
-  };
+  #fileSystems."/mnt/shared_folder" = {
+  #  device = "shared_folder";  # Mount tag from UTM
+  #  fsType = "virtiofs";
+  #  options = [ "rw" "defaults" ];
+  #};
 
   # Ensure mount point exists and set permissions
   #system.activationScripts.createVirtFSMountPoint = lib.mkAfter ''

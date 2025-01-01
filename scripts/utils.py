@@ -76,7 +76,7 @@ class Shell:
         self.rm(path)
         self.mkdir(self.dirname(path))
         return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
-    def file_read(self, path): return Utils.stdout(self.run(f"cat '{path}'"))
+    def file_read(self, path): return Utils.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
     # Git
     def git_add_safe_directory(self, path):
         path = self.readlink(path)
