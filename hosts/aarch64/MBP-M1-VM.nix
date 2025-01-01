@@ -4,6 +4,17 @@
   variables.disk.device = "/dev/nvme0n1";
   variables.disk.swapSize = "1G"; # Small swap for a VM
 
+  # Explicitly disable Parallels support
+  #hardware.parallels.enable = false;
+
+  ##### Services #####
+  # Enable QEMU guest agent and Spice vdagent service for UTM
+  services = {
+    qemuGuest.enable = true;
+    spice-vdagentd.enable = true; # For clipboard sharing with Spice
+    # Other services can be added here
+  };
+
   ##### Boot Configuration #####
   boot = {
     # Include necessary kernel modules for QEMU / KVM virtual machines
@@ -45,21 +56,6 @@
     kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
   };
 
-  ##### Hardware Configuration #####
-  # GPU acceleration
-  hardware.graphics.enable = true;
-
-  # Explicitly disable Parallels support
-  hardware.parallels.enable = false;
-
-  ##### Services #####
-  # Enable QEMU guest agent and Spice vdagent service
-  services = {
-    qemuGuest.enable = true;
-    spice-vdagentd.enable = true; # For clipboard sharing with Spice
-    # Other services can be added here
-  };
-
   ##### Networking #####
   networking.useDHCP = lib.mkForce true;
 
@@ -79,9 +75,9 @@
   };
 
   # Ensure mount point exists and set permissions
-  system.activationScripts.createVirtFSMountPoint = lib.mkAfter ''
-    mkdir -p /mnt/shared_folder
-    chown ${config.variables.user.admin}:users /mnt/shared_folder
-    chmod 770 /mnt/shared_folder
-  '';
+  #system.activationScripts.createVirtFSMountPoint = lib.mkAfter ''
+  #  mkdir -p /mnt/shared_folder
+  #  chown ${config.variables.user.admin}:users /mnt/shared_folder
+  #  chmod 770 /mnt/shared_folder
+  #'';
 }
