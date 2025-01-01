@@ -54,8 +54,8 @@
         canTouchEfiVariables = true;
         efiSysMountPoint = "/boot";
       };
-      plymouth.theme = lib.mkForce "text";
     };
+    plymouth.theme = lib.mkForce "text";
     # Use the latest kernel packages
     kernelPackages = lib.mkForce pkgs.linuxPackages_latest;
   };
