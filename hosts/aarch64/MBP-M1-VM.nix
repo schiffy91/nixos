@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }:
+{ pkgs, lib, ... }:
 {
   ##### Disk Information #####
   variables.disk.device = "/dev/nvme0n1";
@@ -11,7 +11,7 @@
   ##### Services #####
   # Enable QEMU guest agent and Spice vdagent service for UTM
   services = {
-    qemuGuest.enable = true;
+    #qemuGuest.enable = true;
     spice-vdagentd.enable = true; # For clipboard sharing with Spice
     # Other services can be added here
   };
@@ -23,16 +23,16 @@
       availableKernelModules = [
         "xhci_pci"
         "nvme"
-        "sr_mod"
-        "virtio_pci"
-        "virtio_blk"
-        "virtio_scsi"
-        "virtio_net"
-        "virtio_gpu"
-        "virtiofs"
-        "drm"
-        "drm_kms_helper"
-        "usbhid"
+        #"sr_mod"
+       #"virtio_pci"
+       # "virtio_blk"
+       # "virtio_scsi"
+       # "virtio_net"
+       # "virtio_gpu"
+       # "virtiofs"
+        #"drm"
+        #"drm_kms_helper"
+        #"usbhid"
         # Audio modules (uncomment if needed)
         # "snd_hda_intel"
         # "snd_hda_codec"
