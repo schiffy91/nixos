@@ -3,14 +3,10 @@
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
   variables.disk.swapSize = "1G"; # Small swap for a VM
-
-  ##### Parallels #####
-  #hardware.parallels.enable = true;
   ##### UTM #####
-  #environment.variables.LIBGL_ALWAYS_SOFTWARE = "1";
+  #environment.variables.LIBGL_ALWAYS_SOFTWARE = "1"; # OpenGL drivers are buggy
   services.qemuGuest.enable = true;
-  spice-vdagentd.enable = true; # For clipboard sharing with Spice
-
+  services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
@@ -33,8 +29,6 @@
     "virtio_rng"
     "virtio_gpu"
   ];
-  boot.kernelPackages = lib.mkForce (if config.hardware.parallels.enable then pkgs.linuxPackages_6_6  else pkgs.linuxPackages_latest); # Parallels Tools is broken on anything greater than 6.6. SMH
-
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent
