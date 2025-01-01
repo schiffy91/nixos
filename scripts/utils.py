@@ -61,7 +61,7 @@ class Shell:
     def is_symlink(self, path): return self.run(f"[ -L '{path}' ]", check=False).returncode == 0
     def readlink(self, path): return Utils.stdout(self.run(f"readlink '{path}'")) if self.is_symlink(path) else path
     def is_dir(self, path): return self.run(f"[ -d '{path}' ]", check=False).returncode == 0
-    def exists(self, *args): return self.run(" ".join(f"[ -e {arg} ]" for arg in args) + " && true", check=False).returncode == 0
+    def exists(self, *args): return self.run(" ".join(f"[ -e '{arg}' ]" for arg in args) + " && true", check=False).returncode == 0
     def basename(self, path): return Utils.stdout(self.run(f"basename '{path}'"))
     def dirname(self, path): return Utils.stdout(self.run(f"dirname '{path}'"))
     def parent_name(self, path): return self.basename(self.dirname(path))
