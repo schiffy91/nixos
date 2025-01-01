@@ -5,36 +5,23 @@ class Installer:
     sh = Shell()
     @classmethod
     def install_nixos(cls):
-        # Paths
-        sh = cls.sh
-        remote_root = cls.get_remote_root_path()
-        nixos_path = cls.get_nixos_path() # ~/nixos
-        remote_nixos_path = cls.get_nixos_path(remote=True) # ~/mnt/nixos
-        install_path = cls.get_install_path() # /etc/nixos
-        remote_install_path = cls.get_install_path(remote=True) # /mnt/etc/nixos
-        remote_tmp_path = cls.get_nix_tmp_path(remote=True) # /mnt/nix/tmp
-        username = cls.get_username() # alexanderschiffhauer
-        # nixos-install args
         host = Config.get_host()
-        target = Config.get_target()
-        env = f"TMPDIR={remote_tmp_path}"
-        flake_arg = f"--flake {remote_install_path}#{host}-{target}"
-        root_arg = f"--root {remote_root}"
+        target = Config.get_host()
+        mount_point = cls.get_mount_point()
+        source = cls.get_install_path()
+        destination = {mount_point}/{source}
+        flake_arg = f"--flake {destination}#{host}-{target}"
+        root_arg = f"--root {mount_point}"
         options = "--no-channel-copy --show-trace --no-root-password --cores 0"
         cmd = f"nixos-install {flake_arg} {root_arg} {options}"
-        # Prepare nixos-install
-        sh.rm(remote_nixos_path, remote_install_path) # Remove up destinations
-        sh.mkdir(cls.get_etc_path(remote=True), cls.get_store_path(remote=True), remote_tmp_path) # Ensure dependent directories exist
-        sh.cpdir(install_path, remote_install_path) # e.g. cp -R /etc/nixos /mnt/etc/nixos
-        # nixos-install
-        sh.run(cmd=cmd, env=env, capture_output=False)
-        # Symlink and permission within chroot
-        with sh.chroot(remote_root):
-            Config.secure(username, sh) # Pass in sh for chroot
-            sh.mv(install_path, nixos_path) # Move nixos to home directory
-            sh.symlink(nixos_path, install_path) # Smylink ~/nixos to e.g. /etc/nixos
-        # Cleanup
-        sh.rm(f"{remote_tmp_path}")
+        tmp = f"{mount_point}/nix/tmp"
+        env = f"TMPDIR={tmp}"
+        cls.sh.cpdir(source, destination)
+        cls.sh.run(cmd=cmd, env=env, capture_output=False)
+        with cls.sh.chroot(mount_point):
+            cls.sh.symlink(source, Config.get_nixos_path())
+            Config.secure(cls.get_username(), sh=cls.sh)
+        cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode):
         disko_key = "github:nix-community/disko/"
@@ -44,27 +31,15 @@ class Installer:
         return cls.sh.run(command, capture_output=False)
     # Readonly
     @classmethod
-    def get_remote_root_path(cls): return "/mnt"
+    def get_mount_point(cls): return "/mnt"
     @classmethod
-    def get_install_path(cls, remote=False): return f"{cls.get_remote_root_path()}{Config.get_nixos_path()}" if remote else Config.get_nixos_path()
+    def get_username(cls): return Utils.get_value_from_variables("admin")
     @classmethod
-    def get_etc_path(cls, remote=False): return f"{cls.get_remote_root_path()}/etc" if remote else "/etc"
-    @classmethod
-    def get_store_path(cls, remote=False): return f"{cls.get_remote_root_path()}/nix/store" if remote else "/nix/store"
-    @classmethod
-    def get_nix_tmp_path(cls, remote=False): return f"{cls.get_remote_root_path()}/nix/tmp" if remote else "/nix/tmp"
-    @classmethod
-    def get_home_path(cls, remote=False): return f"{cls.get_remote_root_path()}/home" if remote else "/home"
-    @classmethod
-    def get_user_path(cls, remote=False): return f"{cls.get_remote_root_path()}/home/{cls.get_username()}" if remote else f"/home/{cls.get_username()}"
-    @classmethod
-    def get_nixos_path(cls, remote=False): return f"{cls.get_remote_root_path()}{cls.get_user_path()}/nixos" if remote else f"{cls.get_user_path()}/nixos"
+    def get_install_path(cls): return f"/home/{cls.get_username()}/nixos"
     @classmethod
     def get_disk_path(cls): return Utils.get_value_from_path(Config.get_host_path(), "variables.disk.device")
     @classmethod
     def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
-    @classmethod
-    def get_username(cls): return Utils.get_value_from_variables("admin")
     @classmethod
     def disk_mount(cls): return cls.run_disko("mount")
     @classmethod
