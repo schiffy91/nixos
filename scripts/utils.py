@@ -37,6 +37,7 @@ class Shell:
     def mkdir(self, *args): return self.run(f"mkdir -p { ' '.join(args) }")
     def cpdir(self, source, target):
         self.rm(target)
+        self.mkdir(self.parent_name(target)) # Make all missing parent directories
         return self.run(f"cp -r {source} {target}")
     def find(self, path, pattern="*", ignore_pattern=None, ignore_files=False, ignore_directories=False):
         def format_patterns(prefix, patterns):
