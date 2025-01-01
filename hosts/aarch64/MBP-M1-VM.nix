@@ -4,7 +4,7 @@
   variables.disk.device = "/dev/vda";
   variables.disk.swapSize = "1G"; # Small swap for a VM
   ##### UTM #####
-  #environment.variables.LIBGL_ALWAYS_SOFTWARE = "1"; # OpenGL drivers are buggy
+  environment.variables.LIBGL_ALWAYS_SOFTWARE = "1"; # OpenGL drivers are buggy
   services.qemuGuest.enable = true;
   services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
   ##### Boot Configuration #####
