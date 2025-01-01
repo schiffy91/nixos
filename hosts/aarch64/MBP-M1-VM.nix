@@ -6,6 +6,7 @@
 
   # Explicitly disable Parallels support
   #hardware.parallels.enable = false;
+  environment.variables.LIBGL_ALWAYS_SOFTWARE = "1";
 
   ##### Services #####
   # Enable QEMU guest agent and Spice vdagent service for UTM
