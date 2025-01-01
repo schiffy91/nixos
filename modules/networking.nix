@@ -38,4 +38,5 @@
   users.users.${config.variables.user.admin}.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI= ${config.variables.user.admin}"
   ];
+  networking.useDHCP = true;
 }
