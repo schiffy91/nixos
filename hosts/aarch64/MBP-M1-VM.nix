@@ -1,15 +1,17 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, modulesPath, ... }:
 {
   ##### Disk Information #####
-  variables.disk.device = "/dev/nvme0n1";
+  variables.disk.device = "/dev/vda";
   variables.disk.swapSize = "1G"; # Small swap for a VM
 
   # Explicitly disable Parallels support
   #hardware.parallels.enable = false;
-  environment.variables.LIBGL_ALWAYS_SOFTWARE = "1";
+  #environment.variables.LIBGL_ALWAYS_SOFTWARE = "1";
 
   ##### Services #####
   # Enable QEMU guest agent and Spice vdagent service for UTM
+  imports = [ (modulesPath + "/profiles/qemu-guest.nix") ];
+
   services = {
     #qemuGuest.enable = true;
     spice-vdagentd.enable = true; # For clipboard sharing with Spice
@@ -38,9 +40,9 @@
         # "snd_hda_codec"
       ];
     };
-    kernelModules = [
-      "virtio_balloon"
-    ];
+    #kernelModules = [
+    #  "virtio_balloon"
+    #];
     loader = {
       systemd-boot = {
         enable = true;
