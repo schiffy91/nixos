@@ -19,7 +19,7 @@
     "sr_mod"
     "nvme"
   ];
-  boot.kernelModules = [ "kvm-arm" ];
+  #boot.kernelModules = [ "kvm-arm" ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     open-vm-tools
