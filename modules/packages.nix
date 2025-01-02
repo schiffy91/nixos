@@ -12,6 +12,7 @@
     _1password-gui
     _1password-cli
     alacritty
+    inputs.nixpkgs-unstable.ghostty
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
