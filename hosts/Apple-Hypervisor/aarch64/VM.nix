@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, config, lib ... }:
 {
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
@@ -19,21 +19,23 @@
     "xhci_pci"
     "hid_generic"
     "usbhid"
+    "fuse"
   ];
   boot.kernelParams = [
     "console=tty0"
   ];
-  ##### Packages #####
-  environment.systemPackages = with pkgs; [ 
-    spice-vdagent
-  ];
   ##### Shared Clipboard #####
   services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
-
   ##### Shared Folder #####
   fileSystems."/mnt/shared" = {
     device = "share";  # Mount tag from UTM
     fsType = "virtiofs";
     options = [ "rw" "nofail" ];
   };
+  users.users.${config.variables.user.admin}.extraGroups = lib.mkAfter [ "fuse" ];
+  ##### Packages #####
+  environment.systemPackages = with pkgs; [ 
+    spice-vdagent
+    fuse
+  ];
 }
