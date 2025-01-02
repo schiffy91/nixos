@@ -24,7 +24,7 @@
     "fuse"
   ];
   ##### Shared Clipboard #####
-  services.spice-vdagentd.enable = true; # For clipboard sharing with Spice #TODO Fix this
+  services.spice-vdagentd.enable = true;
   ##### Shared Folder #####
   fileSystems."/mnt/shared" = {
     device = "share";  # Mount tag from UTM
