@@ -12,7 +12,7 @@
     "drm"
     "drm_kms_helper"
     "virtio_snd"
-    "virtio_fs"
+    "virtiofs"
     "virtio_rng"
     "virtio_balloon"
     "virtio_console"
