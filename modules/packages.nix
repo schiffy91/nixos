@@ -11,7 +11,6 @@
     efibootmgr
     _1password-gui
     _1password-cli
-    blackbox-terminal
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
