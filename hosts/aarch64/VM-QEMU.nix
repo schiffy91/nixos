@@ -21,6 +21,7 @@
     "usbhid"
     "9p"
     "9pnet_virtio"
+    "virtio_console"
     "snd_hda_codec"
     "snd_hda_core"
   ];
@@ -33,9 +34,9 @@
   services.spice-vdagentd.enable = true;
   ##### Shared Folder #####
   fileSystems."/mnt/shared" = {
-    device = "share";  # Mount tag from UTM
-    fsType = "virtiofs";
-    options = [ "rw" "nofail" ];
+    device = "share";
+    fsType = "9p";
+    options = [ "trans=virtio" "version=9p2000.L" "rw" "nofail" ];
   };
   ##### Security #####
   security.sudo.wheelNeedsPassword = false;
