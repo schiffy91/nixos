@@ -24,5 +24,9 @@
     "console=tty0"
   ];
   ##### Packages #####
-  environment.systemPackages = with pkgs; [ ];
+  environment.systemPackages = with pkgs; [ 
+    spice-vdagent
+  ];
+  ##### Copy-Paste #####
+  services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
 }
