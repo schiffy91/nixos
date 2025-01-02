@@ -190,7 +190,7 @@ class Interactive:
     @classmethod
     def ask_for_host_path(cls):
         hosts_paths = glob.glob(f"{Config.get_nixos_path()}/hosts/**/*.nix", recursive=True)
-        formatted_hosts_paths = [ f"({cls.sh.parent_name(host_path)})" + cls.sh.basename(host_path).replace(".nix", "") for host_path in hosts_paths ]
+        formatted_hosts_paths = [ f"{cls.sh.basename(host_path).replace(".nix", "")} ({cls.sh.parent_name(host_path)})"  for host_path in hosts_paths ]
         potential_matches = [ formatted_hosts_path for formatted_hosts_path in formatted_hosts_paths if cls.sh.hostname() in formatted_hosts_path ]
         if potential_matches:
             match = hosts_paths[formatted_hosts_paths.index(potential_matches[0])]
