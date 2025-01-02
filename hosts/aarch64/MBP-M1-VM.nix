@@ -6,7 +6,6 @@
   ##### UTM #####
   services.qemuGuest.enable = true;
   services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
-  environment.variables.LIBGL_ALWAYS_SOFTWARE = "1"; # GPU acceleration is too buggy on MacOS
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
