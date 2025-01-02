@@ -1,4 +1,4 @@
-{ pkgs, inputs, config, ... }:
+{ pkgs, inputs, config, lib, ... }:
 {
   imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
   boot = {
@@ -37,6 +37,6 @@
       "rd.systemd.show_status=auto"     # Same as above, but for the initrd phase
       "plymouth.ignore-serial-consoles" # Force display rendering
     ];
-    kernelPackages = pkgs.linuxPackages_latest;
+    kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
   };
 }
