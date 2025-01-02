@@ -13,10 +13,24 @@ let kernelPackage = "linux_6_11"; in # Parallels Tools is broken on anything gre
   };
   boot.kernelPackages = pkgs.linuxPackages_6_11;
   ##### Boot Configuration #####
-  boot.kernelModules = [
-    "prl_tg"  # Parallels Tools communications
-    "prl_fs"  # Shared folders
-    "prl_fs_freeze"  # File system synchronization
+  boot.initrd.availableKernelModules = [
+    "xhci_pci"
+    "virtio_pci"
+    "virtio_pci_modern_dev"
+    "drm"
+    "drm_kms_helper"
+    "virtio_mmio"
+    "virtio_blk"
+    "virtio_net"
+    "hid_generic"
+    "usbhid"
+    "9p"
+    "9pnet_virtio"
+    "snd_hda_codec"
+    "snd_hda_core"
+    "prl_fs_freeze"
+    "prl_fs"
+    "prl_tg"
     "prl_eth" # Network driver
     "prl_vid" # Video driver
     "prl_clipboard" # Clipboard sharing
