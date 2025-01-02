@@ -31,7 +31,7 @@
     fsType = "virtiofs";
     options = [ "rw" "nofail" ];
   };
-  users.users.${config.variables.user.admin}.extraGroups = lib.mkAfter [ "fuse" ];
+  users.users.${config.variables.user.admin}.extraGroups = [ "fuse" ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [ 
     spice-vdagent

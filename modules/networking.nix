@@ -1,4 +1,4 @@
-{ config, lib, ... }: {
+{ lib, ... }: {
   networking = { 
     networkmanager.enable = true;
     firewall = { 
