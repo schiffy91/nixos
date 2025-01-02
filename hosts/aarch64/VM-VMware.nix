@@ -12,10 +12,7 @@
     package = pkgs.open-vm-tools;  # Explicitly set the package
   };
   ##### Display Manager #####
-  services.xserver = {
-    enable = true;
-    videoDrivers = [ "vmware" ];
-  };
+  services.xserver.enable = true;
   services.displayManager.sddm = {
     enable = false;
     wayland.enable = false;
@@ -25,9 +22,6 @@
     "xhci_pci"
     "sr_mod"
     "nvme"
-    "vmw_vsock_vmci_transport"
-    "vmw_balloon"
-    "vmw_vmci"
   ];
   boot.kernelModules = [ "kvm-arm" ];
   ##### Packages #####
@@ -39,15 +33,5 @@
     device = ".host:/";
     fsType = "fuse.vmhgfs-fuse";
     options = [ "defaults" "allow_other" ];
-  };
-  # Additional VMware-specific systemd services
-  systemd.services."vmware-vmblock-fuse" = {
-    description = "VMware vmblock fuse mount";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "network.target" ];
-    serviceConfig = {
-      ExecStart = "${pkgs.open-vm-tools}/bin/vmware-vmblock-fuse -d";
-      Type = "forking";
-    };
   };
 }

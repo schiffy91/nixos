@@ -1,9 +1,9 @@
-{ lib, ... }: {
+{ config, lib, ... }: {
+  hardware.graphics.enable = true;
   services.xserver.enable = lib.mkDefault false;
   services.desktopManager.plasma6.enable = true;
   services.displayManager.sddm = lib.mkDefault {
-    enable = true;
-    wayland.enable = true;
+    enable = !config.xserver.enable;
+    wayland.enable = !config.xserver.enable;
   };
-  hardware.graphics.enable = true;
 }
