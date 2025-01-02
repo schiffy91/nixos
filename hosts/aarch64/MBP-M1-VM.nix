@@ -28,10 +28,6 @@
     "virtio_balloon"
     "virtio_rng"
   ];
-  boot.kernelParams = [
-    "console=tty1"
-    "video=virtio-ramfb:1920x1080"
-  ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent
