@@ -6,13 +6,13 @@
     devbox
     git
     vscode
-    (inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl)
+    inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
     python313
     efibootmgr
     _1password-gui
     _1password-cli
     alacritty
-    inputs.nixpkgs-unstable.pkgs.ghostty
+    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
