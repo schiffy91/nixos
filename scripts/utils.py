@@ -109,7 +109,7 @@ class Config:
         cls.sh.mkdir(cls.get_secrets_path())
         password = Interactive.ask_for_password()
         if plain_text_password_path: cls.sh.file_write(plain_text_password_path, password, sensitive=password)
-        encrypted_password = Utils.stdout(Utils.encrypt_password(password))
+        encrypted_password = Utils.encrypt_password(password)
         cls.sh.file_write(cls.get_hashed_password_path(), encrypted_password, sensitive=encrypted_password)
     @classmethod
     def secure_secrets(cls, path_to_secrets, sh=None):
@@ -239,7 +239,7 @@ class Utils:
     @classmethod
     def stdout(cls, completed_process): return completed_process.stdout.strip()
     @classmethod
-    def encrypt_password(cls, password): return cls.sh.run(f"mkpasswd -m sha-512 '{password}'", sensitive=password)
+    def encrypt_password(cls, password): return cls.stdout(cls.sh.run(f"mkpasswd -m sha-512 '{password}'", sensitive=password))
     @classmethod
     def log(cls, message): print(f"{cls.GRAY}LOG: {message}{cls.RESET}")
     @classmethod
