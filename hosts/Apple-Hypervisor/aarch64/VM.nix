@@ -21,11 +21,8 @@
     "usbhid"
     "fuse"
   ];
-  boot.kernelParams = [
-    "console=tty0"
-  ];
   ##### Shared Clipboard #####
-  services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
+  services.spice-vdagentd.enable = true; # For clipboard sharing with Spice #TODO Fix this
   ##### Shared Folder #####
   fileSystems."/mnt/shared" = {
     device = "share";  # Mount tag from UTM
