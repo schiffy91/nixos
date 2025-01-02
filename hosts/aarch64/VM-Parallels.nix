@@ -1,5 +1,5 @@
 { pkgs, ... }:
-let kernelPackage = "linux_6_11"; in # Parallels Tools is broken on anything greater than 6.11. SMH
+let kernelPackage = "linux_6_6"; in # Parallels Tools is broken on anything greater than 6.11. SMH
 {
   ##### Host Name #####
   networking.hostName = "VM";
