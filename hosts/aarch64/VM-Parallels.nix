@@ -1,5 +1,9 @@
 { pkgs, ... }:
-let kernelPackage = "linux_6_6"; in # Parallels Tools is broken on anything greater than 6.11. SMH
+let
+  kernel_version = "6_6";
+  kernelPackage = "linux_${kernel_version}";
+  linuxPackage = "linuxPackages_${kernel_version}";
+in # Parallels Tools is broken on anything greater than 6.11. SMH
 {
   ##### Host Name #####
   networking.hostName = "VM";
@@ -11,7 +15,7 @@ let kernelPackage = "linux_6_6"; in # Parallels Tools is broken on anything grea
     enable = true;
     package = pkgs.linuxKernel.packages.${kernelPackage}.prl-tools;
   };
-  boot.kernelPackages = pkgs.linuxPackages_6_11;
+  boot.kernelPackages = pkgs.${linuxPackage};
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
