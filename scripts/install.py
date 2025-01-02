@@ -33,7 +33,7 @@ class Installer:
     @classmethod
     def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
     @classmethod
-    def get_required_secrets(cls): return [ Config.get_secrets_path(), Config.get_hashed_password_path, cls.get_plain_text_password_path() ]
+    def get_required_secrets(cls): return [ Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path() ]
     @classmethod
     def required_secrets_are_valid(cls): return Utils.encrypt_password(cls.sh.file_read(Installer.get_plain_text_password_path())) == cls.sh.file_read(Config.get_hashed_password_path())
     @classmethod
