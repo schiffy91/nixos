@@ -1,5 +1,7 @@
 { pkgs, ... }:
 {
+  ##### Host Name #####
+  networking.hostName = "VM";
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
   variables.disk.swapSize = "1G"; # Small swap for a VM
