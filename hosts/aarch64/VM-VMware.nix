@@ -8,15 +8,11 @@
   ##### VMware #####
   virtualisation.vmware.guest = {
     enable = true;
-    headless = false;  # Set to false to enable GUI tools including copy/paste
-    package = pkgs.open-vm-tools;  # Explicitly set the package
+    headless = false;
+    package = pkgs.open-vm-tools;
   };
   ##### Display Manager #####
   services.xserver.enable = true;
-  services.displayManager.sddm = {
-    enable = false;
-    wayland.enable = false;
-  };
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
