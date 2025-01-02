@@ -25,9 +25,9 @@
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let name = getHostName hostFile; in 
         [ 
-          { name = "${name}-mount"; value = mkTarget hostFile [ ./modules/disk.nix ]; }
-          { name = "${name}-standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
-          { name = "${name}-secure-boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { boot.lanzaboote.enable = lib.mkForce true; }) ]; }
+          { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/disk.nix ]; }
+          { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
+          { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { boot.lanzaboote.enable = lib.mkForce true; }) ]; }
         ]
       ) hostFiles);
     };

@@ -142,7 +142,7 @@ class Config:
         if not cls.sh.exists(cls.get_config_path()):
             print("'CONFIG.JSON' IS MISSING.")
             host_path = Interactive.ask_for_host_path()
-            cls.reset_config(host_path, "standard")
+            cls.reset_config(host_path, Config.get_standard_flake_target())
             rebuild_file_system = True
         environment = ""
         if rebuild_file_system:
@@ -159,6 +159,12 @@ class Config:
     @classmethod
     def get_target(cls): return cls.get("target")
     # Readonly
+    @classmethod
+    def get_standard_flake_target(cls): return "Standard"
+    @classmethod
+    def get_secure_boot_flake_target(cls): return "Secure-Boot"
+    @classmethod
+    def get_disk_operation_target(cls): return "Disk-Operation"
     @classmethod
     def get_host(cls): return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod

@@ -41,7 +41,7 @@ def require_signed_boot_loader():
 
 def disable_secure_boot():
     remove_old_efi_entries()
-    Config.set_target("standard")
+    Config.set_target(Config.get_standard_flake_target())
     return Config.update(rebuild_file_system=True)
 
 def enable_secure_boot():

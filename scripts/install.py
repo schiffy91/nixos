@@ -19,7 +19,7 @@ class Installer:
         disko_key = "github:nix-community/disko/"
         version = Utils.get_value_from_path(Config.get_flake_path(), key=disko_key, start=disko_key, end='"')
         command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{version} --verbose -- " \
-                f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-mount --mode {mode} --root-mountpoint {cls.get_mount_point()} {args}"
+                f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-{Config.get_disk_operation_target()} --mode {mode} --root-mountpoint {cls.get_mount_point()} {args}"
         return cls.sh.run(command, capture_output=False)
     # Helpers
     @classmethod
@@ -39,7 +39,7 @@ class Installer:
 
 def main():
     Utils.require_root()
-    Config.reset_config(Interactive.ask_for_host_path(), "standard") # Create config.json based on the selected host
+    Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
     Config.reset_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Setup passwords for encryption
     if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Ask whether to erase and mount disk
     else: Installer.mount_disk() # Otherwise just mount the disk
