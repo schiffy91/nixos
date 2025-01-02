@@ -33,9 +33,15 @@ class Installer:
     @classmethod
     def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
     @classmethod
-    def get_required_secrets(cls): return [ Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path() ]
-    @classmethod
-    def required_secrets_are_valid(cls): return Utils.encrypt_password(cls.sh.file_read(Installer.get_plain_text_password_path())) == cls.sh.file_read(Config.get_hashed_password_path())
+    def secrets_already_exist(cls): 
+        if not cls.sh.exists(Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path()):
+            return False
+        tmp_password = cls.sh.file_read(Installer.get_plain_text_password_path())
+        hashed_password = cls.sh.file_read(Config.get_hashed_password_path())
+        Utils.print_error(f"tmp_password = {tmp_password}")
+        Utils.print_error(f"hashed_password = {hashed_password}")
+        Utils.print_error(f"Utils.encrypt_password(tmp_password) = {Utils.encrypt_password(tmp_password)}")
+        return Utils.encrypt_password(tmp_password) == hashed_password
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod
@@ -45,7 +51,7 @@ def main():
     Utils.require_root()
     if Installer.sh.exists(Config.get_config_path()): Utils.print(f"Found {Config.get_config_path()}")
     else: Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
-    if Installer.sh.exists(*Installer.get_required_secrets()) and Installer.required_secrets_are_valid(): Utils.print(f"Found {' '.join(Installer.get_required_secrets())}")
+    if Installer.secrets_already_exist(): Utils.print("Found existing secrets.")
     else: Config.reset_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Setup passwords for encryption
     if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Format disk
     else: Installer.mount_disk() # Or just mount disk
