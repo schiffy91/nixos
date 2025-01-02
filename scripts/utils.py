@@ -69,7 +69,7 @@ class Shell:
     def chmod(self, mode, *args):
         paths = [self.readlink(path) for path in args]
         self.run(f"chmod -R {mode} " + " ".join(f"'{path}'" for path in paths))
-    def chown(self, user, args):
+    def chown(self, user, *args):
         paths = [self.readlink(path) for path in args]
         self.run(f"chown -R {user} " + " ".join(f"'{path}'" for path in paths))
     # I/O
