@@ -1,4 +1,5 @@
 { pkgs,lib, ... }:
+let linux_kernel_verrsion = "linuxPackages_6_11"; in
 {
   ##### Host Name #####
   networking.hostName = "VM";
@@ -6,7 +7,10 @@
   variables.disk.device = "/dev/sda";
   variables.disk.swapSize = "1G"; # Small swap for a VM
   ##### Parallels #####
-  hardware.parallels.enable = true;
+  hardware.parallels = {
+    enable = true;
+    package = pkgs.linuxKernel.packages.linux_6_11.prl-tools;
+  };
   boot.kernelPackages = pkgs.linuxPackages_6_11; # Parallels Tools is broken on anything greater than 6.11. SMH
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
@@ -35,7 +39,6 @@
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-  
+      linuxKernel.packages.linux_6_11.prl-tools
   ];
-  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "prl-tools" ];
 }
