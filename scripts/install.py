@@ -45,7 +45,7 @@ def main():
     Utils.require_root()
     if Installer.sh.exists(Config.get_config_path()): Utils.print(f"Found {Config.get_config_path()}")
     else: Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
-    if Installer.sh.exists(*Installer.get_required_secrets()) and Installer.required_secrets_are_valid(): Utils.print(f"Found {" ".join(Installer.get_required_secrets())}")
+    if Installer.sh.exists(*Installer.get_required_secrets()) and Installer.required_secrets_are_valid(): Utils.print(f"Found {' '.join(Installer.get_required_secrets())}")
     else: Config.reset_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Setup passwords for encryption
     if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Format disk
     else: Installer.mount_disk() # Or just mount disk
