@@ -117,14 +117,14 @@ class Config:
         directories = sh.find_directories(path_to_secrets, pattern="*")
         files = sh.find_files(path_to_secrets, pattern="*")
         sh.chown("root", path_to_secrets, *directories, *files) # Only root owns secrets
-        sh.chmod("700", path_to_secrets, *directories) # Traversable directories by anyone
-        sh.chmod("600", *files) # But only root can read or write files
+        sh.chmod(700, path_to_secrets, *directories) # Traversable directories by anyone
+        sh.chmod(600, *files) # But only root can read or write files
     @classmethod
     def secure(cls, username, sh=None):
         sh = cls.sh if sh is None else sh
         ignore_pattern = "*/{secrets}*" # Ignore secrets
         nixos_path = cls.get_nixos_path() # /etc/nixos
-        sh.chown(nixos_path, username) # $username owns everything in /etc/nixos
+        sh.chown(username, nixos_path) # $username owns everything in /etc/nixos
         sh.chmod(755, sh.find_directories(nixos_path, ignore_pattern=ignore_pattern)) # Directories are traversable
         sh.chmod(644, sh.find_files(nixos_path, ignore_pattern=ignore_pattern)) # Owner can read write files
         sh.chmod(755, sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
