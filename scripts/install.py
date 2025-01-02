@@ -10,8 +10,8 @@ class Installer:
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()):
-            cls.sh.mv(Config.get_nixos_path(), cls.get_final_nixos_path())
-            cls.sh.symlink(cls.get_final_nixos_path(), Config.get_nixos_path())
+            #cls.sh.mv(Config.get_nixos_path(), cls.get_final_nixos_path())
+            #cls.sh.symlink(cls.get_final_nixos_path(), Config.get_nixos_path())
             Config.secure(cls.get_username(), sh=cls.sh)
         cls.sh.rm(tmp)
     @classmethod

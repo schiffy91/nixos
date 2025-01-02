@@ -125,10 +125,10 @@ class Config:
         ignore_pattern = "*/{secrets}*" # Ignore secrets
         nixos_path = cls.get_nixos_path() # /etc/nixos
         sh.chown(username, nixos_path) # $username owns everything in /etc/nixos
-        sh.chmod(755, sh.find_directories(nixos_path, ignore_pattern=ignore_pattern)) # Directories are traversable
-        sh.chmod(644, sh.find_files(nixos_path, ignore_pattern=ignore_pattern)) # Owner can read write files
-        sh.chmod(755, sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
-        sh.chmod(444, sh.find_files(f"{nixos_path}/.git/objects")) # Git files require specific permission
+        sh.chmod(755, *sh.find_directories(nixos_path, ignore_pattern=ignore_pattern)) # Directories are traversable
+        sh.chmod(644, *sh.find_files(nixos_path, ignore_pattern=ignore_pattern)) # Owner can read write files
+        sh.chmod(755, *sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
+        sh.chmod(444, *sh.find_files(f"{nixos_path}/.git/objects")) # Git files require specific permission
         cls.secure_secrets(cls.get_secrets_path(), sh) # Secure the secrets using our shell (in case of chroot)
         sh.git_add_safe_directory(nixos_path)
     @classmethod
