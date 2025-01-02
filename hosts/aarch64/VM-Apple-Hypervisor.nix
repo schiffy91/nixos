@@ -1,4 +1,4 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, ... }:
 {
   ##### Host Name #####
   networking.hostName = "VM";
