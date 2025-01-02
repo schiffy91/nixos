@@ -4,10 +4,10 @@ source "$(dirname "$(readlink -f "$0")")/utils"
 # Install Python3.13
 sudo nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#python313
 
-if arg_exists "--collect-garbage"; then
+if arg_exists "--collect-garbage" "$@"; then
     sudo nix-collect-garbage -d;
 fi
-if arg_exists "--debug"; then
+if arg_exists "--debug" "$@"; then
     sudo nix --extra-experimental-features "nix-command flakes" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data --install-extension ms-python.python
     sudo nix --extra-experimental-features "nix-command flakes" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data /etc/nixos
 else
