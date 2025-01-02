@@ -7,9 +7,7 @@
   variables.disk.swapSize = "1G"; # Small swap for a VM
   ##### Parallels #####
   hardware.parallels.enable = true;
-  boot.kernelPackages = pkgs.linuxPackages_6_11; # Parallels Tools is broken on anything greater than 6.6. SMH
-  ##### Disk Information #####
-  services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
+  boot.kernelPackages = pkgs.linuxPackages_6_11; # Parallels Tools is broken on anything greater than 6.11. SMH
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
@@ -26,6 +24,9 @@
     "9pnet_virtio"
     "snd_hda_codec"
     "snd_hda_core"
+    "prl_fs_freeze"
+    "prl_fs"
+    "prl_tg"
   ];
   boot.initrd.kernelModules = [
     "virtio_gpu"
@@ -34,6 +35,6 @@
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-    spice-vdagent
+    "prl_tools"
   ];
 }
