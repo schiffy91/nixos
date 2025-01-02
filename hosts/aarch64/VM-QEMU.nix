@@ -29,7 +29,6 @@
     "virtio_balloon"
     "virtio_rng"
     "virtio_console"
-    "virtio_serial"
   ];
   ##### Shared Clipboard #####
   services.spice-vdagentd.enable = true;
