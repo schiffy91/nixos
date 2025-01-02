@@ -21,8 +21,6 @@
     "usbhid"
     "9p"
     "9pnet_virtio"
-    "virtio_console"
-    "virtio-serial" 
     "snd_hda_codec"
     "snd_hda_core"
   ];
@@ -30,6 +28,8 @@
     "virtio_gpu"
     "virtio_balloon"
     "virtio_rng"
+    "virtio_console"
+    "virtio_serial"
   ];
   ##### Shared Clipboard #####
   services.spice-vdagentd.enable = true;
@@ -44,5 +44,6 @@
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent
+    spice-protocol
   ];
 }

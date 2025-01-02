@@ -8,11 +8,8 @@
     vscode
     inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
     python313
-    efibootmgr
     _1password-gui
     _1password-cli
-    xdg-desktop-portal-kde
-    wl-clipboard
     #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty Too buggy :(
   ]);
   programs._1password.enable = true;

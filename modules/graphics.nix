@@ -10,4 +10,8 @@
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-kde ];
   };
+  environment.systemPackages = with pkgs; [
+    xdg-desktop-portal-kde
+    wl-clipboard
+  ];
 }
