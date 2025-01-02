@@ -1,10 +1,11 @@
+#TODO Clipboard doesn't work
 { pkgs, ... }:
 {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
   variables.disk.device = "/dev/nvme0n1";
-  variables.disk.swapSize = "1G"; # Small swap for a VM
+  
   ##### VMware #####
   virtualisation.vmware.guest = {
     enable = true;
@@ -20,6 +21,8 @@
     "nvme"
   ];
   boot.kernelModules = [ "kvm-arm" ];
+  ##### Security #####
+  security.sudo.wheelNeedsPassword = false;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     open-vm-tools

@@ -1,10 +1,10 @@
+#TODO 100% CPU Utilization
 { pkgs, config, ... }:
 {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
-  variables.disk.swapSize = "1G"; # Small swap for a VM
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "virtio_pci"
@@ -32,6 +32,8 @@
     options = [ "rw" "nofail" ];
   };
   users.users.${config.variables.user.admin}.extraGroups = [ "fuse" ];
+  ##### Security #####
+  security.sudo.wheelNeedsPassword = false;
   ##### Packages #####
   environment.systemPackages = with pkgs; [ 
     spice-vdagent

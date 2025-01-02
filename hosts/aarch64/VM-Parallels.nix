@@ -1,3 +1,4 @@
+#TODO Clipboard doesn't work
 { pkgs, ... }:
 let
   kernel_version = "6_6"; # Parallels Tools is broken on anything greater than 6.11. SMH
@@ -9,7 +10,6 @@ in
   networking.hostName = "VM";
   ##### Disk Information #####
   variables.disk.device = "/dev/sda";
-  variables.disk.swapSize = "1G"; # Small swap for a VM
   ##### Parallels #####
   hardware.parallels = {
     enable = true;
@@ -21,6 +21,8 @@ in
     "xhci_pci"
     "sr_mod"
   ];
+  ##### Security #####
+  security.sudo.wheelNeedsPassword = false;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
       linuxKernel.packages.${kernelPackage}.prl-tools

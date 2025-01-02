@@ -1,10 +1,10 @@
+#TODO Clipboard doesn't work
 { pkgs, ... }:
 {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
-  variables.disk.swapSize = "1G";
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Boot Configuration #####
@@ -37,6 +37,8 @@
     fsType = "virtiofs";
     options = [ "rw" "nofail" ];
   };
+  ##### Security #####
+  security.sudo.wheelNeedsPassword = false;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent
