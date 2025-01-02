@@ -66,12 +66,12 @@ class Shell:
     def dirname(self, path): return Utils.stdout(self.run(f"dirname '{path}'"))
     def parent_name(self, path): return self.basename(self.dirname(path))
     # Security
-    def chmod(self, path, mode):
-        path = self.readlink(path)
-        self.run(f"chmod {'-R' if self.is_dir(path) else ''} {mode} '{path}'")
-    def chown(self, path, user):
-        path = self.readlink(path)
-        self.run(f"chown {'-R' if self.is_dir(path) else ''} {user} '{path}'")
+    def chmod(self, mode, *args):
+        paths = [self.readlink(path) for path in args]
+        self.run(f"chmod -R {mode} " + " ".join(f"'{path}'" for path in paths))
+    def chown(self, user, args):
+        paths = [self.readlink(path) for path in args]
+        self.run(f"chown -R {user} " + " ".join(f"'{path}'" for path in paths))
     # I/O
     def file_write(self, path, string, sensitive=None, **kwargs):
         self.rm(path)
@@ -114,22 +114,21 @@ class Config:
     @classmethod
     def secure_secrets(cls, path_to_secrets, sh=None):
         sh = cls.sh if sh is None else sh
-        secrets = [(path_to_secrets, "700", "root")]
-        secrets += [(path, "700", "root") for path in sh.find_directories(path_to_secrets, pattern="*")] # 700 for sub directories
-        secrets += [(path, "600", "root") for path in sh.find_files(path_to_secrets, pattern="*")] # 600 for sub files
-        for (path, mode, user) in secrets:
-            sh.chown(path, user)
-            sh.chmod(path, mode)
+        directories = sh.find_directories(path_to_secrets, pattern="*")
+        files = sh.find_files(path_to_secrets, pattern="*")
+        sh.chown("root", path_to_secrets, *directories, *files) # Only root owns secrets
+        sh.chmod("700", path_to_secrets, *directories) # Traversable directories by anyone
+        sh.chmod("600", *files) # But only root can read or write files
     @classmethod
     def secure(cls, username, sh=None):
         sh = cls.sh if sh is None else sh
         ignore_pattern = "*/{secrets}*" # Ignore secrets
         nixos_path = cls.get_nixos_path() # /etc/nixos
         sh.chown(nixos_path, username) # $username owns everything in /etc/nixos
-        for directory_path in [nixos_path] + sh.find_directories(nixos_path, ignore_pattern=ignore_pattern): sh.chmod(directory_path, 755) # Directories are traversable
-        for file_path in sh.find_files(nixos_path, ignore_pattern=ignore_pattern): sh.chmod(file_path, 644) # Owner can read write files
-        for executable in sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern): sh.chmod(executable, 755)# Owner can execute
-        for git_object in sh.find_files(f"{nixos_path}/.git/objects"): sh.chmod(git_object, 444)
+        sh.chmod(755, sh.find_directories(nixos_path, ignore_pattern=ignore_pattern)) # Directories are traversable
+        sh.chmod(644, sh.find_files(nixos_path, ignore_pattern=ignore_pattern)) # Owner can read write files
+        sh.chmod(755, sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
+        sh.chmod(444, sh.find_files(f"{nixos_path}/.git/objects")) # Git files require specific permission
         cls.secure_secrets(cls.get_secrets_path(), sh) # Secure the secrets using our shell (in case of chroot)
         sh.git_add_safe_directory(nixos_path)
     @classmethod
