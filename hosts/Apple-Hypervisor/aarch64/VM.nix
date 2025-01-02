@@ -27,6 +27,13 @@
   environment.systemPackages = with pkgs; [ 
     spice-vdagent
   ];
-  ##### Copy-Paste #####
+  ##### Shared Clipboard #####
   services.spice-vdagentd.enable = true; # For clipboard sharing with Spice
+
+  ##### Shared Folder #####
+  fileSystems."/mnt/shared" = {
+    device = "share";  # Mount tag from UTM
+    fsType = "virtiofs";
+    options = [ "rw" "nofail" ];
+  };
 }

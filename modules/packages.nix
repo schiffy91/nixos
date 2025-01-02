@@ -11,7 +11,6 @@
     efibootmgr
     _1password-gui
     _1password-cli
-    alacritty
     #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty Too buggy :(
   ]);
   programs._1password.enable = true;
@@ -24,7 +23,6 @@
     mode = "0755";
   };
   environment.plasma6.excludePackages = (with pkgs.kdePackages; [
-    konsole
     kate
     gwenview
     khelpcenter
