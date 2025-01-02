@@ -39,10 +39,10 @@ class Installer:
 
 def main():
     Utils.require_root()
-    Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
-    Config.reset_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Setup passwords for encryption
-    if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Ask whether to erase and mount disk
-    else: Installer.mount_disk() # Otherwise just mount the disk
+    if not Installer.sh.exists(Config.get_config_path()): Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
+    if not Installer.sh.exists(Config.get_secrets_path()): Config.reset_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Setup passwords for encryption
+    if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Format disk
+    else: Installer.mount_disk() # Or just mount disk
     if Interactive.confirm("Install nixos?"): Installer.install_nixos() # Install NixOS
     Interactive.ask_to_reboot()
 
