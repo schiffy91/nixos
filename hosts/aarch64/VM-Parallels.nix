@@ -15,7 +15,7 @@ let kernelPackage = "linux_6_11"; in # Parallels Tools is broken on anything gre
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
-    "srm_mod"
+    "sr_mod"
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
