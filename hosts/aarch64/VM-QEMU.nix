@@ -1,40 +1,37 @@
-{ pkgs, config, ... }:
+{ pkgs, ... }:
 {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
-  variables.disk.swapSize = "1G"; # Small swap for a VM
+  variables.disk.swapSize = "1G";
+  ##### Qemu #####
+  services.qemuGuest.enable = true;
+  services.spice-vdagentd.enable = true;
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
+    "xhci_pci"
     "virtio_pci"
-    "virtio_blk"
-    "virtio_net"
-    "virtio_gpu"
+    "virtio_pci_modern_dev"
     "drm"
     "drm_kms_helper"
-    "virtio_snd"
-    "virtiofs"
-    "virtio_rng"
-    "virtio_balloon"
-    "virtio_console"
-    "xhci_pci"
+    "virtio_mmio"
+    "virtio_blk"
+    "virtio_net"
     "hid_generic"
     "usbhid"
-    "fuse"
+    "9p"
+    "9pnet_virtio"
+    "snd_hda_codec"
+    "snd_hda_core"
   ];
-  ##### Shared Clipboard #####
-  services.spice-vdagentd.enable = true;
-  ##### Shared Folder #####
-  fileSystems."/mnt/shared" = {
-    device = "share";  # Mount tag from UTM
-    fsType = "virtiofs";
-    options = [ "rw" "nofail" ];
-  };
-  users.users.${config.variables.user.admin}.extraGroups = [ "fuse" ];
+  boot.initrd.kernelModules = [
+    "virtio_gpu"
+    "virtio_balloon"
+    "virtio_rng"
+  ];
   ##### Packages #####
-  environment.systemPackages = with pkgs; [ 
+  environment.systemPackages = with pkgs; [
     spice-vdagent
-    fuse
   ];
 }
