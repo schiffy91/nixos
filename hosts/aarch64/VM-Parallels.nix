@@ -1,5 +1,5 @@
-{ pkgs,lib, ... }:
-let linux_kernel_verrsion = "linuxPackages_6_11"; in
+{ pkgs, ... }:
+let linux_kernel_verrsion = "6_11"; in # Parallels Tools is broken on anything greater than 6.11. SMH
 {
   ##### Host Name #####
   networking.hostName = "VM";
@@ -9,9 +9,9 @@ let linux_kernel_verrsion = "linuxPackages_6_11"; in
   ##### Parallels #####
   hardware.parallels = {
     enable = true;
-    package = pkgs.linuxKernel.packages.linux_6_11.prl-tools;
+    package = pkgs.linuxKernel.packages.linux_"${linux_kernel_verrsion}".prl-tools;
   };
-  boot.kernelPackages = pkgs.linuxPackages_6_11; # Parallels Tools is broken on anything greater than 6.11. SMH
+  boot.kernelPackages = pkgs.linuxPackages_"${linux_kernel_verrsion}";
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
@@ -39,6 +39,6 @@ let linux_kernel_verrsion = "linuxPackages_6_11"; in
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-      linuxKernel.packages.linux_6_11.prl-tools
+      linuxKernel.packages.linux_"${linux_kernel_verrsion}".prl-tools
   ];
 }
