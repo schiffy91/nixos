@@ -9,9 +9,9 @@ let linux_kernel_verrsion = "6_11"; in # Parallels Tools is broken on anything g
   ##### Parallels #####
   hardware.parallels = {
     enable = true;
-    package = pkgs.linuxKernel.packages.linux_"${linux_kernel_verrsion}".prl-tools;
+    package = pkgs.linuxKernel.packages.linux_"$linux_kernel_verrsion".prl-tools;
   };
-  boot.kernelPackages = pkgs.linuxPackages_"${linux_kernel_verrsion}";
+  boot.kernelPackages = pkgs.linuxPackages_"$linux_kernel_verrsion";
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
@@ -39,6 +39,6 @@ let linux_kernel_verrsion = "6_11"; in # Parallels Tools is broken on anything g
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-      linuxKernel.packages.linux_"${linux_kernel_verrsion}".prl-tools
+      linuxKernel.packages.linux_"$linux_kernel_verrsion".prl-tools
   ];
 }
