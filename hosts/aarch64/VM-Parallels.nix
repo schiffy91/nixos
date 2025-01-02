@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs,lib, ... }:
 {
   ##### Host Name #####
   networking.hostName = "VM";
@@ -35,6 +35,7 @@
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-    prl-tools
+  
   ];
+  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "prl-tools" ];
 }
