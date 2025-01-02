@@ -3,7 +3,7 @@
   services.xserver.enable = lib.mkDefault false;
   services.desktopManager.plasma6.enable = true;
   services.displayManager.sddm = lib.mkDefault {
-    enable = !config.xserver.enable;
-    wayland.enable = !config.xserver.enable;
+    enable = !config.services.xserver.enable;
+    wayland.enable = !config.services.xserver.enable;
   };
 }
