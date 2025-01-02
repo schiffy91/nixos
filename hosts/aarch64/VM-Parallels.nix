@@ -28,6 +28,16 @@ in # Parallels Tools is broken on anything greater than 6.11. SMH
     "xhci_pci"
     "sr_mod"
   ];
+  ##### Clipboard Sharing #####
+  systemd.user.services.prl-clipboard = {
+    description = "Parallels Tools Clipboard Service";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.linuxKernel.packages.${kernelPackage}.prl-tools}/bin/prlcc";
+      Restart = "always";
+    };
+  };
   ##### Packages #####
   environment.systemPackages = with pkgs; [
       linuxKernel.packages.${kernelPackage}.prl-tools
