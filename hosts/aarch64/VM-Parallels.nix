@@ -31,7 +31,6 @@ let kernelPackage = "linux_6_11"; in # Parallels Tools is broken on anything gre
     "prl_fs_freeze"
     "prl_fs"
     "prl_tg"
-    "prl_vid" # Video driver
     "prl_clipboard" # Clipboard sharing
   ];
   boot.initrd.kernelModules = [
