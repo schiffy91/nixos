@@ -1,4 +1,4 @@
-{ pkgs, config, lib ... }:
+{ pkgs, config, lib, ... }:
 {
   ##### Disk Information #####
   variables.disk.device = "/dev/vda";
