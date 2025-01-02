@@ -49,7 +49,7 @@ class Shell:
         type_arg = "" if not ignore_files and not ignore_directories else "-type d" if ignore_files else "-type f"
         pattern_arg = format_patterns("", pattern)
         ignore_arg = format_patterns("-not", ignore_pattern)
-        path = self.readlink(path) # find doesn't work on symlinks
+        path = self.realpath(path) # find doesn't work on symlinks
         command_arg = f"find '{path}' {pattern_arg} {type_arg} {ignore_arg}".strip()
         output = Utils.stdout(self.run(command_arg))
         return [] if not output else output.split("\n")
@@ -58,8 +58,7 @@ class Shell:
     def find_files(self, path, pattern="*", ignore_pattern=None):
         return self.find(path, pattern=pattern, ignore_pattern=ignore_pattern, ignore_directories=True)
     def symlink(self, source, target): return self.run(f"ln -s {source} {target}")
-    def is_symlink(self, path): return self.run(f"[ -L '{path}' ]", check=False).returncode == 0
-    def readlink(self, path): return Utils.stdout(self.run(f"readlink '{path}'")) if self.is_symlink(path) else path
+    def realpath(self, *paths): return Utils.stdout(self.run("realpath " + " ".join(f"'{path}'" for path in paths))).splitlines()
     def is_dir(self, path): return self.run(f"[ -d '{path}' ]", check=False).returncode == 0
     def exists(self, *args): return self.run(" && ".join(f"[ -e '{arg}' ]" for arg in args) + " && true", check=False).returncode == 0
     def basename(self, path): return Utils.stdout(self.run(f"basename '{path}'"))
@@ -67,10 +66,10 @@ class Shell:
     def parent_name(self, path): return self.basename(self.dirname(path))
     # Security
     def chmod(self, mode, *args):
-        paths = [self.readlink(path) for path in args]
+        paths = self.realpath(*args)
         self.run(f"chmod -R {mode} " + " ".join(f"'{path}'" for path in paths))
     def chown(self, user, *args):
-        paths = [self.readlink(path) for path in args]
+        paths = self.realpath(*args)
         self.run(f"chown -R {user} " + " ".join(f"'{path}'" for path in paths))
     # I/O
     def file_write(self, path, string, sensitive=None, **kwargs):
@@ -80,7 +79,7 @@ class Shell:
     def file_read(self, path): return Utils.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
     # Git
     def git_add_safe_directory(self, path):
-        path = self.readlink(path)
+        path = self.realpath(path)
         self.run(f"git config --global --add safe.directory '{path}'") # Git doesn't think sudo is the owner of a git path despite having admin privileges. SMH
 
 class Config:
@@ -147,7 +146,7 @@ class Config:
         if rebuild_file_system:
             environment = "NIXOS_INSTALL_BOOTLOADER=1"
             cls.secure(cls.sh.whoami(), cls.get_secrets_path())
-        cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.readlink(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
+        cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
         Interactive.ask_to_reboot()
     # Readwrite
     @classmethod

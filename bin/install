@@ -1,5 +1,5 @@
 #!/bin/sh
-source "$(dirname "$(readlink -f "$0")")/utils"
+source "$(dirname "$(realpath -f "$0")")/utils"
 
 # Install Python3.13
 sudo nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#python313
