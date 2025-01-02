@@ -1,8 +1,5 @@
-{ pkgs,lib, ... }:
-let
-  linuxKernelVersion = "6_11";  # Changed to camelCase
-  kernelPackage = "linux_${linuxKernelVersion}";  # Proper string interpolation
-in
+{ pkgs, ... }:
+let kernelPackage = "linux_6_11"; in
 {
   ##### Host Name #####
   networking.hostName = "VM";
