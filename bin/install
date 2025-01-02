@@ -1,25 +1,15 @@
 #!/bin/sh
-set -e
-
-# Ask to run nix-collect-garbage
-while true; do
-    echo "Run garbage collection? (y/n): "
-    read -r response
-    case $response in
-        [yY]) sudo nix-collect-garbage -d; break ;;
-        [nN]|"") break ;;
-        *) echo "Please answer y or n" ;;
-    esac
-done
+source ./utils
 
 # Install Python3.13
 sudo nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#python313
 
-# If run as nixos-install --debug, open /etc/nixos in VSCode to allow for graphical debugging
-if [ "$1" = "--debug" ]; then
+if arg_exists "--collect-garbage"; then
+    sudo nix-collect-garbage -d;
+fi
+if arg_exists "--debug"; then
     sudo nix --extra-experimental-features "nix-command flakes" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data --install-extension ms-python.python
     sudo nix --extra-experimental-features "nix-command flakes" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data /etc/nixos
-# Otherwise, install
 else
     sudo python3 -B /etc/nixos/scripts/install.py
 fi
