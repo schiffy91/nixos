@@ -33,7 +33,7 @@ class Installer:
     @classmethod
     def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
     @classmethod
-    def secrets_already_exist(cls): 
+    def secrets_already_exist(cls):
         if not cls.sh.exists(Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path()):
             return False
         tmp_password = cls.sh.file_read(Installer.get_plain_text_password_path())
