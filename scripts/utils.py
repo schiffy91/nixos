@@ -196,7 +196,7 @@ class Interactive:
     @classmethod
     def ask_for_host_path(cls):
         hosts_paths = glob.glob(f"{Config.get_nixos_path()}/hosts/**/*.nix", recursive=True)
-        formatted_hosts_paths = [ cls.sh.basename(host_path).replace(".nix", "") + " (" + host_path.replace(f"{Config.get_nixos_path()}/hosts/", "") + ")" for host_path in hosts_paths ]
+        formatted_hosts_paths = [ cls.sh.basename(host_path).replace(".nix", "") + " (" + cls.sh.parent_name(host_path) + ")" for host_path in hosts_paths ]
         while True:
             for i, name in enumerate(formatted_hosts_paths): Utils.print(f"{i+1}) {name}")
             try: return hosts_paths[int(input("> ")) - 1]
