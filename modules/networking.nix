@@ -19,7 +19,7 @@
     };
     openssh = {
       settings = {
-        PasswordAuthentication = false;
+        PasswordAuthentication = true;
         AllowUsers = null;
         UseDns = true;
         X11Forwarding = false;
