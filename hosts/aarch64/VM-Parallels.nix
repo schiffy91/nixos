@@ -35,6 +35,6 @@
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-    "prl-tools"
+    prl-tools
   ];
 }
