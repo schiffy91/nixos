@@ -33,15 +33,7 @@ class Installer:
     @classmethod
     def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
     @classmethod
-    def secrets_already_exist(cls):
-        if not cls.sh.exists(Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path()):
-            return False
-        tmp_password = cls.sh.file_read(Installer.get_plain_text_password_path())
-        hashed_password = cls.sh.file_read(Config.get_hashed_password_path())
-        Utils.print_error(f"tmp_password = {tmp_password}")
-        Utils.print_error(f"hashed_password = {hashed_password}")
-        Utils.print_error(f"Utils.encrypt_password(tmp_password) = {Utils.encrypt_password(tmp_password)}")
-        return Utils.encrypt_password(tmp_password) == hashed_password
+    def secrets_already_exist(cls): return cls.sh.exists(Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path())
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod
