@@ -1,5 +1,5 @@
 #!/bin/sh
-source ./utils
+source utils
 
 # Install Python3.13
 sudo nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#python313
