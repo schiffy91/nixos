@@ -11,6 +11,7 @@
     efibootmgr
     _1password-gui
     _1password-cli
+    alacritty
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
