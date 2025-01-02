@@ -12,7 +12,7 @@
     _1password-gui
     _1password-cli
     alacritty
-    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty
+    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty Too buggy :(
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
