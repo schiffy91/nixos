@@ -15,6 +15,13 @@ in # Parallels Tools is broken on anything greater than 6.11. SMH
     enable = true;
     package = pkgs.linuxKernel.packages.${kernelPackage}.prl-tools;
   };
+  ##### X11 Configuration #####
+  services.xserver = {
+    enable = true;
+    displayManager = {
+      sddm.wayland.enable = false;  # Force X11
+    };
+  };
   boot.kernelPackages = pkgs.${linuxPackage};
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
