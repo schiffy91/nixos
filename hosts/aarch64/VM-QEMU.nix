@@ -7,7 +7,6 @@
   variables.disk.swapSize = "1G";
   ##### Qemu #####
   services.qemuGuest.enable = true;
-  services.spice-vdagentd.enable = true;
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
@@ -30,6 +29,14 @@
     "virtio_balloon"
     "virtio_rng"
   ];
+  ##### Shared Clipboard #####
+  services.spice-vdagentd.enable = true;
+  ##### Shared Folder #####
+  fileSystems."/mnt/shared" = {
+    device = "share";  # Mount tag from UTM
+    fsType = "virtiofs";
+    options = [ "rw" "nofail" ];
+  };
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent
