@@ -1,4 +1,5 @@
 { config, inputs, pkgs, ... }: {
+  hardware.graphics.enable = true;
   nixpkgs.config.allowUnfree = true;
   environment.systemPackages = (with pkgs; [
     micro

@@ -4,8 +4,7 @@
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
-  variables.disk.device = "/dev/nvme0n1";
-  
+  variables.disk.device = "/dev/nvme0n1"; 
   ##### VMware #####
   virtualisation.vmware.guest = {
     enable = true;
