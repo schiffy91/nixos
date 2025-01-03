@@ -7,6 +7,8 @@
   variables.disk.device = "/dev/vda";
   ##### Qemu #####
   services.qemuGuest.enable = true;
+  ##### Desktop #####
+  variables.desktop.displayServer = "x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"

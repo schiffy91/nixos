@@ -10,5 +10,6 @@
     variables.disk.swapSize = mkVariable str ""; # Per host
     variables.disk.tmpPasswordFile = mkVariable str "/tmp/plain_text_password.txt";
     variables.disk.pkiBundle = mkVariable str "/var/lib/sbctl";
+    variables.desktop.displayServer = mkVariable (enum [ "x11" "wayland" ]) "wayland";
   };
 }
