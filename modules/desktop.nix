@@ -12,6 +12,7 @@ let
 in {
   hardware.graphics.enable = true;
   services.desktopManager.plasma6.enable = lib.mkDefault true; #Plasma 6 used by default
+  services.displayManager.defaultSession = (if config.variables.desktop.displayServer == "wayland" then if "plasmawayland" else "plasmax11");
   services.displayManager.sddm.enable = lib.mkDefault true; # Login Manager enabled by default
   services.xserver.enable = (config.variables.desktop.displayServer == "x11");
   services.displayManager.sddm.wayland.enable = (config.variables.desktop.displayServer == "wayland");
