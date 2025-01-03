@@ -4,6 +4,7 @@
     enable = false;
     package = null;
     profiles = {};
+    vendorPath = null;  # Add this line
   };
 
   programs.plasma = {
