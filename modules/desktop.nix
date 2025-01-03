@@ -13,8 +13,8 @@ in {
   hardware.graphics.enable = true;
   services.desktopManager.plasma6.enable = lib.mkDefault true; #Plasma 6 used by default
   services.displayManager.sddm.enable = lib.mkDefault true; # Login Manager enabled by default
-  services.xserver.enable = lib.mkDefault (config.variables.desktop.displayServer == "x11");
-  services.displayManager.sddm.wayland.enable = lib.mkDefault (config.variables.desktop.displayServer == "wayland");
+  services.xserver.enable = (config.variables.desktop.displayServer == "x11");
+  services.displayManager.sddm.wayland.enable = (config.variables.desktop.displayServer == "wayland");
   xdg.portal = {
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-kde ];
