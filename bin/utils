@@ -12,21 +12,6 @@ arg_exists() {
   return 1
 }
 
-map_args() {
-  local all=("$@")
-  shift $#
-  while [ $# -gt 0 ]; do
-    local c=$1
-    local f=$2
-    shift 2
-    if [ -z "$c" ] && [ "${#all[@]}" -eq 0 ]; then
-      "$f"
-    elif arg_exists "$c" "${all[@]}"; then
-      "$f"
-    fi
-  done
-}
-
 confirm() {
   local prompt="$1"
   while true; do
