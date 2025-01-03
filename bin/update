@@ -2,6 +2,7 @@
 source "$(dirname "$(realpath "$0")")/utils"
 
 update-home() {
+    echo "Skipping home"
     #nix run home-manager/release-24.11 -- init --switch
     #home-manager switch --flake /etc/nixos/home-manager
 }
