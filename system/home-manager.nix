@@ -2,7 +2,8 @@
   imports = [inputs.home-manager.nixosModules.home-manager];
   home-manager = {
     extraSpecialArgs = { inherit inputs config pkgs lib; };
-    sharedModules = [ inputs.plasma-manager.homeManagerModules.plasma-manager ];
+    useGlobalPkgs = true;
+    useUserPackages = true;
     users = lib.listToAttrs (lib.map (path: { 
       name = lib.removeSuffix ".nix" (baseNameOf path); 
       value = import path; 
