@@ -1,4 +1,4 @@
 { config, pkgs, ... }: {
   home.stateVersion = "24.11";
-  home.packages = [ ];
+  home.packages = [ pkgs.firefox ];
 }
