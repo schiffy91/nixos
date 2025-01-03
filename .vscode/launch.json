@@ -5,7 +5,7 @@
             "name": "Installer",
             "type": "debugpy",
             "request": "launch",
-            "program": "scripts/install.py",
+            "program": "bin/scripts/install.py",
             "console": "integratedTerminal",
             "sudo": true
         },
@@ -13,7 +13,7 @@
             "name": "Secure Boot (Enable)",
             "type": "debugpy",
             "request": "launch",
-            "program": "scripts/secure_boot.py",
+            "program": "bin/scripts/secure_boot.py",
             "console": "integratedTerminal",
             "args": [ "enable" ],
             "sudo": true
@@ -22,7 +22,7 @@
             "name": "Secure Boot (Disable)",
             "type": "debugpy",
             "request": "launch",
-            "program": "scripts/secure_boot.py",
+            "program": "bin/scripts/secure_boot.py",
             "console": "integratedTerminal",
             "args": [ "disable" ],
             "sudo": true
@@ -31,7 +31,7 @@
             "name": "Update",
             "type": "debugpy",
             "request": "launch",
-            "program": "scripts/update.py",
+            "program": "bin/scripts/update.py",
             "console": "integratedTerminal",
             "sudo": true
         }
