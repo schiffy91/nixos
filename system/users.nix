@@ -4,11 +4,11 @@
     extraGroups = [ "wheel" "libvirtd" ];
     hashedPasswordFile = "${config.variables.secrets}/${config.variables.user.hashedPasswordFile}";
     openssh.authorizedKeys.keys = [
-      "${config.variables.user.publicKey} ${config.variables.user.admin}"
+      "${config.variables.user.trustedPublicKey} ${config.variables.user.admin}"
     ];
   };
   services.displayManager.autoLogin = {
-    enable = config.variables.user.autoLogin;
+    enable = config.variables.user.adminAutoLoginEnabled;
     user = config.variables.user.admin;
   };
 }
