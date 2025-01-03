@@ -11,7 +11,8 @@
     python313
     _1password-gui
     _1password-cli
-    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty
+    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty # Too buggy in Wayland w/ VirGL; doesn't work in X11 w/ VirGL
+    alacritty
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
