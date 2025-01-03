@@ -26,6 +26,6 @@
           { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
           { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { boot.lanzaboote.enable = lib.mkForce true; }) ]; }
         ]
-      ) (lib.filter (path: (lib.hasSuffix ".nix" path))) (lib.filesystem.listFilesRecursive ./hosts));
+      ) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./hosts)));
     };
 }
