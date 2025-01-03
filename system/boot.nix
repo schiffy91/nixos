@@ -1,19 +1,9 @@
-{ pkgs, inputs, config, lib, ... }:
-{
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
+{ pkgs, inputs, config, lib, ... }: { imports = [ inputs.lanzaboote.nixosModules.lanzaboote ]; } //
+lib.mkMerge [{
   boot = {
-    lanzaboote = {
-      enable = false; # Overridden by secure-boot target in ../flake.nix
-      pkiBundle = config.variables.disk.pkiBundle;
-    };
+    kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
     loader = {
       timeout = 5;
-      systemd-boot = {
-        enable = if !config.boot.lanzaboote.enable then true else false;
-        configurationLimit = 3;
-        consoleMode = "max";
-        editor = false;
-      };
       efi = {
         canTouchEfiVariables = true;
         efiSysMountPoint = "/boot";
@@ -37,9 +27,23 @@
       "rd.systemd.show_status=auto"     # Same as above, but for the initrd phase
       "plymouth.ignore-serial-consoles" # Force display rendering
     ];
-    kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
   };
-  environment.systemPackages = (with pkgs; [
-    efibootmgr
-  ]);
+  environment.systemPackages = with pkgs; [ efibootmgr ];
 }
+(lib.mkIf (config.variables.boot.method == "Standard") {
+  boot.loader.systemd-boot = {
+    enable = true;
+    configurationLimit = 3;
+    consoleMode = "max";
+    editor = false;
+  };
+})
+(lib.mkIf (config.variables.boot.method == "Secure-Boot") {
+  boot = {
+    systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
+    lanzaboote = {
+      enable = true;
+      pkiBundle = config.variables.disk.pkiBundle;
+    };
+  };
+})]
