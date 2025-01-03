@@ -11,5 +11,6 @@
     variables.disk.tmpPasswordFile = mkVariable str "/tmp/plain_text_password.txt";
     variables.disk.pkiBundle = mkVariable str "/var/lib/sbctl";
     variables.desktop.displayServer = mkVariable (enum [ "x11" "wayland" ]) "wayland";
+    variables.desktop.scaleFactor = mkVariable float 2.0; # Most screens are high res in 2025...
   };
 }

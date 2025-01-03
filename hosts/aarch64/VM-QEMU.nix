@@ -1,6 +1,4 @@
-#TODO Clipboard doesn't work
-{ pkgs, lib, ... }:
-{
+{ config, lib, pkgs, ... }: {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
@@ -10,8 +8,8 @@
   ##### Desktop #####
   variables.desktop.displayServer = lib.mkForce "x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
   services.xserver = {
-    dpi = 192; # 2x scaling
-    displayManager.sessionCommands = ''xrandr --dpi 192'';
+    dpi = builtins.floor (96 * config.variables.displayManager.scalingFactor);
+    upscaleDefaultCursor = true;
   };
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
