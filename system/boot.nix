@@ -38,7 +38,7 @@ lib.mkMerge [{
 }
 (lib.mkIf (config.variables.boot.method == "Secure-Boot") {
   boot = {
-    systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
+    loader.systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
     lanzaboote = {
       enable = true;
       pkiBundle = config.variables.disk.pkiBundle;
