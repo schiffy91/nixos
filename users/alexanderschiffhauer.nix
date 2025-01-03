@@ -1,5 +1,6 @@
 { config, pkgs, ... }: {
   home.stateVersion = "24.11";
+  programs.firefox.enable = false; # BUG.
   programs.plasma = {
     enable = true;
     workspace = {
