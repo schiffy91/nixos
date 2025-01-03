@@ -11,7 +11,7 @@
     python313
     _1password-gui
     _1password-cli
-    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty Too buggy :(
+    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
