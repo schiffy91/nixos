@@ -4,7 +4,7 @@
     variables.secrets = mkVariable str "/etc/nixos/secrets";
     variables.user.admin = mkVariable str "alexanderschiffhauer";
     variables.user.adminAutoLoginEnabled = mkVariable bool true;
-    variables.user.trustedPublicKey = mkVariable str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
+    variables.user.adminAuthorizedKey = mkVariable str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
     variables.user.hashedPasswordFile = mkVariable str "hashed_password.txt";
     variables.disk.device = mkVariable str ""; # Per host
     variables.disk.swapSize = mkVariable str ""; # Per host
