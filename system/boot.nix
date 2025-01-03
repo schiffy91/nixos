@@ -4,6 +4,12 @@ lib.mkMerge [{
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
     loader = {
       timeout = 5;
+      systemd-boot = {
+        enable = true;
+        configurationLimit = 3;
+        consoleMode = "max";
+        editor = false;
+      };
       efi = {
         canTouchEfiVariables = true;
         efiSysMountPoint = "/boot";
@@ -30,14 +36,6 @@ lib.mkMerge [{
   };
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
-(lib.mkIf (config.variables.boot.method == "Standard") {
-  boot.loader.systemd-boot = {
-    enable = true;
-    configurationLimit = 3;
-    consoleMode = "max";
-    editor = false;
-  };
-})
 (lib.mkIf (config.variables.boot.method == "Secure-Boot") {
   boot = {
     systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
