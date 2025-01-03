@@ -16,6 +16,17 @@ in {
   services.displayManager.sddm.enable = lib.mkDefault true; # Login Manager enabled by default
   services.xserver.enable = (config.variables.desktop.displayServer == "x11");
   services.displayManager.sddm.wayland.enable = (config.variables.desktop.displayServer == "wayland");
+  services.xserver = {
+    dpi = builtins.floor (96.0 * config.variables.desktop.scalingFactor);
+    upscaleDefaultCursor = true;
+  };
+  # TODO: Test these
+  #environment.sessionVariables = {
+    #GDK_SCALE = toString config.variables.desktop.scalingFactor;
+    #GDK_DPI_SCALE = toString config.variables.desktop.scalingFactor;
+    #QT_SCALE_FACTOR = toString config.variables.desktop.scalingFactor;
+    #XCURSOR_SIZE = toString (24 * config.variables.desktop.scalingFactor);
+  #};
   xdg.portal = {
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-kde ];
