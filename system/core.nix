@@ -14,6 +14,7 @@
     #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty # Too buggy in Wayland w/ VirGL; doesn't work in X11 w/ VirGL
     #alacritty # Too buggy in Wayland w/ VirGL; doesn't work in X11 w/ VirGL
     blackbox-terminal
+    home-manager
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {

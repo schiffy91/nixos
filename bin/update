@@ -1,2 +1,21 @@
 #!/bin/sh
-sudo python3 /etc/nixos/scripts/update.py "$@"
+source "$(dirname "$(realpath "$0")")/utils"
+
+update-home() {
+    #nix run home-manager/release-24.11 -- init --switch
+    #home-manager switch --flake /etc/nixos/home-manager
+}
+
+update-os() {
+    sudo python3 /etc/nixos/scripts/update.py "$@"
+}
+
+update-all() {
+    update-home
+    update-os
+}
+
+map_args "$@" \
+    "--home" update-home \
+    "--nixos" update-os \
+    "" update-all
