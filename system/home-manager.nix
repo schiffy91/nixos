@@ -5,9 +5,12 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     users = let
+      # Use absolute path resolution
+      usersPath = ../../users;
+      
       # List all files in users directory
       allFiles = let 
-        files = lib.filesystem.listFilesRecursive ../users; 
+        files = lib.filesystem.listFilesRecursive usersPath;
       in 
         builtins.trace "All files found: ${toString files}" files;
       
@@ -27,11 +30,10 @@
             else builtins.throw "Config file not found: ${toString path}";
         in {
           name = username;
-          value = builtins.trace "Loaded config for ${username}" imported;
+          value = imported;
         }
       ) nixFiles;
     in
-      builtins.trace "Final user attributes: ${toString (map (x: x.name) userAttrs)}"
-      (lib.listToAttrs userAttrs);
+      lib.listToAttrs userAttrs;
   };
 }
