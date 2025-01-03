@@ -8,6 +8,6 @@
     users = lib.listToAttrs (lib.map (path: { 
       name = lib.removeSuffix ".nix" (baseNameOf path); 
       value = import path; 
-    }) (lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./users)));
+    }) (lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ../users)));
   };
 }
