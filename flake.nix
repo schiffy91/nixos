@@ -22,7 +22,7 @@
         [ 
           { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./system/disk.nix ]; }
           { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
-          { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { boot.lanzaboote.enable = lib.mkForce true; }) ]; }
+          { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { variables.boot.method = lib.mkForce "Secure-Boot"; }) ]; }
         ]
       ) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./hosts)));
     };
