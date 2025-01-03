@@ -1,11 +1,5 @@
 { config, pkgs, ... }: {
   home.stateVersion = "24.11";
-  programs.firefox = {
-    enable = false;
-    package = null;
-    profiles = {};
-    vendorPath = null;  # Add this line
-  };
 
   programs.plasma = {
     enable = true;
