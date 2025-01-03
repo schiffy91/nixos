@@ -9,6 +9,10 @@
   services.qemuGuest.enable = true;
   ##### Desktop #####
   variables.desktop.displayServer = lib.mkForce "x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
+  services.xserver = {
+    dpi = 192; # 2x scaling
+    displayManager.sessionCommands = ''xrandr --dpi 192'';
+  };
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
