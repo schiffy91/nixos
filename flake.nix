@@ -21,7 +21,7 @@
         home-manager.useGlobalPkgs = true;
         home-manager.useUserPackages = true;
         home-manager.sharedModules = [ plasma-manager.homeManagerModules.plasma-manager ];
-        home-manager.users = lib.listToAttrs (lib.map (path: { name = lib.removeSuffix ".nix" (baseNameOf path); value = import path; }) (getNixPathsIn ./users));
+        home-manager.users.alexanderschiffhauer = import ./users/alexanderschiffhauer.nix;
       };
       mkTarget = hostFile: modules: 
         (lib.nixosSystem {
