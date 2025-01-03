@@ -1,4 +1,5 @@
 { pkgs, inputs, config, lib, ... }: lib.mkMerge [{
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
   boot = {
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
     loader = {
@@ -38,7 +39,6 @@
   };
 })
 (lib.mkIf (config.variables.boot.method == "Secure-Boot") {
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
   boot = {
     systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
     lanzaboote = {
