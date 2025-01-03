@@ -174,7 +174,7 @@ class Config:
     @classmethod
     def get_secrets_path(cls): return Utils.get_value_from_variables("secrets")
     @classmethod
-    def get_variables_path(cls): return f"{Config.get_nixos_path()}/variables.nix"
+    def get_variables_path(cls): return f"{Config.get_nixos_path()}/system/variables.nix"
     @classmethod
     def get_config_path(cls): return f"{cls.get_nixos_path()}/config.json"
     @classmethod
