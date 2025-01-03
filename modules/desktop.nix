@@ -21,12 +21,12 @@ in {
     upscaleDefaultCursor = true;
   };
   # TODO: Test these
-  #environment.sessionVariables = {
-    #GDK_SCALE = toString config.variables.desktop.scalingFactor;
-    #GDK_DPI_SCALE = toString config.variables.desktop.scalingFactor;
-    #QT_SCALE_FACTOR = toString config.variables.desktop.scalingFactor;
-    #XCURSOR_SIZE = toString (24 * config.variables.desktop.scalingFactor);
-  #};
+  environment.sessionVariables = {
+    GDK_SCALE = toString config.variables.desktop.scalingFactor;
+    GDK_DPI_SCALE = toString config.variables.desktop.scalingFactor;
+    QT_SCALE_FACTOR = toString config.variables.desktop.scalingFactor;
+    XCURSOR_SIZE = toString (24 * config.variables.desktop.scalingFactor);
+  };
   xdg.portal = {
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-kde ];
