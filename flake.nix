@@ -14,14 +14,14 @@
   outputs = inputs@{ self, nixpkgs, home-manager, plasma-manager, ... }:
     let
       lib = nixpkgs.lib;
-      listNixPathsIn = directory: ((lib.filter (path: (lib.hasSuffix ".nix" path))) (lib.filesystem.listFilesRecursive directory));
+      getNixPathsIn = directory: ((lib.filter (path: (lib.hasSuffix ".nix" path))) (lib.filesystem.listFilesRecursive directory));
       # Optional modules
       lanzabooteModule = ({ lib, ... }: { boot.lanzaboote.enable = lib.mkForce true; });
       homeManagerModule = home-manager.nixosModules.home-manager {
         home-manager.useGlobalPkgs = true;
         home-manager.useUserPackages = true;
         home-manager.sharedModules = [ plasma-manager.homeManagerModules.plasma-manager ];
-        home-manager.users = lib.listToAttrs (lib.map (path: { name = lib.removeSuffix ".nix" (baseNameOf path); value = import path; }) (listNixPathsIn ./users));
+        home-manager.users = lib.listToAttrs (lib.map (path: { name = lib.removeSuffix ".nix" (baseNameOf path); value = import path; }) (getNixPathsIn ./users));
       };
       mkTarget = hostFile: modules: 
         (lib.nixosSystem {
@@ -37,6 +37,6 @@
           { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix homeManagerModule ]; }
           { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix homeManagerModule lanzabooteModule ]; }
         ]
-      ) listNixPathsIn ./hosts);
+      ) (getNixPathsIn ./hosts));
     };
 }
