@@ -82,10 +82,7 @@
     kwin = {
       edgeBarrier = 0;
       cornerBarrier = false;
-      scripts.polonium ={
-        enable = true;
-        borderVisibility = "borderAll";
-      };
+      scripts.polonium.enable = true;
     };
 
     kscreenlocker = {
