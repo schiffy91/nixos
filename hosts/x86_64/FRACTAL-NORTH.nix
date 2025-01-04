@@ -12,12 +12,12 @@
     "amdgpu.dc=1"
     "video=HDMI-A-0:3840x2160@120"
   ];
+  boot.kernelModules = [ "kvm-amd" ];
   hardware.firmware = [
     pkgs.linux-firmware
-    pkgs.amd-ucode
   ]; # new line
-  hardware.cpu.amd.updateMicrocode = true; # new line
-  hardware.amdgpu.initrd.enable = true;    # new line
+  hardware.cpu.amd.updateMicrocode = true;
+  hardware.amdgpu.initrd.enable = true;
   # Nvidia drivers
   hardware.nvidia = {
     open = false;
