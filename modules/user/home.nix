@@ -82,7 +82,7 @@
     kwin = {
       edgeBarrier = 0;
       cornerBarrier = false;
-      scripts.polonium.enable = true;
+      #scripts.polonium.enable = true;
       titlebarButtons.right = [
         "minimize"
         "maximize"
