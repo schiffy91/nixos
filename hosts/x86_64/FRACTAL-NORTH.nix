@@ -15,10 +15,9 @@
   boot.kernelModules = [ "kvm-amd" ];
   hardware.firmware = [
     pkgs.linux-firmware
-  ]; # new line
+  ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
-  # Nvidia drivers
   hardware.nvidia = {
     open = false;
     package = config.boot.kernelPackages.nvidiaPackages.stable;
