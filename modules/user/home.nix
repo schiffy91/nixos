@@ -83,7 +83,7 @@
       edgeBarrier = 0;
       cornerBarrier = false;
       scripts.polonium.enable = true;
-      programs.plasma.kwin.titlebarButtons.right = [
+      titlebarButtons.right = [
         "minimize"
         "maximize"
         "close"
