@@ -30,7 +30,7 @@
 })
 (lib.mkIf (config.variables.desktop.displayServer == "wayland") {
   services.displayManager.sddm.wayland.enable = true;
-  services.displayManager.defaultSession = "plasmawayland";
+  services.displayManager.defaultSession = "plasma";
   environment.systemPackages = with pkgs; [
     wl-clipboard
   ];
