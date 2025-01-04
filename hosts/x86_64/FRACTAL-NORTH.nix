@@ -69,4 +69,7 @@
     win-virtio
     win-spice
   ];
+
+  # Moonlight
+  services.sunshine.enable = true;
 }
