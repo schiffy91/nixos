@@ -1,6 +1,6 @@
 { config, lib, ... }:
 let
-  lanSubnet = coonfig.variables.networking.lanSubnet;
+  lanSubnet = config.variables.networking.lanSubnet;
   sshPorts = [ 22 ];
   mdnsPorts = [ 5353 ];
   sunshineTcpPorts = [ 47984 47989 47990 48010 ];
@@ -20,10 +20,9 @@ in
     enable = true;
     allowedTCPPorts = [];
     allowedUDPPorts = [];
-    extraCommands = mkServiceRules "A";
-    extraStopCommands = mkServiceRules "D";
+    extraCommands = mkServiceRules "A"; # A = Add
+    extraStopCommands = mkServiceRules "D"; # D = Drop
   };
-
   services = {
     avahi = {
       enable = true;
