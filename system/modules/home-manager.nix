@@ -9,7 +9,6 @@
     users."${config.variables.user.admin}" = { variables, ... }: {
       home = {
         username = variables.user.admin;
-        homeDirectory = "/home/${variables.user.admin}";
         stateVersion = "24.11";
       };
       programs.home-manager.enable = true;
