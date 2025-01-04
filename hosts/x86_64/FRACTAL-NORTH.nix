@@ -46,7 +46,6 @@
   # so that you have all GPU drivers ready in userland.
   hardware.opengl = {
     enable = true;
-    driSupport = true;
     driSupport32Bit = true;
     extraPackages = with pkgs; [
       amdvlk
