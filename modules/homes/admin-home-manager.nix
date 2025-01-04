@@ -1,4 +1,4 @@
-{ variables, pkgs, ... }: {
+{ variables, pkgs, lib, ... }: {
   home = {
     username = variables.user.admin;
     homeDirectory = "/home/${variables.user.admin}";
@@ -19,23 +19,19 @@
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Patak/contents/images/1080x1920.png";
     };
 
-    panels = [
-      {
-        location = "bottom";
-        widgets = [
-          "org.kde.plasma.kickoff"
-          "org.kde.plasma.icontasks"
-          "org.kde.plasma.marginsseparator"
-          "org.kde.plasma.systemtray"
-          "org.kde.plasma.digitalclock"
-        ];
-      }
-      # Global menu at the top
-      {
-        location = "top";
-        height = 26;
-        widgets = [ "org.kde.plasma.appmenu" ];
+    panels = [{
+      location = "bottom";
+      widgets = [
+        "org.kde.plasma.kickoff"
+        "org.kde.plasma.icontasks"
+        "org.kde.plasma.marginsseparator"
+        "org.kde.plasma.systemtray"
+        "org.kde.plasma.digitalclock"];
       }
     ];
+    configFile = {
+      "kdeglobals"."KScreen"."ScaleFactor" = (1 * variables.desktop.scalingFactor);
+      "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${1 * variables.desktop.scalingFactor};";
+    }
   };
 }
