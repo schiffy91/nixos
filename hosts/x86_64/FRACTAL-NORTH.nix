@@ -9,7 +9,7 @@
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
   # AMD drivers
   boot.kernelParams = [ "amdgpu.dc=1" ];
-  hardware.firmware = [ pkgs.amd-ucode ];
+  #hardware.firmware = [ pkgs.amd-ucode ];
   # Nvidia drivers
   hardware.nvidia = {
     open = false;
