@@ -14,7 +14,7 @@
         (lib.nixosSystem {
           specialArgs = { inherit self inputs; };
           system = "${baseNameOf (dirOf hostFile)}-linux";
-          modules = [ ./system/variables.nix hostFile ] ++ modules;
+          modules = [ ./system/variables.nix ./system/home-manager.nix hostFile ] ++ modules;
         });
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
