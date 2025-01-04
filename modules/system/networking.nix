@@ -11,8 +11,8 @@ let
     lib.concatStringsSep "\n" (lib.remove null [
       (lib.optionalString config.services.openssh.enable (mkPortRules { inherit action; proto = "tcp"; ports = sshPorts; }))
       (lib.optionalString config.services.avahi.enable (mkPortRules { inherit action; proto = "udp"; ports = mdnsPorts; }))
-      (lib.optionalString config.services.sunshine.enabled (mkPortRules { inherit action; proto = "tcp"; ports = sunshineTcpPorts; }))
-      (lib.optionalString config.services.sunshine.enabled (mkPortRules { inherit action; proto = "udp"; ports = sunshineUdpPorts; }))
+      (lib.optionalString config.services.sunshine.enable (mkPortRules { inherit action; proto = "tcp"; ports = sunshineTcpPorts; }))
+      (lib.optionalString config.services.sunshine.enable (mkPortRules { inherit action; proto = "udp"; ports = sunshineUdpPorts; }))
     ]);
 in
 {
