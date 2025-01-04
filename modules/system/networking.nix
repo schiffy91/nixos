@@ -40,9 +40,7 @@ in
         PasswordAuthentication = false;
         UseDns = true;
         PermitRootLogin = "prohibit-password";
-          extraConfig = ''
-          AllowAgentForwarding yes
-        '';
+        AllowAgentForwarding = "yes";
       };
     };
     sunshine = {
