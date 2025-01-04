@@ -5,6 +5,6 @@
     useUserPackages = true;
     sharedModules = [ inputs.plasma-manager.homeManagerModules.plasma-manager ];
     extraSpecialArgs = { variables = config.variables; };
-    users."${config.variables.user.admin}" = import ../homes/admin-home-manager.nix;
+    users."${config.variables.user.admin}" = import ../user/home.nix;
   };
 }
