@@ -4,12 +4,12 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     extraSpecialArgs = {
-      username = config.variables.user.admin;
+      variables = config.variables;
     };
-    users."${config.variables.user.admin}" = { username, ... }: {
+    users."${config.variables.user.admin}" = { variables, ... }: {
       home = {
-        inherit username;
-        homeDirectory = "/home/${username}";
+        inherit variables;
+        homeDirectory = "/home/${variables.user.admin}";
         stateVersion = "24.11";
       };
       programs.home-manager.enable = true;
