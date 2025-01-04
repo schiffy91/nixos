@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 {  
   ##### Host Name #####
   networking.hostName = "FRACTAL-NORTH";
@@ -9,4 +9,8 @@
   services.xserver.videoDrivers = [ "amdgpu" ];
   # AMD drivers
   boot.kernelParams = [ "amdgpu.dc=1" ];
+    boot.initrd.availableKernelModules = [ "nvme" "thunderbolt" "xhci_pci" "ahci" "usbhid" ];
+  boot.initrd.kernelModules = [ ];
+  boot.kernelModules = [ "kvm-amd" ];
+    hardware.cpu.amd.updateMicrocode = true;
 }
