@@ -14,13 +14,13 @@
         (lib.nixosSystem {
           specialArgs = { inherit self inputs; };
           system = "${baseNameOf (dirOf hostFile)}-linux";
-          modules = [ ./system/variables.nix hostFile ] ++ modules;
+          modules = [ ./modules/variables.nix hostFile ] ++ modules;
         });
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let name = lib.removeSuffix ".nix" (baseNameOf hostFile); in 
         [ 
-          { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./system/modules/disk.nix ]; }
+          { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/variables/disk.nix ]; }
           { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
           { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { variables.boot.method = lib.mkForce "Secure-Boot"; }) ]; }
         ]
