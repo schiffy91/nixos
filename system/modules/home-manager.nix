@@ -3,6 +3,16 @@
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
-    users."${config.variables.user.admin}" = import ../users/admin.nix;
+    extraSpecialArgs = {
+      username = config.variables.user.admin;
+    };
+    users."${config.variables.user.admin}" = { username, ... }: {
+      home = {
+        inherit username;
+        homeDirectory = "/home/${username}";
+        stateVersion = "24.11";
+      };
+      programs.home-manager.enable = true;
+    };
   };
 }
