@@ -1,89 +1,72 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, ... }:
 {  
   ##### Host Name #####
   networking.hostName = "FRACTAL-NORTH";
   # Disk information
   variables.disk.device = "/dev/nvme0n1"; # This line must exist, but feel free to change the location
   variables.disk.swapSize = "65G";
-  ##########################
-  # Basic system settings  #
-  ##########################
-  system.stateVersion = "24.11"; # Match your NixOS release
-
-  ###############
-  # Bootloader  #
-  ###############
-  boot = {
-    # Force AMD Display Core, set a 4k@120 mode if recognized
-    kernelParams = [
-      "amdgpu.dc=1"
-      "video=HDMI-A-0:3840x2160@120"
-    ];
-
-    # Load these modules early (initrd) so the console can try high-res
-    initrd.availableKernelModules = [
-      "amdgpu"
-      "nvme"
-      "xhci_pci"
-      "ahci"
-      "usbhid"
-      "thunderbolt"
-    ];
-    initrd.kernelModules = [ ];
-    kernelModules = [ "kvm-amd" ];
-  };
-
-  ##########################
-  # AMD microcode & GPU    #
-  ##########################
-  hardware.cpu.amd.updateMicrocode = true;
-
-  # This option loads amdgpu in initrd stage (improves early console).
-  # It's available in 24.11; see `nixos-option hardware.amdgpu.initrd.enable`.
-  hardware.amdgpu.initrd.enable = true;
-
-  # Provide AMD’s user-space Vulkan/OpenCL stacks
-  # so that you have all GPU drivers ready in userland.
-  hardware.opengl = {
-    enable = true;
-    driSupport32Bit = true;
-    extraPackages = with pkgs; [
-      amdvlk
-    ];
-  };
-
-  ##########################
-  # Display & Desktop      #
-  ##########################
-  # We enable SDDM (with Wayland) and Plasma 6.
-  services.xserver = {
-    enable = true;
-    videoDrivers = [ "amdgpu" ];
-
-    # SDDM display manager
-    displayManager.sddm.enable = true;
-    displayManager.sddm.wayland.enable = true;
-    displayManager.defaultSession = "plasma";
-
-    # Plasma 6 desktop environment
-    desktopManager.plasma6.enable = true;
-  };
-
-  ##########################
-  # System Packages        #
-  ##########################
-  environment.systemPackages = with pkgs; [
-    # Basic GPU info & monitoring
-    glxinfo
-    radeontop
-    # Vulkan driver, etc. included above in hardware.opengl.extraPackages
+  # Dual GPU drivers
+  services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
+  # AMD drivers
+  boot.kernelParams = [
+    "amdgpu.dc=1"
+    "video=HDMI-A-0:3840x2160@120"
   ];
+  hardware.firmware = [
+    pkgs.linux-firmware
+    pkgs.amd-ucode
+  ]; # new line
+  hardware.cpu.amd.updateMicrocode = true; # new line
+  hardware.amdgpu.initrd.enable = true;    # new line
+  # Nvidia drivers
+  hardware.nvidia = {
+    open = false;
+    package = config.boot.kernelPackages.nvidiaPackages.stable;
+    nvidiaSettings = true;
+    powerManagement.enable = true;
+    prime = {
+      offload = {
+        enable = true;
+        enableOffloadCmd = true;
+      };
+      amdgpuBusId = "PCI:1:0:0";
+      nvidiaBusId = "PCI:69:0:0";
+    };
+  };
+  # Virtualization (libvirt, podman)
+  services.qemuGuest.enable = true;
+  programs.virt-manager.enable = true;
+  virtualisation = {
+    libvirtd = {
+      enable = true;
+      qemu = {
+        package = pkgs.qemu;
+        ovmf.enable = true;
+        ovmf.packages = [ pkgs.OVMFFull.fd ];
+        swtpm.enable = true;
+        runAsRoot = false;
+      };
+    };
+    spiceUSBRedirection.enable = true;
+    podman = {
+      enable = true;
+      dockerCompat = true;
+    };
+  };
 
-  ################################
-  # (Optional) Networking, SSH...#
-  ################################
-  # networking.useDHCP = true;
-  # services.openssh.enable = true;
-
+  # Packages
+  environment.systemPackages = with pkgs; [
+    google-chrome
+    distrobox
+    vscode
+    pciutils
+    usbutils
+    virt-manager
+    virt-viewer
+    spice 
+    spice-gtk
+    spice-protocol
+    win-virtio
+    win-spice
+  ];
 }
-
