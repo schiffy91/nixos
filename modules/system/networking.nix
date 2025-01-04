@@ -25,6 +25,9 @@
         UseDns = true;
         X11Forwarding = false;
         PermitRootLogin = "prohibit-password";
+          extraConfig = ''
+          AllowAgentForwarding yes
+        '';
       };
     };
     printing.browsed.enable = lib.mkDefault false;
