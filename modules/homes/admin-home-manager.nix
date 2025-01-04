@@ -32,6 +32,6 @@
     configFile = {
       "kdeglobals"."KScreen"."ScaleFactor" = (1 * variables.desktop.scalingFactor);
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${1 * variables.desktop.scalingFactor};";
-    }
+    };
   };
 }
