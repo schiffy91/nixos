@@ -1,5 +1,8 @@
-{ inputs, config, lib, ... }: inputs.home-manager.nixosModules.home-manager lib {
-  home-manager.useGlobalPkgs = true;
-  home-manager.useUserPackages = true;
-  home-manager.users."${config.variables.user.admin}" = import ../users/admin.nix;
+{ inputs, config, lib, ... }: {
+  imports = [ inputs.home-manager.nixosModules.home-manager ];
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = true;
+    users."${config.variables.user.admin}" = import ../users/admin.nix;
+  };
 }
