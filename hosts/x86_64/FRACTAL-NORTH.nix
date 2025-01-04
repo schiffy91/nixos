@@ -71,5 +71,10 @@
   ];
 
   # Moonlight
-  services.sunshine.enable = true;
+  services.sunshine = {
+    enable = true;
+    openFirewall = false;
+    autoStart = true;
+    capSysAdmin = true;
+  };
 }
