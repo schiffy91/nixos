@@ -73,10 +73,6 @@
           window-types = [ "normal" ];
         };
         apply = {
-          noborder = {
-            value = true;
-            apply = "force";
-          };
           maximizehoriz = true;
           maximizevert = true;
         };
@@ -86,7 +82,10 @@
     kwin = {
       edgeBarrier = 0;
       cornerBarrier = false;
-      scripts.polonium.enable = true;
+      scripts.polonium ={
+        enable = true;
+        borderVisibility = "borderAll";
+      };
     };
 
     kscreenlocker = {
