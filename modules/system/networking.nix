@@ -45,6 +45,12 @@ in
         '';
       };
     };
+    sunshine = {
+      enable = lib.mkDefault false;
+      openFirewall = false;
+      autoStart = true;
+      capSysAdmin = true;
+    };
     printing.browsed.enable = lib.mkDefault false;
   };
   programs.ssh = {
@@ -54,11 +60,5 @@ in
           IdentityAgent ~/.1password/agent.sock
           ForwardAgent yes
       '';
-  };
-  sunshine = {
-    enable = lib.mkDefault false;
-    openFirewall = false;
-    autoStart = true;
-    capSysAdmin = true;
   };
 }
