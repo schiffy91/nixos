@@ -50,4 +50,15 @@ in
         ForwardAgent yes
     '';
   };
+  boot.initrd.network = {
+    enable = true;
+    ssh = {
+      enable = true;
+      authorizedKeys = config.variables.user.admin.authorizedKey;
+      hostKeys = [ 
+        "${config.variables.secrets.path}/${config.variables.secrets.initrd.rsaKeyFile}"
+        "${config.variables.secrets.path}/${config.variables.secrets.initrd.ed25519KeyFile}"
+      ];
+    };
+  };
 }

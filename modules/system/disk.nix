@@ -33,7 +33,7 @@ in
               content = {
                 type = "luks";
                 name = "crypted";
-                passwordFile = config.variables.disk.tmpPasswordFile;
+                passwordFile = config.variables.disk.tmpPasswordPath;
                 settings.allowDiscards = true;
                 content = {
                   type = "btrfs";

@@ -1,7 +1,7 @@
 { variables, pkgs, ... }: {
   home = {
-    username = variables.user.admin;
-    homeDirectory = "/home/${variables.user.admin}";
+    username = variables.user.admin.username;
+    homeDirectory = "/home/${variables.user.admin.username}";
     stateVersion = "24.11";
   };
   programs.home-manager.enable = true;

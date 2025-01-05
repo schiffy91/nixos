@@ -1,19 +1,21 @@
 { lib, ... }: let mkVariable = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; in
 {
   options = with lib.types; {
-    variables.secrets = mkVariable str "/etc/nixos/secrets";
-    variables.user.admin = mkVariable str "alexanderschiffhauer";
-    variables.user.adminAutoLoginEnabled = mkVariable bool true;
-    variables.user.adminAuthorizedKey = mkVariable str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
-    variables.user.hashedPasswordFile = mkVariable str "hashed_password.txt";
+    variables.secrets.path = mkVariable str "/etc/nixos/secrets";
+    variables.secrets.hashedPasswordFile = mkVariable str "hashed_password.txt";
+    variables.secrets.initrd.rsaKeyFile = mkVariable str "ssh_host_rsa_key"; # Used exclusively by boot.initrd.networking
+    variables.secrets.initrd.ed25519KeyFile = mkVariable str "ssh_host_ed25519_key"; # Used exclusively by boot.initrd.networking
+    variables.user.admin.username = mkVariable str "alexanderschiffhauer";
+    variables.user.admin.autoLoginEnabled = mkVariable bool true;
+    variables.user.admin.authorizedKey = mkVariable str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
     variables.disk.device = mkVariable str ""; # Per host
     variables.disk.swapSize = mkVariable str ""; # Per host
-    variables.disk.tmpPasswordFile = mkVariable str "/tmp/plain_text_password.txt";
+    variables.disk.tmpPasswordPath = mkVariable str "/tmp/plain_text_password.txt";
     variables.disk.pkiBundle = mkVariable str "/var/lib/sbctl";
     variables.boot.method = mkVariable str "Standard";
     variables.desktop.displayServer = mkVariable (enum [ "x11" "wayland" ]) "wayland";
     variables.desktop.scalingFactor = mkVariable float 2.0; # Most screens are high res in 2025...
-    variables.networking.lanSubnet = mkVariable str "10.0.0.0/24"; # Replace with your subnet
+    variables.networking.lanSubnet = mkVariable str (builtins.readFile (builtins.toFile "subnet" (builtins.execCommand ["bash" "-c" "ip -o -f inet addr show | awk '/scope global/ {print $4}'"]))); # Override with your own subnet
     variables.networking.ports.udp = mkVariable (listOf int) [];
     variables.networking.ports.tcp = mkVariable (listOf int) [];
   };

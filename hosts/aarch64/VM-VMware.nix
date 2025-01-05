@@ -27,5 +27,5 @@
     open-vm-tools
   ];
   ##### Networking #####
-  variables.networking.lanSubnet = "192.168.64.0/24";
+  #TODO Remove this if my script works. variables.networking.lanSubnet = "192.168.64.0/24";
 }

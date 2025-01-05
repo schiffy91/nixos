@@ -31,7 +31,7 @@
     fsType = "virtiofs";
     options = [ "rw" "nofail" ];
   };
-  users.users.${config.variables.user.admin}.extraGroups = [ "fuse" ];
+  users.users.${config.variables.user.admin.username}.extraGroups = [ "fuse" ];
   ##### Security #####
   security.sudo.wheelNeedsPassword = false;
   ##### Packages #####

@@ -72,6 +72,9 @@ class Shell:
     def chown(self, user, *args):
         paths = self.realpaths(*args)
         self.run(f"chown -R {user} " + " ".join(f"'{path}'" for path in paths))
+    def ssh_keygen(self, key_type, path, password=""):
+        self.mkdir(self.dirname(path))
+        self.run(f"ssh-keygen -t {key_type} -N {password} -f '{path}'")
     # I/O
     def file_write(self, path, string, sensitive=None, **kwargs):
         self.rm(path)
@@ -104,20 +107,25 @@ class Config:
         cls.set_host_path(host_path)
         cls.set_target(target)
     @classmethod
-    def reset_secrets(cls, plain_text_password_path=None):
-        cls.sh.rm(cls.get_secrets_path())
-        cls.sh.mkdir(cls.get_secrets_path())
-        password = Interactive.ask_for_password()
-        if plain_text_password_path: cls.sh.file_write(plain_text_password_path, password, sensitive=password)
-        encrypted_password = Utils.encrypt_password(password)
-        cls.sh.file_write(cls.get_hashed_password_path(), encrypted_password, sensitive=encrypted_password)
+    def create_secrets(cls, plain_text_password_path=None):
+        if not cls.sh.exists(cls.get_secrets_path()):
+            cls.sh.mkdir(cls.get_secrets_path())
+        if not cls.sh.exists(cls.get_hashed_password_path()) or (plain_text_password_path and not cls.sh.exists(plain_text_password_path)):
+            password = Interactive.ask_for_password()
+            if plain_text_password_path: cls.sh.file_write(plain_text_password_path, password, sensitive=password)
+            encrypted_password = Utils.encrypt_password(password)
+            cls.sh.file_write(cls.get_hashed_password_path(), encrypted_password, sensitive=encrypted_password)
+        if not cls.sh.exists(Config.get_initrd_rsa_key_path()):
+            cls.sh.ssh_keygen("rsa", Config.get_initrd_rsa_key_path())
+        if not cls.sh.exists(Config.get_initrd_ed25519_key_path()):
+            cls.sh.ssh_keygen("ed25519", Config.get_initrd_ed25519_key_path())
     @classmethod
-    def secure_secrets(cls, path_to_secrets, sh=None):
+    def secure_secrets(cls, sh=None):
         sh = cls.sh if sh is None else sh
-        directories = sh.find_directories(path_to_secrets, pattern="*")
-        files = sh.find_files(path_to_secrets, pattern="*")
-        sh.chown("root", path_to_secrets, *directories, *files) # Only root owns secrets
-        sh.chmod(700, path_to_secrets, *directories) # Traversable directories by anyone
+        directories = sh.find_directories(cls.get_secrets_path(), pattern="*")
+        files = sh.find_files(cls.get_secrets_path(), pattern="*")
+        sh.chown("root", cls.get_secrets_path(), *directories, *files) # Only root owns secrets
+        sh.chmod(700, cls.get_secrets_path(), *directories) # Traversable directories by anyone
         sh.chmod(600, *files) # But only root can read or write files
     @classmethod
     def secure(cls, username, sh=None):
@@ -129,15 +137,12 @@ class Config:
         sh.chmod(644, *sh.find_files(nixos_path, ignore_pattern=ignore_pattern)) # Owner can read write files
         sh.chmod(755, *sh.find(nixos_path, pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
         sh.chmod(444, *sh.find_files(f"{nixos_path}/.git/objects")) # Git files require specific permission
-        cls.secure_secrets(cls.get_secrets_path(), sh) # Secure the secrets using our shell (in case of chroot)
+        cls.secure_secrets(sh) # Secure the secrets using our shell (in case of chroot)
         sh.git_add_safe_directory(nixos_path)
     @classmethod
     def update(cls, rebuild_file_system=False):
-        if not cls.sh.exists(cls.get_secrets_path()):
-            Utils.log_error("'SECRETS' IS MISSING.")
-            cls.reset_secrets()
-            cls.secure_secrets(cls.get_secrets_path())
-            rebuild_file_system = True
+        cls.create_secrets()
+        cls.secure_secrets()
         if not cls.sh.exists(cls.get_config_path()):
             print("'CONFIG.JSON' IS MISSING.")
             host_path = Interactive.ask_for_host_path()
@@ -170,9 +175,13 @@ class Config:
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
     @classmethod
-    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("hashedPasswordFile")
+    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("variables.secrets.hashedPasswordFile")
     @classmethod
-    def get_secrets_path(cls): return Utils.get_value_from_variables("secrets")
+    def get_initrd_rsa_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("variables.secrets.initrd.rsaKeyFile")
+    @classmethod
+    def get_initrd_ed25519_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("variables.secrets.initrd.ed25519KeyFile")
+    @classmethod
+    def get_secrets_path(cls): return Utils.get_value_from_variables("variables.secrets.path")
     @classmethod
     def get_variables_path(cls): return f"{Config.get_nixos_path()}/modules/variables.nix"
     @classmethod

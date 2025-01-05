@@ -25,15 +25,13 @@ class Installer:
     @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
-    def get_username(cls): return Utils.get_value_from_variables("admin")
+    def get_username(cls): return Utils.get_value_from_variables("variables.user.admin.username")
     @classmethod
     def get_final_nixos_path(cls): return f"/home/{cls.get_username()}/nixos"
     @classmethod
     def get_installation_disk(cls): return Utils.get_value_from_path(Config.get_host_path(), "variables.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Utils.get_value_from_variables("tmpPasswordFile")
-    @classmethod
-    def secrets_already_exist(cls): return cls.sh.exists(Config.get_secrets_path(), Config.get_hashed_password_path(), cls.get_plain_text_password_path())
+    def get_plain_text_password_path(cls): return Utils.get_value_from_variables("variables.disk.tmpPasswordPath")
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod
@@ -43,8 +41,7 @@ def main():
     Utils.require_root()
     if Installer.sh.exists(Config.get_config_path()): Utils.print(f"Found {Config.get_config_path()}")
     else: Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
-    if Installer.secrets_already_exist(): Utils.print("Found existing secrets.")
-    else: Config.reset_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Setup passwords for encryption
+    Config.create_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Create all secrets
     if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Format disk
     else: Installer.mount_disk() # Or just mount disk
     if Interactive.confirm("Install nixos?"): Installer.install_nixos() # Install NixOS
