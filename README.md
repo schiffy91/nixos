@@ -1,39 +1,26 @@
 # TO DO
 * Utils
-    * Log to a log instead of stdout
+    * Log to an actual log instead of stdout
+* Admin
+    * Change auto login to default off; flip it on in the VMs, which we can presume are authenticated.
 * Boot
     * Secure Boot
-        * `FRACTAL-NORTH`: 
-            * Remove all closed source drivers. 
-            * Debug why it's not working.
-            * Set a password on EUFI.
-        * `VM-QEMU`: In theory, Secure Boot should work there too since everything is open source.
+        * `FRACTAL-NORTH`: Set a password on EUFI.
+        * `VM-QEMU`: In theory, this should work in QEMU too.
     * SSH
         * Figure out why SSH to decrypt LUKS is broken on `VM-QEMU` and `FRACTAL-NORTH`
     * TPM2
         * Convert `bin/tpm2` from `bash` to `python3`.
-        * Get it working on `FRACTAL-NORTH` so that keys are stored there instead of `/etc/secureboot` with `sbctl` (link)[https://jnsgr.uk/2024/04/nixos-secure-boot-tpm-fde/]
-            ```
-            λ » sudo sbctl reset
-            ✓ Removed Platform Key!
-            Use `sbctl enroll-keys` to enroll the Platform Key again.
-
-            λ » sudo sbctl rotate-keys --pk-keytype tpm --kek-keytype kek --db-keytype file
-            Backed up keys to /var/tmp/sbctl/sbctl_backup_keys_1722423218
-            Creating secure boot keys...✓
-            Secure boot keys created!
-            ✓ Enrolled new keys into UEFI!
-            ✓ Signed /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed
-            ✓ Signed /efi/EFI/BOOT/BOOTX64.EFI
-            ✓ Signed /efi/EFI/Linux/arch-linux.efi
-            ✓ Signed /usr/lib/fwupd/efi/fwupdx64.efi.signed
-            ```
-        * `VM-QEMU`: In theory, TPM2 should work there too, but it probably is off the main path for Linux VMs (vs Windows 11 VMs).
-    * 1Password - Open at boot; unlock via terminal. See if there's a way to automatically reduce prompts
+        * Call `tpm2` as bunch of sh functions chroot'ed after install, using --unlock-key-file=PATH to tmp/plain_text_password.txt to auomate the decryption.
+        * `VM-QEMU`: In theory, this should work in QEMU too.
+    * 1Password
+        * Create a service to autostart 1Password
+        * Investigate ability to unlock 1Password via terminal instead of GUI. Se
+        * Investigate if there's a way to automatically reduce prompts for password or a way to automate the extraction of the SSH key after login.
 * Installer
     * Validate installer didn't break after the most-recent refactor
 * VMs
-    * Move `VM-VMware`, `VM-Parallels`, and `VM-Apple-Hypervisor` to gists and remove from my repository.
+    * Move `VM-VMware`, `VM-Parallels`, and `VM-Apple-Hypervisor` to gists and out of the repository since they're unused.
 * Desktop Environment
     * PAM for Secrets in KDEWallet
     * Plasma Manager
