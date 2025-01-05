@@ -18,8 +18,9 @@
       theme = "breeze";
     };
     kernelParams = [
-      "quiet"
-      "splash"
+      "ip=dhcp"                         # SSH during initrd to decrypt filesystem
+      "quiet"                           # Plymouth
+      "splash"                          # Plymouth
       "loglevel=3"                      # Reduce kernel log verbosity
       "vt.global_cursor_default=0"      # Hide the console cursor during boot
       "rd.udev.log_priority=3"          # Minimize udev messages

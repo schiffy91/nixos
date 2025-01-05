@@ -23,6 +23,7 @@
     "9pnet_virtio"
     "snd_hda_codec"
     "snd_hda_core"
+    "virtio_net"
   ];
   boot.initrd.kernelModules = [
     "virtio_gpu"

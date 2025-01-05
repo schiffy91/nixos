@@ -8,8 +8,9 @@
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
   ##### AMD #####
   boot.kernelParams = [
-    "amdgpu.dc=1"
-    "video=HDMI-A-0:3840x2160@120"
+    "amdgpu.dc=1" # AMD GPU
+    "video=HDMI-A-0:3840x2160@120" # Force 4k120
+    "igc" # Ethernet during boot for SSH
   ];
   boot.kernelModules = [ "kvm-amd" ];
   hardware.firmware = [
