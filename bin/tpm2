@@ -12,32 +12,36 @@ if [ ! -e "/dev/tpmrm0" ]; then
 fi
 
 # Check TPM version
-if [ ! -f "/sys/class/tpm/tpm0/device/tpm_version_major" ]; then
+if [ ! -f "/sys/class/tpm/tpm0/tpm_version_major" ]; then
     logger -t tpmd "TPM device information not available"
     exit 0
 fi
 
-tpm2_present=$(cat /sys/class/tpm/tpm0/device/tpm_version_major)
+tpm2_present=$(cat /sys/class/tpm/tpm0/tpm_version_major)
 if [ "$tpm2_present" -ne 2 ]; then
     logger -t tpmd "TPM2 not present (version: $tpm2_present)"
     exit 0
 fi
 
 # Check LUKS partition
-if ! cryptsetup isLuks /dev/disk/by-label/crypted; then
+if ! cryptsetup isLuks /dev/disk/by-partlabel/disk-main-luks; then
     logger -t tpmd "Partition is not LUKS formatted"
     exit 0
 fi
 
 # Check existing enrollment
-if systemd-cryptenroll --tpm2-device=list | grep -q /dev/disk/by-label/crypted; then
+if systemd-cryptenroll --tpm2-device=list | grep -q /dev/disk/by-partlabel/disk-main-luks; then
     logger -t tpmd "Device already enrolled with TPM2"
     exit 0
 fi
 
 # Enroll
 logger -t tpmd "Enrolling LUKS partition with TPM2..."
-if ! systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+7 /dev/disk/by-label/crypted; then
+#PCR 0: Core system firmware executable code
+#PCR 2: Extended or pluggable executable code
+#PCR 7: SecureBoot state
+#PCR 12: Kernel command line, system credentials and system configuration images
+if ! systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+2+7+12 --wipe-slot=tpm2 /dev/disk/by-partlabel/disk-main-luks; then
     logger -t tpmd "TPM2 enrollment failed"
     exit 1
 fi
