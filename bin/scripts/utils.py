@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys, subprocess, json, getpass, glob, contextlib, re
 
 class Shell:
