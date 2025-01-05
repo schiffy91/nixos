@@ -15,5 +15,7 @@
     variables.desktop.scalingFactor = mkVariable float 2.0; # Most screens are high res in 2025...
     variables.networking.lanSubnet = mkVariable str "10.0.0.0/24"; # Replace with your subnet
     variables.networking.loopbackEnabled = mkVariable bool true;
+    variables.networking.ports.udp = mkVariable listOf int [];
+    variables.networking.ports.tcp = mkVariable listOf int [];
   };
 }

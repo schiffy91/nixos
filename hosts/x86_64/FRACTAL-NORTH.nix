@@ -1,13 +1,12 @@
-{ config, pkgs, ... }:
-{  
+{ config, pkgs, lib, ... }: {
   ##### Host Name #####
   networking.hostName = "FRACTAL-NORTH";
-  # Disk information
-  variables.disk.device = "/dev/nvme0n1"; # This line must exist, but feel free to change the location
+  ##### Disk Information #####
+  variables.disk.device = "/dev/nvme0n1";
   variables.disk.swapSize = "65G";
-  # Dual GPU drivers
+  ##### Drivers #####
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
-  # AMD drivers
+  ##### AMD #####
   boot.kernelParams = [
     "amdgpu.dc=1"
     "video=HDMI-A-0:3840x2160@120"
@@ -18,6 +17,7 @@
   ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
+  ##### NVIDIA #####
   hardware.nvidia = {
     open = false;
     package = config.boot.kernelPackages.nvidiaPackages.stable;
@@ -32,7 +32,7 @@
       nvidiaBusId = "PCI:69:0:0";
     };
   };
-  # Virtualization (libvirt, podman)
+  ##### Virtualization #####
   services.qemuGuest.enable = true;
   programs.virt-manager.enable = true;
   virtualisation = {
@@ -52,8 +52,7 @@
       dockerCompat = true;
     };
   };
-
-  # Packages
+  ##### Packages #####
   environment.systemPackages = with pkgs; [
     google-chrome
     distrobox
@@ -68,12 +67,15 @@
     win-virtio
     win-spice
   ];
-
-  # Moonlight
+  ##### Networking #####
+  variables.networking.lanSubnet = "10.0.0.0/24";
+  ##### Moonlight #####
   services.sunshine = {
     enable = true;
     openFirewall = false;
     autoStart = true;
     capSysAdmin = true;
   };
+  variables.networking.ports.tcp = [ 47984 47989 47990 48010 ];
+  variables.networking.ports.udp = lib.lists.flatten (map (range: lib.lists.range range.from range.to) [ { from = 47998; to = 48000; } { from = 8000; to = 8010; } ]);
 }

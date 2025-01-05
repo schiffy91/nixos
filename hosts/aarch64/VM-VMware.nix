@@ -26,4 +26,6 @@
   environment.systemPackages = with pkgs; [
     open-vm-tools
   ];
+  ##### Networking #####
+  variables.networking.lanSubnet = "192.168.64.0/24";
 }
