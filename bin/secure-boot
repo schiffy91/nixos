@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
 DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
-. "$DIR/utils"
+source "$DIR/utils"
+
 sudo python3 /etc/nixos/bin/scripts/secure_boot.py "$@"

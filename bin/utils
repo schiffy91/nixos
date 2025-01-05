@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-source "$(dirname "$(realpath "$0")")/utils"
+DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 
 arg_exists() {
   local target_arg="$1"

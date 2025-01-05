@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
-source "$(dirname "$(realpath "$0")")/utils"
+DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
+source "$DIR/utils"
 
 # Install Python3.13
 sudo nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#python313
