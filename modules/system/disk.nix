@@ -30,6 +30,7 @@ in
               size = "100%";
               content = {
                 type = "luks";
+                name = config.variables.disk.label.encrypted;
                 passwordFile = config.variables.disk.tmpPasswordPath;
                 settings.allowDiscards = true;
                 content = {
