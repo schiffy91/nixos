@@ -220,17 +220,15 @@ class Utils:
     RESET = "\033[0m"
     @classmethod
     def parse_args(cls, argv, *allowed_args):
-        if not argv:
-            return Utils.abort("No arguments provided")
+        if not argv: return Utils.abort("No arguments provided")
         matched_args = [arg for arg in argv if arg in set(allowed_args)]
-        if not matched_args:
-            return Utils.abort("No valid arguments provided")
+        if not matched_args: return Utils.abort("No valid arguments provided")
         return matched_args
     @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod
-    def abort(cls, error=""): 
-        if error: Utils.log_error(error)
+    def abort(cls, message=""):
+        if message: Utils.log_error(message)
         return sys.exit(1)
     @classmethod
     def get_value_from_path(cls, path, key, start='"', end='"', trim_whitespace=True):
