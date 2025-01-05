@@ -6,7 +6,7 @@ let
   mkPortRules = { action, protos, ports }: lib.concatStringsSep "\n" (lib.lists.flatten (map (proto: map (port: mkIptablesRule { inherit action port proto; }) ports) protos));
   mkServiceRules = action: lib.concatStringsSep "\n" (lib.remove null [
     (lib.optionalString config.services.openssh.enable (mkPortRules { inherit action; protos = ["tcp"]; ports = [ 22 ]; })) # SSH
-    (lib.optionalString config.services.avahi.enable (mkPortRules { inherit action; protos = ["tcp" "udp"]; ports = 5353; })) # Avahi
+    (lib.optionalString config.services.avahi.enable (mkPortRules { inherit action; protos = ["tcp" "udp"]; ports = [ 5353 ]; })) # Avahi
     (lib.optionalString (lib.lists.length config.variables.networking.ports.tcp != 0) (mkPortRules { inherit action; protos = ["tcp"]; ports = config.variables.networking.ports.tcp; }))
     (lib.optionalString (lib.lists.length config.variables.networking.ports.udp != 0) (mkPortRules { inherit action; protos = ["udp"]; ports = config.variables.networking.ports.udp; }))
   ]);
