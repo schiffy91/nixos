@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 cd "$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 . "./utils"
 sudo python3 /etc/nixos/bin/scripts/secure_boot.py "$@"
