@@ -15,7 +15,7 @@
     variables.boot.method = mkVariable str "Standard";
     variables.desktop.displayServer = mkVariable (enum [ "x11" "wayland" ]) "wayland";
     variables.desktop.scalingFactor = mkVariable float 2.0; # Most screens are high res in 2025...
-    variables.networking.lanSubnet = mkVariable str (builtins.readFile (builtins.toFile "subnet" (builtins.execCommand ["bash" "-c" "ip -o -f inet addr show | awk '/scope global/ {print $4}'"]))); # Override with your own subnet
+    variables.networking.lanSubnet = mkVariable str "10.0.0.0/24"; #ip -o -f inet addr show | awk '/scope global/ {print $4}'; # Override with your own subnet
     variables.networking.ports.udp = mkVariable (listOf int) [];
     variables.networking.ports.tcp = mkVariable (listOf int) [];
   };

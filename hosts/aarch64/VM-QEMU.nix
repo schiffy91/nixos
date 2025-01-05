@@ -46,5 +46,5 @@
     spice-protocol
   ];
   ##### Networking #####
-  #TODO: Remove this if my script variables.networking.lanSubnet = "192.168.64.0/24";
+  variables.networking.lanSubnet = "192.168.64.0/24";
 }

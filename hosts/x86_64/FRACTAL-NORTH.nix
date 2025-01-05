@@ -68,7 +68,7 @@
     win-spice
   ];
   ##### Networking #####
-  #TODO Remove this if my script works. variables.networking.lanSubnet = "10.0.0.0/24";
+  variables.networking.lanSubnet = "10.0.0.0/24";
   ##### Moonlight #####
   services.sunshine = {
     enable = true;
