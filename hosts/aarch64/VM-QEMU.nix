@@ -45,4 +45,6 @@
     spice-vdagent
     spice-protocol
   ];
+  ##### Networking #####
+  variables.networking.lanSubnet = lib.mkDefault "192.168.64.0/24";
 }
