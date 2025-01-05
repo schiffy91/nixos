@@ -77,5 +77,4 @@
     capSysAdmin = true;
   };
   variables.networking.ports.tcp = [ 47984 47989 47990 48010 ];
-  variables.networking.ports.udp = lib.lists.flatten (map (range: lib.lists.range range.from range.to) [ { from = 47998; to = 48000; } { from = 8000; to = 8010; } ]);
-}
+  variables.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);}

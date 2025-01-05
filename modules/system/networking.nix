@@ -42,7 +42,6 @@ in
     };
     printing.browsed.enable = lib.mkDefault false;
   };
-
   programs.ssh = {
     startAgent = true;
     extraConfig = ''
