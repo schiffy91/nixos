@@ -1,7 +1,5 @@
 #!/bin/sh
 set -e
-# Get absolute path to script directory
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-# Source utils with correct quoting
-source "${SCRIPT_DIR}/utils"
+cd "$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")"
+source utils
 sudo python3 /etc/nixos/bin/scripts/secure_boot.py "$@"
