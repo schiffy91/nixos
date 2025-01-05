@@ -262,7 +262,7 @@ class Utils:
 
 def main():
     match Utils.parse_args(sys.argv[1:], "--update"):
-        case "--update":
+        case ["--update"]:
             Utils.require_root()
             return Config.update()
         case _:
