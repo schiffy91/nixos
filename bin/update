@@ -1,5 +1,4 @@
 #!/bin/sh
 set -e
-source "$(dirname "$(realpath "$0")")/utils"
 
 sudo python3 /etc/nixos/bin/scripts/utils.py "$@" --update
