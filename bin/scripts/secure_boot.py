@@ -51,13 +51,13 @@ def enable_secure_boot():
 
 def main():
     operation = None
-    match Utils.parse_args(sys.argv[1:], "--enable", "--disable"):
-        case ["--enable"]:
+    match Utils.parse_args(sys.argv[1:], "enable", "disable"):
+        case ["enable"]:
             operation = enable_secure_boot
-        case ["--disable"]:
+        case ["disable"]:
             operation = disable_secure_boot
         case _:
-            return Utils.abort("Usage: secure_boot.py (--enable | --disable)")
+            return Utils.abort("Usage: secure_boot.py (enable | disable)")
     try:
         operation()
     except BaseException as exception:

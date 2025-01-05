@@ -1,12 +1,10 @@
 { config, inputs, ... }:
-let 
-  mkSwapVolume = size: 
-  if size != "" then { 
-    "/swap" = { 
-      mountpoint = "/.swapvol"; 
-      swap.swapfile.size = size; 
-    }; 
-  } else {};
+let optionalSwapVolume = if config.variables.disk.swapSize == "" then {} else {
+  "/swap" = { 
+    mountpoint = "/.swapvol"; 
+    swap.swapfile.size = config.variables.disk.swapSize; 
+  };
+};
 in
 {
   imports = [ inputs.disko.nixosModules.disko ];
@@ -55,7 +53,7 @@ in
                       mountpoint = "/var";
                       mountOptions = [ "compress=zstd" "noatime" ];
                     };
-                  } // (mkSwapVolume config.variables.disk.swapSize);
+                  } // optionalSwapVolume;
                 };
               };
             };
