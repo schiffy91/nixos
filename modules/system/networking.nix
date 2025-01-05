@@ -2,7 +2,7 @@
 let
   #TODO networking.nftables.ruleset is probably the more kosher way to do this..
   # https://discourse.nixos.org/t/open-firewall-ports-only-towards-local-network/13037
-  mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${config.variables.networking.lanSubne} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
+  mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${config.variables.networking.lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
   mkPortRules = { action, protos, ports }: lib.concatStringsSep "\n" (lib.lists.flatten (map (proto: map (port: mkIptablesRule { inherit action port proto; }) ports) protos));
   mkServiceRules = action: lib.concatStringsSep "\n" (lib.remove null [
     (lib.optionalString config.services.openssh.enable (mkPortRules { inherit action; protos = ["tcp"]; ports = [ 22 ]; })) # SSH
