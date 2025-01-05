@@ -49,7 +49,7 @@ def enable_secure_boot():
     create_keys()
     if not are_keys_enrolled():
         enroll_keys()
-    Config.set_target("secure-boot")
+    Config.set_target(Config.get_secure_boot_flake_target())
     Config.update(rebuild_file_system=True)
     require_signed_boot_loader()
 
