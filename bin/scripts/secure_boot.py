@@ -17,6 +17,8 @@ def are_keys_enrolled():
     return "secure boot: ✓ enabled" in Utils.stdout(status).lower()
 
 def enroll_keys():
+    Utils.log("Resetting Secure Boot keys...")
+    sh.run("sbctl reset", check=False)
     Utils.log("Enrolling Secure Boot keys...")
     sh.run("sbctl enroll-keys --microsoft")
     Utils.log("Secure Boot keys enrolled successfully")

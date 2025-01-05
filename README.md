@@ -12,7 +12,7 @@
         * Figure out why SSH to decrypt LUKS is broken on `VM-QEMU` and `FRACTAL-NORTH`
     * TPM2
         * Convert `bin/tpm2` from `bash` to `python3`.
-        * Get it working on `FRACTAL-NORTH` so that keys are stored there instead of `/etc/secureboot` with `sbctl`
+        * Get it working on `FRACTAL-NORTH` so that keys are stored there instead of `/etc/secureboot` with `sbctl` (link)[https://jnsgr.uk/2024/04/nixos-secure-boot-tpm-fde/]
             ```
             λ » sudo sbctl reset
             ✓ Removed Platform Key!
