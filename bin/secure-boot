@@ -1,5 +1,5 @@
 #!/bin/sh
 set -e
-cd "$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")"
+cd "$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 source utils
 sudo python3 /etc/nixos/bin/scripts/secure_boot.py "$@"
