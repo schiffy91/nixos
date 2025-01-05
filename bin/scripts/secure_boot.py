@@ -4,12 +4,6 @@ from utils import Utils, Config, Shell
 
 sh = Shell(root_required=True)
 
-def parse_args():
-    if len(sys.argv) != 2 or sys.argv[1] not in ["--enable", "--disable"]:
-        Utils.log("Usage: nixos_secure_boot.py [--enable|--disable]")
-        return Utils.abort()
-    return sys.argv[1]
-
 def remove_old_efi_entries():
     sh.mkdir("/boot/EFI/Linux", "/var/lib/sbctl")
     sh.rm("/boot/EFI/Linux/linux-*.efi")
@@ -55,7 +49,7 @@ def enable_secure_boot():
 
 def main():
     try:
-        match parse_args():
+        match Utils.parse_args(sys.argv[1:], "--enable", "--disable"):
             case "--enable":
                 return enable_secure_boot()
             case "--disable":

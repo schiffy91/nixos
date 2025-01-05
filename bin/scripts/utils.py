@@ -219,6 +219,16 @@ class Utils:
     RED = "\033[31m"
     RESET = "\033[0m"
     @classmethod
+    def parse_args(cls, argv, *allowed_args):
+        if not argv:
+            Utils.log_error("No arguments provided")
+            return Utils.abort()
+        matched_args = [arg for arg in argv if arg in set(allowed_args)]
+        if not matched_args:
+            Utils.log_error("No valid arguments provided")
+            return Utils.abort()
+        return matched_args
+    @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod
     def abort(cls): return sys.exit(1)
@@ -248,3 +258,13 @@ class Utils:
     def print(cls, message): print(message)
     @classmethod
     def print_error(cls, message): print(f"{cls.RED}{message}{cls.RESET}", file=sys.stderr)
+
+def main():
+    match Utils.parse_args(sys.argv[1:], "--update"):
+        case "--update":
+            Utils.require_root()
+            return Config.update()
+        case _:
+            return Utils.abort()
+
+if __name__ == "__main__": main()
