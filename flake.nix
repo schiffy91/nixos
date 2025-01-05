@@ -21,7 +21,7 @@
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let name = lib.removeSuffix ".nix" (baseNameOf hostFile); in 
         [ 
-          { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/variables/disk.nix ]; }
+          { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/system/disk.nix ]; }
           { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
           { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { variables.boot.method = lib.mkForce "Secure-Boot"; }) ]; }
         ]
