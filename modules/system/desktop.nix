@@ -20,7 +20,7 @@
     drkonqi
     spectacle
   ]);
-} 
+}
 (lib.mkIf (config.variables.desktop.displayServer == "x11") {
   services.xserver.enable = true;
   services.displayManager.defaultSession = "plasmax11";
