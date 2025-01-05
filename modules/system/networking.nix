@@ -3,17 +3,20 @@ let
   lanSubnet = config.variables.networking.lanSubnet;
   sshPorts = [ 22 ];
   mdnsPorts = [ 5353 ];
-  sunshineTcpPorts = [ 47984 47989 47990 48010 ];
-  sunshineUdpPorts = lib.lists.flatten (map (range: lib.lists.range range.from range.to)[ { from = 47998; to = 48000; } { from = 8000; to = 8010; }]);
-  mkIptablesRule = { action, proto, port }: "iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}";
-  mkPortRules = { action, proto, ports }: lib.concatStringsSep "\n" (map (port: mkIptablesRule { inherit action proto port; }) ports);
-  mkServiceRules = action:
-    lib.concatStringsSep "\n" (lib.remove null [
-      (lib.optionalString config.services.openssh.enable (mkPortRules { inherit action; proto = "tcp"; ports = sshPorts; }))
-      (lib.optionalString config.services.avahi.enable (mkPortRules { inherit action; proto = "udp"; ports = mdnsPorts; }))
-      (lib.optionalString config.services.sunshine.enable (mkPortRules { inherit action; proto = "tcp"; ports = sunshineTcpPorts; }))
-      (lib.optionalString config.services.sunshine.enable (mkPortRules { inherit action; proto = "udp"; ports = sunshineUdpPorts; }))
-    ]);
+  sunshinePorts = {
+    tcp = [ 47984 47989 47990 48010 ];
+    udp = lib.lists.flatten (map (range: lib.lists.range range.from range.to) [ { from = 47998; to = 48000; } { from = 8000; to = 8010; } ]);
+  };
+  mkLoopbackRule = action: ''iptables -${action} nixos-fw -i lo -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
+  mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
+  mkPortRules = { action, protos, ports }: lib.concatStringsSep "\n" (lib.lists.flatten (map (proto: map (port: mkIptablesRule { inherit action port proto; }) ports) protos));
+  mkServiceRules = action: lib.concatStringsSep "\n" (lib.remove null [
+    (lib.optionalString config.variables.networking.loopbackEnabled (mkLoopbackRule action))
+    (lib.optionalString config.services.openssh.enable (mkPortRules { inherit action; protos = ["tcp"]; ports = sshPorts; }))
+    (lib.optionalString config.services.avahi.enable (mkPortRules { inherit action; protos = ["tcp" "udp"]; ports = mdnsPorts; }))
+    (lib.optionalString config.services.sunshine.enable (mkPortRules { inherit action; protos = ["tcp"]; ports = sunshinePorts.tcp; }))
+    (lib.optionalString config.services.sunshine.enable (mkPortRules { inherit action; protos = ["udp"]; ports = sunshinePorts.udp; }))
+  ]);
 in
 {
   networking.firewall = {
