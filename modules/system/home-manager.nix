@@ -3,7 +3,7 @@
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
-    backupFileExtension = "backup";
+    backupFileExtension = "hm-backup";
     sharedModules = [ inputs.plasma-manager.homeManagerModules.plasma-manager ];
     extraSpecialArgs = { variables = config.variables; };
         users = 
