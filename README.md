@@ -29,6 +29,7 @@
             ✓ Signed /usr/lib/fwupd/efi/fwupdx64.efi.signed
             ```
         * `VM-QEMU`: In theory, TPM2 should work there too, but it probably is off the main path for Linux VMs (vs Windows 11 VMs).
+    * 1Password - Open at boot; unlock via terminal. See if there's a way to automatically reduce prompts
 * Installer
     * Validate installer didn't break after the most-recent refactor
 * VMs
