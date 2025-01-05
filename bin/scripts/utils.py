@@ -74,7 +74,7 @@ class Shell:
         self.run(f"chown -R {user} " + " ".join(f"'{path}'" for path in paths))
     def ssh_keygen(self, key_type, path, password=""):
         self.mkdir(self.dirname(path))
-        self.run(f"ssh-keygen -t {key_type} -N {password} -f '{path}'")
+        self.run(f"ssh-keygen -t {key_type} -N \"{password}\" -f '{path}'")
     # I/O
     def file_write(self, path, string, sensitive=None, **kwargs):
         self.rm(path)
