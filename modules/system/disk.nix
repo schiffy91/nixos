@@ -9,14 +9,14 @@ in
 {
   imports = [ inputs.disko.nixosModules.disko ];
   disko.devices = {
-    disk = {
-      main = {
+    "${config.variables.disk.label.disk}" = {
+      "${config.variables.disk.label.main}" = {
         type = "disk";
         device = config.variables.disk.device;
         content = {
           type = "gpt";
           partitions = {
-            ESP = {
+            "${config.variables.disk.label.boot}" = {
               size = "512M";
               type = "EF00";
               content = {
@@ -26,11 +26,10 @@ in
                 mountOptions = [ "umask=0077" ];
               };
             };
-            luks = {
+            "${config.variables.disk.label.encrypted}" = {
               size = "100%";
               content = {
                 type = "luks";
-                name = "crypted";
                 passwordFile = config.variables.disk.tmpPasswordPath;
                 settings.allowDiscards = true;
                 content = {

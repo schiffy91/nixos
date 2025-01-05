@@ -9,6 +9,10 @@
     variables.user.admin.autoLoginEnabled = mkVariable bool true;
     variables.user.admin.authorizedKey = mkVariable str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
     variables.disk.device = mkVariable str ""; # Per host
+    variables.disk.label.disk = mkVariable str "disk";
+    variables.disk.label.main = mkVariable str "main";
+    variables.disk.label.boot = mkVariable str "ESP";
+    variables.disk.label.encrypted = mkVariable str "luks";
     variables.disk.swapSize = mkVariable str ""; # Per host
     variables.disk.tmpPasswordPath = mkVariable str "/tmp/plain_text_password.txt";
     variables.disk.pkiBundle = mkVariable str "/var/lib/sbctl";
