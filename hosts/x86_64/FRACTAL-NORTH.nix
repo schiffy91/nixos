@@ -20,7 +20,7 @@
   hardware.amdgpu.initrd.enable = true;
   ##### NVIDIA #####
   hardware.nvidia = {
-    open = false;
+    open = true;
     package = config.boot.kernelPackages.nvidiaPackages.stable;
     nvidiaSettings = true;
     powerManagement.enable = true;
