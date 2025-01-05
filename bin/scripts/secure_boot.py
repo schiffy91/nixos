@@ -48,14 +48,16 @@ def enable_secure_boot():
     require_signed_boot_loader()
 
 def main():
+    operation = None
+    match Utils.parse_args(sys.argv[1:], "--enable", "--disable"):
+        case ["--enable"]:
+            operation = enable_secure_boot
+        case ["--disable"]:
+            operation = disable_secure_boot
+        case _:
+            return Utils.abort("Usage: secure_boot.py (--enable | --disable)")
     try:
-        match Utils.parse_args(sys.argv[1:], "--enable", "--disable"):
-            case "--enable":
-                return enable_secure_boot()
-            case "--disable":
-                return disable_secure_boot()
-            case _:
-                return Utils.abort("Usage: secure_boot.py (--enable | --disable)")
+        operation()
     except BaseException as exception:
         Utils.log_error(f"Caught exception: {exception}.")
         Utils.log_error("Disabling Secure Boot.")
