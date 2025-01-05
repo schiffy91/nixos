@@ -146,7 +146,7 @@ class Config:
         environment = ""
         if rebuild_file_system:
             environment = "NIXOS_INSTALL_BOOTLOADER=1"
-            cls.secure(cls.sh.whoami(), cls.get_secrets_path())
+            cls.secure(cls.sh.whoami())
         cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
         Interactive.ask_to_reboot()
     # Readwrite
