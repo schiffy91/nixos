@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+source "$(dirname "$(realpath "$0")")/utils"
 
 logger -t tpmd "Starting TPM2 enrollment check..."
 

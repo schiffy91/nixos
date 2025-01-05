@@ -55,8 +55,11 @@ def main():
             case "--disable":
                 return disable_secure_boot()
             case _:
-                return Utils.abort()
-    except BaseException:
+                return Utils.abort("Usage: secure_boot.py (--enable | --disable)")
+    except BaseException as exception:
+        Utils.log_error(f"Caught exception: {exception}.")
+        Utils.log_error("Disabling Secure Boot.")
         disable_secure_boot()
+        raise
 
 if __name__ == "__main__": main()

@@ -8,8 +8,7 @@ class Shell:
     # User
     def require_root(self):
         if Utils.stdout(self.run("id -u")) != "0":
-            Utils.print_error("Please run this script with sudo.")
-            Utils.abort()
+            Utils.abort("Please run this script with sudo.")
     def whoami(self): return Utils.stdout(self.run("who")).split()[0]
     def hostname(self): return Utils.stdout(self.run("hostname"))
     # Execution
@@ -222,17 +221,17 @@ class Utils:
     @classmethod
     def parse_args(cls, argv, *allowed_args):
         if not argv:
-            Utils.log_error("No arguments provided")
-            return Utils.abort()
+            return Utils.abort("No arguments provided")
         matched_args = [arg for arg in argv if arg in set(allowed_args)]
         if not matched_args:
-            Utils.log_error("No valid arguments provided")
-            return Utils.abort()
+            return Utils.abort("No valid arguments provided")
         return matched_args
     @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod
-    def abort(cls): return sys.exit(1)
+    def abort(cls, error=""): 
+        if error: Utils.log_error(error)
+        return sys.exit(1)
     @classmethod
     def get_value_from_path(cls, path, key, start='"', end='"', trim_whitespace=True):
         file_contents = cls.sh.file_read(path)
@@ -266,6 +265,6 @@ def main():
             Utils.require_root()
             return Config.update()
         case _:
-            return Utils.abort()
+            return Utils.abort("Usage: utils.py --update")
 
 if __name__ == "__main__": main()
