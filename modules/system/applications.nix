@@ -1,5 +1,6 @@
 { config, inputs, pkgs, ... }: {
   nixpkgs.config.allowUnfree = true;
+  inputs.nixpkgs-unstable.config.allowUnfree = true;
   environment.systemPackages = (with pkgs; [
     micro
     wget
