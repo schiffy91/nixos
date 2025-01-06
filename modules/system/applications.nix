@@ -1,6 +1,4 @@
-{ config, inputs, pkgs, ... }: {
-  nixpkgs.config.allowUnfree = true;
-  #inputs.nixpkgs-unstable.config.allowUnfree = true;
+{ config, inputs, pkgs, unstable-pkgs, ... }: {
   environment.systemPackages = (with pkgs; [
     micro
     wget
@@ -9,11 +7,11 @@
     python313
     _1password-gui
     _1password-cli
-    home-manager
-    inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
-    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode
-    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode.fhs
+    inputs.sbctl-pkg.legacyPackages.${pks.system}.sbctl
+    unstable-pkgs.vscode
+    unstable-pkgs.vscode.fhs
   ]);
+  programs.nix-ld.enable = true; # See https://nixos.wiki/wiki/Visual_Studio_Code#Remote_SSH
   programs._1password.enable = true;
   programs._1password-gui = {
     enable = true;
@@ -22,7 +20,5 @@
   environment.etc."1password/custom_allowed_browsers" = {
     text = "chromium";
     mode = "0755";
-  };
-  
-  programs.nix-ld.enable = true; # See https://nixos.wiki/wiki/Visual_Studio_Code#Remote_SSH
+  };  
 }
