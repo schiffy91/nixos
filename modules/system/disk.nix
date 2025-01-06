@@ -26,11 +26,11 @@ in
                 mountOptions = [ "umask=0077" ];
               };
             };
-            "${config.variables.disk.label.encrypted}" = {
+            "${config.variables.disk.label.data}" = {
               size = "100%";
               content = {
                 type = "luks";
-                name = config.variables.disk.label.encrypted;
+                name = config.variables.disk.label.data;
                 passwordFile = config.variables.disk.tmpPasswordPath;
                 settings.allowDiscards = true;
                 content = {

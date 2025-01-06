@@ -19,11 +19,12 @@
         });
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
-        let name = lib.removeSuffix ".nix" (baseNameOf hostFile); in 
+        let name = lib.removeSuffix ".nix" (baseNameOf hostFile); 
+            mkForceBootLoader = type: ({ lib, ...}: { variables.boot.method = lib.mkForce type; }); in 
         [ 
           { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/system/disk.nix ]; }
-          { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix ]; }
-          { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix ({ lib, ... }: { variables.boot.method = lib.mkForce "Secure-Boot"; }) ]; }
+          { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix  (mkForceBootLoader "Standard") ]; }
+          { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix (mkForceBootLoader "Secure-Boot") ]; }
         ]
       ) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./hosts)));
     };

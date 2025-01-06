@@ -44,7 +44,7 @@
     loader.systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
     lanzaboote = {
       enable = true;
-      pkiBundle = config.variables.disk.pkiBundle;
+      pkiBundle = config.variables.boot.pkiBundle;
     };
   };
 })]
