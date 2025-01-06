@@ -7,12 +7,13 @@
   ##### Drivers #####
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
   ##### TPM2 #####
-  config.variables.tpm.device = "/dev/tpmrm0";
+  variables.tpm.device = "/dev/tpmrm0";
   ##### AMD #####
   boot.kernelParams = [
-    "amdgpu.dc=1" # AMD GPU
-    "video=HDMI-A-0:3840x2160@120" # Force 4k120
-    "igc" # Ethernet during boot for SSH
+    "amdgpu.dc=1"                   # AMD GPU
+    "video=HDMI-A-0:3840x2160@120"  # Force 4k120
+    #                               #TODO: Ethernet during boot for SSH
+    #                               #TODO: i2c-0: Failed to register i2c client MSFT8000:00 at 0x4e (-16)
   ];
   boot.kernelModules = [ "kvm-amd" ];
   hardware.firmware = [

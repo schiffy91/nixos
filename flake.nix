@@ -22,11 +22,11 @@
         let 
           name = lib.removeSuffix ".nix" (baseNameOf hostFile); 
           setBootLoader = bootLoader: ({ lib, ...}: { variables.boot.method = lib.mkForce bootLoader; }); in 
-        [ 
-          { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/system/disk.nix ]; }
-          { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix  (setBootLoader "Standard") ]; }
-          { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix (setBootLoader "Secure-Boot") ]; }
-        ]
+          [ 
+            { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/system/disk.nix ]; }
+            { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix  (setBootLoader "Standard") ]; }
+            { name = "${name}-Secure-Boot"; value = mkTarget hostFile [ ./configuration.nix (setBootLoader "Secure-Boot") ]; }
+          ]
       ) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./hosts)));
     };
 }
