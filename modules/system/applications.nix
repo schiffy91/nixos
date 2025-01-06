@@ -5,15 +5,13 @@
     wget
     devbox
     git
-    vscode
     inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
     python313
     _1password-gui
     _1password-cli
-    blackbox-terminal
     home-manager
-    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.ghostty # Too buggy in Wayland w/ VirGL; doesn't work in X11 w/ VirGL
-    #alacritty # Too buggy in Wayland w/ VirGL; doesn't work in X11 w/ VirGL
+    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode
+    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode.fhs
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
@@ -24,4 +22,6 @@
     text = "chromium";
     mode = "0755";
   };
+  
+  programs.nix-ld.enable = true; # See https://nixos.wiki/wiki/Visual_Studio_Code#Remote_SSH
 }
