@@ -1,4 +1,4 @@
-{ config, inputs, pkgs, ... }: {
+{ config, inputs, pkgs, nixpkgs-unstable ... }: {
   nixpkgs.config.allowUnfree = true;
   nixpkgs-unstable.config.allowUnfree = true;
   environment.systemPackages = (with pkgs; [
