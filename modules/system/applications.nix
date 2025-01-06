@@ -7,7 +7,7 @@
     python313
     _1password-gui
     _1password-cli
-    inputs.sbctl-pkg.legacyPackages.${pks.system}.sbctl
+    inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
     unstable-pkgs.vscode
     unstable-pkgs.vscode.fhs
   ]);
