@@ -27,7 +27,7 @@ def enable_tpm2():
 def disable_tpm2():
     if not tpm2_exists(): return Utils.abort("TPM2 does not exist.")
     if not tpm2_enrolled(): return Utils.abort("TPM2 is not enrolled. run `tpm2.py enable` and try again after.")
-    if sh.run(f"systemd-cryptenroll {Config.get_data_disk_path()} --wipe-slot=tpm2 --tpm2-device={Config.get_tpm_device()}", capture_output=False, check=False).returncode != 0: Utils.abort("Failed removing TPM2 enrollment")
+    if sh.run(f"systemd-cryptenroll {Config.get_data_disk_path()} --wipe-slot=tpm2", capture_output=False, check=False).returncode != 0: Utils.abort("Failed removing TPM2 enrollment")
 
 def main():
     operation = None
