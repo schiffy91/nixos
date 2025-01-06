@@ -177,6 +177,10 @@ class Config:
     @classmethod
     def get_data_disk_path(cls): return f"/dev/disk/by-partlabel/{cls.get_disk_label('disk')}-{cls.get_disk_label('main')}-{cls.get_disk_label('data')}"
     @classmethod
+    def get_tpm_device(cls): return Utils.get_value_from_variables("variables.tpm.device")
+    @classmethod
+    def get_tpm_version_path(cls): return Utils.get_value_from_variables("variables.tpm.versionPath")
+    @classmethod
     def get_host(cls): return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
