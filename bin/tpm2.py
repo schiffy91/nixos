@@ -8,7 +8,6 @@ def tpm2_exists(): return sh.exists(Config.get_tpm_device()) and int(sh.file_rea
 
 def get_enrolled_tpm2_devices(): return Utils.stdout(sh.run("systemd-cryptenroll --tpm2-device=list", check=False))
 
-def tpm2_enrolled(): return Config.get_tpm_device() in get_enrolled_tpm2_devices()
 
 def data_disk_encrypted(): return sh.run(f"cryptsetup isLuks {Config.get_data_disk_path()}", check=False).returncode == 0
 
@@ -19,14 +18,12 @@ def enroll_tpm2():
 def enable_tpm2():
     if not tpm2_exists(): return Utils.abort("TPM2 does not exist.")
     if not data_disk_encrypted(): return Utils.abort(f"{Config.get_data_disk_path} isn't encrypted with LUKS.")
-    if tpm2_enrolled(): return Utils.abort("TPM2 already enrolled. run `tpm2.py disable` and try again after.")
     if not enroll_tpm2(): Utils.abort("Enrolling TPM2 failed")
     Utils.log("Successfully enrolled TPM2")
     Utils.log("Please check that TPM2 performs automatic disk decryption after reboot")
 
 def disable_tpm2():
     if not tpm2_exists(): return Utils.abort("TPM2 does not exist.")
-    if not tpm2_enrolled(): return Utils.abort("TPM2 is not enrolled. run `tpm2.py enable` and try again after.")
     if sh.run(f"systemd-cryptenroll {Config.get_data_disk_path()} --wipe-slot=tpm2", capture_output=False, check=False).returncode != 0: Utils.abort("Failed removing TPM2 enrollment")
 
 def main():
