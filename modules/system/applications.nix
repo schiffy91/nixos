@@ -11,8 +11,8 @@
     _1password-cli
     home-manager
     inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
-    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode
-    inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode.fhs
+    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode
+    #inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode.fhs
   ]);
   programs._1password.enable = true;
   programs._1password-gui = {
