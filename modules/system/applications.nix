@@ -1,4 +1,4 @@
-{ config, inputs, pkgs, nixpkgs-unstable ... }: {
+{ config, inputs, pkgs, ... }: {
   nixpkgs.config.allowUnfree = true;
   nixpkgs-unstable.config.allowUnfree = true;
   environment.systemPackages = (with pkgs; [
@@ -6,11 +6,11 @@
     wget
     devbox
     git
-    inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
     python313
     _1password-gui
     _1password-cli
     home-manager
+    inputs.sbctl-pkg.legacyPackages.${pkgs.system}.sbctl
     inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode
     inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.vscode.fhs
   ]);
