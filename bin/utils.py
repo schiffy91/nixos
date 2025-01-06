@@ -171,6 +171,12 @@ class Config:
     @classmethod
     def get_disk_operation_target(cls): return "Disk-Operation"
     @classmethod
+    def get_disk_label(cls, label): return Utils.get_value_from_variables(f"variables.disk.label.{label}")
+    @classmethod
+    def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/{cls.get_disk_label('disk')}-{cls.get_disk_label('main')}-{cls.get_disk_label('boot')}"
+    @classmethod
+    def get_data_disk_path(cls): return f"/dev/disk/by-partlabel/{cls.get_disk_label('disk')}-{cls.get_disk_label('main')}-{cls.get_disk_label('data')}"
+    @classmethod
     def get_host(cls): return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
@@ -266,12 +272,3 @@ class Utils:
     @classmethod
     def print_error(cls, message): print(f"{cls.RED}{message}{cls.RESET}", file=sys.stderr)
 
-def main():
-    match Utils.parse_args(sys.argv[1:], "--update"):
-        case ["--update"]:
-            Utils.require_root()
-            return Config.update()
-        case _:
-            return Utils.abort("Usage: utils.py --update")
-
-if __name__ == "__main__": main()

@@ -31,7 +31,7 @@ class Installer:
     @classmethod
     def get_installation_disk(cls): return Utils.get_value_from_path(Config.get_host_path(), "variables.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Utils.get_value_from_variables("variables.disk.tmpPasswordPath")
+    def get_plain_text_password_path(cls): return Utils.get_value_from_variables("variables.disk.encryption.plainTextPasswordFile")
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod

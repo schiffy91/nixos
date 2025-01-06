@@ -1,6 +1,0 @@
-#!/bin/sh
-set -e
-DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
-source "$DIR/utils"
-
-sudo python3 /etc/nixos/bin/scripts/utils.py "$@" --update

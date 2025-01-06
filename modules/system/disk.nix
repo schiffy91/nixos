@@ -31,7 +31,7 @@ in
               content = {
                 type = "luks";
                 name = config.variables.disk.label.data;
-                passwordFile = config.variables.disk.tmpPasswordPath;
+                passwordFile = config.variables.disk.encryption.plainTextPasswordFile;
                 settings.allowDiscards = true;
                 content = {
                   type = "btrfs";

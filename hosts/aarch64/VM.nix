@@ -41,6 +41,7 @@
   };
   ##### Security #####
   security.sudo.wheelNeedsPassword = false;
+  variables.user.admin.autoLoginEnabled = true;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent

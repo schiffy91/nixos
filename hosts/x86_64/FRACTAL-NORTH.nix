@@ -6,6 +6,8 @@
   variables.disk.swapSize = "65G";
   ##### Drivers #####
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
+  ##### TPM2 #####
+  config.variables.tpm.device = "/dev/tpmrm0";
   ##### AMD #####
   boot.kernelParams = [
     "amdgpu.dc=1" # AMD GPU
