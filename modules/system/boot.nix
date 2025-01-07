@@ -19,7 +19,6 @@
     };
     kernelParams = [
       "ip=dhcp"                         # SSH during initrd to decrypt filesystem remotely
-      "rd.neednet=1"                    # SSH during initrd to decrypt filesystem remotely
       "quiet"                           # Plymouth
       "splash"                          # Plymouth
       "loglevel=3"                      # Reduce kernel log verbosity
