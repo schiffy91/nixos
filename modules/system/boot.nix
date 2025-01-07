@@ -5,7 +5,7 @@
     loader = {
       timeout = 5;
       efi = {
-        canTouchEfisettings = true;
+        canTouchEfiVariables = true;
         efiSysMountPoint = "/boot";
       };
     };
