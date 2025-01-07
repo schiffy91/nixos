@@ -14,9 +14,8 @@
           stateVersion = "24.11";
         };
         programs.home-manager.enable = true;
-      } // builtins.listToAttrs 
-            (map (path: { name = lib.removeSuffix ".nix" (baseNameOf path); value = import path; }) 
-              (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ../apps)));
+        imports = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ../apps);
+      };
     };
   };
 }
