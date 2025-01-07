@@ -1,11 +1,11 @@
-{ inputs, config, lib, ... }: {
+{ inputs, config, lib, unstable-pkgs, ... }: {
   imports = [ inputs.home-manager.nixosModules.home-manager ];
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "hm-backup";
     sharedModules = [ inputs.plasma-manager.homeManagerModules.plasma-manager ];
-    extraSpecialArgs = { settings = config.settings; };
+    extraSpecialArgs = { settings = config.settings; unstable-pkgs = unstable-pkgs; };
     users = { 
       "${config.settings.user.admin.username}" = { settings, ... }: {
         home = {
