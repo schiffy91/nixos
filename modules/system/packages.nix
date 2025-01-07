@@ -1,4 +1,4 @@
-{ config, inputs, pkgs, unstable-pkgs, ... }: {
+{ inputs, pkgs, ... }: {
   environment.systemPackages = (with pkgs; [
     micro
     git

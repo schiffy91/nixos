@@ -1,5 +1,4 @@
-{ lib, ... }: let mksetting = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; in
-{
+{ lib, ... }: let mksetting = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; in {
   options = with lib.types; {
     # Secrets
     settings.secrets.path = mksetting str "/etc/nixos/secrets";

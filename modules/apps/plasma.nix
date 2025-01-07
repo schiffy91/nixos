@@ -49,12 +49,10 @@
         hiding = "autohide";
       }
     ];
-
     kscreenlocker = {
       lockOnResume = true;
       timeout = 10;
     };
-
     configFile = {
       "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";

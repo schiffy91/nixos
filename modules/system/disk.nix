@@ -5,8 +5,7 @@ let optionalSwapVolume = if config.settings.disk.swapSize == "" then {} else {
     swap.swapfile.size = config.settings.disk.swapSize; 
   };
 };
-in
-{
+in {
   imports = [ inputs.disko.nixosModules.disko ];
   disko.devices = {
     "${config.settings.disk.label.disk}" = {
