@@ -1,7 +1,7 @@
-{ variables, pkgs, ... }: {
+{ settings, pkgs, ... }: {
   home = {
-    username = variables.user.admin.username;
-    homeDirectory = "/home/${variables.user.admin.username}";
+    username = settings.user.admin.username;
+    homeDirectory = "/home/${settings.user.admin.username}";
     stateVersion = "24.11";
   };
   programs.home-manager.enable = true;
@@ -96,9 +96,9 @@
     };
 
     configFile = {
-      "kdeglobals"."KScreen"."ScaleFactor" = 1 * variables.desktop.scalingFactor;
-      "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * variables.desktop.scalingFactor)};";
-      "kwinrc"."Xwayland"."Scale" = 1 * variables.desktop.scalingFactor;
+      "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;
+      "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
+      "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
     };
   };
 }

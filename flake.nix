@@ -15,13 +15,13 @@
         let system = "${baseNameOf (dirOf hostFile)}-linux"; in (lib.nixosSystem {
           inherit system;
           specialArgs = { inherit self inputs; unstable-pkgs = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; }; };
-          modules = [ { nixpkgs = { config.allowUnfree = true; }; } ./modules/variables.nix hostFile ] ++ modules;
+          modules = [ { nixpkgs = { config.allowUnfree = true; }; } ./modules/settings.nix hostFile ] ++ modules;
         });
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let 
           name = lib.removeSuffix ".nix" (baseNameOf hostFile); 
-          setBootLoader = bootLoader: ({ lib, ...}: { variables.boot.method = lib.mkForce bootLoader; }); in 
+          setBootLoader = bootLoader: ({ lib, ...}: { settings.boot.method = lib.mkForce bootLoader; }); in 
         [ 
           { name = "${name}-Disk-Operation"; value = mkTarget hostFile [ ./modules/system/disk.nix ]; }
           { name = "${name}-Standard"; value = mkTarget hostFile [ ./configuration.nix  (setBootLoader "Standard") ]; }

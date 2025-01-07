@@ -2,11 +2,11 @@
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
-  variables.disk.device = "/dev/vda";
+  settings.disk.device = "/dev/vda";
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Desktop #####
-  variables.desktop.displayServer = lib.mkForce "x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
+  settings.desktop.displayServer = lib.mkForce "x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
@@ -41,12 +41,12 @@
   };
   ##### Security #####
   security.sudo.wheelNeedsPassword = false;
-  variables.user.admin.autoLoginEnabled = true;
+  settings.user.admin.autoLoginEnabled = true;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent
     spice-protocol
   ];
   ##### Networking #####
-  variables.networking.lanSubnet = "192.168.64.0/24";
+  settings.networking.lanSubnet = "192.168.64.0/24";
 }

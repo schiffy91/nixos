@@ -1,22 +1,22 @@
 { config, inputs, ... }:
-let optionalSwapVolume = if config.variables.disk.swapSize == "" then {} else {
+let optionalSwapVolume = if config.settings.disk.swapSize == "" then {} else {
   "/swap" = { 
     mountpoint = "/.swapvol"; 
-    swap.swapfile.size = config.variables.disk.swapSize; 
+    swap.swapfile.size = config.settings.disk.swapSize; 
   };
 };
 in
 {
   imports = [ inputs.disko.nixosModules.disko ];
   disko.devices = {
-    "${config.variables.disk.label.disk}" = {
-      "${config.variables.disk.label.main}" = {
+    "${config.settings.disk.label.disk}" = {
+      "${config.settings.disk.label.main}" = {
         type = "disk";
-        device = config.variables.disk.device;
+        device = config.settings.disk.device;
         content = {
           type = "gpt";
           partitions = {
-            "${config.variables.disk.label.boot}" = {
+            "${config.settings.disk.label.boot}" = {
               size = "512M";
               type = "EF00";
               content = {
@@ -26,12 +26,12 @@ in
                 mountOptions = [ "umask=0077" ];
               };
             };
-            "${config.variables.disk.label.data}" = {
+            "${config.settings.disk.label.data}" = {
               size = "100%";
               content = {
                 type = "luks";
-                name = config.variables.disk.label.data;
-                passwordFile = config.variables.disk.encryption.plainTextPasswordFile;
+                name = config.settings.disk.label.data;
+                passwordFile = config.settings.disk.encryption.plainTextPasswordFile;
                 settings.allowDiscards = true;
                 content = {
                   type = "btrfs";

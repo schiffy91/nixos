@@ -25,13 +25,13 @@ class Installer:
     @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
-    def get_username(cls): return Utils.get_value_from_variables("variables.user.admin.username")
+    def get_username(cls): return Utils.get_value_from_settings("settings.user.admin.username")
     @classmethod
     def get_final_nixos_path(cls): return f"/home/{cls.get_username()}/nixos"
     @classmethod
-    def get_installation_disk(cls): return Utils.get_value_from_path(Config.get_host_path(), "variables.disk.device")
+    def get_installation_disk(cls): return Utils.get_value_from_path(Config.get_host_path(), "settings.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Utils.get_value_from_variables("variables.disk.encryption.plainTextPasswordFile")
+    def get_plain_text_password_path(cls): return Utils.get_value_from_settings("settings.disk.encryption.plainTextPasswordFile")
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod

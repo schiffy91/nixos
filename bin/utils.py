@@ -171,29 +171,29 @@ class Config:
     @classmethod
     def get_disk_operation_target(cls): return "Disk-Operation"
     @classmethod
-    def get_disk_label(cls, label): return Utils.get_value_from_variables(f"variables.disk.label.{label}")
+    def get_disk_label(cls, label): return Utils.get_value_from_settings(f"settings.disk.label.{label}")
     @classmethod
     def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/{cls.get_disk_label('disk')}-{cls.get_disk_label('main')}-{cls.get_disk_label('boot')}"
     @classmethod
     def get_data_disk_path(cls): return f"/dev/disk/by-partlabel/{cls.get_disk_label('disk')}-{cls.get_disk_label('main')}-{cls.get_disk_label('data')}"
     @classmethod
-    def get_tpm_device(cls): return Utils.get_value_from_variables("variables.tpm.device")
+    def get_tpm_device(cls): return Utils.get_value_from_settings("settings.tpm.device")
     @classmethod
-    def get_tpm_version_path(cls): return Utils.get_value_from_variables("variables.tpm.versionPath")
+    def get_tpm_version_path(cls): return Utils.get_value_from_settings("settings.tpm.versionPath")
     @classmethod
     def get_host(cls): return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
     @classmethod
-    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("variables.secrets.hashedPasswordFile")
+    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.hashedPasswordFile")
     @classmethod
-    def get_initrd_rsa_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("variables.secrets.initrd.rsaKeyFile")
+    def get_initrd_rsa_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.initrd.rsaKeyFile")
     @classmethod
-    def get_initrd_ed25519_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_variables("variables.secrets.initrd.ed25519KeyFile")
+    def get_initrd_ed25519_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.initrd.ed25519KeyFile")
     @classmethod
-    def get_secrets_path(cls): return Utils.get_value_from_variables("variables.secrets.path")
+    def get_secrets_path(cls): return Utils.get_value_from_settings("settings.secrets.path")
     @classmethod
-    def get_variables_path(cls): return f"{Config.get_nixos_path()}/modules/variables.nix"
+    def get_settings_path(cls): return f"{Config.get_nixos_path()}/modules/settings.nix"
     @classmethod
     def get_config_path(cls): return f"{cls.get_nixos_path()}/config.json"
     @classmethod
@@ -254,7 +254,7 @@ class Utils:
         file_contents = cls.sh.file_read(path)
         return Utils.get_string_between(file_contents, start=start, end=end, start_from=key, trim_whitespace=trim_whitespace)
     @classmethod
-    def get_value_from_variables(cls, key): return cls.get_value_from_path(Config.get_variables_path(), key)
+    def get_value_from_settings(cls, key): return cls.get_value_from_path(Config.get_settings_path(), key)
     @classmethod
     def get_string_between(cls, text, start, end, start_from=None, trim_whitespace=False):
         def trimmer(x): return x.replace(" ", "") if trim_whitespace else x
@@ -275,4 +275,3 @@ class Utils:
     def print(cls, message): print(message)
     @classmethod
     def print_error(cls, message): print(f"{cls.RED}{message}{cls.RESET}", file=sys.stderr)
-

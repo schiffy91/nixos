@@ -21,14 +21,14 @@
     spectacle
   ]);
 }
-(lib.mkIf (config.variables.desktop.displayServer == "x11") {
+(lib.mkIf (config.settings.desktop.displayServer == "x11") {
   services.xserver.enable = true;
   services.displayManager.defaultSession = "plasmax11";
   environment.systemPackages = with pkgs; [
     xclip
   ];
 })
-(lib.mkIf (config.variables.desktop.displayServer == "wayland") {
+(lib.mkIf (config.settings.desktop.displayServer == "wayland") {
   services.displayManager.sddm.wayland.enable = true;
   services.displayManager.defaultSession = "plasma";
   environment.systemPackages = with pkgs; [

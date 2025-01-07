@@ -5,7 +5,7 @@
     loader = {
       timeout = 5;
       efi = {
-        canTouchEfiVariables = true;
+        canTouchEfisettings = true;
         efiSysMountPoint = "/boot";
       };
     };
@@ -31,7 +31,7 @@
   };
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
-(lib.mkIf (config.variables.boot.method == "Standard") {
+(lib.mkIf (config.settings.boot.method == "Standard") {
   boot.loader.systemd-boot = {
     enable = true;
     configurationLimit = 3;
@@ -39,12 +39,12 @@
     editor = false;
   };
 })
-(lib.mkIf (config.variables.boot.method == "Secure-Boot") {
+(lib.mkIf (config.settings.boot.method == "Secure-Boot") {
   boot = {
     loader.systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
     lanzaboote = {
       enable = true;
-      pkiBundle = config.variables.boot.pkiBundle;
+      pkiBundle = config.settings.boot.pkiBundle;
     };
   };
 })]

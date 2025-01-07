@@ -2,13 +2,13 @@
 let
   #TODO networking.nftables.ruleset is probably the more kosher way to do this..
   # https://discourse.nixos.org/t/open-firewall-ports-only-towards-local-network/13037
-  mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${config.variables.networking.lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
+  mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${config.settings.networking.lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
   mkPortRules = { action, protos, ports }: lib.concatStringsSep "\n" (lib.lists.flatten (map (proto: map (port: mkIptablesRule { inherit action port proto; }) ports) protos));
   mkServiceRules = action: lib.concatStringsSep "\n" (lib.remove null [
     (lib.optionalString config.services.openssh.enable (mkPortRules { inherit action; protos = ["tcp"]; ports = [ 22 ]; })) # SSH
     (lib.optionalString config.services.avahi.enable (mkPortRules { inherit action; protos = ["tcp" "udp"]; ports = [ 5353 ]; })) # Avahi
-    (lib.optionalString (lib.lists.length config.variables.networking.ports.tcp != 0) (mkPortRules { inherit action; protos = ["tcp"]; ports = config.variables.networking.ports.tcp; }))
-    (lib.optionalString (lib.lists.length config.variables.networking.ports.udp != 0) (mkPortRules { inherit action; protos = ["udp"]; ports = config.variables.networking.ports.udp; }))
+    (lib.optionalString (lib.lists.length config.settings.networking.ports.tcp != 0) (mkPortRules { inherit action; protos = ["tcp"]; ports = config.settings.networking.ports.tcp; }))
+    (lib.optionalString (lib.lists.length config.settings.networking.ports.udp != 0) (mkPortRules { inherit action; protos = ["udp"]; ports = config.settings.networking.ports.udp; }))
   ]);
 in
 {
@@ -54,10 +54,10 @@ in
     enable = true;
     ssh = {
       enable = true;
-      authorizedKeys = [ "${config.variables.user.admin.authorizedKey} ${config.variables.user.admin.username}"];
+      authorizedKeys = [ "${config.settings.user.admin.authorizedKey} ${config.settings.user.admin.username}"];
       hostKeys = [ 
-        "${config.variables.secrets.path}/${config.variables.secrets.initrd.rsaKeyFile}"
-        "${config.variables.secrets.path}/${config.variables.secrets.initrd.ed25519KeyFile}"
+        "${config.settings.secrets.path}/${config.settings.secrets.initrd.rsaKeyFile}"
+        "${config.settings.secrets.path}/${config.settings.secrets.initrd.ed25519KeyFile}"
       ];
     };
   };
