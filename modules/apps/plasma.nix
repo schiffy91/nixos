@@ -1,22 +1,9 @@
 { settings, pkgs, ... }: {
-  home = {
-    username = settings.user.admin.username;
-    homeDirectory = "/home/${settings.user.admin.username}";
-    stateVersion = "24.11";
-  };
-  programs.home-manager.enable = true;
-  # Configure 1Password SSH Agent to add all my SSH Keys
-  xdg.configFile."1Password/ssh/agent.toml".text = ''
-    [[ssh-keys]]
-    vault = "Private"
-  '';
-  # Declarative Plasma :)
-  programs.plasma = {
+    programs.plasma = {
     enable = true;
     workspace = {
       lookAndFeel = "org.kde.breezedark.desktop";
       cursor.theme = "Bibata-Modern-Ice";
-      iconTheme = "Papirus-Light";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
     };
     panels = [
@@ -48,6 +35,7 @@
             systemTray.items = {
               shown = [
                 "org.kde.plasma.networkmanagement"
+                "org.kde.plasma.brightness"
               ];
               hidden = [
                 "org.kde.plasma.volume"
@@ -61,34 +49,6 @@
         hiding = "autohide";
       }
     ];
-
-    window-rules = [
-      {
-        description = "Dolphin";
-        match = {
-          window-class = {
-            value = "dolphin";
-            type = "substring";
-          };
-          window-types = [ "normal" ];
-        };
-        apply = {
-          maximizehoriz = true;
-          maximizevert = true;
-        };
-      }
-    ];
-
-    kwin = {
-      edgeBarrier = 0;
-      cornerBarrier = false;
-      #scripts.polonium.enable = true;
-      titlebarButtons.right = [
-        "minimize"
-        "maximize"
-        "close"
-      ];
-    };
 
     kscreenlocker = {
       lockOnResume = true;
