@@ -8,10 +8,6 @@
     enable = true;
     polkitPolicyOwners = [ "${settings.user.admin.username}" ];
   };
-  environment.etc."1password/custom_allowed_browsers" = {
-    text = "chromium";
-    mode = "0755";
-  };
   xdg.configFile."1Password/ssh/agent.toml".text = ''
     [[ssh-keys]]
     vault = "Private"
