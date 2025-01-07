@@ -10,8 +10,7 @@ let
     (lib.optionalString (lib.lists.length config.settings.networking.ports.tcp != 0) (mkPortRules { inherit action; protos = ["tcp"]; ports = config.settings.networking.ports.tcp; }))
     (lib.optionalString (lib.lists.length config.settings.networking.ports.udp != 0) (mkPortRules { inherit action; protos = ["udp"]; ports = config.settings.networking.ports.udp; }))
   ]);
-in
-{
+in {
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [];
