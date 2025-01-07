@@ -60,7 +60,6 @@
   environment.systemPackages = with pkgs; [
     google-chrome
     distrobox
-    vscode
     pciutils
     usbutils
     virt-manager
