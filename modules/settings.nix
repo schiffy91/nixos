@@ -14,7 +14,7 @@
     settings.disk.swapSize = mkSetting str ""; #OVERRIDE (HOST)
     settings.disk.label.nixos = mkSetting str "nixos";
     settings.disk.label.boot = mkSetting str "boot";
-    settings.disk.label.data = mkSetting str "root";
+    settings.disk.label.root = mkSetting str "root";
     settings.disk.encryption.enabled = mkSetting bool true; #TODO Implement this
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     # Boot
