@@ -8,8 +8,8 @@ let optionalSwapVolume = if config.settings.disk.swapSize == "" then {} else {
 in {
   imports = [ inputs.disko.nixosModules.disko ];
   disko.devices.disk = {
-    "${config.settings.disk.label.nixos}" = {
       name = "foobar";
+    "${config.settings.disk.label.nixos}" = {
       type = "disk";
       device = config.settings.disk.device;
       content = {
