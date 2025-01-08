@@ -14,8 +14,8 @@
     settings.disk.swapSize = mkSetting str ""; #OVERRIDE (HOST)
     settings.disk.label.disk = mkSetting str "disk";
     settings.disk.label.main = mkSetting str "main";
-    settings.disk.label.boot = mkSetting str "ESP";
-    settings.disk.label.data = mkSetting str "luks";
+    settings.disk.label.boot = mkSetting str "boot";
+    settings.disk.label.data = mkSetting str "data";
     settings.disk.encryption.enabled = mkSetting bool true; #TODO Implement this
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     # Boot
