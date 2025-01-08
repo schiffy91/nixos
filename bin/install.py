@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#! /usr/bin/env nix-shell
+#! nix-shell -i python3 -p python3
+import sys
 from utils import Utils, Config, Shell, Interactive
 
 class Installer:
@@ -23,6 +25,15 @@ class Installer:
         return cls.sh.run(command, capture_output=False)
     # Helpers
     @classmethod
+    def parse_args(cls):
+        args = sys.argv[1:]
+        vscodium_cmd = "nix --extra-experimental-features \"nix-command flakes\" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
+        if "--collect-garbage" in args: cls.sh.run("nix-collect-garbage -d")
+        if "--debug" in args:
+            cls.sh.run(f"{vscodium_cmd} --install-extension ms-python.python")
+            cls.sh.run(f"{vscodium_cmd} {Config.get_nixos_path()}")
+            return Utils.abort("Please continue in VSCodium")
+    @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
     def get_username(cls): return Utils.get_value_from_settings("settings.user.admin.username")
@@ -39,6 +50,7 @@ class Installer:
 
 def main():
     Utils.require_root()
+    Installer.parse_args()
     if Installer.sh.exists(Config.get_config_path()): Utils.print(f"Found {Config.get_config_path()}")
     else: Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
     Config.create_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Create all secrets
