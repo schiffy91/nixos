@@ -20,21 +20,21 @@
       spectacle
     ]);
   })
-  (lib.mkIf (config.settings.desktop.displayServer == "plasma-x11") {
+  (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
     services.xserver.enable = true;
     services.displayManager.defaultSession = "plasmax11";
     environment.systemPackages = with pkgs; [
       xclip
     ];
   })
-  (lib.mkIf (config.settings.desktop.displayServer == "plasma-wayland") {
+  (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
     services.displayManager.sddm.wayland.enable = true;
     services.displayManager.defaultSession = "plasma";
     environment.systemPackages = with pkgs; [
       wl-clipboard
     ];
   })
-  (lib.mkIf (config.settings.desktop.displayServer == "hyprland") {
+  (lib.mkIf (config.settings.desktop.environment == "hyprland") {
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     programs.hyprland = {
       enable = true;
