@@ -1,6 +1,6 @@
 { config, inputs, ... }:
 let 
-mkRootVolume = diskEncryption: content: 
+  mkRootVolume = diskEncryption: content: 
     if diskEncryption then {
       luks = {
         size = "100%";
