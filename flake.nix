@@ -15,14 +15,16 @@
         let system = "${baseNameOf (dirOf hostFile)}-linux"; in (lib.nixosSystem {
           inherit system;
           specialArgs = { inherit self inputs; unstable-pkgs = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; }; };
-          modules = [ { nixpkgs = { config.allowUnfree = true; }; } ./modules/settings.nix hostFile ] ++ modules;
+          modules = [ { nixpkgs.config.allowUnfree = true; } ./modules/settings.nix hostFile ] ++ modules;
         });
-      mkNixosModules = bootLoader: [ ({ lib, ...}: {
+      mkNixosModules = bootLoader: {
           imports = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system);
-          nix.settings.experimental-features = [ "nix-command" "flakes" ];
-          system.stateVersion = "24.11";
-          settings.boot.method = lib.mkForce bootLoader;
-        })];
+          config = {
+            nix.settings.experimental-features = [ "nix-command" "flakes" ];
+            system.stateVersion = "24.11";
+            settings.boot.method = lib.mkForce bootLoader;
+          };
+        };
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let name = lib.removeSuffix ".nix" (baseNameOf hostFile); in
