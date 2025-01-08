@@ -3,7 +3,7 @@
   networking.hostName = "VM";
   ##### Disk Information #####
   settings.disk.device = "/dev/vda";
-  settings.disk.encryption = false;
+  settings.disk.encryption.enabled = false;
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Desktop #####
