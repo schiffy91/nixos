@@ -9,6 +9,7 @@ in {
   imports = [ inputs.disko.nixosModules.disko ];
   disko.devices.disk = {
     "${config.settings.disk.label.nixos}" = {
+      name = "foobar";
       type = "disk";
       device = config.settings.disk.device;
       content = {
