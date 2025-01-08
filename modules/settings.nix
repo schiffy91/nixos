@@ -16,7 +16,7 @@
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "ESP";
     settings.disk.label.data = mkSetting str "luks";
-    settings.disk.encryption.enabled = mkSetting bool true;
+    settings.disk.encryption.enabled = mkSetting bool true; #TODO Implement this
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     # Boot
     settings.boot.method = mkSetting str "Standard"; #OVERRIDE (FLAKE)
