@@ -35,6 +35,7 @@
     ];
   })
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
+    services.displayManager.sddm.wayland.enable = true;
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     programs.hyprland = {
       enable = true;
