@@ -56,6 +56,8 @@
       dockerCompat = true;
     };
   };
+  ##### Desktop Environment #####
+  settings.desktop.environment = "plasma-wayland";
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     google-chrome
