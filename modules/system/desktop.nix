@@ -21,6 +21,7 @@
     ]);
   })
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
+    services.displayManager.sddm.enable = false;
     services.xserver.enable = true;
     services.displayManager.defaultSession = "plasmax11";
     environment.systemPackages = with pkgs; [
@@ -28,14 +29,12 @@
     ];
   })
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
-    services.displayManager.sddm.wayland.enable = true;
     services.displayManager.defaultSession = "plasma";
     environment.systemPackages = with pkgs; [
       wl-clipboard
     ];
   })
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
-    services.displayManager.sddm.wayland.enable = true;
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     programs.hyprland = {
       enable = true;
