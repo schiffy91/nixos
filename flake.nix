@@ -11,27 +11,31 @@
   outputs = inputs@{ self, ... }:
     let
       lib = inputs.nixpkgs.lib;
-      mkNixosConfiguration = hostFile: modules: 
-        let system = "${baseNameOf (dirOf hostFile)}-linux"; in (lib.nixosSystem {
+      mkNixosSystem = hostFile: bootLoader: 
+        let 
+          system = "${baseNameOf (dirOf hostFile)}-linux"; 
+          systemModules = [./modules/settings.nix hostFile ] ++
+            (if bootLoader =="Disk-Operation" then [ ./modules/system/disk.nix ] 
+            else (lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)) ++ [{ settings.boot.method = lib.mkForce bootLoader; }]); in
+        (lib.nixosSystem {
           inherit system;
           specialArgs = { inherit self inputs; unstable-pkgs = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; }; };
-          modules = [ { nixpkgs.config.allowUnfree = true; } ./modules/settings.nix hostFile ] ++ modules;
+          modules = [{
+            imports =  systemModules;
+            config = {
+              nix.pkgs.config.allowUnfree = true;
+              nix.settings.experimental-features = [ "nix-command" "flakes" ];
+              system.stateVersion = "24.11";
+            };
+          }];
         });
-      mkNixosModules = bootLoader: {
-          imports = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system);
-          config = {
-            nix.settings.experimental-features = [ "nix-command" "flakes" ];
-            system.stateVersion = "24.11";
-            settings.boot.method = lib.mkForce bootLoader;
-          };
-        };
     in { 
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile:
         let name = lib.removeSuffix ".nix" (baseNameOf hostFile); in
           [ 
-            { name = "${name}-Disk-Operation"; value = mkNixosConfiguration hostFile [ ./modules/system/disk.nix ]; }
-            { name = "${name}-Standard"; value = mkNixosConfiguration hostFile [ mkNixosModules "Standard" ]; }
-            { name = "${name}-Secure-Boot"; value = mkNixosConfiguration hostFile [ mkNixosModules "Secure-Boot" ]; }
+            { name = "${name}-Disk-Operation"; value = mkNixosSystem hostFile "Disk-Operation"; }
+            { name = "${name}-Standard"; value = mkNixosSystem hostFile "Standard"; }
+            { name = "${name}-Secure-Boot"; value = mkNixosSystem hostFile "Secure-Boot"; }
           ]
       ) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./modules/hosts)));
     };
