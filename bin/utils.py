@@ -160,6 +160,8 @@ class Config:
     @classmethod
     def get_host_path(cls): return cls.get("host_path")
     @classmethod
+    def get_hosts_path(cls): return f"{cls.get_nixos_path()}/modules/hosts"
+    @classmethod
     def set_target(cls, target): return cls.set("target", target)
     @classmethod
     def get_target(cls): return cls.get("target")
@@ -214,7 +216,7 @@ class Interactive:
             Utils.print("Invalid input. Enter 'y' or 'n'.")
     @classmethod
     def ask_for_host_path(cls):
-        hosts_paths = glob.glob(f"{Config.get_nixos_path()}/hosts/**/*.nix", recursive=True)
+        hosts_paths = glob.glob(f"{Config.get_hosts_path()}/**/*.nix", recursive=True)
         formatted_hosts_paths = [ cls.sh.basename(host_path).replace(".nix", "") + " (" + cls.sh.parent_name(host_path) + ")" for host_path in hosts_paths ]
         while True:
             for i, name in enumerate(formatted_hosts_paths): Utils.print(f"{i+1}) {name}")

@@ -49,6 +49,7 @@ in {
         ForwardAgent yes
     '';
   };
+  security.pam.sshAgentAuth.enable = true;
   boot.initrd.network = {
     enable = true;
     ssh = {

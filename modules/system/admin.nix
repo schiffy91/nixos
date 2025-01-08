@@ -11,5 +11,4 @@
     enable = config.settings.user.admin.autoLoginEnabled;
     user = config.settings.user.admin.username;
   };
-  security.pam.sshAgentAuth.enable = true;
 }
