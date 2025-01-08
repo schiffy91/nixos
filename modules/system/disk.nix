@@ -1,9 +1,6 @@
 { config, inputs, ... }:
 let 
-  mkSwapVolume = swapSize: if swapSize == "" then {} else {
-
-  };
-  mkRootVolume = diskEncryption: content: 
+mkRootVolume = diskEncryption: content: 
     if diskEncryption then {
       luks = {
         size = "100%";
@@ -59,10 +56,10 @@ in {
             mountpoint = "/var";
             mountOptions = [ "compress=zstd" "noatime" ];
           };
-        } // (if mkSwapVolume config.settings.disk.swapSize == "" then { } else {
+        } // (if config.settings.disk.swapSize == "" then { } else {
           "/swap" = { 
             mountpoint = "/.swapvol"; 
-            swap.swapfile.size = mkSwapVolume config.settings.disk.swapSize; 
+            swap.swapfile.size = config.settings.disk.swapSize; 
           };
         });
       };
