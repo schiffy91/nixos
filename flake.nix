@@ -11,20 +11,20 @@
   outputs = inputs@{ self, ... }:
     let
       lib = inputs.nixpkgs.lib;
-      mkNixosSystem = hostFile: bootLoader: 
+      mkNixosSystem = hostFile: target: 
         let 
           system = "${baseNameOf (dirOf hostFile)}-linux"; 
           systemModules = [./modules/settings.nix hostFile ] ++
-            (if bootLoader =="Disk-Operation" then [ ./modules/system/disk.nix ] 
-            else (lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)) ++ [{ settings.boot.method = lib.mkForce bootLoader; }]); in
+            (if target == "Disk-Operation" then [ ./modules/system/disk.nix ] 
+            else (lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)) ++ [{ settings.boot.method = lib.mkForce target; }]); in
         (lib.nixosSystem {
           inherit system;
           specialArgs = { inherit self inputs; unstable-pkgs = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; }; };
           modules = [{
             imports =  systemModules;
             config = {
-              nix.pkgs.config.allowUnfree = true;
               nix.settings.experimental-features = [ "nix-command" "flakes" ];
+              nixpkgs.config.allowUnfree = true;
               system.stateVersion = "24.11";
             };
           }];
