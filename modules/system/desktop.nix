@@ -1,9 +1,11 @@
 { inputs, config, pkgs, lib, ... }: lib.mkMerge [
+  ##### Shared Settings #####
   {
     hardware.graphics.enable = true;
     services.displayManager.sddm.enable = lib.mkDefault true;
     xdg.portal.enable = true;
   }
+  ##### Shared Plasma Settings #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.desktopManager.plasma6.enable = lib.mkDefault true;
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
@@ -20,6 +22,7 @@
       spectacle
     ]);
   })
+  ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
     services.displayManager.sddm.enable = false;
     services.xserver.enable = true;
@@ -28,12 +31,14 @@
       xclip
     ];
   })
+  ##### Plasma Wayland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
     services.displayManager.defaultSession = "plasma";
     environment.systemPackages = with pkgs; [
       wl-clipboard
     ];
   })
+  ##### Hyprland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     programs.hyprland = {

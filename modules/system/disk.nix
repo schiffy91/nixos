@@ -1,5 +1,6 @@
 { inputs, config, ... }:
 let 
+  ##### Optional Encryption Wrapper #####
   mkRootVolume = diskEncryption: content: 
     if diskEncryption then {
       luks = {
@@ -26,6 +27,7 @@ in {
     content = {
       type = "gpt";
       partitions = {
+        ##### Boot Partition #####
         "${config.settings.disk.label.boot}" = {
           size = "512M";
           type = "EF00";
@@ -36,6 +38,7 @@ in {
             mountOptions = [ "umask=0077" ];
           };
         };
+        ##### Root Partition (Optional Encryption) #####
       } // mkRootVolume config.settings.disk.encryption.enabled {
         type = "btrfs";
         extraArgs = [ "-f" ];
@@ -56,7 +59,8 @@ in {
             mountpoint = "/var";
             mountOptions = [ "compress=zstd" "noatime" ];
           };
-        } // (if config.settings.disk.swapSize == "" then { } else {
+        } ##### Optional Swap Volume ##### 
+        // (if config.settings.disk.swapSize == "" then { } else {
           "/swap" = { 
             mountpoint = "/.swapvol"; 
             swap.swapfile.size = config.settings.disk.swapSize; 

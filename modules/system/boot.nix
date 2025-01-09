@@ -1,5 +1,6 @@
 { inputs, config, pkgs, lib, ... }: { 
   imports = [ inputs.lanzaboote.nixosModules.lanzaboote ]; } // lib.mkMerge [{
+  ##### Shared Boot Settings #####
   boot = {
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
     loader = {
@@ -31,6 +32,7 @@
   };
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
+##### Standard Boot Settings #####
 (lib.mkIf (config.settings.boot.method == "Standard") {
   boot.loader.systemd-boot = {
     enable = true;
@@ -39,6 +41,7 @@
     editor = false;
   };
 })
+##### Secure Boot Settings #####
 (lib.mkIf (config.settings.boot.method == "Secure-Boot") {
   boot = {
     loader.systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
