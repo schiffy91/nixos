@@ -1,5 +1,5 @@
 #! /usr/bin/env nix-shell
-#! nix-shell -i python3 -p python3
+#! nix-shell -i python3 -p python3 -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/93dc9803a1ee435e590b02cde9589038d5cc3a4e.tar.gz -p sbctl
 import sys
 from utils import Utils, Config, Shell
 

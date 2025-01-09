@@ -8,6 +8,7 @@
     # Admin
     settings.user.admin.username = mkSetting str "alexanderschiffhauer"; # OVERRIDE (HERE)
     settings.user.admin.autoLoginEnabled = mkSetting bool false;
+    settings.user.admin.autoLockEnabled = mkSetting bool true;
     settings.user.admin.authorizedKey = mkSetting str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI"; # OVERRIDE (HERE)
     # Disk
     settings.disk.device = mkSetting str ""; #OVERRIDE (HOST)
@@ -30,5 +31,6 @@
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; #OVERRIDE (HOST) # ip -o -f inet addr show | awk '/scope global/ {print $4}';
     settings.networking.ports.udp = mkSetting (listOf int) [];
     settings.networking.ports.tcp = mkSetting (listOf int) [];
+    settings.networking.identityAgent = mkSetting str "~/.1password/agent.sock";
   };
 }

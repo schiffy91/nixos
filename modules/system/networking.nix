@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, settings, ... }:
 let
   #TODO networking.nftables.ruleset is probably the more kosher way to do this..
   # https://discourse.nixos.org/t/open-firewall-ports-only-towards-local-network/13037
@@ -45,7 +45,7 @@ in {
     startAgent = true;
     extraConfig = ''
       Host *
-        IdentityAgent ~/.1password/agent.sock
+        IdentityAgent ${settings.networking.identityAgent}
         ForwardAgent yes
     '';
   };

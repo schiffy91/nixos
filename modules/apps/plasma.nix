@@ -1,4 +1,4 @@
-{ settings, pkgs, ... }: {
+{ settings, pkgs, lib, ... }: {
     programs.plasma = {
     enable = true;
     workspace = {
@@ -49,7 +49,7 @@
         hiding = "autohide";
       }
     ];
-    kscreenlocker = {
+    kscreenlocker = lib.mkIf settings.user.admin.autoLockEnabled {
       lockOnResume = true;
       timeout = 10;
     };
