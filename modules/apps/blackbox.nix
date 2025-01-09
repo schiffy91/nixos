@@ -10,6 +10,8 @@
       font = "Hack 11";
       pretty = true;
       remember-window-size = true;
+      command-as-login-shell = true;
+      scrollback-mode = lib.hm.gvariant.mkUint32 1;
       scrollback-lines = lib.hm.gvariant.mkUint32 10240;
       theme-dark = "Catppuccin-Frappe";
       window-height = lib.hm.gvariant.mkUint32 1150;
