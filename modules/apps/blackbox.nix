@@ -57,8 +57,8 @@
     '';
     ".local/share/blackbox/schemes/Catppuccin-Frappe.json".text = ''
       {
-        "name": "Catppuccin Frappé",
-        "comment": "Soothing pastel theme for Tilix",
+        "name": "Catppuccin-Frappe",
+        "comment": "Soothing pastel theme for the high-spirited!",
         "background-color": "#303446",
         "foreground-color": "#c6d0f5",
         "badge-color": "#626880",
