@@ -5,6 +5,7 @@
       lookAndFeel = "org.kde.breezedark.desktop";
       cursor.theme = "Bibata-Modern-Ice";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
+      iconTheme = "Papirus-Dark";
     };
     panels = [
       {
