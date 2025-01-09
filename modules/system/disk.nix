@@ -1,4 +1,4 @@
-{ config, inputs, ... }:
+{ inputs, config, ... }:
 let 
   mkRootVolume = diskEncryption: content: 
     if diskEncryption then {

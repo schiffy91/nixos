@@ -1,7 +1,7 @@
 { pkgs, ... }: {
-  home.packages = [
-    pkgs._1password-gui
-    pkgs._1password-cli
+  home.packages = with pkgs; [
+    _1password-gui
+    _1password-cli
   ];
   xdg.configFile."1Password/ssh/agent.toml".text = ''
     [[ssh-keys]]

@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }: {
+{ pkgs, lib, ... }: {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####

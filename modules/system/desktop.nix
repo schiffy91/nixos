@@ -1,4 +1,4 @@
-{ inputs, lib, pkgs, config, ... }: lib.mkMerge [
+{ inputs, config, pkgs, lib, ... }: lib.mkMerge [
   {
     hardware.graphics.enable = true;
     services.displayManager.sddm.enable = lib.mkDefault true;

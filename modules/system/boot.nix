@@ -1,4 +1,4 @@
-{ pkgs, inputs, config, lib, ... }: { 
+{ inputs, config, pkgs, lib, ... }: { 
   imports = [ inputs.lanzaboote.nixosModules.lanzaboote ]; } // lib.mkMerge [{
   boot = {
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
