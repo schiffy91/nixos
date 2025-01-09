@@ -7,7 +7,7 @@
       easy-copy-paste = true;
       floating-controls = true;
       floating-controls-hover-area = lib.hm.gvariant.mkUint32 20;
-      font = "FiraCode Nerd Font Mono Medium 13";
+      font = "Hack 16";
       pretty = true;
       remember-window-size = true;
       scrollback-lines = lib.hm.gvariant.mkUint32 10240;
