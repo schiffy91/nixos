@@ -1,5 +1,6 @@
 { settings, pkgs, lib, ... }: {
-    programs.plasma = {
+  home.packages = with pkgs; [ papirus-icon-theme ];
+  programs.plasma = {
     enable = true;
     workspace = {
       lookAndFeel = "org.kde.breezedark.desktop";
