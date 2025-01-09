@@ -1,5 +1,5 @@
 { lib, pkgs, ... }: {
-  home.packages = with pkgs; [ blackbox ];
+  home.packages = with pkgs; [ blackbox-terminal ];
   dconf.settings = {
     "com/raggesilver/BlackBox" = {
       cursor-blink-mode = lib.hm.gvariant.mkUint32 1;

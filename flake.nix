@@ -2,7 +2,7 @@
   inputs = {
     nixpkgs = { url = "github:NixOS/nixpkgs/nixos-24.11"; };
     nixpkgs-unstable = { url = "github:nixos/nixpkgs/nixos-unstable"; };
-    flatpaks.url = "github:GermanBread/declarative-flatpak/stable-v3";
+    flatpaks = { url = "github:GermanBread/declarative-flatpak/stable-v3"; };
     home-manager = { url = "github:nix-community/home-manager/release-24.11"; inputs.nixpkgs.follows = "nixpkgs"; };
     plasma-manager = { url = "github:nix-community/plasma-manager"; inputs.nixpkgs.follows = "nixpkgs"; inputs.home-manager.follows = "home-manager"; };
     hyprland = { url = "github:hyprwm/Hyprland"; }; #TODO HDR support was added to hyprland at HEAD; switch to nixpkgs-unstable after a new release.

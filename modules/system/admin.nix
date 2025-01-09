@@ -15,8 +15,7 @@
           stateVersion = "24.11";
         };
         programs.home-manager.enable = true;
-          imports = [ inputs.flatpaks.homeManagerModules.declarative-flatpak ] ++ 
-                    lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ../apps);
+        imports = [ inputs.flatpaks.homeManagerModules.declarative-flatpak ] ++ lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ../apps);
       };
     };
   };
