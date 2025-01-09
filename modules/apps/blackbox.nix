@@ -3,7 +3,7 @@
   dconf.settings = {
     "com/raggesilver/BlackBox" = {
       cursor-blink-mode = lib.hm.gvariant.mkUint32 1;
-      cursor-shape = lib.hm.gvariant.mkUint32 1;
+      cursor-shape = lib.hm.gvariant.mkUint32 2;
       easy-copy-paste = true;
       floating-controls = true;
       floating-controls-hover-area = lib.hm.gvariant.mkUint32 20;
@@ -14,6 +14,7 @@
       theme-dark = "Catppuccin-Frappe";
       window-height = lib.hm.gvariant.mkUint32 1150;
       window-width = lib.hm.gvariant.mkUint32 1450;
+      opacity = lib.hm.gvariant.mkUint32 95;
     };
   };
   home.file = {
