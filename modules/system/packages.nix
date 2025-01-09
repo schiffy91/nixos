@@ -4,5 +4,6 @@
   environment.systemPackages = (with pkgs; [
     git
     python313
+    blackbox-terminal
   ]);
 }
