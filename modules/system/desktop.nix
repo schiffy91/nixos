@@ -9,7 +9,7 @@
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.desktopManager.plasma6.enable = lib.mkDefault true;
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
-    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde adwaita-qt];
+    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
       gwenview
@@ -21,12 +21,6 @@
       drkonqi
       spectacle
     ]);
-    qt = {
-      enable = true;
-      platformTheme = "gnome";
-      style = "adwaita-dark";
-    };
-    environment.sessionVariables.QT_STYLE_OVERRIDE = "adwaita-dark";
   })
   ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
