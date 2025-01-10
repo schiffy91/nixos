@@ -1,13 +1,9 @@
 { settings, pkgs, lib, ... }: {
   home.packages = with pkgs; [ papirus-icon-theme ];
-  home.file.".local/share/aurorae/themes/ActiveAccentDark".source =
-    let 
-      decoration = pkgs.fetchzip { 
-        url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip";
-        hash = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
-      }; 
-    in
-      "${decoration}/Plasma-window-decorations-main/ActiveAccentDark";
+  home.file."~/.local/share/aurorae/themes/Plasma-window-decorations".source = pkgs.fetchzip {
+    url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip";
+    sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
+  };
   programs.plasma = {
     enable = true;
     workspace = {
@@ -15,8 +11,6 @@
       cursor.theme = "Bibata-Modern-Ice";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
-      windowDecorations.theme = "__aurorae__svg__ActiveAccentDark";
-      windowDecorations.library = "org.kde.kwin.aurorae";
     };
     panels = [
       {
@@ -70,6 +64,12 @@
       "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
+      kwinrc."org.kde.kdecoration2"= {
+        library = "org.kde.kwin.aurorae";
+        NoPlugin = false;
+        theme = "__aurorae__svg__ActiveAccentDark";
+      };
+      #kcminputrc.Mouse.cursorTheme = "Catppuccin-Mocha-Dark-Cursors";
     };
   };
 }
