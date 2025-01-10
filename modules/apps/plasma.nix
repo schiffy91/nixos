@@ -1,10 +1,6 @@
 { settings, pkgs, lib, ... }: {
   home.packages = with pkgs; [ papirus-icon-theme ];
-  home.file.".local/share/aurorae/themes/ActiveAccentDark" = {
-    source = builtins.fetchzip { 
-      url = "https://github.com/nclarius/Plasma-window-decorations/archive/refs/heads/main.zip"; 
-    } + "/Plasma-window-decorations-main/ActiveAccentDark";
-  };
+  home.file.".local/share/aurorae/themes/ActiveAccentDark" = { source = builtins.fetchzip { url = "https://github.com/nclarius/Plasma-window-decorations/archive/refs/heads/main.zip"; } + "/Plasma-window-decorations-main/ActiveAccentDark"; };
   programs.plasma = {
     enable = true;
     workspace = {
@@ -13,6 +9,7 @@
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
       windowDecorations.theme = "__aurorae__svg__ActiveAccentDark";
+      windowDecorations.library = "org.kde.kwin.aurorae";
     };
     panels = [
       {
