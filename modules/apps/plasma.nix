@@ -32,7 +32,13 @@
     ##### Config Files #####
     configFile = {
       kdeglobals = {
-        KScreen.ScaleFactor = 1 * settings.desktop.scalingFactor;
+        KScreen = { 
+          ScaleFactor = 1 * settings.desktop.scalingFactor;
+          ScreenScaleFactors = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
+        };
+        General = {
+          AccentColor = "40,40,40";
+        };
       };
       kwinrc = {
         Xwayland = {
