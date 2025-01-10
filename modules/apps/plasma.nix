@@ -7,14 +7,14 @@
         url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip";
         sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
       };
-    installPhase = ''
-      mkdir -p $out/share/aurorae/themes
-      for theme in $src/Active-Accent*; do
-        if [ -d "$theme" ]; then
-          cp -r "$theme" $out/share/aurorae/themes/
-        fi
-      done
-    '';
+      installPhase = ''
+        mkdir -p $out/share/aurorae/themes
+        for theme in $src/; do
+          if [ -d "$theme" ]; then
+            cp -r "$theme" $out/share/aurorae/themes/
+          fi
+        done
+      '';
     }) 
   ];
   programs.plasma = {
