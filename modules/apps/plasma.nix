@@ -68,10 +68,8 @@
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
       kwinrc."org.kde.kdecoration2"= {
         library = "org.kde.kwin.aurorae";
-        NoPlugin = false;
         theme = "__aurorae__svg__ActiveAccentDark";
       };
-      #kcminputrc.Mouse.cursorTheme = "Catppuccin-Mocha-Dark-Cursors";
     };
   };
 }
