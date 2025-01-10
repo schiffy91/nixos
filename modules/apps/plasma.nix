@@ -3,7 +3,7 @@
     papirus-icon-theme
     (pkgs.stdenv.mkDerivation {
       name = "active-accent-dark-theme";
-      src = builtins.fetchzip {
+      src = pkgs.fetchzip {
         url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip";
         sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
       };
