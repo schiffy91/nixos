@@ -1,4 +1,4 @@
-{ settings, pkgs, ... }: {
+{ settings, pkgs, lib, ... }: {
   home.packages = with pkgs; [ papirus-icon-theme ];
   xdg.dataFile."aurorae/themes/ActiveAccentDark".source = "${pkgs.fetchzip { 
     url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip"; 
@@ -34,7 +34,7 @@
       kdeglobals = {
         KScreen = { 
           ScaleFactor = 1 * settings.desktop.scalingFactor;
-          ScreenScaleFactors = "*=${toString (1 * settings.desktop.scalingFactor)};";
+          ScreenScaleFactors = "*=${lib.strings.floatToString (1 * settings.desktop.scalingFactor)}";
         };
         General = {
           AccentColor = "40,40,40";
