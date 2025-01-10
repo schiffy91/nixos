@@ -30,11 +30,6 @@
       konsole
       dolphin
     ]);
-    qt = {
-      enable = true;
-      platformTheme = "gnome";
-      style = "kvantum";
-    };
   })
   ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
