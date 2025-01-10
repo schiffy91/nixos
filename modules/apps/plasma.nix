@@ -14,7 +14,7 @@
       iconTheme = "Papirus-Dark";
       windowDecorations.theme = "ActiveAccentDark";
       windowDecorations.library = "org.kde.kwin.aurorae";
-      cursor.size = 24 * settings.desktop.scalingFactor;
+      cursor.size = builtins.floor (24 * settings.desktop.scalingFactor);
     };
     panels = [
       {
