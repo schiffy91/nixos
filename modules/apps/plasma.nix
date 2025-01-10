@@ -8,10 +8,9 @@
     enable = true;
     overrideConfig = true;
     workspace = {
-      #lookAndFeel = "org.kde.breezedark.desktop";
       colorScheme = "BreezeDark";
       cursor = {
-        theme = "Breeze_Dark";
+        theme = "Breeze";
         size = builtins.floor (24 * settings.desktop.scalingFactor);
       };
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
@@ -21,15 +20,6 @@
         theme = "__aurorae__svg__ActiveAccentDark";
       };
     };
-    ##### Windows: Title Bar Buttons ##### 
-    /*kwin.titlebarButtons = {
-      left = [ ];
-      right = [
-        "minimize"
-        "maximize"
-        "close"
-      ];
-    };*/
     ##### Restore #####
     windows.allowWindowsToRememberPositions = false;
     session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
@@ -40,7 +30,7 @@
       timeout = if settings.user.admin.autoLockEnabled then 10 else null;
     };
     ##### Config Files #####
-    /*configFile = {
+    configFile = {
       kdeglobals = {
         KScreen.ScaleFactor = 1 * settings.desktop.scalingFactor;
       };
@@ -49,62 +39,9 @@
           Scale = 1 * settings.desktop.scalingFactor;
         };
       };
-    };*/
+    };
+    ##### Start Menu #####
     panels = [
-      /*{
-        location = "top";
-        height = 26;
-        floating = true;
-        widgets = [
-          {
-            applicationTitleBar = {
-              layout.elements = [];
-              windowControlButtons = {
-                iconSource = "breeze";
-                buttonsAspectRatio = 95;
-                buttonsMargin = 0;
-              };
-              windowTitle = {
-                source = "appName";
-                hideEmptyTitle = true;
-                undefinedWindowTitle = "";
-                margins = {
-                  left = 5;
-                  right = 5;
-                };
-              };
-              overrideForMaximized = {
-                enable = true;
-                elements = ["windowCloseButton" "windowMaximizeButton" "windowMinimizeButton" "windowIcon" "windowTitle"];
-                source = "appName";
-              };
-            };
-          }
-          "org.kde.plasma.appmenu"
-          "org.kde.plasma.panelspacer"
-          {
-            digitalClock = {
-              date = {
-                enable = true;
-                position = "besideTime";
-              };
-              time.showSeconds = "always";
-            };
-          }
-          "org.kde.plasma.panelspacer"
-          {
-            systemTray = {
-              icons.scaleToFit = true;
-              items = {
-                shown = [
-                  "org.kde.plasma.battery"
-                ];
-                configs.battery.showPercentage = true;
-              };
-            };
-          }
-        ];
-      }*/
       {
         location = "bottom";
         hiding = "autohide";
