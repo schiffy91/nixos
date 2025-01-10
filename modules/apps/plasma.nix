@@ -69,6 +69,28 @@
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
     };
+    ##### Windows: Hide Title Bar #####
+    programs.plasma.window-rules = [
+      {
+        description = "Hide titlebars on all windows";
+        match = {
+          # Match all windows:
+          window-class = {
+            match-whole = false;
+            type = "substring";
+            value = "";  # Match any window class
+          };
+        };
+        apply = {
+          # Hide the title bar:
+          titlebar = {
+            apply = "force";
+            value = false; 
+          };
+        };
+      }
+    ];
+    ##### Windows: Title Bar Buttons ##### 
     kwin.titlebarButtons = {
       left = [ ];
       right = [
