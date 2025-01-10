@@ -24,7 +24,7 @@
           {
             kickoff = {
               sortAlphabetically = true;
-              icon = "nix-snowflake-white";
+              icon = "nix-snowflake";
             };
           }
           {
