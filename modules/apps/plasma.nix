@@ -8,15 +8,18 @@
     enable = true;
     overrideConfig = true;
     workspace = {
-      lookAndFeel = "org.kde.breezedark.desktop";
-      cursor.theme = "Bibata-Modern-Ice";
+      #lookAndFeel = "org.kde.breezedark.desktop";
+      colorScheme = "BreezeDark";
+      cursor = {
+        theme = "Breeze_Dark";
+        size = builtins.floor (24 * settings.desktop.scalingFactor);
+      };
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
       windowDecorations = {
         library = "org.kde.kwin.aurorae";
         theme = "__aurorae__svg__ActiveAccentDark";
       };
-      cursor.size = builtins.floor (24 * settings.desktop.scalingFactor);
     };
     ##### Windows: Title Bar Buttons ##### 
     /*kwin.titlebarButtons = {
