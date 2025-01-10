@@ -87,6 +87,6 @@
         "close"
       ];
     };
-    windows.allowWindowsToRememberPositions = false; # false since running tiling script
+    windows.allowWindowsToRememberPositions = false;
   };
 }

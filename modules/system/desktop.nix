@@ -21,6 +21,12 @@
       drkonqi
       spectacle
     ]);
+    qt = {
+      enable = true;
+      platformTheme = "gnome";
+      style = "adwaita-dark";
+    };
+    QT_STYLE_OVERRIDE = "adwaita-dark";
   })
   ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
