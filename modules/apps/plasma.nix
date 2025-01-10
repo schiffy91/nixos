@@ -6,70 +6,102 @@
   }}/ActiveAccentDark";
   programs.plasma = {
     enable = true;
+    overrideConfig = true;
     workspace = {
       lookAndFeel = "org.kde.breezedark.desktop";
       cursor.theme = "Bibata-Modern-Ice";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
-      windowDecorations.theme = "ActiveAccentDark";
-      windowDecorations.library = "org.kde.kwin.aurorae";
+      windowDecorations = {
+        library = "org.kde.kwin.aurorae";
+        theme = "__aurorae__svg__ActiveAccentDark";
+      };
       cursor.size = builtins.floor (24 * settings.desktop.scalingFactor);
     };
+    ##### Windows: Title Bar Buttons ##### 
+    /*kwin.titlebarButtons = {
+      left = [ ];
+      right = [
+        "minimize"
+        "maximize"
+        "close"
+      ];
+    };*/
+    ##### Restore #####
+    windows.allowWindowsToRememberPositions = false;
+    session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
+    ##### Auto Lock #####
+    kscreenlocker = {
+      autoLock = if settings.user.admin.autoLockEnabled then true else false;
+      lockOnResume = if settings.user.admin.autoLockEnabled then true else false;
+      timeout = if settings.user.admin.autoLockEnabled then 10 else null;
+    };
+    ##### Config Files #####
+    /*configFile = {
+      kdeglobals = {
+        KScreen.ScaleFactor = 1 * settings.desktop.scalingFactor;
+      };
+      kwinrc = {
+        Xwayland = {
+          Scale = 1 * settings.desktop.scalingFactor;
+        };
+      };
+    };*/
     panels = [
-      {
-      location = "top";
-      height = 26;
-      floating = true;
-      widgets = [
-        {
-          applicationTitleBar = {
-            layout.elements = [];
-            windowControlButtons = {
-              iconSource = "breeze";
-              buttonsAspectRatio = 95;
-              buttonsMargin = 0;
-            };
-            windowTitle = {
-              source = "appName";
-              hideEmptyTitle = true;
-              undefinedWindowTitle = "";
-              margins = {
-                left = 5;
-                right = 5;
+      /*{
+        location = "top";
+        height = 26;
+        floating = true;
+        widgets = [
+          {
+            applicationTitleBar = {
+              layout.elements = [];
+              windowControlButtons = {
+                iconSource = "breeze";
+                buttonsAspectRatio = 95;
+                buttonsMargin = 0;
+              };
+              windowTitle = {
+                source = "appName";
+                hideEmptyTitle = true;
+                undefinedWindowTitle = "";
+                margins = {
+                  left = 5;
+                  right = 5;
+                };
+              };
+              overrideForMaximized = {
+                enable = true;
+                elements = ["windowCloseButton" "windowMaximizeButton" "windowMinimizeButton" "windowIcon" "windowTitle"];
+                source = "appName";
               };
             };
-            overrideForMaximized = {
-              enable = true;
-              elements = ["windowCloseButton" "windowMaximizeButton" "windowMinimizeButton" "windowIcon" "windowTitle"];
-              source = "appName";
+          }
+          "org.kde.plasma.appmenu"
+          "org.kde.plasma.panelspacer"
+          {
+            digitalClock = {
+              date = {
+                enable = true;
+                position = "besideTime";
+              };
+              time.showSeconds = "always";
             };
-          };
-        }
-        "org.kde.plasma.appmenu"
-        "org.kde.plasma.panelspacer"
-        {
-          digitalClock = {
-            date = {
-              enable = true;
-              position = "besideTime";
+          }
+          "org.kde.plasma.panelspacer"
+          {
+            systemTray = {
+              icons.scaleToFit = true;
+              items = {
+                shown = [
+                  "org.kde.plasma.battery"
+                ];
+                configs.battery.showPercentage = true;
+              };
             };
-            time.showSeconds = "always";
-          };
-        }
-        "org.kde.plasma.panelspacer"
-        {
-          systemTray = {
-            icons.scaleToFit = true;
-            items = {
-              shown = [
-                "org.kde.plasma.battery"
-              ];
-              configs.battery.showPercentage = true;
-            };
-          };
-        }
-      ];
-    }
+          }
+        ];
+      }*/
       {
         location = "bottom";
         hiding = "autohide";
@@ -113,34 +145,5 @@
         ];
       }
     ];
-    ##### Windows: Title Bar Buttons ##### 
-    kwin.titlebarButtons = {
-      left = [ ];
-      right = [
-        "minimize"
-        "maximize"
-        "close"
-      ];
-    };
-    ##### Restore #####
-    windows.allowWindowsToRememberPositions = false;
-    session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
-    ##### Auto Lock #####
-    kscreenlocker = {
-      autoLock = if settings.user.admin.autoLockEnabled then true else false;
-      lockOnResume = if settings.user.admin.autoLockEnabled then true else false;
-      timeout = if settings.user.admin.autoLockEnabled then 10 else null;
-    };
-    ##### Config Files #####
-    configFile = {
-      kdeglobals = {
-        KScreen.ScaleFactor = 1 * settings.desktop.scalingFactor;
-      };
-      kwinrc = {
-        Xwayland = {
-          Scale = 1 * settings.desktop.scalingFactor;
-        };
-      };
-    };
   };
 }
