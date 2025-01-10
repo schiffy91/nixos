@@ -11,6 +11,8 @@
       cursor.theme = "Bibata-Modern-Ice";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
+      windowDecorations.theme = "__aurorae__svg__ActiveAccentDark";
+      windowDecorations.library = "org.kde.kwin.aurorae";
     };
     panels = [
       {
