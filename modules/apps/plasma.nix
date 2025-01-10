@@ -66,8 +66,8 @@
           {
             iconTasks = {
               launchers = [
-                #"applications:org.kde.dolphin.desktop"
-                #"applications:org.kde.konsole.desktop"
+                "applications:org.gnome.Nautilus"
+                "applications:com.raggesilver.BlackBox"
               ];
             };
           }
