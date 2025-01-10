@@ -68,7 +68,6 @@
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
       "kwinrc"."org.kde.kdecoration2"."library" = "org.kde.kwin.aurorae";
       "kwinrc"."org.kde.kdecoration2"."theme" = "__aurorae__svg__ActiveAccentDark";
-      };
     };
   };
 }
