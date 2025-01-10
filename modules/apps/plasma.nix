@@ -6,13 +6,15 @@
   }}/ActiveAccentDark";
   programs.plasma = {
     enable = true;
+    overrideConfig = true;
     workspace = {
       lookAndFeel = "org.kde.breezedark.desktop";
       cursor.theme = "Bibata-Modern-Ice";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
-      windowDecorations.theme = "__aurorae__svg__ActiveAccentDark";
+      windowDecorations.theme = "ActiveAccentDark";
       windowDecorations.library = "org.kde.kwin.aurorae";
+      cursor.size = 24 * settings.desktop.scalingFactor;
     };
     panels = [
       {
@@ -66,8 +68,25 @@
       "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
-      "kwinrc"."org.kde.kdecoration2"."library" = "org.kde.kwin.aurorae";
-      "kwinrc"."org.kde.kdecoration2"."theme" = "__aurorae__svg__ActiveAccentDark";
     };
+    kwin.effects = {
+      blur.enable = true;
+      blur.noiseStrength = 10;
+      blur.strength = 5;
+      desktopSwitching.animation = "slide";
+      dimInactive.enable = false;
+      minimization.animation = "off";
+      shakeCursor.enable = true;
+      translucency.enable = true;
+    };
+    kwin.titlebarButtons = {
+      left = [ ];
+      right = [
+        "minimize"
+        "maximize"
+        "close"
+      ];
+    };
+    windows.allowWindowsToRememberPositions = false; # false since running tiling script
   };
 }
