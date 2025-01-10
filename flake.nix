@@ -24,7 +24,7 @@
           unstable-pkgs = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
         in {
           name = "${name}-${target}";
-          value = (lib.nixosSystem {
+          value = lib.nixosSystem {
             inherit system;
             specialArgs = { inherit self inputs unstable-pkgs; };
             modules = [{
@@ -36,15 +36,15 @@
                 system.stateVersion = "24.11";
               };
             }];
-          });
+          };
         };
     in { 
       nixosConfigurations = lib.listToAttrs (
         lib.concatMap (hostFile: [ 
-          mkNixosSystem hostFile "Disk-Operation" 
-          mkNixosSystem hostFile "Standard-Boot" 
-          mkNixosSystem hostFile "Secure-Boot"]
-        ) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./modules/hosts))
+          (mkNixosSystem hostFile "Disk-Operation")
+          (mkNixosSystem hostFile "Standard-Boot")
+          (mkNixosSystem hostFile "Secure-Boot")
+        ]) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./modules/hosts))
       );
     };
 }
