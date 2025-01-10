@@ -7,7 +7,7 @@
       sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
     };
   in {
-    source = "${theme}";
+    source = "${theme}/ActiveAccentDark";
   };
   programs.plasma = {
     enable = true;
