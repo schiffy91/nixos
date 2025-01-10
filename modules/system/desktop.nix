@@ -29,8 +29,6 @@
     services.displayManager.defaultSession = "plasmax11";
     environment.systemPackages = with pkgs; [
       xclip
-      xsettingsd
-      xorg.xrdb
     ];
   })
   ##### Plasma Wayland Settings #####

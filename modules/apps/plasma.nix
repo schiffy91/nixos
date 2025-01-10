@@ -19,6 +19,7 @@
       {
         location = "bottom";
         hiding = "autohide";
+        floating = true;
         widgets = [
           {
             kickoff = {
