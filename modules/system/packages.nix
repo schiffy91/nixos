@@ -6,7 +6,6 @@
   };
   ##### System Packages ##### 
   environment.systemPackages = (with pkgs; [
-    wget
     git
   ]);
   ##### Unpatched Binaries #####
