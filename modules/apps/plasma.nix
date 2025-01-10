@@ -70,7 +70,7 @@
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
     };
     ##### Windows: Hide Title Bar #####
-    programs.plasma.window-rules = [
+    window-rules = [
       {
         description = "Hide titlebars on all windows";
         match = {
