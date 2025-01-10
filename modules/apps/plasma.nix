@@ -66,9 +66,8 @@
       "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
-      kwinrc."org.kde.kdecoration2"= {
-        library = "org.kde.kwin.aurorae";
-        theme = "__aurorae__svg__ActiveAccentDark";
+      "kwinrc"."org.kde.kdecoration2"."library" = "org.kde.kwin.aurorae";
+      "kwinrc"."org.kde.kdecoration2"."theme" = "__aurorae__svg__ActiveAccentDark";
       };
     };
   };
