@@ -9,7 +9,14 @@
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.desktopManager.plasma6.enable = lib.mkDefault true;
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
-    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde ];
+    environment.systemPackages = with pkgs; [ 
+      xdg-desktop-portal-kde
+      nautilus
+      nautilus-open-in-blackbox
+      gtk4
+      gtk3
+      gtk2
+    ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
       gwenview
@@ -20,6 +27,8 @@
       print-manager
       drkonqi
       spectacle
+      konsole
+      dolphin
     ]);
   })
   ##### Plasma X11 Settings #####

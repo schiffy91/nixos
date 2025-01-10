@@ -1,12 +1,16 @@
 { settings, pkgs, ... }: {
+  ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
+  ##### Download SVG Theme #####
   xdg.dataFile."aurorae/themes/ActiveAccentDark".source = "${pkgs.fetchzip { 
     url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip"; 
     sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
   }}/ActiveAccentDark";
   programs.plasma = {
+    ##### Settings #####
     enable = true;
     overrideConfig = true;
+    ##### Workspace #####
     workspace = {
       colorScheme = "BreezeDark";
       cursor = {
