@@ -9,7 +9,14 @@
       };
       installPhase = ''
         mkdir -p $out/share/aurorae/themes
-        cp -r Plasma-window-decorations-*/ActiveAccentDark $out/share/aurorae/themes
+        for themedir in */ActiveAccentDark; do
+          if [ -d "$themedir" ]; then
+            cp -r "$themedir" $out/share/aurorae/themes/
+          else
+            echo "Error: Theme directory not found"
+            exit 1
+          fi
+        done
       '';
     }) 
   ];
