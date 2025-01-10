@@ -18,6 +18,7 @@
     panels = [
       {
         location = "bottom";
+        hiding = "autohide";
         widgets = [
           {
             kickoff = {
@@ -55,7 +56,6 @@
             };
           }
         ];
-        hiding = "autohide";
       }
     ];
     kscreenlocker = {
@@ -68,16 +68,6 @@
       "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
       "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
     };
-    kwin.effects = {
-      blur.enable = true;
-      blur.noiseStrength = 10;
-      blur.strength = 5;
-      desktopSwitching.animation = "slide";
-      dimInactive.enable = false;
-      minimization.animation = "off";
-      shakeCursor.enable = true;
-      translucency.enable = true;
-    };
     kwin.titlebarButtons = {
       left = [ ];
       right = [
@@ -87,5 +77,6 @@
       ];
     };
     windows.allowWindowsToRememberPositions = false;
+    session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
   };
 }
