@@ -15,7 +15,7 @@
       scrollback-lines = lib.hm.gvariant.mkUint32 10240;
       theme-dark = "Catppuccin-Frappe";
       window-height = lib.hm.gvariant.mkUint32 1150;
-        window-width = lib.hm.gvariant.mkUint32 1450;
+      window-width = lib.hm.gvariant.mkUint32 1450;
       opacity = lib.hm.gvariant.mkUint32 95;
     };
   };
