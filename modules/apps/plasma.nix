@@ -6,7 +6,6 @@
   }}/ActiveAccentDark";
   programs.plasma = {
     enable = true;
-    overrideConfig = true;
     workspace = {
       lookAndFeel = "org.kde.breezedark.desktop";
       cursor.theme = "Bibata-Modern-Ice";
