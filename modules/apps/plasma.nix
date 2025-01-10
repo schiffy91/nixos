@@ -9,7 +9,7 @@
       };
       installPhase = ''
         mkdir -p $out/share/aurorae/themes
-        cp -r Plasma-window-decorations-02058699173f5651816d4cb31960d08b45553255/ActiveAccentDark $out/share/aurorae/themes
+        cp -r Plasma-window-decorations-*/ActiveAccentDark $out/share/aurorae/themes
       '';
     }) 
   ];
