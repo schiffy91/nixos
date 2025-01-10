@@ -7,7 +7,7 @@
       sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
     };
   in {
-    source = "${theme}/Plasma-window-decorations-02058699173f5651816d4cb31960d08b45553255/ActiveAccentDark";
+    source = "${theme}";
   };
   programs.plasma = {
     enable = true;
