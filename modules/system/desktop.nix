@@ -9,7 +9,7 @@
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.desktopManager.plasma6.enable = lib.mkDefault true;
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
-    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde ];
+    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde adwaita-qt];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
       gwenview
