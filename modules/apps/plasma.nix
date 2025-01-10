@@ -17,6 +17,60 @@
     };
     panels = [
       {
+      location = "top";
+      height = 26;
+      floating = true;
+      widgets = [
+        {
+          applicationTitleBar = {
+            layout.elements = [];
+            windowControlButtons = {
+              iconSource = "breeze";
+              buttonsAspectRatio = 95;
+              buttonsMargin = 0;
+            };
+            windowTitle = {
+              source = "appName";
+              hideEmptyTitle = true;
+              undefinedWindowTitle = "";
+              margins = {
+                left = 5;
+                right = 5;
+              };
+            };
+            overrideForMaximized = {
+              enable = true;
+              elements = ["windowCloseButton" "windowMaximizeButton" "windowMinimizeButton" "windowIcon" "windowTitle"];
+              source = "appName";
+            };
+          };
+        }
+        "org.kde.plasma.appmenu"
+        "org.kde.plasma.panelspacer"
+        {
+          digitalClock = {
+            date = {
+              enable = true;
+              position = "besideTime";
+            };
+            time.showSeconds = "always";
+          };
+        }
+        "org.kde.plasma.panelspacer"
+        {
+          systemTray = {
+            icons.scaleToFit = true;
+            items = {
+              shown = [
+                "org.kde.plasma.battery"
+              ];
+              configs.battery.showPercentage = true;
+            };
+          };
+        }
+      ];
+    }
+      {
         location = "bottom";
         hiding = "autohide";
         floating = true;
@@ -59,37 +113,6 @@
         ];
       }
     ];
-    kscreenlocker = {
-      autoLock = if settings.user.admin.autoLockEnabled then true else false;
-      lockOnResume = if settings.user.admin.autoLockEnabled then true else false;
-      timeout = if settings.user.admin.autoLockEnabled then 10 else null;
-    };
-    configFile = {
-      "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;
-      "kdeglobals"."KScreen"."ScreenScaleFactors" = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
-      "kwinrc"."Xwayland"."Scale" = 1 * settings.desktop.scalingFactor;
-    };
-    ##### Windows: Hide Title Bar #####
-    window-rules = [
-      {
-        description = "Hide titlebars on all windows";
-        match = {
-          # Match all windows:
-          window-class = {
-            match-whole = false;
-            type = "substring";
-            value = "";  # Match any window class
-          };
-        };
-        apply = {
-          # Hide the title bar:
-          titlebar = {
-            apply = "force";
-            value = false; 
-          };
-        };
-      }
-    ];
     ##### Windows: Title Bar Buttons ##### 
     kwin.titlebarButtons = {
       left = [ ];
@@ -99,7 +122,25 @@
         "close"
       ];
     };
+    ##### Restore #####
     windows.allowWindowsToRememberPositions = false;
     session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
+    ##### Auto Lock #####
+    kscreenlocker = {
+      autoLock = if settings.user.admin.autoLockEnabled then true else false;
+      lockOnResume = if settings.user.admin.autoLockEnabled then true else false;
+      timeout = if settings.user.admin.autoLockEnabled then 10 else null;
+    };
+    ##### Config Files #####
+    configFile = {
+      kdeglobals = {
+        KScreen.ScaleFactor = 1 * settings.desktop.scalingFactor;
+      };
+      kwinrc = {
+        Xwayland = {
+          Scale = 1 * settings.desktop.scalingFactor;
+        };
+      };
+    };
   };
 }
