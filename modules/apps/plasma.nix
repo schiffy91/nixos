@@ -4,7 +4,7 @@
     let 
       decoration = pkgs.fetchzip { 
         url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip";
-        hash = "sha256-1lm0caz6ais3k20w8zibv6527kvss0brxgk4hm8m5npa7yv570iv";
+        hash = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
       }; 
     in
       "${decoration}/Plasma-window-decorations-main/ActiveAccentDark";
