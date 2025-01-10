@@ -19,7 +19,7 @@
     settings.disk.encryption.enabled = mkSetting bool true; #TODO Implement this
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Boot ##### 
-    settings.boot.method = mkSetting str "Standard"; #OVERRIDE (FLAKE)
+    settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot"; #OVERRIDE (FLAKE)
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";
     ##### TPM ##### 
     settings.tpm.device = mkSetting str "/dev/tpmrm0"; #OVERRIDE (HOST)

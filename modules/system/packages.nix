@@ -1,9 +1,4 @@
 { pkgs, ... }: {
-  ##### Flatpaks ##### 
-  services.flatpak = {
-    enable = true;
-    remotes = { "flathub" = "https://dl.flathub.org/repo/flathub.flatpakrepo"; };
-  };
   ##### System Packages ##### 
   environment.systemPackages = (with pkgs; [
     git

@@ -33,7 +33,7 @@
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
 ##### Standard Boot Settings #####
-(lib.mkIf (config.settings.boot.method == "Standard") {
+(lib.mkIf (config.settings.boot.method == "Standard-Boot") {
   boot.loader.systemd-boot = {
     enable = true;
     configurationLimit = 3;

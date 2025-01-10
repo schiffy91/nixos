@@ -168,7 +168,7 @@ class Config:
     def get_target(cls): return cls.get("target")
     # Readonly
     @classmethod
-    def get_standard_flake_target(cls): return "Standard"
+    def get_standard_flake_target(cls): return "Standard-Boot"
     @classmethod
     def get_secure_boot_flake_target(cls): return "Secure-Boot"
     @classmethod
