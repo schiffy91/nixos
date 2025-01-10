@@ -1,5 +1,15 @@
 { settings, pkgs, lib, ... }: {
-  home.packages = with pkgs; [ papirus-icon-theme ];
+  home.packages = with pkgs; [ 
+    papirus-icon-theme
+    (pkgs.stdenv.mkDerivation {
+      name = "active-accent-dark-theme";
+      src = builtins.fetchzip { url = "https://github.com/nclarius/Plasma-window-decorations/archive/refs/heads/main.zip"; };
+      installPhase = ''
+        mkdir -p $out/share/aurorae/themes
+        cp -r Plasma-window-decorations-main/ActiveAccentDark $out/share/aurorae/themes
+      '';
+    })
+  ];
   programs.plasma = {
     enable = true;
     workspace = {
@@ -7,6 +17,7 @@
       cursor.theme = "Bibata-Modern-Ice";
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
+      windowDecorations.theme = "__aurorae__svg__ActiveAccentDark";
     };
     panels = [
       {
@@ -51,9 +62,10 @@
         hiding = "autohide";
       }
     ];
-    kscreenlocker = lib.mkIf settings.user.admin.autoLockEnabled {
-      lockOnResume = true;
-      timeout = 10;
+    kscreenlocker = {
+      autoLock = if settings.user.admin.autoLockEnabled then true else false;
+      lockOnResume = if settings.user.admin.autoLockEnabled then true else false;
+      timeout = if settings.user.admin.autoLockEnabled then 10 else null;
     };
     configFile = {
       "kdeglobals"."KScreen"."ScaleFactor" = 1 * settings.desktop.scalingFactor;

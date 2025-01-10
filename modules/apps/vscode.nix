@@ -1,6 +1,5 @@
-{ ... }: {
-  services.flatpak.remotes = { "flathub" = "https://dl.flathub.org/repo/flathub.flatpakrepo"; };
-  services.flatpak.packages = [
-    "flathub:app/com.visualstudio.code//stable"
+{ unstable-pkgs, ... }: {
+  home.packages = [
+    unstable-pkgs.vscode.fhs # VHS variants allows using extensions with precompiled binaries https://nixos.wiki/wiki/Visual_Studio_Code
   ];
 }
