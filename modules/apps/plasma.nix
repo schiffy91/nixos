@@ -1,14 +1,9 @@
 { settings, pkgs, lib, ... }: {
   home.packages = with pkgs; [ papirus-icon-theme ];
-  xdg.dataFile."aurorae/themes/ActiveAccentDark" = 
-  let
-    theme = pkgs.fetchzip { 
-      url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip"; 
-      sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
-    };
-  in {
-    source = "${theme}/ActiveAccentDark";
-  };
+  xdg.dataFile."aurorae/themes/ActiveAccentDark" = "${pkgs.fetchzip { 
+    url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip"; 
+    sha256 = "sha256-O4JTtj/q2lJRhWS+nhfQes8jitkrfsSBmENHZb5ioNI=";
+  }}/ActiveAccentDark";
   programs.plasma = {
     enable = true;
     workspace = {
