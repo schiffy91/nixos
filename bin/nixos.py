@@ -157,7 +157,8 @@ class Config:
     @classmethod
     def eval(cls, attribute):
         cmd = f"nix eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
-        Shell.evals[cmd] = Shell.evals.get(cmd, Shell.stdout(cls.sh.run(f"nix eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}")))
+        if cmd in Shell.evals: return Shell.evals[cmd]
+        Shell.evals[cmd] = Shell.stdout(cls.sh.run(f"nix eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"))
         return Shell.evals[cmd]
     @classmethod
     def metadata(cls, flake="."): return json.loads(Shell.stdout(cls.sh.run(f"nix flake metadata {flake} --json")))
