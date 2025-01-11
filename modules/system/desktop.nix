@@ -12,11 +12,6 @@
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
     environment.systemPackages = with pkgs; [ 
       xdg-desktop-portal-kde
-      nautilus
-      nautilus-open-in-blackbox
-      gtk4
-      gtk3
-      gtk2
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
@@ -28,8 +23,6 @@
       print-manager
       drkonqi
       spectacle
-      konsole
-      dolphin
     ]);
   })
   ##### Plasma X11 Settings #####
