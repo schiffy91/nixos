@@ -20,5 +20,8 @@
 
     [Terminal Features]
     BlinkingCursorEnabled=true
+
+    [MainWindow]
+    MenuBar=Disabled
   '';
 }
