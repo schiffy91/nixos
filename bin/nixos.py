@@ -156,7 +156,7 @@ class Config:
         Interactive.ask_to_reboot()
     @classmethod
     def eval(cls, attribute):
-        cmd = f"nix eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
+        cmd = f"nix --extra-experimental-features \"nix-command flakes\" eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
         if cmd in Shell.evals: return Shell.evals[cmd]
         Shell.evals[cmd] = Shell.stdout(cls.sh.run(f"nix eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}")).replace("\"", "")
         return Shell.evals[cmd]

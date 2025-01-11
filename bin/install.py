@@ -1,5 +1,5 @@
 #! /usr/bin/env nix-shell
-#! nix-shell --extra-experimental-features "nix-command flakes" -i python3 -p python3
+#! nix-shell -i python3 -p python3
 import sys
 from nixos import Utils, Config, Shell, Interactive
 
