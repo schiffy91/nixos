@@ -18,7 +18,7 @@ class Installer:
         cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):
-        command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{cls.sh.metadata("disko")["locked"]["rev"]} --verbose -- " \
+        command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{Config.metadata("disko")["locked"]["rev"]} --verbose -- " \
                 f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-{Config.get_disk_operation_target()} --mode {mode} --root-mountpoint {cls.get_mount_point()} {args}"
         return cls.sh.run(command, capture_output=False)
     # Helpers
