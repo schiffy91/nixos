@@ -1,6 +1,10 @@
 { settings, pkgs, ... }: {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
+  xdg.configFile."breezrc".text = ''
+  [Common]
+  OutlineCloseButton=true
+  '';
   programs.plasma = {
     ##### Settings #####
     enable = true;
