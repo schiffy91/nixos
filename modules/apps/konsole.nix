@@ -11,23 +11,6 @@
 
     [General]
     Name=alexanderschiffhauer
-    Parent=
-
-    [Keyboard]
-    KeyBindings=macos
-
-    [Scrolling]
-    HistoryMode=2
-
-    [Terminal Features]
-    BlinkingCursorEnabled=true
-
-    [Cursor Options]
-    CursorShape=2
-
-    [General]
-    Name=alexanderschiffhauer
-    Parent=
 
     [Keyboard]
     KeyBindings=macos

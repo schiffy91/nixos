@@ -1,33 +1,28 @@
 # TO DO
-* Utils
-    * Log to an actual log instead of stdout
+* KDE
+    * Plasma: Put applications on bottom bar
+    * Konsole: Remove menu bar
+    * Mouse: Back/forward mouse buttons
+* Applications
+    * Google Drive
+    * Apple Music
+    * Solaar
+    * 1Password
+        * Autostart 1Password
+        * Ability to unlock 1Password via terminal [op signin should work](https://developer.1password.com/docs/cli/sign-in-sso/)
+* Code
+    * `nixos.py`: `Utils` should probably log to an actual log in lieu of (or in addition to) `stdout` and `stderr`.
 * Boot
-    * SSH
-        * Figure out why my public key to access the my machines during initrd to decrypt LUKS is denied
     * 1Password
         * Create a service to autostart 1Password
         * Investigate ability to unlock 1Password via terminal instead of GUI. Se
         * Investigate if there's a way to automatically reduce prompts for password or a way to automate the extraction of the SSH key after login.
-* Desktop Environment
-    * Hyprland
-    * PAM for Secrets in KDEWallet
-    * Plasma Manager
-        * DPI
-        * Panels
-            * Auto hide top
-            * Sort applications on bottom
-        * Icons
-        * Wallpaper
-        * Dolphin
-        * Console
-    * Applications
-        * Google Drive
-        * Chrome + Login
-        * VSCode + Login
-        * Apple Music
-        * Solaar
-* Virtualization
-    * Install 4TB NVME with Windows
-    * Auto configure virt-manager to set it up with some config files that are checked in.
+* Gaming
+    * Connect 4TB NVME over TB4
+    * Configure QEMU for VFIO, IOMMU, and Looking Glass
     * VFIO, IOMMU, and Looking glass.
-    * Ensure BIOS has that at the lowest priority bootloader.
+        * Some examples from the community
+            * https://olai.dev/blog/nvidia-vm-passthrough/
+            * https://astrid.tech/2022/09/22/0/nixos-gpu-vfio/
+            * https://gist.github.com/CRTified/43b7ce84cd238673f7f24652c85980b3
+            * https://github.com/j-brn/nixos-vfio
