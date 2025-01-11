@@ -20,10 +20,10 @@
       okular
       print-manager
     ]);
+    security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWalletEnabled;
   })
   ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
-    services.displayManager.sddm.enable = false;
     services.xserver.enable = true;
     services.displayManager.defaultSession = "plasmax11";
     environment.systemPackages = with pkgs; [
@@ -32,6 +32,7 @@
   })
   ##### Plasma Wayland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
+    services.displayManager.sddm.wayland.enable = true; = false;
     environment.sessionVariables.NIXOS_OZONE_WL = "1"; # https://nixos.wiki/wiki/Wayland
     services.displayManager.defaultSession = "plasma";
     environment.systemPackages = with pkgs; [

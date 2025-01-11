@@ -3,6 +3,7 @@
     * Plasma: Put applications on bottom bar
     * Konsole: Remove menu bar
     * Mouse: Back/forward mouse buttons
+    * KWallet: Figure out how to create a default wallet that matches the hashed password in `/etc/nixois/secrets/hashed_password.txt`
 * Applications
     * Google Drive
     * Apple Music

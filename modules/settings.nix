@@ -7,6 +7,7 @@
     settings.user.admin.username = mkSetting str "alexanderschiffhauer"; # OVERRIDE (HERE)
     settings.user.admin.autoLoginEnabled = mkSetting bool false;
     settings.user.admin.autoLockEnabled = mkSetting bool true;
+    settings.user.admin.autoUnlockWalletEnabled = mkSetting bool true;
     settings.user.admin.authorizedKey = mkSetting str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI"; # OVERRIDE (HERE)
     ##### Disk ##### 
     settings.disk.device = mkSetting str ""; #OVERRIDE (HOST)
