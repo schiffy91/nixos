@@ -43,14 +43,14 @@
         General = {
           AccentColor = "40,40,40";
         };
-        Qt = {
+        "Qt" = {
           dpi = toString (96 * settings.desktop.scalingFactor);
         };
-        Fonts = {
-          General = {
+        "Fonts" = {
+          "General" = {
             fontSize = toString (10 * settings.desktop.scalingFactor);
           };
-          WM = {
+          "WM" = {
             fontSize = toString (10 * settings.desktop.scalingFactor);
           };
         };
