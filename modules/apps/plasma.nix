@@ -1,16 +1,6 @@
 { settings, pkgs, ... }: {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
-  ##### Qt #####
-/*   qt = {
-    enable = true;
-    platformTheme = "qtct";
-    style.name = "kvantum";
-  };
-  xdg.configFile = {
-    "Kvantum/ArcDark".source = "${pkgs.arc-kde-theme}/share/Kvantum/ArcDark";
-    "Kvantum/kvantum.kvconfig".text = "[General]\ntheme=ArcDark";
-  }; */
   ##### Download SVG Theme #####
   xdg.dataFile."aurorae/themes/ActiveAccentDark".source = "${pkgs.fetchzip { 
     url = "https://github.com/nclarius/Plasma-window-decorations/archive/02058699173f5651816d4cb31960d08b45553255.zip"; 
@@ -52,6 +42,17 @@
         };
         General = {
           AccentColor = "40,40,40";
+        };
+        Qt = {
+          dpi = toString (96 * settings.desktop.scalingFactor);
+        };
+        Fonts = {
+          General = {
+            fontSize = toString (10 * settings.desktop.scalingFactor);
+          };
+          WM = {
+            fontSize = toString (10 * settings.desktop.scalingFactor);
+          };
         };
       };
       kwinrc = {
