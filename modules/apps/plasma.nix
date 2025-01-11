@@ -1,7 +1,7 @@
 { settings, pkgs, ... }: {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
-  xdg.configFile."breezrc".text = ''
+  xdg.configFile."breezerc".text = ''
   [Common]
   OutlineCloseButton=true
   '';

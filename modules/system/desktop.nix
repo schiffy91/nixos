@@ -24,6 +24,7 @@
   })
   ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
+    environment.sessionVariables.PLASMA_USE_QT_SCALING = "1";
     services.xserver.enable = true;
     services.displayManager.defaultSession = "plasmax11";
     environment.systemPackages = with pkgs; [
