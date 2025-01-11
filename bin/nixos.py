@@ -154,7 +154,7 @@ class Config:
         cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
         Interactive.ask_to_reboot()
     @classmethod
-    def eval(cls, attribute): return Shell.stdout(cls.sh.run(f"nix eval .{cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"))
+    def eval(cls, attribute): return Shell.stdout(cls.sh.run(f"nix eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"))
     @classmethod
     def metadata(cls, flake="."): return json.loads(Shell.stdout(cls.sh.run(f"nix flake metadata {flake} --json")))
     # Readwrite
