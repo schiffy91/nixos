@@ -32,9 +32,9 @@
   })
   ##### Plasma Wayland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
-    services.displayManager.sddm.wayland.enable = true; = false;
     environment.sessionVariables.NIXOS_OZONE_WL = "1"; # https://nixos.wiki/wiki/Wayland
     services.displayManager.defaultSession = "plasma";
+    services.displayManager.sddm.wayland.enable = true;
     environment.systemPackages = with pkgs; [
       wl-clipboard
     ];
