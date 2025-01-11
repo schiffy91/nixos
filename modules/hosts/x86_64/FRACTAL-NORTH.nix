@@ -8,6 +8,8 @@
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
+  ##### Display #####
+  settings.desktop.scalingFactor = 2.5;
   ##### AMD #####
   boot.kernelParams = [
     "amdgpu.dc=1"                   # AMD GPU

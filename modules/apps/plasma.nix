@@ -43,14 +43,6 @@
         General = {
           AccentColor = "40,40,40";
         };
-        "Qt" = {
-          dpi = toString (96 * settings.desktop.scalingFactor);
-        };
-        "Fonts" = {
-          "WM" = {
-            fontSize = toString (10 * settings.desktop.scalingFactor);
-          };
-        };
       };
       kwinrc = {
         Xwayland = {
