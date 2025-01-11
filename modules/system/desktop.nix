@@ -15,14 +15,10 @@
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
-      gwenview
       khelpcenter
       elisa
-      ark
       okular
       print-manager
-      drkonqi
-      spectacle
     ]);
   })
   ##### Plasma X11 Settings #####
