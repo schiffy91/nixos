@@ -47,9 +47,6 @@
           dpi = toString (96 * settings.desktop.scalingFactor);
         };
         "Fonts" = {
-          "General" = {
-            fontSize = toString (10 * settings.desktop.scalingFactor);
-          };
           "WM" = {
             fontSize = toString (10 * settings.desktop.scalingFactor);
           };
