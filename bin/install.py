@@ -1,7 +1,7 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 import sys
-from utils import Utils, Config, Shell, Interactive
+from nixos import Utils, Config, Shell, Interactive
 
 class Installer:
     sh = Shell()
@@ -18,9 +18,7 @@ class Installer:
         cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):
-        disko_key = "github:nix-community/disko/"
-        version = Utils.get_value_from_path(Config.get_flake_path(), key=disko_key, start=disko_key, end='"')
-        command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{version} --verbose -- " \
+        command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{cls.sh.metadata("disko")["locked"]["rev"]} --verbose -- " \
                 f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-{Config.get_disk_operation_target()} --mode {mode} --root-mountpoint {cls.get_mount_point()} {args}"
         return cls.sh.run(command, capture_output=False)
     # Helpers
@@ -36,13 +34,13 @@ class Installer:
     @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
-    def get_username(cls): return Utils.get_value_from_settings("settings.user.admin.username")
+    def get_username(cls): return Config.eval("config.settings.user.admin.username")
     @classmethod
     def get_final_nixos_path(cls): return f"/home/{cls.get_username()}/nixos"
     @classmethod
-    def get_installation_disk(cls): return Utils.get_value_from_path(Config.get_host_path(), "settings.disk.device")
+    def get_installation_disk(cls): return Config.eval("config.settings.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Utils.get_value_from_settings("settings.disk.encryption.plainTextPasswordFile")
+    def get_plain_text_password_path(cls): return Config.eval("settings.disk.encryption.plainTextPasswordFile")
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod

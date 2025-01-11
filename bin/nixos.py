@@ -1,17 +1,19 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import sys, subprocess, json, getpass, glob, contextlib, re
+import sys, subprocess, json, getpass, glob, contextlib
 
 class Shell:
     def __init__(self, root_required=False):
         self.chroots = []
         if root_required: self.require_root()
+    @classmethod
+    def stdout(cls, completed_process): return completed_process.stdout.strip()
     # User
     def require_root(self):
-        if Utils.stdout(self.run("id -u")) != "0":
+        if Shell.stdout(self.run("id -u")) != "0":
             Utils.abort("Please run this script with sudo.")
-    def whoami(self): return Utils.stdout(self.run("who")).split()[0]
-    def hostname(self): return Utils.stdout(self.run("hostname"))
+    def whoami(self): return Shell.stdout(self.run("who")).split()[0]
+    def hostname(self): return Shell.stdout(self.run("hostname"))
     # Execution
     @contextlib.contextmanager
     def chroot(self, path):
@@ -52,19 +54,19 @@ class Shell:
         ignore_arg = format_patterns("-not", ignore_pattern)
         path = self.realpath(path) # find doesn't work on symlinks
         command_arg = f"find '{path}' {pattern_arg} {type_arg} {ignore_arg}".strip()
-        output = Utils.stdout(self.run(command_arg))
+        output = Shell.stdout(self.run(command_arg))
         return [] if not output else output.split("\n")
     def find_directories(self, path, pattern="*", ignore_pattern=None):
         return self.find(path, pattern=pattern, ignore_pattern=ignore_pattern, ignore_files=True)
     def find_files(self, path, pattern="*", ignore_pattern=None):
         return self.find(path, pattern=pattern, ignore_pattern=ignore_pattern, ignore_directories=True)
     def symlink(self, source, target): return self.run(f"ln -s {source} {target}")
-    def realpath(self, path): return Utils.stdout(self.run(f"realpath '{path}'")).splitlines()[0]
-    def realpaths(self, *paths): return Utils.stdout(self.run("realpath " + " ".join(f"'{path}'" for path in paths))).splitlines()
+    def realpath(self, path): return Shell.stdout(self.run(f"realpath '{path}'")).splitlines()[0]
+    def realpaths(self, *paths): return Shell.stdout(self.run("realpath " + " ".join(f"'{path}'" for path in paths))).splitlines()
     def is_dir(self, path): return self.run(f"[ -d '{path}' ]", check=False).returncode == 0
     def exists(self, *args): return self.run(" && ".join(f"[ -e '{arg}' ]" for arg in args) + " && true", check=False).returncode == 0
-    def basename(self, path): return Utils.stdout(self.run(f"basename '{path}'"))
-    def dirname(self, path): return Utils.stdout(self.run(f"dirname '{path}'"))
+    def basename(self, path): return Shell.stdout(self.run(f"basename '{path}'"))
+    def dirname(self, path): return Shell.stdout(self.run(f"dirname '{path}'"))
     def parent_name(self, path): return self.basename(self.dirname(path))
     # Security
     def chmod(self, mode, *args):
@@ -81,7 +83,7 @@ class Shell:
         self.rm(path)
         self.mkdir(self.dirname(path))
         return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
-    def file_read(self, path): return Utils.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
+    def file_read(self, path): return Shell.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
     # Git
     def git_add_safe_directory(self, path):
         path = self.realpath(path)
@@ -114,7 +116,7 @@ class Config:
         if not cls.sh.exists(cls.get_hashed_password_path()) or (plain_text_password_path and not cls.sh.exists(plain_text_password_path)):
             password = Interactive.ask_for_password()
             if plain_text_password_path: cls.sh.file_write(plain_text_password_path, password, sensitive=password)
-            encrypted_password = Utils.encrypt_password(password)
+            encrypted_password = Shell.stdout(cls.sh.run(f"mkpasswd -m sha-512 '{password}'", sensitive=password))
             cls.sh.file_write(cls.get_hashed_password_path(), encrypted_password, sensitive=encrypted_password)
     @classmethod
     def secure_secrets(cls, sh=None):
@@ -151,6 +153,10 @@ class Config:
             cls.secure(cls.sh.whoami())
         cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
         Interactive.ask_to_reboot()
+    @classmethod
+    def eval(cls, attribute): return Shell.stdout(cls.sh.run(f"nix eval .{cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"))
+    @classmethod
+    def metadata(cls, flake="."): return json.loads(Shell.stdout(cls.sh.run(f"nix flake metadata {flake} --json")))
     # Readwrite
     @classmethod
     def set_host_path(cls, host_path): return cls.set("host_path", host_path)
@@ -170,29 +176,23 @@ class Config:
     @classmethod
     def get_disk_operation_target(cls): return "Disk-Operation"
     @classmethod
-    def get_nix_eval(cls, attribute, path_to_flake = None, host = None, target = None):
-        path_to_flake = cls.sh.realpath(cls.get_nixos_path()) if path_to_flake is None else None
-        host = cls.get_host() if host is None else None
-        target = cls.get_target() if target is None else None
-        return Utils.stdout(cls.sh.run(f"nix eval .{path_to_flake}#nixosConfigurations.{host}-{target}.config.{attribute}"))
-    @classmethod
-    def get_disk_label(cls, label): return Utils.get_value_from_settings(f"settings.disk.label.{label}")
+    def get_disk_label(cls, label): return cls.eval(f"config.settings.disk.label.{label}")
     @classmethod
     def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('nixos')}-{cls.get_disk_label('boot')}"
     @classmethod
     def get_root_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('nixos')}-{cls.get_disk_label('root')}"
     @classmethod
-    def get_tpm_device(cls): return Utils.get_value_from_settings("settings.tpm.device")
+    def get_tpm_device(cls): return cls.eval("config.settings.tpm.device")
     @classmethod
-    def get_tpm_version_path(cls): return Utils.get_value_from_settings("settings.tpm.versionPath")
+    def get_tpm_version_path(cls): return cls.eval("config.settings.tpm.versionPath")
     @classmethod
     def get_host(cls): return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
     @classmethod
-    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.hashedPasswordFile")
+    def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + cls.eval("config.settings.secrets.hashedPasswordFile")
     @classmethod
-    def get_secrets_path(cls): return Utils.get_value_from_settings("settings.secrets.path")
+    def get_secrets_path(cls): return cls.eval("config.settings.secrets.path")
     @classmethod
     def get_settings_path(cls): return f"{Config.get_nixos_path()}/modules/settings.nix"
     @classmethod
@@ -250,24 +250,6 @@ class Utils:
     def abort(cls, message=""):
         if message: cls.log_error(message)
         return sys.exit(1)
-    @classmethod
-    def get_value_from_path(cls, path, key, start='"', end='"', trim_whitespace=True):
-        file_contents = cls.sh.file_read(path)
-        return cls.get_string_between(file_contents, start=start, end=end, start_from=key, trim_whitespace=trim_whitespace)
-    @classmethod
-    def get_value_from_settings(cls, key): return cls.get_value_from_path(Config.get_settings_path(), key)
-    @classmethod
-    def get_string_between(cls, text, start, end, start_from=None, trim_whitespace=False):
-        def trimmer(x): return x.replace(" ", "") if trim_whitespace else x
-        text, start, end, start_from = [ trimmer(text), trimmer(start), trimmer(end), trimmer(start_from) if start_from else start_from ]
-        text = text[text.find(start_from):] if start_from else text
-        pattern = re.escape(start) + r"(.*?)" + re.escape(end)
-        match = re.search(pattern, text, re.DOTALL)
-        return match.group(1) if match else None
-    @classmethod
-    def stdout(cls, completed_process): return completed_process.stdout.strip()
-    @classmethod
-    def encrypt_password(cls, password): return cls.stdout(cls.sh.run(f"mkpasswd -m sha-512 '{password}'", sensitive=password))
     @classmethod
     def log(cls, message): print(f"{cls.GRAY}LOG: {message}{cls.RESET}")
     @classmethod

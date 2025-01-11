@@ -1,7 +1,7 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3 -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/93dc9803a1ee435e590b02cde9589038d5cc3a4e.tar.gz -p sbctl
 import sys
-from utils import Utils, Config, Shell
+from nixos import Utils, Config, Shell
 
 sh = Shell(root_required=True)
 
@@ -15,7 +15,7 @@ def create_keys():
 
 def are_keys_enrolled():
     status = sh.run("sbctl status")
-    return "secure boot: ✓ enabled" in Utils.stdout(status).lower()
+    return "secure boot: ✓ enabled" in Shell.stdout(status).lower()
 
 def enroll_keys():
     Utils.log("Resetting Secure Boot keys...")
@@ -26,7 +26,7 @@ def enroll_keys():
 
 def are_keys_signed():
     status = sh.run("sbctl verify")
-    return "is signed" in Utils.stdout(status).lower()
+    return "is signed" in Shell.stdout(status).lower()
 
 def require_signed_boot_loader():
     if are_keys_signed():

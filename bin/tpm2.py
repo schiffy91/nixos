@@ -1,14 +1,13 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 import sys
-from utils import Utils, Config, Shell
+from nixos import Utils, Config, Shell
 
 sh = Shell(root_required=True)
 
 def tpm2_exists(): return sh.exists(Config.get_tpm_device()) and int(sh.file_read(Config.get_tpm_version_path())) == 2
 
-def get_enrolled_tpm2_devices(): return Utils.stdout(sh.run("systemd-cryptenroll --tpm2-device=list", check=False))
-
+def get_enrolled_tpm2_devices(): return Shell.stdout(sh.run("systemd-cryptenroll --tpm2-device=list", check=False))
 
 def data_disk_encrypted(): return sh.run(f"cryptsetup isLuks {Config.get_root_disk_path()}", check=False).returncode == 0
 
