@@ -116,10 +116,6 @@ class Config:
             if plain_text_password_path: cls.sh.file_write(plain_text_password_path, password, sensitive=password)
             encrypted_password = Utils.encrypt_password(password)
             cls.sh.file_write(cls.get_hashed_password_path(), encrypted_password, sensitive=encrypted_password)
-        if not cls.sh.exists(Config.get_initrd_rsa_key_path()):
-            cls.sh.ssh_keygen("rsa", Config.get_initrd_rsa_key_path())
-        if not cls.sh.exists(Config.get_initrd_ed25519_key_path()):
-            cls.sh.ssh_keygen("ed25519", Config.get_initrd_ed25519_key_path())
     @classmethod
     def secure_secrets(cls, sh=None):
         sh = cls.sh if sh is None else sh
@@ -174,6 +170,12 @@ class Config:
     @classmethod
     def get_disk_operation_target(cls): return "Disk-Operation"
     @classmethod
+    def get_nix_eval(cls, attribute, path_to_flake = None, host = None, target = None):
+        path_to_flake = cls.sh.realpath(cls.get_nixos_path()) if path_to_flake is None else None
+        host = cls.get_host() if host is None else None
+        target = cls.get_target() if target is None else None
+        return Utils.stdout(cls.sh.run(f"nix eval .{path_to_flake}#nixosConfigurations.{host}-{target}.config.{attribute}"))
+    @classmethod
     def get_disk_label(cls, label): return Utils.get_value_from_settings(f"settings.disk.label.{label}")
     @classmethod
     def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('nixos')}-{cls.get_disk_label('boot')}"
@@ -189,10 +191,6 @@ class Config:
     def get_architecture(cls): return cls.sh.parent_name(cls.get_host_path())
     @classmethod
     def get_hashed_password_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.hashedPasswordFile")
-    @classmethod
-    def get_initrd_rsa_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.initrd.rsaKeyFile")
-    @classmethod
-    def get_initrd_ed25519_key_path(cls): return cls.get_secrets_path() + "/" + Utils.get_value_from_settings("settings.secrets.initrd.ed25519KeyFile")
     @classmethod
     def get_secrets_path(cls): return Utils.get_value_from_settings("settings.secrets.path")
     @classmethod
@@ -242,20 +240,20 @@ class Utils:
     RESET = "\033[0m"
     @classmethod
     def parse_args(cls, argv, *allowed_args):
-        if not argv: return Utils.abort("No arguments provided")
+        if not argv: return cls.abort("No arguments provided")
         matched_args = [arg for arg in argv if arg in set(allowed_args)]
-        if not matched_args: return Utils.abort("No valid arguments provided")
+        if not matched_args: return cls.abort("No valid arguments provided")
         return matched_args
     @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod
     def abort(cls, message=""):
-        if message: Utils.log_error(message)
+        if message: cls.log_error(message)
         return sys.exit(1)
     @classmethod
     def get_value_from_path(cls, path, key, start='"', end='"', trim_whitespace=True):
         file_contents = cls.sh.file_read(path)
-        return Utils.get_string_between(file_contents, start=start, end=end, start_from=key, trim_whitespace=trim_whitespace)
+        return cls.get_string_between(file_contents, start=start, end=end, start_from=key, trim_whitespace=trim_whitespace)
     @classmethod
     def get_value_from_settings(cls, key): return cls.get_value_from_path(Config.get_settings_path(), key)
     @classmethod

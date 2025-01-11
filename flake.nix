@@ -46,5 +46,6 @@
           (mkNixosSystem hostFile "Secure-Boot")
         ]) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./modules/hosts))
       );
+      inherit inputs;
     };
 }

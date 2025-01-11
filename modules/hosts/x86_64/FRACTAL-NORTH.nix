@@ -14,8 +14,6 @@
   boot.kernelParams = [
     "amdgpu.dc=1"                   # AMD GPU
     "video=HDMI-A-0:3840x2160@120"  # Force 4k120
-    #                               #TODO: Ethernet during boot for SSH
-    #                               #TODO: i2c-0: Failed to register i2c client MSFT8000:00 at 0x4e (-16)
   ];
   boot.kernelModules = [ "kvm-amd" ];
   hardware.firmware = [
@@ -73,6 +71,7 @@
     spice-protocol
     win-virtio
     win-spice
+    mpv
   ];
   ##### Networking #####
   settings.networking.lanSubnet = "10.0.0.0/24";

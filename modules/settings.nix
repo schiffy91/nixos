@@ -3,8 +3,6 @@
     ##### Secrets ##### 
     settings.secrets.path = mkSetting str "/etc/nixos/secrets";
     settings.secrets.hashedPasswordFile = mkSetting str "hashed_password.txt";
-    settings.secrets.initrd.rsaKeyFile = mkSetting str "ssh_host_rsa_key";
-    settings.secrets.initrd.ed25519KeyFile = mkSetting str "ssh_host_ed25519_key";
     ##### Admin ##### 
     settings.user.admin.username = mkSetting str "alexanderschiffhauer"; # OVERRIDE (HERE)
     settings.user.admin.autoLoginEnabled = mkSetting bool false;
@@ -16,7 +14,7 @@
     settings.disk.label.nixos = mkSetting str "nixos";
     settings.disk.label.boot = mkSetting str "boot"; # /dev/disk-by-partlabel/disk-nixos-boot
     settings.disk.label.root = mkSetting str "root"; # /dev/disk-by-partlabel/disk-nixos-root
-    settings.disk.encryption.enabled = mkSetting bool true; #TODO Implement this
+    settings.disk.encryption.enabled = mkSetting bool true;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot"; #OVERRIDE (FLAKE)
