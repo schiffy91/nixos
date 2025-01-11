@@ -40,7 +40,7 @@ class Installer:
     @classmethod
     def get_installation_disk(cls): return Config.eval("config.settings.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Config.eval("settings.disk.encryption.plainTextPasswordFile")
+    def get_plain_text_password_path(cls): return Config.eval("config.settings.disk.encryption.plainTextPasswordFile")
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod
