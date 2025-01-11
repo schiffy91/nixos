@@ -1,7 +1,23 @@
-{ settings, pkgs, ... }: {
+{ settings, pkgs, lib, ... }: {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
-  xdg.configFile."breezerc".text = ''
+  programs.plasma = {
+    enable = true;
+  };
+
+  # Apply scaling settings for X11 and Wayland
+  environment.sessionVariables = lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
+      # Wayland
+      "QT_AUTO_SCREEN_SCALE_FACTOR" = "1";
+
+      # X11: Use QT scaling
+      "PLASMA_USE_QT_SCALING" = "1";
+      "QT_SCALE_FACTOR" = lib.mkIf (settings.desktop.environment == "plasma-x11") (toString settings.desktop.scalingFactor);
+      
+      # KWin XWayland (For X11 apps under Wayland, probably unneeded in X11 session)
+      "KWIN_X11_SCALE_FACTOR" = toString settings.desktop.scalingFactor; 
+    };
+  /*xdg.configFile."breezerc".text = ''
   [Common]
   OutlineCloseButton=true
   '';
@@ -94,5 +110,5 @@
         ];
       }
     ];
-  };
+  };*/
 }
