@@ -22,10 +22,19 @@
       print-manager
     ]);
     security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWalletEnabled;
+    ##### Scaling #####
+    environment.sessionVariables = lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
+        ##### Wayland #####
+        "QT_AUTO_SCREEN_SCALE_FACTOR" = "1";
+        ##### X11 #####
+        "PLASMA_USE_QT_SCALING" = "1";
+        "QT_SCALE_FACTOR" = lib.mkIf (config.settings.desktop.environment == "plasma-x11") (toString config.settings.desktop.scalingFactor);
+        ##### XWayland #####
+        "KWIN_X11_SCALE_FACTOR" = toString config.settings.desktop.scalingFactor; 
+      };
   })
   ##### Plasma X11 Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
-    environment.sessionVariables.PLASMA_USE_QT_SCALING = "1";
     services.xserver.enable = true;
     services.displayManager.defaultSession = "plasmax11";
     environment.systemPackages = with pkgs; [
