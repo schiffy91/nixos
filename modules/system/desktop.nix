@@ -4,7 +4,6 @@
     hardware.graphics.enable = true;
     services.displayManager.sddm.enable = lib.mkDefault true;
     xdg.portal.enable = true;
-    programs.dconf.enable = true;
   }
   ##### Shared Plasma Settings #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
