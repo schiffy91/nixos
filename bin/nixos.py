@@ -161,7 +161,7 @@ class Config:
         Shell.evals[cmd] = Shell.stdout(cls.sh.run(cmd)).replace("\"", "")
         return Shell.evals[cmd]
     @classmethod
-    def metadata(cls, pkg, flake="."): return json.loads(Shell.stdout(cls.sh.run(f"nix --extra-experimental-features \"nix-command flakes\" flake metadata {flake} {pkg} --json")))
+    def metadata(cls, pkg): return json.loads(Shell.stdout(cls.sh.run(f"nix --extra-experimental-features \"nix-command flakes\" flake metadata {pkg} --json -I {cls.sh.realpath(cls.get_nixos_path())}")))
     # Readwrite
     @classmethod
     def set_host_path(cls, host_path): return cls.set("host_path", host_path)
