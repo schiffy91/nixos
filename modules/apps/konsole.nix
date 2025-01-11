@@ -5,7 +5,7 @@
     [General]
     ConfigVersion=1
   '';
-  xdg.dataFile."konsole/alexanderschiffhauer.profile" = ''
+  xdg.dataFile."konsole/alexanderschiffhauer.profile".text = ''
     [Cursor Options]
     CursorShape=2
 
