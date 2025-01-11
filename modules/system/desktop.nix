@@ -5,7 +5,7 @@
     services.displayManager.sddm.enable = lib.mkDefault true;
     xdg.portal.enable = true;
     programs.dconf.enable =  true;
-    services.xserver.dpi = (96 * config.settings.desktop.scalingFactor);
+    services.xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
   }
   ##### Shared Plasma Settings #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
