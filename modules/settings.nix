@@ -12,9 +12,6 @@
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     settings.disk.swap.enable = mkSetting bool true;
-    settings.disk.swap.size = mkSetting str "";
-    settings.disk.swap.name = mkSetting str "/swap";
-    settings.disk.swap.mountPoint = mkSetting str "/.swapvol";
     ##### Disk: Labels #####
     settings.disk.label.nixos = mkSetting str "nixos";
     settings.disk.label.boot = mkSetting str "boot"; # /dev/disk-by-partlabel/disk-nixos-boot
@@ -46,6 +43,10 @@
       { name = "/var"; mountPoint = "/var"; }
       { name = "${settings.disk.immutability.persist.mountPoint}"; mountPoint = "${settings.disk.immutability.persist.mountPoint}"; }
     ];
+    ##### Disk: Swap #####
+    settings.disk.swap.name = mkSetting str "/swap";
+    settings.disk.swap.mountPoint = mkSetting str "/.swapvol";
+    settings.disk.swap.size = mkSetting str "";
     ##### Disk: Encryption #####
     settings.disk.encryption.enable = mkSetting bool true;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
