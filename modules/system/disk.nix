@@ -77,17 +77,15 @@ in {
   fileSystems."${config.settings.disk.subvolumes.var.mountpoint}".neededForBoot = true;
   environment.persistence."${config.settings.disk.subvolumes.root.mountpoint}" = {
     enable = config.settings.disk.immutability.enable;
-    directories = config.settings.disk.subvolumes.root.preserveDirectories;
+    directories = config.settings.disk.immutability.persist.directories;
     hideMounts = true;
   };
   environment.persistence."${config.settings.disk.subvolumes.home.mountpoint}" = {
     enable = config.settings.disk.immutability.enable;
-    directories = config.settings.disk.subvolumes.home.preserveDirectories;
     hideMounts = true;
   };
   environment.persistence."${config.settings.disk.subvolumes.var.mountpoint}" = {
     enable = config.settings.disk.immutability.enable;
-    directories = config.settings.disk.subvolumes.var.preserveDirectories;
     hideMounts = true;
   };
 }

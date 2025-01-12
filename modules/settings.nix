@@ -18,28 +18,24 @@
     settings.disk.label.root = mkSetting str "root"; # /dev/disk-by-partlabel/disk-nixos-root
     ##### Disk: Subvolumes & Immutability #####
     settings.disk.immutability.enable = mkSetting bool true;
+    settings.disk.immutability.persist.directories = mkSetting (listOf str) [
+      "/etc/nixos"
+      "/etc/NetworkManager/system-connections"
+      "/home/${config.settings.user.admin.username}/nixos"
+      "/var/log"
+      "/var/lib/bluetooth"
+      "/var/lib/nixos"
+      "/var/lib/systemd/coredump"
+    ];
     settings.disk.subvolumes.boot.mountpoint = mkSetting str "/boot";
     settings.disk.subvolumes.root.name = mkSetting str "/root";
     settings.disk.subvolumes.root.mountpoint = mkSetting str "/";
-    settings.disk.subvolumes.root.preserveDirectories = mkSetting (listOf str) [
-      "/nixos"
-      "/NetworkManager/system-connections"
-    ];
     settings.disk.subvolumes.home.name = mkSetting str "/home";
     settings.disk.subvolumes.home.mountpoint = mkSetting str "/home";
-    settings.disk.subvolumes.home.preserveDirectories = mkSetting (listOf str) [
-      "/${config.settings.user.admin.username}/nixos"
-    ];
     settings.disk.subvolumes.nix.name = mkSetting str "/nix";
     settings.disk.subvolumes.nix.mountpoint = mkSetting str "/nix";
     settings.disk.subvolumes.var.name = mkSetting str "/var";
     settings.disk.subvolumes.var.mountpoint = mkSetting str "/var";
-    settings.disk.subvolumes.var.preserveDirectories = mkSetting (listOf str) [
-      "/log"
-      "/lib/bluetooth"
-      "/lib/nixos"
-      "/lib/systemd/coredump"
-    ];
     settings.disk.subvolumes.swap.name = mkSetting str "/swap";
     settings.disk.subvolumes.swap.mountpoint = mkSetting str "/.swapvol";
     ##### Disk: Immutability #####
