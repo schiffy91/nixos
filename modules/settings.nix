@@ -22,8 +22,8 @@
     settings.disk.subvolumes.root.name = mkSetting str "/root";
     settings.disk.subvolumes.root.mountpoint = mkSetting str "/";
     settings.disk.subvolumes.root.preserveDirectories = mkSetting (listOf str) [
-      "nixos"
-      "NetworkManager/system-connections"
+      "/nixos"
+      "/NetworkManager/system-connections"
     ];
     settings.disk.subvolumes.home.name = mkSetting str "/home";
     settings.disk.subvolumes.home.mountpoint = mkSetting str "/home";
