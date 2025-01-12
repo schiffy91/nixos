@@ -154,8 +154,9 @@ class Config:
         cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
         Interactive.ask_to_reboot()
     @classmethod
-    def eval(cls, attribute):
-        cmd = f"nix --extra-experimental-features \"nix-command flakes\" eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
+    def eval(cls, attribute, json=False):
+        json_arg = "--json" if json else ""
+        cmd = f"nix --extra-experimental-features \"nix-command flakes\" eval {json_arg} {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
         if cmd in Shell.evals: return Shell.evals[cmd]
         output = Shell.stdout(cls.sh.run(cmd)).replace("\"", "")
         if output == "true": output = True
