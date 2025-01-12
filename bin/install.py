@@ -35,7 +35,7 @@ class Installer:
     @classmethod
     def get_username(cls): return Config.eval("config.settings.user.admin.username")
     @classmethod
-    def get_symlink_path(cls): return f"/home/{cls.get_username()}/nixos"
+    def get_symlink_path(cls): return f"/home/{cls.get_username()}/"
     @classmethod
     def get_installation_disk(cls): return Config.eval("config.settings.disk.device")
     @classmethod
