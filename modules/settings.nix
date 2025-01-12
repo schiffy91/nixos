@@ -36,6 +36,7 @@
         mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ];
         persistence = mkSetting bool false;
         persistDirectories = mkSetting (listOf str) [];
+        persistFiles = mkSetting (listOf str) [];
       };
     })) [
       {
