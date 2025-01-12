@@ -49,10 +49,7 @@ def main():
     Utils.require_root()
     Installer.parse_args()
     if Installer.sh.exists(Config.get_config_path()): Utils.print(f"Found {Config.get_config_path()}")
-    else: 
-        Utils.print("Not found")
-        Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
-    Utils.print("Resetting secrets")
+    else: Config.reset_config(Interactive.ask_for_host_path(), Config.get_standard_flake_target()) # Create config.json based on the selected host
     Config.create_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Create all secrets
     if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Format disk
     else: Installer.mount_disk() # Or just mount disk
