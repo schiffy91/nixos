@@ -28,6 +28,7 @@
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
     ];
+    settings.disk.immutability.persist.files = mkSetting (listOf str) [];
     ##### Disk: Subvolumes #####
     settings.disk.subvolumes = mkSetting (listOf (submodule {
       options = {
@@ -44,6 +45,7 @@
         mountPoint = "/";
         persistence = true;
         persistDirectories = config.settings.disk.immutability.persist.directories;
+        persistFiles = config.settings.disk.immutability.persist.files;
       }
       {
         name = "/home";

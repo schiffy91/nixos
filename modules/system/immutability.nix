@@ -5,7 +5,8 @@
     name = "${subvolume.mountPoint}";
     value = {
       enable = config.settings.disk.immutability.enable;
-      directories = subvolume.persistDirectories or [];
+      directories = subvolume.persistDirectories;
+      files = subvolume.persistFiles;
       hideMounts = true;
     };
   }) (builtins.filter (subvolume: subvolume.persistence) config.settings.disk.subvolumes));
