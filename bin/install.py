@@ -11,9 +11,7 @@ class Installer:
         cmd = f"nixos-install --flake {cls.get_mount_point()}{Config.get_nixos_path()}#{Config.get_host()}-{Config.get_target()} --root {cls.get_mount_point()} --no-channel-copy --show-trace --no-root-password --cores 0"
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
-        with cls.sh.chroot(cls.get_mount_point()):
-            Config.secure(cls.get_username(), sh=cls.sh)
-            cls.sh.symlink(Config.get_nixos_path(), cls.get_symlink_path())
+        with cls.sh.chroot(cls.get_mount_point()): Config.secure(cls.get_username(), sh=cls.sh)
         cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):
@@ -34,8 +32,6 @@ class Installer:
     def get_mount_point(cls): return "/mnt"
     @classmethod
     def get_username(cls): return Config.eval("config.settings.user.admin.username")
-    @classmethod
-    def get_symlink_path(cls): return f"/home/{cls.get_username()}/"
     @classmethod
     def get_installation_disk(cls): return Config.eval("config.settings.disk.device")
     @classmethod
