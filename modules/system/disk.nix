@@ -1,8 +1,8 @@
-{ inputs, config, ... }:
+{ inputs, config, lib, ... }:
 let 
-  ##### Optional Encryption Wrapper #####
-  mkRootVolume = diskEncryption: content: 
-    if diskEncryption then {
+  ##### Full Disk Encryption #####
+  mkRootVolume = content: 
+    if config.settings.disk.encryption.enable then {
       luks = {
         size = "100%";
         content = {
@@ -19,6 +19,35 @@ let
         content = content;
       };
     };
+  ##### Subvolumes #####
+  mkSubvolumes = subvolumes: 
+    lib.listToAttrs (map (subvolume: { 
+      name = subvolume.name; 
+      value = { 
+        mountpoint = subvolume.mountPoint; 
+        mountOptions = subvolume.mountOptions; 
+      }; 
+    }) subvolumes) // 
+    (if !config.settings.disk.swap.enable then { } else {
+      "${config.settings.disk.swap.name}" = { 
+        mountpoint = config.settings.disk.swap.mountPoint; 
+        swap.swapfile.size = config.settings.disk.swap.size; 
+      };
+    });
+  ##### Immutability
+  mkImmutable = subvolumes:
+    lib.listToAttrs (map (subvolume: {
+      name = "fileSystems.${subvolume.mountPoint}";
+      value.neededForBoot = true;
+    }) subvolumes) // 
+    lib.listToAttrs (map (subvolume: {
+      name = "environment.persistence.${subvolume.mountPoint}";
+      value = {
+        enable = config.settings.disk.immutability.enable;
+        directories = subvolume.persistDirectories or [];
+        hideMounts = true;
+      };
+    }) (builtins.filter (subvolume: subvolume.persistence) subvolumes));
 in {
   imports = [ inputs.disko.nixosModules.disko inputs.impermanence.nixosModules.impermanence ];
   ##### DISKO #####
@@ -40,52 +69,11 @@ in {
           };
         };
         ##### Root Partition (Optional Encryption) #####
-      } // mkRootVolume config.settings.disk.encryption.enable {
+    } // mkRootVolume {
         type = "btrfs";
         extraArgs = [ "-f" ];
-        subvolumes = {
-          "${config.settings.disk.subvolumes.root.name}" = {
-            mountpoint = config.settings.disk.subvolumes.root.mountpoint;
-            mountOptions = [ "compress=zstd" "noatime" ];
-          };
-          "${config.settings.disk.subvolumes.home.name}" = {
-            mountpoint = config.settings.disk.subvolumes.home.mountpoint;
-            mountOptions = [ "compress=zstd" "noatime" ];
-          };
-          "${config.settings.disk.subvolumes.nix.name}" = {
-            mountpoint = config.settings.disk.subvolumes.nix.mountpoint;
-            mountOptions = [ "compress=zstd" "noatime" ];
-          };
-          "${config.settings.disk.subvolumes.var.name}" = {
-            mountpoint = config.settings.disk.subvolumes.var.mountpoint;
-            mountOptions = [ "compress=zstd" "noatime" ];
-          };
-        } ##### Optional Swap Volume ##### 
-        // (if config.settings.disk.swapSize == "" then { } else {
-          "${config.settings.disk.subvolumes.swap.name}" = { 
-            mountpoint = config.settings.disk.subvolumes.swap.mountpoint; 
-            swap.swapfile.size = config.settings.disk.swapSize; 
-          };
-        });
+        subvolumes = mkSubvolumes config.settings.disk.subvolumes;
       };
     };
-  };
-  ##### IMMUTABILITY ######
-  fileSystems."${config.settings.disk.subvolumes.root.mountpoint}".neededForBoot = true;
-  fileSystems."${config.settings.disk.subvolumes.nix.mountpoint}".neededForBoot = true;
-  fileSystems."${config.settings.disk.subvolumes.home.mountpoint}".neededForBoot = true;
-  fileSystems."${config.settings.disk.subvolumes.var.mountpoint}".neededForBoot = true;
-  environment.persistence."${config.settings.disk.subvolumes.root.mountpoint}" = {
-    enable = config.settings.disk.immutability.enable;
-    directories = config.settings.disk.immutability.persist.directories;
-    hideMounts = true;
-  };
-  environment.persistence."${config.settings.disk.subvolumes.home.mountpoint}" = {
-    enable = config.settings.disk.immutability.enable;
-    hideMounts = true;
-  };
-  environment.persistence."${config.settings.disk.subvolumes.var.mountpoint}" = {
-    enable = config.settings.disk.immutability.enable;
-    hideMounts = true;
-  };
+  } // mkImmutable config.settings.disk.subvolumes;
 }

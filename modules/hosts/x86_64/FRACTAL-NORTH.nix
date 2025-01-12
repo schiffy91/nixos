@@ -3,7 +3,7 @@
   networking.hostName = "FRACTAL-NORTH";
   ##### Disk Information #####
   settings.disk.device = "/dev/nvme0n1";
-  settings.disk.swapSize = "65G";
+  settings.disk.swap.size = "65G";
   ##### Drivers #####
   services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
   ##### TPM2 #####
