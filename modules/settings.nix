@@ -22,8 +22,8 @@
     settings.disk.subvolumes.root.name = mkSetting str "/root";
     settings.disk.subvolumes.root.mountpoint = mkSetting str "/";
     settings.disk.subvolumes.root.preserveDirectories = mkSetting (listOf str) [
-      "/etc/nixos"
-      "/etc/NetworkManager/system-connections"
+      "nixos"
+      "NetworkManager/system-connections"
     ];
     settings.disk.subvolumes.home.name = mkSetting str "/home";
     settings.disk.subvolumes.home.mountpoint = mkSetting str "/home";
@@ -35,10 +35,10 @@
     settings.disk.subvolumes.var.name = mkSetting str "/var";
     settings.disk.subvolumes.var.mountpoint = mkSetting str "/var";
     settings.disk.subvolumes.var.preserveDirectories = mkSetting (listOf str) [
-      "log"
-      "lib/bluetooth"
-      "lib/nixos"
-      "lib/systemd/coredump"
+      "/log"
+      "/lib/bluetooth"
+      "/lib/nixos"
+      "/lib/systemd/coredump"
     ];
     settings.disk.subvolumes.swap.name = mkSetting str "/swap";
     settings.disk.subvolumes.swap.mountpoint = mkSetting str "/.swapvol";
