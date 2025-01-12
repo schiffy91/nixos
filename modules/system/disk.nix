@@ -73,6 +73,7 @@ in {
   ##### IMMUTABILITY ######
   fileSystems."${config.settings.disk.subvolumes.root.name}".neededForBoot = true;
   fileSystems."${config.settings.disk.subvolumes.nix.name}".neededForBoot = true;
+  fileSystems."${config.settings.disk.subvolumes.var.name}".neededForBoot = true;
   environment.persistence."${config.settings.disk.subvolumes.root.name}" = {
     enable = config.settings.disk.immutability.enable;
     directories = config.settings.disk.subvolumes.root.preserveDirectories;
