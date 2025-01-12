@@ -11,7 +11,6 @@
     settings.user.admin.authorizedKey = mkSetting str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
-    settings.disk.swap.enable = mkSetting bool true;
     ##### Disk: Labels #####
     settings.disk.label.nixos = mkSetting str "nixos";
     settings.disk.label.boot = mkSetting str "boot"; # /dev/disk-by-partlabel/disk-nixos-boot
@@ -44,6 +43,7 @@
       { name = "${settings.disk.immutability.persist.mountPoint}"; mountPoint = "${settings.disk.immutability.persist.mountPoint}"; }
     ];
     ##### Disk: Swap #####
+    settings.disk.swap.enable = mkSetting bool true;
     settings.disk.swap.name = mkSetting str "/swap";
     settings.disk.swap.mountPoint = mkSetting str "/.swapvol";
     settings.disk.swap.size = mkSetting str "";
