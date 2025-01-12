@@ -34,12 +34,14 @@ let
         swap.swapfile.size = config.settings.disk.swap.size; 
       };
     });
-  ##### Immutability
-  mkImmutable = subvolumes:
+  ##### Immutabile File System #####
+  mkBootRequirements = subvolumes:
     lib.listToAttrs (map (subvolume: {
       name = "fileSystems.${subvolume.mountPoint}";
       value.neededForBoot = true;
-    }) subvolumes) // 
+    }) subvolumes);
+  ##### Persistent Exceptions #####
+  mkPersistentEnvironment = subvolumes: 
     lib.listToAttrs (map (subvolume: {
       name = "environment.persistence.${subvolume.mountPoint}";
       value = {
@@ -48,9 +50,9 @@ let
         hideMounts = true;
       };
     }) (builtins.filter (subvolume: subvolume.persistence) subvolumes));
-in lib.mkMerge[{
+in {
   imports = [ inputs.disko.nixosModules.disko inputs.impermanence.nixosModules.impermanence ];
-  ##### DISKO #####
+  ##### Disko #####
   disko.devices.disk."${config.settings.disk.label.nixos}" = {
     type = "disk";
     device = config.settings.disk.device;
@@ -68,12 +70,15 @@ in lib.mkMerge[{
             mountOptions = [ "umask=0077" ];
           };
         };
-        ##### Root Partition (Optional Encryption) #####
-    } // mkRootVolume {
+      } // mkRootVolume { ##### Root Partition #####
         type = "btrfs";
         extraArgs = [ "-f" ];
         subvolumes = mkSubvolumes config.settings.disk.subvolumes;
       };
     };
   };
-} (mkImmutable config.settings.disk.subvolumes)]
+  ##### Immutabile File System #####
+  fileSystems = mkBootRequirements config.settings.disk.subvolumes;
+  ##### Persistent Exceptions #####
+  environment.persistence = mkPersistentEnvironment config.settings.disk.subvolumes;
+}
