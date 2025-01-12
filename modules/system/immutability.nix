@@ -1,6 +1,9 @@
 { inputs, config, lib, ... }: {
   imports = [ inputs.impermanence.nixosModules.impermanence ];
-  fileSystems = lib.listToAttrs (map (subvolume: { name = "${subvolume.mountPoint}"; value.neededForBoot = true; }) config.settings.disk.subvolumes);
+  fileSystems = lib.listToAttrs (map (subvolume: { 
+    name = "${subvolume.mountPoint}"; 
+    value.neededForBoot = true; 
+  }) config.settings.disk.subvolumes);
   environment.persistence = lib.listToAttrs (map (subvolume: {
     name = "${subvolume.mountPoint}";
     value = {
