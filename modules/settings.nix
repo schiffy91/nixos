@@ -20,7 +20,6 @@
     settings.disk.immutability.enable = mkSetting bool true;
     settings.disk.immutability.persist.directories = mkSetting (listOf str) [
       "/etc/nixos"
-      "/home/${config.settings.user.admin.username}/nixos"
       "/var/log"
       "/var/lib/bluetooth"
       "/var/lib/nixos"
