@@ -34,24 +34,8 @@ let
         swap.swapfile.size = config.settings.disk.swap.size; 
       };
     });
-  ##### Immutabile File System #####
-  mkBootRequirements = subvolumes:
-    lib.listToAttrs (map (subvolume: {
-      name = "fileSystems.${subvolume.mountPoint}";
-      value.neededForBoot = true;
-    }) subvolumes);
-  ##### Persistent Exceptions #####
-  mkPersistentEnvironment = subvolumes: 
-    lib.listToAttrs (map (subvolume: {
-      name = "environment.persistence.${subvolume.mountPoint}";
-      value = {
-        enable = config.settings.disk.immutability.enable;
-        directories = subvolume.persistDirectories or [];
-        hideMounts = true;
-      };
-    }) (builtins.filter (subvolume: subvolume.persistence) subvolumes));
 in {
-  imports = [ inputs.disko.nixosModules.disko inputs.impermanence.nixosModules.impermanence ];
+  imports = [ inputs.disko.nixosModules.disko ];
   ##### Disko #####
   disko.devices.disk."${config.settings.disk.label.nixos}" = {
     type = "disk";
@@ -77,8 +61,4 @@ in {
       };
     };
   };
-  ##### Immutabile File System #####
-  fileSystems = mkBootRequirements config.settings.disk.subvolumes;
-  ##### Persistent Exceptions #####
-  environment.persistence = mkPersistentEnvironment config.settings.disk.subvolumes;
 }
