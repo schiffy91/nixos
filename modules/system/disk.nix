@@ -71,21 +71,21 @@ in {
     };
   };
   ##### IMMUTABILITY ######
-  fileSystems."${config.settings.disk.subvolumes.root.name}".neededForBoot = true;
-  fileSystems."${config.settings.disk.subvolumes.nix.name}".neededForBoot = true;
-  fileSystems."${config.settings.disk.subvolumes.home.name}".neededForBoot = true;
-  fileSystems."${config.settings.disk.subvolumes.var.name}".neededForBoot = true;
-  environment.persistence."${config.settings.disk.subvolumes.root.name}" = {
+  fileSystems."${config.settings.disk.subvolumes.root.mountpoint}".neededForBoot = true;
+  fileSystems."${config.settings.disk.subvolumes.nix.mountpoint}".neededForBoot = true;
+  fileSystems."${config.settings.disk.subvolumes.home.mountpoint}".neededForBoot = true;
+  fileSystems."${config.settings.disk.subvolumes.var.mountpoint}".neededForBoot = true;
+  environment.persistence."${config.settings.disk.subvolumes.root.mountpoint}" = {
     enable = config.settings.disk.immutability.enable;
     directories = config.settings.disk.subvolumes.root.preserveDirectories;
     hideMounts = true;
   };
-  environment.persistence."${config.settings.disk.subvolumes.home.name}" = {
+  environment.persistence."${config.settings.disk.subvolumes.home.mountpoint}" = {
     enable = config.settings.disk.immutability.enable;
     directories = config.settings.disk.subvolumes.home.preserveDirectories;
     hideMounts = true;
   };
-  environment.persistence."${config.settings.disk.subvolumes.var.name}" = {
+  environment.persistence."${config.settings.disk.subvolumes.var.mountpoint}" = {
     enable = config.settings.disk.immutability.enable;
     directories = config.settings.disk.subvolumes.var.preserveDirectories;
     hideMounts = true;
