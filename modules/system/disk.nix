@@ -75,5 +75,5 @@ in {
         subvolumes = mkSubvolumes config.settings.disk.subvolumes;
       };
     };
-  } // mkImmutable config.settings.disk.subvolumes;
-}
+  };
+} // (mkImmutable config.settings.disk.subvolumes)
