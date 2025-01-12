@@ -252,7 +252,7 @@ class Utils:
             match Utils.parse_args(argv, "enable", "disable"):
                 case ["enable"]: on_enable()
                 case ["disable"]: on_disable()
-                case _: return Utils.abort(f"Usage: {inspect.stack()[1].filename} (enable | disable)")
+                case _: return Utils.abort(f"Usage: {cls.sh.basename(inspect.stack()[1].filename)} (enable | disable)")
         except BaseException as exception:
             Utils.log_error(f"Caught exception: {exception}.")
             if on_exception: on_exception()
