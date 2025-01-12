@@ -3,7 +3,7 @@
   networking.hostName = "VM";
   ##### Disk Information #####
   settings.disk.device = "/dev/vda";
-  settings.disk.encryption.enabled = false;
+  settings.disk.encryption.enable = false;
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Desktop #####
@@ -42,8 +42,8 @@
   };
   ##### Security #####
   security.sudo.wheelNeedsPassword = false;
-  settings.user.admin.autoLoginEnabled = true;
-  settings.user.admin.autoLockEnabled = false;
+  settings.user.admin.autoLogin.enable = true;
+  settings.user.admin.autoLock.enable = false;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     spice-vdagent

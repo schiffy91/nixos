@@ -12,9 +12,8 @@ class Installer:
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()):
-            cls.sh.mv(Config.get_nixos_path(), cls.get_final_nixos_path())
-            cls.sh.symlink(cls.get_final_nixos_path(), Config.get_nixos_path())
             Config.secure(cls.get_username(), sh=cls.sh)
+            cls.sh.symlink(Config.get_nixos_path(), cls.get_symlink_path())
         cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):
@@ -36,11 +35,11 @@ class Installer:
     @classmethod
     def get_username(cls): return Config.eval("config.settings.user.admin.username")
     @classmethod
-    def get_final_nixos_path(cls): return f"/home/{cls.get_username()}/nixos"
+    def get_symlink_path(cls): return f"/home/{cls.get_username()}/nixos"
     @classmethod
     def get_installation_disk(cls): return Config.eval("config.settings.disk.device")
     @classmethod
-    def get_plain_text_password_path(cls): return Config.eval("config.settings.disk.encryption.plainTextPasswordFile") if Config.eval("config.settings.disk.encryption.enabled") else None
+    def get_plain_text_password_path(cls): return Config.eval("config.settings.disk.encryption.plainTextPasswordFile") if Config.eval("config.settings.disk.encryption.enable") else None
     @classmethod
     def mount_disk(cls): return cls.run_disko("mount")
     @classmethod

@@ -21,7 +21,7 @@
       okular
       print-manager
     ]);
-    security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWalletEnabled;
+    security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;
     ##### Scaling #####
     environment.sessionVariables = lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
         ##### Wayland #####

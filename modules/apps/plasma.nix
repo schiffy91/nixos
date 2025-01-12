@@ -31,9 +31,9 @@
     session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
     ##### Auto Lock #####
     kscreenlocker = {
-      autoLock = if settings.user.admin.autoLockEnabled then true else false;
-      lockOnResume = if settings.user.admin.autoLockEnabled then true else false;
-      timeout = if settings.user.admin.autoLockEnabled then 10 else null;
+      autoLock = if settings.user.admin.autoLock.enable then true else false;
+      lockOnResume = if settings.user.admin.autoLock.enable then true else false;
+      timeout = if settings.user.admin.autoLock.enable then 10 else null;
     };
     ##### Config Files #####
     configFile = {

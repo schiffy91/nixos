@@ -10,7 +10,7 @@
   };
   ##### Auto Login #####
   services.displayManager.autoLogin = {
-    enable = config.settings.user.admin.autoLoginEnabled;
+    enable = config.settings.user.admin.autoLogin.enable;
     user = config.settings.user.admin.username;
   };
   ##### Home Manager #####
