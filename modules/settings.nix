@@ -21,12 +21,14 @@
     settings.disk.label.root = mkSetting str "root"; # /dev/disk-by-partlabel/disk-nixos-root
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool true;
+    settings.disk.immutability.persist.mountPoint = "/nvm";
     settings.disk.immutability.persist.directories = mkSetting (listOf str) [
       "/etc/nixos"
       "/var/log"
       "/var/lib/bluetooth"
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
+      "${config.settings.boot.pkiBundle}"
     ];
     settings.disk.immutability.persist.files = mkSetting (listOf str) [];
     ##### Disk: Subvolumes #####
@@ -35,33 +37,14 @@
         name = mkSetting str null;
         mountPoint = mkSetting str null;
         mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ];
-        persistence = mkSetting bool false;
-        persistDirectories = mkSetting (listOf str) [];
-        persistFiles = mkSetting (listOf str) [];
       };
-    })) [
-      {
-        name = "/root";
-        mountPoint = "/";
-        persistence = true;
-        persistDirectories = config.settings.disk.immutability.persist.directories;
-        persistFiles = config.settings.disk.immutability.persist.files;
-      }
-      {
-        name = "/home";
-        mountPoint = "/home";
-        persistence = true;
-      }
-      {
-        name = "/nix";
-        mountPoint = "/nix";
-        persistence = false;
-      }
-      {
-        name = "/var";
-        mountPoint = "/var";
-        persistence = true;
-      }
+    })) 
+    [
+      { name = "/root"; mountPoint = "/"; }
+      { name = "/home"; mountPoint = "/home"; }
+      { name = "/nix"; mountPoint = "/nix"; }
+      { name = "/var"; mountPoint = "/var"; }
+      { name = "${settings.disk.immutability.persist.mountPoint}"; mountPoint = "${settings.disk.immutability.persist.mountPoint}"; }
     ];
     ##### Disk: Encryption #####
     settings.disk.encryption.enable = mkSetting bool true;

@@ -1,21 +1,16 @@
 { inputs, config, lib, ... }: {
   imports = [ inputs.impermanence.nixosModules.impermanence ];
-  fileSystems = lib.listToAttrs (map (subvolume: { 
-    name = "${subvolume.mountPoint}"; 
-    value.neededForBoot = true; 
-  }) config.settings.disk.subvolumes);
-  environment.persistence = lib.listToAttrs (map (subvolume: {
-    name = "${subvolume.mountPoint}";
-    value = {
-      enable = config.settings.disk.immutability.enable;
-      directories = subvolume.persistDirectories;
-      files = subvolume.persistFiles;
-      hideMounts = true;
-    };
-  }) (builtins.filter (subvolume: subvolume.persistence) config.settings.disk.subvolumes));
+  fileSystems."${config.settings.disk.immutability.persist.mountPoint}".neededForBoot = true;
+  readOnlyNixStore = config.settings.disk.immutability.enable;
+  environment.persistence."${config.settings.disk.immutability.persist.mountPoint}" = {
+    enable = config.settings.disk.immutability.enable;
+    directories = config.settings.disk.immutability.persist.directories;
+    files = config.settings.disk.immutability.persist.files;
+    hideMounts = true;
+  };
   boot.initrd.postResumeCommands = lib.mkAfter ''
     mkdir /btrfs_tmp
-    mount ${config.settings.disk.device} /btrfs_tmp
+    mount /dev/disk/by-partlabel/disk-${config.settings.disk.label.nixos}-${config.settings.disk.label.root} /btrfs_tmp
     if [[ -e /btrfs_tmp/root ]]; then
         mkdir -p /btrfs_tmp/old_roots
         timestamp=$(date --date="@$(stat -c %Y /btrfs_tmp/root)" "+%Y-%m-%-d_%H:%M:%S")
