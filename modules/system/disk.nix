@@ -48,7 +48,7 @@ let
         hideMounts = true;
       };
     }) (builtins.filter (subvolume: subvolume.persistence) subvolumes));
-in {
+in lib.mkMerge[{
   imports = [ inputs.disko.nixosModules.disko inputs.impermanence.nixosModules.impermanence ];
   ##### DISKO #####
   disko.devices.disk."${config.settings.disk.label.nixos}" = {
@@ -76,4 +76,4 @@ in {
       };
     };
   };
-} // (mkImmutable config.settings.disk.subvolumes)
+} (mkImmutable config.settings.disk.subvolumes)]
