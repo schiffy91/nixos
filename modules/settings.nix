@@ -44,9 +44,9 @@
     ];
     ##### Disk: Swap #####
     settings.disk.swap.enable = mkSetting bool true;
+    settings.disk.swap.size = mkSetting str "";
     settings.disk.swap.name = mkSetting str "/swap";
     settings.disk.swap.mountPoint = mkSetting str "/.swapvol";
-    settings.disk.swap.size = mkSetting str "";
     ##### Disk: Encryption #####
     settings.disk.encryption.enable = mkSetting bool true;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
