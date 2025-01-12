@@ -50,21 +50,6 @@ def enable_secure_boot():
     Config.update(rebuild_file_system=True)
     require_signed_boot_loader()
 
-def main():
-    operation = None
-    match Utils.parse_args(sys.argv[1:], "enable", "disable"):
-        case ["enable"]:
-            operation = enable_secure_boot
-        case ["disable"]:
-            operation = disable_secure_boot
-        case _:
-            return Utils.abort("Usage: secure_boot.py (enable | disable)")
-    try:
-        operation()
-    except BaseException as exception:
-        Utils.log_error(f"Caught exception: {exception}.")
-        Utils.log_error("Disabling Secure Boot.")
-        disable_secure_boot()
-        raise
+def main(): Utils.toggle(sys.argv, on_enable=enable_secure_boot, on_disable=disable_secure_boot, on_exception=disable_secure_boot)
 
 if __name__ == "__main__": main()

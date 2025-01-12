@@ -26,20 +26,6 @@ def disable_tpm2():
     if not tpm2_exists(): return Utils.abort("TPM2 does not exist.")
     if sh.run(f"systemd-cryptenroll {Config.get_root_disk_path()} --wipe-slot=tpm2", capture_output=False, check=False).returncode != 0: Utils.abort("Failed removing TPM2 enrollment")
 
-def main():
-    operation = None
-    match Utils.parse_args(sys.argv[1:], "enable", "disable"):
-        case ["enable"]:
-            operation = enable_tpm2
-        case ["disable"]:
-            operation = disable_tpm2
-        case _:
-            return Utils.abort("Usage: tpm2.py (enable | disable)")
-    try:
-        operation()
-    except BaseException as exception:
-        Utils.log_error(f"Caught exception: {exception}.")
-        raise
+def main(): Utils.toggle(sys.argv, on_enable=enable_tpm2, on_disable=disable_tpm2, on_exception=disable_tpm2)
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

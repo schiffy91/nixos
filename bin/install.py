@@ -24,10 +24,10 @@ class Installer:
     # Helpers
     @classmethod
     def parse_args(cls):
-        args = sys.argv[1:]
-        vscodium_cmd = "nix --extra-experimental-features \"nix-command flakes\" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
+        args = Utils.parse_args(sys.argv[1:], "--collect-garbage", "--debug")
         if "--collect-garbage" in args: cls.sh.run("nix-collect-garbage -d")
         if "--debug" in args:
+            vscodium_cmd = "nix --extra-experimental-features \"nix-command flakes\" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
             cls.sh.run(f"{vscodium_cmd} --install-extension ms-python.python")
             cls.sh.run(f"{vscodium_cmd} {Config.get_nixos_path()}")
             return Utils.abort("Please continue in VSCodium")

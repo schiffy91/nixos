@@ -1,4 +1,4 @@
-{ lib, ... }: let mkSetting = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; in {
+{ lib, config, ... }: let mkSetting = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; in {
   options = with lib.types; {
     ##### Secrets ##### 
     settings.secrets.path = mkSetting str "/etc/nixos/secrets";
@@ -31,5 +31,15 @@
     settings.networking.ports.udp = mkSetting (listOf int) [];
     settings.networking.ports.tcp = mkSetting (listOf int) [];
     settings.networking.identityAgent = mkSetting str "~/.1password/agent.sock";
+    ##### Impermenance #####
+    settings.immutability.enabled = mkSetting bool true;
+    settings.immutability.persist.directories = mkSetting (listOf str) [
+      "/home/${settings.user.admin.username}/nixos"
+      "/etc/nixos"
+      "/var/log"
+      "/var/lib/bluetooth"
+      "/var/lib/nixos"
+      "/var/lib/systemd/coredump"
+    ];
   };
 }

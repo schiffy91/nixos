@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import sys, subprocess, json, getpass, glob, contextlib
+import sys, subprocess, json, getpass, glob, contextlib, inspect
 
 class Shell:
     evals = {} # Cache nix eval since it's slow
@@ -247,11 +247,18 @@ class Utils:
     RED = "\033[31m"
     RESET = "\033[0m"
     @classmethod
-    def parse_args(cls, argv, *allowed_args):
-        if not argv: return cls.abort("No arguments provided")
-        matched_args = [arg for arg in argv if arg in set(allowed_args)]
-        if not matched_args: return cls.abort("No valid arguments provided")
-        return matched_args
+    def toggle(cls, argv, on_enable = None, on_disable = None, on_exception = None):
+        try:
+            match Utils.parse_args(argv, "enable", "disable"):
+                case ["enable"]: on_enable()
+                case ["disable"]: on_disable()
+                case _: return Utils.abort(f"Usage: {inspect.stack()[1].filename} (enable | disable)")
+        except BaseException as exception:
+            Utils.log_error(f"Caught exception: {exception}.")
+            if on_exception: on_exception()
+            raise
+    @classmethod
+    def parse_args(cls, argv, *accepted_args): return [] if not argv or not accepted_args else [arg for arg in argv + [] if arg in set(accepted_args)]
     @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod

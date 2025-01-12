@@ -3,6 +3,7 @@
   ##### Shared Boot Settings #####
   boot = {
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+    readOnlyNixStore = true;
     loader = {
       timeout = 5;
       efi = {
