@@ -22,53 +22,51 @@ let
 in {
   imports = [ inputs.disko.nixosModules.disko inputs.impermanence.nixosModules.impermanence ];
   ##### DISKO #####
-  disko.devices = {
-    disk."${config.settings.disk.label.nixos}" = {
-      type = "disk";
-      device = config.settings.disk.device;
-      content = {
-        type = "gpt";
-        partitions = {
-          ##### Boot Partition #####
-          "${config.settings.disk.label.boot}" = {
-            size = "512M";
-            type = "EF00";
-            content = {
-              type = "filesystem";
-              format = "vfat";
-              mountpoint = "/boot";
-              mountOptions = [ "umask=0077" ];
-            };
+  disko.devices.disk."${config.settings.disk.label.nixos}" = {
+    type = "disk";
+    device = config.settings.disk.device;
+    content = {
+      type = "gpt";
+      partitions = {
+        ##### Boot Partition #####
+        "${config.settings.disk.label.boot}" = {
+          size = "512M";
+          type = "EF00";
+          content = {
+            type = "filesystem";
+            format = "vfat";
+            mountpoint = "/boot";
+            mountOptions = [ "umask=0077" ];
           };
-          ##### Root Partition (Optional Encryption) #####
-        } // mkRootVolume config.settings.disk.encryption.enable {
-          type = "btrfs";
-          extraArgs = [ "-f" ];
-          subvolumes = {
-            "${config.settings.disk.subvolumes.root.name}" = {
-              mountpoint = config.settings.disk.subvolumes.root.mountpoint;
-              mountOptions = [ "compress=zstd" "noatime" ];
-            };
-            "${config.settings.disk.subvolumes.home.name}" = {
-              mountpoint = config.settings.disk.subvolumes.home.mountpoint;
-              mountOptions = [ "compress=zstd" "noatime" ];
-            };
-            "${config.settings.disk.subvolumes.nix.name}" = {
-              mountpoint = config.settings.disk.subvolumes.nix.mountpoint;
-              mountOptions = [ "compress=zstd" "noatime" ];
-            };
-            "${config.settings.disk.subvolumes.var.name}" = {
-              mountpoint = config.settings.disk.subvolumes.var.mountpoint;
-              mountOptions = [ "compress=zstd" "noatime" ];
-            };
-          } ##### Optional Swap Volume ##### 
-          // (if config.settings.disk.swapSize == "" then { } else {
-            "${config.settings.disk.subvolumes.swap.name}" = { 
-              mountpoint = config.settings.disk.subvolumes.swap.mountpoint; 
-              swap.swapfile.size = config.settings.disk.swapSize; 
-            };
-          });
         };
+        ##### Root Partition (Optional Encryption) #####
+      } // mkRootVolume config.settings.disk.encryption.enable {
+        type = "btrfs";
+        extraArgs = [ "-f" ];
+        subvolumes = {
+          "${config.settings.disk.subvolumes.root.name}" = {
+            mountpoint = config.settings.disk.subvolumes.root.mountpoint;
+            mountOptions = [ "compress=zstd" "noatime" ];
+          };
+          "${config.settings.disk.subvolumes.home.name}" = {
+            mountpoint = config.settings.disk.subvolumes.home.mountpoint;
+            mountOptions = [ "compress=zstd" "noatime" ];
+          };
+          "${config.settings.disk.subvolumes.nix.name}" = {
+            mountpoint = config.settings.disk.subvolumes.nix.mountpoint;
+            mountOptions = [ "compress=zstd" "noatime" ];
+          };
+          "${config.settings.disk.subvolumes.var.name}" = {
+            mountpoint = config.settings.disk.subvolumes.var.mountpoint;
+            mountOptions = [ "compress=zstd" "noatime" ];
+          };
+        } ##### Optional Swap Volume ##### 
+        // (if config.settings.disk.swapSize == "" then { } else {
+          "${config.settings.disk.subvolumes.swap.name}" = { 
+            mountpoint = config.settings.disk.subvolumes.swap.mountpoint; 
+            swap.swapfile.size = config.settings.disk.swapSize; 
+          };
+        });
       };
     };
   };
