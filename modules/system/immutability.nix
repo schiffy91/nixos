@@ -1,6 +1,3 @@
-{ inputs, config, lib, ... }: 
-lib.mkMerge [
-  lib.mkIf config.settings.immutability.enabled {
-    boot.readOnlyNixStore = true;
-  }
-]
+{ inputs, config, lib, ... }: {
+  boot.readOnlyNixStore = config.settings.immutability.enabled;
+}
