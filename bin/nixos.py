@@ -156,7 +156,7 @@ class Config:
         Interactive.ask_to_reboot()
     @classmethod
     def eval(cls, attribute):
-        cmd = f"nix --extra-experimental-features \"nix-command flakes\" eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
+        cmd = f"nix --extra-experimental-features \"nix-command flakes\" eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_evaluation_flake_target()}.{attribute}"
         if cmd in Shell.evals: return Shell.evals[cmd]
         output = Shell.stdout(cls.sh.run(cmd)).replace("\"", "")
         if output == "true": output = True
@@ -177,6 +177,8 @@ class Config:
     @classmethod
     def get_target(cls): return cls.get("target")
     # Readonly
+    @classmethod
+    def get_evaluation_flake_target(cls): return "Evaluation"
     @classmethod
     def get_standard_flake_target(cls): return "Standard-Boot"
     @classmethod
