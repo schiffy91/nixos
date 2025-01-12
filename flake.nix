@@ -18,12 +18,9 @@
           system = "${baseNameOf (dirOf hostFile)}-linux"; 
           targetModules = (
             if lib.hasInfix "Boot" target then 
-              [{ settings.boot.method = lib.mkForce target; }] ++ 
-              lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)
-            else if lib.hasInfix "Disk" target then
+              [{ settings.boot.method = lib.mkForce target; }] ++ lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)
+            else
               [ ./modules/system/disk.nix ]
-            else 
-              [ ]
           ); 
           unstable-pkgs = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
         in {
@@ -45,7 +42,6 @@
     in { 
       nixosConfigurations = lib.listToAttrs (
         lib.concatMap (hostFile: [ 
-          (mkNixosSystem hostFile "Settings")
           (mkNixosSystem hostFile "Disk-Operation")
           (mkNixosSystem hostFile "Standard-Boot")
           (mkNixosSystem hostFile "Secure-Boot")
