@@ -12,12 +12,52 @@
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     ##### Disk: Labels #####
-    settings.disk.label.nixos = mkSetting str "nixos";
-    settings.disk.label.boot = mkSetting str "boot"; # /dev/disk-by-partlabel/disk-nixos-boot
-    settings.disk.label.root = mkSetting str "root"; # /dev/disk-by-partlabel/disk-nixos-root
+    settings.disk.label.main = mkSetting str "main";
+    settings.disk.label.boot = mkSetting str "boot";
+    settings.disk.label.root = mkSetting str "root";
+    settings.disk.by.partlabel.boot = mkSetting "/dev/disk-by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
+    settings.disk.by.partlabel.root = mkSetting "/dev/disk-by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
+    ##### Disk: Subvolumes #####
+    settings.disk.subvolumes.root.name = mkSetting str "root";
+    settings.disk.subvolumes.root.mountPoint = mkSetting str "/";
+    settings.disk.subvolumes.home.name = mkSetting str "home";
+    settings.disk.subvolumes.home.mountPoint = mkSetting str "/home";
+    settings.disk.subvolumes.nix.name = mkSetting str "nix";
+    settings.disk.subvolumes.nix.mountPoint = mkSetting str "/nix";
+    settings.disk.subvolumes.var.name = mkSetting str "var";
+    settings.disk.subvolumes.var.mountPoint = mkSetting str "/var";
+    settings.disk.subvolumes.persist.name = mkSetting str "nvm";
+    settings.disk.subvolumes.persist.mountPoint = mkSetting str "/nvm";
+    settings.disk.subvolumes.swap.name = mkSetting str "swap";
+    settings.disk.subvolumes.swap.mountPoint = mkSetting str "/swap";
+    settings.disk.subvolumes.metadata = mkSetting (listOf (submodule {
+      options = {
+        name = mkSetting str null;
+        mountPoint = mkSetting str null;
+        mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ];
+        neededForBoot = false;
+      };
+    })) 
+    [
+      { name = config.settings.disk.subvolumes.root.name; mountPoint = config.settings.disk.subvolumes.root.mountPoint; neededForBoot = true; }
+      { name = config.settings.disk.subvolumes.home.name; mountPoint = config.settings.disk.subvolumes.home.mountPoint; neededForBoot = true; }
+      { name = config.settings.disk.subvolumes.nix.name; mountPoint = config.settings.disk.subvolumes.nix.mountPoint; }
+      { name = config.settings.disk.subvolumes.var.name; mountPoint = config.settings.disk.subvolumes.var.mountPoint; neededForBoot = true; }
+      { name = config.settings.disk.subvolumes.persist.mountPoint; mountPoint = config.settings.disk.subvolumes.persist.mountPoint; neededForBoot = true; }
+      { name = config.settings.disk.subvolumes.swap.name; mountPoint = config.settings.disk.subvolumes.swap.mountPoint; }
+    ];
+    settings.disk.subvolumes.neededForBoot = mkSetting (listOf str) (
+      lib.concatMapStrings ((volume: "${volume.name} ") 
+        (lib.filter: (volume volume.neededForBoot) config.settings.disk.subvolumes))
+    );
+    ##### Disk: Swap #####
+    settings.disk.swap.enable = mkSetting bool true;
+    settings.disk.swap.size = mkSetting str "";
+    ##### Disk: Encryption #####
+    settings.disk.encryption.enable = mkSetting bool true;
+    settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool true;
-    settings.disk.immutability.persist.mountPoint = mkSetting str "/nvm";
     settings.disk.immutability.persist.directories = mkSetting (listOf str) [
       "/etc/nixos"
       "/var/log"
@@ -27,29 +67,47 @@
       "${config.settings.boot.pkiBundle}"
     ];
     settings.disk.immutability.persist.files = mkSetting (listOf str) [];
-    ##### Disk: Subvolumes #####
-    settings.disk.subvolumes = mkSetting (listOf (submodule {
-      options = {
-        name = mkSetting str null;
-        mountPoint = mkSetting str null;
-        mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ];
-      };
-    })) 
-    [
-      { name = "/root"; mountPoint = "/"; }
-      { name = "/home"; mountPoint = "/home"; }
-      { name = "/nix"; mountPoint = "/nix"; }
-      { name = "/var"; mountPoint = "/var"; }
-      { name = "${config.settings.disk.immutability.persist.mountPoint}"; mountPoint = "${config.settings.disk.immutability.persist.mountPoint}"; }
-    ];
-    ##### Disk: Swap #####
-    settings.disk.swap.enable = mkSetting bool true;
-    settings.disk.swap.size = mkSetting str "";
-    settings.disk.swap.name = mkSetting str "/swap";
-    settings.disk.swap.mountPoint = mkSetting str "/.swapvol";
-    ##### Disk: Encryption #####
-    settings.disk.encryption.enable = mkSetting bool true;
-    settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
+    settings.disk.immutability.persist.snapshotsPath = mkSetting str config.settings.disk.subvolumes.persist.mountPoint + "/snapshots";
+    settings.disk.immutability.persist.scripts.postCreateHook = mkSetting str ''
+    (
+      btrfs_mnt=$(mktemp -d)
+      mount /dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
+      trap "umount ''${btrfs_mnt}; rm -rf ''${btrfs_mnt}" EXIT
+
+      for volume in ${settings.disk.subvolumes.neededForBoot}; do
+        mkdir -p "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}" 
+        btrfs subvolume snapshot -r "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new"
+      done
+    )
+    '';
+    settings.disk.immutability.persist.scripts.postDeviceHook = mkSetting str ''
+    (
+      btrfs_mnt=$(mktemp -d)
+      mount /dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
+      trap "umount ''${btrfs_mnt}; rm -rf ''${btrfs_mnt}" EXIT
+
+      delete_subvolume_recursively() {
+        IFS=$'\n'
+        for volume in $(btrfs subvolume list -o "''${1}" | cut -d ' ' -f 9-); do
+          delete_subvolume_recursively "''${btrfs_mnt}/''${volume}"
+        done
+        btrfs subvolume delete "''${1}"
+      }
+
+      for volume in ${settings.disk.subvolumes.neededForBoot};; do
+        if [[ -e "''${btrfs_mnt}/''${volume}" ]] && [[ -e "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" ]]; then
+            timestamp=$(date --date="@$(stat -c %Y ''${btrfs_mnt}/''${volume})" "+%Y-%m-%-d_%H:%M:%S")
+            mv "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/''${timestamp}"
+        fi
+
+        btrfs subvolume snapshot "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" "''${btrfs_mnt}/''${volume}"
+
+        for snapshot in $(find "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/" -maxdepth 1 -mtime +30 -not -name new); do
+          delete_subvolume_recursively "''${snapshot}"
+        done
+      done
+    )
+    '';
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";

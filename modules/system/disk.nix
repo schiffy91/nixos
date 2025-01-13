@@ -27,17 +27,17 @@ let
         mountpoint = subvolume.mountPoint; 
         mountOptions = subvolume.mountOptions; 
       }; 
-    }) subvolumes) // 
+    }) (lib.filter (volume: config.settings.disk.subvolumes.swap.name != volume.name) subvolumes)) // 
     (if !config.settings.disk.swap.enable then { } else {
-      "${config.settings.disk.swap.name}" = { 
-        mountpoint = config.settings.disk.swap.mountPoint; 
+      "${config.settings.disk.subvolumes.swap.name}" = { 
+        mountpoint = config.settings.disk.subvolumes.swap.mountPoint; 
         swap.swapfile.size = config.settings.disk.swap.size; 
       };
     });
 in {
   imports = [ inputs.disko.nixosModules.disko ];
   ##### Disko #####
-  disko.devices.disk."${config.settings.disk.label.nixos}" = {
+  disko.devices.disk."${config.settings.disk.label.main}" = {
     type = "disk";
     device = config.settings.disk.device;
     content = {
@@ -57,7 +57,8 @@ in {
       } // mkRootVolume { ##### Root Partition #####
         type = "btrfs";
         extraArgs = [ "-f" ];
-        subvolumes = mkSubvolumes config.settings.disk.subvolumes;
+        subvolumes = mkSubvolumes config.settings.disk.subvolumes.metadata;
+        postCreateHook = config.settings.disk.immutability.persist.scripts.postCreateHook
       };
     };
   };

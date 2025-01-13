@@ -185,9 +185,9 @@ class Config:
     @classmethod
     def get_disk_label(cls, label): return cls.eval(f"config.settings.disk.label.{label}")
     @classmethod
-    def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('nixos')}-{cls.get_disk_label('boot')}"
+    def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('main')}-{cls.get_disk_label('boot')}"
     @classmethod
-    def get_root_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('nixos')}-{cls.get_disk_label('root')}"
+    def get_root_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('main')}-{cls.get_disk_label('root')}"
     @classmethod
     def get_tpm_device(cls): return cls.eval("config.settings.tpm.device")
     @classmethod
