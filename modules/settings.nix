@@ -57,7 +57,7 @@
     settings.disk.encryption.enable = mkSetting bool true;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Disk: Immutability #####
-    settings.disk.immutability.enable = mkSetting bool true;
+    settings.disk.immutability.enable = mkSetting bool false;
     settings.disk.immutability.persist.directories = mkSetting (listOf str) [
       "/etc/nixos"
       "/var/log"
