@@ -12,7 +12,7 @@ class Installer:
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()): Config.secure(cls.get_username(), sh=cls.sh)
-        cls.sh.rm(tmp)
+        #cls.sh.rm(tmp) #TODO Remove this after fixing bugs
     @classmethod
     def run_disko(cls, mode, args=""):
         command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{Config.metadata('disko')['locked']['rev']} --verbose -- " \
