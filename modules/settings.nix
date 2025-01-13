@@ -66,7 +66,9 @@
       "/var/lib/systemd/coredump"
       "${config.settings.boot.pkiBundle}"
     ];
-    settings.disk.immutability.persist.files = mkSetting (listOf str) [];
+    settings.disk.immutability.persist.files = mkSetting (listOf str) [
+      "/etc/machine-id"
+    ];
     settings.disk.immutability.persist.snapshotsPath = mkSetting str "${config.settings.disk.subvolumes.persist.mountPoint}/snapshots";
     settings.disk.immutability.persist.scripts.postCreateHook = mkSetting str ''
     (
