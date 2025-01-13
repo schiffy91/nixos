@@ -43,7 +43,7 @@
       { name = config.settings.disk.subvolumes.home.name; mountPoint = config.settings.disk.subvolumes.home.mountPoint; neededForBoot = true; }
       { name = config.settings.disk.subvolumes.nix.name; mountPoint = config.settings.disk.subvolumes.nix.mountPoint; }
       { name = config.settings.disk.subvolumes.var.name; mountPoint = config.settings.disk.subvolumes.var.mountPoint; neededForBoot = true; }
-      { name = config.settings.disk.subvolumes.persist.mountPoint; mountPoint = config.settings.disk.subvolumes.persist.mountPoint; neededForBoot = true; }
+      { name = config.settings.disk.subvolumes.persist.name; mountPoint = config.settings.disk.subvolumes.persist.mountPoint; neededForBoot = true; }
       { name = config.settings.disk.subvolumes.swap.name; mountPoint = config.settings.disk.subvolumes.swap.mountPoint; }
     ];
     settings.disk.subvolumes.neededForBoot = mkSetting str (
