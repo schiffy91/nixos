@@ -70,18 +70,6 @@
       "/etc/machine-id"
     ];
     settings.disk.immutability.persist.snapshotsPath = mkSetting str "${config.settings.disk.subvolumes.persist.mountPoint}/snapshots";
-    settings.disk.immutability.persist.scripts.postCreateHook = mkSetting str ''
-    (
-      btrfs_mnt=$(mktemp -d)
-      mount ${config.settings.disk.by.partlabel.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.root.mountPoint}
-      trap "umount ''${btrfs_mnt}; rm -rf ''${btrfs_mnt}" EXIT
-
-      for volume in ${config.settings.disk.subvolumes.neededForBoot}; do
-        mkdir -p "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}" 
-        btrfs subvolume snapshot -r "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}/new"
-      done
-    )
-    '';
     settings.disk.immutability.persist.scripts.postDeviceHook = mkSetting str ''
     (
       btrfs_mnt=$(mktemp -d)

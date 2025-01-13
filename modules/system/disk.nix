@@ -58,7 +58,6 @@ in {
         type = "btrfs";
         extraArgs = [ "-f" ];
         subvolumes = mkSubvolumes config.settings.disk.subvolumes.metadata;
-        postCreateHook = config.settings.disk.immutability.persist.scripts.postCreateHook;
       };
     };
   };

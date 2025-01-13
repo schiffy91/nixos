@@ -209,6 +209,51 @@ class Config:
     @classmethod
     def get_nixos_path(cls): return "/etc/nixos"
 
+class Snapshot:
+    sh = Shell()
+    MOUNT_POINT = "/mnt"
+    BTRFS_MNT = f"{MOUNT_POINT}/btrfs_root"
+    @classmethod
+    def set_mount(cls, mount_point): cls.MOUNT_POINT = mount_point
+    @classmethod
+    def get_mount(cls): return cls.MOUNT_POINT
+    @classmethod
+    def get_btrfs_mount(cls): return cls.BTRFS_MNT
+    @classmethod
+    def mount_root(cls):
+        cls.sh.mkdir(cls.BTRFS_MNT)
+        cls.sh.run(f"mount -v {Config.get_root_disk_path()} {cls.BTRFS_MNT} -o subvol={Config.eval('config.settings.disk.subvolumes.root.name')}")
+    @classmethod
+    def umount_root(cls):
+        cls.sh.run(f"umount {cls.BTRFS_MNT}")
+        cls.sh.rm(cls.BTRFS_MNT)
+    @classmethod
+    def delete_recursively(cls, path):
+        for subvolume in cls.sh.run(f"btrfs subvolume list -o {path}").stdout.splitlines():
+            subvolume_path = f"{cls.BTRFS_MNT}/{subvolume.split()[-1]}"
+            cls.delete_recursively(subvolume_path)
+        cls.sh.run(f"btrfs subvolume delete {path}")
+    @classmethod
+    def create_initial_snapshots(cls):
+        cls.mount_root()
+        for volume in Config.eval("config.settings.disk.subvolumes.neededForBoot").split():
+            snapshot_dir = f"{cls.MOUNT_POINT}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}/{volume}"
+            cls.sh.mkdir(snapshot_dir)
+            cls.sh.run(f"btrfs subvolume snapshot -r {cls.BTRFS_MNT}/{volume} {snapshot_dir}/new")
+        cls.umount_root()
+    @classmethod
+    def manage_snapshots(cls):
+        cls.mount_root()
+        for volume in Config.eval("config.settings.disk.subvolumes.neededForBoot").split():
+            volume_path = f"{cls.BTRFS_MNT}/{volume}"
+            snapshots_path = f"{cls.BTRFS_MNT}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}/{volume}"
+            new_snapshot = f"{snapshots_path}/new"
+            timestamped_snapshot = snapshots_path + "/" + Shell.stdout(cls.sh.run("date --date='@$(stat -c %Y '" + volume_path + "')' '+%Y-%m-%d_%H:%M:%S'"))
+            if cls.sh.exists(volume_path, new_snapshot): cls.sh.run(f"mv {volume_path} {timestamped_snapshot}")
+            cls.sh.run(f"btrfs subvolume snapshot {new_snapshot} {volume_path}")
+            for snapshot in cls.sh.run(f"find {snapshots_path} -maxdepth 1 -mtime +30 -not -name new").stdout.splitlines(): cls.delete_recursively(snapshot)
+        cls.umount_root()
+
 class Interactive:
     sh = Shell()
     @classmethod
