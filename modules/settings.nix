@@ -17,7 +17,7 @@
     settings.disk.label.root = mkSetting str "root"; # /dev/disk-by-partlabel/disk-nixos-root
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool true;
-    settings.disk.immutability.persist.mountPoint = "/nvm";
+    settings.disk.immutability.persist.mountPoint = mkSetting str "/nvm";
     settings.disk.immutability.persist.directories = mkSetting (listOf str) [
       "/etc/nixos"
       "/var/log"
