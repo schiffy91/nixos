@@ -40,7 +40,7 @@
       { name = "/home"; mountPoint = "/home"; }
       { name = "/nix"; mountPoint = "/nix"; }
       { name = "/var"; mountPoint = "/var"; }
-      { name = "${settings.disk.immutability.persist.mountPoint}"; mountPoint = "${settings.disk.immutability.persist.mountPoint}"; }
+      { name = "${config.settings.disk.immutability.persist.mountPoint}"; mountPoint = "${config.settings.disk.immutability.persist.mountPoint}"; }
     ];
     ##### Disk: Swap #####
     settings.disk.swap.enable = mkSetting bool true;
