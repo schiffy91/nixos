@@ -74,9 +74,9 @@
       mount /dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
       trap "umount ''${btrfs_mnt}; rm -rf ''${btrfs_mnt}" EXIT
 
-      for volume in ${settings.disk.subvolumes.neededForBoot}; do
-        mkdir -p "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}" 
-        btrfs subvolume snapshot -r "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new"
+      for volume in ${config.settings.disk.subvolumes.neededForBoot}; do
+        mkdir -p "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}" 
+        btrfs subvolume snapshot -r "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}/new"
       done
     )
     '';
@@ -94,15 +94,15 @@
         btrfs subvolume delete "''${1}"
       }
 
-      for volume in ${settings.disk.subvolumes.neededForBoot}; do
-        if [[ -e "''${btrfs_mnt}/''${volume}" ]] && [[ -e "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" ]]; then
+      for volume in ${config.settings.disk.subvolumes.neededForBoot}; do
+        if [[ -e "''${btrfs_mnt}/''${volume}" ]] && [[ -e "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" ]]; then
             timestamp=$(date --date="@$(stat -c %Y ''${btrfs_mnt}/''${volume})" "+%Y-%m-%-d_%H:%M:%S")
-            mv "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/''${timestamp}"
+            mv "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}/''${timestamp}"
         fi
 
-        btrfs subvolume snapshot "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" "''${btrfs_mnt}/''${volume}"
+        btrfs subvolume snapshot "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" "''${btrfs_mnt}/''${volume}"
 
-        for snapshot in $(find "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/" -maxdepth 1 -mtime +30 -not -name new); do
+        for snapshot in $(find "''${btrfs_mnt}${config.settings.disk.immutability.persist.snapshotsPath}/''${volume}/" -maxdepth 1 -mtime +30 -not -name new); do
           delete_subvolume_recursively "''${snapshot}"
         done
       done
