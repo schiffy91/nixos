@@ -15,8 +15,8 @@
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "boot";
     settings.disk.label.root = mkSetting str "root";
-    settings.disk.by.partlabel.boot = mkSetting "/dev/disk-by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
-    settings.disk.by.partlabel.root = mkSetting "/dev/disk-by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
+    settings.disk.by.partlabel.boot = mkSetting "/dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
+    settings.disk.by.partlabel.root = mkSetting "/dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
     ##### Disk: Subvolumes #####
     settings.disk.subvolumes.root.name = mkSetting str "root";
     settings.disk.subvolumes.root.mountPoint = mkSetting str "/";
@@ -47,8 +47,8 @@
       { name = config.settings.disk.subvolumes.swap.name; mountPoint = config.settings.disk.subvolumes.swap.mountPoint; }
     ];
     settings.disk.subvolumes.neededForBoot = mkSetting (listOf str) (
-      lib.concatMapStrings ((volume: "${volume.name} ") 
-        (lib.filter: (volume volume.neededForBoot) config.settings.disk.subvolumes))
+      lib.concatMapStrings (volume: "${volume.name} ")
+        (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes)
     );
     ##### Disk: Swap #####
     settings.disk.swap.enable = mkSetting bool true;
@@ -94,7 +94,7 @@
         btrfs subvolume delete "''${1}"
       }
 
-      for volume in ${settings.disk.subvolumes.neededForBoot};; do
+      for volume in ${settings.disk.subvolumes.neededForBoot}; do
         if [[ -e "''${btrfs_mnt}/''${volume}" ]] && [[ -e "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/new" ]]; then
             timestamp=$(date --date="@$(stat -c %Y ''${btrfs_mnt}/''${volume})" "+%Y-%m-%-d_%H:%M:%S")
             mv "''${btrfs_mnt}/''${volume}" "''${btrfs_mnt}${settings.disk.immutability.persist.snapshotsPath}/''${volume}/''${timestamp}"
