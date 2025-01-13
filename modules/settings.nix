@@ -35,7 +35,7 @@
         name = mkSetting str null;
         mountPoint = mkSetting str null;
         mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ];
-        neededForBoot = false;
+        neededForBoot = mkSetting bool false;
       };
     })) 
     [
