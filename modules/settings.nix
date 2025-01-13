@@ -46,7 +46,7 @@
       { name = config.settings.disk.subvolumes.persist.mountPoint; mountPoint = config.settings.disk.subvolumes.persist.mountPoint; neededForBoot = true; }
       { name = config.settings.disk.subvolumes.swap.name; mountPoint = config.settings.disk.subvolumes.swap.mountPoint; }
     ];
-    settings.disk.subvolumes.neededForBoot = mkSetting (listOf str) (
+    settings.disk.subvolumes.neededForBoot = mkSetting str (
       lib.concatMapStrings (volume: "${volume.name} ")
         (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.metadata)
     );
