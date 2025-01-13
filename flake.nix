@@ -4,7 +4,7 @@
     nixpkgs-unstable = { url = "github:nixos/nixpkgs/nixos-unstable"; };
     home-manager = { url = "github:nix-community/home-manager/release-24.11"; inputs.nixpkgs.follows = "nixpkgs"; };
     plasma-manager = { url = "github:nix-community/plasma-manager"; inputs.nixpkgs.follows = "nixpkgs"; inputs.home-manager.follows = "home-manager"; };
-    hyprland = { url = "github:hyprwm/Hyprland"; }; #TODO HDR support was added to hyprland at HEAD; switch to nixpkgs-unstable after a new release.
+    #hyprland = { url = "github:hyprwm/Hyprland"; }; #TODO HDR support was added to hyprland at HEAD; switch to nixpkgs-unstable after a new release.
     disko = { url = "github:nix-community/disko/v1.10.0"; inputs.nixpkgs.follows = "nixpkgs"; };
     impermanence = { url = "github:nix-community/impermanence"; };
     lanzaboote = { url = "github:nix-community/lanzaboote/93e6f0d77548be8757c11ebda5c4235ef4f3bc67"; inputs.nixpkgs.follows = "nixpkgs"; }; #TODO Lanzaboote is not in nixpgs, and it's latest release version uses sbctl v0.14; update to a stable release after its pushed to github.
