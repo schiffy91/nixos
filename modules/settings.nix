@@ -71,7 +71,7 @@
     settings.disk.immutability.persist.scripts.postCreateHook = mkSetting str ''
     (
       btrfs_mnt=$(mktemp -d)
-      mount /dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
+      mount ${config.settings.disk.by.partlabel.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
       trap "umount ''${btrfs_mnt}; rm -rf ''${btrfs_mnt}" EXIT
 
       for volume in ${config.settings.disk.subvolumes.neededForBoot}; do
@@ -83,7 +83,7 @@
     settings.disk.immutability.persist.scripts.postDeviceHook = mkSetting str ''
     (
       btrfs_mnt=$(mktemp -d)
-      mount /dev/disk/by-partlabel/disk-${config.settings.disk.label.main}-${config.settings.disk.label.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
+      mount ${config.settings.disk.by.partlabel.root} "''${btrfs_mnt}" -o subvol=${config.settings.disk.subvolumes.swap.mountPoint}
       trap "umount ''${btrfs_mnt}; rm -rf ''${btrfs_mnt}" EXIT
 
       delete_subvolume_recursively() {
