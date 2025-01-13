@@ -48,7 +48,7 @@
     ];
     settings.disk.subvolumes.neededForBoot = mkSetting (listOf str) (
       lib.concatMapStrings (volume: "${volume.name} ")
-        (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes)
+        (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.metadata)
     );
     ##### Disk: Swap #####
     settings.disk.swap.enable = mkSetting bool true;
