@@ -19,7 +19,7 @@ def find_files(directory, ignore_dirs, print_contents):
                 print("---------- File ----------")
                 print(full_path)
                 if print_contents:
-                    print(read_file_contents(full_path))
+                    print(read_file_contents(full_path).strip())
                 print("---------------------------\n")
 
 def main():
