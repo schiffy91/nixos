@@ -95,20 +95,16 @@ class Shell:
         self.run(f"git config --global --add safe.directory '{path}'") # Git doesn't think sudo is the owner of a git path despite having admin privileges. SMH
 
 def chrootable(cls):
-    if not hasattr(chrootable, "registry"):
-        chrootable.registry = []
-    if not hasattr(cls, "sh"):
-        cls.sh = Shell()
+    if not hasattr(chrootable, "registry"): chrootable.registry = []
+    if not hasattr(cls, "sh"): cls.sh = Shell()
     chrootable.registry.append(cls)
     @classmethod
     @contextlib.contextmanager
     def chroot(cls, sh):
         previous = cls.sh
         cls.sh = sh
-        try:
-            yield cls
-        finally:
-            cls.sh = previous
+        try: yield cls
+        finally: cls.sh = previous
     cls.chroot = chroot
     return cls
 
