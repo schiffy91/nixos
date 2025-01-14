@@ -245,11 +245,19 @@ class Immutability:
         cls.sh.run(f"umount {cls.get_btrfs_mount_point()}")
         cls.sh.rm(cls.get_btrfs_mount_point())
     @classmethod
+    def delete_snapshot(cls, path):
+        for subvolume in cls.sh.run(f"btrfs subvolume list -o {path}").stdout.splitlines():
+            subvolume_path = f"{cls.get_btrfs_mount_point()}/{subvolume.split()[-1]}"
+            cls.delete_snapshot(subvolume_path)
+        cls.sh.run(f"btrfs subvolume delete {path}")
+    @classmethod
     def create_initial_snapshots(cls):
         for subvolume in cls.get_subvolumes():
             subvolume_snapshots_path = cls.get_subvolume_snapshots_path(subvolume)
             cls.sh.mkdir(subvolume_snapshots_path)
-            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
+            snapshot_path = f"{subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}"
+            if cls.sh.exists(snapshot_path): cls.delete_snapshot(snapshot_path)
+            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {snapshot_path}")
     @classmethod
     def revert_changes(cls, paths_to_keep):
         persistent_paths = paths_to_keep.split()
