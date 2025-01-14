@@ -24,16 +24,12 @@ let
     lib.listToAttrs (map (subvolume: { 
       name = subvolume.name; 
       value = { 
-        mountpoint = subvolume.mountPoint; 
+        mountpoint = subvolume.mountPoint;
         mountOptions = subvolume.mountOptions; 
-      }; 
-    }) (lib.filter (volume: config.settings.disk.subvolumes.swap.name != volume.name) subvolumes)) // 
-    (if !config.settings.disk.swap.enable then { } else {
-      "${config.settings.disk.subvolumes.swap.name}" = { 
-        mountpoint = config.settings.disk.subvolumes.swap.mountPoint; 
+      } // (if !config.settings.disk.swap.enable || !subvolume.isSwap then {} else {
         swap.swapfile.size = config.settings.disk.swap.size; 
-      };
-    });
+       });
+    }) subvolumes);
 in {
   imports = [ inputs.disko.nixosModules.disko ];
   ##### Disko #####
@@ -57,7 +53,7 @@ in {
       } // mkRootVolume { ##### Root Partition #####
         type = "btrfs";
         extraArgs = [ "-f" ];
-        subvolumes = mkSubvolumes config.settings.disk.subvolumes.metadata;
+        subvolumes = mkSubvolumes config.settings.disk.subvolumes.volumes;
       };
     };
   };
