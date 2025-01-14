@@ -49,7 +49,7 @@
             "name": "Immutable (Initialize)",
             "type": "debugpy",
             "request": "launch",
-            "program": "bin/immutability.py",
+            "program": "bin/immutable.py",
             "console": "integratedTerminal",
             "args": [ "initialize" ],
             "sudo": true
@@ -58,7 +58,7 @@
             "name": "Immutable (Revert)",
             "type": "debugpy",
             "request": "launch",
-            "program": "bin/immutability.py",
+            "program": "bin/immutable.py",
             "console": "integratedTerminal",
             "args": [ "revert" ],
             "sudo": true
