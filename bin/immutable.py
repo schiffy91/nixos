@@ -29,7 +29,6 @@ def main():
         if args.command == "initialize": initialize()
         elif args.command == "revert": revert(args.paths_to_keep)
         else: parser.print_help()
-        if mange_mounting: unmount()
-            
+        if mange_mounting: unmount()   
 
 if __name__ == "__main__": main()
