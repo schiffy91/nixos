@@ -260,7 +260,6 @@ class Immutability:
             #for missing_path in missing_paths:
                 #path_in_snapshot = missing_paths.replace(volume_path, initial_snapshot)
                 #cls.sh.cp(path_in_snapshot, missing_path)
-                    
 class Interactive:
     sh = Shell()
     @classmethod
