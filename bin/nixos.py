@@ -232,13 +232,13 @@ class Immutability:
         cls.sh.run(f"umount {cls.get_btrfs_mount_point()}")
         cls.sh.rm(cls.get_btrfs_mount_point())
     @classmethod
-    def create_snapshots(cls, name):
+    def create_initial_snapshots(cls):
         for subvolume in cls.get_subvolumes():
             subvolume_snapshots_path = cls.get_subvolume_snapshots_path(subvolume)
             cls.sh.mkdir(subvolume_snapshots_path)
-            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {subvolume_snapshots_path}/{name}")
+            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
     @classmethod
-    def delete_changed_files(cls, paths_to_keep):
+    def revert_changes(cls, paths_to_keep):
         persistent_paths = paths_to_keep.split()
         for subvolume in cls.get_subvolumes():
             volume_path = f"{cls.get_mount_point()}/{subvolume}"
@@ -246,15 +246,21 @@ class Immutability:
             initial_snapshot = f"{snapshots_path}/{cls.get_initial_snapshot_name()}"
             if not cls.sh.exists(volume_path) or not cls.sh.exists(initial_snapshot): continue
             required_paths = set(cls.sh.find(initial_snapshot))
-            files_on_disk = set(cls.sh.find(volume_path))
-            files_to_delete = [ path for path in files_on_disk
+            paths_on_disk = set(cls.sh.find(volume_path))
+            files_to_delete = [ path for path in paths_on_disk
                 if path                                                                                                         # Skip any broken file. TODO: Do I need this?
                 if not any(path.startswith(persistent_path) for persistent_path in persistent_paths)                            # Don't delete paths (or sub paths) we're intentionally trying to preserve
                 and not cls.sh.is_symlink(path)                                                                                 # Don't delete NixOS symlinks TODO: Handle broken links after boot
                 and not any(path == required_path.replace(initial_snapshot, volume_path) for required_path in required_paths)   # Don't delete any file that was in the initial snapshot
             ]
             if files_to_delete: cls.sh.rm(*files_to_delete)
-
+            #TODO Handle deleted required files
+            #missing_paths = required_paths - paths_on_disk
+            #if not missing_paths: continue
+            #for missing_path in missing_paths:
+                #path_in_snapshot = missing_paths.replace(volume_path, initial_snapshot)
+                #cls.sh.cp(path_in_snapshot, missing_path)
+                    
 class Interactive:
     sh = Shell()
     @classmethod
