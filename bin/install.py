@@ -11,8 +11,9 @@ class Installer:
         cmd = f"nixos-install --flake {cls.get_mount_point()}{Config.get_nixos_path()}#{Config.get_host()}-{Config.get_target()} --root {cls.get_mount_point()} --no-channel-copy --show-trace --no-root-password --cores 0"
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
-        with cls.sh.chroot(cls.get_mount_point()): Config.secure(cls.get_username(), sh=cls.sh)
-        Immutability.create_initial_snapshots()
+        with cls.sh.chroot(cls.get_mount_point()):
+            with Config.change_shell(cls.sh): Config.secure(cls.get_username())
+            with Immutability.change_shell(cls.sh): Immutability.create_initial_snapshots()
         #cls.sh.rm(tmp) #TODO Remove this after fixing bugs
     @classmethod
     def run_disko(cls, mode, args=""):

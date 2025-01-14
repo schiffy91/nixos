@@ -94,6 +94,13 @@ class Shell:
 class Config:
     sh = Shell()
     @classmethod
+    @contextlib.contextmanager
+    def change_shell(cls, sh):
+        previous = cls.sh
+        cls.sh = sh
+        try: yield cls
+        finally: cls.sh = previous
+    @classmethod
     def exists(cls): return cls.sh.exists(cls.get_config_path())
     @classmethod
     def read(cls):
@@ -121,24 +128,22 @@ class Config:
             encrypted_password = Shell.stdout(cls.sh.run(f"mkpasswd -m sha-512 '{password}'", sensitive=password))
             cls.sh.file_write(cls.get_hashed_password_path(), encrypted_password, sensitive=encrypted_password)
     @classmethod
-    def secure_secrets(cls, sh=None):
-        sh = cls.sh if sh is None else sh
-        directories = sh.find_directories(cls.get_secrets_path(), pattern="*")
-        files = sh.find_files(cls.get_secrets_path(), pattern="*")
-        sh.chown("root", cls.get_secrets_path(), *directories, *files) # Only root owns secrets
-        sh.chmod(700, cls.get_secrets_path(), *directories) # Traversable directories by anyone
-        sh.chmod(600, *files) # But only root can read or write files
+    def secure_secrets(cls):
+        directories = cls.sh.find_directories(cls.get_secrets_path(), pattern="*")
+        files = cls.sh.find_files(cls.get_secrets_path(), pattern="*")
+        cls.sh.chown("root", cls.get_secrets_path(), *directories, *files) # Only root owns secrets
+        cls.sh.chmod(700, cls.get_secrets_path(), *directories) # Traversable directories by anyone
+        cls.sh.chmod(600, *files) # But only root can read or write files
     @classmethod
-    def secure(cls, username, sh=None):
-        sh = cls.sh if sh is None else sh
+    def secure(cls, username,):
         ignore_pattern = "*/{secrets}*" # Ignore secrets
-        sh.chown(username, cls.get_nixos_path()) # $username owns everything in /etc/nixos
-        sh.chmod(755, *sh.find_directories(cls.get_nixos_path(), ignore_pattern=ignore_pattern)) # Directories are traversable
-        sh.chmod(644, *sh.find_files(cls.get_nixos_path(), ignore_pattern=ignore_pattern)) # Owner can read write files
-        sh.chmod(755, *sh.find(cls.get_nixos_path(), pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
-        sh.chmod(444, *sh.find_files(f"{cls.get_nixos_path()}/.git/objects")) # Git files require specific permission
-        cls.secure_secrets(sh) # Secure the secrets using our shell (in case of chroot)
-        sh.git_add_safe_directory(cls.get_nixos_path())
+        cls.sh.chown(username, cls.get_nixos_path()) # $username owns everything in /etc/nixos
+        cls.sh.chmod(755, *cls.sh.find_directories(cls.get_nixos_path(), ignore_pattern=ignore_pattern)) # Directories are traversable
+        cls.sh.chmod(644, *cls.sh.find_files(cls.get_nixos_path(), ignore_pattern=ignore_pattern)) # Owner can read write files
+        cls.sh.chmod(755, *cls.sh.find(cls.get_nixos_path(), pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
+        cls.sh.chmod(444, *cls.sh.find_files(f"{cls.get_nixos_path()}/.git/objects")) # Git files require specific permission
+        cls.secure_secrets() # Secure the secrets using our shell (in case of chroot)
+        cls.sh.git_add_safe_directory(cls.get_nixos_path())
     @classmethod
     def update(cls, rebuild_file_system=False):
         cls.create_secrets()
@@ -209,12 +214,20 @@ class Config:
 class Immutability:
     sh = Shell()
     @classmethod
+    @contextlib.contextmanager
+    def change_shell(cls, sh):
+        previous = cls.sh
+        cls.sh = sh
+        try: yield cls
+        finally: cls.sh = previous
+    @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
     def get_btrfs_mount_point(cls): return f"{cls.get_mount_point()}/btrfs_root"
     @classmethod
-    def get_snapshots_path(cls): return f"{cls.get_mount_point()}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}"
+    def is_btrfs_mounted(cls): return cls.sh.exists(cls.get_btrfs_mount_point())
     @classmethod
+    def get_snapshots_path(cls): return f"{cls.get_mount_point()}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}"
     @classmethod
     def get_initial_snapshot_name(cls): return "POST-INSTALL-STATE"
     @classmethod
@@ -263,6 +276,13 @@ class Immutability:
 class Interactive:
     sh = Shell()
     @classmethod
+    @contextlib.contextmanager
+    def change_shell(cls, sh):
+        previous = cls.sh
+        cls.sh = sh
+        try: yield cls
+        finally: cls.sh = previous
+    @classmethod
     def confirm(cls, prompt):
         while True:
             response = input(f"{prompt} (y/n): ").lower()
@@ -291,6 +311,13 @@ class Interactive:
 
 class Utils:
     sh = Shell()
+    @classmethod
+    @contextlib.contextmanager
+    def change_shell(cls, sh):
+        previous = cls.sh
+        cls.sh = sh
+        try: yield cls
+        finally: cls.sh = previous
     # Color constants
     GRAY = "\033[90m"
     ORANGE = "\033[38;5;208m"
