@@ -46,6 +46,24 @@
             "sudo": true
         },
         {
+            "name": "Immutable (Initialize)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "bin/immutability.py",
+            "console": "integratedTerminal",
+            "args": [ "initialize" ],
+            "sudo": true
+        },
+        {
+            "name": "Immutable (Revert)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "bin/immutability.py",
+            "console": "integratedTerminal",
+            "args": [ "revert" ],
+            "sudo": true
+        },
+        {
             "name": "Update",
             "type": "debugpy",
             "request": "launch",
