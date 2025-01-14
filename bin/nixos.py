@@ -20,6 +20,9 @@ class Shell:
     def chroot(self, path):
         try:
             self.chroots.append(path)
+            for cls in chrootable.registry:
+                with cls.chroot(self):
+                    yield cls
             yield self
         finally: self.chroots.pop()
     def run(self, cmd, env="", sensitive=None, capture_output=True, check=True):
@@ -91,15 +94,27 @@ class Shell:
         path = self.realpath(path)
         self.run(f"git config --global --add safe.directory '{path}'") # Git doesn't think sudo is the owner of a git path despite having admin privileges. SMH
 
-class Config:
-    sh = Shell()
+def chrootable(cls):
+    if not hasattr(chrootable, "registry"):
+        chrootable.registry = []
+    if not hasattr(cls, "sh"):
+        cls.sh = Shell()
+    chrootable.registry.append(cls)
     @classmethod
     @contextlib.contextmanager
-    def change_shell(cls, sh):
+    def chroot(cls, sh):
         previous = cls.sh
         cls.sh = sh
-        try: yield cls
-        finally: cls.sh = previous
+        try:
+            yield cls
+        finally:
+            cls.sh = previous
+    cls.chroot = chroot
+    return cls
+
+@chrootable
+class Config:
+    sh = Shell()
     @classmethod
     def exists(cls): return cls.sh.exists(cls.get_config_path())
     @classmethod
@@ -211,15 +226,9 @@ class Config:
     @classmethod
     def get_nixos_path(cls): return "/etc/nixos"
 
+@chrootable
 class Immutability:
     sh = Shell()
-    @classmethod
-    @contextlib.contextmanager
-    def change_shell(cls, sh):
-        previous = cls.sh
-        cls.sh = sh
-        try: yield cls
-        finally: cls.sh = previous
     @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
@@ -281,15 +290,9 @@ class Immutability:
             #for missing_path in missing_paths:
                 #path_in_snapshot = missing_paths.replace(volume_path, initial_snapshot)
                 #cls.sh.cp(path_in_snapshot, missing_path)
+@chrootable
 class Interactive:
     sh = Shell()
-    @classmethod
-    @contextlib.contextmanager
-    def change_shell(cls, sh):
-        previous = cls.sh
-        cls.sh = sh
-        try: yield cls
-        finally: cls.sh = previous
     @classmethod
     def confirm(cls, prompt):
         while True:
@@ -317,15 +320,9 @@ class Interactive:
     @classmethod
     def ask_to_reboot(cls): return cls.sh.run("shutdown -r now") if Interactive.confirm("Restart now?") else False
 
+@chrootable
 class Utils:
     sh = Shell()
-    @classmethod
-    @contextlib.contextmanager
-    def change_shell(cls, sh):
-        previous = cls.sh
-        cls.sh = sh
-        try: yield cls
-        finally: cls.sh = previous
     # Color constants
     GRAY = "\033[90m"
     ORANGE = "\033[38;5;208m"

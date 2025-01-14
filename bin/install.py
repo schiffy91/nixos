@@ -12,8 +12,8 @@ class Installer:
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()):
-            with Config.change_shell(cls.sh): Config.secure(cls.get_username())
-            with Immutability.change_shell(cls.sh): Immutability.create_initial_snapshots()
+            Config.secure(cls.get_username())
+            Immutability.create_initial_snapshots()
         #cls.sh.rm(tmp) #TODO Remove this after fixing bugs
     @classmethod
     def run_disko(cls, mode, args=""):
