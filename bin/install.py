@@ -1,7 +1,7 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 import sys
-from nixos import Utils, Config, Shell, Snapshot, Interactive
+from nixos import Utils, Config, Shell, Immutability, Interactive
 
 class Installer:
     sh = Shell()
@@ -12,7 +12,7 @@ class Installer:
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()): Config.secure(cls.get_username(), sh=cls.sh)
-        #Snapshot.create_initial_snapshots()
+        Immutability.create_snapshots(Immutability.get_initial_snapshot_name())
         #cls.sh.rm(tmp) #TODO Remove this after fixing bugs
     @classmethod
     def run_disko(cls, mode, args=""):

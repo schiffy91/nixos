@@ -62,6 +62,7 @@ class Shell:
     def find_files(self, path, pattern="*", ignore_pattern=None):
         return self.find(path, pattern=pattern, ignore_pattern=ignore_pattern, ignore_directories=True)
     def symlink(self, source, target): return self.run(f"ln -s {source} {target}")
+    def is_symlink(self, path): return self.run(f"[ ! -L '{path}' ]", check=False).returncode == 0
     def realpath(self, path): return Shell.stdout(self.run(f"realpath '{path}'")).splitlines()[0]
     def realpaths(self, *paths): return Shell.stdout(self.run("realpath " + " ".join(f"'{path}'" for path in paths))).splitlines()
     def is_dir(self, path): return self.run(f"[ -d '{path}' ]", check=False).returncode == 0
@@ -183,11 +184,7 @@ class Config:
     @classmethod
     def get_disk_operation_target(cls): return "Disk-Operation"
     @classmethod
-    def get_disk_label(cls, label): return cls.eval(f"config.settings.disk.label.{label}")
-    @classmethod
-    def get_boot_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('main')}-{cls.get_disk_label('boot')}"
-    @classmethod
-    def get_root_disk_path(cls): return f"/dev/disk/by-partlabel/disk-{cls.get_disk_label('main')}-{cls.get_disk_label('root')}"
+    def get_disk_by_part_label_root(cls): return cls.eval("config.settings.disk.by.partlabel.root")
     @classmethod
     def get_tpm_device(cls): return cls.eval("config.settings.tpm.device")
     @classmethod
@@ -209,50 +206,54 @@ class Config:
     @classmethod
     def get_nixos_path(cls): return "/etc/nixos"
 
-class Snapshot:
+class Immutability:
     sh = Shell()
-    MOUNT_POINT = "/mnt"
-    BTRFS_MNT = f"{MOUNT_POINT}/btrfs_root"
     @classmethod
-    def set_mount(cls, mount_point): cls.MOUNT_POINT = mount_point
+    def get_mount_point(cls): return "/mnt"
     @classmethod
-    def get_mount(cls): return cls.MOUNT_POINT
+    def get_btrfs_mount_point(cls): return f"{cls.get_mount_point()}/btrfs_root"
     @classmethod
-    def get_btrfs_mount(cls): return cls.BTRFS_MNT
+    def get_snapshots_path(cls): return f"{cls.get_mount_point()}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}"
+    @classmethod
+    @classmethod
+    def get_initial_snapshot_name(cls): return "POST-INSTALL-STATE"
+    @classmethod
+    def get_subvolumes(cls): return Config.eval("config.settings.disk.subvolumes.neededForBoot").split()
+    @classmethod
+    def get_subvolume_snapshots_path(cls, subvolume): return f"{cls.get_snapshots_path()}/{subvolume}"
+    @classmethod
+    def get_root_subvolume(cls): return Config.eval("config.settings.disk.subvolumes.root.name")
     @classmethod
     def mount_root(cls):
-        cls.sh.mkdir(cls.BTRFS_MNT)
-        cls.sh.run(f"mount -v {Config.get_root_disk_path()} {cls.BTRFS_MNT} -o subvol={Config.eval('config.settings.disk.subvolumes.root.name')}")
+        cls.sh.mkdir(cls.get_btrfs_mount_point())
+        cls.sh.run(f"mount -v {Config.get_disk_by_part_label_root()} {cls.get_btrfs_mount_point()} -o subvol={cls.get_root_subvolume()}")
     @classmethod
     def umount_root(cls):
-        cls.sh.run(f"umount {cls.BTRFS_MNT}")
-        cls.sh.rm(cls.BTRFS_MNT)
+        cls.sh.run(f"umount {cls.get_btrfs_mount_point()}")
+        cls.sh.rm(cls.get_btrfs_mount_point())
     @classmethod
-    def delete_recursively(cls, path):
-        for subvolume in cls.sh.run(f"btrfs subvolume list -o {path}").stdout.splitlines():
-            subvolume_path = f"{cls.BTRFS_MNT}/{subvolume.split()[-1]}"
-            cls.delete_recursively(subvolume_path)
-        cls.sh.run(f"btrfs subvolume delete {path}")
+    def create_snapshots(cls, name):
+        for subvolume in cls.get_subvolumes():
+            subvolume_snapshots_path = cls.get_subvolume_snapshots_path(subvolume)
+            cls.sh.mkdir(subvolume_snapshots_path)
+            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {subvolume_snapshots_path}/{name}")
     @classmethod
-    def create_initial_snapshots(cls):
-        cls.mount_root()
-        for volume in Config.eval("config.settings.disk.subvolumes.neededForBoot").split():
-            snapshot_dir = f"{cls.MOUNT_POINT}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}/{volume}"
-            cls.sh.mkdir(snapshot_dir)
-            cls.sh.run(f"btrfs subvolume snapshot -r {cls.BTRFS_MNT}/{volume} {snapshot_dir}/new")
-        cls.umount_root()
-    @classmethod
-    def manage_snapshots(cls):
-        cls.mount_root()
-        for volume in Config.eval("config.settings.disk.subvolumes.neededForBoot").split():
-            volume_path = f"{cls.BTRFS_MNT}/{volume}"
-            snapshots_path = f"{cls.BTRFS_MNT}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}/{volume}"
-            new_snapshot = f"{snapshots_path}/new"
-            timestamped_snapshot = snapshots_path + "/" + Shell.stdout(cls.sh.run("date --date='@$(stat -c %Y '" + volume_path + "')' '+%Y-%m-%d_%H:%M:%S'"))
-            if cls.sh.exists(volume_path, new_snapshot): cls.sh.run(f"mv {volume_path} {timestamped_snapshot}")
-            cls.sh.run(f"btrfs subvolume snapshot {new_snapshot} {volume_path}")
-            for snapshot in cls.sh.run(f"find {snapshots_path} -maxdepth 1 -mtime +30 -not -name new").stdout.splitlines(): cls.delete_recursively(snapshot)
-        cls.umount_root()
+    def delete_changed_files(cls, paths_to_keep):
+        persistent_paths = paths_to_keep.split()
+        for subvolume in cls.get_subvolumes():
+            volume_path = f"{cls.get_mount_point()}/{subvolume}"
+            snapshots_path = cls.get_subvolume_snapshots_path(subvolume)
+            initial_snapshot = f"{snapshots_path}/{cls.get_initial_snapshot_name()}"
+            if not cls.sh.exists(volume_path) or not cls.sh.exists(initial_snapshot): continue
+            required_paths = set(cls.sh.find(initial_snapshot))
+            files_on_disk = set(cls.sh.find(volume_path))
+            files_to_delete = [ path for path in files_on_disk
+                if path                                                                                                         # Skip any broken file. TODO: Do I need this?
+                if not any(path.startswith(persistent_path) for persistent_path in persistent_paths)                            # Don't delete paths (or sub paths) we're intentionally trying to preserve
+                and not cls.sh.is_symlink(path)                                                                                 # Don't delete NixOS symlinks TODO: Handle broken links after boot
+                and not any(path == required_path.replace(initial_snapshot, volume_path) for required_path in required_paths)   # Don't delete any file that was in the initial snapshot
+            ]
+            if files_to_delete: cls.sh.rm(*files_to_delete)
 
 class Interactive:
     sh = Shell()

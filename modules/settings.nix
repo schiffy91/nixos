@@ -33,7 +33,7 @@ in {
       { name = "@root"; mountPoint = "/"; neededForBoot = true; }
       { name = "@home"; mountPoint = "/home"; neededForBoot = true; }
       { name = "@nix"; mountPoint = "/nix"; }
-      { name = "@var"; mountPoint = "/var"; }
+      { name = "@var"; mountPoint = "/var"; neededForBoot = true; }
       { name = "@swap"; mountPoint = "/swap"; mountOptions = []; isSwap = true; }
     ];
     settings.disk.subvolumes.neededForBoot = mkSetting str (
@@ -48,7 +48,7 @@ in {
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
-    settings.disk.immutability.persist.snapshotsPath = mkSetting str "${config.settings.disk.subvolumes.persist.mountPoint}/snapshots";
+    settings.disk.immutability.persist.snapshotsPath = mkSetting str "/snapshots";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [
       "/etc/nixos"
       "/etc/machine-id"
