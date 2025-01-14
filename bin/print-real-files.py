@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 # python find_files.py /mnt --ignore-directories /mnt/nix /mnt/boot
 import os, argparse
