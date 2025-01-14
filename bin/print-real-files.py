@@ -16,11 +16,11 @@ def find_files(directory, ignore_dirs, print_contents):
         for file in files:
             full_path = os.path.join(root, file)
             if os.path.isfile(full_path) and not os.path.islink(full_path):
+                print("---------- File ----------")
                 print(full_path)
                 if print_contents:
-                    print("------- File Contents -------")
                     print(read_file_contents(full_path))
-                    print("---------------------------\n")
+                print("---------------------------\n")
 
 def main():
     parser = argparse.ArgumentParser()
