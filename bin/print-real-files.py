@@ -33,5 +33,4 @@ def main():
         return
     find_files(args.directory, args.ignore_directories, args.print_contents)
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
