@@ -9,12 +9,7 @@ lib.mkIf config.settings.disk.immutability.enable {
   boot.readOnlyNixStore = true;
   boot.initrd = {
     kernelModules = initrdKernelModules;
-      availableKernelModules = initrdKernelModules;
-      extraUtilsCommands = ''
-        for pkg in ${lib.escapeShellArgs (map toString initrdPkgs)}; do
-          copy_bin_and_libs $pkg
-        done
-      '';
+    availableKernelModules = initrdKernelModules;
     systemd.services = {
       setup-immutability = {
         description = "Setup tools for immutability service";
