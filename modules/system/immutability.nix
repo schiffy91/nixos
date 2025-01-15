@@ -1,21 +1,16 @@
-{ config, lib, pkgs, ... }: lib.mkIf config.settings.disk.immutability.enable {
-  fileSystems = lib.mkMerge (map (mountPoint: { "${mountPoint}".neededForBoot = true; }) config.settings.disk.subvolumes.bootMountPoints);
+{ config, pkgs, lib, ... }:
+
+lib.mkIf config.settings.disk.immutability.enable {
+  ### This merges existing fileSystems or do whatever is needed if you want to
+  ### forcibly mark them as neededForBoot, read-only store, etc.
+  fileSystems = lib.mkMerge (map (mountPoint: {
+    "${mountPoint}".neededForBoot = true;
+  }) config.settings.disk.subvolumes.bootMountPoints);
+
   boot.readOnlyNixStore = true;
-  systemd.services.immutability = {
-    description = "Enforce immutability by deleting all non-NixOS files that aren't marked to persist across boots.";
-    after = [ "systemd-cryptsetup@*.service" "local-fs.target" ];
-    requires = [ "local-fs.target" ];
-    before = [ "initrd-switch-root.target" "sysinit.target" ];
-    wantedBy = [ "initrd.target" ];
-    path = with pkgs; [ bash btrfs-progs ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = ''
-        
-      '';
-      StandardOutput = "journal+console";
-      StandardError = "journal+console";
-    };
-  };
+  boot.initrd.postResumeCommands = lib.mkAfter ''
+    for i in ${config.settings.disk.subvolumes.volumesNeededForBoot}; do vol=$i%=*; mount_point=/mnt/$vol;
+      mount -t btrfs -o subvol=$vol ${config.settings.disk.by.partlabel.root} $mount_point; /opt/restore-subvolume.sh $mount_point $mount_point/${config.settings.disk.immutability.persist.snapshots.name} '${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}';
+      umount $mount_point; done
+  '';
 }
