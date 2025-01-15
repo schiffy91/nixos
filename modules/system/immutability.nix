@@ -19,6 +19,8 @@
       StandardError = "journal+console";
     };
     script = ''
+      # Ensure basic utils are available
+      export PATH="${lib.makeBinPath (with pkgs; [coreutils btrfs-progs rsync bash])}:$PATH"
       # Write the script to a file in the initrd
       mkdir -p /usr/local/bin
       cat > /usr/local/bin/immutability.sh << 'EOL'
