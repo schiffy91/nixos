@@ -26,7 +26,7 @@ class Shell:
             yield self
         finally: self.chroots.pop()
     def run(self, cmd, env="", sensitive=None, capture_output=True, check=True):
-        if self.chroots: cmd = f"nixos-enter --root {self.chroots[-1]} --command \'{cmd}\'"
+        if self.chroots: cmd = f"nixos-enter --root {self.chroots[-1]} --command \"{cmd}\""
         cmd = f"{env} sudo {cmd}".strip()
         if sensitive: Utils.log(cmd.replace(sensitive, "***"))
         else: Utils.log(cmd)
