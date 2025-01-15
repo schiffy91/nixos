@@ -236,7 +236,7 @@ class Snapshots:
         return dict(volume.split("=") for volume in volumes)
     @classmethod
     def create_initial_snapshots(cls):
-        for subvolume_name, subvolume_mount_point in cls.get_subvolumes():
+        for subvolume_name, subvolume_mount_point in cls.get_subvolumes().items():
             subvolume_snapshots_path = f"{cls.get_snapshots_path()}/{subvolume_name}"
             cls.sh.mkdir(subvolume_snapshots_path)
             cls.sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
