@@ -1,6 +1,6 @@
 { config, lib, ... }:
 lib.mkIf config.settings.disk.immutability.enable {
-  fileSystems = lib.mkMerge (map (mountPoint: { "${mountPoint}".neededForBoot = lib.mkForce true; }) (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes));
+  fileSystems = lib.mkMerge (map (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }) (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes));
   boot.readOnlyNixStore = true;
   boot.initrd.postResumeCommands = lib.mkAfter ''
     cat << "EOF" > /immutability.sh
