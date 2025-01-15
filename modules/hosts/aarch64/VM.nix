@@ -5,6 +5,7 @@
   settings.disk.device = "/dev/vda";
   settings.disk.encryption.enable = false;
   settings.disk.swap.enable = false;
+  settings.disk.immutability.enable = true;
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Desktop #####
