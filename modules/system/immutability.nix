@@ -2,7 +2,7 @@
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (map (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }) (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes));
   boot.readOnlyNixStore = true;
-  boot.initrd.postResumeCommands = lib.mkAfter ''
+  boot.initrd.postDeviceCommands = lib.mkAfter ''
     cat << "EOF" > /immutability.sh
     ${(builtins.readFile ../../bin/immutability.sh)}
     EOF
