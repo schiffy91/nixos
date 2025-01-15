@@ -1,5 +1,5 @@
 { config, lib, pkgs, ... }: lib.mkIf config.settings.disk.immutability.enable {
-  fileSystems = lib.mkMerge (map (mountPoint: { "${mountPoint}".neededForBoot = true; }) config.settings.disk.subvolumes.bootMountPoints);
+  fileSystems = lib.mkMerge (map (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }) (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes));
   boot.readOnlyNixStore = true;
   boot.initrd.systemd.services.immutability = {
     description = "Enforce immutability at boot-time by deleting all new paths that aren't managed by NixOS or marked to persist.";
