@@ -2,7 +2,7 @@
 let 
   initrdPkgs = with pkgs; [ btrfs-progs rsync coreutils bash util-linux ];
   initrdKernelModules = [ "btrfs"];
-  immutabilityFilePath = "../../bin/immutability.sh";
+  immutabilityFilePath = toString ../../bin/immutability.sh;
 in 
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (map (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }) (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes));
