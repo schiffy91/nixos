@@ -8,7 +8,7 @@ class Shell:
         self.chroots = []
         if root_required: self.require_root()
     @classmethod
-    def stdout(cls, completed_process): return completed_process.stdout.strip().strip() # twice for new line and leading whitespace
+    def stdout(cls, completed_process): return completed_process.stdout.strip()
     # User
     def require_root(self):
         if Shell.stdout(self.run("id -u")) != "0":
@@ -232,7 +232,7 @@ class Snapshots:
     def get_initial_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.name")
     @classmethod
     def get_subvolumes(cls):
-        volumes = Config.eval("config.settings.disk.subvolumes.volumesNeededForBoot").split(" ")
+        volumes = Config.eval("config.settings.disk.subvolumes.volumesNeededForBoot").split(" ").strip() # Trim additional trailing whitespace
         return dict(volume.split("=") for volume in volumes)
     @classmethod
     def create_initial_snapshots(cls):
