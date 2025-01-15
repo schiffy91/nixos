@@ -12,8 +12,7 @@
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = ''
-        ${pkgs.bash}/bin/bash -c
-        ${pkgs.python3}/bin/python ${./snapshot-cleanup.py} /mnt ${lib.concatStringsSep " " config.settings.disk.immutability.persist.paths}
+        
       '';
       StandardOutput = "journal+console";
       StandardError = "journal+console";

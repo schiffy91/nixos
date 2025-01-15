@@ -96,8 +96,8 @@ class Shell:
         self.run(f"git config --global --add safe.directory '{path}'") # Git doesn't think sudo is the owner of a git path despite having admin privileges. SMH
 
 def chrootable(cls):
+    if not hasattr(cls, "sh"): raise TypeError(f"Class {cls.__name__} must have a 'sh' attribute to be chrootable.")
     if not hasattr(chrootable, "registry"): chrootable.registry = []
-    if not hasattr(cls, "sh"): cls.sh = Shell()
     chrootable.registry.append(cls)
     @classmethod
     @contextlib.contextmanager
@@ -224,69 +224,25 @@ class Config:
     def get_nixos_path(cls): return "/etc/nixos"
 
 @chrootable
-class Immutability:
+class Snapshots:
     sh = Shell()
     @classmethod
     def get_mount_point(cls): return "/mnt"
     @classmethod
     def get_btrfs_mount_point(cls): return f"{cls.get_mount_point()}/btrfs_root"
     @classmethod
-    def is_btrfs_mounted(cls): return cls.sh.exists(cls.get_btrfs_mount_point())
+    def get_snapshots_path(cls): return f"{cls.get_mount_point()}/{Config.eval('config.settings.disk.immutability.persist.snapshots.path')}"
     @classmethod
-    def get_snapshots_path(cls): return f"{cls.get_mount_point()}/{Config.eval('config.settings.disk.immutability.persist.snapshotsPath')}"
-    @classmethod
-    def get_initial_snapshot_name(cls): return "POST-INSTALL-STATE"
+    def get_initial_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.name")
     @classmethod
     def get_subvolumes(cls): return Config.eval("config.settings.disk.subvolumes.neededForBoot").split()
     @classmethod
-    def get_subvolume_snapshots_path(cls, subvolume): return f"{cls.get_snapshots_path()}/{subvolume}"
-    @classmethod
-    def get_root_subvolume(cls): return Config.eval("config.settings.disk.subvolumes.root.name")
-    @classmethod
-    def mount_root(cls):
-        cls.sh.mkdir(cls.get_btrfs_mount_point())
-        cls.sh.run(f"mount -v {Config.get_disk_by_part_label_root()} {cls.get_btrfs_mount_point()} -o subvol={cls.get_root_subvolume()}")
-    @classmethod
-    def umount_root(cls):
-        cls.sh.run(f"umount {cls.get_btrfs_mount_point()}")
-        cls.sh.rm(cls.get_btrfs_mount_point())
-    @classmethod
-    def delete_snapshot(cls, path):
-        for subvolume in cls.sh.run(f"btrfs subvolume list -o {path}").stdout.splitlines():
-            subvolume_path = f"{cls.get_btrfs_mount_point()}/{subvolume.split()[-1]}"
-            cls.delete_snapshot(subvolume_path)
-        cls.sh.run(f"btrfs subvolume delete {path}")
-    @classmethod
     def create_initial_snapshots(cls):
         for subvolume in cls.get_subvolumes():
-            subvolume_snapshots_path = cls.get_subvolume_snapshots_path(subvolume)
+            subvolume_snapshots_path = f"{cls.get_snapshots_path()}/{subvolume}"
             cls.sh.mkdir(subvolume_snapshots_path)
-            snapshot_path = f"{subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}"
-            if cls.sh.exists(snapshot_path): cls.delete_snapshot(snapshot_path)
-            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {snapshot_path}")
-    @classmethod
-    def revert_changes(cls, paths_to_keep):
-        persistent_paths = paths_to_keep.split()
-        for subvolume in cls.get_subvolumes():
-            volume_path = f"{cls.get_mount_point()}/{subvolume}"
-            snapshots_path = cls.get_subvolume_snapshots_path(subvolume)
-            initial_snapshot = f"{snapshots_path}/{cls.get_initial_snapshot_name()}"
-            if not cls.sh.exists(volume_path) or not cls.sh.exists(initial_snapshot): continue
-            required_paths = set(cls.sh.find(initial_snapshot))
-            paths_on_disk = set(cls.sh.find(volume_path))
-            files_to_delete = [ path for path in paths_on_disk
-                if path                                                                                                         # Skip any broken file. TODO: Do I need this?
-                if not any(path.startswith(persistent_path) for persistent_path in persistent_paths)                            # Don't delete paths (or sub paths) we're intentionally trying to preserve
-                and not cls.sh.is_symlink(path)                                                                                 # Don't delete NixOS symlinks TODO: Handle broken links after boot
-                and not any(path == required_path.replace(initial_snapshot, volume_path) for required_path in required_paths)   # Don't delete any file that was in the initial snapshot
-            ]
-            if files_to_delete: cls.sh.rm(*files_to_delete)
-            #TODO Handle deleted required files
-            #missing_paths = required_paths - paths_on_disk
-            #if not missing_paths: continue
-            #for missing_path in missing_paths:
-                #path_in_snapshot = missing_paths.replace(volume_path, initial_snapshot)
-                #cls.sh.cp(path_in_snapshot, missing_path)
+            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
+
 @chrootable
 class Interactive:
     sh = Shell()
