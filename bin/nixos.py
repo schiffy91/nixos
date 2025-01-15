@@ -18,10 +18,17 @@ class Shell:
     # Execution
     @contextlib.contextmanager
     def chroot(self, path):
+        previous_shells = {}
         try:
             self.chroots.append(path)
+            for cls in chrootable.registry:
+                previous_shells[cls] = cls.sh
+                cls.sh = self
             yield self
-        finally: self.chroots.pop()
+        finally:
+            for cls, old_sh in previous_shells.items():
+                cls.sh = old_sh
+            self.chroots.pop()
     def run(self, cmd, env="", sensitive=None, capture_output=True, check=True):
         if self.chroots: cmd = f"nixos-enter --root {self.chroots[-1]} --command \"{cmd}\""
         cmd = f"{env} sudo {cmd}".strip()
@@ -94,6 +101,8 @@ class Shell:
 
 def chrootable(cls):
     if not hasattr(cls, "sh"): raise TypeError(f"Class {cls.__name__} must have a 'sh' attribute to be chrootable.")
+    if not hasattr(chrootable, "registry"): chrootable.registry = []
+    chrootable.registry.append(cls)
     @classmethod
     @contextlib.contextmanager
     def chroot(cls, sh):
