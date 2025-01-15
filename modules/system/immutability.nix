@@ -6,17 +6,34 @@
     wantedBy = [ "initrd.target" ];
     before = [ "sysroot.mount" ];
     after = if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ];
-    path = (with pkgs; [ btrfs-progs rsync ]);
+    path = (with pkgs; [ 
+      btrfs-progs
+      rsync
+      coreutils
+      bash
+    ]);
     unitConfig.DefaultDependencies = "no";
-    serviceConfig.Type = "oneshot";
+    serviceConfig = {
+      Type = "oneshot";
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
+    };
     script = ''
-      cat << "EOF" > /immutability.sh
+      # Write the script to a file in the initrd
+      mkdir -p /usr/local/bin
+      cat > /usr/local/bin/immutability.sh << 'EOL'
       ${(builtins.readFile ../../bin/immutability.sh)}
-      EOF
-      chmod +x /immutability.sh
-      for i in ${config.settings.disk.subvolumes.volumesNeededForBoot}; do vol=$i%=*; mount_point=/mnt/$vol;
-        mount -t btrfs -o subvol=$vol ${config.settings.disk.by.partlabel.root} $mount_point; /immutability.sh $mount_point $mount_point/${config.settings.disk.immutability.persist.snapshots.name} '${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}';
-        umount $mount_point; done
+      EOL
+      # Make the script executable
+      chmod +x /usr/local/bin/immutability.sh
+      # For each subvolume, mount it at /mnt/$vol and reset it to factory settings + new symlinks + persist files
+      for i in ${config.settings.disk.subvolumes.volumesNeededForBoot}; do 
+        vol=$i%=*
+        mount_point=/mnt/$vol
+        mount -t btrfs -o subvol=$vol ${config.settings.disk.by.partlabel.root} $mount_point
+        /usr/local/bin/immutability.sh $mount_point $mount_point/${config.settings.disk.immutability.persist.snapshots.name} '${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}'
+        umount $mount_point
+      done
     '';
   };
 }
