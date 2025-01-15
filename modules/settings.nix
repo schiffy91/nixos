@@ -48,7 +48,7 @@ in {
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
     settings.disk.immutability.persist.snapshots.path = mkSetting str "/snapshots";
-    settings.disk.immutability.persist.snapshots.name = mkSetting str "ORIGINAL-SIN";
+    settings.disk.immutability.persist.snapshots.name = mkSetting str "FACTORY_RESET";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [
       "/etc/nixos"
       "/etc/machine-id"
