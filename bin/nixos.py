@@ -8,7 +8,7 @@ class Shell:
         self.chroots = []
         if root_required: self.require_root()
     @classmethod
-    def stdout(cls, completed_process): return completed_process.stdout.strip()
+    def stdout(cls, completed_process): return completed_process.stdout.strip().strip() # twice for new line and leading whitespace
     # User
     def require_root(self):
         if Shell.stdout(self.run("id -u")) != "0":
