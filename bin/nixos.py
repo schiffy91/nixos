@@ -20,9 +20,6 @@ class Shell:
     def chroot(self, path):
         try:
             self.chroots.append(path)
-            for cls in chrootable.registry:
-                with cls.chroot(self):
-                    yield cls
             yield self
         finally: self.chroots.pop()
     def run(self, cmd, env="", sensitive=None, capture_output=True, check=True):
@@ -97,8 +94,6 @@ class Shell:
 
 def chrootable(cls):
     if not hasattr(cls, "sh"): raise TypeError(f"Class {cls.__name__} must have a 'sh' attribute to be chrootable.")
-    if not hasattr(chrootable, "registry"): chrootable.registry = []
-    chrootable.registry.append(cls)
     @classmethod
     @contextlib.contextmanager
     def chroot(cls, sh):
