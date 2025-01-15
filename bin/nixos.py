@@ -173,7 +173,7 @@ class Config:
         Interactive.ask_to_reboot()
     @classmethod
     def eval(cls, attribute):
-        cmd = f"nix --extra-experimental-features \"nix-command flakes\" eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
+        cmd = f"nix --extra-experimental-features nix-command --extra-experimental-features eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
         if cmd in Shell.evals: return Shell.evals[cmd]
         output = Shell.stdout(cls.sh.run(cmd)).replace("\"", "")
         if output == "true": output = True
@@ -181,7 +181,7 @@ class Config:
         Shell.evals[cmd] = output
         return output
     @classmethod
-    def metadata(cls, pkg): return json.loads(Shell.stdout(cls.sh.run(f"nix --extra-experimental-features \"nix-command flakes\" flake metadata {pkg} --json -I {cls.sh.realpath(cls.get_nixos_path())}")))
+    def metadata(cls, pkg): return json.loads(Shell.stdout(cls.sh.run(f"nix --extra-experimental-features nix-command --extra-experimental-features flake metadata {pkg} --json -I {cls.sh.realpath(cls.get_nixos_path())}")))
     # Readwrite
     @classmethod
     def set_host_path(cls, host_path): return cls.set("host_path", host_path)

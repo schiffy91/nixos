@@ -17,7 +17,7 @@ class Installer:
         #cls.sh.rm(tmp) #TODO Remove this after fixing bugs (otherwise reinstall is too slow)
     @classmethod
     def run_disko(cls, mode, args=""):
-        command = f"nix --extra-experimental-features \"nix-command flakes\" run github:nix-community/disko/{Config.metadata('disko')['locked']['rev']} --verbose -- " \
+        command = f"nix --extra-experimental-features nix-command --extra-experimental-features run github:nix-community/disko/{Config.metadata('disko')['locked']['rev']} --verbose -- " \
                 f"--show-trace --flake {Config.get_nixos_path()}#{Config.get_host()}-{Config.get_disk_operation_target()} --mode {mode} --root-mountpoint {cls.get_mount_point()} {args}"
         return cls.sh.run(command, capture_output=False)
     # Helpers
@@ -26,7 +26,7 @@ class Installer:
         args = Utils.parse_args(sys.argv[1:], "--collect-garbage", "--debug")
         if "--collect-garbage" in args: cls.sh.run("nix-collect-garbage -d")
         if "--debug" in args:
-            vscodium_cmd = "nix --extra-experimental-features \"nix-command flakes\" run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
+            vscodium_cmd = "nix --extra-experimental-features nix-command --extra-experimental-features run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
             cls.sh.run(f"{vscodium_cmd} --install-extension ms-python.python")
             cls.sh.run(f"{vscodium_cmd} {Config.get_nixos_path()}")
             return Utils.abort("Please continue in VSCodium")
