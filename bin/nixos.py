@@ -32,7 +32,6 @@ class Shell:
         else: Utils.log(cmd)
         try:
             result = subprocess.run(cmd, shell=True, check=check, capture_output=capture_output, text=True)
-            if not capture_output and not sensitive: Utils.log(Shell.stdout(result))
         except subprocess.CalledProcessError as e:
             if e.stdout: Utils.log(e.stdout)
             if e.stderr: Utils.log_error(e.stderr)
