@@ -231,7 +231,9 @@ class Snapshots:
     @classmethod
     def get_initial_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.name")
     @classmethod
-    def get_subvolumes(cls): return dict(item.split("=") for item in Config.eval("config.settings.disk.subvolumes.volumesNeededForBoot").split(";"))
+    def get_subvolumes(cls):
+        volumes = Config.eval("config.settings.disk.subvolumes.volumesNeededForBoot").split(";")
+        return dict(volume.split("=") for volume in volumes)
     @classmethod
     def create_initial_snapshots(cls):
         for subvolume_name, subvolume_mount_point in cls.get_subvolumes():
