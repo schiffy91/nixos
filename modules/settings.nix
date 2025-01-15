@@ -36,9 +36,8 @@ in {
       { name = "@var"; mountPoint = "/var"; neededForBoot = true; }
       { name = "@swap"; mountPoint = "/swap"; mountOptions = []; isSwap = true; }
     ];
-    settings.disk.subvolumes.neededForBoot = mkSetting str (
-      lib.concatMapStrings (volume: "${volume.name} ")
-        (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes)
+    settings.disk.subvolumes.volumesNeededForBoot = mkSetting str (
+      lib.concatMapStrings (volume: "${volume.name}=${volume.mountPoint};") (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes)
     );
     ##### Disk: Swap #####
     settings.disk.swap.enable = mkSetting bool true;

@@ -32,6 +32,7 @@ class Shell:
         else: Utils.log(cmd)
         try:
             result = subprocess.run(cmd, shell=True, check=check, capture_output=capture_output, text=True)
+            if not capture_output and not sensitive: Utils.log(Shell.stdout(result))
         except subprocess.CalledProcessError as e:
             if e.stdout: Utils.log(e.stdout)
             if e.stderr: Utils.log_error(e.stderr)
@@ -227,21 +228,17 @@ class Config:
 class Snapshots:
     sh = Shell()
     @classmethod
-    def get_mount_point(cls): return "/mnt"
-    @classmethod
-    def get_btrfs_mount_point(cls): return f"{cls.get_mount_point()}/btrfs_root"
-    @classmethod
-    def get_snapshots_path(cls): return f"{cls.get_mount_point()}/{Config.eval('config.settings.disk.immutability.persist.snapshots.path')}"
+    def get_snapshots_path(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.path")
     @classmethod
     def get_initial_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.name")
     @classmethod
-    def get_subvolumes(cls): return Config.eval("config.settings.disk.subvolumes.neededForBoot").split()
+    def get_subvolumes(cls): return dict(item.split("=") for item in Config.eval("config.settings.disk.subvolumes.volumeNamesNeededForBoot").split(";"))
     @classmethod
     def create_initial_snapshots(cls):
-        for subvolume in cls.get_subvolumes():
-            subvolume_snapshots_path = f"{cls.get_snapshots_path()}/{subvolume}"
+        for subvolume_name, subvolume_mount_point in cls.get_subvolumes():
+            subvolume_snapshots_path = f"{cls.get_snapshots_path()}/{subvolume_name}"
             cls.sh.mkdir(subvolume_snapshots_path)
-            cls.sh.run(f"btrfs subvolume snapshot -r {cls.get_btrfs_mount_point()}/{subvolume} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
+            cls.sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
 
 @chrootable
 class Interactive:
