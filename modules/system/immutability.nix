@@ -46,6 +46,13 @@ lib.mkIf config.settings.disk.immutability.enable {
         };
         path = initrdPkgs;
         script = ''
+          # Debug output
+          echo "PATH=$PATH"
+          echo "Checking mount command..."
+          which mount || echo "mount not found"
+          
+          # Ensure mount is in path
+          export PATH="${lib.makeBinPath (with pkgs; [ util-linux ])}:${lib.makeBinPath initrdPkgs}:$PATH"
           export PATH="${lib.makeBinPath initrdPkgs}:$PATH"
           for i in ${config.settings.disk.subvolumes.volumesNeededForBoot}; do 
             vol=$(echo "$i" | cut -d'=' -f1)
