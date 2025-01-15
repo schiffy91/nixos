@@ -30,20 +30,30 @@ lib.mkIf config.settings.disk.immutability.enable {
       script = ''
         # Ensure basic utils are available
         export PATH="${lib.makeBinPath initrdPkgs}:$PATH"
+        
         # Write the script to a file in the initrd
         mkdir -p /usr/local/bin
         cat > /usr/local/bin/immutability.sh << 'EOL'
         ${(builtins.readFile immutabilityFilePath)}
         EOL
-        # Make the script executable
         chmod +x /usr/local/bin/immutability.sh
-        # For each subvolume, mount it at /mnt/$vol and reset it to factory settings + new symlinks + persist files
+        
+        # For each subvolume, mount and process
         for i in ${config.settings.disk.subvolumes.volumesNeededForBoot}; do 
-          vol=$i%=*
-          mount_point=/mnt/$vol
-          mount -t btrfs -o subvol=$vol ${config.settings.disk.by.partlabel.root} $mount_point
-          /usr/local/bin/immutability.sh $mount_point $mount_point/${config.settings.disk.immutability.persist.snapshots.name} '${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}'
-          umount $mount_point
+          vol=$(echo "$i" | cut -d'=' -f1)  # Fix pattern matching
+          mount_point="/mnt/$vol"
+          mkdir -p "$mount_point"
+          
+          if mount -t btrfs -o subvol="$vol" "${config.settings.disk.by.partlabel.root}" "$mount_point"; then
+            /usr/local/bin/immutability.sh \
+              "$mount_point" \
+              "$mount_point/${config.settings.disk.immutability.persist.snapshots.name}" \
+              '${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}'
+            umount "$mount_point"
+          else
+            echo "Failed to mount $vol"
+            exit 1
+          fi
         done
       '';
     };
