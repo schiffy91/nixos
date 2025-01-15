@@ -1,4 +1,6 @@
-{ config, lib, pkgs, ... }: lib.mkIf config.settings.disk.immutability.enable {
+{ config, lib, pkgs, ... }: 
+let initrdPkgs = with pkgs; [ btrfs-progs rsync coreutils bash util-linux ];in 
+lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (map (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }) (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes));
   boot.readOnlyNixStore = true;
   boot.initrd.systemd.services.immutability = {
@@ -6,12 +8,7 @@
     wantedBy = [ "initrd.target" ];
     before = [ "sysroot.mount" ];
     after = if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ];
-    path = (with pkgs; [ 
-      btrfs-progs
-      rsync
-      coreutils
-      bash
-    ]);
+    path = initrdPkgs;
     unitConfig.DefaultDependencies = "no";
     serviceConfig = {
       Type = "oneshot";
@@ -20,7 +17,7 @@
     };
     script = ''
       # Ensure basic utils are available
-      export PATH="${lib.makeBinPath (with pkgs; [coreutils btrfs-progs rsync bash])}:$PATH"
+      export PATH="${lib.makeBinPath initrdPkgs}:$PATH"
       # Write the script to a file in the initrd
       mkdir -p /usr/local/bin
       cat > /usr/local/bin/immutability.sh << 'EOL'
