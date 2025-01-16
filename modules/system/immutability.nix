@@ -1,30 +1,29 @@
 { config, lib, pkgs, ... }: 
 let 
-  initrdPkgs = with pkgs; [ btrfs-progs rsync coreutils bash util-linux ];
   initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
   rootSubvolumeName = config.settings.disk.subvolumes.root.name;
   snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
-  systemdRequiredServices = [ "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device" ] ++ #JFC
-                            (if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ]);
+  rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
+  additionalRequirements = if config.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ];
 in 
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
   boot.readOnlyNixStore = true;
   boot.initrd = {
+    supportedFilesystems = [ "btrfs" ];
     kernelModules = initrdKernelModules;
     availableKernelModules = initrdKernelModules;
     systemd.services.immutability = {
       description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
       wantedBy = [ "initrd.target" ];
-      requires = systemdRequiredServices;
-      after = systemdRequiredServices;
+      requires = [ rootDevice ];
+      after = [ rootDevice additionalRequirements ];
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
-      path = initrdPkgs;
       script = ''
       ##################################################
       ##### Setup args and arg-dependent variables #####
