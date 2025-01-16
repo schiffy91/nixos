@@ -61,9 +61,10 @@ lib.mkIf config.settings.disk.immutability.enable {
       btrfs_subvolume_delete_recursively() {
         IFS=$'\n'
         for subvolume in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
-            btrfs_subvolume_delete_recursively "$1/$subvolume" || true
+            btrfs_subvolume_delete_recursively "$1/$subvolume"
         done
-        btrfs subvolume delete "$1"
+        btrfs subvolume delete --commit-each "$1"
+        btrfs filesystem sync
       }
 
       ############################
