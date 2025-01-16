@@ -5,7 +5,7 @@ let
   rootSubvolumeName = config.settings.disk.subvolumes.root.name;
   snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
-  pathsToKeep = "'${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}'";
+  pathsToKeep = ''${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}'';
   rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
 in 
 lib.mkIf config.settings.disk.immutability.enable {
@@ -81,7 +81,8 @@ lib.mkIf config.settings.disk.immutability.enable {
       btrfs subvolume snapshot "$ROOT" "$PREVIOUS_SNAPSHOT"
       ##### Create the new (i.e. current) snapshot, copied from a known clean copy of the system. If it exists, delete it first. #####
       echo "Creating a clean system image, '$CURRENT_SNAPSHOT', from '$CLEAN_ROOT'..."
-      [ -d "$CURRENT_SNAPSHOT" ] && btrfs_subvolume_delete_recursively "$CURRENT_SNAPSHOT" && btrfs subvolume snapshot "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
+      [ -d "$CURRENT_SNAPSHOT" ] && btrfs_subvolume_delete_recursively "$CURRENT_SNAPSHOT"
+      btrfs subvolume snapshot "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
       ##### Make the current snapshot read-writeable #####
       btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true
 
