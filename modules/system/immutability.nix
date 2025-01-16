@@ -122,13 +122,10 @@ lib.mkIf config.settings.disk.immutability.enable {
       #####################
       ##### Swap root #####
       #####################
-      ##### Delete root subvolume (!) #####
       ##### If the power is plugged now, you can restore /mnt/@snapshots/PREVIOUS_SNAPSHOT #####
-      echo "Deleting '$ROOT'..."
-      btrfs_subvolume_delete_recursively "$ROOT"
       ##### Re-create the root subvolume by creating a snapshot based on what we just constructed. #####
-      echo "Restoring '$ROOT'..."
-      btrfs subvolume snapshot "$CURRENT_SNAPSHOT" "$ROOT"
+      echo "Re-creating '$ROOT' from '$CURRENT_SNAPSHOT'..."
+      btrfs_subvolume_create "$CURRENT_SNAPSHOT" "$ROOT"
       ##### Unmount & Delete Mountpoint #####
       umount "$MOUNT"
       rm -rf "$MOUNT"
