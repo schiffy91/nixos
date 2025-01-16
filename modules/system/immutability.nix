@@ -63,8 +63,17 @@ lib.mkIf config.settings.disk.immutability.enable {
         for subvolume in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
             btrfs_subvolume_delete_recursively "$1/$subvolume"
         done
-        btrfs subvolume delete --commit-each "$1"
-        btrfs filesystem sync "$ROOT"
+        [ -d "$1" ] && btrfs subvolume delete "$1" && btrfs filesystem sync /
+      }
+
+      #################################
+      ##### BTRFS Create Function #####
+      #################################
+      btrfs_subvolume_create() {
+        btrfs_subvolume_delete_recursively "$2"
+        btrfs subvolume delete
+        btrfs filesystem sync /
+        [ -d "$1" ] btrfs subvolume "$1" "$2"
       }
 
       ############################
@@ -74,16 +83,10 @@ lib.mkIf config.settings.disk.immutability.enable {
       PREVIOUS_SNAPSHOT="$SNAPSHOTS/PREVIOUS_SNAPSHOT"              # /mnt/@snapshots/PREVIOUS_SNAPSHOT
       PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
       CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
-      ##### If it exists, delete the penultimate snapshot. #####
-      [ -d "$PENULTIMATE_SNAPSHOT" ] && btrfs_subvolume_delete_recursively "$PENULTIMATE_SNAPSHOT"
-      ##### If a previous snapshot exists, make it the penultimate snapshot and delete it. #####
-      [ -d "$PREVIOUS_SNAPSHOT" ] && btrfs subvolume snapshot "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT" && btrfs_subvolume_delete_recursively "$PREVIOUS_SNAPSHOT"  
-      ##### Make a previous snapshot capturing the current state of the system. #####
-      btrfs subvolume snapshot "$ROOT" "$PREVIOUS_SNAPSHOT"
-      ##### Create the new (i.e. current) snapshot, copied from a known clean copy of the system. If it exists, delete it first. #####
-      echo "Creating a clean system image, '$CURRENT_SNAPSHOT', from '$CLEAN_ROOT'..."
-      [ -d "$CURRENT_SNAPSHOT" ] && btrfs_subvolume_delete_recursively "$CURRENT_SNAPSHOT"
-      btrfs subvolume snapshot "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
+      ##### Delete existing snapshots and create new ones #####
+      btrfs_subvolume_create "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
+      btrfs_subvolume_create "$ROOT" "$PREVIOUS_SNAPSHOT"
+      btrfs_subvolume_create "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
       ##### Make the current snapshot read-writeable #####
       btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true
 
