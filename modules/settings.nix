@@ -35,7 +35,7 @@ in {
     [
       { name = "@root"; mountPoint = "/"; neededForBoot = true; flag = "root"; }
       { name = "@home"; mountPoint = "/home"; neededForBoot = true; }
-      { name = "@nix"; mountPoint = "/nix"; }
+      { name = "@nix"; mountPoint = "/nix"; neededForBoot = true; }
       { name = "@var"; mountPoint = "/var"; neededForBoot = true; }
       { name = "@snapshots"; mountPoint = "/.snapshots"; neededForBoot = true; flag = "snapshots"; }
       { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; }
