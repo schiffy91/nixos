@@ -37,8 +37,9 @@ in {
       { name = "@snapshots"; mountPoint = "/.snapshots"; neededForBoot = true; flag = "snapshots"; }
       { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; }
     ];
-    settings.disk.subvolumes.rootVolume = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "root") config.settings.disk.subvolumes.volumes).name);
-    settings.disk.subvolumes.snapshotsVolume = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") config.settings.disk.subvolumes.volumes).name);
+    settings.disk.subvolumes.root.name = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "root") config.settings.disk.subvolumes.volumes).name);
+    settings.disk.subvolumes.snapshots.name = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") config.settings.disk.subvolumes.volumes).name);
+    settings.disk.subvolumes.snapshots.mountPoint = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") config.settings.disk.subvolumes.volumes).mountPoint);
     settings.disk.subvolumes.volumesNeededForBoot = mkSetting str (
       lib.concatMapStrings (volume: "${volume.name}=${volume.mountPoint} ") (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes)
     );
@@ -50,8 +51,7 @@ in {
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
-    settings.disk.immutability.persist.snapshots.path = mkSetting str "/snapshots";
-    settings.disk.immutability.persist.snapshots.name = mkSetting str "CLEAN_ROOT";
+    settings.disk.immutability.persist.snapshots.cleanRoot = mkSetting str "CLEAN_ROOT";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [
       "/etc/nixos"
       "/etc/machine-id"

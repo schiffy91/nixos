@@ -228,22 +228,14 @@ class Config:
     def get_nixos_path(cls): return "/etc/nixos"
 
 @chrootable
-class Snapshots:
+class Snapshot:
     sh = Shell()
     @classmethod
-    def get_snapshots_path(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.path")
+    def get_snapshots_path(cls): return Config.eval("config.settings.disk.subvolumes.snapshots.mountPoint")
     @classmethod
-    def get_initial_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.name")
+    def get_clean_root_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.cleanRoot")
     @classmethod
-    def get_subvolumes(cls):
-        volumes = Config.eval("config.settings.disk.subvolumes.volumesNeededForBoot").strip().split(" ") # Trim additional trailing whitespace before turning into a whitespace delimited list
-        return dict(volume.split("=") for volume in volumes)
-    @classmethod
-    def create_initial_snapshots(cls):
-        for subvolume_name, subvolume_mount_point in cls.get_subvolumes().items():
-            subvolume_snapshots_path = f"{cls.get_snapshots_path()}/{subvolume_name}"
-            cls.sh.mkdir(subvolume_snapshots_path)
-            cls.sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {subvolume_snapshots_path}/{cls.get_initial_snapshot_name()}")
+    def create_initial_snapshot(cls): cls.sh.run(f"btrfs subvolume snapshot -r / {cls.get_snapshots_path()}/{cls.get_clean_root_snapshot_name()}")
 
 @chrootable
 class Interactive:

@@ -4,8 +4,8 @@ let
   initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
   root_subvolume_name = config.settings.disk.subvolumes.rootVolume;
-  snapshots_subvolume_name = config.settings.disk.subvolumes.snapshotsVolume;
-  clean_root_snapshot_relative_path = config.settings.disk.immutability.persist.snapshots.name;
+  snapshots_subvolume_name = config.settings.disk.subvolumes.snapshots.name;
+  clean_root_snapshot_relative_path = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   paths_to_keep = config.settings.disk.immutability.persist.paths;
 in 
 lib.mkIf config.settings.disk.immutability.enable {

@@ -1,7 +1,7 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 import sys
-from nixos import Utils, Config, Shell, Snapshots, Interactive
+from nixos import Utils, Config, Shell, Snapshot, Interactive
 
 class Installer:
     sh = Shell()
@@ -13,7 +13,7 @@ class Installer:
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()):
             Config.secure(cls.get_username())
-            Snapshots.create_initial_snapshots()
+            Snapshot.create_initial_snapshot()
         #cls.sh.rm(tmp) #TODO Remove this after fixing bugs (otherwise reinstall is too)
     @classmethod
     def run_disko(cls, mode, args=""):
