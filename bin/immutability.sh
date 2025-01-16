@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# restore-subvolume.sh - revert a Btrfs subvolume from a snapshot,
-#                        preserving user-specified paths and ignoring new symlinks.
-# Usage:
-#   restore-subvolume.sh <device> <root_subvolume_name> <root_mount_point> <snapshots_subvolume_name> <snapshots_mount_point> <clean_root_snapshot_relative_path> "<paths_to_keep>"
-# Example:
-#   restore-subvolume.sh /dev/disk/by-partlabel/disk-main-root @root / @snapshots /snapshots CLEAN_ROOT "/etc/nixos /home/alexanderschiffhauer"
+# restore-subvolume.sh - revert a Btrfs subvolume from a snapshot, preserving user-specified paths and ignoring new symlinks.
 set -euo pipefail
 
 ##################################################
@@ -12,20 +7,18 @@ set -euo pipefail
 ##################################################
 MOUNT="/mnt"
 ##### Check number of args #####
-if [ $# -ne 7 ]; then
+if [ $# -ne 5 ]; then
     echo "Error: Incorrect number of arguments"
-    echo "Usage: $0 <device> <root_subvolume_name> <root_mount_point> <snapshots_subvolume_name> <snapshots_mount_point> <clean_root_snapshot_relative_path> \"<paths_to_keep>\""
-    echo "Example: $0 /dev/disk/by-partlabel/disk-main-root @root / @snapshots /snapshots CLEAN_ROOT '/etc/nixos /home/alexanderschiffhauer'"
+    echo "Usage: $0 <device> <root_subvolume_name> <snapshots_subvolume_name> <clean_root_snapshot_relative_path> \"<paths_to_keep>\""
+    echo "Example: $0 /dev/disk/by-partlabel/disk-main-root @root / @snapshots CLEAN_ROOT '/etc/nixos /home/alexanderschiffhauer'"
     exit 1
 fi
 ##### Parse args #####
 DEVICE="${1:?'Device parameter is required'}"                     # /dev/disk/by-label/disk-main-root
 ROOT="${MOUNT}/${2:?'Root subvolume name is required'}"           # /mnt/@root <--------------------  @root
-ROOT_MOUNT_POINT="${3:?'Root mount point is required'}"           # /
-SNAPSHOTS="${4:?'Snapshots subvolume name is required'}"          # /mnt/@snapshots <---------------  @snapshots
-SNAPSHOTS_MOUNT_POINT="${5:?'Snapshots mount point is required'}" # /snapshots
-CLEAN_ROOT="${SNAPSHOTS}/${6:?'Clean root path is required'}"     # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
-PATHS_TO_KEEP="${7:?'Paths to keep is required'}"                 # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
+SNAPSHOTS="${3:?'Snapshots subvolume name is required'}"          # /mnt/@snapshots <---------------  @snapshots
+CLEAN_ROOT="${SNAPSHOTS}/${4:?'Clean root path is required'}"     # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
+PATHS_TO_KEEP="${5:?'Paths to keep is required'}"                 # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
 # Validate device exists
 if [ ! -b "$DEVICE" ]; then
     echo "Error: Device '$DEVICE' does not exist"
@@ -39,8 +32,7 @@ fi
 # Create mount point if it doesn't exist
 mkdir -p "${MOUNT}"                         
 ##### Mount subvolumes #####
-mount -o subvol="${ROOT_MOUNT_POINT}",user_subvol_rm_allowed "${DEVICE}" "${MOUNT}"
-mount -o subvol="${SNAPSHOTS_MOUNT_POINT}",user_subvol_rm_allowed "${DEVICE}" "${MOUNT}"
+mount -o subvol=/,user_subvol_rm_allowed "${DEVICE}" "${MOUNT}"
 ##### Validate CLEAN_ROOT exists #####
 if [ -z "$CLEAN_ROOT" ]; then
   echo "Usage: $0 ${CLEAN_ROOT} does not exist"
