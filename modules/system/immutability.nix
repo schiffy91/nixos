@@ -23,14 +23,6 @@ lib.mkIf config.settings.disk.immutability.enable {
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
-      path = (with pkgs; [
-        btrfs-progs
-        coreutils-full
-        coreutils
-        util-linux
-        mount
-        umount
-      ]);
       script = ''
       ##################################################
       ##### Setup args and arg-dependent variables #####
