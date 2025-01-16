@@ -25,10 +25,10 @@
     ##### Scaling #####
     environment.sessionVariables = lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
         ##### Wayland #####
-        "QT_AUTO_SCREEN_SCALE_FACTOR" = "1";
+        #"QT_AUTO_SCREEN_SCALE_FACTOR" = "1";
         ##### X11 #####
-        "QT_SCALE_FACTOR" = lib.mkIf (config.settings.desktop.environment == "plasma-x11") (toString config.settings.desktop.scalingFactor);
-        "PLASMA_USE_QT_SCALING" = "1";
+        #"QT_SCALE_FACTOR" = lib.mkIf (config.settings.desktop.environment == "plasma-x11") (toString config.settings.desktop.scalingFactor);
+        #"PLASMA_USE_QT_SCALING" = "1";
       };
   })
   ##### Plasma X11 Settings #####
