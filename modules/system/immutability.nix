@@ -113,6 +113,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       PREVIOUS_SNAPSHOT="$SNAPSHOTS/PREVIOUS_SNAPSHOT"              # /mnt/@snapshots/PREVIOUS_SNAPSHOT
       PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
       CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
+      ##### Setup PREVIOUS_SNAPSHOT and PENULTIMTE_SNAPSHOT if they don't exist #####
+      btrfs_subvolume_copy "$CLEAN_ROOT" "$PENULTIMATE_SNAPSHOT"
+      btrfs_subvolume_copy "$CLEAN_ROOT" "$PREVIOUS_SNAPSHOT"
       ##### Delete existing snapshots and create new ones #####
       btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
       btrfs_subvolume_copy "$ROOT" "$PREVIOUS_SNAPSHOT"
