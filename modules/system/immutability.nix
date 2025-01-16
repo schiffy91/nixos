@@ -59,24 +59,50 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### BTRFS Delete Function #####
       #################################
       btrfs_subvolume_delete_recursively() {
-        echo "btrfs_subvolume_delete_recursively: $1"
-        [ ! -d "$1" ] && echo "  Warning: $1 does not exist" && return 0
+        local path="$1"
+        echo "btrfs_subvolume_delete_recursively: $path"
+        [ ! -d "$path" ] && echo "  Warning: $path does not exist" && return 0
+        
+        # First get all nested subvolumes in reverse order (deepest first)
+        local subvolumes
+        subvolumes=$(btrfs subvolume list -o "$path" | tac | cut -f 9- -d ' ')
+        
+        # Delete each nested subvolume
         IFS=$'\n'
-        for subvolume in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
-            echo "  Found: $1/$subvolume"
-            btrfs_subvolume_delete_recursively "$1/$subvolume"
+        for subvolume in $subvolumes; do
+            echo "  Deleting nested: $subvolume"
+            btrfs subvolume delete "$MOUNT/$subvolume" || {
+                echo "  Warning: Failed to delete $subvolume"
+                continue
+            }
         done
-        echo "  Deleting: $1" && btrfs subvolume delete "$1" && btrfs filesystem sync "$ROOT" && echo "  Deleted: $1"
+        
+        # Finally delete the main subvolume
+        echo "  Deleting main: $path"
+        btrfs subvolume delete "$path" && {
+            btrfs filesystem sync "$ROOT"
+            echo "  Deleted: $path"
+        } || echo "  ERROR: Failed to delete $path"
       }
 
       #################################
       ##### BTRFS Create Function #####
       #################################
       btrfs_subvolume_create() {
-        echo "btrfs_subvolume_create: $1 $2"
-        [ ! -d "$1" ] && echo " ERROR: $1 does not exist"
-        btrfs_subvolume_delete_recursively "$2"
-        btrfs subvolume snapshot "$1" "$2"
+        local source="$1"
+        local target="$2"
+        echo "btrfs_subvolume_create: $source -> $target"
+        
+        [ ! -d "$source" ] && { 
+            echo " ERROR: Source $source does not exist"
+            return 1
+        }
+        
+        btrfs_subvolume_delete_recursively "$target"
+        btrfs subvolume snapshot "$source" "$target" || {
+            echo " ERROR: Failed to create snapshot from $source to $target"
+            return 1
+        }
         btrfs filesystem sync "$ROOT"
       }
 
