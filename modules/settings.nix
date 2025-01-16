@@ -37,9 +37,9 @@ in {
       { name = "@snapshots"; mountPoint = "/.snapshots"; neededForBoot = true; flag = "snapshots"; }
       { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; }
     ];
-    settings.disk.subvolumes.root.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "root") config.settings.disk.subvolumes.volumes).name));
-    settings.disk.subvolumes.snapshots.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") config.settings.disk.subvolumes.volumes).name));
-    settings.disk.subvolumes.snapshots.mountPoint = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") config.settings.disk.subvolumes.volumes).mountPoint));
+    settings.disk.subvolumes.root.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "root") null config.settings.disk.subvolumes.volumes).name));
+    settings.disk.subvolumes.snapshots.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes).name));
+    settings.disk.subvolumes.snapshots.mountPoint = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes).mountPoint));
     settings.disk.subvolumes.volumesNeededForBoot = mkSetting str (
       lib.concatMapStrings (volume: "${volume.name}=${volume.mountPoint} ") (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes)
     );
