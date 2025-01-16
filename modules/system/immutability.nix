@@ -66,7 +66,7 @@ lib.mkIf config.settings.disk.immutability.enable {
             echo "  Found: $1/$subvolume"
             btrfs_subvolume_delete_recursively "$1/$subvolume"
         done
-        echo "  Deleting: $1" && btrfs subvolume delete "$1" && btrfs filesystem sync / && echo "  Deleted: $1"
+        echo "  Deleting: $1" && btrfs subvolume delete "$1" && btrfs filesystem sync "$ROOT" && echo "  Deleted: $1"
       }
 
       #################################
@@ -77,7 +77,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         [ ! -d "$1" ] && echo " ERROR: $1 does not exist"
         btrfs_subvolume_delete_recursively "$2"
         btrfs subvolume snapshot "$1" "$2"
-        btrfs filesystem sync /
+        btrfs filesystem sync "$ROOT"
       }
 
       ############################
