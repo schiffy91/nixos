@@ -17,7 +17,7 @@ lib.mkIf config.settings.disk.immutability.enable {
     systemd.services.immutability = {
       description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
       wantedBy = [ "initrd.target" ];
-      after = (if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ]);
+      after = (if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" "systemd-udev-settle.service" ] else [ "systemd-udev-settle.service" ]);
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
