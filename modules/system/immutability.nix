@@ -3,7 +3,7 @@ let
   initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
   rootSubvolumeName = config.settings.disk.subvolumes.root.name;
-  snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
+  snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.mountPoint;
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
   rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
@@ -41,14 +41,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       if [ ! -b "$DEVICE" ]; then
           echo "Error: Device '$DEVICE' does not exist"
           exit 1
-      fi
-      # Ensure mount point is available
-      if mountpoint -q "$MOUNT"; then
-          echo "Error: '$MOUNT' is already mounted"
-          exit 1
-      fi                        
+      fi                       
       ##### Mount subvolumes #####
-      mount -o subvol=/,user_subvol_rm_allowed "$DEVICE" "$MOUNT"
+      mount -t btrfs -o subvol=/,user_subvol_rm_allowed "$DEVICE" "$MOUNT"
       ##### Validate CLEAN_ROOT exists #####
       if [ -z "$CLEAN_ROOT" ] || [ ! -d "$CLEAN_ROOT" ]; then
         echo "Error: '$CLEAN_ROOT' is not a directory or is empty"
