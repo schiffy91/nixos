@@ -28,17 +28,18 @@ in {
         name = mkSetting str null; 
         mountPoint = mkSetting str null; 
         mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ]; 
-        neededForBoot = mkSetting bool false;
+        neededForBoot = mkSetting bool true;
         flag = mkSetting (enum [ "none" "swap" "snapshots" "root"]) "none";
+        resetOnBoot = false;
       };
     }))
     [
-      { name = "@root"; mountPoint = "/"; neededForBoot = true; flag = "root"; }
-      { name = "@home"; mountPoint = "/home"; neededForBoot = true; }
-      { name = "@nix"; mountPoint = "/nix"; neededForBoot = true; }
-      { name = "@var"; mountPoint = "/var"; neededForBoot = true; }
-      { name = "@snapshots"; mountPoint = "/.snapshots"; neededForBoot = true; flag = "snapshots"; }
-      { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; }
+      { name = "@root"; mountPoint = "/"; flag = "root"; resetOnBoot = true; }
+      { name = "@home"; mountPoint = "/home"; resetOnBoot = true; }
+      { name = "@nix"; mountPoint = "/nix"; }
+      { name = "@var"; mountPoint = "/var"; }
+      { name = "@snapshots"; mountPoint = "/.snapshots"; flag = "snapshots"; }
+      { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; neededForBoot = false; }
     ];
     settings.disk.subvolumes.root.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "root") null config.settings.disk.subvolumes.volumes).name));
     settings.disk.subvolumes.snapshots.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes).name));
