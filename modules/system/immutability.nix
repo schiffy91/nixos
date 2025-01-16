@@ -25,12 +25,11 @@ lib.mkIf config.settings.disk.immutability.enable {
       serviceConfig.Type = "oneshot";
       path = (with pkgs; [
         btrfs-progs
-        rsync
+        coreutils-full
         coreutils
         util-linux
         mount
         umount
-        coreutils-full
       ]);
       script = ''
       ##################################################
