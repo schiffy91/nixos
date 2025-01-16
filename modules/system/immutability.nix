@@ -19,7 +19,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
       wantedBy = [ "initrd.target" ];
       requires = [ rootDevice ];
-      after = [ rootDevice "systemd-cryptsetup@${config.settings.disk.by.partlabel.root}.service" ];
+      after = [ rootDevice "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" ];
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
