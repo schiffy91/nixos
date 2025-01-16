@@ -3,10 +3,12 @@ let
   initrdPkgs = with pkgs; [ btrfs-progs rsync coreutils bash util-linux ];
   initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
-  root_subvolume_name = config.settings.disk.subvolumes.root.name;
-  snapshots_subvolume_name = config.settings.disk.subvolumes.snapshots.name;
-  clean_root_snapshot_relative_path = config.settings.disk.immutability.persist.snapshots.cleanRoot;
-  paths_to_keep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
+  rootSubvolumeName = config.settings.disk.subvolumes.root.name;
+  snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
+  cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
+  pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
+  systemdRequiredServices = [ "dev-disk-by\\x2dlabel-disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}.device" ] ++
+                            (if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ]);
 in 
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
@@ -17,7 +19,8 @@ lib.mkIf config.settings.disk.immutability.enable {
     systemd.services.immutability = {
       description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
       wantedBy = [ "initrd.target" ];
-      after = (if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" "systemd-udev-settle.service" ] else [ "systemd-udev-settle.service" ]);
+      requires = systemdRequiredServices;
+      after = systemdRequiredServices;
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
@@ -31,11 +34,11 @@ lib.mkIf config.settings.disk.immutability.enable {
       MOUNT="/mnt"
       mkdir -p "$MOUNT"
       ##### Parse args #####
-      DEVICE="${device}"                                            # /dev/disk/by-label/disk-main-root
-      ROOT="$MOUNT/${root_subvolume_name}"                          # /mnt/@root <--------------------  @root
-      SNAPSHOTS="${snapshots_subvolume_name}"                       # /mnt/@snapshots <---------------  @snapshots
-      CLEAN_ROOT="$SNAPSHOTS/${clean_root_snapshot_relative_path}"  # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
-      PATHS_TO_KEEP="${paths_to_keep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
+      DEVICE="${device}"                                          # /dev/disk/by-label/disk-main-root
+      ROOT="$MOUNT/${rootSubvolumeName}"                          # /mnt/@root <--------------------  @root
+      SNAPSHOTS="${snapshotsSubvolumeName}"                       # /mnt/@snapshots <---------------  @snapshots
+      CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
+      PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
       # Validate device exists
       if [ ! -b "$DEVICE" ]; then
           echo "Error: Device '$DEVICE' does not exist"
