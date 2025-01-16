@@ -4,8 +4,6 @@
     git
     wget
     btrfs-progs
-    python3
-    rsync
   ]);
   ##### Unpatched Binaries #####
   programs.nix-ld.enable = true;
