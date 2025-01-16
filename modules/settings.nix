@@ -30,13 +30,15 @@ in {
       };
     }))
     [
-      { name = "@root"; mountPoint = "/"; neededForBoot = true; }
-      { name = "@home"; mountPoint = "/home"; neededForBoot = true; flag = "root"; }
+      { name = "@root"; mountPoint = "/"; neededForBoot = true; flag = "root"; }
+      { name = "@home"; mountPoint = "/home"; neededForBoot = true; }
       { name = "@nix"; mountPoint = "/nix"; }
       { name = "@var"; mountPoint = "/var"; neededForBoot = true; }
       { name = "@snapshots"; mountPoint = "/.snapshots"; neededForBoot = true; flag = "snapshots"; }
       { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; }
     ];
+    settings.disk.subvolumes.rootVolume = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "root") config.settings.disk.subvolumes.volumes).name);
+    settings.disk.subvolumes.snapshotsVolume = mkSetting str toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") config.settings.disk.subvolumes.volumes).name);
     settings.disk.subvolumes.volumesNeededForBoot = mkSetting str (
       lib.concatMapStrings (volume: "${volume.name}=${volume.mountPoint} ") (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes)
     );
