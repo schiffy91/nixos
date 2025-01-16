@@ -26,8 +26,10 @@ lib.mkIf config.settings.disk.immutability.enable {
       path = (with pkgs; [
         btrfs-progs
         rsync
-        coreutils
         util-linux
+        mount
+        umount
+        coreutils-full
       ]);
       script = ''
       ##################################################
