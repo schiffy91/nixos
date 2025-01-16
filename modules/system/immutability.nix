@@ -23,6 +23,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
+      path = (with pkgs; [ rsync ]);
       script = ''
       ##################################################
       ##### Setup args and arg-dependent variables #####
