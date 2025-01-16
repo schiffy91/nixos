@@ -3,7 +3,7 @@ let
   initrdPkgs = with pkgs; [ btrfs-progs rsync coreutils bash util-linux ];
   initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
-  root_subvolume_name = config.settings.disk.subvolumes.rootVolume;
+  root_subvolume_name = config.settings.disk.subvolumes.root.name;
   snapshots_subvolume_name = config.settings.disk.subvolumes.snapshots.name;
   clean_root_snapshot_relative_path = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   paths_to_keep = config.settings.disk.immutability.persist.paths;
@@ -22,26 +22,20 @@ lib.mkIf config.settings.disk.immutability.enable {
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
       path = initrdPkgs;
-      scriptArgs = "${device} ${root_subvolume_name} ${snapshots_subvolume_name} ${clean_root_snapshot_relative_path} ${paths_to_keep}";
       script = ''
       ##################################################
       ##### Setup args and arg-dependent variables #####
       ##################################################
       set -euo pipefail
+      # Create mount point if it doesn't exist
       MOUNT="/mnt"
-      ##### Check number of args #####
-      if [ $# -ne 5 ]; then
-          echo "Error: Incorrect number of arguments"
-          echo "Usage: $0 <device> <root_subvolume_name> <snapshots_subvolume_name> <clean_root_snapshot_relative_path> \"<paths_to_keep>\""
-          echo "Example: $0 /dev/disk/by-partlabel/disk-main-root @root @snapshots CLEAN_ROOT '/etc/nixos /home/alexanderschiffhauer'"
-          exit 1
-      fi
+      mkdir -p "$MOUNT"
       ##### Parse args #####
-      DEVICE="$1:?'Device parameter is required'"                   # /dev/disk/by-label/disk-main-root
-      ROOT="$MOUNT/$2:?'Root subvolume name is required'"           # /mnt/@root <--------------------  @root
-      SNAPSHOTS="$3:?'Snapshots subvolume name is required'"        # /mnt/@snapshots <---------------  @snapshots
-      CLEAN_ROOT="$SNAPSHOTS/$4:?'Clean root path is required'"     # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
-      PATHS_TO_KEEP="$5:?'Paths to keep is required'"               # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
+      DEVICE="${device}"                                            # /dev/disk/by-label/disk-main-root
+      ROOT="$MOUNT/${root_subvolume_name}"                          # /mnt/@root <--------------------  @root
+      SNAPSHOTS="${snapshots_subvolume_name}"                       # /mnt/@snapshots <---------------  @snapshots
+      CLEAN_ROOT="$SNAPSHOTS/${clean_root_snapshot_relative_path}"  # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
+      PATHS_TO_KEEP="${paths_to_keep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
       # Validate device exists
       if [ ! -b "$DEVICE" ]; then
           echo "Error: Device '$DEVICE' does not exist"
@@ -51,9 +45,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       if mountpoint -q "$MOUNT"; then
           echo "Error: '$MOUNT' is already mounted"
           exit 1
-      fi
-      # Create mount point if it doesn't exist
-      mkdir -p "$MOUNT"                         
+      fi                        
       ##### Mount subvolumes #####
       mount -o subvol=/,user_subvol_rm_allowed "$DEVICE" "$MOUNT"
       ##### Validate CLEAN_ROOT exists #####
@@ -66,9 +58,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### Manage snapshots #####
       ############################
       ##### Create Snapshot path variables #####
-      PREVIOUS_SNAPSHOT="$SNAPSHOTS/PREVIOUS_SNAPSHOT"        # /mnt/@snapshots/PREVIOUS_SNAPSHOT
-      PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"  # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
-      CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"          # /mnt/@snapshots/CURRENT_SNAPSHOT
+      PREVIOUS_SNAPSHOT="$SNAPSHOTS/PREVIOUS_SNAPSHOT"              # /mnt/@snapshots/PREVIOUS_SNAPSHOT
+      PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
+      CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
       ##### If it exists, delete the penultimate snapshot. #####
       [ -d "$PENULTIMATE_SNAPSHOT" ] && btrfs subvolume delete -R "$PENULTIMATE_SNAPSHOT"
       ##### If a previous snapshot exists, make it the penultimate snapshot and delete it. #####
@@ -120,8 +112,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### Re-create the root subvolume by creating a snapshot based on what we just constructed. #####
       echo "Restoring '$ROOT'..."
       btrfs subvolume snapshot "$CURRENT_SNAPSHOT" "$ROOT"
-      ##### Unmount #####
+      ##### Unmount & Delete Mountpoint #####
       umount "$MOUNT"
+      rm -rf "$MOUNT"
       ##### Finish #####
       echo "Done. '$ROOT' has been restored to the state of '$CLEAN_ROOT' + new symlinks + keep-paths."
       '';

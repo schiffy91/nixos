@@ -70,7 +70,7 @@ class Shell:
     def find_files(self, path, pattern="*", ignore_pattern=None):
         return self.find(path, pattern=pattern, ignore_pattern=ignore_pattern, ignore_directories=True)
     def symlink(self, source, target): return self.run(f"ln -s {source} {target}")
-    def is_symlink(self, path): return self.run(f"[ ! -L '{path}' ]", check=False).returncode == 0
+    def is_symlink(self, path): return self.run(f"[ -L '{path}' ]", check=False).returncode == 0
     def realpath(self, path): return Shell.stdout(self.run(f"realpath '{path}'")).splitlines()[0]
     def realpaths(self, *paths): return Shell.stdout(self.run("realpath " + " ".join(f"'{path}'" for path in paths))).splitlines()
     def is_dir(self, path): return self.run(f"[ -d '{path}' ]", check=False).returncode == 0
@@ -287,7 +287,7 @@ class Utils:
             if on_exception: on_exception()
             raise
     @classmethod
-    def parse_args(cls, argv, *accepted_args): return [] if not argv or not accepted_args else [arg for arg in argv + [] if arg in set(accepted_args)]
+    def parse_args(cls, argv, *accepted_args): return [] if not argv or not accepted_args else [arg for arg in argv if arg in set(accepted_args)]
     @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod
