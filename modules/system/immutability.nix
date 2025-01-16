@@ -23,7 +23,12 @@ lib.mkIf config.settings.disk.immutability.enable {
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
-      path = (with pkgs; [ rsync ]);
+      path = (with pkgs; [
+        btrfs-progs
+        rsync
+        coreutils
+        util-linux
+      ]);
       script = ''
       ##################################################
       ##### Setup args and arg-dependent variables #####
@@ -35,7 +40,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### Parse args #####
       DEVICE="${device}"                                          # /dev/disk/by-label/disk-main-root
       ROOT="$MOUNT/${rootSubvolumeName}"                          # /mnt/@root <--------------------  @root
-      SNAPSHOTS="$MOUNT/${snapshotsSubvolumeName}"                       # /mnt/@snapshots <---------------  @snapshots
+      SNAPSHOTS="$MOUNT/${snapshotsSubvolumeName}"                # /mnt/@snapshots <---------------  @snapshots
       CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
       PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
       # Validate device exists
