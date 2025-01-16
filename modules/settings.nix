@@ -14,11 +14,12 @@ in {
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     ##### Disk: Labels #####
+    settings.disk.label.disk = mkSetting str "disk";
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "boot";
     settings.disk.label.root = mkSetting str "root";
-    settings.disk.partlabel.boot = mkSetting str "disk-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
-    settings.disk.partlabel.root = mkSetting str "disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
+    settings.disk.partlabel.boot = mkSetting str "${config.settings.disk.label.disk}-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
+    settings.disk.partlabel.root = mkSetting str "${config.settings.disk.label.disk}-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
     settings.disk.by.partlabel.boot = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.boot}";
     settings.disk.by.partlabel.root = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.root}";
     ##### Disk: Subvolumes #####
