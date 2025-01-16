@@ -26,15 +26,16 @@ in {
         mountPoint = mkSetting str null; 
         mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ]; 
         neededForBoot = mkSetting bool false;
-        isSwap = mkSetting bool false;
+        flag = mkSetting (enum [ "none" "swap" "snapshots" "root"]) "none";
       };
     }))
     [
       { name = "@root"; mountPoint = "/"; neededForBoot = true; }
-      { name = "@home"; mountPoint = "/home"; neededForBoot = true; }
+      { name = "@home"; mountPoint = "/home"; neededForBoot = true; flag = "root"; }
       { name = "@nix"; mountPoint = "/nix"; }
       { name = "@var"; mountPoint = "/var"; neededForBoot = true; }
-      { name = "@swap"; mountPoint = "/swap"; mountOptions = []; isSwap = true; }
+      { name = "@snapshots"; mountPoint = "/.snapshots"; neededForBoot = true; flag = "snapshots"; }
+      { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; }
     ];
     settings.disk.subvolumes.volumesNeededForBoot = mkSetting str (
       lib.concatMapStrings (volume: "${volume.name}=${volume.mountPoint} ") (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes)
@@ -48,7 +49,7 @@ in {
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
     settings.disk.immutability.persist.snapshots.path = mkSetting str "/snapshots";
-    settings.disk.immutability.persist.snapshots.name = mkSetting str "FACTORY_RESET";
+    settings.disk.immutability.persist.snapshots.name = mkSetting str "CLEAN_ROOT";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [
       "/etc/nixos"
       "/etc/machine-id"

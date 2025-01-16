@@ -21,15 +21,15 @@ let
     };
   ##### Subvolumes #####
   mkSubvolumes = subvolumes: 
-    lib.listToAttrs (map (subvolume: { 
+    lib.listToAttrs (lib.lists.forEach subvolumes (subvolume: { 
       name = subvolume.name; 
       value = { 
         mountpoint = subvolume.mountPoint;
         mountOptions = subvolume.mountOptions; 
-      } // (if !config.settings.disk.swap.enable || !subvolume.isSwap then {} else {
+      } // (if !config.settings.disk.swap.enable || subvolume.flag != "swap" then {} else {
         swap.swapfile.size = config.settings.disk.swap.size; 
        });
-    }) subvolumes);
+    }));
 in {
   imports = [ inputs.disko.nixosModules.disko ];
   ##### Disko #####
