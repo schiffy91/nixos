@@ -5,7 +5,7 @@ let
   rootSubvolumeName = config.settings.disk.subvolumes.root.name;
   snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
-  pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
+  pathsToKeep = '${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}'
   rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
 in 
 lib.mkIf config.settings.disk.immutability.enable {
