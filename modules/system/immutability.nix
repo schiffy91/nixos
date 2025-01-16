@@ -63,7 +63,6 @@ lib.mkIf config.settings.disk.immutability.enable {
         echo "btrfs_subvolume_delete_recursively: $path"
         [ ! -d "$path" ] && echo "  Warning: $path does not exist" && return 0
         
-        # First get all nested subvolumes in reverse order (deepest first)
         local subvolumes
         subvolumes=$(btrfs subvolume list -o "$path" | tac | cut -f 9- -d ' ')
         
@@ -75,6 +74,7 @@ lib.mkIf config.settings.disk.immutability.enable {
                 echo "  Warning: Failed to delete $subvolume"
                 continue
             }
+            btrfs filesystem sync "$ROOT"
         done
         
         # Finally delete the main subvolume
