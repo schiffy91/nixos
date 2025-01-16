@@ -6,7 +6,7 @@ let
   root_subvolume_name = config.settings.disk.subvolumes.root.name;
   snapshots_subvolume_name = config.settings.disk.subvolumes.snapshots.name;
   clean_root_snapshot_relative_path = config.settings.disk.immutability.persist.snapshots.cleanRoot;
-  paths_to_keep = config.settings.disk.immutability.persist.paths;
+  paths_to_keep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
 in 
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
