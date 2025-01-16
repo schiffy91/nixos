@@ -7,7 +7,9 @@
 #   restore-subvolume.sh /dev/disk/by-partlabel/disk-main-root @root / @snapshots /snapshots CLEAN_ROOT "/etc/nixos /home/alexanderschiffhauer"
 set -euo pipefail
 
+##################################################
 ##### Setup args and arg-dependent variables #####
+##################################################
 MOUNT="/mnt"
 ##### Check number of args #####
 if [ $# -ne 7 ]; then
@@ -46,11 +48,13 @@ if [ -z "$CLEAN_ROOT" ]; then
   exit 1
 fi
 
+############################
 ##### Manage snapshots #####
+############################
 ##### Create Snapshot path variables #####
-PREVIOUS_SNAPSHOT="${SNAPSHOTS}/PREVIOUS_SNAPSHOT"                  # /mnt/@snapshots/PREVIOUS_SNAPSHOT
-PENULTIMATE_SNAPSHOT="${SNAPSHOTS}/PENULTIMATE_SNAPSHOT"     # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
-CURRENT_SNAPSHOT="${SNAPSHOTS}/CURRENT_SNAPSHOT"                    # /mnt/@snapshots/CURRENT_SNAPSHOT
+PREVIOUS_SNAPSHOT="${SNAPSHOTS}/PREVIOUS_SNAPSHOT"        # /mnt/@snapshots/PREVIOUS_SNAPSHOT
+PENULTIMATE_SNAPSHOT="${SNAPSHOTS}/PENULTIMATE_SNAPSHOT"  # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
+CURRENT_SNAPSHOT="${SNAPSHOTS}/CURRENT_SNAPSHOT"          # /mnt/@snapshots/CURRENT_SNAPSHOT
 ##### If it exists, delete the penultimate snapshot. #####
 [ -d "${PENULTIMATE_SNAPSHOT}" ] && btrfs subvolume delete -R "${PENULTIMATE_SNAPSHOT}"
 ##### If a previous snapshot exists, make it the penultimate snapshot and delete it. #####
@@ -63,6 +67,9 @@ btrfs subvolume snapshot "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
 ##### Make the current snapshot read-writeable #####
 btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true
 
+######################
+##### Copy paths #####
+######################
 ##### Copy the explicitly preserved paths into the current snapshot. #####
 echo "Copying '${PATHS_TO_KEEP}' to '${CURRENT_SNAPSHOT}'..."
 for path in $PATHS_TO_KEEP; do
@@ -76,7 +83,6 @@ for path in $PATHS_TO_KEEP; do
     echo "Warning: '${current_path}' does not exist and was not preserved."
   fi
 done
-
 ##### NixOS depends on an unfathomable amount of symlinks, so just copy all of them into the current snapshot. #####
 echo "Preserving new symlinks..."
 (
@@ -90,6 +96,9 @@ echo "Preserving new symlinks..."
   done
 )
 
+#####################
+##### Swap root #####
+#####################
 ##### Delete root subvolume (!) #####
 ##### If the power is plugged now, you can restore /mnt/@snapshots/PREVIOUS_SNAPSHOT #####
 echo "Deleting '${ROOT}'..."
@@ -97,8 +106,7 @@ btrfs subvolume delete -R "${ROOT}"
 ##### Re-create the root subvolume by creating a snapshot based on what we just constructed. #####
 echo "Restoring '${ROOT}'..."
 btrfs subvolume snapshot "${CURRENT_SNAPSHOT}" "${ROOT}"
-
 ##### Unmount #####
 umount "${MOUNT}"
-
+##### Finish #####
 echo "Done. '${ROOT}' has been restored to the state of '${CLEAN_ROOT}' + new symlinks + keep-paths."
