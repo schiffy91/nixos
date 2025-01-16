@@ -7,7 +7,7 @@ let
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
   rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
-  additionalRequirements = if config.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ];
+  additionalRequirements = if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ];
 in 
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
