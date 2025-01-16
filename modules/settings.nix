@@ -30,6 +30,7 @@ in {
         mountOptions = mkSetting (listOf str) [ "compress=zstd" "noatime" ]; 
         neededForBoot = mkSetting bool true;
         flag = mkSetting (enum [ "none" "swap" "snapshots" "root"]) "none";
+        neededForBoot = true;
         resetOnBoot = false;
       };
     }))
