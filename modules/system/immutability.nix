@@ -7,7 +7,7 @@ let
   snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
-  systemdRequiredServices = [ "dev-disk-by\\x2dlabel-${config.settings.disk.partlable.root}.device" ] ++
+  systemdRequiredServices = [ "dev-disk-by\\x2dlabel-${config.settings.disk.partlabel.root}.device" ] ++
                             (if config.settings.disk.encryption.enable then [ "systemd-cryptsetup@*.service" ] else [ ]);
 in 
 lib.mkIf config.settings.disk.immutability.enable {

@@ -17,10 +17,10 @@ in {
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "boot";
     settings.disk.label.root = mkSetting str "root";
-    settings.disk.partlable.boot = mkSetting str "disk-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
-    settings.disk.partlable.root = mkSetting str "disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
-    settings.disk.by.partlabel.boot = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlable.boot}";
-    settings.disk.by.partlabel.root = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlable.root}";
+    settings.disk.partlabel.boot = mkSetting str "disk-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
+    settings.disk.partlabel.root = mkSetting str "disk-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
+    settings.disk.by.partlabel.boot = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.boot}";
+    settings.disk.by.partlabel.root = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.root}";
     ##### Disk: Subvolumes #####
     settings.disk.subvolumes.volumes = mkSetting (listOf (submodule{ 
       options = { 
