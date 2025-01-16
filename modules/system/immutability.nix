@@ -37,6 +37,11 @@ lib.mkIf config.settings.disk.immutability.enable {
       SNAPSHOTS="$MOUNT/${snapshotsSubvolumeName}"                # /mnt/@snapshots <---------------  @snapshots
       CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
       PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
+      echo "MOUNT: $MOUNT"
+      echo "ROOT: $ROOT"
+      echo "SNAPSHOTS: $SNAPSHOTS"
+      echo "CLEAN_ROOT: $CLEANROOT"
+      echo "PATHS_TO_KEEP: $PATHS_TO_KEEP"
       # Validate device exists
       if [ ! -b "$DEVICE" ]; then
           echo "Error: Device '$DEVICE' does not exist"
@@ -74,9 +79,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       [ -d "$PREVIOUS_SNAPSHOT" ] && btrfs subvolume snapshot "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT" && btrfs_subvolume_delete_recursively "$PREVIOUS_SNAPSHOT"  
       ##### Make a previous snapshot capturing the current state of the system. #####
       btrfs subvolume snapshot "$ROOT" "$PREVIOUS_SNAPSHOT"
-      ##### Create the new (i.e. current) snapshot, copied from a known clean copy of the system. #####
+      ##### Create the new (i.e. current) snapshot, copied from a known clean copy of the system. If it exists, delete it first. #####
       echo "Creating a clean system image, '$CURRENT_SNAPSHOT', from '$CLEAN_ROOT'..."
-      btrfs subvolume snapshot "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
+      [ -d "$CURRENT_SNAPSHOT" ] && btrfs_subvolume_delete_recursively "$CURRENT_SNAPSHOT" && btrfs subvolume snapshot "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
       ##### Make the current snapshot read-writeable #####
       btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true
 
