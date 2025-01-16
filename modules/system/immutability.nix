@@ -3,7 +3,7 @@ let
   initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
   rootSubvolumeName = config.settings.disk.subvolumes.root.name;
-  snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.mountPoint;
+  snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
   cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
   pathsToKeep = lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths;
   rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
@@ -34,7 +34,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### Parse args #####
       DEVICE="${device}"                                          # /dev/disk/by-label/disk-main-root
       ROOT="$MOUNT/${rootSubvolumeName}"                          # /mnt/@root <--------------------  @root
-      SNAPSHOTS="${snapshotsSubvolumeName}"                       # /mnt/@snapshots <---------------  @snapshots
+      SNAPSHOTS="MOUNT/${snapshotsSubvolumeName}"                       # /mnt/@snapshots <---------------  @snapshots
       CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
       PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
       # Validate device exists
