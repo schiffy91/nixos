@@ -34,7 +34,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### Parse args #####
       DEVICE="${device}"                                          # /dev/disk/by-label/disk-main-root
       ROOT="$MOUNT/${rootSubvolumeName}"                          # /mnt/@root <--------------------  @root
-      SNAPSHOTS="MOUNT/${snapshotsSubvolumeName}"                       # /mnt/@snapshots <---------------  @snapshots
+      SNAPSHOTS="$MOUNT/${snapshotsSubvolumeName}"                       # /mnt/@snapshots <---------------  @snapshots
       CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
       PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
       # Validate device exists
