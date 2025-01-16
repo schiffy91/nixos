@@ -26,6 +26,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       path = (with pkgs; [
         btrfs-progs
         rsync
+        coreutils
         util-linux
         mount
         umount
@@ -87,7 +88,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         tmp_path="$CURRENT_SNAPSHOT/$path"
         if [ -e "$current_path" ]; then
           mkdir -p "$(dirname "$tmp_path")"
-          rsync -avxHAX "$current_path" "$tmp_path" # rsync -avxHAX should preserve everything
+          cp -a "$current_path" "$tmp_path"
           echo "Successfully copied '$current_path' to '$tmp_path'"
         else
           echo "Warning: '$current_path' does not exist and was not preserved."
@@ -100,7 +101,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         find . -type l | while read -r link; do
           if [ ! -e "$CURRENT_SNAPSHOT/$link" ]; then
             mkdir -p "$(dirname "$CURRENT_SNAPSHOT/$link")"
-            cp -a -H "$link" "$CURRENT_SNAPSHOT/$link"
+            cp -a "$link" "$CURRENT_SNAPSHOT/$link"
             echo "Successfully copied '$link' to '$CURRENT_SNAPSHOT/$link'"
           fi
         done
