@@ -235,7 +235,10 @@ class Snapshot:
     @classmethod
     def get_clean_root_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.cleanRoot")
     @classmethod
-    def create_initial_snapshot(cls): cls.sh.run(f"btrfs subvolume snapshot -r / {cls.get_snapshots_path()}/{cls.get_clean_root_snapshot_name()}")
+    def create_initial_snapshot(cls):
+        snapshot_path = f"{cls.get_snapshots_path()}/{cls.get_clean_root_snapshot_name()}"
+        if cls.sh.exists(snapshot_path): cls.sh.rm(snapshot_path)
+        cls.sh.run(f"btrfs subvolume snapshot -r / {snapshot_path}")
 
 @chrootable
 class Interactive:
