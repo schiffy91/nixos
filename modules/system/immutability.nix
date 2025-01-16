@@ -40,7 +40,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       echo "MOUNT: $MOUNT"
       echo "ROOT: $ROOT"
       echo "SNAPSHOTS: $SNAPSHOTS"
-      echo "CLEAN_ROOT: $CLEANROOT"
+      echo "CLEAN_ROOT: $CLEAN_ROOT"
       echo "PATHS_TO_KEEP: $PATHS_TO_KEEP"
       # Validate device exists
       if [ ! -b "$DEVICE" ]; then
