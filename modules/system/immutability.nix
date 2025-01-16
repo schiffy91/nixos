@@ -86,12 +86,12 @@ lib.mkIf config.settings.disk.immutability.enable {
       }
 
       #################################
-      ##### BTRFS Create Function #####
+      ##### BTRFS Copy Function #####
       #################################
-      btrfs_subvolume_create() {
+      btrfs_subvolume_copy() {
         local source="$1"
         local target="$2"
-        echo "btrfs_subvolume_create: $source -> $target"
+        echo "btrfs_subvolume_copy: $source -> $target"
         
         [ ! -d "$source" ] && { 
             echo " ERROR: Source $source does not exist"
@@ -114,9 +114,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
       CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
       ##### Delete existing snapshots and create new ones #####
-      btrfs_subvolume_create "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
-      btrfs_subvolume_create "$ROOT" "$PREVIOUS_SNAPSHOT"
-      btrfs_subvolume_create "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
+      btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
+      btrfs_subvolume_copy "$ROOT" "$PREVIOUS_SNAPSHOT"
+      btrfs_subvolume_copy "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
       ##### Make the current snapshot read-writeable #####
       btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true
 
@@ -155,7 +155,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### If the power is plugged now, you can restore /mnt/@snapshots/PREVIOUS_SNAPSHOT #####
       ##### Re-create the root subvolume by creating a snapshot based on what we just constructed. #####
       echo "Re-creating '$ROOT' from '$CURRENT_SNAPSHOT'..."
-      btrfs_subvolume_create "$CURRENT_SNAPSHOT" "$ROOT"
+      btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$ROOT"
       ##### Unmount & Delete Mountpoint #####
       umount "$MOUNT"
       rm -rf "$MOUNT"
