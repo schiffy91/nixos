@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # restore-subvolume.sh - revert a Btrfs subvolume from a snapshot, preserving user-specified paths and ignoring new symlinks.
-set -euo pipefail
 
 ##################################################
 ##### Setup args and arg-dependent variables #####
 ##################################################
+set -euo pipefail
 MOUNT="/mnt"
 ##### Check number of args #####
 if [ $# -ne 5 ]; then
