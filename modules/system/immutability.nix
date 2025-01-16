@@ -59,22 +59,25 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### BTRFS Delete Function #####
       #################################
       btrfs_subvolume_delete_recursively() {
-        [ ! -d "$1" ] && return 0
+        echo "btrfs_subvolume_delete_recursively: $1"
+        [ ! -d "$1" ] && echo "  Warning: $1 does not exist" && return 0
         IFS=$'\n'
         for subvolume in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
+            echo "  Found: $1/$subvolume"
             btrfs_subvolume_delete_recursively "$1/$subvolume"
         done
-        btrfs subvolume delete "$1" && btrfs filesystem sync /
+        echo "  Deleting: $1" && btrfs subvolume delete "$1" && btrfs filesystem sync / && echo "  Deleted: $1"
       }
 
       #################################
       ##### BTRFS Create Function #####
       #################################
       btrfs_subvolume_create() {
+        echo "btrfs_subvolume_create: $1 $2"
+        [ ! -d "$1" ] && echo " ERROR: $1 does not exist"
         btrfs_subvolume_delete_recursively "$2"
-        btrfs subvolume delete
+        btrfs subvolume snapshot "$1" "$2"
         btrfs filesystem sync /
-        [ -d "$1" ] btrfs subvolume "$1" "$2"
       }
 
       ############################
