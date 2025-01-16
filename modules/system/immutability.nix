@@ -50,6 +50,17 @@ lib.mkIf config.settings.disk.immutability.enable {
         exit 1
       fi
 
+      #################################
+      ##### BTRFS Delete Function #####
+      #################################
+      btrfs_subvolume_delete_recursively() {
+        IFS=$'\n'
+        for subvolume in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
+            btrfs_subvolume_delete_recursively "$SNAPSHOTS/$subvolume"
+        done
+        btrfs subvolume delete "$1"
+      }
+
       ############################
       ##### Manage snapshots #####
       ############################
@@ -58,9 +69,9 @@ lib.mkIf config.settings.disk.immutability.enable {
       PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
       CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
       ##### If it exists, delete the penultimate snapshot. #####
-      [ -d "$PENULTIMATE_SNAPSHOT" ] && btrfs subvolume delete -R "$PENULTIMATE_SNAPSHOT"
+      [ -d "$PENULTIMATE_SNAPSHOT" ] && btrfs_subvolume_delete_recursively "$PENULTIMATE_SNAPSHOT"
       ##### If a previous snapshot exists, make it the penultimate snapshot and delete it. #####
-      [ -d "$PREVIOUS_SNAPSHOT" ] && btrfs subvolume snapshot "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT" && btrfs subvolume delete -R "$PREVIOUS_SNAPSHOT"  
+      [ -d "$PREVIOUS_SNAPSHOT" ] && btrfs subvolume snapshot "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT" && btrfs_subvolume_delete_recursively "$PREVIOUS_SNAPSHOT"  
       ##### Make a previous snapshot capturing the current state of the system. #####
       btrfs subvolume snapshot "$ROOT" "$PREVIOUS_SNAPSHOT"
       ##### Create the new (i.e. current) snapshot, copied from a known clean copy of the system. #####
@@ -104,7 +115,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       ##### Delete root subvolume (!) #####
       ##### If the power is plugged now, you can restore /mnt/@snapshots/PREVIOUS_SNAPSHOT #####
       echo "Deleting '$ROOT'..."
-      btrfs subvolume delete -R "$ROOT"
+      btrfs_subvolume_delete_recursively "$ROOT"
       ##### Re-create the root subvolume by creating a snapshot based on what we just constructed. #####
       echo "Restoring '$ROOT'..."
       btrfs subvolume snapshot "$CURRENT_SNAPSHOT" "$ROOT"
