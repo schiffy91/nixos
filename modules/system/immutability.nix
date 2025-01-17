@@ -13,8 +13,8 @@ lib.mkIf config.settings.disk.immutability.enable {
   boot.readOnlyNixStore = true;
   boot.initrd = {
     supportedFilesystems = [ "btrfs" ];
-    kernelModules = initrdKernelModules;
-    availableKernelModules = initrdKernelModules;
+    #kernelModules = initrdKernelModules;
+    #availableKernelModules = initrdKernelModules;
     systemd.services.immutability = {
       description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
       wantedBy = [ "initrd.target" ];
@@ -24,146 +24,114 @@ lib.mkIf config.settings.disk.immutability.enable {
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
       script = ''
-      ##################################################
-      ##### Setup args and arg-dependent variables #####
-      ##################################################
       set -euo pipefail
-      # Create mount point if it doesn't exist
+      INDENT_DEPTH=0
+      indent() {
+        local tabs=""
+        for ((i=1; i<=INDENT_DEPTH; i++)); do
+          tabs+="\t"
+        done
+        echo "$tabs"
+      }
+      log_info() {
+        echo "$(indent)INFO    : $@"
+      }
+      log_error() {
+        echo "$(indent)ERROR   : $@" >&2
+      }
+      trace() {
+        ((INDENT_DEPTH++))
+        echo "$(indent)STARTED : $@"
+        "$@"
+        local ret=$?
+        if [ $ret -eq 0 ]; then
+          echo "$(indent)FINISHED: $@"
+        else
+          echo "$(indent)FAILED  : $@" >&2
+        fi
+        ((INDENT_DEPTH--))
+        return $ret
+      }
+      warn() {
+        log_error "$@"
+      }
+      abort() {
+        warn "$@"
+        trace disk_unmount "$MOUNT"
+        exit 1
+      }
+      disk_mount() {
+        trace mkdir -p "$2"
+        trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$1" "$2"
+      }
+      disk_unmount() {
+        trace umount "$1"
+        trace rm -rf "$1"
+      }
+      require() {
+        trace test "$@" || abort "Require failed: $@"
+      }
+      desire() {
+        trace test "$@" && return 0
+        warn "Desire failed: $@"
+        return 1
+      }
+      btrfs_sync() {
+        local path="$1"
+        trace btrfs filesystem sync "$path"
+      }
+      btrfs_subvolume_delete() {
+        trace btrfs subvolume delete "$@"
+        trace btrfs_sync "$ROOT"
+      }
+      btrfs_subvolume_delete_recursively() {
+        local path="$1"
+        [ -d "$path" ] || (warn "$path is not a directory" && return 0)
+        local subvolumes
+        subvolumes=$(btrfs subvolume list -o "$path" | tac | cut -f 9- -d ' ')
+        IFS=$'\n'
+        for subvolume in $subvolumes; do
+          trace btrfs_subvolume_delete "$MOUNT/$subvolume"
+        done
+        trace btrfs_subvolume_delete "$path" 
+      }
+      btrfs_subvolume_copy() {
+        local source="$1"
+        local target="$2"
+        desire "-d $source" || return 1
+        trace btrfs_subvolume_delete_recursively "$target" || return 1
+        trace btrfs subvolume snapshot "$source" "$target" || abort "Failed to create snapshot from $source to $target"
+        trace btrfs_sync "$ROOT"
+      }
+      
+      log_info "Setting up variables"
       MOUNT="/mnt"
-      mkdir -p "$MOUNT"
-      ##### Parse args #####
       DEVICE="${device}"                                          # /dev/disk/by-label/disk-main-root
       ROOT="$MOUNT/${rootSubvolumeName}"                          # /mnt/@root <--------------------  @root
       SNAPSHOTS="$MOUNT/${snapshotsSubvolumeName}"                # /mnt/@snapshots <---------------  @snapshots
       CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
       PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
-      echo "MOUNT: $MOUNT"
-      echo "ROOT: $ROOT"
-      echo "SNAPSHOTS: $SNAPSHOTS"
-      echo "CLEAN_ROOT: $CLEAN_ROOT"
-      echo "PATHS_TO_KEEP: $PATHS_TO_KEEP"
-      # Validate device exists
-      if [ ! -b "$DEVICE" ]; then
-          echo "Error: Device '$DEVICE' does not exist"
-          exit 1
-      fi                       
-      ##### Mount subvolumes #####
-      mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$DEVICE" "$MOUNT"
-      ##### Validate CLEAN_ROOT exists #####
-      if [ -z "$CLEAN_ROOT" ] || [ ! -d "$CLEAN_ROOT" ]; then
-        echo "Error: '$CLEAN_ROOT' is not a directory or is empty"
-        exit 1
-      fi
-
-      #################################
-      ##### BTRFS Delete Function #####
-      #################################
-      btrfs_subvolume_delete_recursively() {
-        local path="$1"
-        echo "btrfs_subvolume_delete_recursively: $path"
-        [ ! -d "$path" ] && echo "  Warning: $path does not exist" && return 0
-        
-        local subvolumes
-        subvolumes=$(btrfs subvolume list -o "$path" | tac | cut -f 9- -d ' ')
-        
-        # Delete each nested subvolume
-        IFS=$'\n'
-        for subvolume in $subvolumes; do
-            echo "  Deleting nested: $subvolume"
-            btrfs subvolume delete "$MOUNT/$subvolume" || {
-                echo "  Warning: Failed to delete $subvolume"
-                continue
-            }
-            btrfs filesystem sync "$ROOT"
-        done
-        
-        # Finally delete the main subvolume
-        echo "  Deleting main: $path"
-        btrfs subvolume delete "$path" && {
-            btrfs filesystem sync "$ROOT"
-            echo "  Deleted: $path"
-        } || echo "  ERROR: Failed to delete $path"
-      }
-
-      #################################
-      ##### BTRFS Copy Function #####
-      #################################
-      btrfs_subvolume_copy() {
-        local source="$1"
-        local target="$2"
-        echo "btrfs_subvolume_copy: $source -> $target"
-        
-        [ ! -d "$source" ] && { 
-            echo " ERROR: Source $source does not exist"
-            return 1
-        }
-        
-        btrfs_subvolume_delete_recursively "$target"
-        btrfs subvolume snapshot "$source" "$target" || {
-            echo " ERROR: Failed to create snapshot from $source to $target"
-            return 1
-        }
-        btrfs filesystem sync "$ROOT"
-      }
-
-      ############################
-      ##### Manage snapshots #####
-      ############################
-      ##### Create Snapshot path variables #####
+      
+      log_info "MOUNT=$MOUNT ROOT=$ROOT SNAPSHOTS=$SNAPSHOTS CLEAN_ROOT=$CLEAN_ROOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
+      require "-b $DEVICE"
+      require "-n $CLEAN_ROOT"
+      require "-d $CLEAN_ROOT"
+      trace disk_mount "$DEVICE" "$MOUNT"
       PREVIOUS_SNAPSHOT="$SNAPSHOTS/PREVIOUS_SNAPSHOT"              # /mnt/@snapshots/PREVIOUS_SNAPSHOT
       PENULTIMATE_SNAPSHOT="$SNAPSHOTS/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
       CURRENT_SNAPSHOT="$SNAPSHOTS/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
-      ##### Setup PREVIOUS_SNAPSHOT and PENULTIMTE_SNAPSHOT if they don't exist #####
-      [ ! -d "$PENULTIMATE_SNAPSHOT" ] && btrfs_subvolume_copy "$CLEAN_ROOT" "$PENULTIMATE_SNAPSHOT"
-      [ ! -d "$PREVIOUS_SNAPSHOT" ] && btrfs_subvolume_copy "$CLEAN_ROOT" "$PREVIOUS_SNAPSHOT"
-      ##### Delete existing snapshots and create new ones #####
-      btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
-      btrfs_subvolume_copy "$ROOT" "$PREVIOUS_SNAPSHOT"
-      btrfs_subvolume_copy "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
-      ##### Make the current snapshot read-writeable #####
-      btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true
-
-      ######################
-      ##### Copy paths #####
-      ######################
-      ##### Copy the explicitly preserved paths into the current snapshot. #####
-      echo "Copying '$PATHS_TO_KEEP' to '$CURRENT_SNAPSHOT'..."
-      for path in $PATHS_TO_KEEP; do
-        current_path="$ROOT/$path"
-        tmp_path="$CURRENT_SNAPSHOT/$path"
-        if [ -e "$current_path" ]; then
-          mkdir -p "$(dirname "$tmp_path")"
-          cp -a "$current_path" "$tmp_path"
-          echo "Successfully copied '$current_path' to '$tmp_path'"
-        else
-          echo "Warning: '$current_path' does not exist and was not preserved."
-        fi
-      done
-      ##### NixOS depends on an unfathomable amount of symlinks, so just copy all of them into the current snapshot. #####
-      echo "Preserving new symlinks..."
-      (
-        cd "$ROOT"
-        find . -type l | while read -r link; do
-          if [ ! -e "$CURRENT_SNAPSHOT/$link" ]; then
-            mkdir -p "$(dirname "$CURRENT_SNAPSHOT/$link")"
-            cp -a "$link" "$CURRENT_SNAPSHOT/$link"
-            echo "Successfully copied '$link' to '$CURRENT_SNAPSHOT/$link'"
-          fi
-        done
-      )
-
-      #####################
-      ##### Swap root #####
-      #####################
-      ##### If the power is plugged now, you can restore /mnt/@snapshots/PREVIOUS_SNAPSHOT #####
-      ##### Re-create the root subvolume by creating a snapshot based on what we just constructed. #####
-      echo "Re-creating '$ROOT' from '$CURRENT_SNAPSHOT'..."
-      btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$ROOT"
-      ##### Unmount & Delete Mountpoint #####
-      umount "$MOUNT"
-      rm -rf "$MOUNT"
-      ##### Finish #####
-      echo "Done. '$ROOT' has been restored to the state of '$CLEAN_ROOT' + new symlinks + keep-paths."
+      desire -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_ROOT" "$PENULTIMATE_SNAPSHOT"
+      desire -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_ROOT" "$PREVIOUS_SNAPSHOT"
+      
+      log_info "Setting up snapshots"
+      trace btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
+      trace btrfs_subvolume_copy "$ROOT" "$PREVIOUS_SNAPSHOT"
+      trace btrfs_subvolume_copy "$CLEAN_ROOT" "$CURRENT_SNAPSHOT"
+      trace btrfs property set -ts "$CURRENT_SNAPSHOT" ro false 2>/dev/null || true # readwrite
+      
+      log_info "Copying $CURRENT_SNAPSHOT to $ROOT"
+      trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$ROOT"
+      trace disk_unmount "$MOUNT"
       '';
     };
   };
