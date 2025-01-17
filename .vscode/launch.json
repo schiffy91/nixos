@@ -46,21 +46,12 @@
             "sudo": true
         },
         {
-            "name": "Immutable (Initialize)",
+            "name": "Immutability",
             "type": "debugpy",
             "request": "launch",
-            "program": "bin/immutable.py",
+            "program": "bin/immutability.py",
             "console": "integratedTerminal",
-            "args": [ "initialize" ],
-            "sudo": true
-        },
-        {
-            "name": "Immutable (Revert)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "bin/immutable.py",
-            "console": "integratedTerminal",
-            "args": [ "revert" ],
+            "args": [ "/dev/disk/by-label/disk-main-root", "@root", "@snapshots", "CLEAN_ROOT", "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"  ],
             "sudo": true
         },
         {

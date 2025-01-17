@@ -28,6 +28,7 @@ class Installer:
         if "--debug" in args:
             vscodium_cmd = "nix --extra-experimental-features nix-command --extra-experimental-features flakes run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
             cls.sh.run(f"{vscodium_cmd} --install-extension ms-python.python")
+            cls.sh.run(f"{vscodium_cmd} --install-extension rogalmic.bash-debug")
             cls.sh.run(f"{vscodium_cmd} {Config.get_nixos_path()}")
             return Utils.abort("Please continue in VSCodium")
     @classmethod
