@@ -47,12 +47,11 @@
         },
         {
             "name": "Immutability",
-            "type": "debugpy",
+            "type": "bashdb",
             "request": "launch",
-            "program": "bin/immutability.sh",
-            "console": "integratedTerminal",
-            "args": [ "/dev/disk/by-label/disk-main-root", "@root", "@snapshots", "CLEAN_ROOT", "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"  ],
-            "sudo": true
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/bin/immutability.sh",
+            "args": [ "/dev/disk/by-label/disk-main-root", "@root", "@snapshots", "CLEAN_ROOT", "/etc/nixos /etc/machine-id /home/alexanderschiffhauer" ]
         },
         {
             "name": "Update",
