@@ -23,6 +23,7 @@ lib.mkIf config.settings.disk.immutability.enable {
       before = [ "sysroot.mount" ];
       unitConfig.DefaultDependencies = "no";
       serviceConfig.Type = "oneshot";
+      scriptArgs = "${device} ${rootSubvolumeName} ${snapshotsSubvolumeName} ${cleanRootSnapshotRelativePath} ${pathsToKeep}";
       script = ''
       set -euo pipefail
       INDENT_DEPTH=0
@@ -106,11 +107,11 @@ lib.mkIf config.settings.disk.immutability.enable {
       
       log_info "Setting up variables"
       MOUNT="/mnt"
-      DEVICE="${device}"                                          # /dev/disk/by-label/disk-main-root
-      ROOT="$MOUNT/${rootSubvolumeName}"                          # /mnt/@root <--------------------  @root
-      SNAPSHOTS="$MOUNT/${snapshotsSubvolumeName}"                # /mnt/@snapshots <---------------  @snapshots
-      CLEAN_ROOT="$SNAPSHOTS/${cleanRootSnapshotRelativePath}"    # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
-      PATHS_TO_KEEP="${pathsToKeep}"                              # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
+      DEVICE="$1"                 # /dev/disk/by-label/disk-main-root
+      ROOT="$MOUNT/$2"            # /mnt/@root <--------------------  @root
+      SNAPSHOTS="$MOUNT/$3"       # /mnt/@snapshots <---------------  @snapshots
+      CLEAN_ROOT="$SNAPSHOTS/$4"  # /mnt/@snapshots/CLEAN_ROOT <---- CLEAN_ROOT
+      PATHS_TO_KEEP="$5"          # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
       
       log_info "MOUNT=$MOUNT ROOT=$ROOT SNAPSHOTS=$SNAPSHOTS CLEAN_ROOT=$CLEAN_ROOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
       require "-b $DEVICE"
