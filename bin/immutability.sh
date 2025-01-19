@@ -77,10 +77,10 @@ btrfs_subvolume_delete_recursively() {
 	local path="$1"
 	trace desire -d "$path" || return 0
 	local subvolumes
-	subvolumes=$(btrfs subvolume list -o "$path" | tac | cut -f 9- -d ' ')
+	subvolumes=$(btrfs subvolume list -o "$path" | cut -f 9- -d ' ')
 	IFS=$'\n'
 	for subvolume in $subvolumes; do
-		trace btrfs_subvolume_delete "$path/$subvolume"
+		trace btrfs_subvolume_delete_recursively "$path/$subvolume"
 	done
 	trace btrfs_subvolume_delete "$path"
 }
