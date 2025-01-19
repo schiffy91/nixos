@@ -51,7 +51,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/bin/immutability.sh",
-            "args": [ "/dev/disk/by-label/disk-main-root", "@root", "@snapshots", "CLEAN_ROOT", "/etc/nixos /etc/machine-id /home/alexanderschiffhauer" ]
+            "args": [ "/dev/disk/by-label/disk-main-root", "\"\"", ".snapshots", "CLEAN_ROOT", "/etc/nixos /etc/machine-id /home/alexanderschiffhauer" ]
         },
         {
             "name": "Update",
