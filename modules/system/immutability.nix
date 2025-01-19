@@ -108,10 +108,8 @@ lib.mkIf config.settings.disk.immutability.enable {
           trace desire -d "$path" || return 0
           local subvolumes
           subvolumes=$(btrfs subvolume list -o "$path" | cut -f 9- -d ' ')
-          trace echo "$subvolumes"
           IFS=$'\n'
           for subvolume in $subvolumes; do
-            trace echo "$subvolume
             trace btrfs_subvolume_delete_recursively "$(dirname $path)/$subvolume"
           done
           trace btrfs_subvolume_delete "$path"
