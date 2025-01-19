@@ -14,7 +14,7 @@ class Installer:
         with cls.sh.chroot(cls.get_mount_point()):
             Config.secure(cls.get_username())
             Snapshot.create_initial_snapshot()
-        #cls.sh.rm(tmp) #TODO Remove this after fixing bugs (otherwise reinstall is too)
+        cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):
         command = f"nix --extra-experimental-features nix-command --extra-experimental-features flakes run github:nix-community/disko/{Config.metadata('disko')['locked']['rev']} --verbose -- " \
