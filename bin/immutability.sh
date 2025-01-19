@@ -1,7 +1,17 @@
 set -euo pipefail
-LOG_PREFIX=""
+LOG_DEPTH=0
+LOG_SPACES_PER_LEVEL=2
+indent_log() {
+	spaces=$((LOG_DEPTH * LOG_SPACES_PER_LEVEL))
+	i=0
+	while [ $i -lt $spaces ]; do
+		echo -n " "
+		i=$((i + 1))
+	done
+}
 log() {
-	echo "$@" #TODO: Use indentation
+	indent_log
+	echo "$@"
 }
 log_info() {
 	log "MSG $@"
@@ -13,14 +23,14 @@ log_error() {
 	log "ERR $@" >&2
 }
 trace() {
+	LOG_DEPTH=$((LOG_DEPTH + 1))
 	log_info "$@"
 	"$@"
-	#TODO: Increment LOG_PREFIX
 	local ret=$?
 	if [ ! $ret -eq 0 ]; then
 		log_warning "$@ returned with status code $ret" >&2
 	fi
-	#TODO: Decrement LOG_PREFIX
+	LOG_DEPTH=$((LOG_DEPTH - 1))
 	return $ret
 }
 abort() {
@@ -32,7 +42,6 @@ abort() {
 	trace subvolumes_unmount "$MOUNT_POINT"
 	exit 1
 }
-#TODO: Don't mount the full disk; instead mount EPHEMERAL_SUBVOLUME at "/$EPHEMERAL_SUBVOLUME" and SNAPSHOTS_SUBVOLUME at "/$EPHEMERAL_SUBVOLUME".
 subvolumes_mount() {
 		local device="$1"
 		local mount="$2"
@@ -55,14 +64,13 @@ require() {
 desire() {
 	trace test "$@" || return 1
 }
-#TODO: Add btrfs commit here?
 btrfs_sync() {
 	local path="$1"
 	trace btrfs filesystem sync "$path"
 }
 btrfs_subvolume_delete() {
 	local path="$1"
-	trace btrfs subvolume delete "$path" || abort "Failed to delete $path"
+	trace btrfs subvolume delete "$path" --commit-after || abort "Failed to delete $path"
 	trace btrfs_sync "$(dirname $path)"
 }
 btrfs_subvolume_delete_recursively() {
@@ -88,6 +96,10 @@ btrfs_subvolume_rw() {
 	local path="$1"
 	trace btrfs property set -ts "$path" ro false 2>/dev/null || abort "Failed to make $path read-write"
 }
+btrfs_verify() {
+	local device="$1"
+	trace require "[ \"$(blkid -p "$device" | grep 'TYPE=' | grep -o 'btrfs')\" = 'btrfs' ]" || abort "Device $device is not a btrfs filesystem"
+}
 
 log_info "Setting up variables"
 MOUNT_POINT="/mnt"
@@ -100,6 +112,8 @@ PATH_TO_CLEAN_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/$4"  											# /mnt/@snapshots/P
 PATHS_TO_KEEP="$5"          																						# "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
 
 log_info "MOUNT_POINT=$MOUNT_POINT EPHEMERAL_SUBVOLUME=$EPHEMERAL_SUBVOLUME SNAPSHOTS_SUBVOLUME=$SNAPSHOTS_SUBVOLUME PATH_TO_CLEAN_SNAPSHOT=$PATH_TO_CLEAN_SNAPSHOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
+trace require [ "$#" -eq 5 ] || abort "Usage: $0 <disk> <ephemeral_subvolume> <snapshots_subvolume> <clean_snapshot> <paths_to_keep>"
+trace btrfs_verify "$DISK"
 trace require "-b $DISK"
 trace require "-n $PATH_TO_CLEAN_SNAPSHOT"
 trace require "-d $PATH_TO_CLEAN_SNAPSHOT"
