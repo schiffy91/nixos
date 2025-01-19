@@ -14,7 +14,7 @@ log() {
 	echo "$@"
 }
 log_info() {
-	log "MSG $@"
+	log "$@"
 }
 log_warning() {
 	log "WRN $@" >&2
@@ -96,10 +96,6 @@ btrfs_subvolume_rw() {
 	local path="$1"
 	trace btrfs property set -ts "$path" ro false 2>/dev/null || abort "Failed to make $path read-write"
 }
-btrfs_verify() {
-	local device="$1"
-	trace require "[ \"$(blkid -p "$device" | grep 'TYPE=' | grep -o 'btrfs')\" = 'btrfs' ]" || abort "Device $device is not a btrfs filesystem"
-}
 
 log_info "Setting up variables"
 MOUNT_POINT="/mnt"
@@ -112,8 +108,6 @@ PATH_TO_CLEAN_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/$4"  											# /mnt/@snapshots/P
 PATHS_TO_KEEP="$5"          																						# "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
 
 log_info "MOUNT_POINT=$MOUNT_POINT EPHEMERAL_SUBVOLUME=$EPHEMERAL_SUBVOLUME SNAPSHOTS_SUBVOLUME=$SNAPSHOTS_SUBVOLUME PATH_TO_CLEAN_SNAPSHOT=$PATH_TO_CLEAN_SNAPSHOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
-trace require [ "$#" -eq 5 ] || abort "Usage: $0 <disk> <ephemeral_subvolume> <snapshots_subvolume> <clean_snapshot> <paths_to_keep>"
-trace btrfs_verify "$DISK"
 trace require "-b $DISK"
 trace require "-n $PATH_TO_CLEAN_SNAPSHOT"
 trace require "-d $PATH_TO_CLEAN_SNAPSHOT"
