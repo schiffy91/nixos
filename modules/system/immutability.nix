@@ -74,9 +74,6 @@ lib.mkIf config.settings.disk.immutability.enable {
             local mount="$2"
             shift 2
 
-            trace mkdir -p "$mount"
-            trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$device" "$mount"
-
             while [ $# -ge 1 ]; do
               local subvolume_name="$1"
               trace mkdir -p "$mount/$subvolume_name"
@@ -110,7 +107,7 @@ lib.mkIf config.settings.disk.immutability.enable {
           subvolumes=$(btrfs subvolume list -o "$path" | cut -f 9- -d ' ')
           IFS=$'\n'
           for subvolume in $subvolumes; do
-            trace btrfs_subvolume_delete_recursively "$path/$subvolume"
+            trace btrfs_subvolume_delete_recursively "$(dirname path)/$subvolume"
           done
           trace btrfs_subvolume_delete "$path"
         }
