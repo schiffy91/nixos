@@ -38,17 +38,15 @@ lib.mkIf config.settings.disk.immutability.enable {
           echo "$@"
         }
         log_warning() {
-          indent
-          echo "WRN $@" >&2
+          log "WRN $@" >&2
         }
         log_error() {
-          indent
-          echo "ERR $@" >&2
+          log "ERR $@" >&2
         }
         trace() {
           LOG_DEPTH=$((LOG_DEPTH + 1))
           log "$@"
-          "$@" | log
+          "$@"
           local ret=$?
           if [ ! $ret -eq 0 ]; then
             log_warning "$@ returned with status code $ret"
