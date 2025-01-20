@@ -169,7 +169,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
         #TODO Preserve persistent paths
-        trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+        #trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
         log "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
