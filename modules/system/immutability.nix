@@ -123,6 +123,13 @@ lib.mkIf config.settings.disk.immutability.enable {
           local path="$1"
           trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
         }
+        btrfs_find_changes() {
+          local old="$1" 
+          local new="$2"
+          local transid=$(btrfs subvolume find-new "$old" 9999999 | sed 's/transid marker was //')
+          require "[ -n '$transid' -a '$transid' -gt 0 ]" || abort "Failed to find generation for $old"
+          btrfs subvolume find-new "$new" "$transid" | sed '$d' | cut -f17- -d' ' | sort | uniq
+        }
         symlinks_copy() {
           local source="$1"
           local destination="$2"
@@ -159,7 +166,8 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
         #TODO Preserve persistent paths
-        trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+        btrfs_find_changes "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+        #trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
         log "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
