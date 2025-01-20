@@ -80,7 +80,7 @@ lib.mkIf config.settings.disk.immutability.enable {
             while [ $# -ge 1 ]; do
               local subvolume_name="$1"
               trace mkdir -p "$mount/$subvolume_name"
-              trace (mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"  | log_info)
+              trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"  | log_info
               shift 1
             done
         }
