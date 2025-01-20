@@ -50,7 +50,6 @@ lib.mkIf config.settings.disk.immutability.enable {
           log "ERR $@" >&2
         }
         trace() {
-          desire "$@" != "" || return 0
           LOG_DEPTH=$((LOG_DEPTH + 1))
           log_info "$@"
           "$@"
@@ -173,7 +172,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 
         #TODO Preserve persistent paths
         trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
-
+ 
         log_info "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
         trace subvolumes_unmount "$MOUNT_POINT"
