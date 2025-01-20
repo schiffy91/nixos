@@ -127,11 +127,7 @@ lib.mkIf config.settings.disk.immutability.enable {
           local source="$1"
           local destination="$2"
           trace cd "$source" || abort "Failed to cd into $source"
-          local links=""
-          for link in $(find . -type l); do
-            trace "Found link $link"
-            links="$links $link"
-          done
+          local links=$(find . -type l)
           trace "Found links: $links"
         }
 
