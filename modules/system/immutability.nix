@@ -25,7 +25,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         set -euo pipefail
         LOG_DEPTH=0
         LOG_SPACES_PER_LEVEL=2
-        indent_log() {
+        indent() {
           spaces=$((LOG_DEPTH * LOG_SPACES_PER_LEVEL))
           i=0
           while [ $i -lt $spaces ]; do
@@ -34,22 +34,21 @@ lib.mkIf config.settings.disk.immutability.enable {
           done
         }
         log() {
-          indent_log
+          indent
           echo "$@"
         }
-        log_info() {
-          log "$@"
-        }
         log_warning() {
-          log "WRN $@" >&2
+          indent
+          echo "WRN $@" >&2
         }
         log_error() {
-          log "ERR $@" >&2
+          indent
+          echo "ERR $@" >&2
         }
         trace() {
           LOG_DEPTH=$((LOG_DEPTH + 1))
-          log_info "$@"
-          "$@" | log_info
+          log "$@"
+          "$@" | log
           local ret=$?
           if [ ! $ret -eq 0 ]; then
             log_warning "$@ returned with status code $ret"
@@ -124,7 +123,7 @@ lib.mkIf config.settings.disk.immutability.enable {
           trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
         }
 
-        log_info "Setting up variables"
+        log "Setting up variables"
         MOUNT_POINT="/mnt"
         DISK="$1"																																# /dev/disk/by-label/disk-main-root
         EPHEMERAL_SUBVOLUME_NAME="$2"																						# @root #TODO Make this the last argument and a list of suvolumes to quote
@@ -134,7 +133,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         PATH_TO_CLEAN_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/$4"  											# /mnt/@snapshots/PATH_TO_CLEAN_SNAPSHOT <---- PATH_TO_CLEAN_SNAPSHOT
         PATHS_TO_KEEP="$5"          																						# "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
 
-        log_info "MOUNT_POINT=$MOUNT_POINT EPHEMERAL_SUBVOLUME=$EPHEMERAL_SUBVOLUME SNAPSHOTS_SUBVOLUME=$SNAPSHOTS_SUBVOLUME PATH_TO_CLEAN_SNAPSHOT=$PATH_TO_CLEAN_SNAPSHOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
+        log "MOUNT_POINT=$MOUNT_POINT EPHEMERAL_SUBVOLUME=$EPHEMERAL_SUBVOLUME SNAPSHOTS_SUBVOLUME=$SNAPSHOTS_SUBVOLUME PATH_TO_CLEAN_SNAPSHOT=$PATH_TO_CLEAN_SNAPSHOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
         trace require "-b $DISK"
         trace require "-n $PATH_TO_CLEAN_SNAPSHOT"
         trace require "-d $PATH_TO_CLEAN_SNAPSHOT"
@@ -145,7 +144,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace desire -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
         trace desire -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$PREVIOUS_SNAPSHOT"
 
-        log_info "Setting up snapshots"
+        log "Setting up snapshots"
         trace btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
         trace btrfs_subvolume_copy "$EPHEMERAL_SUBVOLUME" "$PREVIOUS_SNAPSHOT"
         trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
@@ -154,7 +153,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         #TODO Preserve persistent paths
         #TODO Preserve all symlinks
 
-        log_info "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
+        log "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
         trace subvolumes_unmount "$MOUNT_POINT"
       '';
