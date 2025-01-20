@@ -124,22 +124,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         }
         btrfs_subvolume_rw() {
           local path="$1"
-          trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
-        }
-        symlinks_copy() {
-          local source="$1"
-          local destination="$2"
-          trace cd "$source" || abort "Failed to cd into $source"
-          local links=""
-          for link in $(find . -type l); do
-            links="$links $link"
-          done
-          local sorted_links
-          sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
-          for link in $sorted_links; do
-            rm -rf "$destination/$link"
-            cp -a "$link" "$destination/$link"
-          done
+          trace btrfs property set -ts "$path" ro false 2>/dev/null || abort "Failed to make $path read-write"
         }
 
         log_info "Setting up variables"
@@ -170,7 +155,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
         #TODO Preserve persistent paths
-        trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+        #TODO Preserve all symlinks
 
         log_info "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
