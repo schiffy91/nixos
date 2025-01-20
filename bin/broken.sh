@@ -219,3 +219,21 @@ lib.mkIf config.settings.disk.immutability.enable {
             cp -a "$link" "$destination/$link"
           done
         }
+
+                symlinks_copy() {
+          local source="$1"
+          local destination="$2"
+          trace cd "$source" || abort "Failed to cd into $source"
+          local links=""
+          for link in $(find . -type l); do
+            links="$links $link"
+          done
+          trace "Found symlinks: $links"
+          local sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
+          trace "Sorted symlinks: $sorted_links"
+          for link in $sorted_links; do
+            trace rm -rf "$destination/$link"
+            trace mkdir -p "$(dirname $destination/$link)
+            trace cp -a "$link" "$destination/$link"
+          done
+        }
