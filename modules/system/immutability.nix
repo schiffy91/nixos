@@ -123,22 +123,6 @@ lib.mkIf config.settings.disk.immutability.enable {
           local path="$1"
           trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
         }
-        btrfs_find_changes() {
-          local old="$1" 
-          local new="$2"
-          local raw_transid=$(btrfs subvolume find-new "$old" 9999999)
-          local transid
-          echo "$raw_transid" | read _ _ _ transid
-          [ -n '$transid' -a '$transid' -gt 0 ] || abort "Failed to find generation for $old"
-          btrfs subvolume find-new "$new" "$transid"
-        }
-        symlinks_copy() {
-          local source="$1"
-          local destination="$2"
-          trace cd "$source" || abort "Failed to cd into $source"
-          local links=$(find . -type l)
-          trace "Found links: $links"
-        }
 
         log "Setting up variables"
         MOUNT_POINT="/mnt"
@@ -167,9 +151,8 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
         trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
-        #TODO Preserve persistent paths
-        btrfs_find_changes "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
-        #trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+        #TODO Preserve persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
+        #TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
 
         log "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
