@@ -96,7 +96,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         }
         btrfs_sync() {
           local path="$1"
-          trace (btrfs filesystem sync "$path" | log_info)
+          trace btrfs filesystem sync "$path" | log_info
         }
         btrfs_subvolume_delete() {
           local path="$1"
