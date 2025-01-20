@@ -52,7 +52,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace() {
           LOG_DEPTH=$((LOG_DEPTH + 1))
           log_info "$@"
-          "$@"
+          "$@" | log_info
           local ret=$?
           if [ ! $ret -eq 0 ]; then
             log_warning "$@ returned with status code $ret" >&2
@@ -75,12 +75,12 @@ lib.mkIf config.settings.disk.immutability.enable {
             shift 2
 
             trace mkdir -p "$mount"
-            trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$device" "$mount"  | log_info
+            trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$device" "$mount"
 
             while [ $# -ge 1 ]; do
               local subvolume_name="$1"
               trace mkdir -p "$mount/$subvolume_name"
-              trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"  | log_info
+              trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"
               shift 1
             done
         }
@@ -96,11 +96,11 @@ lib.mkIf config.settings.disk.immutability.enable {
         }
         btrfs_sync() {
           local path="$1"
-          trace btrfs filesystem sync "$path" | log_info
+          trace btrfs filesystem sync "$path"
         }
         btrfs_subvolume_delete() {
           local path="$1"
-          trace btrfs subvolume delete "$path" --commit-after | log_info || abort "Failed to delete $path"
+          trace btrfs subvolume delete "$path" --commit-after || abort "Failed to delete $path"
           trace btrfs_sync "$(dirname $path)"
         }
         btrfs_subvolume_delete_recursively() {
@@ -119,12 +119,12 @@ lib.mkIf config.settings.disk.immutability.enable {
           local target="$2"
           trace require "-d $source"
           trace btrfs_subvolume_delete_recursively "$target"
-          trace btrfs subvolume snapshot "$source" "$target" | log_info || abort "Failed to create snapshot from $source to $target"
+          trace btrfs subvolume snapshot "$source" "$target" || abort "Failed to create snapshot from $source to $target"
           trace btrfs_sync "$source"
         }
         btrfs_subvolume_rw() {
           local path="$1"
-          trace btrfs property set -ts "$path" ro false | log_info || abort "Failed to make $path read-write"
+          trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
         }
         symlinks_copy() {
           local source="$1"
