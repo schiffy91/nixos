@@ -132,13 +132,13 @@ lib.mkIf config.settings.disk.immutability.enable {
             links="$links $link"
           done
           trace "Found symlinks: $links"
-          local sorted_links
-          sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
+          local sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
           trace "Sorted symlinks: $sorted_links"
-          for link in $sorted_links; do
-            trace rm -rf "$destination/$link"
-            trace cp -a "$link" "$destination/$link"
-          done
+          #for link in $sorted_links; do
+          #  trace rm -rf "$destination/$link"
+          #  trace mkdir -p "$(dirname $destination/$link)
+          #  trace cp -a "$link" "$destination/$link"
+          #done
         }
 
         log "Setting up variables"
