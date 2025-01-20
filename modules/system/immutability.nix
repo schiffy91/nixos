@@ -50,6 +50,7 @@ lib.mkIf config.settings.disk.immutability.enable {
           log "ERR $@" >&2
         }
         trace() {
+          desire "$@" != "" || return 0
           LOG_DEPTH=$((LOG_DEPTH + 1))
           log_info "$@"
           "$@"
@@ -124,7 +125,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         }
         btrfs_subvolume_rw() {
           local path="$1"
-          trace btrfs property set -ts "$path" ro false  | log_info || abort "Failed to make $path read-write"
+          trace btrfs property set -ts "$path" ro false | log_info || abort "Failed to make $path read-write"
         }
         symlinks_copy() {
           local source="$1"
@@ -133,12 +134,13 @@ lib.mkIf config.settings.disk.immutability.enable {
           local links=""
           for link in $(find . -type l); do
             links="$links $link"
+            echo "$links"
           done
           local sorted_links
           sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
           for link in $sorted_links; do
-            rm -rf "$destination/$link"
-            cp -a "$link" "$destination/$link"
+            trace rm -rf "$destination/$link"
+            trace cp -a "$link" "$destination/$link"
           done
         }
 
