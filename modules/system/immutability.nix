@@ -126,10 +126,25 @@ lib.mkIf config.settings.disk.immutability.enable {
           local path="$1"
           trace (btrfs property set -ts "$path" ro false  | log_info) || abort "Failed to make $path read-write"
         }
+        symlinks_copy() {
+          local source="$1"
+          local destination="$2"
+          trace cd "$source" || abort "Failed to cd into $source"
+          local links=""
+          for link in $(find . -type l); do
+            links="$links $link"
+          done
+          local sorted_links
+          sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
+          for link in $sorted_links; do
+            rm -rf "$destination/$link"
+            cp -a "$link" "$destination/$link"
+          done
+        }
 
         log_info "Setting up variables"
         MOUNT_POINT="/mnt"
-        DISK="$1"																						ƒ										# /dev/disk/by-label/disk-main-root
+        DISK="$1"																																# /dev/disk/by-label/disk-main-root
         EPHEMERAL_SUBVOLUME_NAME="$2"																						# @root
         EPHEMERAL_SUBVOLUME="$MOUNT_POINT/$EPHEMERAL_SUBVOLUME_NAME"						# /mnt/@root
         SNAPSHOTS_SUBVOLUME_NAME="$3"																						# @snapshots
@@ -155,7 +170,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
         #TODO Preserve persistent paths
-        #TODO Preserve all symlinks
+        trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
         log_info "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"

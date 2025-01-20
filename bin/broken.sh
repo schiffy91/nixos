@@ -1,23 +1,4 @@
-      log_info "Copying symlinks"
-      (
-        cd "$ROOT"
-        link_files=()
-        link_directories=()
-        find . -type l | while read -r link; do
-          if [ -d "$(readlink -f "$link")" ]; then
-            link_directories+=("$link")
-          else
-            link_files+=("$link")
-          fi
-        done
-        IFS=$'\n' sorted_directories=($(sort <<<"${link_directories[*]}"))
-        IFS=$'\n' sorted_files=($(sort <<<"${link_files[*]}"))
-        unset IFS
-        for link in "${sorted_directories[@]}"; do
-          if [ -e ]; then
-          fi
-        done
-      )
+
 
 
           if [ ! -e "$CURRENT_SNAPSHOT/$link" ]; then
