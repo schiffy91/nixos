@@ -119,12 +119,12 @@ lib.mkIf config.settings.disk.immutability.enable {
           local target="$2"
           trace require "-d $source"
           trace btrfs_subvolume_delete_recursively "$target"
-          trace (btrfs subvolume snapshot "$source" "$target" | log_info) || abort "Failed to create snapshot from $source to $target"
+          trace btrfs subvolume snapshot "$source" "$target" | log_info || abort "Failed to create snapshot from $source to $target"
           trace btrfs_sync "$source"
         }
         btrfs_subvolume_rw() {
           local path="$1"
-          trace (btrfs property set -ts "$path" ro false  | log_info) || abort "Failed to make $path read-write"
+          trace btrfs property set -ts "$path" ro false  | log_info || abort "Failed to make $path read-write"
         }
         symlinks_copy() {
           local source="$1"
