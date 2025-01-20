@@ -126,9 +126,11 @@ lib.mkIf config.settings.disk.immutability.enable {
         btrfs_find_changes() {
           local old="$1" 
           local new="$2"
-          local transid=$(btrfs subvolume find-new "$old" 9999999 | sed 's/transid marker was //')
-          require "[ -n '$transid' -a '$transid' -gt 0 ]" || abort "Failed to find generation for $old"
-          btrfs subvolume find-new "$new" "$transid" | sed '$d' | cut -f17- -d' ' | sort | uniq
+          local raw_transid=$(btrfs subvolume find-new "$old" 9999999)
+          local transid
+          echo "$raw_transid" | read _ _ _ transid
+          [ -n '$transid' -a '$transid' -gt 0 ] || abort "Failed to find generation for $old"
+          btrfs subvolume find-new "$new" "$transid"
         }
         symlinks_copy() {
           local source="$1"
