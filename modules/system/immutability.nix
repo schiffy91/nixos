@@ -52,7 +52,7 @@ lib.mkIf config.settings.disk.immutability.enable {
           "$@" | log_info
           local ret=$?
           if [ ! $ret -eq 0 ]; then
-            log_warning "$@ returned with status code $ret" >&2
+            log_warning "$@ returned with status code $ret"
           fi
           LOG_DEPTH=$((LOG_DEPTH - 1))
           return $ret
