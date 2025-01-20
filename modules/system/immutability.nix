@@ -133,13 +133,12 @@ lib.mkIf config.settings.disk.immutability.enable {
           local links=""
           for link in $(find . -type l); do
             links="$links $link"
-            echo "$links"
           done
           local sorted_links
           sorted_links=$(echo "$links" | tr ' ' '\n' | sort)
           for link in $sorted_links; do
-            trace rm -rf "$destination/$link"
-            trace cp -a "$link" "$destination/$link"
+            rm -rf "$destination/$link"
+            cp -a "$link" "$destination/$link"
           done
         }
 
@@ -172,7 +171,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 
         #TODO Preserve persistent paths
         trace symlinks_copy "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
- 
+
         log_info "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
         trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
         trace subvolumes_unmount "$MOUNT_POINT"
