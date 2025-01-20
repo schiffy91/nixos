@@ -1,6 +1,5 @@
 { config, lib, pkgs, ... }: 
 let 
-  initrdKernelModules = [ "btrfs"];
   device = config.settings.disk.by.partlabel.root;
   rootSubvolumeName = config.settings.disk.subvolumes.root.name;
   snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
@@ -13,8 +12,6 @@ lib.mkIf config.settings.disk.immutability.enable {
   boot.readOnlyNixStore = true;
   boot.initrd = {
     supportedFilesystems = [ "btrfs" ];
-    #kernelModules = initrdKernelModules;
-    #availableKernelModules = initrdKernelModules;
     systemd.services.immutability = {
       description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
       wantedBy = [ "initrd.target" ];
@@ -70,19 +67,19 @@ lib.mkIf config.settings.disk.immutability.enable {
           exit 1
         }
         subvolumes_mount() {
-            local device="$1"
-            local mount="$2"
-            shift 2
+          local device="$1"
+          local mount="$2"
+          shift 2
 
-            trace mkdir -p "$mount"
-            trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$device" "$mount"
+          trace mkdir -p "$mount"
+          trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$device" "$mount"
 
-            while [ $# -ge 1 ]; do
-              local subvolume_name="$1"
-              trace mkdir -p "$mount/$subvolume_name"
-              trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"
-              shift 1
-            done
+          while [ $# -ge 1 ]; do
+            local subvolume_name="$1"
+            trace mkdir -p "$mount/$subvolume_name"
+            trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"
+            shift 1
+          done
         }
         subvolumes_unmount() {
           trace umount -R "$1"
@@ -124,13 +121,13 @@ lib.mkIf config.settings.disk.immutability.enable {
         }
         btrfs_subvolume_rw() {
           local path="$1"
-          trace btrfs property set -ts "$path" ro false 2>/dev/null || abort "Failed to make $path read-write"
+          trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
         }
 
         log_info "Setting up variables"
         MOUNT_POINT="/mnt"
         DISK="$1"																																# /dev/disk/by-label/disk-main-root
-        EPHEMERAL_SUBVOLUME_NAME="$2"																						# @root
+        EPHEMERAL_SUBVOLUME_NAME="$2"																						# @root #TODO Make this the last argument and a list of suvolumes to quote
         EPHEMERAL_SUBVOLUME="$MOUNT_POINT/$EPHEMERAL_SUBVOLUME_NAME"						# /mnt/@root
         SNAPSHOTS_SUBVOLUME_NAME="$3"																						# @snapshots
         SNAPSHOTS_SUBVOLUME="$MOUNT_POINT/$SNAPSHOTS_SUBVOLUME_NAME"						# /mnt/@snapshots
