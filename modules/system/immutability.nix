@@ -10,6 +10,7 @@ in
 lib.mkIf config.settings.disk.immutability.enable {
   fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
   boot.readOnlyNixStore = true;
+  boot.tmp.useTmpfs = true;
   boot.initrd = {
     supportedFilesystems = [ "btrfs" ];
     systemd.services.immutability = {
