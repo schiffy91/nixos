@@ -49,7 +49,7 @@ lib.mkIf config.settings.disk.immutability.enable {
           output=$("$@" 2>&1)
           local ret=$?
           echo "$output" | while read -r line; do
-            log "$line"
+            [ -n "$line" ] && log "$line"
           done
           if [ ! $ret -eq 0 ]; then
             log_warning "$@ returned with status code $ret"
