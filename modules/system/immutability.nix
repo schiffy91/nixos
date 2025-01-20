@@ -100,7 +100,7 @@ lib.mkIf config.settings.disk.immutability.enable {
         }
         btrfs_subvolume_delete() {
           local path="$1"
-          trace (btrfs subvolume delete "$path" --commit-after | log_info) || abort "Failed to delete $path"
+          trace btrfs subvolume delete "$path" --commit-after | log_info || abort "Failed to delete $path"
           trace btrfs_sync "$(dirname $path)"
         }
         btrfs_subvolume_delete_recursively() {
