@@ -23,14 +23,14 @@ def diff(subvolume_name, subvolume_mount_point):
     return set(output)
 
 def main():
+    paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").replace("[", "").replace("]", "").strip().split(" ")
     diffs = set()
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
         try: diffs.update(diff(subvolume_name, subvolume_mount_point))
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
     diffs = sorted(diffs)
-
+    
     Utils.print("\nPATHS TO KEEP:\n")
-    paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").replace("[", "").replace("]", "").strip().split(" ")
     for path_to_keep in paths_to_keep: Utils.print(path_to_keep)
 
     changes_to_delete = set()
