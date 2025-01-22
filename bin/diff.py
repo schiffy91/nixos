@@ -27,7 +27,7 @@ def main():
     diffs = set()
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
         try:
-            diffs += diff(subvolume_name, subvolume_mount_point)
+            diffs.update(diff(subvolume_name, subvolume_mount_point))
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
     diffs = sorted(diffs)
 
