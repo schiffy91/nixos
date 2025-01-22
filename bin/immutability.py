@@ -1,8 +1,9 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
+import os
 from nixos import Utils, Snapshot, Shell
 
-sh = Shell(root_required=True)   
+sh = Shell(root_required=True)
 
 def get_tmp_snapshot_path(subvolume_name): return f"{Snapshot.get_snapshots_path()}/{subvolume_name}/tmp"
 def delete_tmp_snapshot(subvolume_name):
@@ -16,7 +17,7 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
 def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-    sh.run(f"nix-shell ./btrfs_diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=False)
+    sh.run(f"nix-shell {os.path.dirname(os.path.realpath(__file__))}/btrfs_diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=False)
     delete_tmp_snapshot(subvolume_name)
 
 def main():
