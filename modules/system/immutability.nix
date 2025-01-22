@@ -132,7 +132,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				SNAPSHOTS_SUBVOLUME_NAME="$2"
 				CLEAN_SNAPSHOT_NAME="$3"
 				SUBVOLUME_NAMES="$4"
-				PATHS_TO_KEEP="$5" 
+				PATHS_TO_KEEP=$(echo "$5" | tr ' ' '\n' | sort)
 				PREVIOUS_SNAPSHOT_NAME="REVIOUS"
 				PENULTIMATE_SNAPSHOT_NAME="PENULTIMATE"
 				CURRENT_SNAPSHOT_NAME="CURRENT"
@@ -163,11 +163,15 @@ lib.mkIf config.settings.disk.immutability.enable {
 
 					log "Preserving persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT"
 					for path in $PATHS_TO_KEEP; do
-							trace desire -e "$PREVIOUS_SNAPSHOT/$path" && {
-									trace mkdir -p "$(dirname "$CURRENT_SNAPSHOT/$path")"
-									trace cp -a "$PREVIOUS_SNAPSHOT/$path" "$CURRENT_SNAPSHOT/$path"
-							}
+						local path_in_previous_snapshot="$PREVIOUS_SNAPSHOT$path"
+						trace desire -e "$path_in_previous_snapshot" && {
+							local path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
+							trace rm -rf "$path_in_current_snapshot"
+							trace mkdir -p $(dirname "$path_in_current_snapshot")
+							trace cp -a "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
+						}
 					done
+					
 					#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
 
 					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
