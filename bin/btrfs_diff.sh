@@ -1,4 +1,5 @@
-#!/bin/sh
+#! /usr/bin/env nix-shell
+#! nix-shell -i bash
 #
 # get differences between two BTRFS snapshots.
 #

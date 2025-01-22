@@ -16,7 +16,7 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
 def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-    sh.run(f"./btrfs_diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=False)
+    sh.run(f"nix-shell btrfs_diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=False)
     delete_tmp_snapshot(subvolume_name)
 
 def main():
