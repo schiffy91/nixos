@@ -164,12 +164,12 @@ lib.mkIf config.settings.disk.immutability.enable {
 					log "Preserving persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT"
 					for path in $PATHS_TO_KEEP; do
 						path_in_previous_snapshot="$PREVIOUS_SNAPSHOT$path"
-						trace desire -e "$path_in_previous_snapshot" && {
-							path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
-							trace rm -rf "$path_in_current_snapshot"
+						path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
+						if trace desire -e "$path_in_previous_snapshot"; then
 							trace mkdir -p $(dirname "$path_in_current_snapshot")
+							trace desire "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
-						}
+						fi
 					done
 					
 					#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
