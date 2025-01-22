@@ -180,7 +180,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					log "TODO: Preserve new symlinks from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 
 					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
-					log "TODO: Make this operation atomic by using btrfs subvolume set-default <new_path> <old_path> on new TMP subvolumes
+					log "TODO: Make this operation atomic by using btrfs subvolume set-default <new_path> <old_path> on new TMP subvolumes"
 					trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOUME"
 				done
 				trace subvolumes_unmount "$MOUNT_POINT"
