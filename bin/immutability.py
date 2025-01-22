@@ -7,7 +7,7 @@ sh = Shell(root_required=True)
 def get_tmp_snapshot_path(subvolume_name): return f"{Snapshot.get_snapshots_path()}/{subvolume_name}/tmp"
 def delete_tmp_snapshot(subvolume_name):
     tmp_snapshot_path = get_tmp_snapshot_path(subvolume_name)
-    if sh.exists(tmp_snapshot_path): sh.run(f"btrfs subvolume delete -RC {tmp_snapshot_path}")
+    if sh.exists(tmp_snapshot_path): sh.run(f"btrfs subvolume delete -C {tmp_snapshot_path}")
 def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = get_tmp_snapshot_path(subvolume_name)
     delete_tmp_snapshot(subvolume_name)
