@@ -167,7 +167,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 						path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
 						if trace desire -e "$path_in_previous_snapshot"; then
 							trace desire -e $(dirname "$path_in_current_snapshot") || trace mkdir -p $(dirname "$path_in_current_snapshot")
-							trace cp -af "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
+							trace cp -a "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
 						fi
 					done
 					
