@@ -1,4 +1,5 @@
-#!/bin/bash
+#! /usr/bin/env nix-shell
+#! nix-shell -i bash
 #
 # Author: http://serverfault.com/users/96883/artfulrobot
 #
