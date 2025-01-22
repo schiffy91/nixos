@@ -161,7 +161,13 @@ lib.mkIf config.settings.disk.immutability.enable {
 					trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
 					trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
-					#TODO Preserve persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
+					log "Preserving persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT"
+					for path in $PATHS_TO_KEEP; do
+							trace desire -e "$PREVIOUS_SNAPSHOT/$path" && {
+									trace mkdir -p "$(dirname "$CURRENT_SNAPSHOT/$path")"
+									trace cp -a "$PREVIOUS_SNAPSHOT/$path" "$CURRENT_SNAPSHOT/$path"
+							}
+					done
 					#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
 
 					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
