@@ -18,10 +18,6 @@ def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     tmp_diff = "diff.dump"
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-    #sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs_diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=False, check=False)
-    #sh.run(f"btrfs send --no-data -p {clean_snapshot_path} {tmp_snapshot_path} > {diff_name}", capture_output=False, check=False)
-    #sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs-snapshots-diff.py -f {diff_name}", capture_output=False, check=False)
-    #sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs-snapshots-diff.py -p {clean_snapshot_path} -c {tmp_snapshot_path}", capture_output=False, check=False)
     sh.run(f"btrfs send --no-data -p {clean_snapshot_path} {tmp_snapshot_path} | btrfs receive --dump > {tmp_diff}", capture_output=False)
     sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs_diff.sh --file {tmp_diff} ", capture_output=False, check=False)
     delete_tmp_snapshot(subvolume_name)
