@@ -240,8 +240,8 @@ class Snapshot:
     def create_initial_snapshots(cls):
         for subvolume_name, mount_point in cls.get_subvolumes_to_reset_on_boot():
             clean_snapshot_path = f"{cls.get_snapshots_path()}/{subvolume_name}/{cls.get_clean_snapshot_name()}"
-            cls.sh.mkdir(clean_snapshot_path)
             try:
+                cls.sh.rm(clean_snapshot_path)
                 cls.sh.run(f"btrfs subvolume snapshot -r {mount_point} {clean_snapshot_path}")
             except BaseException as e:
                 Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
