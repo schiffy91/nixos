@@ -1,7 +1,7 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 import os
-from nixos import Utils, Snapshot, Shell
+from nixos import Utils, Snapshot, Shell, Config
 
 sh = Shell(root_required=True)
 
@@ -27,6 +27,10 @@ def main():
         try:
             diffs += diff(subvolume_name, subvolume_mount_point)
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
-    print("\n".join(map(str, sorted(set(diffs)))))
+    diffs = sorted(set(diffs))
+    paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").split("\n")
+    for change in diffs:
+        if not any(change.startswith(path_to_keep) for path_to_keep in paths_to_keep):
+            print(change)
 
 if __name__ == "__main__": main()
