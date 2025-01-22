@@ -163,9 +163,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 
 					log "Preserving persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT"
 					for path in $PATHS_TO_KEEP; do
-						local path_in_previous_snapshot="$PREVIOUS_SNAPSHOT$path"
+						path_in_previous_snapshot="$PREVIOUS_SNAPSHOT$path"
 						trace desire -e "$path_in_previous_snapshot" && {
-							local path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
+							path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
 							trace rm -rf "$path_in_current_snapshot"
 							trace mkdir -p $(dirname "$path_in_current_snapshot")
 							trace cp -a "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
