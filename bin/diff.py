@@ -29,8 +29,15 @@ def main():
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
     diffs = sorted(set(diffs))
     paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").split("\n")
+    Utils.print("PATHS THAT WILL BE ERASED ON BOOT")
+    paths_to_ignore = []
     for change in diffs:
         if not any(change.startswith(path_to_keep) for path_to_keep in paths_to_keep):
             print(change)
+        else:
+            paths_to_ignore += change
+    Utils.print("PATHS THAT CHANGED – BUT WILL PERSIST ON BOOT")
+    for change in paths_to_ignore:
+        print(change)
 
 if __name__ == "__main__": main()
