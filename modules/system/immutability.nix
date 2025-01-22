@@ -174,13 +174,13 @@ lib.mkIf config.settings.disk.immutability.enable {
 					trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
 					trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
-					log "Preserving persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT"
+					log "Preserving persistent paths from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 					trace files_copy "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
-					#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
+					log "TODO: Preserve new symlinks from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 
 					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
-					#TODO Use btrfs subvolume set-default <new_path> <old_path> on SUBVOLUME_TMP, then delete and replace SUBVOLUME and last use btrfs subvolume set-default again.
+					log "TODO: Make this operation atomic by using btrfs subvolume set-default <new_path> <old_path> on new TMP subvolumes
 					trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOUME"
 				done
 				trace subvolumes_unmount "$MOUNT_POINT"
