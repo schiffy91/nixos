@@ -19,7 +19,7 @@ def diff(subvolume_name, subvolume_mount_point):
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
     output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=True, check=True))
     delete_tmp_snapshot(subvolume_name)
-    output = [ os.path.normpath(f"{subvolume_mount_point}/{path}") for path in output.split("\n") ]
+    output = [ os.path.normpath(f"{subvolume_mount_point}/{path}").replace("//", "/") for path in output.split("\n") ]
     return set(output)
 
 def main():
