@@ -238,8 +238,7 @@ class Snapshot:
     def get_subvolumes_to_reset_on_boot(cls): return [pair.split("=") for pair in Config.eval("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot").split()]
     @classmethod
     def create_initial_snapshots(cls):
-        cls.sh.rm("/var/run")
-        cls.sh.symlink("/run", "/var/run")
+        cls.sh.rm("/var/run") # https://github.com/systemd/systemd/issues/7683
         for subvolume_name, mount_point in cls.get_subvolumes_to_reset_on_boot():
             clean_snapshot_path = f"{cls.get_snapshots_path()}/{subvolume_name}/{cls.get_clean_snapshot_name()}"
             try:
