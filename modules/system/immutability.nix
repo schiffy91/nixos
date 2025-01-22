@@ -125,6 +125,19 @@ lib.mkIf config.settings.disk.immutability.enable {
 					local path="$1"
 					trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
 				}
+				files_copy() {
+					local paths_to_keep="$1"
+					local previous_snapshot="$2"
+					local current_snapshot="$3"
+					for path in $paths_to_keep; do
+						local path_in_previous_snapshot="$previous_snapshot$path"
+						local path_in_current_snapshot="$current_snapshot$path"
+						if trace desire -e "$path_in_previous_snapshot"; then
+							trace desire -e $(dirname "$path_in_current_snapshot") || trace mkdir -p $(dirname "$path_in_current_snapshot")
+							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
+						fi
+					done
+				}
 
 				log "Setting up variables"
 				MOUNT_POINT="/mnt"
@@ -162,15 +175,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 					trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
 					log "Preserving persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT"
-					for path in $PATHS_TO_KEEP; do
-						path_in_previous_snapshot="$PREVIOUS_SNAPSHOT$path"
-						path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
-						if trace desire -e "$path_in_previous_snapshot"; then
-							trace desire -e $(dirname "$path_in_current_snapshot") || trace mkdir -p $(dirname "$path_in_current_snapshot")
-							trace cp -a "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
-						fi
-					done
-					
+					trace files_copy "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+
 					#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
 
 					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
