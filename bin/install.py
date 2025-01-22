@@ -13,7 +13,7 @@ class Installer:
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
         with cls.sh.chroot(cls.get_mount_point()):
             Config.secure(cls.get_username())
-            Snapshot.create_initial_snapshot()
+            Snapshot.create_initial_snapshots()
         cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):

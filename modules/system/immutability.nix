@@ -1,10 +1,10 @@
-{ config, lib, pkgs, ... }: 
+{ config, lib, ... }: 
 let 
 	device = config.settings.disk.by.partlabel.root;
-	rootSubvolumeName = config.settings.disk.subvolumes.root.name;
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
-	cleanRootSnapshotRelativePath = config.settings.disk.immutability.persist.snapshots.cleanRoot;
+	cleanName = config.settings.disk.immutability.persist.snapshots.cleanName;
 	pathsToKeep = lib.strings.concatStringsSep " " (map lib.strings.escapeShellArg config.settings.disk.immutability.persist.paths);
+	subvolume_names = config.settings.disk.subvolumes.names.resetOnBoot;
 	rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
 in 
 lib.mkIf config.settings.disk.immutability.enable {
@@ -21,7 +21,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 			before = [ "sysroot.mount" ];
 			unitConfig.DefaultDependencies = "no";
 			serviceConfig.Type = "oneshot";
-			scriptArgs = "${device} ${rootSubvolumeName} ${snapshotsSubvolumeName} ${cleanRootSnapshotRelativePath} ${pathsToKeep}";
+			scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolume_names} ${pathsToKeep}";
 			script = ''
 				set -euo pipefail
 				LOG_DEPTH=0
@@ -130,9 +130,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 				MOUNT_POINT="/mnt"
 				DISK="$1"
 				SNAPSHOTS_SUBVOLUME_NAME="$2"
-				SUBVOLUME_NAMES="$3"
-				PATHS_TO_KEEP="$4"
-				CLEAN_SNAPSHOT_NAME="CLEAN"
+				CLEAN_SNAPSHOT_NAME="$3"
+				SUBVOLUME_NAMES="$4"
+				PATHS_TO_KEEP="$5" 
 				PREVIOUS_SNAPSHOT_NAME="REVIOUS"
 				PENULTIMATE_SNAPSHOT_NAME="PENULTIMATE"
 				CURRENT_SNAPSHOT_NAME="CURRENT"
