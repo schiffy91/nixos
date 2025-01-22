@@ -19,25 +19,29 @@ def diff(subvolume_name, subvolume_mount_point):
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
     output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=True, check=True))
     delete_tmp_snapshot(subvolume_name)
-    return output.split("\n")
+    output = output.split("\n")
+    output = [f"{subvolume_mount_point}/{path}" for path in output]
+    return set(output)
 
 def main():
-    diffs = []
+    diffs = set()
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
         try:
             diffs += diff(subvolume_name, subvolume_mount_point)
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
-    diffs = sorted(set(diffs))
+    diffs = sorted(diffs)
+
     paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").split("\n")
-    Utils.print("PATHS THAT WILL BE ERASED ON BOOT")
-    paths_to_ignore = []
+    changes_to_delete = set()
+    changes_to_ignore = set()
     for change in diffs:
-        if not any(change.startswith(path_to_keep) for path_to_keep in paths_to_keep):
-            print(change)
-        else:
-            paths_to_ignore += change
-    Utils.print("PATHS THAT CHANGED – BUT WILL PERSIST ON BOOT")
-    for change in paths_to_ignore:
-        print(change)
+        if not any(change.startswith(path_to_keep) for path_to_keep in paths_to_keep): changes_to_delete.add(change)
+        else: changes_to_ignore.add(change)
+    changes_to_delete = sorted(changes_to_delete)
+    changes_to_ignore = sorted(changes_to_ignore)
+    Utils.print_warning("\nCHANGES TO DELETE:\n")
+    for change_to_delete in changes_to_delete: Utils.print_warning(change_to_delete)
+    Utils.print("\nCHANGES TO IGNORE:\n")
+    for change_to_ignore in changes_to_ignore: print(change_to_ignore)
 
 if __name__ == "__main__": main()

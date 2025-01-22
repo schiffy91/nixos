@@ -314,4 +314,6 @@ class Utils:
     @classmethod
     def print(cls, message): print(message)
     @classmethod
+    def print_warning(cls, message): cls.print_error(message)
+    @classmethod
     def print_error(cls, message): print(f"{cls.RED}{message}{cls.RESET}", file=sys.stderr)
