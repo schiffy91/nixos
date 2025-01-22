@@ -30,7 +30,9 @@ def main():
     diffs = sorted(diffs)
 
     Utils.print("\nPATHS TO KEEP:\n")
-    paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").split("\n")
+    paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths")
+    print(paths_to_keep)
+    paths_to_keep = paths_to_keep.split("\n")
     for path_to_keep in paths_to_keep: Utils.print(path_to_keep)
 
     changes_to_delete = set()
