@@ -19,7 +19,7 @@ def diff(subvolume_name, subvolume_mount_point):
     tmp_diff = "diff.dump"
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
     sh.run(f"btrfs send --no-data -p {clean_snapshot_path} {tmp_snapshot_path} | btrfs receive --dump > {tmp_diff}", capture_output=False)
-    output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs_diff.sh --file {tmp_diff}"))
+    output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs_diff.sh --file {tmp_diff}", check=False))
     delete_tmp_snapshot(subvolume_name)
     sh.rm(tmp_diff)
     return output
