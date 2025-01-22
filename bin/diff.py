@@ -29,10 +29,8 @@ def main():
         try: diffs.update(diff(subvolume_name, subvolume_mount_point))
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
     diffs = sorted(diffs)
-    
     Utils.print("\nPATHS TO KEEP:")
     for path_to_keep in paths_to_keep: Utils.print(path_to_keep)
-
     changes_to_delete = set()
     changes_to_ignore = set()
     for change in diffs:
