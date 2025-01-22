@@ -30,7 +30,7 @@ def main():
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
     diffs = sorted(diffs)
     
-    Utils.print("\nPATHS TO KEEP:\n")
+    Utils.print("\nPATHS TO KEEP:")
     for path_to_keep in paths_to_keep: Utils.print(path_to_keep)
 
     changes_to_delete = set()
@@ -40,9 +40,9 @@ def main():
         else: changes_to_ignore.add(change)
     changes_to_delete = sorted(changes_to_delete)
     changes_to_ignore = sorted(changes_to_ignore)
-    Utils.print_warning("\nCHANGES TO DELETE:\n")
+    Utils.print_warning("\nCHANGES TO DELETE:")
     for change_to_delete in changes_to_delete: Utils.print_warning(change_to_delete)
-    Utils.print("\nCHANGES TO IGNORE:\n")
+    Utils.print("\nCHANGES TO IGNORE:")
     for change_to_ignore in changes_to_ignore: print(change_to_ignore)
 
 if __name__ == "__main__": main()
