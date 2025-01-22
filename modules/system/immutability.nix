@@ -151,7 +151,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					CURRENT_SNAPSHOT="$SNAPSHOTS/$CURRENT_SNAPSHOT_NAME"
 
 					log "Validating $CLEAN_SNAPSHOT, and initializing $PENULTIMATE_SNAPSHOT and $PREVIOUS_SNAPSHOT if they don't exist."
-					trace require "-n $CLEAN_SNAPSHOT" && trace require "-d $CLEAN_SNAPSHOT"
+					trace require -n "$CLEAN_SNAPSHOT" && trace require -d "$CLEAN_SNAPSHOT"
 					trace desire -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
 					trace desire -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PREVIOUS_SNAPSHOT"
 
@@ -166,8 +166,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 						path_in_previous_snapshot="$PREVIOUS_SNAPSHOT$path"
 						path_in_current_snapshot="$CURRENT_SNAPSHOT$path"
 						if trace desire -e "$path_in_previous_snapshot"; then
-							trace mkdir -p $(dirname "$path_in_current_snapshot")
-							trace desire "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
+							trace desire -e $(dirname "$path_in_current_snapshot") || trace mkdir -p $(dirname "$path_in_current_snapshot")
+							trace desire -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$PREVIOUS_SNAPSHOT$path" "$CURRENT_SNAPSHOT$path"
 						fi
 					done
