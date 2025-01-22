@@ -16,19 +16,16 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
     return tmp_snapshot_path
 def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
-    tmp_diff = "diff.dump"
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-    sh.run(f"btrfs send --no-data -p {clean_snapshot_path} {tmp_snapshot_path} | btrfs receive --dump > {tmp_diff}", capture_output=False)
-    output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/btrfs_diff.sh --file {tmp_diff}", check=False))
+    sh.run(f"btrfs subvolume find-new {clean_snapshot_path} {tmp_snapshot_path}", capture_output=False)
     delete_tmp_snapshot(subvolume_name)
-    sh.rm(tmp_diff)
-    return output
 
 def main():
-    diffs = []
+    #diffs = []
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
         try:
-            diffs += diff(subvolume_name, subvolume_mount_point).split()
+            #diffs += 
+            diff(subvolume_name, subvolume_mount_point)#.split()
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
     print(sorted(diffs))
 
