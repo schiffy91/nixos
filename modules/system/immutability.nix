@@ -77,7 +77,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					trace mkdir -p "$mount_point"
 
 					trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$disk" "$mount_point"
-					for subvolume_name in "$subvolume_names $snapshots_subvolume_name"; do
+					for subvolume_name in $subvolume_names $snapshots_subvolume_name; do
 						trace mkdir -p "$mount_point/$subvolume_name"
 						trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$disk" "$mount_point/$subvolume_name"
 					done
