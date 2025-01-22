@@ -37,7 +37,7 @@ in {
       { name = "@root"; mountPoint = "/"; flag = "root"; resetOnBoot = true; }
       { name = "@home"; mountPoint = "/home"; resetOnBoot = true; }
       { name = "@nix"; mountPoint = "/nix"; }
-      { name = "@var"; mountPoint = "/var"; resetOnBoot = true; }
+      { name = "@var"; mountPoint = "/var"; }
       { name = "@snapshots"; mountPoint = "/.snapshots"; flag = "snapshots"; }
       { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; neededForBoot = false; }
     ];
