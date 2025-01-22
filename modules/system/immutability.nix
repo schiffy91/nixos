@@ -63,28 +63,29 @@ lib.mkIf config.settings.disk.immutability.enable {
 					log_error "$@"
 					log_error "Unmounting and quitting"
 					echo ""
-					trace btrfs_sync "$EPHEMERAL_SUBVOLUME"
+					trace btrfs_sync "$SUBVOUME"
 					trace subvolumes_unmount "$MOUNT_POINT"
 					exit 1
 				}
 				subvolumes_mount() {
-					local device="$1"
-					local mount="$2"
-					shift 2
+					local disk="$1"
+					local mount_point="$2"
+					local snapshots_subvolume_name="$3"
+					local subvolume_names="$4"
 
-					trace mkdir -p "$mount"
-					trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$device" "$mount"
+					trace require "-b $disk"
+					trace mkdir -p "$mount_point"
 
-					while [ $# -ge 1 ]; do
-						local subvolume_name="$1"
-						trace mkdir -p "$mount/$subvolume_name"
-						trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$device" "$mount/$subvolume_name"
-						shift 1
+					trace mount -t btrfs -o subvolid=5,user_subvol_rm_allowed "$disk" "$mount_point"
+					for subvolume_name in "$subvolume_names $snapshots_subvolume_name"; do
+						trace mkdir -p "$mount_point/$subvolume_name"
+						trace mount -t btrfs -o subvol="$subvolume_name",user_subvol_rm_allowed "$disk" "$mount_point/$subvolume_name"
 					done
 				}
 				subvolumes_unmount() {
-					trace umount -R "$1"
-					trace rm -rf "$1"
+					local mount_point="$1"
+					trace umount -R "$mount_point"
+					trace rm -rf "$mount_point"
 				}
 				require() {
 					trace test "$@" || abort "Require failed: $@"
@@ -127,36 +128,46 @@ lib.mkIf config.settings.disk.immutability.enable {
 
 				log "Setting up variables"
 				MOUNT_POINT="/mnt"
-				DISK="$1"                                                               # /dev/disk/by-label/disk-main-root
-				EPHEMERAL_SUBVOLUME_NAME="$2"                                           # @root #TODO Make this the last argument and a list of suvolumes to quote
-				EPHEMERAL_SUBVOLUME="$MOUNT_POINT/$EPHEMERAL_SUBVOLUME_NAME"            # /mnt/@root
-				SNAPSHOTS_SUBVOLUME_NAME="$3"                                           # @snapshots
-				SNAPSHOTS_SUBVOLUME="$MOUNT_POINT/$SNAPSHOTS_SUBVOLUME_NAME"            # /mnt/@snapshots
-				PATH_TO_CLEAN_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/$4"                        # /mnt/@snapshots/PATH_TO_CLEAN_SNAPSHOT <---- PATH_TO_CLEAN_SNAPSHOT
-				PATHS_TO_KEEP="$5"                                                      # "/etc/nixos /etc/machine-id /home/alexanderschiffhauer"
+				DISK="$1"
+				SNAPSHOTS_SUBVOLUME_NAME="$2"
+				SUBVOLUME_NAMES="$3"
+				PATHS_TO_KEEP="$4"
+				CLEAN_SNAPSHOT_NAME="CLEAN"
+				PREVIOUS_SNAPSHOT_NAME="REVIOUS"
+				PENULTIMATE_SNAPSHOT_NAME="PENULTIMATE"
+				CURRENT_SNAPSHOT_NAME="CURRENT"
+				log "MOUNT_POINT=$MOUNT_POINT SNAPSHOTS_SUBVOLUME_NAME=$SNAPSHOTS_SUBVOLUME_NAME SUBVOLUME_NAMES=$SUBVOLUME_NAMES PATHS_TO_KEEP=$PATHS_TO_KEEP"
+				
+				log "Mounting $DISK, $SNAPSHOTS_SUBVOLUME_NAME, and $SUBVOLUME_NAMES"
+				trace subvolumes_mount "$DISK" "$MOUNT_POINT" "$SNAPSHOTS_SUBVOLUME_NAME" "$SUBVOLUME_NAMES"
+				
+				for SUBVOUME_NAME in $SUBVOLUME_NAMES; do
+					log "Resetting $SUBVOLUME_NAME"
+					SUBVOUME="$MOUNT_POINT/$SUBVOUME_NAME"
+					SNAPSHOTS="$MOUNT_POINT/$SNAPSHOTS_SUBVOLUME_NAME/$SUBVOUME_NAME"
+					CLEAN_SNAPSHOT="$SNAPSHOTS/$CLEAN_SNAPSHOT_NAME"
+					PREVIOUS_SNAPSHOT="$SNAPSHOTS/$PREVIOUS_SNAPSHOT_NAME"
+					PENULTIMATE_SNAPSHOT="$SNAPSHOTS/$PENULTIMATE_SNAPSHOT_NAME"
+					CURRENT_SNAPSHOT="$SNAPSHOTS/$CURRENT_SNAPSHOT_NAME"
 
-				log "MOUNT_POINT=$MOUNT_POINT EPHEMERAL_SUBVOLUME=$EPHEMERAL_SUBVOLUME SNAPSHOTS_SUBVOLUME=$SNAPSHOTS_SUBVOLUME PATH_TO_CLEAN_SNAPSHOT=$PATH_TO_CLEAN_SNAPSHOT PATHS_TO_KEEP=$PATHS_TO_KEEP"
-				trace require "-b $DISK"
-				trace require "-n $PATH_TO_CLEAN_SNAPSHOT"
-				trace require "-d $PATH_TO_CLEAN_SNAPSHOT"
-				trace subvolumes_mount "$DISK" "$MOUNT_POINT" "$EPHEMERAL_SUBVOLUME_NAME" "$SNAPSHOTS_SUBVOLUME_NAME"
-				PREVIOUS_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/PREVIOUS_SNAPSHOT"              # /mnt/@snapshots/PREVIOUS_SNAPSHOT
-				PENULTIMATE_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/PENULTIMATE_SNAPSHOT"        # /mnt/@snapshots/PENULTIMATE_SNAPSHOT
-				CURRENT_SNAPSHOT="$SNAPSHOTS_SUBVOLUME/CURRENT_SNAPSHOT"                # /mnt/@snapshots/CURRENT_SNAPSHOT
-				trace desire -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
-				trace desire -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$PREVIOUS_SNAPSHOT"
+					log "Validating $CLEAN_SNAPSHOT, and initializing $PENULTIMATE_SNAPSHOT and $PREVIOUS_SNAPSHOT if they don't exist."
+					trace require "-n $CLEAN_SNAPSHOT" && trace require "-d $CLEAN_SNAPSHOT"
+					trace desire -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
+					trace desire -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PREVIOUS_SNAPSHOT"
 
-				log "Setting up snapshots"
-				trace btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
-				trace btrfs_subvolume_copy "$EPHEMERAL_SUBVOLUME" "$PREVIOUS_SNAPSHOT"
-				trace btrfs_subvolume_copy "$PATH_TO_CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
-				trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
+					log "Setting $PENULTIMATE_SNAPSHOT, $PREVIOUS_SNAPSHOT, and $CURRENT_SNAPSHOT"
+					trace btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
+					trace btrfs_subvolume_copy "$SUBVOUME" "$PREVIOUS_SNAPSHOT"
+					trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
+					trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
-				#TODO Preserve persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
-				#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
+					#TODO Preserve persistent paths from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
+					#TODO Preserve new symlinks from PREVIOUS_SNAPSHOT into CURRENT_SNAPSHOT
 
-				log "Copying $CURRENT_SNAPSHOT to $EPHEMERAL_SUBVOLUME"
-				trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$EPHEMERAL_SUBVOLUME"
+					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
+					#TODO Use btrfs subvolume set-default <new_path> <old_path> on SUBVOLUME_TMP, then delete and replace SUBVOLUME and last use btrfs subvolume set-default again.
+					trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOUME"
+				done
 				trace subvolumes_unmount "$MOUNT_POINT"
 			'';
 		};
