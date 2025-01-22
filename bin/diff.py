@@ -17,12 +17,16 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
 def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-    sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=True, check=True)
+    output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=True, check=True))
     delete_tmp_snapshot(subvolume_name)
+    return output.split("\n")
 
 def main():
+    diffs = []
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
-        try: diff(subvolume_name, subvolume_mount_point)
+        try:
+            diffs += diff(subvolume_name, subvolume_mount_point)
         except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
+    print (sorted(set(diffs)))
 
 if __name__ == "__main__": main()
