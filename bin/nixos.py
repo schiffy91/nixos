@@ -242,6 +242,7 @@ class Snapshot:
             clean_snapshot_path = f"{cls.get_snapshots_path()}/{subvolume_name}/{cls.get_clean_snapshot_name()}"
             try:
                 cls.sh.rm(clean_snapshot_path)
+                cls.sh.mkdir(clean_snapshot_path)
                 cls.sh.run(f"btrfs subvolume snapshot -r {mount_point} {clean_snapshot_path}")
             except BaseException as e:
                 Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
