@@ -63,6 +63,12 @@ in {
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "${config.settings.boot.pkiBundle}"
+      "/home/${config.settings.user.admin.username}/.config/dconf/user"
+      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/settings.ini"
+      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/settings.ini"
+      "/home/${config.settings.user.admin.username}/.config/kcmfonts"
+      "/home/${config.settings.user.admin.username}/.config/kdeglobals"
+      "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
