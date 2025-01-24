@@ -95,7 +95,7 @@ class Shell:
         return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
     def file_read(self, path): return Shell.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
     def json_read(self, path):
-        try: return json.loads(self.file_read(path()))
+        try: return json.loads(self.file_read(path))
         except BaseException: return {}
     def json_write(self, path, key, value):
         data = self.json_read(path)
