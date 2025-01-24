@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import os, argparse, hashlib
+import os, argparse, hashlib, fnmatch
 from nixos import Utils, Snapshot, Shell, Config
 
 sh = Shell(root_required=True)
@@ -50,15 +50,15 @@ def diff_files(file_paths):
     for file in file_paths: diffs[file] = diff_file(file)
     return diffs
 
-def get_diffs(previous_run=None):
+def get_diffs(previous_run, paths_to_keep, paths_to_hide):
     diffs = set()
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot(): diffs.update(diff_subvolume(subvolume_name, subvolume_mount_point))
     diffs = sorted(diffs)
     diff_paths_to_delete = set()
     diff_paths_to_ignore = set()
+    diff_paths_to_hide = set()
     diff_paths_hashed = {}
     diff_paths_since_last_run_hashed = {}
-    paths_to_keep = get_paths_to_keep()
     for diff in diffs:
         if any(diff.startswith(path_to_keep) for path_to_keep in paths_to_keep):
             diff_paths_to_ignore.add(diff)
@@ -67,27 +67,30 @@ def get_diffs(previous_run=None):
             diff_hash = "N/A"
             if not os.path.isdir(diff) and not (os.path.islink(diff) and not os.path.exists(diff)): diff_hash = sha256sum(diff)
             diff_paths_hashed[diff] = diff_hash
+            if paths_to_keep is not None and any(fnmatch.fnmatch(diff, pattern) for pattern in paths_to_hide): diff_paths_to_hide.add(diff)
             if previous_run is None: continue
             if diff_hash != previous_run.get(diff, ""): diff_paths_since_last_run_hashed[diff] = diff_hash
-    return (sorted(diff_paths_to_delete), sorted(diff_paths_to_ignore), diff_paths_hashed, diff_paths_since_last_run_hashed)
+    return (sorted(diff_paths_to_delete), sorted(diff_paths_to_ignore), diff_paths_hashed, diff_paths_since_last_run_hashed, sorted(diff_paths_to_hide))
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--since-last-run", action="store_true", help="Only list changes since the last run of this program ")
-    parser.add_argument("--show-changes-to-ignore", action="store_true", help="List changes that will be ignored because they match paths to keep")
-    parser.add_argument("--show-paths-to-keep", action="store_true", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
-    parser.add_argument("--deltas", nargs="*", default=[], help="Files to show a diff of")
-    parser.add_argument("--deltas-that-changed", action="store_true", help="Show a diff of every changed file, since last run if --since-last-run supplied")
+    parser.add_argument("--since-last-run", action="store_true", help="Only list changes since the last run of this program.")
+    parser.add_argument("--show-changes-to-ignore", action="store_true", help="List any changes that will be ignored because they match paths to keep (usually located in /etx/nixos/modules/settings.nix).")
+    parser.add_argument("--show-paths-to-keep", action="store_true", help="List the paths to keep (usually located in /etx/nixos/modules/settings.nix)")
+    parser.add_argument("--delta", nargs="*", default=[], help="Show the delta of one or many files")
+    parser.add_argument("--deltas", action="store_true", help="Show the delta of every changed file. If --since-last-run supplied, it will only show the deltas of those files.")
+    parser.add_argument("--paths-to-hide", type=str, metavar="FILE", help="A file that specifies new-line separated paths (supporting * wildcards) to hide from this script's output. They'll still be deleted upon boot if they're not matched by paths to keep (usually located in /etc/nixos/modules/settings.nix).")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
     previous_run = sh.json_read(diff_json_file_path) if args.since_last_run else None
-
-    diff_paths_to_delete, diff_paths_to_ignore, diff_paths_hashed, diff_paths_since_last_run_hashed  = get_diffs(previous_run)
     paths_to_keep = get_paths_to_keep()
-    diffs_to_print = diff_paths_since_last_run_hashed.keys() if args.since_last_run else diff_paths_to_delete
-    deltas = diff_files(args.deltas)
-    deltas_that_changed = diff_files(diffs_to_print) if args.deltas_that_changed else {}
+    paths_to_hide = sh.file_read(args.paths_to_hide).split("\n") if args.paths_to_hide else []
+
+    diff_paths_to_delete, diff_paths_to_ignore, diff_paths_hashed, diff_paths_since_last_run_hashed, diff_paths_to_hide = get_diffs(previous_run, paths_to_keep, paths_to_hide)
+    diffs_to_print = sorted(set(diff_paths_since_last_run_hashed.keys()).difference(diff_paths_to_hide)) if args.since_last_run else sorted(diff_paths_to_delete.difference(diff_paths_to_hide))
+    delta = diff_files(args.delta)
+    deltas = diff_files(diffs_to_print) if args.deltas else {}
 
     if len(diff_paths_to_delete) != 0:
         sh.json_overwrite(diff_json_file_path, diff_paths_hashed)
@@ -102,14 +105,14 @@ def main():
 
     if args.show_paths_to_keep:
         Utils.print("\nPATHS TO KEEP:")
-        for path in paths_to_keep: Utils.print(path)
+        for path in get_paths_to_keep(): Utils.print(path)
 
-    if len(deltas) != 0:
+    if len(delta) != 0:
         Utils.print("\nFILE DIFFS:")
-        for file, diff in deltas.items(): print(f"File: {file}\n{diff}")
+        for file, diff in delta.items(): print(f"File: {file}\n{diff}")
 
-    if args.deltas_that_changed and len(deltas_that_changed) != 0:
+    if args.deltas and len(deltas) != 0:
         Utils.print("\nFILES THAT CHANGED DIFFS:")
-        for file, diff in deltas_that_changed.items(): print(f"File: {file}\n{diff}")
+        for file, diff in deltas.items(): print(f"File: {file}\n{diff}")
 
 if __name__ == "__main__": main()
