@@ -40,7 +40,9 @@ def diff_file(file_path):
     if previous_file_path == "": Utils.abort(f"Couldn't diff {file_path}")
     current_file_path = file_path
     if sh.exists(previous_file_path):
-        return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=True))
+        try:
+            return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=True))
+        except BaseException: pass
     return sh.file_read(current_file_path)
 
 def diff_files(file_paths):
