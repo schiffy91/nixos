@@ -76,7 +76,7 @@ def main():
     parser.add_argument("--since-last-run", action="store_true", help="Only list changes since the last run of this program ")
     parser.add_argument("--show-changes-to-ignore", action="store_true", help="List changes that will be ignored because they match paths to keep")
     parser.add_argument("--show-paths-to-keep", action="store_true", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
-    parser.add_argument("--files", nargs="*", default=[] help="Directory to search")
+    parser.add_argument("--files", nargs="*", default=[], help="Directory to search")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
