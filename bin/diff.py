@@ -102,6 +102,6 @@ def main():
     deltas = diff_files(args.files)
     if len(deltas) != 0:
         Utils.print("\nFILE DIFFS")
-        for delta in deltas: print(delta)
+        print(deltas)
 
 if __name__ == "__main__": main()
