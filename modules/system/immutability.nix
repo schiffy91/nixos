@@ -35,8 +35,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					done
 				}
 				log() {
-					indent
-					echo "$@"
+					indent; echo -n "$@" | tr '\n' ' '; echo
 				}
 				log_warning() {
 					log "WRN $@" >&2
