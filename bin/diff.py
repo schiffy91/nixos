@@ -52,7 +52,7 @@ def sha256sum(filename):
 def print_changes(changes, diff_json=None):
     hashes = {}
     for change in changes:
-        if os.path.isdir(change): continue
+        if os.path.isdir(change) or (os.path.islink(change) and not os.path.exists(change)): continue
         change_hash = sha256sum(change)
         if diff_json is not None and change_hash != diff_json.get(change, ""):
             Utils.print(change)
