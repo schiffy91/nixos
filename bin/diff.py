@@ -93,8 +93,9 @@ def main():
 
     if len(diff_paths_to_delete) != 0:
         sh.json_overwrite(diff_json_file_path, diff_paths_hashed)
-        Utils.print_warning("\nCHANGES TO DELETE:")
-        Utils.print_warning("\n".join(sorted(diffs_to_print)))
+        if (len(diffs_to_print) != 0):
+            Utils.print_warning("\nCHANGES TO DELETE:")
+            Utils.print_warning("\n".join(sorted(diffs_to_print)))
     else: sh.rm(diff_json_file_path)
 
     if args.show_changes_to_ignore:
