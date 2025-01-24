@@ -104,11 +104,9 @@ def main():
     if len(files) != 0:
         Utils.print("\nFILE DIFFS:")
         for key, value in files:  print(f"File: {key}\n{value}")
-        
+
     if args.files_that_changed:
         Utils.print("\nFILES THAT CHANGED DIFFS:")
         for key, value in files_that_changed: print(f"File: {key}\n{value}")
-
-
 
 if __name__ == "__main__": main()
