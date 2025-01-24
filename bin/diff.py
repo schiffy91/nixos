@@ -88,7 +88,7 @@ def main():
     paths_to_hide = sh.file_read(args.paths_to_hide).split("\n") if args.paths_to_hide else []
 
     diff_paths_to_delete, diff_paths_to_ignore, diff_paths_hashed, diff_paths_since_last_run_hashed, diff_paths_to_hide = get_diffs(previous_run, paths_to_keep, paths_to_hide)
-    diffs_to_print = sorted(set(diff_paths_since_last_run_hashed.keys()).difference(diff_paths_to_hide)) if args.since_last_run else sorted(diff_paths_to_delete.difference(diff_paths_to_hide))
+    diffs_to_print = sorted(set(diff_paths_since_last_run_hashed.keys()).difference(diff_paths_to_hide)) if args.since_last_run else sorted(set(diff_paths_to_delete).difference(diff_paths_to_hide))
     delta = diff_files(args.delta)
     deltas = diff_files(diffs_to_print) if args.deltas else {}
 
