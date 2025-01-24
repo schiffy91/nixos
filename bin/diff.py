@@ -6,14 +6,17 @@ from nixos import Utils, Snapshot, Shell, Config
 sh = Shell(root_required=True)
 
 def get_tmp_snapshot_path(subvolume_name): return f"{Snapshot.get_snapshots_path()}/{subvolume_name}/tmp"
+
 def delete_tmp_snapshot(subvolume_name):
     tmp_snapshot_path = get_tmp_snapshot_path(subvolume_name)
     if sh.exists(tmp_snapshot_path): sh.run(f"btrfs subvolume delete -C {tmp_snapshot_path}")
+
 def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = get_tmp_snapshot_path(subvolume_name)
     delete_tmp_snapshot(subvolume_name)
     sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {tmp_snapshot_path}")
     return tmp_snapshot_path
+
 def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
@@ -22,6 +25,7 @@ def diff(subvolume_name, subvolume_mount_point):
     delete_tmp_snapshot(subvolume_name)
     output = [ os.path.normpath(f"{subvolume_mount_point}/{path}").replace("//", "/") for path in output.split("\n") ]
     return set(output)
+
 def main():
     paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").replace("[", "").replace("]", "").strip().split(" ")
     diffs = set()
