@@ -74,7 +74,8 @@ def main():
     parser.add_argument("--since-last-run", action="store_true", help="Only list changes since the last run of this program ")
     parser.add_argument("--show-changes-to-ignore", action="store_true", help="List changes that will be ignored because they match paths to keep")
     parser.add_argument("--show-paths-to-keep", action="store_true", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
-    parser.add_argument("--files", nargs="*", default=[], help="Directory to search")
+    parser.add_argument("--files", nargs="*", default=[], help="Files to show a diff of")
+    parser.add_argument("--files-that-changed", action="store_true", help="Show a diff of every changed file, since last run if --since-last-run supplied")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
@@ -82,11 +83,13 @@ def main():
 
     diffs_to_delete, diffs_to_ignore, diffs_hashed, diffs_since_last_run_hashed  = get_diffs(previous_run)
     paths_to_keep = get_paths_to_keep()
+    diffs_to_print = diffs_since_last_run_hashed.keys() if args.since_last_run else diffs_to_delete
+    files = diff_files(args.files)
+    files_that_changed = diff_files(diffs_to_print) if args.files_that_changed else []
 
     if len(diffs_to_delete) != 0:
         sh.json_overwrite(diff_json_file_path, diffs_hashed)
         Utils.print_warning("\nCHANGES TO DELETE:")
-        diffs_to_print = diffs_since_last_run_hashed.keys() if args.since_last_run else diffs_to_delete
         Utils.print_warning("\n".join(sorted(diffs_to_print)))
     else: sh.rm(diff_json_file_path)
 
@@ -98,9 +101,14 @@ def main():
         Utils.print("\nPATHS TO KEEP:")
         for path in paths_to_keep: Utils.print(path)
 
-    deltas = diff_files(args.files)
-    if len(deltas) != 0:
+    if len(files) != 0:
         Utils.print("\nFILE DIFFS:")
-        print(deltas)
+        for key, value in files:  print(f"File: {key}\n{value}")
+        
+    if args.files_that_changed:
+        Utils.print("\nFILES THAT CHANGED DIFFS:")
+        for key, value in files_that_changed: print(f"File: {key}\n{value}")
+
+
 
 if __name__ == "__main__": main()
