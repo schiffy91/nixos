@@ -78,7 +78,7 @@ def main():
     parser.add_argument("--show-changes-to-ignore", action="store_true", help="List any changes that will be ignored because they match paths to keep (usually located in /etx/nixos/modules/settings.nix).")
     parser.add_argument("--show-paths-to-keep", action="store_true", help="List the paths to keep (usually located in /etx/nixos/modules/settings.nix)")
     parser.add_argument("--delta", nargs="*", default=[], help="Show the delta of one or many files")
-    parser.add_argument("--deltas", action="store_true", help="Show the delta of every changed file. If --since-last-run supplied, it will only show the deltas of those files.")
+    parser.add_argument("--deltas", action="store_true", help="Show the delta of every changed file. Aware of --since-last-run supplied and --paths-to-hide.")
     parser.add_argument("--paths-to-hide", type=str, metavar="FILE", help="A file that specifies new-line separated paths (supporting * wildcards) to hide from this script's output. They'll still be deleted upon boot if they're not matched by paths to keep (usually located in /etc/nixos/modules/settings.nix).")
     args = parser.parse_args()
 
