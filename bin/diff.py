@@ -41,7 +41,7 @@ def diff_file(file_path):
     current_file_path = file_path
     if sh.exists(previous_file_path):
         return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=False))
-    return Shell.stdout(sh.file_read(current_file_path))
+    return sh.file_read(current_file_path)
 
 def diff_files(file_paths):
     diffs = {}
