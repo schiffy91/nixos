@@ -48,6 +48,7 @@ def get_diffs(previous_run=None):
             diffs_to_delete.add(diff)
             diff_hash = "N/A"
             if not os.path.isdir(diff) and not (os.path.islink(diff) and not os.path.exists(diff)): diff_hash = sha256sum(diff)
+            diffs_hashed[diff] = diff_hash
             if previous_run is None: continue
             if diff_hash != previous_run.get(diff, ""): diffs_since_last_run_hashed[diff] = diff_hash
     return (sorted(diffs_to_delete), sorted(diffs_to_ignore), diffs_hashed, diffs_since_last_run_hashed)
