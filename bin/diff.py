@@ -100,7 +100,7 @@ def main():
         for path in get_paths_to_keep(): Utils.print(path)
 
     deltas = diff_files(args.files)
-    if len(deltas != 0):
+    if len(deltas) != 0:
         Utils.print("\nFILE DIFFS")
         for delta in deltas: print(delta)
 
