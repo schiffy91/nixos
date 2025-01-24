@@ -34,7 +34,7 @@ def diff_subvolume(subvolume_name, subvolume_mount_point):
 
 def diff_file(file_path):
     previous_file_path = ""
-    for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot(): 
+    for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
         clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
         if file_path.startswith(subvolume_mount_point): previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}"
     if previous_file_path == "": Utils.abort(f"Couldn't diff {file_path}")
