@@ -85,7 +85,7 @@ def main():
     paths_to_keep = get_paths_to_keep()
     diffs_to_print = diff_paths_since_last_run_hashed.keys() if args.since_last_run else diff_paths_to_delete
     deltas = diff_files(args.deltas)
-    deltas_that_changed = diff_files(diffs_to_print) if args.files_that_changed else {}
+    deltas_that_changed = diff_files(diffs_to_print) if args.deltas_that_changed else {}
 
     if len(diff_paths_to_delete) != 0:
         sh.json_overwrite(diff_json_file_path, diff_paths_hashed)
@@ -105,7 +105,7 @@ def main():
         Utils.print("\nFILE DIFFS:")
         for file, diff in deltas.items(): print(f"File: {file}\n{diff}")
 
-    if args.files_that_changed and len(deltas_that_changed) != 0:
+    if args.deltas_that_changed and len(deltas_that_changed) != 0:
         Utils.print("\nFILES THAT CHANGED DIFFS:")
         for file, diff in deltas_that_changed.items(): print(f"File: {file}\n{diff}")
 
