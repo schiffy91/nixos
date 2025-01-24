@@ -81,6 +81,7 @@ def main():
     previous_run = sh.json_read(diff_json_file_path) if args.since_last_run else None
 
     diffs_to_delete, diffs_to_ignore, diffs_hashed, diffs_since_last_run_hashed  = get_diffs(previous_run)
+    paths_to_keep = get_paths_to_keep()
 
     if len(diffs_to_delete) != 0:
         sh.json_overwrite(diff_json_file_path, diffs_hashed)
@@ -95,7 +96,7 @@ def main():
 
     if args.show_paths_to_keep:
         Utils.print("\nPATHS TO KEEP:")
-        for path in get_paths_to_keep(): Utils.print(path)
+        for path in paths_to_keep(): Utils.print(path)
 
     deltas = diff_files(args.files)
     if len(deltas) != 0:
