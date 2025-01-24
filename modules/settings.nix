@@ -57,6 +57,7 @@ in {
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [
       "/etc/nixos"
       "/etc/machine-id"
+      "/usr/bin/env"
       "/var/log"
       "/var/lib/bluetooth"
       "/var/lib/nixos"

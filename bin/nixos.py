@@ -94,6 +94,16 @@ class Shell:
         self.mkdir(self.dirname(path))
         return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
     def file_read(self, path): return Shell.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
+    def json_read(self, path):
+        try: return json.loads(self.file_read(path()))
+        except BaseException: return {}
+    def json_write(self, path, key, value):
+        data = self.json_read(path)
+        data[key] = value
+        return self.file_write(path, json.dumps(data))
+    def json_overwrite(self, path, data):
+        self.rm(path)
+        return self.file_write(path, json.dumps(data))
     # Git
     def git_add_safe_directory(self, path):
         path = self.realpath(path)
@@ -119,16 +129,11 @@ class Config:
     @classmethod
     def exists(cls): return cls.sh.exists(cls.get_config_path())
     @classmethod
-    def read(cls):
-        try: return json.loads(cls.sh.file_read(cls.get_config_path()))
-        except BaseException: return {}
+    def read(cls): return cls.sh.json_read(cls.get_config_path())
     @classmethod
     def get(cls, key): return cls.read().get(key, None)
     @classmethod
-    def set(cls, key, value):
-        data = cls.read()
-        data[key] = value
-        return cls.sh.file_write(cls.get_config_path(), json.dumps(data))
+    def set(cls, key, value): return cls.sh.json_write(cls.get_config_path(), key, value)
     @classmethod
     def reset_config(cls, host_path, target):
         cls.sh.rm(cls.get_config_path())
