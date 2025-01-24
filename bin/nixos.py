@@ -156,7 +156,7 @@ class Config:
         cls.sh.chmod(700, cls.get_secrets_path(), *directories) # Traversable directories by anyone
         cls.sh.chmod(600, *files) # But only root can read or write files
     @classmethod
-    def secure(cls, username,):
+    def secure(cls, username):
         ignore_pattern = "*/{secrets}*" # Ignore secrets
         cls.sh.chown(username, cls.get_nixos_path()) # $username owns everything in /etc/nixos
         cls.sh.chmod(755, *cls.sh.find_directories(cls.get_nixos_path(), ignore_pattern=ignore_pattern)) # Directories are traversable
