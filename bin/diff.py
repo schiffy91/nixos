@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import os, argparse, hashlib, difflib
+import os, argparse, hashlib
 from nixos import Utils, Snapshot, Shell, Config
 
 sh = Shell(root_required=True)
@@ -39,16 +39,12 @@ def diff_file(file_path):
         if file_path.startswith(subvolume_mount_point): previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}"
     if previous_file_path == "": Utils.abort(f"Couldn't diff {file_path}")
     current_file_path = file_path
-    previous_file = sh.file_read(previous_file_path)
-    current_file = sh.file_read(current_file_path)
-    delta = ""
-    for line in difflib.unified_diff(previous_file, current_file, fromfile=previous_file_path, tofile=current_file_path, lineterm=''): delta += line
-    return delta
+    return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=False))
 
 def diff_files(file_paths):
-    deltas = []
-    for file in file_paths: deltas += diff_file(file)
-    return deltas
+    diffs = {}
+    for file in file_paths: diffs[file] = diff_file(file)
+    return diffs
 
 def get_diffs(previous_run=None):
     diffs = set()
@@ -101,7 +97,7 @@ def main():
 
     deltas = diff_files(args.files)
     if len(deltas) != 0:
-        Utils.print("\nFILE DIFFS")
+        Utils.print("\nFILE DIFFS:")
         print(deltas)
 
 if __name__ == "__main__": main()
