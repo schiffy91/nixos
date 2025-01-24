@@ -74,7 +74,7 @@ def main():
         hashes = print_changes(changes_to_delete, diff_json)
         sh.json_overwrite(diff_json_file_path, hashes)
         Utils.print_warning("\nCHANGES TO DELETE:")
-        Utils.print_warning(sorted("\n".join(hashes.keys())))
+        Utils.print_warning("\n".join(sorted(hashes.keys())))
     else: sh.rm(diff_json_file_path)
 
     if args.show_changes_to_ignore:
