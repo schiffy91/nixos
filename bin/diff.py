@@ -19,7 +19,11 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
     sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {tmp_snapshot_path}")
     return tmp_snapshot_path
 
-def diff(subvolume_name, subvolume_mount_point):
+def sha256sum(filename):
+    with open(filename, "rb", buffering=0) as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+def diff_subvolume(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
     transaction_id = Shell.stdout(sh.run(f"echo \"$(sudo btrfs subvolume find-new \"{clean_snapshot_path}\" 9999999)\" | cut -d' ' -f4", capture_output=True, check=True))
@@ -28,36 +32,26 @@ def diff(subvolume_name, subvolume_mount_point):
     output = [ os.path.normpath(f"{subvolume_mount_point}/{path}").replace("//", "/") for path in output.split("\n") ]
     return set(output)
 
-def get_diffs():
+def get_diffs(previous_run=None):
     diffs = set()
-    for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
-        try: diffs.update(diff(subvolume_name, subvolume_mount_point))
-        except BaseException as e: Utils.log_error(f"Failed to create a clean snapshot for {subvolume_name}\n{e}")
-    return sorted(diffs)
-
-def get_changes():
-    diffs = get_diffs()
-    changes_to_delete = set()
-    changes_to_ignore = set()
+    for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot(): diffs.update(diff_subvolume(subvolume_name, subvolume_mount_point))
+    diffs = sorted(diffs)
+    diffs_to_delete = set()
+    diffs_to_ignore = set()
+    diffs_hashed = {}
+    diffs_since_last_run_hashed = {}
     paths_to_keep = get_paths_to_keep()
-    for change in diffs:
-        if not any(change.startswith(path_to_keep) for path_to_keep in paths_to_keep): changes_to_delete.add(change)
-        else: changes_to_ignore.add(change)
-    return (sorted(changes_to_delete), sorted(changes_to_ignore))
-
-def sha256sum(filename):
-    with open(filename, 'rb', buffering=0) as f:
-        return hashlib.file_digest(f, 'sha256').hexdigest()
-
-def print_changes(changes, diff_json=None):
-    hashes = {}
-    for change in changes:
-        if os.path.isdir(change) or (os.path.islink(change) and not os.path.exists(change)): continue
-        change_hash = sha256sum(change)
-        if diff_json is not None and change_hash != diff_json.get(change, ""):
-            Utils.print(change)
-        hashes[change] = change_hash
-    return hashes
+    for diff in diffs:
+        if any(diff.startswith(path_to_keep) for path_to_keep in paths_to_keep):
+            diffs_to_ignore.add(diff)
+        else:
+            diffs_to_delete.add(diff)
+            if os.path.isdir(diff) or (os.path.islink(diff) and not os.path.exists(diff)):
+                diffs_hashed[diff] = "N/A"
+            diff_hash = sha256sum(diff)
+            if previous_run is not None and diff_hash != previous_run.get(diff, ""):
+                diffs_since_last_run_hashed[diff] = diff_hash
+    return (sorted(diffs_to_delete), sorted(diffs_to_ignore), diffs_hashed, diffs_since_last_run_hashed)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -67,19 +61,20 @@ def main():
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
-    diff_json = sh.json_read(diff_json_file_path) if args.since_last_run else None
+    previous_run = sh.json_read(diff_json_file_path) if args.since_last_run else None
 
-    changes_to_delete, changes_to_ignore = get_changes()
-    if len(changes_to_delete) != 0:
-        hashes = print_changes(changes_to_delete, diff_json)
-        sh.json_overwrite(diff_json_file_path, hashes)
+    diffs_to_delete, diffs_to_ignore, diffs_hashed, diffs_since_last_run_hashed  = get_diffs(previous_run)
+
+    if len(diffs_to_delete) != 0:
+        sh.json_overwrite(diff_json_file_path, diffs_hashed)
         Utils.print_warning("\nCHANGES TO DELETE:")
-        Utils.print_warning("\n".join(sorted(hashes.keys())))
+        diffs_to_print = diffs_since_last_run_hashed.keys() if args.since_last_run else diffs_to_delete
+        Utils.print_warning("\n".join(sorted(diffs_to_print)))
     else: sh.rm(diff_json_file_path)
 
     if args.show_changes_to_ignore:
         Utils.print("\nCHANGES TO IGNORE:")
-        print_changes(changes_to_ignore)
+        Utils.print("\n".join(sorted(diffs_to_ignore)))
 
     if args.show_paths_to_keep:
         Utils.print("\nPATHS TO KEEP:")
