@@ -52,61 +52,61 @@ def get_diffs(previous_run=None):
     diffs = set()
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot(): diffs.update(diff_subvolume(subvolume_name, subvolume_mount_point))
     diffs = sorted(diffs)
-    diffs_to_delete = set()
-    diffs_to_ignore = set()
-    diffs_hashed = {}
-    diffs_since_last_run_hashed = {}
+    diff_paths_to_delete = set()
+    diff_paths_to_ignore = set()
+    diff_paths_hashed = {}
+    diff_paths_since_last_run_hashed = {}
     paths_to_keep = get_paths_to_keep()
     for diff in diffs:
         if any(diff.startswith(path_to_keep) for path_to_keep in paths_to_keep):
-            diffs_to_ignore.add(diff)
+            diff_paths_to_ignore.add(diff)
         else:
-            diffs_to_delete.add(diff)
+            diff_paths_to_delete.add(diff)
             diff_hash = "N/A"
             if not os.path.isdir(diff) and not (os.path.islink(diff) and not os.path.exists(diff)): diff_hash = sha256sum(diff)
-            diffs_hashed[diff] = diff_hash
+            diff_paths_hashed[diff] = diff_hash
             if previous_run is None: continue
-            if diff_hash != previous_run.get(diff, ""): diffs_since_last_run_hashed[diff] = diff_hash
-    return (sorted(diffs_to_delete), sorted(diffs_to_ignore), diffs_hashed, diffs_since_last_run_hashed)
+            if diff_hash != previous_run.get(diff, ""): diff_paths_since_last_run_hashed[diff] = diff_hash
+    return (sorted(diff_paths_to_delete), sorted(diff_paths_to_ignore), diff_paths_hashed, diff_paths_since_last_run_hashed)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--since-last-run", action="store_true", help="Only list changes since the last run of this program ")
     parser.add_argument("--show-changes-to-ignore", action="store_true", help="List changes that will be ignored because they match paths to keep")
     parser.add_argument("--show-paths-to-keep", action="store_true", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
-    parser.add_argument("--files", nargs="*", default=[], help="Files to show a diff of")
-    parser.add_argument("--files-that-changed", action="store_true", help="Show a diff of every changed file, since last run if --since-last-run supplied")
+    parser.add_argument("--deltas", nargs="*", default=[], help="Files to show a diff of")
+    parser.add_argument("--deltas-that-changed", action="store_true", help="Show a diff of every changed file, since last run if --since-last-run supplied")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
     previous_run = sh.json_read(diff_json_file_path) if args.since_last_run else None
 
-    diffs_to_delete, diffs_to_ignore, diffs_hashed, diffs_since_last_run_hashed  = get_diffs(previous_run)
+    diff_paths_to_delete, diff_paths_to_ignore, diff_paths_hashed, diff_paths_since_last_run_hashed  = get_diffs(previous_run)
     paths_to_keep = get_paths_to_keep()
-    diffs_to_print = diffs_since_last_run_hashed.keys() if args.since_last_run else diffs_to_delete
-    files = diff_files(args.files)
-    files_that_changed = diff_files(diffs_to_print) if args.files_that_changed else {}
+    diffs_to_print = diff_paths_since_last_run_hashed.keys() if args.since_last_run else diff_paths_to_delete
+    deltas = diff_files(args.deltas)
+    deltas_that_changed = diff_files(diffs_to_print) if args.files_that_changed else {}
 
-    if len(diffs_to_delete) != 0:
-        sh.json_overwrite(diff_json_file_path, diffs_hashed)
+    if len(diff_paths_to_delete) != 0:
+        sh.json_overwrite(diff_json_file_path, diff_paths_hashed)
         Utils.print_warning("\nCHANGES TO DELETE:")
         Utils.print_warning("\n".join(sorted(diffs_to_print)))
     else: sh.rm(diff_json_file_path)
 
     if args.show_changes_to_ignore:
         Utils.print("\nCHANGES TO IGNORE:")
-        Utils.print("\n".join(sorted(diffs_to_ignore)))
+        Utils.print("\n".join(sorted(diff_paths_to_ignore)))
 
     if args.show_paths_to_keep:
         Utils.print("\nPATHS TO KEEP:")
         for path in paths_to_keep: Utils.print(path)
 
-    if len(files) != 0:
+    if len(deltas) != 0:
         Utils.print("\nFILE DIFFS:")
-        for file, diff in files.items(): print(f"File: {file}\n{diff}")
+        for file, diff in deltas.items(): print(f"File: {file}\n{diff}")
 
-    if args.files_that_changed:
+    if args.files_that_changed and len(deltas_that_changed) != 0:
         Utils.print("\nFILES THAT CHANGED DIFFS:")
-        for file, diff in files_that_changed.items(): print(f"File: {file}\n{diff}")
+        for file, diff in deltas_that_changed.items(): print(f"File: {file}\n{diff}")
 
 if __name__ == "__main__": main()
