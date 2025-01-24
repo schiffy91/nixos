@@ -17,11 +17,11 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
 def diff(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
     clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-    output = Shell.stdout(sh.run(f"{os.path.dirname(os.path.realpath(__file__))}/diff.sh {clean_snapshot_path} {tmp_snapshot_path}", capture_output=True, check=True))
+    transaction_id = Shell.stdout(sh.run(f"echo \"$(sudo btrfs subvolume find-new \"{clean_snapshot_path}\" 9999999)\" | cut -d' ' -f4", capture_output=True, check=True))
+    output = Shell.stdout(sh.run(f"btrfs subvolume find-new \"{tmp_snapshot_path}\" {transaction_id} | sed '$d' | cut -f17- -d' ' | sort | uniq", capture_output=True, check=True))
     delete_tmp_snapshot(subvolume_name)
     output = [ os.path.normpath(f"{subvolume_mount_point}/{path}").replace("//", "/") for path in output.split("\n") ]
     return set(output)
-
 def main():
     paths_to_keep = Config.eval("config.settings.disk.immutability.persist.paths").replace("[", "").replace("]", "").strip().split(" ")
     diffs = set()
