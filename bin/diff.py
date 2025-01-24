@@ -61,9 +61,9 @@ def print_changes(changes, diff_json=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--since-last-run", help="Only list changes since the last run of this program ")
-    parser.add_argument("--show-changes-to-ignore", help="List changes that will be ignored because they match paths to keep")
-    parser.add_argument("--show-paths-to-keep", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
+    parser.add_argument("since-last-run", help="Only list changes since the last run of this program ")
+    parser.add_argument("show-changes-to-ignore", help="List changes that will be ignored because they match paths to keep")
+    parser.add_argument("show-paths-to-keep", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
