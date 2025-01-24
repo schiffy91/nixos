@@ -39,7 +39,9 @@ def diff_file(file_path):
         if file_path.startswith(subvolume_mount_point): previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}".replace("//", "/")
     if previous_file_path == "": Utils.abort(f"Couldn't diff {file_path}")
     current_file_path = file_path
-    return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=False))
+    if sh.exists(previous_file_path):
+        return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=False))
+    return Shell.stdout(sh.file_read(current_file_path))
 
 def diff_files(file_paths):
     diffs = {}
