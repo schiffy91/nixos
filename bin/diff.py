@@ -96,7 +96,7 @@ def main():
 
     if args.show_paths_to_keep:
         Utils.print("\nPATHS TO KEEP:")
-        for path in paths_to_keep(): Utils.print(path)
+        for path in paths_to_keep: Utils.print(path)
 
     deltas = diff_files(args.files)
     if len(deltas) != 0:
