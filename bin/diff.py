@@ -43,7 +43,9 @@ def diff_file(file_path):
         try:
             return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=True))
         except BaseException: pass
-    return sh.file_read(current_file_path)
+    try:
+        return sh.file_read(current_file_path)
+    except BaseException: return "BINARY"
 
 def diff_files(file_paths):
     diffs = {}
