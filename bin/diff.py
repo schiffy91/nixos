@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import os, argparse, hashlib
+import os, argparse, hashlib, difflib
 from nixos import Utils, Snapshot, Shell, Config
 
 sh = Shell(root_required=True)
@@ -32,6 +32,25 @@ def diff_subvolume(subvolume_name, subvolume_mount_point):
     output = [ os.path.normpath(f"{subvolume_mount_point}/{path}").replace("//", "/") for path in output.split("\n") ]
     return set(output)
 
+def diff_file(file_path):
+    previous_file_path = ""
+    for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot(): 
+        clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
+        if file_path.startswith(subvolume_mount_point): previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}"
+    if previous_file_path == "": Utils.abort(f"Couldn't diff {file_path}")
+    current_file_path = file_path
+    previous_file = sh.file_read(previous_file_path)
+    current_file = sh.file_read(current_file_path)
+    delta = ""
+    for line in difflib.unified_diff(previous_file, current_file, fromfile=previous_file_path, tofile=current_file_path, lineterm=''): delta += line
+    return delta
+
+def diff_files(file_paths):
+    file_paths = [ os.path.abspath(file) for file in file_paths]
+    deltas = []
+    for file in file_paths: deltas += diff_file(file)
+    return deltas
+
 def get_diffs(previous_run=None):
     diffs = set()
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot(): diffs.update(diff_subvolume(subvolume_name, subvolume_mount_point))
@@ -58,6 +77,7 @@ def main():
     parser.add_argument("--since-last-run", action="store_true", help="Only list changes since the last run of this program ")
     parser.add_argument("--show-changes-to-ignore", action="store_true", help="List changes that will be ignored because they match paths to keep")
     parser.add_argument("--show-paths-to-keep", action="store_true", help="List paths to keep (usually located in /etx/nixos/modules/settings.nix)")
+    parser.add_argument("--files", nargs="*", help="Directory to search")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
@@ -79,5 +99,10 @@ def main():
     if args.show_paths_to_keep:
         Utils.print("\nPATHS TO KEEP:")
         for path in get_paths_to_keep(): Utils.print(path)
+
+    deltas = diff_files(args.files)
+    if len(deltas != 0):
+        Utils.print("\nFILE DIFFS")
+        for delta in deltas: print(delta)
 
 if __name__ == "__main__": main()
