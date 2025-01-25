@@ -1,5 +1,5 @@
 { ... }: {
-  xdg.configFile."konsolerc".text = ''
+  /*xdg.configFile."konsolerc".text = ''
     [Desktop Entry]
     DefaultProfile=alexanderschiffhauer.profile
     [General]
@@ -23,5 +23,5 @@
 
     [MainWindow]
     MenuBar=Disabled
-  '';
+  '';*/
 }
