@@ -4,7 +4,7 @@ let
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
 	cleanName = config.settings.disk.immutability.persist.snapshots.cleanName;
 	pathsToKeep = "\"${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}\"";
-	subvolume_names = "\"${config.settings.disk.subvolumes.names.resetOnBoot}\"";
+	subvolumeNameMountPointPairs = "\"${config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot}\"";
 	rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device"; # JFC…
 in 
 lib.mkIf config.settings.disk.immutability.enable {
@@ -21,7 +21,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 			before = [ "sysroot.mount" ];
 			unitConfig.DefaultDependencies = "no";
 			serviceConfig.Type = "oneshot";
-			scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolume_names} ${pathsToKeep}";
+			scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
 			script = ''
 				set -euo pipefail
 				LOG_DEPTH=0
@@ -64,7 +64,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					log_error "$@"
 					log_error "Unmounting and quitting"
 					echo ""
-					trace btrfs_sync "$SUBVOUME"
+					trace btrfs_sync "$SUBVOLUME"
 					trace subvolumes_unmount "$MOUNT_POINT"
 					exit 1
 				}
@@ -127,31 +127,46 @@ lib.mkIf config.settings.disk.immutability.enable {
 					trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
 				}
 				files_copy() {
-					local paths_to_keep="$1"
-					local previous_snapshot="$2"
-					local current_snapshot="$3"
-					for path in $paths_to_keep; do
-						local path_in_previous_snapshot="$previous_snapshot$path"
-						local path_in_current_snapshot="$current_snapshot$path"
-						if trace desire -e "$path_in_previous_snapshot"; then
-							if ! trace desire -d "$(dirname "$path_in_current_snapshot")"; then
-									trace mkdir -p "$(dirname "$path_in_current_snapshot")"
-							fi
-							if trace desire -e "$path_in_current_snapshot"; then
-									trace rm -rf "$path_in_current_snapshot"
-							fi
-							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
-						fi
-					done
+						local subvolume_mount_point="$1"
+						local paths_to_keep="$2"
+						local previous_snapshot="$3"
+						local current_snapshot="$4"
+						for path in $paths_to_keep; do
+							case "$path" in
+								"$subvolume_mount_point"*)
+									local relative_path=''${path#"$subvolume_mount_point"}
+									relative_path=''${relative_path#/}
+									local path_in_previous_snapshot="$previous_snapshot/$relative_path"
+									local path_in_current_snapshot="$current_snapshot/$relative_path"
+									if trace desire -e "$path_in_previous_snapshot"; then
+										if ! trace desire -d "$(dirname "$path_in_current_snapshot")"; then
+											trace mkdir -p "$(dirname "$path_in_current_snapshot")"
+										fi
+										if trace desire -e "$path_in_current_snapshot"; then
+											trace rm -rf "$path_in_current_snapshot"
+										fi
+										trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
+									fi
+								;;
+							esac
+						done
 				}
-
 				log "Setting up variables"
 				MOUNT_POINT="/mnt"
 				DISK="$1"
 				SNAPSHOTS_SUBVOLUME_NAME="$2"
 				CLEAN_SNAPSHOT_NAME="$3"
-				SUBVOLUME_NAMES="$4"
+				SUBVOLUME_NAME_MOUNT_POINT_PAIRS="$4"
 				PATHS_TO_KEEP=$(echo "$5" | tr ' ' '\n' | sort)
+				SUBVOLUME_NAMES=""
+				for pair in $SUBVOLUME_NAME_MOUNT_POINT_PAIRS; do
+					local subvolume_name=''${pair%=*}
+					if [ -z "$SUBVOLUME_NAMES" ]; then
+						SUBVOLUME_NAMES="$subvolume_name"
+					else
+						SUBVOLUME_NAMES="$SUBVOLUME_NAMES $subvolume_name"
+					fi
+				done
 				PREVIOUS_SNAPSHOT_NAME="PREVIOUS"
 				PENULTIMATE_SNAPSHOT_NAME="PENULTIMATE"
 				CURRENT_SNAPSHOT_NAME="CURRENT"
@@ -160,9 +175,11 @@ lib.mkIf config.settings.disk.immutability.enable {
 				log "Mounting $DISK, $SNAPSHOTS_SUBVOLUME_NAME, and $SUBVOLUME_NAMES"
 				trace subvolumes_mount "$DISK" "$MOUNT_POINT" "$SNAPSHOTS_SUBVOLUME_NAME" "$SUBVOLUME_NAMES"
 				
-				for SUBVOLUME_NAME in $SUBVOLUME_NAMES; do
+				for pair in $SUBVOLUME_NAME_MOUNT_POINT_PAIRS; do
+					SUBVOLUME_NAME=''${pair%=*}
+					SUBVOLUME_MOUNT_POINT=''${pair#*=}
 					log "Resetting $SUBVOLUME_NAME"
-					SUBVOUME="$MOUNT_POINT/$SUBVOLUME_NAME"
+					SUBVOLUME="$MOUNT_POINT/$SUBVOLUME_NAME"
 					SNAPSHOTS="$MOUNT_POINT/$SNAPSHOTS_SUBVOLUME_NAME/$SUBVOLUME_NAME"
 					CLEAN_SNAPSHOT="$SNAPSHOTS/$CLEAN_SNAPSHOT_NAME"
 					PREVIOUS_SNAPSHOT="$SNAPSHOTS/$PREVIOUS_SNAPSHOT_NAME"
@@ -176,18 +193,18 @@ lib.mkIf config.settings.disk.immutability.enable {
 
 					log "Setting $PENULTIMATE_SNAPSHOT, $PREVIOUS_SNAPSHOT, and $CURRENT_SNAPSHOT"
 					trace btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
-					trace btrfs_subvolume_copy "$SUBVOUME" "$PREVIOUS_SNAPSHOT"
+					trace btrfs_subvolume_copy "$SUBVOLUME" "$PREVIOUS_SNAPSHOT"
 					trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$CURRENT_SNAPSHOT"
 					trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
 					log "Preserving persistent paths from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
-					trace files_copy "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+					trace files_copy "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
 					log "TODO: Preserve new symlinks from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 
-					log "Copying $CURRENT_SNAPSHOT to $SUBVOUME"
+					log "Copying $CURRENT_SNAPSHOT to $SUBVOLUME"
 					log "TODO: Make this operation atomic by using btrfs subvolume set-default <new_path> <old_path> on new TMP subvolumes"
-					trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOUME"
+					trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOLUME"
 				done
 				trace subvolumes_unmount "$MOUNT_POINT"
 			'';
