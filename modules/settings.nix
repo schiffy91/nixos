@@ -63,6 +63,8 @@ in {
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "${config.settings.boot.pkiBundle}"
+      #TODO: Some permission breaks here with home-manager
+      #TODO: PermissionError: [Errno 13] Permission denied: '/home/alexanderschiffhauer/.config/kcminputrc'
       "/home/${config.settings.user.admin.username}/.config/dconf/user"
       "/home/${config.settings.user.admin.username}/.config/gtk-3.0/settings.ini"
       "/home/${config.settings.user.admin.username}/.config/gtk-4.0/settings.ini"
