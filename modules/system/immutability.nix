@@ -1,4 +1,4 @@
-{ config, lib, ... }: 
+{ config, lib, pkgs, ... }: 
 let 
 	device = config.settings.disk.by.partlabel.root;
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
