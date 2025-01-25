@@ -15,7 +15,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 		supportedFilesystems = [ "btrfs" ];
 		systemd = {
 			extraBin = {
-				rsync = ${pkgs.rsync}/bin/rysnc;
+				rsync = "${pkgs.rsync}/bin/rysnc";
 			}
 			services.immutability = {
 				description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
