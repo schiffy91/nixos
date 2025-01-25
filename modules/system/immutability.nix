@@ -35,7 +35,11 @@ lib.mkIf config.settings.disk.immutability.enable {
 					done
 				}
 				log() {
-					indent; echo -n "$@" | tr '\n' ' '; echo
+					local msg="$*"
+					while IFS= read -r line; do
+						indent
+						echo "$line"
+					done <<< "${msg}"
 				}
 				log_warning() {
 					log "WRN $@" >&2
