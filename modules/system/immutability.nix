@@ -35,11 +35,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 					done
 				}
 				log() {
-					local log_message="$*"
-					while IFS= read -r line; do
-						indent
-						echo "$line"
-					done <<< "$log_message"
+					local joined="$(echo "$*" | tr '\n' ' ')"
+					indent
+					echo "$joined"
 				}
 				log_warning() {
 					log "WRN $@" >&2
