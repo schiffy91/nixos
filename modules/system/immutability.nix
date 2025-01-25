@@ -159,7 +159,6 @@ lib.mkIf config.settings.disk.immutability.enable {
 				SUBVOLUME_NAME_MOUNT_POINT_PAIRS="$4"
 				PATHS_TO_KEEP=$(echo "$5" | tr ' ' '\n' | sort)
 				SUBVOLUME_NAMES=""
-				SUBVOLUME_NAMES=""
         for pair in $SUBVOLUME_NAME_MOUNT_POINT_PAIRS; do
           subvolume_name=''${pair%=*}
           if [ -z "$SUBVOLUME_NAMES" ]; then
