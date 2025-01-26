@@ -149,7 +149,6 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
 					}
-					}
 					files_copy_rsync() {
 						log "pre-1"
 						local subvolume_mount_point="$1"
