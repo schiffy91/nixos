@@ -137,7 +137,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 						local current_snapshot="$4"
 
 						for path in $paths_to_keep; do
-							[[ "$path" != "$subvolume_mount_point"* ]] && continue							
+							if [[ "$path" != "$subvolume_mount_point"* ]]; then
+								continue
+							fi
 							local relative_path=''${path#"$subvolume_mount_point"}
 							relative_path=''${relative_path#/}
 							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
