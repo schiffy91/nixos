@@ -161,7 +161,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 						local previous_snapshot="$3"
 						local current_snapshot="$4"
 						local keep_list="/tmp/keep_list.txt"
-						trace rm -f "$keep_list"
+						trace desire -e "$keep_list" && trace rm -f "$keep_list"
 						for path in $paths_to_keep; do
 							case "$path" in
 								"$subvolume_mount_point"*)
