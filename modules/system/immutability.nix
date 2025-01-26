@@ -226,8 +226,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 						trace btrfs_subvolume_rw "$CURRENT_SNAPSHOT"
 
 						log "Preserving persistent paths from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
-						#trace files_copy "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
-						trace files_copy_rsync "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+						trace files_copy "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
+						#trace files_copy_rsync "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
 						log "TODO: Preserve new symlinks from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 
