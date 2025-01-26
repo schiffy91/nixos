@@ -95,9 +95,6 @@ lib.mkIf config.settings.disk.immutability.enable {
 					require() {
 						trace test "$@" || abort "Require failed: $@"
 					}
-					desire() {
-						trace test "$@" || return 1
-					}
 					btrfs_sync() {
 						local path="$1"
 						trace btrfs filesystem sync "$path"
@@ -109,7 +106,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					}
 					btrfs_subvolume_delete_recursively() {
 						local path="$1"
-						trace desire -d "$path" || return 0
+						trace test -d "$path" || return 0
 						local subvolumes
 						subvolumes=$(btrfs subvolume list -o "$path" | cut -f 9- -d ' ')
 						IFS=$'\n'
@@ -145,9 +142,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
 							local path_in_current_snapshot="$current_snapshot/$relative_path"
 
-							trace desire -e "$path_in_previous_snapshot" || continue
-							trace desire -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
-							trace desire -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
+							trace test -e "$path_in_previous_snapshot" || continue
+							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
+							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
 					}
@@ -163,7 +160,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 						log "pre-5"
 						local keep_list="/tmp/keep_list.txt"
 						log "pre-6"
-						trace desire -e "$keep_list" && trace rm -f "$keep_list"
+						trace test -e "$keep_list" && trace rm -f "$keep_list"
 						for path in $paths_to_keep; do
 							case "$path" in
 								"$subvolume_mount_point"*)
@@ -212,8 +209,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 
 						log "Validating $CLEAN_SNAPSHOT, and initializing $PENULTIMATE_SNAPSHOT and $PREVIOUS_SNAPSHOT if they don't exist."
 						trace require -n "$CLEAN_SNAPSHOT" && trace require -d "$CLEAN_SNAPSHOT"
-						trace desire -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
-						trace desire -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PREVIOUS_SNAPSHOT"
+						trace test -d "$PENULTIMATE_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
+						trace test -d "$PREVIOUS_SNAPSHOT" || trace btrfs_subvolume_copy "$CLEAN_SNAPSHOT" "$PREVIOUS_SNAPSHOT"
 
 						log "Setting $PENULTIMATE_SNAPSHOT, $PREVIOUS_SNAPSHOT, and $CURRENT_SNAPSHOT"
 						trace btrfs_subvolume_copy "$PREVIOUS_SNAPSHOT" "$PENULTIMATE_SNAPSHOT"
