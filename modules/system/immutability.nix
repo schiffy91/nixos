@@ -22,7 +22,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 			unitConfig.DefaultDependencies = "no";
 			serviceConfig.Type = "oneshot";
 			scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
-			path = with pkgs; [ rsync coreutils util-linux ];
+			path = with pkgs; [ rsync toybox ];
 			script = ''
 				set -euo pipefail
 				LOG_DEPTH=0
