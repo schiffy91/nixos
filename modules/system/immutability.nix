@@ -131,29 +131,26 @@ lib.mkIf config.settings.disk.immutability.enable {
 						trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
 					}
 					files_copy() {
-						local subvolume_mount_point="$1"
-						local paths_to_keep="$2"
-						local previous_snapshot="$3"
-						local current_snapshot="$4"
-						for path in $paths_to_keep; do
-							case "$path" in
-								"$subvolume_mount_point"*)
-									local relative_path=''${path#"$subvolume_mount_point"}
-									relative_path=''${relative_path#/}
-									local path_in_previous_snapshot="$previous_snapshot/$relative_path"
-									local path_in_current_snapshot="$current_snapshot/$relative_path"
-									if trace desire -e "$path_in_previous_snapshot"; then
-										if ! trace desire -d "$(dirname "$path_in_current_snapshot")"; then
-											trace mkdir -p "$(dirname "$path_in_current_snapshot")"
-										fi
-										if trace desire -e "$path_in_current_snapshot"; then
-											trace rm -rf "$path_in_current_snapshot"
-										fi
-										trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
-									fi
-								;;
-							esac
-						done
+					local subvolume_mount_point="$1"
+					local paths_to_keep="$2"
+					local previous_snapshot="$3"
+					local current_snapshot="$4"
+
+					for path in $paths_to_keep; do
+						case "$path" in
+						"$subvolume_mount_point"*)
+							local relative_path=''${path#"$subvolume_mount_point"}
+							relative_path=''${relative_path#/}
+							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
+							local path_in_current_snapshot="$current_snapshot/$relative_path"
+
+							trace desire -e "$path_in_previous_snapshot" || continue
+							trace desire -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
+							trace desire -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
+							trace cp -a --preserve=xattr --preserve=acl "$path_in_previous_snapshot" "$path_in_current_snapshot"
+						;;
+						esac
+					done
 					}
 					files_copy_rsync() {
 						log "pre-1"
