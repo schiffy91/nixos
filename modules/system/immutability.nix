@@ -147,7 +147,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace desire -e "$path_in_previous_snapshot" || continue
 							trace desire -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
 							trace desire -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
-							trace cp -a --preserve=xattr --preserve=acl "$path_in_previous_snapshot" "$path_in_current_snapshot"
+							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						;;
 						esac
 					done
