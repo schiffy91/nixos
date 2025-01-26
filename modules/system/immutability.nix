@@ -156,11 +156,17 @@ lib.mkIf config.settings.disk.immutability.enable {
 						done
 					}
 					files_copy_rsync() {
+						log "pre-1"
 						local subvolume_mount_point="$1"
+						log "pre-2"
 						local paths_to_keep="$2"
+						log "pre-3"
 						local previous_snapshot="$3"
+						log "pre-4"
 						local current_snapshot="$4"
+						log "pre-5"
 						local keep_list="/tmp/keep_list.txt"
+						log "pre-6"
 						trace desire -e "$keep_list" && trace rm -f "$keep_list"
 						for path in $paths_to_keep; do
 							case "$path" in
