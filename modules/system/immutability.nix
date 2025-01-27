@@ -147,6 +147,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
+						return 0
 					}
 					files_copy_rsync() {
 						log "pre-1"
