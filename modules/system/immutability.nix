@@ -128,31 +128,19 @@ lib.mkIf config.settings.disk.immutability.enable {
 						trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
 					}
 					files_copy() {
-						log "a"
 						local subvolume_mount_point="$1"
-						log "b"
 						local paths_to_keep="$2"
-						log "c"
 						local previous_snapshot="$3"
-						log "d"
 						local current_snapshot="$4"
-						log "e"
 
 						for path in $paths_to_keep; do
-							log "f"
 							if [[ "$path" != "$subvolume_mount_point"* ]]; then
-								log "g"
 								continue
 							fi
-							log "h"
 							local relative_path=''${path#"$subvolume_mount_point"}
-							log "i"
 							relative_path=''${relative_path#/}
-							log "j"
 							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
-							log "k"
 							local path_in_current_snapshot="$current_snapshot/$relative_path"
-							log "l"
 
 							trace test -e "$path_in_previous_snapshot" || continue
 							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
