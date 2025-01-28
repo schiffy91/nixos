@@ -29,18 +29,12 @@ lib.mkIf config.settings.disk.immutability.enable {
 				script = ''
 					LOG_DEPTH=0
 					LOG_SPACES_PER_LEVEL=2
-					indent() {
-						spaces=$((LOG_DEPTH * LOG_SPACES_PER_LEVEL))
-						i=0
-						while [ $i -lt $spaces ]; do
-							echo -n " "
-							i=$((i + 1))
-						done
-					}
 					log() {
-						local joined="$(echo "$*" | tr '\n' ' ')"
-						indent
-						echo "$joined"
+						local depth=${LOG_DEPTH:-0}
+						local spaces_per_level=${LOG_SPACES_PER_LEVEL:-2}
+						local spaces=$((depth * spaces_per_level))						
+						printf "%''${spaces}s" ""
+						echo "$*" | tr '\n' ' '
 					}
 					log_warning() {
 						log "WRN $@" >&2
