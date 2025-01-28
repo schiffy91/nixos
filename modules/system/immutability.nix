@@ -142,7 +142,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							#trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
-							trace rsync -aAX "$path_in_previous_snapshot" "$path_in_current_snapshot"
+							trace rsync -aAX "$(dirname "$path_in_previous_snapshot")" "$path_in_current_snapshot"
 						done
 					}
 					log "Setting up variables"
