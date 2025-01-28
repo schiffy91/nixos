@@ -51,7 +51,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 					trace() {
 						LOG_DEPTH=$((LOG_DEPTH + 1))
 						log "$@"
-						output=$("$@" 2>&1)
+						local output=$("$@" 2>&1)
 						local ret=$?
 						echo "$output" | while read -r line; do
 							[ -n "$line" ] && log "$line"
@@ -146,7 +146,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
-						log "Complete"
+						return 0
 					}
 					files_copy_rsync() {
 						log "pre-1"
