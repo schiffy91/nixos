@@ -27,7 +27,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 				serviceConfig.Type = "oneshot";
 				scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
 				script = ''
-					set -euo pipefail
+					set -Eeuo pipefail
+					trap 'catch_error $LINENO "$BASH_COMMAND" $?' ERR
 					LOG_DEPTH=0
 					LOG_SPACES_PER_LEVEL=2
 					indent() {
@@ -71,6 +72,12 @@ lib.mkIf config.settings.disk.immutability.enable {
 						trace btrfs_sync "$SUBVOLUME"
 						trace subvolumes_unmount "$MOUNT_POINT"
 						exit 1
+					}
+					catch_error() {
+						local line=$1
+						local cmd=$2
+						local ret=$3
+						abort "ERROR: Command '$cmd' failed with exit code '$ret' at line '$line'."
 					}
 					subvolumes_mount() {
 						local disk="$1"
@@ -147,7 +154,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
-						true
+						return 0
 					}
 					files_copy_rsync() {
 						log "pre-1"
