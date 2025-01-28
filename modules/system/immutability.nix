@@ -129,39 +129,23 @@ lib.mkIf config.settings.disk.immutability.enable {
 						trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
 					}
 					files_copy() {
-						trace "a"
 						local subvolume_mount_point="$1"
-						trace "b"
 						local paths_to_keep="$2"
-						trace "c"
 						local previous_snapshot="$3"
-						trace "d"
 						local current_snapshot="$4"
-						trace "e"
 						for path in $paths_to_keep; do
-							trace "f"
 							if [[ "$path" != "$subvolume_mount_point"* ]]; then
-								trace "g"
 								continue
 							fi
-							trace "h"
 							local relative_path=''${path#"$subvolume_mount_point"}
-							trace "i"
 							relative_path=''${relative_path#/}
-							trace "j"
 							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
-							trace "k"
 							local path_in_current_snapshot="$current_snapshot/$relative_path"
-							trace "l"
 
 							trace test -e "$path_in_previous_snapshot" || continue
-							trace "m"
 							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
-							trace "n"
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
-							trace "o"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
-							trace "p"
 						done
 					}
 					files_copy_rsync() {
