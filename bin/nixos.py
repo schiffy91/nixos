@@ -240,12 +240,11 @@ class Snapshot:
     @classmethod
     def get_clean_snapshot_name(cls): return Config.eval("config.settings.disk.immutability.persist.snapshots.cleanName")
     @classmethod
-    def get_subvolumes_to_reset_on_boot(cls): return [pair.split("=") for pair in Config.eval("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot").split()]
+    def get_subvolumes_to_reset_on_boot(cls): return [ pair.split("=") for pair in Config.eval("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot").split() ]
     @classmethod
     def get_clean_snapshot_path(cls, subvolume_name): return f"{cls.get_snapshots_path()}/{subvolume_name}/{cls.get_clean_snapshot_name()}"
     @classmethod
     def create_initial_snapshots(cls):
-        cls.sh.rm("/var/run") # https://github.com/systemd/systemd/issues/7683
         for subvolume_name, subvolume_mount_point in cls.get_subvolumes_to_reset_on_boot():
             clean_snapshot_path = cls.get_clean_snapshot_path(subvolume_name)
             try:
