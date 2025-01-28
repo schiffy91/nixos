@@ -48,7 +48,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 						shift
 						quoted_args+=("$first_arg")
 						for arg in "$@"; do
-							quoted_args+=("'$arg'")
+							quoted_args+=("\"$arg\"")
 						done
 						local joined="$(echo "''${quoted_args[*]}" | tr '\n' ' ')"
 						indent
