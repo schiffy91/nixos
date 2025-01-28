@@ -27,7 +27,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				serviceConfig.Type = "oneshot";
 				scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
 				script = ''
-					set -euo pipefail
+					#set -euo pipefail
 					LOG_DEPTH=0
 					LOG_SPACES_PER_LEVEL=2
 					indent() {
@@ -129,31 +129,18 @@ lib.mkIf config.settings.disk.immutability.enable {
 						trace btrfs property set -ts "$path" ro false || abort "Failed to make $path read-write"
 					}
 					files_copy() {
-						local i=0
 						local subvolume_mount_point="$1"
-						i=$((i+1)); log "$i"
 						local paths_to_keep="$2"
-						i=$((i+1)); log "$i"
 						local previous_snapshot="$3"
-						i=$((i+1)); log "$i"
 						local current_snapshot="$4"
-						i=$((i+1)); log "$i"
 						for path in $paths_to_keep; do
-						i=$((i+1)); log "$i"
 							if [[ "$path" != "$subvolume_mount_point"* ]]; then
-							i=$((i+1)); log "$i"
 								continue
-								i=$((i+1)); log "$i"
 							fi
-							i=$((i+1)); log "$i"
 							local relative_path=''${path#"$subvolume_mount_point"}
-							i=$((i+1)); log "$i"
 							relative_path=''${relative_path#/}
-							i=$((i+1)); log "$i"
 							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
-							i=$((i+1)); log "$i"
 							local path_in_current_snapshot="$current_snapshot/$relative_path"
-							i=$((i+1)); log "$i"
 
 							trace test -e "$path_in_previous_snapshot" || continue
 							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
