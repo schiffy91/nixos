@@ -50,13 +50,14 @@ lib.mkIf config.settings.disk.immutability.enable {
 					}
 					trace() {
 						LOG_DEPTH=$((LOG_DEPTH + 1))
-						log "$@"
-						local output=$("$@" 2>&1)
+						log "$*"
+						local output
+						output=$("$@" 2>&1)
 						local ret=$?
-						echo "$output" | while read -r line; do
+						while IFS= read -r line; do
 							[ -n "$line" ] && log "$line"
-						done
-						if [ ! $ret -eq 0 ]; then
+						done <<< "$output"
+						if [ $ret -ne 0 ]; then
 							log_warning "$@ returned with status code $ret"
 						fi
 						LOG_DEPTH=$((LOG_DEPTH - 1))
