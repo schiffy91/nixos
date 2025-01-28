@@ -38,19 +38,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 						done
 					}
 					log() {
-						if [ $# -eq 0 ]; then
-							indent
-							echo
-							return
-						fi
-						local quoted_args=()
-						local first_arg="$1"
-						shift
-						quoted_args+=("$first_arg")
-						for arg in "$@"; do
-							quoted_args+=("\"$arg\"")
-						done
-						local joined="$(echo "''${quoted_args[*]}" | tr '\n' ' ')"
+						local joined="$(echo "$*" | tr '\n' ' ')"
 						indent
 						echo "$joined"
 					}
