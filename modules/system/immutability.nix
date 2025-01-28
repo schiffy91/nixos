@@ -28,18 +28,14 @@ lib.mkIf config.settings.disk.immutability.enable {
 				scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
 				script = ''
 					LOG_DEPTH=0
-					LOG_SPACES_PER_LEVEL=2
-					indent() {
-						spaces=$((LOG_DEPTH * LOG_SPACES_PER_LEVEL))
+					log() {
+						local joined="$(echo "$*" | tr '\n' ' ')"
+						indentations=$((LOG_DEPTH * 2))
 						i=0
-						while [ $i -lt $spaces ]; do
+						while [ $i -lt $indentations ]; do
 							echo -n " "
 							i=$((i + 1))
 						done
-					}
-					log() {
-						local joined="$(echo "$*" | tr '\n' ' ')"
-						indent
 						echo "$joined"
 					}
 					log_warning() {
