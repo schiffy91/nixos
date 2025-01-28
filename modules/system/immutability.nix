@@ -142,31 +142,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
+							#trace rsync -aAX "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
-					}
-					files_copy_rsync() {
-						log "pre-1"
-						local subvolume_mount_point="$1"
-						log "pre-2"
-						local paths_to_keep="$2"
-						log "pre-3"
-						local previous_snapshot="$3"
-						log "pre-4"
-						local current_snapshot="$4"
-						log "pre-5"
-						local keep_list="/tmp/keep_list.txt"
-						log "pre-6"
-						trace test -e "$keep_list" && trace rm -f "$keep_list"
-						for path in $paths_to_keep; do
-							case "$path" in
-								"$subvolume_mount_point"*)
-									local relative_path=''${path#"$subvolume_mount_point"}
-									relative_path=''${relative_path#/}
-									echo "$relative_path" >> "$keep_list"
-								;;
-							esac
-						done
-						trace rsync -aAX --files-from="$keep_list" --relative "$previous_snapshot"/ "$current_snapshot"/
 					}
 					log "Setting up variables"
 					MOUNT_POINT="/mnt"
