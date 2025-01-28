@@ -27,7 +27,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				serviceConfig.Type = "oneshot";
 				scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
 				script = ''
-					#set -euo pipefail
+					set -euo pipefail
 					LOG_DEPTH=0
 					LOG_SPACES_PER_LEVEL=2
 					indent() {
@@ -147,6 +147,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
 							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
 						done
+						return 0
 					}
 					files_copy_rsync() {
 						log "pre-1"
