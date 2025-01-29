@@ -130,17 +130,17 @@ lib.mkIf config.settings.disk.immutability.enable {
 						local previous_snapshot="$3"
 						local current_snapshot="$4"
 						(
-							local rsync_arguments=( --include="*/" )
+							local rsync_paths=( --include="*/" )
 							for path_to_keep in $paths_to_keep; do
 								if [[ "$path_to_keep" == "$subvolume_mount_point"* ]]; then
 									local path_in_snapshot="''${path_to_keep#$subvolume_mount_point}"
 									path_in_snapshot="''${path_in_snapshot#/}"
-									rsync_arguments+=( --include="$path_in_snapshot" )
+									rsync_paths+=( --include="$path_in_snapshot" )
 								fi
 							done
-							rsync_arguments+=( --exclude="*" )
-							if [ "''${#rsync_arguments[@]}" -gt 2 ]; then
-								trace cd "$previous_snapshot" && trace rsync -aHAX --numeric-ids --delete "''${rsync_arguments[@]}" . "$current_snapshot"
+							rsync_paths+=( --exclude="*" )
+							if [ "''${#rsync_paths[@]}" -gt 2 ]; then
+								trace cd "$previous_snapshot" && trace rsync -aHAX --numeric-ids --delete "''${rsync_paths[@]}" . "$current_snapshot"
 							else
 								log "No paths matched $subvolume_mount_point; skipping rsync."
 							fi
