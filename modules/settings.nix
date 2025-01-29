@@ -63,16 +63,12 @@ in {
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "${config.settings.boot.pkiBundle}"
-      #TODO: Some permission breaks here with home-manager
-      #TODO: PermissionError: [Errno 13] Permission denied: '/home/alexanderschiffhauer/.config/kcminputrc'
-      #[alexanderschiffhauer@VM:~]$ rm -rf .config/dconf/user
-      #rm: cannot remove '.config/dconf/user': Permission denied
-      #"/home/${config.settings.user.admin.username}/.config/dconf/user"
-      #"/home/${config.settings.user.admin.username}/.config/gtk-3.0/settings.ini"
-      #"/home/${config.settings.user.admin.username}/.config/gtk-4.0/settings.ini"
-      #"/home/${config.settings.user.admin.username}/.config/kcmfonts"
-      #"/home/${config.settings.user.admin.username}/.config/kdeglobals"
-      #"/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
+      "/home/${config.settings.user.admin.username}/.config/dconf/user"
+      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/settings.ini"
+      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/settings.ini"
+      "/home/${config.settings.user.admin.username}/.config/kcmfonts"
+      "/home/${config.settings.user.admin.username}/.config/kdeglobals"
+      "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
