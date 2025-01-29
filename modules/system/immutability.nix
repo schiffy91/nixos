@@ -129,20 +129,25 @@ lib.mkIf config.settings.disk.immutability.enable {
 						local paths_to_keep="$2"
 						local previous_snapshot="$3"
 						local current_snapshot="$4"
-						for path in $paths_to_keep; do
-							if [[ "$path" != "$subvolume_mount_point"* ]]; then
-								continue
+						(
+							cd "$previous_snapshot" || {
+								log "Unable to change directory into $previous_snapshot"
+								return
+							}
+							local filter_arguments=( --include="*/" )
+							for requested_path in $paths_to_keep; do
+								if [[ "$requested_path" == "$subvolume_mount_point"* ]]; then
+									local path_in_snapshot="''${requested_path#"$subvolume_mount_point"/}"
+									filter_arguments+=( --include="$path_in_snapshot" )
+								fi
+							done
+							filter_arguments+=( --exclude="*" )
+							if [ "''${#filter_arguments[@]}" -gt 2 ]; then
+								rsync -aHAX --numeric-ids --delete "''${filter_arguments[@]}" . "$current_snapshot"
+							else
+								log "No paths matched $subvolume_mount_point; skipping rsync."
 							fi
-							local relative_path=''${path#"$subvolume_mount_point"}
-							relative_path=''${relative_path#/}
-							local path_in_previous_snapshot="$previous_snapshot/$relative_path"
-							local path_in_current_snapshot="$current_snapshot/$relative_path"
-
-							trace test -e "$path_in_previous_snapshot" || continue
-							#trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
-							#trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
-							trace rsync -aHAX --numeric-ids "$path_in_previous_snapshot" "$(dirname "$path_in_current_snapshot")"
-						done
+						)
 					}
 					log "Setting up variables"
 					MOUNT_POINT="/mnt"
