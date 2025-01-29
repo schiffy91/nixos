@@ -11,6 +11,7 @@ in {
     settings.user.admin.autoLock.enable = mkSetting bool true;
     settings.user.admin.autoUnlockWallet.enabled = mkSetting bool true;
     settings.user.admin.authorizedKey = mkSetting str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
+    settings.user.admin.homeManager.enable = mkSetting bool true;
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     ##### Disk: Labels #####

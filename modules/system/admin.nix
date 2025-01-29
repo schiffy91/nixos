@@ -28,7 +28,7 @@
           homeDirectory = "/home/${settings.user.admin.username}";
           stateVersion = "24.11";
         };
-        programs.home-manager.enable = true;
+        programs.home-manager.enable = config.settings.user.admin.homeManager.enable;
         imports = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ../apps);
       };
     };
