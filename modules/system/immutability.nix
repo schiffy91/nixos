@@ -141,9 +141,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							trace test -e "$path_in_previous_snapshot" || continue
 							trace test -d "$(dirname "$path_in_current_snapshot")" || trace mkdir -p "$(dirname "$path_in_current_snapshot")"
 							trace test -e "$path_in_current_snapshot" && trace rm -rf "$path_in_current_snapshot"
-							trace cp -a "$path_in_previous_snapshot" "$path_in_current_snapshot"
-							log "TODO: Fix rsync paths"
-							#trace rsync -aAX "$path_in_current_snapshot" "$(dirname "$path_in_current_snapshot")/"
+							trace rsync -aHAX "$path_in_current_snapshot" "$(dirname "$path_in_current_snapshot")"
 						done
 					}
 					log "Setting up variables"
@@ -155,12 +153,12 @@ lib.mkIf config.settings.disk.immutability.enable {
 					PATHS_TO_KEEP=$(echo "$5" | tr ' ' '\n' | sort)
 					SUBVOLUME_NAMES=""
 					for pair in $SUBVOLUME_NAME_MOUNT_POINT_PAIRS; do
-					subvolume_name=''${pair%=*}
-					if [ -z "$SUBVOLUME_NAMES" ]; then
-						SUBVOLUME_NAMES="$subvolume_name"
-					else
-						SUBVOLUME_NAMES="$SUBVOLUME_NAMES $subvolume_name"
-					fi
+						subvolume_name=''${pair%=*}
+						if [ -z "$SUBVOLUME_NAMES" ]; then
+							SUBVOLUME_NAMES="$subvolume_name"
+						else
+							SUBVOLUME_NAMES="$SUBVOLUME_NAMES $subvolume_name"
+						fi
 					done
 					PREVIOUS_SNAPSHOT_NAME="PREVIOUS"
 					PENULTIMATE_SNAPSHOT_NAME="PENULTIMATE"
@@ -194,12 +192,11 @@ lib.mkIf config.settings.disk.immutability.enable {
 
 						log "Preserving persistent paths from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 						trace files_copy "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
-						#trace files_copy_rsync "$SUBVOLUME_MOUNT_POINT" "$PATHS_TO_KEEP" "$PREVIOUS_SNAPSHOT" "$CURRENT_SNAPSHOT"
 
-						log "TODO: Preserve new symlinks from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
+						log_warning "TODO: Preserve new symlinks from $PREVIOUS_SNAPSHOT into $CURRENT_SNAPSHOT"
 
 						log "Copying $CURRENT_SNAPSHOT to $SUBVOLUME"
-						log "TODO: Make this operation atomic by using btrfs subvolume set-default <new_path> <old_path> on new TMP subvolumes"
+						log_warning "TODO: Make this operation atomic by using btrfs subvolume set-default <new_path> <old_path> on new TMP subvolumes"
 						trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOLUME"
 					done
 					trace subvolumes_unmount "$MOUNT_POINT"
