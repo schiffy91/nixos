@@ -1,5 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
+# cd / && sudo rm -rf /etc/nixos && sudo git clone https://github.com/schiffy91/nixos.git /etc/nixos && sudo /etc/nixos/bin/install.py
 import sys
 from nixos import Utils, Config, Shell, Snapshot, Interactive
 
