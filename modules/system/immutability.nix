@@ -140,7 +140,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 							done
 							rsync_arguments+=( --exclude="*" )
 							if [ "''${#rsync_arguments[@]}" -gt 2 ]; then
-								trace cd "$previous_snapshot" && trace rsync -aHAX --numeric-ids --delete "''${filter_arguments[@]}" . "$current_snapshot"
+								trace cd "$previous_snapshot" && trace rsync -aHAX --numeric-ids --delete "''${rsync_arguments[@]}" . "$current_snapshot"
 							else
 								log "No paths matched $subvolume_mount_point; skipping rsync."
 							fi
