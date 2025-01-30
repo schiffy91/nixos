@@ -1,4 +1,4 @@
-{ inputs, config, pkgs, lib, ... }: lib.mkMerge [
+{ config, pkgs, pkgs-unstable, lib, ... }: lib.mkMerge [
   ##### Shared Settings #####
   {
     hardware.graphics.enable = true;
@@ -53,6 +53,7 @@
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     programs.hyprland = {
       enable = true;
+      package = pkgs-unstable.hyprland;
       #package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
       #portalPackage = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
     };

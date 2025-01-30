@@ -1,4 +1,4 @@
-{ inputs, config, unstable-pkgs, lib, ... }: {
+{ inputs, config, pkgs-unstable, lib, ... }: {
   ##### Security #####
   users.users.${config.settings.user.admin.username} = {
     isNormalUser = true;
@@ -20,7 +20,7 @@
     useUserPackages = true;
     backupFileExtension = "hm-backup";
     sharedModules = if (lib.hasInfix "plasma" config.settings.desktop.environment) then [ inputs.plasma-manager.homeManagerModules.plasma-manager ] else [];
-    extraSpecialArgs = { settings = config.settings; unstable-pkgs = unstable-pkgs; };
+    extraSpecialArgs = { settings = config.settings; pkgs-unstable = pkgs-unstable; };
     users = { 
       "${config.settings.user.admin.username}" = { settings, ... }: {
         home = {
