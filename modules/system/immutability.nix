@@ -140,6 +140,15 @@ lib.mkIf config.settings.disk.immutability.enable {
 									local path_in_snapshot="''${path_to_keep#$subvolume_mount_point}"
 									path_in_snapshot="''${path_in_snapshot#/}"
 									filter_arguments+=( --include="$path_in_snapshot" )
+									if [ -e "$path_in_snapshot" ]; then
+										if [ -d "$path_in_snapshot" ]; then
+											filter_arguments+=( --include="$path_in_snapshot/" --include="$path_in_snapshot/**" )
+										else
+											filter_arguments+=( --include="$path_in_snapshot" )
+										fi
+									else
+										log "$path_to_keep not in $subvolume_mount_point"
+									fi
 								fi
 							done
 							filter_arguments+=( --exclude="*" )
