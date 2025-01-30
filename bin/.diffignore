@@ -3,3 +3,5 @@
 *qtshadercache*
 *QGfxShaderBuilder*
 *.sqlite*
+*tmp*
+*.cache*
