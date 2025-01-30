@@ -79,6 +79,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/kdedefaults/ksplashrc"
       "/home/${config.settings.user.admin.username}/.config/kdedefaults/package"
       "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
+      "/home/${config.settings.user.admin.username}/.config/kcminputrc"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
