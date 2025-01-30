@@ -70,6 +70,15 @@ in {
       "/home/${config.settings.user.admin.username}/.config/kcmfonts"
       "/home/${config.settings.user.admin.username}/.config/kdeglobals"
       "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
+      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/colors.css"
+      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/gtk.css"
+      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/colors.css"
+      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/gtk.css"
+      "/home/${config.settings.user.admin.username}/.config/gtkrc"
+      "/home/${config.settings.user.admin.username}/.config/gtkrc-2.0"
+      "/home/${config.settings.user.admin.username}/.config/kdedefaults/ksplashrc"
+      "/home/${config.settings.user.admin.username}/.config/kdedefaults/package"
+      "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
