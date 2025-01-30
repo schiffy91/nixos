@@ -130,7 +130,10 @@ lib.mkIf config.settings.disk.immutability.enable {
 						local previous_snapshot="$3"
 						local current_snapshot="$4"
 						(
-							trace cd "$previous_snapshot"
+							cd "$previous_snapshot" || {
+								log "Unable to change directory into $previous_snapshot"
+								return 1
+							}
 							local filter_arguments=( --include="*/" )
 							for path_to_keep in $paths_to_keep; do
 								if [[ "$path_to_keep" == "$subvolume_mount_point"* ]]; then
