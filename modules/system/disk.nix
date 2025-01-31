@@ -1,24 +1,17 @@
 { inputs, config, lib, ... }:
 let 
   ##### Full Disk Encryption #####
-  mkRootVolume = content: 
-    if config.settings.disk.encryption.enable then {
-      luks = {
-        size = "100%";
-        content = {
-          type = "luks";
-          name = config.settings.disk.label.root;
-          passwordFile = config.settings.disk.encryption.plainTextPasswordFile;
-          settings.allowDiscards = true;
-          content = content;
-        };
-      };
-    } else {
-      "${config.settings.disk.label.root}" = {
-        size = "100%";
+  mkRootVolume = content: {
+    "${config.settings.disk.label.root}" = {
+      size = "100%";
+      content = if !config.settings.disk.encryption.enable then content else {
+        type = "luks";
+        passwordFile = config.settings.disk.encryption.plainTextPasswordFile;
+        settings.allowDiscards = true;
         content = content;
       };
     };
+  };
   ##### Subvolumes #####
   mkSubvolumes = subvolumes: 
     lib.listToAttrs (lib.lists.forEach subvolumes (subvolume: { 
