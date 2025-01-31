@@ -6,7 +6,7 @@ from nixos import Utils, Config, Shell
 def main():
     Utils.require_root()
     sh = Shell()
-    sh.run(f"cd {Config.get_nixos_path()} && git pull")
+    sh.run(f"git -C {Config.get_nixos_path()} pull")
     parser = argparse.ArgumentParser()
     parser.add_argument("--rebuild-filesystem", action="store_true", help="Whether to rebuild the filesystem.")
     args = parser.parse_args()
