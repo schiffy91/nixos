@@ -6,6 +6,7 @@ let
       size = "100%";
       content = if !config.settings.disk.encryption.enable then content else {
         type = "luks";
+        name = config.settings.disk.label.root;
         passwordFile = config.settings.disk.encryption.plainTextPasswordFile;
         settings.allowDiscards = true;
         content = content;
