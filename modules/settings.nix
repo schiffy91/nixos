@@ -23,6 +23,7 @@ in {
     settings.disk.partlabel.root = mkSetting str "${config.settings.disk.label.disk}-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
     settings.disk.by.partlabel.boot = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.boot}";
     settings.disk.by.partlabel.root = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.root}";
+    settings.disk.by.mapper.root = mkSetting str "/dev/mapper/${config.settings.disk.partlabel.root}";
     ##### Disk: Subvolumes #####
     settings.disk.subvolumes.volumes = mkSetting (listOf (submodule{ 
       options = { 
