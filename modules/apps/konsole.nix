@@ -28,7 +28,12 @@
     [Terminal Features]
     BlinkingCursorEnabled=true
 
+    [KonsoleWindow]
+    RememberWindowSize=false
+    ShowMenuBarByDefault=false
     [MainWindow]
     MenuBar=Disabled
+    StatusBar=Disabled
+    ToolBarsMovable=Disabled
   '';
 }
