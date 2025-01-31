@@ -6,6 +6,7 @@ let
 	pathsToKeep = "\"${lib.strings.concatStringsSep " " config.settings.disk.immutability.persist.paths}\"";
 	subvolumeNameMountPointPairs = "\"${config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot}\"";
 	rootDevice = "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
+	requiredDependency = if config.settings.disk.encryption.enable then rootDevice else "dev-mapper-${config.settings.disk.partlabel.root}.device";
 in 
 lib.mkIf config.settings.disk.immutability.enable {
 	fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
@@ -20,7 +21,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 			services.immutability = {
 				description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
 				wantedBy = [ "initrd.target" ];
-				requires = [ rootDevice ];
+				requires = [ requiredDependency ];
 				after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" rootDevice ];
 				before = [ "sysroot.mount" ];
 				unitConfig.DefaultDependencies = "no";
