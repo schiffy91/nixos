@@ -1,16 +1,16 @@
-{ ... }: {
-  /*xdg.configFile."konsolerc".text = ''
+{ settings, ... }: {
+  xdg.configFile."konsolerc".text = ''
     [Desktop Entry]
-    DefaultProfile=alexanderschiffhauer.profile
+    DefaultProfile=${settings.user.admin.username}.profile
     [General]
     ConfigVersion=1
   '';
-  xdg.dataFile."konsole/alexanderschiffhauer.profile".text = ''
+  xdg.dataFile."konsole/${settings.user.admin.username}.profile".text = ''
     [Cursor Options]
     CursorShape=2
 
     [General]
-    Name=alexanderschiffhauer
+    Name=${settings.user.admin.username}
 
     [Keyboard]
     KeyBindings=macos
@@ -23,5 +23,5 @@
 
     [MainWindow]
     MenuBar=Disabled
-  '';*/
+  '';
 }
