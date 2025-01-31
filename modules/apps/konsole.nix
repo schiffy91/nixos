@@ -5,7 +5,12 @@
     [General]
     ConfigVersion=1
     [KonsoleWindow]
+    RememberWindowSize=false
     ShowMenuBarByDefault=false
+    [MainWindow]
+    MenuBar=Disabled
+    StatusBar=Disabled
+    ToolBarsMovable=Disabled
   '';
   xdg.dataFile."konsole/${settings.user.admin.username}.profile".text = ''
     [Cursor Options]
