@@ -51,6 +51,8 @@
   ##### Hyprland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
+    services.displayManager.defaultSession = "hyprland";
+    services.displayManager.sddm.wayland.enable = true;
     programs.hyprland = {
       enable = true;
       package = pkgs-unstable.hyprland;
