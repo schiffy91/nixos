@@ -18,7 +18,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				rsync = "${pkgs.rsync}/bin/rsync";
 			};
 			services.immutability = {
-				description = "Apply immutability on-boot by resetting the filesystem to the original BTRFS snapshot and copying symlinks and intentionally preserved files";
+				description = "Factory resets BTRFS subvolumes that are marked for resetOnBoot. Intentionally preserved files are restored.";
 				wantedBy = [ "initrd.target" ];
 				requires = [ deviceDependency ];
 				after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
