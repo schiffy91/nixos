@@ -1,4 +1,4 @@
-{ settings, pkgs, lib, ... }: lib.mkIf lib.hasInfix "plasma" settings.desktop.environment {
+{ settings, pkgs, lib, ... }: lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
   xdg.configFile."breezerc".text = ''
