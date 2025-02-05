@@ -32,7 +32,7 @@
     environment.sessionVariables = {
       "QT_SCALE_FACTOR" = toString config.settings.desktop.scalingFactor;
       "PLASMA_USE_QT_SCALING" = "1";
-    }
+    };
   })
   ##### Plasma Wayland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
