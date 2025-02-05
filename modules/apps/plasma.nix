@@ -25,7 +25,7 @@
       timeout = if settings.user.admin.autoLock.enable then 10 else null;
     };
     ##### Config Files #####
-    configFile = {
+/*     configFile = {
       kdeglobals = {
         KScreen = { 
           ScaleFactor = 1 * settings.desktop.scalingFactor;
@@ -40,7 +40,7 @@
           Scale = 1 * settings.desktop.scalingFactor;
         };
       };
-    };
+    }; */
     ##### Start Menu #####
     panels = [
       {
