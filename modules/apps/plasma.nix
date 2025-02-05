@@ -1,10 +1,6 @@
 { settings, pkgs, lib, ... }: lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
-  xdg.configFile."breezerc".text = ''
-  [Common]
-  OutlineCloseButton=true
-  '';
   programs.plasma = {
     ##### Settings #####
     enable = true;
@@ -18,10 +14,6 @@
       };
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
-      #windowDecorations = {
-      #  library = "org.kde.breeze";
-      #  theme = "Breeze";
-      #};
     };
     ##### Restore #####
     windows.allowWindowsToRememberPositions = false;
