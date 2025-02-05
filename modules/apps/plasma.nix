@@ -18,10 +18,10 @@
       };
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";
-      windowDecorations = {
-        library = "org.kde.breeze";
-        theme = "Breeze";
-      };
+      #windowDecorations = {
+      #  library = "org.kde.breeze";
+      #  theme = "Breeze";
+      #};
     };
     ##### Restore #####
     windows.allowWindowsToRememberPositions = false;
