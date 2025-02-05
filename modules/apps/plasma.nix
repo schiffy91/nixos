@@ -1,9 +1,6 @@
 { settings, pkgs, lib, ... }: lib.mkIf lib.hasInfix "plasma" config.settings.desktop.environment {
   ##### Download Icons #####
   home.packages = with pkgs; [ papirus-icon-theme ];
-  programs.plasma = {
-    enable = true;
-  };
   xdg.configFile."breezerc".text = ''
   [Common]
   OutlineCloseButton=true
