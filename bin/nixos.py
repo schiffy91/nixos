@@ -166,7 +166,7 @@ class Config:
         cls.secure_secrets() # Secure the secrets using our shell (in case of chroot)
         cls.sh.git_add_safe_directory(cls.get_nixos_path())
     @classmethod
-    def update(cls, rebuild_file_system=False):
+    def update(cls, rebuild_file_system=False, reboot=False):
         cls.create_secrets()
         cls.secure_secrets()
         if not cls.sh.exists(cls.get_config_path()):
@@ -179,7 +179,8 @@ class Config:
             environment = "NIXOS_INSTALL_BOOTLOADER=1"
             cls.secure(cls.sh.whoami())
         cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
-        Interactive.ask_to_reboot()
+        if reboot: Utils.reboot()
+        else: Interactive.ask_to_reboot()
     @classmethod
     def eval(cls, attribute):
         cmd = f"nix --extra-experimental-features nix-command --extra-experimental-features flakes eval {cls.sh.realpath(cls.get_nixos_path())}#nixosConfigurations.{cls.get_host()}-{cls.get_target()}.{attribute}"
@@ -282,7 +283,7 @@ class Interactive:
             if password == getpass.getpass("Confirm your password: "): return password
             Utils.log_error("Passwords do not match.")
     @classmethod
-    def ask_to_reboot(cls): return cls.sh.run("shutdown -r now") if Interactive.confirm("Restart now?") else False
+    def ask_to_reboot(cls): return Utils.reboot() if Interactive.confirm("Restart now?") else False
 
 @chrootable
 class Utils:
@@ -311,6 +312,8 @@ class Utils:
     def abort(cls, message=""):
         if message: cls.log_error(message)
         return sys.exit(1)
+    @classmethod
+    def reboot(cls): return cls.sh.run("shutdown -r now") 
     @classmethod
     def log(cls, message): print(f"{cls.GRAY}LOG: {message}{cls.RESET}")
     @classmethod

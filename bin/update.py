@@ -9,8 +9,9 @@ def main():
     sh.run(f"git -C {Config.get_nixos_path()} pull", capture_output=False, check=False)
     parser = argparse.ArgumentParser()
     parser.add_argument("--rebuild-filesystem", action="store_true", help="Whether to rebuild the filesystem.")
+    parser.add_argument("--reboot", action="store_true", help="Whether to reboot the system after a successful update.")
     args = parser.parse_args()
 
-    return Config.update(rebuild_file_system=args.rebuild_filesystem)
+    return Config.update(rebuild_file_system=args.rebuild_filesystem, reboot=args.reboot)
 
 if __name__ == "__main__": main()
