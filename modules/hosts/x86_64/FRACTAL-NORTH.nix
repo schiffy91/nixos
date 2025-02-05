@@ -66,6 +66,7 @@
     distrobox
     pciutils
     usbutils
+    looking-glass-client
     virt-manager
     virt-viewer
     spice 
