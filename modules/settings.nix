@@ -57,6 +57,7 @@ in {
     settings.disk.immutability.enable = mkSetting bool false;
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [
+      ##### Core System Files #####
       "/etc/machine-id"
       "/etc/nixos"
       "/etc/ssh"
@@ -65,24 +66,24 @@ in {
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/var/log"
+      ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
+      ##### Files & Folders #####
       "/home/${config.settings.user.admin.username}/.bash_history"
-      "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
       "/home/${config.settings.user.admin.username}/.config/dconf/user"
-      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/colors.css"
-      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/gtk.css"
-      "/home/${config.settings.user.admin.username}/.config/gtk-3.0/settings.ini"
-      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/colors.css"
-      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/gtk.css"
-      "/home/${config.settings.user.admin.username}/.config/gtk-4.0/settings.ini"
-      "/home/${config.settings.user.admin.username}/.config/gtkrc-2.0"
+      "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
+      "/home/${config.settings.user.admin.username}/.cache"
+      ##### Plasma #####
+      "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
+      "/home/${config.settings.user.admin.username}/.config/gtk-3.0"
+      "/home/${config.settings.user.admin.username}/.config/gtk-4.0"
       "/home/${config.settings.user.admin.username}/.config/gtkrc"
+      "/home/${config.settings.user.admin.username}/.config/gtkrc-2.0"
       "/home/${config.settings.user.admin.username}/.config/kcmfonts"
       "/home/${config.settings.user.admin.username}/.config/kcminputrc"
       "/home/${config.settings.user.admin.username}/.config/kdedefaults"
       "/home/${config.settings.user.admin.username}/.config/kdeglobals"
       "/home/${config.settings.user.admin.username}/.config/konsolesshconfig"
-      "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
       "/home/${config.settings.user.admin.username}/.local/share/kactivitymanagerd"
       "/home/${config.settings.user.admin.username}/.local/state/konsolestaterc"
     ];
