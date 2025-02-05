@@ -66,7 +66,7 @@ in {
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "${config.settings.boot.pkiBundle}"
-      "/home/${config.settings.user.admin.username}/.config/dconf/user"
+/*       "/home/${config.settings.user.admin.username}/.config/dconf/user"
       "/home/${config.settings.user.admin.username}/.config/gtk-3.0/settings.ini"
       "/home/${config.settings.user.admin.username}/.config/gtk-4.0/settings.ini"
       "/home/${config.settings.user.admin.username}/.config/kcmfonts"
@@ -81,7 +81,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/kdedefaults/ksplashrc"
       "/home/${config.settings.user.admin.username}/.config/kdedefaults/package"
       "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
-      "/home/${config.settings.user.admin.username}/.config/kcminputrc"
+      "/home/${config.settings.user.admin.username}/.config/kcminputrc" */
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
