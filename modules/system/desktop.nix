@@ -1,6 +1,5 @@
-{ config, pkgs, pkgs-unstable, lib, ... }: lib.mkMerge [
+{ config, pkgs, pkgs-unstable, lib, ... }: lib.mkMerge [{
   ##### Shared Settings #####
-  {
     hardware.graphics.enable = true;
     services.displayManager.sddm.enable = lib.mkDefault true;
     xdg.portal.enable = true;
@@ -11,7 +10,7 @@
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.desktopManager.plasma6.enable = lib.mkDefault true;
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
-    environment.systemPackages = with pkgs; [ 
+    environment.systemPackages = with pkgs; [
       xdg-desktop-portal-kde
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
@@ -56,8 +55,6 @@
     programs.hyprland = {
       enable = true;
       package = pkgs-unstable.hyprland;
-      #package = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.hyprland;
-      #portalPackage = inputs.hyprland.packages.${pkgs.stdenv.hostPlatform.system}.xdg-desktop-portal-hyprland;
     };
   })
 ]
