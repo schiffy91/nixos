@@ -46,6 +46,14 @@
             "sudo": true
         },
         {
+            "name": "Diff",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "bin/diff.py",
+            "console": "integratedTerminal",
+            "sudo": true
+        },
+        {
             "name": "Immutability",
             "type": "bashdb",
             "request": "launch",
@@ -60,6 +68,20 @@
             "program": "bin/update.py",
             "console": "integratedTerminal",
             "sudo": true
+        },
+        {
+            "name": "Current File (Integrated)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Current File (External)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "externalTerminal"
         }
     ]
 }

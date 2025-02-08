@@ -64,7 +64,9 @@ def get_diffs(previous_run, paths_to_keep, paths_to_hide):
         else:
             diff_paths_to_delete.add(diff)
             diff_hash = "N/A"
-            if not os.path.isdir(diff) and not (os.path.islink(diff) and not os.path.exists(diff)): diff_hash = sha256sum(diff)
+            try:
+                if not os.path.isdir(diff) and not (os.path.islink(diff) and not os.path.exists(diff)): diff_hash = sha256sum(diff)
+            except BaseException: pass
             diff_paths_hashed[diff] = diff_hash
             if paths_to_keep is not None and any(fnmatch.fnmatch(diff, pattern) for pattern in paths_to_hide): diff_paths_to_hide.add(diff)
             if previous_run is None: continue

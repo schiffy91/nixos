@@ -86,6 +86,8 @@ in {
       "/home/${config.settings.user.admin.username}/.config/konsolesshconfig"
       "/home/${config.settings.user.admin.username}/.local/share/kactivitymanagerd"
       "/home/${config.settings.user.admin.username}/.local/state/konsolestaterc"
+      ##### 1Password #####
+      "/home/alexanderschiffhauer/.config/1Password"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";

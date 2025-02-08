@@ -89,10 +89,15 @@ class Shell:
         self.mkdir(self.dirname(path))
         self.run(f"ssh-keygen -t {key_type} -N \"{password}\" -f '{path}'")
     # I/O
-    def file_write(self, path, string, sensitive=None, **kwargs):
+    def file_write(self, path, string, sensitive=None, chunk_size=1024):
         self.rm(path)
         self.mkdir(self.dirname(path))
-        return self.run(f"echo -n '{string}' > '{path}'", sensitive=sensitive, **kwargs).returncode == 0
+        self.run(f"touch '{path}'")
+        for i in range(0, len(string), chunk_size):
+            chunk = string[i:i + chunk_size]
+            command = f"echo -n '{chunk}' >> '{path}'"
+            if self.run(command, sensitive=sensitive).returncode != 0: return False
+        return True
     def file_read(self, path): return Shell.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
     def json_read(self, path):
         try: return json.loads(self.file_read(path))
@@ -288,6 +293,8 @@ class Interactive:
 @chrootable
 class Utils:
     sh = Shell()
+    # LOG LEVEL
+    LOG_INFO = False
     # Color constants
     GRAY = "\033[90m"
     ORANGE = "\033[38;5;208m"
@@ -315,7 +322,8 @@ class Utils:
     @classmethod
     def reboot(cls): return cls.sh.run("shutdown -r now") 
     @classmethod
-    def log(cls, message): print(f"{cls.GRAY}LOG: {message}{cls.RESET}")
+    def log(cls, message): 
+        if cls.LOG_INFO: print(f"{cls.GRAY}LOG: {message}{cls.RESET}")
     @classmethod
     def log_error(cls, message): print(f"{cls.ORANGE}ERROR: {message}{cls.RESET}", file=sys.stderr)
     @classmethod
