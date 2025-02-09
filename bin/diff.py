@@ -44,9 +44,9 @@ def get_subvolume_mount_point_to_clean_snapshot_path_cache():
     return subvolume_mount_point_to_clean_snapshot_path_cache
 
 def diff_file(file_path):
-    if not os.path.exists(file_path): return "DOES NOT EXIST"
-    if os.path.isdir(file_path): return "DIRECTORY"
-    if os.path.islink(file_path): return "LINK"
+    if not os.path.exists(file_path): return "N/A (DOES NOT EXIST)"
+    if os.path.isdir(file_path): return "N/A (DIRECTORY)"
+    if os.path.islink(file_path): return "N/A (LINK)"
 
     previous_file_path = ""
     match = ""
@@ -57,12 +57,12 @@ def diff_file(file_path):
             match = subvolume_mount_point
     if not previous_file_path: # New file
         try: return sh.file_read(file_path)
-        except BaseException: return "NEW BINARY FILE"
+        except BaseException: return "N/A (NEW BINARY FILE)"
     try:
         current = sh.file_read(file_path).strip().splitlines()
         previous = sh.file_read(previous_file_path).strip().splitlines()
         return "".join(difflib.unified_diff(current, previous, fromfile=previous_file_path, tofile=file_path, lineterm=''))
-    except BaseException: return "EXISTING BINARY FILE"
+    except BaseException: return "N/A (EXISTING BINARY FILE)"
     
 
 def diff_files(file_paths):
@@ -137,11 +137,11 @@ def main():
         for path in get_paths_to_keep(): Utils.print(path)
 
     if len(delta) != 0:
-        Utils.print("\nFILE DIFFS:")
-        for file, diff in delta.items(): print(f"File: {file}\n{diff}")
+        Utils.print("\nDELTA:")
+        for file, diff in delta.items(): print(f"\nPATH: {file}\nDIFF: {diff}")
 
     if args.deltas and len(deltas) != 0:
-        Utils.print("\nFILES THAT CHANGED DIFFS:")
-        for file, diff in deltas.items(): print(f"File: {file}\n{diff}")
+        Utils.print("\nDELTAS:")
+        for file, diff in deltas.items(): print(f"\nPATH: {file}\nDIFF: {diff}")
 
 if __name__ == "__main__": main()

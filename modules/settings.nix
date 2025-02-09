@@ -104,6 +104,9 @@ in {
       "/home/${config.settings.user.admin.username}/.config/google-chrome"
       ##### VSCode #####
       "/home/${config.settings.user.admin.username}/.config/Code"
+      "/home/${config.settings.user.admin.username}/.vscode"
+      ##### Sunshine #####
+      "/home/${config.settings.user.admin.username}/.config/sunshine"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
