@@ -1,6 +1,7 @@
 { pkgs, ... }: {
   ##### System Packages ##### 
   environment.systemPackages = (with pkgs; [
+    git
     wget
   ]);
   ##### Unpatched Binaries #####
