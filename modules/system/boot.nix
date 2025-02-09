@@ -46,6 +46,7 @@
     lanzaboote = {
       enable = true;
       pkiBundle = config.settings.boot.pkiBundle;
+      configurationLimit = 3;
     };
   };
 })]
