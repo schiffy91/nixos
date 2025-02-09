@@ -61,7 +61,7 @@ def diff_file(file_path):
     try:
         current = sh.file_read(file_path).strip().splitlines()
         previous = sh.file_read(previous_file_path).strip().splitlines()
-        return "".join(difflib.unified_diff(current, previous, fromfile=previous_file_path, tofile=file_path, lineterm=''))
+        return "\n".join(difflib.unified_diff(previous, current, fromfile=previous_file_path, tofile=file_path, lineterm=''))
     except BaseException: return "N/A (EXISTING BINARY FILE)"
     
 
@@ -104,8 +104,7 @@ def main():
     parser.add_argument("--recent", action="store_true", help="Only list changes since the last run of this program.")
     parser.add_argument("--show-changes-to-keep", action="store_true", help="List any changes that will be ignored because they match paths to keep (usually located in /etx/nixos/modules/settings.nix).")
     parser.add_argument("--show-paths-to-keep", action="store_true", help="List the paths to keep (usually located in /etx/nixos/modules/settings.nix)")
-    parser.add_argument("--delta", nargs="*", metavar="FILE", default=[], help="Show the delta of one or many files")
-    parser.add_argument("--deltas", action="store_true", help="Show the delta of every changed file. Aware of --since-last-run supplied and --paths-to-hide.")
+    parser.add_argument("--deltas", nargs="*", metavar="FILE", default=None, help="Show the delta of one or many files")
     parser.add_argument("--diffignore", type=str, metavar="FILE", help="A file that specifies new-line separated paths (supporting * wildcards) to hide from this script's output. They'll still be deleted upon boot if they're not matched by paths to keep (usually located in /etc/nixos/modules/settings.nix). If a file exists in /etc/nixos/bin/.diffignore, it'll be read automatically.")
     parser.add_argument("--dirname", action="store_true", help="Only show the dirname (i.e. parent of) the changes.")
     args = parser.parse_args()
@@ -117,8 +116,10 @@ def main():
 
     diff_paths_to_delete, diff_paths_to_keep, diff_paths_hashed, diff_paths_recent_hashed, diff_paths_to_diffignore = get_diffs(previous_run, diffignore)
     diffs_to_print = sorted(set(diff_paths_recent_hashed.keys()).difference(diff_paths_to_diffignore)) if args.recent else sorted(set(diff_paths_to_delete).difference(diff_paths_to_diffignore))
-    delta = diff_files(args.delta)
-    deltas = diff_files(diffs_to_print) if args.deltas else {}
+    deltas = {}
+    if args.deltas is not None:
+        if len(args.deltas) > 0: deltas = diff_files(args.deltas)
+        else: deltas = diff_files(diffs_to_print)
     if args.dirname: diffs_to_print = sorted(set([sh.dirname(diff) for diff in diffs_to_print]))
 
     if len(diff_paths_to_delete) != 0:
@@ -136,12 +137,8 @@ def main():
         Utils.print("\nPATHS TO KEEP:")
         for path in get_paths_to_keep(): Utils.print(path)
 
-    if len(delta) != 0:
-        Utils.print("\nDELTA:")
-        for file, diff in delta.items(): print(f"\nPATH: {file}\nDIFF: {diff}")
-
-    if args.deltas and len(deltas) != 0:
+    if len(deltas) != 0:
         Utils.print("\nDELTAS:")
-        for file, diff in deltas.items(): print(f"\nPATH: {file}\nDIFF: {diff}")
+        for file, diff in deltas.items(): print(f"\n{file}\n{diff}")
 
 if __name__ == "__main__": main()

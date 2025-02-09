@@ -77,7 +77,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
       "/home/${config.settings.user.admin.username}/.cache"
       ##### SSH #####
-      "/home/${config.settings.user.admin.username}.ssh/known_hosts"
+      "/home/${config.settings.user.admin.username}/.ssh/known_hosts"
       ##### Plasma #####
       "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
       "/home/${config.settings.user.admin.username}/.config/gtk-3.0"
@@ -98,10 +98,15 @@ in {
       "/home/${config.settings.user.admin.username}/.local/share/kactivitymanagerd"
       "/home/${config.settings.user.admin.username}/.local/state/konsolestaterc"
       "/home/${config.settings.user.admin.username}/.local/state/systemsettingsstaterc"
+      ##### Kwallet #####
+      "/home/${config.settings.user.admin.username}/.local/share/kwalletd"
       ##### 1Password #####
       "/home/${config.settings.user.admin.username}/.config/1Password"
       ##### Chrome #####
       "/home/${config.settings.user.admin.username}/.config/google-chrome"
+      "/home/${config.settings.user.admin.username}/.local/share/applications"
+      "/home/${config.settings.user.admin.username}/.local/share/icons"
+      "/home/${config.settings.user.admin.username}/.local/share/desktop-directories"
       ##### VSCode #####
       "/home/${config.settings.user.admin.username}/.config/Code"
       "/home/${config.settings.user.admin.username}/.vscode"

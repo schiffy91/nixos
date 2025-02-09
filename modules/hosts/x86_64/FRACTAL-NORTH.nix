@@ -82,6 +82,7 @@
     win-virtio
     win-spice
     mpv
+    ollama-cuda
   ];
   ##### Networking #####
   settings.networking.lanSubnet = "10.0.0.0/24";
