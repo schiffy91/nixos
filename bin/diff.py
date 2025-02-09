@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import os, argparse, hashlib, fnmatch
+import os, argparse, hashlib, fnmatch, difflib
 from nixos import Utils, Snapshot, Shell, Config
 
 sh = Shell(root_required=True)
@@ -19,11 +19,11 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
     sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {tmp_snapshot_path}")
     return tmp_snapshot_path
 
-def sha256sum(filename):
+def sha256sum(file_path):
     file_hash = "N/A"
-    if not os.path.exists(filename) or os.path.isdir(filename) or os.path.islink(filename): return file_hash
+    if not os.path.exists(file_path) or os.path.isdir(file_path) or os.path.islink(file_path): return file_hash
     try:
-        with open(filename, "rb", buffering=0) as f: return hashlib.file_digest(f, "sha256").hexdigest()
+        with open(file_path, "rb", buffering=0) as f: return hashlib.file_digest(f, "sha256").hexdigest()
     except: return file_hash
 
 def diff_subvolume(subvolume_name, subvolume_mount_point):
@@ -35,21 +35,43 @@ def diff_subvolume(subvolume_name, subvolume_mount_point):
     output = [ os.path.normpath(f"{subvolume_mount_point}/{path}").replace("//", "/") for path in output.split("\n") ]
     return set(output)
 
-def diff_file(file_path):
-    previous_file_path = ""
+subvolume_mount_point_to_clean_snapshot_path_cache = {}
+def get_subvolume_mount_point_to_clean_snapshot_path_cache():
+    if subvolume_mount_point_to_clean_snapshot_path_cache: return subvolume_mount_point_to_clean_snapshot_path_cache
     for subvolume_name, subvolume_mount_point in Snapshot.get_subvolumes_to_reset_on_boot():
         clean_snapshot_path = Snapshot.get_clean_snapshot_path(subvolume_name)
-        if file_path.startswith(subvolume_mount_point): previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}".replace("//", "/")
-    if previous_file_path == "": Utils.abort(f"Couldn't diff {file_path}")
-    current_file_path = file_path
-    try: return Shell.stdout(sh.run(f"diff -u {previous_file_path} {current_file_path}", capture_output=True))
-    except BaseException: pass
-    try: return sh.file_read(current_file_path)
-    except BaseException: return "N/A"
+        subvolume_mount_point_to_clean_snapshot_path_cache[subvolume_mount_point] = clean_snapshot_path
+    return subvolume_mount_point_to_clean_snapshot_path_cache
+
+def diff_file(file_path):
+    if not os.path.exists(file_path): return "DOES NOT EXIST"
+    if os.path.isdir(file_path): return "DIRECTORY"
+    if os.path.islink(file_path): return "LINK"
+
+    previous_file_path = ""
+    match = ""
+    for subvolume_mount_point, clean_snapshot_path in get_subvolume_mount_point_to_clean_snapshot_path_cache().items():
+        subvolume_mount_point_to_clean_snapshot_path_cache
+        if file_path.startswith(subvolume_mount_point) and len(match) < len(subvolume_mount_point): # The correct subvolume is the one that matches the longest prefix of the file
+            previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}".replace("//", "/")
+            match = subvolume_mount_point
+    if not previous_file_path: # New file
+        try: return sh.file_read(file_path)
+        except BaseException: return "NEW BINARY FILE"
+    try:
+        current = sh.file_read(file_path).strip().splitlines()
+        previous = sh.file_read(previous_file_path).strip().splitlines()
+        return "".join(difflib.unified_diff(current, previous, fromfile=previous_file_path, tofile=file_path, lineterm=''))
+    except BaseException: return "EXISTING BINARY FILE"
+    
 
 def diff_files(file_paths):
     diffs = {}
-    for file in file_paths: diffs[file] = diff_file(file)
+    i = 0
+    for file in file_paths:
+        i += 1
+        Utils.print_inline(f"Progress: {(i / float(len(file_paths))) * 100:.2f}%")
+        diffs[file] = diff_file(file)
     return diffs
 
 def get_diffs(previous_run, diffignore):

@@ -96,7 +96,12 @@ class Shell:
         self.rm(path)
         self.mkdir(self.dirname(path))
         with open(path, "w") as file: file.write(string)
-    def file_read(self, path): return Shell.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
+    def file_read(self, path):
+        if self.chroots: path = f"{self.chroots[-1]}{path}"
+        contents = ""
+        if not self.exists(path): return contents
+        with open(path, "r") as file: contents = file.read()
+        return contents
     def json_read(self, path):
         try: return json.loads(self.file_read(path))
         except BaseException: return {}
