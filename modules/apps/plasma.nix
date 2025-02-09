@@ -58,6 +58,7 @@
             iconTasks = {
               launchers = [
                 "applications:org.kde.dolphin.desktop"
+                "applications:google-chrome.desktop"
                 "applications:org.kde.konsole.desktop"
               ];
             };
