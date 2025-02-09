@@ -17,7 +17,7 @@ in {
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     ##### Disk: Labels #####
-    settings.disk.boot.efiSysMountPoint = "/boot";
+    settings.disk.boot.efiSysMountPoint = mkSetting str "/boot";
     settings.disk.label.disk = mkSetting str "disk";
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "boot";
