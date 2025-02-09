@@ -40,7 +40,7 @@ in {
           content = {
             type = "filesystem";
             format = "vfat";
-            mountpoint = "/boot";
+            mountpoint = config.settings.disk.boot.efiSysMountPoint;
             mountOptions = [ "umask=0077" ];
           };
         };

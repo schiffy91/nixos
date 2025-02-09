@@ -4,10 +4,10 @@
   boot = {
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
     loader = {
-      timeout = 5;
+      timeout = config.settings.boot.timeout;
       efi = {
         canTouchEfiVariables = true;
-        efiSysMountPoint = "/boot";
+        efiSysMountPoint = config.settings.disk.boot.efiSysMountPoint;
       };
     };
     initrd = {

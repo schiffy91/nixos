@@ -17,6 +17,7 @@ in {
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     ##### Disk: Labels #####
+    settings.disk.boot.efiSysMountPoint = "/boot";
     settings.disk.label.disk = mkSetting str "disk";
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "boot";
@@ -106,6 +107,7 @@ in {
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";
     settings.boot.previousGenerationLimit = mkSetting int 3;
+    settings.boot.timeout = mkSetting int 3;
     ##### TPM ##### 
     settings.tpm.device = mkSetting str "/dev/tpmrm0";
     settings.tpm.versionPath = mkSetting str "/sys/class/tpm/tpm0/tpm_version_major";
