@@ -7,6 +7,8 @@ in {
     settings.secrets.hashedPasswordFile = mkSetting str "hashed_password.txt";
     ##### Admin ##### 
     settings.user.admin.username = mkSetting str "alexanderschiffhauer";
+    settings.user.admin.publicName = mkSetting str "Alexander Schiffhauer";
+    settings.user.admin.publicEmail = mkSetting str "Alexander.Schiffhauer@gmail.com";
     settings.user.admin.autoLogin.enable = mkSetting bool false;
     settings.user.admin.autoLock.enable = mkSetting bool true;
     settings.user.admin.autoUnlockWallet.enabled = mkSetting bool true;
@@ -84,10 +86,16 @@ in {
       "/home/${config.settings.user.admin.username}/.config/kdedefaults"
       "/home/${config.settings.user.admin.username}/.config/kdeglobals"
       "/home/${config.settings.user.admin.username}/.config/konsolesshconfig"
+      "/home/${config.settings.user.admin.username}/.config/plasma-org.kde.plasma.desktop-appletsrc"
       "/home/${config.settings.user.admin.username}/.local/share/kactivitymanagerd"
       "/home/${config.settings.user.admin.username}/.local/state/konsolestaterc"
+      "/home/${config.settings.user.admin.username}/.local/state/systemsettingsstaterc"
       ##### 1Password #####
-      "/home/alexanderschiffhauer/.config/1Password"
+      "/home/${config.settings.user.admin.username}/.config/1Password"
+      ##### Chrome #####
+      "/home/${config.settings.user.admin.username}/.config/google-chrome"
+      ##### VSCode #####
+      "/home/${config.settings.user.admin.username}/.config/Code"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";

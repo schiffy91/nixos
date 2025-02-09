@@ -20,8 +20,11 @@ def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
     return tmp_snapshot_path
 
 def sha256sum(filename):
-    with open(filename, "rb", buffering=0) as f:
-        return hashlib.file_digest(f, "sha256").hexdigest()
+    file_hash = "N/A"
+    if not os.path.exists(filename) or os.path.isdir(filename) or os.path.islink(filename): return file_hash
+    try:
+        with open(filename, "rb", buffering=0) as f: return hashlib.file_digest(f, "sha256").hexdigest()
+    except: return file_hash
 
 def diff_subvolume(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
@@ -58,15 +61,15 @@ def get_diffs(previous_run, paths_to_keep, paths_to_hide):
     diff_paths_to_hide = set()
     diff_paths_hashed = {}
     diff_paths_since_last_run_hashed = {}
+    i = 0
     for diff in diffs:
+        i += 1
+        Utils.print_inline(f"\rProgress: {(i / float(len(diffs))) * 100:.2f}%")
         if any(diff.startswith(path_to_keep) for path_to_keep in paths_to_keep):
             diff_paths_to_ignore.add(diff)
         else:
             diff_paths_to_delete.add(diff)
-            diff_hash = "N/A"
-            try:
-                if not os.path.isdir(diff) and not (os.path.islink(diff) and not os.path.exists(diff)): diff_hash = sha256sum(diff)
-            except BaseException: pass
+            diff_hash = sha256sum(diff)
             diff_paths_hashed[diff] = diff_hash
             if paths_to_keep is not None and any(fnmatch.fnmatch(diff, pattern) for pattern in paths_to_hide): diff_paths_to_hide.add(diff)
             if previous_run is None: continue

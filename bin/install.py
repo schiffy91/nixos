@@ -1,7 +1,7 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
 # cd / && sudo rm -rf /etc/nixos && sudo git clone https://github.com/schiffy91/nixos.git /etc/nixos && sudo /etc/nixos/bin/install.py
-import sys
+import argparse
 from nixos import Utils, Config, Shell, Snapshot, Interactive
 
 class Installer:
@@ -24,9 +24,12 @@ class Installer:
     # Helpers
     @classmethod
     def parse_args(cls):
-        args = Utils.parse_args(sys.argv[1:], "--collect-garbage", "--debug")
-        if "--collect-garbage" in args: cls.sh.run("nix-collect-garbage -d")
-        if "--debug" in args:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--collect-garbage", action="store_true", help="Collects Nix Store garbage")
+        parser.add_argument("--debug", action="store_true", help="Opens the NixOS repository with VSCodium and Python debugging")
+        args = parser.parse_args()
+        if args.collect_garbage: cls.sh.run("nix-collect-garbage -d")
+        if args.debug:
             vscodium_cmd = "nix --extra-experimental-features nix-command --extra-experimental-features flakes run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data"
             cls.sh.run(f"{vscodium_cmd} --install-extension ms-python.python")
             cls.sh.run(f"{vscodium_cmd} --install-extension rogalmic.bash-debug")

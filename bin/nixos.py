@@ -89,15 +89,12 @@ class Shell:
         self.mkdir(self.dirname(path))
         self.run(f"ssh-keygen -t {key_type} -N \"{password}\" -f '{path}'")
     # I/O
-    def file_write(self, path, string, sensitive=None, chunk_size=1024):
+    def file_write(self, path, string, sensitive=None):
+        if self.chroots: path = f"{self.chroots[-1]}{path}"
+        if sensitive: string = string.replace(sensitive, "***")
         self.rm(path)
         self.mkdir(self.dirname(path))
-        self.run(f"touch '{path}'")
-        for i in range(0, len(string), chunk_size):
-            chunk = string[i:i + chunk_size]
-            command = f"echo -n '{chunk}' >> '{path}'"
-            if self.run(command, sensitive=sensitive).returncode != 0: return False
-        return True
+        with open(path, "w") as file: file.write(string)
     def file_read(self, path): return Shell.stdout(self.run(f"cat '{path}'")) if self.exists(path) else ""
     def json_read(self, path):
         try: return json.loads(self.file_read(path))
@@ -328,6 +325,8 @@ class Utils:
     def log_error(cls, message): print(f"{cls.ORANGE}ERROR: {message}{cls.RESET}", file=sys.stderr)
     @classmethod
     def print(cls, message): print(message)
+    @classmethod
+    def print_inline(cls, message): print(f"\r{message}", end="")
     @classmethod
     def print_warning(cls, message): cls.print_error(message)
     @classmethod
