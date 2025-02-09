@@ -29,9 +29,10 @@ class Shell:
             for cls, old_sh in previous_shells.items():
                 cls.sh = old_sh
             self.chroots.pop()
-    def run(self, cmd, env="", sensitive=None, capture_output=True, check=True):
+    def run(self, cmd, env="", sudo=True, capture_output=True, check=True, sensitive=None):
         if self.chroots: cmd = f"nixos-enter --root {self.chroots[-1]} --command \"{cmd}\""
-        cmd = f"{env} sudo {cmd}".strip()
+        if sudo: cmd = f"{env} sudo {cmd}".strip()
+        else: cmd = f"{env} {cmd}".strip()
         if sensitive: Utils.log(cmd.replace(sensitive, "***"))
         else: Utils.log(cmd)
         try:
