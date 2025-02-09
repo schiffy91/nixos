@@ -76,6 +76,8 @@ in {
       "/home/${config.settings.user.admin.username}/.config/dconf/user"
       "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
       "/home/${config.settings.user.admin.username}/.cache"
+      ##### SSH #####
+      "/home/${config.settings.user.admin.username}.ssh/known_hosts"
       ##### Plasma #####
       "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
       "/home/${config.settings.user.admin.username}/.config/gtk-3.0"

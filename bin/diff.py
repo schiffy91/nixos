@@ -107,6 +107,7 @@ def main():
     parser.add_argument("--delta", nargs="*", metavar="FILE", default=[], help="Show the delta of one or many files")
     parser.add_argument("--deltas", action="store_true", help="Show the delta of every changed file. Aware of --since-last-run supplied and --paths-to-hide.")
     parser.add_argument("--diffignore", type=str, metavar="FILE", help="A file that specifies new-line separated paths (supporting * wildcards) to hide from this script's output. They'll still be deleted upon boot if they're not matched by paths to keep (usually located in /etc/nixos/modules/settings.nix). If a file exists in /etc/nixos/bin/.diffignore, it'll be read automatically.")
+    parser.add_argument("--dirname", action="store_true", help="Only show the dirname (i.e. parent of) the changes.")
     args = parser.parse_args()
 
     diff_json_file_path = "/tmp/etc/nixos/bin/diff/diff.json"
@@ -118,6 +119,7 @@ def main():
     diffs_to_print = sorted(set(diff_paths_recent_hashed.keys()).difference(diff_paths_to_diffignore)) if args.recent else sorted(set(diff_paths_to_delete).difference(diff_paths_to_diffignore))
     delta = diff_files(args.delta)
     deltas = diff_files(diffs_to_print) if args.deltas else {}
+    if args.dirname: diffs_to_print = sorted(set([sh.dirname(diff) for diff in diffs_to_print]))
 
     if len(diff_paths_to_delete) != 0:
         sh.json_overwrite(diff_json_file_path, diff_paths_hashed)
