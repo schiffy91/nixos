@@ -34,7 +34,7 @@
 (lib.mkIf (config.settings.boot.method == "Standard-Boot") {
   boot.loader.systemd-boot = {
     enable = true;
-    configurationLimit = 3;
+    configurationLimit = config.settings.boot.previousGenerationLimit;
     consoleMode = "max";
     editor = false;
   };
@@ -46,7 +46,7 @@
     lanzaboote = {
       enable = true;
       pkiBundle = config.settings.boot.pkiBundle;
-      configurationLimit = 3;
+      configurationLimit = config.settings.boot.previousGenerationLimit;
     };
   };
 })]

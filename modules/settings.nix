@@ -105,6 +105,7 @@ in {
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";
+    settings.boot.previousGenerationLimit = mkSetting int 3;
     ##### TPM ##### 
     settings.tpm.device = mkSetting str "/dev/tpmrm0";
     settings.tpm.versionPath = mkSetting str "/sys/class/tpm/tpm0/tpm_version_major";
