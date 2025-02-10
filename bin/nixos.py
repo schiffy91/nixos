@@ -171,21 +171,19 @@ class Config:
         cls.sh.chmod(644, *cls.sh.find_files(cls.get_nixos_path(), ignore_pattern=ignore_pattern)) # Owner can read write files
         cls.sh.chmod(755, *cls.sh.find(cls.get_nixos_path(), pattern="*/bin/* */scripts/*", ignore_pattern=ignore_pattern))# Owner can execute
         cls.sh.chmod(444, *cls.sh.find_files(f"{cls.get_nixos_path()}/.git/objects")) # Git files require specific permission
-        cls.secure_secrets() # Secure the secrets using our shell (in case of chroot)
+        cls.secure_secrets()
         cls.sh.git_add_safe_directory(cls.get_nixos_path())
     @classmethod
     def update(cls, rebuild_file_system=False, reboot=False):
         cls.create_secrets()
-        cls.secure_secrets()
+        cls.secure(cls.sh.whoami())
         if not cls.sh.exists(cls.get_config_path()):
-            print("'CONFIG.JSON' IS MISSING.")
+            Utils.print_error(f"'{cls.get_config_path()}' IS MISSING.")
             host_path = Interactive.ask_for_host_path()
             cls.reset_config(host_path, Config.get_standard_flake_target())
             rebuild_file_system = True
         environment = ""
-        if rebuild_file_system:
-            environment = "NIXOS_INSTALL_BOOTLOADER=1"
-            cls.secure(cls.sh.whoami())
+        if rebuild_file_system: environment = "NIXOS_INSTALL_BOOTLOADER=1"
         cls.sh.run(f"{environment} nixos-rebuild switch --flake {cls.sh.realpath(cls.get_nixos_path())}#{cls.get_host()}-{cls.get_target()}", capture_output=False)
         if reboot: Utils.reboot()
         else: Interactive.ask_to_reboot()
