@@ -83,9 +83,11 @@
     win-spice
     mpv
     ollama-cuda
+    fwupd
   ];
   ##### Networking #####
   settings.networking.lanSubnet = "10.0.0.0/24";
+  programs.openvpn3.enable = true;
   ##### Moonlight #####
   services.sunshine = {
     enable = true;
