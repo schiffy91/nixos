@@ -76,6 +76,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/dconf/user"
       "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
       "/home/${config.settings.user.admin.username}/.cache"
+      "/home/${config.settings.user.admin.username}/.pki"
       ##### SSH #####
       "/home/${config.settings.user.admin.username}/.ssh/known_hosts"
       ##### Plasma #####
@@ -91,6 +92,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/konsolesshconfig"
       "/home/${config.settings.user.admin.username}/.config/kwinoutputconfig.json"
       "/home/${config.settings.user.admin.username}/.config/kwinrc"
+      "/home/${config.settings.user.admin.username}/.config/menu"
       "/home/${config.settings.user.admin.username}/.config/plasma-org.kde.plasma.desktop-appletsrc"
       "/home/${config.settings.user.admin.username}/.config/plasmashellrc"
       "/home/${config.settings.user.admin.username}/.config/systemsettingsrc"

@@ -139,6 +139,13 @@ def main():
 
     if len(deltas) != 0:
         Utils.print("\nDELTAS:")
-        for file, diff in deltas.items(): print(f"\n{file}\n{diff}")
+        failures = set()
+        for file, diff in deltas.items():
+            output = f"\n{file}\n{diff}"
+            if diff.startswith("N/A") or not diff.strip(): failures.add(output)
+            else: print(output)
+        failures = sorted(failures)
+        Utils.print("\nN/A:")
+        for output in failures: print(output)
 
 if __name__ == "__main__": main()
