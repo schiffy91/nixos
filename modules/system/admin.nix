@@ -2,7 +2,7 @@
   ##### Security #####
   users.users.${config.settings.user.admin.username} = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "libvirtd" ];
+    extraGroups = [ "wheel" "libvirtd" "networkmanager" ];
     hashedPasswordFile = "${config.settings.secrets.path}/${config.settings.secrets.hashedPasswordFile}";
     openssh.authorizedKeys.keys = [
       "${config.settings.user.admin.authorizedKey} ${config.settings.user.admin.username}"

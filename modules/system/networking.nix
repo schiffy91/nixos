@@ -11,12 +11,15 @@ let
   ]);
 in {
   ##### Firewall Settings ##### 
-  networking.firewall = {
-    enable = true;
-    allowedTCPPorts = [];
-    allowedUDPPorts = [];
-    extraCommands = mkServiceRules "A"; # A = Add
-    extraStopCommands = mkServiceRules "D"; # D = Drop
+  networking =
+    networkmanager.enable = true;
+    firewall = {
+      enable = true;
+      allowedTCPPorts = [];
+      allowedUDPPorts = [];
+      extraCommands = mkServiceRules "A"; # A = Add
+      extraStopCommands = mkServiceRules "D"; # D = Drop
+    };
   };
   ##### mDNS (e.g. ssh HOSTNAME.local) ##### 
   services = {
