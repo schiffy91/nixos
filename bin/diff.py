@@ -24,7 +24,7 @@ def sha256sum(file_path):
     if not os.path.exists(file_path) or os.path.isdir(file_path) or os.path.islink(file_path): return file_hash
     try:
         with open(file_path, "rb", buffering=0) as f: return hashlib.file_digest(f, "sha256").hexdigest()
-    except: return file_hash
+    except BaseException: return file_hash
 
 def diff_subvolume(subvolume_name, subvolume_mount_point):
     tmp_snapshot_path = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
@@ -51,7 +51,6 @@ def diff_file(file_path):
     previous_file_path = ""
     match = ""
     for subvolume_mount_point, clean_snapshot_path in get_subvolume_mount_point_to_clean_snapshot_path_cache().items():
-        subvolume_mount_point_to_clean_snapshot_path_cache
         if file_path.startswith(subvolume_mount_point) and len(match) < len(subvolume_mount_point): # The correct subvolume is the one that matches the longest prefix of the file
             previous_file_path = f"{clean_snapshot_path}/{file_path.replace(clean_snapshot_path, '')}".replace("//", "/")
             match = subvolume_mount_point
@@ -63,7 +62,6 @@ def diff_file(file_path):
         previous = sh.file_read(previous_file_path).strip().splitlines()
         return "\n".join(difflib.unified_diff(previous, current, fromfile=previous_file_path, tofile=file_path, lineterm=''))
     except BaseException: return "N/A (EXISTING BINARY FILE)"
-    
 
 def diff_files(file_paths):
     diffs = {}
