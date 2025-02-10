@@ -13,12 +13,12 @@ def main():
     parser.add_argument("--upgrade", action="store_true", help="Runs 'nix flake update'")
     args = parser.parse_args()
 
-    if args.clean: 
+    if args.clean:
         sh.run("nix-collect-garbage -d", capture_output=False)
         sh.run("rm -rf /root/.cache")
         sh.run("nix-store --verify --repair", capture_output=False)
     if args.upgrade: sh.run(f"nix flake update --flake {Config.get_nixos_path()}", capture_output=False)
-    
+
     return Config.update(rebuild_file_system=args.rebuild_filesystem, reboot=args.reboot)
 
 if __name__ == "__main__": main()

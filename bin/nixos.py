@@ -313,7 +313,7 @@ class Utils:
             if on_exception: on_exception()
             raise
     @classmethod
-    def parse_args(cls, argv, *accepted_args): return [] if not argv or not accepted_args else [arg for arg in argv if arg in set(accepted_args)]
+    def parse_args(cls, argv, *accepted_args): return [] if not argv or not accepted_args else [ arg for arg in argv if arg in set(accepted_args) ]
     @classmethod
     def require_root(cls): cls.sh.require_root()
     @classmethod
@@ -321,9 +321,9 @@ class Utils:
         if message: cls.log_error(message)
         return sys.exit(1)
     @classmethod
-    def reboot(cls): return cls.sh.run("shutdown -r now") 
+    def reboot(cls): return cls.sh.run("shutdown -r now")
     @classmethod
-    def log(cls, message): 
+    def log(cls, message):
         if cls.LOG_INFO: print(f"{cls.GRAY}LOG: {message}{cls.RESET}")
     @classmethod
     def log_error(cls, message): print(f"{cls.ORANGE}ERROR: {message}{cls.RESET}", file=sys.stderr)
