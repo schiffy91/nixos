@@ -11,7 +11,7 @@ let
   ]);
 in {
   ##### Firewall Settings ##### 
-  networking =
+  networking = {
     networkmanager.enable = true;
     firewall = {
       enable = true;
