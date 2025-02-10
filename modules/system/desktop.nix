@@ -12,6 +12,7 @@
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
     environment.systemPackages = with pkgs; [
       xdg-desktop-portal-kde
+      pkgs-unstable.kdePackages.kio-gdrive
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
