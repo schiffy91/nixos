@@ -8,11 +8,14 @@
   }
   ##### Shared Plasma Settings #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
-    services.desktopManager.plasma6.enable = lib.mkDefault true;
+    services.desktopManager.plasma6 = {
+      enable = lib.mkDefault true;
+      enableQt5Integration = false;
+    };
     xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
     environment.systemPackages = with pkgs; [
       xdg-desktop-portal-kde
-      pkgs-unstable.kdePackages.kio-gdrive
+      kdePackages.plasma-thunderbolt
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
