@@ -1,4 +1,5 @@
 { config, lib, pkgs, ... }: {
+    # https://github.com/systemd/systemd/issues/34304 (should be fixed in systemd v257.3)
     systemd.package = pkgs.systemd.overrideAttrs (old: {
         patches = old.patches ++ [ 
             (pkgs.fetchurl {
