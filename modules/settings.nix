@@ -79,6 +79,8 @@ in {
       "/home/${config.settings.user.admin.username}/.pki"
       ##### SSH #####
       "/home/${config.settings.user.admin.username}/.ssh/known_hosts"
+      ##### Direnv #####
+      "/home/${config.settings.user.admin.username}/.local/share/direnv"
       ##### Plasma #####
       "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
       "/home/${config.settings.user.admin.username}/.config/gtk-3.0"
