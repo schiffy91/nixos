@@ -18,7 +18,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 				rsync = "${pkgs.rsync}/bin/rsync";
 				python = "${pkgs.python314}/bin/python3.14";
 			};
-			contents."/immutability.py".text = "print("Hello world")";
+			contents."/immutability.py".text = ''
+print("Hello world")
+'';
 			services.immutability = {
 				description = "Factory resets BTRFS subvolumes that are marked for resetOnBoot. Intentionally preserved files are restored.";
 				wantedBy = [ "initrd.target" ];
