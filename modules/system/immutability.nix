@@ -218,6 +218,8 @@ print("Hello world")
 						trace btrfs_subvolume_copy "$CURRENT_SNAPSHOT" "$SUBVOLUME"
 					done
 					trace subvolumes_unmount "$MOUNT_POINT"
+					# TEST
+					python '/immutability.py'
 				'';
 			};
 		};
