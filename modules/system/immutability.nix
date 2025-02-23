@@ -18,7 +18,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				rsync = "${pkgs.rsync}/bin/rsync";
 				python = "${pkgs.python314}/bin/python3.14"
 			};
-			services.immutability-python = {
+			services.immutabilitypython = {
 				description = "Factory resets BTRFS subvolumes that are marked for resetOnBoot. Intentionally preserved files are restored.";
 				wantedBy = [ "initrd.target" ];
 				requires = [ deviceDependency ];
@@ -28,9 +28,9 @@ lib.mkIf config.settings.disk.immutability.enable {
 				serviceConfig.Type = "oneshot";
 				scriptArgs = "${device} ${snapshotsSubvolumeName} ${cleanName} ${subvolumeNameMountPointPairs} ${pathsToKeep}";
 				script = ''
-				#!${pkgs.python314}/bin/python3.14
-				print("Hello world")
-				'';
+#!${pkgs.python314}/bin/python3.14
+print("Hello world")
+'';
 			};
 			services.immutability = {
 				description = "Factory resets BTRFS subvolumes that are marked for resetOnBoot. Intentionally preserved files are restored.";
