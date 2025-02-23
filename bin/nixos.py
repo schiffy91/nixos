@@ -95,12 +95,12 @@ class Shell:
         if sensitive: string = string.replace(sensitive, "***")
         self.rm(path)
         self.mkdir(self.dirname(path))
-        with open(path, "w") as file: file.write(string)
+        with open(path, "w", encoding="utf-8") as file: file.write(string)
     def file_read(self, path):
         if self.chroots: path = f"{self.chroots[-1]}{path}"
         contents = ""
         if not self.exists(path): return contents
-        with open(path, "r") as file: contents = file.read()
+        with open(path, "r", encoding="utf-8") as file: contents = file.read()
         return contents
     def json_read(self, path):
         try: return json.loads(self.file_read(path))
