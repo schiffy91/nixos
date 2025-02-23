@@ -15,9 +15,11 @@ def main():
 
     if args.clean:
         sh.run("nix-collect-garbage -d", capture_output=False)
-        sh.run("rm -rf /root/.cache")
+        sh.rm("/root/.cache")
         sh.run("nix-store --verify --repair", capture_output=False)
-    if args.upgrade: sh.run(f"nix flake update --flake {Config.get_nixos_path()}", capture_output=False)
+    if args.upgrade:
+        sh.rm("/root/.cache")
+        sh.run(f"nix flake update --flake {Config.get_nixos_path()}", capture_output=False)
 
     return Config.update(rebuild_file_system=args.rebuild_filesystem, reboot=args.reboot)
 
