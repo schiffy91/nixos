@@ -104,6 +104,8 @@ in {
       "/home/${config.settings.user.admin.username}/.local/state/systemsettingsstaterc"
       ##### Kwallet #####
       "/home/${config.settings.user.admin.username}/.local/share/kwalletd"
+      ##### Klipper #####
+      "/home/${config.settings.user.admin.username}/.local/share/klipper/history2.lst"
       ##### 1Password #####
       "/home/${config.settings.user.admin.username}/.config/1Password"
       ##### Chrome #####
