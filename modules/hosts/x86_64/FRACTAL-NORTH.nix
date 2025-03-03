@@ -26,7 +26,7 @@
   ##### NVIDIA #####
   hardware.nvidia = {
     open = true;
-    #package = config.boot.kernelPackages.nvidiaPackages.latest; # https://github.com/NixOS/nixpkgs/issues/375730#issuecomment-2625157971
+    #package = config.boot.kernelPackages.nvidiaPackages.latest; # TODO https://github.com/NixOS/nixpkgs/issues/375730#issuecomment-2625157971
     package = config.boot.kernelPackages.nvidiaPackages.mkDriver {
       version = "570.86.16";
       sha256_64bit = "sha256-RWPqS7ZUJH9JEAWlfHLGdqrNlavhaR1xMyzs8lJhy9U=";
@@ -100,4 +100,7 @@
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
   ##### Thunderbolt #####
   services.hardware.bolt.enable = true;
+  ##### Ollama #####
+  services.nextjs-ollama-llm-ui.enable = true;
+  services.ollama.enable = true;
 }
