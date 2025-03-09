@@ -72,6 +72,7 @@ in {
       ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
       ##### Files & Folders #####
+      "/home/${config.settings.user.admin.username}/Downloads"
       "/home/${config.settings.user.admin.username}/.bash_history"
       "/home/${config.settings.user.admin.username}/.config/dconf/user"
       "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
