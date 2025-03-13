@@ -21,6 +21,7 @@
       pkgs-unstable.kdePackages.kaccounts-providers
       pkgs-unstable.kdePackages.kaccounts-integration
       pkgs-unstable.kdePackages.kio-gdrive
+      pkgs-unstable.vulkan-hdr-layer-kwin6
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
