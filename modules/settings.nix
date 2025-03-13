@@ -64,6 +64,7 @@ in {
       "/etc/machine-id"
       "/etc/nixos"
       "/etc/ssh"
+      "/etc/NetworkManager/"
       "/usr/bin/env"
       "/var/lib/bluetooth"
       "/var/lib/nixos"
@@ -80,6 +81,8 @@ in {
       "/home/${config.settings.user.admin.username}/.pki"
       ##### SSH #####
       "/home/${config.settings.user.admin.username}/.ssh/known_hosts"
+      ##### Network Manager #####
+      "/home/${config.settings.user.admin.username}/.cert/nm-openvpn"
       ##### Direnv #####
       "/home/${config.settings.user.admin.username}/.local/share/direnv"
       ##### Plasma #####
