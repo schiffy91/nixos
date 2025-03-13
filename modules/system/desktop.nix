@@ -17,11 +17,10 @@
     environment.systemPackages = with pkgs; [
       xdg-desktop-portal-kde
       kdePackages.plasma-thunderbolt
-      xdg-desktop-portal-kde
       pkgs-unstable.kdePackages.kaccounts-providers
       pkgs-unstable.kdePackages.kaccounts-integration
       pkgs-unstable.kdePackages.kio-gdrive
-      pkgs-unstable.vulkan-hdr-layer-kwin6
+      pkgs-unstable.vulkan-hdr-layer-kwin6 # TODO Remove after a mesa version >25 (unstable only) https://discuss.kde.org/t/will-plasma-6-3-support-vk-hdr-layer/25116
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
