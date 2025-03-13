@@ -11,7 +11,6 @@ def main():
     parser.add_argument("--clean", action="store_true", help="Runs 'nix-collect-garbage -d', 'rm -rf /root/.cache/', and 'nix-store --verify --repair'")
     parser.add_argument("--upgrade", action="store_true", help="Runs 'nix flake update'")
     args = parser.parse_args()
-    
     delete_cache = args.clean or args.upgrade
     if delete_cache:
         sh.run("nix-collect-garbage -d", capture_output=False)
