@@ -139,6 +139,7 @@ print("Hello world")
 								return 1
 							}
 							local filter_arguments=( --include="*/" )
+							log_warning "TODO: Speed up this for loop by 1-2 orders of magnitude"
 							for path_to_keep in $paths_to_keep; do
 								if [[ "$path_to_keep" == "$subvolume_mount_point"* ]]; then
 									local path_in_snapshot="''${path_to_keep#$subvolume_mount_point}"

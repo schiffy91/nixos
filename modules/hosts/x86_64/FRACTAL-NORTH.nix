@@ -26,12 +26,12 @@
   ##### NVIDIA #####
   hardware.nvidia = {
     open = true;
-    #package = config.boot.kernelPackages.nvidiaPackages.latest; # TODO https://github.com/NixOS/nixpkgs/issues/375730#issuecomment-2625157971
+    #package = config.boot.kernelPackages.nvidiaPackages.latest; # TODO https://github.com/NixOS/nixpkgs/issues/375730#issuecomment-2625157971 https://www.nvidia.com/en-us/drivers/unix/
     package = config.boot.kernelPackages.nvidiaPackages.mkDriver {
-      version = "570.86.16";
-      sha256_64bit = "sha256-RWPqS7ZUJH9JEAWlfHLGdqrNlavhaR1xMyzs8lJhy9U=";
-      openSha256 = "sha256-DuVNA63+pJ8IB7Tw2gM4HbwlOh1bcDg2AN2mbEU9VPE=";
-      settingsSha256 = "sha256-9rtqh64TyhDF5fFAYiWl3oDHzKJqyOW3abpcf2iNRT8=";
+      version = "570.124.04";
+      sha256_64bit = "sha256-G3hqS3Ei18QhbFiuQAdoik93jBlsFI2RkWOBXuENU8Q=";
+      openSha256 = "sha256-KCGUyu/XtmgcBqJ8NLw/iXlaqB9/exg51KFx0Ta5ip0=";
+      settingsSha256 = "sha256-LNL0J/sYHD8vagkV1w8tb52gMtzj/F0QmJTV1cMaso8=";
       usePersistenced = false;
     };
     nvidiaSettings = true;

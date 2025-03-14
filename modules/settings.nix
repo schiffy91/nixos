@@ -70,6 +70,7 @@ in {
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/var/log"
+      "/root/.cache/nix/"
       ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
       ##### Files & Folders #####
