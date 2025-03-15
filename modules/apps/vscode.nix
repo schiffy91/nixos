@@ -1,5 +1,5 @@
 { pkgs-unstable, ... }: {
-  home.packages = [
-    pkgs-unstable.vscode
+  home.packages = with pkgs-unstable; [
+    vscode
   ];
 }

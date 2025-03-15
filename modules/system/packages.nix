@@ -1,4 +1,4 @@
-{ pkgs, pkgs-unstable, ... }: {
+{ pkgs, ... }: {
   ##### System Packages ##### 
   environment.systemPackages = (with pkgs; [
     git
@@ -10,6 +10,4 @@
   programs.direnv.enable = true;
   ##### Firmware #####
   services.fwupd.enable = true;
-  ##### Systemd #####
-  systemd.package = pkgs-unstable.systemd;
 }

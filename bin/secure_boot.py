@@ -8,8 +8,12 @@ sh = Shell(root_required=True)
 def remove_old_efi_entries():
     sh.mkdir("/boot/EFI/Linux", "/var/lib/sbctl")
     sh.rm("/boot/EFI/Linux/linux-*.efi")
+    #sh.rm("/etc/secureboot")
+    #sh.mkdir("/etc/secureboot")
 
 def create_keys():
+    Utils.log("Resetting Secure Boot keys...")
+    sh.run("sbctl reset", check=False)
     Utils.log("Creating Secure Boot keys...")
     sh.run("sbctl create-keys")
 
@@ -18,8 +22,6 @@ def are_keys_enrolled():
     return "secure boot: ✓ enabled" in Shell.stdout(status).lower()
 
 def enroll_keys():
-    Utils.log("Resetting Secure Boot keys...")
-    sh.run("sbctl reset", check=False)
     Utils.log("Enrolling Secure Boot keys...")
     sh.run("sbctl enroll-keys --microsoft")
     Utils.log("Secure Boot keys enrolled successfully")
@@ -44,12 +46,13 @@ def disable_secure_boot():
 def enable_secure_boot():
     remove_old_efi_entries()
     create_keys()
-    if not are_keys_enrolled():
-        enroll_keys()
+    if not are_keys_enrolled(): enroll_keys()
     Config.set_target(Config.get_secure_boot_flake_target())
     Config.update(rebuild_file_system=True)
     require_signed_boot_loader()
 
-def main(): Utils.toggle(sys.argv, on_enable=enable_secure_boot, on_disable=disable_secure_boot, on_exception=disable_secure_boot)
+def main():
+    Utils.LOG_INFO = True
+    Utils.toggle(sys.argv, on_enable=enable_secure_boot, on_disable=disable_secure_boot, on_exception=disable_secure_boot)
 
 if __name__ == "__main__": main()

@@ -94,7 +94,7 @@
     openFirewall = false;
     autoStart = true;
     capSysAdmin = true;
-    package = pkgs-unstable.sunshine;
+    package = pkgs-unstable.sunshine; # Always use unstable sunshine
   };
   settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);

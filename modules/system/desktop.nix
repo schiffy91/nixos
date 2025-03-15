@@ -13,14 +13,12 @@
       enableQt5Integration = false;
     };
     services.accounts-daemon.enable = true;
-    xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-kde ];
     environment.systemPackages = with pkgs; [
-      xdg-desktop-portal-kde
       kdePackages.plasma-thunderbolt
-      pkgs-unstable.kdePackages.kaccounts-providers
-      pkgs-unstable.kdePackages.kaccounts-integration
-      pkgs-unstable.kdePackages.kio-gdrive
-      pkgs-unstable.vulkan-hdr-layer-kwin6 # TODO Remove after a mesa version >25 (unstable only) https://discuss.kde.org/t/will-plasma-6-3-support-vk-hdr-layer/25116
+      kdePackages.kaccounts-providers
+      kdePackages.kaccounts-integration
+      kdePackages.kio-gdrive
+      #pkgs-unstable.vulkan-hdr-layer-kwin6 # TODO Not sure if this is needed (https://discuss.kde.org/t/will-plasma-6-3-support-vk-hdr-layer/25116)
     ];
     environment.plasma6.excludePackages = (with pkgs.kdePackages; [
       kate
@@ -61,7 +59,7 @@
     services.displayManager.sddm.wayland.enable = true;
     programs.hyprland = {
       enable = true;
-      package = pkgs-unstable.hyprland;
+      package = pkgs-unstable.hyprland; # Always use unstable for hyprland given its bugs & pace of development
     };
   })
 ]
