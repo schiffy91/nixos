@@ -41,14 +41,14 @@ def require_signed_boot_loader():
 def disable_secure_boot():
     remove_old_efi_entries()
     Config.set_target(Config.get_standard_flake_target())
-    return Config.update(rebuild_file_system=True)
+    return Config.update(rebuild_file_system=True, delete_cache=True)
 
 def enable_secure_boot():
     remove_old_efi_entries()
     create_keys()
     if not are_keys_enrolled(): enroll_keys()
     Config.set_target(Config.get_secure_boot_flake_target())
-    Config.update(rebuild_file_system=True)
+    Config.update(rebuild_file_system=True, delete_cache=True)
     require_signed_boot_loader()
 
 def main():

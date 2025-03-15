@@ -174,7 +174,14 @@ class Config:
         cls.secure_secrets()
         cls.sh.git_add_safe_directory(cls.get_nixos_path())
     @classmethod
-    def update(cls, rebuild_file_system=False, reboot=False):
+    def update(cls, rebuild_file_system=False, reboot=False, delete_cache=False, upgrade=False):
+        if delete_cache:
+            cls.sh.run("nix-collect-garbage -d", capture_output=False)
+            cls.sh.rm("/root/.cache")
+            cls.sh.run("nix-store --verify --repair", capture_output=False)
+        if upgrade:
+            cls.sh.rm("/root/.cache")
+            cls.sh.run(f"nix flake update --flake {Config.get_nixos_path()}", capture_output=False)
         cls.create_secrets()
         cls.secure(cls.sh.whoami())
         if not cls.sh.exists(cls.get_config_path()):
