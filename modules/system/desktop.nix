@@ -52,7 +52,7 @@
     services.displayManager.defaultSession = "plasma";
   })
   ##### Gnome #####
-  (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) 
+  (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
     services.xserver.displayManager.gdm.enable = true;
   })
   ##### Gnome Wayland #####
