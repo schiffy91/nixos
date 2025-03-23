@@ -3,6 +3,7 @@
     hardware.graphics.enable = true;
     programs.dconf.enable =  true;
     services.xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
+    xdg.portal.enable = true;
   }
   ##### Wayland #####
   (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
@@ -65,7 +66,6 @@
   })
   ##### Hyprland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
-    xdg.portal.enable = true;
     xdg.portal.extraPortals = with pkgs; [ xdg.portal.extraPortals ];
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     services.displayManager.sddm.enable = lib.mkDefault true;
