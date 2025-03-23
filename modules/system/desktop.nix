@@ -3,7 +3,7 @@
     hardware.graphics.enable = true;
     programs.dconf.enable =  true;
     services.xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
-    services.displayManager.sddm.enable = true;
+    services.displayManager.enable = true;
   }
   ##### Wayland #####
   (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
@@ -22,6 +22,7 @@
   ##### Plasma #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.displayManager.sddm.wayland.enable = true;
+    services.displayManager.sddm.enable = true;
     services.desktopManager.plasma6 = {
       enable = lib.mkDefault true;
       enableQt5Integration = false;
