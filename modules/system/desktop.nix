@@ -56,11 +56,11 @@
   })
   ##### Gnome Wayland #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
-    services.xserver.displayManager.gdm.wayland.enable = false;
+    services.xserver.displayManager.gdm.wayland = false;
   })
     ##### Gnome X11 #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
-    services.xserver.displayManager.gdm.wayland.enable = true;
+    services.xserver.displayManager.gdm.wayland = true;
   })
   ##### Hyprland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
