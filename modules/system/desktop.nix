@@ -24,13 +24,13 @@
   ##### Plasma #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.displayManager.sddm.enable = lib.mkDefault true;
-    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde ];
     services.desktopManager.plasma6 = {
       enable = lib.mkDefault true;
       enableQt5Integration = false;
     };
     services.accounts-daemon.enable = true;
     environment.systemPackages = with pkgs; [
+      xdg-desktop-portal-kde
       kdePackages.plasma-thunderbolt
       kdePackages.kaccounts-providers
       kdePackages.kaccounts-integration
