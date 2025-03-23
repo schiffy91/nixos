@@ -24,6 +24,7 @@
   ##### Plasma #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.displayManager.sddm.enable = lib.mkDefault true;
+    environment.systemPackages = with pkgs; [ xdg-desktop-portal-kde ];
     services.desktopManager.plasma6 = {
       enable = lib.mkDefault true;
       enableQt5Integration = false;
@@ -54,6 +55,7 @@
   })
   ##### Gnome #####
   (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
+    environment.systemPackages = with pkgs; [ xdg-desktop-portal-gtk ];
     services.xserver.displayManager.gdm.enable = true;
   })
   ##### Gnome Wayland #####
