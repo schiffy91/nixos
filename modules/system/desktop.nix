@@ -3,13 +3,10 @@
     hardware.graphics.enable = true;
     programs.dconf.enable =  true;
     services.xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
-    xdg.portal.enable = true;
   }
   ##### Wayland #####
   (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
     environment.sessionVariables.NIXOS_OZONE_WL = "1"; # https://nixos.wiki/wiki/Wayland
-    services.displayManager.sddm.wayland.enable = true;
-    services.xserver.displayManager.gdm.wayland.enable = true;
     environment.systemPackages = with pkgs; [
       wl-clipboard
     ];
@@ -23,6 +20,7 @@
   })
   ##### Plasma #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
+    services.displayManager.sddm.wayland.enable = true;
     services.displayManager.sddm.enable = lib.mkDefault true;
     services.desktopManager.plasma6 = {
       enable = lib.mkDefault true;
@@ -57,7 +55,7 @@
     services.xserver.displayManager.gdm.enable = true;
   })
   ##### Gnome Wayland #####
-  (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
+  (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
     services.xserver.displayManager.gdm.wayland.enable = false;
   })
     ##### Gnome X11 #####
@@ -66,6 +64,7 @@
   })
   ##### Hyprland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
+    xdg.portal.enable = true;
     xdg.portal.extraPortals = with pkgs; [ xdg.portal.extraPortals ];
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     services.displayManager.sddm.enable = lib.mkDefault true;
