@@ -3,6 +3,7 @@
     hardware.graphics.enable = true;
     programs.dconf.enable =  true;
     services.xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
+    services.displayManager.sddm.enable = true;
   }
   ##### Wayland #####
   (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
@@ -21,7 +22,6 @@
   ##### Plasma #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services.displayManager.sddm.wayland.enable = true;
-    services.displayManager.sddm.enable = lib.mkDefault true;
     services.desktopManager.plasma6 = {
       enable = lib.mkDefault true;
       enableQt5Integration = false;
@@ -52,7 +52,7 @@
   })
   ##### Gnome #####
   (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
-    services.displayManager.defaultSession = "gnome";
+    services.displayManager.defaultSession = "gnome-xorg";
     services.xserver.displayManager.gdm.enable = true;
   })
   ##### Gnome Wayland #####
@@ -61,6 +61,7 @@
   })
     ##### Gnome X11 #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
+    services.displayManager.defaultSession = "gnome";
     services.xserver.displayManager.gdm.wayland = true;
   })
   ##### Hyprland Settings #####
