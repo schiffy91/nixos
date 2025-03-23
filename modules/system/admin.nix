@@ -19,7 +19,7 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "hm-backup";
-    sharedModules = inputs.plasma-manager.homeManagerModules.plasma-manager;
+    sharedModules = [ inputs.plasma-manager.homeManagerModules.plasma-manager ];
     extraSpecialArgs = { settings = config.settings; pkgs-unstable = pkgs-unstable; };
     users = { 
       "${config.settings.user.admin.username}" = { settings, ... }: {
