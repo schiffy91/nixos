@@ -69,6 +69,7 @@
         displayManager.gdm.enable = true;
         desktopManager.gnome.enable = true;
       };
+    };
   })
   ##### Gnome Wayland #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
