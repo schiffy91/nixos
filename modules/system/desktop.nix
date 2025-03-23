@@ -55,7 +55,6 @@
   ##### Gnome #####
   (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
     services.xserver.displayManager.gdm.enable = true;
-    services.xserver.displayManager.gdm.defaultSession = "gnome";
   })
   ##### Gnome Wayland #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
