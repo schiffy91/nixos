@@ -1,7 +1,6 @@
 { config, pkgs, pkgs-unstable, lib, ... }: lib.mkMerge [{
   ##### Shared #####
     hardware.graphics.enable = true;
-    xdg.portal.enable = true;
     programs.dconf.enable =  true;
     services.xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
   }
@@ -30,7 +29,6 @@
     };
     services.accounts-daemon.enable = true;
     environment.systemPackages = with pkgs; [
-      xdg-desktop-portal-kde
       kdePackages.plasma-thunderbolt
       kdePackages.kaccounts-providers
       kdePackages.kaccounts-integration
@@ -54,8 +52,7 @@
     services.displayManager.defaultSession = "plasma";
   })
   ##### Gnome #####
-  (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
-    environment.systemPackages = with pkgs; [ xdg-desktop-portal-gtk ];
+  (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) 
     services.xserver.displayManager.gdm.enable = true;
   })
   ##### Gnome Wayland #####
@@ -68,6 +65,8 @@
   })
   ##### Hyprland Settings #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
+    xdg.portal.enable = true;
+    xdg.portal.extraPortals = with pkgs; [ xdg.portal.extraPortals ];
     environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
     services.displayManager.sddm.enable = lib.mkDefault true;
     services.displayManager.defaultSession = "hyprland";
