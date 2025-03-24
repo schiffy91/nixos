@@ -9,7 +9,7 @@
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Desktop #####
-  settings.desktop.environment = lib.mkForce "gnome-x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
+  settings.desktop.environment = lib.mkForce "plasma-x11"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
