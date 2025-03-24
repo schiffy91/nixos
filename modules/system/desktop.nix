@@ -75,7 +75,7 @@
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
     services.xserver.displayManager.gdm.wayland = false;
   })
-    ##### Gnome X11 #####
+  ##### Gnome X11 #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
     services = {
       displayManager.defaultSession = "gnome";
