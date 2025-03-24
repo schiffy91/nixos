@@ -53,11 +53,9 @@
     };
     security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;
   })
-  ##### Plasma X11 #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
     services.displayManager.defaultSession = "plasmax11";
   })
-  ##### Plasma Wayland #####
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
     services.displayManager.defaultSession = "plasma";
   })
@@ -71,18 +69,16 @@
       };
     };
   })
-  ##### Gnome Wayland #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
     services.xserver.displayManager.gdm.wayland = false;
   })
-  ##### Gnome X11 #####
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
     services = {
       displayManager.defaultSession = "gnome";
       xserver.displayManager.gdm.wayland = true;
     };
   })
-  ##### Hyprland Settings #####
+  ##### Hyprland #####
   (lib.mkIf (config.settings.desktop.environment == "hyprland") {
     xdg.portal = {
       enable = true;
