@@ -27,10 +27,7 @@
   ##### Plasma #####
   (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
     services = {
-      displayManager.sddm = {
-        enable = true;
-        wayland.enable = true;
-      };
+      displayManager.sddm.enable = true;
       desktopManager.plasma6 = {
         enable = true;
         enableQt5Integration = false;
@@ -54,10 +51,16 @@
     security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;
   })
   (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
-    services.displayManager.defaultSession = "plasmax11";
+    services.displayManager = {
+      sddm.wayland.enable = false;
+      defaultSession = "plasmax11";
+    };
   })
   (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
-    services.displayManager.defaultSession = "plasma";
+    services.displayManager = {
+      sddm.wayland.enable = true;
+      defaultSession = "plasma";
+    };
   })
   ##### Gnome #####
   (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
