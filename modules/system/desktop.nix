@@ -61,15 +61,13 @@
   })
   ##### Gnome #####
   (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
-    services = {
-      displayManager.defaultSession = "gnome-xorg";
-      xserver = {
-        displayManager.gdm.enable = true;
-        desktopManager.gnome.enable = true;
-      };
+    services.xserver = {
+      displayManager.gdm.enable = true;
+      desktopManager.gnome.enable = true;
     };
   })
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
+    displayManager.defaultSession = "gnome-xorg";
     services.xserver.displayManager.gdm.wayland = false;
   })
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
