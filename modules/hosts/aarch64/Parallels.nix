@@ -25,8 +25,6 @@ in
     "xhci_pci"
     "sr_mod"
   ];
-  ##### Security #####
-  security.sudo.wheelNeedsPassword = false;
   ##### Packages #####
   environment.systemPackages = with pkgs; [
       linuxKernel.packages.${kernelPackage}.prl-tools
