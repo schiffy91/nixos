@@ -33,11 +33,6 @@ in
   security.sudo.wheelNeedsPassword = false;
   settings.user.admin.autoLogin.enable = true;
   settings.user.admin.autoLock.enable = false;
-  ##### Packages #####
-  environment.systemPackages = with pkgs; [
-    spice-vdagent
-    spice-protocol
-  ];
   ##### Networking #####
   settings.networking.lanSubnet = "192.168.64.0/24";
 }
