@@ -6,7 +6,7 @@ let
 in
 {
   ##### Host Name #####
-  networking.hostName = "VM";
+  networking.hostName = "Parallels";
   ##### Disk Information #####
   settings.disk.device = "/dev/sda";
   settings.disk.encryption.enable = false;
