@@ -302,7 +302,7 @@ class Interactive:
 class Utils:
     sh = Shell()
     # LOG LEVEL
-    LOG_INFO = False
+    LOG_INFO = True
     # Color constants
     GRAY = "\033[90m"
     ORANGE = "\033[38;5;208m"
