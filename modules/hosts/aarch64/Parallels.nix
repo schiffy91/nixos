@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }: {
 let
   kernel_version = "6_14";
   kernelPackage = "linux_${kernel_version}";
