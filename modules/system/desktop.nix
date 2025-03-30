@@ -1,4 +1,4 @@
-{ config, pkgs, pkgs-unstable, lib, ... }: lib.mkMerge [{
+{ config, pkgs, lib, ... }: lib.mkMerge [{
   ##### Shared #####
     hardware.graphics.enable = true;
     programs.dconf.enable =  true;
