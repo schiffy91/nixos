@@ -34,5 +34,5 @@ in
   settings.user.admin.autoLogin.enable = true;
   settings.user.admin.autoLock.enable = false;
   ##### Networking #####
-  settings.networking.lanSubnet = "10.211.55.3/24";
+  settings.networking.lanSubnet = "10.0.2.3/24";
 }
