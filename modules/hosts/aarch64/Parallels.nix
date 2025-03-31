@@ -6,7 +6,7 @@ let
 in
 {
   ##### Host Name #####
-  networking.hostName = "Parallels";
+  networking.hostName = "VM";
   ##### Disk Information #####
   settings.disk.device = "/dev/sda";
   settings.disk.encryption.enable = false;
@@ -34,5 +34,5 @@ in
   settings.user.admin.autoLogin.enable = true;
   settings.user.admin.autoLock.enable = false;
   ##### Networking #####
-  settings.networking.lanSubnet = "192.168.64.0/24";
+  settings.networking.lanSubnet = "10.211.55.3/24";
 }
