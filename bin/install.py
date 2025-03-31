@@ -12,10 +12,13 @@ class Installer:
         cmd = f"nixos-install --flake {cls.get_mount_point()}{Config.get_nixos_path()}#{Config.get_host()}-{Config.get_target()} --root {cls.get_mount_point()} --no-channel-copy --show-trace --no-root-password --cores 0"
         tmp = f"{cls.get_mount_point()}/nix/tmp"
         cls.sh.run(cmd=cmd, env=f"TMPDIR={tmp}", capture_output=False)
+        cls.sh.rm(tmp)
+        cls.permission_nixos()
+    @classmethod
+    def permission_nixos(cls):
         with cls.sh.chroot(cls.get_mount_point()):
             Config.secure(cls.get_username())
             Snapshot.create_initial_snapshots()
-        cls.sh.rm(tmp)
     @classmethod
     def run_disko(cls, mode, args=""):
         command = f"nix --extra-experimental-features nix-command --extra-experimental-features flakes run github:nix-community/disko/{Config.metadata('disko')['locked']['rev']} --verbose -- " \
@@ -56,7 +59,8 @@ def main():
     Config.create_secrets(plain_text_password_path=Installer.get_plain_text_password_path()) # Create all secrets
     if Interactive.confirm(f"Format {Installer.get_installation_disk()}?"): Installer.erase_and_mount_disk() # Format disk
     else: Installer.mount_disk() # Or just mount disk
-    if Interactive.confirm("Install nixos?"): Installer.install_nixos() # Install NixOS
+    if Interactive.confirm("Install NixOS?"): Installer.install_nixos() # Install NixOS
+    elif Interactive.confirm("Permission NixOS?"): Installer.permission_nixos() # Permission NixOS if installation is skipped
     Interactive.ask_to_reboot()
 
 if __name__=="__main__": main()

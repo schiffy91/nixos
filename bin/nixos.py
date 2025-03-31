@@ -91,15 +91,15 @@ class Shell:
         self.run(f"ssh-keygen -t {key_type} -N \"{password}\" -f '{path}'")
     # I/O
     def file_write(self, path, string, sensitive=None):
-        if self.chroots: path = f"{self.chroots[-1]}{path}"
         if sensitive: string = string.replace(sensitive, "***")
         self.rm(path)
         self.mkdir(self.dirname(path))
+        if self.chroots: path = f"{self.chroots[-1]}{path}"
         with open(path, "w", encoding="utf-8") as file: file.write(string)
     def file_read(self, path):
-        if self.chroots: path = f"{self.chroots[-1]}{path}"
         contents = ""
         if not self.exists(path): return contents
+        if self.chroots: path = f"{self.chroots[-1]}{path}"
         with open(path, "r", encoding="utf-8") as file: contents = file.read()
         return contents
     def json_read(self, path):
