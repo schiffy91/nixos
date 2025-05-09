@@ -92,7 +92,4 @@
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
   ##### Thunderbolt #####
   services.hardware.bolt.enable = true;
-  ##### Ollama #####
-  services.nextjs-ollama-llm-ui.enable = true;
-  services.ollama.enable = true;
 }
