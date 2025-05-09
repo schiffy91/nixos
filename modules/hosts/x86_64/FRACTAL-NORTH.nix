@@ -75,7 +75,7 @@
     win-virtio
     win-spice
     mpv
-    ollama-cuda
+    #ollama-cuda
     fwupd
   ];
   ##### Networking #####
