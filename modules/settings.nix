@@ -105,6 +105,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/systemsettingsrc"
       "/home/${config.settings.user.admin.username}/.config/Trolltech.conf"
       "/home/${config.settings.user.admin.username}/.local/share/kactivitymanagerd"
+      "/home/${config.settings.user.admin.username}/.local/share/recently-used.xbel"
       "/home/${config.settings.user.admin.username}/.local/state/konsolestaterc"
       "/home/${config.settings.user.admin.username}/.local/state/systemsettingsstaterc"
       ##### Kwallet #####
