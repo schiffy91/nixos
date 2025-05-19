@@ -59,7 +59,7 @@
     };
   };
   ##### Desktop Environment #####
-  settings.desktop.environment = "gnome-wayland";
+  settings.desktop.environment = "plasma-wayland";
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     google-chrome
