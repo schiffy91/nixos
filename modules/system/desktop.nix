@@ -64,21 +64,21 @@
   })
   ##### Gnome #####
   (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
-    services.xserver = {
+    services = {
       displayManager.gdm.enable = true;
       desktopManager.gnome.enable = true;
     };
   })
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
-    services = {
-      displayManager.defaultSession = "gnome-xorg";
-      xserver.displayManager.gdm.wayland = false;
+    services.displayManager = {
+      defaultSession = "gnome-xorg";
+      gdm.wayland = false;
     };
   })
   (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
-    services = {
-      displayManager.defaultSession = "gnome";
-      xserver.displayManager.gdm.wayland = true;
+    services.displayManager = {
+      defaultSession = "gnome";
+      gdm.wayland = true;
     };
   })
   ##### Hyprland #####
