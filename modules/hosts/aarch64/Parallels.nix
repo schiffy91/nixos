@@ -1,6 +1,6 @@
 { pkgs, lib, ... }:
 let
-  kernelVersion = "6_14";
+  kernelVersion = "6_16";
   kernelPackage = "linux_${kernelVersion}";
   linuxPackage = "linuxPackages_${kernelVersion}";
 in
