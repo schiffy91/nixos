@@ -13,7 +13,7 @@ in
   settings.disk.swap.enable = false;
   settings.disk.immutability.enable = true;
   ##### Desktop #####
-  settings.desktop.environment = lib.mkForce "gnome-wayland";
+  settings.desktop.environment = lib.mkForce "plasma-wayland";
   ##### Parallels #####
   hardware.parallels = {
     enable = true;
