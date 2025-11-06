@@ -4,7 +4,9 @@
     ];
     programs.git = {
         enable = true;
-        userEmail = settings.user.admin.publicEmail;
-        userName = settings.user.admin.publicName;
+        settings.user = {
+            email = settings.user.admin.publicEmail;
+            name =  settings.user.admin.publicName;
+        };
     };
 }
