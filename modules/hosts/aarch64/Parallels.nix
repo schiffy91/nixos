@@ -17,7 +17,7 @@
   ];
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-      linuxKernel.packages.${kernelPackage}.prl-tools
+      prl-tools
   ];
   ##### Security #####
   security.sudo.wheelNeedsPassword = false;
