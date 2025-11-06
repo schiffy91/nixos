@@ -1,10 +1,4 @@
-{ pkgs, lib, ... }:
-let
-  kernelVersion = "6_16";
-  kernelPackage = "linux_${kernelVersion}";
-  linuxPackage = "linuxPackages_${kernelVersion}";
-in
-{
+{ pkgs, lib, ... }: {
   ##### Host Name #####
   networking.hostName = "VM";
   ##### Disk Information #####
@@ -15,10 +9,7 @@ in
   ##### Desktop #####
   settings.desktop.environment = lib.mkForce "plasma-wayland";
   ##### Parallels #####
-  hardware.parallels = {
-    enable = true;
-    package = pkgs.linuxKernel.packages.${kernelPackage}.prl-tools;
-  };
+  hardware.parallels.enable = true;
   boot.kernelPackages = pkgs.${linuxPackage};
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
