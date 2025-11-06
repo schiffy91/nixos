@@ -10,7 +10,6 @@
   settings.desktop.environment = lib.mkForce "plasma-wayland";
   ##### Parallels #####
   hardware.parallels.enable = true;
-  boot.kernelPackages = pkgs.${linuxPackage};
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
