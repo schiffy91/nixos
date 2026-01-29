@@ -46,8 +46,6 @@
       enable = true;
       qemu = {
         package = pkgs.qemu;
-        ovmf.enable = true;
-        ovmf.packages = [ pkgs.OVMFFull.fd ];
         swtpm.enable = true;
         runAsRoot = false;
       };
@@ -72,7 +70,7 @@
     spice 
     spice-gtk
     spice-protocol
-    win-virtio
+    virtio-win
     win-spice
     mpv
     #ollama-cuda
