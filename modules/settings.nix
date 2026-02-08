@@ -127,6 +127,9 @@ in {
       "/home/${config.settings.user.admin.username}/.vscode"
       ##### Sunshine #####
       "/home/${config.settings.user.admin.username}/.config/sunshine"
+      ##### Mulvad #####
+      "/etc/mullvad-vpn/"
+      "/home/${config.settings.user.admin.username}/.config/Mullvad VPN"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";

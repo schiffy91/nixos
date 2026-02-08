@@ -18,9 +18,7 @@
     "video=HDMI-A-0:3840x2160@120"  # Force 4k120
   ];
   boot.kernelModules = [ "kvm-amd" ];
-  hardware.firmware = [
-    pkgs.linux-firmware
-  ];
+  hardware.firmware = [ pkgs.linux-firmware ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
   ##### NVIDIA #####
@@ -79,6 +77,11 @@
   ##### Networking #####
   settings.networking.lanSubnet = "10.0.0.0/24";
   programs.openvpn3.enable = true;
+  services.resolved.enable = true;
+  services.mullvad-vpn = {
+    enable = true;
+    package = pkgs.mullvad-vpn;
+  };
   ##### Moonlight #####
   services.sunshine = {
     enable = true;
