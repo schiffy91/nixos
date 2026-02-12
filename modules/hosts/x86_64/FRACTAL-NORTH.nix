@@ -6,8 +6,6 @@
   settings.disk.encryption.enable = true;
   settings.disk.immutability.enable = true;
   settings.disk.swap.size = "65G";
-  ##### Drivers #####
-  services.xserver.videoDrivers = [ "amdgpu" "nvidia" ]; # AMD first (primary for display), NVIDIA second (for rendering via PRIME)
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
   ##### Display #####
@@ -23,11 +21,10 @@
   hardware.firmware = [ pkgs.linux-firmware ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
-  # Note: hardware.graphics.enable and enable32Bit are set in desktop.nix
-  hardware.graphics.extraPackages = with pkgs; [
-    nvidia-vaapi-driver  # NVIDIA hardware video decode
-  ];
+  ##### Desktop Environment #####
+  settings.desktop.environment = "plasma-wayland";
   ##### NVIDIA #####
+  services.xserver.videoDrivers = [ "amdgpu" "nvidia" ]; # AMD first (primary for display), NVIDIA second (for rendering via PRIME)
   hardware.nvidia = {
     open = true;
     modesetting.enable = true;
@@ -35,10 +32,31 @@
     nvidiaSettings = true;
     powerManagement.enable = true;
     prime = {
-      reverseSync.enable = true;    # Reverse Sync: NVIDIA renders, AMD iGPU outputs to display
-      amdgpuBusId = "PCI:107:0:0";  # AMD iGPU at 6b:00.0 (hex 6b = 107 dec)
-      nvidiaBusId = "PCI:1:0:0";    # RTX 4090 at 01:00.0
+      sync.enable = true;           # Prime Sync: RTX 4090 renders, AMD iGPU outputs to TB4 display
+      amdgpuBusId = "PCI:107:0:0";  # AMD iGPU at 6b:00.0 (hex 6b = 107 dec) - connected to display
+      nvidiaBusId = "PCI:1:0:0";    # RTX 4090 at 01:00.0 - PCIe only, does all rendering
     };
+    forceFullCompositionPipeline = true;
+  };
+  hardware.graphics.extraPackages = with pkgs; [
+    nvidia-vaapi-driver
+    libva-vdpau-driver
+    libvdpau-va-gl
+    vulkan-loader
+    vulkan-validation-layers
+    vulkan-tools
+  ];
+  hardware.graphics.extraPackages32 = with pkgs.pkgsi686Linux; [
+    nvidia-vaapi-driver
+    libva-vdpau-driver
+    libvdpau-va-gl
+  ];
+  environment.sessionVariables = {
+    __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+    LIBVA_DRIVER_NAME = "nvidia";
+    VDPAU_DRIVER = "nvidia";
+    DRI_PRIME = "1";
+    ENABLE_VULKAN = "1";
   };
   ##### Virtualization #####
   services.qemuGuest.enable = true;
@@ -58,20 +76,18 @@
       dockerCompat = true;
     };
   };
-  ##### Desktop Environment #####
-  settings.desktop.environment = "plasma-wayland";
-
-  ##### Environment Variables for Hardware Acceleration #####
-  environment.sessionVariables = {
-    # Force Chrome to use NVIDIA GPU for rendering
-    __NV_PRIME_RENDER_OFFLOAD = "1";
-    __GLX_VENDOR_LIBRARY_NAME = "nvidia";
-    # Enable VA-API for video decode
-    LIBVA_DRIVER_NAME = "nvidia";
-  };
   ##### Packages #####
   environment.systemPackages = with pkgs; [
-    google-chrome
+    (google-chrome.override {
+      commandLineArgs = [
+        "--ozone-platform=x11"                        # Use X11 backend (Wayland has DMA-BUF import issues with NVIDIA)
+        "--use-angle=vulkan"                          # Use Vulkan through ANGLE
+        "--render-node-override=/dev/dri/renderD129"  # Force NVIDIA GPU (renderD129)
+        "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder"
+        "--ignore-gpu-blocklist"
+        "--enable-gpu-rasterization"
+      ];
+    })
     distrobox
     pciutils
     usbutils
@@ -88,6 +104,12 @@
     sbctl
     fwupd
     nixd
+    # GPU diagnostic tools
+    mesa-demos       # provides glxinfo
+    vulkan-tools   # provides vulkaninfo
+    vdpauinfo          # VDPAU info
+    libva-utils     # vainfo for VA-API
+    nvtopPackages.full      # GPU monitoring (supports NVIDIA + AMD)
   ];
   ##### Networking #####
   settings.networking.lanSubnet = "10.0.0.0/24";
