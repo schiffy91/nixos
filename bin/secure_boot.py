@@ -7,9 +7,7 @@ sh = Shell(root_required=True)
 
 def remove_old_efi_entries():
     sh.mkdir("/boot/EFI/Linux", "/var/lib/sbctl")
-    sh.rm("/boot/EFI/Linux/linux-*.efi")
-    #sh.rm("/etc/secureboot")
-    #sh.mkdir("/etc/secureboot")
+    sh.rm("/boot/EFI/Linux/linux-*.efi", "/etc/secureboot")
 
 def create_keys():
     Utils.log("Resetting Secure Boot keys...")
@@ -52,7 +50,7 @@ def enable_secure_boot():
     require_signed_boot_loader()
 
 def main():
-    Utils.LOG_INFO = True
+    Utils.LOG_INFO = False
     Utils.toggle(sys.argv, on_enable=enable_secure_boot, on_disable=disable_secure_boot, on_exception=disable_secure_boot)
 
 if __name__ == "__main__": main()

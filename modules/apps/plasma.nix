@@ -10,7 +10,6 @@
       colorScheme = "BreezeDark";
       cursor = {
         theme = "Breeze";
-        size = builtins.floor (24 * settings.desktop.scalingFactor);
       };
       wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
       iconTheme = "Papirus-Dark";

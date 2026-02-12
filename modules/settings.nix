@@ -130,6 +130,8 @@ in {
       ##### Mulvad #####
       "/etc/mullvad-vpn/"
       "/home/${config.settings.user.admin.username}/.config/Mullvad VPN"
+      ##### Claude #####
+      "/home/${config.settings.user.admin.username}/.claude"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";

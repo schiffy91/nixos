@@ -7,7 +7,7 @@
   settings.disk.immutability.enable = true;
   settings.disk.swap.size = "65G";
   ##### Drivers #####
-  services.xserver.videoDrivers = [ "nvidia" "amdgpu" ];
+  services.xserver.videoDrivers = [ "amdgpu" "nvidia" ]; # AMD first (primary for display), NVIDIA second (for rendering via PRIME)
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
   ##### Display #####
@@ -15,25 +15,29 @@
   ##### AMD #####
   boot.kernelParams = [
     "amdgpu.dc=1"                   # AMD GPU
-    "video=HDMI-A-0:3840x2160@120"  # Force 4k120
+    "amd_iommu=on"                  # Enable IOMMU for VFIO passthrough
+    "iommu=pt"                      # IOMMU passthrough mode (better performance)
+  #  "video=HDMI-A-0:3840x2160@120"  # Force 4k120
   ];
-  boot.kernelModules = [ "kvm-amd" ];
+  boot.kernelModules = [ "kvm-amd" "vfio" "vfio_pci" "vfio_iommu_type1" ];
   hardware.firmware = [ pkgs.linux-firmware ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
+  # Note: hardware.graphics.enable and enable32Bit are set in desktop.nix
+  hardware.graphics.extraPackages = with pkgs; [
+    nvidia-vaapi-driver  # NVIDIA hardware video decode
+  ];
   ##### NVIDIA #####
   hardware.nvidia = {
     open = true;
+    modesetting.enable = true;
     package = config.boot.kernelPackages.nvidiaPackages.latest;
     nvidiaSettings = true;
     powerManagement.enable = true;
     prime = {
-      offload = {
-        enable = true;
-        enableOffloadCmd = true;
-      };
-      amdgpuBusId = "PCI:1:0:0";
-      nvidiaBusId = "PCI:69:0:0";
+      reverseSync.enable = true;    # Reverse Sync: NVIDIA renders, AMD iGPU outputs to display
+      amdgpuBusId = "PCI:107:0:0";  # AMD iGPU at 6b:00.0 (hex 6b = 107 dec)
+      nvidiaBusId = "PCI:1:0:0";    # RTX 4090 at 01:00.0
     };
   };
   ##### Virtualization #####
@@ -56,6 +60,15 @@
   };
   ##### Desktop Environment #####
   settings.desktop.environment = "plasma-wayland";
+
+  ##### Environment Variables for Hardware Acceleration #####
+  environment.sessionVariables = {
+    # Force Chrome to use NVIDIA GPU for rendering
+    __NV_PRIME_RENDER_OFFLOAD = "1";
+    __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+    # Enable VA-API for video decode
+    LIBVA_DRIVER_NAME = "nvidia";
+  };
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     google-chrome
@@ -65,14 +78,16 @@
     looking-glass-client
     virt-manager
     virt-viewer
-    spice 
+    spice
     spice-gtk
     spice-protocol
     virtio-win
     win-spice
     mpv
-    #ollama-cuda
+    lmstudio
+    sbctl
     fwupd
+    nixd
   ];
   ##### Networking #####
   settings.networking.lanSubnet = "10.0.0.0/24";
