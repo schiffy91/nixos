@@ -26,7 +26,7 @@
   ##### NVIDIA #####
   services.xserver.videoDrivers = [ "amdgpu" "nvidia" ]; # AMD first (primary for display), NVIDIA second (for rendering via PRIME)
   hardware.nvidia = {
-    open = true;
+    open = false;
     modesetting.enable = true;
     package = config.boot.kernelPackages.nvidiaPackages.latest;
     nvidiaSettings = true;

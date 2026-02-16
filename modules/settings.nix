@@ -142,7 +142,7 @@ in {
     settings.tpm.device = mkSetting str "/dev/tpmrm0";
     settings.tpm.versionPath = mkSetting str "/sys/class/tpm/tpm0/tpm_version_major";
     ##### Desktop ##### 
-    settings.desktop.environment = mkSetting (enum [ "hyprland-wayland" "plasma-wayland" "plasma-x11" "gnome-wayland" "gnome-x11"]) "plasma-wayland";
+    settings.desktop.environment = mkSetting (enum [ "none" "hyprland-wayland" "plasma-wayland" "plasma-x11" "gnome-wayland" "gnome-x11"]) "plasma-wayland";
     settings.desktop.scalingFactor = mkSetting float 2.0;
     ##### Networking ##### 
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; # ip -o -f inet addr show | awk '/scope global/ {print $4}';

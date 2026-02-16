@@ -1,0 +1,21 @@
+[tool.pylint."messages control"]
+disable = [
+    "import-error",           # E0401: core.* modules use sys.path.insert at runtime
+    "wrong-import-position",  # C0413: imports after sys.path.insert() are intentional
+    "redefined-outer-name",   # W0621: standard pytest fixture injection pattern
+]
+
+[tool.pytest.ini_options]
+testpaths = ["scripts"]
+python_files = ["*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E265", "E501", "E402", "F401", "F403"]
+
+[tool.pyright]
+extraPaths = ["scripts"]
+venvPath = "/nix/store"
+venv = "z0ii1kk6i8ryqzvyrzx9fdc9d81dy5g1-python3-3.14.2-env"

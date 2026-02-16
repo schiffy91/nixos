@@ -1,5 +1,6 @@
-{ config, pkgs, lib, ... }: lib.mkMerge [{
+{ config, pkgs, lib, ... }: lib.mkMerge [
   ##### Shared #####
+  (lib.mkIf (config.settings.desktop.environment != "none") {
     hardware.graphics = {
       enable = true;
       enable32Bit = true;
@@ -10,7 +11,7 @@
       displayManager.enable = true;
       accounts-daemon.enable = true;
     };
-  }
+  })
   ##### Wayland #####
   (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
     environment = {

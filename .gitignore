@@ -3,3 +3,7 @@
 secrets/
 config.json
 .direnv/
+.vm/
+coverage/
+.pytest_cache/
+.coverage
