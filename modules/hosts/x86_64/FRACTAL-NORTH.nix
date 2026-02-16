@@ -46,6 +46,7 @@
     vulkan-validation-layers
     vulkan-tools
   ];
+  hardware.graphics.enable32Bit = true;
   hardware.graphics.extraPackages32 = with pkgs.pkgsi686Linux; [
     nvidia-vaapi-driver
     libva-vdpau-driver
