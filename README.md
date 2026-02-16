@@ -34,9 +34,9 @@ Declarative, reproducible NixOS system management with BTRFS immutability, LUKS 
       plasma.nix         # Plasma/KDE settings (via plasma-manager)
       vscode.nix         # VS Code extensions and settings
       virt.nix           # Virtualization (libvirtd, QEMU)
-  scripts/
-    core/                # Python library modules
-    cli/                 # Executable CLI tools
+  bin/                   # Executable CLI tools (nix-shell shebangs)
+  lib/                   # Python library modules
+  tests/                 # Unit, integration, and functional tests
   .vm/                   # QEMU VM test environment (gitignored)
   secrets/               # Encrypted secrets (gitignored)
 ```
@@ -70,7 +70,7 @@ Persistent paths include `/etc/nixos`, `/etc/ssh`, `/var/lib/nixos`, user config
 
 ## Scripts
 
-### Core Library (`scripts/core/`)
+### Library (`lib/`)
 
 | Module | Description |
 |---|---|
@@ -83,15 +83,15 @@ Persistent paths include `/etc/nixos`, `/etc/ssh`, `/var/lib/nixos`, user config
 
 The `@chrootable` decorator adds a `chroot(sh)` context manager to classes, allowing them to transparently operate inside a mounted NixOS installation (used during `install.py`).
 
-### CLI Tools (`scripts/cli/`)
+### CLI Tools (`bin/`)
 
 All CLI scripts use nix-shell shebangs and are self-contained:
 
 | Script | Description |
 |---|---|
 | `install.py` | Full NixOS installation: disko partitioning, nixos-install, permissions, snapshots |
-| `update.py` | System update: `nixos-rebuild switch` with optional `--upgrade`, `--delete-cache` |
-| `diff.py` | Show differences between current and pending NixOS generation |
+| `update.py` | System update: `nixos-rebuild switch` with optional `--upgrade`, `--clean` |
+| `diff.py` | Show what changed since last boot (files that would be wiped by immutability) |
 | `eval.py` | Evaluate NixOS configuration attributes via `nix eval` |
 | `secure_boot.py` | Enroll Secure Boot keys and switch to lanzaboote target |
 | `tpm2.py` | Enroll TPM2 LUKS auto-unlock |
@@ -102,66 +102,48 @@ All CLI scripts use nix-shell shebangs and are self-contained:
 
 ```bash
 # Install NixOS from live USB
-sudo scripts/cli/install.py
+sudo bin/install.py
 
 # Update system
-sudo scripts/cli/update.py
-sudo scripts/cli/update.py --upgrade      # Also update flake inputs
-sudo scripts/cli/update.py --delete-cache  # Garbage collect first
+sudo bin/update.py
+sudo bin/update.py --upgrade  # Also update flake inputs
+sudo bin/update.py --clean    # Garbage collect first
 
 # Evaluate a config attribute
-scripts/cli/eval.py config.settings.disk.device
+bin/eval.py config.settings.disk.device
 
 # GPU passthrough
-sudo scripts/cli/gpu_vfio.py status
-sudo scripts/cli/gpu_vfio.py detach   # Bind to vfio-pci for VM
-sudo scripts/cli/gpu_vfio.py attach   # Return to nvidia driver
+sudo bin/gpu_vfio.py status
+sudo bin/gpu_vfio.py detach   # Bind to vfio-pci for VM
+sudo bin/gpu_vfio.py attach   # Return to nvidia driver
 ```
 
 ## Testing
 
-### Unit Tests
+### Unit and Integration Tests
 
 ```bash
-# Run all unit tests (excludes VM E2E tests)
-nix-shell -p python3 python3Packages.pytest --run \
-  "python3 -m pytest scripts/core/tests/ scripts/cli/tests/ \
-   --ignore=scripts/core/tests/vm_test.py -v"
-
-# Or use the master test runners
-nix-shell -p python3 python3Packages.pytest --run \
-  "python3 scripts/core/tests/core_tests.py"
-nix-shell -p python3 python3Packages.pytest --run \
-  "python3 scripts/cli/tests/cli_tests.py"
-
-# With coverage
-nix-shell -p python3 python3Packages.pytest python3Packages.pytest-cov --run \
-  "python3 -m pytest scripts/core/tests/ --ignore=scripts/core/tests/vm_test.py \
-   --cov=scripts/core --cov-report=term-missing"
+python3 -m pytest                              # All fast tests (default)
+python3 -m pytest tests/unit_tests/ -v         # Unit tests only
+python3 -m pytest tests/integration_tests/ -v  # Integration tests only
 ```
 
-Core library coverage: 100% (shell, config, utils, interactive, snapshot).
+### Functional Tests (QEMU VM)
 
-### VM E2E Tests
-
-The VM test harness (`scripts/core/vm.py`) boots a QEMU VM from `modules/hosts/x86_64/VM-TEST.nix` and runs integration tests over serial console.
+The VM test harness (`lib/vm.py`) boots a QEMU VM and runs end-to-end tests with QEMU snapshots as checkpoints for reproducibility.
 
 ```bash
-# Setup VM (build NixOS image + prepare QEMU environment)
-python3 scripts/core/vm.py setup
+# Run all functional tests
+python3 -m pytest tests/functional_tests/ -v -s --tb=short
 
-# Boot VM and run E2E tests
-nix-shell -p python3 python3Packages.pytest --run \
-  "python3 -m pytest scripts/core/tests/vm_test.py -v"
+# Clean and rerun from scratch
+VM_CLEAN=1 python3 -m pytest tests/functional_tests/ -v -s --tb=short
 
-# Interactive VM access
-python3 scripts/core/vm.py up      # Boot VM
-python3 scripts/core/vm.py ssh     # Connect to serial console
-python3 scripts/core/vm.py stop    # Shutdown
-python3 scripts/core/vm.py clean   # Remove VM artifacts
+# Resume from a specific checkpoint
+VM_FROM=booted python3 -m pytest tests/functional_tests/ -v -s --tb=short
 ```
 
-VM tests validate: boot, console access, NixOS generation, nix eval, file operations, systemd services, BTRFS subvolumes, disk settings, and system info.
+VM tests validate: installation, boot, immutability modes (reset, snapshot-only, disabled, restore-previous, restore-penultimate), performance, and system updates.
 
 ## Hardware: FRACTAL-NORTH
 

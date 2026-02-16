@@ -30,7 +30,7 @@ let
 		"${volume.name}=${volume.mountPoint}:${filterForVolume volume}"
 	) resetVolumes;
 
-	immutabilityScript = ../../scripts/core/immutability.py;
+	immutabilityScript = ../../lib/immutability.py;
 
 in
 lib.mkIf config.settings.disk.immutability.enable {
