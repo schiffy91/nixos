@@ -1,5 +1,5 @@
 #! /usr/bin/env nix-shell
-#! nix-shell -i python3 -p python3 qemu libarchive OVMF
+#! nix-shell -i python3 -p python3 qemu libarchive openssh OVMF
 import argparse
 import json
 import os
@@ -20,7 +20,7 @@ class VM:
     ))
     ISO_URL = (
         "https://channels.nixos.org/nixos-unstable/"
-        "latest-nixos-minimal-x86_64-linux.iso"
+        f"latest-nixos-minimal-{ARCH}-linux.iso"
     )
     SSH_PORT = 2222
     process: "subprocess.Popen[bytes] | None" = None
@@ -42,6 +42,10 @@ class VM:
 
     @classmethod
     def ovmf_code(cls):
+        if MACOS:
+            brew_path = f"/opt/homebrew/share/qemu/edk2-{ARCH}-code.fd"
+            if os.path.exists(brew_path):
+                return brew_path
         result = subprocess.run(
             ["find", "/nix/store", "-maxdepth", "3",
              "-name", "OVMF_CODE.fd", "-path", "*OVMF*fd*"],
@@ -50,7 +54,7 @@ class VM:
         paths = result.stdout.strip().split("\n")
         if paths and paths[0]:
             return paths[0]
-        raise FileNotFoundError("OVMF_CODE.fd not found in /nix/store")
+        raise FileNotFoundError("UEFI firmware not found")
 
     @classmethod
     def boot_dir(cls):
@@ -100,6 +104,8 @@ class VM:
 
     @classmethod
     def extract_boot(cls):
+        if ARCH != "x86_64":
+            return
         marker = os.path.join(cls.boot_dir(), "boot.cfg")
         if os.path.exists(marker):
             return
@@ -160,14 +166,27 @@ class VM:
             "-device", "virtio-net-pci,netdev=net0",
             "-nographic",
         ]
+        if ARCH == "aarch64":
+            args += ["-machine", "virt", "-cpu", "host"]
         if from_iso:
-            cfg = cls.boot_cfg()
-            args += [
-                "-kernel", cfg["kernel"],
-                "-initrd", cfg["initrd"],
-                "-append", cfg["append"],
-                "-cdrom", cls.iso_path(),
-            ]
+            if ARCH == "x86_64":
+                cfg = cls.boot_cfg()
+                args += [
+                    "-kernel", cfg["kernel"],
+                    "-initrd", cfg["initrd"],
+                    "-append", cfg["append"],
+                    "-cdrom", cls.iso_path(),
+                ]
+            else:
+                cls.setup_ovmf()
+                args += [
+                    "-drive",
+                    f"if=pflash,format=raw,readonly=on,file={cls.ovmf_code()}",
+                    "-drive",
+                    f"if=pflash,format=raw,file={cls.ovmf_path()}",
+                    "-cdrom", cls.iso_path(),
+                    "-boot", "d",
+                ]
         else:
             cls.setup_ovmf()
             args += [
@@ -254,7 +273,8 @@ class VM:
         return subprocess.run(
             ["ssh", "-p", str(cls.SSH_PORT)]
             + cls.ssh_opts() + ["root@localhost", cmd],
-            capture_output=True, text=True, check=check, timeout=timeout
+            capture_output=True, check=check, timeout=timeout,
+            encoding="utf-8", errors="replace",
         )
 
     @classmethod
@@ -323,12 +343,18 @@ class VM:
 
     # Snapshots
     @classmethod
+    def ovmf_snapshot_path(cls, name):
+        return os.path.join(cls.DIR, f"OVMF_VARS.{name}.fd")
+
+    @classmethod
     def snapshot(cls, name):
         cls.stop()
         subprocess.run(
             ["qemu-img", "snapshot", "-c", name, cls.disk_path()],
             check=True
         )
+        if os.path.exists(cls.ovmf_path()):
+            shutil.copy2(cls.ovmf_path(), cls.ovmf_snapshot_path(name))
 
     @classmethod
     def restore(cls, name):
@@ -337,6 +363,9 @@ class VM:
             ["qemu-img", "snapshot", "-a", name, cls.disk_path()],
             check=True
         )
+        saved = cls.ovmf_snapshot_path(name)
+        if os.path.exists(saved):
+            shutil.copy2(saved, cls.ovmf_path())
 
     @classmethod
     def has_snapshot(cls, name):
@@ -354,14 +383,22 @@ class VM:
             ["qemu-img", "snapshot", "-d", name, cls.disk_path()],
             check=True
         )
+        saved = cls.ovmf_snapshot_path(name)
+        if os.path.exists(saved):
+            os.remove(saved)
 
     @classmethod
     def setup_ovmf(cls):
         if os.path.exists(cls.ovmf_path()):
             return
         os.makedirs(cls.DIR, exist_ok=True)
-        src = os.path.join(os.path.dirname(cls.ovmf_code()), "OVMF_VARS.fd")
-        shutil.copy2(src, cls.ovmf_path())
+        code_path = cls.ovmf_code()
+        vars_src = os.path.join(os.path.dirname(code_path), "OVMF_VARS.fd")
+        if os.path.exists(vars_src):
+            shutil.copy2(vars_src, cls.ovmf_path())
+        else:
+            with open(cls.ovmf_path(), "wb") as f:
+                f.write(b"\x00" * 64 * 1024 * 1024)
         os.chmod(cls.ovmf_path(), 0o644)
 
     # Compound operations
@@ -419,20 +456,15 @@ def main():
         case "clean":
             VM.clean()
         case "status":
-            print(f"DIR:     {VM.DIR}")
-            print(
-                f"ISO:     {
-                    'yes' if os.path.exists(
-                        VM.iso_path()) else 'no'}")
-            print(
-                f"Disk:    {
-                    'yes' if os.path.exists(
-                        VM.disk_path()) else 'no'}")
-            print(
-                f"SSH key: {
-                    'yes' if os.path.exists(
-                        VM.ssh_key()) else 'no'}")
+            iso = "yes" if os.path.exists(VM.iso_path()) else "no"
+            disk = "yes" if os.path.exists(VM.disk_path()) else "no"
+            key = "yes" if os.path.exists(VM.ssh_key()) else "no"
             running = VM.process and VM.process.poll() is None
+            print(f"DIR:     {VM.DIR}")
+            print(f"ARCH:    {ARCH}")
+            print(f"ISO:     {iso}")
+            print(f"Disk:    {disk}")
+            print(f"SSH key: {key}")
             print(f"Running: {'yes' if running else 'no'}")
 
 

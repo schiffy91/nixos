@@ -36,6 +36,7 @@ def mock_config_eval(monkeypatch):
         "config.settings.disk.subvolumes.snapshots.mountPoint": "/.snapshots",
         "config.settings.disk.immutability.persist.snapshots.cleanName":
             "CLEAN",
+        "config.settings.disk.immutability.mode": "reset",
         "config.settings.disk.immutability.persist.paths":
             "/etc/nixos /var/lib/nixos",
         "config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot":

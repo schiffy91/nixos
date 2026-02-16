@@ -4,14 +4,12 @@ let
 	deviceDependency = if config.settings.disk.encryption.enable then "dev-mapper-${config.settings.disk.label.root}.device" else "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
 	cleanName = config.settings.disk.immutability.persist.snapshots.cleanName;
+	mode = config.settings.disk.immutability.mode;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
 	subvolumeNameMountPointPairs = config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot;
 
-	rsyncFilterFile = pkgs.writeText "immutability-rsync-filters" (
-		"+ */\n" +
-		lib.concatMapStringsSep "\n" (path:
-			"+ ${path}\n+ ${path}/**"
-		) pathsToKeep + "\n- *"
+	pathsFile = pkgs.writeText "immutability-paths" (
+		lib.concatMapStringsSep "\n" (path: path) pathsToKeep
 	);
 
 	immutabilityBin = pkgs.stdenv.mkDerivation {
@@ -42,7 +40,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 	boot.initrd = {
 		supportedFilesystems = [ "btrfs" ];
 		systemd = {
-			storePaths = [ "${pkgs.python3}" "${rsyncFilterFile}" ];
+			storePaths = [ "${pkgs.python3}" "${pathsFile}" ];
 			extraBin = {
 				btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
 				rsync = "${pkgs.rsync}/bin/rsync";
@@ -58,7 +56,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				serviceConfig.Type = "oneshot";
 				serviceConfig.Environment = "PYTHONHOME=${pkgs.python3}";
 				script = ''
-					immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${rsyncFilterFile} ${subvolumeNameMountPointPairs}
+					immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pathsFile} ${subvolumeNameMountPointPairs}
 				'';
 			};
 		};
