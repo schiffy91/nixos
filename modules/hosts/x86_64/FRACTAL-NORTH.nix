@@ -5,7 +5,6 @@
   settings.disk.device = "/dev/nvme0n1";
   settings.disk.encryption.enable = true;
   settings.disk.immutability.enable = true;
-  settings.disk.immutability.mode = "restore-previous";
   settings.disk.swap.size = "65G";
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
