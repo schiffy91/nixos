@@ -3,13 +3,13 @@
   networking.hostName = "VM";
   ##### Disk Information #####
   settings.disk.device = "/dev/vda";
-  settings.disk.encryption.enable = false;
-  settings.disk.swap.enable = false;
+  settings.disk.encryption.enable = true;
+  settings.disk.swap.enable = true;
   settings.disk.immutability.enable = true;
   ##### Qemu #####
   services.qemuGuest.enable = true;
   ##### Desktop #####
-  settings.desktop.environment = lib.mkForce "gnome-wayland"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
+  settings.desktop.environment = lib.mkForce "kde-wayland"; # Spice is broken with Wayland. SMH. https://bugzilla.redhat.com/show_bug.cgi?id=2016563
   ##### Boot Configuration #####
   boot.initrd.availableKernelModules = [
     "xhci_pci"
