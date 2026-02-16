@@ -6,31 +6,31 @@ let
 	cleanName = config.settings.disk.immutability.persist.snapshots.cleanName;
 	mode = config.settings.disk.immutability.mode;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
-	subvolumeNameMountPointPairs = config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot;
+	resetVolumes = lib.filter (v: v.resetOnBoot) config.settings.disk.subvolumes.volumes;
 
-	pathsFile = pkgs.writeText "immutability-paths" (
-		lib.concatMapStringsSep "\n" (path: path) pathsToKeep
-	);
+	# Build a precomputed rsync filter file per subvolume mount point
+	filterForVolume = volume: let
+		mp = volume.mountPoint;
+		relevant = builtins.filter (path:
+			if mp == "/" then true
+			else path == mp || lib.hasPrefix (mp + "/") path
+		) pathsToKeep;
+		toRelative = path:
+			if mp == "/" then lib.removePrefix "/" path
+			else let stripped = lib.removePrefix (mp + "/") path;
+			in if path == mp then "" else stripped;
+		relatives = builtins.filter (r: r != "") (map toRelative relevant);
+		lines = [ "+ */" ]
+			++ (lib.concatMap (rel: [ "+ /${rel}" "+ /${rel}/" "+ /${rel}/**" ]) relatives)
+			++ [ "- *" ];
+	in pkgs.writeText "immutability-filter-${volume.name}" (lib.concatStringsSep "\n" lines + "\n");
 
-	immutabilityBin = pkgs.stdenv.mkDerivation {
-		pname = "immutability";
-		version = "1.0.0";
-		src = ../../scripts/core/immutability.py;
-		nativeBuildInputs = [ pkgs.python3 pkgs.python3Packages.cython ];
-		dontUnpack = true;
-		buildPhase = ''
-			cp $src immutability.py
-			${pkgs.python3Packages.cython}/bin/cython --embed -3 -o immutability.c immutability.py
-			${pkgs.stdenv.cc}/bin/cc -O2 \
-				$(${pkgs.python3}/bin/python3-config --cflags --embed) \
-				-o immutability immutability.c \
-				$(${pkgs.python3}/bin/python3-config --ldflags --embed)
-		'';
-		installPhase = ''
-			mkdir -p $out/bin
-			cp immutability $out/bin/
-		'';
-	};
+	# name=mount:filter for each volume
+	pairArgs = lib.concatMapStringsSep " " (volume:
+		"${volume.name}=${volume.mountPoint}:${filterForVolume volume}"
+	) resetVolumes;
+
+	immutabilityScript = ../../scripts/core/immutability.py;
 
 in
 lib.mkIf config.settings.disk.immutability.enable {
@@ -40,11 +40,12 @@ lib.mkIf config.settings.disk.immutability.enable {
 	boot.initrd = {
 		supportedFilesystems = [ "btrfs" ];
 		systemd = {
-			storePaths = [ "${pkgs.python3}" "${pathsFile}" ];
+			storePaths = let
+				filterFiles = map filterForVolume resetVolumes;
+			in [ "${pkgs.python3}" "${immutabilityScript}" ] ++ filterFiles;
 			extraBin = {
 				btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
 				rsync = "${pkgs.rsync}/bin/rsync";
-				immutability = "${immutabilityBin}/bin/immutability";
 			};
 			services.immutability = {
 				description = "Factory resets BTRFS subvolumes via compiled Python";
@@ -54,9 +55,8 @@ lib.mkIf config.settings.disk.immutability.enable {
 				before = [ "sysroot.mount" ];
 				unitConfig.DefaultDependencies = "no";
 				serviceConfig.Type = "oneshot";
-				serviceConfig.Environment = "PYTHONHOME=${pkgs.python3}";
 				script = ''
-					immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pathsFile} ${subvolumeNameMountPointPairs}
+					${pkgs.python3}/bin/python3 -S ${immutabilityScript} ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pairArgs}
 				'';
 			};
 		};

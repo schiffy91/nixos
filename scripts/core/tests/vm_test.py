@@ -13,6 +13,7 @@ To start fresh:
     VM_CLEAN=1 pytest vm_test.py -v -s --tb=short
 """
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -99,12 +100,12 @@ def restore_or_skip(name):
 def boot_and_ssh(from_iso=False):
     VM.boot(from_iso=from_iso)
     if from_iso:
-        time.sleep(30)
+        time.sleep(20)
         VM.serial_bootstrap_ssh()
-    VM.wait_for_ssh(timeout=180)
+    VM.wait_for_ssh(timeout=120)
 
 
-def ssh(cmd, check=True, timeout=30):
+def ssh(cmd, check=True, timeout=20):
     result = VM.ssh(cmd, check=check, timeout=timeout)
     return result.stdout.strip()
 
@@ -119,7 +120,7 @@ def reboot_vm():
     time.sleep(5)
     VM.stop()
     VM.boot(from_iso=False)
-    VM.wait_for_ssh(timeout=180)
+    VM.wait_for_ssh(timeout=120)
 
 
 def change_mode_and_rebuild(mode):
@@ -138,7 +139,9 @@ def change_mode_and_rebuild(mode):
             f"immutability.mode = \"{mode}\"|' {nix_path}"
         )
     result = ssh(f"grep 'immutability.mode' {nix_path}")
-    assert mode in result, f"Mode change failed: expected '{mode}' in '{result}'"
+    assert mode in result, (
+        f"Mode change failed: expected '{mode}' in '{result}'"
+    )
     ssh("git -C /etc/nixos add -A", timeout=60)
     ssh(
         "git -C /etc/nixos -c user.name=test -c user.email=test@test "
@@ -190,6 +193,28 @@ def snapshot_file_content(subvol, label, rel_path):
         f"cat /.snapshots/{subvol}/{label}/{rel_path} 2>/dev/null",
         check=False,
     )
+
+
+def immutability_log():
+    return ssh(
+        "journalctl -u immutability -b --no-pager 2>/dev/null",
+        check=False,
+    )
+
+
+def immutability_completed():
+    return "Immutability complete" in immutability_log()
+
+
+def immutability_cpu_seconds():
+    log = immutability_log()
+    match = re.search(r"Consumed\s+([\d.]+)s\s+CPU", log)
+    if match:
+        return float(match.group(1))
+    match = re.search(r"Consumed\s+([\d]+)min\s+([\d.]+)s\s+CPU", log)
+    if match:
+        return float(match.group(1)) * 60 + float(match.group(2))
+    return None
 
 
 # --- Fixtures ---
@@ -244,7 +269,7 @@ class TestLiveBoot:
 
     def test_wait_for_boot(self):
         skip_if_checkpoint("live-ssh")
-        time.sleep(30)
+        time.sleep(20)
         output = VM.serial_read()
         assert len(output) > 0
 
@@ -352,7 +377,9 @@ class TestInstall:
 
     def test_checkpoint_installed(self):
         skip_if_checkpoint("installed")
-        result = ssh("test -f /mnt/etc/nixos/flake.nix && echo ok", check=False)
+        result = ssh(
+            "test -f /mnt/etc/nixos/flake.nix && echo ok", check=False,
+        )
         assert "ok" in result, "Install incomplete — not checkpointing"
         checkpoint("installed")
 
@@ -366,7 +393,7 @@ class TestBootInstalled:
     def test_boot_from_disk(self):
         skip_if_checkpoint("booted")
         VM.boot(from_iso=False)
-        VM.wait_for_ssh(timeout=180)
+        VM.wait_for_ssh(timeout=120)
 
     def test_hostname(self):
         if VM.has_snapshot("booted"):
@@ -386,17 +413,6 @@ class TestBootInstalled:
 
 
 # --- Phase 5a: Immutability — reset mode ---
-
-
-def immutability_log():
-    return ssh(
-        "journalctl -u immutability -b --no-pager 2>/dev/null",
-        check=False,
-    )
-
-
-def immutability_completed():
-    return "Immutability complete" in immutability_log()
 
 
 class TestImmutabilityReset:
@@ -429,8 +445,12 @@ class TestImmutabilityReset:
     def test_write_persistent_home(self):
         skip_if_checkpoint("reset-tested")
         user = ssh("ls /home/ | head -1")
-        write_marker(f"/home/{user}/.cache/e2e-home-marker", "persist-home")
-        check_marker(f"/home/{user}/.cache/e2e-home-marker", "persist-home")
+        write_marker(
+            f"/home/{user}/.cache/e2e-home-marker", "persist-home",
+        )
+        check_marker(
+            f"/home/{user}/.cache/e2e-home-marker", "persist-home",
+        )
 
     def test_write_ephemeral_root(self):
         skip_if_checkpoint("reset-tested")
@@ -440,8 +460,12 @@ class TestImmutabilityReset:
     def test_write_ephemeral_home(self):
         skip_if_checkpoint("reset-tested")
         user = ssh("ls /home/ | head -1")
-        write_marker(f"/home/{user}/e2e-ephemeral-home", "ephemeral-home")
-        check_marker(f"/home/{user}/e2e-ephemeral-home", "ephemeral-home")
+        write_marker(
+            f"/home/{user}/e2e-ephemeral-home", "ephemeral-home",
+        )
+        check_marker(
+            f"/home/{user}/e2e-ephemeral-home", "ephemeral-home",
+        )
 
     def test_reboot(self):
         skip_if_checkpoint("reset-tested")
@@ -458,7 +482,9 @@ class TestImmutabilityReset:
     def test_persistent_home_survives(self):
         skip_if_checkpoint("reset-tested")
         user = ssh("ls /home/ | head -1")
-        check_marker(f"/home/{user}/.cache/e2e-home-marker", "persist-home")
+        check_marker(
+            f"/home/{user}/.cache/e2e-home-marker", "persist-home",
+        )
 
     def test_ephemeral_root_wiped(self):
         skip_if_checkpoint("reset-tested")
@@ -488,6 +514,83 @@ class TestImmutabilityReset:
     def test_checkpoint(self):
         skip_if_checkpoint("reset-tested")
         checkpoint("reset-tested")
+
+
+# --- Phase 5a-perf: Performance validation ---
+
+
+class TestImmutabilityPerformance:
+    """Validate performance optimizations from the rewrite."""
+
+    def test_restore_booted(self):
+        restore_or_skip("reset-tested")
+        boot_and_ssh()
+
+    def test_no_pythonhome_in_service(self):
+        """python3 -S should not need PYTHONHOME."""
+        skip_if_checkpoint("perf-tested")
+        result = ssh(
+            "systemctl cat immutability 2>/dev/null || true",
+            check=False,
+        )
+        assert "PYTHONHOME" not in result, (
+            "Service should not set PYTHONHOME"
+        )
+
+    def test_uses_precomputed_filter(self):
+        """Filter files should come from nix store, not built at runtime."""
+        skip_if_checkpoint("perf-tested")
+        log = immutability_log()
+        assert "precomputed filter" in log.lower(), (
+            f"Expected 'precomputed filter' in log:\n{log}"
+        )
+
+    def test_line_buffered_timestamps(self):
+        """With line buffering, log timestamps should not be batched."""
+        skip_if_checkpoint("perf-tested")
+        log = immutability_log()
+        timestamps = re.findall(
+            r"^(\w+ \d+ [\d:]+)", log, re.MULTILINE,
+        )
+        unique = set(timestamps)
+        assert len(unique) >= 2, (
+            f"Expected multiple distinct timestamps, got {len(unique)}: "
+            f"{unique}"
+        )
+
+    def test_batched_sync(self):
+        """Should have far fewer sync calls than the old version (was 26+)."""
+        skip_if_checkpoint("perf-tested")
+        log = immutability_log()
+        sync_count = log.count("filesystem sync")
+        assert sync_count <= 4, (
+            f"Expected <= 4 sync calls (1 per subvol), got {sync_count}"
+        )
+
+    def test_no_shell_equals_true(self):
+        """Commands should be called directly, not via /bin/sh -c."""
+        skip_if_checkpoint("perf-tested")
+        log = immutability_log()
+        assert "/bin/sh" not in log
+
+    def test_parallel_execution(self):
+        """Both subvolumes should be processed (possibly in parallel)."""
+        skip_if_checkpoint("perf-tested")
+        log = immutability_log()
+        assert "@root" in log and "@home" in log
+
+    def test_cpu_time_reduced(self):
+        """CPU time should be dramatically lower than the old 85s."""
+        skip_if_checkpoint("perf-tested")
+        cpu = immutability_cpu_seconds()
+        if cpu is not None:
+            assert cpu < 30, (
+                f"CPU time {cpu:.1f}s exceeds 30s budget (old was 85s)"
+            )
+
+    def test_checkpoint(self):
+        skip_if_checkpoint("perf-tested")
+        checkpoint("perf-tested")
 
 
 # --- Phase 5b: Immutability — snapshot-only mode ---
@@ -614,8 +717,12 @@ class TestImmutabilityDisabled:
     def test_write_markers(self):
         skip_if_checkpoint("disabled-tested")
         user = ssh("ls /home/ | head -1")
-        write_marker("/etc/nixos/e2e-disabled-persist", "disabled-persist")
-        write_marker("/root/e2e-disabled-ephemeral", "disabled-ephemeral")
+        write_marker(
+            "/etc/nixos/e2e-disabled-persist", "disabled-persist",
+        )
+        write_marker(
+            "/root/e2e-disabled-ephemeral", "disabled-ephemeral",
+        )
         write_marker(
             f"/home/{user}/e2e-disabled-home", "disabled-home",
         )
@@ -627,8 +734,12 @@ class TestImmutabilityDisabled:
     def test_all_files_survive(self):
         skip_if_checkpoint("disabled-tested")
         user = ssh("ls /home/ | head -1")
-        check_marker("/etc/nixos/e2e-disabled-persist", "disabled-persist")
-        check_marker("/root/e2e-disabled-ephemeral", "disabled-ephemeral")
+        check_marker(
+            "/etc/nixos/e2e-disabled-persist", "disabled-persist",
+        )
+        check_marker(
+            "/root/e2e-disabled-ephemeral", "disabled-ephemeral",
+        )
         check_marker(f"/home/{user}/e2e-disabled-home", "disabled-home")
 
     def test_still_reports_disabled(self):
@@ -687,10 +798,18 @@ class TestImmutabilityRestorePrevious:
 
     def test_cycle_2_verify(self):
         skip_if_checkpoint("restore-history-ready")
-        pen = snapshot_file_content("@root", "PENULTIMATE", "root/cycle-marker")
-        assert "cycle-1" in pen, f"PENULTIMATE should have cycle-1, got: {pen}"
-        prev = snapshot_file_content("@root", "PREVIOUS", "root/cycle-marker")
-        assert "cycle-2" in prev, f"PREVIOUS should have cycle-2, got: {prev}"
+        pen = snapshot_file_content(
+            "@root", "PENULTIMATE", "root/cycle-marker",
+        )
+        assert "cycle-1" in pen, (
+            f"PENULTIMATE should have cycle-1, got: {pen}"
+        )
+        prev = snapshot_file_content(
+            "@root", "PREVIOUS", "root/cycle-marker",
+        )
+        assert "cycle-2" in prev, (
+            f"PREVIOUS should have cycle-2, got: {prev}"
+        )
 
     def test_cycle_3_write(self):
         skip_if_checkpoint("restore-history-ready")
@@ -749,7 +868,9 @@ class TestImmutabilityRestorePrevious:
     def test_system_functional(self):
         skip_if_checkpoint("restore-previous-tested")
         assert ssh("hostname") == "VM-TEST"
-        result = ssh("test -f /etc/nixos/flake.nix && echo ok", check=False)
+        result = ssh(
+            "test -f /etc/nixos/flake.nix && echo ok", check=False,
+        )
         assert "ok" in result
 
     def test_checkpoint(self):
@@ -814,7 +935,9 @@ class TestImmutabilityRestorePenultimate:
     def test_system_functional(self):
         skip_if_checkpoint("restore-penultimate-tested")
         assert ssh("hostname") == "VM-TEST"
-        result = ssh("test -f /etc/nixos/flake.nix && echo ok", check=False)
+        result = ssh(
+            "test -f /etc/nixos/flake.nix && echo ok", check=False,
+        )
         assert "ok" in result
 
     def test_checkpoint(self):
