@@ -33,6 +33,7 @@ class TestRun:
             assert immutability.run(["echo", "hi"]) == 0
             m.assert_called_once_with(
                 ["echo", "hi"], capture_output=True, text=True,
+                check=False,
             )
 
     def test_failure(self):
@@ -76,7 +77,7 @@ class TestBtrfs:
             immutability.btrfs_sync("/mnt")
             m.assert_called_once_with(
                 ["btrfs", "filesystem", "sync", "/mnt"],
-                capture_output=True, text=True,
+                capture_output=True, text=True, check=False,
             )
 
     def test_delete_success(self):

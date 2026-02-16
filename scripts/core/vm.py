@@ -285,14 +285,14 @@ class VM:
             return False
 
     @classmethod
-    def wait_for_ssh(cls, timeout=180, interval=5):
+    def wait_for_ssh(cls, timeout=60, interval=3):
         elapsed = 0
         while elapsed < timeout:
             if cls.ssh_ready():
                 return True
             time.sleep(interval)
             elapsed += interval
-            if elapsed > 0 and elapsed % 30 == 0:
+            if elapsed > 0 and elapsed % 15 == 0:
                 cls.serial_bootstrap_ssh()
         raise TimeoutError(f"SSH not ready after {timeout}s")
 
@@ -414,15 +414,63 @@ class VM:
     def up(cls):
         cls.setup()
         cls.boot(from_iso=True)
-        time.sleep(30)
+        time.sleep(20)
         cls.serial_bootstrap_ssh()
-        cls.wait_for_ssh(timeout=120)
+        cls.wait_for_ssh()
+
+    CHECKPOINTS = [
+        "live-ssh", "installed", "booted",
+        "reset-tested", "perf-tested",
+        "snapshot-only-rebuilt", "snapshot-only-tested",
+        "disabled-rebuilt", "disabled-tested",
+        "restore-history-ready",
+        "restore-previous-rebuilt", "restore-previous-tested",
+        "restore-penultimate-rebuilt", "restore-penultimate-tested",
+    ]
 
     @classmethod
     def clean(cls):
+        """Delete disk + snapshots but keep ISO and SSH keys."""
+        cls.stop()
+        for name in [cls.disk_path(), cls.ovmf_path()]:
+            if os.path.exists(name):
+                os.remove(name)
+        for f in os.listdir(cls.DIR):
+            if f.startswith("OVMF_VARS.") and f.endswith(".fd"):
+                os.remove(os.path.join(cls.DIR, f))
+        boot = cls.boot_dir()
+        if os.path.exists(boot):
+            shutil.rmtree(boot)
+
+    @classmethod
+    def clean_all(cls):
+        """Delete everything including ISO."""
         cls.stop()
         if os.path.exists(cls.DIR):
             shutil.rmtree(cls.DIR)
+
+    @classmethod
+    def clean_iso(cls):
+        """Delete only the ISO (redownload on next run)."""
+        iso = cls.iso_path()
+        if os.path.exists(iso):
+            os.remove(iso)
+
+    @classmethod
+    def clean_from(cls, stage):
+        """Delete all snapshots at or after the given stage."""
+        cls.stop()
+        try:
+            idx = cls.CHECKPOINTS.index(stage)
+        except ValueError:
+            raise ValueError(
+                f"Unknown stage '{stage}'. "
+                f"Valid: {', '.join(cls.CHECKPOINTS)}"
+            ) from None
+        to_delete = cls.CHECKPOINTS[idx:]
+        for name in to_delete:
+            if cls.has_snapshot(name):
+                cls.delete_snapshot(name)
 
 
 def main():
@@ -430,8 +478,9 @@ def main():
     parser.add_argument(
         "command",
         choices=[
-            "setup", "up", "ssh", "stop", "clean", "status",
+            "setup", "up", "ssh", "stop", "status",
             "snapshot", "restore",
+            "clean", "clean-all", "clean-iso", "clean-from",
         ],
     )
     parser.add_argument("args", nargs="*")
@@ -455,6 +504,20 @@ def main():
             VM.stop()
         case "clean":
             VM.clean()
+            print("Deleted disk + snapshots (ISO kept)")
+        case "clean-all":
+            VM.clean_all()
+            print("Deleted everything")
+        case "clean-iso":
+            VM.clean_iso()
+            print("Deleted ISO")
+        case "clean-from":
+            if not args.args:
+                print("Usage: clean-from <stage>")
+                print(f"Stages: {', '.join(VM.CHECKPOINTS)}")
+                return
+            VM.clean_from(args.args[0])
+            print(f"Deleted snapshots from '{args.args[0]}' onward")
         case "status":
             iso = "yes" if os.path.exists(VM.iso_path()) else "no"
             disk = "yes" if os.path.exists(VM.disk_path()) else "no"
@@ -466,6 +529,13 @@ def main():
             print(f"Disk:    {disk}")
             print(f"SSH key: {key}")
             print(f"Running: {'yes' if running else 'no'}")
+            if os.path.exists(VM.disk_path()):
+                result = subprocess.run(
+                    ["qemu-img", "snapshot", "-l", VM.disk_path()],
+                    capture_output=True, text=True, check=False,
+                )
+                if result.stdout.strip():
+                    print(f"Snapshots:\n{result.stdout.strip()}")
 
 
 if __name__ == "__main__":

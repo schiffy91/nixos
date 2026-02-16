@@ -3,8 +3,8 @@ import sys
 import subprocess
 import threading
 
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
+sys.stdout = os.fdopen(sys.stdout.fileno(), "w", buffering=1, closefd=False)
+sys.stderr = os.fdopen(sys.stderr.fileno(), "w", buffering=1, closefd=False)
 
 _mount_point = "/mnt"
 
@@ -25,7 +25,7 @@ def run(cmd):
     display = cmd if isinstance(cmd, str) else " ".join(cmd)
     log(f"  {display}")
     args = cmd.split() if isinstance(cmd, str) else cmd
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, check=False)
     for line in result.stdout.splitlines():
         if line.strip():
             log(f"  {line}")
@@ -54,7 +54,7 @@ def btrfs_delete_recursively(path):
         return
     result = subprocess.run(
         ["btrfs", "subvolume", "list", "-o", path],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     for line in result.stdout.splitlines():
         parts = line.split()
@@ -104,7 +104,7 @@ def check_recovery_needed(snapshot):
 
 
 def create_sentinel(snapshot):
-    with open(f"{snapshot}/.boot-ready", "w"):
+    with open(f"{snapshot}/.boot-ready", "w", encoding="utf-8"):
         pass
 
 
@@ -116,7 +116,7 @@ def copy_persistent_files(previous, current, filter_file):
         abort("rsync failed to copy persistent files")
 
 
-def reset_subvolume(name, mount_point, snapshots_name, clean_name,
+def reset_subvolume(name, _mount_point_arg, snapshots_name, clean_name,
                     filter_file):
     subvolume = f"{_mount_point}/{name}"
     snapshots = f"{_mount_point}/{snapshots_name}/{name}"

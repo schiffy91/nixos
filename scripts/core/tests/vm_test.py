@@ -4,13 +4,13 @@
 E2E tests for the NixOS VM test harness.
 
 Uses QEMU snapshots as checkpoints so each phase can be skipped if the
-checkpoint already exists. Run with:
+checkpoint already exists.
 
-    pytest vm_test.py -v -s --tb=short
-
-To start fresh:
-
-    VM_CLEAN=1 pytest vm_test.py -v -s --tb=short
+    pytest vm_test.py -v -x -s          # normal run (reuse checkpoints)
+    VM_CLEAN=1 pytest ...               # delete disk+snapshots, keep ISO
+    VM_CLEAN_ALL=1 pytest ...           # delete everything including ISO
+    VM_CLEAN_ISO=1 pytest ...           # redownload ISO only
+    VM_FROM=booted pytest ...           # rerun from 'booted' checkpoint onward
 """
 import os
 import re
@@ -102,7 +102,7 @@ def boot_and_ssh(from_iso=False):
     if from_iso:
         time.sleep(20)
         VM.serial_bootstrap_ssh()
-    VM.wait_for_ssh(timeout=120)
+    VM.wait_for_ssh()
 
 
 def ssh(cmd, check=True, timeout=20):
@@ -120,7 +120,7 @@ def reboot_vm():
     time.sleep(5)
     VM.stop()
     VM.boot(from_iso=False)
-    VM.wait_for_ssh(timeout=120)
+    VM.wait_for_ssh()
 
 
 def change_mode_and_rebuild(mode):
@@ -227,8 +227,15 @@ def cleanup():
 
 @pytest.fixture(scope="session", autouse=True)
 def handle_clean():
-    if os.environ.get("VM_CLEAN"):
+    if os.environ.get("VM_CLEAN_ALL"):
+        VM.clean_all()
+    elif os.environ.get("VM_CLEAN"):
         VM.clean()
+    if os.environ.get("VM_CLEAN_ISO"):
+        VM.clean_iso()
+    vm_from = os.environ.get("VM_FROM")
+    if vm_from:
+        VM.clean_from(vm_from)
 
 
 # --- Phase 1: Setup (download ISO, create disk, extract boot) ---
@@ -279,7 +286,7 @@ class TestLiveBoot:
 
     def test_ssh_ready(self):
         skip_if_checkpoint("live-ssh")
-        VM.wait_for_ssh(timeout=120)
+        VM.wait_for_ssh()
 
     def test_ssh_works(self):
         skip_if_checkpoint("live-ssh")
@@ -304,7 +311,7 @@ class TestInstall:
         ssh_opts = " ".join(shlex.quote(o) for o in VM.ssh_opts())
         subprocess.run(
             f"tar czf - --exclude=.vm --exclude=secrets --exclude=.git "
-            f"--exclude='._*' --no-mac-metadata "
+            f"--exclude='._*' "
             f"-C {shlex.quote(parent)} {shlex.quote(name)} | "
             f"ssh -p {VM.SSH_PORT} {ssh_opts}"
             f" root@localhost 'mkdir -p /etc && tar xzf - -C /etc'",
@@ -332,6 +339,9 @@ class TestInstall:
             '  settings.desktop.environment = "none";\\n'
             '}\\n'
         )
+        # Remove other arch hosts to avoid cross-compilation failures
+        other = "aarch64" if ARCH == "x86_64" else "x86_64"
+        ssh(f"rm -rf /etc/nixos/modules/hosts/{other}")
         ssh(f"mkdir -p /etc/nixos/modules/hosts/{ARCH}")
         ssh(f"printf '{vm_test_nix}' > "
             f"/etc/nixos/modules/hosts/{ARCH}/VM-TEST.nix")
@@ -393,7 +403,7 @@ class TestBootInstalled:
     def test_boot_from_disk(self):
         skip_if_checkpoint("booted")
         VM.boot(from_iso=False)
-        VM.wait_for_ssh(timeout=120)
+        VM.wait_for_ssh()
 
     def test_hostname(self):
         if VM.has_snapshot("booted"):
