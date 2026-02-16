@@ -5,6 +5,7 @@
   settings.disk.device = "/dev/vda";
   settings.disk.encryption.enable = true;
   settings.disk.swap.enable = true;
+  settings.disk.swap.size = "17G";
   settings.disk.immutability.enable = true;
   ##### Qemu #####
   services.qemuGuest.enable = true;
