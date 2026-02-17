@@ -10,8 +10,10 @@ let
       cp $src/wineasio32.dll $src/wineasio32.dll.so $out/
     '';
   };
-  gameDir = "${config.home.homeDirectory}/.local/share/Steam/steamapps/common/Rocksmith2014";
-  prefixDir = "${config.home.homeDirectory}/.local/share/Steam/steamapps/compatdata/221680/pfx";
+  steamDir = "${config.home.homeDirectory}/.local/share/Steam/steamapps";
+  gameDir = "${steamDir}/common/Rocksmith2014";
+  protonDir = "${steamDir}/common/Proton - Experimental/files";
+  prefixDir = "${steamDir}/compatdata/221680/pfx";
 in {
   home.activation.rocksmith = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     if [ -d "${gameDir}" ]; then
@@ -22,11 +24,12 @@ in {
       cp -f ${rocksmithMods}/xinput1_3.dll "${gameDir}/"
       cp -f ${rocksmithMods}/RSMods.ini "${gameDir}/"
 
-      # Deploy wineasio to Proton prefix
+      # Deploy wineasio into Proton (Proton 10.x uses .so naming, not .dll.so)
+      if [ -d "${protonDir}" ]; then
+        cp -f ${rocksmithMods}/wineasio32.dll.so "${protonDir}/lib/wine/i386-unix/wineasio32.so"
+      fi
       if [ -d "${prefixDir}" ]; then
         cp -f ${rocksmithMods}/wineasio32.dll "${prefixDir}/drive_c/windows/syswow64/"
-        mkdir -p "${config.home.homeDirectory}/.local/lib/wine/i386-unix"
-        cp -f ${rocksmithMods}/wineasio32.dll.so "${config.home.homeDirectory}/.local/lib/wine/i386-unix/"
 
         # Register wineasio in Wine registry
         if ! grep -q "WineASIO" "${prefixDir}/system.reg" 2>/dev/null; then

@@ -132,16 +132,19 @@
     enable = true;
     extraPackages = with pkgs; [ kdePackages.breeze ];
     package = pkgs.steam.override {
-      extraProfile = ''
-        export WINEDLLPATH="/home/${config.settings.user.admin.username}/.local/lib/wine/i386-unix"
-      '';
+      extraLibraries = pkgs': with pkgs'; [ pipewire.jack ];
     };
   };
   settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
   ##### Thunderbolt #####
   services.hardware.bolt.enable = true;
-  ##### Quad Cortex (implicit feedback — capture needs playback active) #####
+  ##### Rocksmith / Quad Cortex #####
+  users.users.${config.settings.user.admin.username}.extraGroups = [ "audio" "rtkit" ];
+  security.pam.loginLimits = [
+    { domain = "@audio"; item = "memlock"; type = "-"; value = "unlimited"; }
+    { domain = "@audio"; item = "rtprio"; type = "-"; value = "99"; }
+  ];
   services.pipewire.wireplumber.extraConfig."51-quad-cortex"."monitor.alsa.rules" = [
     {
       matches = [{ "node.name" = "~alsa_.*Neural_DSP_Quad_Cortex.*"; }];
