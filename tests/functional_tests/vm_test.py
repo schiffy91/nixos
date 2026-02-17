@@ -550,21 +550,18 @@ class TestImmutabilityPerformance:
         """Filter files should come from nix store, not built at runtime."""
         skip_if_checkpoint("perf-tested")
         log = immutability_log()
-        assert "precomputed filter" in log.lower(), (
-            f"Expected 'precomputed filter' in log:\n{log}"
+        assert "persistent paths" in log.lower(), (
+            f"Expected 'persistent paths' in log:\n{log}"
         )
 
     def test_line_buffered_timestamps(self):
-        """With line buffering, log timestamps should not be batched."""
+        """Output should contain embedded timestamps from the binary."""
         skip_if_checkpoint("perf-tested")
         log = immutability_log()
-        timestamps = re.findall(
-            r"^(\w+ \d+ [\d:]+)", log, re.MULTILINE,
-        )
-        unique = set(timestamps)
-        assert len(unique) >= 2, (
-            f"Expected multiple distinct timestamps, got {len(unique)}: "
-            f"{unique}"
+        timestamps = re.findall(r"\[\d+\.\d+s\]", log)
+        assert len(timestamps) >= 2, (
+            f"Expected multiple embedded timestamps, got {len(timestamps)}: "
+            f"{log}"
         )
 
     def test_batched_sync(self):

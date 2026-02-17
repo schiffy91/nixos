@@ -6,31 +6,45 @@ let
 	cleanName = config.settings.disk.immutability.persist.snapshots.cleanName;
 	mode = config.settings.disk.immutability.mode;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
-	resetVolumes = lib.filter (v: v.resetOnBoot) config.settings.disk.subvolumes.volumes;
+	allVolumes = config.settings.disk.subvolumes.volumes;
+	resetVolumes = lib.filter (volume: volume.resetOnBoot) allVolumes;
 
-	# Build a precomputed rsync filter file per subvolume mount point
 	filterForVolume = volume: let
-		mp = volume.mountPoint;
-		relevant = builtins.filter (path:
-			if mp == "/" then true
-			else path == mp || lib.hasPrefix (mp + "/") path
+		mountPoint = volume.mountPoint;
+		otherMounts = lib.filter (other: other.mountPoint != mountPoint && other.mountPoint != "/") allVolumes;
+		relevantPaths = builtins.filter (path:
+			if mountPoint == "/" then
+				!(builtins.any (other: path == other.mountPoint || lib.hasPrefix (other.mountPoint + "/") path) otherMounts)
+			else path == mountPoint || lib.hasPrefix (mountPoint + "/") path
 		) pathsToKeep;
 		toRelative = path:
-			if mp == "/" then lib.removePrefix "/" path
-			else let stripped = lib.removePrefix (mp + "/") path;
-			in if path == mp then "" else stripped;
-		relatives = builtins.filter (r: r != "") (map toRelative relevant);
-		lines = [ "+ */" ]
-			++ (lib.concatMap (rel: [ "+ /${rel}" "+ /${rel}/" "+ /${rel}/**" ]) relatives)
+			if mountPoint == "/" then lib.removePrefix "/" path
+			else let stripped = lib.removePrefix (mountPoint + "/") path;
+			in if path == mountPoint then "" else stripped;
+		relativePaths = builtins.filter (path: path != "") (map toRelative relevantPaths);
+		ancestorsOf = path: let
+			parts = lib.splitString "/" path;
+			parentParts = lib.init parts;
+			indices = lib.range 0 (builtins.length parentParts - 1);
+		in map (i: lib.concatStringsSep "/" (lib.take (i + 1) parentParts)) indices;
+		allAncestors = lib.unique (lib.concatMap ancestorsOf relativePaths);
+		filterLines = (map (ancestor: "+ /${ancestor}/") allAncestors)
+			++ (lib.concatMap (path: [ "+ /${path}" "+ /${path}/" "+ /${path}/**" ]) relativePaths)
 			++ [ "- *" ];
-	in pkgs.writeText "immutability-filter-${volume.name}" (lib.concatStringsSep "\n" lines + "\n");
+	in pkgs.writeText "immutability-filter-${volume.name}" (lib.concatStringsSep "\n" filterLines + "\n");
 
-	# name=mount:filter for each volume
 	pairArgs = lib.concatMapStringsSep " " (volume:
 		"${volume.name}=${volume.mountPoint}:${filterForVolume volume}"
 	) resetVolumes;
 
-	immutabilityScript = ../../lib/immutability.py;
+	immutabilityBin = pkgs.stdenv.mkDerivation {
+		name = "immutability";
+		src = ../../lib/immutability.rs;
+		dontUnpack = true;
+		nativeBuildInputs = [ pkgs.rustc ];
+		buildPhase = "rustc --edition 2021 -O -o immutability $src";
+		installPhase = "mkdir -p $out/bin && cp immutability $out/bin/";
+	};
 
 in
 lib.mkIf config.settings.disk.immutability.enable {
@@ -42,13 +56,13 @@ lib.mkIf config.settings.disk.immutability.enable {
 		systemd = {
 			storePaths = let
 				filterFiles = map filterForVolume resetVolumes;
-			in [ "${pkgs.python3}" "${immutabilityScript}" ] ++ filterFiles;
+			in [ "${immutabilityBin}" ] ++ filterFiles;
 			extraBin = {
 				btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
-				rsync = "${pkgs.rsync}/bin/rsync";
+				cp = "${pkgs.coreutils}/bin/cp";
 			};
 			services.immutability = {
-				description = "Factory resets BTRFS subvolumes via compiled Python";
+				description = "Factory resets BTRFS subvolumes";
 				wantedBy = [ "initrd.target" ];
 				requires = [ deviceDependency ];
 				after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
@@ -56,7 +70,7 @@ lib.mkIf config.settings.disk.immutability.enable {
 				unitConfig.DefaultDependencies = "no";
 				serviceConfig.Type = "oneshot";
 				script = ''
-					${pkgs.python3}/bin/python3 -S ${immutabilityScript} ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pairArgs}
+					${immutabilityBin}/bin/immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pairArgs}
 				'';
 			};
 		};

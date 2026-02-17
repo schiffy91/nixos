@@ -35,7 +35,7 @@ Declarative, reproducible NixOS system management with BTRFS immutability, LUKS 
       vscode.nix         # VS Code extensions and settings
       virt.nix           # Virtualization (libvirtd, QEMU)
   bin/                   # Executable CLI tools (nix-shell shebangs)
-  lib/                   # Python library modules
+  lib/                   # Python library modules + Rust binary sources
   tests/                 # Unit, integration, and functional tests
   .vm/                   # QEMU VM test environment (gitignored)
   secrets/               # Encrypted secrets (gitignored)
@@ -58,13 +58,13 @@ Usage: `nixos-rebuild switch --flake /etc/nixos#HOSTNAME-TARGET`
 When `settings.disk.immutability.enable = true`, the system factory-resets designated BTRFS subvolumes (`@root`, `@home`) on every boot via an initrd systemd service.
 
 **How it works:**
-1. At build time, an rsync filter file is precomputed from `settings.disk.immutability.persist.paths`
-2. At boot (initrd), the service mounts the BTRFS root and snapshots subvolume
+1. At build time, a filter file of persistent paths is precomputed from `settings.disk.immutability.persist.paths`
+2. At boot (initrd), a Rust binary (`lib/immutability.rs`) mounts the BTRFS root and snapshots subvolume
 3. Current subvolume state is saved to `PREVIOUS` snapshot
-4. A fresh copy of the `CLEAN` snapshot is created as `CURRENT`
-5. Persistent paths are rsynced from `PREVIOUS` into `CURRENT`
-6. A `.boot-ready` sentinel is written for crash recovery
-7. `CURRENT` replaces the live subvolume
+4. `PREVIOUS` is snapshotted to `CURRENT`, then non-persistent entries are replaced with `CLEAN` versions via btrfs reflink (`cp --reflink=always`)
+5. A `.boot-ready` sentinel is written for crash recovery
+6. `CURRENT` replaces the live subvolume
+7. Subvolumes are processed in parallel threads
 
 Persistent paths include `/etc/nixos`, `/etc/ssh`, `/var/lib/nixos`, user config directories, and application data.
 
@@ -80,6 +80,7 @@ Persistent paths include `/etc/nixos`, `/etc/ssh`, `/var/lib/nixos`, user config
 | `interactive.py` | User prompts: confirm, host selection, password, reboot |
 | `snapshot.py` | BTRFS snapshot management for immutability setup |
 | `vm.py` | QEMU VM test harness with serial console and snapshot support |
+| `immutability.rs` | Rust binary for initrd boot-time BTRFS subvolume reset via reflink merge |
 
 The `@chrootable` decorator adds a `chroot(sh)` context manager to classes, allowing them to transparently operate inside a mounted NixOS installation (used during `install.py`).
 
