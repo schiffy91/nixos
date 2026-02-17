@@ -1,166 +1,105 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import argparse, difflib, fnmatch, hashlib, sys
+import sys, argparse, fnmatch, os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import Utils, Snapshot, Shell, Config
 
 sh = Shell(root_required=True)
 
-def get_tmp_snapshot_path(subvolume_name):
-    return f"{Snapshot.get_snapshots_path()}/{subvolume_name}/tmp"
-
-def get_paths_to_keep():
+def get_keep_paths():
     raw = str(Config.eval("config.settings.disk.immutability.persist.paths"))
     return raw.replace("[", "").replace("]", "").strip().split(" ")
 
-def delete_tmp_snapshot(subvolume_name):
-    tmp = get_tmp_snapshot_path(subvolume_name)
-    if sh.exists(tmp): sh.run(f"btrfs subvolume delete -C {tmp}")
-
-def create_tmp_snapshot(subvolume_name, subvolume_mount_point):
-    tmp = get_tmp_snapshot_path(subvolume_name)
-    delete_tmp_snapshot(subvolume_name)
-    sh.run(f"btrfs subvolume snapshot -r {subvolume_mount_point} {tmp}")
-    return tmp
-
-def sha256sum(file_path):
-    file_hash = "N/A"
-    if not sh.exists(file_path) or sh.is_dir(file_path) or sh.is_symlink(file_path):
-        return file_hash
-    try:
-        contents = sh.file_read(file_path)
-        return hashlib.sha256(contents.encode()).hexdigest()
-    except (OSError, PermissionError, UnicodeDecodeError):
-        return file_hash
-
-def diff_subvolume(subvolume_name, subvolume_mount_point):
-    tmp = create_tmp_snapshot(subvolume_name, subvolume_mount_point)
-    clean = Snapshot.get_clean_snapshot_path(subvolume_name)
-    txid = Shell.stdout(sh.run(
-        f'echo "$(sudo btrfs subvolume find-new "{clean}" 9999999)" '
-        f"| cut -d' ' -f4", capture_output=True, check=True))
-    output = Shell.stdout(sh.run(
-        f'btrfs subvolume find-new "{tmp}" {txid} '
-        f"| sed '$d' | cut -f17- -d' ' | sort | uniq",
-        capture_output=True, check=True))
-    delete_tmp_snapshot(subvolume_name)
-    paths = [f"{subvolume_mount_point}/{p}".replace("//", "/")
-             for p in output.split("\n")]
-    return set(paths)
-
-_mount_cache = {}
-
-def get_mount_cache():
-    if _mount_cache: return _mount_cache
+def get_changed_files():
+    changed = set()
     for name, mount in Snapshot.get_subvolumes_to_reset_on_boot():
-        _mount_cache[mount] = Snapshot.get_clean_snapshot_path(name)
-    return _mount_cache
+        snapshots = Snapshot.get_snapshots_path()
+        tmp = f"{snapshots}/{name}/tmp"
+        clean = Snapshot.get_clean_snapshot_path(name)
+        if sh.exists(tmp): sh.run(f"btrfs subvolume delete -C {tmp}")
+        sh.run(f"btrfs subvolume snapshot -r {mount} {tmp}")
+        transaction_id = Shell.stdout(sh.run(
+            f'echo "$(sudo btrfs subvolume find-new "{clean}" 9999999)" '
+            f"| cut -d' ' -f4"))
+        output = Shell.stdout(sh.run(
+            f'btrfs subvolume find-new "{tmp}" {transaction_id} '
+            f"| sed '$d' | cut -f17- -d' ' | sort | uniq"))
+        sh.run(f"btrfs subvolume delete -C {tmp}")
+        for path in output.split("\n"):
+            if path.strip(): changed.add(f"{mount}/{path}".replace("//", "/"))
+    return changed
 
-def diff_file(file_path):
-    if not sh.exists(file_path): return "N/A (DOES NOT EXIST)"
-    if sh.is_dir(file_path): return "N/A (DIRECTORY)"
-    if sh.is_symlink(file_path): return "N/A (LINK)"
-    previous_file_path = ""
-    match = ""
-    for mount, clean in get_mount_cache().items():
-        if file_path.startswith(mount) and len(match) < len(mount):
-            previous_file_path = (
-                f"{clean}/{file_path.replace(clean, '')}").replace("//", "/")
-            match = mount
-    if not previous_file_path:
-        try: return sh.file_read(file_path)
-        except (OSError, PermissionError): return "N/A (NEW BINARY FILE)"
-    try:
-        current = sh.file_read(file_path).strip().splitlines()
-        previous = sh.file_read(previous_file_path).strip().splitlines()
-        return "\n".join(difflib.unified_diff(
-            previous, current,
-            fromfile=previous_file_path, tofile=file_path, lineterm=""))
-    except (OSError, PermissionError, UnicodeDecodeError):
-        return "N/A (EXISTING BINARY FILE)"
+def top_ancestor(path, keep_paths, mount_points):
+    segments = path.split("/")
+    for depth in range(1, len(segments) + 1):
+        ancestor = "/".join(segments[:depth]) or "/"
+        if ancestor in mount_points: continue
+        if any(keep.startswith(ancestor + "/") for keep in keep_paths): continue
+        return ancestor
+    return path
 
-def diff_files(file_paths):
-    diffs = {}
-    for i, f in enumerate(file_paths):
-        Utils.print_inline(
-            f"Progress: {(i + 1) / float(len(file_paths)) * 100:.2f}%")
-        diffs[f] = diff_file(f)
-    return diffs
+def collapse(ephemeral, keep_paths, mount_points):
+    return sorted(set(
+        top_ancestor(path, keep_paths, mount_points) for path in ephemeral))
 
-def get_diffs(previous_run, diffignore):
-    paths_to_keep = get_paths_to_keep()
-    diffs = set()
-    for name, mount in Snapshot.get_subvolumes_to_reset_on_boot():
-        diffs.update(diff_subvolume(name, mount))
-    diffs = sorted(diffs)
-    to_delete, to_keep, to_diffignore = set(), set(), set()
-    hashed, recent_hashed = {}, {}
-    for i, d in enumerate(diffs):
-        Utils.print_inline(
-            f"Progress: {(i + 1) / float(len(diffs)) * 100:.2f}%")
-        if any(d.startswith(p) for p in paths_to_keep):
-            to_keep.add(d)
-        else:
-            to_delete.add(d)
-            h = sha256sum(d)
-            hashed[d] = h
-            if any(fnmatch.fnmatch(d, pat) for pat in diffignore):
-                to_diffignore.add(d)
-            if previous_run is None: continue
-            if h != previous_run.get(d, ""): recent_hashed[d] = h
-    return (sorted(to_delete), sorted(to_keep),
-            hashed, recent_hashed, sorted(to_diffignore))
+def at_depth(bases, ephemeral, depth):
+    if depth == 0: return list(bases)
+    result = set()
+    for base in bases:
+        prefix = base + "/"
+        for path in ephemeral:
+            if not path.startswith(prefix): continue
+            if depth is None: result.add(path)
+            else: result.add("/".join(path.split("/")[:base.count("/") + 1 + depth]))
+    return sorted(result)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--recent", action="store_true")
-    parser.add_argument("--show-changes-to-keep", action="store_true")
-    parser.add_argument("--show-paths-to-keep", action="store_true")
-    parser.add_argument("--deltas", nargs="*", metavar="FILE", default=None)
+    parser.add_argument("--show-symlinks", action="store_true")
+    parser.add_argument("--show-children", type=str, metavar="PATH")
+    parser.add_argument("--depth", type=int, default=None)
+    parser.add_argument("--pattern", type=str, metavar="GLOB")
     parser.add_argument("--diffignore", type=str, metavar="FILE")
-    parser.add_argument("--dirname", action="store_true")
     args = parser.parse_args()
-    diff_json = "/tmp/etc/nixos/bin/diff/diff.json"
-    ignore_path = (args.diffignore if args.diffignore
-                   else "/etc/nixos/bin/.diffignore")
-    previous_run = sh.json_read(diff_json) if args.recent else None
+    cache_path = "/tmp/etc/nixos/bin/diff/cache.json"
+    ignore_path = args.diffignore or "/etc/nixos/bin/.diffignore"
     diffignore = (sh.file_read(ignore_path).split("\n")
                   if sh.exists(ignore_path) else [])
-    to_delete, to_keep, hashed, recent_hashed, to_diffignore = get_diffs(
-        previous_run, diffignore)
+    keep_paths = get_keep_paths()
+    mount_points = {mount for _, mount in Snapshot.get_subvolumes_to_reset_on_boot()}
+    changed = get_changed_files()
+    ephemeral = set()
+    for path in changed:
+        if any(path == keep or path.startswith(keep + "/")
+               for keep in keep_paths): continue
+        if any(fnmatch.fnmatch(path, pattern)
+               for pattern in diffignore): continue
+        ephemeral.add(path)
+    top_changes = collapse(ephemeral, keep_paths, mount_points)
+    previous = sh.json_read(cache_path)
+    sh.json_overwrite(cache_path, {path: True for path in top_changes})
+    output = list(top_changes)
     if args.recent:
-        to_print = sorted(set(recent_hashed.keys()).difference(to_diffignore))
+        output = [path for path in output if path not in previous]
+    if not args.show_symlinks:
+        output = [path for path in output if not os.path.islink(path)]
+    if args.pattern:
+        output = [path for path in output
+                  if fnmatch.fnmatch(path.lower(), args.pattern.lower())]
+    if args.show_children:
+        target = args.show_children
+        covers = any(path == target or target.startswith(path + "/")
+                     or path.startswith(target + "/") for path in output)
+        output = [target] if covers else []
+        depth = args.depth
     else:
-        to_print = sorted(set(to_delete).difference(to_diffignore))
-    deltas = {}
-    if args.deltas is not None:
-        if args.deltas: deltas = diff_files(args.deltas)
-        else: deltas = diff_files(to_print)
-    if args.dirname:
-        to_print = sorted(set(sh.dirname(d) for d in to_print))
-    if to_delete:
-        sh.json_overwrite(diff_json, hashed)
-        if to_print:
-            Utils.print_error("\nCHANGES TO DELETE:")
-            Utils.print_error("\n".join(sorted(to_print)))
-    else:
-        sh.rm(diff_json)
-    if args.show_changes_to_keep:
-        Utils.print("\nCHANGES TO IGNORE:")
-        Utils.print("\n".join(sorted(to_keep)))
-    if args.show_paths_to_keep:
-        Utils.print("\nPATHS TO KEEP:")
-        for p in get_paths_to_keep(): Utils.print(p)
-    if deltas:
-        Utils.print("\nDELTAS:")
-        failures = set()
-        for path, d in deltas.items():
-            output = f"\n{path}\n{d}"
-            if d.startswith("N/A") or not d.strip(): failures.add(output)
-            else: print(output)
-        Utils.print("\nN/A:")
-        for output in sorted(failures): print(output)
+        depth = args.depth or 0
+    output = at_depth(output, ephemeral, depth)
+    if output:
+        Utils.print_error("\nCHANGES TO DELETE:")
+        for path in output: Utils.print_error(path)
 
 if __name__ == "__main__":
     main()

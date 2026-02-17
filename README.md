@@ -149,7 +149,7 @@ VM tests validate: installation, boot, immutability modes (reset, snapshot-only,
 ## Hardware: FRACTAL-NORTH
 
 - **CPU**: AMD (with iGPU for display output via Thunderbolt 4)
-- **GPU**: NVIDIA RTX 4090 (PCIe, rendering via PRIME Sync)
+- **GPU**: NVIDIA RTX 4090 (PCIe, rendering via PRIME Offload)
 - **Disk**: NVMe with LUKS encryption, BTRFS, 6 subvolumes
 - **Boot**: Secure Boot via lanzaboote, TPM2 auto-unlock
 - **Features**: VFIO GPU passthrough, Sunshine streaming, Mullvad VPN, libvirtd/QEMU
