@@ -4,7 +4,7 @@
 import subprocess, sys, struct, signal, re, math
 
 def get_capture_devices():
-    result = subprocess.run(['arecord', '-l'], capture_output=True, text=True)
+    result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, check=False)
     devices = []
     for line in result.stdout.splitlines():
         m = re.match(r'card (\d+): \S+ \[(.+?)\], device (\d+):', line)
@@ -15,9 +15,9 @@ def probe_format(card, dev):
     for channels in [8, 2, 1]:
         for fmt in ['S32_LE', 'S16_LE', 'S24_LE']:
             try:
-                p = subprocess.run(['arecord', '-D', f'hw:{card},{dev}', '-f', fmt, '-r', '48000', '-c', str(channels), '-d', '1', '/dev/null'], capture_output=True, text=True, timeout=5)
+                p = subprocess.run(['arecord', '-D', f'hw:{card},{dev}', '-f', fmt, '-r', '48000', '-c', str(channels), '-d', '1', '/dev/null'], capture_output=True, text=True, timeout=5, check=False)
                 if p.returncode == 0: return fmt, channels
-            except: pass
+            except (subprocess.TimeoutExpired, OSError): pass
     return None, None
 
 def monitor_device(card, dev, fmt, channels):
@@ -27,7 +27,7 @@ def monitor_device(card, dev, fmt, channels):
 
     w = 50
     print(f"\n  Monitoring hw:{card},{dev} ({fmt}, {channels}ch, 48kHz)")
-    print(f"  Strum your guitar! Ctrl+C to stop.\n")
+    print("  Strum your guitar! Ctrl+C to stop.\n")
     for _ in range(channels): print()
 
     try:
@@ -54,8 +54,8 @@ def monitor_device(card, dev, fmt, channels):
                 elif db > -40: c = '\033[92m'
                 elif db > -60: c = '\033[93m'
                 else: c = '\033[90m'
-                bar = c + '█' * fill + '\033[0m' + '░' * (w - fill)
-                print(f"  Ch{ch+1:d} [{bar}] {db:6.1f} dB")
+                meter = c + '█' * fill + '\033[0m' + '░' * (w - fill)
+                print(f"  Ch{ch+1:d} [{meter}] {db:6.1f} dB")
     except KeyboardInterrupt: pass
     finally:
         proc.kill()
