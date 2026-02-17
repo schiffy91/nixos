@@ -24,34 +24,15 @@ in {
       cp -f ${rocksmithMods}/xinput1_3.dll "${gameDir}/"
       cp -f ${rocksmithMods}/RSMods.ini "${gameDir}/"
 
-      # Deploy wineasio into Proton (Proton 10.x uses .so naming, not .dll.so)
-      if [ -d "${protonDir}" ]; then
-        cp -f ${rocksmithMods}/wineasio32.dll.so "${protonDir}/lib/wine/i386-unix/wineasio32.so"
+      # Deploy wineasio as builtin Wine DLL (into Proton's own lib dirs)
+      if [ -d "${protonDir}/lib/wine" ]; then
+        cp -f ${rocksmithMods}/wineasio32.dll "${protonDir}/lib/wine/i386-windows/"
+        cp -f ${rocksmithMods}/wineasio32.dll.so "${protonDir}/lib/wine/i386-unix/wineasio32.dll.so"
       fi
-      if [ -d "${prefixDir}" ]; then
-        cp -f ${rocksmithMods}/wineasio32.dll "${prefixDir}/drive_c/windows/syswow64/"
 
-        # Register wineasio in Wine registry
-        if ! grep -q "WineASIO" "${prefixDir}/system.reg" 2>/dev/null; then
-          cat >> "${prefixDir}/system.reg" << 'REGEOF'
-
-[Software\\ASIO\\WineASIO]
-"CLSID"="{48D0C522-BFCC-45CC-8B84-17F25F33E6E8}"
-"Description"="WineASIO Driver"
-
-[Software\\Classes\\CLSID\\{48D0C522-BFCC-45CC-8B84-17F25F33E6E8}]
-@="WineASIO Object"
-
-[Software\\Classes\\CLSID\\{48D0C522-BFCC-45CC-8B84-17F25F33E6E8}\\InprocServer32]
-@="wineasio32.dll"
-"ThreadingModel"="Apartment"
-REGEOF
-        fi
-
-        # Set DLL override for wineasio32
-        if ! grep -q "wineasio32" "${prefixDir}/user.reg" 2>/dev/null; then
-          sed -i '/\[Software\\\\Wine\\\\DllOverrides\]/a "wineasio32"="native"' "${prefixDir}/user.reg" 2>/dev/null || true
-        fi
+      # Remove stale "native" override that prevents builtin loading
+      if [ -f "${prefixDir}/user.reg" ]; then
+        sed -i '/"wineasio32"="native"/d' "${prefixDir}/user.reg" 2>/dev/null || true
       fi
 
       # Configure Rocksmith.ini

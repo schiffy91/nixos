@@ -140,14 +140,29 @@
   ##### Thunderbolt #####
   services.hardware.bolt.enable = true;
   ##### Rocksmith / Quad Cortex #####
-  users.users.${config.settings.user.admin.username}.extraGroups = [ "audio" "rtkit" ];
+  services.pipewire.extraConfig.pipewire."10-low-latency" = {
+    "context.properties" = {
+      "default.clock.min-quantum" = 64;
+      "default.clock.rate" = 48000;
+      "default.clock.allowed-rates" = [ 48000 ];
+    };
+  };
+  users.users.${config.settings.user.admin.username}.extraGroups = [ "audio" "rtkit" "pipewire" ];
   security.pam.loginLimits = [
     { domain = "@audio"; item = "memlock"; type = "-"; value = "unlimited"; }
     { domain = "@audio"; item = "rtprio"; type = "-"; value = "99"; }
   ];
   services.pipewire.wireplumber.extraConfig."51-quad-cortex"."monitor.alsa.rules" = [
     {
-      matches = [{ "node.name" = "~alsa_.*Neural_DSP_Quad_Cortex.*"; }];
+      matches = [{ "node.name" = "~alsa_input.*Neural_DSP_Quad_Cortex.*"; }];
+      actions.update-props = {
+        "session.suspend-timeout-seconds" = 0;
+        "priority.session" = 2500;
+        "priority.driver" = 2500;
+      };
+    }
+    {
+      matches = [{ "node.name" = "~alsa_output.*Neural_DSP_Quad_Cortex.*"; }];
       actions.update-props."session.suspend-timeout-seconds" = 0;
     }
   ];
