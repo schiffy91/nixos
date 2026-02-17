@@ -32,11 +32,10 @@
     nvidiaSettings = true;
     powerManagement.enable = true;
     prime = {
-      sync.enable = true;           # Prime Sync: RTX 4090 renders, AMD iGPU outputs to TB4 display
-      amdgpuBusId = "PCI:107:0:0";  # AMD iGPU at 6b:00.0 (hex 6b = 107 dec) - connected to display
-      nvidiaBusId = "PCI:1:0:0";    # RTX 4090 at 01:00.0 - PCIe only, does all rendering
+      sync.enable = true;           # X11 only: RTX 4090 renders, AMD iGPU outputs to TB4 display
+      amdgpuBusId = "PCI:107:0:0";  # AMD iGPU at 6b:00.0 (hex 6b = 107 dec)
+      nvidiaBusId = "PCI:1:0:0";    # RTX 4090 at 01:00.0
     };
-    forceFullCompositionPipeline = true;
   };
   hardware.graphics.extraPackages = with pkgs; [
     nvidia-vaapi-driver
@@ -56,8 +55,8 @@
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     LIBVA_DRIVER_NAME = "nvidia";
     VDPAU_DRIVER = "nvidia";
-    DRI_PRIME = "1";
     ENABLE_VULKAN = "1";
+    KWIN_DRM_DEVICES = "/dev/dri/by-path/pci-0000:01:00.0-card:/dev/dri/by-path/pci-0000:6b:00.0-card"; # Wayland: NVIDIA renders, AMD scans out
   };
   ##### Virtualization #####
   services.qemuGuest.enable = true;

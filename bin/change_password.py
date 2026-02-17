@@ -23,7 +23,7 @@ def change_luks_password(old_password, new_password):
     result = sh.run(
         f"printf '%s\\n%s' {shlex.quote(old_password)} {shlex.quote(new_password)}"
         f" | cryptsetup luksChangeKey {root}",
-        sensitive=old_password, check=False)
+        sensitive=[old_password, new_password], check=False)
     if result.returncode != 0:
         Utils.abort("Failed to change LUKS password.")
 

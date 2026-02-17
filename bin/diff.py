@@ -31,7 +31,7 @@ def sha256sum(file_path):
     try:
         contents = sh.file_read(file_path)
         return hashlib.sha256(contents.encode()).hexdigest()
-    except (OSError, PermissionError):
+    except (OSError, PermissionError, UnicodeDecodeError):
         return file_hash
 
 def diff_subvolume(subvolume_name, subvolume_mount_point):

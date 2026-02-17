@@ -14,11 +14,6 @@
     environment = {
       sessionVariables = {
         NIXOS_OZONE_WL = "1"; # https://nixos.wiki/wiki/Wayland
-        # NVIDIA-specific Wayland variables
-        GBM_BACKEND = "nvidia-drm";
-        __GLX_VENDOR_LIBRARY_NAME = "nvidia";
-        # Enable NVIDIA Wayland support
-        WLR_NO_HARDWARE_CURSORS = "1";  # May be needed for cursor issues
       };
       systemPackages = with pkgs; [
         wl-clipboard

@@ -1,10 +1,15 @@
-import contextlib, json, subprocess, sys
+import contextlib
+import json
+import subprocess
+import sys
+
 
 class Shell:
     evals = {}
     def __init__(self, root_required=False):
         self.chroots = []
-        if root_required: self.require_root()
+        if root_required:
+            self.require_root()
     @classmethod
     def stdout(cls, completed_process):
         return completed_process.stdout.strip()
@@ -31,22 +36,22 @@ class Shell:
             for cls, old_sh in previous_shells.items():
                 cls.sh = old_sh
             self.chroots.pop()
+    def redact(self, text, sensitive):
+        if not sensitive: return text
+        for secret in (sensitive if isinstance(sensitive, list) else [sensitive]):
+            text = text.replace(secret, "***")
+        return text
     def run(self, cmd, env="", sudo=True, capture_output=True, check=True, sensitive=None):
         if self.chroots:
             cmd = f'nixos-enter --root {self.chroots[-1]} --command "{cmd}"'
         if sudo: cmd = f"{env} sudo {cmd}".strip()
         else: cmd = f"{env} {cmd}".strip()
-        log_msg = cmd.replace(sensitive, "***") if sensitive else cmd
-        print(f"\033[90mLOG: {log_msg}\033[0m")
+        print(f"\033[90mLOG: {self.redact(cmd, sensitive)}\033[0m")
         try:
             return subprocess.run(cmd, shell=True, check=check, capture_output=capture_output, text=True)
         except subprocess.CalledProcessError as e:
-            if e.stdout:
-                out = e.stdout.replace(sensitive, "***") if sensitive else e.stdout
-                print(f"\033[90mLOG: {out}\033[0m")
-            if e.stderr:
-                err = e.stderr.replace(sensitive, "***") if sensitive else e.stderr
-                print(f"\033[38;5;208mERROR: {err}\033[0m", file=sys.stderr)
+            if e.stdout: print(f"\033[90mLOG: {self.redact(e.stdout, sensitive)}\033[0m")
+            if e.stderr: print(f"\033[38;5;208mERROR: {self.redact(e.stderr, sensitive)}\033[0m", file=sys.stderr)
             raise
     # File System
     def mv(self, original, final):
@@ -64,7 +69,8 @@ class Shell:
         def format_patterns(prefix, patterns):
             if not patterns: return ""
             if " " in patterns:
-                joined = " -o ".join(f"-path '{p}'" for p in patterns.strip().split())
+                joined = " -o ".join(
+                    f"-path '{p}'" for p in patterns.strip().split())
                 return f"{prefix} \\( {joined} \\)"
             return f"{prefix} -path '{patterns}'"
         type_arg = ""
@@ -112,7 +118,7 @@ class Shell:
         self.run(f"ssh-keygen -t {key_type} -N \"{password}\" -f '{path}'")
     # I/O
     def file_write(self, path, string, sensitive=None):
-        log_string = string.replace(sensitive, "***") if sensitive else string
+        log_string = self.redact(string, sensitive)
         print(f"\033[90mLOG: file_write {path} ({log_string})\033[0m")
         self.rm(path)
         self.mkdir(self.dirname(path))
@@ -139,18 +145,23 @@ class Shell:
         path = self.realpath(path)
         self.run(f"git config --global --add safe.directory '{path}'")
 
+
 chrootable_registry: list = []
+
 
 def chrootable(cls):
     if not hasattr(cls, "sh"):
-        raise TypeError(f"Class {cls.__name__} must have a 'sh' attribute to be chrootable.")
+        raise TypeError(
+            f"Class {cls.__name__} must have a 'sh' attribute to be chrootable.")
     chrootable_registry.append(cls)
     @classmethod
     @contextlib.contextmanager
     def chroot(cls, sh):
         previous = cls.sh
         cls.sh = sh
-        try: yield cls
-        finally: cls.sh = previous
+        try:
+            yield cls
+        finally:
+            cls.sh = previous
     cls.chroot = chroot
     return cls

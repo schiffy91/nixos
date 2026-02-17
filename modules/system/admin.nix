@@ -1,5 +1,6 @@
 { inputs, config, pkgs-unstable, lib, ... }: {
   ##### Security #####
+  users.mutableUsers = false;
   users.users.${config.settings.user.admin.username} = {
     isNormalUser = true;
     extraGroups = [ "wheel" "libvirtd" "networkmanager" ];
