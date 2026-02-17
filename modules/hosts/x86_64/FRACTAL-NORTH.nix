@@ -32,9 +32,10 @@
     nvidiaSettings = true;
     powerManagement.enable = true;
     prime = {
-      sync.enable = true;           # X11 only: RTX 4090 renders, AMD iGPU outputs to TB4 display
-      amdgpuBusId = "PCI:107:0:0";  # AMD iGPU at 6b:00.0 (hex 6b = 107 dec)
-      nvidiaBusId = "PCI:1:0:0";    # RTX 4090 at 01:00.0
+      offload.enable = true;            # AMD composes desktop, NVIDIA for app offload
+      offload.enableOffloadCmd = true;  # Provides nvidia-offload wrapper
+      amdgpuBusId = "PCI:107:0:0";      # AMD iGPU at 6b:00.0 (hex 6b = 107 dec) - display via TB4
+      nvidiaBusId = "PCI:1:0:0";        # RTX 4090 at 01:00.0 - app rendering
     };
   };
   hardware.graphics.extraPackages = with pkgs; [
@@ -53,10 +54,10 @@
   ];
   environment.sessionVariables = {
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+    GBM_BACKEND = "nvidia-drm";
     LIBVA_DRIVER_NAME = "nvidia";
     VDPAU_DRIVER = "nvidia";
     ENABLE_VULKAN = "1";
-    KWIN_DRM_DEVICES = "/dev/dri/by-path/pci-0000:01:00.0-card:/dev/dri/by-path/pci-0000:6b:00.0-card"; # Wayland: NVIDIA renders, AMD scans out
   };
   ##### Virtualization #####
   services.qemuGuest.enable = true;
