@@ -141,4 +141,11 @@
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
   ##### Thunderbolt #####
   services.hardware.bolt.enable = true;
+  ##### Quad Cortex (implicit feedback — capture needs playback active) #####
+  services.pipewire.wireplumber.extraConfig."51-quad-cortex"."monitor.alsa.rules" = [
+    {
+      matches = [{ "node.name" = "~alsa_.*Neural_DSP_Quad_Cortex.*"; }];
+      actions.update-props."session.suspend-timeout-seconds" = 0;
+    }
+  ];
 }

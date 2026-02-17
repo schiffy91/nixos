@@ -1,7 +1,7 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i python3 -p python3 alsa-utils
 
-import subprocess, sys, struct, signal, re, math
+import subprocess, sys, struct, signal, re, math, os
 
 def get_capture_devices():
     result = subprocess.run(['arecord', '-l'], capture_output=True, text=True, check=False)
@@ -20,8 +20,17 @@ def probe_format(card, dev):
             except (subprocess.TimeoutExpired, OSError): pass
     return None, None
 
+def has_playback(card, dev):
+    return os.path.exists(f'/proc/asound/card{card}/pcm{dev}p')
+
 def monitor_device(card, dev, fmt, channels):
+    # Implicit feedback devices need playback running to produce capture data
+    dummy = None
+    if has_playback(card, dev):
+        dummy = subprocess.Popen(['aplay', '-D', f'hw:{card},{dev}', '-f', fmt, '-r', '48000', '-c', str(channels), '-t', 'raw', '/dev/zero'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     proc = subprocess.Popen(['arecord', '-D', f'hw:{card},{dev}', '-f', fmt, '-r', '48000', '-c', str(channels), '-t', 'raw', '-'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    assert proc.stdout
     bps = 4 if '32' in fmt else (3 if '24' in fmt else 2)
     chunk = 48000 * channels * bps // 10
 
@@ -60,6 +69,7 @@ def monitor_device(card, dev, fmt, channels):
     finally:
         proc.kill()
         proc.wait()
+        if dummy: dummy.kill(); dummy.wait()
 
 def main():
     print("\n  === Audio Input Monitor ===\n")
