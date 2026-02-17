@@ -128,7 +128,15 @@
     capSysAdmin = true;
   };
   ##### Steam #####
-  programs.steam.enable =  true;
+  programs.steam = {
+    enable = true;
+    extraPackages = with pkgs; [ kdePackages.breeze ];
+    package = pkgs.steam.override {
+      extraProfile = ''
+        export WINEDLLPATH="/home/${config.settings.user.admin.username}/.local/lib/wine/i386-unix"
+      '';
+    };
+  };
   settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
   ##### Thunderbolt #####
