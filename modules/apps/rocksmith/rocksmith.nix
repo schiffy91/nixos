@@ -1,7 +1,7 @@
-{ config, pkgs, lib, ... }:
+{ settings, config, pkgs, lib, ... }:
 let
-  sampleSize = config.settings.rocksmith.sampleSize;
-  sampleRate = config.settings.rocksmith.sampleRate;
+  sampleSize = settings.rocksmith.sampleSize;
+  sampleRate = settings.rocksmith.sampleRate;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
     [Config]
     EnableWasapiOutputs=0
