@@ -106,6 +106,7 @@
     sbctl
     fwupd
     nixd
+    claude-code
     # GPU diagnostic tools
     mesa-demos       # provides glxinfo
     vulkan-tools   # provides vulkaninfo
