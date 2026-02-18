@@ -54,11 +54,21 @@ def at_depth(bases, ephemeral, depth):
             else: result.add("/".join(path.split("/")[:base.count("/") + 1 + depth]))
     return sorted(result)
 
+def collapse_to_persist(persisted, keep_paths):
+    result = set()
+    for path in persisted:
+        for keep in keep_paths:
+            if path == keep or path.startswith(keep + "/"):
+                result.add(keep)
+                break
+    return sorted(result)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--recent", action="store_true")
     parser.add_argument("--show-symlinks", action="store_true")
     parser.add_argument("--show-children", type=str, metavar="PATH")
+    parser.add_argument("--show-persist-paths", action="store_true")
     parser.add_argument("--depth", type=int, default=None)
     parser.add_argument("--pattern", type=str, metavar="GLOB")
     parser.add_argument("--diffignore", type=str, metavar="FILE")
@@ -71,15 +81,29 @@ def main():
     mount_points = {mount for _, mount in Snapshot.get_subvolumes_to_reset_on_boot()}
     changed = get_changed_files()
     ephemeral = set()
+    persisted = set()
     for path in changed:
         if any(path == keep or path.startswith(keep + "/")
-               for keep in keep_paths): continue
+               for keep in keep_paths):
+            persisted.add(path)
+            continue
         if any(fnmatch.fnmatch(path, pattern)
                for pattern in diffignore): continue
         ephemeral.add(path)
     top_changes = collapse(ephemeral, keep_paths, mount_points)
     previous = sh.json_read(cache_path)
     sh.json_overwrite(cache_path, {path: True for path in top_changes})
+    if args.show_persist_paths:
+        persist_bases = collapse_to_persist(persisted, keep_paths)
+        depth = args.depth or 0
+        output = at_depth(persist_bases, persisted, depth)
+        if args.pattern:
+            output = [path for path in output
+                      if fnmatch.fnmatch(path.lower(), args.pattern.lower())]
+        if output:
+            Utils.print_error("\nPERSISTED CHANGES:")
+            for path in output: Utils.print_error(path)
+        return
     output = list(top_changes)
     if args.recent:
         output = [path for path in output if path not in previous]

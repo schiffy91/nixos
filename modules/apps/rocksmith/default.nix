@@ -10,7 +10,28 @@ let
       cp $src/wineasio32.dll $src/wineasio32.dll.so $out/
     '';
   };
-  steamDir = "${config.home.homeDirectory}/.local/share/Steam/steamapps";
+  bufferSize = 64;
+  sampleRate = 48000;
+  launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString bufferSize}/${toString sampleRate} %command%";
+  setLaunchOptions = pkgs.writers.writePython3Bin "set-launch-options" { libraries = [ pkgs.python3Packages.vdf ]; } ''
+    import glob, sys, vdf
+    APP_ID, OPTS = "221680", sys.argv[1]
+    for path in glob.glob(sys.argv[2] + "/userdata/*/config/localconfig.vdf"):
+        with open(path) as f:
+            config = vdf.load(f)
+        steam = config.setdefault("UserLocalConfigStore", {}).setdefault("Software", {}).setdefault("Valve", {}).setdefault("Steam", {})
+        apps = steam.get("apps", steam.get("Apps"))
+        if apps is None:
+            apps = steam.setdefault("apps", {})
+        app = apps.setdefault(APP_ID, {})
+        if app.get("LaunchOptions") == OPTS:
+            continue
+        app["LaunchOptions"] = OPTS
+        with open(path, "w") as f:
+            vdf.dump(config, f, pretty=True)
+  '';
+  steamRoot = "${config.home.homeDirectory}/.local/share/Steam";
+  steamDir = "${steamRoot}/steamapps";
   gameDir = "${steamDir}/common/Rocksmith2014";
   protonDir = "${steamDir}/common/Proton - Experimental/files";
   prefixDir = "${steamDir}/compatdata/221680/pfx";
@@ -40,6 +61,9 @@ in {
         sed -i 's/^ExclusiveMode=.*/ExclusiveMode=1/' "${gameDir}/Rocksmith.ini"
         sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gameDir}/Rocksmith.ini"
       fi
+
+      # Set Steam launch options
+      ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamRoot}"
     fi
   '';
 }
