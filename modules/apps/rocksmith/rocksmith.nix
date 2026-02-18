@@ -117,12 +117,8 @@ in {
         sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gamePath}/Rocksmith.ini"
       fi
 
-      # Set Steam launch options (skip if Steam is running — it overwrites on exit)
-      if ! ${pkgs.procps}/bin/pgrep -x steam > /dev/null 2>&1; then
-        ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamPath}"
-      else
-        echo "Rocksmith 2014: Steam is running — close it and nixos-rebuild switch to set launch options" >&2
-      fi
+      # Set Steam launch options
+      ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamPath}"
     fi
   '';
 }

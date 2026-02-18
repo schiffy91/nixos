@@ -157,7 +157,7 @@
     { domain = "@audio"; item = "memlock"; type = "-"; value = "unlimited"; }
     { domain = "@audio"; item = "rtprio"; type = "-"; value = "99"; }
   ];
-  services.pipewire.wireplumber.extraConfig."51-quad-cortex"."monitor.alsa.rules" = [
+  services.pipewire.wireplumber.extraConfig."51-alsa-tweaks"."monitor.alsa.rules" = [
     {
       matches = [{ "node.name" = "~alsa_input.*Neural_DSP_Quad_Cortex.*"; }];
       actions.update-props = {
@@ -168,11 +168,14 @@
     }
     {
       matches = [{ "node.name" = "~alsa_output.*Neural_DSP_Quad_Cortex.*"; }];
-      actions.update-props."session.suspend-timeout-seconds" = 0;
+      actions.update-props = {
+        "session.suspend-timeout-seconds" = 0;
+        "node.driver" = false;
+      };
     }
     {
       matches = [{ "node.name" = "~alsa_input.*Logi_4K_Pro.*"; }];
-      actions.update-props."node.force-quantum" = 1024;
+      actions.update-props."node.disabled" = true;
     }
   ];
 }
