@@ -94,6 +94,15 @@ class Config:
         cls.sh.run(f"{environment} nixos-rebuild switch "
                    f"--flake {nixos_path}#{host}-{target}",
                    capture_output=False)
+        result = cls.sh.run(
+            "journalctl -u 'home-manager-*.service' "
+            "--no-pager -o cat -q -r 2>/dev/null "
+            "| sed '/^Starting Home Manager activation$/q' "
+            "| tac "
+            "| grep -v '^\\(Starting\\|Stopping\\|Stopped\\|Finished\\|Activating \\)'",
+            check=False, capture_output=True)
+        hm_log = Shell.stdout(result)
+        if hm_log: print(hm_log)
         if reboot: Utils.reboot()
         else: Interactive.ask_to_reboot()
     @classmethod

@@ -13,13 +13,24 @@ let
   bufferSize = 64;
   sampleRate = 48000;
   launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString bufferSize}/${toString sampleRate} %command%";
-  setLaunchOptions = pkgs.writers.writePython3Bin "set-launch-options" { libraries = [ pkgs.python3Packages.vdf ]; } ''
-    import glob, sys, vdf
+  setLaunchOptions = pkgs.writers.writePython3Bin "set-launch-options" {
+    libraries = [ pkgs.python3Packages.vdf ];
+  } ''
+    import glob
+    import sys
+    import vdf
+
     APP_ID, OPTS = "221680", sys.argv[1]
-    for path in glob.glob(sys.argv[2] + "/userdata/*/config/localconfig.vdf"):
+    for path in glob.glob(
+        sys.argv[2] + "/userdata/*/config/localconfig.vdf"
+    ):
         with open(path) as f:
             config = vdf.load(f)
-        steam = config.setdefault("UserLocalConfigStore", {}).setdefault("Software", {}).setdefault("Valve", {}).setdefault("Steam", {})
+        sd = config.setdefault
+        root = sd("UserLocalConfigStore", {})
+        steam = root.setdefault("Software", {}) \
+            .setdefault("Valve", {}) \
+            .setdefault("Steam", {})
         apps = steam.get("apps", steam.get("Apps"))
         if apps is None:
             apps = steam.setdefault("apps", {})
@@ -62,8 +73,12 @@ in {
         sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gameDir}/Rocksmith.ini"
       fi
 
-      # Set Steam launch options
-      ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamRoot}"
+      # Set Steam launch options (skip if Steam is running — it overwrites on exit)
+      if ! ${pkgs.procps}/bin/pgrep -x steam > /dev/null 2>&1; then
+        ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamRoot}"
+      else
+        echo "Rocksmith 2014: Steam is running — close it and nixos-rebuild switch to set launch options" >&2
+      fi
     fi
   '';
 }
