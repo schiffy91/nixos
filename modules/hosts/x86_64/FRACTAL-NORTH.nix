@@ -58,6 +58,8 @@
     LIBVA_DRIVER_NAME = "nvidia";
     VDPAU_DRIVER = "nvidia";
     ENABLE_VULKAN = "1";
+    DRI_PRIME = "1";                                      # Default render device to NVIDIA
+    DXVK_FILTER_DEVICE_NAME = "NVIDIA GeForce RTX 4090";  # Force DXVK (Proton) to NVIDIA
   };
   ##### Virtualization #####
   services.qemuGuest.enable = true;
