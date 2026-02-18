@@ -1,6 +1,6 @@
 { config, pkgs, lib, ... }:
 let
-  rocksmithMods = pkgs.stdenvNoCC.mkDerivation {
+  mods = pkgs.stdenvNoCC.mkDerivation {
     name = "rocksmith-mods";
     src = ./.;
     installPhase = ''
@@ -41,41 +41,41 @@ let
         with open(path, "w") as f:
             vdf.dump(config, f, pretty=True)
   '';
-  steamRoot = "${config.home.homeDirectory}/.local/share/Steam";
-  steamDir = "${steamRoot}/steamapps";
-  gameDir = "${steamDir}/common/Rocksmith2014";
-  protonDir = "${steamDir}/common/Proton - Experimental/files";
-  prefixDir = "${steamDir}/compatdata/221680/pfx";
+  steamPath = "${config.home.homeDirectory}/.local/share/Steam";
+  steamAppsPath = "${steamPath}/steamapps";
+  gamePath = "${steamAppsPath}/common/Rocksmith2014";
+  protonPath = "${steamAppsPath}/common/Proton - Experimental/files";
+  prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
 in {
   home.activation.rocksmith = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    if [ -d "${gameDir}" ]; then
+    if [ -d "${gamePath}" ]; then
       # Deploy RS_ASIO + RSMods to game directory
-      cp -f ${rocksmithMods}/RS_ASIO.dll "${gameDir}/"
-      cp -f ${rocksmithMods}/avrt.dll "${gameDir}/"
-      cp -f ${rocksmithMods}/RS_ASIO.ini "${gameDir}/"
-      cp -f ${rocksmithMods}/xinput1_3.dll "${gameDir}/"
-      cp -f ${rocksmithMods}/RSMods.ini "${gameDir}/"
+      cp -f ${mods}/RS_ASIO.dll "${gamePath}/"
+      cp -f ${mods}/avrt.dll "${gamePath}/"
+      cp -f ${mods}/RS_ASIO.ini "${gamePath}/"
+      cp -f ${mods}/xinput1_3.dll "${gamePath}/"
+      cp -f ${mods}/RSMods.ini "${gamePath}/"
 
       # Deploy wineasio as builtin Wine DLL (into Proton's own lib dirs)
-      if [ -d "${protonDir}/lib/wine" ]; then
-        cp -f ${rocksmithMods}/wineasio32.dll "${protonDir}/lib/wine/i386-windows/"
-        cp -f ${rocksmithMods}/wineasio32.dll.so "${protonDir}/lib/wine/i386-unix/wineasio32.dll.so"
+      if [ -d "${protonPath}/lib/wine" ]; then
+        cp -f ${mods}/wineasio32.dll "${protonPath}/lib/wine/i386-windows/"
+        cp -f ${mods}/wineasio32.dll.so "${protonPath}/lib/wine/i386-unix/wineasio32.dll.so"
       fi
 
       # Remove stale "native" override that prevents builtin loading
-      if [ -f "${prefixDir}/user.reg" ]; then
-        sed -i '/"wineasio32"="native"/d' "${prefixDir}/user.reg" 2>/dev/null || true
+      if [ -f "${prefixPath}/user.reg" ]; then
+        sed -i '/"wineasio32"="native"/d' "${prefixPath}/user.reg" 2>/dev/null || true
       fi
 
       # Configure Rocksmith.ini
-      if [ -f "${gameDir}/Rocksmith.ini" ]; then
-        sed -i 's/^ExclusiveMode=.*/ExclusiveMode=1/' "${gameDir}/Rocksmith.ini"
-        sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gameDir}/Rocksmith.ini"
+      if [ -f "${gamePath}/Rocksmith.ini" ]; then
+        sed -i 's/^ExclusiveMode=.*/ExclusiveMode=1/' "${gamePath}/Rocksmith.ini"
+        sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gamePath}/Rocksmith.ini"
       fi
 
       # Set Steam launch options (skip if Steam is running — it overwrites on exit)
       if ! ${pkgs.procps}/bin/pgrep -x steam > /dev/null 2>&1; then
-        ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamRoot}"
+        ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamPath}"
       else
         echo "Rocksmith 2014: Steam is running — close it and nixos-rebuild switch to set launch options" >&2
       fi
