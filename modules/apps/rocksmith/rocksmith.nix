@@ -10,7 +10,7 @@ let
       cp $src/wineasio32.dll $src/wineasio32.dll.so $out/
     '';
   };
-  bufferSize = 64;
+  bufferSize = 32;
   sampleRate = 48000;
   launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString bufferSize}/${toString sampleRate} %command%";
   setLaunchOptions = pkgs.writers.writePython3Bin "set-launch-options" {

@@ -142,7 +142,7 @@
   ##### Rocksmith / Quad Cortex #####
   services.pipewire.extraConfig.pipewire."10-low-latency" = {
     "context.properties" = {
-      "default.clock.min-quantum" = 64;
+      "default.clock.min-quantum" = 32;
       "default.clock.rate" = 48000;
       "default.clock.allowed-rates" = [ 48000 ];
     };
@@ -164,6 +164,10 @@
     {
       matches = [{ "node.name" = "~alsa_output.*Neural_DSP_Quad_Cortex.*"; }];
       actions.update-props."session.suspend-timeout-seconds" = 0;
+    }
+    {
+      matches = [{ "node.name" = "~alsa_input.*Logi_4K_Pro.*"; }];
+      actions.update-props."node.force-quantum" = 1024;
     }
   ];
 }
