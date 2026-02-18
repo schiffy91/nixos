@@ -24,7 +24,7 @@
   ##### Desktop Environment #####
   settings.desktop.environment = "plasma-wayland";
   ##### NVIDIA #####
-  services.xserver.videoDrivers = [ "amdgpu" "nvidia" ]; # AMD first (primary for display), NVIDIA second (for rendering via PRIME)
+  services.xserver.videoDrivers = [ "nvidia" "amdgpu" ]; # NVIDIA primary, AMD as display sink
   hardware.nvidia = {
     open = false;
     modesetting.enable = true;
@@ -32,32 +32,22 @@
     nvidiaSettings = true;
     powerManagement.enable = true;
     prime = {
-      offload.enable = true;            # AMD composes desktop, NVIDIA for app offload
-      offload.enableOffloadCmd = true;  # Provides nvidia-offload wrapper
+      sync.enable = true;               # NVIDIA renders everything, AMD iGPU is display output
       amdgpuBusId = "PCI:107:0:0";      # AMD iGPU at 6b:00.0 (hex 6b = 107 dec) - display via TB4
-      nvidiaBusId = "PCI:1:0:0";        # RTX 4090 at 01:00.0 - app rendering
+      nvidiaBusId = "PCI:1:0:0";        # RTX 4090 at 01:00.0 - all rendering
     };
   };
   hardware.graphics.extraPackages = with pkgs; [
     nvidia-vaapi-driver
-    libva-vdpau-driver
-    libvdpau-va-gl
     vulkan-loader
     vulkan-validation-layers
-    vulkan-tools
   ];
   hardware.graphics.enable32Bit = true;
-  hardware.graphics.extraPackages32 = with pkgs.pkgsi686Linux; [
-    nvidia-vaapi-driver
-    libva-vdpau-driver
-    libvdpau-va-gl
-  ];
   environment.sessionVariables = {
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
     GBM_BACKEND = "nvidia-drm";
     LIBVA_DRIVER_NAME = "nvidia";
     VDPAU_DRIVER = "nvidia";
-    ENABLE_VULKAN = "1";
   };
   ##### Virtualization #####
   services.qemuGuest.enable = true;
@@ -81,10 +71,6 @@
   environment.systemPackages = with pkgs; [
     (google-chrome.override {
       commandLineArgs = [
-        "--ozone-platform=x11"                        # Use X11 backend (Wayland has DMA-BUF import issues with NVIDIA)
-        "--use-angle=vulkan"                          # Use Vulkan through ANGLE
-        "--render-node-override=/dev/dri/renderD129"  # Force NVIDIA GPU (renderD129)
-        "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder"
         "--ignore-gpu-blocklist"
         "--enable-gpu-rasterization"
       ];
