@@ -153,5 +153,8 @@ in {
     settings.networking.ports.udp = mkSetting (listOf int) [];
     settings.networking.ports.tcp = mkSetting (listOf int) [];
     settings.networking.identityAgent = mkSetting str "~/.1password/agent.sock";
+    ##### Rocksmith #####
+    settings.rocksmith.sampleSize = mkSetting int 128;
+    settings.rocksmith.sampleRate = mkSetting int 48000;
   };
 }

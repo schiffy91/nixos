@@ -1,18 +1,62 @@
 { config, pkgs, lib, ... }:
 let
+  sampleSize = config.settings.rocksmith.sampleSize;
+  sampleRate = config.settings.rocksmith.sampleRate;
+  rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
+    [Config]
+    EnableWasapiOutputs=0
+    EnableWasapiInputs=0
+    EnableAsio=1
+
+    [Asio]
+    BufferSizeMode=custom
+    CustomBufferSize=${toString sampleSize}
+
+    [Asio.Output]
+    Driver=wineasio-rsasio
+    BaseChannel=0
+    AltBaseChannel=
+    EnableSoftwareEndpointVolumeControl=1
+    EnableSoftwareMasterVolumeControl=1
+    SoftwareMasterVolumePercent=100
+    EnableRefCountHack=
+
+    [Asio.Input.0]
+    Driver=wineasio-rsasio
+    Channel=0
+    EnableSoftwareEndpointVolumeControl=1
+    EnableSoftwareMasterVolumeControl=1
+    SoftwareMasterVolumePercent=100
+    EnableRefCountHack=
+
+    [Asio.Input.1]
+    Driver=
+    Channel=1
+    EnableSoftwareEndpointVolumeControl=1
+    EnableSoftwareMasterVolumeControl=1
+    SoftwareMasterVolumePercent=100
+    EnableRefCountHack=
+
+    [Asio.Input.Mic]
+    Driver=
+    Channel=1
+    EnableSoftwareEndpointVolumeControl=1
+    EnableSoftwareMasterVolumeControl=1
+    SoftwareMasterVolumePercent=100
+    EnableRefCountHack=
+  '';
   mods = pkgs.stdenvNoCC.mkDerivation {
     name = "rocksmith-mods";
     src = ./.;
     installPhase = ''
       mkdir -p $out
-      cp $src/RS_ASIO.dll $src/avrt.dll $src/RS_ASIO.ini $out/
+      cp $src/RS_ASIO.dll $src/avrt.dll $out/
+      cp ${rsAsioIni} $out/RS_ASIO.ini
       cp $src/xinput1_3.dll $src/RSMods.ini $out/
       cp $src/wineasio32.dll $src/wineasio32.dll.so $out/
     '';
   };
-  bufferSize = 32;
-  sampleRate = 48000;
-  launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString bufferSize}/${toString sampleRate} %command%";
+  launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString sampleSize}/${toString sampleRate} %command%";
   setLaunchOptions = pkgs.writers.writePython3Bin "set-launch-options" {
     libraries = [ pkgs.python3Packages.vdf ];
   } ''

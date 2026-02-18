@@ -142,9 +142,9 @@
   ##### Rocksmith / Quad Cortex #####
   services.pipewire.extraConfig.pipewire."10-low-latency" = {
     "context.properties" = {
-      "default.clock.min-quantum" = 32;
-      "default.clock.rate" = 48000;
-      "default.clock.allowed-rates" = [ 48000 ];
+      "default.clock.min-quantum" = config.settings.rocksmith.sampleSize;
+      "default.clock.rate" = config.settings.rocksmith.sampleRate;
+      "default.clock.allowed-rates" = [ config.settings.rocksmith.sampleRate ];
     };
   };
   users.users.${config.settings.user.admin.username}.extraGroups = [ "audio" "rtkit" "pipewire" ];
