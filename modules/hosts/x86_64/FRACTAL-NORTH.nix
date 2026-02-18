@@ -15,10 +15,10 @@
     "amdgpu.dc=1"                   # AMD GPU
     "amd_iommu=on"                  # Enable IOMMU for VFIO passthrough
     "iommu=pt"                      # IOMMU passthrough mode (better performance)
-  #  "video=HDMI-A-0:3840x2160@120" # Force 4k120
   ];
+  boot.consoleLogLevel = 0;         # Suppress kernel messages during boot (MSFT8000 i2c noise)
   boot.kernelModules = [ "kvm-amd" "vfio" "vfio_pci" "vfio_iommu_type1" ];
-  boot.blacklistedKernelModules = [ "hid_sensor_hub" ]; # i2c i2c-0: Failed to register i2c client MSFT8000:00 at 0x4e (-16)
+  boot.blacklistedKernelModules = [ "hid_sensor_hub" ];
   hardware.firmware = [ pkgs.linux-firmware ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;

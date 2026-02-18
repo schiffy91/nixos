@@ -16,7 +16,7 @@
     };
     plymouth = {
       enable = true;
-      theme = "breeze";
+      theme = "bgrt";
     };
     kernelParams = [
       "quiet"                           # Plymouth
