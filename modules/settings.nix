@@ -133,6 +133,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/Mullvad VPN"
       ##### Claude #####
       "/home/${config.settings.user.admin.username}/.claude"
+      "/home/${config.settings.user.admin.username}/.claude.json"
       ##### Steam #####
       "/home/${config.settings.user.admin.username}/.local/share/Steam"
       "/home/${config.settings.user.admin.username}/.steam"
