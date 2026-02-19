@@ -17,8 +17,8 @@
     "iommu=pt"                      # IOMMU passthrough mode (better performance)
   ];
   boot.consoleLogLevel = 0;         # Suppress kernel messages during boot (MSFT8000 i2c noise)
-  boot.kernelModules = [ "kvm-amd" "vfio" "vfio_pci" "vfio_iommu_type1" ];
-  boot.blacklistedKernelModules = [ "hid_sensor_hub" ];
+  boot.kernelModules = [ "kvm-amd" "vfio" "vfio_pci" "vfio_iommu_type1" "i2c-dev" ];
+  #boot.blacklistedKernelModules = [ "hid_sensor_hub" ];
   hardware.firmware = [ pkgs.linux-firmware ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
@@ -59,6 +59,17 @@
     LIBVA_DRIVER_NAME = "nvidia";
     VDPAU_DRIVER = "nvidia";
     ENABLE_VULKAN = "1";
+  };
+  services.hardware.openrgb.enable = true;
+  hardware.i2c.enable = true;
+  systemd.services.gpu-led-off = {
+    description = "Turn off NVIDIA 4090 FE LED";
+    after = [ "openrgb.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.openrgb-with-all-plugins}/bin/openrgb -d 0 -m Off";
+    };
   };
   ##### Virtualization #####
   services.qemuGuest.enable = true;
