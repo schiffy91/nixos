@@ -18,7 +18,7 @@
   ];
   boot.consoleLogLevel = 0;         # Suppress kernel messages during boot (MSFT8000 i2c noise)
   boot.kernelModules = [ "kvm-amd" "vfio" "vfio_pci" "vfio_iommu_type1" "i2c-dev" ];
-  #boot.blacklistedKernelModules = [ "hid_sensor_hub" ];
+  boot.blacklistedKernelModules = [ "hid_sensor_hub" ];
   hardware.firmware = [ pkgs.linux-firmware ];
   hardware.cpu.amd.updateMicrocode = true;
   hardware.amdgpu.initrd.enable = true;
@@ -60,6 +60,7 @@
     VDPAU_DRIVER = "nvidia";
     ENABLE_VULKAN = "1";
   };
+  ##### GPU LED Off (OpenRGB) #####
   services.hardware.openrgb.enable = true;
   hardware.i2c.enable = true;
   systemd.services.gpu-led-off = {
@@ -68,7 +69,7 @@
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.openrgb-with-all-plugins}/bin/openrgb -d 0 -m Off";
+      ExecStart = "${pkgs.openrgb-with-all-plugins}/bin/openrgb --noautoconnect -d 1 -m Off";
     };
   };
   ##### Virtualization #####
