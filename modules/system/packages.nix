@@ -7,6 +7,8 @@
   ]);
   ##### Unpatched Binaries #####
   programs.nix-ld.enable = true;
+  ##### AppImage #####
+  programs.appimage.binfmt = true;
   ##### direnv #####
   programs.direnv.enable = true;
   ##### Firmware #####
