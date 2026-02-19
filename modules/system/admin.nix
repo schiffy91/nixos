@@ -5,9 +5,7 @@
     isNormalUser = true;
     extraGroups = [ "wheel" "libvirtd" "networkmanager" ];
     hashedPasswordFile = "${config.settings.secrets.path}/${config.settings.secrets.hashedPasswordFile}";
-    openssh.authorizedKeys.keys = [
-      "${config.settings.user.admin.authorizedKey} ${config.settings.user.admin.username}"
-    ];
+    openssh.authorizedKeys.keys = config.settings.user.admin.authorizedKeys;
   };
   ##### Auto Login #####
   services.displayManager.autoLogin = {

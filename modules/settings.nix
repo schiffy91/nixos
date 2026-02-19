@@ -12,7 +12,9 @@ in {
     settings.user.admin.autoLogin.enable = mkSetting bool false;
     settings.user.admin.autoLock.enable = mkSetting bool true;
     settings.user.admin.autoUnlockWallet.enabled = mkSetting bool true;
-    settings.user.admin.authorizedKey = mkSetting str "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI";
+    settings.user.admin.authorizedKeys = mkSetting (listOf str) [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINJsoluI1m5T4iwuCbpSdHvLVdemN3v7wMrqk4e+XJA0"
+    ];
     settings.user.admin.homeManager.enable = mkSetting bool true;
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
