@@ -1,8 +1,9 @@
 { pkgs, ... }: {
-  ##### System Packages ##### 
+  ##### System Packages #####
   environment.systemPackages = (with pkgs; [
     git
     wget
+    appimage-run
   ]);
   ##### Unpatched Binaries #####
   programs.nix-ld.enable = true;

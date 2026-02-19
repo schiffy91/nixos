@@ -115,6 +115,7 @@
     nvtopPackages.full      # GPU monitoring (supports NVIDIA + AMD)
   ];
   ##### Networking #####
+  networking.interfaces.eno2.wakeOnLan.enable = true;
   settings.networking.lanSubnet = "10.0.0.0/24";
   programs.openvpn3.enable = true;
   services.resolved.enable = true;
