@@ -60,8 +60,8 @@
                 "applications:google-chrome.desktop"
                 "applications:cider-2.desktop"
                 "applications:code.desktop"
-                "applications:steam.desktop"
                 "applications:org.kde.konsole.desktop"
+                "applications:steam.desktop"
               ];
             };
           }
