@@ -85,7 +85,7 @@
     };
   })
   ##### Hyprland #####
-  (lib.mkIf (config.settings.desktop.environment == "hyprland") {
+  (lib.mkIf (config.settings.desktop.environment == "hyprland-wayland") {
     xdg.portal = {
       enable = true;
       extraPortals = with pkgs; [ xdg.portal.extraPortals ];

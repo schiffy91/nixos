@@ -71,6 +71,7 @@ class VM:
     @classmethod
     def create_ssh_key(cls):
         if cls.ssh_key().exists():
+            cls.ssh_key().chmod(0o600)
             return
         cls.DIR.mkdir(parents=True, exist_ok=True)
         subprocess.run(
@@ -78,6 +79,7 @@ class VM:
              "-f", str(cls.ssh_key()), "-q"],
             check=True
         )
+        cls.ssh_key().chmod(0o600)
     @classmethod
     def create_disk(cls, size="20G"):
         disk = cls.disk_path()

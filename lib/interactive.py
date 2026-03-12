@@ -1,4 +1,4 @@
-import getpass, glob
+import getpass
 from .shell import Shell, chrootable
 from .utils import Utils
 
@@ -14,7 +14,7 @@ class Interactive:
             Utils.print("Invalid input. Enter 'y' or 'n'.")
     @classmethod
     def ask_for_host_path(cls, hosts_path):
-        hosts_paths = glob.glob(f"{hosts_path}/**/*.nix", recursive=True)
+        hosts_paths = cls.sh.find_files(hosts_path, pattern="*.nix")
         formatted = [
             cls.sh.basename(p).replace(".nix", "")
             + " (" + cls.sh.parent_name(p) + ")"

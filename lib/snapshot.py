@@ -33,6 +33,6 @@ class Snapshot:
                 cls.sh.mkdir(cls.sh.dirname(clean_path))
                 cls.sh.run(
                     f"btrfs subvolume snapshot -r {mount_point} {clean_path}")
-            except BaseException as e:
+            except Exception as e:
                 Utils.log_error(
                     f"Failed to create a clean snapshot for {name}\n{e}")

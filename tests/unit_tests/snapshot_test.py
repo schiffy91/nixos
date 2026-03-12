@@ -57,6 +57,7 @@ class TestSnapshotCreation:
                     with patch.object(mock_shell, "dirname",
                                       return_value="/.snapshots/@root"):
                         Snapshot.create_initial_snapshots()
+                        assert run.call_args_list, "Expected btrfs commands"
                         for call_args in run.call_args_list:
                             cmd = call_args[0][0]
                             assert cmd.startswith(

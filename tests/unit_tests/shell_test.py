@@ -1,5 +1,5 @@
 from subprocess import CalledProcessError
-import json, os
+import json
 from unittest.mock import MagicMock, patch, mock_open
 
 import pytest
@@ -194,7 +194,7 @@ class TestShellRun:
             mock_shell.run("echo test")
         cmd = _get_cmd(mock_subprocess)
         assert "nixos-enter --root /mnt" in cmd
-        assert '--command "echo test"' in cmd
+        assert "--command 'echo test'" in cmd
     def test_run_in_nested_chroot_uses_innermost(self, mock_shell,
                                                    mock_subprocess):
         with mock_shell.chroot("/mnt1"):

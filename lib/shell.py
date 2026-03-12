@@ -43,7 +43,8 @@ class Shell:
         return text
     def run(self, cmd, env="", sudo=True, capture_output=True, check=True, sensitive=None):
         if self.chroots:
-            cmd = f'nixos-enter --root {self.chroots[-1]} --command "{cmd}"'
+            escaped = cmd.replace("'", "'\\''")
+            cmd = f"nixos-enter --root {self.chroots[-1]} --command '{escaped}'"
         if sudo: cmd = f"{env} sudo {cmd}".strip()
         else: cmd = f"{env} {cmd}".strip()
         print(f"\033[90mLOG: {self.redact(cmd, sensitive)}\033[0m")

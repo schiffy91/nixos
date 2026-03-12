@@ -74,6 +74,7 @@ in {
       "/var/lib/systemd/coredump"
       "/var/log"
       "/root/.cache/nix/"
+      "/root/.ssh/known_hosts"
       ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
       ##### Files & Folders #####
@@ -130,7 +131,7 @@ in {
       "/home/${config.settings.user.admin.username}/.vscode"
       ##### Sunshine #####
       "/home/${config.settings.user.admin.username}/.config/sunshine"
-      ##### Mulvad #####
+      ##### Mullvad #####
       "/etc/mullvad-vpn/"
       "/home/${config.settings.user.admin.username}/.config/Mullvad VPN"
       ##### Claude #####

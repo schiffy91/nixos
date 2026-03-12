@@ -53,7 +53,7 @@ class TestHostPath:
     def test_valid_selection_first(self, mock_shell, monkeypatch):
         Interactive.sh = mock_shell
         paths = ["/etc/nixos/modules/hosts/x86_64/host1.nix"]
-        with patch("glob.glob", return_value=paths):
+        with patch.object(mock_shell, "find_files", return_value=paths):
             with patch.object(mock_shell, "basename",
                               side_effect=lambda p: p.split("/")[-1]):
                 with patch.object(mock_shell, "parent_name",
@@ -69,7 +69,7 @@ class TestHostPath:
             "/etc/nixos/modules/hosts/x86_64/host1.nix",
             "/etc/nixos/modules/hosts/aarch64/host2.nix",
         ]
-        with patch("glob.glob", return_value=paths):
+        with patch.object(mock_shell, "find_files", return_value=paths):
             with patch.object(mock_shell, "basename",
                               side_effect=lambda p: p.split("/")[-1]):
                 with patch.object(mock_shell, "parent_name",
@@ -83,7 +83,7 @@ class TestHostPath:
         Interactive.sh = mock_shell
         paths = ["/etc/nixos/modules/hosts/x86_64/host1.nix"]
         inputs = iter(["99", "invalid", "1"])
-        with patch("glob.glob", return_value=paths):
+        with patch.object(mock_shell, "find_files", return_value=paths):
             with patch.object(mock_shell, "basename",
                               side_effect=lambda p: p.split("/")[-1]):
                 with patch.object(mock_shell, "parent_name",
@@ -99,7 +99,7 @@ class TestHostPath:
     def test_keyboard_interrupt_exits(self, mock_shell, monkeypatch):
         Interactive.sh = mock_shell
         paths = ["/etc/nixos/modules/hosts/x86_64/host1.nix"]
-        with patch("glob.glob", return_value=paths):
+        with patch.object(mock_shell, "find_files", return_value=paths):
             with patch.object(mock_shell, "basename",
                               return_value="host1.nix"):
                 with patch.object(mock_shell, "parent_name",
@@ -121,7 +121,7 @@ class TestHostPath:
             "/etc/nixos/modules/hosts/aarch64/laptop.nix",
             "/etc/nixos/modules/hosts/x86_64/server.nix",
         ]
-        with patch("glob.glob", return_value=paths):
+        with patch.object(mock_shell, "find_files", return_value=paths):
             with patch.object(
                 mock_shell, "basename",
                 side_effect=lambda p: p.split("/")[-1],
