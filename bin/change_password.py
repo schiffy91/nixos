@@ -1,9 +1,9 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import argparse, getpass, shlex, sys
+import getpass, shlex, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Utils, Config, Shell
+from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
 
@@ -46,11 +46,7 @@ def update_tpm2():
     else: Utils.log("Successfully re-enrolled TPM2")
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--full-disk-encryption-only", action="store_true")
-    parser.add_argument("--user-account-only", action="store_true")
-    parser.add_argument("--update-tpm2", action="store_true")
-    args = parser.parse_args()
+    args = Utils.parse_args(["--full-disk-encryption-only", "--user-account-only", "--update-tpm2"])
     if args.full_disk_encryption_only and args.user_account_only:
         Utils.abort("Cannot use both --full-disk-encryption-only "
                     "and --user-account-only")

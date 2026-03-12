@@ -3,7 +3,7 @@
 import sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Utils, Shell
+from lib import Shell, Utils
 
 sh = Shell(root_required=True)
 
@@ -79,13 +79,10 @@ def status():
         Utils.print("Status: Unknown state")
 
 def main():
-    if len(sys.argv) < 2:
-        Utils.abort("Usage: gpu_vfio.py [attach|detach|status]")
-    match sys.argv[1]:
-        case "detach": detach()
-        case "attach": attach()
-        case "status": status()
-        case _: Utils.abort("Usage: gpu_vfio.py [attach|detach|status]")
+    args = Utils.parse_args({"attach": [], "detach": [], "status": []})
+    if args.command == "attach": attach()
+    elif args.command == "detach": detach()
+    elif args.command == "status": status()
 
 if __name__ == "__main__":
     main()

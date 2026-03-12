@@ -5,8 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import Config, Shell
 
+sh = Shell(root_required=True)
+
 def main():
-    sh = Shell(root_required=True)
     username = os.environ.get("SUDO_USER") or sh.whoami()
     Config.secure(username)
 

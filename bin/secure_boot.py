@@ -1,61 +1,58 @@
 #! /usr/bin/env nix-shell
-#! nix-shell -i python3 -p python3 -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/93dc9803a1ee435e590b02cde9589038d5cc3a4e.tar.gz -p sbctl
-import sys
+#! nix-shell -i python3 -p python3 -p sbctl
+import json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Utils, Config, Shell
+from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
 
 def remove_old_efi_entries():
     sh.mkdir("/boot/EFI/Linux", "/var/lib/sbctl")
-    sh.rm("/boot/EFI/Linux/linux-*.efi", "/etc/secureboot")
+    for path in sh.find_files("/boot/EFI/Linux", pattern="*/linux-*.efi"):
+        sh.rm(path)
+    sh.rm("/etc/secureboot")
 
 def create_keys():
-    Utils.log("Resetting Secure Boot keys...")
-    sh.run("sbctl reset", check=False)
     Utils.log("Creating Secure Boot keys...")
-    sh.run("sbctl create-keys")
+    sh.run("sbctl create-keys", check=False)
 
-def are_keys_enrolled():
-    status = sh.run("sbctl status")
-    return "secure boot: \u2713 enabled" in Shell.stdout(status).lower()
-
-def enroll_keys():
+def enroll_keys(microsoft=False):
     Utils.log("Enrolling Secure Boot keys...")
-    sh.run("sbctl enroll-keys --microsoft")
+    flag = "--microsoft" if microsoft else "--yes-this-might-brick-my-machine"
+    sh.run(f"sbctl enroll-keys {flag}")
     Utils.log("Secure Boot keys enrolled successfully")
 
-def are_keys_signed():
-    status = sh.run("sbctl verify")
-    return "is signed" in Shell.stdout(status).lower()
+def verify():
+    output = Shell.stdout(sh.run("sbctl verify --json", check=False)) or "null"
+    result = json.loads(output)
+    if not result: return Utils.log_error("No EFI binaries registered")
+    unsigned = [f for f, info in result.items() if not info.get("is_signed")]
+    if not unsigned: return Utils.log("All EFI binaries are signed")
+    for f in unsigned: Utils.log_error(f"NOT signed: {f}")
 
-def require_signed_boot_loader():
-    if are_keys_signed():
-        Utils.log("Successfully created and enrolled Secure Boot keys")
-    else:
-        Utils.log("No EFI stub found after rebuild")
-        disable_secure_boot()
+def status():
+    sh.run("sbctl status", capture_output=False, check=False)
+    sh.run("sbctl verify", capture_output=False, check=False)
 
 def disable_secure_boot():
     remove_old_efi_entries()
     Config.set_target(Config.get_standard_flake_target())
-    return Config.update(rebuild_file_system=True, delete_cache=True)
+    Config.update(rebuild_file_system=True, delete_cache=True)
 
-def enable_secure_boot():
+def enable_secure_boot(microsoft=False):
     remove_old_efi_entries()
     create_keys()
-    if not are_keys_enrolled(): enroll_keys()
+    enroll_keys(microsoft=microsoft)
     Config.set_target(Config.get_secure_boot_flake_target())
     Config.update(rebuild_file_system=True, delete_cache=True)
-    require_signed_boot_loader()
+    verify()
 
 def main():
-    Utils.LOG_INFO = False
-    Utils.toggle(sys.argv,
-                 on_enable=enable_secure_boot,
-                 on_disable=disable_secure_boot,
-                 on_exception=disable_secure_boot)
+    args = Utils.parse_args({
+        "enable": ["--microsoft"], "disable": [], "status": []})
+    if args.command == "enable": enable_secure_boot(microsoft=args.microsoft)
+    elif args.command == "disable": disable_secure_boot()
+    elif args.command == "status": status()
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

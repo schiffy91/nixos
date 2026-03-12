@@ -1,9 +1,9 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import sys, argparse, fnmatch, os
+import fnmatch, os, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Utils, Snapshot, Shell, Config
+from lib import Config, Shell, Snapshot, Utils
 
 sh = Shell(root_required=True)
 
@@ -64,15 +64,10 @@ def collapse_to_persist(persisted, keep_paths):
     return sorted(result)
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--recent", action="store_true")
-    parser.add_argument("--show-symlinks", action="store_true")
-    parser.add_argument("--show-children", type=str, metavar="PATH")
-    parser.add_argument("--show-persist-paths", action="store_true")
-    parser.add_argument("--depth", type=int, default=None)
-    parser.add_argument("--pattern", type=str, metavar="GLOB")
-    parser.add_argument("--diffignore", type=str, metavar="FILE")
-    args = parser.parse_args()
+    args = Utils.parse_args([
+        "--recent", "--show-symlinks", "--show-persist-paths",
+        ("--show-children", str), ("--depth", int),
+        ("--pattern", str), ("--diffignore", str)])
     cache_path = "/tmp/etc/nixos/bin/diff/cache.json"
     ignore_path = args.diffignore or "/etc/nixos/bin/.diffignore"
     diffignore = (sh.file_read(ignore_path).split("\n")

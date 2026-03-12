@@ -1,9 +1,9 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import argparse, sys
+import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Utils, Config, Shell, Snapshot, Interactive
+from lib import Config, Interactive, Shell, Snapshot, Utils
 
 class Installer:
     sh = Shell()
@@ -41,10 +41,7 @@ class Installer:
         return cls.sh.run(command, capture_output=False)
     @classmethod
     def parse_args(cls):
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--collect-garbage", action="store_true")
-        parser.add_argument("--debug", action="store_true")
-        args = parser.parse_args()
+        args = Utils.parse_args(["--collect-garbage", "--debug"])
         if args.collect_garbage: cls.sh.run("nix-collect-garbage -d")
         if args.debug:
             vscodium = ("nix --extra-experimental-features nix-command "

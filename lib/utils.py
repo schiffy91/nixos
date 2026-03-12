@@ -1,4 +1,4 @@
-import inspect, sys
+import argparse, sys
 from .shell import Shell, chrootable
 
 @chrootable
@@ -10,22 +10,20 @@ class Utils:
     RED = "\033[31m"
     RESET = "\033[0m"
     @classmethod
-    def toggle(cls, argv, on_enable=None, on_disable=None, on_exception=None):
-        try:
-            match Utils.parse_args(argv, "enable", "disable"):
-                case ["enable"] if on_enable: on_enable()
-                case ["disable"] if on_disable: on_disable()
-                case _:
-                    name = cls.sh.basename(inspect.stack()[1].filename)
-                    return Utils.abort(f"Usage: {name} (enable | disable)")
-        except BaseException as exception:
-            Utils.log_error(f"Caught exception: {exception}.")
-            if on_exception: on_exception()
-            raise
-    @classmethod
-    def parse_args(cls, argv, *accepted_args):
-        if not argv or not accepted_args: return []
-        return [arg for arg in argv if arg in set(accepted_args)]
+    def parse_args(cls, schema):
+        def add_args(parser, args):
+            for arg in args:
+                if isinstance(arg, tuple): parser.add_argument(arg[0], type=arg[1], default=None)
+                elif arg.startswith("--"): parser.add_argument(arg, action="store_true")
+                else: parser.add_argument(arg)
+        parser = argparse.ArgumentParser()
+        if isinstance(schema, dict):
+            subparsers = parser.add_subparsers(dest="command", required=True)
+            for command, args in schema.items():
+                add_args(subparsers.add_parser(command), args)
+        else:
+            add_args(parser, schema)
+        return parser.parse_args()
     @classmethod
     def require_root(cls):
         cls.sh.require_root()

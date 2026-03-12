@@ -1,31 +1,48 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from lib.utils import Utils
 
 class TestUtilsParseArgs:
-    def test_single_match(self):
-        assert Utils.parse_args(["enable"], "enable", "disable") == ["enable"]
-    def test_multiple_matches(self):
-        result = Utils.parse_args(
-            ["enable", "verbose"], "enable", "disable", "verbose"
-        )
-        assert sorted(result) == ["enable", "verbose"]
-    def test_no_matches(self):
-        assert Utils.parse_args(["foo"], "enable", "disable") == []
-    def test_empty_argv(self):
-        assert Utils.parse_args([], "enable") == []
-    def test_none_argv(self):
-        assert Utils.parse_args(None, "enable") == []
-    def test_no_accepted_args(self):
-        assert Utils.parse_args(["enable"]) == []
-    def test_extra_unrecognized_args_filtered_out(self):
-        result = Utils.parse_args(
-            ["enable", "bogus", "unknown", "disable"],
-            "enable", "disable",
-        )
-        assert result == ["enable", "disable"]
+    def test_parses_command(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "enable"])
+        args = Utils.parse_args({"enable": [], "disable": []})
+        assert args.command == "enable"
+    def test_parses_flag(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "enable", "--microsoft"])
+        args = Utils.parse_args({"enable": ["--microsoft"], "disable": []})
+        assert args.command == "enable"
+        assert args.microsoft is True
+    def test_flag_defaults_false(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "enable"])
+        args = Utils.parse_args({"enable": ["--microsoft"], "disable": []})
+        assert args.microsoft is False
+    def test_missing_command_exits(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog"])
+        with pytest.raises(SystemExit):
+            Utils.parse_args({"enable": [], "disable": []})
+    def test_invalid_command_exits(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "bogus"])
+        with pytest.raises(SystemExit):
+            Utils.parse_args({"enable": [], "disable": []})
+    def test_boolean_flags(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "--clean"])
+        args = Utils.parse_args(["--rebuild-filesystem", "--clean"])
+        assert args.clean is True
+        assert args.rebuild_filesystem is False
+    def test_typed_arg(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "--depth", "3"])
+        args = Utils.parse_args([("--depth", int)])
+        assert args.depth == 3
+    def test_typed_arg_defaults_none(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog"])
+        args = Utils.parse_args([("--depth", int)])
+        assert args.depth is None
+    def test_positional_arg(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["prog", "some.expression"])
+        args = Utils.parse_args(["expression"])
+        assert args.expression == "some.expression"
 
 class TestUtilsLogging:
     def test_log_enabled(self, capsys):
@@ -92,47 +109,3 @@ class TestUtilsSystem:
         Utils.require_root()
         mock_rr.assert_called_once()
 
-class TestUtilsToggle:
-    def test_enable_calls_on_enable(self):
-        called = []
-        Utils.toggle(["enable"], on_enable=lambda: called.append("e"))
-        assert called == ["e"]
-    def test_disable_calls_on_disable(self):
-        called = []
-        Utils.toggle(["disable"], on_disable=lambda: called.append("d"))
-        assert called == ["d"]
-    def test_invalid_shows_usage_and_exits(self, mock_shell):
-        Utils.sh = mock_shell
-        with patch.object(mock_shell, "basename", return_value="test.py"):
-            with pytest.raises(SystemExit):
-                Utils.toggle(["invalid"])
-    def test_exception_calls_on_exception_then_re_raises(self):
-        exception_called = []
-        def on_enable():
-            raise ValueError("test error")
-        def on_exception():
-            exception_called.append(True)
-
-        with pytest.raises(ValueError):
-            Utils.toggle(
-                ["enable"],
-                on_enable=on_enable,
-                on_exception=on_exception,
-            )
-        assert exception_called
-    def test_exception_without_handler_still_re_raises(self):
-        with pytest.raises(ValueError):
-            Utils.toggle(
-                ["enable"],
-                on_enable=lambda: (_ for _ in ()).throw(ValueError("err")),
-            )
-    def test_enable_with_none_on_enable_hits_default_case(self, mock_shell):
-        Utils.sh = mock_shell
-        with patch.object(mock_shell, "basename", return_value="test.py"):
-            with pytest.raises(SystemExit):
-                Utils.toggle(["enable"], on_enable=None)
-    def test_toggle_with_empty_argv(self, mock_shell):
-        Utils.sh = mock_shell
-        with patch.object(mock_shell, "basename", return_value="test.py"):
-            with pytest.raises(SystemExit):
-                Utils.toggle([])
