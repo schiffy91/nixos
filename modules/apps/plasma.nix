@@ -58,6 +58,7 @@
               launchers = [
                 "applications:org.kde.dolphin.desktop"
                 "applications:google-chrome.desktop"
+                "applications:cider-2.desktop"
                 "applications:org.kde.konsole.desktop"
               ];
             };

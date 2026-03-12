@@ -65,11 +65,12 @@
   hardware.i2c.enable = true;
   systemd.services.gpu-led-off = {
     description = "Turn off NVIDIA 4090 FE LED";
-    after = [ "openrgb.service" ];
+    after = [ "openrgb.service" "display-manager.service" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.openrgb-with-all-plugins}/bin/openrgb --noautoconnect -d 1 -m Off";
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
+      ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.openrgb-with-all-plugins}/bin/openrgb --noautoconnect -d 1 -m Off || true'";
     };
   };
   ##### Virtualization #####
@@ -119,6 +120,12 @@
     fwupd
     nixd
     claude-code
+    (cider-2.overrideAttrs (old: {
+      postFixup = (old.postFixup or "") + ''
+        substituteInPlace $out/share/applications/cider-2.desktop \
+          --replace-fail "Exec=cider-2" "Exec=cider-2 --force-device-scale-factor=1"
+      '';
+    }))
     # GPU diagnostic tools
     mesa-demos       # provides glxinfo
     vulkan-tools   # provides vulkaninfo

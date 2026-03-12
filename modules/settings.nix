@@ -139,6 +139,11 @@ in {
       ##### Steam #####
       "/home/${config.settings.user.admin.username}/.local/share/Steam"
       "/home/${config.settings.user.admin.username}/.steam"
+      ##### Apple Music #####
+      "/home/${config.settings.user.admin.username}/.config/sh.cider.genten"
+      ##### NanoClaw #####
+      "/home/${config.settings.user.admin.username}/.local/share/nanoclaw"
+      "/home/${config.settings.user.admin.username}/.config/nanoclaw"
     ];
     ##### Boot ##### 
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
