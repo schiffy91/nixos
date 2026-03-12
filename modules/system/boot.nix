@@ -26,8 +26,11 @@
       "systemd.show_status=auto"        # Hide systemd boot status unless there's an error
       "rd.systemd.show_status=auto"     # Same as above, but for the initrd phase
       "plymouth.ignore-serial-consoles" # Force display rendering
+      "mem_encrypt=on"                  # AMD SME: transparent memory encryption
+      "mem_sleep_default=s2idle"        # Use s2idle instead of S3 suspend
     ];
   };
+  systemd.sleep.settings.Sleep.AllowHibernation = if config.settings.sleep.allowHibernation then "yes" else "no";
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
 ##### Standard Boot Settings #####

@@ -145,7 +145,9 @@ in {
       "/home/${config.settings.user.admin.username}/.local/share/nanoclaw"
       "/home/${config.settings.user.admin.username}/.config/nanoclaw"
     ];
-    ##### Boot ##### 
+    ##### Sleep #####
+    settings.sleep.allowHibernation = mkSetting bool false;
+    ##### Boot #####
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";
     settings.boot.previousGenerationLimit = mkSetting int 3;
