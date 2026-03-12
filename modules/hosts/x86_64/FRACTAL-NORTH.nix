@@ -135,7 +135,7 @@
   ];
   ##### Networking #####
   networking.interfaces.eno2.wakeOnLan.enable = true;
-  settings.networking.lanSubnet = "10.0.0.0/24";
+  settings.networking.lanSubnet = "192.168.50.0/24";
   programs.openvpn3.enable = true;
   services.resolved.enable = true;
   services.mullvad-vpn = {
