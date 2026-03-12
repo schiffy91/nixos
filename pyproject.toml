@@ -3,6 +3,8 @@ disable = [
     "import-error",           # E0401: lib.* modules use sys.path.insert at runtime
     "wrong-import-position",  # C0413: imports after sys.path.insert() are intentional
     "redefined-outer-name",   # W0621: standard pytest fixture injection pattern
+    "no-member",              # E1101: @chrootable adds .chroot() dynamically at runtime
+    "unused-argument",        # W0613: pytest fixtures must be in signatures to activate
 ]
 
 [tool.pytest.ini_options]
