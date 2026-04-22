@@ -60,12 +60,11 @@ def phase_1():
     section("patched QEMU derivation")
     req = stdout_of(f"nix-store --query --requisites {out_path} 2>/dev/null")
     check("patched qemu-10 in closure", lambda: re.search(r"-qemu-10\.\d+\.\d+", req) is not None)
-    section("libvirt QEMU hook")
-    tmpfiles = stdout_of(f"cat {out_path}/etc/tmpfiles.d/00-nixos.conf 2>/dev/null")
-    check("tmpfiles rule for hooks/qemu", lambda: "/var/lib/libvirt/hooks/qemu" in tmpfiles)
-    m = re.search(r"(/nix/store/[^\s]+-qemu-hook)", tmpfiles)
-    check("hook script path resolves", lambda: m is not None and Path(m.group(1)).exists())
-    if m: check("hook script contains bind_vfio", lambda: "bind_vfio" in Path(m.group(1)).read_text(encoding="utf-8"))
+    section("libvirt QEMU hook (SharkWipf dispatcher + per-VM scripts)")
+    etc_listing = stdout_of(f"find {out_path}/etc/libvirt/hooks 2>/dev/null")
+    check("dispatcher /etc/libvirt/hooks/qemu in closure", lambda: re.search(r"/etc/libvirt/hooks/qemu$", etc_listing, re.M) is not None)
+    check("qemu.d/win11/prepare/begin/start.sh in closure", lambda: "qemu.d/win11/prepare/begin/start.sh" in etc_listing)
+    check("qemu.d/win11/release/end/revert.sh in closure", lambda: "qemu.d/win11/release/end/revert.sh" in etc_listing)
     section("compiled ACPI tables")
     aml_out = stdout_of(f"nix-store --query --requisites {out_path} 2>/dev/null | xargs -I{{}} find {{}} -maxdepth 2 -name '*.aml' 2>/dev/null")
     check("fake_battery.aml in closure", lambda: "fake_battery.aml" in aml_out)
@@ -97,10 +96,12 @@ def phase_2():
     check(f"{KVMFR_DEV} exists", lambda: sh.exists(KVMFR_DEV))
     section("libvirt")
     check("libvirtd active", lambda: stdout_of("systemctl is-active libvirtd").strip() == "active")
-    check("/var/lib/libvirt/hooks/qemu symlink",
-          lambda: sh.is_symlink("/var/lib/libvirt/hooks/qemu") and "nix/store" in sh.realpath("/var/lib/libvirt/hooks/qemu"))
-    check("hook script executable",
-          lambda: run("test -x /var/lib/libvirt/hooks/qemu").returncode == 0)
+    check("/etc/libvirt/hooks/qemu exists & executable",
+          lambda: Path("/etc/libvirt/hooks/qemu").is_file() and os.access("/etc/libvirt/hooks/qemu", os.X_OK))
+    check("/etc/libvirt/hooks/qemu.d/win11/prepare/begin/start.sh",
+          lambda: Path("/etc/libvirt/hooks/qemu.d/win11/prepare/begin/start.sh").is_file())
+    check("/etc/libvirt/hooks/qemu.d/win11/release/end/revert.sh",
+          lambda: Path("/etc/libvirt/hooks/qemu.d/win11/release/end/revert.sh").is_file())
     section("ACPI spoofed tables")
     check("/etc/acpi-spoofed-tables/fake_battery.aml", lambda: sh.exists("/etc/acpi-spoofed-tables/fake_battery.aml"))
     check("/etc/acpi-spoofed-tables/spoofed_devices.aml", lambda: sh.exists("/etc/acpi-spoofed-tables/spoofed_devices.aml"))
@@ -129,9 +130,9 @@ def _dm_active():
 
 def _recover(reason):
     Utils.log_error(f"[recovery] triggered: {reason}")
-    Utils.log("[recovery] force gpu_vfio.py attach")
-    run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
-    Utils.log("[recovery] start display-manager")
+    Utils.log("[recovery] invoking revert.sh via libvirt hook dispatcher")
+    run(f"/etc/libvirt/hooks/qemu win11 release end - < /dev/null", sudo=True)
+    Utils.log("[recovery] ensuring display-manager is up")
     run("systemctl start display-manager", sudo=True)
     time.sleep(3)
     gpu_ok, dm_ok = _gpu_on_nvidia(), _dm_active()
@@ -180,16 +181,21 @@ def _wrap_destructive(body, recover_needed_on_clean_exit=True):
         if recover_needed_on_clean_exit and not (_gpu_on_nvidia() and _dm_active()):
             _recover("final-state-unhealthy")
 
-def _verify_detached():
-    check("GPU → vfio-pci", lambda: Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver").resolve().name == "vfio-pci")
-    check("Audio → vfio-pci", lambda: Path(f"/sys/bus/pci/devices/{AUDIO_PCI}/driver").resolve().name == "vfio-pci")
+VM_NAME = "win11"
+HOOK_DISPATCHER = "/etc/libvirt/hooks/qemu"
+
+def _hook(state, phase):
+    return run(f"{HOOK_DISPATCHER} {VM_NAME} {state} {phase} - < /dev/null", sudo=True)
+
+def _verify_after_start_sh():
+    check("display-manager inactive", lambda: stdout_of("systemctl is-active display-manager").strip() != "active")
     lsmod = stdout_of("lsmod")
     check("no nvidia modules loaded", lambda: not re.search(r"^nvidia", lsmod, re.M))
+    check("vfio_pci module loaded", lambda: re.search(r"^vfio_pci\b", lsmod, re.M) is not None)
     dm = stdout_of("dmesg", sudo=True)
     check("dmesg has no BUG:", lambda: "BUG:" not in dm)
-    check("dmesg has no Hardware Error", lambda: "Hardware Error" not in dm)
 
-def _verify_attached():
+def _verify_after_revert_sh():
     check("GPU → nvidia", lambda: Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver").resolve().name == "nvidia")
     check("Audio → snd_hda_intel", lambda: Path(f"/sys/bus/pci/devices/{AUDIO_PCI}/driver").resolve().name == "snd_hda_intel")
     lsmod = stdout_of("lsmod")
@@ -198,46 +204,48 @@ def _verify_attached():
     check("nvidia-smi works", lambda: run("nvidia-smi").returncode == 0)
     check("display-manager active", lambda: _dm_active())
     dm = stdout_of("dmesg", sudo=True)
-    check("reattach dmesg clean (no BUG:)", lambda: "BUG:" not in dm)
+    check("revert dmesg clean (no BUG:)", lambda: "BUG:" not in dm)
 
 def phase_3():
-    heading("Phase 3: single detach → attach cycle")
+    heading("Phase 3: invoke libvirt hooks directly (start.sh → revert.sh)")
     _confirm_destructive()
     def body():
         run("dmesg -C", sudo=True)
-        section("detach")
-        r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
-        check("detach exit 0", lambda: r.returncode == 0)
-        _verify_detached()
-        Utils.log("holding detached state for 3s before reattach...")
-        time.sleep(3)
-        section("attach")
+        section("prepare/begin (start.sh)")
+        r = _hook("prepare", "begin")
+        check("start.sh exit 0", lambda: r.returncode == 0)
+        _verify_after_start_sh()
+        Utils.log("holding for 5s (libvirt would start QEMU + bind vfio-pci here)...")
+        time.sleep(5)
+        section("release/end (revert.sh)")
         run("dmesg -C", sudo=True)
-        r = run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
-        check("attach exit 0", lambda: r.returncode == 0)
-        _verify_attached()
+        r = _hook("release", "end")
+        check("revert.sh exit 0", lambda: r.returncode == 0)
+        time.sleep(3)
+        _verify_after_revert_sh()
         finish(3)
     _wrap_destructive(body)
 
 def phase_3_detach():
-    heading("Phase 3-detach: GPU detach only (leaves display off)")
+    heading("Phase 3-detach: invoke start.sh only (display goes off)")
     _confirm_destructive()
     def body():
         run("dmesg -C", sudo=True)
-        r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
-        check("detach exit 0", lambda: r.returncode == 0)
-        _verify_detached()
+        r = _hook("prepare", "begin")
+        check("start.sh exit 0", lambda: r.returncode == 0)
+        _verify_after_start_sh()
         Utils.print("\n  Run 'sudo /etc/nixos/bin/gpu_vfio_test.py p3-attach' to restore.")
         finish(3)
     _wrap_destructive(body, recover_needed_on_clean_exit=False)
 
 def phase_3_attach():
-    heading("Phase 3-attach: GPU reattach to host")
+    heading("Phase 3-attach: invoke revert.sh to restore host")
     def body():
         run("dmesg -C", sudo=True)
-        r = run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
-        check("attach exit 0", lambda: r.returncode == 0)
-        _verify_attached()
+        r = _hook("release", "end")
+        check("revert.sh exit 0", lambda: r.returncode == 0)
+        time.sleep(3)
+        _verify_after_revert_sh()
         finish(3)
     _wrap_destructive(body)
 

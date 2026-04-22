@@ -1,131 +1,59 @@
-import contextlib
 from unittest.mock import patch
-
 import pytest
+from bin.gpu_vfio import vm_state, vm_defined, gpu_driver, status, main
 
-from bin.gpu_vfio import (
-    get_driver, check_iommu, gpu_status,
-    detach, attach, status, main,
-)
 
-class TestGpuVfioHelpers:
-    def test_get_driver_nvidia(self, mock_shell, mock_subprocess):
+class TestVmState:
+    def test_running(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 0
-        mock_subprocess.return_value.stdout = "nvidia"
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("bin.gpu_vfio.sh", mock_shell))
-            stack.enter_context(patch.object(mock_shell, "is_symlink",
-                                             return_value=True))
-            stack.enter_context(patch.object(mock_shell, "realpath",
-                                             return_value="/sys/nvidia"))
-            stack.enter_context(patch.object(mock_shell, "basename",
-                                             return_value="nvidia"))
-            assert get_driver("0000:01:00.0") == "nvidia"
-    def test_get_driver_vfio_pci(self, mock_shell, mock_subprocess):
-        mock_subprocess.return_value.returncode = 0
-        mock_subprocess.return_value.stdout = "vfio-pci"
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("bin.gpu_vfio.sh", mock_shell))
-            stack.enter_context(patch.object(mock_shell, "is_symlink",
-                                             return_value=True))
-            stack.enter_context(patch.object(mock_shell, "realpath",
-                                             return_value="/sys/vfio-pci"))
-            stack.enter_context(patch.object(mock_shell, "basename",
-                                             return_value="vfio-pci"))
-            assert get_driver("0000:01:00.0") == "vfio-pci"
-    def test_get_driver_none(self, mock_shell):
+        mock_subprocess.return_value.stdout = "running\n"
         with patch("bin.gpu_vfio.sh", mock_shell):
-            with patch.object(mock_shell, "is_symlink", return_value=False):
-                assert get_driver("0000:01:00.0") == "none"
-    def test_check_iommu_enabled(self, mock_shell, mock_subprocess):
-        mock_subprocess.return_value.returncode = 0
-        with patch("bin.gpu_vfio.sh", mock_shell):
-            check_iommu()
-    def test_check_iommu_disabled(self, mock_shell, mock_subprocess):
+            assert vm_state() == "running"
+    def test_undefined(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 1
         with patch("bin.gpu_vfio.sh", mock_shell):
-            with pytest.raises(SystemExit):
-                check_iommu()
+            assert vm_state() == "undefined"
 
-class TestGpuVfioDetach:
-    def test_detach(self, mock_shell, mock_subprocess):
+
+class TestVmDefined:
+    def test_yes(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 0
-        mock_subprocess.return_value.stdout = "nvidia"
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("bin.gpu_vfio.sh", mock_shell))
-            stack.enter_context(patch("bin.gpu_vfio.check_iommu"))
-            stack.enter_context(patch("bin.gpu_vfio.get_driver",
-                                      side_effect=["nvidia", "vfio-pci",
-                                                    "vfio-pci"]))
-            stack.enter_context(patch("bin.gpu_vfio.terminate_user_sessions"))
-            stack.enter_context(patch("bin.gpu_vfio.stop_display_manager"))
-            stack.enter_context(patch("bin.gpu_vfio.unload_nvidia"))
-            stack.enter_context(patch("bin.gpu_vfio.unbind_device"))
-            stack.enter_context(patch("bin.gpu_vfio.bind_device"))
-            detach()
-    def test_detach_already_vfio(self, mock_shell):
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("bin.gpu_vfio.sh", mock_shell))
-            stack.enter_context(patch("bin.gpu_vfio.check_iommu"))
-            stack.enter_context(patch("bin.gpu_vfio.get_driver",
-                                      return_value="vfio-pci"))
-            detach()
+        with patch("bin.gpu_vfio.sh", mock_shell):
+            assert vm_defined() is True
+    def test_no(self, mock_shell, mock_subprocess):
+        mock_subprocess.return_value.returncode = 1
+        with patch("bin.gpu_vfio.sh", mock_shell):
+            assert vm_defined() is False
 
-class TestGpuVfioAttach:
-    def test_attach(self, mock_shell, mock_subprocess):
-        mock_subprocess.return_value.returncode = 0
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("bin.gpu_vfio.sh", mock_shell))
-            stack.enter_context(patch("bin.gpu_vfio.get_driver",
-                                      side_effect=["vfio-pci", "nvidia",
-                                                    "snd_hda_intel"]))
-            stack.enter_context(patch("bin.gpu_vfio.unbind_device"))
-            stack.enter_context(patch("bin.gpu_vfio.bind_device"))
-            stack.enter_context(patch("bin.gpu_vfio.wait_for_nvidia"))
-            stack.enter_context(patch("bin.gpu_vfio.start_display_manager"))
-            attach()
-    def test_attach_already_nvidia(self, mock_shell):
-        with patch("bin.gpu_vfio.sh", mock_shell):
-            with patch("bin.gpu_vfio.get_driver", return_value="nvidia"):
-                attach()
 
-class TestGpuVfioStatus:
-    def test_gpu_status_vfio(self):
-        with patch("bin.gpu_vfio.get_driver", return_value="vfio-pci"):
-            assert "Detached" in gpu_status()
-    def test_gpu_status_nvidia(self):
-        with patch("bin.gpu_vfio.get_driver", return_value="nvidia"):
-            assert "Attached" in gpu_status()
-    def test_gpu_status_unknown(self):
-        with patch("bin.gpu_vfio.get_driver", return_value="other"):
-            assert "Unknown" in gpu_status()
-    def test_status_vfio(self, mock_shell, capsys):
-        with patch("bin.gpu_vfio.sh", mock_shell):
-            with patch("bin.gpu_vfio.get_driver", return_value="vfio-pci"):
-                status()
-                output = capsys.readouterr().out
-                assert "Detached" in output
-    def test_status_nvidia(self, mock_shell, capsys):
-        with patch("bin.gpu_vfio.sh", mock_shell):
-            with patch("bin.gpu_vfio.get_driver", return_value="nvidia"):
-                status()
-                output = capsys.readouterr().out
-                assert "Attached" in output
-    def test_status_unknown(self, mock_shell, capsys):
-        with patch("bin.gpu_vfio.sh", mock_shell):
-            with patch("bin.gpu_vfio.get_driver", return_value="other"):
-                status()
-                output = capsys.readouterr().out
-                assert "Unknown" in output
+class TestGpuDriver:
+    def test_nvidia(self):
+        with patch("pathlib.Path.is_symlink", return_value=True):
+            with patch("pathlib.Path.resolve") as r:
+                r.return_value.name = "nvidia"
+                assert gpu_driver() == "nvidia"
+    def test_none(self):
+        with patch("pathlib.Path.is_symlink", return_value=False):
+            assert gpu_driver() == "none"
 
-class TestGpuVfioMain:
-    def test_main_invalid(self, mock_shell,  # noqa: ARG002
-                          monkeypatch):
+
+class TestStatus:
+    def test_prints(self, mock_shell, capsys):
+        with patch("bin.gpu_vfio.sh", mock_shell):
+            with patch("bin.gpu_vfio.vm_state", return_value="shut off"):
+                with patch("bin.gpu_vfio.gpu_driver", return_value="nvidia"):
+                    with patch("pathlib.Path.is_char_device", return_value=True):
+                        with patch("pathlib.Path.exists", return_value=True):
+                            status()
+                            assert "VFIO Status" in capsys.readouterr().out
+
+
+class TestMain:
+    def test_invalid(self, mock_shell, monkeypatch):  # noqa: ARG002
         monkeypatch.setattr("sys.argv", ["gpu_vfio.py", "invalid"])
         with pytest.raises(SystemExit):
             main()
-    def test_main_no_args(self, mock_shell,  # noqa: ARG002
-                          monkeypatch):
+    def test_no_args(self, mock_shell, monkeypatch):  # noqa: ARG002
         monkeypatch.setattr("sys.argv", ["gpu_vfio.py"])
         with pytest.raises(SystemExit):
             main()

@@ -1,37 +1,6 @@
 { config, pkgs, lib, ... }: let
   cfg = config.settings.vfio;
   adminUser = config.settings.user.admin.username;
-  gpuPci = "0000:01:00.0";
-  audioPci = "0000:01:00.1";
-  gpuVendorDevice = "10de:2684";
-  audioVendorDevice = "10de:22ba";
-  hookScript = pkgs.writeShellScript "qemu-hook" ''
-    GUEST="$1"
-    OPERATION="$2"
-    [ "$GUEST" != "${cfg.vmName}" ] && exit 0
-    unbind() { echo "$1" > "/sys/bus/pci/devices/$1/driver/unbind" 2>/dev/null || true; }
-    bind_vfio() {
-      unbind "$1"
-      sleep 0.5
-      echo "$2" > /sys/bus/pci/drivers/vfio-pci/new_id 2>/dev/null || true
-      echo "$1" > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null || true
-    }
-    bind_host() {
-      unbind "$1"
-      sleep 0.5
-      echo "$1" > "/sys/bus/pci/drivers/$2/bind" 2>/dev/null || true
-    }
-    case "$OPERATION" in
-      prepare)
-        bind_vfio "${gpuPci}" "${gpuVendorDevice}"
-        bind_vfio "${audioPci}" "${audioVendorDevice}"
-        ;;
-      release)
-        bind_host "${gpuPci}" "nvidia"
-        bind_host "${audioPci}" "snd_hda_intel"
-        ;;
-    esac
-  '';
   ##### Hypervisor-Phantom QEMU anti-detection patch (AMD, QEMU 10.2.0) #####
   antiDetectPatch = pkgs.fetchurl {
     url = "https://raw.githubusercontent.com/Scrut1ny/Hypervisor-Phantom/main/patches/QEMU/AMD-v10.2.0.patch";
@@ -63,11 +32,25 @@ in lib.mkMerge [
     };
     ##### User groups for VFIO + input access #####
     users.users.${adminUser}.extraGroups = [ "input" "kvm" ];
-    ##### Libvirt hook for automatic GPU detach/attach #####
+    ##### Libvirt hooks (SharkWipf dispatcher + per-VM start/revert) #####
+    ##### Pattern: PassthroughPOST/VFIO-Tools + joeknock90/QaidVoid       #####
+    environment.etc."libvirt/hooks/qemu" = {
+      source = ./vfio_hooks/qemu;
+      mode = "0755";
+    };
+    environment.etc."libvirt/hooks/qemu.d/${cfg.vmName}/prepare/begin/start.sh" = {
+      source = ./vfio_hooks/start.sh;
+      mode = "0755";
+    };
+    environment.etc."libvirt/hooks/qemu.d/${cfg.vmName}/release/end/revert.sh" = {
+      source = ./vfio_hooks/revert.sh;
+      mode = "0755";
+    };
+    ##### Log dir for hook output #####
     systemd.tmpfiles.rules = [
-      "L /var/lib/libvirt/hooks/qemu - - - - ${hookScript}"
+      "d /var/log/libvirt 0755 root root -"
     ];
-    ##### ACPI tables available at /run/acpi-spoofed-tables/ #####
+    ##### ACPI tables available at /etc/acpi-spoofed-tables/ #####
     environment.etc."acpi-spoofed-tables/fake_battery.aml".source = "${acpiTables}/fake_battery.aml";
     environment.etc."acpi-spoofed-tables/spoofed_devices.aml".source = "${acpiTables}/spoofed_devices.aml";
   })

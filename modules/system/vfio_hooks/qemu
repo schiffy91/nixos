@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# SharkWipf libvirt qemu hook dispatcher
+# Routes lifecycle events to /etc/libvirt/hooks/qemu.d/<vm>/<hook>/<state>
+GUEST_NAME="$1"
+HOOK_NAME="$2"
+STATE_NAME="$3"
+BASEDIR="$(dirname "$0")"
+HOOKPATH="$BASEDIR/qemu.d/$GUEST_NAME/$HOOK_NAME/$STATE_NAME"
+STDIN=$(cat)
+set -e
+if [ -f "$HOOKPATH" ] && [ -s "$HOOKPATH" ] && [ -x "$HOOKPATH" ]; then
+    eval "\"$HOOKPATH\"" "$@" <<< "$STDIN"
+elif [ -d "$HOOKPATH" ]; then
+    while read -r file; do
+        [ -n "$file" ] && eval "\"$file\"" "$@" <<< "$STDIN"
+    done <<< "$(find -L "$HOOKPATH" -maxdepth 1 -type f -executable -print)"
+fi
