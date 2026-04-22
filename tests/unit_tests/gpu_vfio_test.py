@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from bin.gpu_vfio import (
-    get_driver, check_iommu,
+    get_driver, check_iommu, gpu_status,
     detach, attach, status, main,
 )
 
@@ -57,6 +57,8 @@ class TestGpuVfioDetach:
             stack.enter_context(patch("bin.gpu_vfio.get_driver",
                                       side_effect=["nvidia", "vfio-pci",
                                                     "vfio-pci"]))
+            stack.enter_context(patch("bin.gpu_vfio.stop_display_manager"))
+            stack.enter_context(patch("bin.gpu_vfio.unload_nvidia"))
             stack.enter_context(patch("bin.gpu_vfio.unbind_device"))
             stack.enter_context(patch("bin.gpu_vfio.bind_device"))
             detach()
@@ -78,6 +80,7 @@ class TestGpuVfioAttach:
                                                     "snd_hda_intel"]))
             stack.enter_context(patch("bin.gpu_vfio.unbind_device"))
             stack.enter_context(patch("bin.gpu_vfio.bind_device"))
+            stack.enter_context(patch("bin.gpu_vfio.start_display_manager"))
             attach()
     def test_attach_already_nvidia(self, mock_shell):
         with patch("bin.gpu_vfio.sh", mock_shell):
@@ -85,6 +88,15 @@ class TestGpuVfioAttach:
                 attach()
 
 class TestGpuVfioStatus:
+    def test_gpu_status_vfio(self):
+        with patch("bin.gpu_vfio.get_driver", return_value="vfio-pci"):
+            assert "Detached" in gpu_status()
+    def test_gpu_status_nvidia(self):
+        with patch("bin.gpu_vfio.get_driver", return_value="nvidia"):
+            assert "Attached" in gpu_status()
+    def test_gpu_status_unknown(self):
+        with patch("bin.gpu_vfio.get_driver", return_value="other"):
+            assert "Unknown" in gpu_status()
     def test_status_vfio(self, mock_shell, capsys):
         with patch("bin.gpu_vfio.sh", mock_shell):
             with patch("bin.gpu_vfio.get_driver", return_value="vfio-pci"):

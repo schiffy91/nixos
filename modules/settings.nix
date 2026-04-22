@@ -75,6 +75,9 @@ in {
       "/var/log"
       "/root/.cache/nix/"
       "/root/.ssh/known_hosts"
+      ##### Libvirt #####
+      "/var/lib/libvirt"
+      "/etc/libvirt"
       ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
       ##### Files & Folders #####
@@ -167,5 +170,11 @@ in {
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
+    ##### VFIO #####
+    settings.vfio.enable = mkSetting bool false;
+    settings.vfio.vmName = mkSetting str "win11";
+    settings.vfio.lookingGlass.enable = mkSetting bool false;
+    settings.vfio.lookingGlass.sharedMemoryMB = mkSetting int 128;
+    settings.vfio.evdev.enable = mkSetting bool false;
   };
 }

@@ -6,6 +6,11 @@
   settings.disk.encryption.enable = true;
   settings.disk.immutability.enable = true;
   settings.disk.swap.size = "65G";
+  ##### VFIO #####
+  settings.vfio.enable = true;
+  settings.vfio.vmName = "win11";
+  settings.vfio.lookingGlass.enable = true;
+  settings.vfio.evdev.enable = true;
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
   ##### Display #####
@@ -80,9 +85,7 @@
     libvirtd = {
       enable = true;
       qemu = {
-        package = pkgs.qemu;
         swtpm.enable = true;
-        runAsRoot = false;
       };
     };
     spiceUSBRedirection.enable = true;

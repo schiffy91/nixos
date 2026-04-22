@@ -1,0 +1,229 @@
+<!--
+  Windows 11 VFIO Gaming VM — Anti-Cheat Hardened
+  Managed by: sudo gpu_vfio.py {setup|start|stop|status|guide}
+-->
+<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <name>win11</name>
+  <uuid>932dac4f-1e97-4c9a-82b5-e9c10b311f4d</uuid>
+  <metadata>
+    <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
+      <libosinfo:os id="http://microsoft.com/win/11"/>
+    </libosinfo:libosinfo>
+  </metadata>
+
+  <memory unit='GiB'>32</memory>
+  <currentMemory unit='GiB'>32</currentMemory>
+
+  <vcpu placement='static'>16</vcpu>
+  <iothreads>2</iothreads>
+  <cputune>
+    <!-- Pin to second CCD (cores 8-15, threads 16-31) -->
+    <vcpupin vcpu='0' cpuset='16'/>
+    <vcpupin vcpu='1' cpuset='17'/>
+    <vcpupin vcpu='2' cpuset='18'/>
+    <vcpupin vcpu='3' cpuset='19'/>
+    <vcpupin vcpu='4' cpuset='20'/>
+    <vcpupin vcpu='5' cpuset='21'/>
+    <vcpupin vcpu='6' cpuset='22'/>
+    <vcpupin vcpu='7' cpuset='23'/>
+    <vcpupin vcpu='8' cpuset='24'/>
+    <vcpupin vcpu='9' cpuset='25'/>
+    <vcpupin vcpu='10' cpuset='26'/>
+    <vcpupin vcpu='11' cpuset='27'/>
+    <vcpupin vcpu='12' cpuset='28'/>
+    <vcpupin vcpu='13' cpuset='29'/>
+    <vcpupin vcpu='14' cpuset='30'/>
+    <vcpupin vcpu='15' cpuset='31'/>
+    <emulatorpin cpuset='0-1'/>
+    <iothreadpin iothread='1' cpuset='2'/>
+    <iothreadpin iothread='2' cpuset='3'/>
+  </cputune>
+
+  <os>
+    <type arch='x86_64' machine='pc-q35-10.2'>hvm</type>
+    <loader readonly='yes' type='pflash'>/run/libvirt/nix-ovmf/edk2-x86_64-code.fd</loader>
+    <nvram template='/run/libvirt/nix-ovmf/edk2-i386-vars.fd'/>
+    <boot dev='hd'/>
+    <smbios mode='sysinfo'/>
+  </os>
+
+  <sysinfo type='smbios'>
+    <bios>
+      <entry name='vendor'>American Megatrends Inc.</entry>
+      <entry name='version'>4204</entry>
+      <entry name='date'>03/14/2024</entry>
+      <entry name='release'>42.04</entry>
+    </bios>
+    <system>
+      <entry name='manufacturer'>ASUS</entry>
+      <entry name='product'>ROG STRIX X670E-E GAMING WIFI</entry>
+      <entry name='version'>Rev 1.xx</entry>
+      <entry name='serial'>220927391700123</entry>
+      <entry name='uuid'>932dac4f-1e97-4c9a-82b5-e9c10b311f4d</entry>
+      <entry name='family'>Desktop</entry>
+    </system>
+    <baseBoard>
+      <entry name='manufacturer'>ASUSTeK COMPUTER INC.</entry>
+      <entry name='product'>ROG STRIX X670E-E GAMING WIFI</entry>
+      <entry name='version'>Rev 1.xx</entry>
+      <entry name='serial'>220927391700456</entry>
+    </baseBoard>
+    <chassis>
+      <entry name='manufacturer'>Default string</entry>
+      <entry name='version'>Default string</entry>
+      <entry name='serial'>220927391700789</entry>
+    </chassis>
+  </sysinfo>
+
+  <features>
+    <acpi/>
+    <apic/>
+    <smm state='on'/>
+    <kvm>
+      <hidden state='on'/>
+    </kvm>
+    <hyperv mode='custom'>
+      <relaxed state='on'/>
+      <vapic state='on'/>
+      <spinlocks state='on' retries='8191'/>
+      <vpindex state='on'/>
+      <runtime state='on'/>
+      <synic state='on'/>
+      <stimer state='on'>
+        <direct state='on'/>
+      </stimer>
+      <reset state='on'/>
+      <frequencies state='on'/>
+      <tlbflush state='on'/>
+      <vendor_id state='on' value='AuthenticAMD'/>
+    </hyperv>
+    <ioapic driver='kvm'/>
+  </features>
+
+  <cpu mode='host-passthrough' check='none' migratable='off'>
+    <topology sockets='1' dies='1' cores='8' threads='2'/>
+    <feature policy='disable' name='hypervisor'/>
+    <feature policy='require' name='topoext'/>
+    <feature policy='require' name='invtsc'/>
+  </cpu>
+
+  <clock offset='localtime'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+    <timer name='hypervclock' present='yes'/>
+    <timer name='tsc' present='yes' mode='native'/>
+  </clock>
+
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
+
+  <devices>
+    <!-- Virtual TPM for BitLocker -->
+    <tpm model='tpm-crb'>
+      <backend type='emulator' version='2.0'/>
+    </tpm>
+
+    <!-- NVIDIA RTX 4090 GPU -->
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <source>
+        <address domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
+      </source>
+      <address type='pci' domain='0x0000' bus='0x05' slot='0x00' function='0x0' multifunction='on'/>
+    </hostdev>
+    <!-- NVIDIA RTX 4090 Audio -->
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <source>
+        <address domain='0x0000' bus='0x01' slot='0x00' function='0x1'/>
+      </source>
+      <address type='pci' domain='0x0000' bus='0x05' slot='0x00' function='0x1'/>
+    </hostdev>
+
+    <!-- WD BLACK SN850X 4TB over TB4 (BitLocker encrypted) -->
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw' cache='none' io='native' discard='unmap'/>
+      <source dev='/dev/disk/by-id/nvme-WD_BLACK_SN850X_4000GB_22461L800626'/>
+      <target dev='sda' bus='sata'/>
+      <serial>WD-WMATV6230456</serial>
+    </disk>
+
+    <!-- Looking Glass shared memory (128MB for 4K) -->
+    <shmem name='looking-glass'>
+      <model type='ivshmem-plain'/>
+      <size unit='M'>128</size>
+    </shmem>
+
+    <!-- Network: e1000e with Intel MAC (anti-cheat safe) -->
+    <interface type='network'>
+      <mac address='24:4B:FE:A1:B2:C3'/>
+      <source network='default'/>
+      <model type='e1000e'/>
+    </interface>
+
+    <!-- USB controller -->
+    <controller type='usb' model='qemu-xhci' ports='15'/>
+
+    <!-- Controllers -->
+    <controller type='pci' model='pcie-root'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='pci' model='pcie-root-port'/>
+    <controller type='sata'/>
+
+    <!-- Virtio RNG -->
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+
+    <!--
+    INITIAL SETUP ONLY: Uncomment this for display before Looking Glass Host is installed.
+    Remove after LG Host is confirmed working.
+
+    <graphics type='spice' autoport='yes'>
+      <listen type='address' address='127.0.0.1'/>
+    </graphics>
+    <video>
+      <model type='qxl' ram='65536' vram='65536' vgamem='16384' heads='1' primary='yes'/>
+    </video>
+    -->
+
+    <!-- No video device (Looking Glass provides display) -->
+    <video>
+      <model type='none'/>
+    </video>
+
+    <memballoon model='none'/>
+  </devices>
+
+  <qemu:commandline>
+    <!-- SMBIOS OEM strings (removes QEMU default) -->
+    <qemu:arg value='-smbios'/>
+    <qemu:arg value='type=11,value=To Be Filled By O.E.M.'/>
+    <!-- Memory info spoofing -->
+    <qemu:arg value='-smbios'/>
+    <qemu:arg value='type=17,manufacturer=G.Skill,speed=6000,part=F5-6000J3636F16G'/>
+    <!-- Custom ACPI SSDT tables (fake battery + spoofed hardware devices) -->
+    <qemu:arg value='-acpitable'/>
+    <qemu:arg value='file=/etc/acpi-spoofed-tables/fake_battery.aml'/>
+    <qemu:arg value='-acpitable'/>
+    <qemu:arg value='file=/etc/acpi-spoofed-tables/spoofed_devices.aml'/>
+    <!-- Disable KVM paravirtualization (timing attack mitigation) -->
+    <qemu:arg value='-overcommit'/>
+    <qemu:arg value='cpu-pm=on'/>
+    <!-- evdev keyboard (Razer BlackWidow Lite) -->
+    <qemu:arg value='-object'/>
+    <qemu:arg value='input-linux,id=kbd,evdev=/dev/input/by-id/usb-Razer_Razer_BlackWidow_Lite-event-kbd,grab_all=on,repeat=on'/>
+    <!-- evdev mouse (Logitech USB Receiver) -->
+    <qemu:arg value='-object'/>
+    <qemu:arg value='input-linux,id=mouse,evdev=/dev/input/by-id/usb-Logitech_USB_Receiver-if01-event-mouse'/>
+  </qemu:commandline>
+</domain>
