@@ -52,7 +52,33 @@ def stop_display_manager():
 
 def start_display_manager():
     Utils.log("Starting display manager...")
-    sh.run("systemctl start display-manager", check=False)
+    sh.run("systemctl restart display-manager", check=False)
+
+def terminate_user_sessions():
+    Utils.log("Terminating user sessions (clean logind handoff)...")
+    result = sh.run("loginctl list-users --no-legend 2>/dev/null", check=False)
+    for line in Shell.stdout(result).splitlines():
+        parts = line.split()
+        if len(parts) < 2: continue
+        uid, user = parts[0], parts[1]
+        if user == "root" or not uid.isdigit() or int(uid) < 1000: continue
+        Utils.log(f"  loginctl terminate-user {user}")
+        sh.run(f"loginctl terminate-user {user}", check=False)
+    for _ in range(10):
+        r = sh.run("systemctl list-units 'user@*.service' --state=active --no-legend 2>/dev/null", check=False)
+        if not Shell.stdout(r).strip(): return
+        time.sleep(1)
+    Utils.log("  (user sessions still lingering — proceeding anyway)")
+
+def wait_for_nvidia():
+    Utils.log("Waiting for nvidia devices to be ready...")
+    for i in range(40):
+        if sh.exists("/dev/nvidia0") and sh.run("nvidia-smi", check=False).returncode == 0:
+            Utils.log(f"  nvidia ready after {i * 0.25:.2f}s")
+            return True
+        time.sleep(0.25)
+    Utils.log_error("  nvidia-smi did not succeed within 10s")
+    return False
 
 def unbind_vtconsoles():
     Utils.log("Unbinding VT consoles...")
@@ -100,6 +126,7 @@ def detach():
     if get_driver(GPU_PCI) == "vfio-pci":
         Utils.log("GPU already bound to vfio-pci")
         return
+    terminate_user_sessions()
     stop_display_manager()
     unload_nvidia()
     unbind_device(GPU_PCI)
@@ -120,6 +147,7 @@ def attach():
     bind_device(GPU_PCI, "nvidia")
     bind_device(AUDIO_PCI, "snd_hda_intel")
     Utils.log(f"GPU: {get_driver(GPU_PCI)}, Audio: {get_driver(AUDIO_PCI)}")
+    wait_for_nvidia()
     start_display_manager()
 
 ##### VM State #####

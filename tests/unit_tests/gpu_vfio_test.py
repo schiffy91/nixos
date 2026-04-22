@@ -57,6 +57,7 @@ class TestGpuVfioDetach:
             stack.enter_context(patch("bin.gpu_vfio.get_driver",
                                       side_effect=["nvidia", "vfio-pci",
                                                     "vfio-pci"]))
+            stack.enter_context(patch("bin.gpu_vfio.terminate_user_sessions"))
             stack.enter_context(patch("bin.gpu_vfio.stop_display_manager"))
             stack.enter_context(patch("bin.gpu_vfio.unload_nvidia"))
             stack.enter_context(patch("bin.gpu_vfio.unbind_device"))
@@ -80,6 +81,7 @@ class TestGpuVfioAttach:
                                                     "snd_hda_intel"]))
             stack.enter_context(patch("bin.gpu_vfio.unbind_device"))
             stack.enter_context(patch("bin.gpu_vfio.bind_device"))
+            stack.enter_context(patch("bin.gpu_vfio.wait_for_nvidia"))
             stack.enter_context(patch("bin.gpu_vfio.start_display_manager"))
             attach()
     def test_attach_already_nvidia(self, mock_shell):

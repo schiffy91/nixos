@@ -155,8 +155,7 @@ def _timeout_handler(_sig, _frame):
     _recover("timeout")
     raise TimeoutError("phase 3 deadline exceeded")
 
-def phase_3():
-    heading("Phase 3: GPU detach/reattach cycle (DESTRUCTIVE)")
+def _confirm_destructive():
     Utils.print("  WARNING: This kills the display manager.")
     Utils.print("  You must run this from SSH or a TTY.")
     Utils.print("  Watchdog: 300s deadline, auto-recovery on exception or unhealthy final state.")
@@ -164,10 +163,12 @@ def phase_3():
     else:
         answer = input("  Continue? [yes/NO]: ").strip().lower()
         if answer != "yes": Utils.abort("aborted by user")
+
+def _wrap_destructive(body, recover_needed_on_clean_exit=True):
     signal.signal(signal.SIGALRM, _timeout_handler)
     signal.alarm(300)
     try:
-        _phase_3_body()
+        body()
     except SystemExit:
         raise
     except BaseException as e:
@@ -176,14 +177,10 @@ def phase_3():
         raise
     finally:
         signal.alarm(0)
-        if not (_gpu_on_nvidia() and _dm_active()):
+        if recover_needed_on_clean_exit and not (_gpu_on_nvidia() and _dm_active()):
             _recover("final-state-unhealthy")
 
-def _phase_3_body():
-    run("dmesg -C", sudo=True)
-    section("cycle 1: detach")
-    r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
-    check("detach exit 0", lambda: r.returncode == 0)
+def _verify_detached():
     check("GPU → vfio-pci", lambda: Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver").resolve().name == "vfio-pci")
     check("Audio → vfio-pci", lambda: Path(f"/sys/bus/pci/devices/{AUDIO_PCI}/driver").resolve().name == "vfio-pci")
     lsmod = stdout_of("lsmod")
@@ -191,31 +188,58 @@ def _phase_3_body():
     dm = stdout_of("dmesg", sudo=True)
     check("dmesg has no BUG:", lambda: "BUG:" not in dm)
     check("dmesg has no Hardware Error", lambda: "Hardware Error" not in dm)
-    section("cycle 1: reattach")
-    run("dmesg -C", sudo=True)
-    r = run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
-    check("attach exit 0", lambda: r.returncode == 0)
+
+def _verify_attached():
     check("GPU → nvidia", lambda: Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver").resolve().name == "nvidia")
     check("Audio → snd_hda_intel", lambda: Path(f"/sys/bus/pci/devices/{AUDIO_PCI}/driver").resolve().name == "snd_hda_intel")
     lsmod = stdout_of("lsmod")
     for mod in ["nvidia", "nvidia_drm", "nvidia_modeset", "nvidia_uvm"]:
         check(f"module {mod} loaded", lambda m=mod: re.search(rf"^{re.escape(m)}\b", lsmod, re.M) is not None)
     check("nvidia-smi works", lambda: run("nvidia-smi").returncode == 0)
-    time.sleep(3)
-    check("display-manager active", lambda: stdout_of("systemctl is-active display-manager").strip() == "active")
+    check("display-manager active", lambda: _dm_active())
     dm = stdout_of("dmesg", sudo=True)
     check("reattach dmesg clean (no BUG:)", lambda: "BUG:" not in dm)
-    section("cycle 2: detach (idempotency)")
-    run("dmesg -C", sudo=True)
-    r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
-    check("detach 2 exit 0", lambda: r.returncode == 0)
-    check("GPU → vfio-pci (cycle 2)", lambda: Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver").resolve().name == "vfio-pci")
-    section("cycle 2: reattach (idempotency)")
-    r = run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
-    check("attach 2 exit 0", lambda: r.returncode == 0)
-    check("GPU → nvidia (cycle 2)", lambda: Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver").resolve().name == "nvidia")
-    check("nvidia-smi works (cycle 2)", lambda: run("nvidia-smi").returncode == 0)
-    finish(3)
+
+def phase_3():
+    heading("Phase 3: single detach → attach cycle")
+    _confirm_destructive()
+    def body():
+        run("dmesg -C", sudo=True)
+        section("detach")
+        r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
+        check("detach exit 0", lambda: r.returncode == 0)
+        _verify_detached()
+        Utils.log("holding detached state for 3s before reattach...")
+        time.sleep(3)
+        section("attach")
+        run("dmesg -C", sudo=True)
+        r = run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
+        check("attach exit 0", lambda: r.returncode == 0)
+        _verify_attached()
+        finish(3)
+    _wrap_destructive(body)
+
+def phase_3_detach():
+    heading("Phase 3-detach: GPU detach only (leaves display off)")
+    _confirm_destructive()
+    def body():
+        run("dmesg -C", sudo=True)
+        r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
+        check("detach exit 0", lambda: r.returncode == 0)
+        _verify_detached()
+        Utils.print("\n  Run 'sudo /etc/nixos/bin/gpu_vfio_test.py p3-attach' to restore.")
+        finish(3)
+    _wrap_destructive(body, recover_needed_on_clean_exit=False)
+
+def phase_3_attach():
+    heading("Phase 3-attach: GPU reattach to host")
+    def body():
+        run("dmesg -C", sudo=True)
+        r = run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
+        check("attach exit 0", lambda: r.returncode == 0)
+        _verify_attached()
+        finish(3)
+    _wrap_destructive(body)
 
 ##### Phase state/report #####
 
@@ -232,7 +256,7 @@ def status():
 
 def main():
     args = Utils.parse_args({
-        "p1": [], "p2": [], "p3": [], "status": [],
+        "p1": [], "p2": [], "p3": [], "p3-detach": [], "p3-attach": [], "status": [],
     })
     cmd = args.command
     if os.environ.get("_VFIO_TEED") != "1" and cmd != "status":
@@ -245,6 +269,8 @@ def main():
     if cmd == "p1": phase_1()
     elif cmd == "p2": phase_2()
     elif cmd == "p3": phase_3()
+    elif cmd == "p3-detach": phase_3_detach()
+    elif cmd == "p3-attach": phase_3_attach()
     elif cmd == "status": status()
 
 if __name__ == "__main__":
