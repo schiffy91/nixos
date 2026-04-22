@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import sys, json, time, re
+import sys, os, json, time, re, shlex
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import Shell, Utils
@@ -96,11 +96,11 @@ def phase_1():
 
 def phase_2():
     heading(f"Phase 2: switch + runtime preflight (target: {FLAKE_TARGET})")
-    Utils.log("Running nixos-rebuild switch (requires sudo)...")
-    r = run(f"cd {NIXOS_DIR} && nixos-rebuild switch --flake .#{FLAKE_TARGET} 2>&1", sudo=True)
-    check("nixos-rebuild switch exit 0", lambda: r.returncode == 0)
+    Utils.log("Running update.py (canonical rebuild path, answering 'n' to reboot prompt)...")
+    r = run(f"echo 'n' | {NIXOS_DIR}/bin/update.py 2>&1", sudo=True)
+    check("update.py exit 0", lambda: r.returncode == 0)
     if r.returncode != 0:
-        Utils.print("  Last 40 lines of rebuild output:")
+        Utils.print("  Last 40 lines of update output:")
         for line in Shell.stdout(r).splitlines()[-40:]: Utils.print(f"    {line}")
         finish(2)
     section("kernel / IOMMU")
@@ -198,6 +198,13 @@ def main():
         "p1": [], "p2": [], "p3": [], "status": [],
     })
     cmd = args.command
+    if os.environ.get("_VFIO_TEED") != "1" and cmd != "status":
+        os.environ["_VFIO_TEED"] = "1"
+        log_path = f"/tmp/vfio_{cmd}.log"
+        quoted = " ".join(shlex.quote(a) for a in sys.argv)
+        Path(log_path).write_text("", encoding="utf-8")
+        Utils.print(f"(logging to {log_path})")
+        os.execvp("sh", ["sh", "-c", f"exec {quoted} 2>&1 | tee {shlex.quote(log_path)}"])
     if cmd == "p1": phase_1()
     elif cmd == "p2": phase_2()
     elif cmd == "p3": phase_3()
