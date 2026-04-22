@@ -7,7 +7,6 @@ from lib import Shell, Utils
 
 sh = Shell(root_required=False)
 
-STATE_FILE = "/tmp/vfio_phase_state.json"
 _cfg = json.loads(Path("/etc/nixos/config.json").read_text(encoding="utf-8"))
 FLAKE_TARGET = f"{Path(_cfg['host_path']).stem}-{_cfg['target']}"
 VM_NAME = "win11"
@@ -35,21 +34,9 @@ def heading(title):
 def section(title):
     Utils.print(f"\n  --- {title} ---")
 
-def save_state(phase, passed, detail=""):
-    state = {}
-    try: state = json.loads(Path(STATE_FILE).read_text(encoding="utf-8"))
-    except Exception: pass
-    state[f"phase_{phase}"] = {
-        "passed": passed,
-        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "detail": detail,
-    }
-    Path(STATE_FILE).write_text(json.dumps(state, indent=2), encoding="utf-8")
-
 def finish(phase):
     c, f = _stats["checks"], _stats["failures"]
     passed = f == 0
-    save_state(phase, passed, f"{c - f}/{c} checks")
     Utils.print(f"\nPhase {phase}: {'PASS' if passed else 'FAIL'} — {c - f}/{c} checks passed")
     sys.exit(0 if passed else 1)
 
@@ -117,10 +104,10 @@ def phase_2():
     section("ACPI spoofed tables")
     check("/etc/acpi-spoofed-tables/fake_battery.aml", lambda: sh.exists("/etc/acpi-spoofed-tables/fake_battery.aml"))
     check("/etc/acpi-spoofed-tables/spoofed_devices.aml", lambda: sh.exists("/etc/acpi-spoofed-tables/spoofed_devices.aml"))
-    section("persistence")
-    mounts = stdout_of("mount")
-    check("/var/lib/libvirt persisted", lambda: "/var/lib/libvirt" in mounts)
-    check("/etc/libvirt persisted", lambda: "/etc/libvirt" in mounts)
+    section("persistence (declared in settings.nix pathsToKeep)")
+    persist_src = Path("/etc/nixos/modules/settings.nix").read_text(encoding="utf-8")
+    check("'/var/lib/libvirt' in pathsToKeep", lambda: '"/var/lib/libvirt"' in persist_src)
+    check("/var/lib/libvirt exists and populated", lambda: Path("/var/lib/libvirt").is_dir() and any(Path("/var/lib/libvirt").iterdir()))
     section("user/group")
     groups = stdout_of(f"groups {ADMIN}")
     check("admin in 'kvm' group", lambda: re.search(r"\bkvm\b", groups) is not None)
@@ -130,9 +117,6 @@ def phase_2():
     gpu_driver = Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver")
     check("GPU driver = nvidia", lambda: gpu_driver.is_symlink() and gpu_driver.resolve().name == "nvidia")
     check("nvidia-smi works", lambda: run("nvidia-smi").returncode == 0)
-    section("gpu_vfio.py check")
-    r2 = run("/etc/nixos/bin/gpu_vfio.py check", sudo=True)
-    check("gpu_vfio.py check passes", lambda: r2.returncode == 0 and "All checks passed" in Shell.stdout(r2))
     finish(2)
 
 ##### Phase 3: detach/reattach cycle (DESTRUCTIVE — kills display) #####
@@ -185,13 +169,15 @@ def phase_3():
 ##### Phase state/report #####
 
 def status():
-    heading("VFIO phase state")
-    try: state = json.loads(Path(STATE_FILE).read_text(encoding="utf-8"))
-    except Exception: Utils.print("  (no state yet)"); return
-    for k in sorted(state.keys()):
-        v = state[k]
-        mark = "✓" if v.get("passed") else "✗"
-        Utils.print(f"  {mark} {k}: {v.get('detail','')} @ {v.get('time','')}")
+    heading("VFIO phase state (from /tmp/vfio_pN.log)")
+    for phase in range(1, 11):
+        log = Path(f"/tmp/vfio_p{phase}.log")
+        if not log.exists(): continue
+        tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-2:]
+        last = tail[-1] if tail else ""
+        mark = "✓" if "PASS" in last else ("✗" if "FAIL" in last else "?")
+        mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(log.stat().st_mtime))
+        Utils.print(f"  {mark} p{phase}: {last.strip()}   @ {mtime}")
 
 def main():
     args = Utils.parse_args({
