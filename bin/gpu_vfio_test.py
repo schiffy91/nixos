@@ -259,6 +259,14 @@ def main():
         "p1": [], "p2": [], "p3": [], "p3-detach": [], "p3-attach": [], "status": [],
     })
     cmd = args.command
+    if cmd.startswith("p3") and os.environ.get("_VFIO_SCOPED") != "1" and os.geteuid() == 0:
+        os.environ["_VFIO_SCOPED"] = "1"
+        Utils.print("(reparenting to system.slice so terminate-user can't kill us)")
+        os.execvp("systemd-run", [
+            "systemd-run", "--quiet", "--scope", "--slice=system.slice",
+            "--unit", f"vfio_test_{cmd.replace('-', '_')}",
+            sys.argv[0], *sys.argv[1:],
+        ])
     if os.environ.get("_VFIO_TEED") != "1" and cmd != "status":
         os.environ["_VFIO_TEED"] = "1"
         log_path = f"/tmp/vfio_{cmd}.log"

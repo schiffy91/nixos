@@ -128,6 +128,8 @@ def detach():
         return
     terminate_user_sessions()
     stop_display_manager()
+    Utils.log("Letting logind process session cleanup (5s)...")
+    time.sleep(5)
     unload_nvidia()
     unbind_device(GPU_PCI)
     unbind_device(AUDIO_PCI)
@@ -148,6 +150,8 @@ def attach():
     bind_device(AUDIO_PCI, "snd_hda_intel")
     Utils.log(f"GPU: {get_driver(GPU_PCI)}, Audio: {get_driver(AUDIO_PCI)}")
     wait_for_nvidia()
+    Utils.log("Letting kernel settle before DM start (3s)...")
+    time.sleep(3)
     start_display_manager()
 
 ##### VM State #####
