@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3
-import sys, os, json, time, re, shlex
+import sys, os, json, time, re, shlex, signal
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import Shell, Utils
@@ -120,14 +120,66 @@ def phase_2():
 
 ##### Phase 3: detach/reattach cycle (DESTRUCTIVE — kills display) #####
 
+def _gpu_on_nvidia():
+    p = Path(f"/sys/bus/pci/devices/{GPU_PCI}/driver")
+    return p.is_symlink() and p.resolve().name == "nvidia"
+
+def _dm_active():
+    return stdout_of("systemctl is-active display-manager").strip() == "active"
+
+def _recover(reason):
+    Utils.log_error(f"[recovery] triggered: {reason}")
+    Utils.log("[recovery] force gpu_vfio.py attach")
+    run("/etc/nixos/bin/gpu_vfio.py attach", sudo=True)
+    Utils.log("[recovery] start display-manager")
+    run("systemctl start display-manager", sudo=True)
+    time.sleep(3)
+    gpu_ok, dm_ok = _gpu_on_nvidia(), _dm_active()
+    smi_ok = run("nvidia-smi").returncode == 0
+    Utils.log(f"[recovery] post-attempt: GPU nvidia={gpu_ok}, DM active={dm_ok}, nvidia-smi={smi_ok}")
+    if not (gpu_ok and dm_ok):
+        Utils.log("[recovery] secondary: reload nvidia modules explicitly")
+        for m in ["nvidia", "nvidia_modeset", "nvidia_uvm", "nvidia_drm"]:
+            run(f"modprobe {m}", sudo=True)
+        run("systemctl restart display-manager", sudo=True)
+        time.sleep(3)
+        gpu_ok, dm_ok = _gpu_on_nvidia(), _dm_active()
+        Utils.log(f"[recovery] after reload: GPU nvidia={gpu_ok}, DM active={dm_ok}")
+    if not (gpu_ok and dm_ok):
+        Utils.log_error("[recovery] FAILED — manual intervention needed. Try: sudo reboot")
+    else:
+        Utils.log("[recovery] system restored to healthy state")
+
+def _timeout_handler(_sig, _frame):
+    Utils.log_error("[watchdog] phase 3 exceeded 300s deadline")
+    _recover("timeout")
+    raise TimeoutError("phase 3 deadline exceeded")
+
 def phase_3():
     heading("Phase 3: GPU detach/reattach cycle (DESTRUCTIVE)")
     Utils.print("  WARNING: This kills the display manager.")
     Utils.print("  You must run this from SSH or a TTY.")
+    Utils.print("  Watchdog: 300s deadline, auto-recovery on exception or unhealthy final state.")
     if not sys.stdin.isatty(): Utils.print("  (non-interactive — proceeding)")
     else:
         answer = input("  Continue? [yes/NO]: ").strip().lower()
         if answer != "yes": Utils.abort("aborted by user")
+    signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(300)
+    try:
+        _phase_3_body()
+    except SystemExit:
+        raise
+    except BaseException as e:
+        Utils.log_error(f"[exception] {type(e).__name__}: {e}")
+        _recover(f"exception {type(e).__name__}")
+        raise
+    finally:
+        signal.alarm(0)
+        if not (_gpu_on_nvidia() and _dm_active()):
+            _recover("final-state-unhealthy")
+
+def _phase_3_body():
     run("dmesg -C", sudo=True)
     section("cycle 1: detach")
     r = run("/etc/nixos/bin/gpu_vfio.py detach", sudo=True)
