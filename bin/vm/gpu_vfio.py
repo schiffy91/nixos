@@ -2,19 +2,19 @@
 #! nix-shell -i python3 -p python3
 import sys, time
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Shell, Utils
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
 
-VM_NAME = "win11"
-VM_XML = "/etc/nixos/vm/win11.xml"
-KVMFR_DEV = "/dev/kvmfr0"
-NVME_ID = "nvme-WD_BLACK_SN850X_4000GB_22461L800626"
+VM_NAME = Config.eval("config.settings.vfio.vmName")
+GPU_PCI = Config.eval("config.settings.vfio.gpuPci")
+NVME_ID = Config.eval("config.settings.vfio.nvmeId")
+KBD_EVENT = Config.eval("config.settings.vfio.keyboardEvent")
+MOUSE_EVENT = Config.eval("config.settings.vfio.mouseEvent")
+VM_XML = f"/etc/nixos/bin/vm/{VM_NAME}.xml"
 NVME_PATH = f"/dev/disk/by-id/{NVME_ID}"
-KBD_EVENT = "usb-Razer_Razer_BlackWidow_Lite-event-kbd"
-MOUSE_EVENT = "usb-Logitech_USB_Receiver-if01-event-mouse"
-GPU_PCI = "0000:01:00.0"
+KVMFR_DEV = "/dev/kvmfr0"
 HOOK_DISPATCHER = "/etc/libvirt/hooks/qemu"
 HOOK_START = f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/prepare/begin/start.sh"
 HOOK_REVERT = f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/release/end/revert.sh"

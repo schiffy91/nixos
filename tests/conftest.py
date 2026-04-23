@@ -22,7 +22,7 @@ def _mock_run(*args, **kwargs):
 subprocess.run = _mock_run  # type: ignore[assignment]
 
 import bin.install, bin.update, bin.diff, bin.eval  # noqa: E402, F401, E401
-import bin.secure_boot, bin.tpm2, bin.change_password, bin.gpu_vfio  # noqa: E402, F401, E401
+import bin.secure_boot, bin.tpm2, bin.change_password, bin.vm.gpu_vfio  # noqa: E402, F401, E401
 
 subprocess.run = _original_run  # type: ignore[assignment]
 

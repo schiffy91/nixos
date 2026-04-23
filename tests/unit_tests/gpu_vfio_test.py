@@ -1,28 +1,28 @@
 from unittest.mock import patch
 import pytest
-from bin.gpu_vfio import vm_state, vm_defined, gpu_driver, status, main
+from bin.vm.gpu_vfio import vm_state, vm_defined, gpu_driver, status, main
 
 
 class TestVmState:
     def test_running(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 0
         mock_subprocess.return_value.stdout = "running\n"
-        with patch("bin.gpu_vfio.sh", mock_shell):
+        with patch("bin.vm.gpu_vfio.sh", mock_shell):
             assert vm_state() == "running"
     def test_undefined(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 1
-        with patch("bin.gpu_vfio.sh", mock_shell):
+        with patch("bin.vm.gpu_vfio.sh", mock_shell):
             assert vm_state() == "undefined"
 
 
 class TestVmDefined:
     def test_yes(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 0
-        with patch("bin.gpu_vfio.sh", mock_shell):
+        with patch("bin.vm.gpu_vfio.sh", mock_shell):
             assert vm_defined() is True
     def test_no(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.returncode = 1
-        with patch("bin.gpu_vfio.sh", mock_shell):
+        with patch("bin.vm.gpu_vfio.sh", mock_shell):
             assert vm_defined() is False
 
 
@@ -39,9 +39,9 @@ class TestGpuDriver:
 
 class TestStatus:
     def test_prints(self, mock_shell, capsys):
-        with patch("bin.gpu_vfio.sh", mock_shell):
-            with patch("bin.gpu_vfio.vm_state", return_value="shut off"):
-                with patch("bin.gpu_vfio.gpu_driver", return_value="nvidia"):
+        with patch("bin.vm.gpu_vfio.sh", mock_shell):
+            with patch("bin.vm.gpu_vfio.vm_state", return_value="shut off"):
+                with patch("bin.vm.gpu_vfio.gpu_driver", return_value="nvidia"):
                     with patch("pathlib.Path.is_char_device", return_value=True):
                         with patch("pathlib.Path.exists", return_value=True):
                             status()

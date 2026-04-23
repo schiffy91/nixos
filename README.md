@@ -97,7 +97,7 @@ All CLI scripts use nix-shell shebangs and are self-contained:
 | `secure_boot.py` | Enroll Secure Boot keys and switch to lanzaboote target |
 | `tpm2.py` | Enroll TPM2 LUKS auto-unlock |
 | `change_password.py` | Change user password and re-enroll TPM2 |
-| `gpu_vfio.py` | NVIDIA GPU VFIO passthrough: attach/detach/status |
+| `vm/gpu_vfio.py` | NVIDIA GPU VFIO passthrough: attach/detach/status |
 
 ### Usage
 

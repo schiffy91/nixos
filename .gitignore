@@ -6,5 +6,7 @@ config.json
 .vm/
 coverage/
 .pytest_cache/
+.ruff_cache/
 .coverage
 .claude
+/result

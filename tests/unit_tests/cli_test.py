@@ -5,7 +5,7 @@ from tests.helpers import compile_python_file
 CLI_DIR = Path(__file__).resolve().parent.parent.parent / "bin"
 EXPECTED_SCRIPTS = [
     "install.py", "update.py", "diff.py", "secure_boot.py",
-    "tpm2.py", "eval.py", "change_password.py", "gpu_vfio.py",
+    "tpm2.py", "eval.py", "change_password.py",
 ]
 
 class TestCLIStructure:

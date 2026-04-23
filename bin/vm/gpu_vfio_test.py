@@ -2,19 +2,19 @@
 #! nix-shell -i python3 -p python3
 import sys, os, json, time, re, shlex, signal
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import Shell, Utils
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from lib import Config, Shell, Utils
 
 sh = Shell(root_required=False)
 
 _cfg = json.loads(Path("/etc/nixos/config.json").read_text(encoding="utf-8"))
 FLAKE_TARGET = f"{Path(_cfg['host_path']).stem}-{_cfg['target']}"
-VM_NAME = "win11"
-GPU_PCI = "0000:01:00.0"
-AUDIO_PCI = "0000:01:00.1"
+VM_NAME = Config.eval("config.settings.vfio.vmName")
+GPU_PCI = Config.eval("config.settings.vfio.gpuPci")
+AUDIO_PCI = Config.eval("config.settings.vfio.audioPci")
+ADMIN = Config.eval("config.settings.user.admin.username")
 KVMFR_DEV = "/dev/kvmfr0"
 NIXOS_DIR = "/etc/nixos"
-ADMIN = "alexanderschiffhauer"
 
 ##### Check helpers #####
 
@@ -51,10 +51,9 @@ def stdout_of(cmd, sudo=False):
 def phase_1():
     heading(f"Phase 1: build-only validation (target: {FLAKE_TARGET})")
     Utils.log("Running nix build (this takes a few minutes)...")
-    result = run(f"cd {NIXOS_DIR} && nix build .#nixosConfigurations.{FLAKE_TARGET}.config.system.build.toplevel --print-out-paths 2>&1", sudo=False)
+    result = run(f"cd {NIXOS_DIR} && nix build .#nixosConfigurations.{FLAKE_TARGET}.config.system.build.toplevel --no-link --print-out-paths 2>&1", sudo=False)
     check("nix build exit 0", lambda: result.returncode == 0)
     out_path = Shell.stdout(result).strip().splitlines()[-1] if result.returncode == 0 else ""
-    check("result symlink exists", lambda: Path(f"{NIXOS_DIR}/result").is_symlink())
     check("toplevel closure valid", lambda: out_path.startswith("/nix/store/"))
     if not out_path: finish(1)
     section("patched QEMU derivation")
@@ -63,8 +62,8 @@ def phase_1():
     section("libvirt QEMU hook (SharkWipf dispatcher + per-VM scripts)")
     etc_listing = stdout_of(f"find {out_path}/etc/libvirt/hooks 2>/dev/null")
     check("dispatcher /etc/libvirt/hooks/qemu in closure", lambda: re.search(r"/etc/libvirt/hooks/qemu$", etc_listing, re.M) is not None)
-    check("qemu.d/win11/prepare/begin/start.sh in closure", lambda: "qemu.d/win11/prepare/begin/start.sh" in etc_listing)
-    check("qemu.d/win11/release/end/revert.sh in closure", lambda: "qemu.d/win11/release/end/revert.sh" in etc_listing)
+    check(f"qemu.d/{VM_NAME}/prepare/begin/start.sh in closure", lambda: f"qemu.d/{VM_NAME}/prepare/begin/start.sh" in etc_listing)
+    check(f"qemu.d/{VM_NAME}/release/end/revert.sh in closure", lambda: f"qemu.d/{VM_NAME}/release/end/revert.sh" in etc_listing)
     section("compiled ACPI tables")
     aml_out = stdout_of(f"nix-store --query --requisites {out_path} 2>/dev/null | xargs -I{{}} find {{}} -maxdepth 2 -name '*.aml' 2>/dev/null")
     check("fake_battery.aml in closure", lambda: "fake_battery.aml" in aml_out)
@@ -98,10 +97,10 @@ def phase_2():
     check("libvirtd active", lambda: stdout_of("systemctl is-active libvirtd").strip() == "active")
     check("/etc/libvirt/hooks/qemu exists & executable",
           lambda: Path("/etc/libvirt/hooks/qemu").is_file() and os.access("/etc/libvirt/hooks/qemu", os.X_OK))
-    check("/etc/libvirt/hooks/qemu.d/win11/prepare/begin/start.sh",
-          lambda: Path("/etc/libvirt/hooks/qemu.d/win11/prepare/begin/start.sh").is_file())
-    check("/etc/libvirt/hooks/qemu.d/win11/release/end/revert.sh",
-          lambda: Path("/etc/libvirt/hooks/qemu.d/win11/release/end/revert.sh").is_file())
+    check(f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/prepare/begin/start.sh",
+          lambda: Path(f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/prepare/begin/start.sh").is_file())
+    check(f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/release/end/revert.sh",
+          lambda: Path(f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/release/end/revert.sh").is_file())
     section("ACPI spoofed tables")
     check("/etc/acpi-spoofed-tables/fake_battery.aml", lambda: sh.exists("/etc/acpi-spoofed-tables/fake_battery.aml"))
     check("/etc/acpi-spoofed-tables/spoofed_devices.aml", lambda: sh.exists("/etc/acpi-spoofed-tables/spoofed_devices.aml"))
@@ -131,7 +130,7 @@ def _dm_active():
 def _recover(reason):
     Utils.log_error(f"[recovery] triggered: {reason}")
     Utils.log("[recovery] invoking revert.sh via libvirt hook dispatcher")
-    run(f"/etc/libvirt/hooks/qemu win11 release end - < /dev/null", sudo=True)
+    run(f"/etc/libvirt/hooks/qemu {VM_NAME} release end - < /dev/null", sudo=True)
     Utils.log("[recovery] ensuring display-manager is up")
     run("systemctl start display-manager", sudo=True)
     time.sleep(3)
@@ -181,7 +180,6 @@ def _wrap_destructive(body, recover_needed_on_clean_exit=True):
         if recover_needed_on_clean_exit and not (_gpu_on_nvidia() and _dm_active()):
             _recover("final-state-unhealthy")
 
-VM_NAME = "win11"
 HOOK_DISPATCHER = "/etc/libvirt/hooks/qemu"
 
 def _hook(state, phase):
@@ -202,7 +200,7 @@ def _verify_after_revert_sh():
     for mod in ["nvidia", "nvidia_drm", "nvidia_modeset", "nvidia_uvm"]:
         check(f"module {mod} loaded", lambda m=mod: re.search(rf"^{re.escape(m)}\b", lsmod, re.M) is not None)
     check("nvidia-smi works", lambda: run("nvidia-smi").returncode == 0)
-    check("display-manager active", lambda: _dm_active())
+    check("display-manager active", _dm_active)
     dm = stdout_of("dmesg", sudo=True)
     check("revert dmesg clean (no BUG:)", lambda: "BUG:" not in dm)
 
@@ -252,15 +250,15 @@ def phase_3_attach():
 ##### Phase state/report #####
 
 def status():
-    heading("VFIO phase state (from /tmp/vfio_pN.log)")
-    for phase in range(1, 11):
-        log = Path(f"/tmp/vfio_p{phase}.log")
+    heading("VFIO phase state (from /tmp/vfio_<cmd>.log)")
+    for cmd in ["p1", "p2", "p3", "p3-detach", "p3-attach"]:
+        log = Path(f"/tmp/vfio_{cmd}.log")
         if not log.exists(): continue
         tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-2:]
         last = tail[-1] if tail else ""
         mark = "✓" if "PASS" in last else ("✗" if "FAIL" in last else "?")
         mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(log.stat().st_mtime))
-        Utils.print(f"  {mark} p{phase}: {last.strip()}   @ {mtime}")
+        Utils.print(f"  {mark} {cmd}: {last.strip()}   @ {mtime}")
 
 def main():
     args = Utils.parse_args({
