@@ -1,6 +1,6 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 let
-  ##### Firewall Functions ##### 
+  ##### Firewall Functions #####
   mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${config.settings.networking.lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
   mkPortRules = { action, protos, ports }: lib.concatStringsSep "\n" (lib.lists.flatten (map (proto: map (port: mkIptablesRule { inherit action port proto; }) ports) protos));
   mkServiceRules = action: lib.concatStringsSep "\n" (lib.remove null [
@@ -46,7 +46,7 @@ in {
     };
     printing.browsed.enable = lib.mkDefault false;
   };
-  ##### SSH Client ##### 
+  ##### SSH Client #####
   programs.ssh = {
     startAgent = true;
     extraConfig = ''
@@ -56,4 +56,17 @@ in {
     '';
   };
   security.pam.sshAgentAuth.enable = true;
+  systemd.services = lib.optionalAttrs (config.settings.networking.primaryInterface != "") {
+    disable-non-primary-eth = {
+      wantedBy = [ "multi-user.target" ];
+      after = [ "NetworkManager-wait-online.service" ];
+      serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+      path = [ pkgs.networkmanager ];
+      script = ''
+        for i in $(nmcli -t -f DEVICE,TYPE dev | awk -F: '$2=="ethernet" && $1!="${config.settings.networking.primaryInterface}" {print $1}'); do
+          nmcli device disconnect "$i" || true
+        done
+      '';
+    };
+  };
 }

@@ -19,16 +19,16 @@
     session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
     ##### Auto Lock #####
     kscreenlocker = {
-      autoLock = if settings.user.admin.autoLock.enable then true else false;
-      lockOnResume = if settings.user.admin.autoLock.enable then true else false;
+      autoLock = settings.user.admin.autoLock.enable;
+      lockOnResume = settings.user.admin.autoLock.enable;
       timeout = if settings.user.admin.autoLock.enable then 10 else null;
     };
     ##### Config Files #####
      configFile = {
       kdeglobals = {
-        KScreen = { 
-          ScaleFactor = 1 * settings.desktop.scalingFactor;
-          ScreenScaleFactors = "Virtual-1=${toString (1 * settings.desktop.scalingFactor)};";
+        KScreen = {
+          ScaleFactor = settings.desktop.scalingFactor;
+          ScreenScaleFactors = "${settings.desktop.primaryOutput}=${toString settings.desktop.scalingFactor};";
         };
         General = {
           AccentColor = "40,40,40";
@@ -36,7 +36,7 @@
       };
       kwinrc = {
         Xwayland = {
-          Scale = 1 * settings.desktop.scalingFactor;
+          Scale = settings.desktop.scalingFactor;
         };
       };
     };
@@ -119,13 +119,5 @@
 
     [Terminal Features]
     BlinkingCursorEnabled=true
-
-    [KonsoleWindow]
-    RememberWindowSize=false
-    ShowMenuBarByDefault=false
-    [MainWindow]
-    MenuBar=Disabled
-    StatusBar=Disabled
-    ToolBarsMovable=Disabled
   '';
 }

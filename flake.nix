@@ -15,11 +15,11 @@
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
           system = "${baseNameOf (dirOf hostFile)}-linux"; 
           targetModules = (
-            if lib.hasInfix "Boot" target then 
+            if lib.hasInfix "Boot" target then
               [{ settings.boot.method = lib.mkForce target; }] ++ lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)
             else
               [ ./modules/system/disk.nix ]
-          ); 
+          );
           pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
         in {
           name = "${name}-${target}";

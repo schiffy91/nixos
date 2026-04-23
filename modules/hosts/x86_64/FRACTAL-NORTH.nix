@@ -9,12 +9,18 @@
   ##### VFIO #####
   settings.vfio.enable = true;
   settings.vfio.vmName = "win11";
+  settings.vfio.gpuPci = "0000:01:00.0";
+  settings.vfio.audioPci = "0000:01:00.1";
+  settings.vfio.nvmeId = "nvme-WD_BLACK_SN850X_4000GB_22461L800626";
+  settings.vfio.keyboardEvent = "usb-Razer_Razer_BlackWidow_Lite-event-kbd";
+  settings.vfio.mouseEvent = "usb-Logitech_USB_Receiver-if01-event-mouse";
   settings.vfio.lookingGlass.enable = true;
   settings.vfio.evdev.enable = true;
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
   ##### Display #####
   settings.desktop.scalingFactor = 2.5;
+  settings.desktop.primaryOutput = "DP-1"; # XDR via TB4; AMD iGPU connector name
   ##### AMD #####
   boot.kernelParams = [
     "amdgpu.dc=1"                   # AMD GPU
@@ -139,6 +145,7 @@
   ##### Networking #####
   networking.interfaces.eno2.wakeOnLan.enable = true;
   settings.networking.lanSubnet = "192.168.50.0/24";
+  settings.networking.primaryInterface = "eno2";  # Stable onboard NIC; TB ethernet (eth0) is optional + goes away during sleep.
   programs.openvpn3.enable = true;
   services.resolved.enable = true;
   services.mullvad-vpn = {

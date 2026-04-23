@@ -145,9 +145,6 @@ in {
       "/home/${config.settings.user.admin.username}/.steam"
       ##### Apple Music #####
       "/home/${config.settings.user.admin.username}/.config/sh.cider.genten"
-      ##### NanoClaw #####
-      "/home/${config.settings.user.admin.username}/.local/share/nanoclaw"
-      "/home/${config.settings.user.admin.username}/.config/nanoclaw"
     ];
     ##### Sleep #####
     settings.sleep.allowHibernation = mkSetting bool false;
@@ -162,17 +159,24 @@ in {
     ##### Desktop ##### 
     settings.desktop.environment = mkSetting (enum [ "none" "hyprland-wayland" "plasma-wayland" "plasma-x11" "gnome-wayland" "gnome-x11"]) "plasma-wayland";
     settings.desktop.scalingFactor = mkSetting float 2.0;
-    ##### Networking ##### 
+    settings.desktop.primaryOutput = mkSetting str "Virtual-1";
+    ##### Networking #####
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; # ip -o -f inet addr show | awk '/scope global/ {print $4}';
     settings.networking.ports.udp = mkSetting (listOf int) [];
     settings.networking.ports.tcp = mkSetting (listOf int) [];
     settings.networking.identityAgent = mkSetting str "~/.1password/agent.sock";
+    settings.networking.primaryInterface = mkSetting str "";  # empty = no preference; set to e.g. "eno2" to route outbound via that NIC (prevents asymmetric routing when multiple NICs on one subnet)
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
     ##### VFIO #####
     settings.vfio.enable = mkSetting bool false;
     settings.vfio.vmName = mkSetting str "win11";
+    settings.vfio.gpuPci = mkSetting str "";         # e.g. "0000:01:00.0" — host-specific, required if vfio.enable
+    settings.vfio.audioPci = mkSetting str "";       # companion function of gpuPci (e.g. "0000:01:00.1")
+    settings.vfio.nvmeId = mkSetting str "";         # /dev/disk/by-id/nvme-* suffix for the TB4 Windows drive
+    settings.vfio.keyboardEvent = mkSetting str "";  # /dev/input/by-id/usb-*-event-kbd suffix for evdev passthrough
+    settings.vfio.mouseEvent = mkSetting str "";     # /dev/input/by-id/usb-*-event-mouse suffix for evdev passthrough
     settings.vfio.lookingGlass.enable = mkSetting bool false;
     settings.vfio.lookingGlass.sharedMemoryMB = mkSetting int 128;
     settings.vfio.evdev.enable = mkSetting bool false;

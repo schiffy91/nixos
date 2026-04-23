@@ -88,9 +88,9 @@
   (lib.mkIf (config.settings.desktop.environment == "hyprland-wayland") {
     xdg.portal = {
       enable = true;
-      extraPortals = with pkgs; [ xdg.portal.extraPortals ];
+      extraPortals = [ pkgs.xdg-desktop-portal-hyprland ];
     };
-    environment.systemPackages = with pkgs; [ xdg-desktop-portal-hyprland ];
+    environment.systemPackages = [ pkgs.xdg-desktop-portal-hyprland ];
     services.displayManager = {
       sddm = {
         enable = true;
