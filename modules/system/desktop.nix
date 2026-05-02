@@ -81,7 +81,14 @@
       desktopManager.gnome.enable = true;
     };
     programs.dconf.profiles.user.databases = [{
-      settings."org/gnome/desktop/interface".cursor-theme = config.settings.desktop.cursor.theme;
+      settings = {
+        "org/gnome/desktop/interface".cursor-theme = config.settings.desktop.cursor.theme;
+        # TODO: scale value still imperative-only (monitors.xml needs EDID to template)
+        "org/gnome/mutter".experimental-features = [
+          "scale-monitor-framebuffer"
+          "xwayland-native-scaling"
+        ];
+      };
     }];
   })
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
@@ -97,6 +104,7 @@
     };
   })
   ##### Hyprland #####
+  # TODO: no scalingFactor wiring; needs HM hyprland module + apps/hyprland.nix
   (lib.mkIf (config.settings.desktop.environment == "hyprland-wayland") {
     xdg.portal = {
       enable = true;
