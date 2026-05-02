@@ -1,4 +1,4 @@
-{ lib, config, ... }: 
+{ lib, config, pkgs, ... }: 
 let mkSetting = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; 
 in {
   options = with lib.types; {
@@ -98,6 +98,7 @@ in {
       "/home/${config.settings.user.admin.username}/.config/gtk-4.0"
       "/home/${config.settings.user.admin.username}/.config/gtkrc-2.0"
       "/home/${config.settings.user.admin.username}/.config/gtkrc"
+      "/home/${config.settings.user.admin.username}/.icons"
       "/home/${config.settings.user.admin.username}/.config/kcmfonts"
       "/home/${config.settings.user.admin.username}/.config/kcminputrc"
       "/home/${config.settings.user.admin.username}/.config/kdedefaults"
@@ -160,6 +161,19 @@ in {
     settings.desktop.environment = mkSetting (enum [ "none" "hyprland-wayland" "plasma-wayland" "plasma-x11" "gnome-wayland" "gnome-x11"]) "plasma-wayland";
     settings.desktop.scalingFactor = mkSetting float 2.0;
     settings.desktop.primaryOutput = mkSetting str "Virtual-1";
+    settings.desktop.cursor.theme = mkSetting str "Breeze";
+    settings.desktop.cursor.package = mkSetting package pkgs.kdePackages.breeze;
+    settings.desktop.cursor.path = mkSetting str "${config.settings.desktop.cursor.package}/share/icons/breeze_cursors";
+    settings.desktop.cursor.defaultPackage = mkSetting package (pkgs.runCommandLocal "breeze-cursor-default-theme" { } ''
+      mkdir -p "$out/share/icons"
+      ln -s "${config.settings.desktop.cursor.path}" "$out/share/icons/default"
+    '');
+    ##### Desktop: Plasma #####
+    settings.desktop.plasma.colorScheme = mkSetting str "BreezeDark";
+    settings.desktop.plasma.iconTheme = mkSetting str "Papirus-Dark";
+    settings.desktop.plasma.iconThemePackage = mkSetting package pkgs.papirus-icon-theme;
+    settings.desktop.plasma.accentColor = mkSetting str "40,40,40";
+    settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
     ##### Networking #####
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; # ip -o -f inet addr show | awk '/scope global/ {print $4}';
     settings.networking.ports.udp = mkSetting (listOf int) [];

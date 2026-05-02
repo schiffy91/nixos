@@ -55,7 +55,7 @@ class Config:
         cls.sh.chmod(600, *files)
     @classmethod
     def secure(cls, username):
-        ignore_pattern = "*/{secrets}*"
+        ignore_pattern = "*/secrets* */.venv* */.direnv* */.git*"
         cls.sh.chown(username, cls.get_nixos_path())
         cls.sh.chmod(755, *cls.sh.find_directories(
             cls.get_nixos_path(), ignore_pattern=ignore_pattern))

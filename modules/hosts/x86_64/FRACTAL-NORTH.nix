@@ -1,4 +1,20 @@
-{ config, pkgs, lib, ... }: {
+{ config, pkgs, lib, ... }:
+let
+  pci = {
+    nvidiaGpu      = "0000:01:00.0";
+    nvidiaAudio    = "0000:01:00.1";
+    nvidiaPrimeBus = "PCI:1:0:0";
+    amdPrimeBus    = "PCI:107:0:0";
+  };
+  nvidiaOffloadEnv = {
+    __NV_PRIME_RENDER_OFFLOAD          = "1";
+    __NV_PRIME_RENDER_OFFLOAD_PROVIDER = "NVIDIA-G0";
+    __VK_LAYER_NV_optimus              = "NVIDIA_only";
+    __GLX_VENDOR_LIBRARY_NAME          = "nvidia";
+    LIBVA_DRIVER_NAME                  = "nvidia";
+    VDPAU_DRIVER                       = "nvidia";
+  };
+in {
   ##### Host Name #####
   networking.hostName = "FRACTAL-NORTH";
   ##### Disk Information #####
@@ -9,8 +25,8 @@
   ##### VFIO #####
   settings.vfio.enable = true;
   settings.vfio.vmName = "win11";
-  settings.vfio.gpuPci = "0000:01:00.0";
-  settings.vfio.audioPci = "0000:01:00.1";
+  settings.vfio.gpuPci = pci.nvidiaGpu;
+  settings.vfio.audioPci = pci.nvidiaAudio;
   settings.vfio.nvmeId = "nvme-WD_BLACK_SN850X_4000GB_22461L800626";
   settings.vfio.keyboardEvent = "usb-Razer_Razer_BlackWidow_Lite-event-kbd";
   settings.vfio.mouseEvent = "usb-Logitech_USB_Receiver-if01-event-mouse";
@@ -46,8 +62,8 @@
     prime = {
       offload.enable = true;            # AMD composes desktop, NVIDIA for app offload
       offload.enableOffloadCmd = true;  # Provides nvidia-offload wrapper
-      amdgpuBusId = "PCI:107:0:0";      # AMD iGPU at 6b:00.0 (hex 6b = 107 dec) - display via TB4
-      nvidiaBusId = "PCI:1:0:0";        # RTX 4090 at 01:00.0 - app rendering
+      amdgpuBusId = pci.amdPrimeBus;    # AMD iGPU at 6b:00.0 (hex 6b = 107 dec) - display via TB4
+      nvidiaBusId = pci.nvidiaPrimeBus; # RTX 4090 at 01:00.0 - app rendering
     };
   };
   hardware.graphics.extraPackages = with pkgs; [
@@ -64,12 +80,8 @@
     libva-vdpau-driver
     libvdpau-va-gl
   ];
-  environment.sessionVariables = {
-    __GLX_VENDOR_LIBRARY_NAME = "nvidia";
-    GBM_BACKEND = "nvidia-drm";
-    LIBVA_DRIVER_NAME = "nvidia";
-    VDPAU_DRIVER = "nvidia";
-    ENABLE_VULKAN = "1";
+  environment.sessionVariables = nvidiaOffloadEnv // {
+    KWIN_DRM_DEVICES = "/dev/dri/card0:/dev/dri/card1";  # NVIDIA first → KWin renders on dGPU; AMD scans out (it owns the TB4 display)
   };
   ##### GPU LED Off (OpenRGB) #####
   services.hardware.openrgb.enable = true;
@@ -104,9 +116,9 @@
   environment.systemPackages = with pkgs; [
     (google-chrome.override {
       commandLineArgs = [
-        "--ozone-platform=x11"                        # Use X11 backend (Wayland has DMA-BUF import issues with NVIDIA)
-        "--use-angle=vulkan"                          # Use Vulkan through ANGLE
-        "--render-node-override=/dev/dri/renderD129"  # Force NVIDIA GPU (renderD129)
+        "--ozone-platform=x11"                                                  # Use X11 backend (Wayland has DMA-BUF import issues with NVIDIA)
+        "--use-angle=vulkan"                                                    # Use Vulkan through ANGLE
+        "--render-node-override=/dev/dri/by-path/pci-${pci.nvidiaGpu}-render"   # Force NVIDIA GPU
         "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder"
         "--ignore-gpu-blocklist"
         "--enable-gpu-rasterization"
@@ -123,7 +135,7 @@
     spice-protocol
     virtio-win
     win-spice
-    mpv
+    (mpv.override { youtubeSupport = false; })  # drops yt-dlp → deno → rusty-v8 → V8 source build chain on every nix flake update
     lmstudio
     sbctl
     fwupd
@@ -137,7 +149,7 @@
     }))
     # GPU diagnostic tools
     mesa-demos       # provides glxinfo
-    vulkan-tools   # provides vulkaninfo
+    vulkan-tools # provides vulkaninfo
     vdpauinfo          # VDPAU info
     libva-utils     # vainfo for VA-API
     nvtopPackages.full      # GPU monitoring (supports NVIDIA + AMD)
@@ -162,14 +174,9 @@
   ##### Steam #####
   programs.steam = {
     enable = true;
-    extraPackages = with pkgs; [ kdePackages.breeze ];
     package = pkgs.steam.override {
       extraLibraries = pkgs': with pkgs'; [ pipewire.jack ];
-      extraEnv = {
-        __NV_PRIME_RENDER_OFFLOAD = "1";
-        __VK_LAYER_NV_optimus = "NVIDIA_only";
-        __GLX_VENDOR_LIBRARY_NAME = "nvidia";
-      };
+      extraEnv = nvidiaOffloadEnv;  # Steam doesn't inherit environment variables properly
     };
   };
   settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];

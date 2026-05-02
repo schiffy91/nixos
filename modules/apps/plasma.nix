@@ -1,18 +1,18 @@
-{ settings, pkgs, lib, ... }: lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
-  ##### Download Icons #####
-  home.packages = with pkgs; [ papirus-icon-theme ];
+{ settings, lib, ... }: lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
+  ##### Icon Theme #####
+  home.packages = [ settings.desktop.plasma.iconThemePackage ];
   programs.plasma = {
     ##### Settings #####
     enable = true;
     overrideConfig = true;
     ##### Workspace #####
     workspace = {
-      colorScheme = "BreezeDark";
+      colorScheme = settings.desktop.plasma.colorScheme;
       cursor = {
-        theme = "Breeze";
+        theme = settings.desktop.cursor.theme;
       };
-      wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
-      iconTheme = "Papirus-Dark";
+      wallpaper = settings.desktop.plasma.wallpaper;
+      iconTheme = settings.desktop.plasma.iconTheme;
     };
     ##### Restore #####
     windows.allowWindowsToRememberPositions = false;

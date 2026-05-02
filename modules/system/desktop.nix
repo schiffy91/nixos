@@ -8,6 +8,15 @@
       displayManager.enable = true;
       accounts-daemon.enable = true;
     };
+    environment = {
+      systemPackages = [
+        config.settings.desktop.cursor.package
+        config.settings.desktop.cursor.defaultPackage
+      ];
+      sessionVariables = {
+        XCURSOR_THEME = config.settings.desktop.cursor.theme;
+      };
+    };
   })
   ##### Wayland #####
   (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
@@ -71,6 +80,9 @@
       displayManager.gdm.enable = true;
       desktopManager.gnome.enable = true;
     };
+    programs.dconf.profiles.user.databases = [{
+      settings."org/gnome/desktop/interface".cursor-theme = config.settings.desktop.cursor.theme;
+    }];
   })
   (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
     services.displayManager = {
