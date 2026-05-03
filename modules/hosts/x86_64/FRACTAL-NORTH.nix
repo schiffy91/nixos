@@ -137,6 +137,7 @@ in {
     win-spice
     (mpv.override { youtubeSupport = false; })  # drops yt-dlp → deno → rusty-v8 → V8 source build chain on every nix flake update
     lmstudio
+    protonup-qt
     sbctl
     fwupd
     nixd
