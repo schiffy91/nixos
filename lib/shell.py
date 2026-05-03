@@ -1,4 +1,5 @@
 import contextlib
+import itertools
 import json
 import subprocess
 import sys
@@ -6,6 +7,7 @@ import sys
 
 class Shell:
     evals = {}
+    BATCH_SIZE = 64
     def __init__(self, root_required=False):
         self.chroots = []
         if root_required:
@@ -109,11 +111,11 @@ class Shell:
         return self.basename(self.dirname(path))
     # Security
     def chmod(self, mode, *args):
-        paths = self.realpaths(*args)
-        self.run(f"chmod -R {mode} " + " ".join(f"'{p}'" for p in paths))
+        for batch in itertools.batched(self.realpaths(*args), Shell.BATCH_SIZE):
+            self.run(f"chmod -R {mode} " + " ".join(f"'{p}'" for p in batch))
     def chown(self, user, *args):
-        paths = self.realpaths(*args)
-        self.run(f"chown -R {user} " + " ".join(f"'{p}'" for p in paths))
+        for batch in itertools.batched(self.realpaths(*args), Shell.BATCH_SIZE):
+            self.run(f"chown -R {user} " + " ".join(f"'{p}'" for p in batch))
     def ssh_keygen(self, key_type, path, password=""):
         self.mkdir(self.dirname(path))
         self.run(f"ssh-keygen -t {key_type} -N \"{password}\" -f '{path}'")

@@ -1,6 +1,6 @@
-{ settings, lib, ... }: lib.mkIf (settings.desktop.environment != "none") {
-  home.file = {
-    ".icons/default".source = settings.desktop.cursor.path;
-    ".local/share/icons/default".source = settings.desktop.cursor.path;
-  };
+{ settings, lib, ... }:
+let src = { source = settings.desktop.cursor.path; }; in
+lib.mkIf (settings.desktop.environment != "none") {
+  home.file.".icons/default" = src;
+  home.file.".local/share/icons/default" = src;
 }

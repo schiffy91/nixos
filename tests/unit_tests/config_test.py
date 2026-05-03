@@ -557,7 +557,7 @@ class TestConfigSecure:
             s.enter_context(patch.object(
                 mock_shell, "git_add_safe_directory"))
             Config.secure("testuser")
-            assert find_dirs.call_args[1].get("ignore_pattern") == "*/{secrets}*"
+            assert find_dirs.call_args[1].get("ignore_pattern") == "*/secrets* */.venv* */.direnv* */.git*"
     def test_find_scripts_uses_pattern(self, mock_shell):
         Config.sh = mock_shell
         with ExitStack() as s:

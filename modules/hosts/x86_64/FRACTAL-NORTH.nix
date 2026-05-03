@@ -1,10 +1,39 @@
 { config, pkgs, lib, ... }:
 let
   pci = {
-    nvidiaGpu      = "0000:01:00.0";
-    nvidiaAudio    = "0000:01:00.1";
-    nvidiaPrimeBus = "PCI:1:0:0";
-    amdPrimeBus    = "PCI:107:0:0";
+    nvidiaGpu       = "0000:01:00.0";
+    nvidiaAudio     = "0000:01:00.1";
+    amdGpu          = "0000:6b:00.0";
+    nvidiaPrimeBus  = "PCI:1:0:0";
+    amdPrimeBus     = "PCI:107:0:0";
+    nvidiaGpuId     = "10de:2684";   # RTX 4090 (AD102)
+    nvidiaAudioId   = "10de:22ba";   # AD102 HDMI audio
+  };
+  disk = {
+    nvmeId = "nvme-WD_BLACK_SN850X_4000GB_22461L800626";
+  };
+  input = {
+    razerKeyboardEvent = "usb-Razer_Razer_BlackWidow_Lite-event-kbd";
+    logitechMouseEvent = "usb-Logitech_USB_Receiver-if01-event-mouse";
+    logitechBolt = {
+      vendorId   = "1133";   # 0x046D
+      productId  = "50504";  # 0xC548
+      mouseName  = "Logitech USB Receiver Mouse";
+    };
+  };
+  display = {
+    primaryOutput = "DP-1";  # XDR via TB4; AMD iGPU connector name
+    # NVIDIA first → KWin renders on dGPU; AMD second → scans out (it owns the TB4 display)
+    driCards = "/dev/dri/by-path/pci-${pci.nvidiaGpu}-card:/dev/dri/by-path/pci-${pci.amdGpu}-card";
+  };
+  network = {
+    primaryInterface = "eno2";  # Stable onboard NIC; TB ethernet (eth0) is optional + goes away during sleep
+    lanSubnet        = "192.168.50.0/24";
+  };
+  audio = {
+    quadCortexInputPattern  = "~alsa_input.*Neural_DSP_Quad_Cortex.*";
+    quadCortexOutputPattern = "~alsa_output.*Neural_DSP_Quad_Cortex.*";
+    logitechCameraInputPattern = "~alsa_input.*Logi_4K_Pro.*";
   };
   nvidiaOffloadEnv = {
     __NV_PRIME_RENDER_OFFLOAD          = "1";
@@ -15,28 +44,31 @@ let
     VDPAU_DRIVER                       = "nvidia";
   };
 in {
+  nixpkgs.overlays = [
+    (final: prev: { openldap = prev.openldap.overrideAttrs { doCheck = false; }; })
+  ];
   ##### Host Name #####
   networking.hostName = "FRACTAL-NORTH";
+  ##### Logitech Bolt receiver (mice/keyboards) #####
+  hardware.logitech.wireless.enable = true;
+  home-manager.users.${config.settings.user.admin.username}.programs.plasma.configFile.kcminputrc."Libinput][${input.logitechBolt.vendorId}][${input.logitechBolt.productId}][${input.logitechBolt.mouseName}".PointerAccelerationProfile = 1;
+  ##### Flatpak #####
+  services.flatpak = {
+    enable = true;
+    remotes = [{ name = "flathub"; location = "https://flathub.org/repo/flathub.flatpakrepo"; }];
+    packages = [ "com.usebottles.bottles" ];
+    update.onActivation = true;
+  };
   ##### Disk Information #####
   settings.disk.device = "/dev/nvme0n1";
   settings.disk.encryption.enable = true;
   settings.disk.immutability.enable = true;
   settings.disk.swap.size = "65G";
-  ##### VFIO #####
-  settings.vfio.enable = true;
-  settings.vfio.vmName = "win11";
-  settings.vfio.gpuPci = pci.nvidiaGpu;
-  settings.vfio.audioPci = pci.nvidiaAudio;
-  settings.vfio.nvmeId = "nvme-WD_BLACK_SN850X_4000GB_22461L800626";
-  settings.vfio.keyboardEvent = "usb-Razer_Razer_BlackWidow_Lite-event-kbd";
-  settings.vfio.mouseEvent = "usb-Logitech_USB_Receiver-if01-event-mouse";
-  settings.vfio.lookingGlass.enable = true;
-  settings.vfio.evdev.enable = true;
   ##### TPM2 #####
   settings.tpm.device = "/dev/tpmrm0";
   ##### Display #####
   settings.desktop.scalingFactor = 2.5;
-  settings.desktop.primaryOutput = "DP-1"; # XDR via TB4; AMD iGPU connector name
+  settings.desktop.primaryOutput = display.primaryOutput;
   ##### AMD #####
   boot.kernelParams = [
     "amdgpu.dc=1"                   # AMD GPU
@@ -81,7 +113,7 @@ in {
     libvdpau-va-gl
   ];
   environment.sessionVariables = nvidiaOffloadEnv // {
-    KWIN_DRM_DEVICES = "/dev/dri/card0:/dev/dri/card1";  # NVIDIA first → KWin renders on dGPU; AMD scans out (it owns the TB4 display)
+    KWIN_DRM_DEVICES = display.driCards;
   };
   ##### GPU LED Off (OpenRGB) #####
   services.hardware.openrgb.enable = true;
@@ -125,7 +157,6 @@ in {
       ];
     })
     distrobox
-    gamescope
     pciutils
     usbutils
     looking-glass-client
@@ -149,6 +180,7 @@ in {
           --replace-fail "Exec=cider-2" "Exec=cider-2 --force-device-scale-factor=1"
       '';
     }))
+    solaar
     # GPU diagnostic tools
     mesa-demos       # provides glxinfo
     vulkan-tools # provides vulkaninfo
@@ -157,9 +189,9 @@ in {
     nvtopPackages.full      # GPU monitoring (supports NVIDIA + AMD)
   ];
   ##### Networking #####
-  networking.interfaces.eno2.wakeOnLan.enable = true;
-  settings.networking.lanSubnet = "192.168.50.0/24";
-  settings.networking.primaryInterface = "eno2";  # Stable onboard NIC; TB ethernet (eth0) is optional + goes away during sleep.
+  networking.interfaces.${network.primaryInterface}.wakeOnLan.enable = true;
+  settings.networking.lanSubnet = network.lanSubnet;
+  settings.networking.primaryInterface = network.primaryInterface;
   programs.openvpn3.enable = true;
   services.resolved.enable = true;
   services.mullvad-vpn = {
@@ -200,7 +232,7 @@ in {
   ];
   services.pipewire.wireplumber.extraConfig."51-alsa-tweaks"."monitor.alsa.rules" = [
     {
-      matches = [{ "node.name" = "~alsa_input.*Neural_DSP_Quad_Cortex.*"; }];
+      matches = [{ "node.name" = audio.quadCortexInputPattern; }];
       actions.update-props = {
         "session.suspend-timeout-seconds" = 0;
         "priority.session" = 2500;
@@ -208,15 +240,49 @@ in {
       };
     }
     {
-      matches = [{ "node.name" = "~alsa_output.*Neural_DSP_Quad_Cortex.*"; }];
+      matches = [{ "node.name" = audio.quadCortexOutputPattern; }];
       actions.update-props = {
         "session.suspend-timeout-seconds" = 0;
         "node.driver" = false;
       };
     }
     {
-      matches = [{ "node.name" = "~alsa_input.*Logi_4K_Pro.*"; }];
+      matches = [{ "node.name" = audio.logitechCameraInputPattern; }];
       actions.update-props."node.disabled" = true;
     }
   ];
+  ##### VFIO #####
+  settings.vfio.enable = true;
+  settings.vfio.vmName = "win11";
+  settings.vfio.gpuPci = pci.nvidiaGpu;
+  settings.vfio.audioPci = pci.nvidiaAudio;
+  settings.vfio.nvmeId = disk.nvmeId;
+  settings.vfio.keyboardEvent = input.razerKeyboardEvent;
+  settings.vfio.mouseEvent = input.logitechMouseEvent;
+  settings.vfio.lookingGlass.enable = true;
+  settings.vfio.evdev.enable = true;
+  # Boot entry where NVIDIA is bound to vfio-pci at boot, never loaded by Linux.
+  # KDE runs on the AMD iGPU only. `virsh start win11` instantly attaches the 4090.
+  # Pick "vfio" at the systemd-boot menu when you want to run the Windows VM.
+  specialisation.vfio.configuration = {
+    boot = {
+      kernelParams = [ "vfio-pci.ids=${pci.nvidiaGpuId},${pci.nvidiaAudioId}" ];
+      blacklistedKernelModules = [ "nvidia" "nvidia_drm" "nvidia_modeset" "nvidia_uvm" "nvidiafb" "nouveau" ];
+      initrd.kernelModules = [ "vfio_pci" "vfio" "vfio_iommu_type1" ];
+    };
+    hardware.nvidia = {
+      modesetting.enable = lib.mkForce false;
+      powerManagement.enable = lib.mkForce false;
+      prime.offload.enable = lib.mkForce false;
+      prime.offload.enableOffloadCmd = lib.mkForce false;
+    };
+    services.xserver.videoDrivers = lib.mkForce [ "amdgpu" ];
+    environment.sessionVariables = lib.mkForce {
+      KWIN_DRM_DEVICES = "/dev/dri/by-path/pci-${pci.amdGpu}-card";
+    };
+    programs.steam.package = lib.mkForce (pkgs.steam.override {
+      extraLibraries = pkgs': with pkgs'; [ pipewire.jack ];
+    });
+    systemd.services.gpu-led-off.enable = lib.mkForce false;
+  };
 }

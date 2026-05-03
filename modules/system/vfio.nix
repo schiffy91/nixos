@@ -32,24 +32,6 @@ in lib.mkMerge [
     };
     ##### User groups for VFIO + input access #####
     users.users.${adminUser}.extraGroups = [ "input" "kvm" ];
-    ##### Libvirt hooks (SharkWipf dispatcher + per-VM start/revert) #####
-    ##### Pattern: PassthroughPOST/VFIO-Tools + joeknock90/QaidVoid       #####
-    environment.etc."libvirt/hooks/qemu" = {
-      source = ./vfio_hooks/qemu;
-      mode = "0755";
-    };
-    environment.etc."libvirt/hooks/qemu.d/${cfg.vmName}/prepare/begin/start.sh" = {
-      source = ./vfio_hooks/start.sh;
-      mode = "0755";
-    };
-    environment.etc."libvirt/hooks/qemu.d/${cfg.vmName}/release/end/revert.sh" = {
-      source = ./vfio_hooks/revert.sh;
-      mode = "0755";
-    };
-    ##### Log dir for hook output #####
-    systemd.tmpfiles.rules = [
-      "d /var/log/libvirt 0755 root root -"
-    ];
     ##### ACPI tables available at /etc/acpi-spoofed-tables/ #####
     environment.etc."acpi-spoofed-tables/fake_battery.aml".source = "${acpiTables}/fake_battery.aml";
     environment.etc."acpi-spoofed-tables/spoofed_devices.aml".source = "${acpiTables}/spoofed_devices.aml";

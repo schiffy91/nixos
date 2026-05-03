@@ -1,5 +1,7 @@
-{ inputs, config, pkgs, lib, ... }: { 
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ]; } // lib.mkMerge [{
+{ inputs, config, pkgs, lib, ... }: {
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
+  config = lib.mkMerge [
+{
   ##### Shared Boot Settings #####
   boot = {
     kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
@@ -52,4 +54,5 @@
       configurationLimit = config.settings.boot.previousGenerationLimit;
     };
   };
-})]
+})];
+}

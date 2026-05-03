@@ -668,6 +668,18 @@ class TestShellSecurity:
             "chown -R root" in str(c)
             for c in mock_subprocess.call_args_list
         )
+    def test_chmod_batches_paths(self, mock_shell, mock_subprocess):
+        paths = [f"/p{i}" for i in range(Shell.BATCH_SIZE * 2 + 5)]
+        mock_subprocess.return_value.stdout = "\n".join(paths)
+        mock_shell.chmod("755", *paths)
+        chmod_calls = [c for c in mock_subprocess.call_args_list if "chmod -R 755" in str(c)]
+        assert len(chmod_calls) == 3
+    def test_chown_batches_paths(self, mock_shell, mock_subprocess):
+        paths = [f"/p{i}" for i in range(Shell.BATCH_SIZE + 1)]
+        mock_subprocess.return_value.stdout = "\n".join(paths)
+        mock_shell.chown("root", *paths)
+        chown_calls = [c for c in mock_subprocess.call_args_list if "chown -R root" in str(c)]
+        assert len(chown_calls) == 2
     def test_ssh_keygen_basic(self, mock_shell, mock_subprocess):
         mock_subprocess.return_value.stdout = "/path"
         mock_shell.ssh_keygen("ed25519", "/path/key")

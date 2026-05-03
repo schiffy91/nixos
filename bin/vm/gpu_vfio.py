@@ -15,9 +15,6 @@ MOUSE_EVENT = Config.eval("config.settings.vfio.mouseEvent")
 VM_XML = f"/etc/nixos/bin/vm/{VM_NAME}.xml"
 NVME_PATH = f"/dev/disk/by-id/{NVME_ID}"
 KVMFR_DEV = "/dev/kvmfr0"
-HOOK_DISPATCHER = "/etc/libvirt/hooks/qemu"
-HOOK_START = f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/prepare/begin/start.sh"
-HOOK_REVERT = f"/etc/libvirt/hooks/qemu.d/{VM_NAME}/release/end/revert.sh"
 
 ##### State helpers #####
 
@@ -44,9 +41,7 @@ def preflight():
         ("Mouse evdev",        lambda: Path(f"/dev/input/by-id/{MOUSE_EVENT}").exists()),
         ("VM XML exists",      lambda: Path(VM_XML).exists()),
         ("VM defined",         vm_defined),
-        ("Hook dispatcher",    lambda: Path(HOOK_DISPATCHER).exists()),
-        ("start.sh hook",      lambda: Path(HOOK_START).exists()),
-        ("revert.sh hook",     lambda: Path(HOOK_REVERT).exists()),
+        ("GPU vfio-bound",     lambda: gpu_driver() == "vfio-pci"),
     ]
     all_ok = True
     for name, fn in checks:
@@ -77,7 +72,9 @@ def start():
         Utils.log("VM not defined, running setup first...")
         setup()
     if not Path(NVME_PATH).exists(): Utils.abort("TB4 NVMe not connected.")
-    Utils.log("Starting VM (libvirt hook detaches GPU)...")
+    if gpu_driver() != "vfio-pci":
+        Utils.abort("GPU not bound to vfio-pci. Reboot into the 'vfio' specialisation.")
+    Utils.log("Starting VM...")
     sh.run(f"virsh start {VM_NAME}")
     Utils.print(f"\nVM started. Connect: looking-glass-client -f {KVMFR_DEV}")
 
@@ -95,7 +92,7 @@ def stop():
     else:
         Utils.log("Graceful timeout; forcing off...")
         sh.run(f"virsh destroy {VM_NAME}", check=False)
-    Utils.print("VM stopped. Hook revert.sh restores host GPU + DM.")
+    Utils.print("VM stopped.")
 
 def status():
     Utils.print("=== VFIO Status ===")

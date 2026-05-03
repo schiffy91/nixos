@@ -2,7 +2,7 @@
   ##### Shared #####
   (lib.mkIf (config.settings.desktop.environment != "none") {
     hardware.graphics.enable = true;
-    programs.dconf.enable =  true;
+    programs.dconf.enable = true;
     services = {
       xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
       displayManager.enable = true;

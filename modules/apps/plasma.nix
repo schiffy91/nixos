@@ -1,4 +1,6 @@
-{ settings, lib, ... }: lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
+{ settings, lib, ... }:
+let chromeApp = id: "applications:chrome-${id}-Default.desktop"; in
+lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
   ##### Icon Theme #####
   home.packages = [ settings.desktop.plasma.iconThemePackage ];
   programs.plasma = {
@@ -30,15 +32,9 @@
           ScaleFactor = settings.desktop.scalingFactor;
           ScreenScaleFactors = "${settings.desktop.primaryOutput}=${toString settings.desktop.scalingFactor};";
         };
-        General = {
-          AccentColor = "40,40,40";
-        };
+        General.AccentColor = settings.desktop.plasma.accentColor;
       };
-      kwinrc = {
-        Xwayland = {
-          Scale = settings.desktop.scalingFactor;
-        };
-      };
+      kwinrc.Xwayland.Scale = settings.desktop.scalingFactor;
     };
     ##### Start Menu #####
     panels = [
@@ -46,6 +42,7 @@
         location = "bottom";
         hiding = "autohide";
         floating = true;
+        screen = "all";
         widgets = [
           {
             kickoff = {
@@ -58,6 +55,9 @@
               launchers = [
                 "applications:org.kde.dolphin.desktop"
                 "applications:google-chrome.desktop"
+                (chromeApp "fmgjjmmmlfnkbppncabfkddbjimcfncm")  # Gmail
+                (chromeApp "kjbdgfilnfhdoflbpgamdcdgpehopbep")  # Calendar
+                (chromeApp "hnpfjngllnobngcgfapefoaidbinmjnm")  # WhatsApp
                 "applications:cider-2.desktop"
                 "applications:code.desktop"
                 "applications:org.kde.konsole.desktop"
@@ -91,33 +91,24 @@
     ];
   };
   ##### Konsole #####
-  xdg.configFile."konsolerc".text = ''
-    [Desktop Entry]
-    DefaultProfile=${settings.user.admin.username}.profile
-    [General]
-    ConfigVersion=1
-    [KonsoleWindow]
-    RememberWindowSize=false
-    ShowMenuBarByDefault=false
-    [MainWindow]
-    MenuBar=Disabled
-    StatusBar=Disabled
-    ToolBarsMovable=Disabled
-  '';
-  xdg.dataFile."konsole/${settings.user.admin.username}.profile".text = ''
-    [Cursor Options]
-    CursorShape=2
-
-    [General]
-    Name=${settings.user.admin.username}
-
-    [Keyboard]
-    KeyBindings=macos
-
-    [Scrolling]
-    HistoryMode=2
-
-    [Terminal Features]
-    BlinkingCursorEnabled=true
-  '';
+  programs.konsole = {
+    enable = true;
+    defaultProfile = settings.user.admin.username;
+    profiles.${settings.user.admin.username} = {
+      name = settings.user.admin.username;
+      extraConfig = {
+        "Cursor Options".CursorShape = 2;
+        "Keyboard".KeyBindings = "macos";
+        "Scrolling".HistoryMode = 2;
+        "Terminal Features".BlinkingCursorEnabled = true;
+      };
+    };
+    extraConfig = {
+      "KonsoleWindow".RememberWindowSize = false;
+      "KonsoleWindow".ShowMenuBarByDefault = false;
+      "KonsoleWindow".ToolBarsMovable = false;
+      "MainWindow".MenuBar = "Disabled";
+      "MainWindow".StatusBar = "Disabled";
+    };
+  };
 }
