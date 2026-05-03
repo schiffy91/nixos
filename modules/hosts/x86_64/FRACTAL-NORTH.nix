@@ -125,6 +125,7 @@ in {
       ];
     })
     distrobox
+    gamescope
     pciutils
     usbutils
     looking-glass-client

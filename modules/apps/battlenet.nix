@@ -9,7 +9,10 @@ let
     exec "$@" --force-device-scale-factor=${scale} --high-dpi-support=1
   '';
   shimPath = "${config.home.homeDirectory}/.local/bin/battlenet-scale";
-  launchOptions = "${shimPath} %command%";
+  # HDR + Wayland-native rendering for games launched through Battle.net (Diablo 4 etc.).
+  # Must precede the shim so the shell parses them as env-var assignments.
+  envVars = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1";
+  launchOptions = "${envVars} ${shimPath} %command%";
   setBattlenetConfig = pkgs.writers.writePython3Bin "set-battlenet-config" {
     libraries = [ pkgs.python3Packages.vdf ];
   } ''
