@@ -108,4 +108,3 @@ class TestUtilsSystem:
         monkeypatch.setattr(mock_shell, "require_root", mock_rr)
         Utils.require_root()
         mock_rr.assert_called_once()
-

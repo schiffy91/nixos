@@ -8,7 +8,7 @@ EXPECTED_SCRIPTS = [
 ]
 
 def _scripts(): return [p for p in CLI_DIR.glob("*.py") if p.name != "__init__.py"]
-def _compiles(p): return subprocess.run(["python3", "-m", "py_compile", str(p)]).returncode == 0
+def _compiles(p): return subprocess.run(["python3", "-m", "py_compile", str(p)], check=False).returncode == 0
 
 class TestCLIStructure:
     def test_cli_directory_exists(self):

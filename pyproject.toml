@@ -1,10 +1,28 @@
 [tool.pylint."messages control"]
 disable = [
-    "import-error",           # E0401: lib.* modules use sys.path.insert at runtime
-    "wrong-import-position",  # C0413: imports after sys.path.insert() are intentional
-    "redefined-outer-name",   # W0621: standard pytest fixture injection pattern
-    "no-member",              # E1101: @chrootable adds .chroot() dynamically at runtime
-    "unused-argument",        # W0613: pytest fixtures must be in signatures to activate
+    # Project style: dense one-liners, no docstrings
+    "missing-module-docstring",       # C0114
+    "missing-class-docstring",        # C0115
+    "missing-function-docstring",     # C0116
+    "multiple-statements",            # C0321: dense `if x: return` is intentional
+    "multiple-imports",               # C0410: `import a, b, c` is intentional
+    # Codebase patterns
+    "import-error",                   # E0401: lib.* modules use sys.path.insert at runtime
+    "wrong-import-position",          # C0413: imports after sys.path.insert() are intentional
+    "redefined-outer-name",           # W0621: standard pytest fixture injection pattern
+    "no-member",                      # E1101: @chrootable adds .chroot() dynamically at runtime
+    "unused-argument",                # W0613: pytest fixtures must be in signatures to activate
+    # Refactor heuristics: noise on small CLI scripts + Config/Shell singletons
+    "too-few-public-methods",         # R0903
+    "too-many-public-methods",        # R0904
+    "too-many-locals",                # R0914
+    "too-many-branches",              # R0912
+    "too-many-arguments",             # R0913
+    "too-many-positional-arguments",  # R0917
+    "inconsistent-return-statements", # R1710: Utils.log/log_error tail-returns are fine
+    "consider-using-with",            # R1732: false positive on long-lived Popen handles
+    "broad-exception-caught",         # W0718: CLI error-tolerance paths intentionally catch all
+    "line-too-long",                  # C0301: matches flake8's E501 ignore
 ]
 
 [tool.pytest.ini_options]
@@ -20,5 +38,3 @@ extend-ignore = ["E265", "E501", "E402", "F401", "F403"]
 
 [tool.pyright]
 extraPaths = [".", "bin", "lib"]
-venvPath = "/nix/store"
-venv = "z0ii1kk6i8ryqzvyrzx9fdc9d81dy5g1-python3-3.14.2-env"

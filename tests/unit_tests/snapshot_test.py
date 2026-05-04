@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from lib.config import Config
 from lib.snapshot import Snapshot
 
 @pytest.mark.usefixtures("mock_config_eval")
@@ -20,7 +21,6 @@ class TestSnapshotPaths:
         result = Snapshot.get_clean_snapshot_path("@home")
         assert result == "/.snapshots/@home/CLEAN"
     def test_single_subvolume_parsing(self, monkeypatch):
-        from lib.config import Config
         monkeypatch.setattr(
             Config, "eval",
             classmethod(lambda cls, attr: (
@@ -66,8 +66,7 @@ class TestSnapshotCreation:
     def test_create_processes_all_subvolumes(self, mock_shell):
         Snapshot.sh = mock_shell
         processed = []
-        with patch.object(mock_shell, "rm",
-                          side_effect=lambda p: processed.append(p)):
+        with patch.object(mock_shell, "rm", side_effect=processed.append):
             with patch.object(mock_shell, "mkdir"):
                 with patch.object(mock_shell, "run"):
                     with patch.object(mock_shell, "dirname",
@@ -82,7 +81,7 @@ class TestSnapshotCreation:
         def counting_rm(path):
             call_count["rm"] += 1
             if call_count["rm"] == 1:
-                raise Exception("first subvolume failed")
+                raise RuntimeError("first subvolume failed")
 
         with patch.object(mock_shell, "rm", side_effect=counting_rm):
             with patch.object(mock_shell, "mkdir"):

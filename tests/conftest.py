@@ -17,12 +17,14 @@ def _mock_run(*args, **kwargs):
         mock_result.stderr = ""
         mock_result.returncode = 0
         return mock_result
-    return _original_run(*args, **kwargs)
+    return _original_run(*args, check=kwargs.pop("check", False), **kwargs)
 
 subprocess.run = _mock_run  # type: ignore[assignment]
 
+# pylint: disable=redefined-builtin,unused-import
 import bin.install, bin.update, bin.diff, bin.eval  # noqa: E402, F401, E401
 import bin.secure_boot, bin.tpm2, bin.change_password  # noqa: E402, F401, E401
+# pylint: enable=redefined-builtin,unused-import
 
 subprocess.run = _original_run  # type: ignore[assignment]
 
