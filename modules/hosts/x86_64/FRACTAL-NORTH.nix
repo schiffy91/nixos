@@ -21,10 +21,14 @@ let
       mouseName  = "Logitech USB Receiver Mouse";
     };
   };
-  display = {
+  display = rec {
     primaryOutput = "DP-1";  # XDR via TB4; AMD iGPU connector name
-    # NVIDIA first → KWin renders on dGPU; AMD second → scans out (it owns the TB4 display)
-    driCards = "/dev/dri/by-path/pci-${pci.nvidiaGpu}-card:/dev/dri/by-path/pci-${pci.amdGpu}-card";
+    # KWIN_DRM_DEVICES uses ':' as path separator — can't embed PCI addresses (which contain ':').
+    # Card numbers are assigned by DRM probe order: NVIDIA (PCI 01:00.0) probes first → card0, AMD iGPU (PCI 6b:00.0) → card1.
+    nvidiaCard = "/dev/dri/card0";
+    amdCard    = "/dev/dri/card1";
+    # NVIDIA first → KWin renders on dGPU; AMD second → scans out (it owns the TB4 display).
+    driCards   = "${nvidiaCard}:${amdCard}";
   };
   network = {
     primaryInterface = "eno2";  # Stable onboard NIC; TB ethernet (eth0) is optional + goes away during sleep
@@ -44,19 +48,19 @@ let
     VDPAU_DRIVER                       = "nvidia";
   };
 in {
-  nixpkgs.overlays = [
-    (final: prev: { openldap = prev.openldap.overrideAttrs { doCheck = false; }; })
-  ];
   ##### Host Name #####
   networking.hostName = "FRACTAL-NORTH";
+  ##### XBox Controller #####
+  hardware.xone.enable = true;
   ##### Logitech Bolt receiver (mice/keyboards) #####
   hardware.logitech.wireless.enable = true;
   home-manager.users.${config.settings.user.admin.username}.programs.plasma.configFile.kcminputrc."Libinput][${input.logitechBolt.vendorId}][${input.logitechBolt.productId}][${input.logitechBolt.mouseName}".PointerAccelerationProfile = 1;
   ##### Flatpak #####
+  nixpkgs.overlays = [ (final: prev: { openldap = prev.openldap.overrideAttrs { doCheck = false; }; }) ];
   services.flatpak = {
     enable = true;
     remotes = [{ name = "flathub"; location = "https://flathub.org/repo/flathub.flatpakrepo"; }];
-    packages = [ "com.usebottles.bottles" ];
+    packages = [ "com.usebottles.bottles" "org.freedesktop.Platform.VulkanLayer.gamescope//25.08" ];
     update.onActivation = true;
   };
   ##### Disk Information #####
@@ -174,12 +178,7 @@ in {
     fwupd
     nixd
     claude-code
-    (cider-2.overrideAttrs (old: {
-      postFixup = (old.postFixup or "") + ''
-        substituteInPlace $out/share/applications/cider-2.desktop \
-          --replace-fail "Exec=cider-2" "Exec=cider-2 --force-device-scale-factor=1"
-      '';
-    }))
+    cider-2
     solaar
     # GPU diagnostic tools
     mesa-demos       # provides glxinfo
@@ -278,7 +277,7 @@ in {
     };
     services.xserver.videoDrivers = lib.mkForce [ "amdgpu" ];
     environment.sessionVariables = lib.mkForce {
-      KWIN_DRM_DEVICES = "/dev/dri/by-path/pci-${pci.amdGpu}-card";
+      KWIN_DRM_DEVICES = display.amdCard;  # AMD iGPU only (NVIDIA bound to vfio-pci)
     };
     programs.steam.package = lib.mkForce (pkgs.steam.override {
       extraLibraries = pkgs': with pkgs'; [ pipewire.jack ];
