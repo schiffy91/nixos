@@ -34,7 +34,11 @@ lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
         };
         General.AccentColor = settings.desktop.plasma.accentColor;
       };
-      kwinrc.Xwayland.Scale = settings.desktop.scalingFactor;
+      kwinrc = {
+        Xwayland.Scale = settings.desktop.scalingFactor;
+        # New windows spawn under the cursor — i.e. on whichever monitor's taskbar you clicked.
+        Windows.Placement = "UnderMouse";
+      };
     };
     ##### Start Menu #####
     panels = [
