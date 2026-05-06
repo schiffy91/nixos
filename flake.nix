@@ -6,7 +6,6 @@
     plasma-manager = { url = "github:nix-community/plasma-manager"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.home-manager.follows = "home-manager"; };
     disko = { url = "github:nix-community/disko"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
-    nix-flatpak = { url = "github:gmodena/nix-flatpak"; };
   };
   outputs = inputs@{ self, ... }:
     let

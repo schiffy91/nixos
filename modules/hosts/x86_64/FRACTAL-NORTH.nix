@@ -55,14 +55,6 @@ in {
   ##### Logitech Bolt receiver (mice/keyboards) #####
   hardware.logitech.wireless.enable = true;
   home-manager.users.${config.settings.user.admin.username}.programs.plasma.configFile.kcminputrc."Libinput][${input.logitechBolt.vendorId}][${input.logitechBolt.productId}][${input.logitechBolt.mouseName}".PointerAccelerationProfile = 1;
-  ##### Flatpak #####
-  nixpkgs.overlays = [ (final: prev: { openldap = prev.openldap.overrideAttrs { doCheck = false; }; }) ];
-  services.flatpak = {
-    enable = true;
-    remotes = [{ name = "flathub"; location = "https://flathub.org/repo/flathub.flatpakrepo"; }];
-    packages = [ "com.usebottles.bottles" "org.freedesktop.Platform.VulkanLayer.gamescope//25.08" ];
-    update.onActivation = true;
-  };
   ##### Disk Information #####
   settings.disk.device = "/dev/nvme0n1";
   settings.disk.encryption.enable = true;

@@ -144,10 +144,6 @@ in {
       ##### Steam #####
       "/home/${config.settings.user.admin.username}/.local/share/Steam"
       "/home/${config.settings.user.admin.username}/.steam"
-      ##### Bottles (flatpak) #####
-      "/home/${config.settings.user.admin.username}/.var/app/com.usebottles.bottles"
-      ##### Flatpak #####
-      "/var/lib/flatpak"
       ##### Apple Music #####
       "/home/${config.settings.user.admin.username}/.config/sh.cider.genten"
     ];

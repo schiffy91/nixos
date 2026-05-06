@@ -1,5 +1,4 @@
-{ inputs, pkgs, ... }: {
-  imports = [ inputs.nix-flatpak.nixosModules.nix-flatpak ];
+{ pkgs, ... }: {
   ##### System Packages #####
   environment.systemPackages = (with pkgs; [
     git
