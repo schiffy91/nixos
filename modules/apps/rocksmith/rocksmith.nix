@@ -1,5 +1,6 @@
 { settings, config, pkgs, lib, ... }:
 let
+  steam = import ../../lib/steam.nix { inherit pkgs; };
   sampleSize = settings.rocksmith.sampleSize;
   sampleRate = settings.rocksmith.sampleRate;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
@@ -57,34 +58,6 @@ let
     '';
   };
   launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString sampleSize}/${toString sampleRate} %command%";
-  setLaunchOptions = pkgs.writers.writePython3Bin "set-launch-options" {
-    libraries = [ pkgs.python3Packages.vdf ];
-  } ''
-    import glob
-    import sys
-    import vdf
-
-    APP_ID, OPTS = "221680", sys.argv[1]
-    for path in glob.glob(
-        sys.argv[2] + "/userdata/*/config/localconfig.vdf"
-    ):
-        with open(path) as f:
-            config = vdf.load(f)
-        sd = config.setdefault
-        root = sd("UserLocalConfigStore", {})
-        steam = root.setdefault("Software", {}) \
-            .setdefault("Valve", {}) \
-            .setdefault("Steam", {})
-        apps = steam.get("apps", steam.get("Apps"))
-        if apps is None:
-            apps = steam.setdefault("apps", {})
-        app = apps.setdefault(APP_ID, {})
-        if app.get("LaunchOptions") == OPTS:
-            continue
-        app["LaunchOptions"] = OPTS
-        with open(path, "w") as f:
-            vdf.dump(config, f, pretty=True)
-  '';
   steamPath = "${config.home.homeDirectory}/.local/share/Steam";
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
@@ -118,7 +91,10 @@ in {
       fi
 
       # Set Steam launch options
-      ${setLaunchOptions}/bin/set-launch-options "${launchOptions}" "${steamPath}"
+      ${steam.setLaunchOptions}/bin/set-steam-launch-options \
+        --steam-path "${steamPath}" \
+        --launch-options "${launchOptions}" \
+        --app-id "221680"
     fi
   '';
 }
