@@ -36,8 +36,8 @@ lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
       };
       kwinrc = {
         Xwayland.Scale = settings.desktop.scalingFactor;
-        # New windows spawn under the cursor — i.e. on whichever monitor's taskbar you clicked.
         Windows.Placement = "UnderMouse";
+        Wayland.DisableTonemapping = true;
       };
     };
     ##### Start Menu #####

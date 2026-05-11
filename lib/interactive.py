@@ -14,10 +14,14 @@ class Interactive:
             Utils.print("Invalid input. Enter 'y' or 'n'.")
     @classmethod
     def ask_for_host_path(cls, hosts_path):
-        hosts_paths = cls.sh.find_files(hosts_path, pattern="*.nix")
+        all_paths = cls.sh.find_files(hosts_path, pattern="*.nix")
+        hosts_paths = [
+            p for p in all_paths
+            if cls.sh.basename(p).replace(".nix", "") == cls.sh.parent_name(p)
+        ]
         formatted = [
             cls.sh.basename(p).replace(".nix", "")
-            + " (" + cls.sh.parent_name(p) + ")"
+            + " (" + cls.sh.parent_name(cls.sh.dirname(p)) + ")"
             for p in hosts_paths
         ]
         while True:

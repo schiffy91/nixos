@@ -10,10 +10,13 @@
   outputs = inputs@{ self, ... }:
     let
       lib = inputs.nixpkgs.lib;
-      mkNixosSystem = hostFile: target: 
+      isHostEntry = path:
+        lib.hasSuffix ".nix" path
+        && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
+      mkNixosSystem = hostFile: target:
         let
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
-          system = "${baseNameOf (dirOf hostFile)}-linux"; 
+          system = "${baseNameOf (dirOf (dirOf hostFile))}-linux";
           targetModules = (
             if lib.hasInfix "Boot" target then
               [{ settings.boot.method = lib.mkForce target; }] ++ lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./modules/system)
@@ -39,13 +42,13 @@
             }];
           };
         };
-    in { 
+    in {
       nixosConfigurations = lib.listToAttrs (
-        lib.concatMap (hostFile: [ 
+        lib.concatMap (hostFile: [
           (mkNixosSystem hostFile "Disk-Operation")
           (mkNixosSystem hostFile "Standard-Boot")
           (mkNixosSystem hostFile "Secure-Boot")
-        ]) (lib.filter (path: (lib.hasSuffix ".nix" path)) (lib.filesystem.listFilesRecursive ./modules/hosts))
+        ]) (lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./modules/hosts))
       );
     };
 }

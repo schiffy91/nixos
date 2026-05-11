@@ -135,6 +135,7 @@ in {
       "/home/${config.settings.user.admin.username}/.vscode"
       ##### Sunshine #####
       "/home/${config.settings.user.admin.username}/.config/sunshine"
+      "/home/${config.settings.user.admin.username}/.local/share/flatpak/db"
       ##### Mullvad #####
       "/etc/mullvad-vpn/"
       "/home/${config.settings.user.admin.username}/.config/Mullvad VPN"
@@ -144,6 +145,9 @@ in {
       ##### Steam #####
       "/home/${config.settings.user.admin.username}/.local/share/Steam"
       "/home/${config.settings.user.admin.username}/.steam"
+      ##### Games (wineprefixes / Proton standalone installs) #####
+      "/home/${config.settings.user.admin.username}/Games"
+      "/home/${config.settings.user.admin.username}/.local/share/umu"
       ##### Apple Music #####
       "/home/${config.settings.user.admin.username}/.config/sh.cider.genten"
     ];
@@ -188,7 +192,7 @@ in {
     settings.vfio.vmName = mkSetting str "win11";
     settings.vfio.gpuPci = mkSetting str "";         # e.g. "0000:01:00.0" — host-specific, required if vfio.enable
     settings.vfio.audioPci = mkSetting str "";       # companion function of gpuPci (e.g. "0000:01:00.1")
-    settings.vfio.nvmeId = mkSetting str "";         # /dev/disk/by-id/nvme-* suffix for the TB4 Windows drive
+    settings.vfio.externalNvmeId = mkSetting str ""; # /dev/disk/by-id/nvme-* suffix for the TB4 Windows drive
     settings.vfio.keyboardEvent = mkSetting str "";  # /dev/input/by-id/usb-*-event-kbd suffix for evdev passthrough
     settings.vfio.mouseEvent = mkSetting str "";     # /dev/input/by-id/usb-*-event-mouse suffix for evdev passthrough
     settings.vfio.lookingGlass.enable = mkSetting bool false;

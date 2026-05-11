@@ -163,7 +163,7 @@ class Config:
         return cls.sh.basename(cls.get_host_path()).replace(".nix", "")
     @classmethod
     def get_architecture(cls):
-        return cls.sh.parent_name(cls.get_host_path())
+        return cls.sh.parent_name(cls.sh.dirname(cls.get_host_path()))
     @classmethod
     def get_hashed_password_path(cls):
         return (str(cls.get_secrets_path()) + "/"

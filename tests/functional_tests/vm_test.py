@@ -123,7 +123,7 @@ def reboot_vm():
 
 
 def change_mode_and_rebuild(mode):
-    nix_path = f"/etc/nixos/modules/hosts/{ARCH}/VM-TEST.nix"
+    nix_path = f"/etc/nixos/modules/hosts/{ARCH}/VM-TEST/VM-TEST.nix"
     has_mode = ssh(
         f"grep -c 'immutability.mode' {nix_path} || true", check=False,
     )
@@ -338,14 +338,17 @@ class TestInstall:
             '  settings.desktop.environment = "none";\\n'
             '}\\n'
         )
-        # Remove other arch hosts to avoid cross-compilation failures
+        # Remove other arch hosts and sibling host dirs to avoid cross-compilation failures
         other = "aarch64" if ARCH == "x86_64" else "x86_64"
         ssh(f"rm -rf /etc/nixos/modules/hosts/{other}")
-        ssh(f"mkdir -p /etc/nixos/modules/hosts/{ARCH}")
+        ssh(f"find /etc/nixos/modules/hosts/{ARCH} -mindepth 1 -maxdepth 1 "
+            f"-type d ! -name VM-TEST -exec rm -rf {{}} +",
+            check=False)
+        ssh(f"mkdir -p /etc/nixos/modules/hosts/{ARCH}/VM-TEST")
         ssh(f"printf '{vm_test_nix}' > "
-            f"/etc/nixos/modules/hosts/{ARCH}/VM-TEST.nix")
+            f"/etc/nixos/modules/hosts/{ARCH}/VM-TEST/VM-TEST.nix")
         ssh(
-            f'echo \'{{"host_path": "modules/hosts/{ARCH}/VM-TEST.nix", '
+            f'echo \'{{"host_path": "modules/hosts/{ARCH}/VM-TEST/VM-TEST.nix", '
             f'"target": "Standard-Boot"}}\' > /etc/nixos/config.json'
         )
         ssh("git -C /etc/nixos init")

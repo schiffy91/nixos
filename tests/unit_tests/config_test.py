@@ -182,7 +182,9 @@ class TestConfigHostInfo:
         with ExitStack() as s:
             s.enter_context(patch.object(
                 Config, "get_host_path",
-                return_value="/hosts/x86_64/host.nix"))
+                return_value="/hosts/x86_64/host/host.nix"))
+            s.enter_context(patch.object(
+                mock_shell, "dirname", return_value="/hosts/x86_64/host"))
             s.enter_context(patch.object(
                 mock_shell, "parent_name", return_value="x86_64"))
             assert Config.get_architecture() == "x86_64"
@@ -191,7 +193,9 @@ class TestConfigHostInfo:
         with ExitStack() as s:
             s.enter_context(patch.object(
                 Config, "get_host_path",
-                return_value="/hosts/aarch64/host.nix"))
+                return_value="/hosts/aarch64/host/host.nix"))
+            s.enter_context(patch.object(
+                mock_shell, "dirname", return_value="/hosts/aarch64/host"))
             s.enter_context(patch.object(
                 mock_shell, "parent_name", return_value="aarch64"))
             assert Config.get_architecture() == "aarch64"

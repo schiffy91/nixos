@@ -9,7 +9,7 @@ sh = Shell(root_required=True)
 
 VM_NAME = Config.eval("config.settings.vfio.vmName")
 GPU_PCI = Config.eval("config.settings.vfio.gpuPci")
-NVME_ID = Config.eval("config.settings.vfio.nvmeId")
+NVME_ID = Config.eval("config.settings.vfio.externalNvmeId")
 KBD_EVENT = Config.eval("config.settings.vfio.keyboardEvent")
 MOUSE_EVENT = Config.eval("config.settings.vfio.mouseEvent")
 VM_XML = f"/etc/nixos/bin/vm/{VM_NAME}.xml"
