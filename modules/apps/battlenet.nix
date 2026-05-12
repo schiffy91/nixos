@@ -6,37 +6,43 @@ let
   proton = "${home}/.local/share/Steam/compatibilitytools.d/GE-Proton10-34";
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
-  battlenet = pkgs.writeShellApplication {
-    name = "battlenet";
-    runtimeInputs = [ pkgs.umu-launcher ];
-    text = ''
-      mkdir -p "${prefix}"
-      EXE="''${1:-${exe}}"
-      cd "$HOME"
-      exec env \
-        WINEPREFIX="${prefix}" \
-        GAMEID=umu-battlenet \
-        PROTONPATH="${proton}" \
-        PROTON_ENABLE_WAYLAND=1 \
-        PROTON_ENABLE_HDR=1 \
-        DXVK_HDR=1 \
-        ENABLE_HDR_WSI=1 \
-        WINE_SIMULATE_WRITECOPY=1 \
-        umu-run "$EXE"
-    '';
+  mkLauncher = { name, label, waylandHdr }: rec {
+    launcher = pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [ pkgs.umu-launcher ];
+      text = ''
+        mkdir -p "${prefix}"
+        EXE="''${1:-${exe}}"
+        cd "$HOME"
+        exec env \
+          WINEPREFIX="${prefix}" \
+          GAMEID=umu-battlenet \
+          PROTONPATH="${proton}" \
+          PROTON_USE_WOW64=0 \
+          WINE_SIMULATE_WRITECOPY=1 \
+          ${lib.optionalString waylandHdr ''
+          PROTON_ENABLE_WAYLAND=1 \
+          PROTON_ENABLE_HDR=1 \
+          DXVK_HDR=1 \
+          ENABLE_HDR_WSI=1 \
+        ''}umu-run "$EXE"
+      '';
+    };
+    desktop = pkgs.makeDesktopItem {
+      inherit name;
+      desktopName = label;
+      exec = "${launcher}/bin/${name}";
+      icon = "battlenet";
+      categories = [ "Game" ];
+      comment = "Battle.net via Proton${lib.optionalString waylandHdr " (native Wayland + HDR)"}";
+      terminal = false;
+      startupWMClass = "battle.net.exe";
+    };
   };
-  desktopItem = pkgs.makeDesktopItem {
-    name = "battlenet";
-    desktopName = "Battle.net";
-    exec = "${battlenet}/bin/battlenet";
-    icon = "battlenet";
-    categories = [ "Game" ];
-    comment = "Battle.net via Proton (native Wayland + HDR)";
-    terminal = false;
-    startupWMClass = "battle.net.exe";
-  };
+  wayland = mkLauncher { name = "battlenet"; label = "Battle.net"; waylandHdr = true; };
+  x11 = mkLauncher { name = "battlenet-x11"; label = "Battle.net (X11)"; waylandHdr = false; };
 in {
-  environment.systemPackages = [ battlenet desktopItem ];
+  environment.systemPackages = [ wayland.launcher wayland.desktop x11.launcher x11.desktop ];
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
     if [ -f "${exe}" ] && [ ! -s "${iconPath}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} "$(dirname ${iconPath})"
