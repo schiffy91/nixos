@@ -3,9 +3,7 @@ let
   chromeApp = id: "applications:chrome-${id}-Default.desktop";
   primary = lib.findFirst (o: o.primary) null settings.desktop.outputs;
   primaryScale = if primary == null then 1.0 else primary.scaleFactor;
-  scaleFactorsString = lib.concatMapStringsSep "" (o:
-    "${o.name}=${toString o.scaleFactor};"
-  ) settings.desktop.outputs;
+  scaleFactorsString = lib.concatMapStringsSep "" (o: "${o.name}=${toString o.scaleFactor};") settings.desktop.outputs;
   miceConfig = lib.listToAttrs (map (m: {
     name = "Libinput][${m.vendorId}][${m.productId}][${m.name}";
     value = {
