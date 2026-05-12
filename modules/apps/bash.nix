@@ -1,10 +1,7 @@
 { ... }: {
-  programs.bash = {
-    enable = true;
-    bashrcExtra = ''
-      nix-shell-unstable() {
-        nix-shell -I nixpkgs=channel:nixos-unstable -p "$@"
-      }
-    '';
-  };
+  programs.bash.interactiveShellInit = ''
+    nix-shell-with-pkgs() {
+      nix-shell -I nixpkgs=channel:nixos-unstable -p "$@"
+    }
+  '';
 }

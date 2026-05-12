@@ -1,5 +1,3 @@
 { pkgs-unstable, ... }: {
-  home.packages = with pkgs-unstable; [
-    vscode
-  ];
+  environment.systemPackages = [ pkgs-unstable.vscode ];
 }

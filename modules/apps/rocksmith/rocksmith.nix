@@ -1,8 +1,10 @@
-{ settings, config, pkgs, lib, ... }:
+{ config, pkgs, lib, ... }:
 let
-  steam = import ../../lib/steam.nix { inherit pkgs; };
-  sampleSize = settings.rocksmith.sampleSize;
-  sampleRate = settings.rocksmith.sampleRate;
+  user = config.settings.user.admin.username;
+  home = "/home/${user}";
+  steam = import ../../../scripts/lib/steam.nix { inherit pkgs; };
+  sampleSize = config.settings.rocksmith.sampleSize;
+  sampleRate = config.settings.rocksmith.sampleRate;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
     [Config]
     EnableWasapiOutputs=0
@@ -58,40 +60,36 @@ let
     '';
   };
   launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString sampleSize}/${toString sampleRate} %command%";
-  steamPath = "${config.home.homeDirectory}/.local/share/Steam";
+  steamPath = "${home}/.local/share/Steam";
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
   protonPath = "${steamAppsPath}/common/Proton - Experimental/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
 in {
-  home.activation.rocksmith = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  system.activationScripts.rocksmith = lib.stringAfter [ "users" ] ''
+    export PATH="${pkgs.coreutils}/bin:${pkgs.gnused}/bin:${pkgs.util-linux}/bin:$PATH"
     if [ -d "${gamePath}" ]; then
-      # Deploy RS_ASIO + RSMods to game directory
       cp -f ${mods}/RS_ASIO.dll "${gamePath}/"
       cp -f ${mods}/avrt.dll "${gamePath}/"
       cp -f ${mods}/RS_ASIO.ini "${gamePath}/"
       cp -f ${mods}/xinput1_3.dll "${gamePath}/"
       cp -f ${mods}/RSMods.ini "${gamePath}/"
 
-      # Deploy wineasio as builtin Wine DLL (into Proton's own lib dirs)
       if [ -d "${protonPath}/lib/wine" ]; then
         cp -f ${mods}/wineasio32.dll "${protonPath}/lib/wine/i386-windows/"
         cp -f ${mods}/wineasio32.dll.so "${protonPath}/lib/wine/i386-unix/wineasio32.dll.so"
       fi
 
-      # Remove stale "native" override that prevents builtin loading
       if [ -f "${prefixPath}/user.reg" ]; then
         sed -i '/"wineasio32"="native"/d' "${prefixPath}/user.reg" 2>/dev/null || true
       fi
 
-      # Configure Rocksmith.ini
       if [ -f "${gamePath}/Rocksmith.ini" ]; then
         sed -i 's/^ExclusiveMode=.*/ExclusiveMode=1/' "${gamePath}/Rocksmith.ini"
         sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gamePath}/Rocksmith.ini"
       fi
 
-      # Set Steam launch options
-      ${steam.setLaunchOptions}/bin/set-steam-launch-options \
+      ${pkgs.util-linux}/bin/runuser -u ${user} -- ${steam.setLaunchOptions}/bin/set-steam-launch-options \
         --steam-path "${steamPath}" \
         --launch-options "${launchOptions}" \
         --app-id "221680"

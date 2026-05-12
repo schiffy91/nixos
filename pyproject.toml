@@ -25,16 +25,9 @@ disable = [
     "line-too-long",                  # C0301: matches flake8's E501 ignore
 ]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "--ignore=tests/functional_tests"
-
 [tool.flake8]
 max-line-length = 88
 extend-ignore = ["E265", "E501", "E402", "F401", "F403"]
 
 [tool.pyright]
-extraPaths = [".", "bin", "lib"]
+extraPaths = [".", "scripts", "scripts/bin", "scripts/lib"]

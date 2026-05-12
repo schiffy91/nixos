@@ -1,4 +1,5 @@
 { lib, ... }: {
+  imports = [ ../../../apps/sunshine/system.nix ];
   ##### Moonlight #####
   # capSysAdmin breaks NVENC: setcap → AT_SECURE → LD_LIBRARY_PATH stripped → libcuda dlopen fails.
   services.sunshine = {

@@ -1,7 +1,7 @@
 { lib, config, ... }: {
   nixpkgs.overlays = [
     (final: prev: {
-      sunshine = final.callPackage ../../pkgs/sunshine/package.nix { };
+      sunshine = final.callPackage ./package.nix { };
     })
   ];
 

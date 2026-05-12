@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN="/etc/nixos/scripts/bin"
+
+usage() {
+  cat <<'EOF'
+Usage: nixos <command> [args...]
+
+Commands:
+  update                              Rebuild from the current configuration.
+  upgrade                             Update flake inputs and rebuild.
+  tpm2 --enable|--disable|--status    Manage TPM2 LUKS auto-unlock.
+  secure-boot --enable [--microsoft]|--disable|--status
+                                      Manage Secure Boot enrollment.
+  change-password [--full-disk-encryption-only|--user-account-only]
+                  [--update-tpm2]
+                                      Change LUKS, user account, and KDE
+                                      Wallet passwords in one shot.
+EOF
+}
+
+if [[ $# -eq 0 ]] || [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $EUID -ne 0 ]]; then
+  exec sudo "$BIN/nixos" "$@"
+fi
+
+cmd="$1"; shift
+
+dispatch_sub() {
+  local script="$1"; shift
+  local sub=""
+  local extra=()
+  for arg in "$@"; do
+    case "$arg" in
+      --enable)    sub="enable" ;;
+      --disable)   sub="disable" ;;
+      --status)    sub="status" ;;
+      --microsoft) extra+=("--microsoft") ;;
+      *) echo "$cmd: unknown flag '$arg'" >&2; exit 2 ;;
+    esac
+  done
+  if [[ -z "$sub" ]]; then
+    echo "$cmd: requires --enable, --disable, or --status" >&2
+    exit 2
+  fi
+  exec "$script" "$sub" "${extra[@]}"
+}
+
+case "$cmd" in
+  update)          exec "$BIN/update.py" "$@" ;;
+  upgrade)         exec "$BIN/update.py" --upgrade "$@" ;;
+  tpm2)            dispatch_sub "$BIN/tpm2.py" "$@" ;;
+  secure-boot)     dispatch_sub "$BIN/secure_boot.py" "$@" ;;
+  change-password) exec "$BIN/change_password.py" "$@" ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 2 ;;
+esac

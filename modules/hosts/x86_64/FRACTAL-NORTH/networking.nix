@@ -1,8 +1,7 @@
 { pkgs, host, ... }: {
-  ##### Networking #####
   networking = {
     interfaces.${host.network.primaryInterface}.wakeOnLan.enable = true;
-    networkmanager.unmanaged = [ "mac:24:f5:a2:f1:4d:9b" ];  # Linksys USB3GIGV1 dongle breaks WoL routing
+    networkmanager.unmanaged = map (mac: "mac:${mac}") host.network.unmanagedMacs;
   };
   settings.networking = {
     lanSubnet = host.network.lanSubnet;

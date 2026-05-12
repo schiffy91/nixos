@@ -1,123 +1,49 @@
-{ config, pkgs, lib, ... }: lib.mkMerge [
-  ##### Shared #####
-  (lib.mkIf (config.settings.desktop.environment != "none") {
-    hardware.graphics.enable = true;
-    programs.dconf.enable = true;
-    services = {
-      xserver.dpi = builtins.floor(96 * config.settings.desktop.scalingFactor);
-      displayManager.enable = true;
-      accounts-daemon.enable = true;
-    };
-    environment = {
-      systemPackages = [
-        config.settings.desktop.cursor.package
-        config.settings.desktop.cursor.defaultPackage
-      ];
-      sessionVariables = {
-        XCURSOR_THEME = config.settings.desktop.cursor.theme;
-      };
-    };
-  })
-  ##### Wayland #####
-  (lib.mkIf (lib.hasInfix "wayland" config.settings.desktop.environment) {
-    environment = {
-      sessionVariables = {
-        NIXOS_OZONE_WL = "1"; # https://nixos.wiki/wiki/Wayland
-      };
-      systemPackages = with pkgs; [
-        wl-clipboard
-      ];
-    };
-  })
-  ##### X11 #####
-  (lib.mkIf (lib.hasInfix "x11" config.settings.desktop.environment) {
-    services.xserver.enable = true;
-    environment.systemPackages = with pkgs; [
-      xclip
-    ];
-  })
-  ##### Plasma #####
-  (lib.mkIf (lib.hasInfix "plasma" config.settings.desktop.environment) {
-    services = {
-      displayManager.sddm.enable = true;
-      desktopManager.plasma6 = {
-        enable = true;
-        enableQt5Integration = false;
-      };
-    };
-    environment = {
-      systemPackages = with pkgs; [
-        kdePackages.plasma-thunderbolt
-        kdePackages.kaccounts-providers
-        kdePackages.kaccounts-integration
-        kdePackages.kio-gdrive
-      ];
-      plasma6.excludePackages = (with pkgs.kdePackages; [
-        kate
-        khelpcenter
-        elisa
-        okular
-        print-manager
-      ]);
-    };
-    security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;
-  })
-  (lib.mkIf (config.settings.desktop.environment == "plasma-x11") {
-    services.displayManager = {
-      sddm.wayland.enable = false;
-      defaultSession = "plasmax11";
-    };
-  })
-  (lib.mkIf (config.settings.desktop.environment == "plasma-wayland") {
-    services.displayManager = {
-      sddm.wayland.enable = true;
-      defaultSession = "plasma";
-    };
-  })
-  ##### Gnome #####
-  (lib.mkIf (lib.hasInfix "gnome" config.settings.desktop.environment) {
-    services = {
-      displayManager.gdm.enable = true;
-      desktopManager.gnome.enable = true;
-    };
-    programs.dconf.profiles.user.databases = [{
-      settings = {
-        "org/gnome/desktop/interface".cursor-theme = config.settings.desktop.cursor.theme;
-        # TODO: scale value still imperative-only (monitors.xml needs EDID to template)
-        "org/gnome/mutter".experimental-features = [
-          "scale-monitor-framebuffer"
-          "xwayland-native-scaling"
-        ];
-      };
-    }];
-  })
-  (lib.mkIf (config.settings.desktop.environment == "gnome-x11") {
-    services.displayManager = {
-      defaultSession = "gnome-xorg";
-      gdm.wayland = false;
-    };
-  })
-  (lib.mkIf (config.settings.desktop.environment == "gnome-wayland") {
-    services.displayManager = {
-      defaultSession = "gnome";
-      gdm.wayland = true;
-    };
-  })
-  ##### Hyprland #####
-  # TODO: no scalingFactor wiring; needs HM hyprland module + apps/hyprland.nix
-  (lib.mkIf (config.settings.desktop.environment == "hyprland-wayland") {
-    xdg.portal = {
+{ config, pkgs, lib, ... }:
+let
+  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
+  primaryScale = if primary == null then 1.0 else primary.scaleFactor;
+in {
+  hardware.graphics.enable = true;
+  programs.dconf.enable = true;
+  services = {
+    xserver.dpi = builtins.floor (96 * primaryScale);
+    displayManager = {
       enable = true;
-      extraPortals = [ pkgs.xdg-desktop-portal-hyprland ];
-    };
-    environment.systemPackages = [ pkgs.xdg-desktop-portal-hyprland ];
-    services.displayManager = {
       sddm = {
         enable = true;
         wayland.enable = true;
       };
-      defaultSession = "hyprland";
+      defaultSession = "plasma";
     };
-    programs.hyprland.enable = true;
-  })
-]
+    desktopManager.plasma6 = {
+      enable = true;
+      enableQt5Integration = false;
+    };
+    accounts-daemon.enable = true;
+  };
+  environment = {
+    systemPackages = (with pkgs; [
+      wl-clipboard
+      config.settings.desktop.cursor.package
+      config.settings.desktop.cursor.defaultPackage
+    ]) ++ (with pkgs.kdePackages; [
+      plasma-thunderbolt
+      kaccounts-providers
+      kaccounts-integration
+      kio-gdrive
+    ]);
+    sessionVariables = {
+      XCURSOR_THEME = config.settings.desktop.cursor.theme;
+      NIXOS_OZONE_WL = "1";
+    };
+    plasma6.excludePackages = with pkgs.kdePackages; [
+      kate
+      khelpcenter
+      elisa
+      okular
+      print-manager
+    ];
+  };
+  security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;
+  security.pam.services.passwd.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;  # pam_kwallet hooks chauthtok → wallet re-encrypts on passwd
+}

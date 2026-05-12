@@ -4,18 +4,14 @@
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.nvidiaGpu}", SYMLINK+="dri/nvidia-card"
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.amdGpu}", SYMLINK+="dri/amd-card"
   '';
-  ##### AMD #####
   boot = {
-    kernelParams = [ "amdgpu.dc=1" "amd_iommu=on" "iommu=pt" ];
+    kernelParams = [ "amdgpu.dc=1" ];
     consoleLogLevel = 0;  # silences MSFT8000 i2c spam
     kernelModules = [ "i2c-dev" ];
   };
   hardware = {
-    firmware = [ pkgs.linux-firmware ];
-    cpu.amd.updateMicrocode = true;
     amdgpu.initrd.enable = true;
     i2c.enable = true;
-    ##### NVIDIA #####
     nvidia = {
       open = true;
       modesetting.enable = true;

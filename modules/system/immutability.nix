@@ -39,7 +39,7 @@ let
 
 	immutabilityBin = pkgs.stdenv.mkDerivation {
 		name = "immutability";
-		src = ../../lib/immutability.rs;
+		src = ../../scripts/lib/immutability.rs;
 		dontUnpack = true;
 		nativeBuildInputs = [ pkgs.rustc ];
 		buildPhase = "rustc --edition 2021 -O -o immutability $src";

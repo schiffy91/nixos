@@ -1,6 +1,19 @@
 { settings, lib, ... }:
-let chromeApp = id: "applications:chrome-${id}-Default.desktop"; in
-lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
+let
+  chromeApp = id: "applications:chrome-${id}-Default.desktop";
+  primary = lib.findFirst (o: o.primary) null settings.desktop.outputs;
+  primaryScale = if primary == null then 1.0 else primary.scaleFactor;
+  scaleFactorsString = lib.concatMapStringsSep "" (o:
+    "${o.name}=${toString o.scaleFactor};"
+  ) settings.desktop.outputs;
+  miceConfig = lib.listToAttrs (map (m: {
+    name = "Libinput][${m.vendorId}][${m.productId}][${m.name}";
+    value = {
+      PointerAccelerationProfile = if m.accelProfile == "flat" then 1 else 2;
+      PointerAcceleration = "0.000";
+    };
+  }) settings.input.libinputMice);
+in {
   ##### Icon Theme #####
   home.packages = [ settings.desktop.plasma.iconThemePackage ];
   programs.plasma = {
@@ -29,16 +42,17 @@ lib.mkIf (lib.hasInfix "plasma" settings.desktop.environment) {
      configFile = {
       kdeglobals = {
         KScreen = {
-          ScaleFactor = settings.desktop.scalingFactor;
-          ScreenScaleFactors = "${settings.desktop.primaryOutput}=${toString settings.desktop.scalingFactor};";
+          ScaleFactor = primaryScale;
+          ScreenScaleFactors = scaleFactorsString;
         };
         General.AccentColor = settings.desktop.plasma.accentColor;
       };
       kwinrc = {
-        Xwayland.Scale = settings.desktop.scalingFactor;
+        Xwayland.Scale = primaryScale;
         Windows.Placement = "UnderMouse";
         Wayland.DisableTonemapping = true;
       };
+      kcminputrc = miceConfig;
     };
     ##### Start Menu #####
     panels = [

@@ -68,8 +68,8 @@ def main():
         "--recent", "--show-symlinks", "--show-persist-paths",
         ("--show-children", str), ("--depth", int),
         ("--pattern", str), ("--diffignore", str)])
-    cache_path = "/tmp/etc/nixos/bin/diff/cache.json"
-    ignore_path = args.diffignore or "/etc/nixos/bin/.diffignore"
+    cache_path = "/tmp/etc/nixos/scripts/bin/diff/cache.json"
+    ignore_path = args.diffignore or "/etc/nixos/scripts/bin/.diffignore"
     diffignore = (sh.file_read(ignore_path).split("\n")
                   if sh.exists(ignore_path) else [])
     keep_paths = get_keep_paths()

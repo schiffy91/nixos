@@ -1,11 +1,12 @@
-{ settings, pkgs, ... }: {
-  home.packages = with pkgs; [ git ];
+{ config, ... }: {
   programs.git = {
     enable = true;
-    signing.format = "openpgp";
-    settings.user = {
-      email = settings.user.admin.publicEmail;
-      name = settings.user.admin.publicName;
+    config = {
+      user = {
+        name = config.settings.user.admin.publicName;
+        email = config.settings.user.admin.publicEmail;
+      };
+      gpg.format = "openpgp";
     };
   };
 }

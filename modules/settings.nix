@@ -75,9 +75,6 @@ in {
       "/var/log"
       "/root/.cache/nix/"
       "/root/.ssh/known_hosts"
-      ##### Libvirt #####
-      "/var/lib/libvirt"
-      "/etc/libvirt"
       ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
       ##### Files & Folders #####
@@ -161,10 +158,14 @@ in {
     ##### TPM ##### 
     settings.tpm.device = mkSetting str "/dev/tpmrm0";
     settings.tpm.versionPath = mkSetting str "/sys/class/tpm/tpm0/tpm_version_major";
-    ##### Desktop ##### 
-    settings.desktop.environment = mkSetting (enum [ "none" "hyprland-wayland" "plasma-wayland" "plasma-x11" "gnome-wayland" "gnome-x11"]) "plasma-wayland";
-    settings.desktop.scalingFactor = mkSetting float 2.0;
-    settings.desktop.primaryOutput = mkSetting str "Virtual-1";
+    ##### Desktop #####
+    settings.desktop.outputs = mkSetting (listOf (submodule {
+      options = {
+        name = mkSetting str null;
+        scaleFactor = mkSetting float 1.0;
+        primary = mkSetting bool false;
+      };
+    })) [];
     settings.desktop.cursor.theme = mkSetting str "Breeze";
     settings.desktop.cursor.package = mkSetting package pkgs.kdePackages.breeze;
     settings.desktop.cursor.path = mkSetting str "${config.settings.desktop.cursor.package}/share/icons/breeze_cursors";
@@ -184,19 +185,17 @@ in {
     settings.networking.ports.tcp = mkSetting (listOf int) [];
     settings.networking.identityAgent = mkSetting str "~/.1password/agent.sock";
     settings.networking.primaryInterface = mkSetting str "";  # empty = no preference; set to e.g. "eno2" to route outbound via that NIC (prevents asymmetric routing when multiple NICs on one subnet)
+    ##### Input #####
+    settings.input.libinputMice = mkSetting (listOf (submodule {
+      options = {
+        vendorId = mkSetting str null;
+        productId = mkSetting str null;
+        name = mkSetting str null;
+        accelProfile = mkSetting (enum [ "flat" "adaptive" ]) "flat";
+      };
+    })) [];
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
-    ##### VFIO #####
-    settings.vfio.enable = mkSetting bool false;
-    settings.vfio.vmName = mkSetting str "win11";
-    settings.vfio.gpuPci = mkSetting str "";         # e.g. "0000:01:00.0" — host-specific, required if vfio.enable
-    settings.vfio.audioPci = mkSetting str "";       # companion function of gpuPci (e.g. "0000:01:00.1")
-    settings.vfio.externalNvmeId = mkSetting str ""; # /dev/disk/by-id/nvme-* suffix for the TB4 Windows drive
-    settings.vfio.keyboardEvent = mkSetting str "";  # /dev/input/by-id/usb-*-event-kbd suffix for evdev passthrough
-    settings.vfio.mouseEvent = mkSetting str "";     # /dev/input/by-id/usb-*-event-mouse suffix for evdev passthrough
-    settings.vfio.lookingGlass.enable = mkSetting bool false;
-    settings.vfio.lookingGlass.sharedMemoryMB = mkSetting int 128;
-    settings.vfio.evdev.enable = mkSetting bool false;
   };
 }

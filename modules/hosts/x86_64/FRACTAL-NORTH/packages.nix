@@ -14,14 +14,6 @@
     distrobox
     pciutils
     usbutils
-    looking-glass-client
-    virt-manager
-    virt-viewer
-    spice
-    spice-gtk
-    spice-protocol
-    virtio-win
-    win-spice
     (mpv.override { youtubeSupport = false; })  # avoids V8 source build chain
     lmstudio
     protonup-qt

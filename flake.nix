@@ -10,9 +10,7 @@
   outputs = inputs@{ self, ... }:
     let
       lib = inputs.nixpkgs.lib;
-      isHostEntry = path:
-        lib.hasSuffix ".nix" path
-        && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
+      isHostEntry = path: lib.hasSuffix ".nix" path && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
       mkNixosSystem = hostFile: target:
         let
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
