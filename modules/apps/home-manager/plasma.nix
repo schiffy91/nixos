@@ -48,7 +48,6 @@ in {
       kwinrc = {
         Xwayland.Scale = primaryScale;
         Windows.Placement = "UnderMouse";
-        Wayland.DisableTonemapping = true;
       };
       kcminputrc = miceConfig;
     };

@@ -54,6 +54,7 @@ in {
     ./networking.nix
     ./packages.nix
     ./steam.nix
+    ./edid.nix
     ./sunshine.nix
   ];
   _module.args.host = {
