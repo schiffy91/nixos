@@ -6,14 +6,21 @@ let
   proton = "${home}/.local/share/Steam/compatibilitytools.d/GE-Proton10-34";
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
+  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
+  scaleFactor = if primary == null then 1.0 else primary.scaleFactor;
+  logPixels = builtins.floor (96.0 * scaleFactor + 0.5);
   mkLauncher = { name, label, waylandHdr }: rec {
     launcher = pkgs.writeShellApplication {
       inherit name;
-      runtimeInputs = [ pkgs.umu-launcher ];
+      runtimeInputs = [ pkgs.umu-launcher pkgs.gnused ];
       text = ''
         mkdir -p "${prefix}"
         EXE="''${1:-${exe}}"
         cd "$HOME"
+        if [ -f "${prefix}/user.reg" ]; then
+          DPI_HEX=$(printf '%08x' ${toString logPixels})
+          sed -i -E 's|"LogPixels"=dword:[0-9a-f]+|"LogPixels"=dword:'"$DPI_HEX"'|g' "${prefix}/user.reg"
+        fi
         exec env \
           WINEPREFIX="${prefix}" \
           GAMEID=umu-battlenet \
@@ -25,7 +32,7 @@ let
           PROTON_ENABLE_HDR=1 \
           DXVK_HDR=1 \
           ENABLE_HDR_WSI=1 \
-        ''}umu-run "$EXE"
+        ''}umu-run "$EXE" --force-device-scale-factor=${toString scaleFactor} --high-dpi-support=1
       '';
     };
     desktop = pkgs.makeDesktopItem {
