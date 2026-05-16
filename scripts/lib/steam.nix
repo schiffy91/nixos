@@ -76,6 +76,45 @@ let
     else:
         set_for_non_steam()
   '';
+  setCompatTool = pkgs.writers.writePython3Bin "set-steam-compat-tool" {
+    libraries = [ pkgs.python3Packages.vdf ];
+  } ''
+    import argparse
+    import os
+
+    import vdf
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--steam-path", required=True)
+    parser.add_argument("--tool-name", required=True)
+    parser.add_argument("--app-id", default="0", help="0 = global default")
+    parser.add_argument("--priority", default="250")
+    args = parser.parse_args()
+
+    path = args.steam_path + "/config/config.vdf"
+    if not os.path.exists(path):
+        raise SystemExit(0)
+
+    with open(path) as f:
+        cfg = vdf.load(f)
+
+    valve = (
+        cfg.setdefault("InstallConfigStore", {})
+        .setdefault("Software", {})
+        .setdefault("Valve", {})
+        .setdefault("Steam", {})
+    )
+    mapping = valve.setdefault("CompatToolMapping", {})
+    desired = {"name": args.tool_name, "config": "", "priority": args.priority}
+    if mapping.get(args.app_id) == desired:
+        raise SystemExit(0)
+    mapping[args.app_id] = desired
+
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        vdf.dump(cfg, f, pretty=True)
+    os.replace(tmp, path)
+  '';
 in {
-  inherit setLaunchOptions;
+  inherit setLaunchOptions setCompatTool;
 }

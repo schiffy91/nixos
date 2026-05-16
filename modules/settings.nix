@@ -142,11 +142,13 @@ in {
       ##### Steam #####
       "/home/${config.settings.user.admin.username}/.local/share/Steam"
       "/home/${config.settings.user.admin.username}/.steam"
-      ##### Games (wineprefixes / Proton standalone installs) #####
+      ##### Games #####
       "/home/${config.settings.user.admin.username}/Games"
       "/home/${config.settings.user.admin.username}/.local/share/umu"
       ##### Apple Music #####
       "/home/${config.settings.user.admin.username}/.config/sh.cider.genten"
+      ##### rclone #####
+      "/home/${config.settings.user.admin.username}/.config/rclone"
     ];
     ##### Sleep #####
     settings.sleep.allowHibernation = mkSetting bool false;

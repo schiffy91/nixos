@@ -21,7 +21,12 @@
     fwupd
     nixd
     claude-code
-    cider-2
+    (pkgs.cider-2.overrideAttrs (old: {
+      postFixup = (old.postFixup or "") + ''
+        substituteInPlace $out/share/applications/cider-2.desktop \
+          --replace-fail "Exec=cider-2" "Exec=cider-2 --force-device-scale-factor=1 --ozone-platform=wayland --enable-features=WaylandWindowDecorations"
+      '';
+    }))
     solaar
     mesa-demos
     vulkan-tools
