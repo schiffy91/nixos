@@ -1,8 +1,7 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, steam, ... }:
 let
   user = config.settings.user.admin.username;
   home = "/home/${user}";
-  steam = import ../../../scripts/lib/steam.nix { inherit pkgs; };
   sampleSize = config.settings.rocksmith.sampleSize;
   sampleRate = config.settings.rocksmith.sampleRate;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
@@ -50,7 +49,7 @@ let
   '';
   mods = pkgs.stdenvNoCC.mkDerivation {
     name = "rocksmith-mods";
-    src = ./.;
+    src = ./pkg-overrides/rocksmith;
     installPhase = ''
       mkdir -p $out
       cp $src/RS_ASIO.dll $src/avrt.dll $out/
@@ -63,7 +62,7 @@ let
   steamPath = "${home}/.local/share/Steam";
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
-  protonPath = "${steamAppsPath}/common/Proton - Experimental/files";
+  protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.name}/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
 in {
   system.activationScripts.rocksmith = lib.stringAfter [ "users" ] ''

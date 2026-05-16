@@ -1,9 +1,9 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, steam, ... }:
 let
   user = config.settings.user.admin.username;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
-  proton = "${home}/.local/share/Steam/compatibilitytools.d/GE-Proton10-34";
+  proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.name}";
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;

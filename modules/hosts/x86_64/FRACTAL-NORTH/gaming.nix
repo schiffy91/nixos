@@ -1,12 +1,8 @@
-{ config, pkgs, lib, host, ... }:
+{ config, pkgs, lib, host, steam, ... }:
 let
   user = config.settings.user.admin.username;
   home = "/home/${user}";
-  steam = import ../../../../scripts/lib/steam.nix { inherit pkgs; };
-  protonTool = "GE-Proton10-34";
 in {
-  imports = [ ../../../apps/sunshine/system.nix ];
-
   ##### Steam #####
   programs.steam = {
     enable = true;
@@ -24,7 +20,7 @@ in {
     if [ -d "${home}/.local/share/Steam/config" ]; then
       ${pkgs.util-linux}/bin/runuser -u ${user} -- ${steam.setCompatTool}/bin/set-steam-compat-tool \
         --steam-path "${home}/.local/share/Steam" \
-        --tool-name "${protonTool}"
+        --tool-name "${steam.proton.name}"
     fi
   '';
 

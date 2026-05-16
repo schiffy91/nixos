@@ -1,4 +1,4 @@
-{ pkgs }:
+{ pkgs, ... }:
 let
   setLaunchOptions = pkgs.writers.writePython3Bin "set-steam-launch-options" {
     libraries = [ pkgs.python3Packages.vdf ];
@@ -116,5 +116,8 @@ let
     os.replace(tmp, path)
   '';
 in {
-  inherit setLaunchOptions setCompatTool;
+  _module.args.steam = {
+    inherit setLaunchOptions setCompatTool;
+    proton.name = "GE-Proton10-34";
+  };
 }

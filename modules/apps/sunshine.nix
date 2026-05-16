@@ -1,7 +1,7 @@
 { lib, config, ... }: {
   nixpkgs.overlays = [
     (final: prev: {
-      sunshine = final.callPackage ./package.nix { cudaSupport = true; };
+      sunshine = final.callPackage ./pkg-overrides/sunshine/package.nix { cudaSupport = true; };
     })
   ];
 

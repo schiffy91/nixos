@@ -1,14 +1,13 @@
 { inputs, config, lib, ... }:
 let
-  nixFiles = dir: lib.filter (p: lib.hasSuffix ".nix" (toString p))
-    (lib.filesystem.listFilesRecursive dir);
-  isUnder = subdir: path: lib.hasPrefix "${toString ../apps}/${subdir}/" (toString path);
+  nixFiles = dir:
+    let e = builtins.readDir dir; in
+    lib.attrValues (lib.mapAttrs (n: _: dir + "/${n}")
+      (lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".nix" n) e));
 in {
   imports = [
     inputs.home-manager.nixosModules.home-manager
-  ] ++ lib.filter
-    (p: !(isUnder "home-manager" p) && !(isUnder "sunshine" p))
-    (nixFiles ../apps);
+  ] ++ nixFiles ../apps;
 
   users.mutableUsers = false;
   users.users.${config.settings.user.admin.username} = {

@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 let
-  edid = pkgs.callPackage ../../../apps/sunshine/edid { };
+  edid = pkgs.callPackage ../../../apps/pkg-overrides/sunshine/edid { };
   connector = edid.passthru.connector;
   mode = "1280x800@90";
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
