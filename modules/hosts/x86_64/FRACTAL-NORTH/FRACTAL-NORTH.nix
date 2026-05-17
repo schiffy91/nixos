@@ -53,8 +53,8 @@ in {
     ./input.nix
     ./networking.nix
     ./packages.nix
-    ./edid.nix
-    ./gaming.nix
+    ./steam.nix
+    ./sunshine.nix
   ];
   _module.args.host = {
     inherit pci disk tpm input display network audio nvidiaOffloadEnv;

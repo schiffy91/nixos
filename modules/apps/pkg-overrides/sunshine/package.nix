@@ -71,26 +71,26 @@ let
     ]
   );
   ffmpegPrepared = fetchzip {
-    url = "https://github.com/LizardByte/build-deps/releases/download/v2026.425.130933/Linux-x86_64-ffmpeg.tar.gz";
-    hash = "sha256-YKoKOxxU2urIpBHjV0MQAvRhUwRF48jNqsvXFm0o0x0=";
+    url = "https://github.com/LizardByte/build-deps/releases/download/v2026.516.30821/Linux-x86_64-ffmpeg.tar.gz";
+    hash = "sha256-VT+4qP2FaizCoIBBbBkzbYw4YOvGhuBUoZxWL0IYVZo=";
   };
 in
 stdenv'.mkDerivation (finalAttrs: {
   pname = "sunshine";
-  version = "2026.508.45922";
+  version = "2026.516.143833";
 
   src = fetchFromGitHub {
     owner = "LizardByte";
     repo = "Sunshine";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-MLMprePtg4/As+xrYxO3PqU9zCEwRGW8wiVfT81VPSA=";
+    hash = "sha256-3yuhOyW1Rqz4ddZ40z2ZzpAReZQFva0SL595XrnFB60=";
     fetchSubmodules = true;
   };
 
   ui = buildNpmPackage {
     inherit (finalAttrs) src version;
     pname = "sunshine-ui";
-    npmDepsHash = "sha256-UVtuqjXnijrRcLyvVcsZrI9q04YTxXP6TT27xofUrWI=";
+    npmDepsHash = "sha256-YnNnuAdj/S5LGNytqIsmCApIec8DTWKF6VIJ7AXUctU=";
 
     postPatch = ''
       cp ${./package-lock.json} ./package-lock.json
@@ -228,6 +228,7 @@ stdenv'.mkDerivation (finalAttrs: {
     (lib.cmakeFeature "UDEV_RULES_INSTALL_DIR" "lib/udev/rules.d")
     (lib.cmakeFeature "SYSTEMD_USER_UNIT_INSTALL_DIR" "lib/systemd/user")
     (lib.cmakeFeature "SYSTEMD_MODULES_LOAD_DIR" "lib/modules-load.d")
+    (lib.cmakeFeature "SUNSHINE_EXECUTABLE_PATH" "${placeholder "out"}/bin/sunshine")  # KWin matches Exec= against /proc/self/exe; default "sunshine" fails on NixOS
   ]
   ++ lib.optionals (!cudaSupport) [
     (lib.cmakeBool "SUNSHINE_ENABLE_CUDA" false)

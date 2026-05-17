@@ -1,10 +1,9 @@
-{ config, lib, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 let
   edid = pkgs.callPackage ../../../apps/pkg-overrides/sunshine/edid { };
   connector = edid.passthru.connector;
   mode = "1280x800@90";
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
-
   kd = "${pkgs.kdePackages.libkscreen}/bin/kscreen-doctor";
   enable = pkgs.writeShellScriptBin "sunshine-display-enable" ''
     ${kd} output.${connector}.enable output.${connector}.scale.1 output.${connector}.position.0,0 output.${connector}.primary
@@ -16,6 +15,15 @@ let
     ${kd} output.${connector}.disable || true
   '';
 in {
+  services.sunshine = {
+    enable = true;
+    openFirewall = false;
+    autoStart = true;
+    capSysAdmin = true;
+  };
+  settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];
+  settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
+
   boot.kernelParams = [ "drm.edid_firmware=${connector}:${edid.passthru.firmwarePath}" ];
   hardware.firmware = [ edid ];
   environment.systemPackages = [ enable disable ];

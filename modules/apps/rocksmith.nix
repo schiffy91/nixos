@@ -3,7 +3,6 @@ let
   user = config.settings.user.admin.username;
   home = "/home/${user}";
   sampleSize = config.settings.rocksmith.sampleSize;
-  sampleRate = config.settings.rocksmith.sampleRate;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
     [Config]
     EnableWasapiOutputs=0
@@ -58,7 +57,6 @@ let
       cp $src/wineasio32.dll $src/wineasio32.dll.so $out/
     '';
   };
-  launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString sampleSize}/${toString sampleRate} %command%";
   steamPath = "${home}/.local/share/Steam";
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
@@ -87,11 +85,6 @@ in {
         sed -i 's/^ExclusiveMode=.*/ExclusiveMode=1/' "${gamePath}/Rocksmith.ini"
         sed -i 's/^Win32UltraLowLatencyMode=.*/Win32UltraLowLatencyMode=1/' "${gamePath}/Rocksmith.ini"
       fi
-
-      ${pkgs.util-linux}/bin/runuser -u ${user} -- ${steam.setLaunchOptions}/bin/set-steam-launch-options \
-        --steam-path "${steamPath}" \
-        --launch-options "${launchOptions}" \
-        --app-id "221680"
     fi
   '';
 }

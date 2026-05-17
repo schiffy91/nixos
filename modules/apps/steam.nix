@@ -1,5 +1,14 @@
-{ pkgs, ... }:
+{ config, pkgs, lib, ... }:
 let
+  user = config.settings.user.admin.username;
+  home = "/home/${user}";
+  steamPath = "${home}/.local/share/Steam";
+  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
+  scale = if primary == null then 1.0 else primary.scaleFactor;
+  chromiumDpi = "--force-device-scale-factor=${toString scale} --high-dpi-support=1";
+  rsSampleSize = config.settings.rocksmith.sampleSize;
+  rsSampleRate = config.settings.rocksmith.sampleRate;
+  protonName = "GE-Proton10-34";
   setLaunchOptions = pkgs.writers.writePython3Bin "set-steam-launch-options" {
     libraries = [ pkgs.python3Packages.vdf ];
   } ''
@@ -115,9 +124,55 @@ let
         vdf.dump(cfg, f, pretty=True)
     os.replace(tmp, path)
   '';
-in {
-  _module.args.steam = {
-    inherit setLaunchOptions setCompatTool;
-    proton.name = "GE-Proton10-34";
+  # Per-app Steam config. Travels with the app — true wherever it's installed.
+  # Apps not installed on a given host are harmless (the helpers no-op when no userdata exists).
+  apps = {
+    "221680" = {  # Rocksmith 2014 — ASIO + low-latency pipewire
+      launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString rsSampleSize}/${toString rsSampleRate} %command%";
+    };
+    "3240220" = {  # GTA V Enhanced
+      # GE-Proton10-34 hangs the loader; 10-30 reaches Social Club then white-screens.
+      # Proton Experimental + SteamDeck=1 is Valve's targeted fix for the launcher.
+      compatTool = "proton_experimental";
+      launchOptions = "SteamDeck=1 %command% ${chromiumDpi}";
+    };
+    "1174180" = {  # Red Dead Redemption 2 — Rockstar launcher is Chromium
+      launchOptions = "%command% ${chromiumDpi}";
+    };
+    "1091500" = {  # Cyberpunk 2077 — REDlauncher is Chromium
+      launchOptions = "%command% ${chromiumDpi}";
+    };
   };
+  perApp = appId: cfg:
+    lib.optionalString (cfg ? compatTool) ''
+      $runuser ${setCompatTool}/bin/set-steam-compat-tool \
+        --steam-path "${steamPath}" \
+        --tool-name "${cfg.compatTool}" \
+        --app-id "${appId}"
+    '' + lib.optionalString (cfg ? launchOptions) ''
+      $runuser ${setLaunchOptions}/bin/set-steam-launch-options \
+        --steam-path "${steamPath}" \
+        --launch-options ${lib.escapeShellArg cfg.launchOptions} \
+        --app-id "${appId}"
+    '';
+in {
+  config = lib.mkMerge [
+    {
+      _module.args.steam = {
+        inherit setLaunchOptions setCompatTool;
+        proton.name = protonName;
+      };
+    }
+    (lib.mkIf config.programs.steam.enable {
+      system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
+        if [ -d "${steamPath}/config" ]; then
+          runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"
+          $runuser ${setCompatTool}/bin/set-steam-compat-tool \
+            --steam-path "${steamPath}" \
+            --tool-name "${protonName}"
+          ${lib.concatStrings (lib.mapAttrsToList perApp apps)}
+        fi
+      '';
+    })
+  ];
 }

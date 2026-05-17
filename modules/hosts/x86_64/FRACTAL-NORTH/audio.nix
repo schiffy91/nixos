@@ -1,4 +1,4 @@
-{ config, host, ... }: {
+{ config, host, pkgs, ... }: {
   ##### Rocksmith / Quad Cortex #####
   users.users.${config.settings.user.admin.username}.extraGroups = [ "audio" "rtkit" "pipewire" ];
   security.pam.loginLimits = [
@@ -32,5 +32,19 @@
         actions.update-props."node.disabled" = true;
       }
     ];
+  };
+  ##### HDMI sinks default to 100% (S89C / S102 control their own volume) #####
+  systemd.user.services.audio-hdmi-default-volume = {
+    description = "Reset HDMI audio sinks to 100% at session start";
+    wantedBy = [ "default.target" ];
+    after = [ "pipewire-pulse.service" "wireplumber.service" ];
+    serviceConfig.Type = "oneshot";
+    path = with pkgs; [ pulseaudio coreutils gnugrep ];
+    script = ''
+      sleep 3
+      for sink in $(pactl list short sinks | grep -i hdmi | cut -f2); do
+        pactl set-sink-volume "$sink" 100% || true
+      done
+    '';
   };
 }

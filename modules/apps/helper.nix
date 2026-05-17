@@ -1,16 +1,22 @@
-{ config, pkgs, lib, ... }:
+{ pkgs, ... }:
 let
-  pythonEnv = pkgs.python3.withPackages (ps: with ps; [ pyqt6 ]);
-  src = ../../scripts/bin/nixos_helper.py;
-  helper = pkgs.writeShellApplication {
+  src = ../../scripts/bin/nixos-helper;
+  cliPython = pkgs.python3;
+  daemonPython = pkgs.python3.withPackages (ps: with ps; [ pyqt6 ]);
+  cli = pkgs.writeShellApplication {
+    name = "nixos-helper-cli";
+    runtimeInputs = with pkgs; [ kdePackages.libkscreen systemd kdePackages.konsole pulseaudio ];
+    text = ''exec ${cliPython}/bin/python3 ${src}/cli.py "$@"'';
+  };
+  daemon = pkgs.writeShellApplication {
     name = "nixos-helper";
-    runtimeInputs = with pkgs; [ pythonEnv kdePackages.libkscreen systemd kdePackages.konsole ];
-    text = ''exec ${pythonEnv}/bin/python3 ${src} "$@"'';
+    runtimeInputs = [ cli ];
+    text = ''exec ${daemonPython}/bin/python3 ${src}/daemon.py "$@"'';
   };
   desktopItem = pkgs.makeDesktopItem {
     name = "nixos-helper";
     desktopName = "NixOS Helper";
-    exec = "${helper}/bin/nixos-helper";
+    exec = "${daemon}/bin/nixos-helper";
     icon = "nix-snowflake";
     categories = [ "Utility" "System" ];
     comment = "Tray utilities for NixOS";
@@ -18,12 +24,12 @@ let
     startupWMClass = "nixos-helper";
   };
 in {
-  environment.systemPackages = [ helper desktopItem ];
+  environment.systemPackages = [ cli daemon desktopItem ];
   environment.etc."xdg/autostart/nixos-helper.desktop".text = ''
     [Desktop Entry]
     Type=Application
     Name=NixOS Helper
-    Exec=${helper}/bin/nixos-helper
+    Exec=${daemon}/bin/nixos-helper
     Icon=nix-snowflake
     X-KDE-autostart-after=panel
     NoDisplay=true
