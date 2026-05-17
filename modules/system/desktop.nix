@@ -3,6 +3,20 @@ let
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
   primaryScale = if primary == null then 1.0 else primary.scaleFactor;
 in {
+  # Backport of KDE MR !8293 (HDR screencast support) to KWin 6.6.5.
+  # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
+  # screencast stream so Sunshine can capture genuine HDR pixels from the
+  # compositor instead of 8-bit-truncated SDR.
+  nixpkgs.overlays = [
+    (final: prev: {
+      kdePackages = prev.kdePackages.overrideScope (kdeFinal: kdePrev: {
+        kwin = kdePrev.kwin.overrideAttrs (old: {
+          patches = (old.patches or []) ++ [ ./pkg-overrides/kwin/hdr-screencast.patch ];
+        });
+      });
+    })
+  ];
+
   hardware.graphics.enable = true;
   programs.dconf.enable = true;
   services = {
