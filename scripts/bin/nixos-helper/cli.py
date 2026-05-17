@@ -11,9 +11,10 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 DRM_DEVICES_PATH = Path("/sys/class/drm")
 CAFFEINE_PID_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "nixos-helper-caffeine.pid"
 INHIBIT_WHO = "nixos-helper"
-LABELS_PATH = Path(__file__).resolve().parent / "labels.toml"
+LABELS_PATH = Path(os.environ["NIXOS_HELPER_CONFIG"]) if os.environ.get("NIXOS_HELPER_CONFIG") else None
 
 def load_labels():
+    if not LABELS_PATH: return {}
     try:
         with open(LABELS_PATH, "rb") as f: return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError): return {}

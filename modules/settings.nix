@@ -199,5 +199,7 @@ in {
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
+    ##### NixOS Helper #####
+    settings.nixosHelper.configPath = mkSetting str "";
   };
 }

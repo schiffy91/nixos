@@ -1,17 +1,25 @@
-{ pkgs, ... }:
+{ pkgs, config, lib, ... }:
 let
-  src = ../../scripts;  # ship the whole tree so cli/daemon can `from lib import …`
+  src = ../../scripts;
   cliPython = pkgs.python3;
   daemonPython = pkgs.python3.withPackages (ps: with ps; [ pyqt6 ]);
+  configEnv = lib.optionalString (config.settings.nixosHelper.configPath != "")
+    "export NIXOS_HELPER_CONFIG=${lib.escapeShellArg config.settings.nixosHelper.configPath}";
   cli = pkgs.writeShellApplication {
     name = "nixos-helper-cli";
     runtimeInputs = with pkgs; [ kdePackages.libkscreen systemd kdePackages.konsole pulseaudio ];
-    text = ''exec ${cliPython}/bin/python3 ${src}/bin/nixos-helper/cli.py "$@"'';
+    text = ''
+      ${configEnv}
+      exec ${cliPython}/bin/python3 ${src}/bin/nixos-helper/cli.py "$@"
+    '';
   };
   daemon = pkgs.writeShellApplication {
     name = "nixos-helper";
     runtimeInputs = [ cli ];
-    text = ''exec ${daemonPython}/bin/python3 ${src}/bin/nixos-helper/daemon.py "$@"'';
+    text = ''
+      ${configEnv}
+      exec ${daemonPython}/bin/python3 ${src}/bin/nixos-helper/daemon.py "$@"
+    '';
   };
   desktopItem = pkgs.makeDesktopItem {
     name = "nixos-helper";

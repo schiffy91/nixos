@@ -1,0 +1,26 @@
+##### Display connectors #####
+[displays]
+"DP-1" = "ProXDR"
+"DP-3" = "Streaming"
+"HDMI-A-2" = "S89C"
+
+##### Display layout #####
+[[layout]]
+display     = "HDMI-A-2"
+position    = "left-of"
+relative_to = "DP-1"
+
+##### Audio presets #####
+[[audio]]
+label   = "Kanto TUK"
+card    = "alsa_card.usb-Neural_DSP_Quad_Cortex-00"
+profile = "output:analog-surround-71+input:analog-stereo"
+sink    = "alsa_output.usb-Neural_DSP_Quad_Cortex-00.analog-surround-71"
+volume  = "100%"
+
+[[audio]]
+label   = "Devialet Phantoms"
+card    = "alsa_card.pci-0000_01_00.1"
+profile = "output:hdmi-stereo"
+sink    = "alsa_output.pci-0000_01_00.1.hdmi-stereo"
+volume  = "100%"

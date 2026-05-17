@@ -73,5 +73,6 @@ in {
       scaleFactor = display.scaleFactor;
       primary     = true;
     }];
+    nixosHelper.configPath = "${./nixos-helper.toml}";
   };
 }
