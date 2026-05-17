@@ -2,7 +2,7 @@
 #! nix-shell -i python3 -p python3
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
@@ -55,8 +55,8 @@ def disable():
     require_luks()
     wipe()
 
-def main():
-    args = Utils.parse_args({"enable": [], "disable": [], "status": []})
+def main(argv=None):
+    args = Utils.parse_args({"enable": [], "disable": [], "status": []}, argv)
     if args.command == "enable": enable()
     elif args.command == "disable": disable()
     elif args.command == "status": status()

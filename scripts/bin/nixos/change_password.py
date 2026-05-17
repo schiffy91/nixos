@@ -2,7 +2,7 @@
 #! nix-shell -i python3 -p python3
 import getpass, os, pty, pwd, select, shlex, sys, time
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
@@ -70,14 +70,12 @@ def sync_hashed_password_file(new_password):
 
 def update_tpm2():
     Utils.log("Re-enrolling TPM2 with new LUKS password...")
-    nixos = Config.get_nixos_path()
-    result = sh.run(f"{nixos}/scripts/bin/tpm2.py enable",
-                    capture_output=False, check=False)
+    result = sh.run("nixos tpm2 enable", capture_output=False, check=False)
     if result.returncode != 0: Utils.log_error("TPM2 enrollment failed.")
     else: Utils.log("Successfully re-enrolled TPM2")
 
-def main():
-    args = Utils.parse_args(["--full-disk-encryption-only", "--user-account-only", "--update-tpm2"])
+def main(argv=None):
+    args = Utils.parse_args(["--full-disk-encryption-only", "--user-account-only", "--update-tpm2"], argv)
     if args.full_disk_encryption_only and args.user_account_only:
         Utils.abort("Cannot use both --full-disk-encryption-only and --user-account-only")
     change_fde = not args.user_account_only

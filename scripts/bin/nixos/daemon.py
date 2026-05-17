@@ -12,7 +12,7 @@ from PyQt6.QtGui import QIcon, QAction, QActionGroup, QCursor, QGuiApplication
 from PyQt6.QtCore import QObject, QTimer, QPoint, Qt
 
 PID_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "nixos-helper.pid"
-CLI_BINARY = os.environ.get("NIXOS_HELPER_CLI", "nixos-helper-cli")
+CLI_BINARY = os.environ.get("NIXOS_CLI", "nixos")
 PR_SET_PDEATHSIG = 1
 libc = ctypes.CDLL("libc.so.6", use_errno=True)
 

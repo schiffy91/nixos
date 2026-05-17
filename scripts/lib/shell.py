@@ -61,9 +61,11 @@ class Shell:
         self.mkdir(self.dirname(final))
         return self.run(f"mv {original} {final}")
     def rm(self, *args):
-        return self.run(f"rm -rf {' '.join(args)}")
+        for batch in itertools.batched(args, Shell.BATCH_SIZE):
+            self.run(f"rm -rf {' '.join(batch)}")
     def mkdir(self, *args):
-        return self.run(f"mkdir -p {' '.join(args)}")
+        for batch in itertools.batched(args, Shell.BATCH_SIZE):
+            self.run(f"mkdir -p {' '.join(batch)}")
     def cpdir(self, source, target):
         self.rm(target)
         self.mkdir(self.dirname(target))
@@ -96,13 +98,18 @@ class Shell:
     def realpath(self, path):
         return Shell.stdout(self.run(f"realpath '{path}'")).splitlines()[0]
     def realpaths(self, *paths):
-        cmd = "realpath " + " ".join(f"'{p}'" for p in paths)
-        return Shell.stdout(self.run(cmd)).splitlines()
+        results = []
+        for batch in itertools.batched(paths, Shell.BATCH_SIZE):
+            cmd = "realpath " + " ".join(f"'{p}'" for p in batch)
+            results.extend(Shell.stdout(self.run(cmd)).splitlines())
+        return results
     def is_dir(self, path):
         return self.run(f"[ -d '{path}' ]", check=False).returncode == 0
     def exists(self, *args):
-        cmd = " && ".join(f"[ -e '{a}' ]" for a in args) + " && true"
-        return self.run(cmd, check=False).returncode == 0
+        for batch in itertools.batched(args, Shell.BATCH_SIZE):
+            cmd = " && ".join(f"[ -e '{a}' ]" for a in batch) + " && true"
+            if self.run(cmd, check=False).returncode != 0: return False
+        return True
     def basename(self, path):
         return Shell.stdout(self.run(f"basename '{path}'"))
     def dirname(self, path):

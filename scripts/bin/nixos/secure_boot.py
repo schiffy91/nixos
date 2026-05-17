@@ -2,7 +2,7 @@
 #! nix-shell -i python3 -p python3 -p sbctl
 import json, sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
@@ -48,9 +48,9 @@ def enable_secure_boot(microsoft=False):
     Config.update(rebuild_file_system=True, delete_cache=True)
     verify()
 
-def main():
+def main(argv=None):
     args = Utils.parse_args({
-        "enable": ["--microsoft"], "disable": [], "status": []})
+        "enable": ["--microsoft"], "disable": [], "status": []}, argv)
     if args.command == "enable": enable_secure_boot(microsoft=args.microsoft)
     elif args.command == "disable": disable_secure_boot()
     elif args.command == "status": status()

@@ -2,13 +2,13 @@
 #! nix-shell -i python3 -p python3
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import Config, Shell, Utils
 
 sh = Shell(root_required=True)
 
-def main():
-    args = Utils.parse_args(["--rebuild-filesystem", "--reboot", "--clean", "--upgrade"])
+def main(argv=None):
+    args = Utils.parse_args(["--rebuild-filesystem", "--reboot", "--clean", "--upgrade"], argv)
     delete_cache = args.clean or args.upgrade
     return Config.update(
         rebuild_file_system=args.rebuild_filesystem,

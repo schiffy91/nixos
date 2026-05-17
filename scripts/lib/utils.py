@@ -10,7 +10,7 @@ class Utils:
     RED = "\033[31m"
     RESET = "\033[0m"
     @classmethod
-    def parse_args(cls, schema):
+    def parse_args(cls, schema, argv=None):
         def add_args(parser, args):
             for arg in args:
                 if isinstance(arg, tuple): parser.add_argument(arg[0], type=arg[1], default=None)
@@ -23,7 +23,7 @@ class Utils:
                 add_args(subparsers.add_parser(command), args)
         else:
             add_args(parser, schema)
-        return parser.parse_args()
+        return parser.parse_args(argv)
     @classmethod
     def require_root(cls):
         cls.sh.require_root()

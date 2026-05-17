@@ -269,6 +269,11 @@ stdenv'.mkDerivation (finalAttrs: {
   postFixup = lib.optionalString cudaSupport ''
     wrapProgram $out/bin/sunshine \
       --set LD_LIBRARY_PATH ${lib.makeLibraryPath [ vulkan-loader ]}
+    # wrapProgram makes $out/bin/sunshine a shell wrapper that exec's .sunshine-wrapped.
+    # KWin's screencast permission gate matches Exec= against /proc/self/exe, which
+    # is the inner ELF after exec — so the .desktop must reference .sunshine-wrapped.
+    substituteInPlace $out/share/applications/dev.lizardbyte.app.Sunshine.kwin.desktop \
+      --replace-fail "Exec=$out/bin/sunshine" "Exec=$out/bin/.sunshine-wrapped"
   '';
 
   doInstallCheck = isLinux;
