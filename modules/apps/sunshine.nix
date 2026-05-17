@@ -5,16 +5,11 @@
     })
   ];
 
-  # KWin only exposes enabled outputs via screencast, so the streaming display must
-  # be live before Sunshine's encoder probe runs at service start.
+  # cudaSupport=true bakes /run/opengl-driver/lib into RUNPATH so LD_LIBRARY_PATH
+  # isn't strictly required, but keep it set for the upstream-shipped service unit
+  # in case the wrapper path drops it.
   systemd.user.services = lib.mkIf config.services.sunshine.enable {
-    sunshine = {
-      environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
-      serviceConfig.ExecStartPre = "/run/current-system/sw/bin/sunshine-display-enable";
-    };
-    "app-dev.lizardbyte.app.Sunshine" = {
-      environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
-      serviceConfig.ExecStartPre = "/run/current-system/sw/bin/sunshine-display-enable";
-    };
+    sunshine.environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+    "app-dev.lizardbyte.app.Sunshine".environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
   };
 }

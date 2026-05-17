@@ -21,6 +21,7 @@ def load_labels():
 LABELS = load_labels()
 DISPLAY_LABELS = LABELS.get("displays", {})
 AUDIO_PRESETS = LABELS.get("audio", [])
+DISPLAY_LAYOUT = LABELS.get("layout", [])
 
 
 class Displays:
@@ -41,7 +42,11 @@ class Displays:
         return sorted(outputs_by_name.values(), key=lambda output: (output.get("priority") or 999, output["name"]))
 
     @classmethod
-    def enable(cls, name): cls._kscreen(f"output.{name}.enable")
+    def enable(cls, name):
+        args = [f"output.{name}.enable"]
+        position = cls._layout_position(name)
+        if position: args.append(f"output.{name}.position.{position[0]},{position[1]}")
+        cls._kscreen(*args)
 
     @classmethod
     def disable(cls, name): cls._kscreen(f"output.{name}.disable")
@@ -51,6 +56,38 @@ class Displays:
 
     @classmethod
     def dpms(cls, state): cls._kscreen("--dpms", state)
+
+    @classmethod
+    def layout(cls):  # re-apply all configured layout rules in one shot
+        outputs = {output["name"]: output for output in cls._parse_kscreen()}
+        args = []
+        for rule in DISPLAY_LAYOUT:
+            name = rule.get("display")
+            if not name or not outputs.get(name, {}).get("enabled"): continue
+            position = cls._compute_position(rule, outputs)
+            if position: args.append(f"output.{name}.position.{position[0]},{position[1]}")
+        if args: cls._kscreen(*args)
+
+    @classmethod
+    def _layout_position(cls, name):
+        rule = next((r for r in DISPLAY_LAYOUT if r.get("display") == name), None)
+        if not rule: return None
+        outputs = {output["name"]: output for output in cls._parse_kscreen()}
+        return cls._compute_position(rule, outputs)
+
+    @classmethod
+    def _compute_position(cls, rule, outputs):
+        me, other = outputs.get(rule.get("display")), outputs.get(rule.get("relative_to"))
+        if not me or not other: return None
+        og, mg = other.get("geometry", {}), me.get("geometry", {})
+        ox, oy, ow, oh = og.get("x", 0), og.get("y", 0), og.get("w", 0), og.get("h", 0)
+        mw, mh = mg.get("w", 0), mg.get("h", 0)
+        return {
+            "left-of":  (ox - mw, oy),
+            "right-of": (ox + ow, oy),
+            "above":    (ox, oy - mh),
+            "below":    (ox, oy + oh),
+        }.get(rule.get("position"))
 
     @classmethod
     def _kscreen(cls, *args):
@@ -130,11 +167,13 @@ class Audio:
         preset = next((p for p in AUDIO_PRESETS
                        if selector in (p.get("label"), p.get("sink"))), None)
         if preset:
-            card, profile, sink = preset.get("card"), preset.get("profile"), preset.get("sink")
+            card, profile, sink, volume = preset.get("card"), preset.get("profile"), preset.get("sink"), preset.get("volume")
             if card and profile:
                 subprocess.run(["pactl", "set-card-profile", card, profile], capture_output=False, check=False)
             if sink:
                 subprocess.run(["pactl", "set-default-sink", sink], capture_output=False, check=False)
+                if volume:
+                    subprocess.run(["pactl", "set-sink-volume", sink, volume], capture_output=False, check=False)
         else:
             subprocess.run(["pactl", "set-default-sink", selector], capture_output=False, check=False)
 
@@ -200,6 +239,7 @@ def parse_args():
     displays = commands.add_parser("displays")
     displays_ops = displays.add_subparsers(dest="operation", required=True)
     displays_ops.add_parser("list")
+    displays_ops.add_parser("layout")
     for name in ("enable", "disable", "primary"):
         action_parser = displays_ops.add_parser(name)
         action_parser.add_argument("output")
@@ -228,6 +268,7 @@ def main():
     args = parse_args()
     if args.command == "displays":
         if args.operation == "list": print(json.dumps(Displays.list(), indent=2))
+        elif args.operation == "layout": Displays.layout()
         elif args.operation == "enable": Displays.enable(args.output)
         elif args.operation == "disable": Displays.disable(args.output)
         elif args.operation == "primary": Displays.primary(args.output)

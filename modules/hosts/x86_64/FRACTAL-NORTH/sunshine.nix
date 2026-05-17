@@ -1,19 +1,10 @@
-{ config, pkgs, lib, ... }:
+{ pkgs, lib, ... }:
 let
   edid = pkgs.callPackage ../../../apps/pkg-overrides/sunshine/edid { };
   connector = edid.passthru.connector;
   mode = "1280x800@90";
-  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
+  position = "7016,0";  # just right of DP-1 (Pro Display XDR is 6016 wide); apps don't accidentally spawn here
   kd = "${pkgs.kdePackages.libkscreen}/bin/kscreen-doctor";
-  enable = pkgs.writeShellScriptBin "sunshine-display-enable" ''
-    ${kd} output.${connector}.enable output.${connector}.scale.1 output.${connector}.position.0,0 output.${connector}.primary
-    ${kd} output.${connector}.mode.${mode} || true
-    ${kd} output.${connector}.hdr.enable || true
-  '';
-  disable = pkgs.writeShellScriptBin "sunshine-display-disable" ''
-    ${lib.optionalString (primary != null) "${kd} output.${primary.name}.primary"}
-    ${kd} output.${connector}.disable || true
-  '';
 in {
   services.sunshine = {
     enable = true;
@@ -24,7 +15,28 @@ in {
   settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
 
+  ##### Streaming Display #####
   boot.kernelParams = [ "drm.edid_firmware=${connector}:${edid.passthru.firmwarePath}" ];
   hardware.firmware = [ edid ];
-  environment.systemPackages = [ enable disable ];
+
+  # DP-3 stays always-on as a standalone display positioned off to the right.
+  # No prep/undo dance — Sunshine just captures DP-3 whenever it streams.
+  systemd.user.services.streaming-display-setup = {
+    description = "Configure DP-3 streaming display at session start";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" "plasma-kwin_wayland.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";  # let KWin settle before we touch outputs
+      ExecStart = pkgs.writeShellScript "streaming-display-setup" ''
+        ${kd} output.${connector}.enable \
+              output.${connector}.scale.1 \
+              output.${connector}.position.${position} \
+              output.${connector}.mode.${mode} \
+              output.${connector}.hdr.enable || true
+      '';
+      RemainAfterExit = true;
+    };
+  };
 }

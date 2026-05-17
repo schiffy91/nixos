@@ -46,7 +46,7 @@
   services.xserver.videoDrivers = [ "amdgpu" "nvidia" ];  # AMD scans out, NVIDIA renders via PRIME
   environment.sessionVariables = host.nvidiaOffloadEnv // {
     KWIN_DRM_DEVICES = host.display.driCards;
-    KWIN_DRM_ALLOW_NVIDIA_COLORSPACE = "0";  # NVIDIA KMS Colorspace washes out HDR Wayland
+    KWIN_DRM_ALLOW_NVIDIA_COLORSPACE = "1";  # required for HDR on NVIDIA-attached outputs (DP-3 streaming display)
   };
   ##### GPU LED Off (OpenRGB) #####
   services.hardware.openrgb.enable = true;
