@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i python3 -p python3 kdePackages.libkscreen systemd kdePackages.konsole pulseaudio
-import argparse, json, os, re, signal, subprocess, sys
+import argparse, json, os, re, signal, subprocess, sys, tomllib
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import Shell, Utils
@@ -11,12 +11,16 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 DRM_DEVICES_PATH = Path("/sys/class/drm")
 CAFFEINE_PID_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "nixos-helper-caffeine.pid"
 INHIBIT_WHO = "nixos-helper"
+LABELS_PATH = Path(__file__).resolve().parent / "labels.toml"
 
-DISPLAY_LABELS = {  # connector → friendly label
-    "DP-1": "ProXDR",
-    "DP-3": "Streaming",
-    "HDMI-A-2": "S89C",
-}
+def load_labels():
+    try:
+        with open(LABELS_PATH, "rb") as f: return tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError): return {}
+
+LABELS = load_labels()
+DISPLAY_LABELS = LABELS.get("displays", {})
+AUDIO_PRESETS = LABELS.get("audio", [])
 
 
 class Displays:
@@ -95,13 +99,26 @@ class Displays:
 class Audio:
     @classmethod
     def list(cls):
-        sinks = cls._pactl_json("list", "sinks")
+        active_sinks = cls._pactl_json("list", "sinks")
         current = cls.current()
-        return [{
-            "name": sink.get("name", ""),
-            "description": sink.get("description", ""),
-            "default": sink.get("name") == current,
-        } for sink in sinks]
+        results, covered = [], set()
+        for preset in AUDIO_PRESETS:
+            sink_name = preset.get("sink", "")
+            results.append({
+                "name": sink_name or preset.get("label", ""),
+                "label": preset.get("label", sink_name),
+                "default": bool(sink_name) and sink_name == current,
+            })
+            if sink_name: covered.add(sink_name)
+        for sink in active_sinks:  # extras: anything live but not in presets
+            sink_name = sink.get("name", "")
+            if sink_name in covered: continue
+            results.append({
+                "name": sink_name,
+                "label": sink.get("description") or sink_name,
+                "default": sink_name == current,
+            })
+        return results
 
     @classmethod
     def current(cls):
@@ -109,8 +126,17 @@ class Audio:
         return result.stdout.strip()
 
     @classmethod
-    def set(cls, name):
-        subprocess.run(["pactl", "set-default-sink", name], capture_output=False, check=False)
+    def set(cls, selector):
+        preset = next((p for p in AUDIO_PRESETS
+                       if selector in (p.get("label"), p.get("sink"))), None)
+        if preset:
+            card, profile, sink = preset.get("card"), preset.get("profile"), preset.get("sink")
+            if card and profile:
+                subprocess.run(["pactl", "set-card-profile", card, profile], capture_output=False, check=False)
+            if sink:
+                subprocess.run(["pactl", "set-default-sink", sink], capture_output=False, check=False)
+        else:
+            subprocess.run(["pactl", "set-default-sink", selector], capture_output=False, check=False)
 
     @classmethod
     def _pactl_json(cls, *args):

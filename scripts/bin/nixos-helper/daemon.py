@@ -136,7 +136,7 @@ class HelperWindow(QWidget):
         audio_group = QButtonGroup(self)
         audio_group.setExclusive(True)
         for sink in cli_json("audio", "list"):
-            radio = QRadioButton(sink.get("description") or sink["name"])
+            radio = QRadioButton(sink.get("label") or sink.get("description") or sink["name"])
             radio.setChecked(bool(sink.get("default")))
             radio.toggled.connect(lambda selected, name=sink["name"]: selected and cli("audio", "set", name))
             audio_group.addButton(radio)
@@ -251,7 +251,7 @@ class Helper(QObject):
         audio_group = QActionGroup(audio_menu)
         audio_group.setExclusive(True)
         for sink in cli_json("audio", "list"):
-            action = QAction(sink.get("description") or sink["name"], audio_group)
+            action = QAction(sink.get("label") or sink.get("description") or sink["name"], audio_group)
             action.setCheckable(True)
             action.setChecked(bool(sink.get("default")))
             action.triggered.connect(lambda _checked, name=sink["name"]: cli("audio", "set", name))
