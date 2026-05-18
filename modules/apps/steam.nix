@@ -8,7 +8,8 @@ let
   chromiumDpi = "--force-device-scale-factor=${toString scale} --high-dpi-support=1";
   rsSampleSize = config.settings.rocksmith.sampleSize;
   rsSampleRate = config.settings.rocksmith.sampleRate;
-  protonName = "GE-Proton10-34";
+  protonName = "GE-Proton10-34";       # upstream binary (fallback / X11)
+  scwhineProtonName = "scwhine-GE-Proton10-34";  # patched Wayland+SNI build
   setLaunchOptions = pkgs.writers.writePython3Bin "set-steam-launch-options" {
     libraries = [ pkgs.python3Packages.vdf ];
   } ''
@@ -161,6 +162,7 @@ in {
       _module.args.steam = {
         inherit setLaunchOptions setCompatTool;
         proton.name = protonName;
+        proton.scwhineName = scwhineProtonName;
       };
     }
     (lib.mkIf config.programs.steam.enable {

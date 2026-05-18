@@ -557,10 +557,6 @@ setup "done":
 - **A second VM profile (Linux gaming, Bazzite)**: same flow,
   different launch.sh, useful for testing without touching the
   Windows install.
-- **GPU LED off in VM mode**: the
-  [gpu-led-off](FRACTAL-NORTH/gpu.nix#L52) systemd unit runs once
-  at boot. If the VM re-enables the LED, add a leave-hook that
-  re-runs `openrgb --noautoconnect -d 1 -m Off`.
 - **Sunshine app entry**: add a "Windows VM" entry in Sunshine that
   invokes `nixos vfio enter && vm-curator launch win11-gaming`
   so the VM can be triggered from a Moonlight client. Useful for

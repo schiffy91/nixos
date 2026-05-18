@@ -1,0 +1,114 @@
+From 4fec309669ef526eecfc832361e866bebdaf6c3a Mon Sep 17 00:00:00 2001
+From: scwhine <scwhine@fractal-north>
+Date: Mon, 18 May 2026 15:29:18 -0700
+Subject: [PATCH 1/2] winewayland: implement pUpdateLayeredWindow, use ARGB for
+ layered surfaces
+
+Implement WAYLAND_UpdateLayeredWindow so that layered windows (WS_EX_LAYERED)
+commit their surface content on every UpdateLayeredWindow call.  Without this
+hook the window surface is flushed into the shm buffer but never committed to
+the wl_surface, leaving the window blank.
+
+Switch layered window surfaces to WL_SHM_FORMAT_ARGB8888 so that per-pixel
+alpha blending used by CEF with backgroundColor.alpha=0 is preserved end-to-end.
+
+Signed-off-by: scwhine <scwhine@fractal-north>
+
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index 72a37cb..888e2f4 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -377,6 +377,7 @@ void WAYLAND_DestroyWindow(HWND hwnd);
+ void WAYLAND_SetCursor(HWND hwnd, HCURSOR hcursor);
+ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
+ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
+ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,
+diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
+index 47c1299..17ffc44 100644
+--- a/dlls/winewayland.drv/waylanddrv_main.c
++++ b/dlls/winewayland.drv/waylanddrv_main.c
+@@ -43,6 +43,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
+     .pSetCursor = WAYLAND_SetCursor,
+     .pSetWindowText = WAYLAND_SetWindowText,
+     .pSysCommand = WAYLAND_SysCommand,
++    .pUpdateLayeredWindow = WAYLAND_UpdateLayeredWindow,
+     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
+     .pWindowMessage = WAYLAND_WindowMessage,
+     .pWindowPosChanged = WAYLAND_WindowPosChanged,
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index 6771893..182b2d9 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -825,3 +825,18 @@ void ensure_window_surface_contents(HWND hwnd)
+ 
+     wayland_win_data_release(data);
+ }
++
++/**********************************************************************
++ *          WAYLAND_UpdateLayeredWindow
++ *
++ * Called by win32u after UpdateLayeredWindow[Indirect] has written new
++ * pixel data into the window surface.  Commit the pending shm buffer so
++ * the compositor shows the frame.  Without this the wl_surface stays
++ * uncommitted and the window is a blank / transparent rectangle.
++ */
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags)
++{
++    TRACE("hwnd=%p flags=%#x\n", hwnd, flags);
++    ensure_window_surface_contents(hwnd);
++    wl_display_flush(process_wayland.wl_display);
++}
+diff --git a/dlls/winewayland.drv/window_surface.c b/dlls/winewayland.drv/window_surface.c
+index 36bbb2d..545de59 100644
+--- a/dlls/winewayland.drv/window_surface.c
++++ b/dlls/winewayland.drv/window_surface.c
+@@ -38,6 +38,7 @@ struct wayland_buffer_queue
+     struct wl_list buffer_list;
+     int width;
+     int height;
++    enum wl_shm_format format;
+ };
+ 
+ struct wayland_window_surface
+@@ -112,6 +113,7 @@ static struct wayland_buffer_queue *wayland_buffer_queue_create(int width, int h
+     if (!queue->wl_event_queue) goto err;
+     queue->width = width;
+     queue->height = height;
++    queue->format = WL_SHM_FORMAT_XRGB8888;
+ 
+     wl_list_init(&queue->buffer_list);
+ 
+@@ -153,7 +155,7 @@ static struct wayland_shm_buffer *wayland_buffer_queue_get_free_buffer(struct wa
+         if (nbuffers < 3)
+         {
+             shm_buffer = wayland_shm_buffer_create(queue->width, queue->height,
+-                                                   WL_SHM_FORMAT_XRGB8888);
++                                                   queue->format);
+             if (shm_buffer)
+             {
+                 /* Buffer events go to their own queue so that we can dispatch
+@@ -446,6 +448,7 @@ BOOL WAYLAND_CreateWindowSurface(HWND hwnd, BOOL layered, const RECT *surface_re
+ {
+     struct window_surface *previous;
+     struct wayland_win_data *data;
++    struct wayland_window_surface *wws;
+ 
+     TRACE("hwnd %p, layered %u, surface_rect %s, surface %p\n", hwnd, layered, wine_dbgstr_rect(surface_rect), surface);
+ 
+@@ -455,6 +458,10 @@ BOOL WAYLAND_CreateWindowSurface(HWND hwnd, BOOL layered, const RECT *surface_re
+ 
+     *surface = wayland_window_surface_create(data->hwnd, surface_rect);
+ 
++    /* Layered windows need per-pixel alpha compositing; switch to ARGB8888. */
++    if (layered && *surface && (wws = wayland_window_surface_cast(*surface)) && wws->wayland_buffer_queue)
++        wws->wayland_buffer_queue->format = WL_SHM_FORMAT_ARGB8888;
++
+     wayland_win_data_release(data);
+     return TRUE;
+ }
+-- 
+2.53.0
+

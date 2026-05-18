@@ -3,7 +3,7 @@ let
   user = config.settings.user.admin.username;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
-  proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.name}";
+  proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.scwhineName}";
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
