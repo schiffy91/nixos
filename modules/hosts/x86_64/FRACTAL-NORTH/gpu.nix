@@ -46,18 +46,5 @@
   services.xserver.videoDrivers = [ "amdgpu" "nvidia" ];  # AMD scans out, NVIDIA renders via PRIME
   environment.sessionVariables = host.nvidiaOffloadEnv // {
     KWIN_DRM_DEVICES = host.display.driCards;
-    KWIN_DRM_ALLOW_NVIDIA_COLORSPACE = "1";  # required for HDR on NVIDIA-attached outputs (DP-3 streaming display)
-  };
-  ##### GPU LED Off (OpenRGB) #####
-  services.hardware.openrgb.enable = true;
-  systemd.services.gpu-led-off = {
-    description = "Turn off NVIDIA 4090 FE LED";
-    after = [ "openrgb.service" "display-manager.service" ];
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
-      ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.openrgb-with-all-plugins}/bin/openrgb --noautoconnect -d 1 -m Off || true'";
-    };
   };
 }
