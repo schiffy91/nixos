@@ -218,7 +218,7 @@ in {
       tcpdump     = true;
       ethtool     = true;
       python3     = true;
-      moonlightQt = true;
+      moonlight-qt = true;
     };
   };
 }

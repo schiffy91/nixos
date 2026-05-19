@@ -21,7 +21,7 @@
     fwupd
     nixd
     claude-code
-    inputs.codex.packages.${pkgs.system}.default
+    inputs.codex.packages.${pkgs.stdenv.hostPlatform.system}.default
     (pkgs.cider-2.overrideAttrs (old: {
       postFixup = (old.postFixup or "") + ''
         substituteInPlace $out/share/applications/cider-2.desktop \
