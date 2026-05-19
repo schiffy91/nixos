@@ -1,6 +1,5 @@
 { pkgs, ... }: pkgs.runCommandLocal "llv-streaming-edid" {
   nativeBuildInputs = [ pkgs.python3 ];
-  passthru.connector = "DP-3";
   passthru.firmwarePath = "edid/llv-streaming.bin";
 } ''
   mkdir -p $out/lib/firmware/edid
