@@ -75,5 +75,6 @@ in {
       primary     = true;
     }];
     nixosHelper.configPath = "${./nixos-helper.toml}";
+    sudolessAllowlist.enable = true;
   };
 }

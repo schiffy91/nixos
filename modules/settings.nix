@@ -201,5 +201,24 @@ in {
     settings.rocksmith.sampleRate = mkSetting int 48000;
     ##### NixOS Helper #####
     settings.nixosHelper.configPath = mkSetting str "";
+    ##### Sudoless Allowlist #####
+    settings.sudolessAllowlist.enable   = mkSetting bool false;
+    settings.sudolessAllowlist.nopasswd = mkSetting (attrsOf bool) {
+      nixos-rebuild = true;
+      tcpdump       = true;
+      ethtool       = true;
+      mount         = true;
+      umount        = true;
+      losetup       = true;
+      "mkfs.btrfs"  = true;
+      btrfs         = true;
+      python3       = true;
+    };
+    settings.sudolessAllowlist.packages = mkSetting (attrsOf bool) {
+      tcpdump     = true;
+      ethtool     = true;
+      python3     = true;
+      moonlightQt = true;
+    };
   };
 }
