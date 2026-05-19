@@ -1,0 +1,524 @@
+From b4049221fe1e3414044513eee6cb41af7d7e8535 Mon Sep 17 00:00:00 2001
+From: scwhine <scwhine@fractal-north>
+Date: Mon, 18 May 2026 18:14:36 -0700
+Subject: [PATCH 4/4] winewayland: add SNI StatusNotifierItem systray
+ (pSystrayDockInsert)
+
+Implement pSystrayDockInit/Insert/Clear/Remove using the freedesktop
+org.kde.StatusNotifierItem D-Bus interface.
+
+Works on KDE Plasma 6, GNOME + AppIndicator, and wlroots panels (Waybar).
+No XWayland or xembedsniproxy required.
+
+- Register org.kde.StatusNotifierItem-<pid>-<n> service per icon
+- Extract ARGB32 pixmap via NtGdiGetDIBitsInternal
+- Map Activate/SecondaryActivate/ContextMenu/Scroll to WM_LBUTTONUP /
+  WM_MBUTTONUP / WM_RBUTTONUP / WM_MOUSEWHEEL forwarded to the app
+- Graceful no-op fallback if built without dbus headers
+- Add -ldbus-1 to UNIX_LIBS; add wayland_systray.c to SOURCES
+
+Signed-off-by: scwhine <scwhine@fractal-north>
+
+diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
+index 1f1b2ccf..8543c28d 100644
+--- a/dlls/winewayland.drv/Makefile.in
++++ b/dlls/winewayland.drv/Makefile.in
+@@ -1,7 +1,7 @@
+ MODULE = winewayland.drv
+ UNIXLIB = winewayland.so
+ UNIX_CFLAGS = $(EGL_CFLAGS) $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_EGL_CFLAGS) $(XKBCOMMON_CFLAGS) $(XKBREGISTRY_CFLAGS)
+-UNIX_LIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(WAYLAND_EGL_LIBS) $(XKBCOMMON_LIBS) $(XKBREGISTRY_LIBS) $(PTHREAD_LIBS) -lm
++UNIX_LIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(WAYLAND_EGL_LIBS) $(XKBCOMMON_LIBS) $(XKBREGISTRY_LIBS) $(PTHREAD_LIBS) -ldbus-1 -lm
+ IMPORTS = user32 win32u
+ 
+ VER_FILEDESCRIPTION_STR = "Wine Wayland driver"
+@@ -22,6 +22,7 @@ SOURCES = \
+ 	wayland_output.c \
+ 	wayland_pointer.c \
+ 	wayland_surface.c \
++	wayland_systray.c \
+ 	wayland_text_input.c \
+ 	waylanddrv_main.c \
+ 	window.c \
+diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
+new file mode 100644
+index 00000000..d81f69f1
+--- /dev/null
++++ b/dlls/winewayland.drv/wayland_systray.c
+@@ -0,0 +1,473 @@
++/*
++ * Wayland systray via freedesktop StatusNotifierItem (D-Bus)
++ *
++ * Copyright 2025 scwhine for FRACTAL-NORTH
++ *
++ * Implements pSystrayDockInit / pSystrayDockInsert / pSystrayDockClear /
++ * pSystrayDockRemove using the org.kde.StatusNotifierItem spec.
++ * Works on KDE Plasma 6, GNOME + AppIndicator, and wlroots/Waybar.
++ * No XWayland or xembedsniproxy required.
++ *
++ * The `void *icon` parameter to pSystrayDockInsert is the `struct icon *`
++ * from programs/explorer/systray.c.  We read image, owner, window,
++ * callback_message, id, and tiptext from it.
++ */
++
++#if 0
++#pragma makedep unix
++#endif
++
++#include "config.h"
++
++#ifdef HAVE_DBUS_DBUS_H
++
++#include <dbus/dbus.h>
++#include <pthread.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "waylanddrv.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(systray);
++
++/* -----------------------------------------------------------------------
++ * explorer's struct icon layout — must stay in sync with
++ * programs/explorer/systray.c.  We only read the fields we need.
++ * ----------------------------------------------------------------------- */
++struct explorer_icon
++{
++    void       *list_fwd;
++    void       *list_bwd;
++    HICON       image;
++    HWND        owner;
++    HWND        window;
++    BOOL        layered;
++    HWND        tooltip;
++    UINT        state;
++    UINT        id;
++    UINT        callback_message;
++    int         display;
++    WCHAR       tiptext[128];
++};
++
++/* -----------------------------------------------------------------------
++ * Per-icon SNI service state
++ * ----------------------------------------------------------------------- */
++struct sni_item
++{
++    struct list     entry;
++    int             serial;
++    DBusConnection *conn;
++    HWND            callback_hwnd;
++    UINT            callback_message;
++    UINT            id;
++    int             icon_w, icon_h;
++    unsigned char  *icon_argb;
++    WCHAR           tiptext[128];
++    pthread_t       dispatch_thread;
++    BOOL            running;
++};
++
++static struct list    sni_list   = LIST_INIT(sni_list);
++static int            sni_serial;
++static pthread_mutex_t sni_mutex = PTHREAD_MUTEX_INITIALIZER;
++
++/* -----------------------------------------------------------------------
++ * Helpers
++ * ----------------------------------------------------------------------- */
++static void utf8_from_wchar(const WCHAR *src, char *dst, size_t dst_sz)
++{
++    ULONG bytes;
++    if (!RtlUnicodeToUTF8N(NULL, 0, &bytes, src,
++                            (lstrlenW(src) + 1) * sizeof(WCHAR)))
++        RtlUnicodeToUTF8N(dst, dst_sz, &bytes, src,
++                          (lstrlenW(src) + 1) * sizeof(WCHAR));
++    else
++        dst[0] = '\0';
++}
++
++static unsigned char *icon_to_argb32(HICON hicon, int *w_out, int *h_out)
++{
++    ICONINFO info = {0};
++    BITMAPINFOHEADER bih = { sizeof(bih) };
++    unsigned char *argb = NULL;
++    HDC hdc;
++    int w, h;
++
++    if (!NtUserGetIconInfo(hicon, &info, NULL, NULL, NULL, 0)) return NULL;
++
++    hdc = NtUserGetDC(NULL);
++    bih.biSize = sizeof(bih);
++    if (!NtGdiGetDIBitsInternal(hdc, info.hbmColor, 0, 0, NULL,
++                                (BITMAPINFO *)&bih, DIB_RGB_COLORS, 0, 0))
++        goto done;
++
++    w = bih.biWidth; h = abs(bih.biHeight);
++    if (w <= 0 || h <= 0) goto done;
++
++    bih.biBitCount    = 32;
++    bih.biCompression = BI_RGB;
++    bih.biHeight      = -h;
++    bih.biSizeImage   = w * h * 4;
++
++    if (!(argb = malloc(w * h * 4))) goto done;
++    if (!NtGdiGetDIBitsInternal(hdc, info.hbmColor, 0, h, argb,
++                                (BITMAPINFO *)&bih, DIB_RGB_COLORS,
++                                w * h * 4, 0))
++    {
++        free(argb); argb = NULL; goto done;
++    }
++
++    /* Convert BGRA (GDI) → ARGB big-endian (SNI (iiay)) */
++    for (int i = 0; i < w * h; i++)
++    {
++        unsigned char b = argb[i*4+0], g = argb[i*4+1],
++                      r = argb[i*4+2], a = argb[i*4+3];
++        argb[i*4+0] = a; argb[i*4+1] = r;
++        argb[i*4+2] = g; argb[i*4+3] = b;
++    }
++    *w_out = w; *h_out = h;
++
++done:
++    NtUserReleaseDC(NULL, hdc);
++    if (info.hbmColor) NtGdiDeleteObjectApp(info.hbmColor);
++    if (info.hbmMask)  NtGdiDeleteObjectApp(info.hbmMask);
++    return argb;
++}
++
++/* -----------------------------------------------------------------------
++ * D-Bus StatusNotifierItem XML
++ * ----------------------------------------------------------------------- */
++static const char sni_xml[] =
++    "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection"
++    " 1.0//EN\" \"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
++    "<node>\n"
++    " <interface name=\"org.kde.StatusNotifierItem\">\n"
++    "  <property name=\"Id\"         type=\"s\"        access=\"read\"/>\n"
++    "  <property name=\"Category\"   type=\"s\"        access=\"read\"/>\n"
++    "  <property name=\"Status\"     type=\"s\"        access=\"read\"/>\n"
++    "  <property name=\"Title\"      type=\"s\"        access=\"read\"/>\n"
++    "  <property name=\"IconPixmap\" type=\"a(iiay)\"  access=\"read\"/>\n"
++    "  <property name=\"ToolTip\"    type=\"(sa(iiay)ss)\" access=\"read\"/>\n"
++    "  <method name=\"Activate\"><arg name=\"x\" type=\"i\"/><arg name=\"y\" type=\"i\"/></method>\n"
++    "  <method name=\"SecondaryActivate\"><arg name=\"x\" type=\"i\"/><arg name=\"y\" type=\"i\"/></method>\n"
++    "  <method name=\"ContextMenu\"><arg name=\"x\" type=\"i\"/><arg name=\"y\" type=\"i\"/></method>\n"
++    "  <method name=\"Scroll\"><arg name=\"delta\" type=\"i\"/><arg name=\"orientation\" type=\"s\"/></method>\n"
++    "  <signal name=\"NewIcon\"/>\n"
++    " </interface>\n"
++    " <interface name=\"org.freedesktop.DBus.Introspectable\">\n"
++    "  <method name=\"Introspect\"><arg name=\"xml\" type=\"s\" direction=\"out\"/></method>\n"
++    " </interface>\n"
++    " <interface name=\"org.freedesktop.DBus.Properties\">\n"
++    "  <method name=\"Get\">\n"
++    "   <arg name=\"interface\" type=\"s\" direction=\"in\"/>\n"
++    "   <arg name=\"name\"     type=\"s\" direction=\"in\"/>\n"
++    "   <arg name=\"value\"    type=\"v\" direction=\"out\"/>\n"
++    "  </method>\n"
++    " </interface>\n"
++    "</node>\n";
++
++/* -----------------------------------------------------------------------
++ * Append icon pixmap array a(iiay)
++ * ----------------------------------------------------------------------- */
++static void append_pixmap(DBusMessageIter *iter, struct sni_item *item)
++{
++    DBusMessageIter arr, st, ba;
++    dbus_int32_t w = item->icon_w, h = item->icon_h;
++
++    dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "(iiay)", &arr);
++    if (item->icon_argb && w > 0 && h > 0)
++    {
++        dbus_message_iter_open_container(&arr, DBUS_TYPE_STRUCT, NULL, &st);
++        dbus_message_iter_append_basic(&st, DBUS_TYPE_INT32, &w);
++        dbus_message_iter_append_basic(&st, DBUS_TYPE_INT32, &h);
++        dbus_message_iter_open_container(&st, DBUS_TYPE_ARRAY, "y", &ba);
++        dbus_message_iter_append_fixed_array(&ba, DBUS_TYPE_BYTE,
++                                             &item->icon_argb,
++                                             (int)(w * h * 4));
++        dbus_message_iter_close_container(&st, &ba);
++        dbus_message_iter_close_container(&arr, &st);
++    }
++    dbus_message_iter_close_container(iter, &arr);
++}
++
++/* -----------------------------------------------------------------------
++ * D-Bus message handler
++ * ----------------------------------------------------------------------- */
++static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg,
++                                      void *user_data)
++{
++    struct sni_item *item = user_data;
++    const char *iface = dbus_message_get_interface(msg);
++    const char *member = dbus_message_get_member(msg);
++    DBusMessage *reply = NULL;
++
++    if (dbus_message_is_method_call(msg, DBUS_INTERFACE_INTROSPECTABLE, "Introspect"))
++    {
++        reply = dbus_message_new_method_return(msg);
++        dbus_message_append_args(reply, DBUS_TYPE_STRING, &sni_xml,
++                                 DBUS_TYPE_INVALID);
++        goto send;
++    }
++
++    if (dbus_message_is_method_call(msg, DBUS_INTERFACE_PROPERTIES, "Get"))
++    {
++        const char *name = NULL;
++        DBusMessageIter args, var;
++        dbus_message_get_args(msg, NULL,
++                              DBUS_TYPE_STRING, &iface,
++                              DBUS_TYPE_STRING, &name,
++                              DBUS_TYPE_INVALID);
++        reply = dbus_message_new_method_return(msg);
++        dbus_message_iter_init_append(reply, &args);
++        if (!name) goto send;
++
++        if (!strcmp(name, "Id") || !strcmp(name, "Category") ||
++            !strcmp(name, "Status") || !strcmp(name, "Title"))
++        {
++            const char *str;
++            char id_buf[64], tip[256];
++            if (!strcmp(name, "Id"))
++            { snprintf(id_buf, sizeof(id_buf), "wine-tray-%d", item->serial); str = id_buf; }
++            else if (!strcmp(name, "Category")) str = "ApplicationStatus";
++            else if (!strcmp(name, "Status"))   str = "Active";
++            else { utf8_from_wchar(item->tiptext, tip, sizeof(tip)); str = tip; }
++            dbus_message_iter_open_container(&args, DBUS_TYPE_VARIANT, "s", &var);
++            dbus_message_iter_append_basic(&var, DBUS_TYPE_STRING, &str);
++            dbus_message_iter_close_container(&args, &var);
++        }
++        else if (!strcmp(name, "IconPixmap"))
++        {
++            dbus_message_iter_open_container(&args, DBUS_TYPE_VARIANT, "a(iiay)", &var);
++            append_pixmap(&var, item);
++            dbus_message_iter_close_container(&args, &var);
++        }
++        else if (!strcmp(name, "ToolTip"))
++        {
++            DBusMessageIter st; const char *empty = ""; char tip[256];
++            utf8_from_wchar(item->tiptext, tip, sizeof(tip));
++            dbus_message_iter_open_container(&args, DBUS_TYPE_VARIANT, "(sa(iiay)ss)", &var);
++            dbus_message_iter_open_container(&var, DBUS_TYPE_STRUCT, NULL, &st);
++            dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &empty);
++            append_pixmap(&st, item);
++            dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &tip);
++            dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &empty);
++            dbus_message_iter_close_container(&var, &st);
++            dbus_message_iter_close_container(&args, &var);
++        }
++        goto send;
++    }
++
++    if (iface && !strcmp(iface, "org.kde.StatusNotifierItem"))
++    {
++        UINT wmsg = 0;
++        dbus_int32_t x = 0, y = 0;
++        if      (!strcmp(member, "Activate"))          wmsg = WM_LBUTTONUP;
++        else if (!strcmp(member, "SecondaryActivate")) wmsg = WM_MBUTTONUP;
++        else if (!strcmp(member, "ContextMenu"))       wmsg = WM_RBUTTONUP;
++        else if (!strcmp(member, "Scroll"))
++        {
++            dbus_int32_t delta = 0;
++            dbus_message_get_args(msg, NULL, DBUS_TYPE_INT32, &delta,
++                                  DBUS_TYPE_INVALID);
++            NtUserMessageCall(item->callback_hwnd, item->callback_message,
++                              item->id,
++                              MAKELPARAM(0, delta > 0 ? WHEEL_DELTA : -WHEEL_DELTA),
++                              NULL, NtUserSendNotifyMessage, FALSE);
++            reply = dbus_message_new_method_return(msg);
++            goto send;
++        }
++        if (wmsg) {
++            dbus_message_get_args(msg, NULL,
++                                  DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y,
++                                  DBUS_TYPE_INVALID);
++            NtUserMessageCall(item->callback_hwnd, item->callback_message,
++                              item->id, MAKELPARAM(x, y),
++                              NULL, NtUserSendNotifyMessage, FALSE);
++            NtUserMessageCall(item->callback_hwnd, item->callback_message,
++                              item->id, wmsg,
++                              NULL, NtUserSendNotifyMessage, FALSE);
++        }
++        reply = dbus_message_new_method_return(msg);
++        goto send;
++    }
++
++    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++
++send:
++    if (reply) { dbus_connection_send(conn, reply, NULL); dbus_message_unref(reply); }
++    return DBUS_HANDLER_RESULT_HANDLED;
++}
++
++static const DBusObjectPathVTable sni_vtable = { NULL, sni_handler };
++
++static void *sni_dispatch_thread(void *arg)
++{
++    struct sni_item *item = arg;
++    while (item->running && dbus_connection_read_write_dispatch(item->conn, 200))
++        ;
++    return NULL;
++}
++
++/* -----------------------------------------------------------------------
++ * Public driver hooks
++ * ----------------------------------------------------------------------- */
++
++void WAYLAND_SystrayDockInit(HWND hwnd)
++{
++    TRACE("hwnd=%p\n", hwnd);
++}
++
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon_data)
++{
++    struct explorer_icon *icon = icon_data;
++    struct sni_item *item;
++    DBusError err;
++    char service[128], obj_path[] = "/StatusNotifierItem", rule[256];
++    int ret;
++
++    if (!icon) return FALSE;
++
++    dbus_error_init(&err);
++    item = calloc(1, sizeof(*item));
++    if (!item) return FALSE;
++
++    pthread_mutex_lock(&sni_mutex);
++    item->serial = ++sni_serial;
++    pthread_mutex_unlock(&sni_mutex);
++
++    item->callback_hwnd    = icon->window;
++    item->callback_message = icon->callback_message;
++    item->id               = icon->id;
++    memcpy(item->tiptext, icon->tiptext, sizeof(item->tiptext));
++
++    if (icon->image)
++        item->icon_argb = icon_to_argb32(icon->image, &item->icon_w, &item->icon_h);
++
++    snprintf(service, sizeof(service),
++             "org.kde.StatusNotifierItem-%d-%d", (int)getpid(), item->serial);
++
++    item->conn = dbus_bus_get_private(DBUS_BUS_SESSION, &err);
++    if (!item->conn || dbus_error_is_set(&err))
++    {
++        WARN("D-Bus connect failed: %s\n", dbus_error_is_set(&err) ? err.message : "");
++        dbus_error_free(&err);
++        free(item->icon_argb); free(item);
++        return FALSE;
++    }
++
++    ret = dbus_bus_request_name(item->conn, service,
++                                DBUS_NAME_FLAG_REPLACE_EXISTING, &err);
++    if (ret != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER || dbus_error_is_set(&err))
++    {
++        WARN("Could not claim %s: %s\n", service,
++             dbus_error_is_set(&err) ? err.message : "");
++        dbus_error_free(&err);
++        dbus_connection_close(item->conn);
++        dbus_connection_unref(item->conn);
++        free(item->icon_argb); free(item);
++        return FALSE;
++    }
++
++    if (!dbus_connection_register_object_path(item->conn, obj_path,
++                                              &sni_vtable, item))
++    {
++        ERR("register_object_path failed\n");
++        dbus_connection_close(item->conn);
++        dbus_connection_unref(item->conn);
++        free(item->icon_argb); free(item);
++        return FALSE;
++    }
++
++    {
++        DBusMessage *reg = dbus_message_new_method_call(
++            "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
++            "org.kde.StatusNotifierWatcher", "RegisterStatusNotifierItem");
++        if (reg)
++        {
++            const char *svc = service;
++            dbus_message_append_args(reg, DBUS_TYPE_STRING, &svc,
++                                     DBUS_TYPE_INVALID);
++            dbus_connection_send(item->conn, reg, NULL);
++            dbus_connection_flush(item->conn);
++            dbus_message_unref(reg);
++        }
++    }
++
++    snprintf(rule, sizeof(rule),
++             "type='signal',sender='org.kde.StatusNotifierWatcher'");
++    dbus_bus_add_match(item->conn, rule, NULL);
++
++    item->running = TRUE;
++    pthread_create(&item->dispatch_thread, NULL, sni_dispatch_thread, item);
++
++    pthread_mutex_lock(&sni_mutex);
++    list_add_tail(&sni_list, &item->entry);
++    pthread_mutex_unlock(&sni_mutex);
++
++    TRACE("registered SNI %s hwnd=%p owner=%p id=%u\n",
++          service, hwnd, icon->owner, icon->id);
++    return TRUE;
++}
++
++void WAYLAND_SystrayDockClear(HWND hwnd)
++{
++    struct sni_item *item;
++    pthread_mutex_lock(&sni_mutex);
++    LIST_FOR_EACH_ENTRY(item, &sni_list, struct sni_item, entry)
++    {
++        if (item->callback_hwnd == hwnd)
++        {
++            DBusMessage *sig = dbus_message_new_signal(
++                "/StatusNotifierItem", "org.kde.StatusNotifierItem", "NewIcon");
++            if (sig)
++            {
++                dbus_connection_send(item->conn, sig, NULL);
++                dbus_connection_flush(item->conn);
++                dbus_message_unref(sig);
++            }
++            break;
++        }
++    }
++    pthread_mutex_unlock(&sni_mutex);
++}
++
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd)
++{
++    struct sni_item *item, *found = NULL;
++    pthread_mutex_lock(&sni_mutex);
++    LIST_FOR_EACH_ENTRY(item, &sni_list, struct sni_item, entry)
++        if (item->callback_hwnd == hwnd) { found = item; break; }
++    if (found) list_remove(&found->entry);
++    pthread_mutex_unlock(&sni_mutex);
++    if (!found) return FALSE;
++
++    found->running = FALSE;
++    pthread_join(found->dispatch_thread, NULL);
++    dbus_connection_close(found->conn);
++    dbus_connection_unref(found->conn);
++    free(found->icon_argb);
++    free(found);
++    return TRUE;
++}
++
++#else /* !HAVE_DBUS_DBUS_H */
++
++void WAYLAND_SystrayDockInit(HWND hwnd) {}
++
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon)
++{
++    FIXME("D-Bus not available; systray icon not registered\n");
++    return FALSE;
++}
++
++void WAYLAND_SystrayDockClear(HWND hwnd) {}
++
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd) { return FALSE; }
++
++#endif /* HAVE_DBUS_DBUS_H */
+-- 
+2.53.0
+

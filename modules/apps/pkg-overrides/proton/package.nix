@@ -57,7 +57,13 @@ let
       # fixes permanently blank CEF windows that call UpdateLayeredWindow before
       # their first compositor configure event arrives
       ./patches/0003-winewayland-commit-stored-layered-window-pixels-afte.patch
+      # Patch 4: SNI StatusNotifierItem systray — tray icon integration for
+      # KDE Plasma 6, GNOME+AppIndicator, Waybar; no XWayland needed
+      ./patches/0004-winewayland-add-SNI-StatusNotifierItem-systray-pSyst.patch
     ];
+
+    # Patch 4 needs libdbus for org.kde.StatusNotifierItem
+    buildInputs = (old.buildInputs or []) ++ [ pkgs.dbus ];
 
   });
 
