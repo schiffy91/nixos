@@ -79,7 +79,10 @@ in stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    local dest="$out/${toolName}"
+    # Steam's programs.steam.extraCompatPackages creates a symlink:
+    #   ~/.local/share/Steam/compatibilitytools.d/<pname> -> $out
+    # so the compat tool files must live directly in $out/, not a subdirectory.
+    local dest="$out"
     mkdir -p "$dest"
 
     # 1. Unpack the GE-Proton binary as the base (DXVK, VKD3D, scripts, etc.)
@@ -120,16 +123,19 @@ in stdenv.mkDerivation {
     # 3. DXVK, VKD3D-Proton, mono, gecko from GE-Proton stay untouched
     #    (they are Windows PE DLLs; SERVER_PROTOCOL_VERSION is irrelevant).
 
-    # 4. Compat tool metadata
+    # 4. Compat tool metadata — must follow the Proton compatibilitytool.vdf format
     cat > "$dest/compatibilitytool.vdf" <<EOF
 "compatibilitytools"
 {
-  "${toolName}"
+  "compat_tools"
   {
-    "install_path" "."
-    "display_name" "scwhine GE-Proton10-34 (Wayland/SNI)"
-    "from_oslist"  "windows"
-    "to_oslist"    "linux"
+    "${toolName}"
+    {
+      "install_path" "."
+      "display_name" "scwhine GE-Proton10-34 (Wayland+SNI)"
+      "from_oslist"  "windows"
+      "to_oslist"    "linux"
+    }
   }
 }
 EOF
