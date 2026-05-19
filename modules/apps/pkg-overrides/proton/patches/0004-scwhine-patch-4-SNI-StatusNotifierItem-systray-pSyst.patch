@@ -1,26 +1,12 @@
-From b4049221fe1e3414044513eee6cb41af7d7e8535 Mon Sep 17 00:00:00 2001
+From 859001a5599773bf57358698279d5a33c179ea20 Mon Sep 17 00:00:00 2001
 From: scwhine <scwhine@fractal-north>
-Date: Mon, 18 May 2026 18:14:36 -0700
-Subject: [PATCH 4/5] winewayland: add SNI StatusNotifierItem systray
- (pSystrayDockInsert)
+Date: Mon, 18 May 2026 20:40:04 -0700
+Subject: [PATCH 4/4] scwhine patch 4: SNI StatusNotifierItem systray
+ (pSystrayDock* hooks)
 
-Implement pSystrayDockInit/Insert/Clear/Remove using the freedesktop
-org.kde.StatusNotifierItem D-Bus interface.
-
-Works on KDE Plasma 6, GNOME + AppIndicator, and wlroots panels (Waybar).
-No XWayland or xembedsniproxy required.
-
-- Register org.kde.StatusNotifierItem-<pid>-<n> service per icon
-- Extract ARGB32 pixmap via NtGdiGetDIBitsInternal
-- Map Activate/SecondaryActivate/ContextMenu/Scroll to WM_LBUTTONUP /
-  WM_MBUTTONUP / WM_RBUTTONUP / WM_MOUSEWHEEL forwarded to the app
-- Graceful no-op fallback if built without dbus headers
-- Add -ldbus-1 to UNIX_LIBS; add wayland_systray.c to SOURCES
-
-Signed-off-by: scwhine <scwhine@fractal-north>
 
 diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
-index 1f1b2ccf..8543c28d 100644
+index 3c7da7d8..ea74828c 100644
 --- a/dlls/winewayland.drv/Makefile.in
 +++ b/dlls/winewayland.drv/Makefile.in
 @@ -1,7 +1,7 @@
@@ -31,8 +17,8 @@ index 1f1b2ccf..8543c28d 100644
 +UNIX_LIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(WAYLAND_EGL_LIBS) $(XKBCOMMON_LIBS) $(XKBREGISTRY_LIBS) $(PTHREAD_LIBS) -ldbus-1 -lm
  IMPORTS = user32 win32u
  
- VER_FILEDESCRIPTION_STR = "Wine Wayland driver"
-@@ -22,6 +22,7 @@ SOURCES = \
+ SOURCES = \
+@@ -27,6 +27,7 @@ SOURCES = \
  	wayland_output.c \
  	wayland_pointer.c \
  	wayland_surface.c \
@@ -42,10 +28,10 @@ index 1f1b2ccf..8543c28d 100644
  	window.c \
 diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
 new file mode 100644
-index 00000000..d81f69f1
+index 00000000..994f63c7
 --- /dev/null
 +++ b/dlls/winewayland.drv/wayland_systray.c
-@@ -0,0 +1,473 @@
+@@ -0,0 +1,474 @@
 +/*
 + * Wayland systray via freedesktop StatusNotifierItem (D-Bus)
 + *
@@ -67,6 +53,14 @@ index 00000000..d81f69f1
 +
 +#include "config.h"
 +
++/* Common includes required for Windows types regardless of D-Bus availability */
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "waylanddrv.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(systray);
++
 +#ifdef HAVE_DBUS_DBUS_H
 +
 +#include <dbus/dbus.h>
@@ -75,13 +69,6 @@ index 00000000..d81f69f1
 +#include <stdlib.h>
 +#include <string.h>
 +#include <unistd.h>
-+
-+#include "ntstatus.h"
-+#define WIN32_NO_STATUS
-+#include "waylanddrv.h"
-+#include "wine/debug.h"
-+
-+WINE_DEFAULT_DEBUG_CHANNEL(systray);
 +
 +/* -----------------------------------------------------------------------
 + * explorer's struct icon layout — must stay in sync with
@@ -519,6 +506,36 @@ index 00000000..d81f69f1
 +BOOL WAYLAND_SystrayDockRemove(HWND hwnd) { return FALSE; }
 +
 +#endif /* HAVE_DBUS_DBUS_H */
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index 8a035bda..9ae568bf 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -602,6 +602,10 @@ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
+ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
+ void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
++void WAYLAND_SystrayDockInit(HWND hwnd);
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon);
++void WAYLAND_SystrayDockClear(HWND hwnd);
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd);
+ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
+ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,
+diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
+index a4e6633a..7c473706 100644
+--- a/dlls/winewayland.drv/waylanddrv_main.c
++++ b/dlls/winewayland.drv/waylanddrv_main.c
+@@ -52,6 +52,10 @@ static const struct user_driver_funcs waylanddrv_funcs =
+     .pSetWindowStyle = WAYLAND_SetWindowStyle,
+     .pSetWindowText = WAYLAND_SetWindowText,
+     .pSysCommand = WAYLAND_SysCommand,
++    .pSystrayDockInit = WAYLAND_SystrayDockInit,
++    .pSystrayDockInsert = WAYLAND_SystrayDockInsert,
++    .pSystrayDockClear = WAYLAND_SystrayDockClear,
++    .pSystrayDockRemove = WAYLAND_SystrayDockRemove,
+     .pUpdateLayeredWindow = WAYLAND_UpdateLayeredWindow,
+     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
+     .pWindowMessage = WAYLAND_WindowMessage,
 -- 
 2.53.0
 

@@ -1,0 +1,32 @@
+From cbb1a0042402e25a938b0291c90ed01b1abd0813 Mon Sep 17 00:00:00 2001
+From: scwhine <scwhine@fractal-north>
+Date: Mon, 18 May 2026 19:50:35 -0700
+Subject: [PATCH 1/4] scwhine patch 1: non-blocking second Wayland roundtrip
+ (CEF IPC deadlock fix)
+
+
+diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
+index 75713634..c713110a 100644
+--- a/dlls/winewayland.drv/wayland.c
++++ b/dlls/winewayland.drv/wayland.c
+@@ -372,10 +372,14 @@ BOOL wayland_process_init(void)
+     /* Populate registry */
+     wl_registry_add_listener(process_wayland.wl_registry, &registry_listener, NULL);
+ 
+-    /* We need two roundtrips. One to get and bind globals, one to handle all
+-     * initial events produced from registering the globals. */
+-    wl_display_roundtrip_queue(process_wayland.wl_display, process_wayland.wl_event_queue);
++    /* First roundtrip: bind globals. Second replaced with non-blocking dispatch
++     * to prevent CEF renderer/GPU subprocess IPC deadlock: subprocesses call
++     * wayland_process_init while the browser waits for their IPC reply, so a
++     * second blocking roundtrip causes a multi-process deadlock. */
+     wl_display_roundtrip_queue(process_wayland.wl_display, process_wayland.wl_event_queue);
++    wl_display_flush(process_wayland.wl_display);
++    wl_display_dispatch_queue_pending(process_wayland.wl_display,
++                                      process_wayland.wl_event_queue);
+ 
+     /* initialize steam overlay event */
+     init_overlay_event();
+-- 
+2.53.0
+

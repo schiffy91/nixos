@@ -1,0 +1,57 @@
+From 41f90a385571868d2234c3facffb70a5b486937b Mon Sep 17 00:00:00 2001
+From: scwhine <scwhine@fractal-north>
+Date: Mon, 18 May 2026 19:54:23 -0700
+Subject: [PATCH 2/4] scwhine patch 2: pUpdateLayeredWindow +
+ ensure_after_configure
+
+
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index cba1ee60..8a035bda 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -601,6 +601,7 @@ void WAYLAND_SetWindowIcon(HWND hwnd, UINT type, HICON icon);
+ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
+ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
+ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
+ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,
+diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
+index c10510fa..a4e6633a 100644
+--- a/dlls/winewayland.drv/waylanddrv_main.c
++++ b/dlls/winewayland.drv/waylanddrv_main.c
+@@ -52,6 +52,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
+     .pSetWindowStyle = WAYLAND_SetWindowStyle,
+     .pSetWindowText = WAYLAND_SetWindowText,
+     .pSysCommand = WAYLAND_SysCommand,
++    .pUpdateLayeredWindow = WAYLAND_UpdateLayeredWindow,
+     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
+     .pWindowMessage = WAYLAND_WindowMessage,
+     .pWindowPosChanged = WAYLAND_WindowPosChanged,
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index 4decc0f8..5d89b25d 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -737,6 +737,7 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+         return 0;
+     case WM_WAYLAND_CONFIGURE:
+         wayland_configure_window(hwnd);
++        ensure_window_surface_contents(hwnd);
+         return 0;
+     case WM_WAYLAND_SET_FOREGROUND:
+         NtUserSetForegroundWindow(hwnd);
+@@ -1019,3 +1020,10 @@ void ensure_window_surface_contents(HWND hwnd)
+ 
+     wayland_win_data_release(data);
+ }
++
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags)
++{
++    TRACE("hwnd=%p flags=%#x\n", hwnd, flags);
++    ensure_window_surface_contents(hwnd);
++    wl_display_flush(process_wayland.wl_display);
++}
+-- 
+2.53.0
+
