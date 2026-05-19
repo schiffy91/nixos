@@ -10,7 +10,6 @@
 # so both remain selectable in Steam.  battlenet.nix targets this tool.
 { stdenv
 , pkgs
-, fetchurl
 , autoPatchelfHook
 , makeWrapper
 , unzip
@@ -22,10 +21,8 @@ let
   toolName    = "scwhine-${toolVersion}";
 
   # ── GE-Proton10-34 binary (for DXVK, VKD3D, scripts, mono, gecko) ────────
-  ge-proton-src = fetchurl {
-    url  = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}.tar.gz";
-    hash = "sha256-lzPsYYcrp5NoT3B0WFj3o10Z7tXx7xva1wEP3edeuqM=";
-  };
+  # Use nixpkgs' already-verified proton-ge-bin source to avoid re-fetching.
+  ge-proton-src = pkgs.proton-ge-bin.src;
 
   # ── Patched wine (nixpkgs staging WoW64 + our two scwhine patches) ────────
   #

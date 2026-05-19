@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }:
 let
   scwhine-proton = pkgs.callPackage ./package.nix {
-    inherit (pkgs) fetchurl autoPatchelfHook makeWrapper rsync unzip;
+    inherit (pkgs) autoPatchelfHook makeWrapper rsync unzip;
   };
 in {
   # Install the compat tool into Steam's compatibilitytools.d via the
