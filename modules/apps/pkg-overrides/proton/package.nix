@@ -47,12 +47,14 @@ let
     # Patch 0002 includes the linux-dmabuf XML as a new file, so no
     # separate postPatch step is needed to inject it.
     patches = (old.patches or []) ++ [
-      ./patches/0001-winewayland-implement-pUpdateLayeredWindow-use-ARGB-.patch
-      ./patches/0002-winewayland-bind-zwp_linux_dmabuf_v1-add-dmabuf-surf.patch
+      # Patch 1: implement pUpdateLayeredWindow so layered windows commit to wl_surface
+      ./patches/0001-winewayland-implement-pUpdateLayeredWindow.patch
+      # Patch 2: replace blocking second roundtrip in wayland_process_init — fixes
+      # the Battle.net freeze/grey-window caused by the CEF renderer+GPU subprocess
+      # deadlocking on a Wayland roundtrip while the browser's IPC times out
+      ./patches/0002-winewayland-replace-second-blocking-roundtrip-with-n.patch
     ];
 
-    # Our SNI systray code needs libdbus.
-    buildInputs = (old.buildInputs or []) ++ [ pkgs.dbus ];
   });
 
   # ── Final compat tool ─────────────────────────────────────────────────────

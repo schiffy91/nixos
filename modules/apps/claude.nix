@@ -9,6 +9,8 @@ in {
 
     # nixos-init
 
-    Read /etc/nixos/flake.nix and every file recursively under /etc/nixos/modules and /etc/nixos/scripts.
+    Read every code file in /etc/nixos. Run this command to get the full list, then read each file:
+
+    `find /etc/nixos -type f -not -path '*/.git/*' -not -path '*/.direnv/*' -not -path '*/__pycache__/*' -not -path '*/secrets/*' -not -name '*.pyc' -not -name '*.dll' -not -name '*.dll.so' -not -name '*.exe' -not -name '*.so' -not -name 'flake.lock' -not -name 'package-lock.json' | sort`
   '';
 }

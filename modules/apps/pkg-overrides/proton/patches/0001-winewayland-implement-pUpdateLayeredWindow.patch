@@ -1,0 +1,73 @@
+From 436ef1435cb49396630c4a983db0feefdbe9b719 Mon Sep 17 00:00:00 2001
+From: scwhine <scwhine@fractal-north>
+Date: Mon, 18 May 2026 17:12:20 -0700
+Subject: [PATCH 1/2] winewayland: implement pUpdateLayeredWindow
+
+Commit the pending wl_shm buffer in WAYLAND_UpdateLayeredWindow so
+layered windows (WS_EX_LAYERED) become visible.  Without this hook
+the wl_surface stays uncommitted and CEF-based launchers (Battle.net,
+Ubisoft Connect, EA App) render as blank windows.
+
+wine 11.8 already handles ARGB8888 for layered surfaces in
+wayland_window_surface_create, so only the missing hook is added here.
+
+Signed-off-by: scwhine <scwhine@fractal-north>
+
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index 110db8ba..ceb5d173 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -452,6 +452,11 @@ void WAYLAND_SetWindowIcons(HWND hwnd, HICON icon, const ICONINFO *ii, HICON ico
+ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
+ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
++void WAYLAND_SystrayDockInit(HWND hwnd);
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon);
++void WAYLAND_SystrayDockClear(HWND hwnd);
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd);
+ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
+ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags,
+diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
+index b7a8a29b..e3c21fde 100644
+--- a/dlls/winewayland.drv/waylanddrv_main.c
++++ b/dlls/winewayland.drv/waylanddrv_main.c
+@@ -48,6 +48,11 @@ static const struct user_driver_funcs waylanddrv_funcs =
+     .pSetWindowStyle = WAYLAND_SetWindowStyle,
+     .pSetWindowText = WAYLAND_SetWindowText,
+     .pSysCommand = WAYLAND_SysCommand,
++    .pSystrayDockInit = WAYLAND_SystrayDockInit,
++    .pSystrayDockInsert = WAYLAND_SystrayDockInsert,
++    .pSystrayDockClear = WAYLAND_SystrayDockClear,
++    .pSystrayDockRemove = WAYLAND_SystrayDockRemove,
++    .pUpdateLayeredWindow = WAYLAND_UpdateLayeredWindow,
+     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
+     .pWindowMessage = WAYLAND_WindowMessage,
+     .pWindowPosChanged = WAYLAND_WindowPosChanged,
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index 88eee342..7ea3cdeb 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -905,3 +905,18 @@ void ensure_window_surface_contents(HWND hwnd)
+ 
+     wayland_win_data_release(data);
+ }
++
++/**********************************************************************
++ *          WAYLAND_UpdateLayeredWindow
++ *
++ * Called by win32u after UpdateLayeredWindow[Indirect] writes pixels into
++ * the window surface.  Commit the pending shm buffer so the compositor
++ * shows the frame.  Without this the wl_surface stays uncommitted and
++ * the window is blank.
++ */
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags)
++{
++    TRACE("hwnd=%p flags=%#x\n", hwnd, flags);
++    ensure_window_surface_contents(hwnd);
++    wl_display_flush(process_wayland.wl_display);
++}
+-- 
+2.53.0
+
