@@ -53,6 +53,10 @@ let
       # the Battle.net freeze/grey-window caused by the CEF renderer+GPU subprocess
       # deadlocking on a Wayland roundtrip while the browser's IPC times out
       ./patches/0002-winewayland-replace-second-blocking-roundtrip-with-n.patch
+      # Patch 3: commit stored layered-window pixels after xdg_surface configure —
+      # fixes permanently blank CEF windows that call UpdateLayeredWindow before
+      # their first compositor configure event arrives
+      ./patches/0003-winewayland-commit-stored-layered-window-pixels-afte.patch
     ];
 
   });

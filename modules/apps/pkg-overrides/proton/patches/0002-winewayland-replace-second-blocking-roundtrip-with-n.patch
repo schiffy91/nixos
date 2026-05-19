@@ -1,7 +1,7 @@
 From 764b98fdf6eeac4ac10372fa515e031adfc26f17 Mon Sep 17 00:00:00 2001
 From: scwhine <scwhine@fractal-north>
 Date: Mon, 18 May 2026 17:44:44 -0700
-Subject: [PATCH 2/2] winewayland: replace second blocking roundtrip with
+Subject: [PATCH 2/3] winewayland: replace second blocking roundtrip with
  non-blocking dispatch
 
 Fix multi-process deadlock that freezes Battle.net (and other CEF-based
