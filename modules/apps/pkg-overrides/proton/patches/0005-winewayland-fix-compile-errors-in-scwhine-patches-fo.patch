@@ -1,0 +1,81 @@
+From 4761301bf8fdd625f7743c8d4262fe934b24474f Mon Sep 17 00:00:00 2001
+From: scwhine <scwhine@fractal-north>
+Date: Mon, 18 May 2026 18:34:46 -0700
+Subject: [PATCH 5/5] winewayland: fix compile errors in scwhine patches for
+ wine 11.8
+
+Two fixes:
+1. pUpdateLayeredWindow signature: wine 11.8 uses (HWND, BYTE, UINT) not (HWND, UINT).
+   gdi_driver.h:418 defines: void (*pUpdateLayeredWindow)(HWND, BYTE, UINT)
+
+2. wayland_systray.c: move common includes (waylanddrv.h, wine/debug.h) above
+   the #ifdef HAVE_DBUS_DBUS_H guard so that Windows types (HWND, BOOL, UINT)
+   are available in both the dbus and no-dbus code paths.
+
+Signed-off-by: scwhine <scwhine@fractal-north>
+
+diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
+index d81f69f1..994f63c7 100644
+--- a/dlls/winewayland.drv/wayland_systray.c
++++ b/dlls/winewayland.drv/wayland_systray.c
+@@ -19,6 +19,14 @@
+ 
+ #include "config.h"
+ 
++/* Common includes required for Windows types regardless of D-Bus availability */
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "waylanddrv.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(systray);
++
+ #ifdef HAVE_DBUS_DBUS_H
+ 
+ #include <dbus/dbus.h>
+@@ -28,13 +36,6 @@
+ #include <string.h>
+ #include <unistd.h>
+ 
+-#include "ntstatus.h"
+-#define WIN32_NO_STATUS
+-#include "waylanddrv.h"
+-#include "wine/debug.h"
+-
+-WINE_DEFAULT_DEBUG_CHANNEL(systray);
+-
+ /* -----------------------------------------------------------------------
+  * explorer's struct icon layout — must stay in sync with
+  * programs/explorer/systray.c.  We only read the fields we need.
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index ceb5d173..5a770b92 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -452,7 +452,7 @@ void WAYLAND_SetWindowIcons(HWND hwnd, HICON icon, const ICONINFO *ii, HICON ico
+ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
+ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
+-void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, BYTE alpha, UINT flags);
+ void WAYLAND_SystrayDockInit(HWND hwnd);
+ BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon);
+ void WAYLAND_SystrayDockClear(HWND hwnd);
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index b12940d5..14184e2f 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -921,9 +921,9 @@ void ensure_window_surface_contents(HWND hwnd)
+  * shows the frame.  Without this the wl_surface stays uncommitted and
+  * the window is blank.
+  */
+-void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags)
++void WAYLAND_UpdateLayeredWindow(HWND hwnd, BYTE alpha, UINT flags)
+ {
+-    TRACE("hwnd=%p flags=%#x\n", hwnd, flags);
++    TRACE("hwnd=%p alpha=%u flags=%#x\n", hwnd, alpha, flags);
+     ensure_window_surface_contents(hwnd);
+     wl_display_flush(process_wayland.wl_display);
+ }
+-- 
+2.53.0
+

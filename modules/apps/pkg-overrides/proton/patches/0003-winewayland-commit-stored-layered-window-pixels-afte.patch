@@ -1,7 +1,7 @@
 From bf4793f16bd848ce322adfcb63e8c1382080d761 Mon Sep 17 00:00:00 2001
 From: scwhine <scwhine@fractal-north>
 Date: Mon, 18 May 2026 18:07:43 -0700
-Subject: [PATCH 3/4] winewayland: commit stored layered-window pixels after
+Subject: [PATCH 3/5] winewayland: commit stored layered-window pixels after
  xdg_surface configure
 
 After wayland_configure_window() acks the compositor configure event, call

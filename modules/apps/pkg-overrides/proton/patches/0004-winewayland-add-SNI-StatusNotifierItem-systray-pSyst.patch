@@ -1,7 +1,7 @@
 From b4049221fe1e3414044513eee6cb41af7d7e8535 Mon Sep 17 00:00:00 2001
 From: scwhine <scwhine@fractal-north>
 Date: Mon, 18 May 2026 18:14:36 -0700
-Subject: [PATCH 4/4] winewayland: add SNI StatusNotifierItem systray
+Subject: [PATCH 4/5] winewayland: add SNI StatusNotifierItem systray
  (pSystrayDockInsert)
 
 Implement pSystrayDockInit/Insert/Clear/Remove using the freedesktop

@@ -57,6 +57,8 @@ let
       # Patch 4: SNI StatusNotifierItem systray — tray icon integration for
       # KDE Plasma 6, GNOME+AppIndicator, Waybar; no XWayland needed
       ./patches/0004-winewayland-add-SNI-StatusNotifierItem-systray-pSyst.patch
+      # Patch 5: fix compile errors for wine 11.8 (signature + includes)
+      ./patches/0005-winewayland-fix-compile-errors-in-scwhine-patches-fo.patch
     ];
 
     # Patch 4 needs libdbus for org.kde.StatusNotifierItem
