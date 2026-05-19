@@ -1,4 +1,4 @@
-{ pkgs, host, inputs, ... }: {
+{ pkgs, host, ... }: {
   ##### Packages #####
   environment.systemPackages = with pkgs; [
     (google-chrome.override {
@@ -21,7 +21,7 @@
     fwupd
     nixd
     claude-code
-    inputs.codex.packages.${pkgs.stdenv.hostPlatform.system}.default
+    codex
     (pkgs.cider-2.overrideAttrs (old: {
       postFixup = (old.postFixup or "") + ''
         substituteInPlace $out/share/applications/cider-2.desktop \
