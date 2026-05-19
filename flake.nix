@@ -6,6 +6,7 @@
     plasma-manager = { url = "github:nix-community/plasma-manager"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.home-manager.follows = "home-manager"; };
     disko = { url = "github:nix-community/disko"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
+    codex = { url = "github:openai/codex/rust-v0.131.0"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
   };
   outputs = inputs@{ self, ... }:
     let
