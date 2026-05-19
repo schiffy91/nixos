@@ -1,9 +1,29 @@
-From cbb1a0042402e25a938b0291c90ed01b1abd0813 Mon Sep 17 00:00:00 2001
-From: scwhine <scwhine@fractal-north>
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 18 May 2026 19:50:35 -0700
-Subject: [PATCH 1/4] scwhine patch 1: non-blocking second Wayland roundtrip
- (CEF IPC deadlock fix)
+Subject: [PATCH] winewayland.drv: Make second init roundtrip non-blocking.
 
+wayland_process_init does two wl_display_roundtrip calls: the
+first drains the global registry, the second drains the bindings
+registered against those globals.  The second roundtrip is
+blocking, which deadlocks CEF (Chromium Embedded Framework): CEF
+forks a child process and the parent blocks in the Wayland
+roundtrip while the child blocks on the parent over CEF's IPC
+socket.
+
+Replace the blocking roundtrip with wl_display_roundtrip_queue
+on a dedicated event queue, flushed via poll(), so other Wayland
+event sources keep draining while we wait for registry bindings
+to settle.
+
+Reproduces in Battle.net's CEF-hosted launcher: the parent never
+returns from wayland_process_init, the child times out on
+IPC::Channel::Send, the launcher exits silently.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/wayland.c           |   11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
 
 diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
 index 75713634..c713110a 100644
@@ -30,3 +50,5 @@ index 75713634..c713110a 100644
 -- 
 2.53.0
 
+-- 
+2.51.2

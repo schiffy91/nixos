@@ -1,9 +1,31 @@
-From 859001a5599773bf57358698279d5a33c179ea20 Mon Sep 17 00:00:00 2001
-From: scwhine <scwhine@fractal-north>
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 18 May 2026 20:40:04 -0700
-Subject: [PATCH 4/4] scwhine patch 4: SNI StatusNotifierItem systray
- (pSystrayDock* hooks)
+Subject: [PATCH] winewayland.drv: Add SNI StatusNotifierItem systray via libdbus.
 
+Wayland has no equivalent of the X11 _NET_SYSTEM_TRAY XEmbed
+protocol that winex11.drv uses for tray icons, so wine apps lose
+their tray icon entirely on KDE Plasma 6, GNOME (with the
+AppIndicator extension), waybar, and any other Wayland shell.
+
+Implement the pSystrayDock* driver hooks against the
+StatusNotifierItem D-Bus spec (KDE's freedesktop-pending standard
+adopted by all the above shells).  Each icon registers an SNI
+service via libdbus, exports the icon pixmap, and translates SNI
+Activate/SecondaryActivate signals into WM_LBUTTONUP / WM_RBUTTONUP
+messages on the wine systray owner window.
+
+Implementation lives in a new wayland_systray.c so it can be
+reused by other Wayland drivers if desired.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/Makefile.in         |    3 ++-
+ dlls/winewayland.drv/wayland_systray.c   |  474 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ dlls/winewayland.drv/waylanddrv.h        |    4 ++++
+ dlls/winewayland.drv/waylanddrv_main.c   |    5 ++++-
+ 4 files changed, 484 insertions(+), 2 deletions(-)
+ create mode 100644 dlls/winewayland.drv/wayland_systray.c
 
 diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
 index 3c7da7d8..ea74828c 100644
@@ -35,7 +57,7 @@ index 00000000..994f63c7
 +/*
 + * Wayland systray via freedesktop StatusNotifierItem (D-Bus)
 + *
-+ * Copyright 2025 scwhine for FRACTAL-NORTH
++ * Copyright 2025 Alexander Schiffhauer
 + *
 + * Implements pSystrayDockInit / pSystrayDockInsert / pSystrayDockClear /
 + * pSystrayDockRemove using the org.kde.StatusNotifierItem spec.
@@ -539,3 +561,5 @@ index a4e6633a..7c473706 100644
 -- 
 2.53.0
 
+-- 
+2.51.2

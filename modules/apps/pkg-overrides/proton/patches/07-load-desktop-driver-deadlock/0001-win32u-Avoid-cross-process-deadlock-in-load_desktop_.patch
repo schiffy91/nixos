@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 19 May 2026 10:48:00 -0700
+Subject: [PATCH] win32u: Avoid cross-process deadlock in load_desktop_driver.
+
+load_desktop_driver() sends WM_NULL to the desktop window with
+the comment "wait for graphics driver to be ready", using
+send_message() - which is send_message_timeout(..., timeout=0),
+i.e. an unbounded wait.
+
+Two failure modes:
+
+ 1. When the caller IS the desktop owner thread (the wine-wayland
+    explorer.exe /desktop main thread runs load_display_driver
+    itself), wine routes the SendMessage as an inter-thread
+    message and parks the thread waiting for a reply that would
+    have to come from itself.
+
+ 2. When two wine processes both reach load_desktop_driver near-
+    simultaneously (e.g. Battle.net.exe spawns while explorer.exe
+    is finishing driver load), each thread sends WM_NULL to a
+    desktop hwnd owned by the OTHER thread, and both park
+    forever in send_inter_thread_message ->
+    wait_message_reply -> NtWaitForMultipleObjects.
+
+Backtrace from a stuck process:
+  send_message -> send_message_timeout -> process_message
+                -> send_inter_thread_message
+                -> wait_message_reply -> NtWaitForMultipleObjects
+
+Skip the send entirely when the caller already owns the desktop
+window's thread; otherwise bound the wait with SMTO_ABORTIFHUNG
+and a 5-second timeout so a peer in the same state can't wedge
+us indefinitely.  The send is purely a sync barrier - timing
+out and proceeding with NtUserGetProp returns at worst a stale
+guid, matching behaviour before the barrier was added.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/win32u/driver.c                     |    9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
+index 11111111..22222222 100644
+--- a/dlls/win32u/driver.c
++++ b/dlls/win32u/driver.c
+@@ -961,7 +961,11 @@ static BOOL load_desktop_driver( HWND hwnd )
+     user_check_not_lock();
+
+     asciiz_to_unicode( driver_load_error, "The explorer process failed to start." );  /* default error */
+-    /* wait for graphics driver to be ready */
+-    send_message( hwnd, WM_NULL, 0, 0 );
++    /* wait for graphics driver to be ready: bounded send so a peer in the same
++     * load_desktop_driver() path can't wedge us, and skipped entirely when we
++     * already own the desktop hwnd (the wait reply would have to come from us). */
++    if (get_window_thread( hwnd, NULL ) != GetCurrentThreadId())
++        send_message_timeout( hwnd, WM_NULL, 0, 0,
++                              SMTO_ABORTIFHUNG | SMTO_NORMAL, 5000, FALSE );
+
+     guid_atom = HandleToULong( NtUserGetProp( hwnd, prop_nameW ));
+--
+2.43.0
+
+-- 
+2.51.2

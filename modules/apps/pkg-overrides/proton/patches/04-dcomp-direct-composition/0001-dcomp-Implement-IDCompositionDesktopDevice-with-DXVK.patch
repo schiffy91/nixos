@@ -1,0 +1,1531 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 19 May 2026 10:25:38 -0700
+Subject: [PATCH] dcomp: Implement IDCompositionDesktopDevice with DXVK back buffer interop.
+
+Wine's dcomp.dll previously stubbed every COM entry point with
+E_NOTIMPL, which made CEF (Chromium Embedded Framework, used by
+Battle.net and other Electron-style apps) either fall back to GDI
+rendering or refuse to draw at all.
+
+Implement the COM surface required for CEF's compositor path:
+IDCompositionDesktopDevice, IDCompositionVisual2, IDCompositionSurface,
+and IDCompositionTarget.  Each Commit() snapshots the bound DXVK
+swap chain's current back buffer through IDXGIVkInteropSurface and
+forwards it to the windowing driver via WM_WAYLAND_COMPOSE_ATTACH,
+on a ~60 Hz internal ticker so we present at compositor cadence
+without busy-spinning.
+
+This is the hardware-accelerated half of the CEF-on-Wayland pipeline;
+the corresponding driver-side bridge is added in a follow-up patch.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/Makefile.in                   |    2 ++
+ dlls/dcomp/device.c                      | 1458 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 1437 insertions(+), 23 deletions(-)
+
+diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
+index d48b901..4db5387 100644
+--- a/dlls/dcomp/Makefile.in
++++ b/dlls/dcomp/Makefile.in
+@@ -1,4 +1,6 @@
+ MODULE    = dcomp.dll
++IMPORTLIB = dcomp
++IMPORTS   = dxguid uuid d3d11 dxgi user32
+ 
+ EXTRADLLFLAGS = -Wb,--prefer-native
+ 
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index d0eb920..55d463b 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -1,50 +1,1462 @@
+ /*
+- * Copyright 2020 Nikolay Sivov for CodeWeavers
++ * : real dcomp.dll implementation for wayland HW-accelerated CEF.
+  *
+- * This library is free software; you can redistribute it and/or
+- * modify it under the terms of the GNU Lesser General Public
+- * License as published by the Free Software Foundation; either
+- * version 2.1 of the License, or (at your option) any later version.
++ * Replaces the upstream wine stub (which returned E_NOTIMPL for
++ * DCompositionCreateDevice*) with valid COM objects that track the
++ * compositor visual tree and ferry surfaces to winewayland.drv as
++ * dmabuf attaches on Commit().
+  *
+- * This library is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+- * Lesser General Public License for more details.
++ * Implements:
++ *   IDCompositionDesktopDevice : IDCompositionDevice2 : IUnknown
++ *   IDCompositionVisual2       : IDCompositionVisual  : IUnknown
++ *   IDCompositionSurface       : IUnknown
++ *   IDCompositionTarget        : IUnknown
+  *
+- * You should have received a copy of the GNU Lesser General Public
+- * License along with this library; if not, write to the Free Software
+- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ * Phase status:
++ *   - COM scaffolding + state tracking: implemented
++ *   - Commit() routing to wayland_surface_attach_dmabuf: TODO (Phase 3:
++ *     D3D11 ID3D11Texture2D -> VkImage via DXVK IDXGIVkInteropSurface ->
++ *     dmabuf export via VK_EXT_external_memory_dma_buf + vkGetMemoryFdKHR)
++ *   - BeginDraw currently returns a real ID3D11Texture2D backed by the
++ *     CEF-provided D3D11 device; the texture is tracked so Commit can
++ *     later export it as dmabuf.
+  */
+ #include <stdarg.h>
++#include <stdlib.h>
++#include <string.h>
++#include <stdint.h>
+ 
++#define COBJMACROS
++#define INITGUID
+ #include "windef.h"
+ #include "winbase.h"
+-#include "objidl.h"
++#include "objbase.h"
+ #include "dxgi.h"
++#include "d3d11.h"
++#include "dcomp.h"
+ #include "wine/debug.h"
++#include "wine/list.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(dcomp);
+ 
+-HRESULT WINAPI DCompositionCreateDevice(IDXGIDevice *dxgi_device, REFIID iid, void **device)
++/* ───────── Minimal Vulkan + DXVK-interop forward decls (no headers) ───────── */
++typedef uint64_t    VkDeviceSize;
++typedef uint32_t    VkFlags;
++typedef VkFlags     VkImageUsageFlags;
++typedef VkFlags     VkImageCreateFlags;
++typedef VkFlags     VkPipelineStageFlags;
++typedef VkFlags     VkAccessFlags;
++typedef VkFlags     VkSampleCountFlagBits;
++typedef int32_t     VkBool32;
++typedef int32_t     VkResult;
++typedef int32_t     VkStructureType;
++typedef int32_t     VkFormat;
++typedef int32_t     VkImageType;
++typedef int32_t     VkImageTiling;
++typedef int32_t     VkImageLayout;
++typedef int32_t     VkSharingMode;
++typedef int32_t     VkExternalMemoryHandleTypeFlagBits;
++typedef int32_t     VkCommandBufferLevel;
++typedef int32_t     VkImageAspectFlagBits;
++
++/* Dispatchable handles are always pointer-sized. */
++struct VkInstance_T;       typedef struct VkInstance_T       *VkInstance;
++struct VkPhysicalDevice_T; typedef struct VkPhysicalDevice_T *VkPhysicalDevice;
++struct VkDevice_T;         typedef struct VkDevice_T         *VkDevice;
++struct VkQueue_T;          typedef struct VkQueue_T          *VkQueue;
++struct VkCommandBuffer_T;  typedef struct VkCommandBuffer_T  *VkCommandBuffer;
++/* Non-dispatchable handles are ALWAYS uint64_t — even on 32-bit — per Vulkan spec.
++ * Critical for 32-bit dcomp.dll (Battle.net.exe is i386) where pointer is 32-bit but
++ * DXVK writes 64-bit handles. */
++typedef uint64_t VkImage;
++typedef uint64_t VkDeviceMemory;
++typedef uint64_t VkCommandPool;
++typedef uint64_t VkFence;
++#define VK_NULL_HANDLE_NONDISP ((uint64_t)0)
++typedef void *PFN_vkVoidFunction;
++
++#define VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO                              14
++#define VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO                            5
++#define VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO                       39
++#define VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO                   40
++#define VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO                      42
++#define VK_STRUCTURE_TYPE_SUBMIT_INFO                                     4
++#define VK_STRUCTURE_TYPE_FENCE_CREATE_INFO                               8
++#define VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER                           45
++#define VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO            1000072001
++#define VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO                  1000072002
++#define VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR                       1000074002
++#define VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO               1000127001
++#define VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS                1000127000
++#define VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2                        1000146000
++#define VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2             1000146002
++
++#define VK_IMAGE_TYPE_2D                                                  1
++#define VK_IMAGE_TILING_OPTIMAL                                           0
++#define VK_SAMPLE_COUNT_1_BIT                                             1
++#define VK_IMAGE_LAYOUT_UNDEFINED                                         0
++#define VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL                              6
++#define VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL                              7
++#define VK_IMAGE_LAYOUT_GENERAL                                           1
++#define VK_SHARING_MODE_EXCLUSIVE                                         0
++#define VK_IMAGE_USAGE_TRANSFER_SRC_BIT                                0x1
++#define VK_IMAGE_USAGE_TRANSFER_DST_BIT                                0x2
++#define VK_IMAGE_USAGE_SAMPLED_BIT                                     0x4
++#define VK_FORMAT_B8G8R8A8_UNORM                                        44
++#define VK_FORMAT_R8G8B8A8_UNORM                                        37
++#define VK_FORMAT_R16G16B16A16_SFLOAT                                   97
++#define VK_FORMAT_A2R10G10B10_UNORM_PACK32                              58
++#define VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT          0x00000200
++#define VK_PIPELINE_STAGE_ALL_COMMANDS_BIT                       0x00010000
++#define VK_PIPELINE_STAGE_TRANSFER_BIT                              0x1000
++#define VK_ACCESS_TRANSFER_READ_BIT                                  0x800
++#define VK_ACCESS_TRANSFER_WRITE_BIT                                0x1000
++#define VK_ACCESS_MEMORY_READ_BIT                                   0x8000
++#define VK_ACCESS_MEMORY_WRITE_BIT                                 0x10000
++#define VK_IMAGE_ASPECT_COLOR_BIT                                      0x1
++#define VK_COMMAND_BUFFER_LEVEL_PRIMARY                                  0
++#define VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT                0x2
++#define VK_QUEUE_FAMILY_IGNORED                                  ~0u
++#define VK_SUCCESS                                                       0
++#define VK_TRUE                                                          1
++#define VK_FALSE                                                         0
++#define VK_REMAINING_MIP_LEVELS                                  (~0u)
++#define VK_REMAINING_ARRAY_LAYERS                                (~0u)
++
++typedef struct { int32_t x, y, z; }                              VkOffset3D;
++typedef struct { uint32_t width, height, depth; }                VkExtent3D;
++typedef struct { uint32_t aspectMask, mipLevel, baseArrayLayer, layerCount; }
++                                                                  VkImageSubresourceLayers;
++typedef struct { uint32_t aspectMask, baseMipLevel, levelCount, baseArrayLayer, layerCount; }
++                                                                  VkImageSubresourceRange;
++typedef struct {
++    VkImageSubresourceLayers srcSubresource;
++    VkOffset3D               srcOffset;
++    VkImageSubresourceLayers dstSubresource;
++    VkOffset3D               dstOffset;
++    VkExtent3D               extent;
++} VkImageCopy;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkFlags         flags;
++    VkImageType     imageType;
++    VkFormat        format;
++    VkExtent3D      extent;
++    uint32_t        mipLevels;
++    uint32_t        arrayLayers;
++    VkSampleCountFlagBits samples;
++    VkImageTiling   tiling;
++    VkImageUsageFlags usage;
++    VkSharingMode   sharingMode;
++    uint32_t        queueFamilyIndexCount;
++    const uint32_t *pQueueFamilyIndices;
++    VkImageLayout   initialLayout;
++} VkImageCreateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkFlags         handleTypes;
++} VkExternalMemoryImageCreateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkFlags         handleTypes;
++} VkExportMemoryAllocateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkImage         image;
++    VkDeviceMemory  memory;        /* unused for image-only */
++} VkMemoryDedicatedAllocateInfo;
++typedef struct {
++    VkDeviceSize size, alignment;
++    uint32_t     memoryTypeBits;
++} VkMemoryRequirements;
++typedef struct {
++    VkStructureType sType;
++    void *pNext;
++    VkMemoryRequirements memoryRequirements;
++} VkMemoryRequirements2;
++typedef struct {
++    VkStructureType sType;
++    void *pNext;
++    VkBool32        prefersDedicatedAllocation, requiresDedicatedAllocation;
++} VkMemoryDedicatedRequirements;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkImage         image;
++} VkImageMemoryRequirementsInfo2;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkDeviceSize    allocationSize;
++    uint32_t        memoryTypeIndex;
++} VkMemoryAllocateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkAccessFlags   srcAccessMask, dstAccessMask;
++    VkImageLayout   oldLayout, newLayout;
++    uint32_t        srcQueueFamilyIndex, dstQueueFamilyIndex;
++    VkImage         image;
++    VkImageSubresourceRange subresourceRange;
++} VkImageMemoryBarrier;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkFlags         flags;
++} VkCommandBufferBeginInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkFlags         flags;
++    uint32_t        queueFamilyIndex;
++} VkCommandPoolCreateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkCommandPool   commandPool;
++    VkCommandBufferLevel level;
++    uint32_t        commandBufferCount;
++} VkCommandBufferAllocateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    uint32_t        waitSemaphoreCount;
++    const void *pWaitSemaphores;
++    const VkPipelineStageFlags *pWaitDstStageMask;
++    uint32_t        commandBufferCount;
++    const VkCommandBuffer *pCommandBuffers;
++    uint32_t        signalSemaphoreCount;
++    const void *pSignalSemaphores;
++} VkSubmitInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkFlags         flags;
++} VkFenceCreateInfo;
++typedef struct {
++    VkStructureType sType;
++    const void *pNext;
++    VkDeviceMemory  memory;
++    VkExternalMemoryHandleTypeFlagBits handleType;
++} VkMemoryGetFdInfoKHR;
++typedef struct VkPhysicalDeviceMemoryProperties {
++    uint32_t memoryTypeCount;
++    struct { VkFlags propertyFlags; uint32_t heapIndex; } memoryTypes[32];
++    uint32_t memoryHeapCount;
++    struct { VkDeviceSize size; VkFlags flags; } memoryHeaps[16];
++} VkPhysicalDeviceMemoryProperties;
++
++#define VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 0x1
++
++/* DXVK interop interfaces (from DXVK's include/native/dxvk_interfaces.h) */
++DEFINE_GUID(IID_IDXGIVkInteropDevice,
++    0xe2ef5fa5, 0xdc21, 0x4af7, 0x90, 0xc4, 0xf6, 0x7e, 0xf6, 0xa0, 0x93, 0x23);
++DEFINE_GUID(IID_IDXGIVkInteropSurface,
++    0x5546cf8c, 0x77e7, 0x4341, 0xb0, 0x5d, 0x8d, 0x4d, 0x50, 0x00, 0xe7, 0x7d);
++
++typedef struct IDXGIVkInteropDevice  IDXGIVkInteropDevice;
++typedef struct IDXGIVkInteropSurface IDXGIVkInteropSurface;
++
++typedef struct IDXGIVkInteropDeviceVtbl
+ {
+-    FIXME("%p, %s, %p.\n", dxgi_device, debugstr_guid(iid), device);
++    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkInteropDevice *, REFIID, void **);
++    ULONG   (STDMETHODCALLTYPE *AddRef)(IDXGIVkInteropDevice *);
++    ULONG   (STDMETHODCALLTYPE *Release)(IDXGIVkInteropDevice *);
++    void    (STDMETHODCALLTYPE *GetVulkanHandles)(IDXGIVkInteropDevice *, VkInstance *, VkPhysicalDevice *, VkDevice *);
++    void    (STDMETHODCALLTYPE *GetSubmissionQueue)(IDXGIVkInteropDevice *, VkQueue *, uint32_t *);
++    void    (STDMETHODCALLTYPE *TransitionSurfaceLayout)(IDXGIVkInteropDevice *, IDXGIVkInteropSurface *, const VkImageSubresourceRange *, VkImageLayout, VkImageLayout);
++    void    (STDMETHODCALLTYPE *FlushRenderingCommands)(IDXGIVkInteropDevice *);
++    HRESULT (STDMETHODCALLTYPE *LockSubmissionQueue)(IDXGIVkInteropDevice *);
++    HRESULT (STDMETHODCALLTYPE *ReleaseSubmissionQueue)(IDXGIVkInteropDevice *);
++} IDXGIVkInteropDeviceVtbl;
++struct IDXGIVkInteropDevice { const IDXGIVkInteropDeviceVtbl *lpVtbl; };
+ 
+-    return E_NOTIMPL;
++typedef struct IDXGIVkInteropSurfaceVtbl
++{
++    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkInteropSurface *, REFIID, void **);
++    ULONG   (STDMETHODCALLTYPE *AddRef)(IDXGIVkInteropSurface *);
++    ULONG   (STDMETHODCALLTYPE *Release)(IDXGIVkInteropSurface *);
++    HRESULT (STDMETHODCALLTYPE *GetDevice)(IDXGIVkInteropSurface *, IDXGIVkInteropDevice **);
++    HRESULT (STDMETHODCALLTYPE *GetVulkanImageInfo)(IDXGIVkInteropSurface *, VkImage *, VkImageLayout *, VkImageCreateInfo *);
++} IDXGIVkInteropSurfaceVtbl;
++struct IDXGIVkInteropSurface { const IDXGIVkInteropSurfaceVtbl *lpVtbl; };
++
++/* ───────────── bridge to winewayland.drv ───────────── */
++#define WM_WAYLAND_COMPOSE_ATTACH (0x80001003u)
++struct wayland_compose_attach_request
++{
++    uint64_t  src_image;            /* VkImage (non-dispatchable, 64-bit) */
++    uint32_t  src_layout;           /* VkImageLayout */
++    uint32_t  vk_format;            /* VkFormat */
++    uint32_t  width, height;
++    uint64_t  vk_instance;          /* dispatchable handles, stored uint64 for PE/Unix layout */
++    uint64_t  vk_physical_device;
++    uint64_t  vk_device;
++    uint64_t  vk_queue;
++    uint32_t  queue_family;
++    uint32_t  _pad;
++    /* HWND of the DComp target — used by the unix-side handler to look up
++     * the wayland_surface and (lazily) build the compositing subsurface.
++     * Carried in the request rather than the WM message's hwnd because we
++     * SendMessage to a hidden window owned by the dcomp ticker thread (so
++     * the wndproc dispatch happens inline on the ticker, not on BNet's UI
++     * thread which would otherwise block on our vkSubmit + vkWaitForFences
++     * and stall input/IPC dispatch). */
++    void     *target_hwnd;
++};
++#define DRM_FORMAT_ARGB8888  0x34325241  /* 'AR24' */
++#define DRM_FORMAT_XRGB8888  0x34325258  /* 'XR24' */
++#define DRM_FORMAT_ABGR8888  0x34324241  /* 'AB24' */
++#define DRM_FORMAT_XBGR8888  0x34324258  /* 'XB24' */
++#define DRM_FORMAT_ABGR2101010 0x30334241 /* 'AB30' for HDR */
++#define DRM_FORMAT_ARGB2101010 0x30335241 /* 'AR30' */
++#define DRM_FORMAT_ABGR16161616F 0x48344241 /* 'AB4H' */
++#define DRM_FORMAT_MOD_INVALID 0x00ffffffffffffffuLL
++#define DRM_FORMAT_MOD_LINEAR  0x0
++
++/* ───────────── Vulkan function pointers (loaded once) ───────────── */
++static HMODULE g_vulkan = NULL;
++static VkResult (*p_vkAllocateCommandBuffers)(VkDevice, const VkCommandBufferAllocateInfo *, VkCommandBuffer *);
++static VkResult (*p_vkAllocateMemory)(VkDevice, const VkMemoryAllocateInfo *, const void *, VkDeviceMemory *);
++static VkResult (*p_vkBeginCommandBuffer)(VkCommandBuffer, const VkCommandBufferBeginInfo *);
++static VkResult (*p_vkBindImageMemory)(VkDevice, VkImage, VkDeviceMemory, VkDeviceSize);
++static void     (*p_vkCmdCopyImage)(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
++static void     (*p_vkCmdPipelineBarrier)(VkCommandBuffer, VkPipelineStageFlags, VkPipelineStageFlags, VkFlags, uint32_t, const void *, uint32_t, const void *, uint32_t, const VkImageMemoryBarrier *);
++static VkResult (*p_vkCreateCommandPool)(VkDevice, const VkCommandPoolCreateInfo *, const void *, VkCommandPool *);
++static VkResult (*p_vkCreateFence)(VkDevice, const VkFenceCreateInfo *, const void *, VkFence *);
++static VkResult (*p_vkCreateImage)(VkDevice, const VkImageCreateInfo *, const void *, VkImage *);
++static void     (*p_vkDestroyFence)(VkDevice, VkFence, const void *);
++static void     (*p_vkDestroyImage)(VkDevice, VkImage, const void *);
++static void     (*p_vkFreeMemory)(VkDevice, VkDeviceMemory, const void *);
++static VkResult (*p_vkEndCommandBuffer)(VkCommandBuffer);
++static void     (*p_vkGetImageMemoryRequirements2)(VkDevice, const VkImageMemoryRequirementsInfo2 *, VkMemoryRequirements2 *);
++static VkResult (*p_vkGetMemoryFdKHR)(VkDevice, const VkMemoryGetFdInfoKHR *, int *);
++static void     (*p_vkGetPhysicalDeviceMemoryProperties)(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties *);
++static PFN_vkVoidFunction (*p_vkGetDeviceProcAddr)(VkDevice, const char *);
++static PFN_vkVoidFunction (*p_vkGetInstanceProcAddr)(VkInstance, const char *);
++static VkResult (*p_vkQueueSubmit)(VkQueue, uint32_t, const VkSubmitInfo *, VkFence);
++static VkResult (*p_vkResetCommandBuffer)(VkCommandBuffer, VkFlags);
++static VkResult (*p_vkResetFences)(VkDevice, uint32_t, const VkFence *);
++static VkResult (*p_vkWaitForFences)(VkDevice, uint32_t, const VkFence *, VkBool32, uint64_t);
++
++#define LOADVK(name) do { p_##name = (void *)GetProcAddress(g_vulkan, #name); \
++    if (!p_##name) { ERR("missing %s\n", #name); g_vulkan = NULL; return FALSE; } } while (0)
++#define LOADVK_DEV(dev, name) do { p_##name = (void *)p_vkGetDeviceProcAddr(dev, #name); \
++    if (!p_##name) WARN("vkGetDeviceProcAddr %s NULL\n", #name); } while (0)
++
++static BOOL load_vulkan_once(void)
++{
++    static LONG state = 0;  /* 0=untried, 1=ok, 2=failed */
++    LONG s = InterlockedCompareExchange(&state, 0, 0);
++    if (s == 1) return TRUE;
++    if (s == 2) return FALSE;
++    g_vulkan = LoadLibraryW(L"vulkan-1.dll");
++    if (!g_vulkan) { ERR("vulkan-1.dll load failed\n"); InterlockedExchange(&state, 2); return FALSE; }
++    LOADVK(vkGetInstanceProcAddr);
++    LOADVK(vkGetDeviceProcAddr);
++    LOADVK(vkAllocateCommandBuffers);
++    LOADVK(vkAllocateMemory);
++    LOADVK(vkBeginCommandBuffer);
++    LOADVK(vkBindImageMemory);
++    LOADVK(vkCmdCopyImage);
++    LOADVK(vkCmdPipelineBarrier);
++    LOADVK(vkCreateCommandPool);
++    LOADVK(vkCreateFence);
++    LOADVK(vkCreateImage);
++    LOADVK(vkDestroyFence);
++    LOADVK(vkDestroyImage);
++    LOADVK(vkFreeMemory);
++    LOADVK(vkEndCommandBuffer);
++    LOADVK(vkGetImageMemoryRequirements2);
++    LOADVK(vkGetPhysicalDeviceMemoryProperties);
++    LOADVK(vkQueueSubmit);
++    LOADVK(vkResetCommandBuffer);
++    LOADVK(vkResetFences);
++    LOADVK(vkWaitForFences);
++    /* vkGetMemoryFdKHR is a device-level extension fn */
++    InterlockedExchange(&state, 1);
++    return TRUE;
+ }
+ 
+-HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **device)
++/* ───── per-visual exportable surface state (cached across Commits) ───── */
++struct wayland_compose_export
+ {
+-    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++    /* Intermediate D3D11 texture: copy target for the (possibly opaque) swap-chain back
++     * buffer. Created via ID3D11Device::CreateTexture2D so QI for IDXGIVkInteropSurface
++     * is guaranteed to work even when the swap chain's own back buffer hides its VkImage. */
++    ID3D11Texture2D *intermediate;
++    VkImage          intermediate_vk;        /* VkImage of intermediate, queried via interop */
++    /* Exportable copy backed by VK_EXT_external_memory_dma_buf for compositor attach */
++    VkImage          image;
++    VkDeviceMemory   memory;
++    VkDevice         device;
++    uint32_t         width, height;
++    VkFormat         format;
++    int              dmabuf_fd;
++    uint32_t         stride;
++    BOOL             valid;
++};
+ 
+-    /* Try to workaround Chromium race fixed by Chromium commit 1c13c9105b40e83f87ebcad104fab57fcef43eb9. */
+-    Sleep(50);
++static void wayland_compose_export_destroy(struct wayland_compose_export *e)
++{
++    if (!e) return;
++    if (e->intermediate) { ID3D11Texture2D_Release(e->intermediate); e->intermediate = NULL; }
++    if (e->valid)
++    {
++        if (e->image && p_vkDestroyImage) p_vkDestroyImage(e->device, e->image, NULL);
++        if (e->memory && p_vkFreeMemory)  p_vkFreeMemory(e->device, e->memory, NULL);
++    }
++    /* dmabuf_fd is owned by winewayland.drv-side wl_buffer (dup'd on attach);
++     * we let wine's handle table clean it on process exit. */
++    memset(e, 0, sizeof(*e));
++    e->dmabuf_fd = -1;
++}
+ 
+-    return E_NOTIMPL;
++/* ─────────────────────── object types ─────────────────────── */
++
++struct dcomp_device;
++struct dcomp_visual;
++struct dcomp_surface;
++struct dcomp_target;
++
++struct dcomp_device
++{
++    IDCompositionDesktopDevice IDCompositionDesktopDevice_iface;
++    LONG ref;
++
++    IUnknown        *rendering_device;     /* AddRef'd; usually an ID3D11Device */
++    ID3D11Device    *d3d11_device;         /* QI'd from rendering_device; NULL if not D3D11 */
++    struct list      targets;              /* live IDCompositionTarget list */
++    struct list      visuals;              /* live IDCompositionVisual list */
++    struct list      surfaces;             /* live IDCompositionSurface list */
++    BOOL             pending_commit;
++
++    /* : continuous re-export ticker. CEF Commits once but Presents every frame
++     * on the swap chain bound into the visual tree, so a single Commit-time export
++     * freezes the first frame. The ticker thread walks the live tree at ~60Hz and
++     * re-runs the export pipeline, which on the unix side re-copies the latest src
++     * VkImage into our exportable dst_image and re-attaches the wl_buffer. */
++    HANDLE           tick_thread;
++    HANDLE           tick_stop;
++    /* Hidden HWND_MESSAGE window owned by the ticker thread itself. We
++     * SendMessage to this rather than the DComp target's HWND so the
++     * WM_WAYLAND_COMPOSE_ATTACH wndproc dispatch runs inline on the
++     * ticker thread, keeping the GPU+wayland work off BNet's UI thread. */
++    HWND             ticker_hwnd;
++    CRITICAL_SECTION cs;
++    BOOL             cs_init;
++};
++
++struct dcomp_visual
++{
++    IDCompositionVisual2 IDCompositionVisual2_iface;
++    LONG ref;
++    struct list entry;
++    struct dcomp_device *device;
++
++    IUnknown *content;                     /* AddRef'd; usually a swap chain or dcomp_surface */
++    float offset_x, offset_y;
++    D2D_MATRIX_3X2_F transform;
++    struct list children;
++    struct list child_entry;               /* link in parent->children */
++    struct dcomp_visual *parent;
++    BOOL dirty;
++
++    /* state: persistent across Commits, recreated on resize */
++    struct wayland_compose_export exp;
++};
++
++struct dcomp_surface
++{
++    IDCompositionSurface IDCompositionSurface_iface;
++    LONG ref;
++    struct list entry;
++    struct dcomp_device *device;
++
++    UINT width, height;
++    DXGI_FORMAT format;
++    DXGI_ALPHA_MODE alpha_mode;
++    ID3D11Texture2D *draw_texture;         /* allocated lazily in BeginDraw */
++    BOOL in_draw;
++};
++
++struct dcomp_target
++{
++    IDCompositionTarget IDCompositionTarget_iface;
++    LONG ref;
++    struct list entry;
++    struct dcomp_device *device;
++
++    HWND hwnd;
++    BOOL topmost;
++    struct dcomp_visual *root;             /* AddRef'd; may be NULL */
++};
++
++/* impl_from_X helpers */
++static inline struct dcomp_device *impl_from_IDCompositionDesktopDevice(IDCompositionDesktopDevice *iface)
++    { return CONTAINING_RECORD(iface, struct dcomp_device, IDCompositionDesktopDevice_iface); }
++static inline struct dcomp_visual *impl_from_IDCompositionVisual2(IDCompositionVisual2 *iface)
++    { return CONTAINING_RECORD(iface, struct dcomp_visual, IDCompositionVisual2_iface); }
++static inline struct dcomp_surface *impl_from_IDCompositionSurface(IDCompositionSurface *iface)
++    { return CONTAINING_RECORD(iface, struct dcomp_surface, IDCompositionSurface_iface); }
++static inline struct dcomp_target *impl_from_IDCompositionTarget(IDCompositionTarget *iface)
++    { return CONTAINING_RECORD(iface, struct dcomp_target, IDCompositionTarget_iface); }
++
++/* forward vtable declarations */
++static const IDCompositionDesktopDeviceVtbl dcomp_device_vtbl;
++static const IDCompositionVisual2Vtbl       dcomp_visual_vtbl;
++static const IDCompositionSurfaceVtbl       dcomp_surface_vtbl;
++static const IDCompositionTargetVtbl        dcomp_target_vtbl;
++
++/* ─────────────────────── object constructors ─────────────────────── */
++
++static struct dcomp_visual *dcomp_visual_create(struct dcomp_device *device)
++{
++    struct dcomp_visual *v = calloc(1, sizeof(*v));
++    if (!v) return NULL;
++    v->IDCompositionVisual2_iface.lpVtbl = &dcomp_visual_vtbl;
++    v->ref = 1;
++    v->device = device;
++    v->transform.m11 = v->transform.m22 = 1.0f;
++    v->exp.dmabuf_fd = -1;
++    list_init(&v->children);
++    list_add_tail(&device->visuals, &v->entry);
++    TRACE("created visual %p\n", v);
++    return v;
++}
++
++static struct dcomp_surface *dcomp_surface_create(struct dcomp_device *device,
++                                                  UINT width, UINT height,
++                                                  DXGI_FORMAT format, DXGI_ALPHA_MODE alpha)
++{
++    struct dcomp_surface *s = calloc(1, sizeof(*s));
++    if (!s) return NULL;
++    s->IDCompositionSurface_iface.lpVtbl = &dcomp_surface_vtbl;
++    s->ref = 1;
++    s->device = device;
++    s->width = width;
++    s->height = height;
++    s->format = format;
++    s->alpha_mode = alpha;
++    list_add_tail(&device->surfaces, &s->entry);
++    TRACE("created surface %p (%ux%u fmt=%u alpha=%u)\n", s, width, height, format, alpha);
++    return s;
++}
++
++static struct dcomp_target *dcomp_target_create(struct dcomp_device *device,
++                                                HWND hwnd, BOOL topmost)
++{
++    struct dcomp_target *t = calloc(1, sizeof(*t));
++    if (!t) return NULL;
++    t->IDCompositionTarget_iface.lpVtbl = &dcomp_target_vtbl;
++    t->ref = 2;     /* one for caller, one retained by device->targets list */
++    t->device = device;
++    t->hwnd = hwnd;
++    t->topmost = topmost;
++    list_add_tail(&device->targets, &t->entry);
++    TRACE("created target %p (hwnd=%p topmost=%d) device=%p\n", t, hwnd, topmost, device);
++    return t;
++}
++
++/* ─────────────────────── IDCompositionVisual2 ─────────────────────── */
++
++static HRESULT WINAPI visual_QueryInterface(IDCompositionVisual2 *iface, REFIID iid, void **out)
++{
++    if (IsEqualGUID(iid, &IID_IUnknown) ||
++        IsEqualGUID(iid, &IID_IDCompositionVisual) ||
++        IsEqualGUID(iid, &IID_IDCompositionVisual2))
++    {
++        IDCompositionVisual2_AddRef(iface);
++        *out = iface;
++        return S_OK;
++    }
++    WARN("visual QI %s — not supported\n", debugstr_guid(iid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI visual_AddRef(IDCompositionVisual2 *iface)
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    return InterlockedIncrement(&v->ref);
++}
++
++static ULONG WINAPI visual_Release(IDCompositionVisual2 *iface)
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    ULONG r = InterlockedDecrement(&v->ref);
++    if (!r)
++    {
++        struct dcomp_visual *c, *cn;
++        LIST_FOR_EACH_ENTRY_SAFE(c, cn, &v->children, struct dcomp_visual, child_entry)
++        { list_remove(&c->child_entry); c->parent = NULL; }
++        if (v->parent) list_remove(&v->child_entry);
++        wayland_compose_export_destroy(&v->exp);
++        if (v->content) IUnknown_Release(v->content);
++        list_remove(&v->entry);
++        free(v);
++    }
++    return r;
++}
++
++#define VISUAL_STUB_OK(name, ...) \
++    static HRESULT WINAPI visual_##name(IDCompositionVisual2 *iface, ##__VA_ARGS__) \
++    { struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->dirty = TRUE; return S_OK; }
++
++static HRESULT WINAPI visual_SetOffsetX(IDCompositionVisual2 *iface, float x)
++{ struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->offset_x = x; v->dirty = TRUE; return S_OK; }
++static HRESULT WINAPI visual_SetOffsetY(IDCompositionVisual2 *iface, float y)
++{ struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->offset_y = y; v->dirty = TRUE; return S_OK; }
++VISUAL_STUB_OK(SetOffsetXAnimation, IDCompositionAnimation *a)
++VISUAL_STUB_OK(SetOffsetYAnimation, IDCompositionAnimation *a)
++static HRESULT WINAPI visual_SetTransform(IDCompositionVisual2 *iface, const D2D_MATRIX_3X2_F *m)
++{ struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); if (m) v->transform = *m; v->dirty = TRUE; return S_OK; }
++VISUAL_STUB_OK(SetTransformObject, IDCompositionTransform *t)
++VISUAL_STUB_OK(SetTransformParent, IDCompositionVisual *p)
++VISUAL_STUB_OK(SetEffect, IDCompositionEffect *e)
++VISUAL_STUB_OK(SetBitmapInterpolationMode, enum DCOMPOSITION_BITMAP_INTERPOLATION_MODE m)
++VISUAL_STUB_OK(SetBorderMode, enum DCOMPOSITION_BORDER_MODE m)
++VISUAL_STUB_OK(SetClip, const D2D_RECT_F *r)
++VISUAL_STUB_OK(SetClipObject, IDCompositionClip *c)
++
++static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *content)
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p content=%p\n", v, content);
++
++    if (v->device && v->device->cs_init) EnterCriticalSection(&v->device->cs);
++    if (v->content) IUnknown_Release(v->content);
++    v->content = content;
++    if (content)
++    {
++        IDXGISwapChain1   *sc1 = NULL;
++        IDCompositionSurface *sif = NULL;
++        IUnknown_AddRef(content);
++        /* Probe content type — what did CEF give us? */
++        if (SUCCEEDED(IUnknown_QueryInterface(content, &IID_IDXGISwapChain1, (void **)&sc1)) && sc1)
++        {
++            DXGI_SWAP_CHAIN_DESC1 desc = {0};
++            ID3D11Texture2D *bb = NULL;
++            IDXGISwapChain1_GetDesc1(sc1, &desc);
++            HRESULT hr = IDXGISwapChain1_GetBuffer(sc1, 0, &IID_ID3D11Texture2D, (void **)&bb);
++            WARN("visual=%p content is IDXGISwapChain1=%p (%ux%u fmt=%u flags=%#x); GetBuffer hr=%#lx bb=%p\n",
++                 v, sc1, desc.Width, desc.Height, desc.Format, desc.Flags, hr, bb);
++            if (bb) ID3D11Texture2D_Release(bb);
++            IDXGISwapChain1_Release(sc1);
++        }
++        else if (SUCCEEDED(IUnknown_QueryInterface(content, &IID_IDCompositionSurface, (void **)&sif)) && sif)
++        {
++            struct dcomp_surface *s = impl_from_IDCompositionSurface(sif);
++            WARN("visual=%p content is IDCompositionSurface=%p (%ux%u fmt=%u draw_texture=%p)\n",
++                 v, s, s->width, s->height, s->format, s->draw_texture);
++            IDCompositionSurface_Release(sif);
++        }
++        else
++        {
++            WARN("visual=%p content=%p — unknown type (neither swap chain nor dcomp surface)\n", v, content);
++        }
++    }
++    v->dirty = TRUE;
++    if (v->device) v->device->pending_commit = TRUE;
++    if (v->device && v->device->cs_init) LeaveCriticalSection(&v->device->cs);
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_AddVisual(IDCompositionVisual2 *iface, IDCompositionVisual *visual,
++                                       BOOL insert_above, IDCompositionVisual *ref_visual)
++{
++    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
++    struct dcomp_visual *c = NULL;
++    IDCompositionVisual2 *v2 = NULL;
++    if (!visual) return S_OK;
++    if (SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
++    {
++        c = impl_from_IDCompositionVisual2(v2);
++        /* QI AddRef'd; don't release — parent retains via children list. */
++    }
++    if (!c) return S_OK;
++    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
++    if (c->parent)                       /* already in some parent's children — remove first */
++        list_remove(&c->child_entry);
++    c->parent = p;
++    list_add_tail(&p->children, &c->child_entry);
++    p->dirty = TRUE;
++    if (p->device) p->device->pending_commit = TRUE;
++    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
++    TRACE("parent=%p added child=%p\n", p, c);
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_RemoveVisual(IDCompositionVisual2 *iface, IDCompositionVisual *visual)
++{
++    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
++    IDCompositionVisual2 *v2 = NULL;
++    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
++    if (visual && SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
++    {
++        struct dcomp_visual *c = impl_from_IDCompositionVisual2(v2);
++        if (c->parent == p) { list_remove(&c->child_entry); c->parent = NULL; }
++        IDCompositionVisual2_Release(v2);
++    }
++    p->dirty = TRUE;
++    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_RemoveAllVisuals(IDCompositionVisual2 *iface)
++{
++    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
++    struct dcomp_visual *c, *cn;
++    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
++    LIST_FOR_EACH_ENTRY_SAFE(c, cn, &p->children, struct dcomp_visual, child_entry)
++    {
++        list_remove(&c->child_entry); c->parent = NULL;
++    }
++    p->dirty = TRUE;
++    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
++    return S_OK;
++}
++VISUAL_STUB_OK(SetCompositeMode, enum DCOMPOSITION_COMPOSITE_MODE m)
++VISUAL_STUB_OK(SetOpacityMode, enum DCOMPOSITION_OPACITY_MODE m)
++VISUAL_STUB_OK(SetBackFaceVisibility, enum DCOMPOSITION_BACKFACE_VISIBILITY v_)
++
++static const IDCompositionVisual2Vtbl dcomp_visual_vtbl =
++{
++    visual_QueryInterface, visual_AddRef, visual_Release,
++    visual_SetOffsetX, visual_SetOffsetXAnimation,
++    visual_SetOffsetY, visual_SetOffsetYAnimation,
++    visual_SetTransform, visual_SetTransformObject, visual_SetTransformParent,
++    visual_SetEffect, visual_SetBitmapInterpolationMode, visual_SetBorderMode,
++    visual_SetClip, visual_SetClipObject, visual_SetContent,
++    visual_AddVisual, visual_RemoveVisual, visual_RemoveAllVisuals,
++    visual_SetCompositeMode,
++    /* Visual2 */
++    visual_SetOpacityMode, visual_SetBackFaceVisibility,
++};
++
++/* ─────────────────────── IDCompositionSurface ─────────────────────── */
++
++static HRESULT WINAPI surface_QueryInterface(IDCompositionSurface *iface, REFIID iid, void **out)
++{
++    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IDCompositionSurface))
++    { IDCompositionSurface_AddRef(iface); *out = iface; return S_OK; }
++    WARN("surface QI %s — not supported\n", debugstr_guid(iid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI surface_AddRef(IDCompositionSurface *iface)
++{ struct dcomp_surface *s = impl_from_IDCompositionSurface(iface); return InterlockedIncrement(&s->ref); }
++
++static ULONG WINAPI surface_Release(IDCompositionSurface *iface)
++{
++    struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
++    ULONG r = InterlockedDecrement(&s->ref);
++    if (!r)
++    {
++        if (s->draw_texture) ID3D11Texture2D_Release(s->draw_texture);
++        list_remove(&s->entry);
++        free(s);
++    }
++    return r;
++}
++
++static HRESULT WINAPI surface_BeginDraw(IDCompositionSurface *iface, const RECT *rect,
++                                         REFIID iid, void **object, POINT *offset)
++{
++    struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
++    D3D11_TEXTURE2D_DESC desc = {0};
++    HRESULT hr;
++
++    TRACE("surface=%p rect=%p iid=%s\n", s, rect, debugstr_guid(iid));
++
++    if (!s->device || !s->device->d3d11_device)
++    {
++        FIXME("no D3D11 device available for BeginDraw\n");
++        *object = NULL;
++        return E_FAIL;
++    }
++    if (!IsEqualGUID(iid, &IID_ID3D11Texture2D))
++    {
++        FIXME("BeginDraw with non-D3D11 iid %s — not supported\n", debugstr_guid(iid));
++        *object = NULL;
++        return E_NOINTERFACE;
++    }
++    if (s->in_draw)
++    {
++        WARN("surface=%p already in BeginDraw\n", s);
++        return DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED;
++    }
++
++    if (!s->draw_texture)
++    {
++        desc.Width = s->width;
++        desc.Height = s->height;
++        desc.MipLevels = 1;
++        desc.ArraySize = 1;
++        desc.Format = s->format ? s->format : DXGI_FORMAT_B8G8R8A8_UNORM;
++        desc.SampleDesc.Count = 1;
++        desc.Usage = D3D11_USAGE_DEFAULT;
++        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
++        desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;       /* enable dmabuf export via DXVK interop */
++        hr = ID3D11Device_CreateTexture2D(s->device->d3d11_device, &desc, NULL, &s->draw_texture);
++        if (FAILED(hr))
++        {
++            ERR("CreateTexture2D %ux%u failed hr=%#lx\n", s->width, s->height, hr);
++            *object = NULL;
++            return hr;
++        }
++    }
++
++    s->in_draw = TRUE;
++    ID3D11Texture2D_AddRef(s->draw_texture);
++    *object = s->draw_texture;
++    if (offset) { offset->x = 0; offset->y = 0; }
++    return S_OK;
++}
++
++static HRESULT WINAPI surface_EndDraw(IDCompositionSurface *iface)
++{
++    struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
++    TRACE("surface=%p\n", s);
++    s->in_draw = FALSE;
++    if (s->device) s->device->pending_commit = TRUE;
++    return S_OK;
++}
++
++static HRESULT WINAPI surface_SuspendDraw(IDCompositionSurface *iface)
++{ TRACE("\n"); return S_OK; }
++static HRESULT WINAPI surface_ResumeDraw(IDCompositionSurface *iface)
++{ TRACE("\n"); return S_OK; }
++static HRESULT WINAPI surface_Scroll(IDCompositionSurface *iface, const RECT *scroll,
++                                      const RECT *clip, int ox, int oy)
++{ TRACE("\n"); return S_OK; }
++
++static const IDCompositionSurfaceVtbl dcomp_surface_vtbl =
++{
++    surface_QueryInterface, surface_AddRef, surface_Release,
++    surface_BeginDraw, surface_EndDraw,
++    surface_SuspendDraw, surface_ResumeDraw, surface_Scroll,
++};
++
++/* ─────────────────────── IDCompositionTarget ─────────────────────── */
++
++static HRESULT WINAPI target_QueryInterface(IDCompositionTarget *iface, REFIID iid, void **out)
++{
++    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IDCompositionTarget))
++    { IDCompositionTarget_AddRef(iface); *out = iface; return S_OK; }
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI target_AddRef(IDCompositionTarget *iface)
++{ struct dcomp_target *t = impl_from_IDCompositionTarget(iface); return InterlockedIncrement(&t->ref); }
++
++static ULONG WINAPI target_Release(IDCompositionTarget *iface)
++{
++    struct dcomp_target *t = impl_from_IDCompositionTarget(iface);
++    ULONG r = InterlockedDecrement(&t->ref);
++    if (!r)
++    {
++        struct dcomp_device *d = t->device;
++        if (d && d->cs_init) EnterCriticalSection(&d->cs);
++        if (t->root) IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
++        list_remove(&t->entry);
++        if (d && d->cs_init) LeaveCriticalSection(&d->cs);
++        free(t);
++    }
++    return r;
++}
++
++static HRESULT WINAPI target_SetRoot(IDCompositionTarget *iface, IDCompositionVisual *visual)
++{
++    struct dcomp_target *t = impl_from_IDCompositionTarget(iface);
++    TRACE("target=%p visual=%p (hwnd=%p)\n", t, visual, t->hwnd);
++    if (t->device && t->device->cs_init) EnterCriticalSection(&t->device->cs);
++    if (t->root) IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
++    t->root = NULL;
++    if (visual)
++    {
++        IDCompositionVisual2 *v2 = NULL;
++        if (SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
++            t->root = impl_from_IDCompositionVisual2(v2);
++    }
++    if (t->device) t->device->pending_commit = TRUE;
++    if (t->device && t->device->cs_init) LeaveCriticalSection(&t->device->cs);
++    return S_OK;
++}
++
++static const IDCompositionTargetVtbl dcomp_target_vtbl =
++{
++    target_QueryInterface, target_AddRef, target_Release,
++    target_SetRoot,
++};
++
++/* ─────────────────── IDCompositionDesktopDevice ─────────────────── */
++
++static HRESULT WINAPI device_QueryInterface(IDCompositionDesktopDevice *iface, REFIID iid, void **out)
++{
++    if (IsEqualGUID(iid, &IID_IUnknown) ||
++        IsEqualGUID(iid, &IID_IDCompositionDevice2) ||
++        IsEqualGUID(iid, &IID_IDCompositionDesktopDevice))
++    { IDCompositionDesktopDevice_AddRef(iface); *out = iface; return S_OK; }
++    WARN("device QI %s — not supported\n", debugstr_guid(iid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI device_AddRef(IDCompositionDesktopDevice *iface)
++{ struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface); return InterlockedIncrement(&d->ref); }
++
++static ULONG WINAPI device_Release(IDCompositionDesktopDevice *iface)
++{
++    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
++    ULONG r = InterlockedDecrement(&d->ref);
++    if (!r)
++    {
++        struct dcomp_target *t, *t_next;
++        if (d->tick_stop)   SetEvent(d->tick_stop);
++        if (d->tick_thread) { WaitForSingleObject(d->tick_thread, 1000); CloseHandle(d->tick_thread); }
++        if (d->tick_stop)   CloseHandle(d->tick_stop);
++        LIST_FOR_EACH_ENTRY_SAFE(t, t_next, &d->targets, struct dcomp_target, entry)
++            IDCompositionTarget_Release(&t->IDCompositionTarget_iface);
++        if (d->cs_init) DeleteCriticalSection(&d->cs);
++        if (d->d3d11_device) ID3D11Device_Release(d->d3d11_device);
++        if (d->rendering_device) IUnknown_Release(d->rendering_device);
++        free(d);
++    }
++    return r;
++}
++
++/* ─────── DXGI format → DRM fourcc + VkFormat lookup ─────── */
++static uint32_t dxgi_to_drm_fourcc(DXGI_FORMAT f, BOOL *opaque)
++{
++    if (opaque) *opaque = FALSE;
++    switch (f)
++    {
++    case DXGI_FORMAT_B8G8R8A8_UNORM:
++    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:    return DRM_FORMAT_ARGB8888;
++    case DXGI_FORMAT_B8G8R8X8_UNORM:         if (opaque) *opaque = TRUE; return DRM_FORMAT_XRGB8888;
++    case DXGI_FORMAT_R8G8B8A8_UNORM:
++    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:    return DRM_FORMAT_ABGR8888;
++    case DXGI_FORMAT_R10G10B10A2_UNORM:      return DRM_FORMAT_ABGR2101010;
++    case DXGI_FORMAT_R16G16B16A16_FLOAT:     return DRM_FORMAT_ABGR16161616F;
++    default:                                  return 0;
++    }
++}
++
++/* Find a DEVICE_LOCAL memory type from the requirements bitmask. */
++static int pick_memory_type(VkPhysicalDevice pdev, uint32_t bits, VkFlags want)
++{
++    VkPhysicalDeviceMemoryProperties mp = {0};
++    uint32_t i;
++    p_vkGetPhysicalDeviceMemoryProperties(pdev, &mp);
++    for (i = 0; i < mp.memoryTypeCount; i++)
++        if ((bits & (1u << i)) && (mp.memoryTypes[i].propertyFlags & want) == want)
++            return i;
++    /* fallback: first matching bit */
++    for (i = 0; i < mp.memoryTypeCount; i++) if (bits & (1u << i)) return i;
++    return -1;
++}
++
++/* Build or refresh visual->exp so it has an exportable VkImage matching the src
++ * texture's dims/format. Returns TRUE on success. */
++static BOOL wayland_compose_export_ensure(struct dcomp_visual *v, VkDevice dev, VkPhysicalDevice pdev,
++                                  const VkImageCreateInfo *src_info, uint32_t *drm_format_out)
++{
++    VkImageCreateInfo ci;
++    VkExternalMemoryImageCreateInfo eci = { VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO, NULL,
++                                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT };
++    VkImageMemoryRequirementsInfo2 ri = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2 };
++    VkMemoryRequirements2 mreq = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2 };
++    VkMemoryDedicatedRequirements dreq = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS };
++    VkMemoryDedicatedAllocateInfo dai = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO };
++    VkExportMemoryAllocateInfo eai = { VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, NULL,
++                                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT };
++    VkMemoryAllocateInfo ai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
++    VkMemoryGetFdInfoKHR gfi = { VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR };
++    int memtype, fd = -1;
++    BOOL opaque;
++
++    WARN("ENSURE: src fmt=%d ext=%ux%u valid=%d\n", src_info->format, src_info->extent.width, src_info->extent.height, v->exp.valid);
++
++    *drm_format_out = dxgi_to_drm_fourcc((DXGI_FORMAT)0, &opaque);
++    /* Map src VkFormat back to a DRM fourcc */
++    if (src_info->format == VK_FORMAT_B8G8R8A8_UNORM)         *drm_format_out = DRM_FORMAT_ARGB8888;
++    else if (src_info->format == VK_FORMAT_R8G8B8A8_UNORM)    *drm_format_out = DRM_FORMAT_ABGR8888;
++    else if (src_info->format == VK_FORMAT_A2R10G10B10_UNORM_PACK32) *drm_format_out = DRM_FORMAT_ABGR2101010;
++    else if (src_info->format == VK_FORMAT_R16G16B16A16_SFLOAT)     *drm_format_out = DRM_FORMAT_ABGR16161616F;
++    else { ERR("unsupported VkFormat %d\n", src_info->format); return FALSE; }
++
++    if (v->exp.valid && v->exp.image != 0 && v->exp.device == dev &&
++        v->exp.width == src_info->extent.width && v->exp.height == src_info->extent.height &&
++        v->exp.format == src_info->format)
++        return TRUE;        /* reuse */
++
++    wayland_compose_export_destroy(&v->exp);
++    v->exp.device = dev;
++
++    ci = *src_info;
++    ci.pNext = &eci;
++    ci.tiling = VK_IMAGE_TILING_OPTIMAL;
++    ci.usage  = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
++    ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
++    ci.mipLevels = 1;
++    ci.arrayLayers = 1;
++    ci.samples = VK_SAMPLE_COUNT_1_BIT;
++    ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++    ci.queueFamilyIndexCount = 0;
++    ci.pQueueFamilyIndices = NULL;
++
++    if (p_vkCreateImage(dev, &ci, NULL, &v->exp.image) != VK_SUCCESS)
++    { ERR("vkCreateImage failed\n"); return FALSE; }
++
++    ri.image = v->exp.image;
++    mreq.pNext = &dreq;
++    p_vkGetImageMemoryRequirements2(dev, &ri, &mreq);
++
++    memtype = pick_memory_type(pdev, mreq.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    if (memtype < 0) { ERR("no suitable memory type\n"); wayland_compose_export_destroy(&v->exp); return FALSE; }
++
++    if (dreq.requiresDedicatedAllocation || dreq.prefersDedicatedAllocation)
++    {
++        dai.image = v->exp.image;
++        dai.pNext = &eai;
++        ai.pNext  = &dai;
++    }
++    else ai.pNext = &eai;
++    ai.allocationSize  = mreq.memoryRequirements.size;
++    ai.memoryTypeIndex = memtype;
++    if (p_vkAllocateMemory(dev, &ai, NULL, &v->exp.memory) != VK_SUCCESS)
++    { ERR("vkAllocateMemory exportable failed\n"); wayland_compose_export_destroy(&v->exp); return FALSE; }
++    if (p_vkBindImageMemory(dev, v->exp.image, v->exp.memory, 0) != VK_SUCCESS)
++    { ERR("vkBindImageMemory failed\n"); wayland_compose_export_destroy(&v->exp); return FALSE; }
++
++    if (!p_vkGetMemoryFdKHR)
++        p_vkGetMemoryFdKHR = (void *)p_vkGetDeviceProcAddr(dev, "vkGetMemoryFdKHR");
++    if (!p_vkGetMemoryFdKHR) { ERR("vkGetMemoryFdKHR not found\n"); wayland_compose_export_destroy(&v->exp); return FALSE; }
++    gfi.memory     = v->exp.memory;
++    gfi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
++    if (p_vkGetMemoryFdKHR(dev, &gfi, &fd) != VK_SUCCESS || fd < 0)
++    { ERR("vkGetMemoryFdKHR failed\n"); wayland_compose_export_destroy(&v->exp); return FALSE; }
++
++    v->exp.dmabuf_fd = fd;
++    v->exp.width     = src_info->extent.width;
++    v->exp.height    = src_info->extent.height;
++    v->exp.format    = src_info->format;
++    v->exp.stride    = src_info->extent.width * 4;   /* assume 32bpp; refined by importer */
++    v->exp.valid     = TRUE;
++
++    TRACE("allocated exportable VkImage %p (%ux%u fmt=%d) memory=%p dmabuf_fd=%d\n",
++          v->exp.image, v->exp.width, v->exp.height, src_info->format,
++          v->exp.memory, fd);
++    return TRUE;
++}
++
++/* Gather Vulkan handles from DXVK and post them to winewayland.drv via SendMessageW
++ * to do the actual export work using native libvulkan (wine's vulkan-1.dll can't
++ * operate on DXVK-tracked device handles). */
++static void wayland_compose_export_visual(struct dcomp_target *t, struct dcomp_visual *v)
++{
++    IDXGISwapChain1 *sc = NULL;
++    IDCompositionSurface *cs = NULL;
++    ID3D11Texture2D *bb = NULL;
++    IDXGIVkInteropSurface *iface_surf = NULL;
++    IDXGIVkInteropDevice *iface_dev = NULL;
++    VkImage src_img = 0;
++    VkImageLayout src_layout = VK_IMAGE_LAYOUT_UNDEFINED;
++    VkImageCreateInfo src_info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, NULL };
++    VkInstance vk_inst = NULL; VkPhysicalDevice vk_pdev = NULL; VkDevice vk_dev = NULL;
++    VkQueue vk_queue = NULL; uint32_t queue_family = 0;
++    HRESULT hr;
++
++    TRACE("export visual=%p content=%p hwnd=%p\n", v, v->content, t->hwnd);
++    if (!v->content) return;
++
++    /* CEF emits two flavors of content on Visuals:
++     *   1) IDXGISwapChain1   — used for popups / hardware overlays (GetBuffer(0) is the latest frame)
++     *   2) IDCompositionSurface — used for the main view (draw_texture is the latest frame
++     *      after BeginDraw → render → EndDraw → Commit)
++     * Both eventually need to become a dmabuf attached to our wl_surface. */
++    if (SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGISwapChain1, (void **)&sc)) && sc)
++    {
++        if (FAILED(hr = IDXGISwapChain1_GetBuffer(sc, 0, &IID_ID3D11Texture2D, (void **)&bb)) || !bb)
++        { WARN("  GetBuffer failed hr=%#lx\n", hr); IDXGISwapChain1_Release(sc); return; }
++    }
++    else if (SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDCompositionSurface, (void **)&cs)) && cs)
++    {
++        struct dcomp_surface *s = impl_from_IDCompositionSurface(cs);
++        if (!s->draw_texture) { IDCompositionSurface_Release(cs); return; }
++        bb = s->draw_texture;
++        ID3D11Texture2D_AddRef(bb);
++    }
++    else
++    { WARN("  unknown content type — not swap chain or composition surface\n"); return; }
++
++    if (FAILED(hr = ID3D11Texture2D_QueryInterface(bb, &IID_IDXGIVkInteropSurface, (void **)&iface_surf)) || !iface_surf)
++    { WARN("  no IDXGIVkInteropSurface hr=%#lx (DXVK not active?)\n", hr);
++      ID3D11Texture2D_Release(bb); if (cs) IDCompositionSurface_Release(cs); if (sc) IDXGISwapChain1_Release(sc); return; }
++    if (FAILED(hr = iface_surf->lpVtbl->GetVulkanImageInfo(iface_surf, &src_img, &src_layout, &src_info)))
++    { WARN("  GetVulkanImageInfo failed hr=%#lx\n", hr); iface_surf->lpVtbl->Release(iface_surf); ID3D11Texture2D_Release(bb); if (cs) IDCompositionSurface_Release(cs); if (sc) IDXGISwapChain1_Release(sc); return; }
++    TRACE("  src VkImage=0x%llx fmt=%d extent=%ux%u layout=%d\n",
++          (unsigned long long)src_img, src_info.format,
++          src_info.extent.width, src_info.extent.height, src_layout);
++    if (FAILED(hr = iface_surf->lpVtbl->GetDevice(iface_surf, &iface_dev)) || !iface_dev)
++    { WARN("  GetDevice failed hr=%#lx\n", hr); iface_surf->lpVtbl->Release(iface_surf); ID3D11Texture2D_Release(bb); if (cs) IDCompositionSurface_Release(cs); if (sc) IDXGISwapChain1_Release(sc); return; }
++
++    iface_dev->lpVtbl->GetVulkanHandles(iface_dev, &vk_inst, &vk_pdev, &vk_dev);
++    iface_dev->lpVtbl->GetSubmissionQueue(iface_dev, &vk_queue, &queue_family);
++    TRACE("  vk_dev=%p vk_pdev=%p vk_queue=%p queue_family=%u src_image=0x%llx fmt=%d\n",
++          vk_dev, vk_pdev, vk_queue, queue_family,
++          (unsigned long long)src_img, src_info.format);
++
++    /* Hold DXVK's submission lock around the unix-side queue submit so we don't
++     * race CEF's own vkQueueSubmit calls (Vulkan vkQueueSubmit is not thread
++     * safe per-queue, and removing this lock crashed CEF inside wine vulkan
++     * thunks). */
++    iface_dev->lpVtbl->LockSubmissionQueue(iface_dev);
++    {
++        struct wayland_compose_attach_request req = {0};
++        req.src_image          = (uint64_t)src_img;
++        req.src_layout         = (uint32_t)src_layout;
++        req.vk_format          = (uint32_t)src_info.format;
++        req.width              = src_info.extent.width;
++        req.height             = src_info.extent.height;
++        req.vk_instance        = (uint64_t)(uintptr_t)vk_inst;
++        req.vk_physical_device = (uint64_t)(uintptr_t)vk_pdev;
++        req.vk_device          = (uint64_t)(uintptr_t)vk_dev;
++        req.vk_queue           = (uint64_t)(uintptr_t)vk_queue;
++        req.queue_family       = queue_family;
++        req.target_hwnd        = t->hwnd;     /* the DComp target's HWND */
++        TRACE("hwnd=%p %ux%u fmt=%d src_image=0x%llx\n",
++              t->hwnd, req.width, req.height, req.vk_format, (unsigned long long)req.src_image);
++        /* SendMessage to the ticker thread's own hidden HWND_MESSAGE window.
++         * Because the destination HWND lives on THIS thread, wine's user32
++         * dispatches the wndproc inline on this thread (the dcomp ticker)
++         * rather than queuing to the original target_hwnd's owner thread.
++         * That keeps the GPU work (vkSubmit + vkWaitForFences + memcpy +
++         * wayland_commit) off BNet's UI thread, so CEF's input message pump
++         * and Mojo IPC dispatch stay responsive. */
++        /* SendMessageTimeoutW to the DComp target's HWND so the wndproc
++         * dispatch flows through the user32 driver hook to wayland's
++         * WindowMessage handler. SMTO_ABORTIFHUNG + 50ms timeout bounds how
++         * long a hung target window's thread can keep us blocked. */
++        DWORD_PTR sm_result = 0;
++        SendMessageTimeoutW(t->hwnd, WM_WAYLAND_COMPOSE_ATTACH, 0, (LPARAM)&req,
++                            SMTO_NORMAL | SMTO_ABORTIFHUNG, 50, &sm_result);
++    }
++    iface_dev->lpVtbl->ReleaseSubmissionQueue(iface_dev);
++
++    if (iface_dev)  iface_dev->lpVtbl->Release(iface_dev);
++    if (iface_surf) iface_surf->lpVtbl->Release(iface_surf);
++    if (bb)         ID3D11Texture2D_Release(bb);
++    if (cs)         IDCompositionSurface_Release(cs);
++    if (sc)         IDXGISwapChain1_Release(sc);
+ }
+ 
+-HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **device)
++/* Recursive visual tree walk */
++static void wayland_compose_walk_visual(struct dcomp_target *t, struct dcomp_visual *v)
+ {
+-    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++    struct dcomp_visual *c;
++    if (!v) return;
++    if (v->content) wayland_compose_export_visual(t, v);
++    LIST_FOR_EACH_ENTRY(c, &v->children, struct dcomp_visual, child_entry)
++        wayland_compose_walk_visual(t, c);
++}
++
++/* Quiet walk used by the 60Hz ticker — same recursion without per-visual WARN spam. */
++static void wayland_compose_walk_visual_quiet(struct dcomp_target *t, struct dcomp_visual *v)
++{
++    struct dcomp_visual *c;
++    if (!v) return;
++    if (v->content) wayland_compose_export_visual(t, v);
++    LIST_FOR_EACH_ENTRY(c, &v->children, struct dcomp_visual, child_entry)
++        wayland_compose_walk_visual_quiet(t, c);
++}
++
++/* Custom wndproc that explicitly routes driver messages to the wayland
++ * driver. wine's default window proc routes WM_WINE_*_DRIVER_MSG to
++ * user_driver->pWindowMessage, but built-in classes (Static, etc.) handle
++ * their own message dispatch and never reach DefWindowProc for these
++ * messages, so we need a dedicated wndproc here. */
++static LRESULT CALLBACK wayland_compose_ticker_wndproc(HWND hwnd, UINT msg,
++                                               WPARAM wp, LPARAM lp)
++{
++    /* Pass everything to DefWindowProcW — for messages in the WM_WINE_*
++     * driver range, that routes them to user_driver->pWindowMessage, which
++     * is wayland's WAYLAND_WindowMessage → wayland_compose_handle_attach. */
++    return DefWindowProcW(hwnd, msg, wp, lp);
++}
++
++static DWORD WINAPI wayland_compose_tick_thread(void *arg)
++{
++    struct dcomp_device *d = arg;
++    WNDCLASSW wc = {0};
++    static const WCHAR class_name[] = L"wine_dcomp_ticker_class";
++
++    TRACE(" ticker started device=%p\n", d);
++
++    /* Register a private window class with our wndproc so driver messages
++     * get routed through DefWindowProcW → user_driver->pWindowMessage. */
++    wc.lpfnWndProc = wayland_compose_ticker_wndproc;
++    wc.lpszClassName = class_name;
++    RegisterClassW(&wc);     /* idempotent — class may already be registered */
+ 
++    /* Create a hidden HWND_MESSAGE window owned by THIS thread. SendMessage
++     * to a window whose owner thread is the caller dispatches the wndproc
++     * inline (no thread switch) — so WM_WAYLAND_COMPOSE_ATTACH lands
++     * on wayland's WindowMessage handler on the ticker thread, not on
++     * BNet's UI thread. That keeps the per-frame GPU + wayland work off
++     * BNet's UI thread (which has to keep dispatching mouse/keyboard/IPC). */
++    d->ticker_hwnd = CreateWindowExW(0, class_name, L"-ticker",
++                                     0, 0, 0, 0, 0,
++                                     HWND_MESSAGE, NULL, NULL, NULL);
++    if (!d->ticker_hwnd)
++        WARN("failed to create ticker HWND, falling back to direct send\n");
++    else
++        TRACE(" ticker HWND=%p (owner=this thread)\n", d->ticker_hwnd);
++
++    for (;;)
++    {
++        struct dcomp_target *snap[16];
++        int n = 0, i;
++        DWORD w = WaitForSingleObject(d->tick_stop, 33);     /* ~30Hz */
++        if (w == WAIT_OBJECT_0) break;                       /* stop signaled */
++
++        /* Snapshot the target list under the device cs, but do NOT hold the
++         * cs while walking visuals + calling wayland_compose_export_visual (which can
++         * SendMessage). Holding cs across SendMessage produced deadlocks:
++         * CEF's main thread blocked here on the cs and never pumped messages,
++         * so SendMessage from the ticker never returned. */
++        EnterCriticalSection(&d->cs);
++        {
++            struct dcomp_target *t;
++            LIST_FOR_EACH_ENTRY(t, &d->targets, struct dcomp_target, entry)
++            {
++                if (n >= (int)(sizeof(snap)/sizeof(snap[0]))) break;
++                IDCompositionTarget_AddRef(&t->IDCompositionTarget_iface);
++                snap[n++] = t;
++            }
++        }
++        LeaveCriticalSection(&d->cs);
++
++        for (i = 0; i < n; i++)
++        {
++            struct dcomp_target *t = snap[i];
++            if (t->root) wayland_compose_walk_visual_quiet(t, t->root);
++            IDCompositionTarget_Release(&t->IDCompositionTarget_iface);
++        }
++    }
++    TRACE(" ticker exiting device=%p\n", d);
++    return 0;
++}
++
++static HRESULT WINAPI device_Commit(IDCompositionDesktopDevice *iface)
++{
++    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_target *t;
++    int target_count = 0;
++    TRACE("device=%p\n", d);
++
++    if (d->cs_init) EnterCriticalSection(&d->cs);
++    LIST_FOR_EACH_ENTRY(t, &d->targets, struct dcomp_target, entry)
++    {
++        target_count++;
++        TRACE("  target=%p hwnd=%p root=%p\n", t, t->hwnd, t->root);
++        if (t->root) wayland_compose_walk_visual(t, t->root);
++    }
++    d->pending_commit = FALSE;
++    if (d->cs_init) LeaveCriticalSection(&d->cs);
++    if (!target_count) WARN("Commit with no targets registered\n");
++    return S_OK;
++}
++
++static HRESULT WINAPI device_WaitForCommitCompletion(IDCompositionDesktopDevice *iface)
++{ TRACE("\n"); return S_OK; }
++
++static HRESULT WINAPI device_GetFrameStatistics(IDCompositionDesktopDevice *iface,
++                                                 DCOMPOSITION_FRAME_STATISTICS *s)
++{
++    if (s) memset(s, 0, sizeof(*s));
++    return S_OK;
++}
++
++static HRESULT WINAPI device_CreateVisual(IDCompositionDesktopDevice *iface, IDCompositionVisual2 **out)
++{
++    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_visual *v = dcomp_visual_create(d);
++    if (!v) { *out = NULL; return E_OUTOFMEMORY; }
++    *out = &v->IDCompositionVisual2_iface;
++    return S_OK;
++}
++
++static HRESULT WINAPI device_CreateSurfaceFactory(IDCompositionDesktopDevice *iface,
++                                                   IUnknown *rendering_device,
++                                                   IDCompositionSurfaceFactory **out)
++{
++    FIXME("not implemented\n");
++    *out = NULL;
+     return E_NOTIMPL;
+ }
++
++static HRESULT WINAPI device_CreateSurface(IDCompositionDesktopDevice *iface,
++                                            UINT w, UINT h, DXGI_FORMAT fmt, DXGI_ALPHA_MODE am,
++                                            IDCompositionSurface **out)
++{
++    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_surface *s = dcomp_surface_create(d, w, h, fmt, am);
++    if (!s) { *out = NULL; return E_OUTOFMEMORY; }
++    *out = &s->IDCompositionSurface_iface;
++    return S_OK;
++}
++
++static HRESULT WINAPI device_CreateVirtualSurface(IDCompositionDesktopDevice *iface,
++                                                   UINT w, UINT h, DXGI_FORMAT fmt, DXGI_ALPHA_MODE am,
++                                                   IDCompositionVirtualSurface **out)
++{ FIXME("not implemented\n"); *out = NULL; return E_NOTIMPL; }
++
++#define DEV_STUB_OK(name, ret_type, out_name) \
++    static HRESULT WINAPI device_##name(IDCompositionDesktopDevice *iface, ret_type **out_name) \
++    { FIXME("stub: " #name "\n"); *out_name = NULL; return E_NOTIMPL; }
++
++DEV_STUB_OK(CreateTranslateTransform,    IDCompositionTranslateTransform,    out)
++DEV_STUB_OK(CreateScaleTransform,        IDCompositionScaleTransform,        out)
++DEV_STUB_OK(CreateRotateTransform,       IDCompositionRotateTransform,       out)
++DEV_STUB_OK(CreateSkewTransform,         IDCompositionSkewTransform,         out)
++DEV_STUB_OK(CreateMatrixTransform,       IDCompositionMatrixTransform,       out)
++DEV_STUB_OK(CreateTranslateTransform3D,  IDCompositionTranslateTransform3D,  out)
++DEV_STUB_OK(CreateScaleTransform3D,      IDCompositionScaleTransform3D,      out)
++DEV_STUB_OK(CreateRotateTransform3D,     IDCompositionRotateTransform3D,     out)
++DEV_STUB_OK(CreateMatrixTransform3D,     IDCompositionMatrixTransform3D,     out)
++DEV_STUB_OK(CreateEffectGroup,           IDCompositionEffectGroup,           out)
++DEV_STUB_OK(CreateRectangleClip,         IDCompositionRectangleClip,         out)
++DEV_STUB_OK(CreateAnimation,             IDCompositionAnimation,             out)
++
++static HRESULT WINAPI device_CreateTransformGroup(IDCompositionDesktopDevice *iface,
++                                                   IDCompositionTransform **transforms,
++                                                   UINT elements, IDCompositionTransform **out)
++{ FIXME("stub\n"); *out = NULL; return E_NOTIMPL; }
++
++static HRESULT WINAPI device_CreateTransform3DGroup(IDCompositionDesktopDevice *iface,
++                                                     IDCompositionTransform3D **transforms,
++                                                     UINT elements, IDCompositionTransform3D **out)
++{ FIXME("stub\n"); *out = NULL; return E_NOTIMPL; }
++
++static HRESULT WINAPI device_CreateTargetForHwnd(IDCompositionDesktopDevice *iface,
++                                                  HWND hwnd, BOOL topmost,
++                                                  IDCompositionTarget **out)
++{
++    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_target *t = dcomp_target_create(d, hwnd, topmost);
++    if (!t) { *out = NULL; return E_OUTOFMEMORY; }
++    *out = &t->IDCompositionTarget_iface;
++    return S_OK;
++}
++
++static HRESULT WINAPI device_CreateSurfaceFromHandle(IDCompositionDesktopDevice *iface,
++                                                      HANDLE handle, IUnknown **out)
++{ FIXME("stub handle=%p\n", handle); *out = NULL; return E_NOTIMPL; }
++
++static HRESULT WINAPI device_CreateSurfaceFromHwnd(IDCompositionDesktopDevice *iface,
++                                                    HWND hwnd, IUnknown **out)
++{ FIXME("stub hwnd=%p\n", hwnd); *out = NULL; return E_NOTIMPL; }
++
++static const IDCompositionDesktopDeviceVtbl dcomp_device_vtbl =
++{
++    /* IUnknown */
++    device_QueryInterface, device_AddRef, device_Release,
++    /* IDCompositionDevice2 */
++    device_Commit, device_WaitForCommitCompletion, device_GetFrameStatistics,
++    device_CreateVisual, device_CreateSurfaceFactory,
++    device_CreateSurface, device_CreateVirtualSurface,
++    device_CreateTranslateTransform, device_CreateScaleTransform,
++    device_CreateRotateTransform, device_CreateSkewTransform, device_CreateMatrixTransform,
++    device_CreateTransformGroup,
++    device_CreateTranslateTransform3D, device_CreateScaleTransform3D,
++    device_CreateRotateTransform3D, device_CreateMatrixTransform3D,
++    device_CreateTransform3DGroup,
++    device_CreateEffectGroup, device_CreateRectangleClip, device_CreateAnimation,
++    /* IDCompositionDesktopDevice */
++    device_CreateTargetForHwnd, device_CreateSurfaceFromHandle, device_CreateSurfaceFromHwnd,
++};
++
++/* ─────────────────────── dll entry points ─────────────────────── */
++
++static HRESULT dcomp_create_device(IUnknown *rendering_device, REFIID iid, void **out)
++{
++    struct dcomp_device *d;
++    HRESULT hr;
++
++    if (!out) return E_POINTER;
++    *out = NULL;
++
++    if (!IsEqualGUID(iid, &IID_IDCompositionDevice2) &&
++        !IsEqualGUID(iid, &IID_IDCompositionDesktopDevice) &&
++        !IsEqualGUID(iid, &IID_IUnknown))
++    {
++        FIXME("unsupported iid %s\n", debugstr_guid(iid));
++        return E_NOINTERFACE;
++    }
++
++    d = calloc(1, sizeof(*d));
++    if (!d) return E_OUTOFMEMORY;
++    d->IDCompositionDesktopDevice_iface.lpVtbl = &dcomp_device_vtbl;
++    d->ref = 1;
++    list_init(&d->targets);
++    list_init(&d->visuals);
++    list_init(&d->surfaces);
++    InitializeCriticalSection(&d->cs);
++    d->cs_init = TRUE;
++
++    if (rendering_device)
++    {
++        d->rendering_device = rendering_device;
++        IUnknown_AddRef(rendering_device);
++        hr = IUnknown_QueryInterface(rendering_device, &IID_ID3D11Device, (void **)&d->d3d11_device);
++        if (FAILED(hr))
++        {
++            WARN("rendering_device is not ID3D11Device hr=%#lx (BeginDraw will fail)\n", hr);
++            d->d3d11_device = NULL;
++        }
++    }
++
++    /* Ticker thread — bounded by SendMessageTimeoutW(50ms) so it cannot wedge
++     * CEF's main thread. CEF only Commits once but Presents every frame on the
++     * swap chain bound into the visual tree, so without the ticker the
++     * displayed content freezes at the first frame. */
++    d->tick_stop = CreateEventW(NULL, TRUE, FALSE, NULL);
++    /* WINE_DCOMP_NO_TICK=1 disables the dcomp ticker (useful for
++     * debugging whether the ticker is starving CEF's input message pump). */
++    if (!getenv("WINE_DCOMP_NO_TICK"))
++    {
++        d->tick_thread = CreateThread(NULL, 0, wayland_compose_tick_thread, d, 0, NULL);
++        if (!d->tick_thread) WARN(" ticker thread creation failed\n");
++    }
++    else TRACE("dcomp: ticker disabled via WINE_DCOMP_NO_TICK\n");
++
++    *out = &d->IDCompositionDesktopDevice_iface;
++    TRACE("created device=%p (d3d11=%p ticker=%p)\n", d, d->d3d11_device, d->tick_thread);
++    return S_OK;
++}
++
++HRESULT WINAPI DCompositionCreateDevice(IDXGIDevice *dxgi_device, REFIID iid, void **out)
++{
++    TRACE("%p %s %p\n", dxgi_device, debugstr_guid(iid), out);
++    return dcomp_create_device((IUnknown *)dxgi_device, iid, out);
++}
++
++HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **out)
++{
++    TRACE("%p %s %p\n", rendering_device, debugstr_guid(iid), out);
++    return dcomp_create_device(rendering_device, iid, out);
++}
++
++HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **out)
++{
++    TRACE("%p %s %p\n", rendering_device, debugstr_guid(iid), out);
++    return dcomp_create_device(rendering_device, iid, out);
++}
+
+-- 
+2.51.2

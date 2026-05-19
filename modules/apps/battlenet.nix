@@ -9,6 +9,12 @@ let
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
   scaleFactor = if primary == null then 1.0 else primary.scaleFactor;
   logPixels = builtins.floor (96.0 * scaleFactor + 0.5);
+  # scwhine: DXVK config — enableDummyCompositionSwapchain lets CEF's
+  # IDXGIFactory2::CreateSwapChainForComposition return a real swap chain
+  # instead of E_NOTIMPL, so BNet's launcher keeps the DComp path alive.
+  dxvkConf = pkgs.writeText "scwhine-dxvk.conf" ''
+    dxgi.enableDummyCompositionSwapchain = True
+  '';
   mkLauncher = { name, label, waylandHdr }: rec {
     launcher = pkgs.writeShellApplication {
       inherit name;
@@ -25,15 +31,23 @@ let
           WINEPREFIX="${prefix}" \
           GAMEID=umu-battlenet \
           PROTONPATH="${proton}" \
-          PROTON_USE_WOW64=0 \
+          PROTON_USE_WOW64=1 \
           WINE_SIMULATE_WRITECOPY=1 \
+          DXVK_CONFIG_FILE="${dxvkConf}" \
           ${lib.optionalString waylandHdr ''
           PROTON_ENABLE_WAYLAND=1 \
           PROTON_ENABLE_HDR=1 \
           DXVK_HDR=1 \
           ENABLE_HDR_WSI=1 \
-        ''}umu-run "$EXE" --force-device-scale-factor=${toString scaleFactor} --high-dpi-support=1
+        ''}umu-run "$EXE" --high-dpi-support=1 --force-device-scale-factor=${toString scaleFactor}
       '';
+      # CEF reads --force-device-scale-factor (and the matching LogPixels we
+      # set in user.reg above) to size its DComp swap chain at full device-
+      # pixel resolution. With LogPixels=240 (96*2.5) + scale=2.5, BNet's wine
+      # HWND is created at 3000x2000 device pixels = 1200x800 logical, and
+      # CEF renders the launcher at 2.5x detail. My subsurface viewport then
+      # maps the 3000x2000 buffer to 1200x800 surface units, which the
+      # compositor displays at 1:1 device pixels — crisp, no bilinear.
     };
     desktop = pkgs.makeDesktopItem {
       inherit name;

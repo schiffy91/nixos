@@ -1,9 +1,30 @@
-From 41f90a385571868d2234c3facffb70a5b486937b Mon Sep 17 00:00:00 2001
-From: scwhine <scwhine@fractal-north>
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 18 May 2026 19:54:23 -0700
-Subject: [PATCH 2/4] scwhine patch 2: pUpdateLayeredWindow +
- ensure_after_configure
+Subject: [PATCH] winewayland.drv: Hook pUpdateLayeredWindow and refresh after WM_WAYLAND_CONFIGURE.
 
+Two related fixes for layered windows under the Wayland driver:
+
+1. WAYLAND_UpdateLayeredWindow was missing from the driver's
+   user_driver_funcs table, so UpdateLayeredWindow / SetLayered-
+   WindowAttributes silently no-op'd and the window stayed
+   blank.  Wire it up to ensure_window_surface_contents.
+
+2. When the compositor reconfigures the xdg_surface (e.g. on
+   output add/remove or DPI change), the existing buffer is
+   dropped but the window proc isn't notified to redraw.
+   Trigger ensure_window_surface_contents from the
+   WM_WAYLAND_CONFIGURE handler so the next commit has a buffer.
+
+Affects: any layered toplevel (tooltip-style overlays, the BNet
+login splash, splash screens of Win32 installers).
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/waylanddrv.h        |    1 +
+ dlls/winewayland.drv/waylanddrv_main.c   |    1 +
+ dlls/winewayland.drv/window.c            |    9 ++++++++-
+ 3 files changed, 10 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
 index cba1ee60..8a035bda 100644
@@ -55,3 +76,5 @@ index 4decc0f8..5d89b25d 100644
 -- 
 2.53.0
 
+-- 
+2.51.2

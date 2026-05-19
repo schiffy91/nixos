@@ -1,20 +1,25 @@
-# scwhine-proton — GE-Proton10-34 with winewayland.drv + CEF hack patches.
+# scwhine-proton — GE-Proton10-34 with winewayland.drv + CEF accel patches.
 #
 # Builds the EXACT wine GE-Proton10-34 uses (ValveSoftware/wine at commit
 # 1729f00) with the full 504-patch GE wine-wayland hotfix series, then
-# layers our 4 scwhine patches on top.  Replaces only the changed binaries
-# (winewayland.drv unix lib + kernelbase.dll PE/unix) in the GE-Proton
-# binary tarball; everything else (DXVK, VKD3D, Proton scripts) stays as-is.
+# layers our scwhine patch series on top.  Replaces only the changed
+# binaries (winewayland.drv unix lib + win32u.so + dcomp.dll + dxgi.dll)
+# in the GE-Proton binary tarball; everything else stays as-is.
 #
-# Patches (in order):
-#   1. Non-blocking second Wayland roundtrip — fixes CEF IPC deadlock that
-#      caused KDE to grey-out the launcher window after 4 seconds.
-#   2. pUpdateLayeredWindow hook + ensure_window_surface_contents after
-#      WM_WAYLAND_CONFIGURE — fixes blank layered windows.
-#   3. Append `--disable-direct-composition` to Battle.net.exe CEF command
-#      line so CEF stops trying to use stub'd dcomp.dll.
-#   4. SNI StatusNotifierItem systray via libdbus — tray icon integration
-#      for KDE Plasma 6, GNOME+AppIndicator, Waybar; no XWayland.
+# Patches live under ./patches/<NN-bug-name>/*.patch, one subfolder per
+# bug or feature, applied in lexical subfolder order.  Each subfolder
+# carries a README explaining the bug, root cause, and fix.  Patch files
+# are in `git format-patch` style (Wine upstream convention) so they can
+# be submitted directly to wine-devel.
+#
+# Current series:
+#   01  CEF startup deadlock (non-blocking second Wayland roundtrip)
+#   02  Blank layered windows (pUpdateLayeredWindow + configure refresh)
+#   03  SNI StatusNotifierItem systray via libdbus
+#   04  Real DirectComposition impl (CEF accelerated rendering)
+#   05  dxgi.CreateSwapChainForComposition HWND_MESSAGE fallback
+#   06  winewayland.drv DXVK → wl_subsurface presenter bridge
+#   07  win32u: load_desktop_driver cross-process deadlock
 { stdenv
 , pkgs
 , fetchgit
@@ -40,7 +45,7 @@ let
   # GE-Proton binary tarball (DXVK, VKD3D-Proton, Proton scripts, mono, gecko)
   ge-proton-src = pkgs.proton-ge-bin.src;
 
-  # ── Source: Valve wine + 504 GE wayland patches + our 4 scwhine patches ──
+  # ── Source: Valve wine + 504 GE wayland patches + our 6 scwhine patches ──
   wine-scwhine-src = stdenv.mkDerivation {
     pname = "wine-scwhine-src";
     version = toolVersion;
@@ -76,9 +81,14 @@ let
         fi
       done
 
-      # Apply our 4 scwhine patches
-      for p in ${./patches}/*.patch; do
-        patch -p1 < "$p"
+      # Apply scwhine patch series: one subfolder per bug, lexical order.
+      # Within a subfolder, patch files apply in lexical order too (mostly a
+      # single 0001-*.patch but supports multi-patch series per bug).
+      for p in $(ls -d ${./patches}/*/ | sort); do
+        for q in $(ls "$p"*.patch 2>/dev/null | sort); do
+          echo "scwhine: applying $q"
+          patch -p1 < "$q"
+        done
       done
     '';
   };
@@ -103,10 +113,16 @@ let
     ];
 
     postPatch = ''
-      # Generate wine/vulkan.h (required by winewayland.drv/vulkan.c)
-      python3 dlls/winevulkan/make_vulkan \
+      # make_vulkan writes a cache under HOME; the nix builder's /homeless-shelter
+      # is read-only, so point HOME at $TMPDIR before running it.
+      HOME=$TMPDIR python3 dlls/winevulkan/make_vulkan \
         -x ${pkgs.vulkan-headers}/share/vulkan/registry/vk.xml \
         -X ${pkgs.vulkan-headers}/share/vulkan/registry/video.xml
+
+      # Wine source ships with autogen.sh, not a pre-generated ./configure —
+      # run it to produce ./configure from configure.ac.
+      ./tools/make_requests || true
+      HOME=$TMPDIR autoreconf -fi
     '';
 
     configureFlags = [
@@ -116,18 +132,22 @@ let
       "--disable-tests"
     ];
 
-    # Only build what we need
+    # Only build the binaries our patches actually touch. The base GE-Proton
+    # already ships a working kernelbase.dll(.so), and our patches don't
+    # modify kernelbase — skip rebuilding it.
     buildFlags = [
       "dlls/winewayland.drv/winewayland.so"
-      "dlls/kernelbase/all"
+      "dlls/dcomp/all"
+      "dlls/dxgi/all"
     ];
 
     installPhase = ''
       mkdir -p "$out/lib/wine/x86_64-unix" "$out/lib/wine/x86_64-windows" "$out/lib/wine/i386-windows"
-      cp dlls/winewayland.drv/winewayland.so          "$out/lib/wine/x86_64-unix/"
-      cp dlls/kernelbase/kernelbase.dll.so            "$out/lib/wine/x86_64-unix/"
-      cp dlls/kernelbase/x86_64-windows/kernelbase.dll "$out/lib/wine/x86_64-windows/"
-      cp dlls/kernelbase/i386-windows/kernelbase.dll   "$out/lib/wine/i386-windows/"
+      cp dlls/winewayland.drv/winewayland.so           "$out/lib/wine/x86_64-unix/"
+      cp dlls/dcomp/x86_64-windows/dcomp.dll           "$out/lib/wine/x86_64-windows/"
+      cp dlls/dcomp/i386-windows/dcomp.dll             "$out/lib/wine/i386-windows/"
+      cp dlls/dxgi/x86_64-windows/dxgi.dll             "$out/lib/wine/x86_64-windows/"
+      cp dlls/dxgi/i386-windows/dxgi.dll               "$out/lib/wine/i386-windows/"
     '';
 
     meta.platforms = [ "x86_64-linux" ];
@@ -143,6 +163,12 @@ in stdenv.mkDerivation {
   dontConfigure = true;
   dontBuild     = true;
 
+  # GE-Proton ships its own libraries inside files/lib/... that link against
+  # runtime libs (X11, alsa, pulse, gstreamer) supplied by Proton's
+  # pressure-vessel sandbox at runtime, not by the host. Don't fail the build
+  # over those missing deps — they're satisfied at game-launch time.
+  autoPatchelfIgnoreMissingDeps = true;
+
   installPhase = ''
     runHook preInstall
 
@@ -152,15 +178,17 @@ in stdenv.mkDerivation {
     mkdir -p "$out"
     cp -r . "$out/"
 
-    # Overlay our patched binaries
+    # Overlay our patched binaries on top of the GE-Proton tarball.
     cp "${wine-scwhine}/lib/wine/x86_64-unix/winewayland.so" \
        "$out/files/lib/wine/x86_64-unix/winewayland.so"
-    cp "${wine-scwhine}/lib/wine/x86_64-unix/kernelbase.dll.so" \
-       "$out/files/lib/wine/x86_64-unix/kernelbase.dll.so"
-    cp "${wine-scwhine}/lib/wine/x86_64-windows/kernelbase.dll" \
-       "$out/files/lib/wine/x86_64-windows/kernelbase.dll"
-    cp "${wine-scwhine}/lib/wine/i386-windows/kernelbase.dll" \
-       "$out/files/lib/wine/i386-windows/kernelbase.dll"
+    cp "${wine-scwhine}/lib/wine/x86_64-windows/dcomp.dll" \
+       "$out/files/lib/wine/x86_64-windows/dcomp.dll"
+    cp "${wine-scwhine}/lib/wine/i386-windows/dcomp.dll" \
+       "$out/files/lib/wine/i386-windows/dcomp.dll"
+    cp "${wine-scwhine}/lib/wine/x86_64-windows/dxgi.dll" \
+       "$out/files/lib/wine/x86_64-windows/dxgi.dll"
+    cp "${wine-scwhine}/lib/wine/i386-windows/dxgi.dll" \
+       "$out/files/lib/wine/i386-windows/dxgi.dll"
 
     cat > "$out/compatibilitytool.vdf" <<EOF
 "compatibilitytools"
