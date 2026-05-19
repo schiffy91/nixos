@@ -5,7 +5,10 @@
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.amdGpu}", SYMLINK+="dri/amd-card"
   '';
   boot = {
-    kernelParams = [ "amdgpu.dc=1" ];
+    kernelParams = [
+      "amdgpu.dc=1"
+      "plymouth.drm-device=/dev/dri/by-path/pci-${host.pci.amdGpu}-card"
+    ];
     consoleLogLevel = 0;  # silences MSFT8000 i2c spam
     kernelModules = [ "i2c-dev" ];
   };

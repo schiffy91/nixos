@@ -16,7 +16,10 @@ in {
   settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
 
   ##### Streaming Display #####
-  boot.kernelParams = [ "drm.edid_firmware=${connector}:${edid.passthru.firmwarePath}" ];
+  boot.kernelParams = [
+    "drm.edid_firmware=${connector}:${edid.passthru.firmwarePath}"
+    "video=${connector}:d"  # disable streaming connector during boot so Plymouth uses DP-1
+  ];
   hardware.firmware = [ edid ];
 
   # DP-3 stays always-on as a standalone display positioned off to the right.

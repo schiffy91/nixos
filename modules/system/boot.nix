@@ -14,6 +14,7 @@
     };
     initrd = {
       systemd.enable = true;
+      systemd.services.plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
       verbose = false;
     };
     plymouth = {
