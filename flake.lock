@@ -1,5 +1,27 @@
 {
   "nodes": {
+    "codex": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ],
+        "rust-overlay": "rust-overlay"
+      },
+      "locked": {
+        "lastModified": 1779118825,
+        "narHash": "sha256-pWQxDJZO+xbY8aax9QRQRtx/BJw+4CZRL65W3Od4Ep8=",
+        "owner": "openai",
+        "repo": "codex",
+        "rev": "05eb8678451435cbc8d79c6d8254276289f2bdf1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "openai",
+        "ref": "rust-v0.131.0",
+        "repo": "codex",
+        "type": "github"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1778106249,
@@ -100,7 +122,7 @@
           "nixpkgs-unstable"
         ],
         "pre-commit": "pre-commit",
-        "rust-overlay": "rust-overlay"
+        "rust-overlay": "rust-overlay_2"
       },
       "locked": {
         "lastModified": 1778702031,
@@ -196,6 +218,7 @@
     },
     "root": {
       "inputs": {
+        "codex": "codex",
         "disko": "disko",
         "home-manager": "home-manager",
         "lanzaboote": "lanzaboote",
@@ -205,6 +228,27 @@
       }
     },
     "rust-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "codex",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1769828398,
+        "narHash": "sha256-zmnvRUm15QrlKH0V1BZoiT3U+Q+tr+P5Osi8qgtL9fY=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "a1d32c90c8a4ea43e9586b7e5894c179d5747425",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_2": {
       "inputs": {
         "nixpkgs": [
           "lanzaboote",
