@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexanderschiffhauer@users.noreply.github.com>
+Date: Tue, 19 May 2026 23:25:00 -0700
+Subject: [PATCH] win32u: Bound desktop driver readiness wait.
+
+load_desktop_driver() sends WM_NULL to the desktop window with an
+unbounded send_message() call while waiting for the graphics driver to
+be ready.
+
+This can wedge when the caller owns the desktop window thread, since the
+reply would have to be handled by the waiting thread itself. It can also
+wedge when two processes enter the same driver-load path and each waits
+for the other to reply.
+
+Skip the send when the caller owns the desktop window thread, and bound
+the peer wait with SMTO_ABORTIFHUNG. The send is only a readiness
+barrier; timing out leaves the later property lookup to decide whether a
+driver is ready.
+
+Signed-off-by: Alexander Schiffhauer <alexanderschiffhauer@users.noreply.github.com>
+---
+ dlls/win32u/driver.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
+index 23624140208..6f5b52ef468 100644
+--- a/dlls/win32u/driver.c
++++ b/dlls/win32u/driver.c
+@@ -961,7 +961,11 @@ static BOOL load_desktop_driver( HWND hwnd )
+ 
+     asciiz_to_unicode( driver_load_error, "The explorer process failed to start." );  /* default error */
+     /* wait for graphics driver to be ready */
+-    send_message( hwnd, WM_NULL, 0, 0 );
++    if (get_window_thread( hwnd, NULL ) == GetCurrentThreadId())
++        TRACE( "skipping desktop driver readiness wait for owned hwnd %p\n", hwnd );
++    else
++        send_message_timeout( hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL,
++                              5000, FALSE );
+ 
+     guid_atom = HandleToULong( NtUserGetProp( hwnd, prop_nameW ));
+     memcpy( key, guid_key_prefixW, sizeof(guid_key_prefixW) );
+-- 
+2.50.1
+

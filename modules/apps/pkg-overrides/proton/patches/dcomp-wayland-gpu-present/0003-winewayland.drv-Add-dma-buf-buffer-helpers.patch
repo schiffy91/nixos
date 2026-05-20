@@ -1,22 +1,47 @@
-From 1f4870df60b3e2bb4c63c2b2d3c70f0ac38d94b1 Mon Sep 17 00:00:00 2001
+From f2c1fcc85b51ea36974d6ae85625431c3998e7c4 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 21:43:46 -0700
 Subject: [PATCH 3/4] winewayland.drv: Add dma-buf buffer helpers.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/wayland_surface.c | 76 ++++++++++++++++++++++++++
- dlls/winewayland.drv/waylanddrv.h      | 55 +++++++++++++++++++
- 2 files changed, 131 insertions(+)
+ dlls/winewayland.drv/wayland_surface.c | 128 +++++++++++++++++++++++++
+ dlls/winewayland.drv/waylanddrv.h      |  55 +++++++++++
+ 2 files changed, 183 insertions(+)
 
 diff --git a/dlls/winewayland.drv/wayland_surface.c b/dlls/winewayland.drv/wayland_surface.c
-index 88d6eab..caf1fa6 100644
+index 88d6eab..c2ef312 100644
 --- a/dlls/winewayland.drv/wayland_surface.c
 +++ b/dlls/winewayland.drv/wayland_surface.c
-@@ -627,6 +627,82 @@ void wayland_surface_attach_shm(struct wayland_surface *surface,
+@@ -627,6 +627,134 @@ void wayland_surface_attach_shm(struct wayland_surface *surface,
      surface->content_height = win_height;
  }
  
++struct wayland_dmabuf_create_result
++{
++    struct wl_buffer *wl_buffer;
++};
++
++static void dmabuf_params_created(void *data, struct zwp_linux_buffer_params_v1 *params,
++                                  struct wl_buffer *wl_buffer)
++{
++    struct wayland_dmabuf_create_result *result = data;
++
++    TRACE("dmabuf import created wl_buffer=%p params=%p\n", wl_buffer, params);
++    result->wl_buffer = wl_buffer;
++}
++
++static void dmabuf_params_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
++{
++    TRACE("dmabuf import failed params=%p result=%p\n", params, data);
++}
++
++static const struct zwp_linux_buffer_params_v1_listener dmabuf_params_listener =
++{
++    dmabuf_params_created,
++    dmabuf_params_failed,
++};
++
 +/**********************************************************************
 + *          wayland_dmabuf_buffer_create  (HW-accel)
 + *
@@ -27,8 +52,10 @@ index 88d6eab..caf1fa6 100644
 +                                                           uint32_t drm_format, uint64_t modifier,
 +                                                           uint32_t stride, uint32_t offset)
 +{
++    struct wayland_dmabuf_create_result result = {0};
 +    struct wayland_dmabuf_buffer *buf;
 +    struct zwp_linux_buffer_params_v1 *params;
++    struct wl_event_queue *queue;
 +
 +    if (!process_wayland.zwp_linux_dmabuf_v1)
 +    {
@@ -44,8 +71,20 @@ index 88d6eab..caf1fa6 100644
 +    buf = calloc(1, sizeof(*buf));
 +    if (!buf) return NULL;
 +
++    queue = wl_display_create_queue(process_wayland.wl_display);
++    if (!queue)
++    {
++        free(buf);
++        return NULL;
++    }
++
 +    buf->fd = dup(fd);
-+    if (buf->fd < 0) { free(buf); return NULL; }
++    if (buf->fd < 0)
++    {
++        wl_event_queue_destroy(queue);
++        free(buf);
++        return NULL;
++    }
 +    buf->width      = width;
 +    buf->height     = height;
 +    buf->drm_format = drm_format;
@@ -57,19 +96,32 @@ index 88d6eab..caf1fa6 100644
 +    params = zwp_linux_dmabuf_v1_create_params(process_wayland.zwp_linux_dmabuf_v1);
 +    if (!params)
 +    {
-+        close(buf->fd); free(buf);
++        close(buf->fd);
++        wl_event_queue_destroy(queue);
++        free(buf);
 +        return NULL;
 +    }
++    wl_proxy_set_queue((struct wl_proxy *)params, queue);
++    zwp_linux_buffer_params_v1_add_listener(params, &dmabuf_params_listener, &result);
++
 +    zwp_linux_buffer_params_v1_add(params, buf->fd, 0 /*plane*/, offset, stride,
 +                                   (uint32_t)(modifier >> 32),
 +                                   (uint32_t)(modifier & 0xffffffffu));
-+    buf->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params, width, height, drm_format, 0);
++    zwp_linux_buffer_params_v1_create(params, width, height, drm_format, 0);
++
++    if (wl_display_roundtrip_queue(process_wayland.wl_display, queue) == -1)
++        ERR("failed to dispatch dmabuf import result\n");
++
++    buf->wl_buffer = result.wl_buffer;
 +    zwp_linux_buffer_params_v1_destroy(params);
++    if (buf->wl_buffer)
++        wl_proxy_set_queue((struct wl_proxy *)buf->wl_buffer, process_wayland.wl_event_queue);
++    wl_event_queue_destroy(queue);
 +
 +    if (!buf->wl_buffer)
 +    {
-+        ERR("create_immed failed (fmt=0x%08x mod=0x%llx %dx%d)\n",
-+            drm_format, (unsigned long long)modifier, width, height);
++        WARN("dmabuf import failed (fmt=0x%08x mod=0x%llx %dx%d stride=%u offset=%u)\n",
++             drm_format, (unsigned long long)modifier, width, height, stride, offset);
 +        close(buf->fd); free(buf);
 +        return NULL;
 +    }

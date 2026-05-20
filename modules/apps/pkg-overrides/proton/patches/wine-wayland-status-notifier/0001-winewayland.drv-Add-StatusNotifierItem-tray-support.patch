@@ -23,10 +23,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  dlls/winewayland.drv/Makefile.in         |    3 ++-
  dlls/winewayland.drv/dllmain.c           |    7 +++++++
  dlls/winewayland.drv/unixlib.h           |    1 +
- dlls/winewayland.drv/wayland_systray.c   |  538 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ dlls/winewayland.drv/wayland_systray.c   |  557 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  dlls/winewayland.drv/waylanddrv.h        |    5 +++++
  dlls/winewayland.drv/waylanddrv_main.c   |   11 ++++++++++-
- 6 files changed, 565 insertions(+), 2 deletions(-)
+ 6 files changed, 584 insertions(+), 2 deletions(-)
  create mode 100644 dlls/winewayland.drv/wayland_systray.c
 
 diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
@@ -93,7 +93,7 @@ new file mode 100644
 index 00000000..994f63c7
 --- /dev/null
 +++ b/dlls/winewayland.drv/wayland_systray.c
-@@ -0,0 +1,581 @@
+@@ -0,0 +1,600 @@
 +/*
 + * Wayland systray via freedesktop StatusNotifierItem (D-Bus)
 + *
@@ -388,6 +388,20 @@ index 00000000..994f63c7
 +                      sni_mouse_lparam(item->window_hwnd, x, y));
 +}
 +
++static void cancel_tray_context_menu(struct sni_item *item)
++{
++    NtUserPostMessage(item->window_hwnd, WM_CANCELMODE, 0, 0);
++    if (item->owner_hwnd != item->window_hwnd)
++        NtUserPostMessage(item->owner_hwnd, WM_CANCELMODE, 0, 0);
++}
++
++static void finish_tray_context_menu(struct sni_item *item)
++{
++    NtUserPostMessage(item->window_hwnd, WM_NULL, 0, 0);
++    if (item->owner_hwnd != item->window_hwnd)
++        NtUserPostMessage(item->owner_hwnd, WM_NULL, 0, 0);
++}
++
 +/* -----------------------------------------------------------------------
 + * D-Bus message handler
 + * ----------------------------------------------------------------------- */
@@ -479,9 +493,14 @@ index 00000000..994f63c7
 +                                  DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y,
 +                                  DBUS_TYPE_INVALID);
 +            if (context_menu)
++            {
++                cancel_tray_context_menu(item);
 +                NtUserSetForegroundWindow(item->owner_hwnd);
++            }
 +            post_tray_mouse_message(item, down_msg, x, y);
 +            post_tray_mouse_message(item, up_msg, x, y);
++            if (context_menu)
++                finish_tray_context_menu(item);
 +        }
 +        reply = dbus_message_new_method_return(msg);
 +        goto send;

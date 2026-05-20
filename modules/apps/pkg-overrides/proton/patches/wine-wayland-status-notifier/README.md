@@ -17,13 +17,13 @@ Implement `pSystrayDock*` against the StatusNotifierItem D-Bus spec -
 KDE's freedesktop-pending standard adopted by Plasma 6, GNOME (via the
 AppIndicator extension), waybar, and most other Wayland shells.
 
-The active Battle.net build keeps GE-Proton's stock `win32u` and
-`explorer` binaries, because live tests showed rebuilt versions
-destabilize libcef before the launcher settles.  For now the Wayland
-driver reads the existing explorer tray icon payload and exports it as a
-StatusNotifierItem service.  A future upstream pass should replace that
-private layout dependency with a driver-facing snapshot once the full
-`win32u`/`explorer` stack is validated.
+The active Battle.net build rebuilds the matching Wine PE and Unix-side
+modules touched by this series, including `win32u`, so generated Unix
+call tables stay ABI-matched. For now the Wayland driver reads the
+existing explorer tray icon payload and exports it as a
+StatusNotifierItem service. A future upstream pass should replace that
+private layout dependency with a driver-facing snapshot type before this
+is submitted outside the local Proton package.
 
 ## Affected upstream
 `dlls/winewayland.drv/{Makefile.in, waylanddrv.h, waylanddrv_main.c,

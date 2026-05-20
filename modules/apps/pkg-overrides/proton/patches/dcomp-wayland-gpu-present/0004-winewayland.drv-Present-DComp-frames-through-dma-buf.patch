@@ -1,4 +1,4 @@
-From 97f90f808952f42f5a74d3305ff87b5ace861ab9 Mon Sep 17 00:00:00 2001
+From d341e163a2696689bf471fe7f0abb764bd42ce59 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 21:43:51 -0700
 Subject: [PATCH 4/4] winewayland.drv: Present DComp frames through dma-buf.
@@ -6,9 +6,9 @@ Subject: [PATCH 4/4] winewayland.drv: Present DComp frames through dma-buf.
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/Makefile.in     |   1 +
- dlls/winewayland.drv/wayland_dcomp.c | 649 +++++++++++++++++++++++++++
+ dlls/winewayland.drv/wayland_dcomp.c | 657 +++++++++++++++++++++++++++
  dlls/winewayland.drv/window.c        |   7 +
- 3 files changed, 657 insertions(+)
+ 3 files changed, 665 insertions(+)
  create mode 100644 dlls/winewayland.drv/wayland_dcomp.c
 
 diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
@@ -28,7 +28,7 @@ new file mode 100644
 index 0000000..bcd1f3d
 --- /dev/null
 +++ b/dlls/winewayland.drv/wayland_dcomp.c
-@@ -0,0 +1,649 @@
+@@ -0,0 +1,657 @@
 +/*
 + * GPU-backed DComp presentation bridge for winewayland.
 + *
@@ -72,6 +72,7 @@ index 0000000..bcd1f3d
 +#define DRM_FORMAT_ABGR2101010    0x30334241
 +#define DRM_FORMAT_ABGR16161616F  0x48344241
 +#define DRM_FORMAT_MOD_LINEAR     0
++#define DRM_FORMAT_MOD_INVALID    0x00ffffffffffffffull
 +
 +#define FRAME_TIMEOUT_NS          16000000ull
 +
@@ -360,6 +361,13 @@ index 0000000..bcd1f3d
 +    target->dmabuf_buffer = wayland_dmabuf_buffer_create(fd, width, height, drm_format,
 +                                                         DRM_FORMAT_MOD_LINEAR,
 +                                                         target->stride, (uint32_t)layout.offset);
++    if (!target->dmabuf_buffer)
++    {
++        TRACE("retrying dmabuf import with implicit modifier\n");
++        target->dmabuf_buffer = wayland_dmabuf_buffer_create(fd, width, height, drm_format,
++                                                             DRM_FORMAT_MOD_INVALID,
++                                                             target->stride, (uint32_t)layout.offset);
++    }
 +    close(fd);
 +    if (!target->dmabuf_buffer)
 +    {
@@ -698,4 +706,3 @@ index dc90ec6..1685be1 100644
          return 0;
 -- 
 2.53.0
-

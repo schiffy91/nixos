@@ -32,7 +32,8 @@ deliberately isolated to this topic series.
 ## Test Focus
 * Patch application against Valve Wine `1729f00` plus GE-Proton10-34
   wine-wayland hotfixes.
-* Build artifacts for `dcomp.dll`, `dxgi.dll`, `winewayland.drv`, and
-  `winewayland.so` are overlaid into the Proton tool.
+* Build artifacts for `dcomp.dll`, `dxgi.dll`, `winewayland.drv`,
+  `winewayland.so`, `winevulkan`, and `win32u` are overlaid into the
+  Proton tool for both x86_64 and i386 where GE-Proton ships them.
 * Runtime logs should show the launcher using D3D11/DXGI/DComp and the
   Wayland driver creating dma-buf-backed presentation surfaces.

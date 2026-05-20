@@ -1,8 +1,10 @@
 # scwhine-proton - GE-Proton10-34 with winewayland.drv cleanup patches.
 #
 # Builds the exact Wine and DXVK revisions GE-Proton10-34 uses, then layers
-# our active patch series on top. Replaces only the changed binaries touched by
-# the active series in the GE-Proton binary tarball; everything else stays as-is.
+# our active patch series on top. Replaces the changed binaries touched by the
+# active series plus the matching 32/64-bit Unix-side Wine modules. The PE and
+# Unix halves must stay ABI-matched when D3D11/CEF exercises generated Unix
+# thunk tables.
 #
 # Patches live under ./patches/<topic>/, one subfolder per upstreamable topic.
 # The default package applies the explicit activePatchSeries list below, not a
@@ -14,8 +16,10 @@
 #   Blank layered windows (pUpdateLayeredWindow only)
 #   SNI StatusNotifierItem systray via libdbus (winewayland only)
 #   DComp/DXGI/winewayland GPU presentation path
+#   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
 #   DXVK Battle.net composition swap-chain profile
 { stdenv
+, stdenv_32bit
 , pkgs
 , fetchgit
 , fetchFromGitHub
@@ -56,6 +60,7 @@ let
     ./patches/dcomp-wayland-gpu-present/0002-dxgi-Create-a-hidden-swap-chain-for-composition.patch
     ./patches/dcomp-wayland-gpu-present/0003-winewayland.drv-Add-dma-buf-buffer-helpers.patch
     ./patches/dcomp-wayland-gpu-present/0004-winewayland.drv-Present-DComp-frames-through-dma-buf.patch
+    ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
   ];
 
   dxvkPatchSeries = [
@@ -110,7 +115,7 @@ let
   };
 
   # -- Build: configure wine and build only artifacts touched by active patches
-  wine-scwhine = stdenv.mkDerivation {
+  wine-scwhine = stdenv_32bit.mkDerivation {
     pname = "wine-scwhine";
     version = toolVersion;
     src = wine-scwhine-src;
@@ -122,11 +127,17 @@ let
       pkgsCross.mingw32.buildPackages.gcc
     ];
 
-    buildInputs = with pkgs; [
-      wayland dbus libxkbcommon mesa libGL
-      vulkan-headers vulkan-loader
-      xorg.libX11 freetype fontconfig
-    ];
+    buildInputs =
+      (with pkgs; [
+        wayland dbus libxkbcommon mesa libGL
+        vulkan-headers vulkan-loader
+        xorg.libX11 freetype fontconfig
+      ])
+      ++ (with pkgs.pkgsi686Linux; [
+        wayland dbus libxkbcommon mesa libGL
+        vulkan-loader
+        xorg.libX11 freetype fontconfig
+      ]);
 
     postPatch = ''
       # make_vulkan writes a cache under HOME; the nix builder's /homeless-shelter
@@ -141,19 +152,45 @@ let
       HOME=$TMPDIR autoreconf -fi
     '';
 
-    configureFlags = [
-      "--enable-archs=x86_64,i386"
-      "--without-x"
-      "--without-freetype"
-      "--disable-tests"
-    ];
+    dontConfigure = true;
 
-    # Only build the binaries our active patches actually touch.
-    buildFlags = [
-      "dlls/dcomp/all"
-      "dlls/dxgi/all"
-      "dlls/winewayland.drv/all"
-    ];
+    buildPhase = ''
+      runHook preBuild
+
+      source_dir="$PWD"
+      mkdir -p "$TMPDIR/wine64" "$TMPDIR/wine32"
+
+      # GE-Proton ships the shared WoW64 layout with separate i386-unix and
+      # x86_64-unix modules. Build both trees so generated Unix-call tables
+      # match their corresponding PE DLLs.
+      cd "$TMPDIR/wine64"
+      HOME=$TMPDIR "$source_dir/configure" \
+        --enable-win64 \
+        --without-x \
+        --without-freetype \
+        --disable-tests
+      make -j"$NIX_BUILD_CORES" \
+        dlls/dcomp/all \
+        dlls/dxgi/all \
+        dlls/win32u/all \
+        dlls/winevulkan/all \
+        dlls/winewayland.drv/all
+
+      cd "$TMPDIR/wine32"
+      HOME=$TMPDIR "$source_dir/configure" \
+        --with-wine64="$TMPDIR/wine64" \
+        --without-x \
+        --without-freetype \
+        --disable-tests
+      make -j"$NIX_BUILD_CORES" \
+        dlls/dcomp/all \
+        dlls/dxgi/all \
+        dlls/win32u/all \
+        dlls/winevulkan/all \
+        dlls/winewayland.drv/all
+
+      runHook postBuild
+    '';
 
     installPhase = ''
       copy_required() {
@@ -171,24 +208,57 @@ let
         return 1
       }
 
+      wine64_build="$TMPDIR/wine64"
+      wine32_build="$TMPDIR/wine32"
+
       copy_required x86_64-unix/winewayland.so \
-        dlls/winewayland.drv/winewayland.so \
-        dlls/winewayland.drv/x86_64-unix/winewayland.so
+        "$wine64_build/dlls/winewayland.drv/winewayland.so" \
+        "$wine64_build/dlls/winewayland.drv/x86_64-unix/winewayland.so"
+      copy_required i386-unix/winewayland.so \
+        "$wine32_build/dlls/winewayland.drv/winewayland.so" \
+        "$wine32_build/dlls/winewayland.drv/i386-unix/winewayland.so"
+      copy_required x86_64-unix/winevulkan.so \
+        "$wine64_build/dlls/winevulkan/winevulkan.so" \
+        "$wine64_build/dlls/winevulkan/x86_64-unix/winevulkan.so"
+      copy_required i386-unix/winevulkan.so \
+        "$wine32_build/dlls/winevulkan/winevulkan.so" \
+        "$wine32_build/dlls/winevulkan/i386-unix/winevulkan.so"
+      copy_required x86_64-unix/win32u.so \
+        "$wine64_build/dlls/win32u/win32u.so" \
+        "$wine64_build/dlls/win32u/x86_64-unix/win32u.so"
+      copy_required i386-unix/win32u.so \
+        "$wine32_build/dlls/win32u/win32u.so" \
+        "$wine32_build/dlls/win32u/i386-unix/win32u.so"
       copy_required x86_64-windows/winewayland.drv \
-        dlls/winewayland.drv/x86_64-windows/winewayland.drv \
-        dlls/winewayland.drv/winewayland.drv
+        "$wine64_build/dlls/winewayland.drv/x86_64-windows/winewayland.drv" \
+        "$wine64_build/dlls/winewayland.drv/winewayland.drv"
       copy_required i386-windows/winewayland.drv \
-        dlls/winewayland.drv/i386-windows/winewayland.drv
+        "$wine32_build/dlls/winewayland.drv/i386-windows/winewayland.drv" \
+        "$wine32_build/dlls/winewayland.drv/winewayland.drv"
       copy_required x86_64-windows/dcomp.dll \
-        dlls/dcomp/x86_64-windows/dcomp.dll \
-        dlls/dcomp/dcomp.dll
+        "$wine64_build/dlls/dcomp/x86_64-windows/dcomp.dll" \
+        "$wine64_build/dlls/dcomp/dcomp.dll"
       copy_required i386-windows/dcomp.dll \
-        dlls/dcomp/i386-windows/dcomp.dll
+        "$wine32_build/dlls/dcomp/i386-windows/dcomp.dll" \
+        "$wine32_build/dlls/dcomp/dcomp.dll"
       copy_required x86_64-windows/dxgi.dll \
-        dlls/dxgi/x86_64-windows/dxgi.dll \
-        dlls/dxgi/dxgi.dll
+        "$wine64_build/dlls/dxgi/x86_64-windows/dxgi.dll" \
+        "$wine64_build/dlls/dxgi/dxgi.dll"
       copy_required i386-windows/dxgi.dll \
-        dlls/dxgi/i386-windows/dxgi.dll
+        "$wine32_build/dlls/dxgi/i386-windows/dxgi.dll" \
+        "$wine32_build/dlls/dxgi/dxgi.dll"
+      copy_required x86_64-windows/winevulkan.dll \
+        "$wine64_build/dlls/winevulkan/x86_64-windows/winevulkan.dll" \
+        "$wine64_build/dlls/winevulkan/winevulkan.dll"
+      copy_required i386-windows/winevulkan.dll \
+        "$wine32_build/dlls/winevulkan/i386-windows/winevulkan.dll" \
+        "$wine32_build/dlls/winevulkan/winevulkan.dll"
+      copy_required x86_64-windows/win32u.dll \
+        "$wine64_build/dlls/win32u/x86_64-windows/win32u.dll" \
+        "$wine64_build/dlls/win32u/win32u.dll"
+      copy_required i386-windows/win32u.dll \
+        "$wine32_build/dlls/win32u/i386-windows/win32u.dll" \
+        "$wine32_build/dlls/win32u/win32u.dll"
 
     '';
 
@@ -308,12 +378,21 @@ in stdenv.mkDerivation {
     }
 
     copy_patched x86_64-unix/winewayland.so
+    copy_patched i386-unix/winewayland.so
+    copy_patched x86_64-unix/winevulkan.so
+    copy_patched i386-unix/winevulkan.so
+    copy_patched x86_64-unix/win32u.so
+    copy_patched i386-unix/win32u.so
     copy_patched x86_64-windows/winewayland.drv
     copy_patched i386-windows/winewayland.drv
     copy_patched x86_64-windows/dcomp.dll
     copy_patched i386-windows/dcomp.dll
     copy_patched x86_64-windows/dxgi.dll
     copy_patched i386-windows/dxgi.dll
+    copy_patched x86_64-windows/winevulkan.dll
+    copy_patched i386-windows/winevulkan.dll
+    copy_patched x86_64-windows/win32u.dll
+    copy_patched i386-windows/win32u.dll
 
     copy_dxvk() {
       local src="$1"
