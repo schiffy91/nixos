@@ -1,33 +1,21 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 0fc710fa184e293d46ee82389c2e69941d9a09e3 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Mon, 18 May 2026 19:54:23 -0700
-Subject: [PATCH] winewayland.drv: Hook pUpdateLayeredWindow and refresh after WM_WAYLAND_CONFIGURE.
+Date: Tue, 19 May 2026 14:30:45 -0700
+Subject: [PATCH] winewayland.drv: Hook UpdateLayeredWindow.
 
-Two related fixes for layered windows under the Wayland driver:
+Wire the Wayland user driver pUpdateLayeredWindow entry point to the existing surface-content refresh path. This lets layered windows repaint through the Wayland driver instead of leaving UpdateLayeredWindow calls as no-ops.
 
-1. WAYLAND_UpdateLayeredWindow was missing from the driver's
-   user_driver_funcs table, so UpdateLayeredWindow / SetLayered-
-   WindowAttributes silently no-op'd and the window stayed
-   blank.  Wire it up to ensure_window_surface_contents.
-
-2. When the compositor reconfigures the xdg_surface (e.g. on
-   output add/remove or DPI change), the existing buffer is
-   dropped but the window proc isn't notified to redraw.
-   Trigger ensure_window_surface_contents from the
-   WM_WAYLAND_CONFIGURE handler so the next commit has a buffer.
-
-Affects: any layered toplevel (tooltip-style overlays, the BNet
-login splash, splash screens of Win32 installers).
+Do not refresh on WM_WAYLAND_CONFIGURE in this patch; that path changes configure-time geometry behavior and stays disabled until it can be validated separately.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/waylanddrv.h        |    1 +
- dlls/winewayland.drv/waylanddrv_main.c   |    1 +
- dlls/winewayland.drv/window.c            |    9 ++++++++-
- 3 files changed, 10 insertions(+), 1 deletion(-)
+ dlls/winewayland.drv/waylanddrv.h      | 1 +
+ dlls/winewayland.drv/waylanddrv_main.c | 1 +
+ dlls/winewayland.drv/window.c          | 7 +++++++
+ 3 files changed, 9 insertions(+)
 
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index cba1ee60..8a035bda 100644
+index cba1ee6..8a035bd 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
 @@ -601,6 +601,7 @@ void WAYLAND_SetWindowIcon(HWND hwnd, UINT type, HICON icon);
@@ -39,7 +27,7 @@ index cba1ee60..8a035bda 100644
  LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
  void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,
 diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
-index c10510fa..a4e6633a 100644
+index c10510f..a4e6633 100644
 --- a/dlls/winewayland.drv/waylanddrv_main.c
 +++ b/dlls/winewayland.drv/waylanddrv_main.c
 @@ -52,6 +52,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
@@ -51,18 +39,10 @@ index c10510fa..a4e6633a 100644
      .pWindowMessage = WAYLAND_WindowMessage,
      .pWindowPosChanged = WAYLAND_WindowPosChanged,
 diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
-index 4decc0f8..5d89b25d 100644
+index 4decc0f..dc90ec6 100644
 --- a/dlls/winewayland.drv/window.c
 +++ b/dlls/winewayland.drv/window.c
-@@ -737,6 +737,7 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
-         return 0;
-     case WM_WAYLAND_CONFIGURE:
-         wayland_configure_window(hwnd);
-+        ensure_window_surface_contents(hwnd);
-         return 0;
-     case WM_WAYLAND_SET_FOREGROUND:
-         NtUserSetForegroundWindow(hwnd);
-@@ -1019,3 +1020,10 @@ void ensure_window_surface_contents(HWND hwnd)
+@@ -1019,3 +1019,10 @@ void ensure_window_surface_contents(HWND hwnd)
  
      wayland_win_data_release(data);
  }
@@ -76,5 +56,3 @@ index 4decc0f8..5d89b25d 100644
 -- 
 2.53.0
 
--- 
-2.51.2

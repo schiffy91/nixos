@@ -1,0 +1,49 @@
+From ad8f612bad02d84b452ffcdb09ba906bef121b35 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 19 May 2026 21:43:42 -0700
+Subject: [PATCH 2/4] dxgi: Create a hidden swap chain for composition.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dxgi/factory.c | 24 +++++++++++++++++++++---
+ 1 file changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/dxgi/factory.c b/dlls/dxgi/factory.c
+index ebdb42a..c7155e5 100644
+--- a/dlls/dxgi/factory.c
++++ b/dlls/dxgi/factory.c
+@@ -381,10 +381,28 @@ static void STDMETHODCALLTYPE dxgi_factory_UnregisterOcclusionStatus(IWineDXGIFa
+ static HRESULT STDMETHODCALLTYPE dxgi_factory_CreateSwapChainForComposition(IWineDXGIFactory *iface,
+         IUnknown *device, const DXGI_SWAP_CHAIN_DESC1 *desc, IDXGIOutput *output, IDXGISwapChain1 **swapchain)
+ {
+-    FIXME("iface %p, device %p, desc %p, output %p, swapchain %p stub!\n",
+-            iface, device, desc, output, swapchain);
++    /* Route through CreateSwapChainForHwnd with an HWND_MESSAGE hidden window.
++     * DirectComposition clients bind this swap chain to a visual; dcomp.dll
++     * then drives the actual presentation path from Commit(). */
++    DXGI_SWAP_CHAIN_FULLSCREEN_DESC fs = {0};
++    HWND hidden;
++    HRESULT hr;
+ 
+-    return E_NOTIMPL;
++    TRACE("iface %p, device %p, desc %p, output %p.\n",
++          iface, device, desc, output);
++
++    if (!device || !desc || !swapchain) return DXGI_ERROR_INVALID_CALL;
++
++    fs.Windowed = TRUE;
++    hidden = CreateWindowExW(0, L"Message", NULL, 0, 0, 0, 1, 1, HWND_MESSAGE, NULL, NULL, NULL);
++    if (!hidden)
++    {
++        ERR("hidden HWND alloc failed\n");
++        return E_FAIL;
++    }
++    hr = dxgi_factory_CreateSwapChainForHwnd(iface, device, hidden, desc, &fs, output, swapchain);
++    if (FAILED(hr)) DestroyWindow(hidden);
++    return hr;
+ }
+ 
+ static UINT STDMETHODCALLTYPE dxgi_factory_GetCreationFlags(IWineDXGIFactory *iface)
+-- 
+2.53.0
+

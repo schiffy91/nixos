@@ -1,0 +1,701 @@
+From 97f90f808952f42f5a74d3305ff87b5ace861ab9 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 19 May 2026 21:43:51 -0700
+Subject: [PATCH 4/4] winewayland.drv: Present DComp frames through dma-buf.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/Makefile.in     |   1 +
+ dlls/winewayland.drv/wayland_dcomp.c | 649 +++++++++++++++++++++++++++
+ dlls/winewayland.drv/window.c        |   7 +
+ 3 files changed, 657 insertions(+)
+ create mode 100644 dlls/winewayland.drv/wayland_dcomp.c
+
+diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
+index 69e0a19..20a8bbc 100644
+--- a/dlls/winewayland.drv/Makefile.in
++++ b/dlls/winewayland.drv/Makefile.in
+@@ -26,6 +26,7 @@ SOURCES = \
+ 	wayland_keyboard.c \
+ 	wayland_output.c \
+ 	wayland_pointer.c \
++	wayland_dcomp.c \
+ 	wayland_surface.c \
+ 	wayland_systray.c \
+ 	wayland_text_input.c \
+diff --git a/dlls/winewayland.drv/wayland_dcomp.c b/dlls/winewayland.drv/wayland_dcomp.c
+new file mode 100644
+index 0000000..bcd1f3d
+--- /dev/null
++++ b/dlls/winewayland.drv/wayland_dcomp.c
+@@ -0,0 +1,649 @@
++/*
++ * GPU-backed DComp presentation bridge for winewayland.
++ *
++ * dcomp.dll sends DXVK's Vulkan image and queue handles through
++ * WM_WAYLAND_DCOMP_PRESENT.  The driver copies that image into a
++ * linear exportable VkImage on the same GPU queue, exports it as a dma-buf,
++ * and attaches the dma-buf to a Wayland surface.  This keeps D3D11
++ * composition on the GPU presentation path.
++ */
++
++#if 0
++#pragma makedep unix
++#endif
++
++#include "config.h"
++
++#include <limits.h>
++#include <pthread.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#ifndef WINE_UNIX_LIB
++#define WINE_UNIX_LIB
++#endif
++#include "waylanddrv.h"
++#include "wine/debug.h"
++#include "wine/vulkan.h"
++#include "wine/vulkan_driver.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
++
++#ifndef VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
++#define VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT 0x00000200
++#endif
++
++#define DRM_FORMAT_ARGB8888       0x34325241
++#define DRM_FORMAT_ABGR8888       0x34324241
++#define DRM_FORMAT_ARGB2101010    0x30335241
++#define DRM_FORMAT_ABGR2101010    0x30334241
++#define DRM_FORMAT_ABGR16161616F  0x48344241
++#define DRM_FORMAT_MOD_LINEAR     0
++
++#define FRAME_TIMEOUT_NS          16000000ull
++
++struct dcomp_present
++{
++    struct wl_list  link;
++    HWND            hwnd;
++    struct vulkan_device *vk_device;
++    struct vulkan_queue  *vk_queue;
++    uint32_t        queue_family;
++    VkCommandPool   cmd_pool;
++    VkCommandBuffer cmd_buf;
++    VkFence         fence;
++    VkImage         image;
++    VkDeviceMemory  memory;
++    VkImageLayout   image_layout;
++    uint32_t        width, height;
++    VkFormat        format;
++    uint32_t        drm_format;
++    uint32_t        stride;
++    struct wayland_dmabuf_buffer *dmabuf_buffer;
++    BOOL            valid;
++    struct wl_surface       *sub_wl_surface;
++    struct wl_subsurface    *sub_wl_subsurface;
++    struct wp_viewport      *sub_wp_viewport;
++    HWND                     sub_parent_hwnd;
++    int                      sub_x, sub_y;
++};
++
++static struct wl_list   g_targets = { &g_targets, &g_targets };
++static pthread_mutex_t  g_targets_mutex = PTHREAD_MUTEX_INITIALIZER;
++
++static uint32_t vk_to_drm_format(VkFormat format)
++{
++    switch (format)
++    {
++    case VK_FORMAT_B8G8R8A8_UNORM:
++    case VK_FORMAT_B8G8R8A8_SRGB:
++        return DRM_FORMAT_ARGB8888;
++    case VK_FORMAT_R8G8B8A8_UNORM:
++    case VK_FORMAT_R8G8B8A8_SRGB:
++        return DRM_FORMAT_ABGR8888;
++    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
++        return DRM_FORMAT_ARGB2101010;
++    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
++        return DRM_FORMAT_ABGR2101010;
++    case VK_FORMAT_R16G16B16A16_SFLOAT:
++        return DRM_FORMAT_ABGR16161616F;
++    default:
++        return 0;
++    }
++}
++
++static unsigned int vk_format_bpp(VkFormat format)
++{
++    return format == VK_FORMAT_R16G16B16A16_SFLOAT ? 8 : 4;
++}
++
++static int pick_memory_type(struct vulkan_device *dev, uint32_t bits, VkMemoryPropertyFlags want)
++{
++    VkPhysicalDeviceMemoryProperties props;
++    uint32_t i;
++
++    dev->physical_device->instance->p_vkGetPhysicalDeviceMemoryProperties(
++        dev->physical_device->host.physical_device, &props);
++
++    for (i = 0; i < props.memoryTypeCount; i++)
++        if ((bits & (1u << i)) && (props.memoryTypes[i].propertyFlags & want) == want)
++            return i;
++
++    for (i = 0; i < props.memoryTypeCount; i++)
++        if (bits & (1u << i))
++            return i;
++
++    return -1;
++}
++
++static struct dcomp_present *dcomp_present_get(HWND hwnd)
++{
++    struct dcomp_present *target;
++
++    pthread_mutex_lock(&g_targets_mutex);
++    wl_list_for_each(target, &g_targets, link)
++    {
++        if (target->hwnd == hwnd)
++        {
++            pthread_mutex_unlock(&g_targets_mutex);
++            return target;
++        }
++    }
++
++    target = calloc(1, sizeof(*target));
++    if (target)
++    {
++        target->hwnd = hwnd;
++        target->image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
++        target->sub_x = target->sub_y = INT_MIN;
++        wl_list_insert(&g_targets, &target->link);
++    }
++    pthread_mutex_unlock(&g_targets_mutex);
++    return target;
++}
++
++static void dcomp_present_reset_frame(struct dcomp_present *target)
++{
++    struct vulkan_device *dev = target->vk_device;
++    VkDevice host_dev = dev ? dev->host.device : VK_NULL_HANDLE;
++
++    if (target->dmabuf_buffer)
++    {
++        wayland_dmabuf_buffer_unref(target->dmabuf_buffer);
++        target->dmabuf_buffer = NULL;
++    }
++    if (host_dev)
++    {
++        if (target->image) dev->p_vkDestroyImage(host_dev, target->image, NULL);
++        if (target->memory) dev->p_vkFreeMemory(host_dev, target->memory, NULL);
++    }
++
++    target->image = VK_NULL_HANDLE;
++    target->memory = VK_NULL_HANDLE;
++    target->image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
++    target->valid = FALSE;
++}
++
++static BOOL dcomp_present_ensure_commands(struct dcomp_present *target,
++                                           struct vulkan_device *dev, uint32_t queue_family)
++{
++    VkDevice host_dev = dev->host.device;
++
++    if (target->cmd_pool && (target->vk_device != dev || target->queue_family != queue_family))
++    {
++        struct vulkan_device *old_dev = target->vk_device;
++        VkDevice old_host_dev = old_dev ? old_dev->host.device : host_dev;
++
++        dcomp_present_reset_frame(target);
++        if (old_dev && target->fence) old_dev->p_vkDestroyFence(old_host_dev, target->fence, NULL);
++        if (old_dev && target->cmd_pool) old_dev->p_vkDestroyCommandPool(old_host_dev, target->cmd_pool, NULL);
++        target->fence = VK_NULL_HANDLE;
++        target->cmd_pool = VK_NULL_HANDLE;
++        target->cmd_buf = VK_NULL_HANDLE;
++    }
++
++    if (!target->cmd_pool)
++    {
++        VkCommandPoolCreateInfo pool_info = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
++        VkCommandBufferAllocateInfo buffer_info = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
++        VkFenceCreateInfo fence_info = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
++
++        pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
++        pool_info.queueFamilyIndex = queue_family;
++        if (dev->p_vkCreateCommandPool(host_dev, &pool_info, NULL, &target->cmd_pool) != VK_SUCCESS)
++        {
++            ERR("vkCreateCommandPool failed\n");
++            return FALSE;
++        }
++
++        buffer_info.commandPool = target->cmd_pool;
++        buffer_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++        buffer_info.commandBufferCount = 1;
++        if (dev->p_vkAllocateCommandBuffers(host_dev, &buffer_info, &target->cmd_buf) != VK_SUCCESS)
++        {
++            ERR("vkAllocateCommandBuffers failed\n");
++            return FALSE;
++        }
++
++        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
++        if (dev->p_vkCreateFence(host_dev, &fence_info, NULL, &target->fence) != VK_SUCCESS)
++        {
++            ERR("vkCreateFence failed\n");
++            return FALSE;
++        }
++    }
++
++    target->vk_device = dev;
++    target->queue_family = queue_family;
++    return TRUE;
++}
++
++static void dcomp_present_recreate_fence(struct dcomp_present *target, struct vulkan_device *dev)
++{
++    VkDevice host_dev = dev->host.device;
++    VkFenceCreateInfo fence_info = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
++
++    if (target->fence) dev->p_vkDestroyFence(host_dev, target->fence, NULL);
++    target->fence = VK_NULL_HANDLE;
++    fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
++    if (dev->p_vkCreateFence(host_dev, &fence_info, NULL, &target->fence) != VK_SUCCESS)
++        ERR("vkCreateFence failed while recovering copy state\n");
++}
++
++static BOOL dcomp_present_ensure_image(struct dcomp_present *target,
++                                        struct vulkan_device *dev, uint32_t width,
++                                        uint32_t height, VkFormat format)
++{
++    VkDevice host_dev = dev->host.device;
++    VkExternalMemoryImageCreateInfo external_info = { VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO };
++    VkExportMemoryAllocateInfo export_info = { VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO };
++    VkImageCreateInfo image_info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
++    VkMemoryRequirements requirements;
++    VkMemoryAllocateInfo alloc_info = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
++    VkImageSubresource subresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 };
++    VkSubresourceLayout layout;
++    VkMemoryGetFdInfoKHR fd_info = { VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR };
++    uint32_t drm_format;
++    int memory_type, fd = -1;
++
++    if (target->valid && target->width == width && target->height == height &&
++        target->format == format && target->vk_device == dev)
++        return TRUE;
++
++    dcomp_present_reset_frame(target);
++
++    if (!(drm_format = vk_to_drm_format(format)))
++    {
++        WARN("unsupported Vulkan format %d\n", format);
++        return FALSE;
++    }
++    if (!dev->p_vkGetMemoryFdKHR)
++    {
++        WARN("vkGetMemoryFdKHR is unavailable on this Vulkan device\n");
++        return FALSE;
++    }
++
++    external_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
++
++    image_info.pNext = &external_info;
++    image_info.imageType = VK_IMAGE_TYPE_2D;
++    image_info.format = format;
++    image_info.extent.width = width;
++    image_info.extent.height = height;
++    image_info.extent.depth = 1;
++    image_info.mipLevels = 1;
++    image_info.arrayLayers = 1;
++    image_info.samples = VK_SAMPLE_COUNT_1_BIT;
++    image_info.tiling = VK_IMAGE_TILING_LINEAR;
++    image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
++    image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++    image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
++
++    if (dev->p_vkCreateImage(host_dev, &image_info, NULL, &target->image) != VK_SUCCESS)
++    {
++        WARN("vkCreateImage failed for linear dma-buf %ux%u fmt=%d\n", width, height, format);
++        return FALSE;
++    }
++
++    dev->p_vkGetImageMemoryRequirements(host_dev, target->image, &requirements);
++    memory_type = pick_memory_type(dev, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    if (memory_type < 0)
++    {
++        ERR("no memory type for dma-buf image\n");
++        dcomp_present_reset_frame(target);
++        return FALSE;
++    }
++
++    export_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
++    alloc_info.pNext = &export_info;
++    alloc_info.allocationSize = requirements.size;
++    alloc_info.memoryTypeIndex = memory_type;
++
++    if (dev->p_vkAllocateMemory(host_dev, &alloc_info, NULL, &target->memory) != VK_SUCCESS)
++    {
++        ERR("vkAllocateMemory failed for dma-buf image\n");
++        dcomp_present_reset_frame(target);
++        return FALSE;
++    }
++    if (dev->p_vkBindImageMemory(host_dev, target->image, target->memory, 0) != VK_SUCCESS)
++    {
++        ERR("vkBindImageMemory failed for dma-buf image\n");
++        dcomp_present_reset_frame(target);
++        return FALSE;
++    }
++
++    dev->p_vkGetImageSubresourceLayout(host_dev, target->image, &subresource, &layout);
++    target->stride = layout.rowPitch ? (uint32_t)layout.rowPitch : width * vk_format_bpp(format);
++
++    fd_info.memory = target->memory;
++    fd_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
++    if (dev->p_vkGetMemoryFdKHR(host_dev, &fd_info, &fd) != VK_SUCCESS || fd < 0)
++    {
++        ERR("vkGetMemoryFdKHR failed for dma-buf image\n");
++        dcomp_present_reset_frame(target);
++        return FALSE;
++    }
++
++    target->dmabuf_buffer = wayland_dmabuf_buffer_create(fd, width, height, drm_format,
++                                                         DRM_FORMAT_MOD_LINEAR,
++                                                         target->stride, (uint32_t)layout.offset);
++    close(fd);
++    if (!target->dmabuf_buffer)
++    {
++        dcomp_present_reset_frame(target);
++        return FALSE;
++    }
++
++    target->width = width;
++    target->height = height;
++    target->format = format;
++    target->drm_format = drm_format;
++    target->image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
++    target->valid = TRUE;
++    TRACE("created dma-buf target hwnd=%p image=0x%llx %ux%u fmt=%d stride=%u\n",
++          target->hwnd, (unsigned long long)target->image, width, height, format,
++          target->stride);
++    return TRUE;
++}
++
++static BOOL dcomp_present_submit_copy(struct dcomp_present *target, struct vulkan_device *dev,
++                                struct vulkan_queue *queue, VkImage src_image,
++                                VkImageLayout src_layout)
++{
++    VkDevice host_dev = dev->host.device;
++    VkQueue host_queue = queue->host.queue;
++    VkResult vr;
++
++    vr = dev->p_vkWaitForFences(host_dev, 1, &target->fence, VK_TRUE, 0);
++    if (vr == VK_TIMEOUT) return FALSE;
++    if (vr != VK_SUCCESS)
++    {
++        ERR("vkWaitForFences before copy failed: %d\n", vr);
++        return FALSE;
++    }
++
++    dev->p_vkResetFences(host_dev, 1, &target->fence);
++    dev->p_vkResetCommandBuffer(target->cmd_buf, 0);
++
++    {
++        VkCommandBufferBeginInfo begin_info = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
++        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++        if (dev->p_vkBeginCommandBuffer(target->cmd_buf, &begin_info) != VK_SUCCESS)
++        {
++            ERR("vkBeginCommandBuffer failed\n");
++            dcomp_present_recreate_fence(target, dev);
++            return FALSE;
++        }
++    }
++
++    {
++        VkImageMemoryBarrier barriers[2] = {{0}, {0}};
++
++        barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
++        barriers[0].srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
++        barriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++        barriers[0].oldLayout = src_layout;
++        barriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++        barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[0].image = src_image;
++        barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++        barriers[0].subresourceRange.levelCount = 1;
++        barriers[0].subresourceRange.layerCount = 1;
++
++        barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
++        barriers[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
++        barriers[1].oldLayout = target->image_layout;
++        barriers[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
++        barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[1].image = target->image;
++        barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++        barriers[1].subresourceRange.levelCount = 1;
++        barriers[1].subresourceRange.layerCount = 1;
++
++        dev->p_vkCmdPipelineBarrier(target->cmd_buf,
++                                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
++                                    0, 0, NULL, 0, NULL, 2, barriers);
++    }
++
++    {
++        VkImageCopy region = {0};
++        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++        region.srcSubresource.layerCount = 1;
++        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++        region.dstSubresource.layerCount = 1;
++        region.extent.width = target->width;
++        region.extent.height = target->height;
++        region.extent.depth = 1;
++        dev->p_vkCmdCopyImage(target->cmd_buf, src_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++                              target->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
++    }
++
++    {
++        VkImageMemoryBarrier barriers[2] = {{0}, {0}};
++
++        barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
++        barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++        barriers[0].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
++        barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++        barriers[0].newLayout = src_layout;
++        barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[0].image = src_image;
++        barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++        barriers[0].subresourceRange.levelCount = 1;
++        barriers[0].subresourceRange.layerCount = 1;
++
++        barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
++        barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
++        barriers[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
++        barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
++        barriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
++        barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++        barriers[1].image = target->image;
++        barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++        barriers[1].subresourceRange.levelCount = 1;
++        barriers[1].subresourceRange.layerCount = 1;
++
++        dev->p_vkCmdPipelineBarrier(target->cmd_buf,
++                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
++                                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++                                    0, 0, NULL, 0, NULL, 2, barriers);
++    }
++
++    if (dev->p_vkEndCommandBuffer(target->cmd_buf) != VK_SUCCESS)
++    {
++        ERR("vkEndCommandBuffer failed\n");
++        dcomp_present_recreate_fence(target, dev);
++        return FALSE;
++    }
++
++    {
++        VkSubmitInfo submit_info = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
++        submit_info.commandBufferCount = 1;
++        submit_info.pCommandBuffers = &target->cmd_buf;
++        vr = dev->p_vkQueueSubmit(host_queue, 1, &submit_info, target->fence);
++        if (vr != VK_SUCCESS)
++        {
++            ERR("vkQueueSubmit failed: %d\n", vr);
++            dcomp_present_recreate_fence(target, dev);
++            return FALSE;
++        }
++    }
++
++    vr = dev->p_vkWaitForFences(host_dev, 1, &target->fence, VK_TRUE, FRAME_TIMEOUT_NS);
++    if (vr == VK_TIMEOUT) return FALSE;
++    if (vr != VK_SUCCESS)
++    {
++        ERR("vkWaitForFences after copy failed: %d\n", vr);
++        return FALSE;
++    }
++
++    target->image_layout = VK_IMAGE_LAYOUT_GENERAL;
++    return TRUE;
++}
++
++static void dcomp_present_attach_own_surface(struct wayland_surface *surface,
++                                       struct dcomp_present *target)
++{
++    int width = surface->window.rect.right - surface->window.rect.left;
++    int height = surface->window.rect.bottom - surface->window.rect.top;
++
++    if (width <= 0) width = target->width;
++    if (height <= 0) height = target->height;
++
++    wl_surface_attach(surface->wl_surface, target->dmabuf_buffer->wl_buffer, 0, 0);
++    wl_surface_damage_buffer(surface->wl_surface, 0, 0, target->width, target->height);
++    if (surface->wp_viewport)
++    {
++        wp_viewport_set_source(surface->wp_viewport, 0, 0,
++                               wl_fixed_from_int(target->width),
++                               wl_fixed_from_int(target->height));
++        wp_viewport_set_destination(surface->wp_viewport, width, height);
++    }
++    surface->content_width = width;
++    surface->content_height = height;
++    wl_surface_commit(surface->wl_surface);
++}
++
++static void dcomp_present_attach_subsurface(HWND hwnd, struct dcomp_present *target)
++{
++    HWND parent = hwnd;
++    struct wayland_win_data *pdata = NULL;
++    struct wayland_surface *psurface = NULL;
++    int hops;
++
++    for (hops = 0; hops < 8; hops++)
++    {
++        HWND next = NtUserGetAncestor(parent, GA_ROOT);
++        if (!next) next = NtUserGetWindowRelative(parent, GW_OWNER);
++        if (!next || next == parent) break;
++        parent = next;
++        if ((pdata = wayland_win_data_get(parent)))
++        {
++            if (pdata->wayland_surface)
++            {
++                psurface = pdata->wayland_surface;
++                break;
++            }
++            wayland_win_data_release(pdata);
++            pdata = NULL;
++        }
++    }
++
++    if (!psurface)
++    {
++        WARN("no wayland_surface for hwnd=%p or an ancestor\n", hwnd);
++        if (pdata) wayland_win_data_release(pdata);
++        return;
++    }
++
++    if (!target->sub_wl_surface || target->sub_parent_hwnd != parent)
++    {
++        if (target->sub_wp_viewport)   { wp_viewport_destroy(target->sub_wp_viewport); target->sub_wp_viewport = NULL; }
++        if (target->sub_wl_subsurface) { wl_subsurface_destroy(target->sub_wl_subsurface); target->sub_wl_subsurface = NULL; }
++        if (target->sub_wl_surface)    { wl_surface_destroy(target->sub_wl_surface); target->sub_wl_surface = NULL; }
++
++        target->sub_wl_surface = wl_compositor_create_surface(process_wayland.wl_compositor);
++        if (!target->sub_wl_surface) goto done;
++        target->sub_wl_subsurface = wl_subcompositor_get_subsurface(process_wayland.wl_subcompositor,
++                                                                    target->sub_wl_surface,
++                                                                    psurface->wl_surface);
++        if (!target->sub_wl_subsurface) goto done;
++        wl_subsurface_set_desync(target->sub_wl_subsurface);
++
++        {
++            struct wl_region *empty = wl_compositor_create_region(process_wayland.wl_compositor);
++            if (empty)
++            {
++                wl_surface_set_input_region(target->sub_wl_surface, empty);
++                wl_region_destroy(empty);
++            }
++        }
++
++        if (process_wayland.wp_viewporter)
++            target->sub_wp_viewport = wp_viewporter_get_viewport(process_wayland.wp_viewporter,
++                                                                 target->sub_wl_surface);
++        target->sub_parent_hwnd = parent;
++        target->sub_x = target->sub_y = INT_MIN;
++    }
++
++    if (target->sub_x != 0 || target->sub_y != 0)
++    {
++        wl_subsurface_set_position(target->sub_wl_subsurface, 0, 0);
++        target->sub_x = target->sub_y = 0;
++    }
++
++    wl_surface_attach(target->sub_wl_surface, target->dmabuf_buffer->wl_buffer, 0, 0);
++    wl_surface_damage_buffer(target->sub_wl_surface, 0, 0, target->width, target->height);
++
++    if (target->sub_wp_viewport && psurface)
++    {
++        double scale = psurface->window.scale > 0 ? psurface->window.scale : 1.0;
++        int width = (int)((double)target->width / scale + 0.5);
++        int height = (int)((double)target->height / scale + 0.5);
++        if (width < 1) width = 1;
++        if (height < 1) height = 1;
++        wp_viewport_set_source(target->sub_wp_viewport, 0, 0,
++                               wl_fixed_from_int(target->width),
++                               wl_fixed_from_int(target->height));
++        wp_viewport_set_destination(target->sub_wp_viewport, width, height);
++    }
++
++    wl_surface_commit(target->sub_wl_surface);
++    wl_surface_commit(psurface->wl_surface);
++
++done:
++    wayland_win_data_release(pdata);
++}
++
++void wayland_dcomp_handle_present(HWND hwnd, const struct wayland_dcomp_present_request *req)
++{
++    struct dcomp_present *target;
++    struct vulkan_device *dev;
++    struct vulkan_queue *queue;
++    VkImage src_image = (VkImage)req->src_image;
++    VkImageLayout src_layout = (VkImageLayout)req->src_layout;
++    VkFormat format = (VkFormat)req->vk_format;
++    HWND target_hwnd = req->target_hwnd ? (HWND)(uintptr_t)req->target_hwnd : hwnd;
++    struct wayland_win_data *data;
++    struct wayland_surface *surface;
++
++    if (!req->vk_device || !req->vk_queue) return;
++
++    dev = vulkan_device_from_handle((VkDevice)(uintptr_t)req->vk_device);
++    queue = vulkan_queue_from_handle((VkQueue)(uintptr_t)req->vk_queue);
++    if (!dev || !queue)
++    {
++        WARN("Vulkan handle conversion failed dev=%p queue=%p\n", dev, queue);
++        return;
++    }
++
++    target = dcomp_present_get(target_hwnd);
++    if (!target) return;
++
++    if (!dcomp_present_ensure_commands(target, dev, req->queue_family) ||
++        !dcomp_present_ensure_image(target, dev, req->width, req->height, format))
++        return;
++
++    if (!dcomp_present_submit_copy(target, dev, queue, src_image, src_layout))
++        return;
++
++    if ((data = wayland_win_data_get(target_hwnd)) && (surface = data->wayland_surface))
++    {
++        dcomp_present_attach_own_surface(surface, target);
++        wayland_win_data_release(data);
++    }
++    else
++    {
++        if (data) wayland_win_data_release(data);
++        dcomp_present_attach_subsurface(target_hwnd, target);
++    }
++
++    wl_display_flush(process_wayland.wl_display);
++}
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index dc90ec6..1685be1 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -741,6 +741,13 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+     case WM_WAYLAND_SET_FOREGROUND:
+         NtUserSetForegroundWindow(hwnd);
+         return 0;
++    case WM_WAYLAND_DCOMP_PRESENT:
++    {
++        struct wayland_dcomp_present_request *req = (struct wayland_dcomp_present_request *)lp;
++        if (!req) { ERR("WM_WAYLAND_DCOMP_PRESENT NULL request\n"); return 0; }
++        wayland_dcomp_handle_present(hwnd, req);
++        return 0;
++    }
+     default:
+         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, (long)wp, lp);
+         return 0;
+-- 
+2.53.0
+

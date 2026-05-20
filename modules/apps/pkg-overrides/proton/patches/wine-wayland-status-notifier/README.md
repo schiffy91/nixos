@@ -13,15 +13,17 @@ implement the `pSystrayDock*` driver hooks at all, so the icon never
 registers anywhere.
 
 ## Fix
-Implement `pSystrayDock*` against the StatusNotifierItem D-Bus spec —
+Implement `pSystrayDock*` against the StatusNotifierItem D-Bus spec -
 KDE's freedesktop-pending standard adopted by Plasma 6, GNOME (via the
-AppIndicator extension), waybar, and most other Wayland shells.  Each
-icon registers an SNI service via `libdbus`, exports its pixmap, and
-translates SNI `Activate` / `SecondaryActivate` signals into
-`WM_LBUTTONUP` / `WM_RBUTTONUP` on the wine systray owner window.
+AppIndicator extension), waybar, and most other Wayland shells.
 
-Implementation lives in a new `wayland_systray.c` to keep it isolated
-and reusable.
+The active Battle.net build keeps GE-Proton's stock `win32u` and
+`explorer` binaries, because live tests showed rebuilt versions
+destabilize libcef before the launcher settles.  For now the Wayland
+driver reads the existing explorer tray icon payload and exports it as a
+StatusNotifierItem service.  A future upstream pass should replace that
+private layout dependency with a driver-facing snapshot once the full
+`win32u`/`explorer` stack is validated.
 
 ## Affected upstream
 `dlls/winewayland.drv/{Makefile.in, waylanddrv.h, waylanddrv_main.c,

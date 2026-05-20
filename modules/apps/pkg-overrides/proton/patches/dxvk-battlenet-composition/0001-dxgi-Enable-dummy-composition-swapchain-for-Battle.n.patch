@@ -1,0 +1,28 @@
+From 298b7f47b76db070b7fd452e33f41fd6918aa7bb Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Tue, 19 May 2026 22:07:41 -0700
+Subject: [PATCH] dxgi: Enable dummy composition swapchain for Battle.net.
+
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+---
+ src/util/config/config.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
+index 0a0278cc1..af9ea694f 100644
+--- a/src/util/config/config.cpp
++++ b/src/util/config/config.cpp
+@@ -59,6 +59,10 @@ namespace dxvk {
+     { R"(\\Anno117\.exe$)", {{
+       { "dxgi.enableDummyCompositionSwapchain", "True" }
+     }} },
++    /* Battle.net: Uses DirectComposition swap chains in the launcher. */
++    { R"(\\Battle\.net\.exe$)", {{
++      { "dxgi.enableDummyCompositionSwapchain", "True" }
++    }} },
+ 
+     /**********************************************/
+     /* D3D11 GAMES                                */
+-- 
+2.53.0
+

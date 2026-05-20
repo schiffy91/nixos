@@ -1,32 +1,19 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From d5b49da1cf6996fe47d8b8be2e8e41a3ff961bab Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Mon, 18 May 2026 19:50:35 -0700
-Subject: [PATCH] winewayland.drv: Make second init roundtrip non-blocking.
+Date: Tue, 19 May 2026 14:30:39 -0700
+Subject: [PATCH] winewayland.drv: Avoid second init roundtrip.
 
-wayland_process_init does two wl_display_roundtrip calls: the
-first drains the global registry, the second drains the bindings
-registered against those globals.  The second roundtrip is
-blocking, which deadlocks CEF (Chromium Embedded Framework): CEF
-forks a child process and the parent blocks in the Wayland
-roundtrip while the child blocks on the parent over CEF's IPC
-socket.
+The registry setup path performs two roundtrips. Keep the first one to collect globals, but avoid blocking on the second pass that only drains initial events from objects bound by the registry listener.
 
-Replace the blocking roundtrip with wl_display_roundtrip_queue
-on a dedicated event queue, flushed via poll(), so other Wayland
-event sources keep draining while we wait for registry bindings
-to settle.
-
-Reproduces in Battle.net's CEF-hosted launcher: the parent never
-returns from wayland_process_init, the child times out on
-IPC::Channel::Send, the launcher exits silently.
+CEF subprocess startup can otherwise wedge when the parent process is blocked in the driver init path while the child is waiting on parent IPC. Drain any already queued events and flush the display instead.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/wayland.c           |   11 +++++++----
- 1 file changed, 7 insertions(+), 4 deletions(-)
+ dlls/winewayland.drv/wayland.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
-index 75713634..c713110a 100644
+index 7571363..c713110 100644
 --- a/dlls/winewayland.drv/wayland.c
 +++ b/dlls/winewayland.drv/wayland.c
 @@ -372,10 +372,14 @@ BOOL wayland_process_init(void)
@@ -50,5 +37,3 @@ index 75713634..c713110a 100644
 -- 
 2.53.0
 
--- 
-2.51.2

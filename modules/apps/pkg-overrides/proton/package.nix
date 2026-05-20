@@ -1,30 +1,24 @@
-# scwhine-proton — GE-Proton10-34 with winewayland.drv + CEF accel patches.
+# scwhine-proton - GE-Proton10-34 with winewayland.drv cleanup patches.
 #
-# Builds the EXACT wine GE-Proton10-34 uses (ValveSoftware/wine at commit
-# 1729f00) with the full 504-patch GE wine-wayland hotfix series, then
-# layers our scwhine patch series on top.  Replaces only the changed
-# binaries (winewayland.drv unix lib + win32u.so + dcomp.dll + dxgi.dll)
-# in the GE-Proton binary tarball; everything else stays as-is.
+# Builds the exact Wine and DXVK revisions GE-Proton10-34 uses, then layers
+# our active patch series on top. Replaces only the changed binaries touched by
+# the active series in the GE-Proton binary tarball; everything else stays as-is.
 #
-# Patches live under ./patches/<NN-bug-name>/*.patch, one subfolder per
-# bug or feature, applied in lexical subfolder order.  Each subfolder
-# carries a README explaining the bug, root cause, and fix.  Patch files
-# are in `git format-patch` style (Wine upstream convention) so they can
-# be submitted directly to wine-devel.
+# Patches live under ./patches/<topic>/, one subfolder per upstreamable topic.
+# The default package applies the explicit activePatchSeries list below, not a
+# broad glob. Patch files are in `git format-patch -s` style (Wine upstream
+# convention), so their 0001/0002 names are series-local commit order only.
 #
-# Current series:
-#   01  CEF startup deadlock (non-blocking second Wayland roundtrip)
-#   02  Blank layered windows (pUpdateLayeredWindow + configure refresh)
-#   03  SNI StatusNotifierItem systray via libdbus
-#   04  Real DirectComposition impl (CEF accelerated rendering)
-#   05  dxgi.CreateSwapChainForComposition HWND_MESSAGE fallback
-#   06  winewayland.drv DXVK → wl_subsurface presenter bridge
-#   07  win32u: load_desktop_driver cross-process deadlock
+# Active series:
+#   Wayland startup deadlock (non-blocking second init roundtrip)
+#   Blank layered windows (pUpdateLayeredWindow only)
+#   SNI StatusNotifierItem systray via libdbus (winewayland only)
+#   DComp/DXGI/winewayland GPU presentation path
+#   DXVK Battle.net composition swap-chain profile
 { stdenv
 , pkgs
 , fetchgit
 , fetchFromGitHub
-, autoPatchelfHook
 , makeWrapper
 , rsync
 , unzip
@@ -42,10 +36,38 @@ let
   geProtonRev  = "GE-Proton10-34";
   geProtonHash = "sha256-vHwVEJGGzb9vRPu2XNu2pjuovcZRqfLyLRLe3IT2UoQ=";
 
-  # GE-Proton binary tarball (DXVK, VKD3D-Proton, Proton scripts, mono, gecko)
-  ge-proton-src = pkgs.proton-ge-bin.src;
+  dxvkVersion = "v2.7.1-509-g1676dcaf";
+  dxvkRev     = "1676dcaf342a9b13af86c0464ad46235687727a6";
+  dxvkHash    = "sha256-wnxOLWRcXJyCsQ1xaFgnrmQrfpq+O1vgJh+f7sa0qZg=";
 
-  # ── Source: Valve wine + 504 GE wayland patches + our 6 scwhine patches ──
+  # GE-Proton binary tarball (DXVK, VKD3D-Proton, Proton scripts, mono, gecko).
+  # Keep this pinned to the exact tool whose Wine tree is patched below; using
+  # pkgs.proton-ge-bin.src here would silently follow nixpkgs updates.
+  ge-proton-src = pkgs.fetchurl {
+    url = "https://github.com/GloriousEggRoll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}.tar.gz";
+    hash = "sha256-UcWAtmqDPHOZj+APBxfurFcZdlQECi8u1RiePuaNdz0=";
+  };
+
+  activePatchSeries = [
+    ./patches/wine-wayland-roundtrip/0001-winewayland.drv-Avoid-second-init-roundtrip.patch
+    ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Hook-UpdateLayeredWindow.patch
+    ./patches/wine-wayland-status-notifier/0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
+    ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
+    ./patches/dcomp-wayland-gpu-present/0002-dxgi-Create-a-hidden-swap-chain-for-composition.patch
+    ./patches/dcomp-wayland-gpu-present/0003-winewayland.drv-Add-dma-buf-buffer-helpers.patch
+    ./patches/dcomp-wayland-gpu-present/0004-winewayland.drv-Present-DComp-frames-through-dma-buf.patch
+  ];
+
+  dxvkPatchSeries = [
+    ./patches/dxvk-battlenet-composition/0001-dxgi-Enable-dummy-composition-swapchain-for-Battle.n.patch
+  ];
+
+  applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
+      echo "scwhine: applying ${patchFile}"
+      patch -p1 < ${patchFile}
+  '') activePatchSeries;
+
+  # -- Source: Valve wine + GE wayland patches + active cleanup series -------
   wine-scwhine-src = stdenv.mkDerivation {
     pname = "wine-scwhine-src";
     version = toolVersion;
@@ -81,19 +103,13 @@ let
         fi
       done
 
-      # Apply scwhine patch series: one subfolder per bug, lexical order.
-      # Within a subfolder, patch files apply in lexical order too (mostly a
-      # single 0001-*.patch but supports multi-patch series per bug).
-      for p in $(ls -d ${./patches}/*/ | sort); do
-        for q in $(ls "$p"*.patch 2>/dev/null | sort); do
-          echo "scwhine: applying $q"
-          patch -p1 < "$q"
-        done
-      done
+      # Apply only the explicit active series in the order listed above.
+      ${applyActivePatchSeries}
+
     '';
   };
 
-  # ── Build: configure wine, build only winewayland.so + kernelbase ────────
+  # -- Build: configure wine and build only artifacts touched by active patches
   wine-scwhine = stdenv.mkDerivation {
     pname = "wine-scwhine";
     version = toolVersion;
@@ -119,7 +135,7 @@ let
         -x ${pkgs.vulkan-headers}/share/vulkan/registry/vk.xml \
         -X ${pkgs.vulkan-headers}/share/vulkan/registry/video.xml
 
-      # Wine source ships with autogen.sh, not a pre-generated ./configure —
+      # Wine source ships with autogen.sh, not a pre-generated ./configure -
       # run it to produce ./configure from configure.ac.
       ./tools/make_requests || true
       HOME=$TMPDIR autoreconf -fi
@@ -132,63 +148,190 @@ let
       "--disable-tests"
     ];
 
-    # Only build the binaries our patches actually touch. The base GE-Proton
-    # already ships a working kernelbase.dll(.so), and our patches don't
-    # modify kernelbase — skip rebuilding it.
+    # Only build the binaries our active patches actually touch.
     buildFlags = [
-      "dlls/winewayland.drv/winewayland.so"
       "dlls/dcomp/all"
       "dlls/dxgi/all"
+      "dlls/winewayland.drv/all"
     ];
 
     installPhase = ''
-      mkdir -p "$out/lib/wine/x86_64-unix" "$out/lib/wine/x86_64-windows" "$out/lib/wine/i386-windows"
-      cp dlls/winewayland.drv/winewayland.so           "$out/lib/wine/x86_64-unix/"
-      cp dlls/dcomp/x86_64-windows/dcomp.dll           "$out/lib/wine/x86_64-windows/"
-      cp dlls/dcomp/i386-windows/dcomp.dll             "$out/lib/wine/i386-windows/"
-      cp dlls/dxgi/x86_64-windows/dxgi.dll             "$out/lib/wine/x86_64-windows/"
-      cp dlls/dxgi/i386-windows/dxgi.dll               "$out/lib/wine/i386-windows/"
+      copy_required() {
+        local dst="$1"
+        shift
+        local src
+        for src in "$@"; do
+          if [ -e "$src" ]; then
+            install -Dm644 "$src" "$out/lib/wine/$dst"
+            return 0
+          fi
+        done
+        echo "missing expected patched artifact: $dst" >&2
+        printf '  tried: %s\n' "$@" >&2
+        return 1
+      }
+
+      copy_required x86_64-unix/winewayland.so \
+        dlls/winewayland.drv/winewayland.so \
+        dlls/winewayland.drv/x86_64-unix/winewayland.so
+      copy_required x86_64-windows/winewayland.drv \
+        dlls/winewayland.drv/x86_64-windows/winewayland.drv \
+        dlls/winewayland.drv/winewayland.drv
+      copy_required i386-windows/winewayland.drv \
+        dlls/winewayland.drv/i386-windows/winewayland.drv
+      copy_required x86_64-windows/dcomp.dll \
+        dlls/dcomp/x86_64-windows/dcomp.dll \
+        dlls/dcomp/dcomp.dll
+      copy_required i386-windows/dcomp.dll \
+        dlls/dcomp/i386-windows/dcomp.dll
+      copy_required x86_64-windows/dxgi.dll \
+        dlls/dxgi/x86_64-windows/dxgi.dll \
+        dlls/dxgi/dxgi.dll
+      copy_required i386-windows/dxgi.dll \
+        dlls/dxgi/i386-windows/dxgi.dll
+
     '';
 
     meta.platforms = [ "x86_64-linux" ];
   };
 
-  # ── Final compat tool: GE-Proton binary + our patched files ──────────────
+  dxvk-scwhine = stdenv.mkDerivation {
+    pname = "dxvk-scwhine";
+    version = dxvkVersion;
+
+    src = fetchgit {
+      url = "https://github.com/ValveSoftware/dxvk";
+      rev = dxvkRev;
+      hash = dxvkHash;
+      fetchSubmodules = true;
+    };
+
+    patches = dxvkPatchSeries;
+
+    nativeBuildInputs = with pkgs; [
+      glslang
+      meson
+      ninja
+      pkg-config
+      python3
+      pkgsCross.mingwW64.buildPackages.gcc
+      pkgsCross.mingw32.buildPackages.gcc
+    ];
+
+    dontConfigure = true;
+
+    buildPhase = ''
+      runHook preBuild
+
+      patchShebangs subprojects
+      substituteInPlace src/dxvk/meson.build \
+        --replace-fail "dxvk_extra_deps = [ dependency('threads') ]" \
+                       "dxvk_extra_deps = [ dependency('threads'), cpp.find_library('mcfgthread') ]"
+      substituteInPlace src/vulkan/meson.build \
+        --replace-fail "dependencies        : [ thread_dep ]," \
+                       "dependencies        : [ thread_dep, cpp.find_library('mcfgthread') ],"
+      substituteInPlace src/dxgi/meson.build \
+        --replace-fail "dxgi_ld_args      = []" \
+                       "dxgi_ld_args      = [ '-Wl,--whole-archive', '-lmcfgthread', '-Wl,--no-whole-archive' ]"
+
+      export LIBRARY_PATH="${pkgs.pkgsCross.mingwW64.windows.mcfgthreads}/lib:${pkgs.pkgsCross.mingwW64.windows.pthreads}/lib"
+      export LDFLAGS="-L${pkgs.pkgsCross.mingwW64.windows.mcfgthreads}/lib -L${pkgs.pkgsCross.mingwW64.windows.pthreads}/lib"
+      meson setup --cross-file build-win64.txt \
+        --buildtype release \
+        --prefix "$out" \
+        --bindir x64 \
+        --libdir x64 \
+        --strip \
+        -Db_ndebug=if-release \
+        -Dbuild_id=false \
+        build.64
+      ninja -C build.64 src/dxgi/dxgi.dll
+
+      export LIBRARY_PATH="${pkgs.pkgsCross.mingw32.windows.mcfgthreads}/lib:${pkgs.pkgsCross.mingw32.windows.pthreads}/lib"
+      export LDFLAGS="-L${pkgs.pkgsCross.mingw32.windows.mcfgthreads}/lib -L${pkgs.pkgsCross.mingw32.windows.pthreads}/lib"
+      meson setup --cross-file build-win32.txt \
+        --buildtype release \
+        --prefix "$out" \
+        --bindir x32 \
+        --libdir x32 \
+        --strip \
+        -Db_ndebug=if-release \
+        -Dbuild_id=false \
+        build.32
+      ninja -C build.32 src/dxgi/dxgi.dll
+
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      install -Dm755 build.64/src/dxgi/dxgi.dll "$out/x64/dxgi.dll"
+      install -Dm755 build.32/src/dxgi/dxgi.dll "$out/x32/dxgi.dll"
+      printf '%s dxvk (%s)\n' '${dxvkRev}' '${dxvkVersion}' > "$out/version"
+      runHook postInstall
+    '';
+
+    meta.platforms = [ "x86_64-linux" ];
+  };
+
+  # -- Final compat tool: GE-Proton binary + our patched files --------------
 in stdenv.mkDerivation {
   pname   = toolName;
   version = toolVersion;
   src     = ge-proton-src;
 
-  nativeBuildInputs = [ autoPatchelfHook makeWrapper rsync unzip ];
+  nativeBuildInputs = [ makeWrapper rsync unzip ];
   dontConfigure = true;
   dontBuild     = true;
-
-  # GE-Proton ships its own libraries inside files/lib/... that link against
-  # runtime libs (X11, alsa, pulse, gstreamer) supplied by Proton's
-  # pressure-vessel sandbox at runtime, not by the host. Don't fail the build
-  # over those missing deps — they're satisfied at game-launch time.
-  autoPatchelfIgnoreMissingDeps = true;
 
   installPhase = ''
     runHook preInstall
 
-    # Steam's programs.steam.extraCompatPackages creates a symlink:
+    # The activation script in default.nix symlinks this package to:
     #   ~/.local/share/Steam/compatibilitytools.d/<pname> -> $out
     # so the compat tool files must live directly in $out/, not a subdirectory.
     mkdir -p "$out"
     cp -r . "$out/"
 
     # Overlay our patched binaries on top of the GE-Proton tarball.
-    cp "${wine-scwhine}/lib/wine/x86_64-unix/winewayland.so" \
-       "$out/files/lib/wine/x86_64-unix/winewayland.so"
-    cp "${wine-scwhine}/lib/wine/x86_64-windows/dcomp.dll" \
-       "$out/files/lib/wine/x86_64-windows/dcomp.dll"
-    cp "${wine-scwhine}/lib/wine/i386-windows/dcomp.dll" \
-       "$out/files/lib/wine/i386-windows/dcomp.dll"
-    cp "${wine-scwhine}/lib/wine/x86_64-windows/dxgi.dll" \
-       "$out/files/lib/wine/x86_64-windows/dxgi.dll"
-    cp "${wine-scwhine}/lib/wine/i386-windows/dxgi.dll" \
-       "$out/files/lib/wine/i386-windows/dxgi.dll"
+    copy_patched() {
+      local rel="$1"
+      if [ ! -e "${wine-scwhine}/lib/wine/$rel" ]; then
+        echo "missing patched artifact from wine-scwhine: $rel" >&2
+        return 1
+      fi
+      if [ ! -e "$out/files/lib/wine/$rel" ]; then
+        echo "GE-Proton tarball does not contain expected artifact: $rel" >&2
+        return 1
+      fi
+      cp "${wine-scwhine}/lib/wine/$rel" "$out/files/lib/wine/$rel"
+    }
+
+    copy_patched x86_64-unix/winewayland.so
+    copy_patched x86_64-windows/winewayland.drv
+    copy_patched i386-windows/winewayland.drv
+    copy_patched x86_64-windows/dcomp.dll
+    copy_patched i386-windows/dcomp.dll
+    copy_patched x86_64-windows/dxgi.dll
+    copy_patched i386-windows/dxgi.dll
+
+    copy_dxvk() {
+      local src="$1"
+      local rel="$2"
+      if [ ! -e "$src" ]; then
+        echo "missing patched DXVK artifact: $src" >&2
+        return 1
+      fi
+      if [ ! -e "$out/files/lib/wine/dxvk/$rel" ]; then
+        echo "GE-Proton tarball does not contain expected DXVK artifact: $rel" >&2
+        return 1
+      fi
+      cp "$src" "$out/files/lib/wine/dxvk/$rel"
+    }
+
+    copy_dxvk "${dxvk-scwhine}/x64/dxgi.dll" x86_64-windows/dxgi.dll
+    copy_dxvk "${dxvk-scwhine}/x32/dxgi.dll" i386-windows/dxgi.dll
+    cp "${dxvk-scwhine}/version" "$out/files/lib/wine/dxvk/version"
 
     cat > "$out/compatibilitytool.vdf" <<EOF
 "compatibilitytools"
@@ -198,7 +341,7 @@ in stdenv.mkDerivation {
     "${toolName}"
     {
       "install_path" "."
-      "display_name" "scwhine GE-Proton10-34 (Wayland+SNI)"
+      "display_name" "scwhine GE-Proton10-34 (Wayland SNI)"
       "from_oslist"  "windows"
       "to_oslist"    "linux"
     }
@@ -210,7 +353,7 @@ EOF
   '';
 
   meta = {
-    description = "GE-Proton10-34 with scwhine winewayland + CEF fixes (Battle.net Wayland)";
+    description = "GE-Proton10-34 with winewayland SNI cleanup patches (Battle.net Wayland)";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
   };

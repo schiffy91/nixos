@@ -1,0 +1,188 @@
+From 1f4870df60b3e2bb4c63c2b2d3c70f0ac38d94b1 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 19 May 2026 21:43:46 -0700
+Subject: [PATCH 3/4] winewayland.drv: Add dma-buf buffer helpers.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/wayland_surface.c | 76 ++++++++++++++++++++++++++
+ dlls/winewayland.drv/waylanddrv.h      | 55 +++++++++++++++++++
+ 2 files changed, 131 insertions(+)
+
+diff --git a/dlls/winewayland.drv/wayland_surface.c b/dlls/winewayland.drv/wayland_surface.c
+index 88d6eab..caf1fa6 100644
+--- a/dlls/winewayland.drv/wayland_surface.c
++++ b/dlls/winewayland.drv/wayland_surface.c
+@@ -627,6 +627,82 @@ void wayland_surface_attach_shm(struct wayland_surface *surface,
+     surface->content_height = win_height;
+ }
+ 
++/**********************************************************************
++ *          wayland_dmabuf_buffer_create  (HW-accel)
++ *
++ * Wraps a caller-provided GPU dmabuf FD as a wl_buffer via the
++ * zwp_linux_dmabuf_v1 protocol. Takes ownership of the fd (via dup).
++ */
++struct wayland_dmabuf_buffer *wayland_dmabuf_buffer_create(int fd, int width, int height,
++                                                           uint32_t drm_format, uint64_t modifier,
++                                                           uint32_t stride, uint32_t offset)
++{
++    struct wayland_dmabuf_buffer *buf;
++    struct zwp_linux_buffer_params_v1 *params;
++
++    if (!process_wayland.zwp_linux_dmabuf_v1)
++    {
++        ERR("zwp_linux_dmabuf_v1 not bound; cannot create dmabuf buffer\n");
++        return NULL;
++    }
++    if (fd < 0 || width <= 0 || height <= 0 || stride == 0)
++    {
++        ERR("invalid args fd=%d w=%d h=%d stride=%u\n", fd, width, height, stride);
++        return NULL;
++    }
++
++    buf = calloc(1, sizeof(*buf));
++    if (!buf) return NULL;
++
++    buf->fd = dup(fd);
++    if (buf->fd < 0) { free(buf); return NULL; }
++    buf->width      = width;
++    buf->height     = height;
++    buf->drm_format = drm_format;
++    buf->modifier   = modifier;
++    buf->stride     = stride;
++    buf->offset     = offset;
++    buf->ref        = 1;
++
++    params = zwp_linux_dmabuf_v1_create_params(process_wayland.zwp_linux_dmabuf_v1);
++    if (!params)
++    {
++        close(buf->fd); free(buf);
++        return NULL;
++    }
++    zwp_linux_buffer_params_v1_add(params, buf->fd, 0 /*plane*/, offset, stride,
++                                   (uint32_t)(modifier >> 32),
++                                   (uint32_t)(modifier & 0xffffffffu));
++    buf->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params, width, height, drm_format, 0);
++    zwp_linux_buffer_params_v1_destroy(params);
++
++    if (!buf->wl_buffer)
++    {
++        ERR("create_immed failed (fmt=0x%08x mod=0x%llx %dx%d)\n",
++            drm_format, (unsigned long long)modifier, width, height);
++        close(buf->fd); free(buf);
++        return NULL;
++    }
++
++    TRACE("dmabuf buf=%p wl_buffer=%p (%dx%d fmt=0x%08x mod=0x%llx stride=%u)\n",
++          buf, buf->wl_buffer, width, height, drm_format,
++          (unsigned long long)modifier, stride);
++    return buf;
++}
++
++void wayland_dmabuf_buffer_ref(struct wayland_dmabuf_buffer *buf)
++{
++    InterlockedIncrement(&buf->ref);
++}
++
++void wayland_dmabuf_buffer_unref(struct wayland_dmabuf_buffer *buf)
++{
++    if (InterlockedDecrement(&buf->ref) > 0) return;
++    if (buf->wl_buffer) wl_buffer_destroy(buf->wl_buffer);
++    if (buf->fd >= 0) close(buf->fd);
++    free(buf);
++}
++
+ /**********************************************************************
+  *          wayland_surface_config_is_compatible
+  *
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index e7a7769..00d8631 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -26,6 +26,7 @@
+ #endif
+ 
+ #include <pthread.h>
++#include <stdint.h>
+ #include <wayland-client.h>
+ #include <xkbcommon/xkbcommon.h>
+ #include <xkbcommon/xkbregistry.h>
+@@ -82,6 +83,36 @@ enum wayland_window_message
+     WM_WAYLAND_INIT_DISPLAY_DEVICES = WM_WINE_FIRST_DRIVER_MSG,
+     WM_WAYLAND_CONFIGURE,
+     WM_WAYLAND_SET_FOREGROUND,
++    WM_WAYLAND_DCOMP_PRESENT,   /* lParam = struct wayland_dcomp_present_request* */
++};
++
++/* Shared bridge struct: dcomp.dll fills this and SendMessageW's it to a HWND.
++ * winewayland.drv's WAYLAND_WindowMessage handler does the Vulkan export work
++ * using native libvulkan.so (NOT wine's vulkan-1.dll, which can't operate on
++ * DXVK-tracked devices). All Vulkan handles are stored as uint64 so the struct
++ * layout matches across the PE/Unix boundary (PE i386: pointers are 32-bit,
++ * Unix x86_64: pointers are 64-bit; zero-extension is correct since wine PE
++ * addresses occupy the low 32 bits of 64-bit space). */
++struct wayland_dcomp_present_request
++{
++    /* DXVK's source VkImage + dims + Vulkan format + current layout */
++    uint64_t  src_image;            /* VkImage (non-dispatchable, 64-bit) */
++    uint32_t  src_layout;           /* VkImageLayout (enum/int) */
++    uint32_t  vk_format;            /* VkFormat from GetVulkanImageInfo */
++    uint32_t  width, height;
++    /* DXVK handles (dispatchable, but stored uint64 for PE<->Unix layout match) */
++    uint64_t  vk_instance;
++    uint64_t  vk_physical_device;
++    uint64_t  vk_device;
++    uint64_t  vk_queue;
++    uint32_t  queue_family;
++    uint32_t  _pad;                 /* explicit pad for 8-byte alignment of following uint64 */
++    /* HWND of the DComp target - the actual app window this frame belongs
++     * to. We send the WM_WAYLAND_DCOMP_PRESENT message to a hidden
++     * HWND owned by the dcomp ticker thread (so the wndproc dispatches
++     * inline on the ticker, off app's UI thread), and carry the real
++     * destination HWND in the request itself. */
++    uint64_t target_hwnd;
+ };
+ 
+ enum wayland_surface_config_state
+@@ -356,6 +387,19 @@ struct wayland_shm_buffer
+     HRGN damage_region;
+ };
+ 
++/* GPU dmabuf buffer for cross-process hardware-accelerated paths */
++struct wayland_dmabuf_buffer
++{
++    struct wl_buffer *wl_buffer;
++    int fd;                 /* owned; dup'd from caller */
++    int width, height;
++    uint32_t drm_format;    /* fourcc, e.g. DRM_FORMAT_ARGB8888 */
++    uint64_t modifier;
++    uint32_t stride;
++    uint32_t offset;
++    LONG ref;
++};
++
+ struct wayland_surface
+ {
+     HWND hwnd;
+@@ -456,6 +500,17 @@ struct wayland_shm_buffer *wayland_shm_buffer_from_color_bitmaps(HDC hdc, HBITMA
+ void wayland_shm_buffer_ref(struct wayland_shm_buffer *shm_buffer);
+ void wayland_shm_buffer_unref(struct wayland_shm_buffer *shm_buffer);
+ 
++/**********************************************************************
++ *          Wayland dmabuf buffer (HW-accel)
++ */
++
++struct wayland_dmabuf_buffer *wayland_dmabuf_buffer_create(int fd, int width, int height,
++                                                           uint32_t drm_format, uint64_t modifier,
++                                                           uint32_t stride, uint32_t offset);
++void wayland_dmabuf_buffer_ref(struct wayland_dmabuf_buffer *buf);
++void wayland_dmabuf_buffer_unref(struct wayland_dmabuf_buffer *buf);
++void wayland_dcomp_handle_present(HWND hwnd, const struct wayland_dcomp_present_request *req);
++
+ /**********************************************************************
+  *          Wayland Window
+  */
+-- 
+2.53.0
+
