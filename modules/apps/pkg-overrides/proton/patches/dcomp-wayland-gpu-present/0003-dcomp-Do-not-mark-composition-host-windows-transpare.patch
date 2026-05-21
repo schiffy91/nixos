@@ -1,0 +1,32 @@
+From 6d338916b2e93fb904967e00bd0a6f7844260d7f Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 03:03:18 -0700
+Subject: [PATCH] dcomp: Do not mark composition host windows transparent
+
+The host HWND only gives DXVK a native presentation target for a
+DirectComposition visual. Transparency comes from the swap chain alpha mode,
+not from Win32 sibling paint ordering. WS_EX_TRANSPARENT can delay native child
+window updates behind sibling paints and causes unstable overlay ordering under
+Wayland, which shows up as intermittent black rectangles in Battle.net's CEF
+composition surfaces.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index 8a0f5e9..65f150b 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -784,7 +784,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+             if (!v->host_hwnd || v->host_parent != t->hwnd)
+             {
+                 if (v->host_hwnd) DestroyWindow(v->host_hwnd);
+-                v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
++                v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE,
+                                                dcomp_host_class_name, NULL,
+                                                WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
+                                                x, y, width, height, t->hwnd, NULL,
+--
+2.53.0

@@ -1,0 +1,50 @@
+From 6a8bca6acbc55c8efda9b9e010b0eb03c7e0d2a4 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 12:06:31 -0700
+Subject: [PATCH] d3d11: Pace composition swap chains with the compositor
+
+DirectComposition swap chains are desktop-compositor content, not direct game
+surfaces. Chromium/CEF often presents those surfaces with sync interval zero,
+which makes DXVK select immediate presentation for the Wayland child surface.
+That can expose intermediate frames while the desktop compositor is also
+compositing the parent Wine window, showing up as transient flicker in
+Battle.net's launcher.
+
+Keep normal game swap chains on the application's requested interval, but make
+swap chains that have been bound through the private composition interface use
+compositor-paced presentation.
+
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 11 ++++++++++-
+ src/d3d11/d3d11_swapchain.h   |  2 ++
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index c0943a94c..105b6cf4f 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -426 +426,10 @@ namespace dxvk {
+-  }
++  }
++
++  UINT D3D11SwapChain::GetCompositionSyncInterval(UINT SyncInterval) {
++    std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++
++    if (m_compositionTarget && !SyncInterval)
++      return 1;
++
++    return SyncInterval;
++  }
+@@ -454 +463 @@ namespace dxvk {
+-    m_presenter->setSyncInterval(SyncInterval);
++    m_presenter->setSyncInterval(GetCompositionSyncInterval(SyncInterval));
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 6f68b1bc4..126a09d55 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -160 +160,3 @@ namespace dxvk {
+-    Rc<DxvkImageView> GetBackBufferView();
++    Rc<DxvkImageView> GetBackBufferView();
++
++    UINT GetCompositionSyncInterval(UINT SyncInterval);
