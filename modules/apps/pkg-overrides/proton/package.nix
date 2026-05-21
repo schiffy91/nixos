@@ -68,6 +68,7 @@ let
   dxvkPatchSeries = [
     ./patches/dxvk-battlenet-composition/0001-dxgi-Enable-dummy-composition-swapchain-for-Battle.n.patch
     ./patches/dxvk-battlenet-composition/0002-d3d11-Pace-composition-swap-chains-with-the-composi.patch
+    ./patches/dxvk-battlenet-composition/0003-d3d11-Dither-composition-swap-chain-presents.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
