@@ -26,6 +26,21 @@ let
           WINEPREFIX="${prefix}" "$WINE_SERVER" -k >/dev/null 2>&1 || true
         fi
 
+        sync_builtin() {
+          ARCH="$1"
+          WINDOWS_DIR="$2"
+          DLL="$3"
+          SRC="${proton}/files/lib/wine/$ARCH-windows/$DLL"
+          DST="${prefix}/drive_c/windows/$WINDOWS_DIR/$DLL"
+          if [ -e "$SRC" ]; then
+            install -Dm644 "$SRC" "$DST"
+          fi
+        }
+        for DLL in dcomp.dll dxgi.dll winevulkan.dll win32u.dll winewayland.drv explorer.exe; do
+          sync_builtin x86_64 system32 "$DLL"
+          sync_builtin i386 syswow64 "$DLL"
+        done
+
         rm -f "${legacyDxvkConfig}"
         cd "$HOME"
         set_reg_dword() {

@@ -1,13 +1,13 @@
-From 782c9e389011520a7a9c5a7ac941dd495186a366 Mon Sep 17 00:00:00 2001
+From 4bfc7358195dd9d115faacb925334d07e38351fb Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Tue, 19 May 2026 21:43:36 -0700
-Subject: [PATCH 1/4] dcomp: Implement D3D11-backed desktop composition.
+Date: Wed, 20 May 2026 06:03:54 -0700
+Subject: [PATCH 1/2] dcomp: Implement D3D11-backed desktop composition
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/dcomp/Makefile.in |   2 +
- dlls/dcomp/device.c    | 987 ++++++++++++++++++++++++++++++++++++++++-
- 2 files changed, 978 insertions(+), 11 deletions(-)
+ dlls/dcomp/device.c    | 960 ++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 951 insertions(+), 11 deletions(-)
 
 diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
 index d48b901..4db5387 100644
@@ -21,7 +21,7 @@ index d48b901..4db5387 100644
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index d0eb920..0221429 100644
+index d0eb920..7ac70ed 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1,5 +1,8 @@
@@ -33,19 +33,19 @@ index d0eb920..0221429 100644
   *
   * This library is free software; you can redistribute it and/or
   * modify it under the terms of the GNU Lesser General Public
-@@ -16,35 +19,997 @@
+@@ -16,35 +19,970 @@
   * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
   */
  #include <stdarg.h>
 +#include <stdlib.h>
 +#include <string.h>
-+#include <stdint.h>
  
 +#define COBJMACROS
 +#define INITGUID
  #include "windef.h"
  #include "winbase.h"
 -#include "objidl.h"
++#include "winuser.h"
 +#include "objbase.h"
  #include "dxgi.h"
 +#include "d3d11.h"
@@ -56,111 +56,23 @@ index d0eb920..0221429 100644
  WINE_DEFAULT_DEBUG_CHANNEL(dcomp);
  
 -HRESULT WINAPI DCompositionCreateDevice(IDXGIDevice *dxgi_device, REFIID iid, void **device)
-+/* Minimal Vulkan and DXVK interop declarations. */
-+typedef uint32_t VkFlags;
-+typedef VkFlags VkImageUsageFlags;
-+typedef VkFlags VkSampleCountFlagBits;
-+typedef int32_t VkFormat;
-+typedef int32_t VkImageLayout;
-+typedef int32_t VkImageType;
-+typedef int32_t VkImageTiling;
-+typedef int32_t VkSharingMode;
-+typedef int32_t VkStructureType;
++/* Private DXVK interface used to bind DirectComposition swap chains to HWNDs. */
++DEFINE_GUID(IID_IDXGIVkCompositionSwapChain,
++    0x4765d18a, 0xeba0, 0x40bd, 0xa7, 0x30, 0x7f, 0x5f, 0x3d, 0x91, 0x5c, 0x1f);
 +
-+struct VkInstance_T;       typedef struct VkInstance_T       *VkInstance;
-+struct VkPhysicalDevice_T; typedef struct VkPhysicalDevice_T *VkPhysicalDevice;
-+struct VkDevice_T;         typedef struct VkDevice_T         *VkDevice;
-+struct VkQueue_T;          typedef struct VkQueue_T          *VkQueue;
-+typedef uint64_t VkImage;
++typedef struct IDXGIVkCompositionSwapChain IDXGIVkCompositionSwapChain;
 +
-+#define VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO 14
-+#define VK_IMAGE_LAYOUT_UNDEFINED 0
-+
-+typedef struct
-+{
-+    uint32_t width, height, depth;
-+} VkExtent3D;
-+typedef struct
-+{
-+    uint32_t aspectMask, baseMipLevel, levelCount, baseArrayLayer, layerCount;
-+} VkImageSubresourceRange;
-+typedef struct
++typedef struct IDXGIVkCompositionSwapChainVtbl
  {
 -    FIXME("%p, %s, %p.\n", dxgi_device, debugstr_guid(iid), device);
-+    VkStructureType sType;
-+    const void *pNext;
-+    VkFlags         flags;
-+    VkImageType     imageType;
-+    VkFormat        format;
-+    VkExtent3D      extent;
-+    uint32_t        mipLevels;
-+    uint32_t        arrayLayers;
-+    VkSampleCountFlagBits samples;
-+    VkImageTiling   tiling;
-+    VkImageUsageFlags usage;
-+    VkSharingMode   sharingMode;
-+    uint32_t        queueFamilyIndexCount;
-+    const uint32_t *pQueueFamilyIndices;
-+    VkImageLayout   initialLayout;
-+} VkImageCreateInfo;
++    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkCompositionSwapChain *, REFIID, void **);
++    ULONG   (STDMETHODCALLTYPE *AddRef)(IDXGIVkCompositionSwapChain *);
++    ULONG   (STDMETHODCALLTYPE *Release)(IDXGIVkCompositionSwapChain *);
++    void    (STDMETHODCALLTYPE *SetCompositionTarget)(IDXGIVkCompositionSwapChain *, HWND, HWND);
++} IDXGIVkCompositionSwapChainVtbl;
++struct IDXGIVkCompositionSwapChain { const IDXGIVkCompositionSwapChainVtbl *lpVtbl; };
  
 -    return E_NOTIMPL;
-+/* DXVK interop interfaces (from DXVK's include/native/dxvk_interfaces.h) */
-+DEFINE_GUID(IID_IDXGIVkInteropDevice,
-+    0xe2ef5fa5, 0xdc21, 0x4af7, 0x90, 0xc4, 0xf6, 0x7e, 0xf6, 0xa0, 0x93, 0x23);
-+DEFINE_GUID(IID_IDXGIVkInteropSurface,
-+    0x5546cf8c, 0x77e7, 0x4341, 0xb0, 0x5d, 0x8d, 0x4d, 0x50, 0x00, 0xe7, 0x7d);
-+
-+typedef struct IDXGIVkInteropDevice  IDXGIVkInteropDevice;
-+typedef struct IDXGIVkInteropSurface IDXGIVkInteropSurface;
-+
-+typedef struct IDXGIVkInteropDeviceVtbl
-+{
-+    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkInteropDevice *, REFIID, void **);
-+    ULONG   (STDMETHODCALLTYPE *AddRef)(IDXGIVkInteropDevice *);
-+    ULONG   (STDMETHODCALLTYPE *Release)(IDXGIVkInteropDevice *);
-+    void    (STDMETHODCALLTYPE *GetVulkanHandles)(IDXGIVkInteropDevice *, VkInstance *, VkPhysicalDevice *, VkDevice *);
-+    void    (STDMETHODCALLTYPE *GetSubmissionQueue)(IDXGIVkInteropDevice *, VkQueue *, uint32_t *);
-+    void    (STDMETHODCALLTYPE *TransitionSurfaceLayout)(IDXGIVkInteropDevice *, IDXGIVkInteropSurface *, const VkImageSubresourceRange *, VkImageLayout, VkImageLayout);
-+    void    (STDMETHODCALLTYPE *FlushRenderingCommands)(IDXGIVkInteropDevice *);
-+    HRESULT (STDMETHODCALLTYPE *LockSubmissionQueue)(IDXGIVkInteropDevice *);
-+    HRESULT (STDMETHODCALLTYPE *ReleaseSubmissionQueue)(IDXGIVkInteropDevice *);
-+} IDXGIVkInteropDeviceVtbl;
-+struct IDXGIVkInteropDevice { const IDXGIVkInteropDeviceVtbl *lpVtbl; };
-+
-+typedef struct IDXGIVkInteropSurfaceVtbl
-+{
-+    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkInteropSurface *, REFIID, void **);
-+    ULONG   (STDMETHODCALLTYPE *AddRef)(IDXGIVkInteropSurface *);
-+    ULONG   (STDMETHODCALLTYPE *Release)(IDXGIVkInteropSurface *);
-+    HRESULT (STDMETHODCALLTYPE *GetDevice)(IDXGIVkInteropSurface *, IDXGIVkInteropDevice **);
-+    HRESULT (STDMETHODCALLTYPE *GetVulkanImageInfo)(IDXGIVkInteropSurface *, VkImage *, VkImageLayout *, VkImageCreateInfo *);
-+} IDXGIVkInteropSurfaceVtbl;
-+struct IDXGIVkInteropSurface { const IDXGIVkInteropSurfaceVtbl *lpVtbl; };
-+
-+/* ------------- bridge to winewayland.drv ------------- */
-+#define WM_WAYLAND_DCOMP_PRESENT (0x80001003u)
-+struct wayland_dcomp_present_request
-+{
-+    uint64_t  src_image;            /* VkImage (non-dispatchable, 64-bit) */
-+    uint32_t  src_layout;           /* VkImageLayout */
-+    uint32_t  vk_format;            /* VkFormat */
-+    uint32_t  width, height;
-+    uint64_t  vk_instance;          /* dispatchable handles, stored uint64 for PE/Unix layout */
-+    uint64_t  vk_physical_device;
-+    uint64_t  vk_device;
-+    uint64_t  vk_queue;
-+    uint32_t  queue_family;
-+    uint32_t  _pad;
-+    /* HWND of the DComp target - used by the unix-side handler to look up
-+     * the wayland_surface and (lazily) build the compositing subsurface.
-+     * Carried in the request rather than the WM message's hwnd because we
-+     * SendMessage to a hidden window owned by the dcomp ticker thread (so
-+     * the wndproc dispatch happens inline on the ticker, not on app's UI
-+     * thread which would otherwise block on our vkSubmit + vkWaitForFences
-+     * and stall input/IPC dispatch). */
-+    uint64_t target_hwnd;
-+};
 +/* Object types. */
 +
 +struct dcomp_device;
@@ -180,16 +92,6 @@ index d0eb920..0221429 100644
 +    struct list      surfaces;             /* live IDCompositionSurface list */
 +    BOOL             pending_commit;
 +
-+    /* Some DComp clients commit once and then present new frames on the
-+     * swap chain bound into the visual tree. A single Commit-time handoff
-+     * would freeze at the first frame, so the ticker walks the tree at
-+     * compositor cadence and exports the latest image. */
-+    HANDLE           tick_thread;
-+    HANDLE           tick_stop;
-+    /* Hidden HWND_MESSAGE window owned by the ticker thread itself. Driver
-+     * presentation messages sent to this window are dispatched on the ticker
-+     * thread instead of the application's UI thread. */
-+    HWND             ticker_hwnd;
 +    CRITICAL_SECTION cs;
 +    BOOL             cs_init;
 +};
@@ -202,8 +104,18 @@ index d0eb920..0221429 100644
 +    struct dcomp_device *device;
 +
 +    IUnknown *content;                     /* AddRef'd; usually a swap chain or dcomp_surface */
++    BOOL has_swapchain_desc;
++    DXGI_SWAP_CHAIN_DESC1 swapchain_desc;
 +    float offset_x, offset_y;
++    BOOL has_clip;
++    D2D_RECT_F clip;
 +    D2D_MATRIX_3X2_F transform;
++    enum DCOMPOSITION_COMPOSITE_MODE composite_mode;
++    enum DCOMPOSITION_OPACITY_MODE opacity_mode;
++    HWND host_hwnd;
++    HWND host_parent;
++    UINT host_width, host_height;
++    int host_x, host_y;
 +    struct list children;
 +    struct list child_entry;               /* link in parent->children */
 +    struct dcomp_visual *parent;
@@ -237,6 +149,11 @@ index d0eb920..0221429 100644
 +    struct dcomp_visual *root;             /* AddRef'd; may be NULL */
 +};
 +
++struct dcomp_placement
++{
++    int x, y;
++};
++
 +/* impl_from_X helpers */
 +static inline struct dcomp_device *impl_from_IDCompositionDesktopDevice(IDCompositionDesktopDevice *iface)
 +    { return CONTAINING_RECORD(iface, struct dcomp_device, IDCompositionDesktopDevice_iface); }
@@ -252,6 +169,36 @@ index d0eb920..0221429 100644
 +static const IDCompositionVisual2Vtbl       dcomp_visual_vtbl;
 +static const IDCompositionSurfaceVtbl       dcomp_surface_vtbl;
 +static const IDCompositionTargetVtbl        dcomp_target_vtbl;
++
++static const WCHAR dcomp_host_class_name[] =
++    {'W','i','n','e','D','C','o','m','p','S','w','a','p','C','h','a','i','n','H','o','s','t',0};
++
++static LRESULT CALLBACK dcomp_host_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
++{
++    return DefWindowProcW(hwnd, msg, wparam, lparam);
+ }
+ 
+-HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **device)
++static BOOL dcomp_register_host_class(void)
+ {
+-    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++    static ATOM class_atom;
++    WNDCLASSW class = {0};
+ 
+-    /* Try to workaround Chromium race fixed by Chromium commit 1c13c9105b40e83f87ebcad104fab57fcef43eb9. */
+-    Sleep(50);
++    if (class_atom) return TRUE;
+ 
+-    return E_NOTIMPL;
++    class.lpfnWndProc = dcomp_host_wndproc;
++    class.hInstance = GetModuleHandleW(NULL);
++    class.lpszClassName = dcomp_host_class_name;
++
++    class_atom = RegisterClassW(&class);
++    if (!class_atom && GetLastError() == ERROR_CLASS_ALREADY_EXISTS)
++        class_atom = 1;
++    return !!class_atom;
++}
 +
 +/* ----------------------- object constructors ----------------------- */
 +
@@ -285,13 +232,11 @@ index d0eb920..0221429 100644
 +    list_add_tail(&device->surfaces, &s->entry);
 +    TRACE("created surface %p (%ux%u fmt=%u alpha=%u)\n", s, width, height, format, alpha);
 +    return s;
- }
- 
--HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **device)
++}
++
 +static struct dcomp_target *dcomp_target_create(struct dcomp_device *device,
 +                                                HWND hwnd, BOOL topmost)
- {
--    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++{
 +    struct dcomp_target *t = calloc(1, sizeof(*t));
 +    if (!t) return NULL;
 +    t->IDCompositionTarget_iface.lpVtbl = &dcomp_target_vtbl;
@@ -303,12 +248,9 @@ index d0eb920..0221429 100644
 +    TRACE("created target %p (hwnd=%p topmost=%d) device=%p\n", t, hwnd, topmost, device);
 +    return t;
 +}
- 
--    /* Try to workaround Chromium race fixed by Chromium commit 1c13c9105b40e83f87ebcad104fab57fcef43eb9. */
--    Sleep(50);
++
 +/* ----------------------- IDCompositionVisual2 ----------------------- */
- 
--    return E_NOTIMPL;
++
 +static HRESULT WINAPI visual_QueryInterface(IDCompositionVisual2 *iface, REFIID iid, void **out)
 +{
 +    if (IsEqualGUID(iid, &IID_IUnknown) ||
@@ -319,13 +261,15 @@ index d0eb920..0221429 100644
 +        *out = iface;
 +        return S_OK;
 +    }
-+    WARN("visual QI %s - not supported\n", debugstr_guid(iid));
++    TRACE("visual QI %s - not supported\n", debugstr_guid(iid));
 +    *out = NULL;
 +    return E_NOINTERFACE;
-+}
-+
+ }
+ 
+-HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **device)
 +static ULONG WINAPI visual_AddRef(IDCompositionVisual2 *iface)
-+{
+ {
+-    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
 +    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
 +    return InterlockedIncrement(&v->ref);
 +}
@@ -339,6 +283,7 @@ index d0eb920..0221429 100644
 +        struct dcomp_visual *c, *cn;
 +        LIST_FOR_EACH_ENTRY_SAFE(c, cn, &v->children, struct dcomp_visual, child_entry)
 +        { list_remove(&c->child_entry); c->parent = NULL; }
++        if (v->host_hwnd) DestroyWindow(v->host_hwnd);
 +        if (v->parent) list_remove(&v->child_entry);
 +        if (v->content) IUnknown_Release(v->content);
 +        list_remove(&v->entry);
@@ -350,21 +295,47 @@ index d0eb920..0221429 100644
 +#define VISUAL_STUB_OK(name, ...) \
 +    static HRESULT WINAPI visual_##name(IDCompositionVisual2 *iface, ##__VA_ARGS__) \
 +    { struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->dirty = TRUE; return S_OK; }
-+
+ 
 +static HRESULT WINAPI visual_SetOffsetX(IDCompositionVisual2 *iface, float x)
-+{ struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->offset_x = x; v->dirty = TRUE; return S_OK; }
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p x=%.8e\n", v, x);
++    v->offset_x = x;
++    v->dirty = TRUE;
++    return S_OK;
++}
 +static HRESULT WINAPI visual_SetOffsetY(IDCompositionVisual2 *iface, float y)
-+{ struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->offset_y = y; v->dirty = TRUE; return S_OK; }
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p y=%.8e\n", v, y);
++    v->offset_y = y;
++    v->dirty = TRUE;
++    return S_OK;
++}
 +VISUAL_STUB_OK(SetOffsetXAnimation, IDCompositionAnimation *a)
 +VISUAL_STUB_OK(SetOffsetYAnimation, IDCompositionAnimation *a)
 +static HRESULT WINAPI visual_SetTransform(IDCompositionVisual2 *iface, const D2D_MATRIX_3X2_F *m)
-+{ struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); if (m) v->transform = *m; v->dirty = TRUE; return S_OK; }
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p matrix=%p\n", v, m);
++    if (m) v->transform = *m;
++    v->dirty = TRUE;
++    return S_OK;
++}
 +VISUAL_STUB_OK(SetTransformObject, IDCompositionTransform *t)
 +VISUAL_STUB_OK(SetTransformParent, IDCompositionVisual *p)
 +VISUAL_STUB_OK(SetEffect, IDCompositionEffect *e)
 +VISUAL_STUB_OK(SetBitmapInterpolationMode, enum DCOMPOSITION_BITMAP_INTERPOLATION_MODE m)
 +VISUAL_STUB_OK(SetBorderMode, enum DCOMPOSITION_BORDER_MODE m)
-+VISUAL_STUB_OK(SetClip, const D2D_RECT_F *r)
++static HRESULT WINAPI visual_SetClip(IDCompositionVisual2 *iface, const D2D_RECT_F *r)
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p clip=%p\n", v, r);
++    v->has_clip = !!r;
++    if (r) v->clip = *r;
++    v->dirty = TRUE;
++    return S_OK;
++}
 +VISUAL_STUB_OK(SetClipObject, IDCompositionClip *c)
 +
 +static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *content)
@@ -374,6 +345,8 @@ index d0eb920..0221429 100644
 +
 +    if (v->device && v->device->cs_init) EnterCriticalSection(&v->device->cs);
 +    if (v->content) IUnknown_Release(v->content);
++    v->has_swapchain_desc = FALSE;
++    memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
 +    v->content = content;
 +    if (content)
 +    {
@@ -385,23 +358,30 @@ index d0eb920..0221429 100644
 +        {
 +            DXGI_SWAP_CHAIN_DESC1 desc = {0};
 +            ID3D11Texture2D *bb = NULL;
-+            IDXGISwapChain1_GetDesc1(sc1, &desc);
++            HRESULT desc_hr = IDXGISwapChain1_GetDesc1(sc1, &desc);
 +            HRESULT hr = IDXGISwapChain1_GetBuffer(sc1, 0, &IID_ID3D11Texture2D, (void **)&bb);
-+            WARN("visual=%p content is IDXGISwapChain1=%p (%ux%u fmt=%u flags=%#x); GetBuffer hr=%#lx bb=%p\n",
-+                 v, sc1, desc.Width, desc.Height, desc.Format, desc.Flags, hr, bb);
++            if (SUCCEEDED(desc_hr))
++            {
++                v->has_swapchain_desc = TRUE;
++                v->swapchain_desc = desc;
++            }
++            TRACE("visual=%p content is IDXGISwapChain1=%p (%ux%u fmt=%u alpha=%u usage=%#x buffers=%u scaling=%u swap_effect=%u flags=%#x); GetDesc1 hr=%#lx GetBuffer hr=%#lx bb=%p\n",
++                  v, sc1, desc.Width, desc.Height, desc.Format, desc.AlphaMode,
++                  desc.BufferUsage, desc.BufferCount, desc.Scaling, desc.SwapEffect,
++                  desc.Flags, desc_hr, hr, bb);
 +            if (bb) ID3D11Texture2D_Release(bb);
 +            IDXGISwapChain1_Release(sc1);
 +        }
 +        else if (SUCCEEDED(IUnknown_QueryInterface(content, &IID_IDCompositionSurface, (void **)&sif)) && sif)
 +        {
 +            struct dcomp_surface *s = impl_from_IDCompositionSurface(sif);
-+            WARN("visual=%p content is IDCompositionSurface=%p (%ux%u fmt=%u draw_texture=%p)\n",
-+                 v, s, s->width, s->height, s->format, s->draw_texture);
++            TRACE("visual=%p content is IDCompositionSurface=%p (%ux%u fmt=%u draw_texture=%p)\n",
++                  v, s, s->width, s->height, s->format, s->draw_texture);
 +            IDCompositionSurface_Release(sif);
 +        }
 +        else
 +        {
-+            WARN("visual=%p content=%p - unknown type (neither swap chain nor dcomp surface)\n", v, content);
++            TRACE("visual=%p content=%p - unknown type (neither swap chain nor dcomp surface)\n", v, content);
 +        }
 +    }
 +    v->dirty = TRUE;
@@ -414,8 +394,8 @@ index d0eb920..0221429 100644
 +                                       BOOL insert_above, IDCompositionVisual *ref_visual)
 +{
 +    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
-+    struct dcomp_visual *c = NULL;
-+    IDCompositionVisual2 *v2 = NULL;
++    struct dcomp_visual *c = NULL, *ref = NULL;
++    IDCompositionVisual2 *v2 = NULL, *ref_v2 = NULL;
 +    if (!visual) return S_OK;
 +    if (SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
 +    {
@@ -423,15 +403,28 @@ index d0eb920..0221429 100644
 +        /* QI AddRef'd; don't release - parent retains via children list. */
 +    }
 +    if (!c) return S_OK;
++    if (ref_visual &&
++        SUCCEEDED(IDCompositionVisual_QueryInterface(ref_visual, &IID_IDCompositionVisual2, (void **)&ref_v2)) &&
++        ref_v2)
++    {
++        ref = impl_from_IDCompositionVisual2(ref_v2);
++        IDCompositionVisual2_Release(ref_v2);
++    }
 +    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
 +    if (c->parent)                       /* already in some parent's children - remove first */
 +        list_remove(&c->child_entry);
 +    c->parent = p;
-+    list_add_tail(&p->children, &c->child_entry);
++    if (ref && ref->parent == p)
++    {
++        if (insert_above) list_add_after(&ref->child_entry, &c->child_entry);
++        else list_add_before(&ref->child_entry, &c->child_entry);
++    }
++    else if (insert_above) list_add_tail(&p->children, &c->child_entry);
++    else list_add_head(&p->children, &c->child_entry);
 +    p->dirty = TRUE;
 +    if (p->device) p->device->pending_commit = TRUE;
 +    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
-+    TRACE("parent=%p added child=%p\n", p, c);
++    TRACE("parent=%p added child=%p insert_above=%u ref=%p\n", p, c, insert_above, ref);
 +    return S_OK;
 +}
 +
@@ -464,8 +457,24 @@ index d0eb920..0221429 100644
 +    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
 +    return S_OK;
 +}
-+VISUAL_STUB_OK(SetCompositeMode, enum DCOMPOSITION_COMPOSITE_MODE m)
-+VISUAL_STUB_OK(SetOpacityMode, enum DCOMPOSITION_OPACITY_MODE m)
++static HRESULT WINAPI visual_SetCompositeMode(IDCompositionVisual2 *iface,
++                                              enum DCOMPOSITION_COMPOSITE_MODE m)
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p mode=%u\n", v, m);
++    v->composite_mode = m;
++    v->dirty = TRUE;
++    return S_OK;
++}
++static HRESULT WINAPI visual_SetOpacityMode(IDCompositionVisual2 *iface,
++                                            enum DCOMPOSITION_OPACITY_MODE m)
++{
++    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
++    TRACE("visual=%p mode=%u\n", v, m);
++    v->opacity_mode = m;
++    v->dirty = TRUE;
++    return S_OK;
++}
 +VISUAL_STUB_OK(SetBackFaceVisibility, enum DCOMPOSITION_BACKFACE_VISIBILITY v_)
 +
 +static const IDCompositionVisual2Vtbl dcomp_visual_vtbl =
@@ -488,7 +497,7 @@ index d0eb920..0221429 100644
 +{
 +    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IDCompositionSurface))
 +    { IDCompositionSurface_AddRef(iface); *out = iface; return S_OK; }
-+    WARN("surface QI %s - not supported\n", debugstr_guid(iid));
++    TRACE("surface QI %s - not supported\n", debugstr_guid(iid));
 +    *out = NULL;
 +    return E_NOINTERFACE;
 +}
@@ -570,9 +579,8 @@ index d0eb920..0221429 100644
 +    s->in_draw = FALSE;
 +    if (s->device) s->device->pending_commit = TRUE;
 +    return S_OK;
- }
- 
--HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **device)
++}
++
 +static HRESULT WINAPI surface_SuspendDraw(IDCompositionSurface *iface)
 +{ TRACE("\n"); return S_OK; }
 +static HRESULT WINAPI surface_ResumeDraw(IDCompositionSurface *iface)
@@ -582,15 +590,14 @@ index d0eb920..0221429 100644
 +{ TRACE("\n"); return S_OK; }
 +
 +static const IDCompositionSurfaceVtbl dcomp_surface_vtbl =
- {
--    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++{
 +    surface_QueryInterface, surface_AddRef, surface_Release,
 +    surface_BeginDraw, surface_EndDraw,
 +    surface_SuspendDraw, surface_ResumeDraw, surface_Scroll,
 +};
 +
 +/* ----------------------- IDCompositionTarget ----------------------- */
- 
++
 +static HRESULT WINAPI target_QueryInterface(IDCompositionTarget *iface, REFIID iid, void **out)
 +{
 +    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IDCompositionTarget))
@@ -650,7 +657,7 @@ index d0eb920..0221429 100644
 +        IsEqualGUID(iid, &IID_IDCompositionDevice2) ||
 +        IsEqualGUID(iid, &IID_IDCompositionDesktopDevice))
 +    { IDCompositionDesktopDevice_AddRef(iface); *out = iface; return S_OK; }
-+    WARN("device QI %s - not supported\n", debugstr_guid(iid));
++    TRACE("device QI %s - not supported\n", debugstr_guid(iid));
 +    *out = NULL;
 +    return E_NOINTERFACE;
 +}
@@ -665,9 +672,6 @@ index d0eb920..0221429 100644
 +    if (!r)
 +    {
 +        struct dcomp_target *t, *t_next;
-+        if (d->tick_stop)   SetEvent(d->tick_stop);
-+        if (d->tick_thread) { WaitForSingleObject(d->tick_thread, 1000); CloseHandle(d->tick_thread); }
-+        if (d->tick_stop)   CloseHandle(d->tick_stop);
 +        LIST_FOR_EACH_ENTRY_SAFE(t, t_next, &d->targets, struct dcomp_target, entry)
 +            IDCompositionTarget_Release(&t->IDCompositionTarget_iface);
 +        if (d->cs_init) DeleteCriticalSection(&d->cs);
@@ -678,174 +682,144 @@ index d0eb920..0221429 100644
 +    return r;
 +}
 +
-+/* Gather Vulkan handles from DXVK and pass them to the display driver. */
-+static void dcomp_export_visual(struct dcomp_target *t, struct dcomp_visual *v)
++static int round_float(float value)
 +{
-+    IDXGISwapChain1 *sc = NULL;
-+    IDCompositionSurface *cs = NULL;
-+    ID3D11Texture2D *bb = NULL;
-+    IDXGIVkInteropSurface *iface_surf = NULL;
-+    IDXGIVkInteropDevice *iface_dev = NULL;
-+    VkImage src_img = 0;
-+    VkImageLayout src_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-+    VkImageCreateInfo src_info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, NULL };
-+    VkInstance vk_inst = NULL; VkPhysicalDevice vk_pdev = NULL; VkDevice vk_dev = NULL;
-+    VkQueue vk_queue = NULL; uint32_t queue_family = 0;
++    return (int)(value + (value >= 0.0f ? 0.5f : -0.5f));
++}
++
++static struct dcomp_placement dcomp_visual_placement(const struct dcomp_placement *parent,
++                                                     const struct dcomp_visual *v)
++{
++    struct dcomp_placement placement = *parent;
++
++    placement.x += round_float(v->offset_x + v->transform.dx);
++    placement.y += round_float(v->offset_y + v->transform.dy);
++    if (v->transform.m12 != 0.0f || v->transform.m21 != 0.0f ||
++        v->transform.m11 != 1.0f || v->transform.m22 != 1.0f)
++    {
++        FIXME("visual=%p non-translation transform not fully supported: "
++              "[%.8e %.8e %.8e %.8e %.8e %.8e]\n",
++              v, v->transform.m11, v->transform.m12, v->transform.m21,
++              v->transform.m22, v->transform.dx, v->transform.dy);
++    }
++    return placement;
++}
++
++static BOOL dcomp_refresh_swapchain_desc(struct dcomp_visual *v)
++{
++    IDXGISwapChain1 *sc1 = NULL;
++    DXGI_SWAP_CHAIN_DESC1 desc = {0};
 +    HRESULT hr;
 +
-+    TRACE("export visual=%p content=%p hwnd=%p\n", v, v->content, t->hwnd);
-+    if (!v->content) return;
-+
-+    /* Visual content can be either a swap chain or a composition surface.
-+     * Both provide an ID3D11Texture2D that the display driver can present. */
-+    if (SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGISwapChain1, (void **)&sc)) && sc)
++    if (!v->content ||
++        FAILED(IUnknown_QueryInterface(v->content, &IID_IDXGISwapChain1, (void **)&sc1)) ||
++        !sc1)
 +    {
-+        if (FAILED(hr = IDXGISwapChain1_GetBuffer(sc, 0, &IID_ID3D11Texture2D, (void **)&bb)) || !bb)
-+        { WARN("  GetBuffer failed hr=%#lx\n", hr); IDXGISwapChain1_Release(sc); return; }
++        v->has_swapchain_desc = FALSE;
++        memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
++        return FALSE;
 +    }
-+    else if (SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDCompositionSurface, (void **)&cs)) && cs)
++
++    hr = IDXGISwapChain1_GetDesc1(sc1, &desc);
++    IDXGISwapChain1_Release(sc1);
++    if (FAILED(hr))
 +    {
-+        struct dcomp_surface *s = impl_from_IDCompositionSurface(cs);
-+        if (!s->draw_texture) { IDCompositionSurface_Release(cs); return; }
-+        bb = s->draw_texture;
-+        ID3D11Texture2D_AddRef(bb);
++        v->has_swapchain_desc = FALSE;
++        memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
++        return FALSE;
 +    }
-+    else
-+    { WARN("  unknown content type - not swap chain or composition surface\n"); return; }
 +
-+    if (FAILED(hr = ID3D11Texture2D_QueryInterface(bb, &IID_IDXGIVkInteropSurface, (void **)&iface_surf)) || !iface_surf)
-+    { WARN("  no IDXGIVkInteropSurface hr=%#lx (DXVK not active?)\n", hr);
-+      ID3D11Texture2D_Release(bb); if (cs) IDCompositionSurface_Release(cs); if (sc) IDXGISwapChain1_Release(sc); return; }
-+    if (FAILED(hr = iface_surf->lpVtbl->GetVulkanImageInfo(iface_surf, &src_img, &src_layout, &src_info)))
-+    { WARN("  GetVulkanImageInfo failed hr=%#lx\n", hr); iface_surf->lpVtbl->Release(iface_surf); ID3D11Texture2D_Release(bb); if (cs) IDCompositionSurface_Release(cs); if (sc) IDXGISwapChain1_Release(sc); return; }
-+    TRACE("  src VkImage=0x%llx fmt=%d extent=%ux%u layout=%d\n",
-+          (unsigned long long)src_img, src_info.format,
-+          src_info.extent.width, src_info.extent.height, src_layout);
-+    if (FAILED(hr = iface_surf->lpVtbl->GetDevice(iface_surf, &iface_dev)) || !iface_dev)
-+    { WARN("  GetDevice failed hr=%#lx\n", hr); iface_surf->lpVtbl->Release(iface_surf); ID3D11Texture2D_Release(bb); if (cs) IDCompositionSurface_Release(cs); if (sc) IDXGISwapChain1_Release(sc); return; }
-+
-+    iface_dev->lpVtbl->GetVulkanHandles(iface_dev, &vk_inst, &vk_pdev, &vk_dev);
-+    iface_dev->lpVtbl->GetSubmissionQueue(iface_dev, &vk_queue, &queue_family);
-+    TRACE("  vk_dev=%p vk_pdev=%p vk_queue=%p queue_family=%u src_image=0x%llx fmt=%d\n",
-+          vk_dev, vk_pdev, vk_queue, queue_family,
-+          (unsigned long long)src_img, src_info.format);
-+
-+    /* Hold DXVK's submission lock while the display driver submits copy work
-+     * on the same queue. Vulkan queue submission is externally synchronized. */
-+    iface_dev->lpVtbl->LockSubmissionQueue(iface_dev);
-+    {
-+        struct wayland_dcomp_present_request req = {0};
-+        HWND dispatch_hwnd;
-+        DWORD_PTR sm_result = 0;
-+
-+        req.src_image          = (uint64_t)src_img;
-+        req.src_layout         = (uint32_t)src_layout;
-+        req.vk_format          = (uint32_t)src_info.format;
-+        req.width              = src_info.extent.width;
-+        req.height             = src_info.extent.height;
-+        req.vk_instance        = (uint64_t)(uintptr_t)vk_inst;
-+        req.vk_physical_device = (uint64_t)(uintptr_t)vk_pdev;
-+        req.vk_device          = (uint64_t)(uintptr_t)vk_dev;
-+        req.vk_queue           = (uint64_t)(uintptr_t)vk_queue;
-+        req.queue_family       = queue_family;
-+
-+        req.target_hwnd        = (uint64_t)(uintptr_t)t->hwnd;
-+        dispatch_hwnd          = t->device->ticker_hwnd ? t->device->ticker_hwnd : t->hwnd;
-+        TRACE("-> hwnd=%p %ux%u fmt=%d src_image=0x%llx\n",
-+              t->hwnd, req.width, req.height, req.vk_format, (unsigned long long)req.src_image);
-+        SendMessageTimeoutW(dispatch_hwnd, WM_WAYLAND_DCOMP_PRESENT, 0, (LPARAM)&req,
-+                            SMTO_NORMAL | SMTO_ABORTIFHUNG, 50, &sm_result);
-+    }
-+    iface_dev->lpVtbl->ReleaseSubmissionQueue(iface_dev);
-+
-+    if (iface_dev)  iface_dev->lpVtbl->Release(iface_dev);
-+    if (iface_surf) iface_surf->lpVtbl->Release(iface_surf);
-+    if (bb)         ID3D11Texture2D_Release(bb);
-+    if (cs)         IDCompositionSurface_Release(cs);
-+    if (sc)         IDXGISwapChain1_Release(sc);
++    v->has_swapchain_desc = TRUE;
++    v->swapchain_desc = desc;
++    return TRUE;
 +}
 +
-+static void dcomp_walk_visual_quiet(struct dcomp_target *t, struct dcomp_visual *v)
++static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
++                              const struct dcomp_placement *parent_placement)
 +{
 +    struct dcomp_visual *c;
++    IDXGIVkCompositionSwapChain *composition_sc = NULL;
++    struct dcomp_placement placement;
++    HWND target_hwnd;
++
 +    if (!v) return;
-+    if (v->content) dcomp_export_visual(t, v);
-+    LIST_FOR_EACH_ENTRY(c, &v->children, struct dcomp_visual, child_entry)
-+        dcomp_walk_visual_quiet(t, c);
-+}
++    placement = dcomp_visual_placement(parent_placement, v);
 +
-+/* Custom wndproc that explicitly routes driver messages to the wayland
-+ * driver. wine's default window proc routes WM_WINE_*_DRIVER_MSG to
-+ * user_driver->pWindowMessage, but built-in classes (Static, etc.) handle
-+ * their own message dispatch and never reach DefWindowProc for these
-+ * messages, so we need a dedicated wndproc here. */
-+static LRESULT CALLBACK dcomp_ticker_wndproc(HWND hwnd, UINT msg,
-+                                               WPARAM wp, LPARAM lp)
-+{
-+    /* Pass everything to DefWindowProcW - for messages in the WM_WINE_*
-+     * driver range, that routes them to user_driver->pWindowMessage, which
-+     * is wayland's WAYLAND_WindowMessage -> wayland_dcomp_handle_present. */
-+    return DefWindowProcW(hwnd, msg, wp, lp);
-+}
++    TRACE("target=%p hwnd=%p visual=%p content=%p pos=(%d,%d) offset=(%.8e,%.8e) clip=%d composite=%u opacity=%u\n",
++          t, t->hwnd, v, v->content, placement.x, placement.y, v->offset_x,
++          v->offset_y, v->has_clip, v->composite_mode, v->opacity_mode);
 +
-+static DWORD WINAPI dcomp_tick_thread(void *arg)
-+{
-+    struct dcomp_device *d = arg;
-+    WNDCLASSW wc = {0};
-+    static const WCHAR class_name[] = L"dcomp_ticker_class";
-+
-+    TRACE("ticker started device=%p\n", d);
-+
-+    /* Register a private window class with our wndproc so driver messages
-+     * get routed through DefWindowProcW -> user_driver->pWindowMessage. */
-+    wc.lpfnWndProc = dcomp_ticker_wndproc;
-+    wc.lpszClassName = class_name;
-+    RegisterClassW(&wc);     /* idempotent - class may already be registered */
-+
-+    /* Create a hidden HWND_MESSAGE window owned by THIS thread. SendMessage
-+     * to a window whose owner thread is the caller dispatches the wndproc
-+     * inline (no thread switch) - so WM_WAYLAND_DCOMP_PRESENT lands
-+     * on wayland's WindowMessage handler on the ticker thread, not on
-+     * app's UI thread. That keeps the per-frame GPU + wayland work off
-+     * app's UI thread (which has to keep dispatching mouse/keyboard/IPC). */
-+    d->ticker_hwnd = CreateWindowExW(0, class_name, L"dcomp-ticker",
-+                                     0, 0, 0, 0, 0,
-+                                     HWND_MESSAGE, NULL, NULL, NULL);
-+    if (!d->ticker_hwnd)
-+        WARN("failed to create ticker HWND, falling back to direct send\n");
-+    else
-+        TRACE("ticker HWND=%p (owner=this thread)\n", d->ticker_hwnd);
-+
-+    for (;;)
++    target_hwnd = t->hwnd;
++    dcomp_refresh_swapchain_desc(v);
++    if (v->content && v->has_swapchain_desc &&
++        v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)
 +    {
-+        struct dcomp_target *snap[16];
-+        int n = 0, i;
-+        DWORD w = WaitForSingleObject(d->tick_stop, 16);
-+        if (w == WAIT_OBJECT_0) break;                       /* stop signaled */
++        int x = placement.x;
++        int y = placement.y;
++        UINT width = v->swapchain_desc.Width;
++        UINT height = v->swapchain_desc.Height;
 +
-+        /* Snapshot the target list under the device cs, but do not hold the
-+         * cs while walking visuals and sending driver messages. */
-+        EnterCriticalSection(&d->cs);
++        if (v->has_clip)
 +        {
-+            struct dcomp_target *t;
-+            LIST_FOR_EACH_ENTRY(t, &d->targets, struct dcomp_target, entry)
-+            {
-+                if (n >= (int)(sizeof(snap)/sizeof(snap[0]))) break;
-+                IDCompositionTarget_AddRef(&t->IDCompositionTarget_iface);
-+                snap[n++] = t;
-+            }
++            int clip_left = placement.x + round_float(v->clip.left);
++            int clip_top = placement.y + round_float(v->clip.top);
++            int clip_right = placement.x + round_float(v->clip.right);
++            int clip_bottom = placement.y + round_float(v->clip.bottom);
++            int right = x + width;
++            int bottom = y + height;
++
++            if (clip_left > x) x = clip_left;
++            if (clip_top > y) y = clip_top;
++            if (clip_right < right) right = clip_right;
++            if (clip_bottom < bottom) bottom = clip_bottom;
++            width = right > x ? right - x : 0;
++            height = bottom > y ? bottom - y : 0;
 +        }
-+        LeaveCriticalSection(&d->cs);
 +
-+        for (i = 0; i < n; i++)
++        if (width && height && dcomp_register_host_class())
 +        {
-+            struct dcomp_target *t = snap[i];
-+            if (t->root) dcomp_walk_visual_quiet(t, t->root);
-+            IDCompositionTarget_Release(&t->IDCompositionTarget_iface);
++            if (!v->host_hwnd || v->host_parent != t->hwnd)
++            {
++                if (v->host_hwnd) DestroyWindow(v->host_hwnd);
++                v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
++                                               dcomp_host_class_name, NULL,
++                                               WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
++                                               x, y, width, height, t->hwnd, NULL,
++                                               GetModuleHandleW(NULL), NULL);
++                v->host_parent = t->hwnd;
++                v->host_width = v->host_height = 0;
++            }
++
++            if (v->host_hwnd &&
++                (v->host_x != x || v->host_y != y ||
++                 v->host_width != width || v->host_height != height))
++            {
++                SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height,
++                             SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
++                v->host_x = x;
++                v->host_y = y;
++                v->host_width = width;
++                v->host_height = height;
++            }
++
++            if (v->host_hwnd) target_hwnd = v->host_hwnd;
 +        }
 +    }
-+    TRACE("ticker exiting device=%p\n", d);
-+    return 0;
++
++    if (v->content &&
++        SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGIVkCompositionSwapChain,
++                                          (void **)&composition_sc)) &&
++        composition_sc)
++    {
++        TRACE("binding composition swap chain content=%p hwnd=%p parent=%p alpha=%u\n",
++              v->content, target_hwnd, t->hwnd,
++              v->has_swapchain_desc ? v->swapchain_desc.AlphaMode : 0);
++        composition_sc->lpVtbl->SetCompositionTarget(composition_sc, target_hwnd, t->hwnd);
++        composition_sc->lpVtbl->Release(composition_sc);
++    }
++
++    LIST_FOR_EACH_ENTRY(c, &v->children, struct dcomp_visual, child_entry)
++        dcomp_bind_visual(t, c, &placement);
 +}
 +
 +static HRESULT WINAPI device_Commit(IDCompositionDesktopDevice *iface)
@@ -858,12 +832,15 @@ index d0eb920..0221429 100644
 +    if (d->cs_init) EnterCriticalSection(&d->cs);
 +    LIST_FOR_EACH_ENTRY(t, &d->targets, struct dcomp_target, entry)
 +    {
++        const struct dcomp_placement placement = {0, 0};
++
 +        target_count++;
 +        TRACE("  target=%p hwnd=%p root=%p\n", t, t->hwnd, t->root);
++        if (t->root) dcomp_bind_visual(t, t->root, &placement);
 +    }
 +    d->pending_commit = FALSE;
 +    if (d->cs_init) LeaveCriticalSection(&d->cs);
-+    if (!target_count) WARN("Commit with no targets registered\n");
++    if (!target_count) TRACE("Commit with no targets registered\n");
 +    return S_OK;
 +}
 +
@@ -1016,12 +993,8 @@ index d0eb920..0221429 100644
 +        }
 +    }
 +
-+    d->tick_stop = CreateEventW(NULL, TRUE, FALSE, NULL);
-+    d->tick_thread = CreateThread(NULL, 0, dcomp_tick_thread, d, 0, NULL);
-+    if (!d->tick_thread) WARN("ticker thread creation failed\n");
-+
 +    *out = &d->IDCompositionDesktopDevice_iface;
-+    TRACE("created device=%p (d3d11=%p ticker=%p)\n", d, d->d3d11_device, d->tick_thread);
++    TRACE("created device=%p (d3d11=%p)\n", d, d->d3d11_device);
 +    return S_OK;
 +}
 +

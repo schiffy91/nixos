@@ -1,13 +1,397 @@
-From 298b7f47b76db070b7fd452e33f41fd6918aa7bb Mon Sep 17 00:00:00 2001
+From a5444157ecc52468a79fadd9c76355b460b599e2 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
-Date: Tue, 19 May 2026 22:07:41 -0700
-Subject: [PATCH] dxgi: Enable dummy composition swapchain for Battle.net.
+Date: Wed, 20 May 2026 03:04:21 -0700
+Subject: [PATCH] dxgi: Bind composition swap chains to DComp windows
 
 Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- src/util/config/config.cpp | 4 ++++
- 1 file changed, 4 insertions(+)
+ src/d3d11/d3d11_swapchain.cpp        | 70 ++++++++++++++++++++++++++++
+ src/d3d11/d3d11_swapchain.h          | 32 ++++++++++++-
+ src/dxgi/dxgi_interfaces.h           | 18 +++++++
+ src/dxgi/dxgi_surface.cpp            | 20 ++++++++
+ src/dxgi/dxgi_surface.h              |  6 +++
+ src/dxgi/dxgi_swapchain.cpp          |  3 ++
+ src/dxgi/dxgi_swapchain_dispatcher.h |  3 ++
+ src/dxvk/dxvk_presenter.cpp          | 11 ++++-
+ src/dxvk/dxvk_presenter.h            |  2 +
+ src/util/config/config.cpp           |  4 ++
+ 10 files changed, 167 insertions(+), 2 deletions(-)
 
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index cbcc3c6c0..c0943a94c 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -25,6 +25,17 @@ namespace dxvk {
+     }
+   }
+ 
++  static VkCompositeAlphaFlagBitsKHR ConvertCompositeAlpha(DXGI_ALPHA_MODE mode) {
++    switch (mode) {
++      case DXGI_ALPHA_MODE_PREMULTIPLIED:
++        return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
++      case DXGI_ALPHA_MODE_STRAIGHT:
++        return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
++      default:
++        return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
++    }
++  }
++
+   static VkXYColorEXT ConvertXYColor(const UINT16 (&dxgiColor)[2]) {
+     return VkXYColorEXT{ float(dxgiColor[0]) / 50000.0f, float(dxgiColor[1]) / 50000.0f };
+   }
+@@ -61,6 +72,7 @@ namespace dxvk {
+           IDXGIVkSurfaceFactory*  pSurfaceFactory,
+     const DXGI_SWAP_CHAIN_DESC1*  pDesc)
+   : m_dxgiDevice(pContainer),
++    m_composition(this),
+     m_parent(pDevice),
+     m_surfaceFactory(pSurfaceFactory),
+     m_desc(*pDesc),
+@@ -102,6 +114,12 @@ namespace dxvk {
+       return S_OK;
+     }
+ 
++    if (riid == __uuidof(IDXGIVkCompositionSwapChain)) {
++      *ppvObject = &m_composition;
++      AddRef();
++      return S_OK;
++    }
++
+     if (logQueryInterfaceError(__uuidof(IDXGIVkSwapChain), riid)) {
+       Logger::warn("D3D11SwapChain::QueryInterface: Unknown interface query");
+       Logger::warn(str::format(riid));
+@@ -298,6 +316,37 @@ namespace dxvk {
+   }
+ 
+ 
++  D3D11CompositionSwapChain::D3D11CompositionSwapChain(
++          D3D11SwapChain*        parent)
++  : m_parent(parent) {
++
++  }
++
++
++  HRESULT STDMETHODCALLTYPE D3D11CompositionSwapChain::QueryInterface(
++          REFIID                riid,
++          void**                ppvObject) {
++    return m_parent->QueryInterface(riid, ppvObject);
++  }
++
++
++  ULONG STDMETHODCALLTYPE D3D11CompositionSwapChain::AddRef() {
++    return m_parent->AddRef();
++  }
++
++
++  ULONG STDMETHODCALLTYPE D3D11CompositionSwapChain::Release() {
++    return m_parent->Release();
++  }
++
++
++  void STDMETHODCALLTYPE D3D11CompositionSwapChain::SetCompositionTarget(
++          HWND                  hTarget,
++          HWND                  hDispatch) {
++    m_parent->SetCompositionTarget(hTarget, hDispatch);
++  }
++
++
+   UINT STDMETHODCALLTYPE D3D11SwapChain::CheckColorSpaceSupport(
+           DXGI_COLOR_SPACE_TYPE     ColorSpace) {
+     UINT supportFlags = 0;
+@@ -357,6 +406,26 @@ namespace dxvk {
+   }
+ 
+ 
++  void D3D11SwapChain::SetCompositionTarget(
++          HWND                      hTarget,
++          HWND) {
++    HWND previousTarget = nullptr;
++
++    {
++      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++      previousTarget = m_compositionTarget;
++      m_compositionTarget = hTarget;
++    }
++
++    if (hTarget != previousTarget) {
++      m_presenter->destroyResources();
++      m_surfaceFactory->SetWindow(hTarget);
++    }
++
++    Logger::debug("D3D11SwapChain::SetCompositionTarget: bound composition target");
++  }
++
++
+   Rc<DxvkImageView> D3D11SwapChain::GetBackBufferView() {
+     Rc<DxvkImage> image = GetCommonTexture(m_backBuffers[0].ptr())->GetImage();
+ 
+@@ -505,6 +574,7 @@ namespace dxvk {
+   void D3D11SwapChain::CreatePresenter() {
+     PresenterDesc presenterDesc = { };
+     presenterDesc.deferSurfaceCreation = m_parent->GetOptions()->deferSurfaceCreation;
++    presenterDesc.compositeAlpha = ConvertCompositeAlpha(m_desc.AlphaMode);
+ 
+     m_presenter = new Presenter(m_device, m_frameLatencySignal, presenterDesc, [
+       cAdapter  = m_device->adapter(),
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 99f09450c..6f68b1bc4 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -13,6 +13,28 @@ namespace dxvk {
+   
+   class D3D11Device;
+   class D3D11DXGIDevice;
++  class D3D11SwapChain;
++
++  class D3D11CompositionSwapChain : public IDXGIVkCompositionSwapChain {
++  public:
++    D3D11CompositionSwapChain(D3D11SwapChain* parent);
++
++    HRESULT STDMETHODCALLTYPE QueryInterface(
++            REFIID                    riid,
++            void**                    ppvObject);
++
++    ULONG STDMETHODCALLTYPE AddRef();
++
++    ULONG STDMETHODCALLTYPE Release();
++
++    void STDMETHODCALLTYPE SetCompositionTarget(
++            HWND                      hTarget,
++            HWND                      hDispatch);
++
++  private:
++
++    D3D11SwapChain* m_parent;
++  };
+ 
+   class D3D11SwapChain : public ComObject<IDXGIVkSwapChain2> {
+     constexpr static uint32_t DefaultFrameLatency = 1;
+@@ -90,6 +112,10 @@ namespace dxvk {
+     void STDMETHODCALLTYPE SetTargetFrameRate(
+             double                    FrameRate);
+ 
++    void SetCompositionTarget(
++            HWND                      hTarget,
++            HWND                      hDispatch);
++
+   private:
+ 
+     enum BindingIds : uint32_t {
+@@ -98,6 +124,7 @@ namespace dxvk {
+     };
+ 
+     Com<D3D11DXGIDevice, false> m_dxgiDevice;
++    D3D11CompositionSwapChain m_composition;
+     
+     D3D11Device*              m_parent;
+     Com<IDXGIVkSurfaceFactory> m_surfaceFactory;
+@@ -125,6 +152,9 @@ namespace dxvk {
+     dxvk::mutex               m_frameStatisticsLock;
+     DXGI_VK_FRAME_STATISTICS  m_frameStatistics = { };
+ 
++    dxvk::mutex               m_compositionLock;
++    HWND                      m_compositionTarget = nullptr;
++
+     Rc<hud::HudLatencyItem>   m_latencyHud;
+ 
+     Rc<DxvkImageView> GetBackBufferView();
+@@ -157,4 +187,4 @@ namespace dxvk {
+ 
+   };
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/dxgi/dxgi_interfaces.h b/src/dxgi/dxgi_interfaces.h
+index 390eee55a..f7cfd9abf 100644
+--- a/src/dxgi/dxgi_interfaces.h
++++ b/src/dxgi/dxgi_interfaces.h
+@@ -62,6 +62,9 @@ IDXGIVkSurfaceFactory : public IUnknown {
+           VkInstance                Instance,
+           VkPhysicalDevice          Adapter,
+           VkSurfaceKHR*             pSurface) = 0;
++
++  virtual void STDMETHODCALLTYPE SetWindow(
++          HWND                      hWnd) = 0;
+ };
+ 
+ 
+@@ -143,6 +146,20 @@ IDXGIVkSwapChain2 : public IDXGIVkSwapChain1 {
+           double                    FrameRate) = 0;
+ };
+ 
++/**
++ * \brief Private DXGI composition swap chain interface
++ *
++ * Lets Wine's DirectComposition implementation bind a composition swap chain
++ * to the window that owns the visual tree. DXVK can then present the swap
++ * chain through its regular WSI path.
++ */
++MIDL_INTERFACE("4765d18a-eba0-40bd-a730-7f5f3d915c1f")
++IDXGIVkCompositionSwapChain : public IUnknown {
++  virtual void STDMETHODCALLTYPE SetCompositionTarget(
++          HWND                      hTarget,
++          HWND                      hDispatch) = 0;
++};
++
+ 
+ /**
+  * \brief Private DXGI presenter factory
+@@ -479,5 +496,6 @@ __CRT_UUID_DECL(IDXGIVkSurfaceFactory,     0x1e7895a1,0x1bc3,0x4f9c,0xa6,0x70,0x
+ __CRT_UUID_DECL(IDXGIVkSwapChain,          0xe4a9059e,0xb569,0x46ab,0x8d,0xe7,0x50,0x1b,0xd2,0xbc,0x7f,0x7a);
+ __CRT_UUID_DECL(IDXGIVkSwapChain1,         0x785326d4,0xb77b,0x4826,0xae,0x70,0x8d,0x08,0x30,0x8e,0xe6,0xd1);
+ __CRT_UUID_DECL(IDXGIVkSwapChain2,         0xaed91093,0xe02e,0x458c,0xbd,0xef,0xa9,0x7d,0xa1,0xa7,0xe6,0xd2);
++__CRT_UUID_DECL(IDXGIVkCompositionSwapChain, 0x4765d18a,0xeba0,0x40bd,0xa7,0x30,0x7f,0x5f,0x3d,0x91,0x5c,0x1f);
+ __CRT_UUID_DECL(IDXGIVkSwapChainFactory,   0xe7d6c3ca,0x23a0,0x4e08,0x9f,0x2f,0xea,0x52,0x31,0xdf,0x66,0x33);
+ #endif
+diff --git a/src/dxgi/dxgi_surface.cpp b/src/dxgi/dxgi_surface.cpp
+index 0c11b0c28..664e060f2 100644
+--- a/src/dxgi/dxgi_surface.cpp
++++ b/src/dxgi/dxgi_surface.cpp
+@@ -44,10 +44,30 @@ namespace dxvk {
+           VkInstance                Instance,
+           VkPhysicalDevice          Adapter,
+           VkSurfaceKHR*             pSurface) {
++    std::lock_guard<dxvk::mutex> lock(m_mutex);
++
+     return wsi::createSurface(m_window, m_vkGetInstanceProcAddr, Instance, pSurface);
+   }
+ 
+ 
++  void STDMETHODCALLTYPE DxgiSurfaceFactory::SetWindow(
++          HWND                    hWnd) {
++    std::lock_guard<dxvk::mutex> lock(m_mutex);
++
++    if (m_window == hWnd && !m_ownsWindow)
++      return;
++
++    if (m_ownsWindow)
++      DestroyDummyWindow();
++
++    m_window = hWnd;
++    m_ownsWindow = !m_window;
++
++    if (!m_window)
++      m_window = CreateDummyWindow();
++  }
++
++
+   HWND DxgiSurfaceFactory::CreateDummyWindow() {
+ #ifdef _WIN32
+     static std::atomic<bool> s_wndClassRegistered = { false };
+diff --git a/src/dxgi/dxgi_surface.h b/src/dxgi/dxgi_surface.h
+index 4a5c36f6d..1388dd1f6 100644
+--- a/src/dxgi/dxgi_surface.h
++++ b/src/dxgi/dxgi_surface.h
+@@ -1,5 +1,7 @@
+ #pragma once
+ 
++#include <mutex>
++
+ #include "../util/com/com_object.h"
+ 
+ #include "../vulkan/vulkan_loader.h"
+@@ -33,9 +35,13 @@ namespace dxvk {
+             VkPhysicalDevice          Adapter,
+             VkSurfaceKHR*             pSurface);
+ 
++    void STDMETHODCALLTYPE SetWindow(
++            HWND                      hWnd);
++
+   private:
+ 
+     PFN_vkGetInstanceProcAddr m_vkGetInstanceProcAddr = nullptr;
++    dxvk::mutex               m_mutex;
+     HWND                      m_window = nullptr;
+     bool                      m_ownsWindow = false;
+ 
+diff --git a/src/dxgi/dxgi_swapchain.cpp b/src/dxgi/dxgi_swapchain.cpp
+index 0aa3fc701..90e9b410d 100644
+--- a/src/dxgi/dxgi_swapchain.cpp
++++ b/src/dxgi/dxgi_swapchain.cpp
+@@ -89,6 +89,9 @@ namespace dxvk {
+       return S_OK;
+     }
+ 
++    if (riid == __uuidof(IDXGIVkCompositionSwapChain))
++      return m_presenter->QueryInterface(riid, ppvObject);
++
+     if (riid == __uuidof(ID3DDestructionNotifier)) {
+       *ppvObject = ref(&m_destructionNotifier);
+       return S_OK;
+diff --git a/src/dxgi/dxgi_swapchain_dispatcher.h b/src/dxgi/dxgi_swapchain_dispatcher.h
+index d5c00caef..d3d4a29ad 100644
+--- a/src/dxgi/dxgi_swapchain_dispatcher.h
++++ b/src/dxgi/dxgi_swapchain_dispatcher.h
+@@ -61,6 +61,9 @@ namespace dxvk {
+         return S_OK;
+       }
+ 
++      if (riid == __uuidof(IDXGIVkCompositionSwapChain))
++        return m_dispatch->QueryInterface(riid, ppvObject);
++
+       if (logQueryInterfaceError(__uuidof(IDXGISwapChain), riid)) {
+         Logger::warn("DxgiSwapChainDispatcher::QueryInterface: Unknown interface query");
+         Logger::warn(str::format(riid));
+diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
+index f0d26515e..6b03782a7 100644
+--- a/src/dxvk/dxvk_presenter.cpp
++++ b/src/dxvk/dxvk_presenter.cpp
+@@ -22,6 +22,7 @@ namespace dxvk {
+   : m_device(device), m_signal(signal),
+     m_vki(device->instance()->vki()),
+     m_vkd(device->vkd()),
++    m_compositeAlpha(desc.compositeAlpha),
+     m_surfaceProc(std::move(proc)) {
+     // Only enable FSE if the user explicitly opts in. On Windows, FSE
+     // is required to support VRR or HDR, but blocks alt-tabbing or
+@@ -734,10 +735,17 @@ namespace dxvk {
+                                     | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+     swapInfo.imageSharingMode       = VK_SHARING_MODE_EXCLUSIVE;
+     swapInfo.preTransform           = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+-    swapInfo.compositeAlpha         = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
++    swapInfo.compositeAlpha         = m_compositeAlpha;
+     swapInfo.presentMode            = m_presentMode;
+     swapInfo.clipped                = VK_TRUE;
+ 
++    if (!(caps.surfaceCapabilities.supportedCompositeAlpha & swapInfo.compositeAlpha)) {
++      if (swapInfo.compositeAlpha != VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
++        Logger::warn(str::format("Presenter: Requested composite alpha mode ",
++          swapInfo.compositeAlpha, " is unsupported by surface, falling back to opaque"));
++      swapInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
++    }
++
+     if (m_device->features().khrSwapchainMutableFormat && formatList.viewFormatCount) {
+       swapInfo.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
+       formatList.pNext = std::exchange(swapInfo.pNext, &formatList);
+@@ -763,6 +771,7 @@ namespace dxvk {
+       "\n  Format:       ", swapInfo.imageFormat,
+       "\n  Color space:  ", swapInfo.imageColorSpace,
+       "\n  Present mode: ", swapInfo.presentMode, " (dynamic: ", (dynamicModes.empty() ? "no)" : "yes)"),
++      "\n  Composite alpha: ", swapInfo.compositeAlpha,
+       "\n  Buffer size:  ", swapInfo.imageExtent.width, "x", swapInfo.imageExtent.height,
+       "\n  Image count:  ", swapInfo.minImageCount));
+     
+diff --git a/src/dxvk/dxvk_presenter.h b/src/dxvk/dxvk_presenter.h
+index 48fa2928e..72bce2808 100644
+--- a/src/dxvk/dxvk_presenter.h
++++ b/src/dxvk/dxvk_presenter.h
+@@ -35,6 +35,7 @@ namespace dxvk {
+    */
+   struct PresenterDesc {
+     bool deferSurfaceCreation = false;
++    VkCompositeAlphaFlagBitsKHR compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+   };
+ 
+   /**
+@@ -276,6 +277,7 @@ namespace dxvk {
+     VkSwapchainKHR              m_swapchain   = VK_NULL_HANDLE;
+ 
+     VkFullScreenExclusiveEXT    m_fullscreenMode = VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT;
++    VkCompositeAlphaFlagBitsKHR m_compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+ 
+     std::vector<Rc<DxvkImage>>  m_images;
+     std::vector<PresenterSync>  m_semaphores;
 diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
 index 0a0278cc1..af9ea694f 100644
 --- a/src/util/config/config.cpp

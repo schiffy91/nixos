@@ -14,7 +14,7 @@
 # Active series:
 #   Wayland startup deadlock (non-blocking second init roundtrip)
 #   Blank layered windows (pUpdateLayeredWindow only)
-#   SNI StatusNotifierItem systray via libdbus (winewayland only)
+#   SNI StatusNotifierItem systray via libdbus (winewayland dock bridge)
 #   DComp/DXGI/winewayland GPU presentation path
 #   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
 #   DXVK Battle.net composition swap-chain profile
@@ -58,8 +58,6 @@ let
     ./patches/wine-wayland-status-notifier/0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dxgi-Create-a-hidden-swap-chain-for-composition.patch
-    ./patches/dcomp-wayland-gpu-present/0003-winewayland.drv-Add-dma-buf-buffer-helpers.patch
-    ./patches/dcomp-wayland-gpu-present/0004-winewayland.drv-Present-DComp-frames-through-dma-buf.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
   ];
 
@@ -259,7 +257,6 @@ let
       copy_required i386-windows/win32u.dll \
         "$wine32_build/dlls/win32u/i386-windows/win32u.dll" \
         "$wine32_build/dlls/win32u/win32u.dll"
-
     '';
 
     meta.platforms = [ "x86_64-linux" ];
@@ -315,7 +312,7 @@ let
         -Db_ndebug=if-release \
         -Dbuild_id=false \
         build.64
-      ninja -C build.64 src/dxgi/dxgi.dll
+      ninja -C build.64 src/dxgi/dxgi.dll src/d3d11/d3d11.dll
 
       export LIBRARY_PATH="${pkgs.pkgsCross.mingw32.windows.mcfgthreads}/lib:${pkgs.pkgsCross.mingw32.windows.pthreads}/lib"
       export LDFLAGS="-L${pkgs.pkgsCross.mingw32.windows.mcfgthreads}/lib -L${pkgs.pkgsCross.mingw32.windows.pthreads}/lib"
@@ -328,7 +325,7 @@ let
         -Db_ndebug=if-release \
         -Dbuild_id=false \
         build.32
-      ninja -C build.32 src/dxgi/dxgi.dll
+      ninja -C build.32 src/dxgi/dxgi.dll src/d3d11/d3d11.dll
 
       runHook postBuild
     '';
@@ -336,7 +333,9 @@ let
     installPhase = ''
       runHook preInstall
       install -Dm755 build.64/src/dxgi/dxgi.dll "$out/x64/dxgi.dll"
+      install -Dm755 build.64/src/d3d11/d3d11.dll "$out/x64/d3d11.dll"
       install -Dm755 build.32/src/dxgi/dxgi.dll "$out/x32/dxgi.dll"
+      install -Dm755 build.32/src/d3d11/d3d11.dll "$out/x32/d3d11.dll"
       printf '%s dxvk (%s)\n' '${dxvkRev}' '${dxvkVersion}' > "$out/version"
       runHook postInstall
     '';
@@ -393,7 +392,6 @@ in stdenv.mkDerivation {
     copy_patched i386-windows/winevulkan.dll
     copy_patched x86_64-windows/win32u.dll
     copy_patched i386-windows/win32u.dll
-
     copy_dxvk() {
       local src="$1"
       local rel="$2"
@@ -410,6 +408,8 @@ in stdenv.mkDerivation {
 
     copy_dxvk "${dxvk-scwhine}/x64/dxgi.dll" x86_64-windows/dxgi.dll
     copy_dxvk "${dxvk-scwhine}/x32/dxgi.dll" i386-windows/dxgi.dll
+    copy_dxvk "${dxvk-scwhine}/x64/d3d11.dll" x86_64-windows/d3d11.dll
+    copy_dxvk "${dxvk-scwhine}/x32/d3d11.dll" i386-windows/d3d11.dll
     cp "${dxvk-scwhine}/version" "$out/files/lib/wine/dxvk/version"
 
     cat > "$out/compatibilitytool.vdf" <<EOF
