@@ -60,7 +60,8 @@ let
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
     ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
     ./patches/dcomp-wayland-gpu-present/0004-dcomp-Make-composition-host-windows-presentation-onl.patch
-    ./patches/dcomp-wayland-gpu-present/0005-dxgi-Create-a-hidden-swap-chain-for-composition.patch
+    ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-above-target.patch
+    ./patches/dcomp-wayland-gpu-present/0006-dxgi-Create-a-hidden-swap-chain-for-composition.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
   ];
 
