@@ -15,7 +15,7 @@ Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
  src/dxvk/dxvk_presenter.cpp          | 11 ++++-
  src/dxvk/dxvk_presenter.h            |  2 +
  src/util/config/config.cpp           |  4 ++
- 10 files changed, 167 insertions(+), 2 deletions(-)
+ 10 files changed, 169 insertions(+), 2 deletions(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
 index cbcc3c6c0..c0943a94c 100644
@@ -98,19 +98,20 @@ index cbcc3c6c0..c0943a94c 100644
    UINT STDMETHODCALLTYPE D3D11SwapChain::CheckColorSpaceSupport(
            DXGI_COLOR_SPACE_TYPE     ColorSpace) {
      UINT supportFlags = 0;
-@@ -357,6 +406,26 @@ namespace dxvk {
+@@ -357,6 +406,27 @@ namespace dxvk {
    }
  
  
 +  void D3D11SwapChain::SetCompositionTarget(
 +          HWND                      hTarget,
-+          HWND) {
++          HWND                      hDispatch) {
 +    HWND previousTarget = nullptr;
 +
 +    {
 +      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
 +      previousTarget = m_compositionTarget;
 +      m_compositionTarget = hTarget;
++      m_compositionChildTarget = hTarget && hTarget != hDispatch;
 +    }
 +
 +    if (hTarget != previousTarget) {
@@ -185,12 +186,13 @@ index 99f09450c..6f68b1bc4 100644
      
      D3D11Device*              m_parent;
      Com<IDXGIVkSurfaceFactory> m_surfaceFactory;
-@@ -125,6 +152,9 @@ namespace dxvk {
+@@ -125,6 +152,10 @@ namespace dxvk {
      dxvk::mutex               m_frameStatisticsLock;
      DXGI_VK_FRAME_STATISTICS  m_frameStatistics = { };
  
 +    dxvk::mutex               m_compositionLock;
 +    HWND                      m_compositionTarget = nullptr;
++    bool                      m_compositionChildTarget = false;
 +
      Rc<hud::HudLatencyItem>   m_latencyHud;
  
@@ -409,4 +411,3 @@ index 0a0278cc1..af9ea694f 100644
      /* D3D11 GAMES                                */
 -- 
 2.53.0
-

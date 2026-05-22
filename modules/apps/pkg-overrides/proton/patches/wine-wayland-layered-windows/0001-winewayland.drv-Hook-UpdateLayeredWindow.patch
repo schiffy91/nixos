@@ -1,18 +1,22 @@
 From 0fc710fa184e293d46ee82389c2e69941d9a09e3 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:45 -0700
-Subject: [PATCH] winewayland.drv: Hook UpdateLayeredWindow.
+Subject: [PATCH] winewayland.drv: Refresh layered window contents.
 
 Wire the Wayland user driver pUpdateLayeredWindow entry point to the existing surface-content refresh path. This lets layered windows repaint through the Wayland driver instead of leaving UpdateLayeredWindow calls as no-ops.
 
+Also refresh unmanaged popup windows after SetLayeredWindowAttributes. The Wayland driver defers normal window surface creation for layered windows until the application sets those attributes, so leaving that callback as bookkeeping-only can expose newly created popups before their contents have reached the compositor. Managed top-levels are left alone here because they may host DComp content that is committed separately.
+
 Do not refresh on WM_WAYLAND_CONFIGURE in this patch; that path changes configure-time geometry behavior and stays disabled until it can be validated separately.
+
+UpdateLayeredWindow itself remains notification-only because win32u flushes the updated surface immediately after the driver callback. Flushing from the callback would send the old surface contents first and can flicker layered popups.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/waylanddrv.h      | 1 +
  dlls/winewayland.drv/waylanddrv_main.c | 1 +
- dlls/winewayland.drv/window.c          | 7 +++++++
- 3 files changed, 9 insertions(+)
+ dlls/winewayland.drv/window.c          | 13 +++++++++++++
+ 3 files changed, 15 insertions(+)
 
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
 index cba1ee6..8a035bd 100644
@@ -42,7 +46,25 @@ diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
 index 4decc0f..dc90ec6 100644
 --- a/dlls/winewayland.drv/window.c
 +++ b/dlls/winewayland.drv/window.c
-@@ -1019,3 +1019,10 @@ void ensure_window_surface_contents(HWND hwnd)
+@@ -766,9 +766,17 @@ void WAYLAND_SetLayeredWindowAttributes(HWND hwnd, COLORREF key, BYTE alpha, DWO
+ {
+     struct wayland_win_data *data;
++    BOOL managed;
+ 
++    managed = is_window_managed(hwnd, SWP_NOACTIVATE | SWP_NOZORDER, FALSE);
++    TRACE("hwnd=%p key=%#x alpha=%u flags=%#x managed=%d\n", hwnd, key, alpha, flags, managed);
+     if (!(data = wayland_win_data_get(hwnd))) return;
+     data->layered_attribs_set = TRUE;
+     wayland_win_data_release(data);
++    if (!managed)
++    {
++        ensure_window_surface_contents(hwnd);
++        wl_display_flush(process_wayland.wl_display);
++    }
+ }
+ 
+ static enum xdg_toplevel_resize_edge hittest_to_resize_edge(WPARAM hittest)
+@@ -1019,3 +1019,8 @@ void ensure_window_surface_contents(HWND hwnd)
  
      wayland_win_data_release(data);
  }
@@ -50,9 +72,6 @@ index 4decc0f..dc90ec6 100644
 +void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags)
 +{
 +    TRACE("hwnd=%p flags=%#x\n", hwnd, flags);
-+    ensure_window_surface_contents(hwnd);
-+    wl_display_flush(process_wayland.wl_display);
 +}
 -- 
 2.53.0
-

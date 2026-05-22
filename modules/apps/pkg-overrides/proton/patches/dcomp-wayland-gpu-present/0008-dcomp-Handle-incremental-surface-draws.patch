@@ -1,0 +1,154 @@
+From 4529c6c1a897f13cde5ce6d25baf8066ce276a58 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 07:27:58 -0700
+Subject: [PATCH] dcomp: Handle incremental surface draws
+
+Chromium uses IDCompositionSurface for popups, tooltips, and form
+controls, and it may redraw only a sub-rectangle of the surface.
+Return the requested update offset instead of always reporting (0,0),
+support IDXGISurface draw requests, and clear newly-created backing
+textures so untouched pixels are transparent.
+
+Keep composition host HWNDs alive across SetContent() updates and only
+destroy them when the visual no longer needs a presentation host.
+Recreating the host on every content update causes visible flicker and
+can briefly expose stale or empty child surfaces.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 83 +++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 68 insertions(+), 15 deletions(-)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index 19e3d30..b832bcf 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -334,13 +334,6 @@ static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *c
+ 
+     if (v->device && v->device->cs_init) EnterCriticalSection(&v->device->cs);
+     if (v->content) IUnknown_Release(v->content);
+-    if (v->host_hwnd)
+-    {
+-        DestroyWindow(v->host_hwnd);
+-        v->host_hwnd = NULL;
+-        v->host_parent = NULL;
+-        v->host_width = v->host_height = 0;
+-    }
+     v->has_swapchain_desc = FALSE;
+     memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
+     v->content = content;
+@@ -519,21 +512,45 @@ static HRESULT WINAPI surface_BeginDraw(IDCompositionSurface *iface, const RECT
+                                          REFIID iid, void **object, POINT *offset)
+ {
+     struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
++    ID3D11RenderTargetView *view = NULL;
++    ID3D11DeviceContext *context;
+     D3D11_TEXTURE2D_DESC desc = {0};
++    const float clear_color[4] = {0.0f, 0.0f, 0.0f, 0.0f};
++    BOOL want_dxgi_surface, want_texture, created_texture = FALSE;
++    RECT draw_rect;
+     HRESULT hr;
+ 
+     TRACE("surface=%p rect=%p iid=%s\n", s, rect, debugstr_guid(iid));
+ 
++    if (!object) return E_INVALIDARG;
++    *object = NULL;
++
++    if (rect)
++    {
++        if (rect->left < 0 || rect->top < 0 ||
++            rect->right < rect->left || rect->bottom < rect->top ||
++            rect->right > (LONG)s->width || rect->bottom > (LONG)s->height)
++        {
++            WARN("surface=%p invalid update rect %s for %ux%u surface\n",
++                 s, wine_dbgstr_rect(rect), s->width, s->height);
++            return E_INVALIDARG;
++        }
++        draw_rect = *rect;
++    }
++    else
++        SetRect(&draw_rect, 0, 0, s->width, s->height);
++
+     if (!s->device || !s->device->d3d11_device)
+     {
+         FIXME("no D3D11 device available for BeginDraw\n");
+-        *object = NULL;
+         return E_FAIL;
+     }
+-    if (!IsEqualGUID(iid, &IID_ID3D11Texture2D))
++
++    want_texture = IsEqualGUID(iid, &IID_ID3D11Texture2D);
++    want_dxgi_surface = IsEqualGUID(iid, &IID_IDXGISurface);
++    if (!want_texture && !want_dxgi_surface)
+     {
+-        FIXME("BeginDraw with non-D3D11 iid %s - not supported\n", debugstr_guid(iid));
+-        *object = NULL;
++        FIXME("BeginDraw with unsupported iid %s\n", debugstr_guid(iid));
+         return E_NOINTERFACE;
+     }
+     if (s->in_draw)
+@@ -557,15 +574,44 @@ static HRESULT WINAPI surface_BeginDraw(IDCompositionSurface *iface, const RECT
+         if (FAILED(hr))
+         {
+             ERR("CreateTexture2D %ux%u failed hr=%#lx\n", s->width, s->height, hr);
+-            *object = NULL;
+             return hr;
+         }
++        created_texture = TRUE;
++    }
++
++    if (created_texture &&
++        SUCCEEDED(ID3D11Device_CreateRenderTargetView(s->device->d3d11_device,
++                                                      (ID3D11Resource *)s->draw_texture,
++                                                      NULL, &view)))
++    {
++        ID3D11Device_GetImmediateContext(s->device->d3d11_device, &context);
++        ID3D11DeviceContext_ClearRenderTargetView(context, view, clear_color);
++        ID3D11DeviceContext_Release(context);
++        ID3D11RenderTargetView_Release(view);
+     }
+ 
+     s->in_draw = TRUE;
+-    ID3D11Texture2D_AddRef(s->draw_texture);
+-    *object = s->draw_texture;
+-    if (offset) { offset->x = 0; offset->y = 0; }
++
++    if (want_texture)
++    {
++        ID3D11Texture2D_AddRef(s->draw_texture);
++        *object = s->draw_texture;
++        hr = S_OK;
++    }
++    else
++        hr = ID3D11Texture2D_QueryInterface(s->draw_texture, iid, object);
++
++    if (FAILED(hr))
++    {
++        s->in_draw = FALSE;
++        return hr;
++    }
++
++    if (offset)
++    {
++        offset->x = draw_rect.left;
++        offset->y = draw_rect.top;
++    }
+     return S_OK;
+ }
+ 
+@@ -1013,6 +1059,13 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+             if (surface) surface->target_hwnd = NULL;
+         }
+     }
++    else if (v->host_hwnd)
++    {
++        DestroyWindow(v->host_hwnd);
++        v->host_hwnd = NULL;
++        v->host_parent = NULL;
++        v->host_width = v->host_height = 0;
++    }
+ 
+     if (surface && v->host_hwnd)
+     {
+-- 
+2.53.0

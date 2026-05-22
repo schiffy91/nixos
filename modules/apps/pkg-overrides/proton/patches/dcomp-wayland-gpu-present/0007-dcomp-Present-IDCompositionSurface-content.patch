@@ -1,0 +1,289 @@
+From eca0f7f2a7790dd0bc099482436f70a5ca3ee8df Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 06:31:53 -0700
+Subject: [PATCH] dcomp: Present IDCompositionSurface content
+
+Chromium DirectComposition clients draw popup, tooltip, and form-control
+content into IDCompositionSurface objects. The Wayland GPU path already
+binds swap-chain visuals to presentation child windows, but surfaces only
+accepted BeginDraw/EndDraw and never reached a presenter.
+
+Create a composition swap chain for each drawn surface, copy the finished
+texture to the swap-chain back buffer on commit, and bind that swap chain
+to the visual host window through the same DXVK composition target
+interface used for swap-chain visuals.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 203 ++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 198 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index ae435a8..19e3d30 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -112,7 +112,13 @@ struct dcomp_surface
+     DXGI_FORMAT format;
+     DXGI_ALPHA_MODE alpha_mode;
+     ID3D11Texture2D *draw_texture;         /* allocated lazily in BeginDraw */
++    IDXGISwapChain1 *swapchain;            /* presents drawn surface content */
++    HWND target_hwnd;
++    UINT swapchain_width, swapchain_height;
++    DXGI_FORMAT swapchain_format;
++    DXGI_ALPHA_MODE swapchain_alpha;
+     BOOL in_draw;
++    BOOL dirty;
+ };
+
+ struct dcomp_target
+@@ -328,6 +334,13 @@ static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *c
+
+     if (v->device && v->device->cs_init) EnterCriticalSection(&v->device->cs);
+     if (v->content) IUnknown_Release(v->content);
++    if (v->host_hwnd)
++    {
++        DestroyWindow(v->host_hwnd);
++        v->host_hwnd = NULL;
++        v->host_parent = NULL;
++        v->host_width = v->host_height = 0;
++    }
+     v->has_swapchain_desc = FALSE;
+     memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
+     v->content = content;
+@@ -495,6 +508,7 @@ static ULONG WINAPI surface_Release(IDCompositionSurface *iface)
+     if (!r)
+     {
+         if (s->draw_texture) ID3D11Texture2D_Release(s->draw_texture);
++        if (s->swapchain) IDXGISwapChain1_Release(s->swapchain);
+         list_remove(&s->entry);
+         free(s);
+     }
+@@ -560,6 +574,7 @@ static HRESULT WINAPI surface_EndDraw(IDCompositionSurface *iface)
+     struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
+     TRACE("surface=%p\n", s);
+     s->in_draw = FALSE;
++    s->dirty = TRUE;
+     if (s->device) s->device->pending_commit = TRUE;
+     return S_OK;
+ }
+@@ -747,10 +762,174 @@ static void dcomp_clip_rect_to_client(HWND hwnd, int x, int y, UINT *width, UINT
+     }
+ }
+
++static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
++{
++    IDCompositionSurface *iface = NULL;
++    struct dcomp_surface *surface = NULL;
++
++    if (v->content &&
++        SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDCompositionSurface, (void **)&iface)) &&
++        iface)
++    {
++        surface = impl_from_IDCompositionSurface(iface);
++        IDCompositionSurface_Release(iface);
++    }
++
++    return surface;
++}
++
++static void dcomp_surface_reset_swapchain(struct dcomp_surface *s)
++{
++    if (s->swapchain)
++    {
++        IDXGISwapChain1_Release(s->swapchain);
++        s->swapchain = NULL;
++    }
++    s->target_hwnd = NULL;
++    s->swapchain_width = 0;
++    s->swapchain_height = 0;
++    s->swapchain_format = DXGI_FORMAT_UNKNOWN;
++    s->swapchain_alpha = DXGI_ALPHA_MODE_UNSPECIFIED;
++    s->dirty = TRUE;
++}
++
++static HRESULT dcomp_surface_create_swapchain(struct dcomp_surface *s)
++{
++    DXGI_SWAP_CHAIN_DESC1 desc = {0};
++    IDXGIFactory2 *factory = NULL;
++    IDXGIDevice *dxgi_device = NULL;
++    IDXGIAdapter *adapter = NULL;
++    HRESULT hr;
++
++    if (!s->device || !s->device->d3d11_device) return E_FAIL;
++    if (!s->width || !s->height) return E_INVALIDARG;
++
++    desc.Width = s->width;
++    desc.Height = s->height;
++    desc.Format = s->format ? s->format : DXGI_FORMAT_B8G8R8A8_UNORM;
++    desc.Stereo = FALSE;
++    desc.SampleDesc.Count = 1;
++    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
++    desc.BufferCount = 2;
++    desc.Scaling = DXGI_SCALING_STRETCH;
++    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
++    desc.AlphaMode = s->alpha_mode ? s->alpha_mode : DXGI_ALPHA_MODE_PREMULTIPLIED;
++
++    hr = ID3D11Device_QueryInterface(s->device->d3d11_device, &IID_IDXGIDevice, (void **)&dxgi_device);
++    if (FAILED(hr)) return hr;
++
++    hr = IDXGIDevice_GetAdapter(dxgi_device, &adapter);
++    if (SUCCEEDED(hr))
++        hr = IDXGIAdapter_GetParent(adapter, &IID_IDXGIFactory2, (void **)&factory);
++
++    if (SUCCEEDED(hr))
++        hr = IDXGIFactory2_CreateSwapChainForComposition(factory, (IUnknown *)s->device->d3d11_device,
++                                                         &desc, NULL, &s->swapchain);
++
++    if (factory) IDXGIFactory2_Release(factory);
++    if (adapter) IDXGIAdapter_Release(adapter);
++    IDXGIDevice_Release(dxgi_device);
++
++    if (FAILED(hr))
++    {
++        WARN("surface=%p swapchain create failed hr=%#lx\n", s, hr);
++        return hr;
++    }
++
++    s->swapchain_width = desc.Width;
++    s->swapchain_height = desc.Height;
++    s->swapchain_format = desc.Format;
++    s->swapchain_alpha = desc.AlphaMode;
++    s->target_hwnd = NULL;
++    s->dirty = TRUE;
++    TRACE("surface=%p created composition swapchain %p (%ux%u fmt=%u alpha=%u)\n",
++          s, s->swapchain, desc.Width, desc.Height, desc.Format, desc.AlphaMode);
++    return S_OK;
++}
++
++static HRESULT dcomp_surface_ensure_swapchain(struct dcomp_surface *s)
++{
++    DXGI_FORMAT format = s->format ? s->format : DXGI_FORMAT_B8G8R8A8_UNORM;
++    DXGI_ALPHA_MODE alpha = s->alpha_mode ? s->alpha_mode : DXGI_ALPHA_MODE_PREMULTIPLIED;
++
++    if (s->swapchain &&
++        s->swapchain_width == s->width &&
++        s->swapchain_height == s->height &&
++        s->swapchain_format == format &&
++        s->swapchain_alpha == alpha)
++        return S_OK;
++
++    dcomp_surface_reset_swapchain(s);
++    return dcomp_surface_create_swapchain(s);
++}
++
++static HRESULT dcomp_surface_bind_swapchain(struct dcomp_surface *s, HWND target_hwnd, HWND dispatch_hwnd)
++{
++    IDXGIVkCompositionSwapChain *composition_sc = NULL;
++    HRESULT hr;
++
++    if (FAILED(hr = dcomp_surface_ensure_swapchain(s)))
++        return hr;
++
++    if (s->target_hwnd == target_hwnd)
++        return S_OK;
++
++    hr = IDXGISwapChain1_QueryInterface(s->swapchain, &IID_IDXGIVkCompositionSwapChain, (void **)&composition_sc);
++    if (FAILED(hr) || !composition_sc)
++    {
++        WARN("surface=%p composition swapchain QI failed hr=%#lx\n", s, hr);
++        return FAILED(hr) ? hr : E_NOINTERFACE;
++    }
++
++    composition_sc->lpVtbl->SetCompositionTarget(composition_sc, target_hwnd, dispatch_hwnd);
++    composition_sc->lpVtbl->Release(composition_sc);
++
++    s->target_hwnd = target_hwnd;
++    s->dirty = TRUE;
++    return S_OK;
++}
++
++static HRESULT dcomp_surface_present(struct dcomp_surface *s, HWND target_hwnd, HWND dispatch_hwnd)
++{
++    ID3D11Texture2D *backbuffer = NULL;
++    ID3D11DeviceContext *context;
++    HRESULT hr;
++
++    if (FAILED(hr = dcomp_surface_bind_swapchain(s, target_hwnd, dispatch_hwnd)))
++        return hr;
++
++    if (!s->draw_texture || !s->dirty)
++        return S_OK;
++
++    hr = IDXGISwapChain1_GetBuffer(s->swapchain, 0, &IID_ID3D11Texture2D, (void **)&backbuffer);
++    if (FAILED(hr))
++    {
++        WARN("surface=%p GetBuffer failed hr=%#lx\n", s, hr);
++        return hr;
++    }
++
++    ID3D11Device_GetImmediateContext(s->device->d3d11_device, &context);
++    ID3D11DeviceContext_CopyResource(context, (ID3D11Resource *)backbuffer,
++                                     (ID3D11Resource *)s->draw_texture);
++    ID3D11DeviceContext_Release(context);
++    ID3D11Texture2D_Release(backbuffer);
++
++    hr = IDXGISwapChain1_Present(s->swapchain, 1, 0);
++    if (FAILED(hr))
++    {
++        WARN("surface=%p Present failed hr=%#lx\n", s, hr);
++        return hr;
++    }
++
++    s->dirty = FALSE;
++    return S_OK;
++}
++
+ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                               const struct dcomp_placement *parent_placement)
+ {
+     struct dcomp_visual *c;
++    struct dcomp_surface *surface;
+     IDXGIVkCompositionSwapChain *composition_sc = NULL;
+     struct dcomp_placement placement;
+     HWND target_hwnd;
+@@ -763,14 +942,15 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+           v->offset_y, v->has_clip, v->composite_mode, v->opacity_mode);
+
+     target_hwnd = t->hwnd;
++    surface = dcomp_visual_surface(v);
+     dcomp_refresh_swapchain_desc(v);
+-    if (v->content && v->has_swapchain_desc &&
+-        v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)
++    if (v->content && (surface || (v->has_swapchain_desc &&
++        v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)))
+     {
+         int x = placement.x;
+         int y = placement.y;
+-        UINT width = v->swapchain_desc.Width;
+-        UINT height = v->swapchain_desc.Height;
++        UINT width = surface ? surface->width : v->swapchain_desc.Width;
++        UINT height = surface ? surface->height : v->swapchain_desc.Height;
+
+         if (v->has_clip)
+         {
+@@ -824,9 +1004,22 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+
+             if (v->host_hwnd) target_hwnd = v->host_hwnd;
+         }
++        else if (v->host_hwnd)
++        {
++            DestroyWindow(v->host_hwnd);
++            v->host_hwnd = NULL;
++            v->host_parent = NULL;
++            v->host_width = v->host_height = 0;
++            if (surface) surface->target_hwnd = NULL;
++        }
+     }
+
+-    if (v->content &&
++    if (surface && v->host_hwnd)
++    {
++        if (FAILED(dcomp_surface_present(surface, v->host_hwnd, t->hwnd)))
++            WARN("surface=%p present failed\n", surface);
++    }
++    else if (v->content &&
+         SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGIVkCompositionSwapChain,
+                                           (void **)&composition_sc)) &&
+         composition_sc)
+--
+2.53.0

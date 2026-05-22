@@ -1,0 +1,103 @@
+From 8f375b4bd37355fe1f55205c5a86fdf654e62f6e Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 10:23:41 -0700
+Subject: [PATCH] winewayland.drv: Polish SNI context menu callbacks
+
+StatusNotifierItem sends screen coordinates in its activation methods.
+Forward those coordinates both in the notify-icon v4 payload and through
+Wine's shared cursor position before entering application code, since some
+applications still call GetCursorPos() while building their tray menu.
+
+Keep most callback delivery asynchronous, matching Wine's existing native tray
+backends. Applications that open a context menu from their notify-icon callback
+still need WM_CONTEXTMENU to complete before the follow-up WM_NULL workaround is
+queued, otherwise the menu can lose foreground ordering while it is being
+created.
+
+Also send and flush the D-Bus method reply before queueing the Win32
+callback. This lets the panel finish its own grab/interaction before the
+application creates a popup menu.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/wayland_systray.c | 34 ++++++++++++++++++++++++----------
+ 1 file changed, 24 insertions(+), 10 deletions(-)
+
+diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
+index 9b665fb..0b3ff39 100644
+--- a/dlls/winewayland.drv/wayland_systray.c
++++ b/dlls/winewayland.drv/wayland_systray.c
+@@ -267,6 +267,8 @@ static void send_tray_callback(const struct sni_callback *callback, UINT msg, BO
+         lp = MAKELPARAM(msg, callback->id);
+     }
+ 
++    TRACE("posting msg %#x to hwnd %p id %u pos=%d,%d wait=%d\n",
++          msg, callback->owner_hwnd, callback->id, callback->x, callback->y, wait);
+     NtUserMessageCall(callback->owner_hwnd, callback->callback_message, wp, lp, NULL,
+                       wait ? NtUserSendMessage : NtUserSendNotifyMessage, FALSE);
+ }
+@@ -296,12 +298,19 @@ void WAYLAND_SystrayProcessCallback(void *data)
+     }
+     else
+     {
+-        if (callback->context_menu) NtUserSetForegroundWindow(callback->owner_hwnd);
+-        send_tray_callback(callback, callback->down_msg, callback->context_menu);
+-        send_tray_callback(callback, callback->up_msg, callback->context_menu);
++        NtUserSetCursorPos(callback->x, callback->y);
++        if (callback->context_menu)
++        {
++            NtUserSetForegroundWindow(callback->owner_hwnd);
++        }
++
++        send_tray_callback(callback, callback->down_msg, FALSE);
++        send_tray_callback(callback, callback->up_msg,
++                           callback->context_menu && callback->version == 0 &&
++                           callback->up_msg == WM_RBUTTONUP);
+-        if (callback->up_msg == WM_LBUTTONUP && callback->version > 0)
+-            send_tray_callback(callback, NIN_SELECT, FALSE);
++        if (callback->up_msg == WM_LBUTTONUP && callback->version > 0)
++            send_tray_callback(callback, NIN_SELECT, FALSE);
+-        else if (callback->up_msg == WM_RBUTTONUP)
++        else if (callback->up_msg == WM_RBUTTONUP && callback->version > 0)
+-            send_tray_callback(callback, WM_CONTEXTMENU, TRUE);
++            send_tray_callback(callback, WM_CONTEXTMENU, TRUE);
+         if (callback->context_menu) finish_tray_context_menu(callback);
+     }
+@@ -524,6 +531,7 @@ static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, voi
+     {
+         struct sni_item snapshot = *item;
+         UINT down_msg = 0, up_msg = 0;
++        int scroll_delta = 0;
+         dbus_int32_t x = 0, y = 0;
+         BOOL context_menu = FALSE;
+ 
+@@ -550,19 +558,22 @@ static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, voi
+             dbus_int32_t delta = 0;
+ 
+             dbus_message_get_args(msg, NULL, DBUS_TYPE_INT32, &delta, DBUS_TYPE_INVALID);
+-            queue_tray_scroll(&snapshot, delta);
++            scroll_delta = delta;
+         }
+         if (up_msg)
+-        {
+             dbus_message_get_args(msg, NULL, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y,
+                                   DBUS_TYPE_INVALID);
+-            queue_tray_callback(&snapshot, down_msg, up_msg, x, y, context_menu);
+-        }
++
+         reply = dbus_message_new_method_return(msg);
+         if (reply)
+         {
+             dbus_connection_send(conn, reply, NULL);
++            dbus_connection_flush(conn);
+             dbus_message_unref(reply);
+         }
++        if (scroll_delta)
++            queue_tray_scroll(&snapshot, scroll_delta);
++        if (up_msg)
++            queue_tray_callback(&snapshot, down_msg, up_msg, x, y, context_menu);
+         return DBUS_HANDLER_RESULT_HANDLED;
+     }
+ 
+-- 
+2.53.0

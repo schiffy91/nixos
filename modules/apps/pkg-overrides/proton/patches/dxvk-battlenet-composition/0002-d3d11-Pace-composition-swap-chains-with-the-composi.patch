@@ -3,16 +3,16 @@ From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 12:06:31 -0700
 Subject: [PATCH] d3d11: Pace composition swap chains with the compositor
 
-DirectComposition swap chains are desktop-compositor content, not direct game
-surfaces. Chromium/CEF often presents those surfaces with sync interval zero,
-which makes DXVK select immediate presentation for the Wayland child surface.
-That can expose intermediate frames while the desktop compositor is also
-compositing the parent Wine window, showing up as transient flicker in
-Battle.net's launcher.
+DirectComposition child-host swap chains are desktop-compositor content, not
+direct game surfaces. Chromium/CEF often presents those transient surfaces
+with sync interval zero, which makes DXVK select immediate presentation for
+the Wayland child surface. That can expose intermediate frames while the
+desktop compositor is also compositing the parent Wine window, showing up as
+transient flicker in Battle.net's launcher.
 
-Keep normal game swap chains on the application's requested interval, but make
-swap chains that have been bound through the private composition interface use
-compositor-paced presentation.
+Keep normal game and root-window swap chains on the application's requested
+interval, but make swap chains bound to child presentation hosts through the
+private composition interface use compositor-paced presentation.
 
 Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
@@ -31,7 +31,7 @@ index c0943a94c..105b6cf4f 100644
 +  UINT D3D11SwapChain::GetCompositionSyncInterval(UINT SyncInterval) {
 +    std::lock_guard<dxvk::mutex> lock(m_compositionLock);
 +
-+    if (m_compositionTarget && !SyncInterval)
++    if (m_compositionChildTarget && !SyncInterval)
 +      return 1;
 +
 +    return SyncInterval;

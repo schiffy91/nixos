@@ -1,0 +1,264 @@
+From 417c1c771f6841771c792a5464f3e62e2e1d4dc3 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 11:20:49 -0700
+Subject: [PATCH] explorer: Forward docked tray icon updates
+
+Wine's docked systray path only forwarded the full notify-icon
+record when an icon was first inserted. Later NIM_MODIFY and
+NIM_SETVERSION calls updated explorer's private icon state, but
+Wayland StatusNotifierItem state kept using the original icon,
+tooltip, callback message, and notify-icon version.
+
+Introduce a small driver-facing snapshot for the data the dock bridge
+needs instead of exposing explorer's private struct layout to the
+driver. Send a fresh snapshot when visible docked icons are modified
+so panels can keep tooltips, icons, and callback routing in sync.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/win32u/driver.c                   |  6 +++--
+ dlls/winewayland.drv/wayland_systray.c | 31 ++++------------------
+ dlls/winewayland.drv/waylanddrv.h      |  3 ++-
+ dlls/winex11.drv/window.c              |  3 ++-
+ dlls/winex11.drv/x11drv.h              |  3 ++-
+ include/ntuser.h                       | 11 ++++++++
+ include/wine/gdi_driver.h              |  2 +-
+ programs/explorer/systray.c            | 36 +++++++++++++++++++++++---
+ 8 files changed, 60 insertions(+), 35 deletions(-)
+
+diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
+index 3838cc0..d401c6a 100644
+--- a/dlls/win32u/driver.c
++++ b/dlls/win32u/driver.c
+@@ -737,7 +737,8 @@ static void nulldrv_SystrayDockInit( HWND hwnd )
+ {
+ }
+ 
+-static BOOL nulldrv_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy, void *icon )
++static BOOL nulldrv_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy,
++                                       const struct systray_icon_snapshot *icon )
+ {
+     return FALSE;
+ }
+@@ -1174,7 +1175,8 @@ static void loaderdrv_SystrayDockInit( HWND hwnd )
+     load_driver()->pSystrayDockInit( hwnd );
+ }
+ 
+-static BOOL loaderdrv_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy, void *icon )
++static BOOL loaderdrv_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy,
++                                         const struct systray_icon_snapshot *icon )
+ {
+     return load_driver()->pSystrayDockInsert( hwnd, cx, cy, icon );
+ }
+diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
+index ef383e5..179db30 100644
+--- a/dlls/winewayland.drv/wayland_systray.c
++++ b/dlls/winewayland.drv/wayland_systray.c
+@@ -52,28 +52,6 @@ struct sni_item
+     WCHAR tiptext[128];
+ };
+ 
+-/* Mirrors explorer's private tray icon record as passed to WINE_SYSTRAY_DOCK_INSERT. */
+-struct explorer_tray_icon
+-{
+-    struct list entry;
+-    HICON image;
+-    HWND owner;
+-    HWND window;
+-    BOOL layered;
+-    HWND tooltip;
+-    UINT state;
+-    UINT id;
+-    UINT callback_message;
+-    int display;
+-    WCHAR tiptext[128];
+-    WCHAR info_text[256];
+-    WCHAR info_title[64];
+-    UINT info_flags;
+-    UINT info_timeout;
+-    HICON info_icon;
+-    UINT version;
+-};
+-
+ struct sni_callback
+ {
+     HWND owner_hwnd;
+@@ -736,7 +714,7 @@ static void sni_remove_item(struct sni_item *item)
+     free(item);
+ }
+ 
+-static unsigned int sni_update_item(struct sni_item *item, const struct explorer_tray_icon *icon)
++static unsigned int sni_update_item(struct sni_item *item, const struct systray_icon_snapshot *icon)
+ {
+     unsigned int changed = 0;
+ 
+@@ -824,9 +802,9 @@ void WAYLAND_SystrayDockInit(HWND hwnd)
+     sni_ensure_bus();
+ }
+ 
+-BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon_data)
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy,
++                               const struct systray_icon_snapshot *icon)
+ {
+-    const struct explorer_tray_icon *icon = icon_data;
+     struct sni_item *item;
+     unsigned int changed;
+ 
+@@ -894,7 +872,8 @@ BOOL WAYLAND_SystrayDockRemove(HWND hwnd)
+ 
+ void WAYLAND_SystrayDockInit(HWND hwnd) {}
+ 
+-BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon)
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy,
++                               const struct systray_icon_snapshot *icon)
+ {
+     FIXME("D-Bus support is not available; systray icon not registered\n");
+     return FALSE;
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index b1cff07..5611d60 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -604,7 +604,8 @@ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
+ void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
+ void WAYLAND_SystrayDockInit(HWND hwnd);
+-BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon);
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy,
++                               const struct systray_icon_snapshot *icon);
+ void WAYLAND_SystrayDockClear(HWND hwnd);
+ BOOL WAYLAND_SystrayDockRemove(HWND hwnd);
+ void WAYLAND_SystrayDispatch(void);
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index e6edb17..cc6ae0d 100644
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -3150,7 +3150,8 @@ static void get_systray_visual_info( Display *display, Window systray_window, XV
+ /***********************************************************************
+  *              SystrayDockInsert   (X11DRV.@)
+  */
+-BOOL X11DRV_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy, void *icon )
++BOOL X11DRV_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy,
++                               const struct systray_icon_snapshot *icon )
+ {
+     Display *display = thread_init_display();
+     Window systray_window, window;
+diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+index 2e79e89..5337a04 100644
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@@ -214,7 +214,8 @@ extern void X11DRV_SetCursor( HWND hwnd, HCURSOR handle );
+ extern BOOL X11DRV_SetCursorPos( INT x, INT y );
+ extern BOOL X11DRV_ClipCursor( const RECT *clip, BOOL reset );
+ extern void X11DRV_SystrayDockInit( HWND systray );
+-extern BOOL X11DRV_SystrayDockInsert( HWND owner, UINT cx, UINT cy, void *icon );
++extern BOOL X11DRV_SystrayDockInsert( HWND owner, UINT cx, UINT cy,
++                                      const struct systray_icon_snapshot *icon );
+ extern void X11DRV_SystrayDockClear( HWND hwnd );
+ extern BOOL X11DRV_SystrayDockRemove( HWND hwnd );
+ extern LONG X11DRV_ChangeDisplaySettings( LPDEVMODEW displays, LPCWSTR primary_name, HWND hwnd, DWORD flags, LPVOID lpvoid );
+diff --git a/include/ntuser.h b/include/ntuser.h
+index 315fb77..f7d2a87 100644
+--- a/include/ntuser.h
++++ b/include/ntuser.h
+@@ -662,6 +662,17 @@ enum wine_systray_call
+     WINE_SYSTRAY_DOCK_REMOVE,
+ };
+ 
++struct systray_icon_snapshot
++{
++    HICON image;
++    HWND owner;
++    HWND window;
++    UINT id;
++    UINT callback_message;
++    UINT version;
++    WCHAR tiptext[128];
++};
++
+ /* NtUserDragDropCall calls */
+ enum wine_drag_drop_call
+ {
+diff --git a/include/wine/gdi_driver.h b/include/wine/gdi_driver.h
+index 8902346..862550f 100644
+--- a/include/wine/gdi_driver.h
++++ b/include/wine/gdi_driver.h
+@@ -356,7 +356,7 @@ struct user_driver_funcs
+     LRESULT (*pNotifyIcon)(HWND,UINT,NOTIFYICONDATAW *);
+     void    (*pCleanupIcons)(HWND);
+     void    (*pSystrayDockInit)(HWND);
+-    BOOL    (*pSystrayDockInsert)(HWND,UINT,UINT,void *);
++    BOOL    (*pSystrayDockInsert)(HWND,UINT,UINT,const struct systray_icon_snapshot *);
+     void    (*pSystrayDockClear)(HWND);
+     BOOL    (*pSystrayDockRemove)(HWND);
+     /* clipboard functions */
+diff --git a/programs/explorer/systray.c b/programs/explorer/systray.c
+index 02fe507..e613dd1 100644
+--- a/programs/explorer/systray.c
++++ b/programs/explorer/systray.c
+@@ -631,6 +631,32 @@ static void systray_remove_icon( struct icon *icon )
+     SetWindowLongW( icon->window, GWL_STYLE, GetWindowLongW( icon->window, GWL_STYLE ) & ~WS_CHILD );
+ }
+ 
++static void snapshot_icon( struct systray_icon_snapshot *snapshot, const struct icon *icon )
++{
++    memset( snapshot, 0, sizeof(*snapshot) );
++    snapshot->image = icon->image;
++    snapshot->owner = icon->owner;
++    snapshot->window = icon->window;
++    snapshot->id = icon->id;
++    snapshot->callback_message = icon->callback_message;
++    snapshot->version = icon->version;
++    memcpy( snapshot->tiptext, icon->tiptext, sizeof(snapshot->tiptext) );
++}
++
++static BOOL dock_icon( struct icon *icon )
++{
++    struct systray_icon_snapshot snapshot;
++
++    snapshot_icon( &snapshot, icon );
++    return NtUserMessageCall( icon->window, WINE_SYSTRAY_DOCK_INSERT, icon_cx, icon_cy,
++                              &snapshot, NtUserSystemTrayCall, FALSE );
++}
++
++static void update_docked_icon( struct icon *icon )
++{
++    if (enable_dock && icon->display == ICON_DISPLAY_DOCKED) dock_icon( icon );
++}
++
+ /* make an icon visible */
+ static void show_icon(struct icon *icon)
+ {
+@@ -648,8 +674,7 @@ static void show_icon(struct icon *icon)
+         SetWindowLongW( icon->window, GWL_EXSTYLE, old_exstyle | WS_EX_LAYERED );
+         paint_layered_icon( icon );
+ 
+-        if (!NtUserMessageCall( icon->window, WINE_SYSTRAY_DOCK_INSERT, icon_cx, icon_cy,
+-                                icon, NtUserSystemTrayCall, FALSE ))
++        if (!dock_icon( icon ))
+             SetWindowLongW( icon->window, GWL_EXSTYLE, old_exstyle );
+         else
+         {
+@@ -738,7 +763,11 @@ static BOOL modify_icon( struct icon *icon, NOTIFYICONDATAW *nid )
+         update_balloon( icon );
+     }
+     if (icon->state & NIS_HIDDEN) hide_icon( icon );
+-    else show_icon( icon );
++    else
++    {
++        update_docked_icon( icon );
++        show_icon( icon );
++    }
+     return TRUE;
+ }
+ 
+@@ -932,6 +961,7 @@ static BOOL handle_incoming(HWND hwndSource, COPYDATASTRUCT *cds)
+         if (icon)
+         {
+             icon->version = nid.uVersion;
++            update_docked_icon( icon );
+             ret = TRUE;
+         }
+         break;
+-- 
+2.53.0
+

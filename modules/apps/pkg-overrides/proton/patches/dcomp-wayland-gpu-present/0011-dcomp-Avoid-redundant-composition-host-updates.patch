@@ -1,0 +1,167 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 09:55:00 -0700
+Subject: [PATCH] dcomp: Avoid redundant composition host updates
+
+The Wayland presentation host window only needs a Win32 geometry or region
+update when the corresponding DirectComposition visual state changes.
+Reapplying the same SetWindowPos() and SetWindowRgn() state on every commit
+can cause unnecessary child-surface configure churn, which shows up as small
+flickers in Chromium UI panels.
+
+Cache the last applied host bounds and clip region. Hosts still move to the
+top of the target's child stack on each commit, but unchanged commits use
+SWP_NOMOVE and SWP_NOSIZE so they do not resize or reconfigure the Wayland
+child surface.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 72 +++++++++++++++++++++++++++++++--------------
+ 1 file changed, 50 insertions(+), 22 deletions(-)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index f7e1f83..5794cfb 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -95,6 +95,9 @@ struct dcomp_visual
+     HWND host_parent;
+     UINT host_width, host_height;
+     int host_x, host_y;
++    BOOL host_clip_valid;
++    BOOL host_has_region;
++    RECT host_clip;
+     struct list children;
+     struct list child_entry;               /* link in parent->children */
+     struct dcomp_visual *parent;
+@@ -817,6 +820,22 @@ static BOOL dcomp_visual_host_clip(HWND hwnd, int x, int y, const struct dcomp_v
+     return clip->right > clip->left && clip->bottom > clip->top;
+ }
+ 
++static BOOL dcomp_rect_equal(const RECT *a, const RECT *b)
++{
++    return a->left == b->left && a->top == b->top &&
++           a->right == b->right && a->bottom == b->bottom;
++}
++
++static void dcomp_visual_reset_host_state(struct dcomp_visual *v)
++{
++    v->host_parent = NULL;
++    v->host_width = v->host_height = 0;
++    v->host_x = v->host_y = 0;
++    v->host_clip_valid = FALSE;
++    v->host_has_region = FALSE;
++    memset(&v->host_clip, 0, sizeof(v->host_clip));
++}
++
+ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
+ {
+     IDCompositionSurface *iface = NULL;
+@@ -1037,30 +1056,37 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                                                WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
+                                                x, y, width, height, t->hwnd, NULL,
+                                                GetModuleHandleW(NULL), NULL);
+-                v->host_parent = t->hwnd;
+-                v->host_width = v->host_height = 0;
++                dcomp_visual_reset_host_state(v);
++                if (v->host_hwnd) v->host_parent = t->hwnd;
+             }
+ 
+             if (v->host_hwnd)
+             {
+-                UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
++                BOOL changed = v->host_x != x || v->host_y != y ||
++                               v->host_width != width || v->host_height != height;
++                UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
+ 
+-                if (v->host_x == x && v->host_y == y) swp_flags |= SWP_NOMOVE;
+-                if (v->host_width == width && v->host_height == height) swp_flags |= SWP_NOSIZE;
++                if (!changed) swp_flags |= SWP_NOMOVE | SWP_NOSIZE;
++
++                if (SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height, swp_flags) && changed)
++                {
+-
+-                SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height,
+-                             swp_flags);
+-
+-                v->host_x = x;
+-                v->host_y = y;
+-                v->host_width = width;
+-                v->host_height = height;
++                    v->host_x = x;
++                    v->host_y = y;
++                    v->host_width = width;
++                    v->host_height = height;
++                }
+             }
+ 
+             if (v->host_hwnd)
+             {
+-                if (host_clip.left || host_clip.top ||
+-                    host_clip.right != (LONG)width || host_clip.bottom != (LONG)height)
++                BOOL need_region = host_clip.left || host_clip.top ||
++                                   host_clip.right != (LONG)width ||
++                                   host_clip.bottom != (LONG)height;
++                BOOL changed = !v->host_clip_valid ||
++                               v->host_has_region != need_region ||
++                               !dcomp_rect_equal(&v->host_clip, &host_clip);
++
++                if (changed && need_region)
+                 {
+                     HRGN region;
+ 
+@@ -1073,6 +1099,12 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                                  wine_dbgstr_rect(&host_clip), v->host_hwnd);
+                             DeleteObject(region);
+                         }
++                        else
++                        {
++                            v->host_clip = host_clip;
++                            v->host_clip_valid = TRUE;
++                            v->host_has_region = TRUE;
++                        }
+                     }
+                     else
+                     {
+@@ -1080,9 +1112,18 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                              wine_dbgstr_rect(&host_clip));
+                     }
+                 }
+-                else
++                else if (changed)
+                 {
+-                    SetWindowRgn(v->host_hwnd, NULL, TRUE);
++                    if (!SetWindowRgn(v->host_hwnd, NULL, TRUE))
++                    {
++                        WARN("failed to clear composition host clip on hwnd=%p\n", v->host_hwnd);
++                    }
++                    else
++                    {
++                        v->host_clip = host_clip;
++                        v->host_clip_valid = TRUE;
++                        v->host_has_region = FALSE;
++                    }
+                 }
+             }
+ 
+@@ -1092,8 +1133,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+         {
+             DestroyWindow(v->host_hwnd);
+             v->host_hwnd = NULL;
+-            v->host_parent = NULL;
+-            v->host_width = v->host_height = 0;
++            dcomp_visual_reset_host_state(v);
+             if (surface) surface->target_hwnd = NULL;
+         }
+     }
+@@ -1101,8 +1141,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+     {
+         DestroyWindow(v->host_hwnd);
+         v->host_hwnd = NULL;
+-        v->host_parent = NULL;
+-        v->host_width = v->host_height = 0;
++        dcomp_visual_reset_host_state(v);
+     }
+ 
+     if (surface && v->host_hwnd)
+-- 
+2.53.0

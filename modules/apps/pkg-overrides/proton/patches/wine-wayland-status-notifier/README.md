@@ -31,16 +31,18 @@ hand off to a long-lived UI process. Publishing directly from the
 exits. Explorer already owns Wine's tray lifetime, so the Wayland bridge
 publishes from there.
 
-For an upstream submission, replace the local private copy of explorer's
+The active series now replaces the local private copy of explorer's
 `struct icon` with a small driver-facing snapshot passed through
-`pSystrayDockInsert` before posting. The target shape should carry only
-the HICON, owner/window HWNDs, callback message, notification version, id,
-and tooltip text.
+`pSystrayDockInsert`. The snapshot carries only the HICON, owner/window HWNDs,
+callback message, notification version, id, and tooltip text.
+
+Explorer also forwards a fresh snapshot for visible docked icons on
+`NIM_MODIFY` and `NIM_SETVERSION`. Without that update path, Plasma can keep a
+stale tooltip/title/icon and Battle.net can keep the wrong notify-icon callback
+version after its launcher hands off to the long-lived UI process.
 
 ## Affected upstream
-Current local patch:
-`dlls/winewayland.drv/{Makefile.in,waylanddrv.h,wayland_systray.c,waylanddrv_main.c,window.c}`.
-
-Expected upstream refinement:
-`programs/explorer/systray.c` plus the Wine driver ABI header, to replace
-the private icon layout dependency with a small snapshot struct.
+Current local patches:
+`dlls/winewayland.drv/{Makefile.in,waylanddrv.h,wayland_systray.c,waylanddrv_main.c,window.c}`,
+`programs/explorer/systray.c`, `include/ntuser.h`, `include/wine/gdi_driver.h`,
+`dlls/win32u/driver.c`, and the X11 driver hook signature.

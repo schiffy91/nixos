@@ -55,20 +55,34 @@ let
   activePatchSeries = [
     ./patches/wine-wayland-roundtrip/0001-winewayland.drv-Avoid-second-init-roundtrip.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Hook-UpdateLayeredWindow.patch
+    ./patches/wine-wayland-layered-windows/0002-winewayland.drv-Set-layered-surface-alpha-bits.patch
     ./patches/wine-wayland-status-notifier/0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
+    ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Polish-SNI-context-menu-callbacks.patch
+    ./patches/wine-wayland-status-notifier/0003-explorer-Forward-docked-tray-icon-updates.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
     ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
     ./patches/dcomp-wayland-gpu-present/0004-dcomp-Make-composition-host-windows-presentation-onl.patch
     ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-above-target.patch
     ./patches/dcomp-wayland-gpu-present/0006-dxgi-Create-a-hidden-swap-chain-for-composition.patch
+    ./patches/dcomp-wayland-gpu-present/0007-dcomp-Present-IDCompositionSurface-content.patch
+    ./patches/dcomp-wayland-gpu-present/0008-dcomp-Handle-incremental-surface-draws.patch
+    ./patches/dcomp-wayland-gpu-present/0009-dcomp-Clip-composition-hosts-with-window-regions.patch
+    ./patches/dcomp-wayland-gpu-present/0010-dcomp-Host-placed-composition-swap-chain-visuals.patch
+    ./patches/dcomp-wayland-gpu-present/0011-dcomp-Avoid-redundant-composition-host-updates.patch
+    ./patches/dcomp-wayland-gpu-present/0012-dcomp-Implement-GPU-backed-surface-factories.patch
+    ./patches/dcomp-wayland-gpu-present/0013-dcomp-Unbind-removed-composition-hosts.patch
+    ./patches/dcomp-wayland-gpu-present/0014-dcomp-Implement-virtual-surfaces-and-scrolling.patch
+    ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
+    ./patches/win32u-shared-gpu-resource/0001-win32u-Open-D3DKMT-shared-GPU-resources.patch
   ];
 
   dxvkPatchSeries = [
     ./patches/dxvk-battlenet-composition/0001-dxgi-Enable-dummy-composition-swapchain-for-Battle.n.patch
     ./patches/dxvk-battlenet-composition/0002-d3d11-Pace-composition-swap-chains-with-the-composi.patch
     ./patches/dxvk-battlenet-composition/0003-d3d11-Dither-composition-swap-chain-presents.patch
+    ./patches/dxvk-battlenet-composition/0004-d3d11-Allow-limiting-shared-resource-tier.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
@@ -135,12 +149,12 @@ let
       (with pkgs; [
         wayland dbus libxkbcommon mesa libGL
         vulkan-headers vulkan-loader
-        xorg.libX11 freetype fontconfig
+        libx11 freetype fontconfig
       ])
       ++ (with pkgs.pkgsi686Linux; [
         wayland dbus libxkbcommon mesa libGL
         vulkan-loader
-        xorg.libX11 freetype fontconfig
+        libx11 freetype fontconfig
       ]);
 
     postPatch = ''
@@ -171,27 +185,27 @@ let
       HOME=$TMPDIR "$source_dir/configure" \
         --enable-win64 \
         --without-x \
-        --without-freetype \
         --disable-tests
       make -j"$NIX_BUILD_CORES" \
         dlls/dcomp/all \
         dlls/dxgi/all \
         dlls/win32u/all \
         dlls/winevulkan/all \
-        dlls/winewayland.drv/all
+        dlls/winewayland.drv/all \
+        programs/explorer/all
 
       cd "$TMPDIR/wine32"
       HOME=$TMPDIR "$source_dir/configure" \
         --with-wine64="$TMPDIR/wine64" \
         --without-x \
-        --without-freetype \
         --disable-tests
       make -j"$NIX_BUILD_CORES" \
         dlls/dcomp/all \
         dlls/dxgi/all \
         dlls/win32u/all \
         dlls/winevulkan/all \
-        dlls/winewayland.drv/all
+        dlls/winewayland.drv/all \
+        programs/explorer/all
 
       runHook postBuild
     '';
@@ -263,6 +277,12 @@ let
       copy_required i386-windows/win32u.dll \
         "$wine32_build/dlls/win32u/i386-windows/win32u.dll" \
         "$wine32_build/dlls/win32u/win32u.dll"
+      copy_required x86_64-windows/explorer.exe \
+        "$wine64_build/programs/explorer/x86_64-windows/explorer.exe" \
+        "$wine64_build/programs/explorer/explorer.exe"
+      copy_required i386-windows/explorer.exe \
+        "$wine32_build/programs/explorer/i386-windows/explorer.exe" \
+        "$wine32_build/programs/explorer/explorer.exe"
     '';
 
     meta.platforms = [ "x86_64-linux" ];
@@ -398,6 +418,15 @@ in stdenv.mkDerivation {
     copy_patched i386-windows/winevulkan.dll
     copy_patched x86_64-windows/win32u.dll
     copy_patched i386-windows/win32u.dll
+    copy_patched x86_64-windows/explorer.exe
+    copy_patched i386-windows/explorer.exe
+
+    cp "${wine-scwhine}/lib/wine/x86_64-windows/explorer.exe" \
+      "$out/files/share/default_pfx/drive_c/windows/explorer.exe"
+    cp "${wine-scwhine}/lib/wine/x86_64-windows/explorer.exe" \
+      "$out/files/share/default_pfx/drive_c/windows/system32/explorer.exe"
+    cp "${wine-scwhine}/lib/wine/i386-windows/explorer.exe" \
+      "$out/files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"
     copy_dxvk() {
       local src="$1"
       local rel="$2"
@@ -441,5 +470,11 @@ EOF
     description = "GE-Proton10-34 with winewayland SNI cleanup patches (Battle.net Wayland)";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
+  };
+
+  passthru = {
+    wineSource = wine-scwhine-src;
+    wineArtifacts = wine-scwhine;
+    dxvkArtifacts = dxvk-scwhine;
   };
 }

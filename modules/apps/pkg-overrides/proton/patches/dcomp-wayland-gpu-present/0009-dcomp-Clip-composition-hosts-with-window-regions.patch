@@ -1,0 +1,179 @@
+From 2c8e9d854f6cc3022d1aa6eb608ff5f1a0d38a69 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 10:02:38 -0700
+Subject: [PATCH] dcomp: Clip composition hosts with window regions
+
+DirectComposition clips a visual without changing the content origin. The
+Wayland presentation bridge used the clip rectangle to move and shrink the
+host HWND, which effectively displayed the wrong source rectangle from the
+swap chain or IDCompositionSurface.
+
+Keep the host at the visual's full content bounds and apply the target and
+visual clips with SetWindowRgn() instead. This preserves content coordinates
+while still letting child-window clipping limit the presented area.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/Makefile.in |  2 +-
+ dlls/dcomp/device.c    | 71 ++++++++++++++++++++++++++---------------
+ 2 files changed, 46 insertions(+), 27 deletions(-)
+
+diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
+index e0f7189..87d072a 100644
+--- a/dlls/dcomp/Makefile.in
++++ b/dlls/dcomp/Makefile.in
+@@ -1,6 +1,6 @@
+ MODULE    = dcomp.dll
+ IMPORTLIB = dcomp
+-IMPORTS   = dxguid uuid d3d11 dxgi user32
++IMPORTS   = dxguid uuid d3d11 dxgi user32 gdi32
+ 
+ EXTRADLLFLAGS = -Wb,--prefer-native
+ 
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index b832bcf..f59d390 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -27,6 +27,7 @@
+ #include "windef.h"
+ #include "winbase.h"
+ #include "winuser.h"
++#include "wingdi.h"
+ #include "objbase.h"
+ #include "dxgi.h"
+ #include "d3d11.h"
+@@ -778,34 +779,42 @@ static BOOL dcomp_refresh_swapchain_desc(struct dcomp_visual *v)
+     return TRUE;
+ }
+ 
+-static void dcomp_clip_rect_to_client(HWND hwnd, int x, int y, UINT *width, UINT *height)
++static BOOL dcomp_visual_host_clip(HWND hwnd, int x, int y, const struct dcomp_visual *v,
++                                   UINT width, UINT height, RECT *clip)
+ {
+     RECT client;
+-    int max_width, max_height;
+ 
+-    if (!GetClientRect(hwnd, &client)) return;
++    SetRect(clip, 0, 0, width, height);
+ 
+-    max_width = client.right - x;
+-    max_height = client.bottom - y;
+-    if (max_width <= 0 || max_height <= 0)
++    if (GetClientRect(hwnd, &client))
+     {
+-        TRACE("composition host outside target client rect hwnd=%p pos=(%d,%d) client=%ldx%ld\n",
+-              hwnd, x, y, client.right - client.left, client.bottom - client.top);
+-        *width = 0;
+-        *height = 0;
+-        return;
++        RECT client_clip;
++
++        SetRect(&client_clip, client.left - x, client.top - y,
++                client.right - x, client.bottom - y);
++        if (client_clip.left > clip->left) clip->left = client_clip.left;
++        if (client_clip.top > clip->top) clip->top = client_clip.top;
++        if (client_clip.right < clip->right) clip->right = client_clip.right;
++        if (client_clip.bottom < clip->bottom) clip->bottom = client_clip.bottom;
+     }
+ 
+-    if (*width > (UINT)max_width || *height > (UINT)max_height)
++    if (v->has_clip)
+     {
+-        UINT old_width = *width, old_height = *height;
++        RECT visual_clip;
+ 
+-        if (*width > (UINT)max_width) *width = max_width;
+-        if (*height > (UINT)max_height) *height = max_height;
+-        TRACE("clipped composition host from %ux%u to %ux%u for hwnd %p client=%ldx%ld pos=(%d,%d)\n",
+-              old_width, old_height, *width, *height, hwnd,
+-              client.right - client.left, client.bottom - client.top, x, y);
++        SetRect(&visual_clip, round_float(v->clip.left), round_float(v->clip.top),
++                round_float(v->clip.right), round_float(v->clip.bottom));
++        if (visual_clip.left > clip->left) clip->left = visual_clip.left;
++        if (visual_clip.top > clip->top) clip->top = visual_clip.top;
++        if (visual_clip.right < clip->right) clip->right = visual_clip.right;
++        if (visual_clip.bottom < clip->bottom) clip->bottom = visual_clip.bottom;
+     }
++
++    if (clip->left < 0) clip->left = 0;
++    if (clip->top < 0) clip->top = 0;
++    if (clip->right > (LONG)width) clip->right = width;
++    if (clip->bottom > (LONG)height) clip->bottom = height;
++    return clip->right > clip->left && clip->bottom > clip->top;
+ }
+ 
+ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
+@@ -993,31 +1002,14 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+     if (v->content && (surface || (v->has_swapchain_desc &&
+         v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)))
+     {
++        RECT host_clip;
+         int x = placement.x;
+         int y = placement.y;
+         UINT width = surface ? surface->width : v->swapchain_desc.Width;
+         UINT height = surface ? surface->height : v->swapchain_desc.Height;
+ 
+-        if (v->has_clip)
+-        {
+-            int clip_left = placement.x + round_float(v->clip.left);
+-            int clip_top = placement.y + round_float(v->clip.top);
+-            int clip_right = placement.x + round_float(v->clip.right);
+-            int clip_bottom = placement.y + round_float(v->clip.bottom);
+-            int right = x + width;
+-            int bottom = y + height;
+-
+-            if (clip_left > x) x = clip_left;
+-            if (clip_top > y) y = clip_top;
+-            if (clip_right < right) right = clip_right;
+-            if (clip_bottom < bottom) bottom = clip_bottom;
+-            width = right > x ? right - x : 0;
+-            height = bottom > y ? bottom - y : 0;
+-        }
+-
+-        dcomp_clip_rect_to_client(t->hwnd, x, y, &width, &height);
+-
+-        if (width && height && dcomp_register_host_class())
++        if (width && height && dcomp_visual_host_clip(t->hwnd, x, y, v, width, height, &host_clip) &&
++            dcomp_register_host_class())
+         {
+             if (!v->host_hwnd || v->host_parent != t->hwnd)
+             {
+@@ -1048,6 +1040,35 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                 v->host_height = height;
+             }
+ 
++            if (v->host_hwnd)
++            {
++                if (host_clip.left || host_clip.top ||
++                    host_clip.right != (LONG)width || host_clip.bottom != (LONG)height)
++                {
++                    HRGN region;
++
++                    if ((region = CreateRectRgn(host_clip.left, host_clip.top,
++                                                host_clip.right, host_clip.bottom)))
++                    {
++                        if (!SetWindowRgn(v->host_hwnd, region, TRUE))
++                        {
++                            WARN("failed to set composition host clip %s on hwnd=%p\n",
++                                 wine_dbgstr_rect(&host_clip), v->host_hwnd);
++                            DeleteObject(region);
++                        }
++                    }
++                    else
++                    {
++                        WARN("failed to create composition host clip %s\n",
++                             wine_dbgstr_rect(&host_clip));
++                    }
++                }
++                else
++                {
++                    SetWindowRgn(v->host_hwnd, NULL, TRUE);
++                }
++            }
++
+             if (v->host_hwnd) target_hwnd = v->host_hwnd;
+         }
+         else if (v->host_hwnd)
+-- 
+2.53.0
+

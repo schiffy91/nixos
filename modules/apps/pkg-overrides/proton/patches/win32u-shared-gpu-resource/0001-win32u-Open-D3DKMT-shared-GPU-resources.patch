@@ -1,0 +1,387 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Thu, 21 May 2026 08:30:00 -0700
+Subject: [PATCH] win32u: Open D3DKMT shared GPU resources.
+
+DXVK exports Vulkan memory through Wine's shared GPU resource device and
+then imports the returned KMT handle through D3DKMTOpenResource2().
+Without a win32u implementation this path falls back to a stub, leaving
+users of the shared resource without a local allocation handle.
+
+Open the matching sharedgpures.sys resource from win32u, keep the file
+handle alive for the lifetime of the local D3DKMT resource handle, and
+release it through D3DKMTDestroyAllocation(). Implement the DXVK Wine
+metadata escape on the retained handle so later resource queries can
+recover the D3D runtime description from the same shared object.
+
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+---
+ dlls/win32u/d3dkmt.c | 252 ++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 238 insertions(+), 14 deletions(-)
+
+diff --git a/dlls/win32u/d3dkmt.c b/dlls/win32u/d3dkmt.c
+index 74dbce9..c67fd14 100644
+--- a/dlls/win32u/d3dkmt.c
++++ b/dlls/win32u/d3dkmt.c
+@@ -45,6 +45,15 @@ struct d3dkmt_device
+     struct list entry;                  /* List entry */
+ };
+
++struct d3dkmt_resource
++{
++    D3DKMT_HANDLE handle;               /* Local resource handle */
++    D3DKMT_HANDLE device;               /* Owning device handle */
++    D3DKMT_HANDLE global_share;         /* Shared KMT handle */
++    HANDLE shared_resource;             /* sharedgpures.sys file handle */
++    struct list entry;
++};
++
+ struct d3dkmt_vidpn_source
+ {
+     D3DKMT_VIDPNSOURCEOWNER_TYPE type;      /* VidPN source owner type */
+@@ -56,6 +65,7 @@ struct d3dkmt_vidpn_source
+ static pthread_mutex_t d3dkmt_lock = PTHREAD_MUTEX_INITIALIZER;
+ static struct list d3dkmt_adapters = LIST_INIT( d3dkmt_adapters );
+ static struct list d3dkmt_devices = LIST_INIT( d3dkmt_devices );
++static struct list d3dkmt_resources = LIST_INIT( d3dkmt_resources );
+ static struct list d3dkmt_vidpn_sources = LIST_INIT( d3dkmt_vidpn_sources );   /* VidPN source information list */
+
+ static VkInstance d3dkmt_vk_instance; /* Vulkan instance for D3DKMT functions */
+@@ -126,6 +136,142 @@ static struct d3dkmt_adapter *find_adapter_from_handle( D3DKMT_HANDLE handle )
+     return NULL;
+ }
+
++/* d3dkmt_lock must be held */
++static struct d3dkmt_device *find_device_from_handle( D3DKMT_HANDLE handle )
++{
++    struct d3dkmt_device *device;
++    LIST_FOR_EACH_ENTRY( device, &d3dkmt_devices, struct d3dkmt_device, entry )
++        if (device->handle == handle) return device;
++    return NULL;
++}
++
++/* d3dkmt_lock must be held */
++static struct d3dkmt_resource *find_resource_from_handle( D3DKMT_HANDLE handle )
++{
++    struct d3dkmt_resource *resource;
++    LIST_FOR_EACH_ENTRY( resource, &d3dkmt_resources, struct d3dkmt_resource, entry )
++        if (resource->handle == handle) return resource;
++    return NULL;
++}
++
++#define SHARED_GPU_CTL_CODE(function, access) ((0x23 << 16) | ((access) << 14) | ((function) << 2))
++#define IOCTL_SHARED_GPU_RESOURCE_OPEN         SHARED_GPU_CTL_CODE(1, 2)
++#define IOCTL_SHARED_GPU_RESOURCE_SET_METADATA SHARED_GPU_CTL_CODE(4, 2)
++#define IOCTL_SHARED_GPU_RESOURCE_GET_METADATA SHARED_GPU_CTL_CODE(5, 1)
++
++#define D3DKMT_ESCAPE_UPDATE_RESOURCE_WINE 0x80000000
++
++struct shared_resource_open
++{
++    obj_handle_t kmt_handle;
++    WCHAR name[1];
++};
++
++typedef struct
++{
++    union
++    {
++        NTSTATUS Status;
++        ULONG Pointer;
++    };
++    ULONG Information;
++} IO_STATUS_BLOCK32;
++
++static NTSTATUS shared_resource_ioctl( HANDLE file, ULONG code, void *in_buffer, ULONG in_size,
++                                       void *out_buffer, ULONG out_size, ULONG_PTR *information )
++{
++    IO_STATUS_BLOCK32 io32;
++    IO_STATUS_BLOCK io;
++    NTSTATUS status;
++
++    io.Pointer = &io32;
++    status = NtDeviceIoControlFile( file, NULL, NULL, NULL, &io, code,
++                                    in_buffer, in_size, out_buffer, out_size );
++    if (information) *information = status ? 0 : io.Information;
++    return status;
++}
++
++static NTSTATUS open_shared_resource( D3DKMT_HANDLE global_share, HANDLE *handle )
++{
++    static const WCHAR shared_gpu_resourceW[] =
++        {'\\','?','?','\\','S','h','a','r','e','d','G','p','u','R','e','s','o','u','r','c','e',0};
++    struct shared_resource_open open_desc = {0};
++    UNICODE_STRING name;
++    OBJECT_ATTRIBUTES attr;
++    IO_STATUS_BLOCK io;
++    NTSTATUS status;
++    HANDLE file;
++
++    RtlInitUnicodeString( &name, shared_gpu_resourceW );
++    attr.Length = sizeof(attr);
++    attr.RootDirectory = 0;
++    attr.Attributes = 0;
++    attr.ObjectName = &name;
++    attr.SecurityDescriptor = NULL;
++    attr.SecurityQualityOfService = NULL;
++
++    status = NtCreateFile( &file, GENERIC_READ | GENERIC_WRITE, &attr, &io, NULL,
++                           FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE,
++                           FILE_OPEN, 0, NULL, 0 );
++    if (status) return status;
++
++    open_desc.kmt_handle = global_share;
++    status = shared_resource_ioctl( file, IOCTL_SHARED_GPU_RESOURCE_OPEN, &open_desc,
++                                    sizeof(open_desc), NULL, 0, NULL );
++    if (status)
++    {
++        NtClose( file );
++        return status;
++    }
++
++    *handle = file;
++    return STATUS_SUCCESS;
++}
++
++static NTSTATUS query_shared_resource_metadata( D3DKMT_HANDLE global_share, void *buffer,
++                                                UINT *buffer_size )
++{
++    ULONG_PTR information = 0;
++    HANDLE shared_resource;
++    NTSTATUS status;
++
++    if (!buffer || !buffer_size) return STATUS_INVALID_PARAMETER;
++
++    if ((status = open_shared_resource( global_share, &shared_resource )))
++        return status;
++
++    status = shared_resource_ioctl( shared_resource, IOCTL_SHARED_GPU_RESOURCE_GET_METADATA,
++                                    NULL, 0, buffer, *buffer_size, &information );
++    if (!status) *buffer_size = information;
++    NtClose( shared_resource );
++    return status;
++}
++
++static NTSTATUS set_shared_resource_metadata( HANDLE shared_resource, void *buffer, UINT buffer_size )
++{
++    return shared_resource_ioctl( shared_resource, IOCTL_SHARED_GPU_RESOURCE_SET_METADATA,
++                                  buffer, buffer_size, NULL, 0, NULL );
++}
++
++static void destroy_resource( struct d3dkmt_resource *resource )
++{
++    list_remove( &resource->entry );
++    NtClose( resource->shared_resource );
++    free( resource );
++}
++
++static void destroy_device_resources( D3DKMT_HANDLE device )
++{
++    struct d3dkmt_resource *resource, *next;
++
++    pthread_mutex_lock( &d3dkmt_lock );
++    LIST_FOR_EACH_ENTRY_SAFE( resource, next, &d3dkmt_resources, struct d3dkmt_resource, entry )
++    {
++        if (resource->device == device) destroy_resource( resource );
++    }
++    pthread_mutex_unlock( &d3dkmt_lock );
++}
++
+ /******************************************************************************
+  *           NtGdiDdDDIOpenAdapterFromHdc    (win32u.@)
+  */
+@@ -140,8 +286,37 @@ NTSTATUS WINAPI NtGdiDdDDIOpenAdapterFromHdc( D3DKMT_OPENADAPTERFROMHDC *desc )
+  */
+ NTSTATUS WINAPI NtGdiDdDDIEscape( const D3DKMT_ESCAPE *desc )
+ {
+-    FIXME( "(%p): stub\n", desc );
+-    return STATUS_NO_MEMORY;
++    struct d3dkmt_resource *resource = NULL;
++    HANDLE shared_resource = NULL;
++    NTSTATUS status;
++
++    TRACE( "(%p)\n", desc );
++
++    if (!desc) return STATUS_INVALID_PARAMETER;
++
++    if (desc->Type != D3DKMT_ESCAPE_UPDATE_RESOURCE_WINE)
++    {
++        FIXME( "type %#x not supported.\n", desc->Type );
++        return STATUS_NOT_IMPLEMENTED;
++    }
++
++    if (!desc->hContext || !desc->pPrivateDriverData || !desc->PrivateDriverDataSize)
++        return STATUS_INVALID_PARAMETER;
++
++    pthread_mutex_lock( &d3dkmt_lock );
++    if ((resource = find_resource_from_handle( desc->hContext )))
++        shared_resource = resource->shared_resource;
++    pthread_mutex_unlock( &d3dkmt_lock );
++
++    if (!shared_resource) return STATUS_INVALID_PARAMETER;
++
++    status = set_shared_resource_metadata( shared_resource, desc->pPrivateDriverData,
++                                           desc->PrivateDriverDataSize );
++    if (status)
++        WARN( "failed to set metadata on resource %#x, status %#lx.\n",
++              desc->hContext, (long)status );
++
++    return status;
+ }
+
+ /******************************************************************************
+@@ -303,6 +478,7 @@ NTSTATUS WINAPI NtGdiDdDDIDestroyDevice( const D3DKMT_DESTROYDEVICE *desc )
+     if (!found) return STATUS_INVALID_PARAMETER;
+
+     set_owner_desc.hDevice = desc->hDevice;
++    destroy_device_resources( desc->hDevice );
+     NtGdiDdDDISetVidPnSourceOwner( &set_owner_desc );
+     free( found );
+     return STATUS_SUCCESS;
+@@ -706,8 +882,15 @@ NTSTATUS WINAPI NtGdiDdDDICreateAllocation( D3DKMT_CREATEALLOCATION *params )
+  */
+ NTSTATUS WINAPI NtGdiDdDDIDestroyAllocation2( const D3DKMT_DESTROYALLOCATION2 *params )
+ {
+-    FIXME( "params %p stub!\n", params );
+-    return STATUS_NOT_IMPLEMENTED;
++    D3DKMT_DESTROYALLOCATION destroy;
++
++    if (!params) return STATUS_INVALID_PARAMETER;
++
++    destroy.hDevice = params->hDevice;
++    destroy.hResource = params->hResource;
++    destroy.phAllocationList = params->phAllocationList;
++    destroy.AllocationCount = params->AllocationCount;
++    return NtGdiDdDDIDestroyAllocation( &destroy );
+ }
+
+ /******************************************************************************
+@@ -715,8 +898,90 @@ NTSTATUS WINAPI NtGdiDdDDIDestroyAllocation2( const D3DKMT_DESTROYALLOCATION2 *p
+  */
+ NTSTATUS WINAPI NtGdiDdDDIDestroyAllocation( const D3DKMT_DESTROYALLOCATION *params )
+ {
+-    FIXME( "params %p stub!\n", params );
+-    return STATUS_NOT_IMPLEMENTED;
++    struct d3dkmt_resource *resource = NULL;
++    NTSTATUS status = STATUS_INVALID_PARAMETER;
++    UINT i;
++
++    TRACE( "params %p.\n", params );
++
++    if (!params || !params->hDevice) return STATUS_INVALID_PARAMETER;
++
++    pthread_mutex_lock( &d3dkmt_lock );
++    if (params->hResource)
++    {
++        if ((resource = find_resource_from_handle( params->hResource )) && resource->device == params->hDevice)
++        {
++            destroy_resource( resource );
++            status = STATUS_SUCCESS;
++        }
++    }
++    else if (params->phAllocationList)
++    {
++        for (i = 0; i < params->AllocationCount; ++i)
++        {
++            if ((resource = find_resource_from_handle( params->phAllocationList[i] )) &&
++                resource->device == params->hDevice)
++            {
++                destroy_resource( resource );
++                status = STATUS_SUCCESS;
++                break;
++            }
++        }
++    }
++    pthread_mutex_unlock( &d3dkmt_lock );
++
++    return status;
++}
++
++static NTSTATUS open_resource( D3DKMT_OPENRESOURCE *params )
++{
++    static D3DKMT_HANDLE handle_start = 0x10000;
++    struct d3dkmt_resource *resource;
++    NTSTATUS status;
++    UINT i;
++
++    if (!params || !params->hDevice || !params->hGlobalShare || !params->NumAllocations ||
++        !params->pOpenAllocationInfo2)
++    {
++        WARN( "invalid open resource params %p, device %#x, global share %#x, allocations %u, allocation info %p.\n",
++              params, params ? params->hDevice : 0, params ? params->hGlobalShare : 0,
++              params ? params->NumAllocations : 0, params ? params->pOpenAllocationInfo2 : NULL );
++        return STATUS_INVALID_PARAMETER;
++    }
++
++    pthread_mutex_lock( &d3dkmt_lock );
++    if (!find_device_from_handle( params->hDevice ))
++    {
++        pthread_mutex_unlock( &d3dkmt_lock );
++        WARN( "invalid device handle %#x for shared resource %#x.\n",
++              params->hDevice, params->hGlobalShare );
++        return STATUS_INVALID_PARAMETER;
++    }
++    pthread_mutex_unlock( &d3dkmt_lock );
++
++    if (!(resource = calloc( 1, sizeof(*resource) ))) return STATUS_NO_MEMORY;
++    if ((status = open_shared_resource( params->hGlobalShare, &resource->shared_resource )))
++    {
++        WARN( "failed to open shared resource %#x, status %#lx.\n",
++              params->hGlobalShare, (long)status );
++        free( resource );
++        return status;
++    }
++
++    pthread_mutex_lock( &d3dkmt_lock );
++    resource->handle = ++handle_start;
++    resource->device = params->hDevice;
++    resource->global_share = params->hGlobalShare;
++    list_add_tail( &d3dkmt_resources, &resource->entry );
++    pthread_mutex_unlock( &d3dkmt_lock );
++
++    params->hResource = resource->handle;
++    for (i = 0; i < params->NumAllocations; ++i)
++        params->pOpenAllocationInfo2[i].hAllocation = resource->handle;
++
++    TRACE( "opened shared resource %#x as local resource %#x.\n",
++           params->hGlobalShare, resource->handle );
++    return STATUS_SUCCESS;
+ }
+
+ /******************************************************************************
+@@ -724,8 +989,7 @@ NTSTATUS WINAPI NtGdiDdDDIDestroyAllocation( const D3DKMT_DESTROYALLOCATION *par
+  */
+ NTSTATUS WINAPI NtGdiDdDDIOpenResource( D3DKMT_OPENRESOURCE *params )
+ {
+-    FIXME( "params %p stub!\n", params );
+-    return STATUS_NOT_IMPLEMENTED;
++    return open_resource( params );
+ }
+
+ /******************************************************************************
+@@ -733,8 +997,7 @@ NTSTATUS WINAPI NtGdiDdDDIOpenResource( D3DKMT_OPENRESOURCE *params )
+  */
+ NTSTATUS WINAPI NtGdiDdDDIOpenResource2( D3DKMT_OPENRESOURCE *params )
+ {
+-    FIXME( "params %p stub!\n", params );
+-    return STATUS_NOT_IMPLEMENTED;
++    return open_resource( params );
+ }
+
+ /******************************************************************************
+@@ -751,8 +1014,11 @@ NTSTATUS WINAPI NtGdiDdDDIOpenResourceFromNtHandle( D3DKMT_OPENRESOURCEFROMNTHAN
+  */
+ NTSTATUS WINAPI NtGdiDdDDIQueryResourceInfo( D3DKMT_QUERYRESOURCEINFO *params )
+ {
+-    FIXME( "params %p stub!\n", params );
+-    return STATUS_NOT_IMPLEMENTED;
++    if (!params || !params->hDevice || !params->hGlobalShare) return STATUS_INVALID_PARAMETER;
++    params->NumAllocations = 1;
++    if (params->pPrivateRuntimeData && params->PrivateRuntimeDataSize)
++        return query_shared_resource_metadata( params->hGlobalShare, params->pPrivateRuntimeData, &params->PrivateRuntimeDataSize );
++    return STATUS_SUCCESS;
+ }
+
+ /******************************************************************************
+--
+2.49.0

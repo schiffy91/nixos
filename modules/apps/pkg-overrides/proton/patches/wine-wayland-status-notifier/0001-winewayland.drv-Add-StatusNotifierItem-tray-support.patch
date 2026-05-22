@@ -881,7 +881,7 @@ index 0000000..885a1b2
 +    list_add_tail(&sni_list, &item->entry);
 +    pthread_mutex_unlock(&sni_mutex);
 +
-+    if (!sni_register_item(item))
++    if (!sni_start_dispatch_thread())
 +    {
 +        pthread_mutex_lock(&sni_mutex);
 +        list_remove(&item->entry);
@@ -890,7 +890,7 @@ index 0000000..885a1b2
 +        return FALSE;
 +    }
 +
-+    if (!sni_start_dispatch_thread())
++    if (!sni_register_item(item))
 +    {
 +        pthread_mutex_lock(&sni_mutex);
 +        list_remove(&item->entry);
@@ -1079,4 +1079,3 @@ index dc90ec6..3a3ae09 100644
          return 0;
 -- 
 2.53.0
-

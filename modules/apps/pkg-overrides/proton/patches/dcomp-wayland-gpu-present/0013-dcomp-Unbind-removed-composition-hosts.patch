@@ -1,0 +1,172 @@
+From 42e325099d4028369775de66a9191aa33e4b6e74 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 11:07:42 -0700
+Subject: [PATCH] dcomp: Unbind removed composition hosts
+
+Composition visuals retain children with an AddRef while they are linked
+into a parent visual. Reparenting or removing a visual must release that
+retained reference and tear down any child presentation host HWNDs,
+otherwise stale host windows can remain visible after Chromium removes
+popup or control visuals.
+
+Host every non-root swap-chain visual instead of only nested grandchildren
+so child composition swap chains do not fight the root swap chain for the
+same target HWND. Avoid restacking unchanged host HWNDs on every commit to
+reduce Wayland child-surface churn during CEF animations.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 69 +++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 61 insertions(+), 8 deletions(-)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index 3ddd47c..1beef8c 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -171,6 +171,8 @@ static const IDCompositionSurfaceVtbl       dcomp_surface_vtbl;
+ static const IDCompositionSurfaceFactoryVtbl dcomp_surface_factory_vtbl;
+ static const IDCompositionTargetVtbl        dcomp_target_vtbl;
+ 
++static void dcomp_visual_unbind_hosts(struct dcomp_visual *v);
++
+ static const WCHAR dcomp_host_class_name[] =
+     {'W','i','n','e','D','C','o','m','p','S','w','a','p','C','h','a','i','n','H','o','s','t',0};
+ 
+@@ -320,8 +322,13 @@ static ULONG WINAPI visual_Release(IDCompositionVisual2 *iface)
+     {
+         struct dcomp_visual *c, *cn;
+         LIST_FOR_EACH_ENTRY_SAFE(c, cn, &v->children, struct dcomp_visual, child_entry)
+-        { list_remove(&c->child_entry); c->parent = NULL; }
+-        if (v->host_hwnd) DestroyWindow(v->host_hwnd);
++        {
++            list_remove(&c->child_entry);
++            c->parent = NULL;
++            dcomp_visual_unbind_hosts(c);
++            IDCompositionVisual2_Release(&c->IDCompositionVisual2_iface);
++        }
++        dcomp_visual_unbind_hosts(v);
+         if (v->parent) list_remove(&v->child_entry);
+         if (v->content) IUnknown_Release(v->content);
+         list_remove(&v->entry);
+@@ -450,7 +457,12 @@ static HRESULT WINAPI visual_AddVisual(IDCompositionVisual2 *iface, IDCompositio
+     }
+     if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
+     if (c->parent)                       /* already in some parent's children - remove first */
++    {
+         list_remove(&c->child_entry);
++        c->parent = NULL;
++        dcomp_visual_unbind_hosts(c);
++        IDCompositionVisual2_Release(&c->IDCompositionVisual2_iface);
++    }
+     c->parent = p;
+     if (ref && ref->parent == p)
+     {
+@@ -474,10 +486,17 @@ static HRESULT WINAPI visual_RemoveVisual(IDCompositionVisual2 *iface, IDComposi
+     if (visual && SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
+     {
+         struct dcomp_visual *c = impl_from_IDCompositionVisual2(v2);
+-        if (c->parent == p) { list_remove(&c->child_entry); c->parent = NULL; }
++        if (c->parent == p)
++        {
++            list_remove(&c->child_entry);
++            c->parent = NULL;
++            dcomp_visual_unbind_hosts(c);
++            IDCompositionVisual2_Release(&c->IDCompositionVisual2_iface);
++        }
+         IDCompositionVisual2_Release(v2);
+     }
+     p->dirty = TRUE;
++    if (p->device) p->device->pending_commit = TRUE;
+     if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
+     return S_OK;
+ }
+@@ -489,9 +508,13 @@ static HRESULT WINAPI visual_RemoveAllVisuals(IDCompositionVisual2 *iface)
+     if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
+     LIST_FOR_EACH_ENTRY_SAFE(c, cn, &p->children, struct dcomp_visual, child_entry)
+     {
+-        list_remove(&c->child_entry); c->parent = NULL;
++        list_remove(&c->child_entry);
++        c->parent = NULL;
++        dcomp_visual_unbind_hosts(c);
++        IDCompositionVisual2_Release(&c->IDCompositionVisual2_iface);
+     }
+     p->dirty = TRUE;
++    if (p->device) p->device->pending_commit = TRUE;
+     if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
+     return S_OK;
+ }
+@@ -790,7 +813,11 @@ static ULONG WINAPI target_Release(IDCompositionTarget *iface)
+     {
+         struct dcomp_device *d = t->device;
+         if (d && d->cs_init) EnterCriticalSection(&d->cs);
+-        if (t->root) IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
++        if (t->root)
++        {
++            dcomp_visual_unbind_hosts(t->root);
++            IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
++        }
+         list_remove(&t->entry);
+         if (d && d->cs_init) LeaveCriticalSection(&d->cs);
+         free(t);
+@@ -803,7 +830,11 @@ static HRESULT WINAPI target_SetRoot(IDCompositionTarget *iface, IDCompositionVi
+     struct dcomp_target *t = impl_from_IDCompositionTarget(iface);
+     TRACE("target=%p visual=%p (hwnd=%p)\n", t, visual, t->hwnd);
+     if (t->device && t->device->cs_init) EnterCriticalSection(&t->device->cs);
+-    if (t->root) IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
++    if (t->root)
++    {
++        dcomp_visual_unbind_hosts(t->root);
++        IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
++    }
+     t->root = NULL;
+     if (visual)
+     {
+@@ -977,6 +1008,28 @@ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
+     return surface;
+ }
+ 
++static void dcomp_visual_unbind_hosts(struct dcomp_visual *v)
++{
++    struct dcomp_surface *surface;
++    struct dcomp_visual *c;
++
++    if ((surface = dcomp_visual_surface(v)))
++    {
++        surface->target_hwnd = NULL;
++        surface->dirty = TRUE;
++    }
++
++    if (v->host_hwnd)
++    {
++        DestroyWindow(v->host_hwnd);
++        v->host_hwnd = NULL;
++    }
++    dcomp_visual_reset_host_state(v);
++
++    LIST_FOR_EACH_ENTRY(c, &v->children, struct dcomp_visual, child_entry)
++        dcomp_visual_unbind_hosts(c);
++}
++
+ static BOOL dcomp_visual_needs_host(const struct dcomp_visual *v, BOOL has_surface)
+ {
+     BOOL placed;
+@@ -991,7 +1044,7 @@ static BOOL dcomp_visual_needs_host(const struct dcomp_visual *v, BOOL has_surfa
+              v->transform.m11 != 1.0f || v->transform.m22 != 1.0f;
+     if (placed) return TRUE;
+ 
+-    if (v->parent && v->parent->parent) return TRUE;
++    if (v->parent) return TRUE;
+ 
+     return FALSE;
+ }
+@@ -1192,7 +1245,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                                v->host_width != width || v->host_height != height;
+                 UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
+ 
+-                if (!changed) swp_flags |= SWP_NOMOVE | SWP_NOSIZE;
++                if (!changed) swp_flags |= SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER;
+ 
+                 if (SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height, swp_flags) && changed)
+                 {
+-- 
+2.53.0
