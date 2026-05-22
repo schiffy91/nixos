@@ -50,12 +50,12 @@ class Config:
         if not cls.sh.exists(cls.get_secrets_path()): return
         directories = cls.sh.find_directories(cls.get_secrets_path(), pattern="*")
         files = cls.sh.find_files(cls.get_secrets_path(), pattern="*")
-        cls.sh.chown("root", cls.get_secrets_path(), *directories, *files)
+        cls.sh.chown("root:root", cls.get_secrets_path(), *directories, *files)
         cls.sh.chmod(700, cls.get_secrets_path(), *directories)
         cls.sh.chmod(600, *files)
     @classmethod
     def secure(cls, username):
-        ignore_pattern = "*/secrets* */.venv* */.direnv* */.git*"
+        ignore_pattern = "*/secrets* */.venv* */.direnv*"
         cls.sh.chown(username, cls.get_nixos_path())
         cls.sh.chmod(755, *cls.sh.find_directories(
             cls.get_nixos_path(), ignore_pattern=ignore_pattern))
@@ -71,6 +71,7 @@ class Config:
     @classmethod
     def update(cls, rebuild_file_system=False, reboot=False,
                delete_cache=False, upgrade=False):
+        username = cls.eval("config.settings.user.admin.username")
         if delete_cache:
             cls.sh.run("nix-collect-garbage -d", capture_output=False)
             cls.sh.rm("/root/.cache")
@@ -80,7 +81,7 @@ class Config:
             cls.sh.run(f"nix flake update --flake {Config.get_nixos_path()}",
                        capture_output=False)
         cls.create_secrets()
-        cls.secure(cls.sh.whoami())
+        cls.secure(username)
         if not cls.sh.exists(cls.get_config_path()):
             Utils.print_error(f"'{cls.get_config_path()}' IS MISSING.")
             host_path = Interactive.ask_for_host_path(cls.get_hosts_path())
@@ -94,17 +95,23 @@ class Config:
         cls.sh.run(f"{environment} nixos-rebuild switch "
                    f"--flake {nixos_path}#{host}-{target}",
                    capture_output=False)
-        result = cls.sh.run(
-            "journalctl -u 'home-manager-*.service' "
-            "--no-pager -o cat -q -r 2>/dev/null "
-            "| sed '/^Starting Home Manager activation$/q' "
-            "| tac "
-            "| grep -v '^\\(Starting\\|Stopping\\|Stopped\\|Finished\\|Activating \\)'",
-            check=False, capture_output=True)
-        hm_log = Shell.stdout(result)
+        cls.secure(username)
+        hm_log = cls.get_home_manager_logs()
         if hm_log: print(hm_log)
         if reboot: Utils.reboot()
         else: Interactive.ask_to_reboot()
+    @classmethod
+    def get_home_manager_logs(cls):
+        result = cls.sh.run(
+            "journalctl -u 'home-manager-*.service' --no-pager -o cat -q -r",
+            check=False, capture_output=True)
+        lines = []
+        for line in Shell.stdout(result).splitlines():
+            if line == "Starting Home Manager activation": break
+            if not line.startswith(("Starting ", "Stopping ", "Stopped ",
+                                    "Finished ", "Activating ")):
+                lines.append(line)
+        return "\n".join(reversed(lines)).strip()
     @classmethod
     def eval(cls, attribute) -> "str | bool":
         nixos_path = cls.sh.realpath(cls.get_nixos_path())
