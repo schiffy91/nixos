@@ -88,8 +88,20 @@ let
         set_reg_dword "${prefix}/user.reg" "Control Panel\\\\Desktop" LogPixels "$DPI_HEX"
         set_reg_dword "${prefix}/user.reg" "Software\\\\Wine\\\\Fonts" LogPixels "$DPI_HEX"
         set_reg_dword "${prefix}/system.reg" "System\\\\ControlSet001\\\\Hardware Profiles\\\\Current\\\\Software\\\\Fonts" LogPixels "$DPI_HEX"
-        SCALE_FACTOR="''${BATTLE_NET_FORCE_SCALE:-$(${pkgs.gawk}/bin/awk -v dpi="$LOG_PIXELS" 'BEGIN { if (dpi <= 0) dpi = 96; printf "%.6g", dpi / 96 }')}"
-        EXTRA_ARGS=(--high-dpi-support=1 --force-device-scale-factor="$SCALE_FACTOR")
+        EXTRA_ARGS=(
+          --high-dpi-support=1
+        )
+        CEF_SCALE="''${BATTLE_NET_FORCE_SCALE-${toString scaleFactor}}"
+        if [ -n "$CEF_SCALE" ] && [ "$CEF_SCALE" != "1" ]; then
+          EXTRA_ARGS+=(--force-device-scale-factor="$CEF_SCALE")
+        fi
+        if [ -n "''${BATTLE_NET_WINDOW_SIZE:-}" ]; then
+          EXTRA_ARGS+=(--window-size="''${BATTLE_NET_WINDOW_SIZE}")
+        fi
+        if [ -n "''${BATTLE_NET_EXTRA_ARGS:-}" ]; then
+          read -r -a USER_EXTRA_ARGS <<< "''${BATTLE_NET_EXTRA_ARGS}"
+          EXTRA_ARGS+=("''${USER_EXTRA_ARGS[@]}")
+        fi
         ${lib.optionalString waylandHdr ''
         ANGLE_BACKEND="''${BATTLE_NET_ANGLE_BACKEND:-}"
         if [ -n "$ANGLE_BACKEND" ]; then
@@ -114,10 +126,13 @@ let
           ENABLE_HDR_WSI=1 \
         ''}umu-run "$EXE" "''${EXTRA_ARGS[@]}"
       '';
-      # Wine reads LogPixels from user.reg, keeping Qt, Win32, and CEF on one
-      # DPI source. The matching Chromium scale flag is also passed so the
-      # login, interstitial, and launcher CEF processes cannot fall back to 1x.
-      # BATTLE_NET_FORCE_SCALE is left as an escape hatch for diagnostics.
+      # Wine reads LogPixels from user.reg for Win32/Qt paths, and Chromium's
+      # device scale keeps CEF's D3D11 compositor at the same fractional scale.
+      # Set BATTLE_NET_FORCE_SCALE= to suppress the Chromium flag, or set a
+      # numeric value to test a different CEF scale without changing Wine DPI.
+      # BATTLE_NET_WINDOW_SIZE and BATTLE_NET_EXTRA_ARGS are diagnostic escape
+      # hatches; defaults intentionally avoid CEF memory flags because they can
+      # make Battle.net create an empty accelerated root surface.
       #
       # The default intentionally leaves Chromium/ANGLE on its D3D11 path so
       # the patched DComp/DXGI/Wayland bridge is exercised. BATTLE_NET_ANGLE_BACKEND
