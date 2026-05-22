@@ -130,6 +130,8 @@ in {
       ##### VSCode #####
       "/home/${config.settings.user.admin.username}/.config/Code"
       "/home/${config.settings.user.admin.username}/.vscode"
+      ##### Codex #####
+      "/home/${config.settings.user.admin.username}/.codex"
       ##### Sunshine #####
       "/home/${config.settings.user.admin.username}/.config/sunshine"
       "/home/${config.settings.user.admin.username}/.local/share/flatpak/db"
