@@ -1,0 +1,580 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import signal
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+TOOL_NAME = "scwhine-GE-Proton10-34"
+DEV_TOOL_NAME = f"{TOOL_NAME}-dev"
+NIXOS = Path("/etc/nixos")
+PROTON_DIR = NIXOS / "modules/apps/pkg-overrides/proton"
+
+
+def home() -> Path:
+    return Path.home()
+
+
+def compat_dir() -> Path:
+    return home() / ".local/share/Steam/compatibilitytools.d"
+
+
+def tool_path() -> Path:
+    return compat_dir() / TOOL_NAME
+
+
+def dev_tool_path() -> Path:
+    return compat_dir() / DEV_TOOL_NAME
+
+
+def prefix_path() -> Path:
+    return home() / "Games/Battle.net/prefix"
+
+
+def dev_root_dir() -> Path:
+    return PROTON_DIR / "src"
+
+
+def wine_src_dir() -> Path:
+    return dev_root_dir() / "wine"
+
+
+def wine64_dir() -> Path:
+    return dev_root_dir() / "wine64"
+
+
+def wine32_dir() -> Path:
+    return dev_root_dir() / "wine32"
+
+
+def dxvk_dir() -> Path:
+    return dev_root_dir() / "dxvk"
+
+
+def work_home_dir() -> Path:
+    return dev_root_dir() / ".home"
+
+
+def saved_store_target() -> Path:
+    return dev_root_dir() / ".store-target"
+
+
+def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    print("+ " + " ".join(map(str, cmd)))
+    return subprocess.run(cmd, check=True, text=True, **kwargs)
+
+
+def run_shell(script: str, **kwargs) -> subprocess.CompletedProcess:
+    print("+ " + " ".join(script.strip().splitlines()))
+    return subprocess.run(["bash", "-lc", script], check=True, text=True, **kwargs)
+
+
+def realpath(path: Path) -> Path:
+    return Path(os.path.realpath(path))
+
+
+def current_store_target() -> Path:
+    path = tool_path()
+    if not path.exists() and not path.is_symlink():
+        raise SystemExit(f"{path} does not exist; run the normal NixOS activation first")
+
+    target = realpath(path)
+    if target == dev_tool_path():
+        saved = saved_store_target()
+        if saved.exists():
+            return Path(saved.read_text().strip())
+        raise SystemExit(f"{path} already points at {DEV_TOOL_NAME}, but no saved store target exists")
+    return target
+
+
+def write_dev_vdf() -> None:
+    vdf = dev_tool_path() / "compatibilitytool.vdf"
+    if not vdf.exists():
+        return
+    text = vdf.read_text()
+    text = text.replace(
+        '"display_name" "scwhine GE-Proton10-34 (Wayland SNI)"',
+        '"display_name" "scwhine DEV GE-Proton10-34 (Wayland SNI)"',
+    )
+    vdf.write_text(text)
+
+
+def setup(args: argparse.Namespace) -> None:
+    src = current_store_target()
+    dst = dev_tool_path()
+    dev_root_dir().mkdir(parents=True, exist_ok=True)
+    saved_store_target().write_text(str(src) + "\n")
+
+    if args.force and dst.exists():
+        shutil.rmtree(dst)
+
+    if not dst.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        run(["rsync", "-a", "--delete", f"{src}/", f"{dst}/"])
+        run(["chmod", "-R", "u+rwX", str(dst)])
+
+    write_dev_vdf()
+    print(f"dev tool: {dst}")
+    print(f"store base: {src}")
+
+
+def use_dev(_args: argparse.Namespace) -> None:
+    setup(argparse.Namespace(force=False))
+    path = tool_path()
+    target = realpath(path) if path.exists() or path.is_symlink() else None
+    if target != dev_tool_path():
+        if path.exists() or path.is_symlink():
+            path.unlink()
+        path.symlink_to(dev_tool_path())
+    print(f"{path} -> {realpath(path)}")
+
+
+def restore(_args: argparse.Namespace) -> None:
+    saved = saved_store_target()
+    if not saved.exists():
+        raise SystemExit("no saved store target; nothing to restore")
+    target = Path(saved.read_text().strip())
+    if not target.exists():
+        raise SystemExit(f"saved store target no longer exists: {target}")
+    path = tool_path()
+    if path.exists() or path.is_symlink():
+        path.unlink()
+    path.symlink_to(target)
+    print(f"{path} -> {realpath(path)}")
+
+
+def status(_args: argparse.Namespace) -> None:
+    path = tool_path()
+    target = realpath(path) if path.exists() or path.is_symlink() else None
+    print(f"active: {path} -> {target}")
+    print(f"dev:    {dev_tool_path()} ({'present' if dev_tool_path().exists() else 'missing'})")
+    if saved_store_target().exists():
+        print(f"store:  {saved_store_target().read_text().strip()}")
+    print(f"dev root: {dev_root_dir()}")
+    print(f"wine source: {wine_src_dir()} ({'present' if wine_src_dir().exists() else 'missing'})")
+    print(f"wine64 build: {wine64_dir()} ({'configured' if (wine64_dir() / 'Makefile').exists() else 'missing'})")
+    print(f"wine32 build: {wine32_dir()} ({'configured' if (wine32_dir() / 'Makefile').exists() else 'missing'})")
+    print(f"dxvk source: {dxvk_dir()} ({'present' if dxvk_dir().exists() else 'missing'})")
+
+
+def copy_if_exists(src: Path, dst: Path) -> bool:
+    if not src.exists():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        try:
+            if src.samefile(dst):
+                dst.chmod(dst.stat().st_mode | 0o200)
+                return True
+        except OSError:
+            pass
+        dst.chmod(dst.stat().st_mode | 0o200)
+    shutil.copy2(src, dst)
+    dst.chmod(dst.stat().st_mode | 0o200)
+    return True
+
+
+def overlay_explorer_prefix_files() -> list[str]:
+    root = dev_tool_path()
+    explorer64 = root / "files/lib/wine/x86_64-windows/explorer.exe"
+    explorer32 = root / "files/lib/wine/i386-windows/explorer.exe"
+    mappings = [
+        (explorer64, root / "files/share/default_pfx/drive_c/windows/explorer.exe"),
+        (explorer64, root / "files/share/default_pfx/drive_c/windows/system32/explorer.exe"),
+        (explorer32, root / "files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"),
+    ]
+    if prefix_path().exists():
+        mappings.extend([
+            (explorer64, prefix_path() / "drive_c/windows/explorer.exe"),
+            (explorer64, prefix_path() / "drive_c/windows/system32/explorer.exe"),
+            (explorer32, prefix_path() / "drive_c/windows/syswow64/explorer.exe"),
+        ])
+
+    copied = []
+    for src, dst in mappings:
+        if copy_if_exists(src, dst):
+            copied.append(str(dst))
+    return copied
+
+
+def overlay_wine(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    rels = [
+        "x86_64-unix/winewayland.so",
+        "i386-unix/winewayland.so",
+        "x86_64-unix/winevulkan.so",
+        "i386-unix/winevulkan.so",
+        "x86_64-unix/win32u.so",
+        "i386-unix/win32u.so",
+        "x86_64-windows/winewayland.drv",
+        "i386-windows/winewayland.drv",
+        "x86_64-windows/dcomp.dll",
+        "i386-windows/dcomp.dll",
+        "x86_64-windows/dxgi.dll",
+        "i386-windows/dxgi.dll",
+        "x86_64-windows/winevulkan.dll",
+        "i386-windows/winevulkan.dll",
+        "x86_64-windows/win32u.dll",
+        "i386-windows/win32u.dll",
+        "x86_64-windows/explorer.exe",
+        "i386-windows/explorer.exe",
+    ]
+    if args.wine:
+        pairs = [(rel, args.wine / "lib/wine" / rel) for rel in rels]
+    else:
+        if not args.wine64 or not args.wine32:
+            raise SystemExit("overlay-wine needs --wine or both --wine64 and --wine32")
+        pairs = [
+            ("x86_64-unix/winewayland.so", args.wine64 / "dlls/winewayland.drv/winewayland.so"),
+            ("i386-unix/winewayland.so", args.wine32 / "dlls/winewayland.drv/winewayland.so"),
+            ("x86_64-unix/winevulkan.so", args.wine64 / "dlls/winevulkan/winevulkan.so"),
+            ("i386-unix/winevulkan.so", args.wine32 / "dlls/winevulkan/winevulkan.so"),
+            ("x86_64-unix/win32u.so", args.wine64 / "dlls/win32u/win32u.so"),
+            ("i386-unix/win32u.so", args.wine32 / "dlls/win32u/win32u.so"),
+            ("x86_64-windows/winewayland.drv", args.wine64 / "dlls/winewayland.drv/x86_64-windows/winewayland.drv"),
+            ("i386-windows/winewayland.drv", args.wine32 / "dlls/winewayland.drv/i386-windows/winewayland.drv"),
+            ("x86_64-windows/dcomp.dll", args.wine64 / "dlls/dcomp/x86_64-windows/dcomp.dll"),
+            ("i386-windows/dcomp.dll", args.wine32 / "dlls/dcomp/i386-windows/dcomp.dll"),
+            ("x86_64-windows/dxgi.dll", args.wine64 / "dlls/dxgi/x86_64-windows/dxgi.dll"),
+            ("i386-windows/dxgi.dll", args.wine32 / "dlls/dxgi/i386-windows/dxgi.dll"),
+            ("x86_64-windows/winevulkan.dll", args.wine64 / "dlls/winevulkan/x86_64-windows/winevulkan.dll"),
+            ("i386-windows/winevulkan.dll", args.wine32 / "dlls/winevulkan/i386-windows/winevulkan.dll"),
+            ("x86_64-windows/win32u.dll", args.wine64 / "dlls/win32u/x86_64-windows/win32u.dll"),
+            ("i386-windows/win32u.dll", args.wine32 / "dlls/win32u/i386-windows/win32u.dll"),
+            ("x86_64-windows/explorer.exe", args.wine64 / "programs/explorer/x86_64-windows/explorer.exe"),
+            ("i386-windows/explorer.exe", args.wine32 / "programs/explorer/i386-windows/explorer.exe"),
+        ]
+    copied = []
+    for rel, src in pairs:
+        if copy_if_exists(src, dev_tool_path() / "files/lib/wine" / rel):
+            copied.append(rel)
+    if not copied:
+        raise SystemExit("no Wine artifacts copied; check --wine or --wine64/--wine32 build dirs")
+    print("copied Wine artifacts:")
+    for rel in copied:
+        print(f"  {rel}")
+    explorer_copies = overlay_explorer_prefix_files()
+    if explorer_copies:
+        print("updated Explorer prefix files:")
+        for dst in explorer_copies:
+            print(f"  {dst}")
+
+
+def overlay_dxvk(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    if (args.dxvk / "lib/wine/dxvk").exists():
+        pairs = [
+            (args.dxvk / "lib/wine/dxvk/x86_64-windows/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (args.dxvk / "lib/wine/dxvk/i386-windows/dxgi.dll", "i386-windows/dxgi.dll"),
+            (args.dxvk / "lib/wine/dxvk/x86_64-windows/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (args.dxvk / "lib/wine/dxvk/i386-windows/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    elif (args.dxvk / "x64").exists():
+        pairs = [
+            (args.dxvk / "x64/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (args.dxvk / "x32/dxgi.dll", "i386-windows/dxgi.dll"),
+            (args.dxvk / "x64/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (args.dxvk / "x32/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    else:
+        pairs = [
+            (args.dxvk / "build.64/src/dxgi/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (args.dxvk / "build.32/src/dxgi/dxgi.dll", "i386-windows/dxgi.dll"),
+            (args.dxvk / "build.64/src/d3d11/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (args.dxvk / "build.32/src/d3d11/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    copied = []
+    for src, rel in pairs:
+        if copy_if_exists(src, dev_tool_path() / "files/lib/wine/dxvk" / rel):
+            copied.append(rel)
+    if not copied:
+        raise SystemExit("no DXVK artifacts copied; check --dxvk build dir")
+    print("copied DXVK artifacts:")
+    for rel in copied:
+        print(f"  {rel}")
+
+
+def nix_expr(attr: str) -> str:
+    return (
+        'let '
+        'flake = builtins.getFlake "git+file:///etc/nixos"; '
+        'pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; '
+        f'in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton/package.nix '
+        '{ inherit (pkgs) makeWrapper rsync unzip; }).'
+        f'{attr}'
+    )
+
+
+def nix_build_path(attr: str) -> Path:
+    result = run([
+        "nix", "build", "--no-link", "--print-out-paths", "--impure",
+        "--expr", nix_expr(attr),
+    ], capture_output=True)
+    return Path(result.stdout.strip().splitlines()[-1])
+
+
+def nix_eval_raw(attr: str) -> str:
+    result = run(["nix", "eval", "--raw", f"nixpkgs#{attr}"], capture_output=True)
+    return result.stdout.strip().splitlines()[-1]
+
+
+def dev_shell(script: str, target: str = "64") -> None:
+    if target == "64" and os.environ.get("SCWHINE_IN_DEV_SHELL") == "1":
+        run_shell(f"set -euo pipefail; {script}")
+        return
+    run([
+        "nix-shell",
+        str(PROTON_DIR / "dev-shell.nix"),
+        "--argstr",
+        "target",
+        target,
+        "--run",
+        f"set -euo pipefail; {script}",
+    ])
+
+
+def ensure_source_git_repo(src: Path) -> None:
+    if (src / ".git").exists():
+        return
+
+    run(["git", "-C", str(src), "init"])
+    run(["git", "-C", str(src), "config", "user.name", "scwhine dev"])
+    run(["git", "-C", str(src), "config", "user.email", "scwhine-dev@example.invalid"])
+    run(["git", "-C", str(src), "add", "."])
+    run(["git", "-C", str(src), "commit", "-m", "baseline: Valve Wine plus active Battle.net series"])
+
+
+def setup_wine(args: argparse.Namespace) -> None:
+    dev_root_dir().mkdir(parents=True, exist_ok=True)
+    src = wine_src_dir()
+    if args.force and src.exists():
+        shutil.rmtree(src)
+    if not src.exists():
+        seed = nix_build_path("passthru.wineSource")
+        run(["rsync", "-a", "--delete", f"{seed}/", f"{src}/"])
+        run(["chmod", "-R", "u+rwX", str(src)])
+
+    marker = src / "configure"
+    if args.force_configure and marker.exists():
+        marker.unlink()
+    if not marker.exists():
+        vulkan_headers = nix_eval_raw("vulkan-headers")
+        dev_shell(
+            f'cd "{src}" && '
+            f'HOME="{work_home_dir()}" && mkdir -p "$HOME" && '
+            f'python3 dlls/winevulkan/make_vulkan -x "{vulkan_headers}/share/vulkan/registry/vk.xml" '
+            f'-X "{vulkan_headers}/share/vulkan/registry/video.xml" && '
+            'perl ./tools/make_requests || true && '
+            'autoreconf -fi'
+        )
+
+    ensure_source_git_repo(src)
+
+    wine64_dir().mkdir(parents=True, exist_ok=True)
+    wine32_dir().mkdir(parents=True, exist_ok=True)
+    if args.force_configure:
+        for build_dir in (wine64_dir(), wine32_dir()):
+            makefile = build_dir / "Makefile"
+            if makefile.exists():
+                makefile.unlink()
+    if not (wine64_dir() / "Makefile").exists():
+        dev_shell(f'cd "{wine64_dir()}" && HOME="{work_home_dir()}" "{src}/configure" --enable-win64 --without-x --disable-tests')
+    if not (wine32_dir() / "Makefile").exists():
+        dev_shell(
+            f'cd "{wine32_dir()}" && HOME="{work_home_dir()}" "{src}/configure" '
+            f'--with-wine64="{wine64_dir()}" --without-x --disable-tests',
+            target="32",
+        )
+
+    print(f"wine source: {src}")
+    print(f"wine64 build: {wine64_dir()}")
+    print(f"wine32 build: {wine32_dir()}")
+
+
+def build_wine(args: argparse.Namespace) -> None:
+    if not (wine64_dir() / "Makefile").exists() or not (wine32_dir() / "Makefile").exists():
+        setup_wine(argparse.Namespace(force=False, force_configure=False))
+    targets = args.targets or [
+        "dlls/dcomp/all",
+        "dlls/dxgi/all",
+        "dlls/win32u/all",
+        "dlls/winevulkan/all",
+        "dlls/winewayland.drv/all",
+        "programs/explorer/all",
+    ]
+    target_text = " ".join(targets)
+    jobs = args.jobs or os.cpu_count() or 1
+    dev_shell(f'make -C "{wine64_dir()}" -j{jobs} {target_text}')
+    dev_shell(f'make -C "{wine32_dir()}" -j{jobs} {target_text}', target="32")
+    overlay_wine(argparse.Namespace(wine=None, wine64=wine64_dir(), wine32=wine32_dir()))
+
+
+def wine_loop(args: argparse.Namespace) -> None:
+    start = time.monotonic()
+    build_wine(argparse.Namespace(targets=args.targets, jobs=args.jobs))
+    mid = time.monotonic()
+    smoke(argparse.Namespace(seconds=args.seconds, log=args.log))
+    end = time.monotonic()
+    print(f"build+overlay: {mid - start:.3f}s")
+    print(f"smoke:         {end - mid:.3f}s")
+    print(f"total:         {end - start:.3f}s")
+
+
+def kill_dev_processes(grace_seconds: float = 0.5) -> None:
+    pattern = f"{DEV_TOOL_NAME}|{prefix_path()}|Battle.net|Agent.9450"
+    result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True, check=False)
+    pids = [int(line) for line in result.stdout.splitlines() if line.strip().isdigit()]
+    pids = [pid for pid in pids if pid not in {os.getpid(), os.getppid()}]
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    if pids:
+        time.sleep(grace_seconds)
+    for pid in pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def stop_dev_wine(env: dict[str, str] | None = None) -> None:
+    runtime_env = os.environ.copy()
+    if env:
+        runtime_env.update(env)
+    runtime_env["WINEPREFIX"] = str(prefix_path())
+    wineserver = dev_tool_path() / "files/bin-wow64/wineserver"
+    if wineserver.exists():
+        subprocess.run([str(wineserver), "-k"], env=runtime_env, check=False)
+    kill_dev_processes()
+
+
+def cleanup(_args: argparse.Namespace) -> None:
+    stop_dev_wine()
+    print("Battle.net dev processes cleaned up")
+
+
+def smoke(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    log = args.log
+    env = os.environ.copy()
+    env.setdefault("PROTON_LOG", "1")
+    env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+loaddll,+module")
+    handle = log.open("w")
+    started = subprocess.Popen(["battlenet"], stdout=handle, stderr=subprocess.STDOUT, text=True, env=env)
+    try:
+        started.wait(timeout=args.seconds)
+    except subprocess.TimeoutExpired:
+        started.terminate()
+        try:
+            started.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            started.kill()
+            started.wait()
+    finally:
+        handle.close()
+        stop_dev_wine(env)
+    print(f"log: {log}")
+    try:
+        print(log.read_text().splitlines()[0:8])
+    except FileNotFoundError:
+        pass
+
+
+def capture(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    env = os.environ.copy()
+    env.setdefault("PROTON_LOG", "1")
+    env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+dcomp,+dxgi,+waylanddrv")
+    log = args.log.open("w")
+    started = subprocess.Popen(["battlenet"], stdout=log, stderr=subprocess.STDOUT, text=True, env=env)
+    try:
+        time.sleep(args.delay)
+        print(f"+ spectacle -b -n -o {args.output}")
+        subprocess.run(["spectacle", "-b", "-n", "-o", str(args.output)], check=False)
+    finally:
+        log.close()
+        started.terminate()
+        try:
+            started.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            started.kill()
+            started.wait()
+        stop_dev_wine(env)
+    print(f"screenshot: {args.output}")
+    print(f"log: {args.log}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Battle.net Proton development loop")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("setup")
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(func=setup)
+
+    p = sub.add_parser("use")
+    p.set_defaults(func=use_dev)
+
+    p = sub.add_parser("restore")
+    p.set_defaults(func=restore)
+
+    p = sub.add_parser("status")
+    p.set_defaults(func=status)
+
+    p = sub.add_parser("setup-wine")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--force-configure", action="store_true")
+    p.set_defaults(func=setup_wine)
+
+    p = sub.add_parser("build-wine")
+    p.add_argument("--jobs", type=int)
+    p.add_argument("targets", nargs="*")
+    p.set_defaults(func=build_wine)
+
+    p = sub.add_parser("wine-loop")
+    p.add_argument("--jobs", type=int)
+    p.add_argument("--seconds", type=int, default=5)
+    p.add_argument("--log", type=Path, default=Path("/tmp/bnet-dev-wine-loop.log"))
+    p.add_argument("targets", nargs="*")
+    p.set_defaults(func=wine_loop)
+
+    p = sub.add_parser("overlay-wine")
+    p.add_argument("--wine", type=Path)
+    p.add_argument("--wine64", type=Path)
+    p.add_argument("--wine32", type=Path)
+    p.set_defaults(func=overlay_wine)
+
+    p = sub.add_parser("overlay-dxvk")
+    p.add_argument("--dxvk", type=Path, default=dxvk_dir())
+    p.set_defaults(func=overlay_dxvk)
+
+    p = sub.add_parser("smoke")
+    p.add_argument("--seconds", type=int, default=8)
+    p.add_argument("--log", type=Path, default=Path("/tmp/bnet-dev-smoke.log"))
+    p.set_defaults(func=smoke)
+
+    p = sub.add_parser("capture")
+    p.add_argument("--delay", type=int, default=8)
+    p.add_argument("--output", type=Path, default=Path("/tmp/bnet-dev-capture.png"))
+    p.add_argument("--log", type=Path, default=Path("/tmp/bnet-dev-capture.wrapper.log"))
+    p.set_defaults(func=capture)
+
+    p = sub.add_parser("cleanup")
+    p.set_defaults(func=cleanup)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

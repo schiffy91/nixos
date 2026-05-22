@@ -13,8 +13,11 @@ papering over launcher failures with CPU compositing fallbacks.
    the Wine tree used by `GE-Proton10-34`.
 2. Applies the GE-Proton wine-wayland hotfix series.
 3. Applies only the explicit `activePatchSeries` list, in Nix list order.
-4. Builds the patched `dcomp.dll`, `dxgi.dll`, and `winewayland.drv` artifacts.
-5. Overlays only those artifacts on top of the GE-Proton binary tarball.
+4. Builds the patched Wine artifacts touched by the active series:
+   `dcomp.dll`, `dxgi.dll`, `explorer.exe`, `winewayland.drv`,
+   `winevulkan`, and `win32u`, including the matching PE/Unix halves.
+5. Builds the patched DXVK `dxgi.dll` and `d3d11.dll` artifacts.
+6. Overlays only those artifacts on top of the GE-Proton binary tarball.
 
 `default.nix` installs the package through `programs.steam.extraCompatPackages`
 and also keeps
@@ -32,9 +35,9 @@ the `git format-patch -s` commit order for that topic.
 |---|---|---|
 | `wine-wayland-roundtrip` | `0001-winewayland.drv-Avoid-second-init-roundtrip.patch` | Active. Avoids a blocking second Wayland init roundtrip. |
 | `wine-wayland-layered-windows` | `0001-winewayland.drv-Hook-UpdateLayeredWindow.patch` | Active. Hooks `pUpdateLayeredWindow` only. |
-| `wine-wayland-status-notifier` | `0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch` | Active. Adds SNI tray support through Wine's Wayland driver. |
-| `dcomp-wayland-gpu-present` | `0001..0004` | Active. Implements a DComp/DXGI/winewayland dma-buf presentation path for D3D11 DirectComposition clients. |
-| `dxvk-battlenet-composition` | `0001-dxgi-Enable-dummy-composition-swapchain-for-Battle.n.patch` | Active. Makes Battle.net's DXVK `dxgi.dll` accept DirectComposition swap-chain creation. |
+| `wine-wayland-status-notifier` | `0001..0003` | Active. Adds SNI tray support, callback polish, and explorer-to-driver icon snapshots for updates/tooltips. |
+| `dcomp-wayland-gpu-present` | `0001..0014` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
+| `dxvk-battlenet-composition` | `0001..0004` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, dithering experiment, and a shared-resource-tier cap. |
 
 The previous numbered prototype directories were removed. Useful lessons from
 them were folded into the topic folders above; keeping old failed attempts in
@@ -72,7 +75,7 @@ The `battlenet` wrapper now defaults to the D3D11/DXGI/DComp path.
 available as diagnostics, not as the expected user experience. `battlenet-x11`
 remains the control path.
 
-## Build
+## Promotion Build
 
 From this worktree:
 
@@ -80,10 +83,107 @@ From this worktree:
 nix build --print-out-paths --impure --expr 'let flake = builtins.getFlake "/home/alexanderschiffhauer/nixos-bnet-wayland"; in builtins.elemAt flake.nixosConfigurations.FRACTAL-NORTH-Secure-Boot.config.programs.steam.extraCompatPackages 0' -o /tmp/bnet-scwhine-core-result
 ```
 
-Full system test:
+This is a promotion gate for packaging correctness. It is not part of the
+Battle.net rendering/debug loop.
+
+## Fast Local Iteration
+
+The full Nix package path is intentionally reproducible, but it is too slow for
+Battle.net UI experiments. Keep mutable source and build trees in this project
+directory, ignored by git:
+
+```text
+modules/apps/pkg-overrides/proton/src/wine
+modules/apps/pkg-overrides/proton/src/wine64
+modules/apps/pkg-overrides/proton/src/wine32
+modules/apps/pkg-overrides/proton/src/dxvk
+```
+
+Use the local dev compat tool for hot loops through the project Makefile:
 
 ```bash
-nixos-rebuild test --flake /home/alexanderschiffhauer/nixos-bnet-wayland#FRACTAL-NORTH-Secure-Boot
+nix-shell /etc/nixos/modules/apps/pkg-overrides/proton/dev-shell.nix
+cd /etc/nixos/modules/apps/pkg-overrides/proton
+make setup
+make smoke SECONDS=5
+```
+
+The smoke log should say `scwhine DEV GE-Proton10-34 (Wayland SNI)`, proving
+that the existing `battlenet` wrapper is launching through the writable dev
+copy at:
+
+```text
+~/.local/share/Steam/compatibilitytools.d/scwhine-GE-Proton10-34-dev
+```
+
+Once local Wine or DXVK build directories are configured, copy fresh artifacts
+into that dev tool without a Nix rebuild:
+
+```bash
+make overlay-wine
+make overlay-dxvk
+```
+
+The overlay commands also accept the reproducible Nix outputs directly:
+
+```bash
+wine_out=$(nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton/package.nix { inherit (pkgs) makeWrapper rsync unzip; }).passthru.wineArtifacts')
+dxvk_out=$(nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton/package.nix { inherit (pkgs) makeWrapper rsync unzip; }).passthru.dxvkArtifacts')
+./bin/bnet-dev overlay-wine --wine "$wine_out"
+./bin/bnet-dev overlay-dxvk --dxvk "$dxvk_out"
+```
+
+For Wine changes, seed mutable build trees from the exact patched Nix source
+and run hot loops against individual Wine targets:
+
+```bash
+make setup-wine
+make loop TARGETS='dlls/dcomp/all' SECONDS=3
+```
+
+The helper keeps separate 64-bit and i386 Wine build trees so the local build
+uses the same WoW64 shape as the Nix package. `overlay-wine` also updates
+Explorer in GE-Proton's default prefix and in the live Battle.net prefix;
+otherwise the SNI snapshot/update path can compile correctly but still run
+stale Explorer code. A warm `dlls/dcomp/all` edit loop rebuilds and overlays
+both DLLs, smoke-launches Battle.net, then kills leftover Wine/container
+processes in roughly ten seconds.
+
+For the fastest manual loop, edit the materialized Wine source directly and
+rebuild only the touched target:
+
+```bash
+$EDITOR "$SCWHINE_WINE_SRC/dlls/dcomp/device.c"
+make dcomp
+make shot DELAY=8
+```
+
+The local `src/` tree is an ignored workspace. It exists so patches can be
+materialized into real source for development; it is not the committed source
+of truth. Once a change works, turn the relevant local source diff back into a
+small topic patch under `patches/<topic>/` and keep `package.nix` as the
+explicit series manifest. `make setup-wine` initializes `src/wine` as a local
+git repo with a baseline commit after the current patch series is applied, so
+working changes can be inspected and exported without guessing:
+
+```bash
+make wine-status
+make wine-diff
+git -C "$SCWHINE_WINE_SRC" commit -am 'dcomp: describe the tested fix'
+make wine-format-patch RANGE='-1 HEAD'
+```
+
+For screenshot-driven checks, use:
+
+```bash
+BATTLE_NET_FORCE_SCALE=2.5 ./bin/bnet-dev capture --delay 45 --output /tmp/bnet-wayland.png
+./bin/bnet-dev cleanup
+```
+
+Return to the pinned Nix store compat tool with:
+
+```bash
+./bin/bnet-dev restore
 ```
 
 ## Live Test
@@ -115,7 +215,10 @@ Expected Wayland result:
 - The CEF login or launcher content paints instead of remaining black.
 - The Battle.net command line does not include `--use-angle=desktop` or
   `--disable-gpu-compositing` unless explicitly requested for diagnostics.
-- DComp/DXGI logs show composition swap-chain creation and dma-buf presentation.
+- DComp/DXGI logs show composition swap-chain creation, target binding, and
+  DXVK presenter creation. Cold login starts can show a black client area for
+  a few seconds before CEF's first painted frame; use a 45-second capture when
+  checking for persistent black-window regressions.
 - A StatusNotifierItem appears in the session bus.
 - Tray Activate and ContextMenu D-Bus calls return promptly.
 - `battlenet-x11` still launches as a control.
