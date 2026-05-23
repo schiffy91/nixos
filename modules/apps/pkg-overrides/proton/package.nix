@@ -78,6 +78,7 @@ let
     ./patches/dcomp-wayland-gpu-present/0013-dcomp-Unbind-removed-composition-hosts.patch
     ./patches/dcomp-wayland-gpu-present/0014-dcomp-Implement-virtual-surfaces-and-scrolling.patch
     ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-.patch
+    ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent-not.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
     ./patches/win32u-shared-gpu-resource/0001-win32u-Open-D3DKMT-shared-GPU-resources.patch
   ];

@@ -1,0 +1,29 @@
+From bab145de5bc7172aa33ad7d89e7a8992a3b9ac6f Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Sat, 23 May 2026 15:48:00 -0700
+Subject: [PATCH] dcomp: Hide composition host windows from parent notifications
+
+Wine's DirectComposition implementation uses internal child HWNDs to host
+composition swap chains that need placement or clipping. Real DComp visuals
+are not child windows from the application's perspective, so the helper HWND
+lifetime should not send WM_PARENTNOTIFY to Qt/CEF parents.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index 39efe60..bab145d 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -1484,6 +1484,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+                     DestroyWindow(v->host_hwnd);
+                 }
+                 v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE |
++                                               WS_EX_NOPARENTNOTIFY |
+                                                WS_EX_NOREDIRECTIONBITMAP,
+                                                dcomp_host_class_name, NULL,
+                                                WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
+-- 
+2.53.0

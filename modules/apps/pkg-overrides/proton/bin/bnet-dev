@@ -56,7 +56,11 @@ def wine_prefix_path() -> Path:
 
 
 def proton_log_path() -> Path:
-    return home() / "steam-battlenet.log"
+    return proton_log_dir() / "steam-battlenet.log"
+
+
+def proton_log_dir() -> Path:
+    return Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "battlenet-proton"
 
 
 def dev_root_dir() -> Path:
@@ -571,9 +575,24 @@ def setup_dxvk(args: argparse.Namespace) -> None:
     print(f"dxvk32 build: {src / 'build.32'}")
 
 
+def ensure_wine_build_tools_executable() -> None:
+    for build_dir in (wine64_dir(), wine32_dir()):
+        for rel in (
+            "tools/makedep",
+            "tools/widl/widl",
+            "tools/winebuild/winebuild",
+            "tools/winegcc/winegcc",
+            "tools/wrc/wrc",
+        ):
+            path = build_dir / rel
+            if path.exists():
+                path.chmod(path.stat().st_mode | 0o100)
+
+
 def build_wine(args: argparse.Namespace) -> None:
     if not (wine64_dir() / "Makefile").exists() or not (wine32_dir() / "Makefile").exists():
         setup_wine(argparse.Namespace(force=False, force_configure=False))
+    ensure_wine_build_tools_executable()
     targets = args.targets or [
         "dlls/dcomp/all",
         "dlls/dxgi/all",
@@ -714,6 +733,10 @@ def reset_proton_log() -> None:
         proton_log_path().unlink()
     except FileNotFoundError:
         pass
+    try:
+        (home() / "steam-battlenet.log").unlink()
+    except FileNotFoundError:
+        pass
 
 
 def collect_proton_log(wrapper_log: Path) -> Path | None:
@@ -744,11 +767,13 @@ def parse_env(values: list[str]) -> dict[str, str]:
 def launch_env(args: argparse.Namespace) -> dict[str, str]:
     env = os.environ.copy()
     env["PROTON_LOG"] = "1"
+    env["PROTON_LOG_DIR"] = str(proton_log_dir())
     env["TMPDIR"] = "/tmp"
+    proton_log_dir().mkdir(parents=True, exist_ok=True)
 
     if args.trace == "quiet":
         env.setdefault("WINEDEBUG", "-all")
-        env.setdefault("DXVK_LOG_LEVEL", "info")
+        env.setdefault("DXVK_LOG_LEVEL", "none")
     elif args.trace == "modules":
         env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+loaddll,+module")
         env.setdefault("DXVK_LOG_LEVEL", "info")
@@ -906,18 +931,22 @@ def battlenet_geometry() -> tuple[int, int, int, int]:
 
 
 def mouse_location() -> tuple[int, int]:
-    result = subprocess.run(
-        ["kdotool", "getmouselocation", "--shell"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    values = {}
-    for line in result.stdout.splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            values[key] = value
-    return int(values["X"]), int(values["Y"])
+    for _attempt in range(5):
+        result = subprocess.run(
+            ["kdotool", "getmouselocation", "--shell"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        values = {}
+        for line in result.stdout.splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value
+        if "X" in values and "Y" in values:
+            return int(values["X"]), int(values["Y"])
+        time.sleep(0.05)
+    raise SystemExit("could not read mouse location from KWin")
 
 
 def screen_size() -> tuple[int, int]:

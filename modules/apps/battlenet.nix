@@ -98,6 +98,7 @@ let
           WINEPREFIX="${prefix}" \
           GAMEID=umu-battlenet \
           PROTONPATH="${proton}" \
+          WINEDEBUG="''${WINEDEBUG:--all}" \
           PROTON_USE_WOW64=1 \
           WINE_SIMULATE_WRITECOPY=1 \
           WINE_WAYLAND_HACKS=1 \
@@ -105,6 +106,7 @@ let
           PROTON_ENABLE_WAYLAND=1 \
           PROTON_ENABLE_HDR=1 \
           DXVK_HDR=1 \
+          DXVK_LOG_LEVEL="''${DXVK_LOG_LEVEL:-none}" \
           ENABLE_HDR_WSI=1 \
           umu-run "$EXE" "''${EXTRA_ARGS[@]}"
     '';
