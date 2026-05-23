@@ -35,9 +35,9 @@ the `git format-patch -s` commit order for that topic.
 |---|---|---|
 | `wine-wayland-roundtrip` | `0001-winewayland.drv-Avoid-second-init-roundtrip.patch` | Active. Avoids a blocking second Wayland init roundtrip. |
 | `wine-wayland-layered-windows` | `0001-winewayland.drv-Hook-UpdateLayeredWindow.patch` | Active. Hooks `pUpdateLayeredWindow` only. |
-| `wine-wayland-status-notifier` | `0001..0003` | Active. Adds SNI tray support, callback polish, and explorer-to-driver icon snapshots for updates/tooltips. |
-| `dcomp-wayland-gpu-present` | `0001..0014` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
-| `dxvk-battlenet-composition` | `0001..0004` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, dithering experiment, and a shared-resource-tier cap. |
+| `wine-wayland-status-notifier` | `0001..0004` | Active. Adds SNI tray support, callback polish, explorer-to-driver icon snapshots, and self-contained item lifetime handling. |
+| `dcomp-wayland-gpu-present` | `0001..0015` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
+| `dxvk-battlenet-composition` | `0001..0006` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, a shared-resource-tier cap, resize tracking, and preserved contents across partial updates. |
 
 The previous numbered prototype directories were removed. Useful lessons from
 them were folded into the topic folders above; keeping old failed attempts in
@@ -45,42 +45,27 @@ tree made the review story worse.
 
 ## Live Findings
 
-The earlier cleanup series starts Battle.net under native Wayland and registers
-a Plasma SNI tray item. The previous Qt `bad_array_new_length` startup crash was
-fixed by the Wayland roundtrip change.
+The current series starts Battle.net under native Wayland, keeps Chromium/CEF on
+the D3D11/DXGI/DComp path, and registers a Plasma StatusNotifierItem. The
+previous Qt startup crash was fixed by the Wayland roundtrip change.
 
-Stock Chromium D3D11 GPU compositing under Wine Wayland presented a black right
-pane. These attempts did not fix it:
+The main rendering failure was stale or missing composition swap-chain content:
+CEF relies heavily on partial updates, so rotating to an undefined back buffer
+showed up as black panes, hover remnants, video/banner flicker, and resize
+jitter. The active DXVK series now preserves the previous frame after rotation,
+paces composition presents with the compositor, and keeps the private
+composition child window sized to the swap-chain extent.
 
-- `dxgi.enableDummyCompositionSwapchain = True`
-- `--disable-direct-composition`
-- `--disable-gpu-memory-buffer-compositor-resources`
-- the deleted DComp/DXGI/subsurface prototype stack
-
-Forcing Chromium's ANGLE desktop backend painted the launcher but was not
-acceptable:
-
-- `--use-angle=desktop`
-- `--high-dpi-support=1`
-- `--force-device-scale-factor=<Wine LogPixels / 96>`
-
-`--use-angle=desktop` tells Chromium's ANGLE layer to try the desktop OpenGL
-backend instead of the normal D3D path. Live post-login testing showed this is
-not the final GPU-composited solution: Battle.net still spawned renderer
-processes with `--disable-gpu-compositing`, and earlier `--use-gl=desktop` /
-`--use-angle=gl` probes failed to create Chromium's shared GPU context.
-
-The `battlenet` wrapper now defaults to the D3D11/DXGI/DComp path.
-`BATTLE_NET_ANGLE_BACKEND` and `BATTLE_NET_DISABLE_GPU_COMPOSITING=1` remain
-available as diagnostics, not as the expected user experience. `battlenet-x11`
-remains the control path.
+The installed `battlenet` wrapper has no CPU-compositing fallback or ANGLE
+backend override. Runtime diagnostics live in `bin/bnet-dev`, not in the
+desktop launcher.
 
 ## Promotion Build
 
 From this worktree:
 
 ```bash
-nix build --print-out-paths --impure --expr 'let flake = builtins.getFlake "/home/alexanderschiffhauer/nixos-bnet-wayland"; in builtins.elemAt flake.nixosConfigurations.FRACTAL-NORTH-Secure-Boot.config.programs.steam.extraCompatPackages 0' -o /tmp/bnet-scwhine-core-result
+nix build --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; in builtins.elemAt flake.nixosConfigurations.FRACTAL-NORTH-Secure-Boot.config.programs.steam.extraCompatPackages 0' -o /tmp/bnet-scwhine-core-result
 ```
 
 This is a promotion gate for packaging correctness. It is not part of the
@@ -176,7 +161,7 @@ make wine-format-patch RANGE='-1 HEAD'
 For screenshot-driven checks, use:
 
 ```bash
-BATTLE_NET_FORCE_SCALE=2.5 ./bin/bnet-dev capture --delay 45 --output /tmp/bnet-wayland.png
+./bin/bnet-dev capture --delay 45 --output /tmp/bnet-wayland.png
 ./bin/bnet-dev cleanup
 ```
 
@@ -214,14 +199,13 @@ Expected Wayland result:
 - Battle.net launches without the Qt startup crash.
 - The CEF login or launcher content paints instead of remaining black.
 - The Battle.net command line does not include `--use-angle=desktop` or
-  `--disable-gpu-compositing` unless explicitly requested for diagnostics.
+  `--disable-gpu-compositing`.
 - DComp/DXGI logs show composition swap-chain creation, target binding, and
   DXVK presenter creation. Cold login starts can show a black client area for
   a few seconds before CEF's first painted frame; use a 45-second capture when
   checking for persistent black-window regressions.
 - A StatusNotifierItem appears in the session bus.
 - Tray Activate and ContextMenu D-Bus calls return promptly.
-- `battlenet-x11` still launches as a control.
 
 ## Patch Hygiene
 

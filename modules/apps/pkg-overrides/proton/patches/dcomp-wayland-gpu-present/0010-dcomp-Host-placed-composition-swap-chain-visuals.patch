@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 18:15:00 -0700
-Subject: [PATCH] dcomp: Host placed composition swap-chain visuals.
+Subject: [PATCH] dcomp: Host placed composition swap-chain visuals
 
 DirectComposition visual placement and stacking are independent from the
 swap-chain alpha mode. Opaque child visuals still need their own

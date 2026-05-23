@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 08:30:00 -0700
-Subject: [PATCH] win32u: Open D3DKMT shared GPU resources.
+Subject: [PATCH] win32u: Open D3DKMT shared GPU resources
 
 DXVK exports Vulkan memory through Wine's shared GPU resource device and
 then imports the returned KMT handle through D3DKMTOpenResource2().
@@ -14,7 +14,7 @@ release it through D3DKMTDestroyAllocation(). Implement the DXVK Wine
 metadata escape on the retained handle so later resource queries can
 recover the D3D runtime description from the same shared object.
 
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/win32u/d3dkmt.c | 252 ++++++++++++++++++++++++++++++++++++++++---
  1 file changed, 238 insertions(+), 14 deletions(-)

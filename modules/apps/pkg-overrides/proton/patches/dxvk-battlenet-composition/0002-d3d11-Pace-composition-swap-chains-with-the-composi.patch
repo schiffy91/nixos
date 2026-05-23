@@ -1,5 +1,5 @@
 From 6a8bca6acbc55c8efda9b9e010b0eb03c7e0d2a4 Mon Sep 17 00:00:00 2001
-From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 12:06:31 -0700
 Subject: [PATCH] d3d11: Pace composition swap chains with the compositor
 
@@ -14,7 +14,7 @@ Keep normal game and root-window swap chains on the application's requested
 interval, but make swap chains bound to child presentation hosts through the
 private composition interface use compositor-paced presentation.
 
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp | 11 ++++++++++-
  src/d3d11/d3d11_swapchain.h   |  2 ++

@@ -14,7 +14,9 @@ bytes.
 Other Chromium/CEF popups and dialogs use 32-bit per-pixel layered surfaces,
 but still draw some text/control pixels with RGB data and a zero alpha byte.
 Those non-empty pixels need to be promoted to opaque during the upload while
-leaving transparent black pixels untouched.
+leaving transparent black pixels untouched. Some popup snapshots have no
+non-zero alpha at all; in that case the dirty region is treated as opaque so
+black text and controls are not dropped.
 
 ## Root cause
 `WAYLAND_UpdateLayeredWindow` is missing from the driver's `user_driver_funcs`
@@ -26,7 +28,8 @@ Hook `pUpdateLayeredWindow` to `ensure_window_surface_contents`, and set
 constant alpha bits when copying non-per-pixel-alpha layered surface content
 to Wayland ARGB SHM buffers. For per-pixel layered surfaces, preserve the
 application-provided alpha channel except for non-black RGB pixels whose alpha
-byte is zero.
+byte is zero, unless the updated region has no non-zero alpha, in which case
+the region is uploaded as opaque.
 
 ## Affected upstream
 `dlls/winewayland.drv/{waylanddrv.h, waylanddrv_main.c, window.c,

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Alexander Schiffhauer <alexanderschiffhauer@users.noreply.github.com>
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 23:25:00 -0700
-Subject: [PATCH] win32u: Bound desktop driver readiness wait.
+Subject: [PATCH] win32u: Bound desktop driver readiness wait
 
 load_desktop_driver() sends WM_NULL to the desktop window with an
 unbounded send_message() call while waiting for the graphics driver to
@@ -17,7 +17,7 @@ the peer wait with SMTO_ABORTIFHUNG. The send is only a readiness
 barrier; timing out leaves the later property lookup to decide whether a
 driver is ready.
 
-Signed-off-by: Alexander Schiffhauer <alexanderschiffhauer@users.noreply.github.com>
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/win32u/driver.c | 6 +++++-
  1 file changed, 5 insertions(+), 1 deletion(-)

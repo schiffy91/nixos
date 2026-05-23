@@ -10,14 +10,13 @@ let
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
   scaleFactor = if primary == null then 1.0 else primary.scaleFactor;
   logPixels = builtins.floor (96.0 * scaleFactor + 0.5);
-  mkLauncher = { name, label, waylandHdr }: rec {
-    launcher = pkgs.writeShellApplication {
-      inherit name;
-      runtimeInputs = [ pkgs.coreutils pkgs.gawk pkgs.umu-launcher pkgs.gnused ];
-      text = ''
+  launcher = pkgs.writeShellApplication {
+    name = "battlenet";
+    runtimeInputs = [ pkgs.coreutils pkgs.gawk pkgs.umu-launcher ];
+    text = ''
         mkdir -p "${prefix}"
         EXE="''${1:-${exe}}"
-        LOG_PIXELS="''${BATTLE_NET_LOG_PIXELS:-${toString logPixels}}"
+        LOG_PIXELS="${toString logPixels}"
 
         # Stop a stale prefix wineserver before editing user.reg; otherwise Wine
         # may keep the previous DPI in its registry cache and rewrite the file.
@@ -36,7 +35,7 @@ let
             install -Dm644 "$SRC" "$DST"
           fi
         }
-        for DLL in dcomp.dll dxgi.dll winevulkan.dll win32u.dll winewayland.drv explorer.exe; do
+        for DLL in dcomp.dll dxgi.dll ntdll.dll winevulkan.dll win32u.dll winewayland.drv explorer.exe; do
           sync_builtin x86_64 system32 "$DLL"
           sync_builtin i386 syswow64 "$DLL"
         done
@@ -91,26 +90,10 @@ let
         EXTRA_ARGS=(
           --high-dpi-support=1
         )
-        CEF_SCALE="''${BATTLE_NET_FORCE_SCALE-${toString scaleFactor}}"
-        if [ -n "$CEF_SCALE" ] && [ "$CEF_SCALE" != "1" ]; then
+        CEF_SCALE="${toString scaleFactor}"
+        if [ "$CEF_SCALE" != "1" ] && [ "$CEF_SCALE" != "1.0" ]; then
           EXTRA_ARGS+=(--force-device-scale-factor="$CEF_SCALE")
         fi
-        if [ -n "''${BATTLE_NET_WINDOW_SIZE:-}" ]; then
-          EXTRA_ARGS+=(--window-size="''${BATTLE_NET_WINDOW_SIZE}")
-        fi
-        if [ -n "''${BATTLE_NET_EXTRA_ARGS:-}" ]; then
-          read -r -a USER_EXTRA_ARGS <<< "''${BATTLE_NET_EXTRA_ARGS}"
-          EXTRA_ARGS+=("''${USER_EXTRA_ARGS[@]}")
-        fi
-        ${lib.optionalString waylandHdr ''
-        ANGLE_BACKEND="''${BATTLE_NET_ANGLE_BACKEND:-}"
-        if [ -n "$ANGLE_BACKEND" ]; then
-          EXTRA_ARGS+=(--use-angle="$ANGLE_BACKEND")
-        fi
-        if [ -n "''${BATTLE_NET_DISABLE_GPU_COMPOSITING:-}" ]; then
-          EXTRA_ARGS+=(--disable-gpu-compositing)
-        fi
-        ''}
         exec env \
           WINEPREFIX="${prefix}" \
           GAMEID=umu-battlenet \
@@ -119,58 +102,39 @@ let
           WINE_SIMULATE_WRITECOPY=1 \
           WINE_WAYLAND_HACKS=1 \
           WINE_SNI_ICON_NAME=battlenet \
-          ${lib.optionalString waylandHdr ''
           PROTON_ENABLE_WAYLAND=1 \
           PROTON_ENABLE_HDR=1 \
           DXVK_HDR=1 \
           ENABLE_HDR_WSI=1 \
-        ''}umu-run "$EXE" "''${EXTRA_ARGS[@]}"
-      '';
-      # Wine reads LogPixels from user.reg for Win32/Qt paths, and Chromium's
-      # device scale keeps CEF's D3D11 compositor at the same fractional scale.
-      # Set BATTLE_NET_FORCE_SCALE= to suppress the Chromium flag, or set a
-      # numeric value to test a different CEF scale without changing Wine DPI.
-      # BATTLE_NET_WINDOW_SIZE and BATTLE_NET_EXTRA_ARGS are diagnostic escape
-      # hatches; defaults intentionally avoid CEF memory flags because they can
-      # make Battle.net create an empty accelerated root surface.
-      #
-      # The default intentionally leaves Chromium/ANGLE on its D3D11 path so
-      # the patched DComp/DXGI/Wayland bridge is exercised. BATTLE_NET_ANGLE_BACKEND
-      # remains as a diagnostic override.
-      #
-      # BATTLE_NET_DISABLE_GPU_COMPOSITING is left as a fallback for diagnosing
-      # CEF compositor regressions. The default keeps CEF's GPU compositor
-      # enabled; games still use their normal Proton, DXVK, winevulkan, and HDR
-      # paths.
-    };
-    desktop = pkgs.makeDesktopItem {
-      inherit name;
-      desktopName = label;
-      exec = "${launcher}/bin/${name}";
-      icon = "battlenet";
-      categories = [ "Game" ];
-      comment = "Battle.net via Proton${lib.optionalString waylandHdr " (native Wayland + HDR)"}";
-      terminal = false;
-      startupWMClass = "battle.net.exe";
-    };
+          umu-run "$EXE" "''${EXTRA_ARGS[@]}"
+    '';
   };
-  wayland = mkLauncher { name = "battlenet"; label = "Battle.net"; waylandHdr = true; };
-  x11 = mkLauncher { name = "battlenet-x11"; label = "Battle.net (X11)"; waylandHdr = false; };
+  desktop = pkgs.makeDesktopItem {
+    name = "battlenet";
+    desktopName = "Battle.net";
+    exec = "${launcher}/bin/battlenet";
+    icon = "battlenet";
+    categories = [ "Game" ];
+    comment = "Battle.net via Proton (native Wayland + HDR)";
+    terminal = false;
+    startupWMClass = "battle.net.exe";
+  };
 in {
-  environment.systemPackages = [ wayland.launcher wayland.desktop x11.launcher x11.desktop ];
+  environment.systemPackages = [ launcher desktop ];
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
-    if [ -f "${exe}" ] && [ ! -s "${iconPath}" ]; then
+    if [ -f "${exe}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} "$(dirname ${iconPath})"
       tmp=$(${pkgs.coreutils}/bin/mktemp --suffix=.ico)
+      png=$(${pkgs.coreutils}/bin/mktemp --suffix=.png)
       if ${pkgs.icoutils}/bin/wrestool -x -t 14 -o "$tmp" "${exe}" 2>/dev/null; then
         for w in 256 128 64 48 32; do
-          if ${pkgs.icoutils}/bin/icotool -x -w $w -o "${iconPath}" "$tmp" 2>/dev/null && [ -s "${iconPath}" ]; then
-            ${pkgs.coreutils}/bin/chown ${user} "${iconPath}"
+          if ${pkgs.icoutils}/bin/icotool -x -w $w -o "$png" "$tmp" 2>/dev/null && [ -s "$png" ]; then
+            ${pkgs.coreutils}/bin/install -m644 -o ${user} "$png" "${iconPath}"
             break
           fi
         done
       fi
-      ${pkgs.coreutils}/bin/rm -f "$tmp"
+      ${pkgs.coreutils}/bin/rm -f "$tmp" "$png"
     fi
   '';
 }

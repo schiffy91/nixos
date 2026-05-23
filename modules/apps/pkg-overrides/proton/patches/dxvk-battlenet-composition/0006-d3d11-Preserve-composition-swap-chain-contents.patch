@@ -1,0 +1,88 @@
+From 6b2110099b6e7b026f7af199e0d8590ed6e628ad Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 17:46:23 -0700
+Subject: [PATCH] d3d11: Preserve composition swap chain contents
+
+Composition swap chains still need to rotate back buffers so GetBuffer(0)
+continues to expose the writable buffer expected by flip-model clients. Some
+CEF clients repaint only damaged areas though, so the newly exposed buffer must
+start with the previous frame contents or stale regions can flicker.
+
+Copy the presented composition image into the new back buffer after rotation to
+preserve the existing content without pinning the swap chain to a stale buffer.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 22 +++++++++++++++++++---
+ src/d3d11/d3d11_swapchain.h   |  2 +-
+ 2 files changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index f715cf3..0766c8d 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -576,8 +576,14 @@ namespace dxvk {
+       cDevice->presentImage(cPresenter, cLatency, cFrameId, nullptr);
+     });
+
++    bool compositionTarget = false;
++    {
++      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++      compositionTarget = m_compositionTarget;
++    }
++
+     if (m_backBuffers.size() > 1u)
+-      RotateBackBuffers(immediateContext);
++      RotateBackBuffers(immediateContext, compositionTarget);
+
+     immediateContext->FlushCsChunk();
+
+@@ -598,14 +604,15 @@ namespace dxvk {
+   }
+
+
+-  void D3D11SwapChain::RotateBackBuffers(D3D11ImmediateContext* ctx) {
++  void D3D11SwapChain::RotateBackBuffers(D3D11ImmediateContext* ctx, bool preserveContents) {
+     small_vector<Rc<DxvkImage>, 4> images;
+
+     for (uint32_t i = 0; i < m_backBuffers.size(); i++)
+       images.push_back(GetCommonTexture(m_backBuffers[i].ptr())->GetImage());
+
+     ctx->EmitCs([
+-      cImages = std::move(images)
++      cImages = std::move(images),
++      cPreserveContents = preserveContents
+     ] (DxvkContext* ctx) {
+       auto allocation = cImages[0]->storage();
+
+@@ -616,6 +623,15 @@ namespace dxvk {
+
+       ctx->invalidateImage(cImages[cImages.size() - 1u],
+         std::move(allocation), cImages[0]->info().layout);
++
++      if (cPreserveContents) {
++        VkImageSubresourceLayers layers = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
++
++        ctx->copyImage(
++          cImages[0], layers, VkOffset3D { 0, 0, 0 },
++          cImages[cImages.size() - 1u], layers, VkOffset3D { 0, 0, 0 },
++          cImages[0]->mipLevelExtent(0));
++      }
+     });
+   }
+
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 8d7571c..18f9868 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -170,7 +170,7 @@ namespace dxvk {
+
+     HRESULT PresentImage(UINT SyncInterval);
+
+-    void RotateBackBuffers(D3D11ImmediateContext* ctx);
++    void RotateBackBuffers(D3D11ImmediateContext* ctx, bool preserveContents);
+
+     void CreateFrameLatencyEvent();
+
+--
+2.53.0

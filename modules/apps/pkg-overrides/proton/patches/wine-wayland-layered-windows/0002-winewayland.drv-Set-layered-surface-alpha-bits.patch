@@ -1,7 +1,7 @@
 From 3ff6f2e59f7e2ec0e2e7a8d41c9f07c8b343c318 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 20:34:15 -0700
-Subject: [PATCH] winewayland.drv: Fix layered surface alpha uploads.
+Subject: [PATCH] winewayland.drv: Fix layered surface alpha uploads
 
 Layered windows created through SetLayeredWindowAttributes do not have a
 per-pixel alpha mask. Their backing DIB contents should therefore be treated

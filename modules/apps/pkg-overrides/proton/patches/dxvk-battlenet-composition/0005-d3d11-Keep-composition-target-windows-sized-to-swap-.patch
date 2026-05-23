@@ -1,0 +1,111 @@
+From 394d1baa72244d4b91f035d2bf06662abece3925 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 17:45:25 -0700
+Subject: [PATCH] d3d11: Keep composition target windows sized to swap
+ chains
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 44 ++++++++++++++++++++++++++++++++---
+ src/d3d11/d3d11_swapchain.h   |  4 ++++
+ 2 files changed, 45 insertions(+), 3 deletions(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 0d5d1fa..f715cf3 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -193,11 +193,24 @@ namespace dxvk {
+     const DXGI_SWAP_CHAIN_DESC1*    pDesc,
+     const UINT*                     pNodeMasks,
+           IUnknown* const*          ppPresentQueues) {
++    HWND compositionTarget = nullptr;
++    bool compositionChildTarget = false;
++
+     if (m_desc.Format != pDesc->Format)
+       m_presenter->setSurfaceFormat(GetSurfaceFormat(pDesc->Format));
+
+-    if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height)
+-      m_presenter->setSurfaceExtent({ m_desc.Width, m_desc.Height });
++    if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height) {
++      m_presenter->setSurfaceExtent({ pDesc->Width, pDesc->Height });
++
++      {
++        std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++        compositionTarget = m_compositionTarget;
++        compositionChildTarget = m_compositionChildTarget;
++      }
++
++      if (compositionChildTarget)
++        UpdateCompositionTargetWindow(compositionTarget, pDesc->Width, pDesc->Height);
++    }
+
+     m_desc = *pDesc;
+     CreateBackBuffers();
+@@ -406,16 +419,30 @@ namespace dxvk {
+   }
+
+
++  void D3D11SwapChain::UpdateCompositionTargetWindow(
++          HWND                      hTarget,
++          UINT                      Width,
++          UINT                      Height) {
++    if (!hTarget || !Width || !Height)
++      return;
++
++    ::SetWindowPos(hTarget, nullptr, 0, 0, Width, Height,
++      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
++  }
++
++
+   void D3D11SwapChain::SetCompositionTarget(
+           HWND                      hTarget,
+           HWND                      hDispatch) {
+     HWND previousTarget = nullptr;
++    bool childTarget = false;
+
+     {
+       std::lock_guard<dxvk::mutex> lock(m_compositionLock);
+       previousTarget = m_compositionTarget;
+       m_compositionTarget = hTarget;
+       m_compositionChildTarget = hTarget && hTarget != hDispatch;
++      childTarget = m_compositionChildTarget;
+     }
+
+     if (hTarget != previousTarget) {
+@@ -423,7 +450,18 @@ namespace dxvk {
+       m_surfaceFactory->SetWindow(hTarget);
+     }
+
+-    Logger::debug("D3D11SwapChain::SetCompositionTarget: bound composition target");
++    if (childTarget)
++      UpdateCompositionTargetWindow(hTarget, m_desc.Width, m_desc.Height);
++
++    Logger::debug(str::format(
++      "D3D11SwapChain::SetCompositionTarget: swapchain=0x", std::hex,
++      reinterpret_cast<uintptr_t>(this), " target=0x",
++      reinterpret_cast<uintptr_t>(hTarget), " dispatch=0x",
++      reinterpret_cast<uintptr_t>(hDispatch), " previous=0x",
++      reinterpret_cast<uintptr_t>(previousTarget), std::dec,
++      " child=", childTarget,
++      " size=", m_desc.Width, "x", m_desc.Height,
++      " format=", m_desc.Format, " alpha=", m_desc.AlphaMode));
+   }
+
+   UINT D3D11SwapChain::GetCompositionSyncInterval(UINT SyncInterval) {
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index d522bcd..8d7571c 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -117,6 +117,10 @@ namespace dxvk {
+             HWND                      hDispatch);
+
+   private:
++    void UpdateCompositionTargetWindow(
++            HWND                      hTarget,
++            UINT                      Width,
++            UINT                      Height);
+
+     enum BindingIds : uint32_t {
+       Image = 0,
+--
+2.53.0

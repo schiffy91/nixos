@@ -12,19 +12,26 @@ applications that need composition swap chains; carrying it as a profile keeps
 the workaround in DXVK rather than in the launcher wrapper or per-prefix
 `dxvk.conf`.
 
-The active profile also caps `d3d11.maxSharedResourceTier` at zero for
-Battle.net. Chromium otherwise probes a D3DKMT shared-resource path Wine
-does not implement completely, which can show up as missing or unstable CEF
-surfaces while the launcher itself is still GPU accelerated.
+The active profile keeps Battle.net's D3D11 shared resource tier capped at
+zero. Chromium otherwise advertises GPU shared-resource handles through CEF IPC
+and then duplicates them across processes; Wine's current shared GPU resource
+plumbing does not yet provide a real duplicable NT handle for that path.
 
 The patch also exposes a small private composition-swap-chain interface that
 Wine's `dcomp.dll` can use to bind the dummy composition swap chain to the real
 DComp target window. After that bind, presentation goes through DXVK's normal
-Wayland WSI presenter instead of a Wine-side image copy.
+Wayland WSI presenter instead of a Wine-side image copy. Active composition
+swap chains are paced with the compositor when the application requests
+immediate presentation, which avoids UI-tearing and micro-stutter in launcher
+surfaces. They also preserve the previous frame in the newly exposed back
+buffer after rotation. CEF uses partial composition updates heavily; without
+valid previous contents, damaged-only paints can show up as faint hover remnants
+or video/banner flicker.
 
-The local dithering patch is enabled only for this Battle.net test profile as a
-reversible compositor-output experiment. It should not be treated as evidence
-for system-wide gradient banding.
+When a bound composition swap chain changes size, DXVK resizes the private
+composition child HWND to the new swap-chain extent. That keeps KDE snap, tile,
+and maximize transitions from leaving the Wayland child surface at the previous
+size.
 
 ## Upstream
 This belongs in DXVK, separate from the Wine `dcomp-wayland-gpu-present`

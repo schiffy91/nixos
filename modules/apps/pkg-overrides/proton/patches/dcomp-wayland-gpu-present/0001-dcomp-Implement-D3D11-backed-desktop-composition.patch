@@ -1,7 +1,7 @@
 From 4bfc7358195dd9d115faacb925334d07e38351fb Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 20 May 2026 06:03:54 -0700
-Subject: [PATCH 1/2] dcomp: Implement D3D11-backed desktop composition
+Subject: [PATCH] dcomp: Implement D3D11-backed desktop composition
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---

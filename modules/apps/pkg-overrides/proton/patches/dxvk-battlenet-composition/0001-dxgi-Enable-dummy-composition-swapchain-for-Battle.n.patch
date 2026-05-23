@@ -1,9 +1,9 @@
 From a5444157ecc52468a79fadd9c76355b460b599e2 Mon Sep 17 00:00:00 2001
-From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 20 May 2026 03:04:21 -0700
 Subject: [PATCH] dxgi: Bind composition swap chains to DComp windows
 
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp        | 70 ++++++++++++++++++++++++++++
  src/d3d11/d3d11_swapchain.h          | 32 ++++++++++++-

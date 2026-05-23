@@ -1,4 +1,7 @@
-{ pkgs ? import <nixpkgs> { config.allowUnfree = true; }
+{ pkgs ? import (builtins.getFlake "git+file:///etc/nixos").inputs.nixpkgs {
+    system = "x86_64-linux";
+    config.allowUnfree = true;
+  }
 , target ? "64"
 , protonRoot ? "/etc/nixos/modules/apps/pkg-overrides/proton"
 }:
@@ -17,6 +20,10 @@ let
     alias bnet-dev=${protonRoot}/bin/bnet-dev
     alias bnet-make='make -C ${protonRoot}'
 
+    if [ "''${SCWHINE_QUIET_SHELL:-}" = 1 ]; then
+      return
+    fi
+
     cat <<EOF
 scwhine Proton dev shell
   sources: $SCWHINE_DEV_ROOT
@@ -29,10 +36,13 @@ EOF
     autoconf
     automake
     bison
+    dotool
     flex
     glslang
     git
     gnumake
+    imagemagick
+    kdotool
     meson
     ninja
     perl

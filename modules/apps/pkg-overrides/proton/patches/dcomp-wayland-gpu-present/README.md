@@ -19,9 +19,10 @@ The active path intentionally does not use `--disable-gpu-compositing`,
 `--use-angle=desktop`, or a CPU `wl_shm` readback. Those remain useful
 diagnostics, not acceptable defaults.
 
-Opaque root swap chains stay bound to the target HWND. Opaque child or
-placed visuals get host HWNDs, because DComp placement, clipping, and
-z-order do not depend on alpha mode.
+Swap-chain visuals stay on child host HWNDs for now. Directly binding a root
+composition swap chain to the target HWND reduces one host window, but causes
+visible compositor ordering flicker in Battle.net while child content is
+present at the same time.
 
 Composition host geometry and clip regions are cached after each successful
 Win32 update. Commits that do not change the visual tree avoid restacking or
@@ -51,8 +52,5 @@ COM behavior in Wine and native presentation in DXVK's existing WSI code.
 * Runtime logs should show the launcher using D3D11/DXGI/DComp, DXVK's
   Battle.net profile enabling dummy composition swap chains, and
   `D3D11SwapChain::SetCompositionTarget` binding to the launcher window.
-* Chromium/CEF shared-image paths should not rely on Wine's incomplete
-  `D3DKMTOpenResource2()` path for Battle.net. The DXVK profile caps the
-  reported shared resource tier to zero so CEF stays on ordinary D3D11
-  textures while composition swap chains still present through DXVK's Wayland
-  WSI path.
+* Chromium/CEF shared-image paths are still capped in the DXVK Battle.net
+  profile until Wine exposes real duplicable shared-resource handles.

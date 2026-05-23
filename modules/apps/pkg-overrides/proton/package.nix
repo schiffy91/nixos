@@ -15,6 +15,7 @@
 #   Wayland startup deadlock (non-blocking second init roundtrip)
 #   Blank layered windows (pUpdateLayeredWindow only)
 #   SNI StatusNotifierItem systray via libdbus (winewayland dock bridge)
+#   Delay-load IAT protection for PE modules with read-only thunk pages
 #   DComp/DXGI/winewayland GPU presentation path
 #   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
 #   DXVK Battle.net composition swap-chain profile
@@ -56,9 +57,12 @@ let
     ./patches/wine-wayland-roundtrip/0001-winewayland.drv-Avoid-second-init-roundtrip.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Hook-UpdateLayeredWindow.patch
     ./patches/wine-wayland-layered-windows/0002-winewayland.drv-Set-layered-surface-alpha-bits.patch
+    ./patches/wine-wayland-layered-windows/0003-winewayland.drv-Handle-fully-zero-alpha-layered-surf.patch
     ./patches/wine-wayland-status-notifier/0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
     ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Polish-SNI-context-menu-callbacks.patch
     ./patches/wine-wayland-status-notifier/0003-explorer-Forward-docked-tray-icon-updates.patch
+    ./patches/wine-wayland-status-notifier/0004-winewayland.drv-Keep-SNI-items-self-contained.patch
+    ./patches/ntdll-delay-load/0001-ntdll-Make-delay-load-IAT-writable-before-patching.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
     ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
@@ -81,8 +85,10 @@ let
   dxvkPatchSeries = [
     ./patches/dxvk-battlenet-composition/0001-dxgi-Enable-dummy-composition-swapchain-for-Battle.n.patch
     ./patches/dxvk-battlenet-composition/0002-d3d11-Pace-composition-swap-chains-with-the-composi.patch
-    ./patches/dxvk-battlenet-composition/0003-d3d11-Dither-composition-swap-chain-presents.patch
-    ./patches/dxvk-battlenet-composition/0004-d3d11-Allow-limiting-shared-resource-tier.patch
+    ./patches/dxvk-battlenet-composition/0003-d3d11-Allow-limiting-shared-resource-tier.patch
+    ./patches/dxvk-battlenet-composition/0004-d3d11-Pace-all-composition-swap-chains.patch
+    ./patches/dxvk-battlenet-composition/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
+    ./patches/dxvk-battlenet-composition/0006-d3d11-Preserve-composition-swap-chain-contents.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
@@ -189,6 +195,7 @@ let
       make -j"$NIX_BUILD_CORES" \
         dlls/dcomp/all \
         dlls/dxgi/all \
+        dlls/ntdll/all \
         dlls/win32u/all \
         dlls/winevulkan/all \
         dlls/winewayland.drv/all \
@@ -202,6 +209,7 @@ let
       make -j"$NIX_BUILD_CORES" \
         dlls/dcomp/all \
         dlls/dxgi/all \
+        dlls/ntdll/all \
         dlls/win32u/all \
         dlls/winevulkan/all \
         dlls/winewayland.drv/all \
@@ -247,6 +255,12 @@ let
       copy_required i386-unix/win32u.so \
         "$wine32_build/dlls/win32u/win32u.so" \
         "$wine32_build/dlls/win32u/i386-unix/win32u.so"
+      copy_required x86_64-unix/ntdll.so \
+        "$wine64_build/dlls/ntdll/ntdll.so" \
+        "$wine64_build/dlls/ntdll/x86_64-unix/ntdll.so"
+      copy_required i386-unix/ntdll.so \
+        "$wine32_build/dlls/ntdll/ntdll.so" \
+        "$wine32_build/dlls/ntdll/i386-unix/ntdll.so"
       copy_required x86_64-windows/winewayland.drv \
         "$wine64_build/dlls/winewayland.drv/x86_64-windows/winewayland.drv" \
         "$wine64_build/dlls/winewayland.drv/winewayland.drv"
@@ -277,6 +291,12 @@ let
       copy_required i386-windows/win32u.dll \
         "$wine32_build/dlls/win32u/i386-windows/win32u.dll" \
         "$wine32_build/dlls/win32u/win32u.dll"
+      copy_required x86_64-windows/ntdll.dll \
+        "$wine64_build/dlls/ntdll/x86_64-windows/ntdll.dll" \
+        "$wine64_build/dlls/ntdll/ntdll.dll"
+      copy_required i386-windows/ntdll.dll \
+        "$wine32_build/dlls/ntdll/i386-windows/ntdll.dll" \
+        "$wine32_build/dlls/ntdll/ntdll.dll"
       copy_required x86_64-windows/explorer.exe \
         "$wine64_build/programs/explorer/x86_64-windows/explorer.exe" \
         "$wine64_build/programs/explorer/explorer.exe"
@@ -288,8 +308,8 @@ let
     meta.platforms = [ "x86_64-linux" ];
   };
 
-  dxvk-scwhine = stdenv.mkDerivation {
-    pname = "dxvk-scwhine";
+  dxvk-scwhine-src = stdenv.mkDerivation {
+    pname = "dxvk-scwhine-src";
     version = dxvkVersion;
 
     src = fetchgit {
@@ -300,6 +320,20 @@ let
     };
 
     patches = dxvkPatchSeries;
+
+    dontConfigure = true;
+    dontBuild = true;
+
+    installPhase = ''
+      cp -r . "$out"
+      chmod -R u+w "$out"
+    '';
+  };
+
+  dxvk-scwhine = stdenv.mkDerivation {
+    pname = "dxvk-scwhine";
+    version = dxvkVersion;
+    src = dxvk-scwhine-src;
 
     nativeBuildInputs = with pkgs; [
       glslang
@@ -408,6 +442,8 @@ in stdenv.mkDerivation {
     copy_patched i386-unix/winevulkan.so
     copy_patched x86_64-unix/win32u.so
     copy_patched i386-unix/win32u.so
+    copy_patched x86_64-unix/ntdll.so
+    copy_patched i386-unix/ntdll.so
     copy_patched x86_64-windows/winewayland.drv
     copy_patched i386-windows/winewayland.drv
     copy_patched x86_64-windows/dcomp.dll
@@ -418,6 +454,8 @@ in stdenv.mkDerivation {
     copy_patched i386-windows/winevulkan.dll
     copy_patched x86_64-windows/win32u.dll
     copy_patched i386-windows/win32u.dll
+    copy_patched x86_64-windows/ntdll.dll
+    copy_patched i386-windows/ntdll.dll
     copy_patched x86_64-windows/explorer.exe
     copy_patched i386-windows/explorer.exe
 
@@ -427,6 +465,10 @@ in stdenv.mkDerivation {
       "$out/files/share/default_pfx/drive_c/windows/system32/explorer.exe"
     cp "${wine-scwhine}/lib/wine/i386-windows/explorer.exe" \
       "$out/files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"
+    cp "${wine-scwhine}/lib/wine/x86_64-windows/ntdll.dll" \
+      "$out/files/share/default_pfx/drive_c/windows/system32/ntdll.dll"
+    cp "${wine-scwhine}/lib/wine/i386-windows/ntdll.dll" \
+      "$out/files/share/default_pfx/drive_c/windows/syswow64/ntdll.dll"
     copy_dxvk() {
       local src="$1"
       local rel="$2"
@@ -475,6 +517,7 @@ EOF
   passthru = {
     wineSource = wine-scwhine-src;
     wineArtifacts = wine-scwhine;
+    dxvkSource = dxvk-scwhine-src;
     dxvkArtifacts = dxvk-scwhine;
   };
 }

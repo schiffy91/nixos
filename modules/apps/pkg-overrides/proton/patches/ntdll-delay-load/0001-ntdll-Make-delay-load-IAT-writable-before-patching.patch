@@ -1,0 +1,50 @@
+From f30452b219ca205a97450111c06bb7af3fbd9824 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 18:18:53 -0700
+Subject: [PATCH] ntdll: Make delay-load IAT writable before patching
+
+Delay-load resolution patches the import address table after looking up the
+target function. Some PE modules map that thunk page read-only after loader
+initialization, so writing the resolved function pointer directly can fault.
+
+Temporarily make the target thunk writable while updating it, then restore
+the previous page protection.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/ntdll/loader.c | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index a1e7b60..db7c868 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -3993,6 +3993,9 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
+     NTSTATUS nts;
+     FARPROC fp;
+     INT_PTR id;
++    void *protect_addr;
++    SIZE_T protect_size;
++    ULONG protect_old;
+
+     TRACE( "(%p, %p, %p, %p, %p, 0x%08lx)\n", base, desc, dllhook, syshook, addr, flags );
+
+@@ -4026,7 +4029,15 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
+     }
+     if (!nts)
+     {
+-        pIAT[id].u1.Function = (ULONG_PTR)fp;
++        protect_addr = &pIAT[id];
++        protect_size = sizeof(pIAT[id]);
++        if (!NtProtectVirtualMemory( NtCurrentProcess(), &protect_addr, &protect_size,
++                                     PAGE_READWRITE, &protect_old ))
++        {
++            pIAT[id].u1.Function = (ULONG_PTR)fp;
++            NtProtectVirtualMemory( NtCurrentProcess(), &protect_addr, &protect_size,
++                                    protect_old, &protect_old );
++        }
+         return fp;
+     }
+
+--
+2.53.0

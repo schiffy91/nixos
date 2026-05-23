@@ -1,0 +1,61 @@
+From 40b27816f3f2ab0e6bf17d2e52ff1a53a9dbea74 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 22 May 2026 18:18:53 -0700
+Subject: [PATCH] winewayland.drv: Keep SNI items self-contained
+
+Expose an IconPixmap even when an IconName is configured. Some panels prefer
+the named icon, but others use the pixmap data for sizing, fallback rendering,
+or cache refresh, and Wine already has the application-provided icon handle.
+
+Also keep dock initialization side-effect free. The StatusNotifierItem bus
+connection is only needed once a visible tray item is inserted or updated, and
+eager initialization can leave explorer with a stale connection after launcher
+process churn.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/winewayland.drv/wayland_systray.c | 5 +----
+ programs/explorer/systray.c            | 1 -
+ 2 files changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
+index 179db30..829b7e2 100644
+--- a/dlls/winewayland.drv/wayland_systray.c
++++ b/dlls/winewayland.drv/wayland_systray.c
+@@ -732,13 +732,11 @@ static unsigned int sni_update_item(struct sni_item *item, const struct systray_
+
+     if (item->image != icon->image)
+     {
+-        const char *icon_name = getenv("WINE_SNI_ICON_NAME");
+-
+         item->image = icon->image;
+         free(item->icon_argb);
+         item->icon_argb = NULL;
+         item->icon_w = item->icon_h = 0;
+-        if (icon->image && (!icon_name || !icon_name[0]))
++        if (icon->image)
+             item->icon_argb = icon_to_argb32(icon->image, &item->icon_w, &item->icon_h);
+         changed |= SNI_CHANGED_ICON;
+     }
+@@ -799,7 +797,6 @@ static BOOL sni_publish_item(struct sni_item *item)
+ void WAYLAND_SystrayDockInit(HWND hwnd)
+ {
+     TRACE("hwnd=%p\n", hwnd);
+-    sni_ensure_bus();
+ }
+
+ BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy,
+diff --git a/programs/explorer/systray.c b/programs/explorer/systray.c
+index e613dd1..a235a5a 100644
+--- a/programs/explorer/systray.c
++++ b/programs/explorer/systray.c
+@@ -1285,7 +1285,6 @@ void initialize_systray( BOOL arg_using_root, BOOL arg_enable_shell, BOOL arg_sh
+         SIZE size = get_window_size();
+         tray_window = CreateWindowExW( WS_EX_NOACTIVATE, shell_traywnd_class.lpszClassName, L"", WS_CAPTION | WS_SYSMENU,
+                                        CW_USEDEFAULT, CW_USEDEFAULT, size.cx, size.cy, 0, 0, 0, 0 );
+-        NtUserMessageCall( tray_window, WINE_SYSTRAY_DOCK_INIT, 0, 0, NULL, NtUserSystemTrayCall, FALSE );
+     }
+
+     if (!tray_window)
+--
+2.53.0

@@ -1,7 +1,7 @@
 From d5b49da1cf6996fe47d8b8be2e8e41a3ff961bab Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:39 -0700
-Subject: [PATCH] winewayland.drv: Avoid second init roundtrip.
+Subject: [PATCH] winewayland.drv: Avoid second init roundtrip
 
 The registry setup path performs two roundtrips. Keep the first one to collect globals, but avoid blocking on the second pass that only drains initial events from objects bound by the registry listener.
 

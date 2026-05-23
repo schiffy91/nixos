@@ -1,7 +1,7 @@
 From 28786c9d0d164406b7c4bfad9098c78cd0e0ff3f Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 03:54:10 -0700
-Subject: [PATCH] dcomp: Make composition host windows presentation-only.
+Subject: [PATCH] dcomp: Make composition host windows presentation-only
 
 The host HWND exists only to give DXVK a native target for a composition swap
 chain. It should not have its own Win32 backing contents competing with the
