@@ -1,6 +1,6 @@
-From 5e475c84dd42c7ce79d70945b17349a1c80fc94f Mon Sep 17 00:00:00 2001
+From 13e4633af0d8c5de46d53e111552b94b3af94f27 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Mon, 25 May 2026 09:47:50 -0700
+Date: Mon, 25 May 2026 09:42:44 -0700
 Subject: [PATCH] d3d11: Avoid present wait for composition swap chains
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
@@ -19,9 +19,9 @@ index b1fc493..718abb2 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -501,6 +501,12 @@ namespace dxvk {
-
+ 
      m_presenter->setSyncInterval(GetCompositionSyncInterval(SyncInterval));
-
+ 
 +    bool compositionTarget = false;
 +    {
 +      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
@@ -44,12 +44,12 @@ index b1fc493..718abb2 100644
 @@ -564,15 +571,10 @@ namespace dxvk {
        ctx->synchronizeWsi(cSync);
        ctx->flushCommandList(nullptr, nullptr);
-
+ 
 -      cDevice->presentImage(cPresenter, cLatency, cFrameId, nullptr);
 +      cDevice->presentImage(cPresenter, cLatency, cFrameId, nullptr,
 +        cWaitForPresent);
      });
-
+ 
 -    bool compositionTarget = false;
 -    {
 -      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
@@ -58,7 +58,7 @@ index b1fc493..718abb2 100644
 -
      if (m_backBuffers.size() > 1u)
        RotateBackBuffers(immediateContext, compositionTarget);
-
+ 
 diff --git a/src/dxvk/dxvk_device.cpp b/src/dxvk/dxvk_device.cpp
 index 87c1a95..75225a0 100644
 --- a/src/dxvk/dxvk_device.cpp
@@ -74,7 +74,7 @@ index 87c1a95..75225a0 100644
      presentInfo.presenter = presenter;
      presentInfo.frameId = frameId;
 +    presentInfo.waitForPresent = waitForPresent;
-
+ 
      DxvkLatencyInfo latencyInfo;
      latencyInfo.tracker = tracker;
 diff --git a/src/dxvk/dxvk_device.h b/src/dxvk/dxvk_device.h
@@ -88,7 +88,7 @@ index ed5e6e2..8c18ab3 100644
 -            DxvkSubmitStatus*         status);
 +            DxvkSubmitStatus*         status,
 +            bool                      waitForPresent = true);
-
+     
      /**
       * \brief Submits a command list
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
@@ -97,36 +97,36 @@ index 6b03782..ee64b43 100644
 +++ b/src/dxvk/dxvk_presenter.cpp
 @@ -172,7 +172,10 @@ namespace dxvk {
    }
-
-
+ 
+ 
 -  VkResult Presenter::presentImage(uint64_t frameId, const Rc<DxvkLatencyTracker>& tracker) {
 +  VkResult Presenter::presentImage(
 +          uint64_t                frameId,
 +    const Rc<DxvkLatencyTracker>& tracker,
 +          bool                    waitForPresent) {
      PresenterSync& currSync = m_semaphores.at(m_frameIndex);
-
+ 
      VkPresentIdKHR presentId = { VK_STRUCTURE_TYPE_PRESENT_ID_KHR };
 @@ -234,7 +237,7 @@ namespace dxvk {
      }
-
+ 
      // Add frame to waiter queue with current properties
 -    if (m_hasPresentWait) {
 +    if (m_hasPresentWait && waitForPresent) {
        std::lock_guard lock(m_frameMutex);
-
+ 
        auto& frame = m_frameQueue.emplace();
 @@ -248,7 +251,7 @@ namespace dxvk {
-
+ 
      // On a successful present, try to acquire next image already, in
      // order to hide potential delays from the application thread.
 -    if (status == VK_SUCCESS) {
 +    if (status == VK_SUCCESS && waitForPresent) {
        PresenterSync& nextSync = m_semaphores.at(m_frameIndex);
        waitForSwapchainFence(nextSync);
-
+ 
 @@ -275,11 +278,12 @@ namespace dxvk {
-
+ 
    void Presenter::signalFrame(
            uint64_t                frameId,
 -    const Rc<DxvkLatencyTracker>& tracker) {
@@ -134,11 +134,11 @@ index 6b03782..ee64b43 100644
 +          bool                    waitForPresent) {
      if (m_signal == nullptr || !frameId)
        return;
-
+ 
 -    if (m_hasPresentWait) {
 +    if (m_hasPresentWait && waitForPresent) {
        bool canSignal = false;
-
+ 
        { std::unique_lock lock(m_frameMutex);
 diff --git a/src/dxvk/dxvk_presenter.h b/src/dxvk/dxvk_presenter.h
 index 72bce28..e53c7d7 100644
@@ -151,7 +151,7 @@ index 72bce28..e53c7d7 100644
 -      const Rc<DxvkLatencyTracker>& tracker);
 +      const Rc<DxvkLatencyTracker>& tracker,
 +            bool                    waitForPresent);
-
+ 
      /**
       * \brief Signals a given frame
 @@ -144,7 +145,8 @@ namespace dxvk {
@@ -161,7 +161,7 @@ index 72bce28..e53c7d7 100644
 -      const Rc<DxvkLatencyTracker>& tracker);
 +      const Rc<DxvkLatencyTracker>& tracker,
 +            bool                    waitForPresent);
-
+ 
      /**
       * \brief Changes sync interval
 diff --git a/src/dxvk/dxvk_queue.cpp b/src/dxvk/dxvk_queue.cpp
@@ -170,24 +170,24 @@ index 6d2d153..b75d5be 100644
 +++ b/src/dxvk/dxvk_queue.cpp
 @@ -170,7 +170,8 @@ namespace dxvk {
              entry.latency.tracker->notifyQueuePresentBegin(entry.latency.frameId);
-
+ 
            entry.result = entry.present.presenter->presentImage(
 -            entry.present.frameId, entry.latency.tracker);
 +            entry.present.frameId, entry.latency.tracker,
 +            entry.present.waitForPresent);
-
+ 
            if (entry.latency.tracker) {
              entry.latency.tracker->notifyQueuePresentEnd(
 @@ -275,7 +276,8 @@ namespace dxvk {
          // Signal the frame and then immediately destroy the reference.
          // This is necessary since the front-end may want to explicitly
-         // destroy the presenter object.
+         // destroy the presenter object. 
 -        entry.present.presenter->signalFrame(entry.present.frameId, entry.latency.tracker);
 +        entry.present.presenter->signalFrame(entry.present.frameId,
 +          entry.latency.tracker, entry.present.waitForPresent);
          entry.present.presenter = nullptr;
        }
-
+ 
 diff --git a/src/dxvk/dxvk_queue.h b/src/dxvk/dxvk_queue.h
 index 4cc63ef..be09b6a 100644
 --- a/src/dxvk/dxvk_queue.h
@@ -198,7 +198,7 @@ index 4cc63ef..be09b6a 100644
      uint64_t            frameId;
 +    bool                waitForPresent = true;
    };
-
-
---
+ 
+ 
+-- 
 2.53.0

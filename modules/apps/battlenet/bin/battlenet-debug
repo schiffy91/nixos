@@ -9,14 +9,15 @@ prefix="${HOME}/Games/Battle.net/prefix"
 
 usage() {
   cat <<EOF
-usage: battlenet-debug [status|logs|sni|context-menu|capture-window|frames-window|diagnose]
+usage: battlenet-debug [status|logs|sni|context-menu|probe-window|capture-window|frames-window|diagnose]
 
 Commands:
   status          print process, compat tool, desktop entry, and log locations
   logs [LINES]    print redacted tails of wrapper, Proton, Battle.net, and CEF logs
   sni             print StatusNotifierItem metadata without screenshots
   context-menu    call Battle.net's SNI ContextMenu method without capturing the screen
-  capture-window  capture only the active Battle.net window
+  probe-window    capture only Battle.net, print aggregate pixels, delete temp captures
+  capture-window  capture only the Battle.net window; foreground fallback is opt-in
   frames-window   capture a short burst of only the active Battle.net window
   diagnose        run status, sni, and logs
 
@@ -158,14 +159,183 @@ context_menu() {
     --method org.kde.StatusNotifierItem.ContextMenu "$x" "$y"
 }
 
+install_capture_helper() {
+  local desktop_dir desktop_file helper installed_helper system_desktop system_helper
+
+  system_desktop="/run/current-system/sw/share/applications/battlenet-capture-window.desktop"
+  system_helper="/run/current-system/sw/libexec/battlenet-capture-window"
+  if [ -x "$system_helper" ] && [ -f "$system_desktop" ]; then
+    echo "$system_desktop"
+    return 0
+  fi
+
+  helper="$app_dir/.build/battlenet-capture-window"
+  if [ ! -x "$helper" ] || [ "$app_dir/battlenet-capture-window.c" -nt "$helper" ]; then
+    mkdir -p "$(dirname "$helper")"
+    cc "$app_dir/battlenet-capture-window.c" -o "$helper" \
+      $(pkg-config --cflags --libs gio-2.0 gio-unix-2.0 glib-2.0)
+  fi
+
+  desktop_dir="/usr/local/share/applications"
+  desktop_file="$desktop_dir/battlenet-capture-window.desktop"
+  installed_helper="/usr/local/libexec/battlenet-capture-window"
+
+  if ! sudo -n true >/dev/null 2>&1; then
+    cat >&2 <<EOF
+capture helper needs a privileged desktop file for KWin ScreenShot2.
+Install it through battlenet.nix + nixos update, or allow this target to run:
+  sudo install ... /usr/local/libexec/battlenet-capture-window
+  sudo install ... /usr/local/share/applications/battlenet-capture-window.desktop
+EOF
+    return 1
+  fi
+
+  tmp_desktop="$(mktemp)"
+  cat > "$tmp_desktop" <<EOF
+[Desktop Entry]
+Name=Battle.net Window Capture
+Exec=$installed_helper
+Icon=battlenet
+Type=Application
+NoDisplay=true
+StartupNotify=false
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
+X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,zkde_screencast_unstable_v1
+EOF
+  sudo install -Dm755 "$helper" "$installed_helper"
+  sudo install -Dm644 "$tmp_desktop" "$desktop_file"
+  rm -f "$tmp_desktop" "$HOME/.local/share/applications/battlenet-window-capture.desktop" \
+    "$HOME/.local/share/applications/battlenet-capture-window.desktop"
+  kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+  echo "$desktop_file"
+}
+
+window_handle() {
+  kdotool search --class 'battle[.]net[.]exe' --limit 1 getwindowid %1 2>/dev/null \
+    | head -n1
+}
+
+capture_foreground_window() {
+  local output="$1"
+  "$proton_dir/bin/proton-custom-dev" focus >/dev/null
+  spectacle -b -n -a -o "$output" >/dev/null
+}
+
+capture_battlenet_window() {
+  local output="$1"
+  local handle request_dir request status started ended payload ok error fallback helper_error
+  mkdir -p "$(dirname "$output")"
+  handle="$(window_handle)"
+
+  if [ -z "$handle" ]; then
+    echo "capture-method=none reason=battlenet-window-not-found" >&2
+    return 1
+  fi
+
+  fallback="${BATTLENET_CAPTURE_FALLBACK:-none}"
+  if [ "$fallback" = "foreground" ]; then
+    echo "capture-method=spectacle-active fallback=foreground reason=foreground-requested handle=$handle" >&2
+    capture_foreground_window "$output"
+    return 0
+  fi
+
+  helper_error=""
+  if ! helper_error="$(install_capture_helper 2>&1 >/dev/null)"; then
+    if [ "$fallback" = "foreground" ]; then
+      echo "capture-method=spectacle-active fallback=foreground reason=kwin-helper-unavailable handle=$handle error=$helper_error" >&2
+      capture_foreground_window "$output"
+      return 0
+    fi
+    echo "capture-method=none reason=kwin-helper-unavailable handle=$handle error=$helper_error" >&2
+    return 1
+  fi
+
+  request_dir="$runtime_dir/window-capture"
+  request="$request_dir/request"
+  status="$request_dir/status"
+  mkdir -p "$request_dir"
+  rm -f "$status"
+
+  printf '%s\n%s\n' "$handle" "$output" > "$request"
+
+  kstart --application battlenet-capture-window >/dev/null 2>&1 || true
+
+  started="$(date +%s)"
+  ended=$((started + 8))
+  while [ "$(date +%s)" -le "$ended" ]; do
+    [ -s "$status" ] && break
+    sleep 0.1
+  done
+
+  if [ ! -s "$status" ]; then
+    fallback="${BATTLENET_CAPTURE_FALLBACK:-none}"
+    if [ "$fallback" = "foreground" ]; then
+      echo "capture-method=spectacle-active fallback=foreground reason=kwin-window-timeout handle=$handle" >&2
+      capture_foreground_window "$output"
+      return 0
+    fi
+    echo "capture-method=none reason=kwin-window-timeout handle=$handle" >&2
+    return 1
+  fi
+
+  payload="$(cat "$status")"
+  ok="$(sed -n 's/^ok=//p' "$status" | head -n1)"
+  if [ "$ok" = "1" ] && [ -s "$output" ]; then
+    echo "capture-method=kwin-window handle=$handle"
+    return 0
+  fi
+
+  error="$(sed -n 's/^message=//p' "$status" | head -n1)"
+  fallback="${BATTLENET_CAPTURE_FALLBACK:-none}"
+  if [ "$fallback" = "foreground" ]; then
+    echo "capture-method=spectacle-active fallback=foreground reason=kwin-window-unavailable handle=$handle error=$error" >&2
+    capture_foreground_window "$output"
+    return 0
+  fi
+
+  echo "capture-method=none reason=kwin-window-unavailable handle=$handle error=$error payload=$payload" >&2
+  return 1
+}
+
+probe_window() {
+  run_in_devshell probe-window "$@"
+  local output keep mean stdev min max classification
+  output="${1:-}"
+  keep=1
+  if [ -z "$output" ]; then
+    output="$(mktemp --tmpdir battlenet-window.XXXXXX.png)"
+    keep=0
+  fi
+  if [ "$keep" = 0 ]; then
+    trap 'rm -f "$output"' RETURN
+  fi
+
+  capture_battlenet_window "$output"
+
+  read -r mean stdev min max < <(
+    magick identify -format '%[fx:mean] %[fx:standard_deviation] %[fx:minima] %[fx:maxima]\n' "$output"
+  )
+  classification="$(
+    awk -v mean="$mean" -v stdev="$stdev" '
+      BEGIN {
+        if (mean > 0.88 && stdev < 0.08) print "white";
+        else if (mean < 0.04 && stdev < 0.04) print "black";
+        else print "content";
+      }
+    '
+  )"
+  magick identify -format 'window width=%w height=%h ' "$output"
+  printf 'mean=%s stdev=%s min=%s max=%s classification=%s\n' \
+    "$mean" "$stdev" "$min" "$max" "$classification"
+  if [ "$keep" = 1 ]; then
+    echo "image=$output"
+  fi
+}
+
 capture_window() {
   run_in_devshell capture-window "$@"
   local output="${1:-/tmp/battlenet-window.png}"
-  "$proton_dir/bin/proton-custom-dev" focus
-  "$proton_dir/bin/proton-custom-dev" grab-frames --focus --count 1 --interval 0 \
-    --mode active --format png --output-dir "$(dirname "$output")/.battlenet-window-capture"
-  mv "$(dirname "$output")/.battlenet-window-capture/frame-000.png" "$output"
-  rmdir "$(dirname "$output")/.battlenet-window-capture" 2>/dev/null || true
+  capture_battlenet_window "$output"
   echo "$output"
 }
 
@@ -185,6 +355,8 @@ case "$command" in
   logs) logs "$@" ;;
   sni) sni ;;
   context-menu) context_menu "$@" ;;
+  install-capture-helper) install_capture_helper ;;
+  probe-window) probe_window "$@" ;;
   capture-window) capture_window "$@" ;;
   frames-window) frames_window "$@" ;;
   diagnose)

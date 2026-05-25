@@ -325,6 +325,7 @@ let
     };
 
     patches = dxvkPatchSeries;
+    patchFlags = [ "-p1" "--fuzz=0" ];
 
     dontConfigure = true;
     dontBuild = true;

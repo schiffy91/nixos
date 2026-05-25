@@ -123,18 +123,55 @@ let
           umu-run "$EXE" "''${EXTRA_ARGS[@]}"
     '';
   };
-  desktop = pkgs.makeDesktopItem {
-    name = "battlenet";
-    desktopName = "Battle.net";
-    exec = "battlenet";
-    icon = "battlenet";
-    categories = [ "Game" ];
-    comment = "Play this game";
-    terminal = false;
-    startupWMClass = "battle.net.exe";
+  desktop = pkgs.writeTextFile {
+    name = "battlenet-desktop";
+    destination = "/share/applications/battlenet.desktop";
+    text = ''
+      [Desktop Entry]
+      Type=Application
+      Version=1.5
+      Name=Battle.net
+      Comment=Play this game
+      Exec=battlenet
+      Icon=battlenet
+      Terminal=false
+      Categories=Game;
+      StartupWMClass=battle.net.exe
+    '';
+  };
+  captureHelper = pkgs.stdenv.mkDerivation {
+    pname = "battlenet-capture-window";
+    version = "1";
+    src = ./battlenet/battlenet-capture-window.c;
+    dontUnpack = true;
+    nativeBuildInputs = [ pkgs.pkg-config ];
+    buildInputs = [ pkgs.glib ];
+    buildPhase = ''
+      runHook preBuild
+      cc "$src" -o battlenet-capture-window $(
+        pkg-config --cflags --libs gio-2.0 gio-unix-2.0 glib-2.0
+      )
+      runHook postBuild
+    '';
+    installPhase = ''
+      runHook preInstall
+      install -Dm755 battlenet-capture-window "$out/libexec/battlenet-capture-window"
+      install -Dm644 /dev/stdin "$out/share/applications/battlenet-capture-window.desktop" <<EOF
+      [Desktop Entry]
+      Type=Application
+      Name=Battle.net Window Capture
+      Exec=$out/libexec/battlenet-capture-window
+      Icon=battlenet
+      NoDisplay=true
+      StartupNotify=false
+      X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
+      X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,zkde_screencast_unstable_v1
+      EOF
+      runHook postInstall
+    '';
   };
 in {
-  environment.systemPackages = [ launcher desktop ];
+  environment.systemPackages = [ launcher desktop captureHelper ];
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
     if [ -f "${exe}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} "$(dirname ${iconPath})"

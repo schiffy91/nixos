@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+proton_dir="$(cd "$app_dir/../pkg-overrides/proton-custom" && pwd)"
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
+desktop_entry="/run/current-system/sw/share/applications/battlenet.desktop"
+
+repeat=3
+delay=45
+log_lines=80
+frames=4
+frame_interval=1
+artifact_dir=""
+capture_fallback="foreground"
+stop_on_white=0
+
+usage() {
+  cat <<EOF
+usage: battlenet-reproduce [options]
+
+Runs a repeatable KDE-entry Battle.net repro loop:
+  1. stop the Battle.net prefix
+  2. launch /run/current-system/.../battlenet.desktop through kioclient
+  3. wait DELAY seconds
+  4. capture only the Battle.net window through KWin's by-window API
+  5. save SNI metadata, redacted logs, and probe stats
+
+Environment:
+  --repeat N
+  --delay SECONDS
+  --log-lines N
+  --frames N
+  --frame-interval SECONDS
+  --artifact-dir PATH
+  --capture-fallback none|foreground
+  --stop-on-white 0|1
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --repeat)
+      repeat="$2"
+      shift 2
+      ;;
+    --delay)
+      delay="$2"
+      shift 2
+      ;;
+    --log-lines)
+      log_lines="$2"
+      shift 2
+      ;;
+    --frames)
+      frames="$2"
+      shift 2
+      ;;
+    --frame-interval)
+      frame_interval="$2"
+      shift 2
+      ;;
+    --artifact-dir)
+      artifact_dir="$2"
+      shift 2
+      ;;
+    --capture-fallback)
+      capture_fallback="$2"
+      shift 2
+      ;;
+    --stop-on-white)
+      stop_on_white="$2"
+      shift 2
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$artifact_dir" ]; then
+  artifact_dir="/tmp/battlenet-repro-$(date +%Y%m%dT%H%M%S)"
+fi
+
+mkdir -p "$artifact_dir"
+echo "artifact-dir=$artifact_dir"
+
+run_once() {
+  local index="$1"
+  local run_dir="$artifact_dir/run-$index"
+  local frame
+
+  printf '\n==> repro %s/%s <==\n' "$index" "$repeat"
+  mkdir -p "$run_dir"
+
+  "$proton_dir/bin/proton-custom-dev" cleanup
+  rm -f "$runtime_dir"/battlenet-wrapper.log "$runtime_dir"/steam-battlenet.log
+  "$app_dir/bin/battlenet-debug" install-capture-helper >"$run_dir/capture-helper.txt" 2>&1 || true
+
+  if [ -e "$desktop_entry" ]; then
+    kioclient exec "$desktop_entry" >"$run_dir/kioclient.log" 2>&1 &
+  else
+    battlenet >"$run_dir/kioclient.log" 2>&1 &
+  fi
+
+  sleep "$delay"
+  "$app_dir/bin/battlenet-debug" status >"$run_dir/status.txt" 2>&1 || true
+  "$app_dir/bin/battlenet-debug" sni >"$run_dir/sni.txt" 2>&1 || true
+  "$app_dir/bin/battlenet-debug" logs "$log_lines" >"$run_dir/logs.txt" 2>&1 || true
+
+  for frame in $(seq 1 "$frames"); do
+    BATTLENET_CAPTURE_FALLBACK="$capture_fallback" \
+      "$app_dir/bin/battlenet-debug" probe-window "$run_dir/window-$frame.png" \
+      >"$run_dir/probe-$frame.txt" 2>&1 || true
+    cat "$run_dir/probe-$frame.txt"
+    if grep -q 'classification=white' "$run_dir/probe-$frame.txt"; then
+      "$app_dir/bin/battlenet-debug" status >"$run_dir/status-after-white.txt" 2>&1 || true
+      "$app_dir/bin/battlenet-debug" sni >"$run_dir/sni-after-white.txt" 2>&1 || true
+      "$app_dir/bin/battlenet-debug" logs "$log_lines" >"$run_dir/logs-after-white.txt" 2>&1 || true
+      echo "white-frame=$run_dir/window-$frame.png"
+      if [ "$stop_on_white" = 1 ]; then
+        echo "stopping on white frame; Battle.net left running for inspection"
+        exit 10
+      fi
+    fi
+    sleep "$frame_interval"
+  done
+
+  echo "run-dir=$run_dir"
+}
+
+for index in $(seq 1 "$repeat"); do
+  run_once "$index"
+done

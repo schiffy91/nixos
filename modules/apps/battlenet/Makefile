@@ -9,8 +9,14 @@ BATTLENET_DIR ?= $(NIXOS)/modules/apps/battlenet
 PROTON_DIR ?= $(NIXOS)/modules/apps/pkg-overrides/proton-custom
 
 BUILD_MODE ?= changed
+REPEAT ?= 3
 DELAY ?= 20
 LOG_LINES ?= 120
+FRAMES ?= 4
+FRAME_INTERVAL ?= 1
+CAPTURE_FALLBACK ?= foreground
+ARTIFACT_DIR ?=
+STOP_ON_WHITE ?= 0
 COUNT ?= 24
 INTERVAL ?= 0.12
 OUTPUT ?= /tmp/battlenet-window.png
@@ -28,7 +34,7 @@ endif
 
 .PHONY: \
 	help shell build install configure run cycle cycle-no-run \
-	status logs diagnose sni context-menu capture-window frames-window \
+	check build-capture-helper status logs diagnose sni context-menu install-capture-helper probe-window reproduce capture-window frames-window \
 	focus cleanup proton-status proton-restore
 
 help:
@@ -45,6 +51,8 @@ help:
 		'  make install                      point Steam compat tool at the dev proton-custom tree' \
 		'  make configure                    prepare Battle.net prefix for current proton-custom' \
 		'  make cleanup                      stop this Battle.net/Wine prefix' \
+		'  make check                        syntax-check the Battle.net scripts' \
+		'  make build-capture-helper         build the KWin by-window capture helper' \
 		'' \
 		'Debug:' \
 		'  make status                       print compat, process, desktop-entry, and log state' \
@@ -52,13 +60,22 @@ help:
 		'  make diagnose                     status + SNI metadata + redacted logs' \
 		'  make sni                          print StatusNotifierItem metadata' \
 		'  make context-menu                 call the tray ContextMenu method without capture' \
+		'  make install-capture-helper       install local KWin screenshot-authorized helper' \
+		'  make probe-window                 classify Battle.net window pixels, delete temp capture' \
+		'  make reproduce                    repeat KDE desktop-entry launch + screenshot artifacts' \
 		'  make capture-window               active Battle.net window only; never full desktop' \
 		'  make frames-window                active-window frame burst for flicker analysis' \
 		'' \
 		'Common vars:' \
 		'  BUILD_MODE=$(BUILD_MODE)' \
+		'  REPEAT=$(REPEAT)' \
 		'  DELAY=$(DELAY)' \
 		'  LOG_LINES=$(LOG_LINES)' \
+		'  FRAMES=$(FRAMES)' \
+		'  FRAME_INTERVAL=$(FRAME_INTERVAL)' \
+		'  CAPTURE_FALLBACK=$(CAPTURE_FALLBACK)' \
+		'  ARTIFACT_DIR=$(ARTIFACT_DIR)' \
+		'  STOP_ON_WHITE=$(STOP_ON_WHITE)' \
 		'  OUTPUT=$(OUTPUT)' \
 		'  OUTPUT_DIR=$(OUTPUT_DIR)'
 
@@ -73,6 +90,18 @@ install:
 
 configure:
 	$(BATTLENET_DIR)/bin/battlenet-configure
+
+check:
+	bash -n \
+		$(BATTLENET_DIR)/bin/battlenet-configure \
+		$(BATTLENET_DIR)/bin/battlenet-cycle \
+		$(BATTLENET_DIR)/bin/battlenet-debug \
+		$(BATTLENET_DIR)/bin/battlenet-make \
+		$(BATTLENET_DIR)/bin/battlenet-reproduce \
+		$(BATTLENET_DIR)/bin/battlenet-run
+
+build-capture-helper:
+	$(call battlenet_run,mkdir -p $(BATTLENET_DIR)/.build && cc $(BATTLENET_DIR)/battlenet-capture-window.c -o $(BATTLENET_DIR)/.build/battlenet-capture-window $$(pkg-config --cflags --libs gio-2.0 gio-unix-2.0 glib-2.0))
 
 run:
 	$(BATTLENET_DIR)/bin/battlenet-run
@@ -97,6 +126,15 @@ sni:
 
 context-menu:
 	$(BATTLENET_DIR)/bin/battlenet-debug context-menu
+
+install-capture-helper:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug install-capture-helper)
+
+probe-window:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug probe-window)
+
+reproduce:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-reproduce --repeat "$(REPEAT)" --delay "$(DELAY)" --log-lines "$(LOG_LINES)" --frames "$(FRAMES)" --frame-interval "$(FRAME_INTERVAL)" --capture-fallback "$(CAPTURE_FALLBACK)" --artifact-dir "$(ARTIFACT_DIR)" --stop-on-white "$(STOP_ON_WHITE)")
 
 capture-window:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug capture-window "$(OUTPUT)")

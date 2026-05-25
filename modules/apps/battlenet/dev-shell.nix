@@ -12,12 +12,17 @@ pkgs.mkShell {
     dotool
     findutils
     gawk
+    gcc
     git
     glib
     gnumake
     imagemagick
     kdotool
-    python3
+    kdePackages.kservice
+    pkg-config
+    (python3.withPackages (pythonPackages: [
+      pythonPackages."dbus-python"
+    ]))
     umu-launcher
     kdePackages.qttools
     kdePackages.spectacle
