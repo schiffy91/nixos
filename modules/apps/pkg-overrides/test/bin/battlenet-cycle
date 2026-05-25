@@ -2,14 +2,14 @@
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-nixos_dir="$(cd "$app_dir/../../.." && pwd)"
+nixos_dir="$(cd "$app_dir/../../../.." && pwd)"
 proton_dir="$nixos_dir/modules/apps/pkg-overrides/proton-custom"
 
 usage() {
   cat <<EOF
 usage: battlenet-cycle [BUILD_MODE] [--no-run]
 
-Runs the repeatable Battle.net development loop:
+Runs the repeatable Battle.net test loop:
   1. proton-custom-build BUILD_MODE
   2. proton-custom-install dev
   3. battlenet-configure

@@ -1,21 +1,17 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Alexander Schiffhauer <alexanderschiffhauer@users.noreply.github.com>
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 25 May 2026 16:45:00 -0700
-Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave.
+Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave
 
 The Wayland keyboard leave handler runs while dispatching compositor
-events.  Sending WM_CANCELMODE synchronously from that path can block the
+events. Sending WM_CANCELMODE synchronously from that path can block the
 Wayland dispatch thread if the foreground window's owner thread is busy
 destroying a window tree.
 
-Battle.net can hit this while tearing down the external authentication
-browser after token verification.  The application logs stop after the
-auth browser observer is destroyed, and the stuck process shows the
-Wayland keyboard leave callback waiting in send_inter_thread_message()
-while the browser main thread is in send_destroy_message().
-
 Use SendMessageTimeout semantics for the notification so a temporarily
 hung target window cannot wedge the driver event loop permanently.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/wayland_keyboard.c | 2 +-
  dlls/winewayland.drv/waylanddrv.h       | 11 +++++++++++

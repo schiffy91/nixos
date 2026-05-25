@@ -1,16 +1,14 @@
-# DXVK Battle.net composition swapchain
+# DXVK Battle.net composition swap chains
 
 ## Status
-Active local DXVK series.  Battle.net loads DXVK's native `dxgi.dll`, not
-Wine's builtin `dxgi.dll`, so the runtime `CreateSwapChainForComposition`
-failure has to be fixed in DXVK's active code path.
+Active DXVK series. Battle.net loads DXVK's native `dxgi.dll`, so
+`CreateSwapChainForComposition` support belongs in DXVK's active code path.
 
 ## Fix
 Add a DXVK application profile for `Battle.net.exe` that enables
 `dxgi.enableDummyCompositionSwapchain`. DXVK already uses this option for
 applications that need composition swap chains; carrying it as a profile keeps
-the workaround in DXVK rather than in the launcher wrapper or per-prefix
-`dxvk.conf`.
+the behavior next to DXVK's existing per-application configuration.
 
 The active profile keeps Battle.net's D3D11 shared resource tier capped at
 zero. Chromium otherwise advertises GPU shared-resource handles through CEF IPC
@@ -32,11 +30,6 @@ When a bound composition swap chain changes size, DXVK resizes the private
 composition child HWND to the new swap-chain extent. That keeps KDE snap, tile,
 and maximize transitions from leaving the Wayland child surface at the previous
 size.
-
-Do not skip DXVK's present-wait frame queue for these composition swap chains.
-That was tested as a flicker mitigation, but it makes Battle.net's Chromium
-`GpuVSyncThread` spin and can leave the top-level launcher window presenting a
-solid white frame after login.
 
 ## Upstream
 This belongs in DXVK, separate from the Wine `dcomp-wayland-gpu-present`

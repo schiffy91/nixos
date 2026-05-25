@@ -11,4 +11,4 @@ coverage/
 .claude
 /result
 modules/apps/pkg-overrides/proton-custom/src/
-modules/apps/battlenet/.build/
+modules/apps/pkg-overrides/test/.build/

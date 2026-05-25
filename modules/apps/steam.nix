@@ -9,7 +9,7 @@ let
   rsSampleSize = config.settings.rocksmith.sampleSize;
   rsSampleRate = config.settings.rocksmith.sampleRate;
   protonName = "GE-Proton10-34";       # upstream binary (fallback / X11)
-  scwhineProtonName = "scwhine-GE-Proton10-34";  # patched Wayland+SNI build
+  protonCustomName = "proton-custom-GE-Proton10-34";  # patched Wayland+SNI build
   defaultLaunchPrefix = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1";
   appConfig = pkgs.writeText "steam-apps.json" (builtins.toJSON apps);
   configureSteamApps = pkgs.writers.writePython3Bin "configure-steam-apps" {
@@ -163,10 +163,10 @@ let
             write_text_vdf(path, cfg)
   '';
   # Per-app Steam config. Travels with the app — true wherever it's installed.
-  # Installed apps not listed here inherit scwhine + the default Steam Play env.
+  # Installed apps not listed here inherit proton-custom + the default Steam Play env.
   apps = {
     "221680" = {  # Rocksmith 2014 — ASIO + low-latency pipewire
-      compatTool = scwhineProtonName;
+      compatTool = protonCustomName;
       launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString rsSampleSize}/${toString rsSampleRate} %command%";
     };
     "3240220" = {  # GTA V Enhanced
@@ -189,7 +189,7 @@ in {
       _module.args.steam = {
         inherit configureSteamApps;
         proton.name = protonName;
-        proton.scwhineName = scwhineProtonName;
+        proton.customName = protonCustomName;
       };
     }
     (lib.mkIf config.programs.steam.enable {
@@ -198,7 +198,7 @@ in {
           runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"
           $runuser ${configureSteamApps}/bin/configure-steam-apps \
             --steam-path "${steamPath}" \
-            --default-tool "${scwhineProtonName}" \
+            --default-tool "${protonCustomName}" \
             --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
             --app-config ${appConfig}
         fi

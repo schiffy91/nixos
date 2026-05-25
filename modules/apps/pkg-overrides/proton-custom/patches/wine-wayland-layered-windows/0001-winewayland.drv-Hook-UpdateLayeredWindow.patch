@@ -3,13 +3,22 @@ From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:45 -0700
 Subject: [PATCH] winewayland.drv: Refresh layered window contents
 
-Wire the Wayland user driver pUpdateLayeredWindow entry point to the existing surface-content refresh path. This lets layered windows repaint through the Wayland driver instead of leaving UpdateLayeredWindow calls as no-ops.
+Wire the Wayland user driver pUpdateLayeredWindow entry point to the
+existing surface-content refresh path. This lets layered windows repaint
+through the Wayland driver instead of leaving UpdateLayeredWindow calls as
+no-ops.
 
-Also refresh unmanaged popup windows after SetLayeredWindowAttributes. The Wayland driver defers normal window surface creation for layered windows until the application sets those attributes, so leaving that callback as bookkeeping-only can expose newly created popups before their contents have reached the compositor. Managed top-levels are left alone here because they may host DComp content that is committed separately.
+Also refresh unmanaged popup windows after SetLayeredWindowAttributes. The
+Wayland driver defers normal window surface creation for layered windows until
+the application sets those attributes, so leaving that callback as
+bookkeeping-only can expose newly created popups before their contents have
+reached the compositor. Managed top-levels may host DComp content that is
+committed separately.
 
-Do not refresh on WM_WAYLAND_CONFIGURE in this patch; that path changes configure-time geometry behavior and stays disabled until it can be validated separately.
-
-UpdateLayeredWindow itself remains notification-only because win32u flushes the updated surface immediately after the driver callback. Flushing from the callback would send the old surface contents first and can flicker layered popups.
+UpdateLayeredWindow itself remains notification-only because win32u flushes
+the updated surface immediately after the driver callback. Flushing from the
+callback would send the old surface contents first and can flicker layered
+popups.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---

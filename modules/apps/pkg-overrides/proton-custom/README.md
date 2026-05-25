@@ -22,7 +22,7 @@ generic enough to be the one custom Proton build used by Steam games too.
 
 `default.nix` installs the package through `programs.steam.extraCompatPackages`
 and also keeps
-`~/.local/share/Steam/compatibilitytools.d/scwhine-GE-Proton10-34` as a symlink
+`~/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton10-34` as a symlink
 to the exact Nix store build, because the standalone `battlenet` wrapper uses
 that path as `PROTONPATH`.
 
@@ -40,35 +40,28 @@ the `git format-patch -s` commit order for that topic.
 | `dcomp-wayland-gpu-present` | `0001..0016` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
 | `win32u-load-driver-deadlock` | `0001` | Active. Bounds desktop-driver readiness waits. |
 | `win32u-shared-gpu-resource` | `0001` | Active. Opens D3DKMT shared GPU resources used by composition paths. |
-| `dxvk-battlenet-composition` | `0001..0007` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, a shared-resource-tier cap, resize tracking, preserved contents across partial updates, and avoids blocking the app on composition present waits. |
+| `dxvk-battlenet-composition` | `0001..0006` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, a shared-resource-tier cap, resize tracking, and preserved contents across partial updates. |
 
-The previous numbered prototype directories were removed. Useful lessons from
-them were folded into the topic folders above; keeping old failed attempts in
-tree made the review story worse.
-
-## Live Findings
+## Runtime Scope
 
 The current series starts Battle.net under native Wayland, keeps Chromium/CEF on
-the D3D11/DXGI/DComp path, and registers a Plasma StatusNotifierItem. The
-previous Qt startup crash was fixed by the Wayland roundtrip change.
+the D3D11/DXGI/DComp path, and registers a Plasma StatusNotifierItem.
 
-The main rendering failure was stale or missing composition swap-chain content:
-CEF relies heavily on partial updates, so rotating to an undefined back buffer
-showed up as black panes, hover remnants, video/banner flicker, and resize
-jitter. The active DXVK series now preserves the previous frame after rotation,
-paces composition presents with the compositor, and keeps the private
-composition child window sized to the swap-chain extent.
+DXVK preserves composition swap-chain contents across buffer rotation, paces
+composition presents with the compositor, and keeps private composition child
+windows sized to the swap-chain extent. Wine owns the DComp object model,
+Win32 lifetime, popup placement, and tray icon bridge.
 
 The installed `battlenet` wrapper has no CPU-compositing fallback or ANGLE
-backend override. App-specific diagnostics live in `modules/apps/battlenet`, not
-in the desktop launcher.
+backend override. App-specific diagnostics live in `modules/apps/pkg-overrides/test`,
+not in the desktop launcher.
 
 ## Promotion Build
 
 From this worktree:
 
 ```bash
-nix build --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; in builtins.elemAt flake.nixosConfigurations.FRACTAL-NORTH-Secure-Boot.config.programs.steam.extraCompatPackages 0' -o /tmp/bnet-scwhine-core-result
+nix build --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; in builtins.elemAt flake.nixosConfigurations.FRACTAL-NORTH-Secure-Boot.config.programs.steam.extraCompatPackages 0' -o /tmp/bnet-proton-custom-core-result
 ```
 
 This is a promotion gate for packaging correctness. It is not part of the
@@ -111,7 +104,7 @@ make status
 The dev copy lives at:
 
 ```text
-~/.local/share/Steam/compatibilitytools.d/scwhine-GE-Proton10-34-dev
+~/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton10-34-dev
 ```
 
 Once local Wine or DXVK build directories are configured, copy fresh artifacts
@@ -169,8 +162,8 @@ git -C "$PROTON_CUSTOM_WINE_SRC" commit -am 'dcomp: describe the tested fix'
 make wine-format-patch RANGE='-1 HEAD'
 ```
 
-Battle.net repro/debug loops live in `modules/apps/battlenet`, not here. Use
-that Makefile when exercising the launcher.
+Battle.net repro/debug loops live in `modules/apps/pkg-overrides/test`, not
+here. Use that Makefile when exercising the launcher.
 
 Return to the pinned Nix store compat tool with:
 
@@ -195,13 +188,11 @@ nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getF
 Expected Wayland result:
 
 - Battle.net launches without the Qt startup crash.
-- The CEF login or launcher content paints instead of remaining black.
+- The CEF login and launcher content paint through D3D11/DXGI/DComp.
 - The Battle.net command line does not include `--use-angle=desktop` or
   `--disable-gpu-compositing`.
 - DComp/DXGI logs show composition swap-chain creation, target binding, and
-  DXVK presenter creation. Cold login starts can show a black client area for
-  a few seconds before CEF's first painted frame; use a 45-second capture when
-  checking for persistent black-window regressions.
+  DXVK presenter creation.
 - A StatusNotifierItem appears in the session bus.
 - Tray Activate and ContextMenu D-Bus calls return promptly.
 
@@ -216,13 +207,12 @@ git format-patch -s
 Before promoting new material into the active series:
 
 - Keep patch content ASCII-only.
-- Keep project names such as `scwhine` out of upstream-bound patch content.
+- Keep project names such as `proton-custom` out of upstream-bound patch content.
 - Avoid copied private Wine struct layouts.
 - Use configure/pkg-config plumbing for new library dependencies.
 - Use `TRACE` for ordinary debug flow, `WARN` for unexpected recoverable states,
   and `ERR` only for real failures.
-- Do not add broad patch globs or numbered topic directories back to
-  `package.nix`.
+- Keep `package.nix` as an explicit series manifest.
 
 ## Next Design Work
 

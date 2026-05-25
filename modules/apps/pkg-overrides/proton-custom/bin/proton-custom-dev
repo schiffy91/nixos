@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 
-TOOL_NAME = "scwhine-GE-Proton10-34"
+TOOL_NAME = "proton-custom-GE-Proton10-34"
 DEV_TOOL_NAME = f"{TOOL_NAME}-dev"
 NIXOS = Path("/etc/nixos")
 PROTON_DIR = NIXOS / "modules/apps/pkg-overrides/proton-custom"
@@ -160,8 +160,8 @@ def write_dev_vdf() -> None:
         return
     text = vdf.read_text()
     text = text.replace(
-        '"display_name" "scwhine GE-Proton10-34 (Wayland SNI)"',
-        '"display_name" "scwhine DEV GE-Proton10-34 (Wayland SNI)"',
+        '"display_name" "proton-custom GE-Proton10-34 (Wayland SNI)"',
+        '"display_name" "proton-custom DEV GE-Proton10-34 (Wayland SNI)"',
     )
     vdf.write_text(text)
 

@@ -2,7 +2,7 @@
     system = "x86_64-linux";
     config.allowUnfree = true;
   }
-, battlenetRoot ? "/etc/nixos/modules/apps/battlenet"
+, battlenetRoot ? "/etc/nixos/modules/apps/pkg-overrides/test"
 , protonRoot ? "/etc/nixos/modules/apps/pkg-overrides/proton-custom"
 }:
 
@@ -40,8 +40,8 @@ pkgs.mkShell {
     fi
 
     cat <<EOF
-Battle.net dev shell
-  app:     ${battlenetRoot}
+Battle.net test shell
+  tests:   ${battlenetRoot}
   proton:  ${protonRoot}
   loop:    battlenet-make cycle BUILD_MODE=changed
 EOF

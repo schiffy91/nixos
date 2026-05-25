@@ -2,14 +2,14 @@
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-nixos_dir="$(cd "$app_dir/../../.." && pwd)"
+nixos_dir="$(cd "$app_dir/../../../.." && pwd)"
 proton_dir="$nixos_dir/modules/apps/pkg-overrides/proton-custom"
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
 prefix="${HOME}/Games/Battle.net/prefix"
 
 usage() {
   cat <<EOF
-usage: battlenet-debug [status|logs|sni|context-menu|window-info|probe-window|capture-window|frames-window|diagnose]
+usage: battlenet-debug [status|logs|sni|context-menu|window-info|cache-state|reset-browser-cache|probe-window|capture-window|frames-window|diagnose]
 
 Commands:
   status          print process, compat tool, desktop entry, and log locations
@@ -17,6 +17,9 @@ Commands:
   sni             print StatusNotifierItem metadata without screenshots
   context-menu    call Battle.net's SNI ContextMenu method without capturing the screen
   window-info     print Battle.net and Plasma window geometry without screenshots
+  cache-state     print Battle.net browser/GPU cache paths and sizes
+  reset-browser-cache
+                  move only browser/GPU caches to a timestamped backup
   probe-window    capture only Battle.net, print aggregate pixels, delete temp captures
   capture-window  capture only the Battle.net window; foreground fallback is opt-in
   frames-window   capture a short burst of only the active Battle.net window
@@ -185,15 +188,48 @@ window_info() {
   print_window_group "Plasma" 'plasmashell'
 }
 
-install_capture_helper() {
-  local desktop_dir desktop_file helper installed_helper system_desktop system_helper
+cache_roots() {
+  local appdata="$prefix/drive_c/users/steamuser/AppData/Local"
 
-  system_desktop="/run/current-system/sw/share/applications/battlenet-capture-window.desktop"
-  system_helper="/run/current-system/sw/libexec/battlenet-capture-window"
-  if [ -x "$system_helper" ] && [ -f "$system_desktop" ]; then
-    echo "$system_desktop"
-    return 0
-  fi
+  find "$appdata/Battle.net/BrowserCaches" "$appdata/CEF/User Data" \
+    -maxdepth 3 \( -type d \( -name GPUCache -o -name DawnCache -o -name 'Code Cache' \) \) \
+    -print 2>/dev/null || true
+  [ -d "$appdata/Battle.net/Cache" ] && printf '%s\n' "$appdata/Battle.net/Cache"
+  [ -f "$appdata/Battle.net/CachedData.db" ] && printf '%s\n' "$appdata/Battle.net/CachedData.db"
+}
+
+cache_state() {
+  local path
+
+  while IFS= read -r path; do
+    [ -e "$path" ] || continue
+    printf '%s\t' "$path"
+    du -sh "$path" 2>/dev/null | awk '{print $1}'
+  done < <(cache_roots)
+}
+
+reset_browser_cache() {
+  local backup path name
+
+  "$proton_dir/bin/proton-custom-dev" cleanup
+  backup="$prefix/drive_c/users/steamuser/AppData/Local/Battle.net/CacheBackups/$(date +%Y%m%dT%H%M%S)"
+  mkdir -p "$backup"
+
+  while IFS= read -r path; do
+    [ -e "$path" ] || continue
+    name="$(printf '%s' "$path" | sed "s#^$prefix/drive_c/users/steamuser/AppData/Local/##; s#[ /]#_#g")"
+    mv "$path" "$backup/$name"
+    echo "moved $path -> $backup/$name"
+  done < <(cache_roots)
+
+  echo "backup=$backup"
+}
+
+install_capture_helper() {
+  local desktop_dir desktop_file helper installed_helper
+
+  pkill -f '/etc/nixos/modules/apps/battlenet/.build/battlenet-capture-window' 2>/dev/null || true
+  pkill -f "$app_dir/.build/battlenet-capture-window" 2>/dev/null || true
 
   helper="$app_dir/.build/battlenet-capture-window"
   if [ ! -x "$helper" ] || [ "$app_dir/battlenet-capture-window.c" -nt "$helper" ]; then
@@ -202,19 +238,9 @@ install_capture_helper() {
       $(pkg-config --cflags --libs gio-2.0 gio-unix-2.0 glib-2.0)
   fi
 
-  desktop_dir="/usr/local/share/applications"
+  desktop_dir="$HOME/.local/share/applications"
   desktop_file="$desktop_dir/battlenet-capture-window.desktop"
-  installed_helper="/usr/local/libexec/battlenet-capture-window"
-
-  if ! sudo -n true >/dev/null 2>&1; then
-    cat >&2 <<EOF
-capture helper needs a privileged desktop file for KWin ScreenShot2.
-Install it through battlenet.nix + nixos update, or allow this target to run:
-  sudo install ... /usr/local/libexec/battlenet-capture-window
-  sudo install ... /usr/local/share/applications/battlenet-capture-window.desktop
-EOF
-    return 1
-  fi
+  installed_helper="$helper"
 
   tmp_desktop="$(mktemp)"
   cat > "$tmp_desktop" <<EOF
@@ -225,13 +251,11 @@ Icon=battlenet
 Type=Application
 NoDisplay=true
 StartupNotify=false
-X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
+X-KDE-DBUS-Restricted-Interfaces=org.kde.kwin.Screenshot,org.kde.KWin.ScreenShot2
 X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,zkde_screencast_unstable_v1
 EOF
-  sudo install -Dm755 "$helper" "$installed_helper"
-  sudo install -Dm644 "$tmp_desktop" "$desktop_file"
-  rm -f "$tmp_desktop" "$HOME/.local/share/applications/battlenet-window-capture.desktop" \
-    "$HOME/.local/share/applications/battlenet-capture-window.desktop"
+  install -Dm644 "$tmp_desktop" "$desktop_file"
+  rm -f "$tmp_desktop" "$HOME/.local/share/applications/battlenet-window-capture.desktop"
   kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
   echo "$desktop_file"
 }
@@ -245,6 +269,53 @@ capture_foreground_window() {
   local output="$1"
   "$proton_dir/bin/proton-custom-dev" focus >/dev/null
   spectacle -b -n -a -o "$output" >/dev/null
+  if [ ! -s "$output" ]; then
+    echo "capture-method=none reason=spectacle-active-empty-output output=$output" >&2
+    return 1
+  fi
+}
+
+raw_capture_size() {
+  local output="$1"
+  local bytes pixels geometry width height
+
+  bytes="$(stat -c '%s' "$output")"
+  [ "$bytes" -gt 0 ] || return 1
+  [ $((bytes % 4)) -eq 0 ] || return 1
+  pixels=$((bytes / 4))
+
+  geometry="$(kdotool search --class 'battle[.]net[.]exe' --limit 1 getwindowgeometry %1 2>/dev/null)"
+  read -r width height < <(
+    printf '%s\n' "$geometry" | awk -v pixels="$pixels" '
+      /Geometry:/ {
+        split($2, size, "x")
+        logical_w = size[1]
+        logical_h = size[2]
+      }
+      END {
+        if (!logical_w || !logical_h) exit 1
+        scale = sqrt(pixels / (logical_w * logical_h))
+        width = int(logical_w * scale + 0.5)
+        height = int(logical_h * scale + 0.5)
+        if (width * height != pixels) exit 1
+        print width, height
+      }
+    '
+  )
+  [ -n "${width:-}" ] && [ -n "${height:-}" ] || return 1
+  printf '%sx%s\n' "$width" "$height"
+}
+
+normalize_capture_image() {
+  local output="$1"
+  local size tmp
+
+  magick identify "$output" >/dev/null 2>&1 && return 0
+
+  size="$(raw_capture_size "$output")"
+  tmp="$(mktemp --tmpdir battlenet-window.XXXXXX.png)"
+  magick -size "$size" -depth 8 RGBA:"$output" "$tmp"
+  mv "$tmp" "$output"
 }
 
 capture_battlenet_window() {
@@ -262,6 +333,7 @@ capture_battlenet_window() {
   if [ "$fallback" = "foreground" ]; then
     echo "capture-method=spectacle-active fallback=foreground reason=foreground-requested handle=$handle" >&2
     capture_foreground_window "$output"
+    normalize_capture_image "$output"
     return 0
   fi
 
@@ -270,6 +342,7 @@ capture_battlenet_window() {
     if [ "$fallback" = "foreground" ]; then
       echo "capture-method=spectacle-active fallback=foreground reason=kwin-helper-unavailable handle=$handle error=$helper_error" >&2
       capture_foreground_window "$output"
+      normalize_capture_image "$output"
       return 0
     fi
     echo "capture-method=none reason=kwin-helper-unavailable handle=$handle error=$helper_error" >&2
@@ -298,6 +371,7 @@ capture_battlenet_window() {
     if [ "$fallback" = "foreground" ]; then
       echo "capture-method=spectacle-active fallback=foreground reason=kwin-window-timeout handle=$handle" >&2
       capture_foreground_window "$output"
+      normalize_capture_image "$output"
       return 0
     fi
     echo "capture-method=none reason=kwin-window-timeout handle=$handle" >&2
@@ -307,6 +381,7 @@ capture_battlenet_window() {
   payload="$(cat "$status")"
   ok="$(sed -n 's/^ok=//p' "$status" | head -n1)"
   if [ "$ok" = "1" ] && [ -s "$output" ]; then
+    normalize_capture_image "$output"
     echo "capture-method=kwin-window handle=$handle"
     return 0
   fi
@@ -316,6 +391,7 @@ capture_battlenet_window() {
   if [ "$fallback" = "foreground" ]; then
     echo "capture-method=spectacle-active fallback=foreground reason=kwin-window-unavailable handle=$handle error=$error" >&2
     capture_foreground_window "$output"
+    normalize_capture_image "$output"
     return 0
   fi
 
@@ -382,6 +458,8 @@ case "$command" in
   sni) sni ;;
   context-menu) context_menu "$@" ;;
   window-info) window_info "$@" ;;
+  cache-state) cache_state ;;
+  reset-browser-cache) reset_browser_cache ;;
   install-capture-helper) install_capture_helper ;;
   probe-window) probe_window "$@" ;;
   capture-window) capture_window "$@" ;;

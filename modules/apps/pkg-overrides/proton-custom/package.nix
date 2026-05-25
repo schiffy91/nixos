@@ -1,4 +1,4 @@
-# scwhine-proton - GE-Proton10-34 with winewayland.drv cleanup patches.
+# proton-custom - GE-Proton10-34 with winewayland.drv cleanup patches.
 #
 # Builds the exact Wine and DXVK revisions GE-Proton10-34 uses, then layers
 # our active patch series on top. Replaces the changed binaries touched by the
@@ -32,7 +32,7 @@
 
 let
   toolVersion = "GE-Proton10-34";
-  toolName    = "scwhine-${toolVersion}";
+  toolName    = "proton-custom-${toolVersion}";
 
   # The exact Valve wine commit GE-Proton10-34 uses (from proton-ge-custom
   # git submodule `wine` at tag GE-Proton10-34).
@@ -98,13 +98,13 @@ let
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
-      echo "scwhine: applying ${patchFile}"
+      echo "proton-custom: applying ${patchFile}"
       patch -p1 < ${patchFile}
   '') activePatchSeries;
 
   # -- Source: Valve wine + GE wayland patches + active cleanup series -------
-  wine-scwhine-src = stdenv.mkDerivation {
-    pname = "wine-scwhine-src";
+  wine-proton-custom-src = stdenv.mkDerivation {
+    pname = "wine-proton-custom-src";
     version = toolVersion;
 
     src = fetchgit {
@@ -145,10 +145,10 @@ let
   };
 
   # -- Build: configure wine and build only artifacts touched by active patches
-  wine-scwhine = stdenv_32bit.mkDerivation {
-    pname = "wine-scwhine";
+  wine-proton-custom = stdenv_32bit.mkDerivation {
+    pname = "wine-proton-custom";
     version = toolVersion;
-    src = wine-scwhine-src;
+    src = wine-proton-custom-src;
 
     nativeBuildInputs = with pkgs; [
       autoconf automake bison flex perl python3 pkg-config
@@ -314,8 +314,8 @@ let
     meta.platforms = [ "x86_64-linux" ];
   };
 
-  dxvk-scwhine-src = stdenv.mkDerivation {
-    pname = "dxvk-scwhine-src";
+  dxvk-proton-custom-src = stdenv.mkDerivation {
+    pname = "dxvk-proton-custom-src";
     version = dxvkVersion;
 
     src = fetchgit {
@@ -337,10 +337,10 @@ let
     '';
   };
 
-  dxvk-scwhine = stdenv.mkDerivation {
-    pname = "dxvk-scwhine";
+  dxvk-proton-custom = stdenv.mkDerivation {
+    pname = "dxvk-proton-custom";
     version = dxvkVersion;
-    src = dxvk-scwhine-src;
+    src = dxvk-proton-custom-src;
 
     nativeBuildInputs = with pkgs; [
       glslang
@@ -432,15 +432,15 @@ in stdenv.mkDerivation {
     # Overlay our patched binaries on top of the GE-Proton tarball.
     copy_patched() {
       local rel="$1"
-      if [ ! -e "${wine-scwhine}/lib/wine/$rel" ]; then
-        echo "missing patched artifact from wine-scwhine: $rel" >&2
+      if [ ! -e "${wine-proton-custom}/lib/wine/$rel" ]; then
+        echo "missing patched artifact from wine-proton-custom: $rel" >&2
         return 1
       fi
       if [ ! -e "$out/files/lib/wine/$rel" ]; then
         echo "GE-Proton tarball does not contain expected artifact: $rel" >&2
         return 1
       fi
-      cp "${wine-scwhine}/lib/wine/$rel" "$out/files/lib/wine/$rel"
+      cp "${wine-proton-custom}/lib/wine/$rel" "$out/files/lib/wine/$rel"
     }
 
     copy_patched x86_64-unix/winewayland.so
@@ -466,15 +466,15 @@ in stdenv.mkDerivation {
     copy_patched x86_64-windows/explorer.exe
     copy_patched i386-windows/explorer.exe
 
-    cp "${wine-scwhine}/lib/wine/x86_64-windows/explorer.exe" \
+    cp "${wine-proton-custom}/lib/wine/x86_64-windows/explorer.exe" \
       "$out/files/share/default_pfx/drive_c/windows/explorer.exe"
-    cp "${wine-scwhine}/lib/wine/x86_64-windows/explorer.exe" \
+    cp "${wine-proton-custom}/lib/wine/x86_64-windows/explorer.exe" \
       "$out/files/share/default_pfx/drive_c/windows/system32/explorer.exe"
-    cp "${wine-scwhine}/lib/wine/i386-windows/explorer.exe" \
+    cp "${wine-proton-custom}/lib/wine/i386-windows/explorer.exe" \
       "$out/files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"
-    cp "${wine-scwhine}/lib/wine/x86_64-windows/ntdll.dll" \
+    cp "${wine-proton-custom}/lib/wine/x86_64-windows/ntdll.dll" \
       "$out/files/share/default_pfx/drive_c/windows/system32/ntdll.dll"
-    cp "${wine-scwhine}/lib/wine/i386-windows/ntdll.dll" \
+    cp "${wine-proton-custom}/lib/wine/i386-windows/ntdll.dll" \
       "$out/files/share/default_pfx/drive_c/windows/syswow64/ntdll.dll"
     copy_dxvk() {
       local src="$1"
@@ -490,11 +490,11 @@ in stdenv.mkDerivation {
       cp "$src" "$out/files/lib/wine/dxvk/$rel"
     }
 
-    copy_dxvk "${dxvk-scwhine}/x64/dxgi.dll" x86_64-windows/dxgi.dll
-    copy_dxvk "${dxvk-scwhine}/x32/dxgi.dll" i386-windows/dxgi.dll
-    copy_dxvk "${dxvk-scwhine}/x64/d3d11.dll" x86_64-windows/d3d11.dll
-    copy_dxvk "${dxvk-scwhine}/x32/d3d11.dll" i386-windows/d3d11.dll
-    cp "${dxvk-scwhine}/version" "$out/files/lib/wine/dxvk/version"
+    copy_dxvk "${dxvk-proton-custom}/x64/dxgi.dll" x86_64-windows/dxgi.dll
+    copy_dxvk "${dxvk-proton-custom}/x32/dxgi.dll" i386-windows/dxgi.dll
+    copy_dxvk "${dxvk-proton-custom}/x64/d3d11.dll" x86_64-windows/d3d11.dll
+    copy_dxvk "${dxvk-proton-custom}/x32/d3d11.dll" i386-windows/d3d11.dll
+    cp "${dxvk-proton-custom}/version" "$out/files/lib/wine/dxvk/version"
 
     # WineASIO is not part of GE-Proton. Nixpkgs currently packages WineASIO
     # 1.3.0 for 64-bit Wine; Rocksmith still needs the 32-bit driver, so keep
@@ -517,7 +517,7 @@ in stdenv.mkDerivation {
     "${toolName}"
     {
       "install_path" "."
-      "display_name" "scwhine GE-Proton10-34 (Wayland SNI)"
+      "display_name" "proton-custom GE-Proton10-34 (Wayland SNI)"
       "from_oslist"  "windows"
       "to_oslist"    "linux"
     }
@@ -535,9 +535,9 @@ EOF
   };
 
   passthru = {
-    wineSource = wine-scwhine-src;
-    wineArtifacts = wine-scwhine;
-    dxvkSource = dxvk-scwhine-src;
-    dxvkArtifacts = dxvk-scwhine;
+    wineSource = wine-proton-custom-src;
+    wineArtifacts = wine-proton-custom;
+    dxvkSource = dxvk-proton-custom-src;
+    dxvkArtifacts = dxvk-proton-custom;
   };
 }

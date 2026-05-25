@@ -100,6 +100,23 @@ static gboolean write_all(int fd, const char *path, char **error)
     return TRUE;
 }
 
+struct read_task
+{
+    int fd;
+    const char *path;
+    gboolean ok;
+    char *error;
+};
+
+static gpointer read_capture(gpointer data)
+{
+    struct read_task *task = data;
+
+    task->ok = write_all(task->fd, task->path, &task->error);
+    close(task->fd);
+    return NULL;
+}
+
 int main(void)
 {
     g_autofree char *dir = capture_dir();
@@ -112,6 +129,8 @@ int main(void)
     GDBusConnection *connection;
     GUnixFDList *fd_list;
     GVariantBuilder options;
+    struct read_task task = {0};
+    GThread *reader;
     int pipe_fds[2] = {-1, -1};
     int fd_index;
 
@@ -138,9 +157,12 @@ int main(void)
 
     fd_list = g_unix_fd_list_new();
     fd_index = g_unix_fd_list_append(fd_list, pipe_fds[1], &error);
+    close(pipe_fds[1]);
+    pipe_fds[1] = -1;
     if (fd_index < 0)
     {
         write_status(status_path, FALSE, error ? error->message : "could not append screenshot fd");
+        close(pipe_fds[0]);
         g_object_unref(fd_list);
         g_object_unref(connection);
         return 1;
@@ -150,6 +172,10 @@ int main(void)
     g_variant_builder_add(&options, "{sv}", "include-cursor", g_variant_new_boolean(FALSE));
     g_variant_builder_add(&options, "{sv}", "include-decoration", g_variant_new_boolean(FALSE));
     g_variant_builder_add(&options, "{sv}", "native-resolution", g_variant_new_boolean(TRUE));
+
+    task.fd = pipe_fds[0];
+    task.path = output;
+    reader = g_thread_new("capture-reader", read_capture, &task);
 
     g_dbus_connection_call_with_unix_fd_list_sync(connection,
                                                   "org.kde.KWin",
@@ -164,30 +190,28 @@ int main(void)
                                                   NULL,
                                                   NULL,
                                                   &error);
-    close(pipe_fds[1]);
-    pipe_fds[1] = -1;
+    g_object_unref(fd_list);
 
     if (error)
     {
         write_status(status_path, FALSE, error->message);
         close(pipe_fds[0]);
-        g_object_unref(fd_list);
+        g_thread_join(reader);
         g_object_unref(connection);
         return 1;
     }
 
-    if (!write_all(pipe_fds[0], output, &error_message))
+    g_thread_join(reader);
+    if (!task.ok)
     {
-        write_status(status_path, FALSE, error_message);
-        close(pipe_fds[0]);
-        g_object_unref(fd_list);
+        write_status(status_path, FALSE, task.error);
+        g_free(task.error);
         g_object_unref(connection);
         return 1;
     }
+    g_free(task.error);
 
-    close(pipe_fds[0]);
     write_status(status_path, TRUE, "kwin-window");
-    g_object_unref(fd_list);
     g_object_unref(connection);
     return 0;
 }

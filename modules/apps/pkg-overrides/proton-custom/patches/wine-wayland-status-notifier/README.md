@@ -31,8 +31,7 @@ hand off to a long-lived UI process. Publishing directly from the
 exits. Explorer already owns Wine's tray lifetime, so the Wayland bridge
 publishes from there.
 
-The active series now replaces the local private copy of explorer's
-`struct icon` with a small driver-facing snapshot passed through
+The active series passes a small driver-facing icon snapshot through
 `pSystrayDockInsert`. The snapshot carries only the HICON, owner/window HWNDs,
 callback message, notification version, id, and tooltip text.
 
@@ -41,8 +40,8 @@ Explorer also forwards a fresh snapshot for visible docked icons on
 stale tooltip/title/icon and Battle.net can keep the wrong notify-icon callback
 version after its launcher hands off to the long-lived UI process.
 
-## Affected upstream
-Current local patches:
+## Affected Upstream
+Current patches:
 `dlls/winewayland.drv/{Makefile.in,waylanddrv.h,wayland_systray.c,waylanddrv_main.c,window.c}`,
 `programs/explorer/systray.c`, `include/ntuser.h`, `include/wine/gdi_driver.h`,
 `dlls/win32u/driver.c`, and the X11 driver hook signature.

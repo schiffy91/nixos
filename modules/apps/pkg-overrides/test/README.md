@@ -1,7 +1,8 @@
-# Battle.net Dev Loop
+# Battle.net Test Loop
 
-This directory owns Battle.net application workflows. The Proton compat-tool
-source and packaging live in `modules/apps/pkg-overrides/proton-custom`.
+This directory owns Battle.net test and repro workflows. The application module
+lives in `modules/apps/battlenet.nix`; the Proton compat-tool source and
+packaging live in `modules/apps/pkg-overrides/proton-custom`.
 
 The KDE desktop entry and every script here launch the same command:
 
@@ -23,7 +24,7 @@ repeatable:
 The cycle:
 
 1. Builds only changed `proton-custom` Wine/DXVK targets.
-2. Points Steam's `scwhine-GE-Proton10-34` compat-tool symlink at the writable
+2. Points Steam's `proton-custom-GE-Proton10-34` compat-tool symlink at the writable
    dev copy.
 3. Configures the Battle.net prefix for that compat tool.
 4. Runs `battlenet`.
@@ -51,7 +52,7 @@ captures when visual timing bugs require it.
 
 Expected runtime signals:
 
-- Wrapper log says `scwhine DEV GE-Proton10-34 (Wayland SNI)` in dev mode.
+- Wrapper log says `proton-custom DEV GE-Proton10-34 (Wayland SNI)` in dev mode.
 - Proton log options include `wayland` and `hdr`.
 - Battle.net command line does not include `--use-angle=desktop` or
   `--disable-gpu-compositing`.

@@ -3,7 +3,7 @@
 import json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib import Config, Shell, Utils
+from lib import Config, Shell, Snapshot, Utils
 
 sh = Shell(root_required=True)
 
@@ -38,14 +38,14 @@ def status():
 def disable_secure_boot():
     remove_old_efi_entries()
     Config.set_target(Config.get_standard_flake_target())
-    Config.update(rebuild_file_system=True, delete_cache=True)
+    Config.update(rebuild_file_system=True, delete_cache=True, snapshot=Snapshot)
 
 def enable_secure_boot(microsoft=False):
     remove_old_efi_entries()
     create_keys()
     enroll_keys(microsoft=microsoft)
     Config.set_target(Config.get_secure_boot_flake_target())
-    Config.update(rebuild_file_system=True, delete_cache=True)
+    Config.update(rebuild_file_system=True, delete_cache=True, snapshot=Snapshot)
     verify()
 
 def main(argv=None):

@@ -3,7 +3,7 @@
 import getpass, os, pty, pwd, select, shlex, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib import Config, Shell, Utils
+from lib import Config, Shell, Snapshot, Utils
 
 sh = Shell(root_required=True)
 
@@ -91,7 +91,7 @@ def main(argv=None):
         sync_hashed_password_file(new_password)
         Utils.log("Rebuilding system to lock in the new account password...")
         Config.update(rebuild_file_system=False, reboot=False,
-                      delete_cache=False, upgrade=False)
+                      delete_cache=False, upgrade=False, snapshot=Snapshot)
     Utils.log("Password change complete!")
 
 if __name__ == "__main__":

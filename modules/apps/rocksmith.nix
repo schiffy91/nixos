@@ -59,10 +59,10 @@ let
   steamPath = "${home}/.local/share/Steam";
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
-  protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.scwhineName}/files";
+  protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.customName}/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
 in {
-  system.activationScripts.rocksmith = lib.stringAfter [ "users" "scwhineProtonCompatTool" ] ''
+  system.activationScripts.rocksmith = lib.stringAfter [ "users" "protonCustomCompatTool" ] ''
     export PATH="${pkgs.coreutils}/bin:${pkgs.gnused}/bin:${pkgs.gnugrep}/bin:${pkgs.util-linux}/bin:$PATH"
     if [ -d "${gamePath}" ]; then
       cp -f ${mods}/RS_ASIO.dll "${gamePath}/"

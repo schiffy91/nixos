@@ -3,7 +3,7 @@ let
   user = config.settings.user.admin.username;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
-  proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.scwhineName}";
+  proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.customName}";
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   legacyDxvkConfig = "${prefix}/drive_c/Program Files (x86)/Battle.net/dxvk.conf";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
@@ -143,7 +143,7 @@ let
   captureHelper = pkgs.stdenv.mkDerivation {
     pname = "battlenet-capture-window";
     version = "1";
-    src = ./battlenet/battlenet-capture-window.c;
+    src = ./pkg-overrides/test/battlenet-capture-window.c;
     dontUnpack = true;
     nativeBuildInputs = [ pkgs.pkg-config ];
     buildInputs = [ pkgs.glib ];
@@ -165,7 +165,7 @@ let
       Icon=battlenet
       NoDisplay=true
       StartupNotify=false
-      X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
+      X-KDE-DBUS-Restricted-Interfaces=org.kde.kwin.Screenshot,org.kde.KWin.ScreenShot2
       X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,zkde_screencast_unstable_v1
       EOF
       runHook postInstall

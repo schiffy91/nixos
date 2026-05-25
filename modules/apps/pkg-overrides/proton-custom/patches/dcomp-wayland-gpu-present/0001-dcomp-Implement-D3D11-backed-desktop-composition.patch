@@ -400,7 +400,7 @@ index d0eb920..7ac70ed 100644
 +    if (SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
 +    {
 +        c = impl_from_IDCompositionVisual2(v2);
-+        /* QI AddRef'd; don't release - parent retains via children list. */
++        /* QueryInterface added a reference; the parent retains it through the children list. */
 +    }
 +    if (!c) return S_OK;
 +    if (ref_visual &&
@@ -1017,4 +1017,3 @@ index d0eb920..7ac70ed 100644
 +}
 -- 
 2.53.0
-

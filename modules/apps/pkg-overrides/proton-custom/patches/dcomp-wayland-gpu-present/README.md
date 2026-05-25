@@ -1,10 +1,10 @@
 # DComp/DXGI accelerated Wayland presentation
 
 ## Status
-Active local series. This folder keeps the Wine half of the
-DirectComposition work small: implement the DComp objects Battle.net
-uses, then bind composition swap chains and GPU-backed DComp surfaces to
-their target HWND. DXVK owns the actual Wayland WSI presentation path.
+Active Wine series. This folder keeps the Wine half of the DirectComposition
+work small: implement the DComp objects Battle.net uses, then bind composition
+swap chains and GPU-backed DComp surfaces to their target HWND. DXVK owns the
+actual Wayland WSI presentation path.
 
 ## Organization
 The series is split by upstream ownership:
@@ -35,13 +35,10 @@ but no valid host exists, the content is left unbound instead of being
 presented on the root HWND with incorrect geometry.
 
 ## Review Notes
-The earlier dma-buf/subsurface prototype was removed from the active
-series because it copied between DXVK-owned images and compositor-owned
-images outside DXVK's normal presenter. The current design is simpler:
 Wine's `dcomp.dll` records the visual tree and asks DXVK to retarget each
 composition swap chain to the real DComp target HWND or to a child host HWND
-when placement, clipping, or surface content requires one. That keeps Win32
-COM behavior in Wine and native presentation in DXVK's existing WSI code.
+when placement, clipping, or surface content requires one. That keeps Win32 COM
+behavior in Wine and native presentation in DXVK's existing WSI code.
 
 ## Test Focus
 * Patch application against Valve Wine `1729f00` plus GE-Proton10-34

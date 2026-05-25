@@ -3,30 +3,32 @@ From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:39 -0700
 Subject: [PATCH] winewayland.drv: Avoid second init roundtrip
 
-The registry setup path performs two roundtrips. Keep the first one to collect globals, but avoid blocking on the second pass that only drains initial events from objects bound by the registry listener.
+The registry setup path performs two roundtrips. Keep the first one to collect
+globals, but avoid blocking on the second pass that only drains initial events
+from objects bound by the registry listener.
 
-CEF subprocess startup can otherwise wedge when the parent process is blocked in the driver init path while the child is waiting on parent IPC. Drain any already queued events and flush the display instead.
+Subprocess startup can otherwise wedge when the parent process is blocked in
+the driver init path while the child is waiting on parent IPC. Drain any
+already queued events and flush the display instead.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/wayland.c | 10 +++++++---
- 1 file changed, 7 insertions(+), 3 deletions(-)
+ dlls/winewayland.drv/wayland.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
 index 7571363..c713110 100644
 --- a/dlls/winewayland.drv/wayland.c
 +++ b/dlls/winewayland.drv/wayland.c
-@@ -372,10 +372,14 @@ BOOL wayland_process_init(void)
+@@ -372,10 +372,12 @@ BOOL wayland_process_init(void)
      /* Populate registry */
      wl_registry_add_listener(process_wayland.wl_registry, &registry_listener, NULL);
  
 -    /* We need two roundtrips. One to get and bind globals, one to handle all
 -     * initial events produced from registering the globals. */
 -    wl_display_roundtrip_queue(process_wayland.wl_display, process_wayland.wl_event_queue);
-+    /* First roundtrip: bind globals. Second replaced with non-blocking dispatch
-+     * to prevent CEF renderer/GPU subprocess IPC deadlock: subprocesses call
-+     * wayland_process_init while the browser waits for their IPC reply, so a
-+     * second blocking roundtrip causes a multi-process deadlock. */
++    /* The first roundtrip binds globals. Drain the initial events for those
++     * globals without adding another blocking roundtrip. */
      wl_display_roundtrip_queue(process_wayland.wl_display, process_wayland.wl_event_queue);
 +    wl_display_flush(process_wayland.wl_display);
 +    wl_display_dispatch_queue_pending(process_wayland.wl_display,
@@ -36,4 +38,3 @@ index 7571363..c713110 100644
      init_overlay_event();
 -- 
 2.53.0
-

@@ -70,7 +70,7 @@ class Config:
         cls.secure_secrets()
     @classmethod
     def update(cls, rebuild_file_system=False, reboot=False,
-               delete_cache=False, upgrade=False):
+               delete_cache=False, upgrade=False, snapshot=None):
         username = cls.eval("config.settings.user.admin.username")
         if delete_cache:
             cls.sh.run("nix-collect-garbage -d", capture_output=False)
@@ -96,10 +96,18 @@ class Config:
                    f"--flake {nixos_path}#{host}-{target}",
                    capture_output=False)
         cls.secure(username)
+        cls.refresh_immutable_snapshots(snapshot)
         hm_log = cls.get_home_manager_logs()
         if hm_log: print(hm_log)
         if reboot: Utils.reboot()
         else: Interactive.ask_to_reboot()
+    @classmethod
+    def refresh_immutable_snapshots(cls, snapshot):
+        if not snapshot: return
+        if not cls.eval("config.settings.disk.immutability.enable"): return
+        if not cls.eval("config.settings.disk.immutability.enforce.onUpdate"): return
+        Utils.log("Refreshing immutable CLEAN snapshots after update")
+        snapshot.create_initial_snapshots()
     @classmethod
     def get_home_manager_logs(cls):
         result = cls.sh.run(

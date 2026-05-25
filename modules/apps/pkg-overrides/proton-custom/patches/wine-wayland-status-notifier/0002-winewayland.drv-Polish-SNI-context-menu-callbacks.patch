@@ -10,8 +10,8 @@ applications still call GetCursorPos() while building their tray menu.
 
 Keep most callback delivery asynchronous, matching Wine's existing native tray
 backends. Applications that open a context menu from their notify-icon callback
-still need WM_CONTEXTMENU to complete before the follow-up WM_NULL workaround is
-queued, otherwise the menu can lose foreground ordering while it is being
+still need WM_CONTEXTMENU to complete before the follow-up foreground handoff
+is queued, otherwise the menu can lose foreground ordering while it is being
 created.
 
 Also send and flush the D-Bus method reply before queueing the Win32

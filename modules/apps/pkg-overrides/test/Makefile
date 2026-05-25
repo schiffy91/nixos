@@ -5,7 +5,7 @@ MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 NIXOS ?= /etc/nixos
-BATTLENET_DIR ?= $(NIXOS)/modules/apps/battlenet
+BATTLENET_DIR ?= $(NIXOS)/modules/apps/pkg-overrides/test
 PROTON_DIR ?= $(NIXOS)/modules/apps/pkg-overrides/proton-custom
 
 BUILD_MODE ?= changed
@@ -17,6 +17,8 @@ FRAME_INTERVAL ?= 1
 CAPTURE_FALLBACK ?= foreground
 ARTIFACT_DIR ?=
 STOP_ON_WHITE ?= 0
+TRACE ?= quiet
+RESET_CACHE ?= 0
 COUNT ?= 24
 INTERVAL ?= 0.12
 OUTPUT ?= /tmp/battlenet-window.png
@@ -36,12 +38,12 @@ endif
 
 .PHONY: \
 	help shell build install configure run cycle cycle-no-run \
-	check build-capture-helper status logs diagnose sni context-menu window-info install-capture-helper probe-window reproduce capture-window frames-window \
+	check build-capture-helper status logs diagnose sni context-menu window-info cache-state reset-browser-cache install-capture-helper probe-window reproduce capture-window frames-window \
 	focus cleanup proton-status proton-restore
 
 help:
 	@printf '%s\n' \
-		'Battle.net development and repro loop' \
+		'Battle.net test and repro loop' \
 		'' \
 		'Primary loop:' \
 		'  make cycle BUILD_MODE=changed      build proton-custom, install dev tool, configure, run, diagnose' \
@@ -63,6 +65,8 @@ help:
 		'  make sni                          print StatusNotifierItem metadata' \
 		'  make context-menu                 call the tray ContextMenu method without capture' \
 		'  make window-info                  print Battle.net and Plasma window geometry' \
+		'  make cache-state                  print Battle.net browser/GPU cache state' \
+		'  make reset-browser-cache          move browser/GPU caches to a timestamped backup' \
 		'  make install-capture-helper       install local KWin screenshot-authorized helper' \
 		'  make probe-window                 classify Battle.net window pixels, delete temp capture' \
 		'  make reproduce                    repeat KDE desktop-entry launch + screenshot artifacts' \
@@ -79,6 +83,8 @@ help:
 		'  CAPTURE_FALLBACK=$(CAPTURE_FALLBACK)' \
 		'  ARTIFACT_DIR=$(ARTIFACT_DIR)' \
 		'  STOP_ON_WHITE=$(STOP_ON_WHITE)' \
+		'  TRACE=$(TRACE)' \
+		'  RESET_CACHE=$(RESET_CACHE)' \
 		'  OUTPUT=$(OUTPUT)' \
 		'  OUTPUT_DIR=$(OUTPUT_DIR)' \
 		'  MENU_X=$(MENU_X)' \
@@ -135,6 +141,12 @@ context-menu:
 window-info:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug window-info)
 
+cache-state:
+	$(BATTLENET_DIR)/bin/battlenet-debug cache-state
+
+reset-browser-cache:
+	$(BATTLENET_DIR)/bin/battlenet-debug reset-browser-cache
+
 install-capture-helper:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug install-capture-helper)
 
@@ -142,7 +154,7 @@ probe-window:
 	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" $(BATTLENET_DIR)/bin/battlenet-debug probe-window)
 
 reproduce:
-	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-reproduce --repeat "$(REPEAT)" --delay "$(DELAY)" --log-lines "$(LOG_LINES)" --frames "$(FRAMES)" --frame-interval "$(FRAME_INTERVAL)" --capture-fallback "$(CAPTURE_FALLBACK)" --artifact-dir "$(ARTIFACT_DIR)" --stop-on-white "$(STOP_ON_WHITE)")
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-reproduce --repeat "$(REPEAT)" --delay "$(DELAY)" --log-lines "$(LOG_LINES)" --frames "$(FRAMES)" --frame-interval "$(FRAME_INTERVAL)" --capture-fallback "$(CAPTURE_FALLBACK)" --artifact-dir "$(ARTIFACT_DIR)" --stop-on-white "$(STOP_ON_WHITE)" --trace "$(TRACE)" --reset-cache "$(RESET_CACHE)")
 
 capture-window:
 	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" $(BATTLENET_DIR)/bin/battlenet-debug capture-window "$(OUTPUT)")

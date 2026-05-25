@@ -2,7 +2,7 @@
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-proton_dir="$(cd "$app_dir/../pkg-overrides/proton-custom" && pwd)"
+proton_dir="$(cd "$app_dir/../proton-custom" && pwd)"
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
 desktop_entry="/run/current-system/sw/share/applications/battlenet.desktop"
 
@@ -14,6 +14,8 @@ frame_interval=1
 artifact_dir=""
 capture_fallback="foreground"
 stop_on_white=0
+trace="quiet"
+reset_cache=0
 
 usage() {
   cat <<EOF
@@ -35,6 +37,8 @@ Environment:
   --artifact-dir PATH
   --capture-fallback none|foreground
   --stop-on-white 0|1
+  --trace quiet|modules|composition
+  --reset-cache 0|1
 EOF
 }
 
@@ -76,6 +80,14 @@ while [ "$#" -gt 0 ]; do
       stop_on_white="$2"
       shift 2
       ;;
+    --trace)
+      trace="$2"
+      shift 2
+      ;;
+    --reset-cache)
+      reset_cache="$2"
+      shift 2
+      ;;
     *)
       usage >&2
       exit 2
@@ -90,6 +102,14 @@ fi
 mkdir -p "$artifact_dir"
 echo "artifact-dir=$artifact_dir"
 
+case "$trace" in
+  quiet|modules|composition) ;;
+  *)
+    echo "invalid trace mode: $trace" >&2
+    exit 2
+    ;;
+esac
+
 run_once() {
   local index="$1"
   local run_dir="$artifact_dir/run-$index"
@@ -99,9 +119,36 @@ run_once() {
   mkdir -p "$run_dir"
 
   "$proton_dir/bin/proton-custom-dev" cleanup
+  if [ "$reset_cache" = 1 ]; then
+    "$app_dir/bin/battlenet-debug" reset-browser-cache >"$run_dir/cache-reset.txt" 2>&1 || true
+  fi
   mkdir -p "$runtime_dir"
   rm -f "$runtime_dir"/battlenet-wrapper.log "$runtime_dir"/steam-battlenet.log
   "$app_dir/bin/battlenet-debug" install-capture-helper >"$run_dir/capture-helper.txt" 2>&1 || true
+
+  case "$trace" in
+    quiet)
+      unset WINEDEBUG DXVK_LOG_LEVEL DXVK_LOG_PATH DXVK_TRACE_COMPOSITION_SWAPCHAINS
+      ;;
+    modules)
+      export WINEDEBUG="+timestamp,+pid,+tid,+loaddll,+module"
+      export DXVK_LOG_LEVEL="info"
+      export DXVK_LOG_PATH="$run_dir/dxvk"
+      ;;
+    composition)
+      export WINEDEBUG="+timestamp,+pid,+tid,+dcomp,+loaddll,+module"
+      export DXVK_LOG_LEVEL="debug"
+      export DXVK_LOG_PATH="$run_dir/dxvk"
+      export DXVK_TRACE_COMPOSITION_SWAPCHAINS=1
+      ;;
+  esac
+  {
+    echo "trace=$trace"
+    echo "WINEDEBUG=${WINEDEBUG:-}"
+    echo "DXVK_LOG_LEVEL=${DXVK_LOG_LEVEL:-}"
+    echo "DXVK_LOG_PATH=${DXVK_LOG_PATH:-}"
+    echo "DXVK_TRACE_COMPOSITION_SWAPCHAINS=${DXVK_TRACE_COMPOSITION_SWAPCHAINS:-}"
+  } > "$run_dir/trace-env.txt"
 
   if [ -e "$desktop_entry" ]; then
     kioclient exec "$desktop_entry" >"$run_dir/kioclient.log" 2>&1 &
@@ -113,6 +160,8 @@ run_once() {
   "$app_dir/bin/battlenet-debug" status >"$run_dir/status.txt" 2>&1 || true
   "$app_dir/bin/battlenet-debug" sni >"$run_dir/sni.txt" 2>&1 || true
   "$app_dir/bin/battlenet-debug" logs "$log_lines" >"$run_dir/logs.txt" 2>&1 || true
+  cp -f "$runtime_dir/battlenet-wrapper.log" "$run_dir/battlenet-wrapper.log" 2>/dev/null || true
+  cp -f "$runtime_dir/steam-battlenet.log" "$run_dir/steam-battlenet.log" 2>/dev/null || true
 
   for frame in $(seq 1 "$frames"); do
     BATTLENET_CAPTURE_FALLBACK="$capture_fallback" \
@@ -123,6 +172,8 @@ run_once() {
       "$app_dir/bin/battlenet-debug" status >"$run_dir/status-after-white.txt" 2>&1 || true
       "$app_dir/bin/battlenet-debug" sni >"$run_dir/sni-after-white.txt" 2>&1 || true
       "$app_dir/bin/battlenet-debug" logs "$log_lines" >"$run_dir/logs-after-white.txt" 2>&1 || true
+      cp -f "$runtime_dir/battlenet-wrapper.log" "$run_dir/battlenet-wrapper-after-white.log" 2>/dev/null || true
+      cp -f "$runtime_dir/steam-battlenet.log" "$run_dir/steam-battlenet-after-white.log" 2>/dev/null || true
       echo "white-frame=$run_dir/window-$frame.png"
       if [ "$stop_on_white" = 1 ]; then
         echo "stopping on white frame; Battle.net left running for inspection"
