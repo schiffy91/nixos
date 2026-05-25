@@ -106,6 +106,7 @@ let
         fi
         exec env \
           WINEPREFIX="${prefix}" \
+          TMPDIR=/tmp \
           GAMEID=umu-battlenet \
           PROTONPATH="${proton}" \
           PROTON_LOG=1 \

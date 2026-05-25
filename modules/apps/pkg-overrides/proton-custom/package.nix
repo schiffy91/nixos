@@ -93,7 +93,6 @@ let
     ./patches/dxvk-battlenet-composition/0004-d3d11-Pace-all-composition-swap-chains.patch
     ./patches/dxvk-battlenet-composition/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
     ./patches/dxvk-battlenet-composition/0006-d3d11-Preserve-composition-swap-chain-contents.patch
-    ./patches/dxvk-battlenet-composition/0007-d3d11-Avoid-present-wait-for-composition-swap-chains.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''

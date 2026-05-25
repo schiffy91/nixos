@@ -131,16 +131,16 @@ install-capture-helper:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug install-capture-helper)
 
 probe-window:
-	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug probe-window)
+	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" $(BATTLENET_DIR)/bin/battlenet-debug probe-window)
 
 reproduce:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-reproduce --repeat "$(REPEAT)" --delay "$(DELAY)" --log-lines "$(LOG_LINES)" --frames "$(FRAMES)" --frame-interval "$(FRAME_INTERVAL)" --capture-fallback "$(CAPTURE_FALLBACK)" --artifact-dir "$(ARTIFACT_DIR)" --stop-on-white "$(STOP_ON_WHITE)")
 
 capture-window:
-	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug capture-window "$(OUTPUT)")
+	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" $(BATTLENET_DIR)/bin/battlenet-debug capture-window "$(OUTPUT)")
 
 frames-window:
-	$(call battlenet_run,COUNT="$(COUNT)" INTERVAL="$(INTERVAL)" $(BATTLENET_DIR)/bin/battlenet-debug frames-window "$(OUTPUT_DIR)")
+	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" COUNT="$(COUNT)" INTERVAL="$(INTERVAL)" $(BATTLENET_DIR)/bin/battlenet-debug frames-window "$(OUTPUT_DIR)")
 
 focus:
 	$(PROTON_DIR)/bin/proton-custom-dev focus

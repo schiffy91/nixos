@@ -99,6 +99,7 @@ run_once() {
   mkdir -p "$run_dir"
 
   "$proton_dir/bin/proton-custom-dev" cleanup
+  mkdir -p "$runtime_dir"
   rm -f "$runtime_dir"/battlenet-wrapper.log "$runtime_dir"/steam-battlenet.log
   "$app_dir/bin/battlenet-debug" install-capture-helper >"$run_dir/capture-helper.txt" 2>&1 || true
 

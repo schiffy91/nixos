@@ -33,11 +33,10 @@ composition child HWND to the new swap-chain extent. That keeps KDE snap, tile,
 and maximize transitions from leaving the Wayland child surface at the previous
 size.
 
-Composition swap chains deliberately skip DXVK's present-wait frame queue and
-eager next-image acquire. Battle.net tears down transient CEF/DComp popup
-surfaces during login, and waiting for Wayland WSI present completion on those
-surfaces can deadlock popup destruction before the main CEF content browser is
-created.
+Do not skip DXVK's present-wait frame queue for these composition swap chains.
+That was tested as a flicker mitigation, but it makes Battle.net's Chromium
+`GpuVSyncThread` spin and can leave the top-level launcher window presenting a
+solid white frame after login.
 
 ## Upstream
 This belongs in DXVK, separate from the Wine `dcomp-wayland-gpu-present`
