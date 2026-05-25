@@ -12,6 +12,7 @@ JOBS ?= $(shell nproc)
 PATCH_OUT ?= $(PROTON_DIR)/src/patches
 RANGE ?= -1 HEAD
 TARGETS ?= dlls/dcomp/all
+STORE ?=
 
 ALL_WINE_TARGETS := \
 	dlls/dcomp/all \
@@ -34,7 +35,8 @@ endif
 
 .PHONY: \
 	help shell setup use restore status cleanup \
-	setup-wine setup-dxvk build build-dxvk build-all \
+	reset-dev install-store \
+	package setup-wine setup-dxvk build build-dxvk build-all \
 	dcomp dxgi wayland explorer win32u winevulkan ntdll dxvk \
 	overlay-wine overlay-dxvk restore-dxvk check-patches \
 	wine-status wine-diff wine-format-patch \
@@ -52,8 +54,11 @@ help:
 		'Environment:' \
 		'  make shell                    enter the Nix dev shell' \
 		'  make setup                    create dev compat tool and seed sources' \
+		'  make reset-dev                recreate dev compat tool from active store' \
+		'  make install-store STORE=...  point compat symlink at a built store path' \
 		'  make status                   show active compat tool and source dirs' \
 		'  make check-patches            verify Wine/DXVK patch application only' \
+		'  make package                  build the Nix compat-tool package' \
 		'  make cleanup                  kill dev Wine processes for this prefix' \
 		'' \
 		'Build touched Wine targets:' \
@@ -84,6 +89,14 @@ shell:
 
 setup: use setup-wine setup-dxvk
 
+reset-dev:
+	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) setup --force)
+	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) use)
+
+install-store:
+	@test -n "$(STORE)" || (echo 'STORE is required' >&2; exit 1)
+	$(PROTON_DIR)/bin/proton-custom-install store "$(STORE)"
+
 use:
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) setup)
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) use)
@@ -96,6 +109,9 @@ status:
 
 check-patches:
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) check-patches)
+
+package:
+	nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file://$(NIXOS)"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in pkgs.callPackage $(PROTON_DIR)/package.nix { inherit (pkgs) makeWrapper rsync unzip; }'
 
 cleanup:
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) cleanup)

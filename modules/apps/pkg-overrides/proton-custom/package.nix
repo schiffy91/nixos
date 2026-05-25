@@ -15,6 +15,7 @@
 #   Wayland startup deadlock (non-blocking second init roundtrip)
 #   Blank layered windows (pUpdateLayeredWindow only)
 #   SNI StatusNotifierItem systray via libdbus (winewayland dock bridge)
+#   Wayland transient popups through xdg_popup
 #   Delay-load IAT protection for PE modules with read-only thunk pages
 #   DComp/DXGI/winewayland GPU presentation path
 #   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
@@ -65,6 +66,7 @@ let
     ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Polish-SNI-context-menu-callbacks.patch
     ./patches/wine-wayland-status-notifier/0003-explorer-Forward-docked-tray-icon-updates.patch
     ./patches/wine-wayland-status-notifier/0004-winewayland.drv-Keep-SNI-items-self-contained.patch
+    ./patches/wine-wayland-popups/0001-winewayland.drv-Use-xdg_popup-for-transient-popups.patch
     ./patches/ntdll-delay-load/0001-ntdll-Make-delay-load-IAT-writable-before-patching.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch

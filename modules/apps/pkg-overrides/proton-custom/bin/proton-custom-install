@@ -5,10 +5,11 @@ proton_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat <<EOF
-usage: proton-custom-install [dev|production|restore|status]
+usage: proton-custom-install [dev|store PATH|production|restore|status]
 
 Modes:
   dev         install the local dev compat tool by repointing the scwhine symlink
+  store PATH  point the scwhine symlink at an already-built Nix store package
   production  run nixos update so the system-installed proton-custom package is active
   restore     restore the scwhine symlink to the last Nix store build
   status      print the active compat tool paths
@@ -26,6 +27,20 @@ case "$mode" in
     ;;
   dev)
     "$proton_dir/bin/proton-custom-dev" use
+    ;;
+  store)
+    store_path="${2:-}"
+    if [ -z "$store_path" ] || [ ! -d "$store_path/files" ]; then
+      echo "store mode needs a built proton-custom store path" >&2
+      exit 1
+    fi
+    compat_dir="$HOME/.local/share/Steam/compatibilitytools.d"
+    saved_store="$proton_dir/src/.store-target"
+    mkdir -p "$compat_dir"
+    mkdir -p "$(dirname "$saved_store")"
+    ln -sfn "$store_path" "$compat_dir/scwhine-GE-Proton10-34"
+    printf '%s\n' "$store_path" > "$saved_store"
+    echo "$compat_dir/scwhine-GE-Proton10-34 -> $(realpath "$compat_dir/scwhine-GE-Proton10-34")"
     ;;
   production|system)
     nixos update

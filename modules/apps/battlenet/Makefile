@@ -21,6 +21,8 @@ COUNT ?= 24
 INTERVAL ?= 0.12
 OUTPUT ?= /tmp/battlenet-window.png
 OUTPUT_DIR ?= /tmp/battlenet-window-frames
+MENU_X ?= 1900
+MENU_Y ?= 1050
 
 ifdef BATTLENET_IN_DEV_SHELL
 define battlenet_run
@@ -34,7 +36,7 @@ endif
 
 .PHONY: \
 	help shell build install configure run cycle cycle-no-run \
-	check build-capture-helper status logs diagnose sni context-menu install-capture-helper probe-window reproduce capture-window frames-window \
+	check build-capture-helper status logs diagnose sni context-menu window-info install-capture-helper probe-window reproduce capture-window frames-window \
 	focus cleanup proton-status proton-restore
 
 help:
@@ -60,6 +62,7 @@ help:
 		'  make diagnose                     status + SNI metadata + redacted logs' \
 		'  make sni                          print StatusNotifierItem metadata' \
 		'  make context-menu                 call the tray ContextMenu method without capture' \
+		'  make window-info                  print Battle.net and Plasma window geometry' \
 		'  make install-capture-helper       install local KWin screenshot-authorized helper' \
 		'  make probe-window                 classify Battle.net window pixels, delete temp capture' \
 		'  make reproduce                    repeat KDE desktop-entry launch + screenshot artifacts' \
@@ -77,7 +80,9 @@ help:
 		'  ARTIFACT_DIR=$(ARTIFACT_DIR)' \
 		'  STOP_ON_WHITE=$(STOP_ON_WHITE)' \
 		'  OUTPUT=$(OUTPUT)' \
-		'  OUTPUT_DIR=$(OUTPUT_DIR)'
+		'  OUTPUT_DIR=$(OUTPUT_DIR)' \
+		'  MENU_X=$(MENU_X)' \
+		'  MENU_Y=$(MENU_Y)'
 
 shell:
 	nix-shell "$(BATTLENET_DIR)/dev-shell.nix"
@@ -125,7 +130,10 @@ sni:
 	$(BATTLENET_DIR)/bin/battlenet-debug sni
 
 context-menu:
-	$(BATTLENET_DIR)/bin/battlenet-debug context-menu
+	$(BATTLENET_DIR)/bin/battlenet-debug context-menu "$(MENU_X)" "$(MENU_Y)"
+
+window-info:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug window-info)
 
 install-capture-helper:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug install-capture-helper)

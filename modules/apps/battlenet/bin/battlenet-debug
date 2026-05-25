@@ -9,13 +9,14 @@ prefix="${HOME}/Games/Battle.net/prefix"
 
 usage() {
   cat <<EOF
-usage: battlenet-debug [status|logs|sni|context-menu|probe-window|capture-window|frames-window|diagnose]
+usage: battlenet-debug [status|logs|sni|context-menu|window-info|probe-window|capture-window|frames-window|diagnose]
 
 Commands:
   status          print process, compat tool, desktop entry, and log locations
   logs [LINES]    print redacted tails of wrapper, Proton, Battle.net, and CEF logs
   sni             print StatusNotifierItem metadata without screenshots
   context-menu    call Battle.net's SNI ContextMenu method without capturing the screen
+  window-info     print Battle.net and Plasma window geometry without screenshots
   probe-window    capture only Battle.net, print aggregate pixels, delete temp captures
   capture-window  capture only the Battle.net window; foreground fallback is opt-in
   frames-window   capture a short burst of only the active Battle.net window
@@ -157,6 +158,31 @@ context_menu() {
   fi
   gdbus call --session --dest "$service" --object-path "$path" \
     --method org.kde.StatusNotifierItem.ContextMenu "$x" "$y"
+}
+
+print_window_group() {
+  local title="$1"
+  local class="$2"
+  local ids id
+
+  mapfile -t ids < <(kdotool search --class "$class" getwindowid %@ 2>/dev/null || true)
+  for id in "${ids[@]}"; do
+    [ -n "$id" ] || continue
+    printf '\n==> %s %s <==\n' "$title" "$id"
+    kdotool getwindowgeometry "$id" 2>/dev/null || true
+    qdbus org.kde.KWin /KWin org.kde.KWin.getWindowInfo "$id" 2>/dev/null \
+      | grep -E '^(caption|height|keepAbove|layer|resourceClass|role|skipTaskbar|type|width|x|y):' \
+      || true
+  done
+}
+
+window_info() {
+  run_in_devshell window-info "$@"
+  print_window_group "Battle.net" 'battle[.]net[.]exe'
+  print_window_group "Explorer" 'explorer[.]exe'
+  print_window_group "Chromium" 'Cr.*Main'
+  print_window_group "Wine" 'wine'
+  print_window_group "Plasma" 'plasmashell'
 }
 
 install_capture_helper() {
@@ -355,6 +381,7 @@ case "$command" in
   logs) logs "$@" ;;
   sni) sni ;;
   context-menu) context_menu "$@" ;;
+  window-info) window_info "$@" ;;
   install-capture-helper) install_capture_helper ;;
   probe-window) probe_window "$@" ;;
   capture-window) capture_window "$@" ;;

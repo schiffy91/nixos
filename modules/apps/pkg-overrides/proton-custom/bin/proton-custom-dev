@@ -275,36 +275,13 @@ def overlay_explorer_prefix_files() -> list[str]:
 
 def overlay_wine(args: argparse.Namespace) -> None:
     use_dev(argparse.Namespace())
-    rels = [
-        "x86_64-unix/winewayland.so",
-        "i386-unix/winewayland.so",
-        "x86_64-unix/winevulkan.so",
-        "i386-unix/winevulkan.so",
-        "x86_64-unix/ntdll.so",
-        "i386-unix/ntdll.so",
-        "x86_64-unix/win32u.so",
-        "i386-unix/win32u.so",
-        "x86_64-windows/ntdll.dll",
-        "i386-windows/ntdll.dll",
-        "x86_64-windows/winewayland.drv",
-        "i386-windows/winewayland.drv",
-        "x86_64-windows/dcomp.dll",
-        "i386-windows/dcomp.dll",
-        "x86_64-windows/dxgi.dll",
-        "i386-windows/dxgi.dll",
-        "x86_64-windows/winevulkan.dll",
-        "i386-windows/winevulkan.dll",
-        "x86_64-windows/win32u.dll",
-        "i386-windows/win32u.dll",
-        "x86_64-windows/explorer.exe",
-        "i386-windows/explorer.exe",
-    ]
+    rels = wine_artifact_rels(getattr(args, "targets", None))
     if args.wine:
         pairs = [(rel, args.wine / "lib/wine" / rel) for rel in rels]
     else:
         if not args.wine64 or not args.wine32:
             raise SystemExit("overlay-wine needs --wine or both --wine64 and --wine32")
-        pairs = [
+        all_pairs = [
             ("x86_64-unix/winewayland.so", args.wine64 / "dlls/winewayland.drv/winewayland.so"),
             ("i386-unix/winewayland.so", args.wine32 / "dlls/winewayland.drv/winewayland.so"),
             ("x86_64-unix/winevulkan.so", args.wine64 / "dlls/winevulkan/winevulkan.so"),
@@ -328,6 +305,7 @@ def overlay_wine(args: argparse.Namespace) -> None:
             ("x86_64-windows/explorer.exe", args.wine64 / "programs/explorer/x86_64-windows/explorer.exe"),
             ("i386-windows/explorer.exe", args.wine32 / "programs/explorer/i386-windows/explorer.exe"),
         ]
+        pairs = [(rel, src) for rel, src in all_pairs if rel in rels]
     copied = []
     for rel, src in pairs:
         if copy_if_exists(src, dev_tool_path() / "files/lib/wine" / rel):
@@ -337,12 +315,12 @@ def overlay_wine(args: argparse.Namespace) -> None:
     print("copied Wine artifacts:")
     for rel in copied:
         print(f"  {rel}")
-    explorer_copies = overlay_explorer_prefix_files()
+    explorer_copies = overlay_explorer_prefix_files() if any(rel.endswith("explorer.exe") for rel in copied) else []
     if explorer_copies:
         print("updated Explorer prefix files:")
         for dst in explorer_copies:
             print(f"  {dst}")
-    ntdll_copies = overlay_ntdll_prefix_files()
+    ntdll_copies = overlay_ntdll_prefix_files() if any(rel.endswith("ntdll.dll") for rel in copied) else []
     if ntdll_copies:
         print("updated ntdll prefix files:")
         for dst in ntdll_copies:
@@ -368,6 +346,59 @@ def overlay_ntdll_prefix_files() -> list[str]:
         if copy_if_exists(src, dst):
             copied.append(str(dst))
     return copied
+
+
+def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
+    by_target = {
+        "dlls/winewayland.drv/all": [
+            "x86_64-unix/winewayland.so",
+            "i386-unix/winewayland.so",
+            "x86_64-windows/winewayland.drv",
+            "i386-windows/winewayland.drv",
+        ],
+        "dlls/winevulkan/all": [
+            "x86_64-unix/winevulkan.so",
+            "i386-unix/winevulkan.so",
+            "x86_64-windows/winevulkan.dll",
+            "i386-windows/winevulkan.dll",
+        ],
+        "dlls/ntdll/all": [
+            "x86_64-unix/ntdll.so",
+            "i386-unix/ntdll.so",
+            "x86_64-windows/ntdll.dll",
+            "i386-windows/ntdll.dll",
+        ],
+        "dlls/win32u/all": [
+            "x86_64-unix/win32u.so",
+            "i386-unix/win32u.so",
+            "x86_64-windows/win32u.dll",
+            "i386-windows/win32u.dll",
+        ],
+        "dlls/dcomp/all": [
+            "x86_64-windows/dcomp.dll",
+            "i386-windows/dcomp.dll",
+        ],
+        "dlls/dxgi/all": [
+            "x86_64-windows/dxgi.dll",
+            "i386-windows/dxgi.dll",
+        ],
+        "programs/explorer/all": [
+            "x86_64-windows/explorer.exe",
+            "i386-windows/explorer.exe",
+        ],
+    }
+
+    if targets is None:
+        targets = list(by_target)
+
+    rels = []
+    for target in targets:
+        if target not in by_target:
+            raise SystemExit(f"no overlay mapping for Wine target: {target}")
+        for rel in by_target[target]:
+            if rel not in rels:
+                rels.append(rel)
+    return rels
 
 
 def overlay_dxvk(args: argparse.Namespace) -> None:
@@ -694,7 +725,7 @@ def build_wine(args: argparse.Namespace) -> None:
     jobs = args.jobs or os.cpu_count() or 1
     dev_shell(f'make -C "{wine64_dir()}" -j{jobs} {target_text}')
     dev_shell(f'make -C "{wine32_dir()}" -j{jobs} {target_text}', target="32")
-    overlay_wine(argparse.Namespace(wine=None, wine64=wine64_dir(), wine32=wine32_dir()))
+    overlay_wine(argparse.Namespace(wine=None, wine64=wine64_dir(), wine32=wine32_dir(), targets=targets))
 
 
 def build_dxvk(args: argparse.Namespace) -> None:
