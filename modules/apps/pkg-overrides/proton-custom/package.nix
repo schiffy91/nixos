@@ -44,6 +44,8 @@ let
   dxvkVersion = "v2.7.1-509-g1676dcaf";
   dxvkRev     = "1676dcaf342a9b13af86c0464ad46235687727a6";
   dxvkHash    = "sha256-wnxOLWRcXJyCsQ1xaFgnrmQrfpq+O1vgJh+f7sa0qZg=";
+  wineasio64 = pkgs.wineasio;
+  wineasio32Files = ../rocksmith;
 
   # GE-Proton binary tarball (DXVK, VKD3D-Proton, Proton scripts, mono, gecko).
   # Keep this pinned to the exact tool whose Wine tree is patched below; using
@@ -55,6 +57,7 @@ let
 
   activePatchSeries = [
     ./patches/wine-wayland-roundtrip/0001-winewayland.drv-Avoid-second-init-roundtrip.patch
+    ./patches/wine-wayland-focus/0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Hook-UpdateLayeredWindow.patch
     ./patches/wine-wayland-layered-windows/0002-winewayland.drv-Set-layered-surface-alpha-bits.patch
     ./patches/wine-wayland-layered-windows/0003-winewayland.drv-Handle-fully-zero-alpha-layered-surf.patch
@@ -90,6 +93,7 @@ let
     ./patches/dxvk-battlenet-composition/0004-d3d11-Pace-all-composition-swap-chains.patch
     ./patches/dxvk-battlenet-composition/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
     ./patches/dxvk-battlenet-composition/0006-d3d11-Preserve-composition-swap-chain-contents.patch
+    ./patches/dxvk-battlenet-composition/0007-d3d11-Avoid-present-wait-for-composition-swap-chains.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
@@ -489,6 +493,19 @@ in stdenv.mkDerivation {
     copy_dxvk "${dxvk-scwhine}/x64/d3d11.dll" x86_64-windows/d3d11.dll
     copy_dxvk "${dxvk-scwhine}/x32/d3d11.dll" i386-windows/d3d11.dll
     cp "${dxvk-scwhine}/version" "$out/files/lib/wine/dxvk/version"
+
+    # WineASIO is not part of GE-Proton. Nixpkgs currently packages WineASIO
+    # 1.3.0 for 64-bit Wine; Rocksmith still needs the 32-bit driver, so keep
+    # the existing known-working 32-bit pair as a packaged compat-tool payload
+    # instead of mutating the Steam compat tool during activation.
+    install -Dm644 "${wineasio64}/lib/wine/x86_64-windows/wineasio64.dll" \
+      "$out/files/lib/wine/x86_64-windows/wineasio64.dll"
+    install -Dm755 "${wineasio64}/lib/wine/x86_64-unix/wineasio64.dll.so" \
+      "$out/files/lib/wine/x86_64-unix/wineasio64.dll.so"
+    install -Dm644 "${wineasio32Files}/wineasio32.dll" \
+      "$out/files/lib/wine/i386-windows/wineasio32.dll"
+    install -Dm755 "${wineasio32Files}/wineasio32.dll.so" \
+      "$out/files/lib/wine/i386-unix/wineasio32.dll.so"
 
     cat > "$out/compatibilitytool.vdf" <<EOF
 "compatibilitytools"

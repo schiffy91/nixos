@@ -10,4 +10,4 @@ coverage/
 .coverage
 .claude
 /result
-modules/apps/pkg-overrides/proton/src/
+modules/apps/pkg-overrides/proton-custom/src/

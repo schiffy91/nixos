@@ -1,9 +1,10 @@
-# scwhine-proton Battle.net Wayland GPU path
+# proton-custom
 
-This directory packages `GE-Proton10-34` with a small, explicit Wine patch
-series for Battle.net on native Wayland. The goal is an upstream-quality base
-that keeps Chromium/CEF on the D3D11/DXGI/DirectComposition path instead of
-papering over launcher failures with CPU compositing fallbacks.
+This directory packages the custom Proton compat tool. It starts from
+`GE-Proton10-34`, applies a small explicit Wine/DXVK patch series, and overlays
+only the rebuilt artifacts on top of the GE binary release. The primary current
+consumer is Battle.net on native Wayland, but the package is intentionally kept
+generic enough to be the one custom Proton build used by Steam games too.
 
 ## Package Shape
 
@@ -36,8 +37,10 @@ the `git format-patch -s` commit order for that topic.
 | `wine-wayland-roundtrip` | `0001-winewayland.drv-Avoid-second-init-roundtrip.patch` | Active. Avoids a blocking second Wayland init roundtrip. |
 | `wine-wayland-layered-windows` | `0001-winewayland.drv-Hook-UpdateLayeredWindow.patch` | Active. Hooks `pUpdateLayeredWindow` only. |
 | `wine-wayland-status-notifier` | `0001..0004` | Active. Adds SNI tray support, callback polish, explorer-to-driver icon snapshots, and self-contained item lifetime handling. |
-| `dcomp-wayland-gpu-present` | `0001..0015` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
-| `dxvk-battlenet-composition` | `0001..0006` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, a shared-resource-tier cap, resize tracking, and preserved contents across partial updates. |
+| `dcomp-wayland-gpu-present` | `0001..0016` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
+| `win32u-load-driver-deadlock` | `0001` | Active. Bounds desktop-driver readiness waits. |
+| `win32u-shared-gpu-resource` | `0001` | Active. Opens D3DKMT shared GPU resources used by composition paths. |
+| `dxvk-battlenet-composition` | `0001..0007` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, a shared-resource-tier cap, resize tracking, preserved contents across partial updates, and avoids blocking the app on composition present waits. |
 
 The previous numbered prototype directories were removed. Useful lessons from
 them were folded into the topic folders above; keeping old failed attempts in
@@ -57,8 +60,8 @@ paces composition presents with the compositor, and keeps the private
 composition child window sized to the swap-chain extent.
 
 The installed `battlenet` wrapper has no CPU-compositing fallback or ANGLE
-backend override. Runtime diagnostics live in `bin/bnet-dev`, not in the
-desktop launcher.
+backend override. App-specific diagnostics live in `modules/apps/battlenet`, not
+in the desktop launcher.
 
 ## Promotion Build
 
@@ -71,38 +74,48 @@ nix build --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+
 This is a promotion gate for packaging correctness. It is not part of the
 Battle.net rendering/debug loop.
 
+## WineASIO
+
+WineASIO is packaged into `proton-custom` so Rocksmith can use the same compat
+tool as everything else. The production package installs:
+
+- `wineasio64.dll` and `wineasio64.dll.so` from nixpkgs `wineasio`.
+- `wineasio32.dll` and `wineasio32.dll.so` from the existing Rocksmith payload,
+  because nixpkgs currently only exposes the 64-bit output on this system.
+
+Rocksmith still owns its prefix registration and low-latency launch flags in
+`modules/apps/rocksmith.nix` and `modules/apps/steam.nix`. This package only
+provides the WineASIO DLL payload.
+
 ## Fast Local Iteration
 
-The full Nix package path is intentionally reproducible, but it is too slow for
-Battle.net UI experiments. Keep mutable source and build trees in this project
-directory, ignored by git:
+The full Nix package path is reproducible, but it is too slow for UI debugging.
+Keep mutable source and build trees in this project directory, ignored by git:
 
 ```text
-modules/apps/pkg-overrides/proton/src/wine
-modules/apps/pkg-overrides/proton/src/wine64
-modules/apps/pkg-overrides/proton/src/wine32
-modules/apps/pkg-overrides/proton/src/dxvk
+modules/apps/pkg-overrides/proton-custom/src/wine
+modules/apps/pkg-overrides/proton-custom/src/wine64
+modules/apps/pkg-overrides/proton-custom/src/wine32
+modules/apps/pkg-overrides/proton-custom/src/dxvk
 ```
 
 Use the local dev compat tool for hot loops through the project Makefile:
 
 ```bash
-nix-shell /etc/nixos/modules/apps/pkg-overrides/proton/dev-shell.nix
-cd /etc/nixos/modules/apps/pkg-overrides/proton
+nix-shell /etc/nixos/modules/apps/pkg-overrides/proton-custom/dev-shell.nix
+cd /etc/nixos/modules/apps/pkg-overrides/proton-custom
 make setup
-make smoke SECONDS=5
+make status
 ```
 
-The smoke log should say `scwhine DEV GE-Proton10-34 (Wayland SNI)`, proving
-that the existing `battlenet` wrapper is launching through the writable dev
-copy at:
+The dev copy lives at:
 
 ```text
 ~/.local/share/Steam/compatibilitytools.d/scwhine-GE-Proton10-34-dev
 ```
 
 Once local Wine or DXVK build directories are configured, copy fresh artifacts
-into that dev tool without a Nix rebuild:
+into that dev tool without a full Nix package rebuild:
 
 ```bash
 make overlay-wine
@@ -112,35 +125,33 @@ make overlay-dxvk
 The overlay commands also accept the reproducible Nix outputs directly:
 
 ```bash
-wine_out=$(nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton/package.nix { inherit (pkgs) makeWrapper rsync unzip; }).passthru.wineArtifacts')
-dxvk_out=$(nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton/package.nix { inherit (pkgs) makeWrapper rsync unzip; }).passthru.dxvkArtifacts')
-./bin/bnet-dev overlay-wine --wine "$wine_out"
-./bin/bnet-dev overlay-dxvk --dxvk "$dxvk_out"
+wine_out=$(nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton-custom/package.nix { inherit (pkgs) makeWrapper rsync unzip; }).passthru.wineArtifacts')
+dxvk_out=$(nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in (pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton-custom/package.nix { inherit (pkgs) makeWrapper rsync unzip; }).passthru.dxvkArtifacts')
+./bin/proton-custom-dev overlay-wine --wine "$wine_out"
+./bin/proton-custom-dev overlay-dxvk --dxvk "$dxvk_out"
 ```
 
-For Wine changes, seed mutable build trees from the exact patched Nix source
-and run hot loops against individual Wine targets:
+For Wine changes, seed mutable build trees from the exact patched Nix source and
+build only the touched targets:
 
 ```bash
 make setup-wine
-make loop TARGETS='dlls/dcomp/all' SECONDS=3
+make dcomp
+make wayland
 ```
 
 The helper keeps separate 64-bit and i386 Wine build trees so the local build
 uses the same WoW64 shape as the Nix package. `overlay-wine` also updates
 Explorer in GE-Proton's default prefix and in the live Battle.net prefix;
-otherwise the SNI snapshot/update path can compile correctly but still run
-stale Explorer code. A warm `dlls/dcomp/all` edit loop rebuilds and overlays
-both DLLs, smoke-launches Battle.net, then kills leftover Wine/container
-processes in roughly ten seconds.
+otherwise the SNI snapshot/update path can compile correctly but still run stale
+Explorer code.
 
 For the fastest manual loop, edit the materialized Wine source directly and
 rebuild only the touched target:
 
 ```bash
-$EDITOR "$SCWHINE_WINE_SRC/dlls/dcomp/device.c"
+$EDITOR "$PROTON_CUSTOM_WINE_SRC/dlls/dcomp/device.c"
 make dcomp
-make shot DELAY=8
 ```
 
 The local `src/` tree is an ignored workspace. It exists so patches can be
@@ -154,44 +165,31 @@ working changes can be inspected and exported without guessing:
 ```bash
 make wine-status
 make wine-diff
-git -C "$SCWHINE_WINE_SRC" commit -am 'dcomp: describe the tested fix'
+git -C "$PROTON_CUSTOM_WINE_SRC" commit -am 'dcomp: describe the tested fix'
 make wine-format-patch RANGE='-1 HEAD'
 ```
 
-For screenshot-driven checks, use:
-
-```bash
-./bin/bnet-dev capture --delay 45 --output /tmp/bnet-wayland.png
-./bin/bnet-dev cleanup
-```
+Battle.net repro/debug loops live in `modules/apps/battlenet`, not here. Use
+that Makefile when exercising the launcher.
 
 Return to the pinned Nix store compat tool with:
 
 ```bash
-./bin/bnet-dev restore
+./bin/proton-custom-dev restore
 ```
 
-## Live Test
+## Production Check
 
-Capture loader and systray logs before changing behavior:
+Before activation, verify the Nix package or system graph:
 
 ```bash
-WINEDEBUG=+loaddll,+module,+systray PROTON_LOG=1 battlenet 2>&1 | tee /tmp/bnet-load.log
+nix build --dry-run --impure '/etc/nixos#nixosConfigurations."FRACTAL-NORTH-Secure-Boot".config.system.build.toplevel' --no-link
 ```
 
-Confirm that these load from the rebuilt `scwhine-GE-Proton10-34` store path:
-
-- `winewayland.so`
-- `winewayland.drv`
-- `dcomp.dll`
-- `dxgi.dll`
-
-Useful checks:
+The package-only promotion build is:
 
 ```bash
-busctl --user --list | rg 'StatusNotifierItem|StatusNotifierWatcher'
-rg -n 'Loaded L".*(winewayland|win32u|dcomp|dxgi|winevulkan)' "$HOME/steam-battlenet.log"
-spectacle -b -n -o /tmp/bnet-wayland.png
+nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file:///etc/nixos"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in pkgs.callPackage /etc/nixos/modules/apps/pkg-overrides/proton-custom/package.nix { inherit (pkgs) makeWrapper rsync unzip; }'
 ```
 
 Expected Wayland result:

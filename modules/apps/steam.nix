@@ -10,157 +10,184 @@ let
   rsSampleRate = config.settings.rocksmith.sampleRate;
   protonName = "GE-Proton10-34";       # upstream binary (fallback / X11)
   scwhineProtonName = "scwhine-GE-Proton10-34";  # patched Wayland+SNI build
-  setLaunchOptions = pkgs.writers.writePython3Bin "set-steam-launch-options" {
+  defaultLaunchPrefix = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1";
+  appConfig = pkgs.writeText "steam-apps.json" (builtins.toJSON apps);
+  configureSteamApps = pkgs.writers.writePython3Bin "configure-steam-apps" {
     libraries = [ pkgs.python3Packages.vdf ];
   } ''
     import argparse
     import glob
+    import json
     import os
+    from pathlib import Path
 
     import vdf
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--steam-path", required=True)
-    parser.add_argument("--launch-options", required=True)
-    target = parser.add_mutually_exclusive_group(required=True)
-    target.add_argument(
-        "--app-id", help="Steam app ID for purchased games (localconfig.vdf)"
-    )
-    target.add_argument(
-        "--name-match",
-        help="Substring of AppName for non-Steam shortcuts (shortcuts.vdf)",
-    )
+    parser.add_argument("--default-tool", required=True)
+    parser.add_argument("--default-launch-prefix", default="")
+    parser.add_argument("--default-launch-suffix", default="")
+    parser.add_argument("--app-config", required=True)
     args = parser.parse_args()
 
+    skip_names = {"Steamworks Common Redistributables"}
+    skip_prefixes = ("Proton ", "Steam Linux Runtime")
 
-    def set_for_app_id():
-        pattern = args.steam_path + "/userdata/*/config/localconfig.vdf"
-        for path in glob.glob(pattern):
-            with open(path) as f:
-                cfg = vdf.load(f)
-            steam = (
-                cfg.setdefault("UserLocalConfigStore", {})
-                .setdefault("Software", {})
-                .setdefault("Valve", {})
-                .setdefault("Steam", {})
-            )
-            apps = steam.get("apps") or steam.setdefault("Apps", {})
-            app = apps.setdefault(args.app_id, {})
-            if app.get("LaunchOptions") == args.launch_options:
+    with open(args.app_config) as f:
+        app_config = json.load(f)
+
+
+    def desired_entry(tool):
+        return {"name": tool, "config": "", "priority": "250"}
+
+
+    def words(*parts):
+        return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+    def text_vdf(path):
+        with open(path) as f:
+            return vdf.load(f)
+
+
+    def write_text_vdf(path, cfg):
+        tmp = str(path) + ".tmp"
+        with open(tmp, "w") as f:
+            vdf.dump(cfg, f, pretty=True)
+        os.replace(tmp, path)
+
+
+    def steam_apps(cfg):
+        steam = (
+            cfg.setdefault("UserLocalConfigStore", {})
+            .setdefault("Software", {})
+            .setdefault("Valve", {})
+            .setdefault("Steam", {})
+        )
+        return steam.get("apps") or steam.setdefault("Apps", {})
+
+
+    def library_paths():
+        path = Path(args.steam_path) / "steamapps" / "libraryfolders.vdf"
+        if not path.exists():
+            return [Path(args.steam_path)]
+
+        cfg = text_vdf(path)
+        paths = []
+        for entry in cfg.get("libraryfolders", {}).values():
+            if isinstance(entry, dict) and entry.get("path"):
+                paths.append(Path(entry["path"]))
+        return paths or [Path(args.steam_path)]
+
+
+    def installed_games():
+        manifests = {}
+        for library in library_paths():
+            for path in (library / "steamapps").glob("appmanifest_*.acf"):
+                app_id = path.stem.removeprefix("appmanifest_")
+                manifests.setdefault(app_id, path)
+
+        def by_app_id(item):
+            return int(item[0])
+
+        for app_id, path in sorted(manifests.items(), key=by_app_id):
+            app = text_vdf(path).get("AppState", {})
+            name = app.get("name", "")
+            if name in skip_names or name.startswith(skip_prefixes):
                 continue
-            app["LaunchOptions"] = args.launch_options
-            with open(path, "w") as f:
-                vdf.dump(cfg, f, pretty=True)
+            yield app_id
 
 
-    def set_for_non_steam():
-        match = args.name_match.lower()
-        pattern = args.steam_path + "/userdata/*/config/shortcuts.vdf"
-        for path in glob.glob(pattern):
-            with open(path, "rb") as f:
-                cfg = vdf.binary_load(f)
-            changed = False
-            for entry in cfg.get("shortcuts", {}).values():
-                name = next(
-                    (v for k, v in entry.items() if k.lower() == "appname"),
-                    None,
-                )
-                if not name or match not in name.lower():
-                    continue
-                key = next(
-                    (k for k in entry if k.lower() == "launchoptions"),
-                    "LaunchOptions",
-                )
-                if entry.get(key) != args.launch_options:
-                    entry[key] = args.launch_options
-                    changed = True
-            if changed:
-                tmp = path + ".tmp"
-                with open(tmp, "wb") as f:
-                    vdf.binary_dump(cfg, f)
-                os.replace(tmp, path)
+    def launch_options(app_id):
+        cfg = app_config.get(app_id, {})
+        if "launchOptions" in cfg:
+            return cfg["launchOptions"]
+
+        inherit_default = cfg.get("inheritDefaultLaunchOptions", True)
+        prefix = words(
+            cfg.get("launchPrefix", ""),
+            args.default_launch_prefix if inherit_default else "",
+        )
+        suffix = words(
+            args.default_launch_suffix if inherit_default else "",
+            cfg.get("launchSuffix", ""),
+        )
+        return words(prefix, "%command%", suffix)
 
 
-    if args.app_id:
-        set_for_app_id()
-    else:
-        set_for_non_steam()
-  '';
-  setCompatTool = pkgs.writers.writePython3Bin "set-steam-compat-tool" {
-    libraries = [ pkgs.python3Packages.vdf ];
-  } ''
-    import argparse
-    import os
+    app_ids = list(installed_games())
 
-    import vdf
+    path = Path(args.steam_path) / "config" / "config.vdf"
+    if path.exists():
+        cfg = text_vdf(path)
+        valve = (
+            cfg.setdefault("InstallConfigStore", {})
+            .setdefault("Software", {})
+            .setdefault("Valve", {})
+            .setdefault("Steam", {})
+        )
+        mapping = valve.setdefault("CompatToolMapping", {})
+        changed = False
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--steam-path", required=True)
-    parser.add_argument("--tool-name", required=True)
-    parser.add_argument("--app-id", default="0", help="0 = global default")
-    parser.add_argument("--priority", default="250")
-    args = parser.parse_args()
+        desired = desired_entry(args.default_tool)
+        if mapping.get("0") != desired:
+            mapping["0"] = desired
+            changed = True
 
-    path = args.steam_path + "/config/config.vdf"
-    if not os.path.exists(path):
-        raise SystemExit(0)
+        for app_id in app_ids:
+            tool = app_config.get(app_id, {}).get("compatTool", args.default_tool)
+            if tool is None:
+                continue
+            desired = desired_entry(tool)
+            if mapping.get(app_id) != desired:
+                mapping[app_id] = desired
+                changed = True
 
-    with open(path) as f:
-        cfg = vdf.load(f)
+        if changed:
+            write_text_vdf(path, cfg)
 
-    valve = (
-        cfg.setdefault("InstallConfigStore", {})
-        .setdefault("Software", {})
-        .setdefault("Valve", {})
-        .setdefault("Steam", {})
-    )
-    mapping = valve.setdefault("CompatToolMapping", {})
-    desired = {"name": args.tool_name, "config": "", "priority": args.priority}
-    if mapping.get(args.app_id) == desired:
-        raise SystemExit(0)
-    mapping[args.app_id] = desired
+    for path in glob.glob(args.steam_path + "/userdata/*/config/localconfig.vdf"):
+        cfg = text_vdf(path)
+        apps = steam_apps(cfg)
+        changed = False
 
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        vdf.dump(cfg, f, pretty=True)
-    os.replace(tmp, path)
+        for app_id in app_ids:
+            app = apps.setdefault(app_id, {})
+            desired = launch_options(app_id)
+            if app.get("LaunchOptions") != desired:
+                app["LaunchOptions"] = desired
+                changed = True
+
+        if changed:
+            write_text_vdf(path, cfg)
   '';
   # Per-app Steam config. Travels with the app — true wherever it's installed.
-  # Apps not installed on a given host are harmless (the helpers no-op when no userdata exists).
+  # Installed apps not listed here inherit scwhine + the default Steam Play env.
   apps = {
     "221680" = {  # Rocksmith 2014 — ASIO + low-latency pipewire
+      compatTool = scwhineProtonName;
       launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString rsSampleSize}/${toString rsSampleRate} %command%";
     };
     "3240220" = {  # GTA V Enhanced
       # GE-Proton10-34 hangs the loader; 10-30 reaches Social Club then white-screens.
       # Proton Experimental + SteamDeck=1 is Valve's targeted fix for the launcher.
       compatTool = "proton_experimental";
-      launchOptions = "SteamDeck=1 %command% ${chromiumDpi}";
+      launchPrefix = "SteamDeck=1";
+      launchSuffix = chromiumDpi;
     };
     "1174180" = {  # Red Dead Redemption 2 — Rockstar launcher is Chromium
-      launchOptions = "%command% ${chromiumDpi}";
+      launchSuffix = chromiumDpi;
     };
     "1091500" = {  # Cyberpunk 2077 — REDlauncher is Chromium
-      launchOptions = "%command% ${chromiumDpi}";
+      launchSuffix = chromiumDpi;
     };
   };
-  perApp = appId: cfg:
-    lib.optionalString (cfg ? compatTool) ''
-      $runuser ${setCompatTool}/bin/set-steam-compat-tool \
-        --steam-path "${steamPath}" \
-        --tool-name "${cfg.compatTool}" \
-        --app-id "${appId}"
-    '' + lib.optionalString (cfg ? launchOptions) ''
-      $runuser ${setLaunchOptions}/bin/set-steam-launch-options \
-        --steam-path "${steamPath}" \
-        --launch-options ${lib.escapeShellArg cfg.launchOptions} \
-        --app-id "${appId}"
-    '';
 in {
   config = lib.mkMerge [
     {
       _module.args.steam = {
-        inherit setLaunchOptions setCompatTool;
+        inherit configureSteamApps;
         proton.name = protonName;
         proton.scwhineName = scwhineProtonName;
       };
@@ -169,10 +196,11 @@ in {
       system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
         if [ -d "${steamPath}/config" ]; then
           runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"
-          $runuser ${setCompatTool}/bin/set-steam-compat-tool \
+          $runuser ${configureSteamApps}/bin/configure-steam-apps \
             --steam-path "${steamPath}" \
-            --tool-name "${protonName}"
-          ${lib.concatStrings (lib.mapAttrsToList perApp apps)}
+            --default-tool "${scwhineProtonName}" \
+            --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
+            --app-config ${appConfig}
         fi
       '';
     })

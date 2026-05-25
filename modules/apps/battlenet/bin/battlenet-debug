@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+nixos_dir="$(cd "$app_dir/../../.." && pwd)"
+proton_dir="$nixos_dir/modules/apps/pkg-overrides/proton-custom"
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
+prefix="${HOME}/Games/Battle.net/prefix"
+
+usage() {
+  cat <<EOF
+usage: battlenet-debug [status|logs|sni|context-menu|capture-window|frames-window|diagnose]
+
+Commands:
+  status          print process, compat tool, desktop entry, and log locations
+  logs [LINES]    print redacted tails of wrapper, Proton, Battle.net, and CEF logs
+  sni             print StatusNotifierItem metadata without screenshots
+  context-menu    call Battle.net's SNI ContextMenu method without capturing the screen
+  capture-window  capture only the active Battle.net window
+  frames-window   capture a short burst of only the active Battle.net window
+  diagnose        run status, sni, and logs
+
+Full-desktop capture is intentionally unavailable here.
+EOF
+}
+
+run_in_devshell() {
+  if [ "${BATTLENET_IN_DEV_SHELL:-}" = 1 ]; then
+    return 0
+  fi
+  export BATTLENET_QUIET_SHELL=1
+  exec nix-shell "$app_dir/dev-shell.nix" --run "$(printf '%q ' "$0" "$@")"
+}
+
+redact() {
+  sed -E \
+    -e 's/((access|refresh|id)?_?token=)[^&[:space:]"]+/\1<redacted>/Ig' \
+    -e 's/((session|sid|authorization|cookie)=)[^&[:space:]"]+/\1<redacted>/Ig' \
+    -e 's/(account=GameAccount)\([^)]*\)/\1(<redacted>)/g' \
+    -e 's/(entity=)[^ )]+/\1<redacted>/g' \
+    -e 's/(name=)[^ )]+/\1<redacted>/g' \
+    -e 's/(\|accountId=)[^[:space:]]+/\1<redacted>/g'
+}
+
+print_file_tail() {
+  local file="$1"
+  local lines="$2"
+  [ -f "$file" ] || return 0
+  printf '\n==> %s <==\n' "$file"
+  tail -n "$lines" "$file" | redact
+}
+
+print_error_tail() {
+  local file="$1"
+  local lines="$2"
+  [ -f "$file" ] || return 0
+  printf '\n==> %s <==\n' "$file"
+  grep -E '(^[EW] |ERROR|WARNING|failed|Failed|crash|Crash|exception|Exception|DPI|CEF|DirectComposition|DComp|DXGI)' "$file" \
+    | tail -n "$lines" | redact || true
+}
+
+status() {
+  echo "compat:"
+  "$proton_dir/bin/proton-custom-dev" status
+  echo
+  echo "desktop entry:"
+  if [ -e /run/current-system/sw/share/applications/battlenet.desktop ]; then
+    sed -n '1,40p' /run/current-system/sw/share/applications/battlenet.desktop
+  else
+    echo "missing /run/current-system/sw/share/applications/battlenet.desktop"
+  fi
+  echo
+  echo "processes:"
+  mapfile -t pids < <(pgrep -f 'Battle.net|Agent.exe|wine|umu|pressure-vessel|explorer.exe' || true)
+  if [ "${#pids[@]}" -gt 0 ]; then
+    ps -o pid=,stat=,comm= -p "$(IFS=,; echo "${pids[*]}")" | sed 's/^/  /'
+  fi
+  echo
+  echo "logs:"
+  find "$runtime_dir" -maxdepth 1 -type f -print 2>/dev/null | sort || true
+}
+
+sni_items() {
+  qdbus org.kde.StatusNotifierWatcher /StatusNotifierWatcher \
+    org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems 2>/dev/null || true
+}
+
+split_sni_item() {
+  local item="$1"
+  local service="${item%%/*}"
+  local path="/${item#*/}"
+  printf '%s\n%s\n' "$service" "$path"
+}
+
+get_sni_prop() {
+  local service="$1"
+  local path="$2"
+  local prop="$3"
+  gdbus call --session --dest "$service" --object-path "$path" \
+    --method org.freedesktop.DBus.Properties.Get org.kde.StatusNotifierItem "$prop" \
+    2>/dev/null || true
+}
+
+find_battlenet_sni() {
+  local item service path title icon
+  while IFS= read -r item; do
+    [ -n "$item" ] || continue
+    mapfile -t parts < <(split_sni_item "$item")
+    service="${parts[0]}"
+    path="${parts[1]}"
+    title="$(get_sni_prop "$service" "$path" Title)"
+    icon="$(get_sni_prop "$service" "$path" IconName)"
+    if printf '%s\n%s\n' "$title" "$icon" | grep -Eiq 'battle[.]?net|battlenet'; then
+      printf '%s\n%s\n' "$service" "$path"
+      return 0
+    fi
+  done < <(sni_items)
+  return 1
+}
+
+sni() {
+  local item service path
+  while IFS= read -r item; do
+    [ -n "$item" ] || continue
+    mapfile -t parts < <(split_sni_item "$item")
+    service="${parts[0]}"
+    path="${parts[1]}"
+    printf '\n==> %s %s <==\n' "$service" "$path"
+    printf 'Id:       %s\n' "$(get_sni_prop "$service" "$path" Id)"
+    printf 'Title:    %s\n' "$(get_sni_prop "$service" "$path" Title)"
+    printf 'IconName: %s\n' "$(get_sni_prop "$service" "$path" IconName)"
+    printf 'Status:   %s\n' "$(get_sni_prop "$service" "$path" Status)"
+  done < <(sni_items)
+}
+
+logs() {
+  local lines="${1:-180}"
+  print_file_tail "$runtime_dir/battlenet-wrapper.log" "$lines"
+  print_file_tail "$runtime_dir/steam-battlenet.log" "$lines"
+  find "$prefix/drive_c/users/steamuser/AppData/Local/Battle.net/Logs" \
+    -maxdepth 1 -type f \( -name '*.log' -o -name '*.txt' \) -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -4 | cut -d' ' -f2- \
+    | while IFS= read -r file; do print_error_tail "$file" "$lines"; done
+}
+
+context_menu() {
+  local x="${1:-1900}"
+  local y="${2:-1050}"
+  local service path
+  mapfile -t parts < <(find_battlenet_sni)
+  service="${parts[0]:-}"
+  path="${parts[1]:-}"
+  if [ -z "$service" ] || [ -z "$path" ]; then
+    echo "Battle.net SNI item not found" >&2
+    exit 1
+  fi
+  gdbus call --session --dest "$service" --object-path "$path" \
+    --method org.kde.StatusNotifierItem.ContextMenu "$x" "$y"
+}
+
+capture_window() {
+  run_in_devshell capture-window "$@"
+  local output="${1:-/tmp/battlenet-window.png}"
+  "$proton_dir/bin/proton-custom-dev" focus
+  "$proton_dir/bin/proton-custom-dev" grab-frames --focus --count 1 --interval 0 \
+    --mode active --format png --output-dir "$(dirname "$output")/.battlenet-window-capture"
+  mv "$(dirname "$output")/.battlenet-window-capture/frame-000.png" "$output"
+  rmdir "$(dirname "$output")/.battlenet-window-capture" 2>/dev/null || true
+  echo "$output"
+}
+
+frames_window() {
+  run_in_devshell frames-window "$@"
+  local output_dir="${1:-/tmp/battlenet-window-frames}"
+  "$proton_dir/bin/proton-custom-dev" grab-frames --focus --count "${COUNT:-24}" \
+    --interval "${INTERVAL:-0.12}" --mode active --format jpg --output-dir "$output_dir"
+}
+
+command="${1:-diagnose}"
+shift || true
+
+case "$command" in
+  -h|--help) usage ;;
+  status) status ;;
+  logs) logs "$@" ;;
+  sni) sni ;;
+  context-menu) context_menu "$@" ;;
+  capture-window) capture_window "$@" ;;
+  frames-window) frames_window "$@" ;;
+  diagnose)
+    status
+    sni
+    logs "${1:-120}"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

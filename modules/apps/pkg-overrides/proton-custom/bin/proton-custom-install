@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+proton_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+  cat <<EOF
+usage: proton-custom-install [dev|production|restore|status]
+
+Modes:
+  dev         install the local dev compat tool by repointing the scwhine symlink
+  production  run nixos update so the system-installed proton-custom package is active
+  restore     restore the scwhine symlink to the last Nix store build
+  status      print the active compat tool paths
+
+The dev path does not need sudo. The production path delegates to your existing
+nixos update command, so any sudo/sudolessAllowlist need is whatever nixos update
+already requires.
+EOF
+}
+
+mode="${1:-dev}"
+case "$mode" in
+  -h|--help)
+    usage
+    ;;
+  dev)
+    "$proton_dir/bin/proton-custom-dev" use
+    ;;
+  production|system)
+    nixos update
+    ;;
+  restore)
+    "$proton_dir/bin/proton-custom-dev" restore
+    ;;
+  status)
+    "$proton_dir/bin/proton-custom-dev" status
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

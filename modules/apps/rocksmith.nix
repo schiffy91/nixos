@@ -54,17 +54,16 @@ let
       cp $src/RS_ASIO.dll $src/avrt.dll $out/
       cp ${rsAsioIni} $out/RS_ASIO.ini
       cp $src/xinput1_3.dll $src/RSMods.ini $out/
-      cp $src/wineasio32.dll $src/wineasio32.dll.so $out/
     '';
   };
   steamPath = "${home}/.local/share/Steam";
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
-  protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.name}/files";
+  protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.scwhineName}/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
 in {
-  system.activationScripts.rocksmith = lib.stringAfter [ "users" ] ''
-    export PATH="${pkgs.coreutils}/bin:${pkgs.gnused}/bin:${pkgs.util-linux}/bin:$PATH"
+  system.activationScripts.rocksmith = lib.stringAfter [ "users" "scwhineProtonCompatTool" ] ''
+    export PATH="${pkgs.coreutils}/bin:${pkgs.gnused}/bin:${pkgs.gnugrep}/bin:${pkgs.util-linux}/bin:$PATH"
     if [ -d "${gamePath}" ]; then
       cp -f ${mods}/RS_ASIO.dll "${gamePath}/"
       cp -f ${mods}/avrt.dll "${gamePath}/"
@@ -73,12 +72,48 @@ in {
       cp -f ${mods}/RSMods.ini "${gamePath}/"
 
       if [ -d "${protonPath}/lib/wine" ]; then
-        cp -f ${mods}/wineasio32.dll "${protonPath}/lib/wine/i386-windows/"
-        cp -f ${mods}/wineasio32.dll.so "${protonPath}/lib/wine/i386-unix/wineasio32.dll.so"
+        cp -f "${protonPath}/lib/wine/i386-windows/wineasio32.dll" "${gamePath}/wineasio32.dll"
+
+        if [ -d "${prefixPath}/drive_c/windows/syswow64" ]; then
+          cp -f "${protonPath}/lib/wine/i386-windows/wineasio32.dll" \
+            "${prefixPath}/drive_c/windows/syswow64/wineasio32.dll"
+        fi
+        if [ -d "${prefixPath}/drive_c/windows/system32" ] && [ -f "${protonPath}/lib/wine/x86_64-windows/wineasio64.dll" ]; then
+          cp -f "${protonPath}/lib/wine/x86_64-windows/wineasio64.dll" \
+            "${prefixPath}/drive_c/windows/system32/wineasio64.dll"
+        fi
+      fi
+
+      if [ -f "${prefixPath}/system.reg" ] && ! grep -q 'Software\\\\ASIO\\\\WineASIO' "${prefixPath}/system.reg"; then
+        cat >> "${prefixPath}/system.reg" <<'EOF'
+
+[Software\\ASIO\\WineASIO]
+"CLSID"="{48D0C522-BFCC-45CC-8B84-17F25F33E6E8}"
+"Description"="WineASIO Driver"
+
+[Software\\Classes\\CLSID\\{48D0C522-BFCC-45CC-8B84-17F25F33E6E8}]
+@="WineASIO Object"
+
+[Software\\Classes\\CLSID\\{48D0C522-BFCC-45CC-8B84-17F25F33E6E8}\\InprocServer32]
+@="wineasio32.dll"
+"ThreadingModel"="Apartment"
+EOF
       fi
 
       if [ -f "${prefixPath}/user.reg" ]; then
         sed -i '/"wineasio32"="native"/d' "${prefixPath}/user.reg" 2>/dev/null || true
+        if ! grep -q 'Software\\\\Wine\\\\WineASIO' "${prefixPath}/user.reg"; then
+          cat >> "${prefixPath}/user.reg" <<EOF
+
+[Software\\Wine\\WineASIO]
+"Autostart server"=dword:00000000
+"Connect to hardware"=dword:00000001
+"Fixed buffersize"=dword:00000001
+"Number of inputs"=dword:00000010
+"Number of outputs"=dword:00000010
+"Preferred buffersize"=dword:$(printf '%08x' ${toString sampleSize})
+EOF
+        fi
       fi
 
       if [ -f "${gamePath}/Rocksmith.ini" ]; then

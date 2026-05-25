@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexanderschiffhauer@users.noreply.github.com>
+Date: Mon, 25 May 2026 16:45:00 -0700
+Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave.
+
+The Wayland keyboard leave handler runs while dispatching compositor
+events.  Sending WM_CANCELMODE synchronously from that path can block the
+Wayland dispatch thread if the foreground window's owner thread is busy
+destroying a window tree.
+
+Battle.net can hit this while tearing down the external authentication
+browser after token verification.  The application logs stop after the
+auth browser observer is destroyed, and the stuck process shows the
+Wayland keyboard leave callback waiting in send_inter_thread_message()
+while the browser main thread is in send_destroy_message().
+
+Use SendMessageTimeout semantics for the notification so a temporarily
+hung target window cannot wedge the driver event loop permanently.
+---
+ dlls/winewayland.drv/wayland_keyboard.c | 2 +-
+ dlls/winewayland.drv/waylanddrv.h       | 11 +++++++++++
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/winewayland.drv/wayland_keyboard.c b/dlls/winewayland.drv/wayland_keyboard.c
+index 790d2c5..abb6fff 100644
+--- a/dlls/winewayland.drv/wayland_keyboard.c
++++ b/dlls/winewayland.drv/wayland_keyboard.c
+@@ -1004,7 +1004,7 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *wl_keyboard,
+     if (hwnd == NtUserGetForegroundWindow())
+     {
+         if (!(NtUserGetWindowLongW(hwnd, GWL_STYLE) & WS_MINIMIZE))
+-            send_message(hwnd, WM_CANCELMODE, 0, 0);
++            send_message_timeout(hwnd, WM_CANCELMODE, 0, 0, SMTO_ABORTIFHUNG, 200, NULL);
+     }
+
+     /* FIXME: update foreground window as well */
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index 5611d60..91797d4 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -559,6 +559,17 @@ static inline LRESULT send_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
+     return NtUserMessageCall(hwnd, msg, wparam, lparam, NULL, NtUserSendMessage, FALSE);
+ }
+
++static inline LRESULT send_message_timeout(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
++                                           UINT flags, UINT timeout, PDWORD_PTR res_ptr)
++{
++    struct send_message_timeout_params params = { .flags = flags, .timeout = timeout };
++    LRESULT res = NtUserMessageCall(hwnd, msg, wparam, lparam, &params,
++                                    NtUserSendMessageTimeout, FALSE);
++
++    if (res_ptr) *res_ptr = params.result;
++    return res;
++}
++
+ static inline void ascii_to_unicode(WCHAR *dst, const char *src, size_t len)
+ {
+     while (len--) *dst++ = (unsigned char)*src++;
+--
+2.49.0

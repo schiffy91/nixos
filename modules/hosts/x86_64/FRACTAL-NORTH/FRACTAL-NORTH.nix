@@ -62,7 +62,7 @@ in {
     ./packages.nix
     ./steam.nix
     ./sunshine.nix
-    ../../../apps/pkg-overrides/proton/default.nix
+    ../../../apps/pkg-overrides/proton-custom/default.nix
   ];
   _module.args.host = {
     inherit pci disk tpm input display network audio nvidiaOffloadEnv;

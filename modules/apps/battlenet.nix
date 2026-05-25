@@ -17,6 +17,16 @@ let
         mkdir -p "${prefix}"
         EXE="''${1:-${exe}}"
         LOG_PIXELS="${toString logPixels}"
+        PROTON_RUNTIME_LOG_DIR="''${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
+        mkdir -p "$PROTON_RUNTIME_LOG_DIR"
+        rm -f "$PROTON_RUNTIME_LOG_DIR"/steam-battlenet.log "$PROTON_RUNTIME_LOG_DIR"/battlenet-wrapper.log
+
+        # Plasma starts desktop entries without a terminal. Keep stdout/stderr
+        # open on a file so umu/pressure-vessel do not inherit a dead pipe
+        # during Battle.net's CEF handoff.
+        if ! [ -t 1 ]; then
+          exec >> "$PROTON_RUNTIME_LOG_DIR/battlenet-wrapper.log" 2>&1
+        fi
 
         # Stop a stale prefix wineserver before editing user.reg; otherwise Wine
         # may keep the previous DPI in its registry cache and rewrite the file.
@@ -35,7 +45,7 @@ let
             install -Dm644 "$SRC" "$DST"
           fi
         }
-        for DLL in dcomp.dll dxgi.dll ntdll.dll winevulkan.dll win32u.dll winewayland.drv explorer.exe; do
+        for DLL in dcomp.dll dxgi.dll ntdll.dll secur32.dll winevulkan.dll win32u.dll winewayland.drv explorer.exe; do
           sync_builtin x86_64 system32 "$DLL"
           sync_builtin i386 syswow64 "$DLL"
         done
@@ -98,6 +108,8 @@ let
           WINEPREFIX="${prefix}" \
           GAMEID=umu-battlenet \
           PROTONPATH="${proton}" \
+          PROTON_LOG=1 \
+          PROTON_LOG_DIR="$PROTON_RUNTIME_LOG_DIR" \
           WINEDEBUG="''${WINEDEBUG:--all}" \
           PROTON_USE_WOW64=1 \
           WINE_SIMULATE_WRITECOPY=1 \
@@ -114,10 +126,10 @@ let
   desktop = pkgs.makeDesktopItem {
     name = "battlenet";
     desktopName = "Battle.net";
-    exec = "${launcher}/bin/battlenet";
+    exec = "battlenet";
     icon = "battlenet";
     categories = [ "Game" ];
-    comment = "Battle.net via Proton (native Wayland + HDR)";
+    comment = "Play this game";
     terminal = false;
     startupWMClass = "battle.net.exe";
   };
