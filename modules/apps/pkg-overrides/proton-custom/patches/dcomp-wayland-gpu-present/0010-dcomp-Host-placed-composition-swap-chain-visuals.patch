@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From b801a446f6ee22ed4e7ffceb6d881315e9c73c1b Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 18:15:00 -0700
 Subject: [PATCH] dcomp: Host placed composition swap-chain visuals
@@ -13,14 +13,14 @@ dialog, popup, and form-control layers their own positioned host windows.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/dcomp/device.c | 23 +++++++++++++++++++++--
- 1 file changed, 21 insertions(+), 2 deletions(-)
+ dlls/dcomp/device.c | 22 ++++++++++++++++++++--
+ 1 file changed, 20 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index f59d390..f7e1f83 100644
+index f58320e..a331157 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
-@@ -827,6 +827,25 @@ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
+@@ -833,6 +833,25 @@ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
      return surface;
  }
  
@@ -46,7 +46,7 @@ index f59d390..f7e1f83 100644
  static void dcomp_surface_reset_swapchain(struct dcomp_surface *s)
  {
      if (s->swapchain)
-@@ -1003,8 +1023,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+@@ -999,8 +1018,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
      target_hwnd = t->hwnd;
      surface = dcomp_visual_surface(v);
      dcomp_refresh_swapchain_desc(v);
@@ -57,4 +57,5 @@ index f59d390..f7e1f83 100644
          RECT host_clip;
          int x = placement.x;
 -- 
-2.53.0
+2.54.0
+

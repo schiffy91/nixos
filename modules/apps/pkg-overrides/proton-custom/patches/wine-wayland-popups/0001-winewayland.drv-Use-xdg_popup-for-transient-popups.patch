@@ -1,4 +1,4 @@
-From 62f13e28b3a9c4b04b0e9dacf4443963a5b1d433 Mon Sep 17 00:00:00 2001
+From cabf18d1c1a625af3a025c27c43cd46cd5112a1d Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 25 May 2026 15:34:15 -0700
 Subject: [PATCH] winewayland.drv: Use xdg_popup for transient popups
@@ -20,7 +20,6 @@ foreground parent before they create their menu and avoids anchoring tray
 menus inside panel edge affordances.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-
 ---
  dlls/winewayland.drv/wayland_surface.c | 223 +++++++++++++++++++++----
  dlls/winewayland.drv/wayland_systray.c |  23 +++
@@ -43,13 +42,13 @@ index 88d6eab..9439e10 100644
 +        surface->current.serial = serial;
 +        xdg_surface_ack_configure(xdg_surface, serial);
 +    }
-
+ 
      wayland_win_data_release(data);
-
+ 
 @@ -144,6 +151,30 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener =
      xdg_toplevel_handle_close
  };
-
+ 
 +static void xdg_popup_handle_configure(void *private, struct xdg_popup *xdg_popup,
 +                                       int32_t x, int32_t y, int32_t width, int32_t height)
 +{
@@ -80,7 +79,7 @@ index 88d6eab..9439e10 100644
 @@ -172,6 +203,28 @@ static const struct wp_fractional_scale_v1_listener wp_fractional_scale_listener
      wp_fractional_scale_handle_scale
  };
-
+ 
 +static BOOL wayland_surface_create_fractional_scale(struct wayland_surface *surface,
 +                                                    const char *role_name)
 +{
@@ -109,7 +108,7 @@ index 88d6eab..9439e10 100644
 @@ -213,6 +266,44 @@ static const struct zxdg_toplevel_decoration_v1_listener zxdg_toplevel_decoratio
      zxdg_toplevel_decoration_v1_configure
  };
-
+ 
 +static void wayland_surface_get_parent_relative_rect(struct wayland_surface *surface,
 +                                                     struct wayland_surface *parent,
 +                                                     int *x, int *y, int *width, int *height)
@@ -154,7 +153,7 @@ index 88d6eab..9439e10 100644
 @@ -359,22 +450,7 @@ void wayland_surface_make_toplevel(struct wayland_surface *surface, BOOL server_
              surface->wp_content_type_v1, WP_CONTENT_TYPE_V1_TYPE_GAME);
      }
-
+ 
 -    if (process_wayland.wp_fractional_scale_manager_v1)
 -    {
 -        surface->wp_fractional_scale_v1 =
@@ -172,13 +171,13 @@ index 88d6eab..9439e10 100644
 -            surface->hwnd);
 -    }
 +    if (!wayland_surface_create_fractional_scale(surface, "toplevel")) goto err;
-
+ 
      if (process_wayland.zxdg_decoration_manager_v1 && server_decor)
      {
 @@ -413,6 +489,58 @@ err:
      ERR("Failed to assign toplevel role to wayland surface\n");
  }
-
+ 
 +/**********************************************************************
 + *          wayland_surface_make_popup
 + *
@@ -237,7 +236,7 @@ index 88d6eab..9439e10 100644
 @@ -439,22 +567,7 @@ void wayland_surface_make_subsurface(struct wayland_surface *surface,
          goto err;
      }
-
+ 
 -    if (process_wayland.wp_fractional_scale_manager_v1)
 -    {
 -        surface->wp_fractional_scale_v1 =
@@ -255,13 +254,13 @@ index 88d6eab..9439e10 100644
 -            surface->hwnd);
 -    }
 +    if (!wayland_surface_create_fractional_scale(surface, "client")) goto err;
-
+ 
      surface->role = WAYLAND_SURFACE_ROLE_SUBSURFACE;
      surface->toplevel_hwnd = parent->hwnd;
 @@ -487,6 +600,28 @@ void wayland_surface_clear_role(struct wayland_surface *surface)
      case WAYLAND_SURFACE_ROLE_NONE:
          break;
-
+ 
 +    case WAYLAND_SURFACE_ROLE_POPUP:
 +        if (surface->wp_fractional_scale_v1)
 +        {
@@ -290,7 +289,7 @@ index 88d6eab..9439e10 100644
 @@ -886,6 +1021,25 @@ static void wayland_surface_reconfigure_subsurface(struct wayland_surface *surfa
      }
  }
-
+ 
 +static void wayland_surface_reconfigure_popup(struct wayland_surface *surface)
 +{
 +    struct wayland_win_data *parent_data;
@@ -332,7 +331,7 @@ index 829b7e2..b78d78e 100644
 @@ -259,6 +259,27 @@ static void finish_tray_context_menu(const struct sni_callback *callback)
          NtUserPostMessage(callback->owner_hwnd, WM_NULL, 0, 0);
  }
-
+ 
 +static void adjust_context_menu_position(const struct sni_item *item, int *x, int *y)
 +{
 +    int screen_x = NtUserGetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -363,14 +362,14 @@ index 829b7e2..b78d78e 100644
              NtUserSetForegroundWindow(callback->owner_hwnd);
 +            WAYLAND_RequestWindowActivation(callback->owner_hwnd);
          }
-
+ 
          send_tray_callback(callback, callback->down_msg, FALSE);
 @@ -312,6 +334,7 @@ static BOOL queue_tray_callback(const struct sni_item *item, UINT down_msg, UINT
      callback->x = x;
      callback->y = y;
      callback->context_menu = context_menu;
 +    if (context_menu) adjust_context_menu_position(item, &callback->x, &callback->y);
-
+ 
      if (NtUserPostMessage(callback->window_hwnd, WM_WAYLAND_SNI_CALLBACK, 0, (LPARAM)callback))
          return TRUE;
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
@@ -384,7 +383,7 @@ index 64f7166..8aa986d 100644
 +    WAYLAND_SURFACE_ROLE_POPUP,
      WAYLAND_SURFACE_ROLE_SUBSURFACE,
  };
-
+ 
 @@ -384,6 +385,13 @@ struct wayland_surface
              struct wl_subsurface *wl_subsurface;
              HWND toplevel_hwnd;
@@ -397,7 +396,7 @@ index 64f7166..8aa986d 100644
 +            uint32_t popup_reposition_token;
 +        };
      };
-
+ 
      struct wayland_surface_config pending, requested, processing, current;
 @@ -416,6 +424,8 @@ struct wl_output *wayland_get_best_output_for_rect(const RECT *window_rect);
  struct wayland_surface *wayland_surface_create(HWND hwnd);
@@ -411,7 +410,7 @@ index 64f7166..8aa986d 100644
 @@ -446,6 +456,13 @@ static inline BOOL wayland_surface_is_toplevel(struct wayland_surface *surface)
      return surface->role == WAYLAND_SURFACE_ROLE_TOPLEVEL && surface->xdg_toplevel;
  }
-
+ 
 +static inline struct xdg_surface *wayland_surface_get_xdg(struct wayland_surface *surface)
 +{
 +    if (surface->role == WAYLAND_SURFACE_ROLE_TOPLEVEL) return surface->xdg_surface;
@@ -435,23 +434,23 @@ index 14fc810..e1a3ad9 100644
 --- a/dlls/winewayland.drv/window.c
 +++ b/dlls/winewayland.drv/window.c
 @@ -36,7 +36,6 @@
-
+ 
  WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
-
+ 
 -
  static int wayland_win_data_cmp_rb(const void *key,
                                     const struct rb_entry *entry)
  {
 @@ -216,6 +215,9 @@ static BOOL wayland_win_data_create_wayland_surface(struct wayland_win_data *dat
                 (!(exstyle & WS_EX_LAYERED) || data->layered_attribs_set);
-
+ 
      if (!visible) role = WAYLAND_SURFACE_ROLE_NONE;
 +    else if (toplevel_surface && (style & (WS_CHILD | WS_POPUP)) == WS_POPUP &&
 +             wayland_surface_get_xdg(toplevel_surface))
 +        role = WAYLAND_SURFACE_ROLE_POPUP;
      else if (toplevel_surface) role = WAYLAND_SURFACE_ROLE_SUBSURFACE;
      else role = WAYLAND_SURFACE_ROLE_TOPLEVEL;
-
+ 
 @@ -254,6 +256,10 @@ static BOOL wayland_win_data_create_wayland_surface(struct wayland_win_data *dat
      case WAYLAND_SURFACE_ROLE_TOPLEVEL:
          wayland_surface_make_toplevel(surface, server_decor);
@@ -478,7 +477,7 @@ index 14fc810..e1a3ad9 100644
 @@ -420,6 +431,54 @@ static HWND *build_hwnd_list(void)
      }
  }
-
+ 
 +static BOOL request_window_surface_activation(HWND hwnd)
 +{
 +    struct wayland_win_data *data;
@@ -533,7 +532,7 @@ index 14fc810..e1a3ad9 100644
 @@ -481,6 +540,22 @@ static BOOL is_window_managed(HWND hwnd, UINT swp_flags, BOOL fullscreen)
      return FALSE;
  }
-
+ 
 +static BOOL is_transient_popup(HWND hwnd, HWND owner_hint)
 +{
 +    DWORD style, ex_style;
@@ -561,8 +560,9 @@ index 14fc810..e1a3ad9 100644
 +    managed = is_window_managed(hwnd, swp_flags, fullscreen);
 +    if (surface && is_transient_popup(hwnd, owner_hint)) managed = FALSE;
 +    if (!managed && surface) toplevel = owner_hint;
-
+ 
      if (!(data = wayland_win_data_get(hwnd))) return;
      toplevel_data = toplevel && toplevel != hwnd ? wayland_win_data_get_nolock(toplevel) : NULL;
---
-2.53.0
+-- 
+2.54.0
+

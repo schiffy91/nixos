@@ -1,4 +1,4 @@
-From 964ec7678efa694b7b56379f131f63c4b440fb88 Mon Sep 17 00:00:00 2001
+From aece5fad4a9936c0484b564e2cf097bf56860465 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:41:17 -0700
 Subject: [PATCH] dcomp: Unbind composition targets before destroying hosts
@@ -20,7 +20,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 70 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 6d3ea57..39efe60 100644
+index 0c6befa..f779d21 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -177,6 +177,7 @@ static const IDCompositionSurfaceFactoryVtbl dcomp_surface_factory_vtbl;
@@ -175,5 +175,5 @@ index 6d3ea57..39efe60 100644
          if (FAILED(dcomp_surface_present(surface, v->host_hwnd, t->hwnd)))
              WARN("surface=%p present failed\n", surface);
 -- 
-2.53.0
+2.54.0
 

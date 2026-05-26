@@ -1,4 +1,4 @@
-From 2df5011d0f4b412ee872384eb4f6c1cacc783d2f Mon Sep 17 00:00:00 2001
+From 1bb4cbdd89c56bb20e648db6cba60d85fc9d3d7a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 01:15:06 -0700
 Subject: [PATCH] winewayland.drv: Add StatusNotifierItem tray support
@@ -91,7 +91,7 @@ index d9378fe..354c0b9 100644
  
 diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
 new file mode 100644
-index 0000000..885a1b2
+index 0000000..8cb01f3
 --- /dev/null
 +++ b/dlls/winewayland.drv/wayland_systray.c
 @@ -0,0 +1,901 @@
@@ -997,7 +997,7 @@ index 0000000..885a1b2
 +
 +#endif /* SONAME_LIBDBUS_1 */
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index 8a035bd..b1cff07 100644
+index 83b2fe2..f2cb31e 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
 @@ -82,6 +82,7 @@ enum wayland_window_message
@@ -1008,7 +1008,7 @@ index 8a035bd..b1cff07 100644
  };
  
  enum wayland_surface_config_state
-@@ -602,6 +603,12 @@ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
+@@ -613,6 +614,12 @@ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
  void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
  LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
  void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
@@ -1064,7 +1064,7 @@ index a4e6633..6ea9ed7 100644
  
  C_ASSERT(ARRAYSIZE(__wine_unix_call_wow64_funcs) == waylanddrv_unix_func_count);
 diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
-index dc90ec6..3a3ae09 100644
+index 8e1a530..14fc810 100644
 --- a/dlls/winewayland.drv/window.c
 +++ b/dlls/winewayland.drv/window.c
 @@ -741,6 +741,9 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -1078,4 +1078,5 @@ index dc90ec6..3a3ae09 100644
          FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, (long)wp, lp);
          return 0;
 -- 
-2.53.0
+2.54.0
+

@@ -1,4 +1,4 @@
-From 42e325099d4028369775de66a9191aa33e4b6e74 Mon Sep 17 00:00:00 2001
+From 7d7f1c6395250407e4ff6776a0471d88ceabc080 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:07:42 -0700
 Subject: [PATCH] dcomp: Unbind removed composition hosts
@@ -20,7 +20,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 61 insertions(+), 8 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 3ddd47c..1beef8c 100644
+index 16f9d13..18b040b 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -171,6 +171,8 @@ static const IDCompositionSurfaceVtbl       dcomp_surface_vtbl;
@@ -169,4 +169,5 @@ index 3ddd47c..1beef8c 100644
                  if (SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height, swp_flags) && changed)
                  {
 -- 
-2.53.0
+2.54.0
+

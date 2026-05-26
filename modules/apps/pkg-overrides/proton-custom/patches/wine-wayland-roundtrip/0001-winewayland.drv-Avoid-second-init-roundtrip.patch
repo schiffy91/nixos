@@ -1,4 +1,4 @@
-From d5b49da1cf6996fe47d8b8be2e8e41a3ff961bab Mon Sep 17 00:00:00 2001
+From e9f3733b4d29cd75f81abf82ddc5072814921d36 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:39 -0700
 Subject: [PATCH] winewayland.drv: Avoid second init roundtrip
@@ -17,7 +17,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
-index 7571363..c713110 100644
+index 7571363..c512fe0 100644
 --- a/dlls/winewayland.drv/wayland.c
 +++ b/dlls/winewayland.drv/wayland.c
 @@ -372,10 +372,12 @@ BOOL wayland_process_init(void)
@@ -37,4 +37,5 @@ index 7571363..c713110 100644
      /* initialize steam overlay event */
      init_overlay_event();
 -- 
-2.53.0
+2.54.0
+

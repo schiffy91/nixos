@@ -7,6 +7,9 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp        | 70 ++++++++++++++++++++++++++++
  src/d3d11/d3d11_swapchain.h          | 32 ++++++++++++-
+ src/dxgi/dxgi_factory.cpp            |  4 +-
+ src/dxgi/dxgi_options.cpp            |  3 +-
+ src/dxgi/dxgi_options.h              |  2 +-
  src/dxgi/dxgi_interfaces.h           | 18 +++++++
  src/dxgi/dxgi_surface.cpp            | 20 ++++++++
  src/dxgi/dxgi_surface.h              |  6 +++
@@ -14,8 +17,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  src/dxgi/dxgi_swapchain_dispatcher.h |  3 ++
  src/dxvk/dxvk_presenter.cpp          | 11 ++++-
  src/dxvk/dxvk_presenter.h            |  2 +
- src/util/config/config.cpp           |  4 ++
- 10 files changed, 169 insertions(+), 2 deletions(-)
+ 12 files changed, 169 insertions(+), 5 deletions(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
 index cbcc3c6c0..c0943a94c 100644
@@ -204,6 +206,50 @@ index 99f09450c..6f68b1bc4 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/src/dxgi/dxgi_factory.cpp b/src/dxgi/dxgi_factory.cpp
+index b5d467a94..60536e130 100644
+--- a/src/dxgi/dxgi_factory.cpp
++++ b/src/dxgi/dxgi_factory.cpp
+@@ -283,11 +283,11 @@ namespace dxvk {
+     InitReturnPtr(ppSwapChain);
+ 
+     if (!m_options.enableDummyCompositionSwapchain) {
+-      Logger::err("DxgiFactory::CreateSwapChainForComposition: Not implemented");
++      Logger::err("DxgiFactory::CreateSwapChainForComposition: Disabled by configuration");
+       return E_NOTIMPL;
+     }
+ 
+-    Logger::warn("DxgiFactory::CreateSwapChainForComposition: Creating dummy swap chain");
++    Logger::debug("DxgiFactory::CreateSwapChainForComposition: Creating composition swap chain");
+ 
+     return CreateSwapChainBase(pDevice,
+       nullptr, pDesc, nullptr, pRestrictToOutput, ppSwapChain);
+diff --git a/src/dxgi/dxgi_options.cpp b/src/dxgi/dxgi_options.cpp
+index 2b7906c6e..0d3bfbec4 100644
+--- a/src/dxgi/dxgi_options.cpp
++++ b/src/dxgi/dxgi_options.cpp
+@@ -94,7 +94,6 @@ namespace dxvk {
+     this->forceRefreshRate = config.getOption<int32_t>("dxgi.forceRefreshRate", 0u);
+ 
+-    // We don't support dcomp swapchains and some games may rely on them failing on creation
+-    this->enableDummyCompositionSwapchain = config.getOption<bool>("dxgi.enableDummyCompositionSwapchain", false);
++    this->enableDummyCompositionSwapchain = config.getOption<bool>("dxgi.enableDummyCompositionSwapchain", true);
+
+     // Expose Nvidia GPUs properly if NvAPI is enabled in environment
+     this->hideNvidiaGpu = !isNvapiEnabled();
+diff --git a/src/dxgi/dxgi_options.h b/src/dxgi/dxgi_options.h
+index 8d0e9ce9e..e5be8e6d3 100644
+--- a/src/dxgi/dxgi_options.h
++++ b/src/dxgi/dxgi_options.h
+@@ -46,7 +46,7 @@ namespace dxvk {
+     /// Enable HDR
+     bool enableHDR;
+ 
+-    /// Enable support for dummy composition swapchains
++    /// Enable support for composition swap chains
+     bool enableDummyCompositionSwapchain;
+ 
+     /// Limit frame rate
 diff --git a/src/dxgi/dxgi_interfaces.h b/src/dxgi/dxgi_interfaces.h
 index 390eee55a..f7cfd9abf 100644
 --- a/src/dxgi/dxgi_interfaces.h
@@ -394,20 +440,5 @@ index 48fa2928e..72bce2808 100644
  
      std::vector<Rc<DxvkImage>>  m_images;
      std::vector<PresenterSync>  m_semaphores;
-diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
-index 0a0278cc1..af9ea694f 100644
---- a/src/util/config/config.cpp
-+++ b/src/util/config/config.cpp
-@@ -59,6 +59,10 @@ namespace dxvk {
-     { R"(\\Anno117\.exe$)", {{
-       { "dxgi.enableDummyCompositionSwapchain", "True" }
-     }} },
-+    /* Battle.net: Uses DirectComposition swap chains in the launcher. */
-+    { R"(\\Battle\.net\.exe$)", {{
-+      { "dxgi.enableDummyCompositionSwapchain", "True" }
-+    }} },
- 
-     /**********************************************/
-     /* D3D11 GAMES                                */
 -- 
 2.53.0

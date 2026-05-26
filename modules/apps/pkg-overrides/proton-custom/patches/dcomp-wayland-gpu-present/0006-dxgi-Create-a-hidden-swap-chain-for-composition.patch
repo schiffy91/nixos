@@ -1,4 +1,4 @@
-From 81f392fe651f3abedd4bed7ed9810a1d8ba1fe53 Mon Sep 17 00:00:00 2001
+From b5260dd994d6806047d720f6bceab9a1732a7dcf Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 20 May 2026 06:03:54 -0700
 Subject: [PATCH] dxgi: Create a hidden swap chain for composition
@@ -45,5 +45,5 @@ index ebdb42a..c7155e5 100644
  
  static UINT STDMETHODCALLTYPE dxgi_factory_GetCreationFlags(IWineDXGIFactory *iface)
 -- 
-2.53.0
+2.54.0
 

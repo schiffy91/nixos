@@ -8,8 +8,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  src/d3d11/d3d11_features.cpp | 22 +++++++++++++++++++++-
  src/d3d11/d3d11_options.cpp  |  1 +
  src/d3d11/d3d11_options.h    |  3 +++
- src/util/config/config.cpp   |  3 ++-
- 4 files changed, 27 insertions(+), 2 deletions(-)
+ 3 files changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/src/d3d11/d3d11_features.cpp b/src/d3d11/d3d11_features.cpp
 index 504145b..567ae92 100644
@@ -74,18 +73,5 @@ index 3bf1e5e..ea4ac66 100644
      /// Defer surface creation until first present call. This
      /// fixes issues with games that create multiple swap chains
      /// for a single window that may interfere with each other.
-diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
-index af9ea69..8f13a7f 100644
---- a/src/util/config/config.cpp
-+++ b/src/util/config/config.cpp
-@@ -62,6 +62,7 @@ namespace dxvk {
-     /* Battle.net: Uses DirectComposition swap chains in the launcher. */
-     { R"(\\Battle\.net\.exe$)", {{
--      { "dxgi.enableDummyCompositionSwapchain", "True" }
-+      { "dxgi.enableDummyCompositionSwapchain", "True" },
-+      { "d3d11.maxSharedResourceTier", "0" }
-     }} },
-
-     /**********************************************/
 --
 2.53.0

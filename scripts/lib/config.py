@@ -106,8 +106,53 @@ class Config:
         if not snapshot: return
         if not cls.eval("config.settings.disk.immutability.enable"): return
         if not cls.eval("config.settings.disk.immutability.enforce.onUpdate"): return
+        if cls.eval("config.settings.disk.immutability.implementation") == "semipermeable_membrane":
+            cls.refresh_semipermeable_membrane(snapshot)
+            return
         Utils.log("Refreshing immutable CLEAN snapshots after update")
         snapshot.create_initial_snapshots()
+    @classmethod
+    def refresh_semipermeable_membrane(cls, snapshot):
+        if not cls.eval("config.settings.disk.immutability.semipermeable_membrane.enable"):
+            Utils.log("Semipermeable membrane is disabled; skipping update enforcement")
+            return
+        mode = cls.eval("config.settings.disk.immutability.semipermeable_membrane.mode")
+        if mode == "disabled":
+            Utils.log("Semipermeable membrane mode is disabled; skipping update enforcement")
+            return
+        dry_run = cls.eval("config.settings.disk.immutability.semipermeable_membrane.dryRun")
+        if dry_run:
+            Utils.log("DRY would refresh immutable CLEAN snapshots after update")
+        else:
+            Utils.log("Refreshing immutable CLEAN snapshots after update")
+            snapshot.create_initial_snapshots()
+        Utils.log("Converging semipermeable membrane after update")
+        args = [
+            "/run/current-system/sw/bin/semipermeable_membrane",
+            cls.get_immutability_device(),
+            cls.eval("config.settings.disk.subvolumes.snapshots.name"),
+            cls.eval("config.settings.disk.immutability.persist.snapshots.cleanName"),
+            mode,
+            cls.eval("config.settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot"),
+            "/etc/semipermeable_membrane/spec.tsv",
+        ]
+        if dry_run:
+            args.insert(1, "--dry-run")
+        pairs = str(cls.eval(
+            "config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot"
+        )).split()
+        cls.sh.run(" ".join(shlex.quote(str(arg)) for arg in args + pairs),
+                   capture_output=False)
+        if dry_run:
+            Utils.log("DRY would start semipermeable-membrane-mounts.service")
+            return
+        cls.sh.run("systemctl start semipermeable-membrane-mounts.service",
+                   capture_output=False)
+    @classmethod
+    def get_immutability_device(cls):
+        if cls.eval("config.settings.disk.encryption.enable"):
+            return cls.eval("config.settings.disk.by.mapper.root")
+        return cls.eval("config.settings.disk.by.partlabel.root")
     @classmethod
     def get_home_manager_logs(cls):
         result = cls.sh.run(

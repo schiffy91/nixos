@@ -1,7 +1,7 @@
 # proton-custom
 
 This directory packages the custom Proton compat tool. It starts from
-`GE-Proton10-34`, applies a small explicit Wine/DXVK patch series, and overlays
+`GE-Proton10-34`, applies an explicit Wine/DXVK patch series, and overlays
 only the rebuilt artifacts on top of the GE binary release. The primary current
 consumer is Battle.net on native Wayland, but the package is intentionally kept
 generic enough to be the one custom Proton build used by Steam games too.
@@ -37,10 +37,10 @@ the `git format-patch -s` commit order for that topic.
 | `wine-wayland-roundtrip` | `0001-winewayland.drv-Avoid-second-init-roundtrip.patch` | Active. Avoids a blocking second Wayland init roundtrip. |
 | `wine-wayland-layered-windows` | `0001-winewayland.drv-Hook-UpdateLayeredWindow.patch` | Active. Hooks `pUpdateLayeredWindow` only. |
 | `wine-wayland-status-notifier` | `0001..0004` | Active. Adds SNI tray support, callback polish, explorer-to-driver icon snapshots, and self-contained item lifetime handling. |
-| `dcomp-wayland-gpu-present` | `0001..0016` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
+| `dcomp-wayland-gpu-present` | `0001..0017` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
 | `win32u-load-driver-deadlock` | `0001` | Active. Bounds desktop-driver readiness waits. |
 | `win32u-shared-gpu-resource` | `0001` | Active. Opens D3DKMT shared GPU resources used by composition paths. |
-| `dxvk-battlenet-composition` | `0001..0006` | Active. Enables Battle.net composition swap chains in DXVK, compositor pacing, a shared-resource-tier cap, resize tracking, and preserved contents across partial updates. |
+| `dxvk-composition-swapchain` | `0001..0007` | Active. Enables DXGI composition swap chains in DXVK, compositor pacing, resize tracking, preserved contents across partial updates, and first-present host visibility. |
 
 ## Runtime Scope
 
@@ -132,6 +132,16 @@ make setup-wine
 make dcomp
 make wayland
 ```
+
+The committed patches are the source of truth. The ignored `src/` checkout is a
+generated workspace for fast iteration only:
+
+```bash
+make source-drift
+make reset-source-drift
+```
+
+`source-drift` must pass before treating a build as production material.
 
 The helper keeps separate 64-bit and i386 Wine build trees so the local build
 uses the same WoW64 shape as the Nix package. `overlay-wine` also updates

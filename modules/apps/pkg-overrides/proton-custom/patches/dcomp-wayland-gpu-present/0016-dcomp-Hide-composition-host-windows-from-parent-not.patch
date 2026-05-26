@@ -1,7 +1,8 @@
-From bab145de5bc7172aa33ad7d89e7a8992a3b9ac6f Mon Sep 17 00:00:00 2001
+From 9ff79795e5aaac960e613a2c4c2ccce21cc9e48a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Sat, 23 May 2026 15:48:00 -0700
-Subject: [PATCH] dcomp: Hide composition host windows from parent notifications
+Subject: [PATCH] dcomp: Hide composition host windows from parent
+ notifications
 
 Wine's DirectComposition implementation uses internal child HWNDs to host
 composition swap chains that need placement or clipping. Real DComp visuals
@@ -14,7 +15,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 39efe60..bab145d 100644
+index f779d21..35578fd 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1484,6 +1484,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
@@ -26,4 +27,5 @@ index 39efe60..bab145d 100644
                                                 dcomp_host_class_name, NULL,
                                                 WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
 -- 
-2.53.0
+2.54.0
+

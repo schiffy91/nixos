@@ -14,8 +14,9 @@ DELAY ?= 20
 LOG_LINES ?= 120
 FRAMES ?= 4
 FRAME_INTERVAL ?= 1
-CAPTURE_FALLBACK ?= foreground
+CAPTURE_FALLBACK ?= none
 ARTIFACT_DIR ?=
+CAPTURE_SIZE ?= 6015x3385
 STOP_ON_WHITE ?= 0
 TRACE ?= quiet
 RESET_CACHE ?= 0
@@ -38,7 +39,7 @@ endif
 
 .PHONY: \
 	help shell build install configure run cycle cycle-no-run \
-	check build-capture-helper status logs diagnose sni context-menu window-info cache-state reset-browser-cache install-capture-helper probe-window reproduce capture-window frames-window \
+	check build-capture-helper status logs diagnose sni context-menu window-info cache-state reset-browser-cache install-capture-helper probe-window reproduce capture-window frames-window classify-artifacts \
 	focus cleanup proton-status proton-restore
 
 help:
@@ -69,6 +70,7 @@ help:
 		'  make reset-browser-cache          move browser/GPU caches to a timestamped backup' \
 		'  make install-capture-helper       install local KWin screenshot-authorized helper' \
 		'  make probe-window                 classify Battle.net window pixels, delete temp capture' \
+		'  make classify-artifacts           classify saved reproduce window captures' \
 		'  make reproduce                    repeat KDE desktop-entry launch + screenshot artifacts' \
 		'  make capture-window               active Battle.net window only; never full desktop' \
 		'  make frames-window                active-window frame burst for flicker analysis' \
@@ -82,6 +84,7 @@ help:
 		'  FRAME_INTERVAL=$(FRAME_INTERVAL)' \
 		'  CAPTURE_FALLBACK=$(CAPTURE_FALLBACK)' \
 		'  ARTIFACT_DIR=$(ARTIFACT_DIR)' \
+		'  CAPTURE_SIZE=$(CAPTURE_SIZE)' \
 		'  STOP_ON_WHITE=$(STOP_ON_WHITE)' \
 		'  TRACE=$(TRACE)' \
 		'  RESET_CACHE=$(RESET_CACHE)' \
@@ -161,6 +164,10 @@ capture-window:
 
 frames-window:
 	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" COUNT="$(COUNT)" INTERVAL="$(INTERVAL)" $(BATTLENET_DIR)/bin/battlenet-debug frames-window "$(OUTPUT_DIR)")
+
+classify-artifacts:
+	@test -n "$(ARTIFACT_DIR)" || (echo 'ARTIFACT_DIR is required' >&2; exit 1)
+	$(call battlenet_run,BATTLENET_CAPTURE_SIZE="$(CAPTURE_SIZE)" $(BATTLENET_DIR)/bin/battlenet-debug classify-artifacts "$(ARTIFACT_DIR)")
 
 focus:
 	$(PROTON_DIR)/bin/proton-custom-dev focus

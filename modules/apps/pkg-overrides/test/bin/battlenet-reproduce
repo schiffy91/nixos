@@ -164,6 +164,7 @@ run_once() {
   cp -f "$runtime_dir/steam-battlenet.log" "$run_dir/steam-battlenet.log" 2>/dev/null || true
 
   for frame in $(seq 1 "$frames"); do
+    date --iso-8601=ns > "$run_dir/window-$frame.time"
     BATTLENET_CAPTURE_FALLBACK="$capture_fallback" \
       "$app_dir/bin/battlenet-debug" probe-window "$run_dir/window-$frame.png" \
       >"$run_dir/probe-$frame.txt" 2>&1 || true

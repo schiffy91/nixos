@@ -1,4 +1,4 @@
-From 417c1c771f6841771c792a5464f3e62e2e1d4dc3 Mon Sep 17 00:00:00 2001
+From 5c3901b45492bbf549f677b7b3a3c623bb7f2f5a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:20:49 -0700
 Subject: [PATCH] explorer: Forward docked tray icon updates
@@ -27,7 +27,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  8 files changed, 60 insertions(+), 35 deletions(-)
 
 diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
-index 3838cc0..d401c6a 100644
+index 5eaddc7..8e5a6ce 100644
 --- a/dlls/win32u/driver.c
 +++ b/dlls/win32u/driver.c
 @@ -737,7 +737,8 @@ static void nulldrv_SystrayDockInit( HWND hwnd )
@@ -40,7 +40,7 @@ index 3838cc0..d401c6a 100644
  {
      return FALSE;
  }
-@@ -1174,7 +1175,8 @@ static void loaderdrv_SystrayDockInit( HWND hwnd )
+@@ -1170,7 +1171,8 @@ static void loaderdrv_SystrayDockInit( HWND hwnd )
      load_driver()->pSystrayDockInit( hwnd );
  }
  
@@ -115,10 +115,10 @@ index ef383e5..179db30 100644
      FIXME("D-Bus support is not available; systray icon not registered\n");
      return FALSE;
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index b1cff07..5611d60 100644
+index f2cb31e..64f7166 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -604,7 +604,8 @@ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
+@@ -615,7 +615,8 @@ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
  LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
  void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
  void WAYLAND_SystrayDockInit(HWND hwnd);
@@ -260,5 +260,5 @@ index 02fe507..e613dd1 100644
          }
          break;
 -- 
-2.53.0
+2.54.0
 

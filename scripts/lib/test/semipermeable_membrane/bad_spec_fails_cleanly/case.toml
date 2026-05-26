@@ -1,0 +1,25 @@
+name = "bad_spec_fails_cleanly"
+runs = ["!reset"]
+spec = [
+  "@home\t/home\trelative/path\tfile",
+]
+volumes = [
+  "@home=/tmp/semipermeable_membrane-home-not-mounted",
+]
+
+[clean]
+"@home/alex/.bash_history" = "clean history\n"
+
+[live]
+"@home/alex/.bash_history" = "user history\n"
+"@home/alex/session" = "session\n"
+
+[expect]
+files = [
+  "@home/alex/.bash_history=user history\n",
+  "@home/alex/session=session\n",
+]
+missing = [
+  "@persist",
+  "@snapshots/@home/A",
+]

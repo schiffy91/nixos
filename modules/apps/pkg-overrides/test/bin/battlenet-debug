@@ -9,7 +9,7 @@ prefix="${HOME}/Games/Battle.net/prefix"
 
 usage() {
   cat <<EOF
-usage: battlenet-debug [status|logs|sni|context-menu|window-info|cache-state|reset-browser-cache|probe-window|capture-window|frames-window|diagnose]
+usage: battlenet-debug [status|logs|sni|context-menu|window-info|cache-state|reset-browser-cache|probe-window|capture-window|frames-window|classify-image|classify-artifacts|diagnose]
 
 Commands:
   status          print process, compat tool, desktop entry, and log locations
@@ -23,6 +23,9 @@ Commands:
   probe-window    capture only Battle.net, print aggregate pixels, delete temp captures
   capture-window  capture only the Battle.net window; foreground fallback is opt-in
   frames-window   capture a short burst of only the active Battle.net window
+  classify-image  classify an existing capture by aggregate pixels
+  classify-artifacts
+                  classify window captures in a reproduce artifact directory
   diagnose        run status, sni, and logs
 
 Full-desktop capture is intentionally unavailable here.
@@ -228,7 +231,6 @@ reset_browser_cache() {
 install_capture_helper() {
   local desktop_dir desktop_file helper installed_helper
 
-  pkill -f '/etc/nixos/modules/apps/battlenet/.build/battlenet-capture-window' 2>/dev/null || true
   pkill -f "$app_dir/.build/battlenet-capture-window" 2>/dev/null || true
 
   helper="$app_dir/.build/battlenet-capture-window"
@@ -312,10 +314,63 @@ normalize_capture_image() {
 
   magick identify "$output" >/dev/null 2>&1 && return 0
 
-  size="$(raw_capture_size "$output")"
+  if ! size="$(raw_capture_size "$output")"; then
+    size="${BATTLENET_CAPTURE_SIZE:-6015x3385}"
+  fi
   tmp="$(mktemp --tmpdir battlenet-window.XXXXXX.png)"
   magick -size "$size" -depth 8 RGBA:"$output" "$tmp"
   mv "$tmp" "$output"
+}
+
+classify_image() {
+  run_in_devshell classify-image "$@"
+  local output="$1"
+  local size="${2:-${BATTLENET_CAPTURE_SIZE:-6015x3385}}"
+  local tmp="" mean stdev min max classification
+
+  if [ ! -s "$output" ]; then
+    echo "classification=missing"
+    return 0
+  fi
+
+  if ! magick identify "$output" >/dev/null 2>&1; then
+    tmp="$(mktemp --tmpdir battlenet-window.XXXXXX.png)"
+    if ! magick -size "$size" -depth 8 RGBA:"$output" "$tmp"; then
+      rm -f "$tmp"
+      echo "classification=unreadable"
+      return 0
+    fi
+    output="$tmp"
+  fi
+
+  read -r mean stdev min max < <(
+    magick identify -format '%[fx:mean] %[fx:standard_deviation] %[fx:minima] %[fx:maxima]\n' "$output"
+  )
+  classification="$(
+    awk -v mean="$mean" -v stdev="$stdev" '
+      BEGIN {
+        if (mean > 0.88 && stdev < 0.08) print "white";
+        else if (mean < 0.04 && stdev < 0.04) print "black";
+        else print "content";
+      }
+    '
+  )"
+  magick identify -format 'window width=%w height=%h ' "$output"
+  printf 'mean=%s stdev=%s min=%s max=%s classification=%s\n' \
+    "$mean" "$stdev" "$min" "$max" "$classification"
+  [ -z "$tmp" ] || rm -f "$tmp"
+}
+
+classify_artifacts() {
+  run_in_devshell classify-artifacts "$@"
+  local artifact_dir="${1:?artifact directory is required}"
+  local image
+
+  for image in "$artifact_dir"/run-*/window-*.png; do
+    [ -e "$image" ] || continue
+    printf '%s ' "$image"
+    classify_image "$image"
+  done
 }
 
 capture_battlenet_window() {
@@ -464,6 +519,8 @@ case "$command" in
   probe-window) probe_window "$@" ;;
   capture-window) capture_window "$@" ;;
   frames-window) frames_window "$@" ;;
+  classify-image) classify_image "$@" ;;
+  classify-artifacts) classify_artifacts "$@" ;;
   diagnose)
     status
     sni

@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From a387388e9feacdcb9454ce31f17d40bd901f3d4d Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 08:30:00 -0700
 Subject: [PATCH] win32u: Open D3DKMT shared GPU resources
@@ -16,8 +16,8 @@ recover the D3D runtime description from the same shared object.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/win32u/d3dkmt.c | 252 ++++++++++++++++++++++++++++++++++++++++---
- 1 file changed, 238 insertions(+), 14 deletions(-)
+ dlls/win32u/d3dkmt.c | 290 +++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 278 insertions(+), 12 deletions(-)
 
 diff --git a/dlls/win32u/d3dkmt.c b/dlls/win32u/d3dkmt.c
 index 74dbce9..c67fd14 100644
@@ -26,7 +26,7 @@ index 74dbce9..c67fd14 100644
 @@ -45,6 +45,15 @@ struct d3dkmt_device
      struct list entry;                  /* List entry */
  };
-
+ 
 +struct d3dkmt_resource
 +{
 +    D3DKMT_HANDLE handle;               /* Local resource handle */
@@ -45,12 +45,12 @@ index 74dbce9..c67fd14 100644
  static struct list d3dkmt_devices = LIST_INIT( d3dkmt_devices );
 +static struct list d3dkmt_resources = LIST_INIT( d3dkmt_resources );
  static struct list d3dkmt_vidpn_sources = LIST_INIT( d3dkmt_vidpn_sources );   /* VidPN source information list */
-
+ 
  static VkInstance d3dkmt_vk_instance; /* Vulkan instance for D3DKMT functions */
 @@ -126,6 +136,142 @@ static struct d3dkmt_adapter *find_adapter_from_handle( D3DKMT_HANDLE handle )
      return NULL;
  }
-
+ 
 +/* d3dkmt_lock must be held */
 +static struct d3dkmt_device *find_device_from_handle( D3DKMT_HANDLE handle )
 +{
@@ -228,11 +228,11 @@ index 74dbce9..c67fd14 100644
 +
 +    return status;
  }
-
+ 
  /******************************************************************************
 @@ -303,6 +478,7 @@ NTSTATUS WINAPI NtGdiDdDDIDestroyDevice( const D3DKMT_DESTROYDEVICE *desc )
      if (!found) return STATUS_INVALID_PARAMETER;
-
+ 
      set_owner_desc.hDevice = desc->hDevice;
 +    destroy_device_resources( desc->hDevice );
      NtGdiDdDDISetVidPnSourceOwner( &set_owner_desc );
@@ -254,7 +254,7 @@ index 74dbce9..c67fd14 100644
 +    destroy.AllocationCount = params->AllocationCount;
 +    return NtGdiDdDDIDestroyAllocation( &destroy );
  }
-
+ 
  /******************************************************************************
 @@ -715,8 +898,90 @@ NTSTATUS WINAPI NtGdiDdDDIDestroyAllocation2( const D3DKMT_DESTROYALLOCATION2 *p
   */
@@ -347,7 +347,7 @@ index 74dbce9..c67fd14 100644
 +           params->hGlobalShare, resource->handle );
 +    return STATUS_SUCCESS;
  }
-
+ 
  /******************************************************************************
 @@ -724,8 +989,7 @@ NTSTATUS WINAPI NtGdiDdDDIDestroyAllocation( const D3DKMT_DESTROYALLOCATION *par
   */
@@ -357,7 +357,7 @@ index 74dbce9..c67fd14 100644
 -    return STATUS_NOT_IMPLEMENTED;
 +    return open_resource( params );
  }
-
+ 
  /******************************************************************************
 @@ -733,8 +997,7 @@ NTSTATUS WINAPI NtGdiDdDDIOpenResource( D3DKMT_OPENRESOURCE *params )
   */
@@ -367,7 +367,7 @@ index 74dbce9..c67fd14 100644
 -    return STATUS_NOT_IMPLEMENTED;
 +    return open_resource( params );
  }
-
+ 
  /******************************************************************************
 @@ -751,8 +1014,11 @@ NTSTATUS WINAPI NtGdiDdDDIOpenResourceFromNtHandle( D3DKMT_OPENRESOURCEFROMNTHAN
   */
@@ -381,7 +381,8 @@ index 74dbce9..c67fd14 100644
 +        return query_shared_resource_metadata( params->hGlobalShare, params->pPrivateRuntimeData, &params->PrivateRuntimeDataSize );
 +    return STATUS_SUCCESS;
  }
-
+ 
  /******************************************************************************
---
-2.49.0
+-- 
+2.54.0
+

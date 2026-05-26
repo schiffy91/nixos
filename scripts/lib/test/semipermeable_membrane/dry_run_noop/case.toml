@@ -1,0 +1,25 @@
+name = "dry_run_noop"
+runs = ["--dry-run reset"]
+spec = [
+  "@home\t/home\t/home/alex/.bash_history\tfile",
+]
+volumes = [
+  "@home=/tmp/semipermeable_membrane-home-not-mounted",
+]
+
+[clean]
+"@home/alex/.bash_history" = "clean history\n"
+
+[live]
+"@home/alex/.bash_history" = "user history\n"
+"@home/alex/session" = "session\n"
+
+[expect]
+files = [
+  "@home/alex/.bash_history=user history\n",
+  "@home/alex/session=session\n",
+]
+missing = [
+  "@persist",
+  "@snapshots/@home/A",
+]

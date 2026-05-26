@@ -38,7 +38,7 @@ endif
 	reset-dev install-store \
 	package setup-wine setup-dxvk build build-dxvk build-all \
 	dcomp dxgi wayland explorer win32u winevulkan ntdll dxvk \
-	overlay-wine overlay-dxvk restore-dxvk check-patches \
+	overlay-wine overlay-dxvk restore-dxvk check-patches patch-lint source-drift reset-source-drift \
 	wine-status wine-diff wine-format-patch \
 	dxvk-status dxvk-diff dxvk-format-patch
 
@@ -58,6 +58,9 @@ help:
 		'  make install-store STORE=...  point compat symlink at a built store path' \
 		'  make status                   show active compat tool and source dirs' \
 		'  make check-patches            verify Wine/DXVK patch application only' \
+		'  make patch-lint               check patch mailbox metadata hygiene' \
+		'  make source-drift             compare dev source with patched package source' \
+		'  make reset-source-drift       restore dev source to patched package source' \
 		'  make package                  build the Nix compat-tool package' \
 		'  make cleanup                  kill dev Wine processes for this prefix' \
 		'' \
@@ -109,6 +112,15 @@ status:
 
 check-patches:
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) check-patches)
+
+patch-lint:
+	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) patch-lint)
+
+source-drift:
+	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) source-drift)
+
+reset-source-drift:
+	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) reset-source-drift)
 
 package:
 	nix build --no-link --print-out-paths --impure --expr 'let flake = builtins.getFlake "git+file://$(NIXOS)"; pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; in pkgs.callPackage $(PROTON_DIR)/package.nix { inherit (pkgs) makeWrapper rsync unzip; }'

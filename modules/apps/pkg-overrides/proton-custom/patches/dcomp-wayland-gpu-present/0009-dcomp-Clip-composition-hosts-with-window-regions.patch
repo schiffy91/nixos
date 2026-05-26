@@ -1,4 +1,4 @@
-From 2c8e9d854f6cc3022d1aa6eb608ff5f1a0d38a69 Mon Sep 17 00:00:00 2001
+From 075e1eb2144c63a9e5e7123ca638d758893275b2 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 10:02:38 -0700
 Subject: [PATCH] dcomp: Clip composition hosts with window regions
@@ -15,11 +15,11 @@ while still letting child-window clipping limit the presented area.
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
  dlls/dcomp/Makefile.in |  2 +-
- dlls/dcomp/device.c    | 71 ++++++++++++++++++++++++++---------------
- 2 files changed, 46 insertions(+), 27 deletions(-)
+ dlls/dcomp/device.c    | 99 +++++++++++++++++++++++++-----------------
+ 2 files changed, 61 insertions(+), 40 deletions(-)
 
 diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
-index e0f7189..87d072a 100644
+index 4db5387..9904e9d 100644
 --- a/dlls/dcomp/Makefile.in
 +++ b/dlls/dcomp/Makefile.in
 @@ -1,6 +1,6 @@
@@ -31,7 +31,7 @@ index e0f7189..87d072a 100644
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index b832bcf..f59d390 100644
+index 33190f7..f58320e 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -27,6 +27,7 @@
@@ -80,13 +80,14 @@ index b832bcf..f59d390 100644
 +    if (v->has_clip)
      {
 -        UINT old_width = *width, old_height = *height;
-+        RECT visual_clip;
- 
+-
 -        if (*width > (UINT)max_width) *width = max_width;
 -        if (*height > (UINT)max_height) *height = max_height;
 -        TRACE("clipped composition host from %ux%u to %ux%u for hwnd %p client=%ldx%ld pos=(%d,%d)\n",
 -              old_width, old_height, *width, *height, hwnd,
 -              client.right - client.left, client.bottom - client.top, x, y);
++        RECT visual_clip;
++
 +        SetRect(&visual_clip, round_float(v->clip.left), round_float(v->clip.top),
 +                round_float(v->clip.right), round_float(v->clip.bottom));
 +        if (visual_clip.left > clip->left) clip->left = visual_clip.left;
@@ -175,5 +176,5 @@ index b832bcf..f59d390 100644
          }
          else if (v->host_hwnd)
 -- 
-2.53.0
+2.54.0
 

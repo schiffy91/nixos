@@ -1,0 +1,36 @@
+name = "idempotent_rotation"
+runs = ["reset", "reset", "reset"]
+spec = [
+  "@home\t/home\t/home/alex/.bash_history\tfile",
+]
+volumes = [
+  "@home=/tmp/semipermeable_membrane-home-not-mounted",
+]
+
+[clean]
+"@home/alex/.bash_history" = "clean history\n"
+
+[live]
+"@home/alex/.bash_history" = "user history\n"
+"@home/alex/session" = "session\n"
+
+[expect]
+subvolumes = [
+  "@persist/.semipermeable_membrane/files",
+  "@snapshots/@home/A",
+  "@snapshots/@home/B",
+  "@snapshots/@home/C",
+]
+readonly = [
+  "@snapshots/@home/A",
+  "@snapshots/@home/B",
+  "@snapshots/@home/C",
+]
+files = [
+  "@persist/.semipermeable_membrane/files/home!alex!.bash_history=user history\n",
+  "@home/alex/.bash_history=user history\n",
+]
+missing = [
+  "@home/alex/session",
+  "@snapshots/@home/NEXT",
+]

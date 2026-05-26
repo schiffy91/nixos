@@ -1,0 +1,58 @@
+name = "happy_path"
+runs = ["reset"]
+spec = [
+  "@root\t/\t/etc/nixos\tdirectory",
+  "@home\t/home\t/home/alex/.bash_history\tfile",
+  "@home\t/home\t/home/alex/Downloads\tdirectory",
+]
+volumes = [
+  "@root=/tmp/semipermeable_membrane-root-not-mounted",
+  "@home=/tmp/semipermeable_membrane-home-not-mounted",
+]
+
+[clean]
+"@root/etc/nixos/configuration.nix" = "clean root\n"
+"@home/alex/.bash_history" = "clean history\n"
+"@home/alex/Downloads/default.txt" = "clean downloads\n"
+
+[live]
+"@root/etc/nixos/configuration.nix" = "user root\n"
+"@root/tmp/delete-me" = "delete root\n"
+"@home/alex/.bash_history" = "user history\n"
+"@home/alex/cache/delete-me" = "delete home\n"
+"@home/alex/Downloads/big.bin" = "blob:4194304"
+
+[expect]
+subvolumes = [
+  "@persist",
+  "@persist/dirs",
+  "@persist/dirs/etc!nixos",
+  "@persist/dirs/home!alex!Downloads",
+  "@snapshots/@root/A",
+  "@snapshots/@home/A",
+]
+readonly = [
+  "@snapshots/@root/A",
+  "@snapshots/@home/A",
+]
+files = [
+  "@persist/dirs/etc!nixos/configuration.nix=user root\n",
+  "@persist/.semipermeable_membrane/files/home!alex!.bash_history=user history\n",
+  "@home/alex/.bash_history=user history\n",
+]
+exists = [
+  "@persist/dirs/home!alex!Downloads/big.bin",
+]
+missing = [
+  "@home/alex/cache/delete-me",
+  "@home/alex/Downloads/big.bin",
+  "@root/tmp/delete-me",
+  "@snapshots/@root/NEXT",
+  "@snapshots/@home/NEXT",
+]
+equal = [
+  "@persist/dirs/home!alex!Downloads/big.bin == @snapshots/@home/A/alex/Downloads/big.bin",
+]
+direct_mounts = [
+  "@persist/dirs/home!alex!Downloads:big.bin",
+]

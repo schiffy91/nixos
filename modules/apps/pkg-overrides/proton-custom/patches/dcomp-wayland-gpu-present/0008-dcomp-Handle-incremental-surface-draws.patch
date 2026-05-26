@@ -1,4 +1,4 @@
-From 4529c6c1a897f13cde5ce6d25baf8066ce276a58 Mon Sep 17 00:00:00 2001
+From 3b48e1dc720861b490a248ba9545cb416d801844 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 07:27:58 -0700
 Subject: [PATCH] dcomp: Handle incremental surface draws
@@ -20,7 +20,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 68 insertions(+), 15 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 19e3d30..b832bcf 100644
+index 7fc8c0f..33190f7 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -334,13 +334,6 @@ static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *c
@@ -151,4 +151,5 @@ index 19e3d30..b832bcf 100644
      if (surface && v->host_hwnd)
      {
 -- 
-2.53.0
+2.54.0
+

@@ -34,6 +34,11 @@ If a visual requires a host for placement, clipping, or surface presentation
 but no valid host exists, the content is left unbound instead of being
 presented on the root HWND with incorrect geometry.
 
+Composition host HWNDs are created hidden. Surface hosts are shown after Wine
+has presented their backing content; swap-chain hosts stay hidden until DXVK
+receives the first present for that composition swap chain. This prevents an
+empty host window from being mapped during the CEF login-to-launcher handoff.
+
 ## Review Notes
 Wine's `dcomp.dll` records the visual tree and asks DXVK to retarget each
 composition swap chain to the real DComp target HWND or to a child host HWND
@@ -46,8 +51,8 @@ behavior in Wine and native presentation in DXVK's existing WSI code.
 * Build artifacts for `dcomp.dll`, `dxgi.dll`, `explorer.exe`,
   `winewayland.drv`, `winevulkan`, and `win32u` are overlaid into the Proton
   tool for both x86_64 and i386 where GE-Proton ships them.
-* Runtime logs should show the launcher using D3D11/DXGI/DComp, DXVK's
-  Battle.net profile enabling dummy composition swap chains, and
-  `D3D11SwapChain::SetCompositionTarget` binding to the launcher window.
-* Chromium/CEF shared-image paths are still capped in the DXVK Battle.net
-  profile until Wine exposes real duplicable shared-resource handles.
+* Runtime logs should show the launcher using D3D11/DXGI/DComp,
+  `CreateSwapChainForComposition`, and `D3D11SwapChain::SetCompositionTarget`
+  binding to the launcher window.
+* Chromium/CEF shared-image paths should use Wine's D3DKMT shared-resource
+  plumbing rather than a DXVK application profile.

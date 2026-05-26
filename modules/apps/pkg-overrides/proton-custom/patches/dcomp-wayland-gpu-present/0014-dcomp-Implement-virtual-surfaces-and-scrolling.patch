@@ -1,4 +1,4 @@
-From 4ef2bd5ea69dc7bfd8128d24876f16d63ed198eb Mon Sep 17 00:00:00 2001
+From 30872f51faee281929364bfa21de67bee2c5603b Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:10:59 -0700
 Subject: [PATCH] dcomp: Implement virtual surfaces and scrolling
@@ -15,7 +15,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 224 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 1beef8c..6d3ea57 100644
+index 18b040b..0c6befa 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -109,6 +109,7 @@ struct dcomp_visual
@@ -360,4 +360,5 @@ index 1beef8c..6d3ea57 100644
  #define DEV_STUB_OK(name, ret_type, out_name) \
      static HRESULT WINAPI device_##name(IDCompositionDesktopDevice *iface, ret_type **out_name) \
 -- 
-2.53.0
+2.54.0
+

@@ -1,0 +1,68 @@
+From 2d0bba614d0cd0c57b2ae95eb0e42b9f9b7d3aef Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Mon, 25 May 2026 17:49:00 -0700
+Subject: [PATCH] d3d11: Show composition targets on first present
+
+Wine's DComp bridge keeps child host windows hidden until a swap chain is
+bound. Showing the host during DComp commit can expose an empty child window
+before the client has submitted a frame.
+
+Show child composition targets when the swap chain first presents instead.
+This keeps host lifetime separate from DComp tree commits while still making
+the window visible before DXVK creates or acquires the WSI swap chain.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 16 ++++++++++++++++
+ src/d3d11/d3d11_swapchain.h   |  1 +
+ 2 files changed, 17 insertions(+)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 0766c8d..834c9cf 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -442,6 +442,8 @@ namespace dxvk {
+       previousTarget = m_compositionTarget;
+       m_compositionTarget = hTarget;
+       m_compositionChildTarget = hTarget && hTarget != hDispatch;
++      if (hTarget != previousTarget)
++        m_compositionTargetShown = false;
+       childTarget = m_compositionChildTarget;
+     }
+ 
+@@ -499,6 +501,20 @@ namespace dxvk {
+ 
+ 
+   HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
++    HWND showCompositionTarget = nullptr;
++
++    {
++      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++
++      if (m_compositionChildTarget && !m_compositionTargetShown) {
++        showCompositionTarget = m_compositionTarget;
++        m_compositionTargetShown = true;
++      }
++    }
++
++    if (showCompositionTarget)
++      ::ShowWindow(showCompositionTarget, SW_SHOWNOACTIVATE);
++
+     // Flush pending rendering commands before
+     auto immediateContext = m_parent->GetContext();
+     auto immediateContextLock = immediateContext->LockContext();
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 18f9868..9eb7740 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -159,6 +159,7 @@ namespace dxvk {
+     dxvk::mutex               m_compositionLock;
+     HWND                      m_compositionTarget = nullptr;
+     bool                      m_compositionChildTarget = false;
++    bool                      m_compositionTargetShown = false;
+ 
+     Rc<hud::HudLatencyItem>   m_latencyHud;
+ 
+-- 
+2.53.0
+

@@ -1,4 +1,4 @@
-From 0fc710fa184e293d46ee82389c2e69941d9a09e3 Mon Sep 17 00:00:00 2001
+From 0506b82d6e85a4f131f3dab326177fa131f34253 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:45 -0700
 Subject: [PATCH] winewayland.drv: Refresh layered window contents
@@ -22,16 +22,16 @@ popups.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/waylanddrv.h      | 1 +
- dlls/winewayland.drv/waylanddrv_main.c | 1 +
+ dlls/winewayland.drv/waylanddrv.h      |  1 +
+ dlls/winewayland.drv/waylanddrv_main.c |  1 +
  dlls/winewayland.drv/window.c          | 13 +++++++++++++
  3 files changed, 15 insertions(+)
 
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index cba1ee6..8a035bd 100644
+index 4112aa8..83b2fe2 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -601,6 +601,7 @@ void WAYLAND_SetWindowIcon(HWND hwnd, UINT type, HICON icon);
+@@ -612,6 +612,7 @@ void WAYLAND_SetWindowIcon(HWND hwnd, UINT type, HICON icon);
  void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
  void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
  LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
@@ -52,10 +52,11 @@ index c10510f..a4e6633 100644
      .pWindowMessage = WAYLAND_WindowMessage,
      .pWindowPosChanged = WAYLAND_WindowPosChanged,
 diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
-index 4decc0f..dc90ec6 100644
+index 4decc0f..8e1a530 100644
 --- a/dlls/winewayland.drv/window.c
 +++ b/dlls/winewayland.drv/window.c
-@@ -766,9 +766,17 @@ void WAYLAND_SetLayeredWindowAttributes(HWND hwnd, COLORREF key, BYTE alpha, DWO
+@@ -761,10 +761,18 @@ LRESULT WAYLAND_DesktopWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+ void WAYLAND_SetLayeredWindowAttributes(HWND hwnd, COLORREF key, BYTE alpha, DWORD flags)
  {
      struct wayland_win_data *data;
 +    BOOL managed;
@@ -73,7 +74,7 @@ index 4decc0f..dc90ec6 100644
  }
  
  static enum xdg_toplevel_resize_edge hittest_to_resize_edge(WPARAM hittest)
-@@ -1019,3 +1019,8 @@ void ensure_window_surface_contents(HWND hwnd)
+@@ -1019,3 +1027,8 @@ void ensure_window_surface_contents(HWND hwnd)
  
      wayland_win_data_release(data);
  }
@@ -83,4 +84,5 @@ index 4decc0f..dc90ec6 100644
 +    TRACE("hwnd=%p flags=%#x\n", hwnd, flags);
 +}
 -- 
-2.53.0
+2.54.0
+

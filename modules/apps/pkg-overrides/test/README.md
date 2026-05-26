@@ -47,8 +47,10 @@ Useful targets:
 ./bin/battlenet-make cleanup
 ```
 
-`capture-window` and `frames-window` exist only for active Battle.net window
-captures when visual timing bugs require it.
+`capture-window` and `frames-window` exist only for Battle.net window captures
+when visual timing bugs require it. The default capture path never falls back to
+full-desktop or foreground screenshots; opt into foreground fallback explicitly
+with `CAPTURE_FALLBACK=foreground` only during attended debugging.
 
 Expected runtime signals:
 

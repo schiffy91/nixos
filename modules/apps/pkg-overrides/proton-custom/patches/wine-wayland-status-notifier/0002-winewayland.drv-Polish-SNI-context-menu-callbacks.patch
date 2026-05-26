@@ -1,4 +1,4 @@
-From 8f375b4bd37355fe1f55205c5a86fdf654e62f6e Mon Sep 17 00:00:00 2001
+From ca8291af2c27b2f8581d03c1791e3ce0c137189c Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 10:23:41 -0700
 Subject: [PATCH] winewayland.drv: Polish SNI context menu callbacks
@@ -20,14 +20,14 @@ application creates a popup menu.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/wayland_systray.c | 34 ++++++++++++++++++++++++----------
- 1 file changed, 24 insertions(+), 10 deletions(-)
+ dlls/winewayland.drv/wayland_systray.c | 29 +++++++++++++++++++-------
+ 1 file changed, 21 insertions(+), 8 deletions(-)
 
 diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
-index 9b665fb..0b3ff39 100644
+index 8cb01f3..ef383e5 100644
 --- a/dlls/winewayland.drv/wayland_systray.c
 +++ b/dlls/winewayland.drv/wayland_systray.c
-@@ -267,6 +267,8 @@ static void send_tray_callback(const struct sni_callback *callback, UINT msg, BO
+@@ -268,6 +268,8 @@ static void send_tray_callback(const struct sni_callback *callback, UINT msg, BO
          lp = MAKELPARAM(msg, callback->id);
      }
  
@@ -53,17 +53,14 @@ index 9b665fb..0b3ff39 100644
 +        send_tray_callback(callback, callback->up_msg,
 +                           callback->context_menu && callback->version == 0 &&
 +                           callback->up_msg == WM_RBUTTONUP);
--        if (callback->up_msg == WM_LBUTTONUP && callback->version > 0)
--            send_tray_callback(callback, NIN_SELECT, FALSE);
-+        if (callback->up_msg == WM_LBUTTONUP && callback->version > 0)
-+            send_tray_callback(callback, NIN_SELECT, FALSE);
+         if (callback->up_msg == WM_LBUTTONUP && callback->version > 0)
+             send_tray_callback(callback, NIN_SELECT, FALSE);
 -        else if (callback->up_msg == WM_RBUTTONUP)
 +        else if (callback->up_msg == WM_RBUTTONUP && callback->version > 0)
--            send_tray_callback(callback, WM_CONTEXTMENU, TRUE);
-+            send_tray_callback(callback, WM_CONTEXTMENU, TRUE);
+             send_tray_callback(callback, WM_CONTEXTMENU, TRUE);
          if (callback->context_menu) finish_tray_context_menu(callback);
      }
-@@ -524,6 +531,7 @@ static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, voi
+@@ -524,6 +533,7 @@ static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, voi
      {
          struct sni_item snapshot = *item;
          UINT down_msg = 0, up_msg = 0;
@@ -71,7 +68,7 @@ index 9b665fb..0b3ff39 100644
          dbus_int32_t x = 0, y = 0;
          BOOL context_menu = FALSE;
  
-@@ -550,19 +558,22 @@ static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, voi
+@@ -550,20 +560,23 @@ static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, voi
              dbus_int32_t delta = 0;
  
              dbus_message_get_args(msg, NULL, DBUS_TYPE_INT32, &delta, DBUS_TYPE_INVALID);
@@ -100,4 +97,5 @@ index 9b665fb..0b3ff39 100644
      }
  
 -- 
-2.53.0
+2.54.0
+

@@ -19,7 +19,7 @@
 #   Delay-load IAT protection for PE modules with read-only thunk pages
 #   DComp/DXGI/winewayland GPU presentation path
 #   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
-#   DXVK Battle.net composition swap-chain profile
+#   DXVK composition swap-chain support
 { stdenv
 , stdenv_32bit
 , pkgs
@@ -84,17 +84,19 @@ let
     ./patches/dcomp-wayland-gpu-present/0014-dcomp-Implement-virtual-surfaces-and-scrolling.patch
     ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-.patch
     ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent-not.patch
+    ./patches/dcomp-wayland-gpu-present/0017-dcomp-Show-composition-hosts-after-content-binding.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
     ./patches/win32u-shared-gpu-resource/0001-win32u-Open-D3DKMT-shared-GPU-resources.patch
   ];
 
   dxvkPatchSeries = [
-    ./patches/dxvk-battlenet-composition/0001-dxgi-Enable-dummy-composition-swapchain-for-Battle.n.patch
-    ./patches/dxvk-battlenet-composition/0002-d3d11-Pace-composition-swap-chains-with-the-composi.patch
-    ./patches/dxvk-battlenet-composition/0003-d3d11-Allow-limiting-shared-resource-tier.patch
-    ./patches/dxvk-battlenet-composition/0004-d3d11-Pace-all-composition-swap-chains.patch
-    ./patches/dxvk-battlenet-composition/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
-    ./patches/dxvk-battlenet-composition/0006-d3d11-Preserve-composition-swap-chain-contents.patch
+    ./patches/dxvk-composition-swapchain/0001-dxgi-Bind-composition-swap-chains-to-DComp-windows.patch
+    ./patches/dxvk-composition-swapchain/0002-d3d11-Pace-composition-swap-chains-with-the-composi.patch
+    ./patches/dxvk-composition-swapchain/0003-d3d11-Allow-limiting-shared-resource-tier.patch
+    ./patches/dxvk-composition-swapchain/0004-d3d11-Pace-all-composition-swap-chains.patch
+    ./patches/dxvk-composition-swapchain/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
+    ./patches/dxvk-composition-swapchain/0006-d3d11-Preserve-composition-swap-chain-contents.patch
+    ./patches/dxvk-composition-swapchain/0007-d3d11-Show-composition-targets-on-first-present.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
@@ -141,6 +143,7 @@ let
       # Apply only the explicit active series in the order listed above.
       ${applyActivePatchSeries}
 
+      find . -name '*.orig' -delete
     '';
   };
 
@@ -327,6 +330,10 @@ let
 
     patches = dxvkPatchSeries;
     patchFlags = [ "-p1" "--fuzz=0" ];
+
+    postPatch = ''
+      find . -name '*.orig' -delete
+    '';
 
     dontConfigure = true;
     dontBuild = true;
@@ -529,7 +536,7 @@ EOF
   '';
 
   meta = {
-    description = "GE-Proton10-34 with winewayland SNI cleanup patches (Battle.net Wayland)";
+    description = "GE-Proton10-34 with Wine Wayland, DComp, DXVK, SNI, and WineASIO patches";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
   };

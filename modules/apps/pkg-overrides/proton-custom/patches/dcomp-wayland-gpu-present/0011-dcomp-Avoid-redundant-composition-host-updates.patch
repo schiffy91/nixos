@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 2ca0382e813715ec0d30f618656ca52756446278 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 09:55:00 -0700
 Subject: [PATCH] dcomp: Avoid redundant composition host updates
@@ -16,11 +16,11 @@ child surface.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 ---
- dlls/dcomp/device.c | 72 +++++++++++++++++++++++++++++++--------------
- 1 file changed, 50 insertions(+), 22 deletions(-)
+ dlls/dcomp/device.c | 77 ++++++++++++++++++++++++++++++++++-----------
+ 1 file changed, 58 insertions(+), 19 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index f7e1f83..5794cfb 100644
+index a331157..92a5005 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -95,6 +95,9 @@ struct dcomp_visual
@@ -56,7 +56,7 @@ index f7e1f83..5794cfb 100644
  static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
  {
      IDCompositionSurface *iface = NULL;
-@@ -1037,30 +1056,37 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+@@ -1038,30 +1057,37 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
                                                 WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
                                                 x, y, width, height, t->hwnd, NULL,
                                                 GetModuleHandleW(NULL), NULL);
@@ -68,18 +68,14 @@ index f7e1f83..5794cfb 100644
  
              if (v->host_hwnd)
              {
--                UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
 +                BOOL changed = v->host_x != x || v->host_y != y ||
 +                               v->host_width != width || v->host_height != height;
-+                UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
+                 UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
  
 -                if (v->host_x == x && v->host_y == y) swp_flags |= SWP_NOMOVE;
 -                if (v->host_width == width && v->host_height == height) swp_flags |= SWP_NOSIZE;
 +                if (!changed) swp_flags |= SWP_NOMOVE | SWP_NOSIZE;
-+
-+                if (SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height, swp_flags) && changed)
-+                {
--
+ 
 -                SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height,
 -                             swp_flags);
 -
@@ -87,6 +83,8 @@ index f7e1f83..5794cfb 100644
 -                v->host_y = y;
 -                v->host_width = width;
 -                v->host_height = height;
++                if (SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height, swp_flags) && changed)
++                {
 +                    v->host_x = x;
 +                    v->host_y = y;
 +                    v->host_width = width;
@@ -109,7 +107,7 @@ index f7e1f83..5794cfb 100644
                  {
                      HRGN region;
  
-@@ -1073,6 +1099,12 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+@@ -1074,6 +1100,12 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
                                   wine_dbgstr_rect(&host_clip), v->host_hwnd);
                              DeleteObject(region);
                          }
@@ -122,7 +120,7 @@ index f7e1f83..5794cfb 100644
                      }
                      else
                      {
-@@ -1080,9 +1112,18 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+@@ -1081,9 +1113,18 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
                               wine_dbgstr_rect(&host_clip));
                      }
                  }
@@ -143,7 +141,7 @@ index f7e1f83..5794cfb 100644
                  }
              }
  
-@@ -1092,8 +1133,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+@@ -1093,8 +1134,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
          {
              DestroyWindow(v->host_hwnd);
              v->host_hwnd = NULL;
@@ -153,7 +151,7 @@ index f7e1f83..5794cfb 100644
              if (surface) surface->target_hwnd = NULL;
          }
      }
-@@ -1101,8 +1141,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+@@ -1102,8 +1142,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
      {
          DestroyWindow(v->host_hwnd);
          v->host_hwnd = NULL;
@@ -164,4 +162,5 @@ index f7e1f83..5794cfb 100644
  
      if (surface && v->host_hwnd)
 -- 
-2.53.0
+2.54.0
+
