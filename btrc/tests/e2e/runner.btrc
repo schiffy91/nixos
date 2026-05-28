@@ -1,0 +1,254 @@
+class VmOperationCatalog {
+    class Vector<string> all() {
+        Vector<string> kinds = [];
+        kinds.push("download-iso");
+        kinds.push("require-command");
+        kinds.push("require-tpm2");
+        kinds.push("require-uefi");
+        kinds.push("require-secure-boot");
+        kinds.push("probe-secure-boot");
+        kinds.push("require-state");
+        kinds.push("inherit-state");
+        kinds.push("record-state");
+        kinds.push("validate-immutability-v2");
+        kinds.push("reset-state");
+        kinds.push("create-key");
+        kinds.push("create-disk");
+        kinds.push("setup");
+        kinds.push("boot-iso");
+        kinds.push("boot-disk");
+        kinds.push("up-iso");
+        kinds.push("bootstrap-ssh");
+        kinds.push("wait-ssh");
+        kinds.push("serial-send");
+        kinds.push("sleep");
+        kinds.push("guest");
+        kinds.push("reboot-disk");
+        kinds.push("host");
+        kinds.push("workspace-file");
+        kinds.push("nix-eval");
+        kinds.push("qmp");
+        kinds.push("copy-workspace");
+        kinds.push("configure-vm-host");
+        kinds.push("install-nixos");
+        kinds.push("copy-to");
+        kinds.push("copy-from");
+        kinds.push("snapshot");
+        kinds.push("restore");
+        kinds.push("stop");
+        return kinds;
+    }
+}
+
+class VmTestRunner {
+    public VmTestSpec spec;
+    public QemuE2eHarness vm;
+    public int failures;
+
+    public VmTestRunner(VmTestSpec spec) {
+        self.spec = spec;
+        self.vm = QemuE2eHarness(spec);
+        self.failures = 0;
+    }
+
+    class VmTestRunner fromFile(string path) {
+        VmTestSpec spec = VmSpecParser.readFile(path);
+        spec.expandArgs();
+        return VmTestRunner(spec);
+    }
+
+    public void fail(string message) {
+        self.failures++;
+        NixosLog.error(message);
+    }
+
+    public bool outputMatches(ExecResult result, string expect) {
+        if (expect.isEmpty()) { return true; }
+        return result.stdout().contains(expect);
+    }
+
+    public void assertResult(string label, ExecResult result, string expect) {
+        if (!result.ok()) {
+            Console.error(result.stdout().trim());
+            self.fail(label + " failed with exit code " + Strings.fromInt(result.code));
+            return;
+        }
+        if (!self.outputMatches(result, expect)) {
+            Console.error(result.stdout().trim());
+            self.fail(label + " output did not contain expected text: " + expect);
+        }
+    }
+
+    public void runOperation(VmOperation op) {
+        NixosLog.info("e2e " + self.spec.name + ": " + op.kind);
+
+        if (op.kind.equals("download-iso")) {
+            self.vm.downloadIso();
+            return;
+        }
+        if (op.kind.equals("require-command")) {
+            self.vm.requireCommand(op.command);
+            return;
+        }
+        if (op.kind.equals("require-tpm2")) {
+            self.vm.requireTpm2Capability();
+            return;
+        }
+        if (op.kind.equals("require-uefi")) {
+            self.vm.requireUefiCapability();
+            return;
+        }
+        if (op.kind.equals("require-secure-boot")) {
+            self.vm.requireSecureBootCapability();
+            return;
+        }
+        if (op.kind.equals("probe-secure-boot")) {
+            Console.log(self.vm.secureBootCapabilityReport());
+            return;
+        }
+        if (op.kind.equals("require-state")) {
+            self.vm.requireParentState();
+            return;
+        }
+        if (op.kind.equals("inherit-state")) {
+            self.vm.inheritState();
+            return;
+        }
+        if (op.kind.equals("record-state")) {
+            self.vm.recordState();
+            return;
+        }
+        if (op.kind.equals("validate-immutability-v2")) {
+            string version = self.spec.args.getOrDefault("immutabilityVersion", "");
+            if (!version.equals("v2")) {
+                self.fail("btrc E2E specs must use immutabilityVersion=v2; v1 belongs only to the original Rust implementation");
+            }
+            return;
+        }
+        if (op.kind.equals("reset-state")) {
+            self.vm.resetState();
+            return;
+        }
+        if (op.kind.equals("create-key")) {
+            self.vm.createSshKey();
+            return;
+        }
+        if (op.kind.equals("create-disk")) {
+            self.vm.createDisk();
+            return;
+        }
+        if (op.kind.equals("setup")) {
+            self.vm.setup();
+            return;
+        }
+        if (op.kind.equals("boot-iso")) {
+            self.vm.start(true);
+            return;
+        }
+        if (op.kind.equals("boot-disk")) {
+            self.vm.start(false);
+            return;
+        }
+        if (op.kind.equals("up-iso")) {
+            self.vm.upFromIso();
+            return;
+        }
+        if (op.kind.equals("bootstrap-ssh")) {
+            self.vm.bootstrapSsh();
+            return;
+        }
+        if (op.kind.equals("wait-ssh")) {
+            if (!self.vm.waitForSsh(op.timeout)) {
+                self.fail("SSH was not ready after " + Strings.fromInt(op.timeout) + " seconds; serial log: " + self.vm.serialLogPath());
+            }
+            return;
+        }
+        if (op.kind.equals("serial-send")) {
+            self.vm.serialSend(op.command);
+            return;
+        }
+        if (op.kind.equals("sleep")) {
+            self.vm.sleepSeconds(op.timeout);
+            return;
+        }
+        if (op.kind.equals("guest")) {
+            ExecResult result = self.vm.sshWithTimeout(op.command, false, op.timeout);
+            self.assertResult("guest command", result, op.expect);
+            return;
+        }
+        if (op.kind.equals("reboot-disk")) {
+            self.vm.rebootDisk();
+            return;
+        }
+        if (op.kind.equals("host")) {
+            ExecResult result = self.vm.host(op.command, false);
+            self.assertResult("host command", result, op.expect);
+            return;
+        }
+        if (op.kind.equals("workspace-file")) {
+            ExecResult result = self.vm.workspaceFileExists(op.command);
+            self.assertResult("workspace file " + op.command, result, op.expect);
+            return;
+        }
+        if (op.kind.equals("nix-eval")) {
+            ExecResult result = self.vm.nixEval(op.command, op.timeout);
+            self.assertResult("nix eval " + op.command, result, op.expect);
+            return;
+        }
+        if (op.kind.equals("qmp")) {
+            ExecResult result = self.vm.qmp(op.command, op.timeout);
+            self.assertResult("qmp command", result, op.expect);
+            return;
+        }
+        if (op.kind.equals("copy-workspace")) {
+            self.vm.copyWorkspace(op.localPath, op.remotePath);
+            return;
+        }
+        if (op.kind.equals("configure-vm-host")) {
+            self.vm.configureVmHost();
+            return;
+        }
+        if (op.kind.equals("install-nixos")) {
+            self.vm.installNixosGuest();
+            return;
+        }
+        if (op.kind.equals("copy-to")) {
+            self.vm.copyTo(op.localPath, op.remotePath);
+            return;
+        }
+        if (op.kind.equals("copy-from")) {
+            self.vm.copyFrom(op.remotePath, op.localPath);
+            return;
+        }
+        if (op.kind.equals("snapshot")) {
+            self.vm.snapshot(op.name);
+            return;
+        }
+        if (op.kind.equals("restore")) {
+            self.vm.restore(op.name);
+            return;
+        }
+        if (op.kind.equals("stop")) {
+            self.vm.stop();
+            return;
+        }
+
+        self.fail("Unknown VM operation: " + op.kind);
+    }
+
+    public int run() {
+        if (self.spec.operations.len == 0) {
+            NixosLog.fatal("VM spec has no operations");
+        }
+        for op in self.spec.operations {
+            if (self.failures > 0) { break; }
+            self.runOperation(op);
+        }
+        if (self.failures > 0) {
+            self.vm.stop();
+            return 1;
+        }
+        NixosLog.info("e2e " + self.spec.name + ": pass");
+        return 0;
+    }
+}

@@ -1,16 +1,24 @@
-{ pkgs, ... }: {
+{ pkgs, lib, ... }:
+let
+  hasAppImageRun = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.appimage-run;
+in {
   ##### System Packages #####
   environment.systemPackages = (with pkgs; [
     git
     wget
+  ]) ++ lib.optionals hasAppImageRun (with pkgs; [
     appimage-run
   ]);
-  ##### Unpatched Binaries #####
-  programs.nix-ld.enable = true;
-  ##### AppImage #####
-  programs.appimage.binfmt = true;
-  ##### direnv #####
-  programs.direnv.enable = true;
+  programs = {
+    ##### Unpatched Binaries #####
+    nix-ld.enable = true;
+    ##### AppImage #####
+    appimage = lib.mkIf hasAppImageRun {
+      binfmt = true;
+    };
+    ##### direnv #####
+    direnv.enable = true;
+  };
   ##### Firmware #####
   services.fwupd.enable = true;
 }

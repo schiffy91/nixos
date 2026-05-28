@@ -1,6 +1,6 @@
-{ config, ... }: let
+{ config, lib, ... }: let
   user = config.settings.user.admin.username;
-in {
+in lib.mkIf (config.settings.apps.enable && config.settings.apps.claude.enable) {
   home-manager.users.${user}.home.file.".claude/skills/nixos-init/SKILL.md".text = ''
     ---
     name: nixos-init

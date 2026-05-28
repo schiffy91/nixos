@@ -1,0 +1,15 @@
+{
+  "name": "installer-setup",
+  "state": "installer-setup",
+  "parentState": "base-iso",
+  "stateMaterial": "nixos-installer-setup:{{arch}}:{{isoUrl}}:{{diskSize}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "setup" },
+    { "op": "host", "command": "test -s {{iso}} && test -s {{workDir}}/disk.qcow2 && test -s {{workDir}}/id_ed25519.pub && printf setup", "expect": "setup" },
+    { "op": "record-state" }
+  ]
+}

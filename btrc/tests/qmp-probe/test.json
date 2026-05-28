@@ -1,0 +1,22 @@
+{
+  "name": "qmp-probe",
+  "state": "qmp-probe",
+  "parentState": "base-iso",
+  "stateMaterial": "qmp-probe:{{arch}}:{{isoUrl}}:{{diskSize}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "10G",
+  "memory": "2G",
+  "cpus": 2,
+  "sshPort": 2230,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "download-iso" },
+    { "op": "create-disk" },
+    { "op": "boot-iso" },
+    { "op": "sleep", "timeout": 3 },
+    { "op": "qmp", "command": "{\"execute\":\"query-status\"}", "expect": "\"status\"" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

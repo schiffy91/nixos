@@ -1,0 +1,36 @@
+{
+  "name": "cli-parity",
+  "state": "cli-parity",
+  "parentState": "quick",
+  "stateMaterial": "cli-parity:audio:secure-boot:permissions:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    {
+      "op": "host",
+      "command": "set -e; mkdir -p {{workDir}}/fakebin {{workDir}}/tree/bin {{workDir}}/tree/scripts {{workDir}}/tree/secrets {{workDir}}/tree/.venv {{workDir}}/tree/.direnv {{workDir}}/home; printf '%s\\n' '[[audio]]' 'label = \"Desk\"' 'sink = \"preset.sink\"' 'volume = \"40%\"' > {{workDir}}/labels.toml; printf '%s\\n' '#!/bin/sh' 'if [ \"$1\" = \"get-default-sink\" ]; then echo preset.sink; exit 0; fi' 'cat <<EOF' '[' '  {' '    \"name\": \"preset.sink\",' '    \"description\": \"Preset Description\"' '  },' '  {' '    \"name\": \"extra.sink\",' '    \"description\": \"Extra Speakers\"' '  }' ']' 'EOF' > {{workDir}}/fakebin/pactl; chmod +x {{workDir}}/fakebin/pactl; printf '%s\\n' '#!/bin/sh' 'if [ \"$1\" = \"status\" ]; then echo \"Secure Boot: enabled\"; exit 0; fi' 'if [ \"$1\" = \"verify\" ] && [ \"$2\" = \"--json\" ]; then printf %s \"{\\\"/boot/EFI/Linux/good.efi\\\":{\\\"is_signed\\\":true},\\\"/boot/EFI/Linux/bad.efi\\\":{\\\"is_signed\\\":false}}\"; exit 0; fi' 'exit 0' > {{workDir}}/fakebin/sbctl; chmod +x {{workDir}}/fakebin/sbctl; touch {{workDir}}/tree/regular.txt {{workDir}}/tree/bin/tool {{workDir}}/tree/scripts/do {{workDir}}/tree/secrets/password {{workDir}}/tree/.venv/ignored {{workDir}}/tree/.direnv/ignored; chmod 600 {{workDir}}/tree/regular.txt {{workDir}}/tree/bin/tool {{workDir}}/tree/scripts/do {{workDir}}/tree/secrets/password {{workDir}}/tree/.venv/ignored {{workDir}}/tree/.direnv/ignored"
+    },
+    {
+      "op": "host",
+      "command": "env PATH=\"{{workDir}}/fakebin:$PATH\" NIXOS_CONFIG={{workDir}}/labels.toml ./build/nixosctl audio list",
+      "expect": "\"label\":\"Desk\""
+    },
+    {
+      "op": "host",
+      "command": "env PATH=\"{{workDir}}/fakebin:$PATH\" NIXOS_CONFIG={{workDir}}/labels.toml ./build/nixosctl audio list",
+      "expect": "\"description\":\"Extra Speakers\""
+    },
+    {
+      "op": "host",
+      "command": "env PATH=\"{{workDir}}/fakebin:$PATH\" NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true ./build/nixosctl secure-boot status 2>&1",
+      "expect": "NOT signed: /boot/EFI/Linux/bad.efi"
+    },
+    {
+      "op": "host",
+      "command": "set -e; env HOME={{workDir}}/home NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true NIXOS_CONFIG_ROOT={{workDir}}/tree USER=$(id -un) ./build/nixosctl fix-permissions; mode() { if stat -f %Lp \"$1\" >/dev/null 2>&1; then stat -f %Lp \"$1\"; else stat -c %a \"$1\"; fi; }; test \"$(mode {{workDir}}/tree/regular.txt)\" = 644; test \"$(mode {{workDir}}/tree/bin/tool)\" = 755; test \"$(mode {{workDir}}/tree/scripts/do)\" = 755; test \"$(mode {{workDir}}/tree/secrets/password)\" = 600; test \"$(mode {{workDir}}/tree/.venv/ignored)\" = 600; test \"$(mode {{workDir}}/tree/.direnv/ignored)\" = 600; printf permissions-ok",
+      "expect": "permissions-ok"
+    },
+    { "op": "record-state" }
+  ]
+}

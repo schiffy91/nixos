@@ -1,0 +1,32 @@
+{
+  "name": "tpm2-probe",
+  "state": "tpm2-probe",
+  "parentState": "base-iso",
+  "stateMaterial": "tpm2-probe:{{arch}}:{{isoUrl}}:{{diskSize}}:source={{sourceHash}}",
+  "args": {
+    "tpm2": "true"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "4G",
+  "cpus": 4,
+  "sshPort": 2226,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "require-tpm2" },
+    { "op": "download-iso" },
+    { "op": "create-key" },
+    { "op": "create-disk" },
+    { "op": "boot-iso" },
+    { "op": "sleep", "timeout": 20 },
+    { "op": "bootstrap-ssh" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; test -d /sys/class/tpm/tpm0; cat /sys/class/tpm/tpm0/tpm_version_major", "expect": "2" },
+    { "op": "guest", "command": "set -e; test -e /dev/tpm0 -o -e /dev/tpmrm0; printf tpm2", "expect": "tpm2" },
+    { "op": "qmp", "command": "{\"execute\":\"query-status\"}", "expect": "\"status\"" },
+    { "op": "snapshot", "name": "tpm2-live" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

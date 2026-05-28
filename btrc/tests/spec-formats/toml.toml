@@ -1,0 +1,26 @@
+name = "spec-toml"
+state = "spec-toml"
+parentState = "quick"
+stateMaterial = "spec-format:toml:source={{sourceHash}}"
+workDir = ".vm/e2e/{{state}}-{{stateHashShort}}"
+
+[args]
+marker = "toml-ok"
+
+[[operations]]
+op = "require-state"
+
+[[operations]]
+op = "reset-state"
+
+[[operations]]
+op = "host"
+command = "mkdir -p {{workDir}} && printf {{marker}} > {{workDir}}/format.txt"
+
+[[operations]]
+op = "host"
+command = "cat {{workDir}}/format.txt"
+expect = "{{marker}}"
+
+[[operations]]
+op = "record-state"

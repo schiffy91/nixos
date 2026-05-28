@@ -1,0 +1,12 @@
+{
+  "name": "installer-download",
+  "state": "base-iso",
+  "parentState": "root",
+  "stateMaterial": "nixos-minimal-iso:{{arch}}:{{isoUrl}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "download-iso" },
+    { "op": "host", "command": "test -s {{iso}} && printf downloaded", "expect": "downloaded" },
+    { "op": "record-state" }
+  ]
+}

@@ -8,13 +8,15 @@
     primaryInterface = host.network.primaryInterface;
   };
   programs.openvpn3.enable = true;
-  services.resolved.enable = true;
-  services.mullvad-vpn = {
-    enable = true;
-    package = pkgs.mullvad-vpn;
+  services = {
+    resolved.enable = true;
+    mullvad-vpn = {
+      enable = true;
+      package = pkgs.mullvad-vpn;
+    };
+    ##### Thunderbolt #####
+    hardware.bolt.enable = true;
   };
-  ##### Thunderbolt #####
-  services.hardware.bolt.enable = true;
 
   # atlantic driver (Aquantia/Marvell AQC) advertises tx-udp-segmentation but
   # mishandles UDP GSO on the wire — kernel itself logs "suspect GRO implementation".

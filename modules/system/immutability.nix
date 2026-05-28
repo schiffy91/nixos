@@ -21,7 +21,7 @@ let
 	) paths;
 
 	pathsForVolume = volume: let
-		mountPoint = volume.mountPoint;
+		inherit (volume) mountPoint;
 		otherMounts = lib.filter (other: other.mountPoint != mountPoint && other.mountPoint != "/") allVolumes;
 	in builtins.filter (path:
 			if mountPoint == "/" then
@@ -30,7 +30,7 @@ let
 		) pathsToKeep;
 
 	filterForVolume = volume: let
-		mountPoint = volume.mountPoint;
+		inherit (volume) mountPoint;
 		relevantPaths = pathsForVolume volume;
 		toRelative = path:
 			if mountPoint == "/" then lib.removePrefix "/" path
@@ -74,10 +74,11 @@ let
 	};
 	semipermeableMembraneBin = pkgs.stdenv.mkDerivation {
 		name = "semipermeable_membrane";
-		src = ../../scripts/lib/semipermeable_membrane.rs;
+		src = ../../btrc/generated/semipermeable_membrane.c;
 		dontUnpack = true;
-		nativeBuildInputs = [ pkgs.rustc ];
-		buildPhase = "rustc --edition 2021 -O -o semipermeable_membrane $src";
+		buildPhase = ''
+			$CC -std=c11 -O2 -o semipermeable_membrane $src -lm -lpthread
+		'';
 		installPhase = "mkdir -p $out/bin && cp semipermeable_membrane $out/bin/";
 	};
 
@@ -93,30 +94,32 @@ lib.mkMerge [
 }
 (lib.mkIf (config.settings.disk.immutability.enable && config.settings.disk.immutability.implementation == "v1" && config.settings.disk.immutability.enforce.onReboot) {
 	fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
-	boot.nixStoreMountOpts = [ "ro" ];
-	boot.tmp.useTmpfs = true;
-	boot.initrd = {
-		supportedFilesystems = [ "btrfs" ];
-		systemd = {
-			storePaths = let
-				filterFiles = map filterForVolume resetVolumes;
-			in [ "${immutabilityBin}" ] ++ filterFiles;
-			extraBin = {
-				btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
-				cp = "${pkgs.coreutils}/bin/cp";
-				umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
-			};
-			services.immutability = {
-				description = "Factory resets BTRFS subvolumes";
-				wantedBy = [ "initrd.target" ];
-				requires = [ deviceDependency ];
-				after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
-				before = [ "sysroot.mount" ];
-				unitConfig.DefaultDependencies = "no";
-				serviceConfig.Type = "oneshot";
-				script = ''
-					${immutabilityBin}/bin/immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pairArgs}
-				'';
+	boot = {
+		nixStoreMountOpts = [ "ro" ];
+		tmp.useTmpfs = true;
+		initrd = {
+			supportedFilesystems = [ "btrfs" ];
+			systemd = {
+				storePaths = let
+					filterFiles = map filterForVolume resetVolumes;
+				in [ "${immutabilityBin}" ] ++ filterFiles;
+				extraBin = {
+					btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
+					cp = "${pkgs.coreutils}/bin/cp";
+					umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
+				};
+				services.immutability = {
+					description = "Factory resets BTRFS subvolumes";
+					wantedBy = [ "initrd.target" ];
+					requires = [ deviceDependency ];
+					after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
+					before = [ "sysroot.mount" ];
+					unitConfig.DefaultDependencies = "no";
+					serviceConfig.Type = "oneshot";
+					script = ''
+						${immutabilityBin}/bin/immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pairArgs}
+					'';
+				};
 			};
 		};
 	};
@@ -207,30 +210,32 @@ lib.mkMerge [
 })
 (lib.mkIf (membraneEnabled && config.settings.disk.immutability.enforce.onReboot) {
 	fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
-	boot.nixStoreMountOpts = [ "ro" ];
-	boot.tmp.useTmpfs = true;
-	boot.initrd = {
-		supportedFilesystems = [ "btrfs" ];
-		systemd = {
-			storePaths = [ "${semipermeableMembraneBin}" membraneSpecFile ];
-			extraBin = {
-				btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
-				cp = "${pkgs.coreutils}/bin/cp";
-				mv = "${pkgs.coreutils}/bin/mv";
-				findmnt = "${pkgs.util-linux}/bin/findmnt";
-				umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
-			};
-			services."semipermeable-membrane" = {
-				description = "Factory resets BTRFS subvolumes using persistent keep subvolumes";
-				wantedBy = [ "initrd.target" ];
-				requires = [ deviceDependency ];
-				after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
-				before = [ "sysroot.mount" ];
-				unitConfig.DefaultDependencies = "no";
-				serviceConfig.Type = "oneshot";
-				script = ''
-					${semipermeableMembraneBin}/bin/semipermeable_membrane ${lib.optionalString membraneDryRun "--dry-run "}${membraneCommandArgs} ${membranePairArgs}
-				'';
+	boot = {
+		nixStoreMountOpts = [ "ro" ];
+		tmp.useTmpfs = true;
+		initrd = {
+			supportedFilesystems = [ "btrfs" ];
+			systemd = {
+				storePaths = [ "${semipermeableMembraneBin}" membraneSpecFile ];
+				extraBin = {
+					btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
+					cp = "${pkgs.coreutils}/bin/cp";
+					mv = "${pkgs.coreutils}/bin/mv";
+					findmnt = "${pkgs.util-linux}/bin/findmnt";
+					umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
+				};
+				services."semipermeable-membrane" = {
+					description = "Factory resets BTRFS subvolumes using persistent keep subvolumes";
+					wantedBy = [ "initrd.target" ];
+					requires = [ deviceDependency ];
+					after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
+					before = [ "sysroot.mount" ];
+					unitConfig.DefaultDependencies = "no";
+					serviceConfig.Type = "oneshot";
+					script = ''
+						${semipermeableMembraneBin}/bin/semipermeable_membrane ${lib.optionalString membraneDryRun "--dry-run "}${membraneCommandArgs} ${membranePairArgs}
+					'';
+				};
 			};
 		};
 	};

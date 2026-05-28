@@ -1,0 +1,12 @@
+{
+  "name": "quick",
+  "state": "quick",
+  "parentState": "root",
+  "stateMaterial": "quick-cli-dispatch:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "require-command", "command": "sh" },
+    { "op": "host", "command": "printf btrc-e2e", "expect": "btrc-e2e" },
+    { "op": "record-state" }
+  ]
+}

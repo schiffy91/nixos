@@ -1,0 +1,1030 @@
+class QemuE2eHarness {
+    public VmTestSpec spec;
+    public UnixShell shell;
+
+    public QemuE2eHarness(VmTestSpec spec) {
+        self.spec = spec;
+        self.shell = UnixShell();
+    }
+
+    public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
+    public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
+    public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
+    public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
+    public string serialBasePath() { return PathTools.join(self.spec.workDir, "serial"); }
+    public string serialInPath() { return self.serialBasePath() + ".in"; }
+    public string serialOutPath() { return self.serialBasePath() + ".out"; }
+    public string serialLogPath() { return self.serialBasePath() + ".log"; }
+    public string serialReaderPidPath() { return PathTools.join(self.spec.workDir, "serial-reader.pid"); }
+    public string tpmDir() { return PathTools.join(self.spec.workDir, "tpm"); }
+    public string tpmStateDir() { return PathTools.join(self.tpmDir(), "state"); }
+    public string tpmSocketPath() { return PathTools.join(self.tpmDir(), "swtpm.sock"); }
+    public string tpmPidPath() { return PathTools.join(self.tpmDir(), "swtpm.pid"); }
+    public string tpmLogPath() { return PathTools.join(self.tpmDir(), "swtpm.log"); }
+    public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
+    public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
+    public string bootDir() { return PathTools.join(self.spec.workDir, "boot"); }
+    public string bootKernelFile() { return PathTools.join(self.bootDir(), "kernel.path"); }
+    public string bootInitrdFile() { return PathTools.join(self.bootDir(), "initrd.path"); }
+    public string bootAppendFile() { return PathTools.join(self.bootDir(), "append.txt"); }
+    public string firmwareVarsPath() { return PathTools.join(self.spec.workDir, "edk2-vars.fd"); }
+    public string firmwareVarsSnapshotPath(string name) { return PathTools.join(self.spec.workDir, "edk2-vars." + name + ".fd"); }
+    public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
+    public string parentWorkDirFile() { return PathTools.join(self.parentStateDir(), "workDir"); }
+    public string backingDiskFile() { return PathTools.join(self.spec.workDir, "backing-disk"); }
+
+    public string absolutePath(string path) {
+        Command command = Command("sh")
+            .arg("-c")
+            .arg("cd " + UnixShell.quote(PathTools.dirname(path)) + " && printf '%s/%s' \"$PWD\" " + UnixShell.quote(PathTools.basename(path)));
+        ExecResult result = self.shell.runCommand(command);
+        if (!result.ok()) { NixosLog.fatal("Failed to resolve path " + path); }
+        return result.stdout().trim();
+    }
+
+    public void ensureWorkDir() {
+        FileSystem.mkdirp(self.spec.workDir);
+        FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
+    }
+
+    public string qemuBinary() {
+        return f"qemu-system-{self.spec.arch}";
+    }
+
+    public bool argEnabled(string key) {
+        return self.spec.args.getOrDefault(key, "false").equals("true");
+    }
+
+    public bool tpm2Enabled() {
+        return self.argEnabled("tpm2");
+    }
+
+    public bool secureBootEnabled() {
+        return self.argEnabled("secureBoot");
+    }
+
+    public bool uefiEnabled() {
+        return self.argEnabled("uefi") || self.argEnabled("uefiDisk") || self.secureBootEnabled();
+    }
+
+    public bool shouldUseUefi(bool fromIso) {
+        if (self.spec.arch.equals("aarch64")) { return true; }
+        if (self.argEnabled("uefi")) { return true; }
+        if (!fromIso && self.uefiEnabled()) { return true; }
+        if (fromIso && self.argEnabled("uefiIso")) { return true; }
+        return false;
+    }
+
+    public bool hostArchMatchesGuest() {
+        return VmSpecParser.hostArch().equals(self.spec.arch);
+    }
+
+    public string qemuSharePath(string fileName) {
+        string script = "bin=$(command -v " + UnixShell.quote(self.qemuBinary()) + ") || exit 1; "
+            + "path=$(dirname $(dirname \"$bin\"))/share/qemu/" + UnixShell.quote(fileName) + "; "
+            + "test -f \"$path\" || exit 1; printf %s \"$path\"";
+        ExecResult result = self.shell.runUnchecked(script);
+        if (!result.ok()) { return ""; }
+        return Strings.copy(result.stdout().trim());
+    }
+
+    public string firmwareCodePath() {
+        if (self.secureBootEnabled()) {
+            return self.secureFirmwareCodePath();
+        }
+        if (self.spec.arch.equals("aarch64")) {
+            string packaged = self.qemuSharePath("edk2-aarch64-code.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+            if (FileSystem.exists("/opt/homebrew/share/qemu/edk2-aarch64-code.fd")) {
+                return "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
+            }
+        }
+        if (self.spec.arch.equals("x86_64")) {
+            string packaged = self.qemuSharePath("edk2-x86_64-code.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+        }
+        ExecResult result = self.shell.runUnchecked("find /nix/store -maxdepth 4 -name OVMF_CODE.fd -print -quit 2>/dev/null");
+        string found = result.stdout().trim();
+        if (!found.isEmpty()) { return found; }
+        return "";
+    }
+
+    public string secureFirmwareCodePath() {
+        if (!self.spec.arch.equals("x86_64")) { return ""; }
+        string packaged = self.qemuSharePath("edk2-x86_64-secure-code.fd");
+        if (!packaged.isEmpty()) { return packaged; }
+        ExecResult result = self.shell.runUnchecked("find /nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\) -print -quit 2>/dev/null");
+        string found = result.stdout().trim();
+        if (!found.isEmpty()) { return found; }
+        return "";
+    }
+
+    public string firmwareVarsTemplatePath() {
+        if (self.spec.arch.equals("aarch64")) {
+            string packaged = self.qemuSharePath("edk2-arm-vars.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+        }
+        if (self.spec.arch.equals("x86_64")) {
+            string packaged = self.qemuSharePath("edk2-i386-vars.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+        }
+        ExecResult result = self.shell.runUnchecked("find /nix/store -maxdepth 4 -name OVMF_VARS.fd -print -quit 2>/dev/null");
+        string found = result.stdout().trim();
+        if (!found.isEmpty()) { return found; }
+        return "";
+    }
+
+    public void makeFirmwareVarsWritable() {
+        Command chmod = Command("chmod")
+            .arg("600")
+            .arg(self.firmwareVarsPath())
+            .capture(false)
+            .check(false);
+        self.shell.runCommand(chmod);
+    }
+
+    public void setupFirmwareVars() {
+        if (FileSystem.exists(self.firmwareVarsPath())) {
+            self.makeFirmwareVarsWritable();
+            return;
+        }
+        string template = self.firmwareVarsTemplatePath();
+        if (!template.isEmpty()) {
+            Command cp = Command("cp")
+                .arg(template)
+                .arg(self.firmwareVarsPath())
+                .capture(false);
+            ExecResult result = self.shell.runCommand(cp);
+            if (!result.ok()) { NixosLog.fatal("Failed to copy EDK2 vars file"); }
+            self.makeFirmwareVarsWritable();
+            return;
+        }
+        self.shell.runRaw(f"dd if=/dev/zero of={UnixShell.quote(self.firmwareVarsPath())} bs=1M count=64", false, true, "");
+        self.makeFirmwareVarsWritable();
+    }
+
+    public bool commandExists(string name) {
+        ExecResult result = self.shell.runRaw("command -v " + UnixShell.quote(name) + " >/dev/null 2>&1", false, false, "");
+        return result.ok();
+    }
+
+    public void requireCommand(string name) {
+        if (!self.commandExists(name)) {
+            NixosLog.fatal("Missing required command: " + name);
+        }
+    }
+
+    public bool qemuDeviceAvailable(string deviceName) {
+        string command = self.qemuBinary() + " -device help 2>/dev/null | grep -q " + UnixShell.quote("name \"" + deviceName + "\"");
+        ExecResult result = self.shell.runRaw(command, false, false, "");
+        return result.ok();
+    }
+
+    public string tpmQemuDevice() {
+        if (self.spec.arch.equals("aarch64")) { return "tpm-tis-device"; }
+        return "tpm-tis";
+    }
+
+    public void requireTpm2Capability() {
+        self.requireCommand("swtpm");
+        string deviceName = self.tpmQemuDevice();
+        if (!self.qemuDeviceAvailable(deviceName)) {
+            NixosLog.fatal("QEMU TPM2 device is unavailable: " + deviceName);
+        }
+    }
+
+    public void requireUefiCapability() {
+        string codePath = self.firmwareCodePath();
+        string varsPath = self.firmwareVarsTemplatePath();
+        if (codePath.isEmpty() || varsPath.isEmpty()) {
+            NixosLog.fatal("QEMU UEFI firmware is unavailable for " + self.spec.arch);
+        }
+    }
+
+    public void requireSecureBootCapability() {
+        if (!self.spec.arch.equals("x86_64")) {
+            NixosLog.fatal("Secure Boot QEMU enforcement currently requires x86_64 secure EDK2 firmware");
+        }
+        string codePath = self.secureFirmwareCodePath();
+        string varsPath = self.firmwareVarsTemplatePath();
+        if (codePath.isEmpty() || varsPath.isEmpty()) {
+            NixosLog.fatal("QEMU Secure Boot firmware is unavailable for x86_64");
+        }
+        self.requireTpm2Capability();
+    }
+
+    public string secureBootCapabilityReport() {
+        bool qemu = self.commandExists(self.qemuBinary());
+        bool swtpm = self.commandExists("swtpm");
+        string firmware = self.secureFirmwareCodePath();
+        string vars = self.firmwareVarsTemplatePath();
+        string device = self.tpmQemuDevice();
+        bool tpmDevice = qemu && self.qemuDeviceAvailable(device);
+        bool available = self.spec.arch.equals("x86_64")
+            && qemu
+            && swtpm
+            && tpmDevice
+            && !firmware.isEmpty()
+            && !vars.isEmpty();
+        return "secureBootQemu=" + (available ? "available" : "unavailable")
+            + "\narch=" + self.spec.arch
+            + "\nqemu=" + (qemu ? "yes" : "no")
+            + "\nswtpm=" + (swtpm ? "yes" : "no")
+            + "\ntpmDevice=" + (tpmDevice ? device : "missing")
+            + "\nfirmware=" + (firmware.isEmpty() ? "missing" : firmware)
+            + "\nvars=" + (vars.isEmpty() ? "missing" : vars);
+    }
+
+    public bool isDarwin() {
+        ExecResult result = self.shell.run("uname -s");
+        return result.stdout().trim().equals("Darwin");
+    }
+
+    public string stripLeadingSlash(string path) {
+        if (path.startsWith("/")) {
+            return path.substring(1, path.len() - 1);
+        }
+        return path;
+    }
+
+    public string valueAfterLinePrefix(string text, string prefix, int start) {
+        int pos = Strings.find(text, prefix, start);
+        if (pos < 0) { return ""; }
+        pos = pos + prefix.len();
+        int end = pos;
+        while (text[end] != '\0' && text[end] != '\n') {
+            end++;
+        }
+        return JsonObject.slice(text, pos, end).trim();
+    }
+
+    public void extractBootSerial() {
+        if (!self.spec.arch.equals("x86_64")) { return; }
+        if (FileSystem.exists(self.bootAppendFile())) { return; }
+        FileSystem.mkdirp(self.bootDir());
+
+        Command cfgExtract = Command("bsdtar")
+            .arg("-xf")
+            .arg(self.spec.iso)
+            .arg("-C")
+            .arg(self.bootDir())
+            .arg("isolinux/isolinux.cfg")
+            .capture(false);
+        ExecResult cfgResult = self.shell.runCommand(cfgExtract);
+        if (!cfgResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
+
+        string cfgPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
+        string cfg = Path.readAll(cfgPath);
+        int label = Strings.find(cfg, "LABEL boot-serial", 0);
+        if (label < 0) { NixosLog.fatal("Could not find boot-serial entry in installer ISO"); }
+
+        string kernelIso = self.valueAfterLinePrefix(cfg, "LINUX ", label);
+        string append = self.valueAfterLinePrefix(cfg, "APPEND ", label);
+        string initrdIso = self.valueAfterLinePrefix(cfg, "INITRD ", label);
+        if (kernelIso.isEmpty() || initrdIso.isEmpty() || append.isEmpty()) {
+            NixosLog.fatal("Incomplete boot-serial entry in installer ISO");
+        }
+
+        string kernelRel = self.stripLeadingSlash(kernelIso);
+        string initrdRel = self.stripLeadingSlash(initrdIso);
+        Command bootExtract = Command("bsdtar")
+            .arg("-xf")
+            .arg(self.spec.iso)
+            .arg("-C")
+            .arg(self.bootDir())
+            .arg(kernelRel)
+            .arg(initrdRel)
+            .capture(false);
+        ExecResult bootResult = self.shell.runCommand(bootExtract);
+        if (!bootResult.ok()) { NixosLog.fatal("Failed to extract serial boot kernel/initrd from ISO"); }
+
+        Path.writeAll(self.bootKernelFile(), PathTools.join(self.bootDir(), kernelRel));
+        Path.writeAll(self.bootInitrdFile(), PathTools.join(self.bootDir(), initrdRel));
+        Path.writeAll(self.bootAppendFile(), append);
+    }
+
+    public void downloadIso() {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.spec.iso)) { return; }
+        if (self.spec.isoUrl.isEmpty()) {
+            NixosLog.fatal("No iso or isoUrl in VM spec");
+        }
+        string tmp = f"{self.spec.iso}.tmp";
+        Command curl = Command("curl")
+            .arg("-L")
+            .arg("-o")
+            .arg(tmp)
+            .arg(self.spec.isoUrl)
+            .capture(false);
+        ExecResult result = self.shell.runCommand(curl);
+        if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
+        Command mv = Command("mv")
+            .arg(tmp)
+            .arg(self.spec.iso)
+            .capture(false);
+        self.shell.runCommand(mv);
+    }
+
+    public void createSshKey() {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.sshKeyPath())) { return; }
+        Command cmd = Command("ssh-keygen")
+            .arg("-t")
+            .arg("ed25519")
+            .arg("-N")
+            .arg("")
+            .arg("-f")
+            .arg(self.sshKeyPath())
+            .arg("-q")
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }
+    }
+
+    public string sshPubKey() {
+        return Path.readAll(self.sshPubKeyPath()).trim();
+    }
+
+    public void createDisk() {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.diskPath())) { return; }
+        Command cmd = Command("qemu-img")
+            .arg("create")
+            .arg("-f")
+            .arg("qcow2")
+            .arg(self.diskPath())
+            .arg(self.spec.diskSize)
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to create VM disk"); }
+    }
+
+    public void setup() {
+        self.downloadIso();
+        self.createSshKey();
+        self.createDisk();
+        self.extractBootSerial();
+    }
+
+    public void resetState() {
+        self.stop();
+        FileSystem.removeRecursive(self.spec.workDir);
+        self.ensureWorkDir();
+    }
+
+    public void cleanStateRecord() {
+        FileSystem.removeRecursive(self.spec.stateDir());
+    }
+
+    public void requireParentState() {
+        if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
+        if (!FileSystem.exists(self.spec.parentHashFile())) {
+            NixosLog.fatal(f"Missing parent state {self.spec.parentState}; run its test first");
+        }
+    }
+
+    public void copyIfExists(string source, string target) {
+        if (!FileSystem.exists(source)) { return; }
+        Command cp = Command("cp").arg(source).arg(target).capture(false);
+        ExecResult result = self.shell.runCommand(cp);
+        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
+    }
+
+    public void copyTreeIfExists(string source, string target) {
+        if (!FileSystem.exists(source)) { return; }
+        FileSystem.removeRecursive(target);
+        Command cp = Command("cp").arg("-R").arg(source).arg(target).capture(false);
+        ExecResult result = self.shell.runCommand(cp);
+        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }
+    }
+
+    public void inheritState() {
+        self.requireParentState();
+        if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
+        if (!FileSystem.exists(self.parentWorkDirFile())) {
+            NixosLog.fatal(f"Parent state {self.spec.parentState} has no workDir record");
+        }
+        string parentWorkDir = Path.readAll(self.parentWorkDirFile()).trim();
+        self.ensureWorkDir();
+        string parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
+        if (!FileSystem.exists(self.diskPath()) && FileSystem.exists(parentDisk)) {
+            string backing = self.absolutePath(parentDisk);
+            Command create = Command("qemu-img")
+                .arg("create")
+                .arg("-f")
+                .arg("qcow2")
+                .arg("-F")
+                .arg("qcow2")
+                .arg("-b")
+                .arg(backing)
+                .arg(self.diskPath())
+                .capture(false);
+            ExecResult result = self.shell.runCommand(create);
+            if (!result.ok()) { NixosLog.fatal("Failed to create qcow2 state delta for " + self.spec.state); }
+            Path.writeAll(self.backingDiskFile(), backing + "\n");
+        }
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519"), self.sshKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519.pub"), self.sshPubKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmwareVarsPath());
+        self.copyTreeIfExists(PathTools.join(parentWorkDir, "tpm"), self.tpmDir());
+    }
+
+    public void recordState() {
+        FileSystem.mkdirp(self.spec.stateDir());
+        Path.writeAll(self.spec.stateHashFile(), self.spec.stateHash + "\n");
+        Path.writeAll(PathTools.join(self.spec.stateDir(), "workDir"), self.spec.workDir + "\n");
+        JsonObject metadata = JsonObject();
+        metadata.setString("state", self.spec.state);
+        metadata.setString("parentState", self.spec.parentState);
+        metadata.setString("parentHash", self.spec.parentHash);
+        metadata.setString("hash", self.spec.stateHash);
+        metadata.setString("hashShort", self.spec.stateHashShort);
+        metadata.setString("workDir", self.spec.workDir);
+        metadata.setString("iso", self.spec.iso);
+        metadata.setString("isoUrl", self.spec.isoUrl);
+        metadata.setString("disk", self.diskPath());
+        metadata.setString("uefi", self.uefiEnabled() ? "true" : "false");
+        metadata.setString("secureBoot", self.secureBootEnabled() ? "true" : "false");
+        metadata.setString("tpm2", self.tpm2Enabled() ? "true" : "false");
+        if (FileSystem.exists(self.backingDiskFile())) {
+            metadata.setString("delta", "qcow2-backing");
+            metadata.setString("backingDisk", Path.readAll(self.backingDiskFile()).trim());
+        } else {
+            metadata.setString("delta", "base");
+        }
+        metadata.writeFile(PathTools.join(self.spec.stateDir(), "metadata.json"));
+    }
+
+    public bool isRunning() {
+        if (!FileSystem.exists(self.pidPath())) { return false; }
+        ExecResult result = self.shell.runRaw("kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null", false, false, "");
+        return result.ok();
+    }
+
+    public bool hasSnapshot(string name) {
+        if (!FileSystem.exists(self.diskPath())) { return false; }
+        ExecResult result = self.shell.runUnchecked("qemu-img snapshot -l " + UnixShell.quote(self.diskPath()) + " | awk '{print $2}'");
+        if (!result.ok()) { return false; }
+        Vector<string> lines = Strings.split(result.stdout(), "\n");
+        for line in lines {
+            if (line.trim().equals(name)) { return true; }
+        }
+        return false;
+    }
+
+    public bool hasBackingDisk() {
+        return FileSystem.exists(self.backingDiskFile());
+    }
+
+    public string sshOptionsForShell() {
+        Vector<string> opts = [];
+        opts.push("-o");
+        opts.push("StrictHostKeyChecking=no");
+        opts.push("-o");
+        opts.push("UserKnownHostsFile=/dev/null");
+        opts.push("-o");
+        opts.push("LogLevel=ERROR");
+        opts.push("-o");
+        opts.push("BatchMode=yes");
+        opts.push("-o");
+        opts.push("IdentitiesOnly=yes");
+        opts.push("-o");
+        opts.push("ConnectTimeout=3");
+        opts.push("-o");
+        opts.push("ConnectionAttempts=1");
+        opts.push("-i");
+        opts.push(self.sshKeyPath());
+
+        Vector<string> quoted = [];
+        for opt in opts {
+            quoted.push(UnixShell.quote(opt));
+        }
+        return quoted.join(" ");
+    }
+
+    public void printStatus() {
+        string recorded = "no";
+        if (FileSystem.exists(self.spec.stateHashFile())) {
+            string savedHash = Path.readAll(self.spec.stateHashFile()).trim();
+            recorded = savedHash.equals(self.spec.stateHash) ? "yes" : "stale";
+        }
+        Console.log("State:     " + self.spec.state);
+        Console.log("Hash:      " + self.spec.stateHash);
+        Console.log("Parent:    " + self.spec.parentState + " (" + self.spec.parentHash + ")");
+        Console.log("Work dir:  " + self.spec.workDir);
+        Console.log("Arch:      " + self.spec.arch);
+        Console.log("ISO:       " + (FileSystem.exists(self.spec.iso) ? "yes" : "no") + " " + self.spec.iso);
+        Console.log("Disk:      " + (FileSystem.exists(self.diskPath()) ? "yes" : "no") + " " + self.diskPath());
+        Console.log("SSH key:   " + (FileSystem.exists(self.sshKeyPath()) ? "yes" : "no") + " " + self.sshKeyPath());
+        Console.log("Running:   " + (self.isRunning() ? "yes" : "no"));
+        Console.log("Recorded:  " + recorded + " " + self.spec.stateDir());
+    }
+
+    public void prepareSerialPipe() {
+        FileSystem.removeRecursive(self.serialInPath());
+        FileSystem.removeRecursive(self.serialOutPath());
+        Command inPipe = Command("mkfifo");
+        inPipe.arg(self.serialInPath());
+        inPipe.capture(false);
+        ExecResult inResult = self.shell.runCommand(inPipe);
+        if (!inResult.ok()) { NixosLog.fatal("Failed to create VM serial input pipe"); }
+        Command outPipe = Command("mkfifo");
+        outPipe.arg(self.serialOutPath());
+        outPipe.capture(false);
+        ExecResult outResult = self.shell.runCommand(outPipe);
+        if (!outResult.ok()) { NixosLog.fatal("Failed to create VM serial output pipe"); }
+    }
+
+    public void startSerialReader() {
+        FileSystem.removeRecursive(self.serialReaderPidPath());
+        FileSystem.removeRecursive(self.serialLogPath());
+        string outPath = UnixShell.quote(self.serialOutPath());
+        string logPath = UnixShell.quote(self.serialLogPath());
+        string pidPath = UnixShell.quote(self.serialReaderPidPath());
+        self.shell.runRaw("(cat " + outPath + " >> " + logPath + ") & echo $! > " + pidPath, false, false, "");
+    }
+
+    public void stopSerialReader() {
+        if (!FileSystem.exists(self.serialReaderPidPath())) { return; }
+        string pidPath = UnixShell.quote(self.serialReaderPidPath());
+        self.shell.runRaw("pid=$(cat " + pidPath + "); kill $pid 2>/dev/null || true", false, false, "");
+        FileSystem.removeRecursive(self.serialReaderPidPath());
+    }
+
+    public void startSwtpm() {
+        if (!self.tpm2Enabled()) { return; }
+        self.requireTpm2Capability();
+        FileSystem.mkdirp(self.tpmStateDir());
+        FileSystem.removeRecursive(self.tpmSocketPath());
+        if (FileSystem.exists(self.tpmPidPath())) {
+            ExecResult running = self.shell.runRaw("kill -0 $(cat " + UnixShell.quote(self.tpmPidPath()) + ") 2>/dev/null", false, false, "");
+            if (running.ok()) { return; }
+            FileSystem.removeRecursive(self.tpmPidPath());
+        }
+
+        Command cmd = Command("swtpm")
+            .arg("socket")
+            .arg("--tpm2")
+            .arg("--tpmstate")
+            .arg("dir=" + self.tpmStateDir())
+            .arg("--ctrl")
+            .arg("type=unixio,path=" + self.tpmSocketPath())
+            .arg("--daemon")
+            .arg("--pid")
+            .arg("file=" + self.tpmPidPath())
+            .arg("--log")
+            .arg("file=" + self.tpmLogPath() + ",level=20")
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to start swtpm"); }
+        string waitCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do test -S "
+            + UnixShell.quote(self.tpmSocketPath())
+            + " && exit 0; sleep 1; done; exit 1";
+        ExecResult ready = self.shell.runRaw(waitCommand, false, false, "");
+        if (!ready.ok()) { NixosLog.fatal("swtpm socket did not become ready"); }
+    }
+
+    public void stopSwtpm() {
+        if (FileSystem.exists(self.tpmPidPath())) {
+            string quotedPid = UnixShell.quote(self.tpmPidPath());
+            self.shell.runRaw("pid=$(cat " + quotedPid + "); kill $pid 2>/dev/null || true", false, false, "");
+            FileSystem.removeRecursive(self.tpmPidPath());
+        }
+        FileSystem.removeRecursive(self.tpmSocketPath());
+    }
+
+    public void addFirmware(Command cmd, bool fromIso) {
+        if (!self.shouldUseUefi(fromIso)) { return; }
+        self.requireUefiCapability();
+        if (self.secureBootEnabled()) { self.requireSecureBootCapability(); }
+        if (self.spec.arch.equals("x86_64")) {
+            cmd.arg("-machine");
+            cmd.arg("q35");
+        }
+        self.setupFirmwareVars();
+        string codePath = self.firmwareCodePath();
+        if (codePath.isEmpty()) { NixosLog.fatal("Could not find EDK2 firmware for " + self.spec.arch); }
+        cmd.arg("-drive");
+        cmd.arg("if=pflash,format=raw,readonly=on,file=" + codePath);
+        cmd.arg("-drive");
+        cmd.arg("if=pflash,format=raw,file=" + self.firmwareVarsPath());
+    }
+
+    public void addTpm2(Command cmd) {
+        if (!self.tpm2Enabled()) { return; }
+        self.startSwtpm();
+        cmd.arg("-chardev");
+        cmd.arg("socket,id=chrtpm,path=" + self.tpmSocketPath());
+        cmd.arg("-tpmdev");
+        cmd.arg("emulator,id=tpm0,chardev=chrtpm");
+        cmd.arg("-device");
+        cmd.arg(self.tpmQemuDevice() + ",tpmdev=tpm0");
+    }
+
+    public void start(bool fromIso) {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.pidPath())) {
+            NixosLog.info("QEMU pidfile exists; assuming VM is already running");
+            return;
+        }
+        Command cmd = Command(self.qemuBinary());
+        if (self.isDarwin()) {
+            cmd.arg("-accel");
+            cmd.arg(self.hostArchMatchesGuest() ? "hvf" : "tcg");
+        } else {
+            if (self.hostArchMatchesGuest()) {
+                cmd.arg("-enable-kvm");
+            } else {
+                cmd.arg("-accel");
+                cmd.arg("tcg");
+            }
+        }
+        if (self.spec.arch.equals("aarch64")) {
+            cmd.arg("-machine");
+            cmd.arg("virt");
+            cmd.arg("-cpu");
+            cmd.arg(self.hostArchMatchesGuest() ? "host" : "max");
+            cmd.arg("-device");
+            cmd.arg("virtio-rng-pci");
+        }
+        self.addFirmware(cmd, fromIso);
+        cmd.arg("-m");
+        cmd.arg(self.spec.memory);
+        cmd.arg("-smp");
+        cmd.arg(Strings.fromInt(self.spec.cpus));
+        cmd.arg("-drive");
+        cmd.arg("file=" + self.diskPath() + ",format=qcow2,if=virtio,cache=none");
+        cmd.arg("-netdev");
+        cmd.arg("user,id=net0,hostfwd=tcp::" + Strings.fromInt(self.spec.sshPort) + "-:22");
+        cmd.arg("-device");
+        cmd.arg("virtio-net-pci,netdev=net0");
+        cmd.arg("-display");
+        cmd.arg("none");
+        cmd.arg("-serial");
+        cmd.arg("pipe:" + self.serialBasePath());
+        cmd.arg("-monitor");
+        cmd.arg("unix:" + self.monitorPath() + ",server,nowait");
+        cmd.arg("-qmp");
+        cmd.arg("unix:" + self.qmpPath() + ",server,nowait");
+        self.addTpm2(cmd);
+        if (fromIso) {
+            if (self.spec.arch.equals("x86_64") && !self.shouldUseUefi(fromIso)) {
+                self.extractBootSerial();
+                cmd.arg("-kernel");
+                cmd.arg(Path.readAll(self.bootKernelFile()).trim());
+                cmd.arg("-initrd");
+                cmd.arg(Path.readAll(self.bootInitrdFile()).trim());
+                cmd.arg("-append");
+                cmd.arg(Path.readAll(self.bootAppendFile()).trim());
+                cmd.arg("-cdrom");
+                cmd.arg(self.spec.iso);
+            } else {
+                cmd.arg("-cdrom");
+                cmd.arg(self.spec.iso);
+                cmd.arg("-boot");
+                cmd.arg("d");
+            }
+        }
+        self.prepareSerialPipe();
+        self.startSerialReader();
+        cmd.arg("-daemonize");
+        cmd.arg("-pidfile");
+        cmd.arg(self.pidPath());
+        cmd.capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) {
+            self.stopSerialReader();
+            self.stopSwtpm();
+            NixosLog.fatal("Failed to start QEMU");
+        }
+    }
+
+    public void stop() {
+        self.stopSerialReader();
+        if (FileSystem.exists(self.pidPath())) {
+            string quotedPid = UnixShell.quote(self.pidPath());
+            self.shell.runRaw("pid=$(cat " + quotedPid + "); kill $pid 2>/dev/null || true; sleep 2; kill -0 $pid 2>/dev/null && kill -9 $pid 2>/dev/null || true", false, false, "");
+            FileSystem.removeRecursive(self.pidPath());
+        }
+        FileSystem.removeRecursive(self.monitorPath());
+        FileSystem.removeRecursive(self.qmpPath());
+        FileSystem.removeRecursive(self.serialInPath());
+        FileSystem.removeRecursive(self.serialOutPath());
+        self.stopSwtpm();
+    }
+
+    public void sleepSeconds(int seconds) {
+        self.shell.runRaw("sleep " + Strings.fromInt(seconds), false, false, "");
+    }
+
+    public void serialSend(string command) {
+        string payload = command + "\n";
+        self.shell.runRaw("printf %s " + UnixShell.quote(payload) + " > " + UnixShell.quote(self.serialInPath()), false, false, "");
+    }
+
+    public void bootstrapSsh() {
+        self.createSshKey();
+        string key = self.sshPubKey();
+        self.serialSend("");
+        self.serialSend("sudo install -d -m 700 /root/.ssh; echo " + UnixShell.quote(key) + " | sudo tee /root/.ssh/authorized_keys > /dev/null; sudo chmod 600 /root/.ssh/authorized_keys; sudo systemctl restart sshd");
+        self.sleepSeconds(5);
+    }
+
+    public void upFromIso() {
+        self.setup();
+        self.start(true);
+        self.sleepSeconds(20);
+        self.bootstrapSsh();
+        if (!self.waitForSsh(180)) {
+            NixosLog.fatal("SSH was not ready after booting installer ISO");
+        }
+    }
+
+    public void rebootDisk() {
+        self.ssh("reboot", false);
+        self.sleepSeconds(5);
+        self.stop();
+        self.start(false);
+        if (!self.waitForSsh(180)) {
+            NixosLog.fatal("SSH was not ready after disk reboot");
+        }
+    }
+
+    public Command addSshOptions(Command cmd) {
+        return cmd
+            .arg("-o").arg("StrictHostKeyChecking=no")
+            .arg("-o").arg("UserKnownHostsFile=/dev/null")
+            .arg("-o").arg("LogLevel=ERROR")
+            .arg("-o").arg("BatchMode=yes")
+            .arg("-o").arg("IdentitiesOnly=yes")
+            .arg("-o").arg("ConnectTimeout=3")
+            .arg("-o").arg("ConnectionAttempts=1")
+            .arg("-i").arg(self.sshKeyPath());
+    }
+
+    public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
+        Command cmd = self.addSshOptions(Command("timeout")
+            .arg(Strings.fromInt(timeoutSeconds))
+            .arg("ssh")
+            .arg("-p")
+            .arg(Strings.fromInt(self.spec.sshPort)))
+            .arg("root@localhost")
+            .arg(command)
+            .check(checkStatus);
+        ExecResult result = self.shell.runCommand(cmd);
+        return result;
+    }
+
+    public ExecResult ssh(string command, bool checkStatus) {
+        return self.sshWithTimeout(command, checkStatus, 5);
+    }
+
+    public bool waitForSsh(int timeout) {
+        int elapsed = 0;
+        while (elapsed < timeout) {
+            ExecResult result = self.ssh("true", false);
+            if (result.ok()) { return true; }
+            self.sleepSeconds(3);
+            elapsed = elapsed + 8;
+            if (elapsed > 0 && elapsed % 24 == 0) {
+                self.bootstrapSsh();
+            }
+        }
+        return false;
+    }
+
+    public ExecResult host(string command, bool checkStatus) {
+        return self.shell.runRaw(command, true, checkStatus, "");
+    }
+
+    public string workspaceRoot() {
+        return self.spec.args.getOrDefault("workspaceRoot", ".");
+    }
+
+    public ExecResult workspaceFileExists(string relativePath) {
+        string command = "cd " + UnixShell.quote(self.workspaceRoot())
+            + " && test -f " + UnixShell.quote(relativePath)
+            + " && printf exists";
+        return self.shell.runRaw(command, true, false, "");
+    }
+
+    public ExecResult nixEval(string attribute, int timeoutSeconds) {
+        string command = "cd " + UnixShell.quote(self.workspaceRoot())
+            + " && timeout "
+            + Strings.fromInt(timeoutSeconds)
+            + " nix eval "
+            + UnixShell.quote(".#" + attribute)
+            + " --show-trace";
+        return self.shell.runRaw(command, true, false, "");
+    }
+
+    public ExecResult qmp(string command, int timeoutSeconds) {
+        if (!FileSystem.exists(self.qmpPath())) {
+            return ExecResult(1, "", "QMP socket does not exist: " + self.qmpPath(), "");
+        }
+        string payload = "{\"execute\":\"qmp_capabilities\"}\n" + command + "\n";
+        string rendered = "printf %s "
+            + UnixShell.quote(payload)
+            + " | timeout "
+            + Strings.fromInt(timeoutSeconds)
+            + " socat - "
+            + UnixShell.quote("UNIX-CONNECT:" + self.qmpPath());
+        return self.shell.runRaw(rendered, true, false, "");
+    }
+
+    public void copyWorkspace(string localPath, string remotePath) {
+        string source = localPath.isEmpty() ? ".." : localPath;
+        string target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
+        string remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
+        string tar = "tar czf - --exclude=.vm --exclude=btrc/.vm --exclude=btrc/build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
+            + UnixShell.quote(source)
+            + " .";
+        string ssh = "ssh -p "
+            + Strings.fromInt(self.spec.sshPort)
+            + " "
+            + self.sshOptionsForShell()
+            + " root@localhost "
+            + UnixShell.quote(remote);
+        ExecResult result = self.shell.runRaw(tar + " | " + ssh, false, true, "");
+        if (!result.ok()) { NixosLog.fatal("Failed to copy workspace into VM"); }
+    }
+
+    public void configureVmHost() {
+        string mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
+        string enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
+        string implementation = self.spec.args.getOrDefault("immutabilityImplementation", "semipermeable_membrane");
+        string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        bool secureBootTarget = bootTargetName.equals("Secure-Boot");
+        string otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
+        string serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
+        string initrdModules = self.spec.arch.equals("aarch64")
+            ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
+            : "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"tpm_tis\" ]";
+        string hostDir = "/etc/nixos/modules/hosts/" + self.spec.arch + "/VM-TEST";
+        string hostPath = hostDir + "/VM-TEST.nix";
+        string pubkey = self.sshPubKey();
+        string passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
+        string secureBootSettings = secureBootTarget
+            ? "  settings.boot.pkiBundle = \"/var/lib/sbctl\";\n"
+            : "";
+        string secureBootModulePath = "/etc/nixos/modules/system/vm-test-secure-boot.nix";
+        string secureBootModule = "{ config, lib, pkgs, ... }: {\n"
+            + "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {\n"
+            + "    boot.loader.timeout = lib.mkForce 0;\n"
+            + "    boot.lanzaboote.autoGenerateKeys.enable = true;\n"
+            + "    boot.lanzaboote.autoEnrollKeys.enable = true;\n"
+            + "    boot.lanzaboote.allowUnsigned = true;\n"
+            + "    boot.lanzaboote.autoEnrollKeys.includeMicrosoftKeys = true;\n"
+            + "    boot.lanzaboote.autoEnrollKeys.autoReboot = false;\n"
+            + "    environment.systemPackages = [ pkgs.sbctl ];\n"
+            + "  };\n"
+            + "}\n";
+        string secureBootModuleCommand = secureBootTarget
+            ? "printf %s " + UnixShell.quote(secureBootModule) + " > " + UnixShell.quote(secureBootModulePath) + "; "
+            : "";
+        string hostNix = "{ lib, ... }: {\n"
+            + "  networking.hostName = \"VM-TEST\";\n"
+            + "  networking.firewall.enable = lib.mkForce false;\n"
+            + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
+            + "  boot.kernelParams = [ \"console=" + serialConsole + "\" ];\n"
+            + "  boot.initrd.availableKernelModules = " + initrdModules + ";\n"
+            + "  services.getty.autologinUser = lib.mkForce \"root\";\n"
+            + "  services.openssh.enable = lib.mkForce true;\n"
+            + "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";\n"
+            + "  services.openssh.settings.UseDns = lib.mkForce false;\n"
+            + "  settings.user.admin.autoUnlockWallet.enabled = false;\n"
+            + "  settings.user.admin.homeManager.enable = false;\n"
+            + "  settings.networking.identityAgent = \"none\";\n"
+            + "  settings.networking.lanSubnet = \"10.0.2.0/24\";\n"
+            + "  settings.disk.device = \"/dev/vda\";\n"
+            + "  settings.disk.encryption.enable = false;\n"
+            + "  settings.disk.immutability.enable = " + enabled + ";\n"
+            + "  settings.disk.immutability.implementation = \"" + implementation + "\";\n"
+            + "  settings.disk.immutability.mode = \"" + mode + "\";\n"
+            + "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];\n"
+            + "  settings.disk.immutability.semipermeable_membrane.enable = " + (implementation.equals("semipermeable_membrane") ? "true" : "false") + ";\n"
+            + "  settings.disk.immutability.semipermeable_membrane.mode = \"" + mode + "\";\n"
+            + "  settings.disk.swap.size = \"2G\";\n"
+            + secureBootSettings
+            + "}\n";
+        string localConfig = "{\"host_path\":\"modules/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix\",\"target\":\"" + bootTargetName + "\"}\n";
+        string command = "set -e; "
+            + "rm -rf /etc/nixos/modules/hosts/" + otherArch + "; "
+            + "rm -f " + UnixShell.quote(secureBootModulePath) + "; "
+            + secureBootModuleCommand
+            + "find /etc/nixos/modules/apps -maxdepth 1 -type f -name '*.nix' -delete; "
+            + "find /etc/nixos/modules/apps/home-manager -maxdepth 1 -type f -name '*.nix' -delete 2>/dev/null || true; "
+            + "mkdir -p /etc/nixos/modules/apps/home-manager; "
+            + "touch /etc/nixos/modules/apps/home-manager/.keep; "
+            + "mkdir -p /etc/nixos/secrets; "
+            + "printf %s " + UnixShell.quote(passwordHash) + " > /etc/nixos/secrets/hashed_password.txt; "
+            + "chmod 600 /etc/nixos/secrets/hashed_password.txt; "
+            + "mkdir -p " + UnixShell.quote(hostDir) + "; "
+            + "printf %s " + UnixShell.quote(hostNix) + " > " + UnixShell.quote(hostPath) + "; "
+            + "printf %s " + UnixShell.quote(localConfig) + " > /etc/nixos/config.json; "
+            + "git -C /etc/nixos init; "
+            + "git config --global --add safe.directory /etc/nixos; "
+            + "git -C /etc/nixos add -A; "
+            + "git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty";
+        ExecResult result = self.sshWithTimeout(command, false, 120);
+        if (!result.ok()) {
+            Console.error(result.stdout());
+            NixosLog.fatal("Failed to configure VM host");
+        }
+    }
+
+    public void installNixosGuest() {
+        string diskTarget = "VM-TEST-Disk-Operation";
+        string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        bool secureBootTarget = bootTargetName.equals("Secure-Boot");
+        string bootTarget = "VM-TEST-" + bootTargetName;
+        string nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
+        string disko = nix + " run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#"
+            + diskTarget
+            + " --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
+        string install = "mkdir -p /mnt/etc; rm -rf /mnt/etc/nixos; cp -r /etc/nixos /mnt/etc/nixos; mkdir -p /mnt/nix/tmp; TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#"
+            + bootTarget
+            + " --root /mnt --no-channel-copy --show-trace --no-root-password --cores 0";
+        string lanzabooteInstall = secureBootTarget
+            ? "nixos-enter --root /mnt --command "
+                + UnixShell.quote("set -e; cmd=$(nix --extra-experimental-features nix-command --extra-experimental-features flakes eval --raw /etc/nixos#nixosConfigurations.VM-TEST-Secure-Boot.config.boot.lanzaboote.installCommand); tmp=$(mktemp -d); ln -s /nix/var/nix/profiles/system \"$tmp/system-1-link\"; sh -c \"$cmd --public-key /var/lib/sbctl/keys/db/db.pem --private-key /var/lib/sbctl/keys/db/db.key /boot $tmp/system-1-link\"; rm -rf \"$tmp\"")
+            : "true";
+        string snapshots = "nixos-enter --root /mnt --command "
+            + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --add safe.directory /etc/nixos || true");
+        string command = "set -e; " + disko + "; " + install + "; " + lanzabooteInstall + "; " + snapshots + "; echo INSTALL_OK";
+        int timeoutSeconds = secureBootTarget ? 7200 : 3600;
+        ExecResult result = self.sshWithTimeout(command, false, timeoutSeconds);
+        if (!result.ok() || !result.stdout().contains("INSTALL_OK")) {
+            Console.error(result.stdout());
+            self.stop();
+            NixosLog.fatal("NixOS installation failed");
+        }
+    }
+
+    public void snapshot(string name) {
+        self.stop();
+        Command cmd = Command("qemu-img")
+            .arg("snapshot")
+            .arg("-c")
+            .arg(name)
+            .arg(self.diskPath())
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
+        if (FileSystem.exists(self.firmwareVarsPath())) {
+            Command cp = Command("cp")
+                .arg(self.firmwareVarsPath())
+                .arg(self.firmwareVarsSnapshotPath(name))
+                .capture(false);
+            self.shell.runCommand(cp);
+        }
+    }
+
+    public void restore(string name) {
+        self.stop();
+        if (!self.hasSnapshot(name) && self.hasBackingDisk()) {
+            NixosLog.info("Snapshot " + name + " is inherited through qcow2 backing; restore is a no-op");
+            return;
+        }
+        Command cmd = Command("qemu-img")
+            .arg("snapshot")
+            .arg("-a")
+            .arg(name)
+            .arg(self.diskPath())
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
+        if (FileSystem.exists(self.firmwareVarsSnapshotPath(name))) {
+            Command cp = Command("cp")
+                .arg(self.firmwareVarsSnapshotPath(name))
+                .arg(self.firmwareVarsPath())
+                .capture(false);
+            self.shell.runCommand(cp);
+            self.makeFirmwareVarsWritable();
+        }
+    }
+
+    public void copyTo(string localPath, string remotePath) {
+        Command cmd = self.addSshOptions(Command("scp")
+            .arg("-r")
+            .arg("-P")
+            .arg(Strings.fromInt(self.spec.sshPort)))
+            .arg(localPath)
+            .arg(f"root@localhost:{remotePath}")
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
+    }
+
+    public void copyFrom(string remotePath, string localPath) {
+        Command cmd = self.addSshOptions(Command("scp")
+            .arg("-r")
+            .arg("-P")
+            .arg(Strings.fromInt(self.spec.sshPort)))
+            .arg(f"root@localhost:{remotePath}")
+            .arg(localPath)
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
+    }
+}

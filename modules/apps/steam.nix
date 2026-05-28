@@ -192,7 +192,7 @@ in {
         proton.customName = protonCustomName;
       };
     }
-    (lib.mkIf config.programs.steam.enable {
+    (lib.mkIf (config.settings.apps.enable && config.settings.apps.steam.enable && config.programs.steam.enable) {
       system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
         if [ -d "${steamPath}/config" ]; then
           runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"

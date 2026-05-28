@@ -1,0 +1,158 @@
+class NixEvalCache {
+    public Map<string, string> values;
+
+    public NixEvalCache() {
+        self.values = {};
+    }
+
+    public bool has(string key) {
+        return self.values.has(key);
+    }
+
+    public string get(string key) {
+        return self.values.get(key);
+    }
+
+    public void put(string key, string value) {
+        self.values.put(key, value);
+    }
+}
+
+class NixosConfig {
+    public NixosPaths paths;
+    public LocalConfigFile local;
+    public UnixShell shell;
+    public NixEvalCache cache;
+
+    public NixosConfig(string root = "/etc/nixos") {
+        self.paths = NixosPaths(root);
+        self.local = LocalConfigFile(self.paths.configPath());
+        self.shell = UnixShell();
+        self.cache = NixEvalCache();
+    }
+
+    public bool exists() {
+        return self.local.exists();
+    }
+
+    public string hostPath() {
+        return self.local.getString("host_path", "");
+    }
+
+    public string target() {
+        return self.local.getString("target", "Standard-Boot");
+    }
+
+    public void reset(string hostPath, string target) {
+        JsonObject data = JsonObject();
+        data.setString("host_path", hostPath);
+        data.setString("target", target);
+        self.local.overwrite(data);
+    }
+
+    public string host() {
+        string base = PathTools.basename(self.hostPath());
+        return Strings.replace(base, ".nix", "");
+    }
+
+    public string architecture() {
+        string parent = PathTools.dirname(self.hostPath());
+        string hostDir = PathTools.basename(parent);
+        string hostFile = PathTools.basename(self.hostPath());
+        string hostName = Strings.replace(hostFile, ".nix", "");
+        if (hostDir.equals(hostName)) {
+            return PathTools.basename(PathTools.dirname(parent));
+        }
+        return hostDir;
+    }
+
+    public string flakeRef() {
+        return self.paths.root + "#" + self.host() + "-" + self.target();
+    }
+
+    public string inputLockedRev(string inputName) {
+        Command cmd = Command("nix");
+        cmd.arg("--extra-experimental-features");
+        cmd.arg("nix-command");
+        cmd.arg("--extra-experimental-features");
+        cmd.arg("flakes");
+        cmd.arg("flake");
+        cmd.arg("metadata");
+        cmd.arg(inputName);
+        cmd.arg("--json");
+        cmd.arg("-I");
+        cmd.arg(self.paths.root);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { return "master"; }
+        string json = result.stdout();
+        string marker = "\"rev\":\"";
+        int start = Strings.find(json, marker, 0);
+        if (start < 0) { return "master"; }
+        start = start + marker.len();
+        int end = start;
+        while (json[end] != '\0' && json[end] != '"') {
+            end++;
+        }
+        return JsonObject.slice(json, start, end);
+    }
+
+    public string evalRaw(string attribute) {
+        string key = self.flakeRef() + ":" + attribute;
+        if (self.cache.has(key)) {
+            return self.cache.get(key);
+        }
+        Command cmd = Command("nix");
+        cmd.arg("--extra-experimental-features");
+        cmd.arg("nix-command");
+        cmd.arg("--extra-experimental-features");
+        cmd.arg("flakes");
+        cmd.arg("eval");
+        cmd.arg(self.paths.root + "#nixosConfigurations." + self.host() + "-" + self.target() + "." + attribute);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) {
+            NixosLog.fatal("nix eval failed for " + attribute);
+        }
+        string value = result.stdout().trim();
+        value = Strings.replace(value, "\"", "");
+        self.cache.put(key, value);
+        return value;
+    }
+
+    public bool evalBool(string attribute) {
+        string value = self.evalRaw(attribute);
+        return value.equals("true");
+    }
+
+    public string standardTarget() { return "Standard-Boot"; }
+    public string secureBootTarget() { return "Secure-Boot"; }
+    public string diskOperationTarget() { return "Disk-Operation"; }
+
+    public string username() {
+        return self.evalRaw("config.settings.user.admin.username");
+    }
+
+    public string secretsPath() {
+        return self.evalRaw("config.settings.secrets.path");
+    }
+
+    public string hashedPasswordPath() {
+        string name = self.evalRaw("config.settings.secrets.hashedPasswordFile");
+        return PathTools.join(self.secretsPath(), name);
+    }
+
+    public string diskDevice() {
+        return self.evalRaw("config.settings.disk.device");
+    }
+
+    public string rootPartLabelPath() {
+        return self.evalRaw("config.settings.disk.by.partlabel.root");
+    }
+
+    public string tpmDevice() {
+        return self.evalRaw("config.settings.tpm.device");
+    }
+
+    public string tpmVersionPath() {
+        return self.evalRaw("config.settings.tpm.versionPath");
+    }
+}

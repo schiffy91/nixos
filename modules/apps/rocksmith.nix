@@ -1,5 +1,9 @@
 { config, pkgs, lib, steam, ... }:
 let
+  enabled = config.settings.apps.enable
+    && config.settings.apps.rocksmith.enable
+    && config.settings.apps.steam.enable
+    && pkgs.stdenv.hostPlatform.isx86_64;
   user = config.settings.user.admin.username;
   home = "/home/${user}";
   sampleSize = config.settings.rocksmith.sampleSize;
@@ -61,7 +65,7 @@ let
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
   protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.customName}/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
-in {
+in lib.mkIf enabled {
   system.activationScripts.rocksmith = lib.stringAfter [ "users" "protonCustomCompatTool" ] ''
     export PATH="${pkgs.coreutils}/bin:${pkgs.gnused}/bin:${pkgs.gnugrep}/bin:${pkgs.util-linux}/bin:$PATH"
     if [ -d "${gamePath}" ]; then

@@ -9,17 +9,17 @@ let
         name = config.settings.disk.label.root;
         passwordFile = config.settings.disk.encryption.plainTextPasswordFile;
         settings.allowDiscards = true;
-        content = content;
+        inherit content;
       };
     };
   };
   ##### Subvolumes #####
   mkSubvolumes = subvolumes: 
     lib.listToAttrs (lib.lists.forEach subvolumes (subvolume: { 
-      name = subvolume.name; 
+      inherit (subvolume) name;
       value = { 
         mountpoint = subvolume.mountPoint;
-        mountOptions = subvolume.mountOptions; 
+        inherit (subvolume) mountOptions;
       } // (if !config.settings.disk.swap.enable || subvolume.flag != "swap" then {} else {
         swap.swapfile.size = config.settings.disk.swap.size; 
        });

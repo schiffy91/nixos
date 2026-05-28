@@ -1,0 +1,18 @@
+{
+  "name": "secure-boot-capabilities",
+  "state": "secure-boot-capabilities",
+  "parentState": "root",
+  "stateMaterial": "secure-boot-capabilities:{{arch}}:source={{sourceHash}}",
+  "args": {
+    "tpm2": "true",
+    "secureBoot": "true"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "arch": "x86_64",
+  "operations": [
+    { "op": "probe-secure-boot" },
+    { "op": "host", "command": "test -f \"$(dirname $(dirname $(command -v qemu-system-x86_64)))/share/qemu/edk2-x86_64-secure-code.fd\" && printf secure-firmware", "expect": "secure-firmware" },
+    { "op": "host", "command": "set -e; cd {{workspaceRoot}}; lpath=$(nix flake archive --json | jq -r '.inputs.lanzaboote.path'); grep -q autoGenerateKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q autoEnrollKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q inputs.lanzaboote modules/system/boot.nix; printf lanzaboote", "expect": "lanzaboote" },
+    { "op": "record-state" }
+  ]
+}

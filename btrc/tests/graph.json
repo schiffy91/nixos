@@ -1,0 +1,160 @@
+{
+  "name": "nixos-btrc-e2e",
+  "workspaceRoot": "../..",
+  "default": [
+    "cli-parity",
+    "spec-yaml",
+    "app-settings",
+    "stateful-host",
+    "aarch64-qemu-host",
+    "installer-download"
+  ],
+  "nodes": [
+    {
+      "id": "quick",
+      "spec": "quick/test.json",
+      "after": []
+    },
+    {
+      "id": "stateful-host",
+      "spec": "stateful-host/test.json",
+      "after": ["quick"],
+      "args": {
+        "marker": "graph-default"
+      }
+    },
+    {
+      "id": "app-settings",
+      "spec": "app-settings/test.json",
+      "after": ["quick"]
+    },
+    {
+      "id": "aarch64-qemu-host",
+      "spec": "aarch64-qemu-host/test.json",
+      "after": ["quick"]
+    },
+    {
+      "id": "cli-parity",
+      "spec": "cli-parity/test.json",
+      "after": ["quick"]
+    },
+    {
+      "id": "spec-toml",
+      "spec": "spec-formats/toml.toml",
+      "after": ["quick"]
+    },
+    {
+      "id": "spec-yaml",
+      "spec": "spec-formats/yaml.yaml",
+      "after": ["spec-toml"]
+    },
+    {
+      "id": "installer-download",
+      "spec": "installer-download/test.json",
+      "after": []
+    },
+    {
+      "id": "installer-download-x86_64",
+      "spec": "installer-download/test.json",
+      "after": [],
+      "args": {
+        "name": "installer-download-x86_64",
+        "state": "base-iso-x86_64",
+        "arch": "x86_64"
+      }
+    },
+    {
+      "id": "installer-ssh",
+      "spec": "installer-ssh/test.json",
+      "after": ["installer-download"]
+    },
+    {
+      "id": "installer-setup",
+      "spec": "installer-setup/test.json",
+      "after": ["installer-download"]
+    },
+    {
+      "id": "installer-up-iso",
+      "spec": "installer-up-iso/test.json",
+      "after": ["installer-download"]
+    },
+    {
+      "id": "installer-ssh-x86_64",
+      "spec": "installer-ssh/test.json",
+      "after": ["installer-download-x86_64"],
+      "args": {
+        "name": "installer-ssh-x86_64",
+        "state": "installer-ssh-x86_64",
+        "parentState": "base-iso-x86_64",
+        "arch": "x86_64",
+        "sshPort": "2230"
+      }
+    },
+    {
+      "id": "qmp-probe",
+      "spec": "qmp-probe/test.json",
+      "after": ["installer-download"]
+    },
+    {
+      "id": "tpm2-probe",
+      "spec": "tpm2-probe/test.json",
+      "after": ["installer-download"]
+    },
+    {
+      "id": "secure-boot-capabilities",
+      "spec": "secure-boot-capabilities/test.json",
+      "after": ["quick"]
+    },
+    {
+      "id": "install-reset",
+      "spec": "install-system/test.json",
+      "after": ["installer-ssh"],
+      "args": {
+        "name": "install-reset",
+        "state": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset",
+        "immutabilityEnabled": "true"
+      }
+    },
+    {
+      "id": "install-disabled",
+      "spec": "install-system/test.json",
+      "after": ["installer-ssh"],
+      "args": {
+        "name": "install-disabled",
+        "state": "installed-disabled",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "disabled",
+        "immutabilityEnabled": "false"
+      }
+    },
+    {
+      "id": "immutability-reset",
+      "spec": "immutability-reset/test.json",
+      "after": ["install-reset"],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "secure-boot-install",
+      "spec": "secure-boot-install/test.json",
+      "after": ["installer-ssh-x86_64"],
+      "args": {
+        "arch": "x86_64",
+        "parentState": "installer-ssh-x86_64"
+      }
+    },
+    {
+      "id": "secure-boot-lanzaboote",
+      "spec": "secure-boot-lanzaboote/test.json",
+      "after": ["secure-boot-install"]
+    }
+  ]
+}

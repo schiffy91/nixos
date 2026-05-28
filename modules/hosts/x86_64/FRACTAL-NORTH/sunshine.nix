@@ -1,9 +1,10 @@
-{ pkgs, lib, host, ... }:
+{ config, pkgs, lib, host, ... }:
 let
   edid      = pkgs.callPackage ../../../apps/pkg-overrides/sunshine/edid { };
   kd        = "${pkgs.kdePackages.libkscreen}/bin/kscreen-doctor";
   streaming = host.display.streaming;
-in {
+  enabled   = config.settings.apps.enable && config.settings.apps.sunshine.enable;
+in lib.mkIf enabled {
   services.sunshine = {
     enable = true;
     openFirewall = false;

@@ -1,0 +1,16 @@
+name: spec-yaml
+state: spec-yaml
+parentState: spec-toml
+stateMaterial: spec-format:yaml:source={{sourceHash}}
+workDir: .vm/e2e/{{state}}-{{stateHashShort}}
+args:
+  marker: yaml-ok
+operations:
+  - op: require-state
+  - op: reset-state
+  - op: host
+    command: mkdir -p {{workDir}} && printf {{marker}} > {{workDir}}/format.txt
+  - op: host
+    command: cat {{workDir}}/format.txt
+    expect: "{{marker}}"
+  - op: record-state

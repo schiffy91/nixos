@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "btrc": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779948122,
+        "narHash": "sha256-qziOBIt7TUHe0W7u2pgIDQpyJQcVQBODTobWoyA26Wo=",
+        "ref": "main",
+        "rev": "684f716e2e506777b585f3bd5d4d62f56631cf15",
+        "revCount": 4,
+        "type": "git",
+        "url": "file:///Users/alexanderschiffhauer/Drive/dev/btrc"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "file:///Users/alexanderschiffhauer/Drive/dev/btrc"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1779041105,
@@ -196,6 +217,7 @@
     },
     "root": {
       "inputs": {
+        "btrc": "btrc",
         "disko": "disko",
         "home-manager": "home-manager",
         "lanzaboote": "lanzaboote",

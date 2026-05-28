@@ -1,4 +1,4 @@
-{ ... }:
+_:
 let
   pci = {
     nvidiaGpu      = "0000:01:00.0";
@@ -70,7 +70,7 @@ in {
   networking.hostName = "FRACTAL-NORTH";
   settings = {
     disk = {
-      device = disk.device;
+      inherit (disk) device;
       encryption.enable = true;
       immutability.enable = true;
       swap.size = disk.swapSize;

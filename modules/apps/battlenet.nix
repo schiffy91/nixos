@@ -1,5 +1,9 @@
 { config, pkgs, lib, steam, ... }:
 let
+  enabled = config.settings.apps.enable
+    && config.settings.apps.battlenet.enable
+    && config.settings.apps.steam.enable
+    && pkgs.stdenv.hostPlatform.isx86_64;
   user = config.settings.user.admin.username;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
@@ -171,7 +175,7 @@ let
       runHook postInstall
     '';
   };
-in {
+in lib.mkIf enabled {
   environment.systemPackages = [ launcher desktop captureHelper ];
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
     if [ -f "${exe}" ]; then

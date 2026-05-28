@@ -1,0 +1,33 @@
+{
+  "name": "installer-ssh",
+  "state": "installer-ssh",
+  "parentState": "base-iso",
+  "stateMaterial": "nixos-installer-live-ssh:{{arch}}:{{isoUrl}}:{{diskSize}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "4G",
+  "cpus": 4,
+  "sshPort": 2223,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "download-iso" },
+    { "op": "create-key" },
+    { "op": "create-disk" },
+    { "op": "boot-iso" },
+    { "op": "sleep", "timeout": 20 },
+    { "op": "bootstrap-ssh" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "serial-send", "command": "true" },
+    { "op": "guest", "command": "uname -a", "expect": "Linux" },
+    { "op": "guest", "command": "test -f /etc/NIXOS && printf installer", "expect": "installer" },
+    { "op": "copy-to", "local": "tests/fixtures/copy-roundtrip.txt", "remote": "/tmp/copy-roundtrip.txt" },
+    { "op": "guest", "command": "cat /tmp/copy-roundtrip.txt", "expect": "copy-roundtrip" },
+    { "op": "host", "command": "mkdir -p {{workDir}}/copy-out" },
+    { "op": "copy-from", "remote": "/tmp/copy-roundtrip.txt", "local": "{{workDir}}/copy-out/copy-roundtrip.txt" },
+    { "op": "host", "command": "cat {{workDir}}/copy-out/copy-roundtrip.txt", "expect": "copy-roundtrip" },
+    { "op": "snapshot", "name": "live-ssh" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

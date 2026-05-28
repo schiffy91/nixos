@@ -27,7 +27,7 @@ in {
     useUserPackages = true;
     backupFileExtension = "hm-backup";
     sharedModules = [ inputs.plasma-manager.homeModules.plasma-manager ];
-    extraSpecialArgs = { settings = config.settings; };
+    extraSpecialArgs = { inherit (config) settings; };
     users.${config.settings.user.admin.username} = { settings, ... }: {
       home = {
         username = settings.user.admin.username;

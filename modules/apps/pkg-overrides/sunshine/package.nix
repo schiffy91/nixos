@@ -282,7 +282,7 @@ stdenv'.mkDerivation (finalAttrs: {
 
   passthru = {
     tests = lib.optionalAttrs isLinux {
-      sunshine = nixosTests.sunshine;
+      inherit (nixosTests) sunshine;
     };
   };
 

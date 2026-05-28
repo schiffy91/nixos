@@ -5,7 +5,7 @@ let
   mountPoint = "${home}/Drive";
   remote = "gdrive:";
   configFile = "${home}/.config/rclone/rclone.conf";
-in {
+in lib.mkIf (config.settings.apps.enable && config.settings.apps.rclone.enable) {
   environment.systemPackages = [ pkgs.rclone ];
 
   systemd.user.services.rclone-drive = {

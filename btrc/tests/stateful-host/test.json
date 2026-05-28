@@ -1,0 +1,18 @@
+{
+  "name": "stateful-host",
+  "state": "stateful-host",
+  "parentState": "quick",
+  "stateMaterial": "host-state-marker:{{marker}}:source={{sourceHash}}",
+  "args": {
+    "marker": "btrc-state-default"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "host", "command": "mkdir -p {{workDir}} && printf {{marker}} > {{workDir}}/state.txt" },
+    { "op": "host", "command": "cat {{workDir}}/state.txt", "expect": "{{marker}}" },
+    { "op": "host", "command": "test -f {{workDir}}/state.txt && printf stateful", "expect": "stateful" },
+    { "op": "record-state" }
+  ]
+}

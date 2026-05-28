@@ -8,8 +8,8 @@ in {
   # screencast stream so Sunshine can capture genuine HDR pixels from the
   # compositor instead of 8-bit-truncated SDR.
   nixpkgs.overlays = [
-    (final: prev: {
-      kdePackages = prev.kdePackages.overrideScope (kdeFinal: kdePrev: {
+    (_final: prev: {
+      kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
         kwin = kdePrev.kwin.overrideAttrs (old: {
           patches = (old.patches or []) ++ [ ./pkg-overrides/kwin/hdr-screencast.patch ];
         });

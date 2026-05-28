@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }: let
   user = config.settings.user.admin.username;
   src = config.settings.desktop.cursor.path;
-in {
+in lib.mkIf (config.settings.apps.enable && config.settings.apps.cursor.enable) {
   system.activationScripts.cursorIcons = lib.stringAfter [ "users" ] ''
     ${pkgs.coreutils}/bin/install -d -o ${user} /home/${user}/.icons /home/${user}/.local/share/icons
     ${pkgs.coreutils}/bin/ln -sfn ${src} /home/${user}/.icons/default

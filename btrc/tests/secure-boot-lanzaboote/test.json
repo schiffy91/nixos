@@ -1,0 +1,32 @@
+{
+  "name": "secure-boot-lanzaboote",
+  "state": "secure-boot-lanzaboote",
+  "parentState": "installed-secure-boot",
+  "stateMaterial": "secure-boot-lanzaboote:{{arch}}:secureBoot={{secureBoot}}:tpm2={{tpm2}}:source={{sourceHash}}",
+  "args": {
+    "tpm2": "true",
+    "secureBoot": "true",
+    "uefiDisk": "true"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "arch": "x86_64",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2228,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "require-secure-boot" },
+    { "op": "restore", "name": "installed-secure-boot" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 240 },
+    { "op": "guest", "command": "set -e; bootctl status; cat /boot/loader/loader.conf", "expect": "secure-boot-enroll force" },
+    { "op": "guest", "command": "set -e; for unit in generate-sb-keys.service prepare-sb-auto-enroll.service; do for i in $(seq 1 240); do result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; done; sbctl verify", "expect": "signed" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "bootctl status", "expect": "Secure Boot: enabled" },
+    { "op": "snapshot", "name": "secure-boot-enabled" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

@@ -233,7 +233,7 @@ fn rotate(run: &Run, snaps: &str, vol: &str, live: &str) {
 }
 fn publish(run: &Run, vol: &Vol, live: &str, next: &str) {
 	if !exists(next) { return; }
-	if !run.dry && mounted(&vol.mount) {
+	if !run.dry && vol.mount != "/" && mounted(&vol.mount) {
 		eprintln!("{} WRN {} mounted; leaving NEXT for boot", run.e(), vol.mount);
 		return;
 	}

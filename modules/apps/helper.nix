@@ -31,7 +31,7 @@ let
     terminal = false;
     startupWMClass = "nixos-helper";
   };
-in {
+in lib.mkIf (config.settings.apps.enable && config.settings.apps.nixosHelper.enable) {
   environment.systemPackages = [ nixos daemon desktopItem ];
   environment.etc."xdg/autostart/nixos-helper.desktop".text = ''
     [Desktop Entry]

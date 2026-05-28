@@ -1,0 +1,36 @@
+{
+  "name": "secure-boot-install",
+  "state": "installed-secure-boot",
+  "parentState": "installer-ssh",
+  "stateMaterial": "secure-boot-install:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:tpm2={{tpm2}}:source={{sourceHash}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset",
+    "immutabilityEnabled": "true",
+    "bootTarget": "Secure-Boot",
+    "tpm2": "true"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2227,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "require-tpm2" },
+    { "op": "restore", "name": "live-ssh" },
+    { "op": "boot-iso" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; test -d /sys/class/tpm/tpm0; cat /sys/class/tpm/tpm0/tpm_version_major", "expect": "2" },
+    { "op": "copy-workspace", "local": "..", "remote": "/etc/nixos" },
+    { "op": "configure-vm-host" },
+    { "op": "install-nixos" },
+    { "op": "snapshot", "name": "installed-secure-boot" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

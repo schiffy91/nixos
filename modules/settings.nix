@@ -1,5 +1,7 @@
 { lib, config, pkgs, ... }: 
-let mkSetting = type: defaultValue: lib.mkOption { type = type; default = defaultValue; }; 
+let
+  mkSetting = type: defaultValue: lib.mkOption { inherit type; default = defaultValue; };
+  snapshotVolume = lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes;
 in {
   options = with lib.types; {
     ##### Secrets ##### 
@@ -48,8 +50,8 @@ in {
       { name = "@snapshots"; mountPoint = "/.snapshots"; flag = "snapshots"; }
       { name = "@swap"; mountPoint = "/.swap"; mountOptions = []; flag = "swap"; neededForBoot = false; }
     ];
-    settings.disk.subvolumes.snapshots.name = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes).name));
-    settings.disk.subvolumes.snapshots.mountPoint = mkSetting str (toString ((lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes).mountPoint));
+    settings.disk.subvolumes.snapshots.name = mkSetting str (toString snapshotVolume.name);
+    settings.disk.subvolumes.snapshots.mountPoint = mkSetting str (toString snapshotVolume.mountPoint);
     settings.disk.subvolumes.names.resetOnBoot = mkSetting str (lib.concatMapStringsSep " " (volume: volume.name) (lib.filter (volume: volume.resetOnBoot) config.settings.disk.subvolumes.volumes));
     settings.disk.subvolumes.nameMountPointPairs.resetOnBoot = mkSetting str (lib.concatMapStringsSep " " (volume: "${volume.name}=${volume.mountPoint}") (lib.filter (volume: volume.resetOnBoot) config.settings.disk.subvolumes.volumes));
     ##### Disk: Swap #####
@@ -190,6 +192,20 @@ in {
     settings.desktop.plasma.iconThemePackage = mkSetting package pkgs.papirus-icon-theme;
     settings.desktop.plasma.accentColor = mkSetting str "40,40,40";
     settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
+    ##### Apps #####
+    settings.apps.enable = mkSetting bool true;
+    settings.apps.bash.enable = mkSetting bool true;
+    settings.apps.battlenet.enable = mkSetting bool true;
+    settings.apps.claude.enable = mkSetting bool true;
+    settings.apps.cursor.enable = mkSetting bool true;
+    settings.apps.git.enable = mkSetting bool true;
+    settings.apps.nixosHelper.enable = mkSetting bool true;
+    settings.apps.onePassword.enable = mkSetting bool true;
+    settings.apps.rclone.enable = mkSetting bool true;
+    settings.apps.rocksmith.enable = mkSetting bool true;
+    settings.apps.steam.enable = mkSetting bool true;
+    settings.apps.sunshine.enable = mkSetting bool true;
+    settings.apps.vscode.enable = mkSetting bool true;
     ##### Networking #####
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; # ip -o -f inet addr show | awk '/scope global/ {print $4}';
     settings.networking.ports.udp = mkSetting (listOf int) [];

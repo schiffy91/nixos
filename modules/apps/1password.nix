@@ -4,7 +4,7 @@
     [[ssh-keys]]
     vault = "Private"
   '';
-in {
+in lib.mkIf (config.settings.apps.enable && config.settings.apps.onePassword.enable) {
   environment.systemPackages = with pkgs; [ _1password-gui _1password-cli ];
   system.activationScripts.onePasswordAgent = lib.stringAfter [ "users" ] ''
     ${pkgs.coreutils}/bin/install -d -o ${user} -m 0700 /home/${user}/.config/1Password/ssh

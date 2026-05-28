@@ -1,0 +1,41 @@
+{
+  "name": "app-settings",
+  "state": "app-settings",
+  "parentState": "quick",
+  "stateMaterial": "app-settings:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "require-state" },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.steam.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.programs.steam.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.sunshine.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.services.sunshine.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.QEMU-Standard-Boot.config.settings.apps.enable",
+      "expect": "true"
+    },
+    { "op": "record-state" }
+  ]
+}

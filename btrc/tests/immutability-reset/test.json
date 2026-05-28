@@ -1,0 +1,31 @@
+{
+  "name": "immutability-reset",
+  "state": "immutability-reset",
+  "parentState": "installed-system",
+  "stateMaterial": "immutability-test:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2225,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; echo persist-root > /etc/nixos/e2e-persist-marker; echo ephemeral-root > /root/e2e-ephemeral-marker" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "cat /etc/nixos/e2e-persist-marker", "expect": "persist-root" },
+    { "op": "guest", "command": "test ! -e /root/e2e-ephemeral-marker && printf wiped", "expect": "wiped" },
+    { "op": "snapshot", "name": "reset-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}
