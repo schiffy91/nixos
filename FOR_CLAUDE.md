@@ -49,12 +49,13 @@ The aarch64 host is intentionally uppercase `QEMU`, matching the
 The BTRC compiler is an explicit flake input:
 
 ```nix
-inputs.btrc.url = "git+file:///Users/alexanderschiffhauer/Drive/dev/btrc?ref=main";
+inputs.btrc.url = "github:schiffy91/btrc";
 ```
 
-It is pinned in `flake.lock` to the sibling repo commit. Once that BTRC commit
-is pushed, this can move to the GitHub URL without changing the `btrc/Makefile`
-contract.
+It is pinned in `flake.lock` to the published BTRC commit on GitHub. Local
+development can still iterate against the sibling `~/Drive/dev/btrc` checkout;
+re-point the input and run `nix flake update btrc` after pushing to re-pin. This
+does not change the `btrc/Makefile` contract.
 
 ## Important Current State
 
@@ -221,7 +222,7 @@ file just to satisfy style output.
   intentionally available.
 - `btrc/generated/semipermeable_membrane.c` is checked in because the Nix module
   needs generated C during system evaluation; the compiler itself is now
-  packaged through the sibling BTRC flake input.
+  packaged through the BTRC flake input (`github:schiffy91/btrc`).
 - The user may have an unrelated host QEMU process from another app. Do not
   kill host QEMU processes unless you can identify them as this repo's harness.
 
@@ -241,11 +242,12 @@ file just to satisfy style output.
      binary after the GUI/tray story is ready.
    - Keep old Python around only as reference until parity is proven.
 
-4. Push the sibling BTRC compiler commit and consider switching the NixOS input
-   from the local `git+file://` URL to the GitHub URL.
+4. (Done) The NixOS input sources BTRC from `github:schiffy91/btrc`, pinned in
+   `flake.lock` at the pushed commit. `make -C btrc build` still flows through
+   `nix run ..#btrc`, and `make -C btrc stdlib-sync-check` confirms the vendored
+   stdlib matches `..#btrcSrc`.
    - Relative `git+file:../btrc` was tested and rejected because current Nix
-     locks it but can mis-fetch it during eval.
-   - Keep `make -C btrc build` going through `nix run ..#btrc`.
+     locks it but can mis-fetch it during eval; the GitHub URL avoids that.
 
 5. Harden Secure Boot VM coverage.
    - Keep x86_64 capability checks.

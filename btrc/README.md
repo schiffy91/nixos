@@ -24,7 +24,7 @@ before replacing the old Python entrypoints.
 
 ## Build
 
-The NixOS flake depends on the sibling BTRC flake through `inputs.btrc`.
+The NixOS flake depends on the BTRC flake (`github:schiffy91/btrc`) through `inputs.btrc`.
 The Makefile uses `nix run ..#btrc` for transpilation and
 `nix develop ..#btrc-build` for C compilation, so builds flow through the flake
 dependency graph instead of shelling into `../../btrc`.
@@ -105,15 +105,16 @@ behind the same interface later. This stays lightweight: simple tools can use
 while richer apps can later bind WKWebView, WebKitGTK, or WinUI/WebView2
 without changing application models.
 
-The sibling `~/Drive/dev/btrc` checkout is the canonical compiler and stdlib,
-and it is now part of this repo's flake dependency graph as `inputs.btrc`.
+The BTRC compiler and stdlib are consumed through this repo's flake dependency
+graph as `inputs.btrc`, pinned in `flake.lock` to `github:schiffy91/btrc`.
 This repository vendors only `src/stdlib` because the NixOS management programs
 compile with `--no-stdlib` and explicit include ordering. A full git submodule
 would bring in the compiler, tests, editor tooling, and generated artifacts into
 the NixOS repo; the KISS boundary is a flake input plus the
-`stdlib-sync-check` target. The current input is a local `git+file://` URL
-pinned in `flake.lock`; after the BTRC commit is pushed, it can be changed to
-the GitHub URL without changing the Makefile contract.
+`stdlib-sync-check` target, which diffs the vendored copy against `..#btrcSrc`.
+The Makefile contract (`nix run ..#btrc`, `nix develop ..#btrc-build`) is
+unchanged by the source URL, so local development against the sibling
+`~/Drive/dev/btrc` checkout still works after `nix flake update btrc`.
 
 | Surface | Shape |
 |---|---|

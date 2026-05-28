@@ -215,8 +215,8 @@ explicitly out of scope for the BTRC rewrite.
 ## BTRC Management Layer
 
 `btrc/` is the staged replacement for the Python/Rust management layer.
-The compiler is consumed through the flake input `inputs.btrc`, currently pinned
-to the sibling BTRC git checkout with a local `git+file://` URL. The local Makefile builds through
+The compiler is consumed through the flake input `inputs.btrc`, pinned in
+`flake.lock` to `github:schiffy91/btrc`. The local Makefile builds through
 `nix run ..#btrc` and `nix develop ..#btrc-build`, so the dependency is explicit
 in the flake graph rather than an implicit submodule or ad hoc `cd ../../btrc`.
 
