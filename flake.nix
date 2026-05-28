@@ -6,7 +6,7 @@
     plasma-manager = { url = "github:nix-community/plasma-manager"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.home-manager.follows = "home-manager"; };
     disko = { url = "github:nix-community/disko"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
-    btrc = { url = "git+file:///Users/alexanderschiffhauer/Drive/dev/btrc?ref=main"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
+    btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
   };
   outputs = inputs@{ self, ... }:
     let
