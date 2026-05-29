@@ -1,10 +1,10 @@
 # NixOS Configuration
 
 This repository is the flake-backed NixOS configuration for the machines in
-`modules/hosts`, plus a staged BTRC rewrite of the local management tooling.
-The long-term target is Nix plus BTRC for system management, with Python/Rust
-kept only where the current system still needs a legacy implementation or where
-external patch workflows require another language.
+`modules/hosts`, with local management tooling written in BTRC. System
+management is Nix plus BTRC end to end; there is no Python or Rust in the
+management layer (the only Python left is an x86-gated Sunshine EDID packaging
+helper under `modules/apps/pkg-overrides/`).
 
 ## Current Hosts
 
@@ -44,9 +44,12 @@ minimal boot/user defaults needed for the NixOS module graph to evaluate cleanly
 | `modules/apps/pkg-overrides/` | Custom package overrides for Proton, Rocksmith assets, Sunshine, and Battle.net helper tooling |
 | `modules/hosts/x86_64/FRACTAL-NORTH/` | Main workstation host modules and host-specific data |
 | `modules/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
-| `scripts/` | Legacy Python/Rust management implementation retained for parity and v1 immutability support |
-| `btrc/` | BTRC rewrite of the management layer and VM e2e framework |
-| `shell.nix` | Development shell for the legacy Python test path |
+| `bin/` | BTRC entrypoints: `nixosctl.btrc` (management CLI) and `semipermeable_membrane.btrc` (immutability) |
+| `lib/` | BTRC libraries (`lib/btrfs`, `lib/immutability`, …) |
+| `generated/` | Checked-in transpiled C that Nix compiles (`nixosctl.c`, `semipermeable_membrane.c`) |
+| `vendor/btrc-stdlib/` | Vendored BTRC stdlib used by the `--no-stdlib` build |
+| `tests/` | Declarative VM e2e graph and per-scenario specs |
+| `Makefile` | Root build/test contract (`make build`, `make check`, `make -C tests graph-*`) |
 | `FOR_CLAUDE.md` | Handoff notes for future Claude Code sessions |
 
 Host discovery is convention-based:
@@ -139,17 +142,21 @@ semipermeable immutability v2, and sets a small swap size suitable for VM use.
 
 ### Immutability
 
-`modules/system/immutability.nix` supports two implementations:
+`modules/system/immutability.nix` drives the BTRC **semipermeable membrane**, the
+sole immutability implementation. It is generated into
+`generated/semipermeable_membrane.c` and built by Nix as a C program.
 
-| Implementation | Status |
+| Mode | Behavior |
 |---|---|
-| `v1` | Original Rust initrd reset implementation, retained for existing systems only |
-| `semipermeable_membrane` | BTRC-generated C implementation, used by new BTRC tests and QEMU |
+| `reset` | Roll each `resetOnBoot` subvolume back to its read-only `CLEAN` snapshot at boot |
+| `snapshot-only` | Rotate snapshots without rolling back (ephemeral survives) |
+| `restore-previous` / `restore-penultimate` | Roll back to rotation slot A / B |
+| `disabled` | No reset |
 
-The BTRC semipermeable membrane is generated into
-`btrc/generated/semipermeable_membrane.c` and built by Nix as a C program.
-The original Rust v2 prototype remains under `scripts/lib/semipermeable_membrane.rs`
-as historical/reference code, but the live v2 package points at the BTRC output.
+`enforce.onReboot` wires the initrd reset + mounts service; `enforce.onUpdate`
+adds a `snapshot-clean` activation that re-captures the `CLEAN` baseline at
+`nixos-rebuild switch`. Orphaned `@persist/dirs/<key>` subvolumes (keys no longer
+in the spec) are pruned on a reconciling reset.
 
 The v2 mode persists selected files/directories by materializing persistent
 btrfs subvolumes under `@persist` and bind-mounting selected targets after
@@ -198,7 +205,8 @@ The app layer is globally imported but policy-gated through `settings.apps`.
 | `claude.nix` | Installs a Claude skill that teaches Claude how to load this repo |
 | `cursor.nix` | Symlinks the configured cursor theme into user icon paths |
 | `git.nix` | Configures Git identity |
-| `helper.nix` | Installs the legacy Python `nixos` and `nixos-helper` wrappers until BTRC replaces the live desktop helper |
+| `helper.nix` | Wires the live desktop helper to the packaged `nixosctl`; native tray pending (see below) |
+| `nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `rclone.nix` | Defines a user rclone mount for `~/Drive` |
 | `steam.nix` | Exports Steam tool names and configures installed Steam apps when Steam is enabled |
 | `sunshine.nix` | Overlays the custom Sunshine package on x86_64 and sets runtime library paths when Sunshine is enabled |
@@ -214,53 +222,51 @@ explicitly out of scope for the BTRC rewrite.
 
 ## BTRC Management Layer
 
-`btrc/` is the staged replacement for the Python/Rust management layer.
-The compiler is consumed through the flake input `inputs.btrc`, pinned in
-`flake.lock` to `github:schiffy91/btrc`. The local Makefile builds through
-`nix run ..#btrc` and `nix develop ..#btrc-build`, so the dependency is explicit
-in the flake graph rather than an implicit submodule or ad hoc `cd ../../btrc`.
+The management tooling is BTRC at the repository root. The compiler is consumed
+through the flake input `inputs.btrc`, pinned in `flake.lock` to
+`github:schiffy91/btrc`. The Makefile builds through `nix run .#btrc` and
+`nix develop .#btrc-build`, so the dependency is explicit in the flake graph.
 
 | Path | Purpose |
 |---|---|
-| `btrc/bin/nixosctl.btrc` | Main CLI |
-| `btrc/bin/semipermeable_membrane.btrc` | BTRC entrypoint for the v2 immutability runtime |
-| `btrc/src/core` | Logging, paths, interactive prompts |
-| `btrc/src/nix` | Config eval, rebuild/update, secrets, permissions, password changes |
-| `btrc/src/btrfs` | Snapshot and diff helpers |
-| `btrc/src/install` | Install orchestration |
-| `btrc/src/hardware` | Secure Boot and TPM2 helpers |
-| `btrc/src/desktop` | Audio, display, caffeine, labels, terminal launch helpers |
-| `btrc/src/immutability` | Semipermeable membrane v2 |
-| `btrc/vendor/btrc-stdlib` | Vendored BTRC stdlib used for this rewrite |
-| `btrc/tests/e2e` | Declarative VM graph and test runner |
+| `bin/nixosctl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
+| `bin/semipermeable_membrane.btrc` | BTRC entrypoint for the immutability runtime |
+| `lib/btrfs` | Snapshot and diff helpers |
+| `lib/immutability` | Semipermeable membrane |
+| `vendor/btrc-stdlib` | Vendored BTRC stdlib |
+| `tests/e2e` | Declarative VM graph and test runner |
 
-Build from the repo root:
+Build from the repo root (regenerate checked-in C after editing a `.btrc`):
 
 ```bash
-make -C btrc build
-make -C btrc generated
-make -C btrc stdlib-sync-check
+make build              # transpile + compile nixosctl and semipermeable_membrane
+make generated          # refresh generated/*.c for the Nix modules
+make stdlib-sync-check
 ```
 
-Common BTRC commands after build:
+Common `nixosctl` commands after build:
 
 ```bash
-btrc/build/nixosctl eval config.networking.hostName
-sudo btrc/build/nixosctl update --upgrade
-sudo btrc/build/nixosctl install --format
-sudo btrc/build/nixosctl diff --pattern '/var/*'
-sudo btrc/build/nixosctl fix-permissions
-sudo btrc/build/nixosctl secure-boot status
-sudo btrc/build/nixosctl tpm2 status
+build/nixosctl eval config.networking.hostName
+sudo build/nixosctl update --upgrade
+sudo build/nixosctl install --format
+sudo build/nixosctl diff --pattern '/var/*'
+sudo build/nixosctl fix-permissions
+sudo build/nixosctl secure-boot status
+sudo build/nixosctl tpm2 status
 ```
 
-The legacy Python wrappers are still installed by `modules/apps/helper.nix`.
-They remain the live desktop helper until the BTRC GUI/tray daemon is complete.
+On installed hosts the CLI is packaged as `nixosctl` (see `modules/apps/nixosctl.nix`)
+and is on `PATH`. The native system tray (macOS menu bar / Linux Wayland
+StatusNotifierItem) is implemented in the BTRC stdlib in the sibling `../btrc`
+repo; wiring it into `helper.nix` is pending publishing that branch and bumping
+`flake.lock`.
 
 ## E2E VM Testing
 
-The BTRC test framework is declarative. Specs live under `btrc/tests/*` and the
-graph lives at `btrc/tests/graph.json`.
+The BTRC test framework is declarative. Specs live under `tests/*` and the graph
+lives at `tests/graph.json`. The runner is the `nixosctl` binary itself
+(`nixosctl graph tests/graph.json run <node>`).
 
 Core ideas:
 
@@ -275,23 +281,25 @@ Core ideas:
 Useful test targets:
 
 ```bash
-make -C btrc quick
-make -C btrc app-settings
-make -C btrc aarch64-qemu-host
-make -C btrc graph-coverage
-make -C btrc graph-early
-make -C btrc installer-download
-make -C btrc installer-ssh
-make -C btrc graph-installer-ssh
-make -C btrc graph-full
+make -C tests quick
+make -C tests app-settings
+make -C tests aarch64-qemu-host
+make -C tests graph-coverage
+make -C tests installer-download
+make -C tests installer-ssh
+make -C tests graph-full
 ```
+
+Immutability/CLI scenario nodes: `immutability-reset`, `immutability-disabled`,
+`immutability-snapshot-only`, `immutability-restore`, `immutability-orphan`,
+`immutability-files`, `immutability-onupdate`, `nixosctl-cli`, `nixosctl-diff`.
 
 Targets that boot QEMU or install NixOS can take time. The early graph is the
 right default for normal development. The full graph should be used before
 trusting changes to install, immutability, TPM2, or Secure Boot behavior.
 
 The operation catalog currently has full declared operation coverage through
-`make -C btrc graph-coverage`. That is operation coverage, not generated-C line
+`make -C tests graph-coverage`. That is operation coverage, not generated-C line
 coverage.
 
 ## Development Workflow
@@ -302,10 +310,10 @@ Recommended loop:
 git status --short
 nix eval .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
 nix eval .#nixosConfigurations.QEMU-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
-make -C btrc build
-make -C btrc graph-coverage
-make -C btrc app-settings
-make -C btrc aarch64-qemu-host
+make build
+make -C tests graph-coverage
+make -C tests app-settings
+make -C tests aarch64-qemu-host
 ```
 
 For all flake outputs:
@@ -340,27 +348,27 @@ Ignored local paths:
 |---|---|
 | `secrets/` | Local secret material such as hashed password files |
 | `config.json` | Local selected host/target for helper tooling |
-| `.vm/` and `btrc/.vm/` | QEMU disks, ISO downloads, state graph data |
-| `.direnv/`, `.pytest_cache/`, `.ruff_cache/`, `__pycache__` | Development caches |
+| `.vm/` | QEMU disks, ISO downloads, state graph data |
+| `.direnv/`, `.btrc-cache/`, `build/` | Development caches and build outputs |
 | `result` | Nix build symlink |
 
-Do not commit secret material, VM disk images, installer ISOs, or generated
-Python caches.
+Do not commit secret material, VM disk images, installer ISOs, or local build
+caches.
 
 ## Migration Notes
 
-The BTRC parity ledger is `btrc/PARITY.md`. As of this pass:
+The migration to BTRC is complete. Current state:
 
 | Area | State |
 |---|---|
-| CLI dispatch | Ported to BTRC |
-| Nix eval/update/install/diff/permissions | Ported to BTRC |
-| Audio/display/caffeine/system helper backends | Ported to BTRC |
-| TPM2 and Secure Boot helpers | Ported to BTRC with VM capability coverage |
-| Semipermeable immutability v2 | Implemented in BTRC and checked in as generated C for Nix builds |
-| GUI tray/window daemon | Still needs a persistent native/WebView backend |
+| CLI dispatch | BTRC (`nixosctl`) |
+| Nix eval/update/install/diff/permissions | BTRC |
+| Audio/display/caffeine/system helper backends | BTRC |
+| TPM2 and Secure Boot helpers | BTRC with VM capability coverage |
+| Semipermeable immutability | BTRC; checked in as generated C for Nix builds |
+| Native system tray | Implemented in BTRC stdlib (`../btrc`); helper wiring pending publish |
 | VFIO | Removed for now |
-| Python/Rust legacy tree | Retained for parity/reference and v1 immutability only |
+| Python / Rust | Removed (only an x86-gated Sunshine EDID packaging helper remains) |
 
 ## Maintenance Rules
 

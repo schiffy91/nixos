@@ -1,0 +1,32 @@
+{
+  "name": "immutability-onupdate",
+  "state": "immutability-onupdate",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-onupdate:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2234,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; echo onupdate-survives > /etc/onupdate-marker; sed -i '/immutability.mode = /a settings.disk.immutability.enforce.onUpdate = true;' /etc/nixos/modules/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && printf switched", "expect": "switched", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; echo x > /root/reset-check; printf marked", "expect": "marked" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "test -e /etc/onupdate-marker && printf onupdate-ok", "expect": "onupdate-ok" },
+    { "op": "guest", "command": "test ! -e /root/reset-check && printf reset-ran", "expect": "reset-ran" },
+    { "op": "snapshot", "name": "onupdate-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

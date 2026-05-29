@@ -911,7 +911,7 @@ class QemuE2eHarness {
             + "rm -rf /etc/nixos/modules/hosts/" + otherArch + "; "
             + "rm -f " + UnixShell.quote(secureBootModulePath) + "; "
             + secureBootModuleCommand
-            + "find /etc/nixos/modules/apps -maxdepth 1 -type f -name '*.nix' -delete; "
+            + "find /etc/nixos/modules/apps -maxdepth 1 -type f -name '*.nix' ! -name 'nixosctl.nix' -delete; "
             + "find /etc/nixos/modules/apps/home-manager -maxdepth 1 -type f -name '*.nix' -delete 2>/dev/null || true; "
             + "mkdir -p /etc/nixos/modules/apps/home-manager; "
             + "touch /etc/nixos/modules/apps/home-manager/.keep; "

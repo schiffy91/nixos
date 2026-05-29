@@ -282,6 +282,19 @@
         "immutabilityImplementation": "semipermeable_membrane",
         "immutabilityMode": "reset"
       }
+    },
+    {
+      "id": "immutability-onupdate",
+      "spec": "immutability-onupdate/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset"
+      }
     }
   ]
 }
