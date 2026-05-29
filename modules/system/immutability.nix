@@ -4,11 +4,10 @@ let
 	deviceDependency = if config.settings.disk.encryption.enable then "dev-mapper-${config.settings.disk.label.root}.device" else "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
 	cleanName = config.settings.disk.immutability.persist.snapshots.cleanName;
-	mode = config.settings.disk.immutability.mode;
 	membraneMode = config.settings.disk.immutability.semipermeable_membrane.mode;
 	membranePersistRoot = config.settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot;
 	membraneDryRun = config.settings.disk.immutability.semipermeable_membrane.dryRun;
-	membraneEnabled = config.settings.disk.immutability.enable && config.settings.disk.immutability.semipermeable_membrane.enable && config.settings.disk.immutability.implementation == "semipermeable_membrane";
+	membraneEnabled = config.settings.disk.immutability.enable;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
 	allVolumes = config.settings.disk.subvolumes.volumes;
 	resetVolumes = lib.filter (volume: volume.resetOnBoot) allVolumes;
@@ -29,28 +28,6 @@ let
 			else path == mountPoint || lib.hasPrefix (mountPoint + "/") path
 		) pathsToKeep;
 
-	filterForVolume = volume: let
-		inherit (volume) mountPoint;
-		relevantPaths = pathsForVolume volume;
-		toRelative = path:
-			if mountPoint == "/" then lib.removePrefix "/" path
-			else let stripped = lib.removePrefix (mountPoint + "/") path;
-			in if path == mountPoint then "" else stripped;
-		relativePaths = builtins.filter (path: path != "") (map toRelative relevantPaths);
-		ancestorsOf = path: let
-			parts = lib.splitString "/" path;
-			parentParts = lib.init parts;
-			indices = lib.range 0 (builtins.length parentParts - 1);
-		in map (i: lib.concatStringsSep "/" (lib.take (i + 1) parentParts)) indices;
-		allAncestors = lib.unique (lib.concatMap ancestorsOf relativePaths);
-		filterLines = (map (ancestor: "+ /${ancestor}/") allAncestors)
-			++ (lib.concatMap (path: [ "+ /${path}" "+ /${path}/" "+ /${path}/**" ]) relativePaths)
-			++ [ "- *" ];
-	in pkgs.writeText "immutability-filter-${volume.name}" (lib.concatStringsSep "\n" filterLines + "\n");
-
-	pairArgs = lib.concatMapStringsSep " " (volume:
-		"${volume.name}=${volume.mountPoint}:${filterForVolume volume}"
-	) resetVolumes;
 	membranePairArgs = lib.concatMapStringsSep " " (volume:
 		lib.escapeShellArg "${volume.name}=${volume.mountPoint}"
 	) resetVolumes;
@@ -64,14 +41,6 @@ let
 		) + "\n"
 	);
 
-	immutabilityBin = pkgs.stdenv.mkDerivation {
-		name = "immutability";
-		src = ../../scripts/lib/immutability.rs;
-		dontUnpack = true;
-		nativeBuildInputs = [ pkgs.rustc ];
-		buildPhase = "rustc --edition 2021 -O -o immutability $src";
-		installPhase = "mkdir -p $out/bin && cp immutability $out/bin/";
-	};
 	semipermeableMembraneBin = pkgs.stdenv.mkDerivation {
 		name = "semipermeable_membrane";
 		src = ../../btrc/generated/semipermeable_membrane.c;
@@ -84,46 +53,6 @@ let
 
 in
 lib.mkMerge [
-{
-	assertions = [
-		{
-			assertion = !config.settings.disk.immutability.enable || config.settings.disk.immutability.implementation != "semipermeable_membrane" || config.settings.disk.immutability.semipermeable_membrane.enable;
-			message = "settings.disk.immutability.implementation = \"semipermeable_membrane\" requires settings.disk.immutability.semipermeable_membrane.enable = true because it is still experimental.";
-		}
-	];
-}
-(lib.mkIf (config.settings.disk.immutability.enable && config.settings.disk.immutability.implementation == "v1" && config.settings.disk.immutability.enforce.onReboot) {
-	fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
-	boot = {
-		nixStoreMountOpts = [ "ro" ];
-		tmp.useTmpfs = true;
-		initrd = {
-			supportedFilesystems = [ "btrfs" ];
-			systemd = {
-				storePaths = let
-					filterFiles = map filterForVolume resetVolumes;
-				in [ "${immutabilityBin}" ] ++ filterFiles;
-				extraBin = {
-					btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
-					cp = "${pkgs.coreutils}/bin/cp";
-					umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
-				};
-				services.immutability = {
-					description = "Factory resets BTRFS subvolumes";
-					wantedBy = [ "initrd.target" ];
-					requires = [ deviceDependency ];
-					after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
-					before = [ "sysroot.mount" ];
-					unitConfig.DefaultDependencies = "no";
-					serviceConfig.Type = "oneshot";
-					script = ''
-						${immutabilityBin}/bin/immutability ${device} ${snapshotsSubvolumeName} ${cleanName} ${mode} ${pairArgs}
-					'';
-				};
-			};
-		};
-	};
-	})
 (lib.mkIf membraneEnabled {
 	environment.systemPackages = [ semipermeableMembraneBin ];
 	environment.etc."semipermeable_membrane/spec.tsv".source = membraneSpecFile;

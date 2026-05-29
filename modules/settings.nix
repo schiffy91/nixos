@@ -62,13 +62,11 @@ in {
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
-    settings.disk.immutability.implementation = mkSetting (enum [ "v1" "semipermeable_membrane" ]) "v1";
     settings.disk.immutability.mode = mkSetting (enum [ "reset" "snapshot-only" "restore-previous" "restore-penultimate" "disabled" ]) "reset";
     settings.disk.immutability.enforce.onReboot = mkSetting bool true;
     settings.disk.immutability.enforce.onUpdate = mkSetting bool false;
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";
     settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot = mkSetting str "@persist";
-    settings.disk.immutability.semipermeable_membrane.enable = mkSetting bool false;
     settings.disk.immutability.semipermeable_membrane.dryRun = mkSetting bool false;
     settings.disk.immutability.semipermeable_membrane.mode = mkSetting (enum [ "converge" "reset" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-previous" "restore-penultimate" "disabled" ]) "converge";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) [

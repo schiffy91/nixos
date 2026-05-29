@@ -852,7 +852,6 @@ class QemuE2eHarness {
     public void configureVmHost() {
         string mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
         string enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
-        string implementation = self.spec.args.getOrDefault("immutabilityImplementation", "semipermeable_membrane");
         string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
         string desktop = self.spec.args.getOrDefault("desktop", "none");
         bool secureBootTarget = bootTargetName.equals("Secure-Boot");
@@ -900,10 +899,8 @@ class QemuE2eHarness {
             + "  settings.disk.device = \"/dev/vda\";\n"
             + "  settings.disk.encryption.enable = false;\n"
             + "  settings.disk.immutability.enable = " + enabled + ";\n"
-            + "  settings.disk.immutability.implementation = \"" + implementation + "\";\n"
             + "  settings.disk.immutability.mode = \"" + mode + "\";\n"
             + "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];\n"
-            + "  settings.disk.immutability.semipermeable_membrane.enable = " + (implementation.equals("semipermeable_membrane") ? "true" : "false") + ";\n"
             + "  settings.disk.immutability.semipermeable_membrane.mode = \"" + mode + "\";\n"
             + "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";\n"
             + "  settings.disk.swap.size = \"2G\";\n"

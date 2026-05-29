@@ -14,8 +14,6 @@
       encryption.enable = false;
       immutability = {
         enable = true;
-        implementation = "semipermeable_membrane";
-        semipermeable_membrane.enable = true;
         semipermeable_membrane.mode = "reset";
       };
       swap.size = "4G";
