@@ -1,45 +1,10 @@
-{ pkgs, config, lib, ... }:
-let
-  src = ../../scripts;
-  cliPython = pkgs.python3;
-  daemonPython = pkgs.python3.withPackages (ps: [ ps.pyqt6 ]);
-  configEnv = lib.optionalString (config.settings.nixosHelper.configPath != "")
-    "export NIXOS_CONFIG=${lib.escapeShellArg config.settings.nixosHelper.configPath}";
-  nixos = pkgs.writeShellApplication {
-    name = "nixos";
-    runtimeInputs = with pkgs; [ kdePackages.libkscreen systemd kdePackages.konsole pulseaudio sbctl ];
-    text = ''
-      ${configEnv}
-      exec ${cliPython}/bin/python3 ${src}/bin/nixos/cli.py "$@"
-    '';
-  };
-  daemon = pkgs.writeShellApplication {
-    name = "nixos-helper";
-    runtimeInputs = [ nixos ];
-    text = ''
-      ${configEnv}
-      exec ${daemonPython}/bin/python3 ${src}/bin/nixos/daemon.py "$@"
-    '';
-  };
-  desktopItem = pkgs.makeDesktopItem {
-    name = "nixos-helper";
-    desktopName = "NixOS Helper";
-    exec = "${daemon}/bin/nixos-helper";
-    icon = "nix-snowflake";
-    categories = [ "Utility" "System" ];
-    comment = "Tray utilities for NixOS";
-    terminal = false;
-    startupWMClass = "nixos-helper";
-  };
-in lib.mkIf (config.settings.apps.enable && config.settings.apps.nixosHelper.enable) {
-  environment.systemPackages = [ nixos daemon desktopItem ];
-  environment.etc."xdg/autostart/nixos-helper.desktop".text = ''
-    [Desktop Entry]
-    Type=Application
-    Name=NixOS Helper
-    Exec=${daemon}/bin/nixos-helper
-    Icon=nix-snowflake
-    X-KDE-autostart-after=panel
-    NoDisplay=true
-  '';
+{ config, lib, ... }:
+# The user-facing CLI is now the packaged `nixosctl` binary (see
+# modules/apps/nixosctl.nix), which transpiles bin/nixosctl.btrc and replaces
+# the former Python `nixos` CLI that lived here.
+#
+# TODO: the PyQt6 system tray daemon that used to be defined here (and its
+# xdg/autostart entry) has been removed. A native BTRC systray (currently being
+# built in the btrc stdlib) will replace it; wire it up here once available.
+lib.mkIf (config.settings.apps.enable && config.settings.apps.nixosHelper.enable) {
 }

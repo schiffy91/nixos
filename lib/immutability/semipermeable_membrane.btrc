@@ -847,6 +847,52 @@ class SemipermeableMembrane {
         self.run.log("Persistent mounts complete");
     }
 
+    public void configureSnapshotClean(string device, string snapshotsSubvolume, string cleanName, Vector<string> volumeArgs) {
+        self.device = device;
+        self.snapshotsSubvolume = MembranePaths.normSubvol(snapshotsSubvolume);
+        self.cleanName = cleanName.trim();
+        self.readVolumes(volumeArgs);
+    }
+
+    public void snapshotCleanVolume(MembraneVolume volume) {
+        string live = self.run.path(volume.name);
+        string root = PathTools.join(self.snapshotsSubvolume, volume.name);
+        string clean = self.run.path(PathTools.join(root, self.cleanName));
+        if (!self.exists(live)) { self.run.fatal("live missing: " + live); }
+        if (!self.isSubvolume(live)) { self.run.fatal("live is not a subvolume: " + live); }
+        // snapshot() deletes the prior CLEAN (and any nested subvolumes,
+        // deepest-first) before taking a fresh read-only snapshot of live.
+        self.run.log("Re-capturing CLEAN baseline for " + volume.name + " from live subvolume");
+        self.snapshot(live, clean, true);
+    }
+
+    public void snapshotCleanAll() {
+        Vector<string> names = [];
+        // `for x in self.volumes` reads a field, but the loop below mutates
+        // btrfs (delete + recreate CLEAN), so snapshot the volume list into a
+        // local Vector first: re-evaluating a list-returning call mid-loop has
+        // previously caused a segfault + subvolume leak.
+        Vector<MembraneVolume> volumes = self.volumes;
+        for volume in volumes { names.push(volume.name); }
+        self.run.log("snapshot-clean dry_run=" + (self.run.dryRun ? "true" : "false") + " device=" + self.device + " subvolumes=" + names.join(" "));
+        if (self.run.dryRun && !self.assumeMounted) {
+            self.run.log("DRY add --assume-mounted to walk mounted test roots");
+            return;
+        }
+        self.mountTop();
+        for volume in volumes {
+            self.snapshotCleanVolume(volume);
+        }
+        Command sync = Command("btrfs")
+            .arg("filesystem")
+            .arg("sync")
+            .arg(self.run.top)
+            .capture(false);
+        self.run.requireCommand(sync);
+        self.unmountTop();
+        self.run.log("snapshot-clean complete");
+    }
+
     class int cli(CliArgs args) {
         bool dryRun = SemipermeableMembrane.envDryRun();
         bool assumeMounted = false;
@@ -873,6 +919,20 @@ class SemipermeableMembrane {
             SemipermeableMembrane mounter = SemipermeableMembrane(dryRun, assumeMounted);
             mounter.configureMount(args.get(index + 1), args.get(index + 2), args.get(index + 3));
             mounter.mountPersist();
+            return 0;
+        }
+        if (index < args.count() && args.get(index).equals("snapshot-clean")) {
+            if (args.count() < index + 4) {
+                Console.error("Usage: semipermeable_membrane [--dry-run] [--assume-mounted] snapshot-clean <device> <snapshots> <clean> [name=mount ...]");
+                return 1;
+            }
+            Vector<string> cleanVolumeArgs = [];
+            for (int i = index + 4; i < args.count(); i++) {
+                cleanVolumeArgs.push(args.get(i));
+            }
+            SemipermeableMembrane snapshotter = SemipermeableMembrane(dryRun, assumeMounted);
+            snapshotter.configureSnapshotClean(args.get(index + 1), args.get(index + 2), args.get(index + 3), cleanVolumeArgs);
+            snapshotter.snapshotCleanAll();
             return 0;
         }
         if (args.count() < index + 6) {

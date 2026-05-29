@@ -18,6 +18,7 @@ MEMBRANE_ENTRY := bin/semipermeable_membrane.btrc
 NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
 MEMBRANE_C_OUT := $(BUILD_DIR)/semipermeable_membrane.c
 GENERATED_MEMBRANE_C := $(GENERATED_DIR)/semipermeable_membrane.c
+GENERATED_NIXOSCTL_C := $(GENERATED_DIR)/nixosctl.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
 MEMBRANE_BIN := $(BUILD_DIR)/semipermeable_membrane
 BIN := $(NIXOSCTL_BIN)
@@ -47,9 +48,10 @@ $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT)
 $(MEMBRANE_BIN): $(MEMBRANE_C_OUT)
 	$(BTRC_BUILD) $(CC) $(CFLAGS) "$(CURDIR)/$(MEMBRANE_C_OUT)" -o "$(CURDIR)/$(MEMBRANE_BIN)" $(MEMBRANE_LIBS)
 
-generated: $(MEMBRANE_C_OUT)
+generated: $(MEMBRANE_C_OUT) $(NIXOSCTL_C_OUT)
 	mkdir -p $(GENERATED_DIR)
 	cp $(MEMBRANE_C_OUT) $(GENERATED_MEMBRANE_C)
+	cp $(NIXOSCTL_C_OUT) $(GENERATED_NIXOSCTL_C)
 
 quick: $(BIN)
 	@set +e; output="$$(./$(BIN) 2>&1)"; status=$$?; \

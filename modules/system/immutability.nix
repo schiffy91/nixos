@@ -32,6 +32,7 @@ let
 		lib.escapeShellArg "${volume.name}=${volume.mountPoint}"
 	) resetVolumes;
 	membraneCommandArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName membraneMode membranePersistRoot membraneSpecFile ];
+	membraneSnapshotCleanArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName ];
 	membraneResetMountUnits = map (volume: "${utils.escapeSystemdPath volume.mountPoint}.mount") resetVolumes;
 	membraneSpecFile = pkgs.writeText "semipermeable-membrane-spec" (
 		lib.concatStringsSep "\n" (
@@ -104,5 +105,15 @@ lib.mkMerge [
 			};
 		};
 	};
+	})
+	(lib.mkIf (membraneEnabled && config.settings.disk.immutability.enforce.onUpdate) {
+		# Re-capture the CLEAN baseline of the freshly-activated system at switch
+		# time so future factory-resets revert to the updated generation rather
+		# than the original install. snapshot-clean replaces each reset volume's
+		# read-only CLEAN snapshot with a fresh `-r` snapshot of the live subvolume.
+		system.activationScripts.semipermeableMembraneSnapshotClean.text = ''
+			export PATH=${lib.makeBinPath (with pkgs; [ btrfs-progs coreutils util-linux ])}:$PATH
+			${semipermeableMembraneBin}/bin/semipermeable_membrane ${lib.optionalString membraneDryRun "--dry-run "}snapshot-clean ${membraneSnapshotCleanArgs} ${membranePairArgs}
+		'';
 	})
 ]

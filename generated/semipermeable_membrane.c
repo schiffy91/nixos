@@ -563,6 +563,9 @@ bool SemipermeableMembrane_coveredBy(SemipermeableMembrane* self, btrc_Vector_st
 void SemipermeableMembrane_mountTarget(SemipermeableMembrane* self, char* target, char* subvol);
 void SemipermeableMembrane_configureMount(SemipermeableMembrane* self, char* device, char* persistRoot, char* specFile);
 void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self);
+void SemipermeableMembrane_configureSnapshotClean(SemipermeableMembrane* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_string* volumeArgs);
+void SemipermeableMembrane_snapshotCleanVolume(SemipermeableMembrane* self, MembraneVolume* volume);
+void SemipermeableMembrane_snapshotCleanAll(SemipermeableMembrane* self);
 int SemipermeableMembrane_cli(CliArgs* args);
 typedef bool (*__btrc_fn_bool_string)(char*);
 typedef void (*__btrc_fn_void_string)(char*);
@@ -8267,6 +8270,52 @@ void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self) {
     MembraneRun_log(self->run, "Persistent mounts complete");
 }
 
+void SemipermeableMembrane_configureSnapshotClean(SemipermeableMembrane* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_string* volumeArgs) {
+    (self->device = device);
+    (self->snapshotsSubvolume = MembranePaths_normSubvol(snapshotsSubvolume));
+    (self->cleanName = __btrc_str_track(__btrc_trim(cleanName)));
+    SemipermeableMembrane_readVolumes(self, volumeArgs);
+}
+
+void SemipermeableMembrane_snapshotCleanVolume(SemipermeableMembrane* self, MembraneVolume* volume) {
+    char* live = MembraneRun_path(self->run, volume->name);
+    char* root = PathTools_join(self->snapshotsSubvolume, volume->name);
+    char* clean = MembraneRun_path(self->run, PathTools_join(root, self->cleanName));
+    if (!SemipermeableMembrane_exists(self, live)) {
+        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live missing: ", live)));
+    }
+    if (!SemipermeableMembrane_isSubvolume(self, live)) {
+        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live is not a subvolume: ", live)));
+    }
+    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("Re-capturing CLEAN baseline for ", volume->name)), " from live subvolume")));
+    SemipermeableMembrane_snapshot(self, live, clean, true);
+}
+
+void SemipermeableMembrane_snapshotCleanAll(SemipermeableMembrane* self) {
+    btrc_Vector_string* names = btrc_Vector_string_new();
+    btrc_Vector_MembraneVolume* volumes = self->volumes;
+    int __n_82 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_81 = 0; (__i_81 < __n_82); (__i_81++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_81);
+        btrc_Vector_string_push(names, volume->name);
+    }
+    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("snapshot-clean dry_run=", (self->run->dryRun ? "true" : "false"))), " device=")), self->device)), " subvolumes=")), btrc_Vector_string_join(names, " "))));
+    if (self->run->dryRun && (!self->assumeMounted)) {
+        MembraneRun_log(self->run, "DRY add --assume-mounted to walk mounted test roots");
+        return;
+    }
+    SemipermeableMembrane_mountTop(self);
+    int __n_84 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_83 = 0; (__i_83 < __n_84); (__i_83++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_83);
+        SemipermeableMembrane_snapshotCleanVolume(self, volume);
+    }
+    Command* sync = Command_capture(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "filesystem"), "sync"), self->run->top), false);
+    MembraneRun_requireCommand(self->run, sync);
+    SemipermeableMembrane_unmountTop(self);
+    MembraneRun_log(self->run, "snapshot-clean complete");
+}
+
 int SemipermeableMembrane_cli(CliArgs* args) {
     bool dryRun = SemipermeableMembrane_envDryRun();
     bool assumeMounted = false;
@@ -8302,6 +8351,30 @@ int SemipermeableMembrane_cli(CliArgs* args) {
         if (mounter != NULL) {
             if ((--mounter->__rc) <= 0) {
                 SemipermeableMembrane_destroy(mounter);
+            }
+        }
+    }
+    if ((index < CliArgs_count(args)) && (strcmp(CliArgs_get(args, index), "snapshot-clean") == 0)) {
+        if (CliArgs_count(args) < (index + 4)) {
+            Console_error("Usage: semipermeable_membrane [--dry-run] [--assume-mounted] snapshot-clean <device> <snapshots> <clean> [name=mount ...]");
+            return 1;
+        }
+        btrc_Vector_string* cleanVolumeArgs = btrc_Vector_string_new();
+        for (int i = (index + 4); (i < CliArgs_count(args)); (i++)) {
+            btrc_Vector_string_push(cleanVolumeArgs, CliArgs_get(args, i));
+        }
+        SemipermeableMembrane* snapshotter = SemipermeableMembrane_new(dryRun, assumeMounted);
+        SemipermeableMembrane_configureSnapshotClean(snapshotter, CliArgs_get(args, (index + 1)), CliArgs_get(args, (index + 2)), CliArgs_get(args, (index + 3)), cleanVolumeArgs);
+        SemipermeableMembrane_snapshotCleanAll(snapshotter);
+        if (snapshotter != NULL) {
+            if ((--snapshotter->__rc) <= 0) {
+                SemipermeableMembrane_destroy(snapshotter);
+            }
+        }
+        return 0;
+        if (snapshotter != NULL) {
+            if ((--snapshotter->__rc) <= 0) {
+                SemipermeableMembrane_destroy(snapshotter);
             }
         }
     }
