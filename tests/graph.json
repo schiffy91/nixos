@@ -1,6 +1,6 @@
 {
   "name": "nixos-btrc-e2e",
-  "workspaceRoot": "../..",
+  "workspaceRoot": "..",
   "default": [
     "cli-parity",
     "spec-yaml",

@@ -1,4 +1,4 @@
-NIXOS_FLAKE ?= ..
+NIXOS_FLAKE ?= .
 BTRC_APP ?= $(NIXOS_FLAKE)\#btrc
 BTRC_BUILD_SHELL ?= $(NIXOS_FLAKE)\#btrc-build
 BTRC_SRC_ATTR ?= $(NIXOS_FLAKE)\#btrcSrc
@@ -22,7 +22,7 @@ NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
 MEMBRANE_BIN := $(BUILD_DIR)/semipermeable_membrane
 BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(MEMBRANE_BIN)
-SOURCES := $(shell find bin src tests/e2e vendor -name '*.btrc' | sort)
+SOURCES := $(shell find bin lib tests/e2e vendor -name '*.btrc' | sort)
 
 .PHONY: all transpile build generated check quick smoke test host-smoke stdlib-sync-check app-settings stateful-host aarch64-qemu-host installer-download install-system immutability-reset installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
 

@@ -19,8 +19,8 @@
 #include "../vendor/btrc-stdlib/result.btrc"
 #include "../vendor/btrc-stdlib/cli.btrc"
 
-#include "../src/core/log.btrc"
-#include "../src/immutability/semipermeable_membrane.btrc"
+#include "../lib/core/log.btrc"
+#include "../lib/immutability/semipermeable_membrane.btrc"
 
 int main(int argc, char** argv) {
     CliArgs args = CliArgs(argc, argv);

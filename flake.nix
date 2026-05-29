@@ -70,6 +70,15 @@
             stdenv.cc
           ];
         };
+        default = pkgs.mkShell {
+          packages = with pkgs; [
+            inputs.btrc.packages.${system}.btrcpy
+            gnumake
+            nixd
+            git
+            stdenv.cc
+          ];
+        };
       });
       nixosConfigurations = lib.listToAttrs (
         lib.concatMap (hostFile: [

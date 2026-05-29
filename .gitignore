@@ -12,3 +12,4 @@ coverage/
 /result
 modules/apps/pkg-overrides/proton-custom/src/
 modules/apps/pkg-overrides/test/.build/
+build/

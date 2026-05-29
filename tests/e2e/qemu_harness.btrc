@@ -836,7 +836,7 @@ class QemuE2eHarness {
         string source = localPath.isEmpty() ? ".." : localPath;
         string target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
         string remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
-        string tar = "tar czf - --exclude=.vm --exclude=btrc/.vm --exclude=btrc/build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
+        string tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
             + UnixShell.quote(source)
             + " .";
         string ssh = "ssh -p "

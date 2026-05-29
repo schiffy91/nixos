@@ -200,7 +200,7 @@ class VmGraphRunner {
         if (!result.ok()) {
             NixosLog.fatal("Failed to compute workspace source hash for " + root);
         }
-        string toolPath = PathTools.join(root, "btrc/build/nixosctl");
+        string toolPath = PathTools.join(root, "build/nixosctl");
         string toolHash = "missing";
         if (FileSystem.exists(toolPath)) {
             ExecResult tool = UnixShell().run("shasum -a 256 " + UnixShell.quote(toolPath) + " | awk '{print $1}'");

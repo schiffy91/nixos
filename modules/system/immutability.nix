@@ -43,7 +43,7 @@ let
 
 	semipermeableMembraneBin = pkgs.stdenv.mkDerivation {
 		name = "semipermeable_membrane";
-		src = ../../btrc/generated/semipermeable_membrane.c;
+		src = ../../generated/semipermeable_membrane.c;
 		dontUnpack = true;
 		buildPhase = ''
 			$CC -std=c11 -O2 -o semipermeable_membrane $src -lm -lpthread

@@ -2,7 +2,7 @@
 # the ambient <nixpkgs> channel, so VM tests resolve the same nixpkgs the flake
 # builds against regardless of the host's registry.
 { pkgs ? import
-    (let node = (builtins.fromJSON (builtins.readFile ../../flake.lock)).nodes.nixpkgs.locked;
+    (let node = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.nixpkgs.locked;
      in builtins.fetchTree {
        inherit (node) type owner repo rev narHash;
      })
