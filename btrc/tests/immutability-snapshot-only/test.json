@@ -1,0 +1,37 @@
+{
+  "name": "immutability-snapshot-only",
+  "state": "immutability-snapshot-only",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-test:snapshot-only:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2227,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+
+    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"snapshot-only\"/g' /etc/nixos/modules/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -e; echo ephemeral-1 > /root/e2e-ephemeral-marker" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "cat /root/e2e-ephemeral-marker", "expect": "ephemeral-1" },
+    { "op": "guest", "command": "set -e; echo ephemeral-2 >> /root/e2e-ephemeral-marker" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "tr '\\n' ',' < /root/e2e-ephemeral-marker", "expect": "ephemeral-1,ephemeral-2," },
+
+    { "op": "snapshot", "name": "snapshot-only-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

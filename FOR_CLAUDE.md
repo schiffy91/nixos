@@ -169,7 +169,11 @@ Important nodes:
 | `qmp-probe` | validates QMP |
 | `tpm2-probe` | validates swtpm plus guest TPM2 |
 | `install-reset` | installs reset-mode v2 immutability |
-| `immutability-reset` | boots installed disk and validates reset behavior |
+| `install-disabled` | installs with immutability disabled |
+| `immutability-reset` | boots installed disk and validates reset (ephemeral wiped, persist kept) |
+| `immutability-disabled` | boots disabled install and validates nothing is wiped |
+| `immutability-snapshot-only` | switches to snapshot-only mode; validates ephemeral survives rotation |
+| `immutability-restore` | reset boots then restore-previous (slot A) / restore-penultimate (slot B) |
 | `secure-boot-capabilities` | x86_64 secure boot capability probe |
 | `secure-boot-install` | optional x86_64 Lanzaboote install |
 | `secure-boot-lanzaboote` | optional x86_64 Lanzaboote verification |
@@ -177,6 +181,21 @@ Important nodes:
 `make -C btrc graph-coverage` currently reports `35/35` operation coverage.
 That means every declared operation kind is represented in graph specs. It is
 not generated-C line coverage.
+
+### Membrane behavior notes (validated via the e2e suite)
+
+- `restore-previous` restores rotation slot A, `restore-penultimate` slot B;
+  `restore-a`/`restore-b`/`restore-c` are the explicit internal modes.
+- A reset persists each `persist.paths` directory into `@persist/dirs/<key>`
+  and the `semipermeable-membrane-mounts` service mounts it back over the path.
+  Pre-existing content is preserved across the first reset.
+- The headless test VM is selected by `settings.desktop.enable = false`,
+  wired from the harness `desktop=none` arg; real hosts default to `true`.
+- BTRC gotcha worth remembering: `for x in self.method()` re-evaluates the call
+  on every iteration. Snapshot a list-returning call into a local before the
+  loop, especially when the body mutates what that call observes (deleting
+  btrfs subvolumes inside such a loop previously segfaulted on the shrinking
+  vector and leaked the old root subvolume each boot).
 
 ## Validation Commands
 

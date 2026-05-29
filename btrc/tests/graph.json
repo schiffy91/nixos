@@ -143,6 +143,39 @@
       }
     },
     {
+      "id": "immutability-disabled",
+      "spec": "immutability-disabled/test.json",
+      "after": ["install-disabled"],
+      "args": {
+        "parentState": "installed-disabled",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "disabled"
+      }
+    },
+    {
+      "id": "immutability-snapshot-only",
+      "spec": "immutability-snapshot-only/test.json",
+      "after": ["install-reset"],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "immutability-restore",
+      "spec": "immutability-restore/test.json",
+      "after": ["install-reset"],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
       "id": "secure-boot-install",
       "spec": "secure-boot-install/test.json",
       "after": ["installer-ssh-x86_64"],

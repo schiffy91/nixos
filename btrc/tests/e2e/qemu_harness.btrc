@@ -854,6 +854,7 @@ class QemuE2eHarness {
         string enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
         string implementation = self.spec.args.getOrDefault("immutabilityImplementation", "semipermeable_membrane");
         string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        string desktop = self.spec.args.getOrDefault("desktop", "none");
         bool secureBootTarget = bootTargetName.equals("Secure-Boot");
         string otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
         string serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
@@ -904,6 +905,7 @@ class QemuE2eHarness {
             + "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];\n"
             + "  settings.disk.immutability.semipermeable_membrane.enable = " + (implementation.equals("semipermeable_membrane") ? "true" : "false") + ";\n"
             + "  settings.disk.immutability.semipermeable_membrane.mode = \"" + mode + "\";\n"
+            + "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";\n"
             + "  settings.disk.swap.size = \"2G\";\n"
             + secureBootSettings
             + "}\n";

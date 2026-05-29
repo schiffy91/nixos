@@ -2,7 +2,7 @@
 let
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
   primaryScale = if primary == null then 1.0 else primary.scaleFactor;
-in {
+in lib.mkIf config.settings.desktop.enable {
   # Backport of KDE MR !8293 (HDR screencast support) to KWin 6.6.5.
   # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
   # screencast stream so Sunshine can capture genuine HDR pixels from the

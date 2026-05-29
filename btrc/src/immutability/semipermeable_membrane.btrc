@@ -13,6 +13,10 @@ class MembraneConstants {
     class string prepareOnly() { return "prepare-only"; }
     class string snapshotOnly() { return "snapshot-only"; }
     class string restoreA() { return "restore-a"; }
+    class string restoreB() { return "restore-b"; }
+    class string restoreC() { return "restore-c"; }
+    class string restorePrevious() { return "restore-previous"; }
+    class string restorePenultimate() { return "restore-penultimate"; }
 }
 
 class MembraneAbsPath {
@@ -345,15 +349,29 @@ class SemipermeableMembrane {
             int marker = Strings.find(line, " path ", 0);
             if (marker < 0) { continue; }
             string child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
-            self.pushChildSorted(result, self.run.path(child));
+            string childPath = self.run.path(child);
+            if (MembranePaths.ancestor(path, childPath)) {
+                self.pushChildSorted(result, childPath);
+            }
         }
         return result;
     }
 
     public void deleteSubvolume(string path) {
         if (!FileSystem.isDir(path)) { return; }
-        for child in self.childSubvolumes(path) {
-            self.deleteSubvolume(child);
+        // childSubvolumes returns every descendant subvolume deepest-first, so
+        // deleting them in that order clears all nesting before the parent.
+        // Snapshot the listing into a local first: `for x in self.method()`
+        // re-evaluates the call each iteration, so deleting inside the loop
+        // would index a shrinking vector out of bounds (segfault).
+        Vector<string> children = self.childSubvolumes(path);
+        for child in children {
+            Command childCommand = Command("btrfs")
+                .arg("subvolume")
+                .arg("delete")
+                .arg(child)
+                .capture(false);
+            self.run.requireCommand(childCommand);
         }
         Command command = Command("btrfs")
             .arg("subvolume")
@@ -522,7 +540,9 @@ class SemipermeableMembrane {
 
     public Vector<MembranePlan> makePlan(Vector<MembraneSpec> specs, string live, string clean) {
         Vector<MembranePlan> plans = [];
-        for spec in self.sortedSpecs(specs) {
+        // Sort once; `for x in self.method()` re-evaluates the call each pass.
+        Vector<MembraneSpec> ordered = self.sortedSpecs(specs);
+        for spec in ordered {
             string kind = spec.kind;
             if (kind.equals("auto")) {
                 kind = self.resolveKind(live, clean, spec);
@@ -606,12 +626,15 @@ class SemipermeableMembrane {
         self.publish(volume, live, next);
     }
 
-    public void restoreA(MembraneVolume volume) {
+    public void restoreSlot(MembraneVolume volume, string slot) {
         string root = PathTools.join(self.snapshotsSubvolume, volume.name);
         string live = self.run.path(volume.name);
         string next = self.run.path(PathTools.join(root, MembraneConstants.next()));
-        string a = self.run.path(PathTools.join(root, MembraneConstants.a()));
-        self.snapshot(a, next, false);
+        string source = self.run.path(PathTools.join(root, slot));
+        if (!self.exists(source) || !self.isSubvolume(source)) {
+            self.run.fatal("restore source missing: " + source);
+        }
+        self.snapshot(source, next, false);
         self.publish(volume, live, next);
     }
 
@@ -723,8 +746,12 @@ class SemipermeableMembrane {
                 self.resetVolume(volume);
             } else if (self.mode.equals(MembraneConstants.snapshotOnly())) {
                 self.rotate(volume.name, self.run.path(volume.name));
-            } else if (self.mode.equals(MembraneConstants.restoreA())) {
-                self.restoreA(volume);
+            } else if (self.mode.equals(MembraneConstants.restoreA()) || self.mode.equals(MembraneConstants.restorePrevious())) {
+                self.restoreSlot(volume, MembraneConstants.a());
+            } else if (self.mode.equals(MembraneConstants.restoreB()) || self.mode.equals(MembraneConstants.restorePenultimate())) {
+                self.restoreSlot(volume, MembraneConstants.b());
+            } else if (self.mode.equals(MembraneConstants.restoreC())) {
+                self.restoreSlot(volume, MembraneConstants.c());
             } else {
                 self.run.fatal("Unknown mode: " + self.mode);
             }
