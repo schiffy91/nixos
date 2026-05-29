@@ -26,7 +26,7 @@
     { "op": "restore", "name": "live-ssh" },
     { "op": "boot-iso" },
     { "op": "wait-ssh", "timeout": 180 },
-    { "op": "copy-workspace", "local": "..", "remote": "/etc/nixos" },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
     { "op": "configure-vm-host" },
     { "op": "install-nixos" },
     { "op": "snapshot", "name": "installed" },

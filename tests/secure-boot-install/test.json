@@ -26,7 +26,7 @@
     { "op": "boot-iso" },
     { "op": "wait-ssh", "timeout": 180 },
     { "op": "guest", "command": "set -e; test -d /sys/class/tpm/tpm0; cat /sys/class/tpm/tpm0/tpm_version_major", "expect": "2" },
-    { "op": "copy-workspace", "local": "..", "remote": "/etc/nixos" },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
     { "op": "configure-vm-host" },
     { "op": "install-nixos" },
     { "op": "snapshot", "name": "installed-secure-boot" },
