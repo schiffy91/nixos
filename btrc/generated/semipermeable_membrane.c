@@ -557,6 +557,10 @@ void SemipermeableMembrane_mountTop(SemipermeableMembrane* self);
 void SemipermeableMembrane_unmountTop(SemipermeableMembrane* self);
 void SemipermeableMembrane_configure(SemipermeableMembrane* self, char* device, char* snapshotsSubvolume, char* cleanName, char* mode, char* persistRoot, char* specFile, btrc_Vector_string* volumeArgs);
 void SemipermeableMembrane_runAll(SemipermeableMembrane* self);
+bool SemipermeableMembrane_coveredBy(SemipermeableMembrane* self, btrc_Vector_string* selected, char* target);
+void SemipermeableMembrane_mountTarget(SemipermeableMembrane* self, char* target, char* subvol);
+void SemipermeableMembrane_configureMount(SemipermeableMembrane* self, char* device, char* persistRoot, char* specFile);
+void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self);
 int SemipermeableMembrane_cli(CliArgs* args);
 typedef bool (*__btrc_fn_bool_string)(char*);
 typedef void (*__btrc_fn_void_string)(char*);
@@ -8169,6 +8173,64 @@ void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
     MembraneRun_log(self->run, "Semipermeable membrane complete");
 }
 
+bool SemipermeableMembrane_coveredBy(SemipermeableMembrane* self, btrc_Vector_string* selected, char* target) {
+    int __n_72 = btrc_Vector_string_iterLen(selected);
+    for (int __i_71 = 0; (__i_71 < __n_72); (__i_71++)) {
+        char* s = btrc_Vector_string_iterGet(selected, __i_71);
+        if (__btrc_startsWith(target, __btrc_str_track(__btrc_strcat(s, "/")))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void SemipermeableMembrane_mountTarget(SemipermeableMembrane* self, char* target, char* subvol) {
+    MembraneRun_mkdirp(self->run, target);
+    if (SemipermeableMembrane_mounted(self, target)) {
+        return;
+    }
+    Command* command = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("subvol=", subvol)), ",compress=zstd,noatime"))), self->device), target), false);
+    MembraneRun_requireCommand(self->run, command);
+}
+
+void SemipermeableMembrane_configureMount(SemipermeableMembrane* self, char* device, char* persistRoot, char* specFile) {
+    (self->device = device);
+    (self->persistRoot = MembranePaths_normSubvol(persistRoot));
+    (self->specFile = specFile);
+    SemipermeableMembrane_readSpecs(self);
+}
+
+void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self) {
+    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat("Mounting persistent subvolumes dry_run=", (self->run->dryRun ? "true" : "false"))));
+    bool mountedTop = false;
+    if ((!self->assumeMounted) && (!SemipermeableMembrane_mounted(self, self->run->top))) {
+        MembraneRun_mkdirp(self->run, self->run->top);
+        Command* m = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), "ro,subvolid=5"), self->device), self->run->top), false);
+        MembraneRun_requireCommand(self->run, m);
+        (mountedTop = true);
+    }
+    btrc_Vector_string* selected = btrc_Vector_string_new();
+    int __n_74 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+    for (int __i_73 = 0; (__i_73 < __n_74); (__i_73++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_73);
+        char* target = spec->absPath;
+        if (SemipermeableMembrane_coveredBy(self, selected, target)) {
+            continue;
+        }
+        char* subvol = PathTools_join(PathTools_join(self->persistRoot, MembraneConstants_dirs()), MembranePaths_key(target));
+        if (!SemipermeableMembrane_isSubvolume(self, MembraneRun_path(self->run, subvol))) {
+            continue;
+        }
+        SemipermeableMembrane_mountTarget(self, target, subvol);
+        btrc_Vector_string_push(selected, target);
+    }
+    if (mountedTop) {
+        Command* u = Command_check(Command_capture(Command_arg(Command_new("umount"), self->run->top), false), false);
+        MembraneRun_runCommand(self->run, u);
+    }
+    MembraneRun_log(self->run, "Persistent mounts complete");
+}
+
 int SemipermeableMembrane_cli(CliArgs* args) {
     bool dryRun = SemipermeableMembrane_envDryRun();
     bool assumeMounted = false;
@@ -8186,6 +8248,26 @@ int SemipermeableMembrane_cli(CliArgs* args) {
             continue;
         }
         break;
+    }
+    if ((index < CliArgs_count(args)) && (strcmp(CliArgs_get(args, index), "mount") == 0)) {
+        if (CliArgs_count(args) < (index + 4)) {
+            Console_error("Usage: semipermeable_membrane [--dry-run] mount <device> <persist_root> <spec_file>");
+            return 1;
+        }
+        SemipermeableMembrane* mounter = SemipermeableMembrane_new(dryRun, assumeMounted);
+        SemipermeableMembrane_configureMount(mounter, CliArgs_get(args, (index + 1)), CliArgs_get(args, (index + 2)), CliArgs_get(args, (index + 3)));
+        SemipermeableMembrane_mountPersist(mounter);
+        if (mounter != NULL) {
+            if ((--mounter->__rc) <= 0) {
+                SemipermeableMembrane_destroy(mounter);
+            }
+        }
+        return 0;
+        if (mounter != NULL) {
+            if ((--mounter->__rc) <= 0) {
+                SemipermeableMembrane_destroy(mounter);
+            }
+        }
     }
     if (CliArgs_count(args) < (index + 6)) {
         Console_error("Usage: semipermeable_membrane [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");

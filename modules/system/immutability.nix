@@ -67,73 +67,9 @@ lib.mkMerge [
 			Type = "oneshot";
 			RemainAfterExit = true;
 		};
-		path = with pkgs; [ btrfs-progs coreutils gnused util-linux ];
+		path = with pkgs; [ btrfs-progs coreutils util-linux ];
 		script = ''
-			device=${lib.escapeShellArg device}
-			tab="$(printf '\t')"
-			top=/run/semipermeable-membrane-top
-			selected=/run/semipermeable-membrane-mounted-targets
-			mounted=0
-			: > "$selected"
-			covered_by_selected() {
-				while IFS= read -r selectedTarget; do
-					[ -n "$selectedTarget" ] || continue
-					case "$1" in
-						"$selectedTarget"/*) return 0 ;;
-					esac
-				done < "$selected"
-				return 1
-			}
-			if ${lib.boolToString membraneDryRun}; then
-				while IFS="$tab" read -r volume mountPoint target kind; do
-					[ -n "$target" ] || continue
-					if covered_by_selected "$target"; then
-						echo "DRY skip covered nested persist mount $target"
-						continue
-					fi
-					key=''${target#/}
-					case "$key" in *'!'*) echo "semipermeable-membrane-mounts: unsupported ! in path $target" >&2; exit 1 ;; esac
-					key=''${key//\//!}
-					subvol=${membranePersistRoot}/dirs/$key
-					echo "DRY if btrfs subvolume show $top/$subvol"
-					echo "DRY mount -t btrfs -o subvolid=<id>,compress=zstd,noatime $device $target"
-					printf '%s\n' "$target" >> "$selected"
-				done < ${membraneSpecFile}
-				exit 0
-			fi
-			mkdir -p "$top"
-			if ! mountpoint -q "$top"; then
-				mount -t btrfs -o ro,subvolid=5 "$device" "$top"
-				mounted=1
-			fi
-			trap 'if [ "$mounted" = 1 ]; then umount "$top"; fi' EXIT
-			while IFS="$tab" read -r volume mountPoint target kind; do
-				[ -n "$target" ] || continue
-				if covered_by_selected "$target"; then
-					continue
-				fi
-				key=''${target#/}
-				case "$key" in *'!'*) echo "semipermeable-membrane-mounts: unsupported ! in path $target" >&2; exit 1 ;; esac
-				key=''${key//\//!}
-				subvol=${membranePersistRoot}/dirs/$key
-				if btrfs subvolume show "$top/$subvol" >/dev/null 2>&1; then
-					id="$(btrfs subvolume show "$top/$subvol" | sed -n 's/^[[:space:]]*Subvolume ID:[[:space:]]*//p' | head -n 1)"
-					[ -n "$id" ] || exit 1
-					mkdir -p "$target"
-					if mountpoint -q "$target"; then
-						current="$(findmnt -rn -o FSTYPE,OPTIONS --mountpoint "$target")"
-						currentFs="''${current%% *}"
-						currentOptions="''${current#* }"
-						case "$currentFs,$currentOptions," in
-							btrfs,*",subvolid=$id,"*) ;;
-							*) echo "semipermeable-membrane-mounts: $target is mounted but not btrfs subvolid=$id" >&2; exit 1 ;;
-						esac
-					else
-						mount -t btrfs -o "subvolid=$id,compress=zstd,noatime" "$device" "$target"
-					fi
-					printf '%s\n' "$target" >> "$selected"
-				fi
-			done < ${membraneSpecFile}
+			${semipermeableMembraneBin}/bin/semipermeable_membrane ${lib.optionalString membraneDryRun "--dry-run "}mount ${lib.escapeShellArg device} ${lib.escapeShellArg membranePersistRoot} ${membraneSpecFile}
 		'';
 	};
 })

@@ -766,6 +766,60 @@ class SemipermeableMembrane {
         self.run.log("Semipermeable membrane complete");
     }
 
+    public bool coveredBy(Vector<string> selected, string target) {
+        for s in selected {
+            if (target.startsWith(s + "/")) { return true; }
+        }
+        return false;
+    }
+
+    public void mountTarget(string target, string subvol) {
+        self.run.mkdirp(target);
+        if (self.mounted(target)) { return; }
+        Command command = Command("mount")
+            .arg("-t").arg("btrfs")
+            .arg("-o").arg("subvol=" + subvol + ",compress=zstd,noatime")
+            .arg(self.device).arg(target)
+            .capture(false);
+        self.run.requireCommand(command);
+    }
+
+    public void configureMount(string device, string persistRoot, string specFile) {
+        self.device = device;
+        self.persistRoot = MembranePaths.normSubvol(persistRoot);
+        self.specFile = specFile;
+        self.readSpecs();
+    }
+
+    public void mountPersist() {
+        self.run.log("Mounting persistent subvolumes dry_run=" + (self.run.dryRun ? "true" : "false"));
+        bool mountedTop = false;
+        if (!self.assumeMounted && !self.mounted(self.run.top)) {
+            self.run.mkdirp(self.run.top);
+            Command m = Command("mount")
+                .arg("-t").arg("btrfs")
+                .arg("-o").arg("ro,subvolid=5")
+                .arg(self.device).arg(self.run.top)
+                .capture(false);
+            self.run.requireCommand(m);
+            mountedTop = true;
+        }
+        Vector<string> selected = [];
+        for spec in self.specs {
+            string target = spec.absPath;
+            if (self.coveredBy(selected, target)) { continue; }
+            string subvol = PathTools.join(PathTools.join(self.persistRoot, MembraneConstants.dirs()), MembranePaths.key(target));
+            if (!self.isSubvolume(self.run.path(subvol))) { continue; }
+            self.mountTarget(target, subvol);
+            selected.push(target);
+        }
+        if (mountedTop) {
+            Command u = Command("umount").arg(self.run.top).capture(false).check(false);
+            self.run.runCommand(u);
+        }
+        self.run.log("Persistent mounts complete");
+    }
+
     class int cli(CliArgs args) {
         bool dryRun = SemipermeableMembrane.envDryRun();
         bool assumeMounted = false;
@@ -783,6 +837,16 @@ class SemipermeableMembrane {
                 continue;
             }
             break;
+        }
+        if (index < args.count() && args.get(index).equals("mount")) {
+            if (args.count() < index + 4) {
+                Console.error("Usage: semipermeable_membrane [--dry-run] mount <device> <persist_root> <spec_file>");
+                return 1;
+            }
+            SemipermeableMembrane mounter = SemipermeableMembrane(dryRun, assumeMounted);
+            mounter.configureMount(args.get(index + 1), args.get(index + 2), args.get(index + 3));
+            mounter.mountPersist();
+            return 0;
         }
         if (args.count() < index + 6) {
             Console.error("Usage: semipermeable_membrane [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
