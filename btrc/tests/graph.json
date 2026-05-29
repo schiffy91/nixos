@@ -176,6 +176,17 @@
       }
     },
     {
+      "id": "immutability-orphan",
+      "spec": "immutability-orphan/test.json",
+      "after": ["install-reset"],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
       "id": "secure-boot-install",
       "spec": "secure-boot-install/test.json",
       "after": ["installer-ssh-x86_64"],

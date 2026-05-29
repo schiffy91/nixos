@@ -462,6 +462,30 @@ class SemipermeableMembrane {
         }
     }
 
+    public bool keyInSpec(Vector<string> validKeys, string key) {
+        for v in validKeys {
+            if (v.equals(key)) { return true; }
+        }
+        return false;
+    }
+
+    public void pruneOrphans() {
+        Vector<string> validKeys = [];
+        for spec in self.specs {
+            validKeys.push(MembranePaths.key(spec.absPath));
+        }
+        string dirsPath = self.run.path(PathTools.join(self.persistRoot, MembraneConstants.dirs()));
+        // Snapshot the listing: deleting inside a loop over self.method() re-evaluates the call.
+        Vector<string> children = self.childSubvolumes(dirsPath);
+        for child in children {
+            string key = PathTools.basename(child);
+            if (!self.keyInSpec(validKeys, key)) {
+                self.run.log("Pruning orphaned persist subvolume " + key);
+                self.deleteSubvolume(child);
+            }
+        }
+    }
+
     public void rotate(string volume, string live) {
         string root = PathTools.join(self.snapshotsSubvolume, volume);
         string a = self.run.path(PathTools.join(root, MembraneConstants.a()));
@@ -741,6 +765,9 @@ class SemipermeableMembrane {
         }
         self.mountTop();
         self.ensureNamespaces();
+        if (self.mode.equals(MembraneConstants.converge()) || self.mode.equals(MembraneConstants.reset()) || self.mode.equals(MembraneConstants.prepareOnly())) {
+            self.pruneOrphans();
+        }
         for volume in self.volumes {
             if (self.mode.equals(MembraneConstants.converge()) || self.mode.equals(MembraneConstants.reset()) || self.mode.equals(MembraneConstants.prepareOnly())) {
                 self.resetVolume(volume);

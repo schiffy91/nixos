@@ -1,0 +1,32 @@
+{
+  "name": "immutability-orphan",
+  "state": "immutability-orphan",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-test:orphan:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2229,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; dev=$(findmnt -no SOURCE / | sed 's/\\[.*//'); mkdir -p /run/orphan-top; mount -o subvolid=5 \"$dev\" /run/orphan-top; btrfs subvolume create '/run/orphan-top/@persist/dirs/opt!fake'; umount /run/orphan-top" },
+    { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!fake' && printf present", "expect": "present" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!fake' && printf present || printf pruned", "expect": "pruned" },
+    { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/etc!nixos' && printf kept", "expect": "kept" },
+    { "op": "snapshot", "name": "orphan-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}
