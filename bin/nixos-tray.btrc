@@ -1,0 +1,51 @@
+/* NixOS management tray — native menu-bar (macOS) / Wayland StatusNotifierItem
+ * (Linux). Each item launches a nixosctl command in a terminal so the user sees
+ * progress and can authenticate for privileged actions. Built and packaged by
+ * modules/apps/nixos-tray.nix and started as a graphical-session user service
+ * from modules/apps/helper.nix. Native backend: the btrc stdlib SystemTray.
+ *
+ * Vendored-stdlib build: explicit include order, --no-stdlib (mirrors nixosctl).
+ */
+#include "../vendor/btrc-stdlib/iterable.btrc"
+#include "../vendor/btrc-stdlib/vector.btrc"
+#include "../vendor/btrc-stdlib/list.btrc"
+#include "../vendor/btrc-stdlib/array.btrc"
+#include "../vendor/btrc-stdlib/map.btrc"
+#include "../vendor/btrc-stdlib/set.btrc"
+#include "../vendor/btrc-stdlib/strings.btrc"
+#include "../vendor/btrc-stdlib/console.btrc"
+#include "../vendor/btrc-stdlib/io.btrc"
+#include "../vendor/btrc-stdlib/platform.btrc"
+#include "../vendor/btrc-stdlib/process.btrc"
+#include "../vendor/btrc-stdlib/terminal.btrc"
+#include "../vendor/btrc-stdlib/fs.btrc"
+#include "../vendor/btrc-stdlib/daemon.btrc"
+#include "../vendor/btrc-stdlib/ui.btrc"
+#include "../vendor/btrc-stdlib/json.btrc"
+#include "../vendor/btrc-stdlib/toml.btrc"
+#include "../vendor/btrc-stdlib/pattern.btrc"
+#include "../vendor/btrc-stdlib/math.btrc"
+#include "../vendor/btrc-stdlib/datetime.btrc"
+#include "../vendor/btrc-stdlib/random.btrc"
+#include "../vendor/btrc-stdlib/error.btrc"
+#include "../vendor/btrc-stdlib/result.btrc"
+#include "../vendor/btrc-stdlib/cli.btrc"
+#include "../vendor/btrc-stdlib/tray/tray.btrc"
+
+int main() {
+    SystemTray tray = SystemTray("NixOS")
+        .tip("NixOS management")
+        .item("Rebuild (switch)", "konsole -e sudo nixosctl update")
+        .item("Upgrade & rebuild", "konsole -e sudo nixosctl update --upgrade")
+        .item("Snapshot now", "konsole -e sudo nixosctl snapshot")
+        .item("Show changed files", "konsole -e nixosctl diff")
+        .item("Open /etc/nixos", "xdg-open /etc/nixos")
+        .item("Quit tray", TraySignal.quit());
+
+    if (!tray.show()) {
+        print("nixos-tray: no native tray available (headless / no GUI session).");
+        return 0;
+    }
+    tray.run();
+    return 0;
+}

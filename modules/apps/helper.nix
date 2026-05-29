@@ -3,8 +3,8 @@
 # modules/apps/nixosctl.nix), which transpiles bin/nixosctl.btrc and replaces
 # the former Python `nixos` CLI that lived here.
 #
-# TODO: the PyQt6 system tray daemon that used to be defined here (and its
-# xdg/autostart entry) has been removed. A native BTRC systray (currently being
-# built in the btrc stdlib) will replace it; wire it up here once available.
+# The PyQt6 system tray daemon that used to be defined here (and its
+# xdg/autostart entry) has been replaced by the native BTRC systray, packaged
+# and run as a graphical-session user service in modules/apps/nixos-tray.nix.
 lib.mkIf (config.settings.apps.enable && config.settings.apps.nixosHelper.enable) {
 }
