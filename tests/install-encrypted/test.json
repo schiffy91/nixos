@@ -1,0 +1,38 @@
+{
+  "name": "install-encrypted",
+  "state": "installed-encrypted",
+  "parentState": "installer-ssh",
+  "stateMaterial": "live-install:nixos:encryption=true:tpm2=true:immutability={{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:boot={{bootloader}}:swap={{swapSize}}:desktop={{desktop}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "encryption": "true",
+    "tpm2": "true",
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset",
+    "immutabilityEnabled": "true",
+    "bootloader": "systemd-boot",
+    "diskLayout": "btrfs-subvolumes",
+    "swapSize": "2G",
+    "desktop": "none"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2235,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "live-ssh" },
+    { "op": "boot-iso" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "configure-vm-host" },
+    { "op": "install-nixos" },
+    { "op": "snapshot", "name": "installed" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

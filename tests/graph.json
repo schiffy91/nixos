@@ -295,6 +295,35 @@
         "immutabilityImplementation": "semipermeable_membrane",
         "immutabilityMode": "reset"
       }
+    },
+    {
+      "id": "install-encrypted",
+      "spec": "install-encrypted/test.json",
+      "after": [
+        "installer-ssh"
+      ],
+      "args": {
+        "name": "install-encrypted",
+        "state": "installed-encrypted",
+        "encryption": "true",
+        "tpm2": "true",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset",
+        "immutabilityEnabled": "true"
+      }
+    },
+    {
+      "id": "tpm2-enroll",
+      "spec": "tpm2-enroll/test.json",
+      "after": [
+        "install-encrypted"
+      ],
+      "args": {
+        "encryption": "true",
+        "tpm2": "true",
+        "immutabilityMode": "reset"
+      }
     }
   ]
 }

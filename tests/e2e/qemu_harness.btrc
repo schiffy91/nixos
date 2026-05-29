@@ -854,6 +854,8 @@ class QemuE2eHarness {
         string enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
         string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
         string desktop = self.spec.args.getOrDefault("desktop", "none");
+        string encryption = self.spec.args.getOrDefault("encryption", "false");
+        string luksPass = "testpass123";
         bool secureBootTarget = bootTargetName.equals("Secure-Boot");
         string otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
         string serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
@@ -888,6 +890,7 @@ class QemuE2eHarness {
             + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
             + "  boot.kernelParams = [ \"console=" + serialConsole + "\" ];\n"
             + "  boot.initrd.availableKernelModules = " + initrdModules + ";\n"
+            + "  boot.plymouth.enable = lib.mkForce false;\n"
             + "  services.getty.autologinUser = lib.mkForce \"root\";\n"
             + "  services.openssh.enable = lib.mkForce true;\n"
             + "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";\n"
@@ -897,7 +900,7 @@ class QemuE2eHarness {
             + "  settings.networking.identityAgent = \"none\";\n"
             + "  settings.networking.lanSubnet = \"10.0.2.0/24\";\n"
             + "  settings.disk.device = \"/dev/vda\";\n"
-            + "  settings.disk.encryption.enable = false;\n"
+            + "  settings.disk.encryption.enable = " + encryption + ";\n"
             + "  settings.disk.immutability.enable = " + enabled + ";\n"
             + "  settings.disk.immutability.mode = \"" + mode + "\";\n"
             + "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];\n"
@@ -907,7 +910,11 @@ class QemuE2eHarness {
             + secureBootSettings
             + "}\n";
         string localConfig = "{\"host_path\":\"modules/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix\",\"target\":\"" + bootTargetName + "\"}\n";
+        string luksCommand = encryption.equals("true")
+            ? "printf %s " + UnixShell.quote(luksPass) + " > /tmp/plain_text_password.txt; chmod 600 /tmp/plain_text_password.txt; "
+            : "";
         string command = "set -e; "
+            + luksCommand
             + "rm -rf /etc/nixos/modules/hosts/" + otherArch + "; "
             + "rm -f " + UnixShell.quote(secureBootModulePath) + "; "
             + secureBootModuleCommand
