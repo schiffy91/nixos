@@ -1,0 +1,35 @@
+{
+  "name": "immutability-files",
+  "state": "immutability-files",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-files:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2231,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; for i in $(seq 1 500); do echo x > /root/eph-$i; echo x > /etc/nixos/keep-$i; done; dd if=/dev/zero of=/root/eph-big bs=1M count=50; dd if=/dev/zero of=/etc/nixos/keep-big bs=1M count=50; sync; printf created", "expect": "created" },
+    { "op": "guest", "command": "ls /root/eph-* 2>/dev/null | wc -l", "expect": "500" },
+    { "op": "guest", "command": "ls /etc/nixos/keep-* 2>/dev/null | wc -l", "expect": "500" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "ls /root/eph-* 2>/dev/null | wc -l", "expect": "0" },
+    { "op": "guest", "command": "test ! -e /root/eph-big && printf wiped", "expect": "wiped" },
+    { "op": "guest", "command": "ls /etc/nixos/keep-* 2>/dev/null | wc -l", "expect": "500" },
+    { "op": "guest", "command": "test -s /etc/nixos/keep-big && printf kept", "expect": "kept" },
+    { "op": "snapshot", "name": "files-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

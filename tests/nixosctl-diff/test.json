@@ -1,0 +1,31 @@
+{
+  "name": "nixosctl-diff",
+  "state": "nixosctl-diff",
+  "parentState": "installed-reset",
+  "stateMaterial": "nixosctl-diff:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2233,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; test ! -e /zzz-diff-canary && printf clean", "expect": "clean" },
+    { "op": "guest", "command": "NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true nixosctl diff 2>&1 | grep -q zzz-diff-canary && printf present || printf absent", "expect": "absent", "timeout": 600 },
+    { "op": "guest", "command": "set -e; mkdir -p /zzz-diff-canary && echo changed > /zzz-diff-canary/marker && sync && printf made", "expect": "made" },
+    { "op": "guest", "command": "NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true nixosctl diff 2>&1 | grep -q zzz-diff-canary && printf detected", "expect": "detected", "timeout": 600 },
+    { "op": "snapshot", "name": "diff-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

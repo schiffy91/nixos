@@ -1,0 +1,33 @@
+{
+  "name": "nixosctl-cli",
+  "state": "nixosctl-cli",
+  "parentState": "installed-reset",
+  "stateMaterial": "nixosctl-cli:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2232,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "command -v nixosctl >/dev/null && printf found", "expect": "found" },
+    { "op": "guest", "command": "nixosctl 2>&1 | grep -q Usage && printf ok", "expect": "ok" },
+    { "op": "guest", "command": "nixosctl displays 2>&1 | grep -q layout && printf ok", "expect": "ok" },
+    { "op": "guest", "command": "nixosctl vm 2>&1 | grep -q boot-disk && printf ok", "expect": "ok" },
+    { "op": "guest", "command": "nixosctl graph 2>&1 | grep -q coverage && printf ok", "expect": "ok" },
+    { "op": "guest", "command": "nixosctl eval config.networking.hostName 2>/dev/null", "expect": "VM-TEST", "timeout": 300 },
+    { "op": "snapshot", "name": "cli-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}
