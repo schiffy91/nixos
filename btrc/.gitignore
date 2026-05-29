@@ -1,5 +1,0 @@
-build/*
-!build/.gitkeep
-.btrc-cache/
-.vm/
-vendor/btrc-stdlib/gpu/build/
