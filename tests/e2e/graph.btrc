@@ -207,9 +207,9 @@ class VmGraphRunner {
             if (!tool.ok()) {
                 NixosLog.fatal("Failed to compute nixosctl hash for " + toolPath);
             }
-            toolHash = tool.stdout().trim();
+            toolHash = tool.trimmed();
         }
-        self.sourceHashValue = result.stdout().trim() + ":nixosctl=" + toolHash;
+        self.sourceHashValue = result.trimmed() + ":nixosctl=" + toolHash;
         return self.sourceHashValue;
     }
 

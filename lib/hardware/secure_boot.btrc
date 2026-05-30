@@ -107,7 +107,7 @@ class SecureBootManager {
             .arg("--json")
             .check(false);
         ExecResult result = self.shell.runCommand(verify);
-        string output = result.stdout().trim();
+        string output = result.trimmed();
         if (output.isEmpty() || output.equals("null")) {
             NixosLog.error("No EFI binaries registered");
             return;

@@ -172,7 +172,7 @@ class VmTestSpec {
         if (!result.ok()) {
             NixosLog.fatal("Failed to compute state hash for " + self.state);
         }
-        self.stateHash = result.stdout().trim();
+        self.stateHash = result.trimmed();
         self.stateHashShort = self.stateHash.substring(0, 12);
     }
 
@@ -204,7 +204,7 @@ class VmSpecParser {
     class string hostArch() {
         UnixShell shell = UnixShell();
         ExecResult result = shell.run("uname -m");
-        string machine = result.stdout().trim();
+        string machine = result.trimmed();
         if (machine.contains("arm64") || machine.contains("aarch64")) {
             return "aarch64";
         }

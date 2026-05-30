@@ -69,12 +69,12 @@ class VmTestRunner {
 
     public void assertResult(string label, ExecResult result, string expect) {
         if (!result.ok()) {
-            Console.error(result.stdout().trim());
+            Console.error(result.trimmed());
             self.fail(label + " failed with exit code " + Strings.fromInt(result.code));
             return;
         }
         if (!self.outputMatches(result, expect)) {
-            Console.error(result.stdout().trim());
+            Console.error(result.trimmed());
             self.fail(label + " output did not contain expected text: " + expect);
         }
     }

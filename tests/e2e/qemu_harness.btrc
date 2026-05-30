@@ -39,7 +39,7 @@ class QemuE2eHarness {
             .arg("cd " + UnixShell.quote(PathTools.dirname(path)) + " && printf '%s/%s' \"$PWD\" " + UnixShell.quote(PathTools.basename(path)));
         ExecResult result = self.shell.runCommand(command);
         if (!result.ok()) { NixosLog.fatal("Failed to resolve path " + path); }
-        return result.stdout().trim();
+        return result.trimmed();
     }
 
     public void ensureWorkDir() {
@@ -85,12 +85,12 @@ class QemuE2eHarness {
             + "test -f \"$path\" || exit 1; printf %s \"$path\"";
         ExecResult result = self.shell.runUnchecked(script);
         if (!result.ok()) { return ""; }
-        return Strings.copy(result.stdout().trim());
+        return result.trimmed();
     }
 
     // Run `find <args> -print -quit`, return the first match (trimmed, "" if none).
     public string findFirst(string findArgs) {
-        return self.shell.runUnchecked("find " + findArgs + " -print -quit 2>/dev/null").stdout().trim();
+        return self.shell.runUnchecked("find " + findArgs + " -print -quit 2>/dev/null").trimmed();
     }
 
     public string firmwareCodePath() {
@@ -247,7 +247,7 @@ class QemuE2eHarness {
 
     public bool isDarwin() {
         ExecResult result = self.shell.run("uname -s");
-        return result.stdout().trim().equals("Darwin");
+        return result.trimmed().equals("Darwin");
     }
 
     public string stripLeadingSlash(string path) {

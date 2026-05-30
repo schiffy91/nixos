@@ -310,6 +310,7 @@ void ExecResult_init(ExecResult* self, int code, char* out, char* err, char* com
 ExecResult* ExecResult_new(int code, char* out, char* err, char* command);
 bool ExecResult_ok(ExecResult* self);
 char* ExecResult_stdout(ExecResult* self);
+char* ExecResult_trimmed(ExecResult* self);
 void Command_init(Command* self, char* executable);
 Command* Command_new(char* executable);
 Command* Command_arg(Command* self, char* value);
@@ -5125,6 +5126,11 @@ char* ExecResult_stdout(ExecResult* self) {
     return __btrc_ret_82;
 }
 
+char* ExecResult_trimmed(ExecResult* self) {
+    __auto_type __btrc_ret_83 = __btrc_str_track(__btrc_trim(self->out));
+    return __btrc_ret_83;
+}
+
 void Command_init(Command* self, char* executable) {
     self->__rc = 1;
     (self->executable = executable);
@@ -5133,19 +5139,19 @@ void Command_init(Command* self, char* executable) {
             btrc_Vector_string_free(self->args);
         }
     }
+    btrc_Vector_string* __list_86 = btrc_Vector_string_new();
+    (self->args = __list_86);
     btrc_Vector_string* __list_85 = btrc_Vector_string_new();
-    (self->args = __list_85);
-    btrc_Vector_string* __list_84 = btrc_Vector_string_new();
-    (__list_84->__rc++);
+    (__list_85->__rc++);
     if (self->env != NULL) {
         if ((--self->env->__rc) <= 0) {
             btrc_Vector_string_free(self->env);
         }
     }
+    btrc_Vector_string* __list_88 = btrc_Vector_string_new();
+    (self->env = __list_88);
     btrc_Vector_string* __list_87 = btrc_Vector_string_new();
-    (self->env = __list_87);
-    btrc_Vector_string* __list_86 = btrc_Vector_string_new();
-    (__list_86->__rc++);
+    (__list_87->__rc++);
     (self->useSudo = false);
     (self->captureOutput = true);
     (self->checkStatus = true);
@@ -5179,55 +5185,55 @@ void Command_destroy(Command* self) {
 
 Command* Command_arg(Command* self, char* value) {
     btrc_Vector_string_push(self->args, value);
-    __auto_type __btrc_ret_88 = self;
-    return __btrc_ret_88;
+    __auto_type __btrc_ret_89 = self;
+    return __btrc_ret_89;
 }
 
 Command* Command_capture(Command* self, bool enabled) {
     (self->captureOutput = enabled);
-    __auto_type __btrc_ret_94 = self;
-    return __btrc_ret_94;
+    __auto_type __btrc_ret_95 = self;
+    return __btrc_ret_95;
 }
 
 Command* Command_check(Command* self, bool enabled) {
     (self->checkStatus = enabled);
-    __auto_type __btrc_ret_95 = self;
-    return __btrc_ret_95;
+    __auto_type __btrc_ret_96 = self;
+    return __btrc_ret_96;
 }
 
 char* Command_renderEnv(Command* self, char* item) {
     int split = Strings_find(item, "=", 0);
     if (split <= 0) {
-        __auto_type __btrc_ret_98 = ShellWords_quote(item);
-        return __btrc_ret_98;
+        __auto_type __btrc_ret_99 = ShellWords_quote(item);
+        return __btrc_ret_99;
     }
     char* name = __btrc_str_track(__btrc_substring(item, 0, split));
     char* value = __btrc_str_track(__btrc_substring(item, (split + 1), ((((int)strlen(item)) - split) - 1)));
-    __auto_type __btrc_ret_99 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(name, "=")), ShellWords_quote(value)));
-    return __btrc_ret_99;
+    __auto_type __btrc_ret_100 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(name, "=")), ShellWords_quote(value)));
+    return __btrc_ret_100;
 }
 
 char* Command_render(Command* self) {
     btrc_Vector_string* parts = btrc_Vector_string_new();
-    int __n_101 = btrc_Vector_string_iterLen(self->env);
-    for (int __i_100 = 0; (__i_100 < __n_101); (__i_100++)) {
-        char* item = btrc_Vector_string_iterGet(self->env, __i_100);
+    int __n_102 = btrc_Vector_string_iterLen(self->env);
+    for (int __i_101 = 0; (__i_101 < __n_102); (__i_101++)) {
+        char* item = btrc_Vector_string_iterGet(self->env, __i_101);
         btrc_Vector_string_push(parts, Command_renderEnv(self, item));
     }
     if (self->useSudo) {
         btrc_Vector_string_push(parts, "sudo");
     }
     btrc_Vector_string_push(parts, ShellWords_quote(self->executable));
-    int __n_103 = btrc_Vector_string_iterLen(self->args);
-    for (int __i_102 = 0; (__i_102 < __n_103); (__i_102++)) {
-        char* item = btrc_Vector_string_iterGet(self->args, __i_102);
+    int __n_104 = btrc_Vector_string_iterLen(self->args);
+    for (int __i_103 = 0; (__i_103 < __n_104); (__i_103++)) {
+        char* item = btrc_Vector_string_iterGet(self->args, __i_103);
         btrc_Vector_string_push(parts, ShellWords_quote(item));
     }
     if (self->mergeStderr) {
         btrc_Vector_string_push(parts, "2>&1");
     }
-    __auto_type __btrc_ret_104 = btrc_Vector_string_join(parts, " ");
-    return __btrc_ret_104;
+    __auto_type __btrc_ret_105 = btrc_Vector_string_join(parts, " ");
+    return __btrc_ret_105;
 }
 
 void UnixShell_init(UnixShell* self) {
@@ -5248,32 +5254,32 @@ void UnixShell_destroy(UnixShell* self) {
 }
 
 char* UnixShell_quote(char* raw) {
-    __auto_type __btrc_ret_105 = ShellWords_quote(raw);
-    return __btrc_ret_105;
-}
-
-char* UnixShell_redactText(char* text, char* sensitive) {
-    __auto_type __btrc_ret_106 = ShellWords_redact(text, sensitive);
+    __auto_type __btrc_ret_106 = ShellWords_quote(raw);
     return __btrc_ret_106;
 }
 
-ExecResult* UnixShell_run(UnixShell* self, char* command) {
-    __auto_type __btrc_ret_107 = UnixShell_runRaw(self, command, true, true, "");
+char* UnixShell_redactText(char* text, char* sensitive) {
+    __auto_type __btrc_ret_107 = ShellWords_redact(text, sensitive);
     return __btrc_ret_107;
 }
 
+ExecResult* UnixShell_run(UnixShell* self, char* command) {
+    __auto_type __btrc_ret_108 = UnixShell_runRaw(self, command, true, true, "");
+    return __btrc_ret_108;
+}
+
 ExecResult* UnixShell_runCommand(UnixShell* self, Command* command) {
-    __auto_type __btrc_ret_109 = UnixShell_runRaw(self, Command_render(command), command->captureOutput, command->checkStatus, command->sensitive);
-    return __btrc_ret_109;
+    __auto_type __btrc_ret_110 = UnixShell_runRaw(self, Command_render(command), command->captureOutput, command->checkStatus, command->sensitive);
+    return __btrc_ret_110;
 }
 
 ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput, bool checkStatus, char* sensitive) {
     char* rendered = command;
     if (((int)strlen(self->chrootPath)) > 0) {
-        int __fstr_110_len = snprintf(NULL, 0, "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
-        char* __fstr_110_buf = __btrc_str_track(((char*)malloc((__fstr_110_len + 1))));
-        snprintf(__fstr_110_buf, (__fstr_110_len + 1), "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
-        (rendered = __fstr_110_buf);
+        int __fstr_112_len = snprintf(NULL, 0, "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
+        char* __fstr_112_buf = __btrc_str_track(((char*)malloc((__fstr_112_len + 1))));
+        snprintf(__fstr_112_buf, (__fstr_112_len + 1), "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
+        (rendered = __fstr_112_buf);
     }
     if (self->logCommands) {
         char* visible = UnixShell_redactText(rendered, sensitive);
@@ -5285,13 +5291,13 @@ ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput,
         if (checkStatus && (code != 0)) {
             fprintf(stderr, "Command failed (%d): %s\n", code, UnixShell_redactText(rendered, sensitive));
         }
-        __auto_type __btrc_ret_111 = ExecResult_new(code, "", "", rendered);
-        return __btrc_ret_111;
+        __auto_type __btrc_ret_113 = ExecResult_new(code, "", "", rendered);
+        return __btrc_ret_113;
     }
     UnixPipe* pipe = UnixProcess_pipe(rendered);
     if (!UnixPipe_ok(pipe)) {
-        __auto_type __btrc_ret_112 = ExecResult_new(127, "", "popen failed", rendered);
-        return __btrc_ret_112;
+        __auto_type __btrc_ret_114 = ExecResult_new(127, "", "popen failed", rendered);
+        return __btrc_ret_114;
     }
     char* output = UnixPipe_readAll(pipe);
     ProcessStatus* status = UnixPipe_close(pipe);
@@ -5299,8 +5305,8 @@ ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput,
     if (checkStatus && (code != 0)) {
         fprintf(stderr, "Command failed (%d): %s\n", code, UnixShell_redactText(rendered, sensitive));
     }
-    __auto_type __btrc_ret_113 = ExecResult_new(code, output, "", rendered);
-    return __btrc_ret_113;
+    __auto_type __btrc_ret_115 = ExecResult_new(code, output, "", rendered);
+    return __btrc_ret_115;
 }
 
 void PowerShell_init(PowerShell* self) {
@@ -5334,23 +5340,23 @@ void FileStatus_destroy(FileStatus* self) {
 }
 
 bool FileStatus_exists(FileStatus* self) {
-    __auto_type __btrc_ret_115 = self->found;
-    return __btrc_ret_115;
-}
-
-bool FileStatus_isDir(FileStatus* self) {
-    __auto_type __btrc_ret_116 = (self->found && S_ISDIR(self->mode));
-    return __btrc_ret_116;
-}
-
-bool FileStatus_isFile(FileStatus* self) {
-    __auto_type __btrc_ret_117 = (self->found && S_ISREG(self->mode));
+    __auto_type __btrc_ret_117 = self->found;
     return __btrc_ret_117;
 }
 
-bool FileStatus_isSymlink(FileStatus* self) {
-    __auto_type __btrc_ret_118 = (self->linkFound && S_ISLNK(self->linkMode));
+bool FileStatus_isDir(FileStatus* self) {
+    __auto_type __btrc_ret_118 = (self->found && S_ISDIR(self->mode));
     return __btrc_ret_118;
+}
+
+bool FileStatus_isFile(FileStatus* self) {
+    __auto_type __btrc_ret_119 = (self->found && S_ISREG(self->mode));
+    return __btrc_ret_119;
+}
+
+bool FileStatus_isSymlink(FileStatus* self) {
+    __auto_type __btrc_ret_120 = (self->linkFound && S_ISLNK(self->linkMode));
+    return __btrc_ret_120;
 }
 
 void Directory_init(Directory* self, char* path) {
@@ -5397,64 +5403,64 @@ void UnixFileSystem_destroy(UnixFileSystem* self) {
 
 int UnixFileSystem_statusCode(int raw) {
     if (raw == (-1)) {
-        __auto_type __btrc_ret_119 = 127;
-        return __btrc_ret_119;
+        __auto_type __btrc_ret_121 = 127;
+        return __btrc_ret_121;
     }
     if (raw > 255) {
-        __auto_type __btrc_ret_120 = __btrc_div_int(raw, 256);
-        return __btrc_ret_120;
+        __auto_type __btrc_ret_122 = __btrc_div_int(raw, 256);
+        return __btrc_ret_122;
     }
     return raw;
 }
 
 int UnixFileSystem_chmodPath(char* path, int mode) {
-    __auto_type __btrc_ret_121 = chmod(path, ((mode_t)mode));
-    return __btrc_ret_121;
+    __auto_type __btrc_ret_123 = chmod(path, ((mode_t)mode));
+    return __btrc_ret_123;
 }
 
 int UnixFileSystem_mkdirPath(char* path, int mode) {
-    __auto_type __btrc_ret_122 = mkdir(path, ((mode_t)mode));
-    return __btrc_ret_122;
+    __auto_type __btrc_ret_124 = mkdir(path, ((mode_t)mode));
+    return __btrc_ret_124;
 }
 
 int UnixFileSystem_runShell(char* command) {
-    __auto_type __btrc_ret_123 = UnixFileSystem_statusCode(system(command));
-    return __btrc_ret_123;
+    __auto_type __btrc_ret_125 = UnixFileSystem_statusCode(system(command));
+    return __btrc_ret_125;
 }
 
 int UnixFileSystem_mkdirp(char* path) {
     char* quoted = PathTools_shellQuote(path);
-    int __fstr_124_len = snprintf(NULL, 0, "mkdir -p %s", quoted);
-    char* __fstr_124_buf = __btrc_str_track(((char*)malloc((__fstr_124_len + 1))));
-    snprintf(__fstr_124_buf, (__fstr_124_len + 1), "mkdir -p %s", quoted);
-    __auto_type __btrc_ret_125 = UnixFileSystem_runShell(__fstr_124_buf);
-    return __btrc_ret_125;
-}
-
-int UnixFileSystem_removeRecursive(char* path) {
-    char* quoted = PathTools_shellQuote(path);
-    int __fstr_126_len = snprintf(NULL, 0, "rm -rf %s", quoted);
+    int __fstr_126_len = snprintf(NULL, 0, "mkdir -p %s", quoted);
     char* __fstr_126_buf = __btrc_str_track(((char*)malloc((__fstr_126_len + 1))));
-    snprintf(__fstr_126_buf, (__fstr_126_len + 1), "rm -rf %s", quoted);
+    snprintf(__fstr_126_buf, (__fstr_126_len + 1), "mkdir -p %s", quoted);
     __auto_type __btrc_ret_127 = UnixFileSystem_runShell(__fstr_126_buf);
     return __btrc_ret_127;
 }
 
+int UnixFileSystem_removeRecursive(char* path) {
+    char* quoted = PathTools_shellQuote(path);
+    int __fstr_128_len = snprintf(NULL, 0, "rm -rf %s", quoted);
+    char* __fstr_128_buf = __btrc_str_track(((char*)malloc((__fstr_128_len + 1))));
+    snprintf(__fstr_128_buf, (__fstr_128_len + 1), "rm -rf %s", quoted);
+    __auto_type __btrc_ret_129 = UnixFileSystem_runShell(__fstr_128_buf);
+    return __btrc_ret_129;
+}
+
 int UnixFileSystem_symlinkPath(char* target, char* linkPath) {
-    __auto_type __btrc_ret_128 = symlink(target, linkPath);
-    return __btrc_ret_128;
+    __auto_type __btrc_ret_130 = symlink(target, linkPath);
+    return __btrc_ret_130;
 }
 
 char* UnixFileSystem_readLink(char* path) {
     char buffer[4096];
     ssize_t length = readlink(path, buffer, 4095);
     if (length < 0) {
-        __auto_type __btrc_ret_129 = "";
-        return __btrc_ret_129;
+        __auto_type __btrc_ret_131 = "";
+        return __btrc_ret_131;
     }
     (buffer[length] = '\0');
-    __auto_type __btrc_ret_130 = Strings_copy(buffer);
-    return __btrc_ret_130;
+    __auto_type __btrc_ret_132 = Strings_copy(buffer);
+    return __btrc_ret_132;
 }
 
 char* UnixFileSystem_tempDir(char* prefix) {
@@ -5463,11 +5469,11 @@ char* UnixFileSystem_tempDir(char* prefix) {
     char* raw = Strings_copy(templatePath);
     char* result = mkdtemp(raw);
     if (result == NULL) {
-        __auto_type __btrc_ret_131 = "";
-        return __btrc_ret_131;
+        __auto_type __btrc_ret_133 = "";
+        return __btrc_ret_133;
     }
-    __auto_type __btrc_ret_132 = Strings_copy(result);
-    return __btrc_ret_132;
+    __auto_type __btrc_ret_134 = Strings_copy(result);
+    return __btrc_ret_134;
 }
 
 void PathTools_init(PathTools* self) {
@@ -5479,15 +5485,15 @@ void PathTools_destroy(PathTools* self) {
 }
 
 char* PathTools_shellQuote(char* raw) {
-    __auto_type __btrc_ret_133 = ShellWords_quote(raw);
-    return __btrc_ret_133;
+    __auto_type __btrc_ret_135 = ShellWords_quote(raw);
+    return __btrc_ret_135;
 }
 
 char* PathTools_basename(char* path) {
     int len = ((int)strlen(path));
     if (len == 0) {
-        __auto_type __btrc_ret_134 = "";
-        return __btrc_ret_134;
+        __auto_type __btrc_ret_136 = "";
+        return __btrc_ret_136;
     }
     int end = (len - 1);
     while ((end > 0) && (path[end] == '/')) {
@@ -5507,8 +5513,8 @@ char* PathTools_basename(char* path) {
 char* PathTools_dirname(char* path) {
     int len = ((int)strlen(path));
     if (len == 0) {
-        __auto_type __btrc_ret_135 = ".";
-        return __btrc_ret_135;
+        __auto_type __btrc_ret_137 = ".";
+        return __btrc_ret_137;
     }
     int end = (len - 1);
     while ((end > 0) && (path[end] == '/')) {
@@ -5519,11 +5525,11 @@ char* PathTools_dirname(char* path) {
     }
     if (end == 0) {
         if (path[0] == '/') {
-            __auto_type __btrc_ret_136 = "/";
-            return __btrc_ret_136;
+            __auto_type __btrc_ret_138 = "/";
+            return __btrc_ret_138;
         }
-        __auto_type __btrc_ret_137 = ".";
-        return __btrc_ret_137;
+        __auto_type __btrc_ret_139 = ".";
+        return __btrc_ret_139;
     }
     char* result = ((char*)malloc((end + 1)));
     memcpy(result, path, end);
@@ -5533,25 +5539,25 @@ char* PathTools_dirname(char* path) {
 
 char* PathTools_join(char* left, char* right) {
     if (((int)strlen(left)) == 0) {
-        __auto_type __btrc_ret_138 = Strings_copy(right);
-        return __btrc_ret_138;
+        __auto_type __btrc_ret_140 = Strings_copy(right);
+        return __btrc_ret_140;
     }
     if (((int)strlen(right)) == 0) {
-        __auto_type __btrc_ret_139 = Strings_copy(left);
-        return __btrc_ret_139;
-    }
-    if (left[(((int)strlen(left)) - 1)] == '/') {
-        int __fstr_140_len = snprintf(NULL, 0, "%s%s", left, right);
-        char* __fstr_140_buf = __btrc_str_track(((char*)malloc((__fstr_140_len + 1))));
-        snprintf(__fstr_140_buf, (__fstr_140_len + 1), "%s%s", left, right);
-        __auto_type __btrc_ret_141 = __fstr_140_buf;
+        __auto_type __btrc_ret_141 = Strings_copy(left);
         return __btrc_ret_141;
     }
-    int __fstr_142_len = snprintf(NULL, 0, "%s/%s", left, right);
-    char* __fstr_142_buf = __btrc_str_track(((char*)malloc((__fstr_142_len + 1))));
-    snprintf(__fstr_142_buf, (__fstr_142_len + 1), "%s/%s", left, right);
-    __auto_type __btrc_ret_143 = __fstr_142_buf;
-    return __btrc_ret_143;
+    if (left[(((int)strlen(left)) - 1)] == '/') {
+        int __fstr_142_len = snprintf(NULL, 0, "%s%s", left, right);
+        char* __fstr_142_buf = __btrc_str_track(((char*)malloc((__fstr_142_len + 1))));
+        snprintf(__fstr_142_buf, (__fstr_142_len + 1), "%s%s", left, right);
+        __auto_type __btrc_ret_143 = __fstr_142_buf;
+        return __btrc_ret_143;
+    }
+    int __fstr_144_len = snprintf(NULL, 0, "%s/%s", left, right);
+    char* __fstr_144_buf = __btrc_str_track(((char*)malloc((__fstr_144_len + 1))));
+    snprintf(__fstr_144_buf, (__fstr_144_len + 1), "%s/%s", left, right);
+    __auto_type __btrc_ret_145 = __fstr_144_buf;
+    return __btrc_ret_145;
 }
 
 void FileSystem_init(FileSystem* self) {
@@ -5611,43 +5617,43 @@ bool FileSystem_isSymlink(char* path) {
 }
 
 int FileSystem_chmod(char* path, int mode) {
-    __auto_type __btrc_ret_144 = UnixFileSystem_chmodPath(path, mode);
-    return __btrc_ret_144;
-}
-
-int FileSystem_mkdir(char* path, int mode) {
-    __auto_type __btrc_ret_145 = UnixFileSystem_mkdirPath(path, mode);
-    return __btrc_ret_145;
-}
-
-int FileSystem_mkdirp(char* path) {
-    __auto_type __btrc_ret_146 = UnixFileSystem_mkdirp(path);
+    __auto_type __btrc_ret_146 = UnixFileSystem_chmodPath(path, mode);
     return __btrc_ret_146;
 }
 
-int FileSystem_removeRecursive(char* path) {
-    __auto_type __btrc_ret_147 = UnixFileSystem_removeRecursive(path);
+int FileSystem_mkdir(char* path, int mode) {
+    __auto_type __btrc_ret_147 = UnixFileSystem_mkdirPath(path, mode);
     return __btrc_ret_147;
 }
 
-int FileSystem_symlink(char* target, char* linkPath) {
-    __auto_type __btrc_ret_148 = UnixFileSystem_symlinkPath(target, linkPath);
+int FileSystem_mkdirp(char* path) {
+    __auto_type __btrc_ret_148 = UnixFileSystem_mkdirp(path);
     return __btrc_ret_148;
 }
 
-char* FileSystem_readLink(char* path) {
-    __auto_type __btrc_ret_149 = UnixFileSystem_readLink(path);
+int FileSystem_removeRecursive(char* path) {
+    __auto_type __btrc_ret_149 = UnixFileSystem_removeRecursive(path);
     return __btrc_ret_149;
 }
 
-char* FileSystem_tempDir(char* prefix) {
-    __auto_type __btrc_ret_150 = UnixFileSystem_tempDir(prefix);
+int FileSystem_symlink(char* target, char* linkPath) {
+    __auto_type __btrc_ret_150 = UnixFileSystem_symlinkPath(target, linkPath);
     return __btrc_ret_150;
 }
 
-char* FileSystem_readText(char* path) {
-    __auto_type __btrc_ret_151 = Path_readAll(path);
+char* FileSystem_readLink(char* path) {
+    __auto_type __btrc_ret_151 = UnixFileSystem_readLink(path);
     return __btrc_ret_151;
+}
+
+char* FileSystem_tempDir(char* prefix) {
+    __auto_type __btrc_ret_152 = UnixFileSystem_tempDir(prefix);
+    return __btrc_ret_152;
+}
+
+char* FileSystem_readText(char* path) {
+    __auto_type __btrc_ret_153 = Path_readAll(path);
+    return __btrc_ret_153;
 }
 
 void JsonObject_init(JsonObject* self) {
@@ -5694,8 +5700,8 @@ void JsonObject_destroy(JsonObject* self) {
 
 char* JsonObject_escape(char* text) {
     if (text == NULL) {
-        __auto_type __btrc_ret_152 = "";
-        return __btrc_ret_152;
+        __auto_type __btrc_ret_154 = "";
+        return __btrc_ret_154;
     }
     char* escaped = Strings_replace(text, "\\", "\\\\");
     (escaped = Strings_replace(escaped, "\"", "\\\""));
@@ -5745,10 +5751,10 @@ void JsonObject_setRaw(JsonObject* self, char* key, char* value) {
 
 char* JsonObject_stringify(JsonObject* self) {
     btrc_Vector_string* fields = btrc_Vector_string_new();
-    int __n_159 = btrc_Map_string_string_iterLen(self->values);
-    for (int __i_158 = 0; (__i_158 < __n_159); (__i_158++)) {
-        char* key = btrc_Map_string_string_iterGet(self->values, __i_158);
-        char* value = btrc_Map_string_string_iterValueAt(self->values, __i_158);
+    int __n_161 = btrc_Map_string_string_iterLen(self->values);
+    for (int __i_160 = 0; (__i_160 < __n_161); (__i_160++)) {
+        char* key = btrc_Map_string_string_iterGet(self->values, __i_160);
+        char* value = btrc_Map_string_string_iterValueAt(self->values, __i_160);
         char* escapedKey = JsonObject_escape(key);
         char* field = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escapedKey)), "\":"));
         if (btrc_Map_string_bool_getOrDefault(self->quoted, key, true)) {
@@ -5759,8 +5765,8 @@ char* JsonObject_stringify(JsonObject* self) {
         }
         btrc_Vector_string_push(fields, field);
     }
-    __auto_type __btrc_ret_160 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{", btrc_Vector_string_join(fields, ","))), "}"));
-    return __btrc_ret_160;
+    __auto_type __btrc_ret_162 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{", btrc_Vector_string_join(fields, ","))), "}"));
+    return __btrc_ret_162;
 }
 
 int JsonObject_skipSpaces(char* text, int i) {
@@ -5859,8 +5865,8 @@ void UnixPattern_destroy(UnixPattern* self) {
 }
 
 bool UnixPattern_matches(char* pattern, char* text) {
-    __auto_type __btrc_ret_162 = (fnmatch(pattern, text, 0) == 0);
-    return __btrc_ret_162;
+    __auto_type __btrc_ret_164 = (fnmatch(pattern, text, 0) == 0);
+    return __btrc_ret_164;
 }
 
 void Pattern_init(Pattern* self) {
@@ -5872,8 +5878,8 @@ void Pattern_destroy(Pattern* self) {
 }
 
 bool Pattern_matches(char* pattern, char* text) {
-    __auto_type __btrc_ret_163 = UnixPattern_matches(pattern, text);
-    return __btrc_ret_163;
+    __auto_type __btrc_ret_165 = UnixPattern_matches(pattern, text);
+    return __btrc_ret_165;
 }
 
 void Math_init(Math* self) {
@@ -5886,19 +5892,19 @@ void Math_destroy(Math* self) {
 
 int Math_abs(int x) {
     if (x < 0) {
-        __auto_type __btrc_ret_172 = (-x);
-        return __btrc_ret_172;
+        __auto_type __btrc_ret_174 = (-x);
+        return __btrc_ret_174;
     }
     return x;
 }
 
 int Math_factorial(int n) {
     if (n <= 1) {
-        __auto_type __btrc_ret_176 = 1;
-        return __btrc_ret_176;
+        __auto_type __btrc_ret_178 = 1;
+        return __btrc_ret_178;
     }
-    __auto_type __btrc_ret_177 = (n * Math_factorial((n - 1)));
-    return __btrc_ret_177;
+    __auto_type __btrc_ret_179 = (n * Math_factorial((n - 1)));
+    return __btrc_ret_179;
 }
 
 int Math_gcd(int a, int b) {
@@ -5956,8 +5962,8 @@ void Timer_start(Timer* self) {
 
 float Timer_elapsed(Timer* self) {
     clock_t end = (self->running ? clock() : self->end_time);
-    __auto_type __btrc_ret_215 = __btrc_div_double(((float)(end - self->start_time)), ((float)CLOCKS_PER_SEC));
-    return __btrc_ret_215;
+    __auto_type __btrc_ret_217 = __btrc_div_double(((float)(end - self->start_time)), ((float)CLOCKS_PER_SEC));
+    return __btrc_ret_217;
 }
 
 void Random_init(Random* self) {
@@ -5983,16 +5989,16 @@ int Random_randint(Random* self, int lo, int hi) {
     if (!self->seeded) {
         Random_seedTime(self);
     }
-    __auto_type __btrc_ret_216 = (lo + (rand() % ((hi - lo) + 1)));
-    return __btrc_ret_216;
+    __auto_type __btrc_ret_218 = (lo + (rand() % ((hi - lo) + 1)));
+    return __btrc_ret_218;
 }
 
 float Random_random(Random* self) {
     if (!self->seeded) {
         Random_seedTime(self);
     }
-    __auto_type __btrc_ret_217 = __btrc_div_double(((float)rand()), ((float)RAND_MAX));
-    return __btrc_ret_217;
+    __auto_type __btrc_ret_219 = __btrc_div_double(((float)rand()), ((float)RAND_MAX));
+    return __btrc_ret_219;
 }
 
 void Error_init(Error* self, char* message, int code) {
@@ -6006,8 +6012,8 @@ void Error_destroy(Error* self) {
 }
 
 char* Error_toString(Error* self) {
-    __auto_type __btrc_ret_220 = self->message;
-    return __btrc_ret_220;
+    __auto_type __btrc_ret_222 = self->message;
+    return __btrc_ret_222;
 }
 
 void ValueError_init(ValueError* self, char* message) {
@@ -6068,10 +6074,10 @@ void CliArgs_init(CliArgs* self, int argc, char** argv) {
             btrc_Vector_string_free(self->values);
         }
     }
-    btrc_Vector_string* __list_222 = btrc_Vector_string_new();
-    (self->values = __list_222);
-    btrc_Vector_string* __list_221 = btrc_Vector_string_new();
-    (__list_221->__rc++);
+    btrc_Vector_string* __list_224 = btrc_Vector_string_new();
+    (self->values = __list_224);
+    btrc_Vector_string* __list_223 = btrc_Vector_string_new();
+    (__list_223->__rc++);
     for (int i = 1; (i < argc); (i++)) {
         btrc_Vector_string_push(self->values, Strings_copy(argv[i]));
     }
@@ -6097,22 +6103,22 @@ void CliArgs_destroy(CliArgs* self) {
 }
 
 int CliArgs_count(CliArgs* self) {
-    __auto_type __btrc_ret_223 = self->values->len;
-    return __btrc_ret_223;
+    __auto_type __btrc_ret_225 = self->values->len;
+    return __btrc_ret_225;
 }
 
 char* CliArgs_get(CliArgs* self, int index) {
-    __auto_type __btrc_ret_224 = btrc_Vector_string_get(self->values, index);
-    return __btrc_ret_224;
+    __auto_type __btrc_ret_226 = btrc_Vector_string_get(self->values, index);
+    return __btrc_ret_226;
 }
 
 char* CliArgs_command(CliArgs* self) {
     if (self->values->len == 0) {
-        __auto_type __btrc_ret_225 = "";
-        return __btrc_ret_225;
+        __auto_type __btrc_ret_227 = "";
+        return __btrc_ret_227;
     }
-    __auto_type __btrc_ret_226 = btrc_Vector_string_get(self->values, 0);
-    return __btrc_ret_226;
+    __auto_type __btrc_ret_228 = btrc_Vector_string_get(self->values, 0);
+    return __btrc_ret_228;
 }
 
 void CliCommand_init(CliCommand* self, char* name) {
@@ -6123,10 +6129,10 @@ void CliCommand_init(CliCommand* self, char* name) {
             btrc_Vector_string_free(self->aliases);
         }
     }
-    btrc_Vector_string* __list_237 = btrc_Vector_string_new();
-    (self->aliases = __list_237);
-    btrc_Vector_string* __list_236 = btrc_Vector_string_new();
-    (__list_236->__rc++);
+    btrc_Vector_string* __list_239 = btrc_Vector_string_new();
+    (self->aliases = __list_239);
+    btrc_Vector_string* __list_238 = btrc_Vector_string_new();
+    (__list_238->__rc++);
 }
 
 void CliCommand_destroy(CliCommand* self) {
@@ -6150,23 +6156,23 @@ void NixosLog_destroy(NixosLog* self) {
 }
 
 char* NixosLog_gray(void) {
-    __auto_type __btrc_ret_243 = "\033[90m";
-    return __btrc_ret_243;
-}
-
-char* NixosLog_orange(void) {
-    __auto_type __btrc_ret_244 = "\033[38;5;208m";
-    return __btrc_ret_244;
-}
-
-char* NixosLog_red(void) {
-    __auto_type __btrc_ret_245 = "\033[31m";
+    __auto_type __btrc_ret_245 = "\033[90m";
     return __btrc_ret_245;
 }
 
-char* NixosLog_reset(void) {
-    __auto_type __btrc_ret_246 = "\033[0m";
+char* NixosLog_orange(void) {
+    __auto_type __btrc_ret_246 = "\033[38;5;208m";
     return __btrc_ret_246;
+}
+
+char* NixosLog_red(void) {
+    __auto_type __btrc_ret_247 = "\033[31m";
+    return __btrc_ret_247;
+}
+
+char* NixosLog_reset(void) {
+    __auto_type __btrc_ret_248 = "\033[0m";
+    return __btrc_ret_248;
 }
 
 void NixosLog_fatal(char* message) {
@@ -6183,93 +6189,93 @@ void MembraneConstants_destroy(MembraneConstants* self) {
 }
 
 char* MembraneConstants_topBase(void) {
-    __auto_type __btrc_ret_247 = "/run/semipermeable-membrane-top";
-    return __btrc_ret_247;
-}
-
-char* MembraneConstants_dirs(void) {
-    __auto_type __btrc_ret_248 = "dirs";
-    return __btrc_ret_248;
-}
-
-char* MembraneConstants_meta(void) {
-    __auto_type __btrc_ret_249 = ".semipermeable_membrane";
+    __auto_type __btrc_ret_249 = "/run/semipermeable-membrane-top";
     return __btrc_ret_249;
 }
 
-char* MembraneConstants_files(void) {
-    __auto_type __btrc_ret_250 = "files";
+char* MembraneConstants_dirs(void) {
+    __auto_type __btrc_ret_250 = "dirs";
     return __btrc_ret_250;
 }
 
-char* MembraneConstants_next(void) {
-    __auto_type __btrc_ret_251 = "NEXT";
+char* MembraneConstants_meta(void) {
+    __auto_type __btrc_ret_251 = ".semipermeable_membrane";
     return __btrc_ret_251;
 }
 
-char* MembraneConstants_a(void) {
-    __auto_type __btrc_ret_252 = "A";
+char* MembraneConstants_files(void) {
+    __auto_type __btrc_ret_252 = "files";
     return __btrc_ret_252;
 }
 
-char* MembraneConstants_b(void) {
-    __auto_type __btrc_ret_253 = "B";
+char* MembraneConstants_next(void) {
+    __auto_type __btrc_ret_253 = "NEXT";
     return __btrc_ret_253;
 }
 
-char* MembraneConstants_c(void) {
-    __auto_type __btrc_ret_254 = "C";
+char* MembraneConstants_a(void) {
+    __auto_type __btrc_ret_254 = "A";
     return __btrc_ret_254;
 }
 
-char* MembraneConstants_disabled(void) {
-    __auto_type __btrc_ret_255 = "disabled";
+char* MembraneConstants_b(void) {
+    __auto_type __btrc_ret_255 = "B";
     return __btrc_ret_255;
 }
 
-char* MembraneConstants_converge(void) {
-    __auto_type __btrc_ret_256 = "converge";
+char* MembraneConstants_c(void) {
+    __auto_type __btrc_ret_256 = "C";
     return __btrc_ret_256;
 }
 
-char* MembraneConstants_reset(void) {
-    __auto_type __btrc_ret_257 = "reset";
+char* MembraneConstants_disabled(void) {
+    __auto_type __btrc_ret_257 = "disabled";
     return __btrc_ret_257;
 }
 
-char* MembraneConstants_prepareOnly(void) {
-    __auto_type __btrc_ret_258 = "prepare-only";
+char* MembraneConstants_converge(void) {
+    __auto_type __btrc_ret_258 = "converge";
     return __btrc_ret_258;
 }
 
-char* MembraneConstants_snapshotOnly(void) {
-    __auto_type __btrc_ret_259 = "snapshot-only";
+char* MembraneConstants_reset(void) {
+    __auto_type __btrc_ret_259 = "reset";
     return __btrc_ret_259;
 }
 
-char* MembraneConstants_restoreA(void) {
-    __auto_type __btrc_ret_260 = "restore-a";
+char* MembraneConstants_prepareOnly(void) {
+    __auto_type __btrc_ret_260 = "prepare-only";
     return __btrc_ret_260;
 }
 
-char* MembraneConstants_restoreB(void) {
-    __auto_type __btrc_ret_261 = "restore-b";
+char* MembraneConstants_snapshotOnly(void) {
+    __auto_type __btrc_ret_261 = "snapshot-only";
     return __btrc_ret_261;
 }
 
-char* MembraneConstants_restoreC(void) {
-    __auto_type __btrc_ret_262 = "restore-c";
+char* MembraneConstants_restoreA(void) {
+    __auto_type __btrc_ret_262 = "restore-a";
     return __btrc_ret_262;
 }
 
-char* MembraneConstants_restorePrevious(void) {
-    __auto_type __btrc_ret_263 = "restore-previous";
+char* MembraneConstants_restoreB(void) {
+    __auto_type __btrc_ret_263 = "restore-b";
     return __btrc_ret_263;
 }
 
-char* MembraneConstants_restorePenultimate(void) {
-    __auto_type __btrc_ret_264 = "restore-penultimate";
+char* MembraneConstants_restoreC(void) {
+    __auto_type __btrc_ret_264 = "restore-c";
     return __btrc_ret_264;
+}
+
+char* MembraneConstants_restorePrevious(void) {
+    __auto_type __btrc_ret_265 = "restore-previous";
+    return __btrc_ret_265;
+}
+
+char* MembraneConstants_restorePenultimate(void) {
+    __auto_type __btrc_ret_266 = "restore-penultimate";
+    return __btrc_ret_266;
 }
 
 void MembraneAbsPath_init(MembraneAbsPath* self, char* path, bool endedWithSlash) {
@@ -6376,8 +6382,8 @@ char* MembranePaths_trimSlashes(char* raw) {
     while ((end > start) && (value[(end - 1)] == '/')) {
         (end--);
     }
-    __auto_type __btrc_ret_265 = __btrc_str_track(__btrc_substring(value, start, (end - start)));
-    return __btrc_ret_265;
+    __auto_type __btrc_ret_267 = __btrc_str_track(__btrc_substring(value, start, (end - start)));
+    return __btrc_ret_267;
 }
 
 char* MembranePaths_trimTrailingSlashes(char* raw) {
@@ -6386,29 +6392,29 @@ char* MembranePaths_trimTrailingSlashes(char* raw) {
     while ((end > 1) && (value[(end - 1)] == '/')) {
         (end--);
     }
-    __auto_type __btrc_ret_266 = __btrc_str_track(__btrc_substring(value, 0, end));
-    return __btrc_ret_266;
+    __auto_type __btrc_ret_268 = __btrc_str_track(__btrc_substring(value, 0, end));
+    return __btrc_ret_268;
 }
 
 bool MembranePaths_validRel(char* path) {
     if (__btrc_isEmpty(path)) {
-        __auto_type __btrc_ret_267 = false;
-        return __btrc_ret_267;
+        __auto_type __btrc_ret_269 = false;
+        return __btrc_ret_269;
     }
     if (__btrc_strContains(path, "\t") || __btrc_strContains(path, "!")) {
-        __auto_type __btrc_ret_268 = false;
-        return __btrc_ret_268;
+        __auto_type __btrc_ret_270 = false;
+        return __btrc_ret_270;
     }
-    int __n_270 = btrc_Vector_string_iterLen(Strings_split(path, "/"));
-    for (int __i_269 = 0; (__i_269 < __n_270); (__i_269++)) {
-        char* part = btrc_Vector_string_iterGet(Strings_split(path, "/"), __i_269);
+    int __n_272 = btrc_Vector_string_iterLen(Strings_split(path, "/"));
+    for (int __i_271 = 0; (__i_271 < __n_272); (__i_271++)) {
+        char* part = btrc_Vector_string_iterGet(Strings_split(path, "/"), __i_271);
         if ((__btrc_isEmpty(part) || (strcmp(part, ".") == 0)) || (strcmp(part, "..") == 0)) {
-            __auto_type __btrc_ret_271 = false;
-            return __btrc_ret_271;
+            __auto_type __btrc_ret_273 = false;
+            return __btrc_ret_273;
         }
     }
-    __auto_type __btrc_ret_272 = true;
-    return __btrc_ret_272;
+    __auto_type __btrc_ret_274 = true;
+    return __btrc_ret_274;
 }
 
 char* MembranePaths_normSubvol(char* raw) {
@@ -6422,8 +6428,8 @@ char* MembranePaths_normSubvol(char* raw) {
 char* MembranePaths_normMount(char* raw) {
     char* value = __btrc_str_track(__btrc_trim(raw));
     if (__btrc_isEmpty(value) || (strcmp(value, "/") == 0)) {
-        __auto_type __btrc_ret_273 = "/";
-        return __btrc_ret_273;
+        __auto_type __btrc_ret_275 = "/";
+        return __btrc_ret_275;
     }
     (value = MembranePaths_trimTrailingSlashes(value));
     if (!__btrc_startsWith(value, "/")) {
@@ -6447,62 +6453,62 @@ MembraneAbsPath* MembranePaths_normAbs(char* raw) {
     if (!MembranePaths_validRel(rel)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("bad keep path: ", raw)));
     }
-    __auto_type __btrc_ret_274 = MembraneAbsPath_new(value, slash);
-    return __btrc_ret_274;
+    __auto_type __btrc_ret_276 = MembraneAbsPath_new(value, slash);
+    return __btrc_ret_276;
 }
 
 char* MembranePaths_relToMount(char* absPath, char* mountPoint) {
     if (strcmp(mountPoint, "/") == 0) {
-        __auto_type __btrc_ret_275 = __btrc_str_track(__btrc_substring(absPath, 1, (((int)strlen(absPath)) - 1)));
-        return __btrc_ret_275;
+        __auto_type __btrc_ret_277 = __btrc_str_track(__btrc_substring(absPath, 1, (((int)strlen(absPath)) - 1)));
+        return __btrc_ret_277;
     }
     char* prefix = __btrc_str_track(__btrc_strcat(mountPoint, "/"));
     if (!__btrc_startsWith(absPath, prefix)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(absPath, " not under ")), mountPoint)));
     }
-    __auto_type __btrc_ret_276 = __btrc_str_track(__btrc_substring(absPath, ((int)strlen(prefix)), (((int)strlen(absPath)) - ((int)strlen(prefix)))));
-    return __btrc_ret_276;
+    __auto_type __btrc_ret_278 = __btrc_str_track(__btrc_substring(absPath, ((int)strlen(prefix)), (((int)strlen(absPath)) - ((int)strlen(prefix)))));
+    return __btrc_ret_278;
 }
 
 char* MembranePaths_kind(char* raw) {
     char* value = __btrc_str_track(__btrc_trim(raw));
     if (strcmp(value, "auto") == 0) {
-        __auto_type __btrc_ret_277 = "auto";
-        return __btrc_ret_277;
-    }
-    if ((strcmp(value, "directory") == 0) || (strcmp(value, "dir") == 0)) {
-        __auto_type __btrc_ret_278 = "dir";
-        return __btrc_ret_278;
-    }
-    if (strcmp(value, "file") == 0) {
-        __auto_type __btrc_ret_279 = "file";
+        __auto_type __btrc_ret_279 = "auto";
         return __btrc_ret_279;
     }
+    if ((strcmp(value, "directory") == 0) || (strcmp(value, "dir") == 0)) {
+        __auto_type __btrc_ret_280 = "dir";
+        return __btrc_ret_280;
+    }
+    if (strcmp(value, "file") == 0) {
+        __auto_type __btrc_ret_281 = "file";
+        return __btrc_ret_281;
+    }
     NixosLog_fatal(__btrc_str_track(__btrc_strcat("bad kind: ", raw)));
-    __auto_type __btrc_ret_280 = "auto";
-    return __btrc_ret_280;
+    __auto_type __btrc_ret_282 = "auto";
+    return __btrc_ret_282;
 }
 
 bool MembranePaths_ancestor(char* parent, char* child) {
-    __auto_type __btrc_ret_281 = __btrc_startsWith(child, __btrc_str_track(__btrc_strcat(parent, "/")));
-    return __btrc_ret_281;
+    __auto_type __btrc_ret_283 = __btrc_startsWith(child, __btrc_str_track(__btrc_strcat(parent, "/")));
+    return __btrc_ret_283;
 }
 
 char* MembranePaths_key(char* absPath) {
     char* rel = __btrc_str_track(__btrc_substring(absPath, 1, (((int)strlen(absPath)) - 1)));
-    __auto_type __btrc_ret_282 = Strings_replace(rel, "/", "!");
-    return __btrc_ret_282;
+    __auto_type __btrc_ret_284 = Strings_replace(rel, "/", "!");
+    return __btrc_ret_284;
 }
 
 char* MembranePaths_dirStore(char* persistRoot, char* absPath) {
-    __auto_type __btrc_ret_283 = PathTools_join(PathTools_join(persistRoot, MembraneConstants_dirs()), MembranePaths_key(absPath));
-    return __btrc_ret_283;
+    __auto_type __btrc_ret_285 = PathTools_join(PathTools_join(persistRoot, MembraneConstants_dirs()), MembranePaths_key(absPath));
+    return __btrc_ret_285;
 }
 
 char* MembranePaths_fileStore(char* persistRoot, char* absPath) {
     char* root = PathTools_join(PathTools_join(persistRoot, MembraneConstants_meta()), MembraneConstants_files());
-    __auto_type __btrc_ret_284 = PathTools_join(root, MembranePaths_key(absPath));
-    return __btrc_ret_284;
+    __auto_type __btrc_ret_286 = PathTools_join(root, MembranePaths_key(absPath));
+    return __btrc_ret_286;
 }
 
 void MembraneRun_init(MembraneRun* self, bool dryRun) {
@@ -6551,8 +6557,8 @@ void MembraneRun_destroy(MembraneRun* self) {
 }
 
 char* MembraneRun_elapsed(MembraneRun* self) {
-    __auto_type __btrc_ret_285 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("[", Strings_fromFloat(Timer_elapsed(self->timer)))), "s]"));
-    return __btrc_ret_285;
+    __auto_type __btrc_ret_287 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("[", Strings_fromFloat(Timer_elapsed(self->timer)))), "s]"));
+    return __btrc_ret_287;
 }
 
 char* MembraneRun_path(MembraneRun* self, char* rel) {
@@ -6561,8 +6567,8 @@ char* MembraneRun_path(MembraneRun* self, char* rel) {
     if (__btrc_isEmpty(child)) {
         return base;
     }
-    __auto_type __btrc_ret_286 = PathTools_join(base, child);
-    return __btrc_ret_286;
+    __auto_type __btrc_ret_288 = PathTools_join(base, child);
+    return __btrc_ret_288;
 }
 
 void MembraneRun_log(MembraneRun* self, char* message) {
@@ -6577,23 +6583,23 @@ ExecResult* MembraneRun_runCommand(MembraneRun* self, Command* command) {
     char* rendered = Command_render(command);
     if (self->dryRun) {
         MembraneRun_log(self, __btrc_str_track(__btrc_strcat("DRY ", rendered)));
-        __auto_type __btrc_ret_287 = ExecResult_new(0, "", "", rendered);
-        return __btrc_ret_287;
+        __auto_type __btrc_ret_289 = ExecResult_new(0, "", "", rendered);
+        return __btrc_ret_289;
     }
     MembraneRun_log(self, rendered);
-    __auto_type __btrc_ret_288 = UnixShell_runCommand(self->shell, command);
-    return __btrc_ret_288;
+    __auto_type __btrc_ret_290 = UnixShell_runCommand(self->shell, command);
+    return __btrc_ret_290;
 }
 
 ExecResult* MembraneRun_runRaw(MembraneRun* self, char* command, bool captureOutput, bool checkStatus) {
     if (self->dryRun) {
         MembraneRun_log(self, __btrc_str_track(__btrc_strcat("DRY ", command)));
-        __auto_type __btrc_ret_289 = ExecResult_new(0, "", "", command);
-        return __btrc_ret_289;
+        __auto_type __btrc_ret_291 = ExecResult_new(0, "", "", command);
+        return __btrc_ret_291;
     }
     MembraneRun_log(self, command);
-    __auto_type __btrc_ret_290 = UnixShell_runRaw(self->shell, command, captureOutput, checkStatus, "");
-    return __btrc_ret_290;
+    __auto_type __btrc_ret_292 = UnixShell_runRaw(self->shell, command, captureOutput, checkStatus, "");
+    return __btrc_ret_292;
 }
 
 void MembraneRun_requireCommand(MembraneRun* self, Command* command) {
@@ -6652,19 +6658,19 @@ void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool a
             btrc_Vector_MembraneSpec_free(self->specs);
         }
     }
-    btrc_Vector_MembraneSpec* __list_292 = btrc_Vector_MembraneSpec_new();
-    (self->specs = __list_292);
-    btrc_Vector_MembraneSpec* __list_291 = btrc_Vector_MembraneSpec_new();
-    (__list_291->__rc++);
+    btrc_Vector_MembraneSpec* __list_294 = btrc_Vector_MembraneSpec_new();
+    (self->specs = __list_294);
+    btrc_Vector_MembraneSpec* __list_293 = btrc_Vector_MembraneSpec_new();
+    (__list_293->__rc++);
     if (self->volumes != NULL) {
         if ((--self->volumes->__rc) <= 0) {
             btrc_Vector_MembraneVolume_free(self->volumes);
         }
     }
-    btrc_Vector_MembraneVolume* __list_294 = btrc_Vector_MembraneVolume_new();
-    (self->volumes = __list_294);
-    btrc_Vector_MembraneVolume* __list_293 = btrc_Vector_MembraneVolume_new();
-    (__list_293->__rc++);
+    btrc_Vector_MembraneVolume* __list_296 = btrc_Vector_MembraneVolume_new();
+    (self->volumes = __list_296);
+    btrc_Vector_MembraneVolume* __list_295 = btrc_Vector_MembraneVolume_new();
+    (__list_295->__rc++);
     (self->assumeMounted = assumeMounted);
 }
 
@@ -6699,53 +6705,53 @@ void SemipermeableMembrane_destroy(SemipermeableMembrane* self) {
 
 bool SemipermeableMembrane_envDryRun(void) {
     char* value = Environment_get("SEMIPERMEABLE_MEMBRANE_DRY_RUN", "");
-    __auto_type __btrc_ret_295 = ((((strcmp(value, "1") == 0) || (strcmp(value, "true") == 0)) || (strcmp(value, "yes") == 0)) || (strcmp(value, "on") == 0));
-    return __btrc_ret_295;
+    __auto_type __btrc_ret_297 = ((((strcmp(value, "1") == 0) || (strcmp(value, "true") == 0)) || (strcmp(value, "yes") == 0)) || (strcmp(value, "on") == 0));
+    return __btrc_ret_297;
 }
 
 bool SemipermeableMembrane_exists(SemipermeableMembrane* self, char* path) {
-    __auto_type __btrc_ret_296 = (FileSystem_exists(path) || FileSystem_isSymlink(path));
-    return __btrc_ret_296;
+    __auto_type __btrc_ret_298 = (FileSystem_exists(path) || FileSystem_isSymlink(path));
+    return __btrc_ret_298;
 }
 
 bool SemipermeableMembrane_isSubvolume(SemipermeableMembrane* self, char* path) {
     if (!FileSystem_exists(path)) {
-        __auto_type __btrc_ret_297 = false;
-        return __btrc_ret_297;
+        __auto_type __btrc_ret_299 = false;
+        return __btrc_ret_299;
     }
     Command* command = Command_check(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "subvolume"), "show"), path), false);
     ExecResult* result = UnixShell_runCommand(self->run->shell, command);
-    __auto_type __btrc_ret_298 = ExecResult_ok(result);
-    return __btrc_ret_298;
+    __auto_type __btrc_ret_300 = ExecResult_ok(result);
+    return __btrc_ret_300;
 }
 
 bool SemipermeableMembrane_isReadonly(SemipermeableMembrane* self, char* path) {
     Command* command = Command_check(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "property"), "get"), "-ts"), path), "ro"), false);
     ExecResult* result = UnixShell_runCommand(self->run->shell, command);
-    __auto_type __btrc_ret_299 = (ExecResult_ok(result) && __btrc_strContains(ExecResult_stdout(result), "ro=true"));
-    return __btrc_ret_299;
+    __auto_type __btrc_ret_301 = (ExecResult_ok(result) && __btrc_strContains(ExecResult_stdout(result), "ro=true"));
+    return __btrc_ret_301;
 }
 
 bool SemipermeableMembrane_mounted(SemipermeableMembrane* self, char* path) {
     Command* command = Command_check(Command_arg(Command_arg(Command_new("findmnt"), "--mountpoint"), path), false);
     ExecResult* result = UnixShell_runCommand(self->run->shell, command);
-    __auto_type __btrc_ret_300 = ExecResult_ok(result);
-    return __btrc_ret_300;
+    __auto_type __btrc_ret_302 = ExecResult_ok(result);
+    return __btrc_ret_302;
 }
 
 int SemipermeableMembrane_compareDeepestFirst(SemipermeableMembrane* self, char* left, char* right) {
     int leftDepth = Strings_count(left, "/");
     int rightDepth = Strings_count(right, "/");
     if (leftDepth != rightDepth) {
-        __auto_type __btrc_ret_301 = (rightDepth - leftDepth);
-        return __btrc_ret_301;
+        __auto_type __btrc_ret_303 = (rightDepth - leftDepth);
+        return __btrc_ret_303;
     }
     if (((int)strlen(left)) != ((int)strlen(right))) {
-        __auto_type __btrc_ret_302 = (((int)strlen(right)) - ((int)strlen(left)));
-        return __btrc_ret_302;
+        __auto_type __btrc_ret_304 = (((int)strlen(right)) - ((int)strlen(left)));
+        return __btrc_ret_304;
     }
-    __auto_type __btrc_ret_303 = Strings_compare(left, right);
-    return __btrc_ret_303;
+    __auto_type __btrc_ret_305 = Strings_compare(left, right);
+    return __btrc_ret_305;
 }
 
 void SemipermeableMembrane_pushChildSorted(SemipermeableMembrane* self, btrc_Vector_string* paths, char* path) {
@@ -6766,9 +6772,9 @@ btrc_Vector_string* SemipermeableMembrane_childSubvolumes(SemipermeableMembrane*
     if (!ExecResult_ok(listed)) {
         MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("list ", path)));
     }
-    int __n_305 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
-    for (int __i_304 = 0; (__i_304 < __n_305); (__i_304++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_304);
+    int __n_307 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
+    for (int __i_306 = 0; (__i_306 < __n_307); (__i_306++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_306);
         int marker = Strings_find(line, " path ", 0);
         if (marker < 0) {
             continue;
@@ -6787,9 +6793,9 @@ void SemipermeableMembrane_deleteSubvolume(SemipermeableMembrane* self, char* pa
         return;
     }
     btrc_Vector_string* children = SemipermeableMembrane_childSubvolumes(self, path);
-    int __n_307 = btrc_Vector_string_iterLen(children);
-    for (int __i_306 = 0; (__i_306 < __n_307); (__i_306++)) {
-        char* child = btrc_Vector_string_iterGet(children, __i_306);
+    int __n_309 = btrc_Vector_string_iterLen(children);
+    for (int __i_308 = 0; (__i_308 < __n_309); (__i_308++)) {
+        char* child = btrc_Vector_string_iterGet(children, __i_308);
         Command* childCommand = Command_capture(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "subvolume"), "delete"), child), false);
         MembraneRun_requireCommand(self->run, childCommand);
     }
@@ -6831,8 +6837,8 @@ char* SemipermeableMembrane_sourcePath(SemipermeableMembrane* self, char* live, 
     if (SemipermeableMembrane_exists(self, cleanPath)) {
         return cleanPath;
     }
-    __auto_type __btrc_ret_308 = "";
-    return __btrc_ret_308;
+    __auto_type __btrc_ret_310 = "";
+    return __btrc_ret_310;
 }
 
 void SemipermeableMembrane_copyPath(SemipermeableMembrane* self, char* source, char* destination) {
@@ -6853,15 +6859,15 @@ void SemipermeableMembrane_copyDirectoryContents(SemipermeableMembrane* self, ch
 }
 
 void SemipermeableMembrane_ensureNamespaces(SemipermeableMembrane* self) {
-    btrc_Vector_string* __list_309 = btrc_Vector_string_new();
-    btrc_Vector_string_push(__list_309, self->persistRoot);
-    btrc_Vector_string_push(__list_309, PathTools_join(self->persistRoot, MembraneConstants_dirs()));
-    btrc_Vector_string_push(__list_309, PathTools_join(self->persistRoot, MembraneConstants_meta()));
-    btrc_Vector_string_push(__list_309, PathTools_join(PathTools_join(self->persistRoot, MembraneConstants_meta()), MembraneConstants_files()));
-    btrc_Vector_string* namespaces = __list_309;
-    int __n_311 = btrc_Vector_string_iterLen(namespaces);
-    for (int __i_310 = 0; (__i_310 < __n_311); (__i_310++)) {
-        char* rel = btrc_Vector_string_iterGet(namespaces, __i_310);
+    btrc_Vector_string* __list_311 = btrc_Vector_string_new();
+    btrc_Vector_string_push(__list_311, self->persistRoot);
+    btrc_Vector_string_push(__list_311, PathTools_join(self->persistRoot, MembraneConstants_dirs()));
+    btrc_Vector_string_push(__list_311, PathTools_join(self->persistRoot, MembraneConstants_meta()));
+    btrc_Vector_string_push(__list_311, PathTools_join(PathTools_join(self->persistRoot, MembraneConstants_meta()), MembraneConstants_files()));
+    btrc_Vector_string* namespaces = __list_311;
+    int __n_313 = btrc_Vector_string_iterLen(namespaces);
+    for (int __i_312 = 0; (__i_312 < __n_313); (__i_312++)) {
+        char* rel = btrc_Vector_string_iterGet(namespaces, __i_312);
         char* path = MembraneRun_path(self->run, rel);
         if (!SemipermeableMembrane_exists(self, path)) {
             SemipermeableMembrane_makeSubvolume(self, path);
@@ -6872,30 +6878,30 @@ void SemipermeableMembrane_ensureNamespaces(SemipermeableMembrane* self) {
 }
 
 bool SemipermeableMembrane_keyInSpec(SemipermeableMembrane* self, btrc_Vector_string* validKeys, char* key) {
-    int __n_313 = btrc_Vector_string_iterLen(validKeys);
-    for (int __i_312 = 0; (__i_312 < __n_313); (__i_312++)) {
-        char* v = btrc_Vector_string_iterGet(validKeys, __i_312);
+    int __n_315 = btrc_Vector_string_iterLen(validKeys);
+    for (int __i_314 = 0; (__i_314 < __n_315); (__i_314++)) {
+        char* v = btrc_Vector_string_iterGet(validKeys, __i_314);
         if (strcmp(v, key) == 0) {
-            __auto_type __btrc_ret_314 = true;
-            return __btrc_ret_314;
+            __auto_type __btrc_ret_316 = true;
+            return __btrc_ret_316;
         }
     }
-    __auto_type __btrc_ret_315 = false;
-    return __btrc_ret_315;
+    __auto_type __btrc_ret_317 = false;
+    return __btrc_ret_317;
 }
 
 void SemipermeableMembrane_pruneOrphans(SemipermeableMembrane* self) {
     btrc_Vector_string* validKeys = btrc_Vector_string_new();
-    int __n_317 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-    for (int __i_316 = 0; (__i_316 < __n_317); (__i_316++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_316);
+    int __n_319 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+    for (int __i_318 = 0; (__i_318 < __n_319); (__i_318++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_318);
         btrc_Vector_string_push(validKeys, MembranePaths_key(spec->absPath));
     }
     char* dirsPath = MembraneRun_path(self->run, PathTools_join(self->persistRoot, MembraneConstants_dirs()));
     btrc_Vector_string* children = SemipermeableMembrane_childSubvolumes(self, dirsPath);
-    int __n_319 = btrc_Vector_string_iterLen(children);
-    for (int __i_318 = 0; (__i_318 < __n_319); (__i_318++)) {
-        char* child = btrc_Vector_string_iterGet(children, __i_318);
+    int __n_321 = btrc_Vector_string_iterLen(children);
+    for (int __i_320 = 0; (__i_320 < __n_321); (__i_320++)) {
+        char* child = btrc_Vector_string_iterGet(children, __i_320);
         char* key = PathTools_basename(child);
         if (!SemipermeableMembrane_keyInSpec(self, validKeys, key)) {
             MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat("Pruning orphaned persist subvolume ", key)));
@@ -6945,15 +6951,15 @@ int SemipermeableMembrane_compareSpecs(SemipermeableMembrane* self, MembraneSpec
     int leftDepth = Strings_count(left->relPath, "/");
     int rightDepth = Strings_count(right->relPath, "/");
     if (leftDepth != rightDepth) {
-        __auto_type __btrc_ret_320 = (leftDepth - rightDepth);
-        return __btrc_ret_320;
+        __auto_type __btrc_ret_322 = (leftDepth - rightDepth);
+        return __btrc_ret_322;
     }
     if (((int)strlen(left->relPath)) != ((int)strlen(right->relPath))) {
-        __auto_type __btrc_ret_321 = (((int)strlen(left->relPath)) - ((int)strlen(right->relPath)));
-        return __btrc_ret_321;
+        __auto_type __btrc_ret_323 = (((int)strlen(left->relPath)) - ((int)strlen(right->relPath)));
+        return __btrc_ret_323;
     }
-    __auto_type __btrc_ret_322 = Strings_compare(left->relPath, right->relPath);
-    return __btrc_ret_322;
+    __auto_type __btrc_ret_324 = Strings_compare(left->relPath, right->relPath);
+    return __btrc_ret_324;
 }
 
 void SemipermeableMembrane_pushSpecSorted(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, MembraneSpec* spec) {
@@ -6966,9 +6972,9 @@ void SemipermeableMembrane_pushSpecSorted(SemipermeableMembrane* self, btrc_Vect
 
 btrc_Vector_MembraneSpec* SemipermeableMembrane_sortedSpecs(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* input) {
     btrc_Vector_MembraneSpec* sorted = btrc_Vector_MembraneSpec_new();
-    int __n_324 = btrc_Vector_MembraneSpec_iterLen(input);
-    for (int __i_323 = 0; (__i_323 < __n_324); (__i_323++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(input, __i_323);
+    int __n_326 = btrc_Vector_MembraneSpec_iterLen(input);
+    for (int __i_325 = 0; (__i_325 < __n_326); (__i_325++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(input, __i_325);
         SemipermeableMembrane_pushSpecSorted(self, sorted, spec);
     }
     return sorted;
@@ -6977,40 +6983,40 @@ btrc_Vector_MembraneSpec* SemipermeableMembrane_sortedSpecs(SemipermeableMembran
 char* SemipermeableMembrane_resolveKind(SemipermeableMembrane* self, char* live, char* clean, MembraneSpec* spec) {
     char* path = SemipermeableMembrane_sourcePath(self, live, clean, spec->relPath);
     if (__btrc_isEmpty(path)) {
-        __auto_type __btrc_ret_325 = "file";
-        return __btrc_ret_325;
+        __auto_type __btrc_ret_327 = "file";
+        return __btrc_ret_327;
     }
     if (FileSystem_isDir(path)) {
-        __auto_type __btrc_ret_326 = "dir";
-        return __btrc_ret_326;
+        __auto_type __btrc_ret_328 = "dir";
+        return __btrc_ret_328;
     }
-    __auto_type __btrc_ret_327 = "file";
-    return __btrc_ret_327;
+    __auto_type __btrc_ret_329 = "file";
+    return __btrc_ret_329;
 }
 
 bool SemipermeableMembrane_planAlreadyCovers(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, MembraneSpec* spec) {
-    int __n_329 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_328 = 0; (__i_328 < __n_329); (__i_328++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_328);
+    int __n_331 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_330 = 0; (__i_330 < __n_331); (__i_330++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_330);
         if ((strcmp(plan->spec->volume, spec->volume) == 0) && (strcmp(plan->spec->relPath, spec->relPath) == 0)) {
-            __auto_type __btrc_ret_330 = true;
-            return __btrc_ret_330;
+            __auto_type __btrc_ret_332 = true;
+            return __btrc_ret_332;
         }
         if (((strcmp(plan->spec->volume, spec->volume) == 0) && (strcmp(plan->kind, "dir") == 0)) && MembranePaths_ancestor(plan->spec->relPath, spec->relPath)) {
-            __auto_type __btrc_ret_331 = true;
-            return __btrc_ret_331;
+            __auto_type __btrc_ret_333 = true;
+            return __btrc_ret_333;
         }
     }
-    __auto_type __btrc_ret_332 = false;
-    return __btrc_ret_332;
+    __auto_type __btrc_ret_334 = false;
+    return __btrc_ret_334;
 }
 
 btrc_Vector_MembranePlan* SemipermeableMembrane_makePlan(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, char* live, char* clean) {
     btrc_Vector_MembranePlan* plans = btrc_Vector_MembranePlan_new();
     btrc_Vector_MembraneSpec* ordered = SemipermeableMembrane_sortedSpecs(self, specs);
-    int __n_334 = btrc_Vector_MembraneSpec_iterLen(ordered);
-    for (int __i_333 = 0; (__i_333 < __n_334); (__i_333++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(ordered, __i_333);
+    int __n_336 = btrc_Vector_MembraneSpec_iterLen(ordered);
+    for (int __i_335 = 0; (__i_335 < __n_336); (__i_335++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(ordered, __i_335);
         char* kind = spec->kind;
         if (strcmp(kind, "auto") == 0) {
             (kind = SemipermeableMembrane_resolveKind(self, live, clean, spec));
@@ -7026,9 +7032,9 @@ btrc_Vector_MembranePlan* SemipermeableMembrane_makePlan(SemipermeableMembrane* 
 
 btrc_Vector_MembraneSpec* SemipermeableMembrane_specsForVolume(SemipermeableMembrane* self, char* volume) {
     btrc_Vector_MembraneSpec* result = btrc_Vector_MembraneSpec_new();
-    int __n_336 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-    for (int __i_335 = 0; (__i_335 < __n_336); (__i_335++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_335);
+    int __n_338 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+    for (int __i_337 = 0; (__i_337 < __n_338); (__i_337++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_337);
         if (strcmp(spec->volume, volume) == 0) {
             btrc_Vector_MembraneSpec_push(result, spec);
         }
@@ -7055,9 +7061,9 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
     }
     SemipermeableMembrane_deleteSubvolume(self, next);
     btrc_Vector_MembranePlan* plans = SemipermeableMembrane_makePlan(self, SemipermeableMembrane_specsForVolume(self, volume->name), live, clean);
-    int __n_338 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_337 = 0; (__i_337 < __n_338); (__i_337++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_337);
+    int __n_340 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_339 = 0; (__i_339 < __n_340); (__i_339++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_339);
         if (!(strcmp(plan->kind, "dir") == 0)) {
             continue;
         }
@@ -7072,9 +7078,9 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
             MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("not a subvolume: ", store)));
         }
     }
-    int __n_340 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_339 = 0; (__i_339 < __n_340); (__i_339++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_339);
+    int __n_342 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_341 = 0; (__i_341 < __n_342); (__i_341++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_341);
         if (!(strcmp(plan->kind, "file") == 0)) {
             continue;
         }
@@ -7092,9 +7098,9 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
     }
     SemipermeableMembrane_rotate(self, volume->name, live);
     SemipermeableMembrane_snapshot(self, clean, next, false);
-    int __n_342 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_341 = 0; (__i_341 < __n_342); (__i_341++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_341);
+    int __n_344 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_343 = 0; (__i_343 < __n_344); (__i_343++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_343);
         char* target = PathTools_join(next, plan->spec->relPath);
         MembraneRun_removePath(self->run, target);
         if (strcmp(plan->kind, "dir") == 0) {
@@ -7123,9 +7129,9 @@ void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolu
 
 void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self) {
     char* content = FileSystem_readText(self->specFile);
-    int __n_344 = btrc_Vector_string_iterLen(Strings_split(content, "\n"));
-    for (int __i_343 = 0; (__i_343 < __n_344); (__i_343++)) {
-        char* raw = btrc_Vector_string_iterGet(Strings_split(content, "\n"), __i_343);
+    int __n_346 = btrc_Vector_string_iterLen(Strings_split(content, "\n"));
+    for (int __i_345 = 0; (__i_345 < __n_346); (__i_345++)) {
+        char* raw = btrc_Vector_string_iterGet(Strings_split(content, "\n"), __i_345);
         char* line = __btrc_str_track(__btrc_trim(raw));
         if (__btrc_isEmpty(line) || __btrc_startsWith(line, "#")) {
             continue;
@@ -7147,32 +7153,32 @@ void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self) {
 }
 
 bool SemipermeableMembrane_volumeSeen(SemipermeableMembrane* self, btrc_Vector_MembraneVolume* volumes, char* name) {
-    int __n_346 = btrc_Vector_MembraneVolume_iterLen(volumes);
-    for (int __i_345 = 0; (__i_345 < __n_346); (__i_345++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_345);
+    int __n_348 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_347 = 0; (__i_347 < __n_348); (__i_347++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_347);
         if (strcmp(volume->name, name) == 0) {
-            __auto_type __btrc_ret_347 = true;
-            return __btrc_ret_347;
+            __auto_type __btrc_ret_349 = true;
+            return __btrc_ret_349;
         }
     }
-    __auto_type __btrc_ret_348 = false;
-    return __btrc_ret_348;
+    __auto_type __btrc_ret_350 = false;
+    return __btrc_ret_350;
 }
 
 void SemipermeableMembrane_readVolumes(SemipermeableMembrane* self, btrc_Vector_string* args) {
     if (btrc_Vector_string_isEmpty(args)) {
-        int __n_350 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-        for (int __i_349 = 0; (__i_349 < __n_350); (__i_349++)) {
-            MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_349);
+        int __n_352 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+        for (int __i_351 = 0; (__i_351 < __n_352); (__i_351++)) {
+            MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_351);
             if (!SemipermeableMembrane_volumeSeen(self, self->volumes, spec->volume)) {
                 btrc_Vector_MembraneVolume_push(self->volumes, MembraneVolume_new(spec->volume, "/"));
             }
         }
         return;
     }
-    int __n_352 = btrc_Vector_string_iterLen(args);
-    for (int __i_351 = 0; (__i_351 < __n_352); (__i_351++)) {
-        char* arg = btrc_Vector_string_iterGet(args, __i_351);
+    int __n_354 = btrc_Vector_string_iterLen(args);
+    for (int __i_353 = 0; (__i_353 < __n_354); (__i_353++)) {
+        char* arg = btrc_Vector_string_iterGet(args, __i_353);
         int marker = Strings_find(arg, "=", 0);
         if (marker < 0) {
             NixosLog_fatal(__btrc_str_track(__btrc_strcat("bad volume arg: ", arg)));
@@ -7219,9 +7225,9 @@ void SemipermeableMembrane_configure(SemipermeableMembrane* self, char* device, 
 
 void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
     btrc_Vector_string* names = btrc_Vector_string_new();
-    int __n_354 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
-    for (int __i_353 = 0; (__i_353 < __n_354); (__i_353++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_353);
+    int __n_356 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
+    for (int __i_355 = 0; (__i_355 < __n_356); (__i_355++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_355);
         btrc_Vector_string_push(names, volume->name);
     }
     MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("Mode=", self->mode)), " dry_run=")), (self->run->dryRun ? "true" : "false"))), " device=")), self->device)), " subvolumes=")), btrc_Vector_string_join(names, " "))));
@@ -7238,9 +7244,9 @@ void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
     if (((strcmp(self->mode, MembraneConstants_converge()) == 0) || (strcmp(self->mode, MembraneConstants_reset()) == 0)) || (strcmp(self->mode, MembraneConstants_prepareOnly()) == 0)) {
         SemipermeableMembrane_pruneOrphans(self);
     }
-    int __n_356 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
-    for (int __i_355 = 0; (__i_355 < __n_356); (__i_355++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_355);
+    int __n_358 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
+    for (int __i_357 = 0; (__i_357 < __n_358); (__i_357++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_357);
         if (((strcmp(self->mode, MembraneConstants_converge()) == 0) || (strcmp(self->mode, MembraneConstants_reset()) == 0)) || (strcmp(self->mode, MembraneConstants_prepareOnly()) == 0)) {
             SemipermeableMembrane_resetVolume(self, volume);
         } else if (strcmp(self->mode, MembraneConstants_snapshotOnly()) == 0) {
@@ -7262,16 +7268,16 @@ void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
 }
 
 bool SemipermeableMembrane_coveredBy(SemipermeableMembrane* self, btrc_Vector_string* selected, char* target) {
-    int __n_358 = btrc_Vector_string_iterLen(selected);
-    for (int __i_357 = 0; (__i_357 < __n_358); (__i_357++)) {
-        char* s = btrc_Vector_string_iterGet(selected, __i_357);
+    int __n_360 = btrc_Vector_string_iterLen(selected);
+    for (int __i_359 = 0; (__i_359 < __n_360); (__i_359++)) {
+        char* s = btrc_Vector_string_iterGet(selected, __i_359);
         if (__btrc_startsWith(target, __btrc_str_track(__btrc_strcat(s, "/")))) {
-            __auto_type __btrc_ret_359 = true;
-            return __btrc_ret_359;
+            __auto_type __btrc_ret_361 = true;
+            return __btrc_ret_361;
         }
     }
-    __auto_type __btrc_ret_360 = false;
-    return __btrc_ret_360;
+    __auto_type __btrc_ret_362 = false;
+    return __btrc_ret_362;
 }
 
 void SemipermeableMembrane_mountTarget(SemipermeableMembrane* self, char* target, char* subvol) {
@@ -7300,9 +7306,9 @@ void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self) {
         (mountedTop = true);
     }
     btrc_Vector_string* selected = btrc_Vector_string_new();
-    int __n_362 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-    for (int __i_361 = 0; (__i_361 < __n_362); (__i_361++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_361);
+    int __n_364 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+    for (int __i_363 = 0; (__i_363 < __n_364); (__i_363++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_363);
         char* target = spec->absPath;
         if (SemipermeableMembrane_coveredBy(self, selected, target)) {
             continue;
@@ -7345,9 +7351,9 @@ void SemipermeableMembrane_snapshotCleanVolume(SemipermeableMembrane* self, Memb
 void SemipermeableMembrane_snapshotCleanAll(SemipermeableMembrane* self) {
     btrc_Vector_string* names = btrc_Vector_string_new();
     btrc_Vector_MembraneVolume* volumes = self->volumes;
-    int __n_364 = btrc_Vector_MembraneVolume_iterLen(volumes);
-    for (int __i_363 = 0; (__i_363 < __n_364); (__i_363++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_363);
+    int __n_366 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_365 = 0; (__i_365 < __n_366); (__i_365++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_365);
         btrc_Vector_string_push(names, volume->name);
     }
     MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("snapshot-clean dry_run=", (self->run->dryRun ? "true" : "false"))), " device=")), self->device)), " subvolumes=")), btrc_Vector_string_join(names, " "))));
@@ -7356,9 +7362,9 @@ void SemipermeableMembrane_snapshotCleanAll(SemipermeableMembrane* self) {
         return;
     }
     SemipermeableMembrane_mountTop(self);
-    int __n_366 = btrc_Vector_MembraneVolume_iterLen(volumes);
-    for (int __i_365 = 0; (__i_365 < __n_366); (__i_365++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_365);
+    int __n_368 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_367 = 0; (__i_367 < __n_368); (__i_367++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_367);
         SemipermeableMembrane_snapshotCleanVolume(self, volume);
     }
     Command* sync = Command_capture(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "filesystem"), "sync"), self->run->top), false);
@@ -7388,19 +7394,19 @@ int SemipermeableMembrane_cli(CliArgs* args) {
     if ((index < CliArgs_count(args)) && (strcmp(CliArgs_get(args, index), "mount") == 0)) {
         if (CliArgs_count(args) < (index + 4)) {
             Console_error("Usage: semipermeable_membrane [--dry-run] mount <device> <persist_root> <spec_file>");
-            __auto_type __btrc_ret_367 = 1;
-            return __btrc_ret_367;
+            __auto_type __btrc_ret_369 = 1;
+            return __btrc_ret_369;
         }
         SemipermeableMembrane* mounter = SemipermeableMembrane_new(dryRun, assumeMounted);
         SemipermeableMembrane_configureMount(mounter, CliArgs_get(args, (index + 1)), CliArgs_get(args, (index + 2)), CliArgs_get(args, (index + 3)));
         SemipermeableMembrane_mountPersist(mounter);
-        __auto_type __btrc_ret_368 = 0;
+        __auto_type __btrc_ret_370 = 0;
         if (mounter != NULL) {
             if ((--mounter->__rc) <= 0) {
                 SemipermeableMembrane_destroy(mounter);
             }
         }
-        return __btrc_ret_368;
+        return __btrc_ret_370;
         if (mounter != NULL) {
             if ((--mounter->__rc) <= 0) {
                 SemipermeableMembrane_destroy(mounter);
@@ -7410,8 +7416,8 @@ int SemipermeableMembrane_cli(CliArgs* args) {
     if ((index < CliArgs_count(args)) && (strcmp(CliArgs_get(args, index), "snapshot-clean") == 0)) {
         if (CliArgs_count(args) < (index + 4)) {
             Console_error("Usage: semipermeable_membrane [--dry-run] [--assume-mounted] snapshot-clean <device> <snapshots> <clean> [name=mount ...]");
-            __auto_type __btrc_ret_369 = 1;
-            return __btrc_ret_369;
+            __auto_type __btrc_ret_371 = 1;
+            return __btrc_ret_371;
         }
         btrc_Vector_string* cleanVolumeArgs = btrc_Vector_string_new();
         for (int i = (index + 4); (i < CliArgs_count(args)); (i++)) {
@@ -7420,13 +7426,13 @@ int SemipermeableMembrane_cli(CliArgs* args) {
         SemipermeableMembrane* snapshotter = SemipermeableMembrane_new(dryRun, assumeMounted);
         SemipermeableMembrane_configureSnapshotClean(snapshotter, CliArgs_get(args, (index + 1)), CliArgs_get(args, (index + 2)), CliArgs_get(args, (index + 3)), cleanVolumeArgs);
         SemipermeableMembrane_snapshotCleanAll(snapshotter);
-        __auto_type __btrc_ret_370 = 0;
+        __auto_type __btrc_ret_372 = 0;
         if (snapshotter != NULL) {
             if ((--snapshotter->__rc) <= 0) {
                 SemipermeableMembrane_destroy(snapshotter);
             }
         }
-        return __btrc_ret_370;
+        return __btrc_ret_372;
         if (snapshotter != NULL) {
             if ((--snapshotter->__rc) <= 0) {
                 SemipermeableMembrane_destroy(snapshotter);
@@ -7435,8 +7441,8 @@ int SemipermeableMembrane_cli(CliArgs* args) {
     }
     if (CliArgs_count(args) < (index + 6)) {
         Console_error("Usage: semipermeable_membrane [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
-        __auto_type __btrc_ret_371 = 1;
-        return __btrc_ret_371;
+        __auto_type __btrc_ret_373 = 1;
+        return __btrc_ret_373;
     }
     btrc_Vector_string* volumeArgs = btrc_Vector_string_new();
     for (int i = (index + 6); (i < CliArgs_count(args)); (i++)) {
@@ -7445,13 +7451,13 @@ int SemipermeableMembrane_cli(CliArgs* args) {
     SemipermeableMembrane* membrane = SemipermeableMembrane_new(dryRun, assumeMounted);
     SemipermeableMembrane_configure(membrane, CliArgs_get(args, index), CliArgs_get(args, (index + 1)), CliArgs_get(args, (index + 2)), CliArgs_get(args, (index + 3)), CliArgs_get(args, (index + 4)), CliArgs_get(args, (index + 5)), volumeArgs);
     SemipermeableMembrane_runAll(membrane);
-    __auto_type __btrc_ret_372 = 0;
+    __auto_type __btrc_ret_374 = 0;
     if (membrane != NULL) {
         if ((--membrane->__rc) <= 0) {
             SemipermeableMembrane_destroy(membrane);
         }
     }
-    return __btrc_ret_372;
+    return __btrc_ret_374;
     if (membrane != NULL) {
         if ((--membrane->__rc) <= 0) {
             SemipermeableMembrane_destroy(membrane);

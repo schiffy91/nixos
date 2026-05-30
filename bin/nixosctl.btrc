@@ -143,14 +143,14 @@ class NixosCtl {
             string command = self.tail(args, 3);
             if (command.isEmpty()) { NixosLog.fatal("Usage: nixosctl vm <spec.json> ssh <command>"); }
             ExecResult result = vm.ssh(command, false);
-            Console.log(result.stdout().trim());
+            Console.log(result.trimmed());
             return result.code;
         }
         if (action.equals("host")) {
             string command = self.tail(args, 3);
             if (command.isEmpty()) { NixosLog.fatal("Usage: nixosctl vm <spec.json> host <command>"); }
             ExecResult result = vm.host(command, false);
-            Console.log(result.stdout().trim());
+            Console.log(result.trimmed());
             return result.code;
         }
         if (action.equals("copy-workspace")) {

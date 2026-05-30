@@ -106,7 +106,7 @@ class NixosConfig {
         if (!result.ok()) {
             NixosLog.fatal("nix eval failed for " + attribute);
         }
-        string value = result.stdout().trim();
+        string value = result.trimmed();
         value = Strings.replace(value, "\"", "");
         self.cache.put(key, value);
         return value;

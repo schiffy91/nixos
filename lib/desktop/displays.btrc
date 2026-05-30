@@ -58,7 +58,7 @@ class DisplayManager {
     public bool drmConnected(string name) {
         string status = PathTools.join(PathTools.join("/sys/class/drm", "card*-" + name), "status");
         ExecResult result = self.shell.runUnchecked("cat " + status + " 2>/dev/null | head -n 1");
-        return result.stdout().trim().equals("connected");
+        return result.trimmed().equals("connected");
     }
 
     public string lineValue(string block, string prefix) {

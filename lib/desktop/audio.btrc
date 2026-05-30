@@ -19,7 +19,7 @@ class AudioManager {
 
     public string current() {
         ExecResult result = self.shell.runUnchecked("pactl get-default-sink");
-        return result.stdout().trim();
+        return result.trimmed();
     }
 
     public string jsonStringValue(string line, string key) {

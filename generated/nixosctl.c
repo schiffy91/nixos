@@ -438,6 +438,7 @@ void ExecResult_init(ExecResult* self, int code, char* out, char* err, char* com
 ExecResult* ExecResult_new(int code, char* out, char* err, char* command);
 bool ExecResult_ok(ExecResult* self);
 char* ExecResult_stdout(ExecResult* self);
+char* ExecResult_trimmed(ExecResult* self);
 void Command_init(Command* self, char* executable);
 Command* Command_new(char* executable);
 Command* Command_arg(Command* self, char* value);
@@ -8822,6 +8823,11 @@ char* ExecResult_stdout(ExecResult* self) {
     return __btrc_ret_82;
 }
 
+char* ExecResult_trimmed(ExecResult* self) {
+    __auto_type __btrc_ret_83 = __btrc_str_track(__btrc_trim(self->out));
+    return __btrc_ret_83;
+}
+
 void Command_init(Command* self, char* executable) {
     self->__rc = 1;
     (self->executable = executable);
@@ -8830,19 +8836,19 @@ void Command_init(Command* self, char* executable) {
             btrc_Vector_string_free(self->args);
         }
     }
+    btrc_Vector_string* __list_86 = btrc_Vector_string_new();
+    (self->args = __list_86);
     btrc_Vector_string* __list_85 = btrc_Vector_string_new();
-    (self->args = __list_85);
-    btrc_Vector_string* __list_84 = btrc_Vector_string_new();
-    (__list_84->__rc++);
+    (__list_85->__rc++);
     if (self->env != NULL) {
         if ((--self->env->__rc) <= 0) {
             btrc_Vector_string_free(self->env);
         }
     }
+    btrc_Vector_string* __list_88 = btrc_Vector_string_new();
+    (self->env = __list_88);
     btrc_Vector_string* __list_87 = btrc_Vector_string_new();
-    (self->env = __list_87);
-    btrc_Vector_string* __list_86 = btrc_Vector_string_new();
-    (__list_86->__rc++);
+    (__list_87->__rc++);
     (self->useSudo = false);
     (self->captureOutput = true);
     (self->checkStatus = true);
@@ -8876,77 +8882,77 @@ void Command_destroy(Command* self) {
 
 Command* Command_arg(Command* self, char* value) {
     btrc_Vector_string_push(self->args, value);
-    __auto_type __btrc_ret_88 = self;
-    return __btrc_ret_88;
+    __auto_type __btrc_ret_89 = self;
+    return __btrc_ret_89;
 }
 
 Command* Command_flag(Command* self, char* name, char* value) {
     btrc_Vector_string_push(self->args, name);
     btrc_Vector_string_push(self->args, value);
-    __auto_type __btrc_ret_89 = self;
-    return __btrc_ret_89;
+    __auto_type __btrc_ret_90 = self;
+    return __btrc_ret_90;
 }
 
 Command* Command_envVar(Command* self, char* name, char* value) {
-    int __fstr_91_len = snprintf(NULL, 0, "%s=%s", name, value);
-    char* __fstr_91_buf = __btrc_str_track(((char*)malloc((__fstr_91_len + 1))));
-    snprintf(__fstr_91_buf, (__fstr_91_len + 1), "%s=%s", name, value);
-    btrc_Vector_string_push(self->env, __fstr_91_buf);
-    __auto_type __btrc_ret_92 = self;
-    return __btrc_ret_92;
+    int __fstr_92_len = snprintf(NULL, 0, "%s=%s", name, value);
+    char* __fstr_92_buf = __btrc_str_track(((char*)malloc((__fstr_92_len + 1))));
+    snprintf(__fstr_92_buf, (__fstr_92_len + 1), "%s=%s", name, value);
+    btrc_Vector_string_push(self->env, __fstr_92_buf);
+    __auto_type __btrc_ret_93 = self;
+    return __btrc_ret_93;
 }
 
 Command* Command_capture(Command* self, bool enabled) {
     (self->captureOutput = enabled);
-    __auto_type __btrc_ret_94 = self;
-    return __btrc_ret_94;
-}
-
-Command* Command_check(Command* self, bool enabled) {
-    (self->checkStatus = enabled);
     __auto_type __btrc_ret_95 = self;
     return __btrc_ret_95;
 }
 
+Command* Command_check(Command* self, bool enabled) {
+    (self->checkStatus = enabled);
+    __auto_type __btrc_ret_96 = self;
+    return __btrc_ret_96;
+}
+
 Command* Command_redact(Command* self, char* value) {
     (self->sensitive = value);
-    __auto_type __btrc_ret_97 = self;
-    return __btrc_ret_97;
+    __auto_type __btrc_ret_98 = self;
+    return __btrc_ret_98;
 }
 
 char* Command_renderEnv(Command* self, char* item) {
     int split = Strings_find(item, "=", 0);
     if (split <= 0) {
-        __auto_type __btrc_ret_98 = ShellWords_quote(item);
-        return __btrc_ret_98;
+        __auto_type __btrc_ret_99 = ShellWords_quote(item);
+        return __btrc_ret_99;
     }
     char* name = __btrc_str_track(__btrc_substring(item, 0, split));
     char* value = __btrc_str_track(__btrc_substring(item, (split + 1), ((((int)strlen(item)) - split) - 1)));
-    __auto_type __btrc_ret_99 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(name, "=")), ShellWords_quote(value)));
-    return __btrc_ret_99;
+    __auto_type __btrc_ret_100 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(name, "=")), ShellWords_quote(value)));
+    return __btrc_ret_100;
 }
 
 char* Command_render(Command* self) {
     btrc_Vector_string* parts = btrc_Vector_string_new();
-    int __n_101 = btrc_Vector_string_iterLen(self->env);
-    for (int __i_100 = 0; (__i_100 < __n_101); (__i_100++)) {
-        char* item = btrc_Vector_string_iterGet(self->env, __i_100);
+    int __n_102 = btrc_Vector_string_iterLen(self->env);
+    for (int __i_101 = 0; (__i_101 < __n_102); (__i_101++)) {
+        char* item = btrc_Vector_string_iterGet(self->env, __i_101);
         btrc_Vector_string_push(parts, Command_renderEnv(self, item));
     }
     if (self->useSudo) {
         btrc_Vector_string_push(parts, "sudo");
     }
     btrc_Vector_string_push(parts, ShellWords_quote(self->executable));
-    int __n_103 = btrc_Vector_string_iterLen(self->args);
-    for (int __i_102 = 0; (__i_102 < __n_103); (__i_102++)) {
-        char* item = btrc_Vector_string_iterGet(self->args, __i_102);
+    int __n_104 = btrc_Vector_string_iterLen(self->args);
+    for (int __i_103 = 0; (__i_103 < __n_104); (__i_103++)) {
+        char* item = btrc_Vector_string_iterGet(self->args, __i_103);
         btrc_Vector_string_push(parts, ShellWords_quote(item));
     }
     if (self->mergeStderr) {
         btrc_Vector_string_push(parts, "2>&1");
     }
-    __auto_type __btrc_ret_104 = btrc_Vector_string_join(parts, " ");
-    return __btrc_ret_104;
+    __auto_type __btrc_ret_105 = btrc_Vector_string_join(parts, " ");
+    return __btrc_ret_105;
 }
 
 void UnixShell_init(UnixShell* self) {
@@ -8967,13 +8973,13 @@ void UnixShell_destroy(UnixShell* self) {
 }
 
 char* UnixShell_quote(char* raw) {
-    __auto_type __btrc_ret_105 = ShellWords_quote(raw);
-    return __btrc_ret_105;
+    __auto_type __btrc_ret_106 = ShellWords_quote(raw);
+    return __btrc_ret_106;
 }
 
 char* UnixShell_redactText(char* text, char* sensitive) {
-    __auto_type __btrc_ret_106 = ShellWords_redact(text, sensitive);
-    return __btrc_ret_106;
+    __auto_type __btrc_ret_107 = ShellWords_redact(text, sensitive);
+    return __btrc_ret_107;
 }
 
 void UnixShell_chroot(UnixShell* self, char* path) {
@@ -8985,27 +8991,27 @@ void UnixShell_clearChroot(UnixShell* self) {
 }
 
 ExecResult* UnixShell_run(UnixShell* self, char* command) {
-    __auto_type __btrc_ret_107 = UnixShell_runRaw(self, command, true, true, "");
-    return __btrc_ret_107;
-}
-
-ExecResult* UnixShell_runUnchecked(UnixShell* self, char* command) {
-    __auto_type __btrc_ret_108 = UnixShell_runRaw(self, command, true, false, "");
+    __auto_type __btrc_ret_108 = UnixShell_runRaw(self, command, true, true, "");
     return __btrc_ret_108;
 }
 
-ExecResult* UnixShell_runCommand(UnixShell* self, Command* command) {
-    __auto_type __btrc_ret_109 = UnixShell_runRaw(self, Command_render(command), command->captureOutput, command->checkStatus, command->sensitive);
+ExecResult* UnixShell_runUnchecked(UnixShell* self, char* command) {
+    __auto_type __btrc_ret_109 = UnixShell_runRaw(self, command, true, false, "");
     return __btrc_ret_109;
+}
+
+ExecResult* UnixShell_runCommand(UnixShell* self, Command* command) {
+    __auto_type __btrc_ret_110 = UnixShell_runRaw(self, Command_render(command), command->captureOutput, command->checkStatus, command->sensitive);
+    return __btrc_ret_110;
 }
 
 ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput, bool checkStatus, char* sensitive) {
     char* rendered = command;
     if (((int)strlen(self->chrootPath)) > 0) {
-        int __fstr_110_len = snprintf(NULL, 0, "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
-        char* __fstr_110_buf = __btrc_str_track(((char*)malloc((__fstr_110_len + 1))));
-        snprintf(__fstr_110_buf, (__fstr_110_len + 1), "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
-        (rendered = __fstr_110_buf);
+        int __fstr_112_len = snprintf(NULL, 0, "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
+        char* __fstr_112_buf = __btrc_str_track(((char*)malloc((__fstr_112_len + 1))));
+        snprintf(__fstr_112_buf, (__fstr_112_len + 1), "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
+        (rendered = __fstr_112_buf);
     }
     if (self->logCommands) {
         char* visible = UnixShell_redactText(rendered, sensitive);
@@ -9017,13 +9023,13 @@ ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput,
         if (checkStatus && (code != 0)) {
             fprintf(stderr, "Command failed (%d): %s\n", code, UnixShell_redactText(rendered, sensitive));
         }
-        __auto_type __btrc_ret_111 = ExecResult_new(code, "", "", rendered);
-        return __btrc_ret_111;
+        __auto_type __btrc_ret_113 = ExecResult_new(code, "", "", rendered);
+        return __btrc_ret_113;
     }
     UnixPipe* pipe = UnixProcess_pipe(rendered);
     if (!UnixPipe_ok(pipe)) {
-        __auto_type __btrc_ret_112 = ExecResult_new(127, "", "popen failed", rendered);
-        return __btrc_ret_112;
+        __auto_type __btrc_ret_114 = ExecResult_new(127, "", "popen failed", rendered);
+        return __btrc_ret_114;
     }
     char* output = UnixPipe_readAll(pipe);
     ProcessStatus* status = UnixPipe_close(pipe);
@@ -9031,8 +9037,8 @@ ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput,
     if (checkStatus && (code != 0)) {
         fprintf(stderr, "Command failed (%d): %s\n", code, UnixShell_redactText(rendered, sensitive));
     }
-    __auto_type __btrc_ret_113 = ExecResult_new(code, output, "", rendered);
-    return __btrc_ret_113;
+    __auto_type __btrc_ret_115 = ExecResult_new(code, output, "", rendered);
+    return __btrc_ret_115;
 }
 
 void PowerShell_init(PowerShell* self) {
@@ -9054,14 +9060,14 @@ void UnixPamPassword_destroy(UnixPamPassword* self) {
 bool UnixPamPassword_change(char* user, char* oldPassword, char* newPassword) {
     struct passwd* pw = getpwnam(user);
     if (pw == NULL) {
-        __auto_type __btrc_ret_115 = false;
-        return __btrc_ret_115;
+        __auto_type __btrc_ret_117 = false;
+        return __btrc_ret_117;
     }
     int fd = (-1);
     pid_t pid = forkpty((&fd), NULL, NULL, NULL);
     if (pid < 0) {
-        __auto_type __btrc_ret_116 = false;
-        return __btrc_ret_116;
+        __auto_type __btrc_ret_118 = false;
+        return __btrc_ret_118;
     }
     if (pid == 0) {
         setgid(pw->pw_gid);
@@ -9114,8 +9120,8 @@ bool UnixPamPassword_change(char* user, char* oldPassword, char* newPassword) {
     close(fd);
     int status = 0;
     waitpid(pid, (&status), 0);
-    __auto_type __btrc_ret_117 = (WIFEXITED(status) && (WEXITSTATUS(status) == 0));
-    return __btrc_ret_117;
+    __auto_type __btrc_ret_119 = (WIFEXITED(status) && (WEXITSTATUS(status) == 0));
+    return __btrc_ret_119;
 }
 
 void FileStatus_init(FileStatus* self, char* path) {
@@ -9141,23 +9147,23 @@ void FileStatus_destroy(FileStatus* self) {
 }
 
 bool FileStatus_exists(FileStatus* self) {
-    __auto_type __btrc_ret_118 = self->found;
-    return __btrc_ret_118;
-}
-
-bool FileStatus_isDir(FileStatus* self) {
-    __auto_type __btrc_ret_119 = (self->found && S_ISDIR(self->mode));
-    return __btrc_ret_119;
-}
-
-bool FileStatus_isFile(FileStatus* self) {
-    __auto_type __btrc_ret_120 = (self->found && S_ISREG(self->mode));
+    __auto_type __btrc_ret_120 = self->found;
     return __btrc_ret_120;
 }
 
-bool FileStatus_isSymlink(FileStatus* self) {
-    __auto_type __btrc_ret_121 = (self->linkFound && S_ISLNK(self->linkMode));
+bool FileStatus_isDir(FileStatus* self) {
+    __auto_type __btrc_ret_121 = (self->found && S_ISDIR(self->mode));
     return __btrc_ret_121;
+}
+
+bool FileStatus_isFile(FileStatus* self) {
+    __auto_type __btrc_ret_122 = (self->found && S_ISREG(self->mode));
+    return __btrc_ret_122;
+}
+
+bool FileStatus_isSymlink(FileStatus* self) {
+    __auto_type __btrc_ret_123 = (self->linkFound && S_ISLNK(self->linkMode));
+    return __btrc_ret_123;
 }
 
 void Directory_init(Directory* self, char* path) {
@@ -9204,64 +9210,64 @@ void UnixFileSystem_destroy(UnixFileSystem* self) {
 
 int UnixFileSystem_statusCode(int raw) {
     if (raw == (-1)) {
-        __auto_type __btrc_ret_122 = 127;
-        return __btrc_ret_122;
+        __auto_type __btrc_ret_124 = 127;
+        return __btrc_ret_124;
     }
     if (raw > 255) {
-        __auto_type __btrc_ret_123 = __btrc_div_int(raw, 256);
-        return __btrc_ret_123;
+        __auto_type __btrc_ret_125 = __btrc_div_int(raw, 256);
+        return __btrc_ret_125;
     }
     return raw;
 }
 
 int UnixFileSystem_chmodPath(char* path, int mode) {
-    __auto_type __btrc_ret_124 = chmod(path, ((mode_t)mode));
-    return __btrc_ret_124;
+    __auto_type __btrc_ret_126 = chmod(path, ((mode_t)mode));
+    return __btrc_ret_126;
 }
 
 int UnixFileSystem_mkdirPath(char* path, int mode) {
-    __auto_type __btrc_ret_125 = mkdir(path, ((mode_t)mode));
-    return __btrc_ret_125;
+    __auto_type __btrc_ret_127 = mkdir(path, ((mode_t)mode));
+    return __btrc_ret_127;
 }
 
 int UnixFileSystem_runShell(char* command) {
-    __auto_type __btrc_ret_126 = UnixFileSystem_statusCode(system(command));
-    return __btrc_ret_126;
+    __auto_type __btrc_ret_128 = UnixFileSystem_statusCode(system(command));
+    return __btrc_ret_128;
 }
 
 int UnixFileSystem_mkdirp(char* path) {
     char* quoted = PathTools_shellQuote(path);
-    int __fstr_127_len = snprintf(NULL, 0, "mkdir -p %s", quoted);
-    char* __fstr_127_buf = __btrc_str_track(((char*)malloc((__fstr_127_len + 1))));
-    snprintf(__fstr_127_buf, (__fstr_127_len + 1), "mkdir -p %s", quoted);
-    __auto_type __btrc_ret_128 = UnixFileSystem_runShell(__fstr_127_buf);
-    return __btrc_ret_128;
-}
-
-int UnixFileSystem_removeRecursive(char* path) {
-    char* quoted = PathTools_shellQuote(path);
-    int __fstr_129_len = snprintf(NULL, 0, "rm -rf %s", quoted);
+    int __fstr_129_len = snprintf(NULL, 0, "mkdir -p %s", quoted);
     char* __fstr_129_buf = __btrc_str_track(((char*)malloc((__fstr_129_len + 1))));
-    snprintf(__fstr_129_buf, (__fstr_129_len + 1), "rm -rf %s", quoted);
+    snprintf(__fstr_129_buf, (__fstr_129_len + 1), "mkdir -p %s", quoted);
     __auto_type __btrc_ret_130 = UnixFileSystem_runShell(__fstr_129_buf);
     return __btrc_ret_130;
 }
 
+int UnixFileSystem_removeRecursive(char* path) {
+    char* quoted = PathTools_shellQuote(path);
+    int __fstr_131_len = snprintf(NULL, 0, "rm -rf %s", quoted);
+    char* __fstr_131_buf = __btrc_str_track(((char*)malloc((__fstr_131_len + 1))));
+    snprintf(__fstr_131_buf, (__fstr_131_len + 1), "rm -rf %s", quoted);
+    __auto_type __btrc_ret_132 = UnixFileSystem_runShell(__fstr_131_buf);
+    return __btrc_ret_132;
+}
+
 int UnixFileSystem_symlinkPath(char* target, char* linkPath) {
-    __auto_type __btrc_ret_131 = symlink(target, linkPath);
-    return __btrc_ret_131;
+    __auto_type __btrc_ret_133 = symlink(target, linkPath);
+    return __btrc_ret_133;
 }
 
 char* UnixFileSystem_readLink(char* path) {
     char buffer[4096];
     ssize_t length = readlink(path, buffer, 4095);
     if (length < 0) {
-        __auto_type __btrc_ret_132 = "";
-        return __btrc_ret_132;
+        __auto_type __btrc_ret_134 = "";
+        return __btrc_ret_134;
     }
     (buffer[length] = '\0');
-    __auto_type __btrc_ret_133 = Strings_copy(buffer);
-    return __btrc_ret_133;
+    __auto_type __btrc_ret_135 = Strings_copy(buffer);
+    return __btrc_ret_135;
 }
 
 char* UnixFileSystem_tempDir(char* prefix) {
@@ -9270,11 +9276,11 @@ char* UnixFileSystem_tempDir(char* prefix) {
     char* raw = Strings_copy(templatePath);
     char* result = mkdtemp(raw);
     if (result == NULL) {
-        __auto_type __btrc_ret_134 = "";
-        return __btrc_ret_134;
+        __auto_type __btrc_ret_136 = "";
+        return __btrc_ret_136;
     }
-    __auto_type __btrc_ret_135 = Strings_copy(result);
-    return __btrc_ret_135;
+    __auto_type __btrc_ret_137 = Strings_copy(result);
+    return __btrc_ret_137;
 }
 
 void PathTools_init(PathTools* self) {
@@ -9286,15 +9292,15 @@ void PathTools_destroy(PathTools* self) {
 }
 
 char* PathTools_shellQuote(char* raw) {
-    __auto_type __btrc_ret_136 = ShellWords_quote(raw);
-    return __btrc_ret_136;
+    __auto_type __btrc_ret_138 = ShellWords_quote(raw);
+    return __btrc_ret_138;
 }
 
 char* PathTools_basename(char* path) {
     int len = ((int)strlen(path));
     if (len == 0) {
-        __auto_type __btrc_ret_137 = "";
-        return __btrc_ret_137;
+        __auto_type __btrc_ret_139 = "";
+        return __btrc_ret_139;
     }
     int end = (len - 1);
     while ((end > 0) && (path[end] == '/')) {
@@ -9314,8 +9320,8 @@ char* PathTools_basename(char* path) {
 char* PathTools_dirname(char* path) {
     int len = ((int)strlen(path));
     if (len == 0) {
-        __auto_type __btrc_ret_138 = ".";
-        return __btrc_ret_138;
+        __auto_type __btrc_ret_140 = ".";
+        return __btrc_ret_140;
     }
     int end = (len - 1);
     while ((end > 0) && (path[end] == '/')) {
@@ -9326,11 +9332,11 @@ char* PathTools_dirname(char* path) {
     }
     if (end == 0) {
         if (path[0] == '/') {
-            __auto_type __btrc_ret_139 = "/";
-            return __btrc_ret_139;
+            __auto_type __btrc_ret_141 = "/";
+            return __btrc_ret_141;
         }
-        __auto_type __btrc_ret_140 = ".";
-        return __btrc_ret_140;
+        __auto_type __btrc_ret_142 = ".";
+        return __btrc_ret_142;
     }
     char* result = ((char*)malloc((end + 1)));
     memcpy(result, path, end);
@@ -9340,25 +9346,25 @@ char* PathTools_dirname(char* path) {
 
 char* PathTools_join(char* left, char* right) {
     if (((int)strlen(left)) == 0) {
-        __auto_type __btrc_ret_141 = Strings_copy(right);
-        return __btrc_ret_141;
+        __auto_type __btrc_ret_143 = Strings_copy(right);
+        return __btrc_ret_143;
     }
     if (((int)strlen(right)) == 0) {
-        __auto_type __btrc_ret_142 = Strings_copy(left);
-        return __btrc_ret_142;
-    }
-    if (left[(((int)strlen(left)) - 1)] == '/') {
-        int __fstr_143_len = snprintf(NULL, 0, "%s%s", left, right);
-        char* __fstr_143_buf = __btrc_str_track(((char*)malloc((__fstr_143_len + 1))));
-        snprintf(__fstr_143_buf, (__fstr_143_len + 1), "%s%s", left, right);
-        __auto_type __btrc_ret_144 = __fstr_143_buf;
+        __auto_type __btrc_ret_144 = Strings_copy(left);
         return __btrc_ret_144;
     }
-    int __fstr_145_len = snprintf(NULL, 0, "%s/%s", left, right);
-    char* __fstr_145_buf = __btrc_str_track(((char*)malloc((__fstr_145_len + 1))));
-    snprintf(__fstr_145_buf, (__fstr_145_len + 1), "%s/%s", left, right);
-    __auto_type __btrc_ret_146 = __fstr_145_buf;
-    return __btrc_ret_146;
+    if (left[(((int)strlen(left)) - 1)] == '/') {
+        int __fstr_145_len = snprintf(NULL, 0, "%s%s", left, right);
+        char* __fstr_145_buf = __btrc_str_track(((char*)malloc((__fstr_145_len + 1))));
+        snprintf(__fstr_145_buf, (__fstr_145_len + 1), "%s%s", left, right);
+        __auto_type __btrc_ret_146 = __fstr_145_buf;
+        return __btrc_ret_146;
+    }
+    int __fstr_147_len = snprintf(NULL, 0, "%s/%s", left, right);
+    char* __fstr_147_buf = __btrc_str_track(((char*)malloc((__fstr_147_len + 1))));
+    snprintf(__fstr_147_buf, (__fstr_147_len + 1), "%s/%s", left, right);
+    __auto_type __btrc_ret_148 = __fstr_147_buf;
+    return __btrc_ret_148;
 }
 
 void FileSystem_init(FileSystem* self) {
@@ -9402,38 +9408,38 @@ bool FileSystem_isSymlink(char* path) {
 }
 
 int FileSystem_chmod(char* path, int mode) {
-    __auto_type __btrc_ret_147 = UnixFileSystem_chmodPath(path, mode);
-    return __btrc_ret_147;
-}
-
-int FileSystem_mkdir(char* path, int mode) {
-    __auto_type __btrc_ret_148 = UnixFileSystem_mkdirPath(path, mode);
-    return __btrc_ret_148;
-}
-
-int FileSystem_mkdirp(char* path) {
-    __auto_type __btrc_ret_149 = UnixFileSystem_mkdirp(path);
+    __auto_type __btrc_ret_149 = UnixFileSystem_chmodPath(path, mode);
     return __btrc_ret_149;
 }
 
-int FileSystem_removeRecursive(char* path) {
-    __auto_type __btrc_ret_150 = UnixFileSystem_removeRecursive(path);
+int FileSystem_mkdir(char* path, int mode) {
+    __auto_type __btrc_ret_150 = UnixFileSystem_mkdirPath(path, mode);
     return __btrc_ret_150;
 }
 
-int FileSystem_symlink(char* target, char* linkPath) {
-    __auto_type __btrc_ret_151 = UnixFileSystem_symlinkPath(target, linkPath);
+int FileSystem_mkdirp(char* path) {
+    __auto_type __btrc_ret_151 = UnixFileSystem_mkdirp(path);
     return __btrc_ret_151;
 }
 
-char* FileSystem_readLink(char* path) {
-    __auto_type __btrc_ret_152 = UnixFileSystem_readLink(path);
+int FileSystem_removeRecursive(char* path) {
+    __auto_type __btrc_ret_152 = UnixFileSystem_removeRecursive(path);
     return __btrc_ret_152;
 }
 
-char* FileSystem_tempDir(char* prefix) {
-    __auto_type __btrc_ret_153 = UnixFileSystem_tempDir(prefix);
+int FileSystem_symlink(char* target, char* linkPath) {
+    __auto_type __btrc_ret_153 = UnixFileSystem_symlinkPath(target, linkPath);
     return __btrc_ret_153;
+}
+
+char* FileSystem_readLink(char* path) {
+    __auto_type __btrc_ret_154 = UnixFileSystem_readLink(path);
+    return __btrc_ret_154;
+}
+
+char* FileSystem_tempDir(char* prefix) {
+    __auto_type __btrc_ret_155 = UnixFileSystem_tempDir(prefix);
+    return __btrc_ret_155;
 }
 
 void FileSystem_writeText(char* path, char* content) {
@@ -9450,14 +9456,14 @@ void DaemonSpec_init(DaemonSpec* self, char* name, Command* command) {
     }
     (self->command = command);
     (command->__rc++);
-    int __fstr_155_len = snprintf(NULL, 0, "/tmp/%s.pid", name);
-    char* __fstr_155_buf = __btrc_str_track(((char*)malloc((__fstr_155_len + 1))));
-    snprintf(__fstr_155_buf, (__fstr_155_len + 1), "/tmp/%s.pid", name);
-    (self->pidFile = __fstr_155_buf);
-    int __fstr_156_len = snprintf(NULL, 0, "/tmp/%s.log", name);
-    char* __fstr_156_buf = __btrc_str_track(((char*)malloc((__fstr_156_len + 1))));
-    snprintf(__fstr_156_buf, (__fstr_156_len + 1), "/tmp/%s.log", name);
-    (self->logFile = __fstr_156_buf);
+    int __fstr_157_len = snprintf(NULL, 0, "/tmp/%s.pid", name);
+    char* __fstr_157_buf = __btrc_str_track(((char*)malloc((__fstr_157_len + 1))));
+    snprintf(__fstr_157_buf, (__fstr_157_len + 1), "/tmp/%s.pid", name);
+    (self->pidFile = __fstr_157_buf);
+    int __fstr_158_len = snprintf(NULL, 0, "/tmp/%s.log", name);
+    char* __fstr_158_buf = __btrc_str_track(((char*)malloc((__fstr_158_len + 1))));
+    snprintf(__fstr_158_buf, (__fstr_158_len + 1), "/tmp/%s.log", name);
+    (self->logFile = __fstr_158_buf);
     (self->workingDirectory = "");
     (self->autoRestart = false);
 }
@@ -9476,15 +9482,15 @@ void DaemonSpec_destroy(DaemonSpec* self) {
 
 char* DaemonSpec_renderStartCommand(DaemonSpec* self) {
     char* rendered = Command_render(self->command);
-    int __fstr_161_len = snprintf(NULL, 0, "cd %s && ", UnixShell_quote(self->workingDirectory));
-    char* __fstr_161_buf = __btrc_str_track(((char*)malloc((__fstr_161_len + 1))));
-    snprintf(__fstr_161_buf, (__fstr_161_len + 1), "cd %s && ", UnixShell_quote(self->workingDirectory));
-    char* prefix = (__btrc_isEmpty(self->workingDirectory) ? "" : __fstr_161_buf);
-    int __fstr_162_len = snprintf(NULL, 0, "%snohup %s >> %s 2>&1 & echo $! > %s", prefix, rendered, UnixShell_quote(self->logFile), UnixShell_quote(self->pidFile));
-    char* __fstr_162_buf = __btrc_str_track(((char*)malloc((__fstr_162_len + 1))));
-    snprintf(__fstr_162_buf, (__fstr_162_len + 1), "%snohup %s >> %s 2>&1 & echo $! > %s", prefix, rendered, UnixShell_quote(self->logFile), UnixShell_quote(self->pidFile));
-    __auto_type __btrc_ret_163 = __fstr_162_buf;
-    return __btrc_ret_163;
+    int __fstr_163_len = snprintf(NULL, 0, "cd %s && ", UnixShell_quote(self->workingDirectory));
+    char* __fstr_163_buf = __btrc_str_track(((char*)malloc((__fstr_163_len + 1))));
+    snprintf(__fstr_163_buf, (__fstr_163_len + 1), "cd %s && ", UnixShell_quote(self->workingDirectory));
+    char* prefix = (__btrc_isEmpty(self->workingDirectory) ? "" : __fstr_163_buf);
+    int __fstr_164_len = snprintf(NULL, 0, "%snohup %s >> %s 2>&1 & echo $! > %s", prefix, rendered, UnixShell_quote(self->logFile), UnixShell_quote(self->pidFile));
+    char* __fstr_164_buf = __btrc_str_track(((char*)malloc((__fstr_164_len + 1))));
+    snprintf(__fstr_164_buf, (__fstr_164_len + 1), "%snohup %s >> %s 2>&1 & echo $! > %s", prefix, rendered, UnixShell_quote(self->logFile), UnixShell_quote(self->pidFile));
+    __auto_type __btrc_ret_165 = __fstr_164_buf;
+    return __btrc_ret_165;
 }
 
 void DaemonController_init(DaemonController* self) {
@@ -9522,8 +9528,8 @@ void AppSpec_destroy(AppSpec* self) {
 
 AppSpec* AppSpec_withVersion(AppSpec* self, char* version) {
     (self->version = version);
-    __auto_type __btrc_ret_169 = self;
-    return __btrc_ret_169;
+    __auto_type __btrc_ret_171 = self;
+    return __btrc_ret_171;
 }
 
 void DaemonApp_init(DaemonApp* self, char* name, DaemonSpec* daemon) {
@@ -9577,19 +9583,19 @@ void UiNode_init(UiNode* self, char* tag) {
             btrc_Vector_string_free(self->attributes);
         }
     }
-    btrc_Vector_string* __list_171 = btrc_Vector_string_new();
-    (self->attributes = __list_171);
-    btrc_Vector_string* __list_170 = btrc_Vector_string_new();
-    (__list_170->__rc++);
+    btrc_Vector_string* __list_173 = btrc_Vector_string_new();
+    (self->attributes = __list_173);
+    btrc_Vector_string* __list_172 = btrc_Vector_string_new();
+    (__list_172->__rc++);
     if (self->children != NULL) {
         if ((--self->children->__rc) <= 0) {
             btrc_Vector_UiNode_free(self->children);
         }
     }
-    btrc_Vector_UiNode* __list_173 = btrc_Vector_UiNode_new();
-    (self->children = __list_173);
-    btrc_Vector_UiNode* __list_172 = btrc_Vector_UiNode_new();
-    (__list_172->__rc++);
+    btrc_Vector_UiNode* __list_175 = btrc_Vector_UiNode_new();
+    (self->children = __list_175);
+    btrc_Vector_UiNode* __list_174 = btrc_Vector_UiNode_new();
+    (__list_174->__rc++);
 }
 
 UiNode* UiNode_new(char* tag) {
@@ -9619,66 +9625,66 @@ void UiNode_destroy(UiNode* self) {
 UiNode* UiNode_text(UiNode* self, char* value) {
     (self->textContent = value);
     (self->rawText = false);
-    __auto_type __btrc_ret_174 = self;
-    return __btrc_ret_174;
+    __auto_type __btrc_ret_176 = self;
+    return __btrc_ret_176;
 }
 
 UiNode* UiNode_raw(UiNode* self, char* value) {
     (self->textContent = value);
     (self->rawText = true);
-    __auto_type __btrc_ret_175 = self;
-    return __btrc_ret_175;
+    __auto_type __btrc_ret_177 = self;
+    return __btrc_ret_177;
 }
 
 UiNode* UiNode_attr(UiNode* self, char* name, char* value) {
-    int __fstr_177_len = snprintf(NULL, 0, "%s='%s'", name, Html_escape(value));
-    char* __fstr_177_buf = __btrc_str_track(((char*)malloc((__fstr_177_len + 1))));
-    snprintf(__fstr_177_buf, (__fstr_177_len + 1), "%s='%s'", name, Html_escape(value));
-    btrc_Vector_string_push(self->attributes, __fstr_177_buf);
-    __auto_type __btrc_ret_178 = self;
-    return __btrc_ret_178;
+    int __fstr_179_len = snprintf(NULL, 0, "%s='%s'", name, Html_escape(value));
+    char* __fstr_179_buf = __btrc_str_track(((char*)malloc((__fstr_179_len + 1))));
+    snprintf(__fstr_179_buf, (__fstr_179_len + 1), "%s='%s'", name, Html_escape(value));
+    btrc_Vector_string_push(self->attributes, __fstr_179_buf);
+    __auto_type __btrc_ret_180 = self;
+    return __btrc_ret_180;
 }
 
 char* UiNode_renderAttributes(UiNode* self) {
     if (self->attributes->len == 0) {
-        __auto_type __btrc_ret_186 = "";
-        return __btrc_ret_186;
+        __auto_type __btrc_ret_188 = "";
+        return __btrc_ret_188;
     }
-    __auto_type __btrc_ret_187 = __btrc_str_track(__btrc_strcat(" ", btrc_Vector_string_join(self->attributes, " ")));
-    return __btrc_ret_187;
+    __auto_type __btrc_ret_189 = __btrc_str_track(__btrc_strcat(" ", btrc_Vector_string_join(self->attributes, " ")));
+    return __btrc_ret_189;
 }
 
 bool UiNode_isVoidElement(UiNode* self) {
-    __auto_type __btrc_ret_188 = ((((((strcmp(self->tag, "br") == 0) || (strcmp(self->tag, "hr") == 0)) || (strcmp(self->tag, "img") == 0)) || (strcmp(self->tag, "input") == 0)) || (strcmp(self->tag, "link") == 0)) || (strcmp(self->tag, "meta") == 0));
-    return __btrc_ret_188;
+    __auto_type __btrc_ret_190 = ((((((strcmp(self->tag, "br") == 0) || (strcmp(self->tag, "hr") == 0)) || (strcmp(self->tag, "img") == 0)) || (strcmp(self->tag, "input") == 0)) || (strcmp(self->tag, "link") == 0)) || (strcmp(self->tag, "meta") == 0));
+    return __btrc_ret_190;
 }
 
 char* UiNode_renderHtml(UiNode* self) {
     char* attrs = UiNode_renderAttributes(self);
     if (UiNode_isVoidElement(self)) {
-        int __fstr_189_len = snprintf(NULL, 0, "<%s%s>", self->tag, attrs);
-        char* __fstr_189_buf = __btrc_str_track(((char*)malloc((__fstr_189_len + 1))));
-        snprintf(__fstr_189_buf, (__fstr_189_len + 1), "<%s%s>", self->tag, attrs);
-        __auto_type __btrc_ret_190 = __fstr_189_buf;
-        return __btrc_ret_190;
+        int __fstr_191_len = snprintf(NULL, 0, "<%s%s>", self->tag, attrs);
+        char* __fstr_191_buf = __btrc_str_track(((char*)malloc((__fstr_191_len + 1))));
+        snprintf(__fstr_191_buf, (__fstr_191_len + 1), "<%s%s>", self->tag, attrs);
+        __auto_type __btrc_ret_192 = __fstr_191_buf;
+        return __btrc_ret_192;
     }
     char* body = "";
     if (!__btrc_isEmpty(self->textContent)) {
         (body = (self->rawText ? self->textContent : Html_escape(self->textContent)));
     }
-    int __n_192 = btrc_Vector_UiNode_iterLen(self->children);
-    for (int __i_191 = 0; (__i_191 < __n_192); (__i_191++)) {
-        UiNode* node = btrc_Vector_UiNode_iterGet(self->children, __i_191);
-        int __fstr_193_len = snprintf(NULL, 0, "%s%s", body, UiNode_renderHtml(node));
-        char* __fstr_193_buf = __btrc_str_track(((char*)malloc((__fstr_193_len + 1))));
-        snprintf(__fstr_193_buf, (__fstr_193_len + 1), "%s%s", body, UiNode_renderHtml(node));
-        (body = __fstr_193_buf);
+    int __n_194 = btrc_Vector_UiNode_iterLen(self->children);
+    for (int __i_193 = 0; (__i_193 < __n_194); (__i_193++)) {
+        UiNode* node = btrc_Vector_UiNode_iterGet(self->children, __i_193);
+        int __fstr_195_len = snprintf(NULL, 0, "%s%s", body, UiNode_renderHtml(node));
+        char* __fstr_195_buf = __btrc_str_track(((char*)malloc((__fstr_195_len + 1))));
+        snprintf(__fstr_195_buf, (__fstr_195_len + 1), "%s%s", body, UiNode_renderHtml(node));
+        (body = __fstr_195_buf);
     }
-    int __fstr_194_len = snprintf(NULL, 0, "<%s%s>%s</%s>", self->tag, attrs, body, self->tag);
-    char* __fstr_194_buf = __btrc_str_track(((char*)malloc((__fstr_194_len + 1))));
-    snprintf(__fstr_194_buf, (__fstr_194_len + 1), "<%s%s>%s</%s>", self->tag, attrs, body, self->tag);
-    __auto_type __btrc_ret_195 = __fstr_194_buf;
-    return __btrc_ret_195;
+    int __fstr_196_len = snprintf(NULL, 0, "<%s%s>%s</%s>", self->tag, attrs, body, self->tag);
+    char* __fstr_196_buf = __btrc_str_track(((char*)malloc((__fstr_196_len + 1))));
+    snprintf(__fstr_196_buf, (__fstr_196_len + 1), "<%s%s>%s</%s>", self->tag, attrs, body, self->tag);
+    __auto_type __btrc_ret_197 = __fstr_196_buf;
+    return __btrc_ret_197;
 }
 
 void UiDocument_init(UiDocument* self, char* title, UiNode* body) {
@@ -9714,15 +9720,15 @@ void UiDocument_destroy(UiDocument* self) {
 }
 
 char* UiDocument_renderHtml(UiDocument* self) {
-    int __fstr_197_len = snprintf(NULL, 0, "<style>%s</style>", self->css);
-    char* __fstr_197_buf = __btrc_str_track(((char*)malloc((__fstr_197_len + 1))));
-    snprintf(__fstr_197_buf, (__fstr_197_len + 1), "<style>%s</style>", self->css);
-    char* cssBlock = (__btrc_isEmpty(self->css) ? "" : __fstr_197_buf);
-    int __fstr_198_len = snprintf(NULL, 0, "<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title>%s</head><body>%s</body></html>", Html_escape(self->title), cssBlock, UiNode_renderHtml(self->body));
-    char* __fstr_198_buf = __btrc_str_track(((char*)malloc((__fstr_198_len + 1))));
-    snprintf(__fstr_198_buf, (__fstr_198_len + 1), "<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title>%s</head><body>%s</body></html>", Html_escape(self->title), cssBlock, UiNode_renderHtml(self->body));
-    __auto_type __btrc_ret_199 = __fstr_198_buf;
-    return __btrc_ret_199;
+    int __fstr_199_len = snprintf(NULL, 0, "<style>%s</style>", self->css);
+    char* __fstr_199_buf = __btrc_str_track(((char*)malloc((__fstr_199_len + 1))));
+    snprintf(__fstr_199_buf, (__fstr_199_len + 1), "<style>%s</style>", self->css);
+    char* cssBlock = (__btrc_isEmpty(self->css) ? "" : __fstr_199_buf);
+    int __fstr_200_len = snprintf(NULL, 0, "<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title>%s</head><body>%s</body></html>", Html_escape(self->title), cssBlock, UiNode_renderHtml(self->body));
+    char* __fstr_200_buf = __btrc_str_track(((char*)malloc((__fstr_200_len + 1))));
+    snprintf(__fstr_200_buf, (__fstr_200_len + 1), "<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title>%s</head><body>%s</body></html>", Html_escape(self->title), cssBlock, UiNode_renderHtml(self->body));
+    __auto_type __btrc_ret_201 = __fstr_200_buf;
+    return __btrc_ret_201;
 }
 
 void UiDocument_writeHtml(UiDocument* self, char* path) {
@@ -9833,10 +9839,10 @@ void Tray_init(Tray* self, char* title) {
             btrc_Vector_TrayItem_free(self->items);
         }
     }
-    btrc_Vector_TrayItem* __list_205 = btrc_Vector_TrayItem_new();
-    (self->items = __list_205);
-    btrc_Vector_TrayItem* __list_204 = btrc_Vector_TrayItem_new();
-    (__list_204->__rc++);
+    btrc_Vector_TrayItem* __list_207 = btrc_Vector_TrayItem_new();
+    (self->items = __list_207);
+    btrc_Vector_TrayItem* __list_206 = btrc_Vector_TrayItem_new();
+    (__list_206->__rc++);
 }
 
 void Tray_destroy(Tray* self) {
@@ -9868,19 +9874,19 @@ void HtmlUiBackend_destroy(HtmlUiBackend* self) {
 }
 
 Command* HtmlUiBackend_openCommand(HtmlUiBackend* self, char* path) {
-    __auto_type __btrc_ret_210 = Command_check(Command_capture(Command_arg(Command_new(self->opener), path), false), false);
-    return __btrc_ret_210;
+    __auto_type __btrc_ret_212 = Command_check(Command_capture(Command_arg(Command_new(self->opener), path), false), false);
+    return __btrc_ret_212;
 }
 
 ExecResult* HtmlUiBackend_openFile(HtmlUiBackend* self, char* path) {
     UnixShell* shell = UnixShell_new();
-    __auto_type __btrc_ret_211 = UnixShell_runCommand(shell, HtmlUiBackend_openCommand(self, path));
+    __auto_type __btrc_ret_213 = UnixShell_runCommand(shell, HtmlUiBackend_openCommand(self, path));
     if (shell != NULL) {
         if ((--shell->__rc) <= 0) {
             UnixShell_destroy(shell);
         }
     }
-    return __btrc_ret_211;
+    return __btrc_ret_213;
     if (shell != NULL) {
         if ((--shell->__rc) <= 0) {
             UnixShell_destroy(shell);
@@ -9890,8 +9896,8 @@ ExecResult* HtmlUiBackend_openFile(HtmlUiBackend* self, char* path) {
 
 ExecResult* HtmlUiBackend_openWindow(HtmlUiBackend* self, Window* window, char* path) {
     HtmlView_write(window->html, path);
-    __auto_type __btrc_ret_212 = HtmlUiBackend_openFile(self, path);
-    return __btrc_ret_212;
+    __auto_type __btrc_ret_214 = HtmlUiBackend_openFile(self, path);
+    return __btrc_ret_214;
 }
 
 void NativeUiBackend_init(NativeUiBackend* self, char* name, HtmlUiBackend* htmlBackend) {
@@ -9926,51 +9932,51 @@ void NativeUiBackend_destroy(NativeUiBackend* self) {
 }
 
 bool NativeUiBackend_isMac(NativeUiBackend* self) {
-    __auto_type __btrc_ret_213 = (strcmp(self->name, "macos") == 0);
-    return __btrc_ret_213;
+    __auto_type __btrc_ret_215 = (strcmp(self->name, "macos") == 0);
+    return __btrc_ret_215;
 }
 
 bool NativeUiBackend_isLinux(NativeUiBackend* self) {
-    __auto_type __btrc_ret_214 = (strcmp(self->name, "linux") == 0);
-    return __btrc_ret_214;
+    __auto_type __btrc_ret_216 = (strcmp(self->name, "linux") == 0);
+    return __btrc_ret_216;
 }
 
 Command* NativeUiBackend_notifyCommand(NativeUiBackend* self, char* title, char* body) {
     if (NativeUiBackend_isMac(self)) {
         char* script = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("display notification ", NativeUi_applescriptString(body))), " with title ")), NativeUi_applescriptString(title)));
-        __auto_type __btrc_ret_216 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("osascript"), "-e"), script), false), false);
-        return __btrc_ret_216;
+        __auto_type __btrc_ret_218 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("osascript"), "-e"), script), false), false);
+        return __btrc_ret_218;
     }
     if (NativeUiBackend_isLinux(self)) {
-        __auto_type __btrc_ret_217 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("notify-send"), title), body), false), false);
-        return __btrc_ret_217;
+        __auto_type __btrc_ret_219 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("notify-send"), title), body), false), false);
+        return __btrc_ret_219;
     }
-    __auto_type __btrc_ret_218 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_new("powershell"), "-NoProfile"), "-Command"), "Write-Error 'Native notifications are TODO for Windows'"), false), false);
-    return __btrc_ret_218;
+    __auto_type __btrc_ret_220 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_new("powershell"), "-NoProfile"), "-Command"), "Write-Error 'Native notifications are TODO for Windows'"), false), false);
+    return __btrc_ret_220;
 }
 
 Command* NativeUiBackend_alertCommand(NativeUiBackend* self, char* title, char* body) {
     if (NativeUiBackend_isMac(self)) {
         char* script = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("display dialog ", NativeUi_applescriptString(body))), " with title ")), NativeUi_applescriptString(title))), " buttons {\"OK\"} default button \"OK\""));
-        __auto_type __btrc_ret_219 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("osascript"), "-e"), script), false), false);
-        return __btrc_ret_219;
+        __auto_type __btrc_ret_221 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("osascript"), "-e"), script), false), false);
+        return __btrc_ret_221;
     }
     if (NativeUiBackend_isLinux(self)) {
-        __auto_type __btrc_ret_220 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("zenity"), "--info"), "--title"), title), "--text"), body), false), false);
-        return __btrc_ret_220;
+        __auto_type __btrc_ret_222 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("zenity"), "--info"), "--title"), title), "--text"), body), false), false);
+        return __btrc_ret_222;
     }
-    __auto_type __btrc_ret_221 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_new("powershell"), "-NoProfile"), "-Command"), "Write-Error 'Native dialogs are TODO for Windows'"), false), false);
-    return __btrc_ret_221;
+    __auto_type __btrc_ret_223 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_new("powershell"), "-NoProfile"), "-Command"), "Write-Error 'Native dialogs are TODO for Windows'"), false), false);
+    return __btrc_ret_223;
 }
 
 ExecResult* NativeUiBackend_notify(NativeUiBackend* self, char* title, char* body) {
-    __auto_type __btrc_ret_222 = UnixShell_runCommand(UnixShell_new(), NativeUiBackend_notifyCommand(self, title, body));
-    return __btrc_ret_222;
+    __auto_type __btrc_ret_224 = UnixShell_runCommand(UnixShell_new(), NativeUiBackend_notifyCommand(self, title, body));
+    return __btrc_ret_224;
 }
 
 ExecResult* NativeUiBackend_alert(NativeUiBackend* self, char* title, char* body) {
-    __auto_type __btrc_ret_223 = UnixShell_runCommand(UnixShell_new(), NativeUiBackend_alertCommand(self, title, body));
-    return __btrc_ret_223;
+    __auto_type __btrc_ret_225 = UnixShell_runCommand(UnixShell_new(), NativeUiBackend_alertCommand(self, title, body));
+    return __btrc_ret_225;
 }
 
 void LinuxUiBuilder_init(LinuxUiBuilder* self) {
@@ -9982,13 +9988,13 @@ void LinuxUiBuilder_destroy(LinuxUiBuilder* self) {
 }
 
 HtmlUiBackend* LinuxUiBuilder_html(void) {
-    __auto_type __btrc_ret_226 = HtmlUiBackend_new("xdg-open");
-    return __btrc_ret_226;
+    __auto_type __btrc_ret_228 = HtmlUiBackend_new("xdg-open");
+    return __btrc_ret_228;
 }
 
 NativeUiBackend* LinuxUiBuilder_native(void) {
-    __auto_type __btrc_ret_227 = NativeUiBackend_new("linux", LinuxUiBuilder_html());
-    return __btrc_ret_227;
+    __auto_type __btrc_ret_229 = NativeUiBackend_new("linux", LinuxUiBuilder_html());
+    return __btrc_ret_229;
 }
 
 void MacUiBuilder_init(MacUiBuilder* self) {
@@ -10000,13 +10006,13 @@ void MacUiBuilder_destroy(MacUiBuilder* self) {
 }
 
 HtmlUiBackend* MacUiBuilder_html(void) {
-    __auto_type __btrc_ret_228 = HtmlUiBackend_new("open");
-    return __btrc_ret_228;
+    __auto_type __btrc_ret_230 = HtmlUiBackend_new("open");
+    return __btrc_ret_230;
 }
 
 NativeUiBackend* MacUiBuilder_native(void) {
-    __auto_type __btrc_ret_229 = NativeUiBackend_new("macos", MacUiBuilder_html());
-    return __btrc_ret_229;
+    __auto_type __btrc_ret_231 = NativeUiBackend_new("macos", MacUiBuilder_html());
+    return __btrc_ret_231;
 }
 
 void WindowsUiBuilder_init(WindowsUiBuilder* self) {
@@ -10018,13 +10024,13 @@ void WindowsUiBuilder_destroy(WindowsUiBuilder* self) {
 }
 
 HtmlUiBackend* WindowsUiBuilder_html(void) {
-    __auto_type __btrc_ret_230 = HtmlUiBackend_new("powershell");
-    return __btrc_ret_230;
+    __auto_type __btrc_ret_232 = HtmlUiBackend_new("powershell");
+    return __btrc_ret_232;
 }
 
 NativeUiBackend* WindowsUiBuilder_native(void) {
-    __auto_type __btrc_ret_231 = NativeUiBackend_new("windows", WindowsUiBuilder_html());
-    return __btrc_ret_231;
+    __auto_type __btrc_ret_233 = NativeUiBackend_new("windows", WindowsUiBuilder_html());
+    return __btrc_ret_233;
 }
 
 void Ui_init(Ui* self) {
@@ -10053,8 +10059,8 @@ void NativeUi_destroy(NativeUi* self) {
 char* NativeUi_applescriptString(char* raw) {
     char* escaped = Strings_replace(raw, "\\", "\\\\");
     (escaped = Strings_replace(escaped, "\"", "\\\""));
-    __auto_type __btrc_ret_239 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escaped)), "\""));
-    return __btrc_ret_239;
+    __auto_type __btrc_ret_241 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escaped)), "\""));
+    return __btrc_ret_241;
 }
 
 void UiRuntime_init(UiRuntime* self) {
@@ -10069,8 +10075,8 @@ static void* __btrc_spawn_wrapper_1(void* __arg) {
     __btrc_spawn_env_1* __env = ((__btrc_spawn_env_1*)__arg);
     Command* command = __env->command;
     ExecResult* result = UnixShell_runCommand(UnixShell_new(), command);
-    __auto_type __btrc_ret_243 = result->code;
-    void* __result = ((void*)((intptr_t)__btrc_ret_243));
+    __auto_type __btrc_ret_245 = result->code;
+    void* __result = ((void*)((intptr_t)__btrc_ret_245));
     if (command != NULL) {
         if ((--command->__rc) <= 0) {
             Command_destroy(command);
@@ -10086,8 +10092,8 @@ static void* __btrc_spawn_wrapper_2(void* __arg) {
     char* body = __env->body;
     char* title = __env->title;
     ExecResult* result = NativeUiBackend_notify(backend, title, body);
-    __auto_type __btrc_ret_245 = result->code;
-    void* __result = ((void*)((intptr_t)__btrc_ret_245));
+    __auto_type __btrc_ret_247 = result->code;
+    void* __result = ((void*)((intptr_t)__btrc_ret_247));
     if (backend != NULL) {
         if ((--backend->__rc) <= 0) {
             NativeUiBackend_destroy(backend);
@@ -10104,10 +10110,10 @@ void Signal_init(Signal* self) {
             btrc_Vector_string_free(self->events);
         }
     }
-    btrc_Vector_string* __list_248 = btrc_Vector_string_new();
-    (self->events = __list_248);
-    btrc_Vector_string* __list_247 = btrc_Vector_string_new();
-    (__list_247->__rc++);
+    btrc_Vector_string* __list_250 = btrc_Vector_string_new();
+    (self->events = __list_250);
+    btrc_Vector_string* __list_249 = btrc_Vector_string_new();
+    (__list_249->__rc++);
 }
 
 void Signal_destroy(Signal* self) {
@@ -10166,8 +10172,8 @@ void JsonObject_destroy(JsonObject* self) {
 
 char* JsonObject_escape(char* text) {
     if (text == NULL) {
-        __auto_type __btrc_ret_252 = "";
-        return __btrc_ret_252;
+        __auto_type __btrc_ret_254 = "";
+        return __btrc_ret_254;
     }
     char* escaped = Strings_replace(text, "\\", "\\\\");
     (escaped = Strings_replace(escaped, "\"", "\\\""));
@@ -10229,16 +10235,16 @@ char* JsonObject_getString(JsonObject* self, char* key, char* fallback) {
     if (!btrc_Map_string_string_has(self->values, key)) {
         return fallback;
     }
-    __auto_type __btrc_ret_254 = btrc_Map_string_string_get(self->values, key);
-    return __btrc_ret_254;
+    __auto_type __btrc_ret_256 = btrc_Map_string_string_get(self->values, key);
+    return __btrc_ret_256;
 }
 
 char* JsonObject_stringify(JsonObject* self) {
     btrc_Vector_string* fields = btrc_Vector_string_new();
-    int __n_259 = btrc_Map_string_string_iterLen(self->values);
-    for (int __i_258 = 0; (__i_258 < __n_259); (__i_258++)) {
-        char* key = btrc_Map_string_string_iterGet(self->values, __i_258);
-        char* value = btrc_Map_string_string_iterValueAt(self->values, __i_258);
+    int __n_261 = btrc_Map_string_string_iterLen(self->values);
+    for (int __i_260 = 0; (__i_260 < __n_261); (__i_260++)) {
+        char* key = btrc_Map_string_string_iterGet(self->values, __i_260);
+        char* value = btrc_Map_string_string_iterValueAt(self->values, __i_260);
         char* escapedKey = JsonObject_escape(key);
         char* field = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escapedKey)), "\":"));
         if (btrc_Map_string_bool_getOrDefault(self->quoted, key, true)) {
@@ -10249,8 +10255,8 @@ char* JsonObject_stringify(JsonObject* self) {
         }
         btrc_Vector_string_push(fields, field);
     }
-    __auto_type __btrc_ret_260 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{", btrc_Vector_string_join(fields, ","))), "}"));
-    return __btrc_ret_260;
+    __auto_type __btrc_ret_262 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{", btrc_Vector_string_join(fields, ","))), "}"));
+    return __btrc_ret_262;
 }
 
 int JsonObject_skipSpaces(char* text, int i) {
@@ -10341,8 +10347,8 @@ JsonObject* JsonObject_parse(char* text) {
 }
 
 JsonObject* JsonObject_readFile(char* path) {
-    __auto_type __btrc_ret_261 = JsonObject_parse(Path_readAll(path));
-    return __btrc_ret_261;
+    __auto_type __btrc_ret_263 = JsonObject_parse(Path_readAll(path));
+    return __btrc_ret_263;
 }
 
 void JsonObject_writeFile(JsonObject* self, char* path) {
@@ -10379,23 +10385,23 @@ char* Toml_stripInlineComment(char* raw) {
             continue;
         }
         if (c == '#') {
-            __auto_type __btrc_ret_262 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(raw, 0, i))));
-            return __btrc_ret_262;
+            __auto_type __btrc_ret_264 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(raw, 0, i))));
+            return __btrc_ret_264;
         }
     }
-    __auto_type __btrc_ret_263 = __btrc_str_track(__btrc_trim(raw));
-    return __btrc_ret_263;
+    __auto_type __btrc_ret_265 = __btrc_str_track(__btrc_trim(raw));
+    return __btrc_ret_265;
 }
 
 char* Toml_unquote(char* raw) {
     char* value = __btrc_str_track(__btrc_trim(raw));
     if ((__btrc_startsWith(value, "\"") && __btrc_endsWith(value, "\"")) && (((int)strlen(value)) >= 2)) {
-        __auto_type __btrc_ret_264 = __btrc_str_track(__btrc_substring(value, 1, (((int)strlen(value)) - 2)));
-        return __btrc_ret_264;
+        __auto_type __btrc_ret_266 = __btrc_str_track(__btrc_substring(value, 1, (((int)strlen(value)) - 2)));
+        return __btrc_ret_266;
     }
     if ((__btrc_startsWith(value, "'") && __btrc_endsWith(value, "'")) && (((int)strlen(value)) >= 2)) {
-        __auto_type __btrc_ret_265 = __btrc_str_track(__btrc_substring(value, 1, (((int)strlen(value)) - 2)));
-        return __btrc_ret_265;
+        __auto_type __btrc_ret_267 = __btrc_str_track(__btrc_substring(value, 1, (((int)strlen(value)) - 2)));
+        return __btrc_ret_267;
     }
     return value;
 }
@@ -10404,46 +10410,46 @@ char* Toml_key(char* line) {
     char* cleaned = Toml_stripInlineComment(line);
     int pos = Strings_find(cleaned, "=", 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_266 = "";
-        return __btrc_ret_266;
+        __auto_type __btrc_ret_268 = "";
+        return __btrc_ret_268;
     }
-    __auto_type __btrc_ret_267 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 0, pos)))));
-    return __btrc_ret_267;
+    __auto_type __btrc_ret_269 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 0, pos)))));
+    return __btrc_ret_269;
 }
 
 char* Toml_value(char* line) {
     char* cleaned = Toml_stripInlineComment(line);
     int pos = Strings_find(cleaned, "=", 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_268 = "";
-        return __btrc_ret_268;
+        __auto_type __btrc_ret_270 = "";
+        return __btrc_ret_270;
     }
-    __auto_type __btrc_ret_269 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, (pos + 1), ((((int)strlen(cleaned)) - pos) - 1))))));
-    return __btrc_ret_269;
+    __auto_type __btrc_ret_271 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, (pos + 1), ((((int)strlen(cleaned)) - pos) - 1))))));
+    return __btrc_ret_271;
 }
 
 char* Toml_sectionName(char* line) {
     char* cleaned = Toml_stripInlineComment(line);
     if ((!__btrc_startsWith(cleaned, "[")) || (!__btrc_endsWith(cleaned, "]"))) {
-        __auto_type __btrc_ret_270 = "";
-        return __btrc_ret_270;
+        __auto_type __btrc_ret_272 = "";
+        return __btrc_ret_272;
     }
     if (__btrc_startsWith(cleaned, "[[")) {
-        __auto_type __btrc_ret_271 = "";
-        return __btrc_ret_271;
+        __auto_type __btrc_ret_273 = "";
+        return __btrc_ret_273;
     }
-    __auto_type __btrc_ret_272 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 1, (((int)strlen(cleaned)) - 2)))));
-    return __btrc_ret_272;
+    __auto_type __btrc_ret_274 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 1, (((int)strlen(cleaned)) - 2)))));
+    return __btrc_ret_274;
 }
 
 char* Toml_tableArrayName(char* line) {
     char* cleaned = Toml_stripInlineComment(line);
     if ((!__btrc_startsWith(cleaned, "[[")) || (!__btrc_endsWith(cleaned, "]]"))) {
-        __auto_type __btrc_ret_273 = "";
-        return __btrc_ret_273;
+        __auto_type __btrc_ret_275 = "";
+        return __btrc_ret_275;
     }
-    __auto_type __btrc_ret_274 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 2, (((int)strlen(cleaned)) - 4)))));
-    return __btrc_ret_274;
+    __auto_type __btrc_ret_276 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 2, (((int)strlen(cleaned)) - 4)))));
+    return __btrc_ret_276;
 }
 
 void UnixPattern_init(UnixPattern* self) {
@@ -10455,8 +10461,8 @@ void UnixPattern_destroy(UnixPattern* self) {
 }
 
 bool UnixPattern_matches(char* pattern, char* text) {
-    __auto_type __btrc_ret_275 = (fnmatch(pattern, text, 0) == 0);
-    return __btrc_ret_275;
+    __auto_type __btrc_ret_277 = (fnmatch(pattern, text, 0) == 0);
+    return __btrc_ret_277;
 }
 
 void Pattern_init(Pattern* self) {
@@ -10468,8 +10474,8 @@ void Pattern_destroy(Pattern* self) {
 }
 
 bool Pattern_matches(char* pattern, char* text) {
-    __auto_type __btrc_ret_276 = UnixPattern_matches(pattern, text);
-    return __btrc_ret_276;
+    __auto_type __btrc_ret_278 = UnixPattern_matches(pattern, text);
+    return __btrc_ret_278;
 }
 
 void Math_init(Math* self) {
@@ -10482,19 +10488,19 @@ void Math_destroy(Math* self) {
 
 int Math_abs(int x) {
     if (x < 0) {
-        __auto_type __btrc_ret_285 = (-x);
-        return __btrc_ret_285;
+        __auto_type __btrc_ret_287 = (-x);
+        return __btrc_ret_287;
     }
     return x;
 }
 
 int Math_factorial(int n) {
     if (n <= 1) {
-        __auto_type __btrc_ret_289 = 1;
-        return __btrc_ret_289;
+        __auto_type __btrc_ret_291 = 1;
+        return __btrc_ret_291;
     }
-    __auto_type __btrc_ret_290 = (n * Math_factorial((n - 1)));
-    return __btrc_ret_290;
+    __auto_type __btrc_ret_292 = (n * Math_factorial((n - 1)));
+    return __btrc_ret_292;
 }
 
 int Math_gcd(int a, int b) {
@@ -10561,16 +10567,16 @@ int Random_randint(Random* self, int lo, int hi) {
     if (!self->seeded) {
         Random_seedTime(self);
     }
-    __auto_type __btrc_ret_329 = (lo + (rand() % ((hi - lo) + 1)));
-    return __btrc_ret_329;
+    __auto_type __btrc_ret_331 = (lo + (rand() % ((hi - lo) + 1)));
+    return __btrc_ret_331;
 }
 
 float Random_random(Random* self) {
     if (!self->seeded) {
         Random_seedTime(self);
     }
-    __auto_type __btrc_ret_330 = __btrc_div_double(((float)rand()), ((float)RAND_MAX));
-    return __btrc_ret_330;
+    __auto_type __btrc_ret_332 = __btrc_div_double(((float)rand()), ((float)RAND_MAX));
+    return __btrc_ret_332;
 }
 
 void Error_init(Error* self, char* message, int code) {
@@ -10584,8 +10590,8 @@ void Error_destroy(Error* self) {
 }
 
 char* Error_toString(Error* self) {
-    __auto_type __btrc_ret_333 = self->message;
-    return __btrc_ret_333;
+    __auto_type __btrc_ret_335 = self->message;
+    return __btrc_ret_335;
 }
 
 void ValueError_init(ValueError* self, char* message) {
@@ -10646,10 +10652,10 @@ void CliArgs_init(CliArgs* self, int argc, char** argv) {
             btrc_Vector_string_free(self->values);
         }
     }
-    btrc_Vector_string* __list_335 = btrc_Vector_string_new();
-    (self->values = __list_335);
-    btrc_Vector_string* __list_334 = btrc_Vector_string_new();
-    (__list_334->__rc++);
+    btrc_Vector_string* __list_337 = btrc_Vector_string_new();
+    (self->values = __list_337);
+    btrc_Vector_string* __list_336 = btrc_Vector_string_new();
+    (__list_336->__rc++);
     for (int i = 1; (i < argc); (i++)) {
         btrc_Vector_string_push(self->values, Strings_copy(argv[i]));
     }
@@ -10675,42 +10681,42 @@ void CliArgs_destroy(CliArgs* self) {
 }
 
 int CliArgs_count(CliArgs* self) {
-    __auto_type __btrc_ret_336 = self->values->len;
-    return __btrc_ret_336;
+    __auto_type __btrc_ret_338 = self->values->len;
+    return __btrc_ret_338;
 }
 
 char* CliArgs_get(CliArgs* self, int index) {
-    __auto_type __btrc_ret_337 = btrc_Vector_string_get(self->values, index);
-    return __btrc_ret_337;
+    __auto_type __btrc_ret_339 = btrc_Vector_string_get(self->values, index);
+    return __btrc_ret_339;
 }
 
 char* CliArgs_command(CliArgs* self) {
     if (self->values->len == 0) {
-        __auto_type __btrc_ret_338 = "";
-        return __btrc_ret_338;
+        __auto_type __btrc_ret_340 = "";
+        return __btrc_ret_340;
     }
-    __auto_type __btrc_ret_339 = btrc_Vector_string_get(self->values, 0);
-    return __btrc_ret_339;
+    __auto_type __btrc_ret_341 = btrc_Vector_string_get(self->values, 0);
+    return __btrc_ret_341;
 }
 
 bool CliArgs_has(CliArgs* self, char* flag) {
-    int __n_341 = btrc_Vector_string_iterLen(self->values);
-    for (int __i_340 = 0; (__i_340 < __n_341); (__i_340++)) {
-        char* value = btrc_Vector_string_iterGet(self->values, __i_340);
+    int __n_343 = btrc_Vector_string_iterLen(self->values);
+    for (int __i_342 = 0; (__i_342 < __n_343); (__i_342++)) {
+        char* value = btrc_Vector_string_iterGet(self->values, __i_342);
         if (strcmp(value, flag) == 0) {
-            __auto_type __btrc_ret_342 = true;
-            return __btrc_ret_342;
+            __auto_type __btrc_ret_344 = true;
+            return __btrc_ret_344;
         }
     }
-    __auto_type __btrc_ret_343 = false;
-    return __btrc_ret_343;
+    __auto_type __btrc_ret_345 = false;
+    return __btrc_ret_345;
 }
 
 char* CliArgs_valueAfter(CliArgs* self, char* flag, char* fallback) {
     for (int i = 0; (i < (self->values->len - 1)); (i++)) {
         if (strcmp(btrc_Vector_string_get(self->values, i), flag) == 0) {
-            __auto_type __btrc_ret_344 = btrc_Vector_string_get(self->values, (i + 1));
-            return __btrc_ret_344;
+            __auto_type __btrc_ret_346 = btrc_Vector_string_get(self->values, (i + 1));
+            return __btrc_ret_346;
         }
     }
     return fallback;
@@ -10724,10 +10730,10 @@ void CliCommand_init(CliCommand* self, char* name) {
             btrc_Vector_string_free(self->aliases);
         }
     }
-    btrc_Vector_string* __list_350 = btrc_Vector_string_new();
-    (self->aliases = __list_350);
-    btrc_Vector_string* __list_349 = btrc_Vector_string_new();
-    (__list_349->__rc++);
+    btrc_Vector_string* __list_352 = btrc_Vector_string_new();
+    (self->aliases = __list_352);
+    btrc_Vector_string* __list_351 = btrc_Vector_string_new();
+    (__list_351->__rc++);
 }
 
 void CliCommand_destroy(CliCommand* self) {
@@ -10751,23 +10757,23 @@ void NixosLog_destroy(NixosLog* self) {
 }
 
 char* NixosLog_gray(void) {
-    __auto_type __btrc_ret_356 = "\033[90m";
-    return __btrc_ret_356;
-}
-
-char* NixosLog_orange(void) {
-    __auto_type __btrc_ret_357 = "\033[38;5;208m";
-    return __btrc_ret_357;
-}
-
-char* NixosLog_red(void) {
-    __auto_type __btrc_ret_358 = "\033[31m";
+    __auto_type __btrc_ret_358 = "\033[90m";
     return __btrc_ret_358;
 }
 
-char* NixosLog_reset(void) {
-    __auto_type __btrc_ret_359 = "\033[0m";
+char* NixosLog_orange(void) {
+    __auto_type __btrc_ret_359 = "\033[38;5;208m";
     return __btrc_ret_359;
+}
+
+char* NixosLog_red(void) {
+    __auto_type __btrc_ret_360 = "\033[31m";
+    return __btrc_ret_360;
+}
+
+char* NixosLog_reset(void) {
+    __auto_type __btrc_ret_361 = "\033[0m";
+    return __btrc_ret_361;
 }
 
 void NixosLog_info(char* message) {
@@ -10800,18 +10806,18 @@ void NixosPaths_destroy(NixosPaths* self) {
 }
 
 char* NixosPaths_configPath(NixosPaths* self) {
-    __auto_type __btrc_ret_360 = PathTools_join(self->root, "config.json");
-    return __btrc_ret_360;
+    __auto_type __btrc_ret_362 = PathTools_join(self->root, "config.json");
+    return __btrc_ret_362;
 }
 
 char* NixosPaths_hostsPath(NixosPaths* self) {
-    __auto_type __btrc_ret_363 = PathTools_join(self->root, "modules/hosts");
-    return __btrc_ret_363;
+    __auto_type __btrc_ret_365 = PathTools_join(self->root, "modules/hosts");
+    return __btrc_ret_365;
 }
 
 char* NixosPaths_secretsPathFallback(NixosPaths* self) {
-    __auto_type __btrc_ret_364 = PathTools_join(self->root, "secrets");
-    return __btrc_ret_364;
+    __auto_type __btrc_ret_366 = PathTools_join(self->root, "secrets");
+    return __btrc_ret_366;
 }
 
 void LocalConfigFile_init(LocalConfigFile* self, char* path) {
@@ -10831,17 +10837,17 @@ void LocalConfigFile_destroy(LocalConfigFile* self) {
 }
 
 bool LocalConfigFile_exists(LocalConfigFile* self) {
-    __auto_type __btrc_ret_365 = FileSystem_exists(self->path);
-    return __btrc_ret_365;
+    __auto_type __btrc_ret_367 = FileSystem_exists(self->path);
+    return __btrc_ret_367;
 }
 
 JsonObject* LocalConfigFile_read(LocalConfigFile* self) {
     if (!LocalConfigFile_exists(self)) {
-        __auto_type __btrc_ret_366 = JsonObject_new();
-        return __btrc_ret_366;
+        __auto_type __btrc_ret_368 = JsonObject_new();
+        return __btrc_ret_368;
     }
-    __auto_type __btrc_ret_367 = JsonObject_readFile(self->path);
-    return __btrc_ret_367;
+    __auto_type __btrc_ret_369 = JsonObject_readFile(self->path);
+    return __btrc_ret_369;
 }
 
 void LocalConfigFile_overwrite(LocalConfigFile* self, JsonObject* data) {
@@ -10853,8 +10859,8 @@ void LocalConfigFile_overwrite(LocalConfigFile* self, JsonObject* data) {
 char* LocalConfigFile_getString(LocalConfigFile* self, char* key, char* fallback) {
     JsonObject* data = LocalConfigFile_read(self);
     char* value = JsonObject_getString(data, key, fallback);
-    __auto_type __btrc_ret_368 = Strings_copy(value);
-    return __btrc_ret_368;
+    __auto_type __btrc_ret_370 = Strings_copy(value);
+    return __btrc_ret_370;
 }
 
 void LocalConfigFile_setString(LocalConfigFile* self, char* key, char* value) {
@@ -10896,32 +10902,32 @@ void Interactive_destroy(Interactive* self) {
 char* Interactive_ask(Interactive* self, char* prompt) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf ", UnixShell_quote(__btrc_str_track(__btrc_strcat(prompt, " "))))), " >&2; IFS= read -r value; printf '%s' \"$value\""));
     ExecResult* result = UnixShell_runRaw(self->shell, command, true, false, "");
-    __auto_type __btrc_ret_369 = ExecResult_stdout(result);
-    return __btrc_ret_369;
+    __auto_type __btrc_ret_371 = ExecResult_stdout(result);
+    return __btrc_ret_371;
 }
 
 bool Interactive_confirm(Interactive* self, char* prompt) {
     while (true) {
         char* response = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_toLower(Interactive_ask(self, __btrc_str_track(__btrc_strcat(prompt, " (y/n):")))))));
         if ((strcmp(response, "y") == 0) || (strcmp(response, "yes") == 0)) {
-            __auto_type __btrc_ret_370 = true;
-            return __btrc_ret_370;
+            __auto_type __btrc_ret_372 = true;
+            return __btrc_ret_372;
         }
         if ((strcmp(response, "n") == 0) || (strcmp(response, "no") == 0)) {
-            __auto_type __btrc_ret_371 = false;
-            return __btrc_ret_371;
+            __auto_type __btrc_ret_373 = false;
+            return __btrc_ret_373;
         }
         Console_error("Invalid input. Enter 'y' or 'n'.");
     }
-    __auto_type __btrc_ret_372 = false;
-    return __btrc_ret_372;
+    __auto_type __btrc_ret_374 = false;
+    return __btrc_ret_374;
 }
 
 char* Interactive_askPassword(Interactive* self, char* prompt) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf ", UnixShell_quote(__btrc_str_track(__btrc_strcat(prompt, ": "))))), " >&2; stty -echo; IFS= read -r value; stty echo; printf '\\n' >&2; printf '%s' \"$value\""));
     ExecResult* result = UnixShell_runRaw(self->shell, command, true, false, "");
-    __auto_type __btrc_ret_373 = ExecResult_stdout(result);
-    return __btrc_ret_373;
+    __auto_type __btrc_ret_375 = ExecResult_stdout(result);
+    return __btrc_ret_375;
 }
 
 char* Interactive_askPasswordConfirmed(Interactive* self, char* prompt) {
@@ -10933,16 +10939,16 @@ char* Interactive_askPasswordConfirmed(Interactive* self, char* prompt) {
         }
         NixosLog_error("Passwords do not match.");
     }
-    __auto_type __btrc_ret_374 = "";
-    return __btrc_ret_374;
+    __auto_type __btrc_ret_376 = "";
+    return __btrc_ret_376;
 }
 
 char* Interactive_askHostPath(Interactive* self, char* hostsPath) {
     ExecResult* found = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("find ", UnixShell_quote(hostsPath))), " -type f -name '*.nix' | sort")));
     btrc_Vector_string* candidates = btrc_Vector_string_new();
-    int __n_376 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(found), "\n"));
-    for (int __i_375 = 0; (__i_375 < __n_376); (__i_375++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(found), "\n"), __i_375);
+    int __n_378 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(found), "\n"));
+    for (int __i_377 = 0; (__i_377 < __n_378); (__i_377++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(found), "\n"), __i_377);
         char* path = __btrc_str_track(__btrc_trim(line));
         if (__btrc_isEmpty(path)) {
             continue;
@@ -10965,13 +10971,13 @@ char* Interactive_askHostPath(Interactive* self, char* hostsPath) {
         }
         int selected = (Strings_toInt(__btrc_str_track(__btrc_trim(Interactive_ask(self, ">")))) - 1);
         if ((selected >= 0) && (selected < candidates->len)) {
-            __auto_type __btrc_ret_377 = btrc_Vector_string_get(candidates, selected);
-            return __btrc_ret_377;
+            __auto_type __btrc_ret_379 = btrc_Vector_string_get(candidates, selected);
+            return __btrc_ret_379;
         }
         NixosLog_error("Invalid choice.");
     }
-    __auto_type __btrc_ret_378 = btrc_Vector_string_get(candidates, 0);
-    return __btrc_ret_378;
+    __auto_type __btrc_ret_380 = btrc_Vector_string_get(candidates, 0);
+    return __btrc_ret_380;
 }
 
 void Interactive_askToReboot(Interactive* self) {
@@ -11012,13 +11018,13 @@ void NixEvalCache_destroy(NixEvalCache* self) {
 }
 
 bool NixEvalCache_has(NixEvalCache* self, char* key) {
-    __auto_type __btrc_ret_379 = btrc_Map_string_string_has(self->values, key);
-    return __btrc_ret_379;
+    __auto_type __btrc_ret_381 = btrc_Map_string_string_has(self->values, key);
+    return __btrc_ret_381;
 }
 
 char* NixEvalCache_get(NixEvalCache* self, char* key) {
-    __auto_type __btrc_ret_380 = btrc_Map_string_string_get(self->values, key);
-    return __btrc_ret_380;
+    __auto_type __btrc_ret_382 = btrc_Map_string_string_get(self->values, key);
+    return __btrc_ret_382;
 }
 
 void NixEvalCache_put(NixEvalCache* self, char* key, char* value) {
@@ -11092,18 +11098,18 @@ void NixosConfig_destroy(NixosConfig* self) {
 }
 
 bool NixosConfig_exists(NixosConfig* self) {
-    __auto_type __btrc_ret_381 = LocalConfigFile_exists(self->local);
-    return __btrc_ret_381;
+    __auto_type __btrc_ret_383 = LocalConfigFile_exists(self->local);
+    return __btrc_ret_383;
 }
 
 char* NixosConfig_hostPath(NixosConfig* self) {
-    __auto_type __btrc_ret_382 = LocalConfigFile_getString(self->local, "host_path", "");
-    return __btrc_ret_382;
+    __auto_type __btrc_ret_384 = LocalConfigFile_getString(self->local, "host_path", "");
+    return __btrc_ret_384;
 }
 
 char* NixosConfig_target(NixosConfig* self) {
-    __auto_type __btrc_ret_383 = LocalConfigFile_getString(self->local, "target", "Standard-Boot");
-    return __btrc_ret_383;
+    __auto_type __btrc_ret_385 = LocalConfigFile_getString(self->local, "target", "Standard-Boot");
+    return __btrc_ret_385;
 }
 
 void NixosConfig_reset(NixosConfig* self, char* hostPath, char* target) {
@@ -11120,55 +11126,55 @@ void NixosConfig_reset(NixosConfig* self, char* hostPath, char* target) {
 
 char* NixosConfig_host(NixosConfig* self) {
     char* base = PathTools_basename(NixosConfig_hostPath(self));
-    __auto_type __btrc_ret_384 = Strings_replace(base, ".nix", "");
-    return __btrc_ret_384;
-}
-
-char* NixosConfig_flakeRef(NixosConfig* self) {
-    __auto_type __btrc_ret_386 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->paths->root, "#")), NixosConfig_host(self))), "-")), NixosConfig_target(self)));
+    __auto_type __btrc_ret_386 = Strings_replace(base, ".nix", "");
     return __btrc_ret_386;
 }
 
+char* NixosConfig_flakeRef(NixosConfig* self) {
+    __auto_type __btrc_ret_388 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->paths->root, "#")), NixosConfig_host(self))), "-")), NixosConfig_target(self)));
+    return __btrc_ret_388;
+}
+
 Command* NixosConfig_nixCmd(NixosConfig* self) {
-    __auto_type __btrc_ret_387 = Command_arg(Command_arg(Command_arg(Command_arg(Command_new("nix"), "--extra-experimental-features"), "nix-command"), "--extra-experimental-features"), "flakes");
-    return __btrc_ret_387;
+    __auto_type __btrc_ret_389 = Command_arg(Command_arg(Command_arg(Command_arg(Command_new("nix"), "--extra-experimental-features"), "nix-command"), "--extra-experimental-features"), "flakes");
+    return __btrc_ret_389;
 }
 
 char* NixosConfig_inputLockedRev(NixosConfig* self, char* inputName) {
     Command* cmd = Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(NixosConfig_nixCmd(self), "flake"), "metadata"), inputName), "--json"), "-I"), self->paths->root);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
-        __auto_type __btrc_ret_388 = "master";
-        return __btrc_ret_388;
+        __auto_type __btrc_ret_390 = "master";
+        return __btrc_ret_390;
     }
     char* json = ExecResult_stdout(result);
     char* marker = "\"rev\":\"";
     int start = Strings_find(json, marker, 0);
     if (start < 0) {
-        __auto_type __btrc_ret_389 = "master";
-        return __btrc_ret_389;
+        __auto_type __btrc_ret_391 = "master";
+        return __btrc_ret_391;
     }
     (start = (start + ((int)strlen(marker))));
     int end = start;
     while ((json[end] != '\0') && (json[end] != '"')) {
         (end++);
     }
-    __auto_type __btrc_ret_390 = JsonObject_slice(json, start, end);
-    return __btrc_ret_390;
+    __auto_type __btrc_ret_392 = JsonObject_slice(json, start, end);
+    return __btrc_ret_392;
 }
 
 char* NixosConfig_evalRaw(NixosConfig* self, char* attribute) {
     char* key = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(NixosConfig_flakeRef(self), ":")), attribute));
     if (NixEvalCache_has(self->cache, key)) {
-        __auto_type __btrc_ret_391 = NixEvalCache_get(self->cache, key);
-        return __btrc_ret_391;
+        __auto_type __btrc_ret_393 = NixEvalCache_get(self->cache, key);
+        return __btrc_ret_393;
     }
     Command* cmd = Command_arg(Command_arg(NixosConfig_nixCmd(self), "eval"), __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->paths->root, "#nixosConfigurations.")), NixosConfig_host(self))), "-")), NixosConfig_target(self))), ".")), attribute)));
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("nix eval failed for ", attribute)));
     }
-    char* value = __btrc_str_track(__btrc_trim(ExecResult_stdout(result)));
+    char* value = ExecResult_trimmed(result);
     (value = Strings_replace(value, "\"", ""));
     NixEvalCache_put(self->cache, key, value);
     return value;
@@ -11176,59 +11182,59 @@ char* NixosConfig_evalRaw(NixosConfig* self, char* attribute) {
 
 bool NixosConfig_evalBool(NixosConfig* self, char* attribute) {
     char* value = NixosConfig_evalRaw(self, attribute);
-    __auto_type __btrc_ret_392 = (strcmp(value, "true") == 0);
-    return __btrc_ret_392;
-}
-
-char* NixosConfig_standardTarget(NixosConfig* self) {
-    __auto_type __btrc_ret_393 = "Standard-Boot";
-    return __btrc_ret_393;
-}
-
-char* NixosConfig_secureBootTarget(NixosConfig* self) {
-    __auto_type __btrc_ret_394 = "Secure-Boot";
+    __auto_type __btrc_ret_394 = (strcmp(value, "true") == 0);
     return __btrc_ret_394;
 }
 
-char* NixosConfig_diskOperationTarget(NixosConfig* self) {
-    __auto_type __btrc_ret_395 = "Disk-Operation";
+char* NixosConfig_standardTarget(NixosConfig* self) {
+    __auto_type __btrc_ret_395 = "Standard-Boot";
     return __btrc_ret_395;
 }
 
-char* NixosConfig_username(NixosConfig* self) {
-    __auto_type __btrc_ret_396 = NixosConfig_evalRaw(self, "config.settings.user.admin.username");
+char* NixosConfig_secureBootTarget(NixosConfig* self) {
+    __auto_type __btrc_ret_396 = "Secure-Boot";
     return __btrc_ret_396;
 }
 
-char* NixosConfig_secretsPath(NixosConfig* self) {
-    __auto_type __btrc_ret_397 = NixosConfig_evalRaw(self, "config.settings.secrets.path");
+char* NixosConfig_diskOperationTarget(NixosConfig* self) {
+    __auto_type __btrc_ret_397 = "Disk-Operation";
     return __btrc_ret_397;
+}
+
+char* NixosConfig_username(NixosConfig* self) {
+    __auto_type __btrc_ret_398 = NixosConfig_evalRaw(self, "config.settings.user.admin.username");
+    return __btrc_ret_398;
+}
+
+char* NixosConfig_secretsPath(NixosConfig* self) {
+    __auto_type __btrc_ret_399 = NixosConfig_evalRaw(self, "config.settings.secrets.path");
+    return __btrc_ret_399;
 }
 
 char* NixosConfig_hashedPasswordPath(NixosConfig* self) {
     char* name = NixosConfig_evalRaw(self, "config.settings.secrets.hashedPasswordFile");
-    __auto_type __btrc_ret_398 = PathTools_join(NixosConfig_secretsPath(self), name);
-    return __btrc_ret_398;
-}
-
-char* NixosConfig_diskDevice(NixosConfig* self) {
-    __auto_type __btrc_ret_399 = NixosConfig_evalRaw(self, "config.settings.disk.device");
-    return __btrc_ret_399;
-}
-
-char* NixosConfig_rootPartLabelPath(NixosConfig* self) {
-    __auto_type __btrc_ret_400 = NixosConfig_evalRaw(self, "config.settings.disk.by.partlabel.root");
+    __auto_type __btrc_ret_400 = PathTools_join(NixosConfig_secretsPath(self), name);
     return __btrc_ret_400;
 }
 
-char* NixosConfig_tpmDevice(NixosConfig* self) {
-    __auto_type __btrc_ret_401 = NixosConfig_evalRaw(self, "config.settings.tpm.device");
+char* NixosConfig_diskDevice(NixosConfig* self) {
+    __auto_type __btrc_ret_401 = NixosConfig_evalRaw(self, "config.settings.disk.device");
     return __btrc_ret_401;
 }
 
-char* NixosConfig_tpmVersionPath(NixosConfig* self) {
-    __auto_type __btrc_ret_402 = NixosConfig_evalRaw(self, "config.settings.tpm.versionPath");
+char* NixosConfig_rootPartLabelPath(NixosConfig* self) {
+    __auto_type __btrc_ret_402 = NixosConfig_evalRaw(self, "config.settings.disk.by.partlabel.root");
     return __btrc_ret_402;
+}
+
+char* NixosConfig_tpmDevice(NixosConfig* self) {
+    __auto_type __btrc_ret_403 = NixosConfig_evalRaw(self, "config.settings.tpm.device");
+    return __btrc_ret_403;
+}
+
+char* NixosConfig_tpmVersionPath(NixosConfig* self) {
+    __auto_type __btrc_ret_404 = NixosConfig_evalRaw(self, "config.settings.tpm.versionPath");
+    return __btrc_ret_404;
 }
 
 void SecretsManager_init(SecretsManager* self, NixosConfig* config) {
@@ -11286,8 +11292,8 @@ void SecretsManager_destroy(SecretsManager* self) {
 }
 
 bool SecretsManager_hasHashedPassword(SecretsManager* self) {
-    __auto_type __btrc_ret_403 = FileSystem_exists(NixosConfig_hashedPasswordPath(self->config));
-    return __btrc_ret_403;
+    __auto_type __btrc_ret_405 = FileSystem_exists(NixosConfig_hashedPasswordPath(self->config));
+    return __btrc_ret_405;
 }
 
 void SecretsManager_writeHashedPassword(SecretsManager* self, char* hashed) {
@@ -11297,15 +11303,15 @@ void SecretsManager_writeHashedPassword(SecretsManager* self, char* hashed) {
 
 bool SecretsManager_needsPassword(SecretsManager* self, char* plainTextPasswordPath) {
     if (!SecretsManager_hasHashedPassword(self)) {
-        __auto_type __btrc_ret_404 = true;
-        return __btrc_ret_404;
+        __auto_type __btrc_ret_406 = true;
+        return __btrc_ret_406;
     }
     if ((!__btrc_isEmpty(plainTextPasswordPath)) && (!FileSystem_exists(plainTextPasswordPath))) {
-        __auto_type __btrc_ret_405 = true;
-        return __btrc_ret_405;
+        __auto_type __btrc_ret_407 = true;
+        return __btrc_ret_407;
     }
-    __auto_type __btrc_ret_406 = false;
-    return __btrc_ret_406;
+    __auto_type __btrc_ret_408 = false;
+    return __btrc_ret_408;
 }
 
 char* SecretsManager_hashPassword(SecretsManager* self, char* password) {
@@ -11318,13 +11324,13 @@ char* SecretsManager_hashPassword(SecretsManager* self, char* password) {
     if (!ExecResult_ok(result)) {
         NixosLog_fatal("mkpasswd failed");
     }
-    __auto_type __btrc_ret_407 = __btrc_str_track(__btrc_trim(ExecResult_stdout(result)));
+    __auto_type __btrc_ret_409 = ExecResult_trimmed(result);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_407;
+    return __btrc_ret_409;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -11398,8 +11404,8 @@ void PermissionsManager_destroy(PermissionsManager* self) {
 }
 
 char* PermissionsManager_ignorePredicate(PermissionsManager* self, char* quotedRoot) {
-    __auto_type __btrc_ret_408 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\\( -path ", UnixShell_quote("*/secrets*"))), " -o -path ")), UnixShell_quote("*/.venv*"))), " -o -path ")), UnixShell_quote("*/.direnv*"))), " \\)"));
-    return __btrc_ret_408;
+    __auto_type __btrc_ret_410 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\\( -path ", UnixShell_quote("*/secrets*"))), " -o -path ")), UnixShell_quote("*/.venv*"))), " -o -path ")), UnixShell_quote("*/.direnv*"))), " \\)"));
+    return __btrc_ret_410;
 }
 
 void PermissionsManager_secureSecretsPath(PermissionsManager* self, char* path) {
@@ -11524,34 +11530,34 @@ char* SnapshotManager_hostPath(SnapshotManager* self, char* path) {
         return path;
     }
     if (strcmp(path, "/") == 0) {
-        __auto_type __btrc_ret_409 = self->rootPrefix;
-        return __btrc_ret_409;
+        __auto_type __btrc_ret_411 = self->rootPrefix;
+        return __btrc_ret_411;
     }
     if (__btrc_startsWith(path, "/")) {
-        __auto_type __btrc_ret_410 = __btrc_str_track(__btrc_strcat(self->rootPrefix, path));
-        return __btrc_ret_410;
+        __auto_type __btrc_ret_412 = __btrc_str_track(__btrc_strcat(self->rootPrefix, path));
+        return __btrc_ret_412;
     }
-    __auto_type __btrc_ret_411 = PathTools_join(self->rootPrefix, path);
-    return __btrc_ret_411;
+    __auto_type __btrc_ret_413 = PathTools_join(self->rootPrefix, path);
+    return __btrc_ret_413;
 }
 
 char* SnapshotManager_snapshotsPath(SnapshotManager* self) {
-    __auto_type __btrc_ret_412 = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.mountPoint");
-    return __btrc_ret_412;
+    __auto_type __btrc_ret_414 = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.mountPoint");
+    return __btrc_ret_414;
 }
 
 char* SnapshotManager_cleanName(SnapshotManager* self) {
-    __auto_type __btrc_ret_413 = NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName");
-    return __btrc_ret_413;
+    __auto_type __btrc_ret_415 = NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName");
+    return __btrc_ret_415;
 }
 
 btrc_Vector_ResetSubvolume* SnapshotManager_resetSubvolumes(SnapshotManager* self) {
     btrc_Vector_ResetSubvolume* result = btrc_Vector_ResetSubvolume_new();
     char* raw = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
     btrc_Vector_string* pairs = Strings_split(raw, " ");
-    int __n_415 = btrc_Vector_string_iterLen(pairs);
-    for (int __i_414 = 0; (__i_414 < __n_415); (__i_414++)) {
-        char* pair = btrc_Vector_string_iterGet(pairs, __i_414);
+    int __n_417 = btrc_Vector_string_iterLen(pairs);
+    for (int __i_416 = 0; (__i_416 < __n_417); (__i_416++)) {
+        char* pair = btrc_Vector_string_iterGet(pairs, __i_416);
         if (__btrc_isEmpty(pair)) {
             continue;
         }
@@ -11564,25 +11570,25 @@ btrc_Vector_ResetSubvolume* SnapshotManager_resetSubvolumes(SnapshotManager* sel
 }
 
 char* SnapshotManager_cleanSnapshotPath(SnapshotManager* self, char* subvolumeName) {
-    __auto_type __btrc_ret_416 = PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self), subvolumeName), SnapshotManager_cleanName(self));
-    return __btrc_ret_416;
+    __auto_type __btrc_ret_418 = PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self), subvolumeName), SnapshotManager_cleanName(self));
+    return __btrc_ret_418;
 }
 
 bool SnapshotManager_isSubvolume(SnapshotManager* self, char* path) {
     if (!FileSystem_exists(path)) {
-        __auto_type __btrc_ret_417 = false;
-        return __btrc_ret_417;
+        __auto_type __btrc_ret_419 = false;
+        return __btrc_ret_419;
     }
     Command* cmd = Command_check(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "subvolume"), "show"), path), false);
-    __auto_type __btrc_ret_418 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
-    return __btrc_ret_418;
+    __auto_type __btrc_ret_420 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
+    return __btrc_ret_420;
 }
 
 bool SnapshotManager_isReadonly(SnapshotManager* self, char* path) {
     Command* cmd = Command_check(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "property"), "get"), "-ts"), path), "ro"), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
-    __auto_type __btrc_ret_419 = (ExecResult_ok(result) && __btrc_strContains(ExecResult_stdout(result), "ro=true"));
-    return __btrc_ret_419;
+    __auto_type __btrc_ret_421 = (ExecResult_ok(result) && __btrc_strContains(ExecResult_stdout(result), "ro=true"));
+    return __btrc_ret_421;
 }
 
 btrc_Vector_string* SnapshotManager_childSubvolumes(SnapshotManager* self, char* path) {
@@ -11594,9 +11600,9 @@ btrc_Vector_string* SnapshotManager_childSubvolumes(SnapshotManager* self, char*
     }
     char* snapshotsName = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.name");
     char* snapshotsMount = SnapshotManager_snapshotsPath(self);
-    int __n_421 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
-    for (int __i_420 = 0; (__i_420 < __n_421); (__i_420++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_420);
+    int __n_423 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
+    for (int __i_422 = 0; (__i_422 < __n_423); (__i_422++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_422);
         int marker = Strings_find(line, " path ", 0);
         if (marker < 0) {
             continue;
@@ -11620,9 +11626,9 @@ void SnapshotManager_deleteSubvolume(SnapshotManager* self, char* path) {
     if (!SnapshotManager_isSubvolume(self, path)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Refusing to delete non-subvolume: ", path)));
     }
-    int __n_423 = btrc_Vector_string_iterLen(SnapshotManager_childSubvolumes(self, path));
-    for (int __i_422 = 0; (__i_422 < __n_423); (__i_422++)) {
-        char* child = btrc_Vector_string_iterGet(SnapshotManager_childSubvolumes(self, path), __i_422);
+    int __n_425 = btrc_Vector_string_iterLen(SnapshotManager_childSubvolumes(self, path));
+    for (int __i_424 = 0; (__i_424 < __n_425); (__i_424++)) {
+        char* child = btrc_Vector_string_iterGet(SnapshotManager_childSubvolumes(self, path), __i_424);
         SnapshotManager_deleteSubvolume(self, child);
     }
     Command* cmd = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "subvolume"), "delete"), "-C"), path), false);
@@ -11673,9 +11679,9 @@ void SnapshotManager_createCleanSnapshot(SnapshotManager* self, ResetSubvolume* 
 
 void SnapshotManager_createInitialSnapshots(SnapshotManager* self) {
     btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self);
-    int __n_425 = btrc_Vector_ResetSubvolume_iterLen(volumes);
-    for (int __i_424 = 0; (__i_424 < __n_425); (__i_424++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_424);
+    int __n_427 = btrc_Vector_ResetSubvolume_iterLen(volumes);
+    for (int __i_426 = 0; (__i_426 < __n_427); (__i_426++)) {
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_426);
         SnapshotManager_createCleanSnapshot(self, volume);
     }
 }
@@ -11757,45 +11763,6 @@ ExecResult* NixosRebuilder_runNixCollectGarbage(NixosRebuilder* self) {
     Command* cmd = Command_new("nix-collect-garbage");
     Command_arg(cmd, "-d");
     Command_capture(cmd, false);
-    __auto_type __btrc_ret_426 = UnixShell_runCommand(self->shell, cmd);
-    if (cmd != NULL) {
-        if ((--cmd->__rc) <= 0) {
-            Command_destroy(cmd);
-        }
-    }
-    return __btrc_ret_426;
-    if (cmd != NULL) {
-        if ((--cmd->__rc) <= 0) {
-            Command_destroy(cmd);
-        }
-    }
-}
-
-ExecResult* NixosRebuilder_verifyStore(NixosRebuilder* self) {
-    Command* cmd = Command_new("nix-store");
-    Command_arg(cmd, "--verify");
-    Command_arg(cmd, "--repair");
-    Command_capture(cmd, false);
-    __auto_type __btrc_ret_427 = UnixShell_runCommand(self->shell, cmd);
-    if (cmd != NULL) {
-        if ((--cmd->__rc) <= 0) {
-            Command_destroy(cmd);
-        }
-    }
-    return __btrc_ret_427;
-    if (cmd != NULL) {
-        if ((--cmd->__rc) <= 0) {
-            Command_destroy(cmd);
-        }
-    }
-}
-
-ExecResult* NixosRebuilder_updateFlake(NixosRebuilder* self) {
-    Command* cmd = Command_new("nix");
-    Command_arg(cmd, "flake");
-    Command_arg(cmd, "update");
-    Command_flag(cmd, "--flake", self->config->paths->root);
-    Command_capture(cmd, false);
     __auto_type __btrc_ret_428 = UnixShell_runCommand(self->shell, cmd);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
@@ -11810,13 +11777,10 @@ ExecResult* NixosRebuilder_updateFlake(NixosRebuilder* self) {
     }
 }
 
-ExecResult* NixosRebuilder_switchSystem(NixosRebuilder* self, RebuildOptions* options) {
-    Command* cmd = Command_new("nixos-rebuild");
-    Command_arg(cmd, "switch");
-    Command_flag(cmd, "--flake", NixosConfig_flakeRef(self->config));
-    if (options->rebuildFileSystem) {
-        Command_envVar(cmd, "NIXOS_INSTALL_BOOTLOADER", "1");
-    }
+ExecResult* NixosRebuilder_verifyStore(NixosRebuilder* self) {
+    Command* cmd = Command_new("nix-store");
+    Command_arg(cmd, "--verify");
+    Command_arg(cmd, "--repair");
     Command_capture(cmd, false);
     __auto_type __btrc_ret_429 = UnixShell_runCommand(self->shell, cmd);
     if (cmd != NULL) {
@@ -11832,13 +11796,55 @@ ExecResult* NixosRebuilder_switchSystem(NixosRebuilder* self, RebuildOptions* op
     }
 }
 
+ExecResult* NixosRebuilder_updateFlake(NixosRebuilder* self) {
+    Command* cmd = Command_new("nix");
+    Command_arg(cmd, "flake");
+    Command_arg(cmd, "update");
+    Command_flag(cmd, "--flake", self->config->paths->root);
+    Command_capture(cmd, false);
+    __auto_type __btrc_ret_430 = UnixShell_runCommand(self->shell, cmd);
+    if (cmd != NULL) {
+        if ((--cmd->__rc) <= 0) {
+            Command_destroy(cmd);
+        }
+    }
+    return __btrc_ret_430;
+    if (cmd != NULL) {
+        if ((--cmd->__rc) <= 0) {
+            Command_destroy(cmd);
+        }
+    }
+}
+
+ExecResult* NixosRebuilder_switchSystem(NixosRebuilder* self, RebuildOptions* options) {
+    Command* cmd = Command_new("nixos-rebuild");
+    Command_arg(cmd, "switch");
+    Command_flag(cmd, "--flake", NixosConfig_flakeRef(self->config));
+    if (options->rebuildFileSystem) {
+        Command_envVar(cmd, "NIXOS_INSTALL_BOOTLOADER", "1");
+    }
+    Command_capture(cmd, false);
+    __auto_type __btrc_ret_431 = UnixShell_runCommand(self->shell, cmd);
+    if (cmd != NULL) {
+        if ((--cmd->__rc) <= 0) {
+            Command_destroy(cmd);
+        }
+    }
+    return __btrc_ret_431;
+    if (cmd != NULL) {
+        if ((--cmd->__rc) <= 0) {
+            Command_destroy(cmd);
+        }
+    }
+}
+
 char* NixosRebuilder_immutabilityDevice(NixosRebuilder* self) {
     if (NixosConfig_evalBool(self->config, "config.settings.disk.encryption.enable")) {
-        __auto_type __btrc_ret_430 = NixosConfig_evalRaw(self->config, "config.settings.disk.by.mapper.root");
-        return __btrc_ret_430;
+        __auto_type __btrc_ret_432 = NixosConfig_evalRaw(self->config, "config.settings.disk.by.mapper.root");
+        return __btrc_ret_432;
     }
-    __auto_type __btrc_ret_431 = NixosConfig_rootPartLabelPath(self->config);
-    return __btrc_ret_431;
+    __auto_type __btrc_ret_433 = NixosConfig_rootPartLabelPath(self->config);
+    return __btrc_ret_433;
 }
 
 void NixosRebuilder_bootstrapConfigIfMissing(NixosRebuilder* self, RebuildOptions* options) {
@@ -11853,19 +11859,19 @@ void NixosRebuilder_bootstrapConfigIfMissing(NixosRebuilder* self, RebuildOption
 
 char* NixosRebuilder_plainTextPasswordPath(NixosRebuilder* self) {
     if (NixosConfig_evalBool(self->config, "config.settings.disk.encryption.enable")) {
-        __auto_type __btrc_ret_432 = NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
-        return __btrc_ret_432;
+        __auto_type __btrc_ret_434 = NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
+        return __btrc_ret_434;
     }
-    __auto_type __btrc_ret_433 = "";
-    return __btrc_ret_433;
+    __auto_type __btrc_ret_435 = "";
+    return __btrc_ret_435;
 }
 
 char* NixosRebuilder_homeManagerLogs(NixosRebuilder* self) {
     ExecResult* result = UnixShell_runUnchecked(self->shell, "journalctl -u 'home-manager-*.service' --no-pager -o cat -q -r");
     btrc_Vector_string* lines = btrc_Vector_string_new();
-    int __n_435 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(result), "\n"));
-    for (int __i_434 = 0; (__i_434 < __n_435); (__i_434++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(result), "\n"), __i_434);
+    int __n_437 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(result), "\n"));
+    for (int __i_436 = 0; (__i_436 < __n_437); (__i_436++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(result), "\n"), __i_436);
         if (strcmp(line, "Starting Home Manager activation") == 0) {
             break;
         }
@@ -11877,8 +11883,8 @@ char* NixosRebuilder_homeManagerLogs(NixosRebuilder* self) {
         }
     }
     btrc_Vector_string_reverse(lines);
-    __auto_type __btrc_ret_436 = __btrc_str_track(__btrc_trim(btrc_Vector_string_join(lines, "\n")));
-    return __btrc_ret_436;
+    __auto_type __btrc_ret_438 = __btrc_str_track(__btrc_trim(btrc_Vector_string_join(lines, "\n")));
+    return __btrc_ret_438;
 }
 
 void NixosRebuilder_refreshImmutableSnapshots(NixosRebuilder* self) {
@@ -11927,22 +11933,22 @@ void NixosRebuilder_refreshImmutableSnapshots(NixosRebuilder* self) {
         SnapshotManager_createInitialSnapshots(snapshots);
     }
     NixosLog_info("Converging semipermeable membrane after update");
-    btrc_Vector_string* __list_437 = btrc_Vector_string_new();
-    btrc_Vector_string_push(__list_437, "/run/current-system/sw/bin/semipermeable_membrane");
-    btrc_Vector_string_push(__list_437, NixosRebuilder_immutabilityDevice(self));
-    btrc_Vector_string_push(__list_437, NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.name"));
-    btrc_Vector_string_push(__list_437, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName"));
-    btrc_Vector_string_push(__list_437, mode);
-    btrc_Vector_string_push(__list_437, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot"));
-    btrc_Vector_string_push(__list_437, "/etc/semipermeable_membrane/spec.tsv");
-    btrc_Vector_string* args = __list_437;
+    btrc_Vector_string* __list_439 = btrc_Vector_string_new();
+    btrc_Vector_string_push(__list_439, "/run/current-system/sw/bin/semipermeable_membrane");
+    btrc_Vector_string_push(__list_439, NixosRebuilder_immutabilityDevice(self));
+    btrc_Vector_string_push(__list_439, NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.name"));
+    btrc_Vector_string_push(__list_439, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName"));
+    btrc_Vector_string_push(__list_439, mode);
+    btrc_Vector_string_push(__list_439, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot"));
+    btrc_Vector_string_push(__list_439, "/etc/semipermeable_membrane/spec.tsv");
+    btrc_Vector_string* args = __list_439;
     if (dryRun) {
         btrc_Vector_string_insert(args, 1, "--dry-run");
     }
     char* pairs = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
-    int __n_439 = btrc_Vector_string_iterLen(Strings_split(pairs, " "));
-    for (int __i_438 = 0; (__i_438 < __n_439); (__i_438++)) {
-        char* pair = btrc_Vector_string_iterGet(Strings_split(pairs, " "), __i_438);
+    int __n_441 = btrc_Vector_string_iterLen(Strings_split(pairs, " "));
+    for (int __i_440 = 0; (__i_440 < __n_441); (__i_440++)) {
+        char* pair = btrc_Vector_string_iterGet(Strings_split(pairs, " "), __i_440);
         if (!__btrc_isEmpty(__btrc_str_track(__btrc_trim(pair)))) {
             btrc_Vector_string_push(args, __btrc_str_track(__btrc_trim(pair)));
         }
@@ -12102,9 +12108,9 @@ btrc_Vector_string* DiffScanner_keepPaths(DiffScanner* self) {
     (raw = Strings_replace(raw, "[", ""));
     (raw = Strings_replace(raw, "]", ""));
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_441 = btrc_Vector_string_iterLen(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "));
-    for (int __i_440 = 0; (__i_440 < __n_441); (__i_440++)) {
-        char* item = btrc_Vector_string_iterGet(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "), __i_440);
+    int __n_443 = btrc_Vector_string_iterLen(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "));
+    for (int __i_442 = 0; (__i_442 < __n_443); (__i_442++)) {
+        char* item = btrc_Vector_string_iterGet(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "), __i_442);
         if (!__btrc_isEmpty(__btrc_str_track(__btrc_trim(item)))) {
             btrc_Vector_string_push(result, __btrc_str_track(__btrc_trim(item)));
         }
@@ -12117,9 +12123,9 @@ btrc_Vector_string* DiffScanner_ignorePatterns(DiffScanner* self, char* path) {
     if (!FileSystem_exists(path)) {
         return patterns;
     }
-    int __n_443 = btrc_Vector_string_iterLen(Strings_split(Path_readAll(path), "\n"));
-    for (int __i_442 = 0; (__i_442 < __n_443); (__i_442++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(Path_readAll(path), "\n"), __i_442);
+    int __n_445 = btrc_Vector_string_iterLen(Strings_split(Path_readAll(path), "\n"));
+    for (int __i_444 = 0; (__i_444 < __n_445); (__i_444++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(Path_readAll(path), "\n"), __i_444);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         if ((!__btrc_isEmpty(trimmed)) && (!__btrc_startsWith(trimmed, "#"))) {
             btrc_Vector_string_push(patterns, trimmed);
@@ -12131,9 +12137,9 @@ btrc_Vector_string* DiffScanner_ignorePatterns(DiffScanner* self, char* path) {
 btrc_Vector_string* DiffScanner_mountPoints(DiffScanner* self) {
     btrc_Vector_string* result = btrc_Vector_string_new();
     btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self->snapshots);
-    int __n_445 = btrc_Vector_ResetSubvolume_iterLen(volumes);
-    for (int __i_444 = 0; (__i_444 < __n_445); (__i_444++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_444);
+    int __n_447 = btrc_Vector_ResetSubvolume_iterLen(volumes);
+    for (int __i_446 = 0; (__i_446 < __n_447); (__i_446++)) {
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_446);
         btrc_Vector_string_push(result, volume->mountPoint);
     }
     return result;
@@ -12142,20 +12148,20 @@ btrc_Vector_string* DiffScanner_mountPoints(DiffScanner* self) {
 btrc_Vector_string* DiffScanner_changedFiles(DiffScanner* self) {
     btrc_Vector_string* result = btrc_Vector_string_new();
     btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self->snapshots);
-    int __n_447 = btrc_Vector_ResetSubvolume_iterLen(volumes);
-    for (int __i_446 = 0; (__i_446 < __n_447); (__i_446++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_446);
+    int __n_449 = btrc_Vector_ResetSubvolume_iterLen(volumes);
+    for (int __i_448 = 0; (__i_448 < __n_449); (__i_448++)) {
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_448);
         char* tmp = PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self->snapshots), volume->name), "tmp");
         char* clean = SnapshotManager_cleanSnapshotPath(self->snapshots, volume->name);
         SnapshotManager_deleteSubvolume(self->snapshots, tmp);
         SnapshotManager_createReadonlySnapshot(self->snapshots, volume->mountPoint, tmp);
         ExecResult* tx = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("echo \"$(sudo btrfs subvolume find-new ", UnixShell_quote(clean))), " 9999999)\" | cut -d' ' -f4")));
-        char* transaction = __btrc_str_track(__btrc_trim(ExecResult_stdout(tx)));
+        char* transaction = ExecResult_trimmed(tx);
         ExecResult* changes = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("btrfs subvolume find-new ", UnixShell_quote(tmp))), " ")), UnixShell_quote(transaction))), " | sed '$d' | cut -f17- -d' ' | sort | uniq")));
         if (ExecResult_ok(changes)) {
-            int __n_449 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(changes), "\n"));
-            for (int __i_448 = 0; (__i_448 < __n_449); (__i_448++)) {
-                char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(changes), "\n"), __i_448);
+            int __n_451 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(changes), "\n"));
+            for (int __i_450 = 0; (__i_450 < __n_451); (__i_450++)) {
+                char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(changes), "\n"), __i_450);
                 if (!__btrc_isEmpty(__btrc_str_track(__btrc_trim(line)))) {
                     char* full = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(volume->mountPoint, "/")), __btrc_str_track(__btrc_trim(line))));
                     btrc_Vector_string_push(result, Strings_replace(full, "//", "/"));
@@ -12168,38 +12174,38 @@ btrc_Vector_string* DiffScanner_changedFiles(DiffScanner* self) {
 }
 
 bool DiffScanner_isPersisted(DiffScanner* self, char* path, btrc_Vector_string* keepPaths) {
-    int __n_451 = btrc_Vector_string_iterLen(keepPaths);
-    for (int __i_450 = 0; (__i_450 < __n_451); (__i_450++)) {
-        char* keepPath = btrc_Vector_string_iterGet(keepPaths, __i_450);
+    int __n_453 = btrc_Vector_string_iterLen(keepPaths);
+    for (int __i_452 = 0; (__i_452 < __n_453); (__i_452++)) {
+        char* keepPath = btrc_Vector_string_iterGet(keepPaths, __i_452);
         if ((strcmp(path, keepPath) == 0) || __btrc_startsWith(path, __btrc_str_track(__btrc_strcat(keepPath, "/")))) {
-            __auto_type __btrc_ret_452 = true;
-            return __btrc_ret_452;
+            __auto_type __btrc_ret_454 = true;
+            return __btrc_ret_454;
         }
     }
-    __auto_type __btrc_ret_453 = false;
-    return __btrc_ret_453;
+    __auto_type __btrc_ret_455 = false;
+    return __btrc_ret_455;
 }
 
 bool DiffScanner_matchesPattern(DiffScanner* self, char* path, char* pattern) {
     if (__btrc_isEmpty(pattern)) {
-        __auto_type __btrc_ret_454 = true;
-        return __btrc_ret_454;
+        __auto_type __btrc_ret_456 = true;
+        return __btrc_ret_456;
     }
-    __auto_type __btrc_ret_455 = Pattern_matches(__btrc_str_track(__btrc_toLower(pattern)), __btrc_str_track(__btrc_toLower(path)));
-    return __btrc_ret_455;
+    __auto_type __btrc_ret_457 = Pattern_matches(__btrc_str_track(__btrc_toLower(pattern)), __btrc_str_track(__btrc_toLower(path)));
+    return __btrc_ret_457;
 }
 
 bool DiffScanner_ignored(DiffScanner* self, char* path, btrc_Vector_string* patterns) {
-    int __n_457 = btrc_Vector_string_iterLen(patterns);
-    for (int __i_456 = 0; (__i_456 < __n_457); (__i_456++)) {
-        char* pattern = btrc_Vector_string_iterGet(patterns, __i_456);
+    int __n_459 = btrc_Vector_string_iterLen(patterns);
+    for (int __i_458 = 0; (__i_458 < __n_459); (__i_458++)) {
+        char* pattern = btrc_Vector_string_iterGet(patterns, __i_458);
         if (Pattern_matches(pattern, path)) {
-            __auto_type __btrc_ret_458 = true;
-            return __btrc_ret_458;
+            __auto_type __btrc_ret_460 = true;
+            return __btrc_ret_460;
         }
     }
-    __auto_type __btrc_ret_459 = false;
-    return __btrc_ret_459;
+    __auto_type __btrc_ret_461 = false;
+    return __btrc_ret_461;
 }
 
 char* DiffScanner_topAncestor(DiffScanner* self, char* path, btrc_Vector_string* keepList, btrc_Vector_string* mounts) {
@@ -12214,9 +12220,9 @@ char* DiffScanner_topAncestor(DiffScanner* self, char* path, btrc_Vector_string*
             continue;
         }
         bool coversKeep = false;
-        int __n_461 = btrc_Vector_string_iterLen(keepList);
-        for (int __i_460 = 0; (__i_460 < __n_461); (__i_460++)) {
-            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_460);
+        int __n_463 = btrc_Vector_string_iterLen(keepList);
+        for (int __i_462 = 0; (__i_462 < __n_463); (__i_462++)) {
+            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_462);
             if (__btrc_startsWith(keepPath, __btrc_str_track(__btrc_strcat(ancestor, "/")))) {
                 (coversKeep = true);
             }
@@ -12231,9 +12237,9 @@ char* DiffScanner_topAncestor(DiffScanner* self, char* path, btrc_Vector_string*
 
 btrc_Vector_string* DiffScanner_collapse(DiffScanner* self, btrc_Vector_string* paths, btrc_Vector_string* keepList, btrc_Vector_string* mounts) {
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_463 = btrc_Vector_string_iterLen(paths);
-    for (int __i_462 = 0; (__i_462 < __n_463); (__i_462++)) {
-        char* path = btrc_Vector_string_iterGet(paths, __i_462);
+    int __n_465 = btrc_Vector_string_iterLen(paths);
+    for (int __i_464 = 0; (__i_464 < __n_465); (__i_464++)) {
+        char* path = btrc_Vector_string_iterGet(paths, __i_464);
         btrc_Vector_string_push(result, DiffScanner_topAncestor(self, path, keepList, mounts));
     }
     btrc_Vector_string* distinct = btrc_Vector_string_distinct(result);
@@ -12243,12 +12249,12 @@ btrc_Vector_string* DiffScanner_collapse(DiffScanner* self, btrc_Vector_string* 
 
 btrc_Vector_string* DiffScanner_collapseToPersist(DiffScanner* self, btrc_Vector_string* persisted, btrc_Vector_string* keepList) {
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_465 = btrc_Vector_string_iterLen(persisted);
-    for (int __i_464 = 0; (__i_464 < __n_465); (__i_464++)) {
-        char* path = btrc_Vector_string_iterGet(persisted, __i_464);
-        int __n_467 = btrc_Vector_string_iterLen(keepList);
-        for (int __i_466 = 0; (__i_466 < __n_467); (__i_466++)) {
-            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_466);
+    int __n_467 = btrc_Vector_string_iterLen(persisted);
+    for (int __i_466 = 0; (__i_466 < __n_467); (__i_466++)) {
+        char* path = btrc_Vector_string_iterGet(persisted, __i_466);
+        int __n_469 = btrc_Vector_string_iterLen(keepList);
+        for (int __i_468 = 0; (__i_468 < __n_469); (__i_468++)) {
+            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_468);
             if ((strcmp(path, keepPath) == 0) || __btrc_startsWith(path, __btrc_str_track(__btrc_strcat(keepPath, "/")))) {
                 btrc_Vector_string_push(result, keepPath);
                 break;
@@ -12265,13 +12271,13 @@ btrc_Vector_string* DiffScanner_atDepth(DiffScanner* self, btrc_Vector_string* b
         return bases;
     }
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_469 = btrc_Vector_string_iterLen(bases);
-    for (int __i_468 = 0; (__i_468 < __n_469); (__i_468++)) {
-        char* base = btrc_Vector_string_iterGet(bases, __i_468);
+    int __n_471 = btrc_Vector_string_iterLen(bases);
+    for (int __i_470 = 0; (__i_470 < __n_471); (__i_470++)) {
+        char* base = btrc_Vector_string_iterGet(bases, __i_470);
         char* prefix = __btrc_str_track(__btrc_strcat(base, "/"));
-        int __n_471 = btrc_Vector_string_iterLen(source);
-        for (int __i_470 = 0; (__i_470 < __n_471); (__i_470++)) {
-            char* path = btrc_Vector_string_iterGet(source, __i_470);
+        int __n_473 = btrc_Vector_string_iterLen(source);
+        for (int __i_472 = 0; (__i_472 < __n_473); (__i_472++)) {
+            char* path = btrc_Vector_string_iterGet(source, __i_472);
             if (!__btrc_startsWith(path, prefix)) {
                 continue;
             }
@@ -12302,9 +12308,9 @@ btrc_Vector_string* DiffScanner_filterPattern(DiffScanner* self, btrc_Vector_str
         return input;
     }
     btrc_Vector_string* output = btrc_Vector_string_new();
-    int __n_473 = btrc_Vector_string_iterLen(input);
-    for (int __i_472 = 0; (__i_472 < __n_473); (__i_472++)) {
-        char* path = btrc_Vector_string_iterGet(input, __i_472);
+    int __n_475 = btrc_Vector_string_iterLen(input);
+    for (int __i_474 = 0; (__i_474 < __n_475); (__i_474++)) {
+        char* path = btrc_Vector_string_iterGet(input, __i_474);
         if (DiffScanner_matchesPattern(self, path, pattern)) {
             btrc_Vector_string_push(output, path);
         }
@@ -12318,9 +12324,9 @@ btrc_Vector_string* DiffScanner_previousCache(DiffScanner* self, char* cachePath
         return result;
     }
     JsonObject* data = JsonObject_readFile(cachePath);
-    int __n_475 = btrc_Vector_string_iterLen(btrc_Map_string_string_keys(data->values));
-    for (int __i_474 = 0; (__i_474 < __n_475); (__i_474++)) {
-        char* key = btrc_Vector_string_iterGet(btrc_Map_string_string_keys(data->values), __i_474);
+    int __n_477 = btrc_Vector_string_iterLen(btrc_Map_string_string_keys(data->values));
+    for (int __i_476 = 0; (__i_476 < __n_477); (__i_476++)) {
+        char* key = btrc_Vector_string_iterGet(btrc_Map_string_string_keys(data->values), __i_476);
         btrc_Vector_string_push(result, key);
     }
     return result;
@@ -12328,9 +12334,9 @@ btrc_Vector_string* DiffScanner_previousCache(DiffScanner* self, char* cachePath
 
 void DiffScanner_writeCache(DiffScanner* self, char* cachePath, btrc_Vector_string* paths) {
     JsonObject* data = JsonObject_new();
-    int __n_477 = btrc_Vector_string_iterLen(paths);
-    for (int __i_476 = 0; (__i_476 < __n_477); (__i_476++)) {
-        char* path = btrc_Vector_string_iterGet(paths, __i_476);
+    int __n_479 = btrc_Vector_string_iterLen(paths);
+    for (int __i_478 = 0; (__i_478 < __n_479); (__i_478++)) {
+        char* path = btrc_Vector_string_iterGet(paths, __i_478);
         JsonObject_setBool(data, path, true);
     }
     FileSystem_mkdirp(PathTools_dirname(cachePath));
@@ -12350,9 +12356,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
     btrc_Vector_string* ephemeral = btrc_Vector_string_new();
     btrc_Vector_string* persistedPaths = btrc_Vector_string_new();
     btrc_Vector_string* changed = DiffScanner_changedFiles(self);
-    int __n_479 = btrc_Vector_string_iterLen(changed);
-    for (int __i_478 = 0; (__i_478 < __n_479); (__i_478++)) {
-        char* path = btrc_Vector_string_iterGet(changed, __i_478);
+    int __n_481 = btrc_Vector_string_iterLen(changed);
+    for (int __i_480 = 0; (__i_480 < __n_481); (__i_480++)) {
+        char* path = btrc_Vector_string_iterGet(changed, __i_480);
         if (DiffScanner_isPersisted(self, path, keepList)) {
             btrc_Vector_string_push(persistedPaths, path);
             continue;
@@ -12372,9 +12378,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
         DiffScanner_writeCache(self, cachePath, top);
         if (options->recent) {
             btrc_Vector_string* recent = btrc_Vector_string_new();
-            int __n_481 = btrc_Vector_string_iterLen(top);
-            for (int __i_480 = 0; (__i_480 < __n_481); (__i_480++)) {
-                char* path = btrc_Vector_string_iterGet(top, __i_480);
+            int __n_483 = btrc_Vector_string_iterLen(top);
+            for (int __i_482 = 0; (__i_482 < __n_483); (__i_482++)) {
+                char* path = btrc_Vector_string_iterGet(top, __i_482);
                 if (!btrc_Vector_string_contains(previous, path)) {
                     btrc_Vector_string_push(recent, path);
                 }
@@ -12383,9 +12389,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
         }
         if (!options->showSymlinks) {
             btrc_Vector_string* filtered = btrc_Vector_string_new();
-            int __n_483 = btrc_Vector_string_iterLen(top);
-            for (int __i_482 = 0; (__i_482 < __n_483); (__i_482++)) {
-                char* path = btrc_Vector_string_iterGet(top, __i_482);
+            int __n_485 = btrc_Vector_string_iterLen(top);
+            for (int __i_484 = 0; (__i_484 < __n_485); (__i_484++)) {
+                char* path = btrc_Vector_string_iterGet(top, __i_484);
                 if (!FileSystem_isSymlink(path)) {
                     btrc_Vector_string_push(filtered, path);
                 }
@@ -12394,9 +12400,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
         }
         if (!__btrc_isEmpty(options->showChildren)) {
             bool covers = false;
-            int __n_485 = btrc_Vector_string_iterLen(top);
-            for (int __i_484 = 0; (__i_484 < __n_485); (__i_484++)) {
-                char* path = btrc_Vector_string_iterGet(top, __i_484);
+            int __n_487 = btrc_Vector_string_iterLen(top);
+            for (int __i_486 = 0; (__i_486 < __n_487); (__i_486++)) {
+                char* path = btrc_Vector_string_iterGet(top, __i_486);
                 if (((strcmp(path, options->showChildren) == 0) || __btrc_startsWith(options->showChildren, __btrc_str_track(__btrc_strcat(path, "/")))) || __btrc_startsWith(path, __btrc_str_track(__btrc_strcat(options->showChildren, "/")))) {
                     (covers = true);
                 }
@@ -12419,9 +12425,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
     } else {
         NixosLog_error("\nCHANGES TO DELETE:");
     }
-    int __n_487 = btrc_Vector_string_iterLen(output);
-    for (int __i_486 = 0; (__i_486 < __n_487); (__i_486++)) {
-        char* path = btrc_Vector_string_iterGet(output, __i_486);
+    int __n_489 = btrc_Vector_string_iterLen(output);
+    for (int __i_488 = 0; (__i_488 < __n_489); (__i_488++)) {
+        char* path = btrc_Vector_string_iterGet(output, __i_488);
         Console_error(path);
     }
 }
@@ -12487,18 +12493,18 @@ ExecResult* Installer_runDisko(Installer* self, char* mode, char* extraArgs) {
         (rev = "master");
     }
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("nix --extra-experimental-features nix-command --extra-experimental-features flakes run ", "github:nix-community/disko/")), rev)), " --verbose -- --show-trace --flake ")), UnixShell_quote(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->config->paths->root, "#")), NixosConfig_host(self->config))), "-")), NixosConfig_diskOperationTarget(self->config)))))), " --mode ")), UnixShell_quote(mode))), " --root-mountpoint ")), UnixShell_quote(self->mountPoint))), " ")), extraArgs));
-    __auto_type __btrc_ret_488 = UnixShell_runRaw(self->shell, command, false, true, "");
-    return __btrc_ret_488;
+    __auto_type __btrc_ret_490 = UnixShell_runRaw(self->shell, command, false, true, "");
+    return __btrc_ret_490;
 }
 
 ExecResult* Installer_mountDisk(Installer* self) {
-    __auto_type __btrc_ret_489 = Installer_runDisko(self, "mount", "");
-    return __btrc_ret_489;
+    __auto_type __btrc_ret_491 = Installer_runDisko(self, "mount", "");
+    return __btrc_ret_491;
 }
 
 ExecResult* Installer_eraseAndMountDisk(Installer* self) {
-    __auto_type __btrc_ret_490 = Installer_runDisko(self, "destroy,format,mount", "--yes-wipe-all-disks");
-    return __btrc_ret_490;
+    __auto_type __btrc_ret_492 = Installer_runDisko(self, "destroy,format,mount", "--yes-wipe-all-disks");
+    return __btrc_ret_492;
 }
 
 ExecResult* Installer_installNixos(Installer* self) {
@@ -12570,11 +12576,11 @@ void Installer_permissionNixos(Installer* self) {
 
 char* Installer_plainTextPasswordPath(Installer* self) {
     if (NixosConfig_evalBool(self->config, "config.settings.disk.encryption.enable")) {
-        __auto_type __btrc_ret_491 = NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
-        return __btrc_ret_491;
+        __auto_type __btrc_ret_493 = NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
+        return __btrc_ret_493;
     }
-    __auto_type __btrc_ret_492 = "";
-    return __btrc_ret_492;
+    __auto_type __btrc_ret_494 = "";
+    return __btrc_ret_494;
 }
 
 void Installer_bootstrapConfigIfMissing(Installer* self) {
@@ -12755,7 +12761,7 @@ btrc_Vector_string* SecureBootManager_unsignedFromJson(SecureBootManager* self, 
 void SecureBootManager_verify(SecureBootManager* self) {
     Command* verify = Command_check(Command_arg(Command_arg(Command_new("sbctl"), "verify"), "--json"), false);
     ExecResult* result = UnixShell_runCommand(self->shell, verify);
-    char* output = __btrc_str_track(__btrc_trim(ExecResult_stdout(result)));
+    char* output = ExecResult_trimmed(result);
     if (__btrc_isEmpty(output) || (strcmp(output, "null") == 0)) {
         NixosLog_error("No EFI binaries registered");
         return;
@@ -12765,9 +12771,9 @@ void SecureBootManager_verify(SecureBootManager* self) {
         NixosLog_info("All EFI binaries are signed");
         return;
     }
-    int __n_496 = btrc_Vector_string_iterLen(unsignedPaths);
-    for (int __i_495 = 0; (__i_495 < __n_496); (__i_495++)) {
-        char* path = btrc_Vector_string_iterGet(unsignedPaths, __i_495);
+    int __n_498 = btrc_Vector_string_iterLen(unsignedPaths);
+    for (int __i_497 = 0; (__i_497 < __n_498); (__i_497++)) {
+        char* path = btrc_Vector_string_iterGet(unsignedPaths, __i_497);
         NixosLog_error(__btrc_str_track(__btrc_strcat("NOT signed: ", path)));
     }
 }
@@ -12853,12 +12859,12 @@ void Tpm2Manager_destroy(Tpm2Manager* self) {
 
 bool Tpm2Manager_exists(Tpm2Manager* self) {
     if (!FileSystem_exists(NixosConfig_tpmDevice(self->config))) {
-        __auto_type __btrc_ret_497 = false;
-        return __btrc_ret_497;
+        __auto_type __btrc_ret_499 = false;
+        return __btrc_ret_499;
     }
     char* version = __btrc_str_track(__btrc_trim(Path_readAll(NixosConfig_tpmVersionPath(self->config))));
-    __auto_type __btrc_ret_498 = (strcmp(version, "2") == 0);
-    return __btrc_ret_498;
+    __auto_type __btrc_ret_500 = (strcmp(version, "2") == 0);
+    return __btrc_ret_500;
 }
 
 bool Tpm2Manager_diskEncrypted(Tpm2Manager* self) {
@@ -12867,13 +12873,13 @@ bool Tpm2Manager_diskEncrypted(Tpm2Manager* self) {
     Command_arg(cmd, NixosConfig_rootPartLabelPath(self->config));
     Command_check(cmd, false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
-    __auto_type __btrc_ret_499 = ExecResult_ok(result);
+    __auto_type __btrc_ret_501 = ExecResult_ok(result);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_499;
+    return __btrc_ret_501;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12889,13 +12895,13 @@ bool Tpm2Manager_enroll(Tpm2Manager* self) {
     Command_arg(cmd, "--tpm2-pcrs=7+12");
     Command_capture(cmd, false);
     Command_check(cmd, false);
-    __auto_type __btrc_ret_500 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
+    __auto_type __btrc_ret_502 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_500;
+    return __btrc_ret_502;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12909,13 +12915,13 @@ bool Tpm2Manager_wipe(Tpm2Manager* self) {
     Command_arg(cmd, "--wipe-slot=tpm2");
     Command_capture(cmd, false);
     Command_check(cmd, false);
-    __auto_type __btrc_ret_501 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
+    __auto_type __btrc_ret_503 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_501;
+    return __btrc_ret_503;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12988,8 +12994,8 @@ void PasswordManager_destroy(PasswordManager* self) {
 bool PasswordManager_changeLuksPassword(PasswordManager* self, char* oldPassword, char* newPassword) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf '%s\\n%s' ", UnixShell_quote(oldPassword))), " ")), UnixShell_quote(newPassword))), " | cryptsetup luksChangeKey ")), UnixShell_quote(NixosConfig_rootPartLabelPath(self->config))));
     ExecResult* result = UnixShell_runRaw(self->shell, command, false, false, oldPassword);
-    __auto_type __btrc_ret_502 = ExecResult_ok(result);
-    return __btrc_ret_502;
+    __auto_type __btrc_ret_504 = ExecResult_ok(result);
+    return __btrc_ret_504;
 }
 
 void PasswordManager_fallbackChangeUserPassword(PasswordManager* self, char* user, char* password) {
@@ -13109,9 +13115,9 @@ void LabelsConfig_destroy(LabelsConfig* self) {
 
 char* LabelsConfig_displayLabel(LabelsConfig* self, char* name) {
     bool inDisplays = false;
-    int __n_504 = btrc_Vector_string_iterLen(Strings_split(self->content, "\n"));
-    for (int __i_503 = 0; (__i_503 < __n_504); (__i_503++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(self->content, "\n"), __i_503);
+    int __n_506 = btrc_Vector_string_iterLen(Strings_split(self->content, "\n"));
+    for (int __i_505 = 0; (__i_505 < __n_506); (__i_505++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(self->content, "\n"), __i_505);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         char* section = Toml_sectionName(trimmed);
         if (strcmp(section, "displays") == 0) {
@@ -13122,8 +13128,8 @@ char* LabelsConfig_displayLabel(LabelsConfig* self, char* name) {
             (inDisplays = false);
         }
         if (inDisplays && (strcmp(Toml_key(trimmed), name) == 0)) {
-            __auto_type __btrc_ret_505 = Toml_value(trimmed);
-            return __btrc_ret_505;
+            __auto_type __btrc_ret_507 = Toml_value(trimmed);
+            return __btrc_ret_507;
         }
     }
     return name;
@@ -13133,9 +13139,9 @@ btrc_Vector_DisplayLayoutRule* LabelsConfig_layoutRules(LabelsConfig* self) {
     btrc_Vector_DisplayLayoutRule* result = btrc_Vector_DisplayLayoutRule_new();
     DisplayLayoutRule* current = DisplayLayoutRule_new();
     bool inLayout = false;
-    int __n_507 = btrc_Vector_string_iterLen(Strings_split(self->content, "\n"));
-    for (int __i_506 = 0; (__i_506 < __n_507); (__i_506++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(self->content, "\n"), __i_506);
+    int __n_509 = btrc_Vector_string_iterLen(Strings_split(self->content, "\n"));
+    for (int __i_508 = 0; (__i_508 < __n_509); (__i_508++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(self->content, "\n"), __i_508);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         char* table = Toml_tableArrayName(trimmed);
         if (strcmp(table, "layout") == 0) {
@@ -13187,9 +13193,9 @@ btrc_Vector_AudioPreset* LabelsConfig_audioPresets(LabelsConfig* self) {
     btrc_Vector_AudioPreset* result = btrc_Vector_AudioPreset_new();
     AudioPreset* current = AudioPreset_new();
     bool inAudio = false;
-    int __n_509 = btrc_Vector_string_iterLen(Strings_split(self->content, "\n"));
-    for (int __i_508 = 0; (__i_508 < __n_509); (__i_508++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(self->content, "\n"), __i_508);
+    int __n_511 = btrc_Vector_string_iterLen(Strings_split(self->content, "\n"));
+    for (int __i_510 = 0; (__i_510 < __n_511); (__i_510++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(self->content, "\n"), __i_510);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         char* table = Toml_tableArrayName(trimmed);
         if (strcmp(table, "audio") == 0) {
@@ -13304,34 +13310,34 @@ void AudioManager_destroy(AudioManager* self) {
 
 char* AudioManager_current(AudioManager* self) {
     ExecResult* result = UnixShell_runUnchecked(self->shell, "pactl get-default-sink");
-    __auto_type __btrc_ret_510 = __btrc_str_track(__btrc_trim(ExecResult_stdout(result)));
-    return __btrc_ret_510;
+    __auto_type __btrc_ret_512 = ExecResult_trimmed(result);
+    return __btrc_ret_512;
 }
 
 char* AudioManager_jsonStringValue(AudioManager* self, char* line, char* key) {
     char* marker = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", key)), "\""));
     int pos = Strings_find(line, marker, 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_511 = "";
-        return __btrc_ret_511;
+        __auto_type __btrc_ret_513 = "";
+        return __btrc_ret_513;
     }
     int colon = Strings_find(line, ":", pos);
     if (colon < 0) {
-        __auto_type __btrc_ret_512 = "";
-        return __btrc_ret_512;
+        __auto_type __btrc_ret_514 = "";
+        return __btrc_ret_514;
     }
     int quote = Strings_find(line, "\"", (colon + 1));
     if (quote < 0) {
-        __auto_type __btrc_ret_513 = "";
-        return __btrc_ret_513;
+        __auto_type __btrc_ret_515 = "";
+        return __btrc_ret_515;
     }
     int end = (quote + 1);
     bool escaped = false;
     while (end < ((int)strlen(line))) {
         char c = line[end];
         if ((!escaped) && (c == ((char)34))) {
-            __auto_type __btrc_ret_514 = JsonObject_slice(line, (quote + 1), end);
-            return __btrc_ret_514;
+            __auto_type __btrc_ret_516 = JsonObject_slice(line, (quote + 1), end);
+            return __btrc_ret_516;
         }
         (escaped = ((!escaped) && (c == '\\')));
         if (c != '\\') {
@@ -13339,17 +13345,17 @@ char* AudioManager_jsonStringValue(AudioManager* self, char* line, char* key) {
         }
         (end++);
     }
-    __auto_type __btrc_ret_515 = "";
-    return __btrc_ret_515;
+    __auto_type __btrc_ret_517 = "";
+    return __btrc_ret_517;
 }
 
 btrc_Vector_AudioSink* AudioManager_sinks(AudioManager* self) {
     btrc_Vector_AudioSink* result = btrc_Vector_AudioSink_new();
     ExecResult* listed = UnixShell_runUnchecked(self->shell, "pactl -f json list sinks");
     AudioSink* current = AudioSink_new();
-    int __n_517 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
-    for (int __i_516 = 0; (__i_516 < __n_517); (__i_516++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_516);
+    int __n_519 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
+    for (int __i_518 = 0; (__i_518 < __n_519); (__i_518++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_518);
         char* name = AudioManager_jsonStringValue(self, line, "name");
         if (!__btrc_isEmpty(name)) {
             if (!__btrc_isEmpty(current->name)) {
@@ -13407,9 +13413,9 @@ void AudioManager_list(AudioManager* self) {
     btrc_Vector_string* entries = btrc_Vector_string_new();
     btrc_Vector_string* covered = btrc_Vector_string_new();
     btrc_Vector_AudioPreset* presets = LabelsConfig_audioPresets(self->labels);
-    int __n_519 = btrc_Vector_AudioPreset_iterLen(presets);
-    for (int __i_518 = 0; (__i_518 < __n_519); (__i_518++)) {
-        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_518);
+    int __n_521 = btrc_Vector_AudioPreset_iterLen(presets);
+    for (int __i_520 = 0; (__i_520 < __n_521); (__i_520++)) {
+        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_520);
         char* name = (__btrc_isEmpty(preset->sink) ? preset->label : preset->sink);
         char* label = (__btrc_isEmpty(preset->label) ? name : preset->label);
         btrc_Vector_string_push(entries, AudioManager_entryJson(self, name, label, "", ((!__btrc_isEmpty(preset->sink)) && (strcmp(preset->sink, currentSink) == 0))));
@@ -13418,9 +13424,9 @@ void AudioManager_list(AudioManager* self) {
         }
     }
     btrc_Vector_AudioSink* allSinks = AudioManager_sinks(self);
-    int __n_521 = btrc_Vector_AudioSink_iterLen(allSinks);
-    for (int __i_520 = 0; (__i_520 < __n_521); (__i_520++)) {
-        AudioSink* sink = btrc_Vector_AudioSink_iterGet(allSinks, __i_520);
+    int __n_523 = btrc_Vector_AudioSink_iterLen(allSinks);
+    for (int __i_522 = 0; (__i_522 < __n_523); (__i_522++)) {
+        AudioSink* sink = btrc_Vector_AudioSink_iterGet(allSinks, __i_522);
         if (!btrc_Vector_string_contains(covered, sink->name)) {
             char* label = (__btrc_isEmpty(sink->description) ? sink->name : sink->description);
             btrc_Vector_string_push(entries, AudioManager_entryJson(self, sink->name, label, sink->description, (strcmp(sink->name, currentSink) == 0)));
@@ -13431,15 +13437,15 @@ void AudioManager_list(AudioManager* self) {
 
 AudioPreset* AudioManager_findPreset(AudioManager* self, char* selector) {
     btrc_Vector_AudioPreset* presets = LabelsConfig_audioPresets(self->labels);
-    int __n_523 = btrc_Vector_AudioPreset_iterLen(presets);
-    for (int __i_522 = 0; (__i_522 < __n_523); (__i_522++)) {
-        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_522);
+    int __n_525 = btrc_Vector_AudioPreset_iterLen(presets);
+    for (int __i_524 = 0; (__i_524 < __n_525); (__i_524++)) {
+        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_524);
         if ((strcmp(selector, preset->label) == 0) || (strcmp(selector, preset->sink) == 0)) {
             return preset;
         }
     }
-    __auto_type __btrc_ret_524 = AudioPreset_new();
-    return __btrc_ret_524;
+    __auto_type __btrc_ret_526 = AudioPreset_new();
+    return __btrc_ret_526;
 }
 
 void AudioManager_applyPreset(AudioManager* self, AudioPreset* preset) {
@@ -13501,27 +13507,27 @@ void CaffeineManager_destroy(CaffeineManager* self) {
 
 int CaffeineManager_pid(CaffeineManager* self) {
     if (!FileSystem_exists(self->pidFile)) {
-        __auto_type __btrc_ret_525 = 0;
-        return __btrc_ret_525;
+        __auto_type __btrc_ret_527 = 0;
+        return __btrc_ret_527;
     }
     int existing = Strings_toInt(__btrc_str_track(__btrc_trim(Path_readAll(self->pidFile))));
     if (existing <= 0) {
         FileSystem_removeRecursive(self->pidFile);
-        __auto_type __btrc_ret_526 = 0;
-        return __btrc_ret_526;
+        __auto_type __btrc_ret_528 = 0;
+        return __btrc_ret_528;
     }
     ExecResult* alive = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat("kill -0 ", Strings_fromInt(existing))));
     if (!ExecResult_ok(alive)) {
         FileSystem_removeRecursive(self->pidFile);
-        __auto_type __btrc_ret_527 = 0;
-        return __btrc_ret_527;
+        __auto_type __btrc_ret_529 = 0;
+        return __btrc_ret_529;
     }
     return existing;
 }
 
 bool CaffeineManager_enabled(CaffeineManager* self) {
-    __auto_type __btrc_ret_528 = (CaffeineManager_pid(self) > 0);
-    return __btrc_ret_528;
+    __auto_type __btrc_ret_530 = (CaffeineManager_pid(self) > 0);
+    return __btrc_ret_530;
 }
 
 void CaffeineManager_enable(CaffeineManager* self) {
@@ -13640,29 +13646,29 @@ void DisplayManager_destroy(DisplayManager* self) {
 
 char* DisplayManager_kscreen(DisplayManager* self) {
     ExecResult* result = UnixShell_runUnchecked(self->shell, "kscreen-doctor -o | sed -E 's/\\x1b\\[[0-9;]*m//g'");
-    __auto_type __btrc_ret_529 = ExecResult_stdout(result);
-    return __btrc_ret_529;
+    __auto_type __btrc_ret_531 = ExecResult_stdout(result);
+    return __btrc_ret_531;
 }
 
 bool DisplayManager_drmConnected(DisplayManager* self, char* name) {
     char* status = PathTools_join(PathTools_join("/sys/class/drm", __btrc_str_track(__btrc_strcat("card*-", name))), "status");
     ExecResult* result = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cat ", status)), " 2>/dev/null | head -n 1")));
-    __auto_type __btrc_ret_530 = (strcmp(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))), "connected") == 0);
-    return __btrc_ret_530;
+    __auto_type __btrc_ret_532 = (strcmp(ExecResult_trimmed(result), "connected") == 0);
+    return __btrc_ret_532;
 }
 
 char* DisplayManager_lineValue(DisplayManager* self, char* block, char* prefix) {
-    int __n_532 = btrc_Vector_string_iterLen(Strings_split(block, "\n"));
-    for (int __i_531 = 0; (__i_531 < __n_532); (__i_531++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(block, "\n"), __i_531);
+    int __n_534 = btrc_Vector_string_iterLen(Strings_split(block, "\n"));
+    for (int __i_533 = 0; (__i_533 < __n_534); (__i_533++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(block, "\n"), __i_533);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         if (__btrc_startsWith(trimmed, prefix)) {
-            __auto_type __btrc_ret_533 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(trimmed, ((int)strlen(prefix)), (((int)strlen(trimmed)) - ((int)strlen(prefix)))))));
-            return __btrc_ret_533;
+            __auto_type __btrc_ret_535 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(trimmed, ((int)strlen(prefix)), (((int)strlen(trimmed)) - ((int)strlen(prefix)))))));
+            return __btrc_ret_535;
         }
     }
-    __auto_type __btrc_ret_534 = "";
-    return __btrc_ret_534;
+    __auto_type __btrc_ret_536 = "";
+    return __btrc_ret_536;
 }
 
 DisplayOutput* DisplayManager_parseBlock(DisplayManager* self, char* block) {
@@ -13684,25 +13690,25 @@ DisplayOutput* DisplayManager_parseBlock(DisplayManager* self, char* block) {
     if (!__btrc_isEmpty(priority)) {
         (output->priority = Strings_toInt(priority));
     }
-    btrc_Vector_string* __list_535 = btrc_Vector_string_new();
-    btrc_Vector_string_push(__list_535, "HDMI");
-    btrc_Vector_string_push(__list_535, "DisplayPort");
-    btrc_Vector_string_push(__list_535, "VGA");
-    btrc_Vector_string_push(__list_535, "DVI");
-    btrc_Vector_string_push(__list_535, "Panel");
-    btrc_Vector_string_push(__list_535, "TV");
-    btrc_Vector_string_push(__list_535, "Unknown");
-    int __n_537 = btrc_Vector_string_iterLen(__list_535);
-    for (int __i_536 = 0; (__i_536 < __n_537); (__i_536++)) {
-        btrc_Vector_string* __list_535 = btrc_Vector_string_new();
-        btrc_Vector_string_push(__list_535, "HDMI");
-        btrc_Vector_string_push(__list_535, "DisplayPort");
-        btrc_Vector_string_push(__list_535, "VGA");
-        btrc_Vector_string_push(__list_535, "DVI");
-        btrc_Vector_string_push(__list_535, "Panel");
-        btrc_Vector_string_push(__list_535, "TV");
-        btrc_Vector_string_push(__list_535, "Unknown");
-        char* kind = btrc_Vector_string_iterGet(__list_535, __i_536);
+    btrc_Vector_string* __list_537 = btrc_Vector_string_new();
+    btrc_Vector_string_push(__list_537, "HDMI");
+    btrc_Vector_string_push(__list_537, "DisplayPort");
+    btrc_Vector_string_push(__list_537, "VGA");
+    btrc_Vector_string_push(__list_537, "DVI");
+    btrc_Vector_string_push(__list_537, "Panel");
+    btrc_Vector_string_push(__list_537, "TV");
+    btrc_Vector_string_push(__list_537, "Unknown");
+    int __n_539 = btrc_Vector_string_iterLen(__list_537);
+    for (int __i_538 = 0; (__i_538 < __n_539); (__i_538++)) {
+        btrc_Vector_string* __list_537 = btrc_Vector_string_new();
+        btrc_Vector_string_push(__list_537, "HDMI");
+        btrc_Vector_string_push(__list_537, "DisplayPort");
+        btrc_Vector_string_push(__list_537, "VGA");
+        btrc_Vector_string_push(__list_537, "DVI");
+        btrc_Vector_string_push(__list_537, "Panel");
+        btrc_Vector_string_push(__list_537, "TV");
+        btrc_Vector_string_push(__list_537, "Unknown");
+        char* kind = btrc_Vector_string_iterGet(__list_537, __i_538);
         if (__btrc_strContains(block, __btrc_str_track(__btrc_strcat("\t", kind)))) {
             (output->kind = kind);
         }
@@ -13733,9 +13739,9 @@ DisplayOutput* DisplayManager_parseBlock(DisplayManager* self, char* block) {
 
 btrc_Vector_DisplayOutput* DisplayManager_outputs(DisplayManager* self) {
     btrc_Vector_DisplayOutput* result = btrc_Vector_DisplayOutput_new();
-    int __n_539 = btrc_Vector_string_iterLen(Strings_split(DisplayManager_kscreen(self), "Output: "));
-    for (int __i_538 = 0; (__i_538 < __n_539); (__i_538++)) {
-        char* block = btrc_Vector_string_iterGet(Strings_split(DisplayManager_kscreen(self), "Output: "), __i_538);
+    int __n_541 = btrc_Vector_string_iterLen(Strings_split(DisplayManager_kscreen(self), "Output: "));
+    for (int __i_540 = 0; (__i_540 < __n_541); (__i_540++)) {
+        char* block = btrc_Vector_string_iterGet(Strings_split(DisplayManager_kscreen(self), "Output: "), __i_540);
         char* trimmed = __btrc_str_track(__btrc_trim(block));
         if (__btrc_isEmpty(trimmed)) {
             continue;
@@ -13749,15 +13755,15 @@ btrc_Vector_DisplayOutput* DisplayManager_outputs(DisplayManager* self) {
 }
 
 DisplayOutput* DisplayManager_findOutput(DisplayManager* self, char* name, btrc_Vector_DisplayOutput* outputs) {
-    int __n_541 = btrc_Vector_DisplayOutput_iterLen(outputs);
-    for (int __i_540 = 0; (__i_540 < __n_541); (__i_540++)) {
-        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(outputs, __i_540);
+    int __n_543 = btrc_Vector_DisplayOutput_iterLen(outputs);
+    for (int __i_542 = 0; (__i_542 < __n_543); (__i_542++)) {
+        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(outputs, __i_542);
         if (strcmp(output->name, name) == 0) {
             return output;
         }
     }
-    __auto_type __btrc_ret_542 = DisplayOutput_new();
-    return __btrc_ret_542;
+    __auto_type __btrc_ret_544 = DisplayOutput_new();
+    return __btrc_ret_544;
 }
 
 void DisplayManager_run(DisplayManager* self, char* arg) {
@@ -13785,9 +13791,9 @@ void DisplayManager_dpms(DisplayManager* self, char* state) {
 
 void DisplayManager_layout(DisplayManager* self) {
     btrc_Vector_DisplayLayoutRule* rules = LabelsConfig_layoutRules(self->labels);
-    int __n_544 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
-    for (int __i_543 = 0; (__i_543 < __n_544); (__i_543++)) {
-        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_543);
+    int __n_546 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
+    for (int __i_545 = 0; (__i_545 < __n_546); (__i_545++)) {
+        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_545);
         DisplayManager_applyLayout(self, rule->display);
     }
 }
@@ -13795,9 +13801,9 @@ void DisplayManager_layout(DisplayManager* self) {
 void DisplayManager_applyLayout(DisplayManager* self, char* name) {
     DisplayLayoutRule* selected = DisplayLayoutRule_new();
     btrc_Vector_DisplayLayoutRule* rules = LabelsConfig_layoutRules(self->labels);
-    int __n_546 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
-    for (int __i_545 = 0; (__i_545 < __n_546); (__i_545++)) {
-        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_545);
+    int __n_548 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
+    for (int __i_547 = 0; (__i_547 < __n_548); (__i_547++)) {
+        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_547);
         if (strcmp(rule->display, name) == 0) {
             (selected = rule);
         }
@@ -13850,9 +13856,9 @@ void DisplayManager_applyLayout(DisplayManager* self, char* name) {
 void DisplayManager_list(DisplayManager* self) {
     btrc_Vector_string* rows = btrc_Vector_string_new();
     btrc_Vector_DisplayOutput* all = DisplayManager_outputs(self);
-    int __n_548 = btrc_Vector_DisplayOutput_iterLen(all);
-    for (int __i_547 = 0; (__i_547 < __n_548); (__i_547++)) {
-        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(all, __i_547);
+    int __n_550 = btrc_Vector_DisplayOutput_iterLen(all);
+    for (int __i_549 = 0; (__i_549 < __n_550); (__i_549++)) {
+        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(all, __i_549);
         btrc_Vector_string_push(rows, DisplayOutput_json(output));
     }
     Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("[", btrc_Vector_string_join(rows, ","))), "]")));
@@ -13964,10 +13970,10 @@ void VmTestSpec_init(VmTestSpec* self) {
             btrc_Vector_VmOperation_free(self->operations);
         }
     }
-    btrc_Vector_VmOperation* __list_550 = btrc_Vector_VmOperation_new();
-    (self->operations = __list_550);
-    btrc_Vector_VmOperation* __list_549 = btrc_Vector_VmOperation_new();
-    (__list_549->__rc++);
+    btrc_Vector_VmOperation* __list_552 = btrc_Vector_VmOperation_new();
+    (self->operations = __list_552);
+    btrc_Vector_VmOperation* __list_551 = btrc_Vector_VmOperation_new();
+    (__list_551->__rc++);
 }
 
 VmTestSpec* VmTestSpec_new(void) {
@@ -14047,39 +14053,39 @@ void VmTestSpec_refreshDerivedArgs(VmTestSpec* self) {
 }
 
 char* VmTestSpec_stateDir(VmTestSpec* self) {
-    __auto_type __btrc_ret_551 = PathTools_join(self->stateRoot, self->state);
-    return __btrc_ret_551;
+    __auto_type __btrc_ret_553 = PathTools_join(self->stateRoot, self->state);
+    return __btrc_ret_553;
 }
 
 char* VmTestSpec_stateHashFile(VmTestSpec* self) {
-    __auto_type __btrc_ret_552 = PathTools_join(VmTestSpec_stateDir(self), "hash");
-    return __btrc_ret_552;
+    __auto_type __btrc_ret_554 = PathTools_join(VmTestSpec_stateDir(self), "hash");
+    return __btrc_ret_554;
 }
 
 char* VmTestSpec_parentHashFile(VmTestSpec* self) {
-    __auto_type __btrc_ret_553 = PathTools_join(PathTools_join(self->stateRoot, self->parentState), "hash");
-    return __btrc_ret_553;
+    __auto_type __btrc_ret_555 = PathTools_join(PathTools_join(self->stateRoot, self->parentState), "hash");
+    return __btrc_ret_555;
 }
 
 char* VmTestSpec_resolveParentHash(VmTestSpec* self) {
     if ((strcmp(self->parentState, "root") == 0) || __btrc_isEmpty(self->parentState)) {
-        __auto_type __btrc_ret_554 = "root";
-        return __btrc_ret_554;
+        __auto_type __btrc_ret_556 = "root";
+        return __btrc_ret_556;
     }
     char* path = VmTestSpec_parentHashFile(self);
     if (FileSystem_exists(path)) {
-        __auto_type __btrc_ret_555 = __btrc_str_track(__btrc_trim(Path_readAll(path)));
-        return __btrc_ret_555;
+        __auto_type __btrc_ret_557 = __btrc_str_track(__btrc_trim(Path_readAll(path)));
+        return __btrc_ret_557;
     }
-    __auto_type __btrc_ret_556 = __btrc_str_track(__btrc_strcat("missing:", self->parentState));
-    return __btrc_ret_556;
+    __auto_type __btrc_ret_558 = __btrc_str_track(__btrc_strcat("missing:", self->parentState));
+    return __btrc_ret_558;
 }
 
 char* VmTestSpec_operationsMaterial(VmTestSpec* self) {
     btrc_Vector_string* lines = btrc_Vector_string_new();
-    int __n_558 = btrc_Vector_VmOperation_iterLen(self->operations);
-    for (int __i_557 = 0; (__i_557 < __n_558); (__i_557++)) {
-        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_557);
+    int __n_560 = btrc_Vector_VmOperation_iterLen(self->operations);
+    for (int __i_559 = 0; (__i_559 < __n_560); (__i_559++)) {
+        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_559);
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("op=", op->kind)));
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("name=", op->name)));
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("command=", op->command)));
@@ -14088,23 +14094,23 @@ char* VmTestSpec_operationsMaterial(VmTestSpec* self) {
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("remote=", op->remotePath)));
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("timeout=", Strings_fromInt(op->timeout))));
     }
-    __auto_type __btrc_ret_559 = btrc_Vector_string_join(lines, "\n");
-    return __btrc_ret_559;
+    __auto_type __btrc_ret_561 = btrc_Vector_string_join(lines, "\n");
+    return __btrc_ret_561;
 }
 
 char* VmTestSpec_hashMaterial(VmTestSpec* self) {
     char* material = self->stateMaterial;
     if (__btrc_isEmpty(material)) {
-        int __fstr_560_len = snprintf(NULL, 0, "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
-        char* __fstr_560_buf = __btrc_str_track(((char*)malloc((__fstr_560_len + 1))));
-        snprintf(__fstr_560_buf, (__fstr_560_len + 1), "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
-        (material = __fstr_560_buf);
+        int __fstr_562_len = snprintf(NULL, 0, "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
+        char* __fstr_562_buf = __btrc_str_track(((char*)malloc((__fstr_562_len + 1))));
+        snprintf(__fstr_562_buf, (__fstr_562_len + 1), "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
+        (material = __fstr_562_buf);
     }
-    int __fstr_561_len = snprintf(NULL, 0, "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
-    char* __fstr_561_buf = __btrc_str_track(((char*)malloc((__fstr_561_len + 1))));
-    snprintf(__fstr_561_buf, (__fstr_561_len + 1), "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
-    __auto_type __btrc_ret_562 = __fstr_561_buf;
-    return __btrc_ret_562;
+    int __fstr_563_len = snprintf(NULL, 0, "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
+    char* __fstr_563_buf = __btrc_str_track(((char*)malloc((__fstr_563_len + 1))));
+    snprintf(__fstr_563_buf, (__fstr_563_len + 1), "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
+    __auto_type __btrc_ret_564 = __fstr_563_buf;
+    return __btrc_ret_564;
 }
 
 void VmTestSpec_computeStateHash(VmTestSpec* self) {
@@ -14114,7 +14120,7 @@ void VmTestSpec_computeStateHash(VmTestSpec* self) {
     if (!ExecResult_ok(result)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Failed to compute state hash for ", self->state)));
     }
-    (self->stateHash = __btrc_str_track(__btrc_trim(ExecResult_stdout(result))));
+    (self->stateHash = ExecResult_trimmed(result));
     (self->stateHashShort = __btrc_str_track(__btrc_substring(self->stateHash, 0, 12)));
 }
 
@@ -14136,9 +14142,9 @@ void VmTestSpec_expandArgs(VmTestSpec* self) {
     VmTestSpec_refreshDerivedArgs(self);
     (self->workDir = VmSpecParser_expandArgs(rawWorkDir, self->args));
     VmTestSpec_refreshDerivedArgs(self);
-    int __n_564 = btrc_Vector_VmOperation_iterLen(self->operations);
-    for (int __i_563 = 0; (__i_563 < __n_564); (__i_563++)) {
-        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_563);
+    int __n_566 = btrc_Vector_VmOperation_iterLen(self->operations);
+    for (int __i_565 = 0; (__i_565 < __n_566); (__i_565++)) {
+        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_565);
         VmOperation_expandArgs(op, self->args);
     }
 }
@@ -14154,23 +14160,23 @@ void VmSpecParser_destroy(VmSpecParser* self) {
 char* VmSpecParser_hostArch(void) {
     UnixShell* shell = UnixShell_new();
     ExecResult* result = UnixShell_run(shell, "uname -m");
-    char* machine = __btrc_str_track(__btrc_trim(ExecResult_stdout(result)));
+    char* machine = ExecResult_trimmed(result);
     if (__btrc_strContains(machine, "arm64") || __btrc_strContains(machine, "aarch64")) {
-        __auto_type __btrc_ret_565 = "aarch64";
+        __auto_type __btrc_ret_567 = "aarch64";
         if (shell != NULL) {
             if ((--shell->__rc) <= 0) {
                 UnixShell_destroy(shell);
             }
         }
-        return __btrc_ret_565;
+        return __btrc_ret_567;
     }
-    __auto_type __btrc_ret_566 = "x86_64";
+    __auto_type __btrc_ret_568 = "x86_64";
     if (shell != NULL) {
         if ((--shell->__rc) <= 0) {
             UnixShell_destroy(shell);
         }
     }
-    return __btrc_ret_566;
+    return __btrc_ret_568;
     if (shell != NULL) {
         if ((--shell->__rc) <= 0) {
             UnixShell_destroy(shell);
@@ -14179,22 +14185,22 @@ char* VmSpecParser_hostArch(void) {
 }
 
 char* VmSpecParser_defaultIsoUrl(char* arch) {
-    __auto_type __btrc_ret_567 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-", arch)), "-linux.iso"));
-    return __btrc_ret_567;
+    __auto_type __btrc_ret_569 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-", arch)), "-linux.iso"));
+    return __btrc_ret_569;
 }
 
 char* VmSpecParser_expandArgs(char* text, btrc_Map_string_string* args) {
     char* result = Strings_copy(text);
-    int __n_569 = btrc_Map_string_string_iterLen(args);
-    for (int __i_568 = 0; (__i_568 < __n_569); (__i_568++)) {
-        char* key = btrc_Map_string_string_iterGet(args, __i_568);
-        char* value = btrc_Map_string_string_iterValueAt(args, __i_568);
-        (result = Strings_replace(result, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{{", key)), "}}")), value));
-    }
     int __n_571 = btrc_Map_string_string_iterLen(args);
     for (int __i_570 = 0; (__i_570 < __n_571); (__i_570++)) {
         char* key = btrc_Map_string_string_iterGet(args, __i_570);
         char* value = btrc_Map_string_string_iterValueAt(args, __i_570);
+        (result = Strings_replace(result, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{{", key)), "}}")), value));
+    }
+    int __n_573 = btrc_Map_string_string_iterLen(args);
+    for (int __i_572 = 0; (__i_572 < __n_573); (__i_572++)) {
+        char* key = btrc_Map_string_string_iterGet(args, __i_572);
+        char* value = btrc_Map_string_string_iterValueAt(args, __i_572);
         (result = Strings_replace(result, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("${", key)), "}")), value));
     }
     return result;
@@ -14209,26 +14215,26 @@ int VmSpecParser_skipSpaces(char* text, int i) {
 }
 
 int VmSpecParser_keyPosition(char* text, char* key) {
-    __auto_type __btrc_ret_572 = Strings_find(text, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", key)), "\"")), 0);
-    return __btrc_ret_572;
+    __auto_type __btrc_ret_574 = Strings_find(text, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", key)), "\"")), 0);
+    return __btrc_ret_574;
 }
 
 char* VmSpecParser_objectField(char* text, char* key) {
     int pos = VmSpecParser_keyPosition(text, key);
     if (pos < 0) {
-        __auto_type __btrc_ret_573 = "";
-        return __btrc_ret_573;
+        __auto_type __btrc_ret_575 = "";
+        return __btrc_ret_575;
     }
     int colon = Strings_find(text, ":", pos);
     if (colon < 0) {
-        __auto_type __btrc_ret_574 = "";
-        return __btrc_ret_574;
+        __auto_type __btrc_ret_576 = "";
+        return __btrc_ret_576;
     }
     int i = VmSpecParser_skipSpaces(text, (colon + 1));
     int len = ((int)strlen(text));
     if ((i >= len) || (text[i] != '{')) {
-        __auto_type __btrc_ret_575 = "";
-        return __btrc_ret_575;
+        __auto_type __btrc_ret_577 = "";
+        return __btrc_ret_577;
     }
     int depth = 0;
     bool inString = false;
@@ -14257,13 +14263,13 @@ char* VmSpecParser_objectField(char* text, char* key) {
         if (c == '}') {
             (depth--);
             if (depth == 0) {
-                __auto_type __btrc_ret_576 = JsonObject_slice(text, i, (j + 1));
-                return __btrc_ret_576;
+                __auto_type __btrc_ret_578 = JsonObject_slice(text, i, (j + 1));
+                return __btrc_ret_578;
             }
         }
     }
-    __auto_type __btrc_ret_577 = "";
-    return __btrc_ret_577;
+    __auto_type __btrc_ret_579 = "";
+    return __btrc_ret_579;
 }
 
 btrc_Map_string_string* VmSpecParser_argsObject(char* text) {
@@ -14273,10 +14279,10 @@ btrc_Map_string_string* VmSpecParser_argsObject(char* text) {
         return result;
     }
     JsonObject* parsed = JsonObject_parse(objectText);
-    int __n_579 = btrc_Map_string_string_iterLen(parsed->values);
-    for (int __i_578 = 0; (__i_578 < __n_579); (__i_578++)) {
-        char* key = btrc_Map_string_string_iterGet(parsed->values, __i_578);
-        char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_578);
+    int __n_581 = btrc_Map_string_string_iterLen(parsed->values);
+    for (int __i_580 = 0; (__i_580 < __n_581); (__i_580++)) {
+        char* key = btrc_Map_string_string_iterGet(parsed->values, __i_580);
+        char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_580);
         btrc_Map_string_string_put(result, key, value);
     }
     return result;
@@ -14293,8 +14299,8 @@ char* VmSpecParser_parseStringValue(char* text, int i, char* fallback) {
     bool escaped = false;
     while (i < len) {
         if ((!escaped) && (text[i] == ((char)34))) {
-            __auto_type __btrc_ret_580 = JsonObject_unescape(JsonObject_slice(text, start, i));
-            return __btrc_ret_580;
+            __auto_type __btrc_ret_582 = JsonObject_unescape(JsonObject_slice(text, start, i));
+            return __btrc_ret_582;
         }
         (escaped = ((!escaped) && (text[i] == '\\')));
         if (text[i] != '\\') {
@@ -14317,8 +14323,8 @@ char* VmSpecParser_field(char* text, char* key, char* fallback) {
     int i = VmSpecParser_skipSpaces(text, (colon + 1));
     int len = ((int)strlen(text));
     if ((i < len) && (text[i] == ((char)34))) {
-        __auto_type __btrc_ret_581 = VmSpecParser_parseStringValue(text, i, fallback);
-        return __btrc_ret_581;
+        __auto_type __btrc_ret_583 = VmSpecParser_parseStringValue(text, i, fallback);
+        return __btrc_ret_583;
     }
     int start = i;
     while ((((i < len) && (text[i] != ',')) && (text[i] != '}')) && (text[i] != ']')) {
@@ -14336,8 +14342,8 @@ int VmSpecParser_intField(char* text, char* key, int fallback) {
     if (__btrc_isEmpty(raw)) {
         return fallback;
     }
-    __auto_type __btrc_ret_582 = Strings_toInt(raw);
-    return __btrc_ret_582;
+    __auto_type __btrc_ret_584 = Strings_toInt(raw);
+    return __btrc_ret_584;
 }
 
 VmOperation* VmSpecParser_operation(char* objectText) {
@@ -14540,28 +14546,28 @@ void VmSpecParser_applyOperationField(VmOperation* op, char* key, char* value) {
 }
 
 bool VmSpecParser_hasOperation(VmOperation* op) {
-    __auto_type __btrc_ret_583 = (((!__btrc_isEmpty(op->kind)) || (!__btrc_isEmpty(op->command))) || (!__btrc_isEmpty(op->name)));
-    return __btrc_ret_583;
+    __auto_type __btrc_ret_585 = (((!__btrc_isEmpty(op->kind)) || (!__btrc_isEmpty(op->command))) || (!__btrc_isEmpty(op->name)));
+    return __btrc_ret_585;
 }
 
 char* VmSpecParser_yamlKey(char* line) {
     int pos = Strings_find(line, ":", 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_584 = "";
-        return __btrc_ret_584;
+        __auto_type __btrc_ret_586 = "";
+        return __btrc_ret_586;
     }
-    __auto_type __btrc_ret_585 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(line, 0, pos)))));
-    return __btrc_ret_585;
+    __auto_type __btrc_ret_587 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(line, 0, pos)))));
+    return __btrc_ret_587;
 }
 
 char* VmSpecParser_yamlValue(char* line) {
     int pos = Strings_find(line, ":", 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_586 = "";
-        return __btrc_ret_586;
+        __auto_type __btrc_ret_588 = "";
+        return __btrc_ret_588;
     }
-    __auto_type __btrc_ret_587 = Toml_unquote(__btrc_str_track(__btrc_trim(Toml_stripInlineComment(__btrc_str_track(__btrc_substring(line, (pos + 1), ((((int)strlen(line)) - pos) - 1)))))));
-    return __btrc_ret_587;
+    __auto_type __btrc_ret_589 = Toml_unquote(__btrc_str_track(__btrc_trim(Toml_stripInlineComment(__btrc_str_track(__btrc_substring(line, (pos + 1), ((((int)strlen(line)) - pos) - 1)))))));
+    return __btrc_ret_589;
 }
 
 VmTestSpec* VmSpecParser_parseToml(char* text) {
@@ -14569,9 +14575,9 @@ VmTestSpec* VmSpecParser_parseToml(char* text) {
     char* section = "root";
     VmOperation* op = VmOperation_new();
     btrc_Vector_string* lines = Strings_split(text, "\n");
-    int __n_589 = btrc_Vector_string_iterLen(lines);
-    for (int __i_588 = 0; (__i_588 < __n_589); (__i_588++)) {
-        char* line = btrc_Vector_string_iterGet(lines, __i_588);
+    int __n_591 = btrc_Vector_string_iterLen(lines);
+    for (int __i_590 = 0; (__i_590 < __n_591); (__i_590++)) {
+        char* line = btrc_Vector_string_iterGet(lines, __i_590);
         char* cleaned = Toml_stripInlineComment(line);
         if (__btrc_isEmpty(cleaned)) {
             continue;
@@ -14635,9 +14641,9 @@ VmTestSpec* VmSpecParser_parseYaml(char* text) {
     char* section = "root";
     VmOperation* op = VmOperation_new();
     btrc_Vector_string* lines = Strings_split(text, "\n");
-    int __n_591 = btrc_Vector_string_iterLen(lines);
-    for (int __i_590 = 0; (__i_590 < __n_591); (__i_590++)) {
-        char* raw = btrc_Vector_string_iterGet(lines, __i_590);
+    int __n_593 = btrc_Vector_string_iterLen(lines);
+    for (int __i_592 = 0; (__i_592 < __n_593); (__i_592++)) {
+        char* raw = btrc_Vector_string_iterGet(lines, __i_592);
         char* line = Toml_stripInlineComment(raw);
         if (__btrc_isEmpty(__btrc_str_track(__btrc_trim(line)))) {
             continue;
@@ -14706,15 +14712,15 @@ VmTestSpec* VmSpecParser_parseYaml(char* text) {
 VmTestSpec* VmSpecParser_readFile(char* path) {
     char* text = Path_readAll(path);
     if (__btrc_endsWith(path, ".toml")) {
-        __auto_type __btrc_ret_592 = VmSpecParser_parseToml(text);
-        return __btrc_ret_592;
+        __auto_type __btrc_ret_594 = VmSpecParser_parseToml(text);
+        return __btrc_ret_594;
     }
     if (__btrc_endsWith(path, ".yaml") || __btrc_endsWith(path, ".yml")) {
-        __auto_type __btrc_ret_593 = VmSpecParser_parseYaml(text);
-        return __btrc_ret_593;
+        __auto_type __btrc_ret_595 = VmSpecParser_parseYaml(text);
+        return __btrc_ret_595;
     }
-    __auto_type __btrc_ret_594 = VmSpecParser_parse(text);
-    return __btrc_ret_594;
+    __auto_type __btrc_ret_596 = VmSpecParser_parse(text);
+    return __btrc_ret_596;
 }
 
 void QemuE2eHarness_init(QemuE2eHarness* self, VmTestSpec* spec) {
@@ -14760,128 +14766,128 @@ void QemuE2eHarness_destroy(QemuE2eHarness* self) {
 }
 
 char* QemuE2eHarness_diskPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_595 = PathTools_join(self->spec->workDir, "disk.qcow2");
-    return __btrc_ret_595;
-}
-
-char* QemuE2eHarness_pidPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_596 = PathTools_join(self->spec->workDir, "qemu.pid");
-    return __btrc_ret_596;
-}
-
-char* QemuE2eHarness_monitorPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_597 = PathTools_join(self->spec->workDir, "monitor.sock");
+    __auto_type __btrc_ret_597 = PathTools_join(self->spec->workDir, "disk.qcow2");
     return __btrc_ret_597;
 }
 
-char* QemuE2eHarness_qmpPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_598 = PathTools_join(self->spec->workDir, "qmp.sock");
+char* QemuE2eHarness_pidPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_598 = PathTools_join(self->spec->workDir, "qemu.pid");
     return __btrc_ret_598;
 }
 
-char* QemuE2eHarness_serialBasePath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_599 = PathTools_join(self->spec->workDir, "serial");
+char* QemuE2eHarness_monitorPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_599 = PathTools_join(self->spec->workDir, "monitor.sock");
     return __btrc_ret_599;
 }
 
-char* QemuE2eHarness_serialInPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_600 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_serialBasePath(self), ".in"));
+char* QemuE2eHarness_qmpPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_600 = PathTools_join(self->spec->workDir, "qmp.sock");
     return __btrc_ret_600;
 }
 
-char* QemuE2eHarness_serialOutPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_601 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_serialBasePath(self), ".out"));
+char* QemuE2eHarness_serialBasePath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_601 = PathTools_join(self->spec->workDir, "serial");
     return __btrc_ret_601;
 }
 
-char* QemuE2eHarness_serialLogPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_602 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_serialBasePath(self), ".log"));
+char* QemuE2eHarness_serialInPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_602 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_serialBasePath(self), ".in"));
     return __btrc_ret_602;
 }
 
-char* QemuE2eHarness_serialReaderPidPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_603 = PathTools_join(self->spec->workDir, "serial-reader.pid");
+char* QemuE2eHarness_serialOutPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_603 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_serialBasePath(self), ".out"));
     return __btrc_ret_603;
 }
 
-char* QemuE2eHarness_tpmDir(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_604 = PathTools_join(self->spec->workDir, "tpm");
+char* QemuE2eHarness_serialLogPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_604 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_serialBasePath(self), ".log"));
     return __btrc_ret_604;
 }
 
-char* QemuE2eHarness_tpmStateDir(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_605 = PathTools_join(QemuE2eHarness_tpmDir(self), "state");
+char* QemuE2eHarness_serialReaderPidPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_605 = PathTools_join(self->spec->workDir, "serial-reader.pid");
     return __btrc_ret_605;
 }
 
-char* QemuE2eHarness_tpmSocketPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_606 = PathTools_join(QemuE2eHarness_tpmDir(self), "swtpm.sock");
+char* QemuE2eHarness_tpmDir(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_606 = PathTools_join(self->spec->workDir, "tpm");
     return __btrc_ret_606;
 }
 
-char* QemuE2eHarness_tpmPidPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_607 = PathTools_join(QemuE2eHarness_tpmDir(self), "swtpm.pid");
+char* QemuE2eHarness_tpmStateDir(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_607 = PathTools_join(QemuE2eHarness_tpmDir(self), "state");
     return __btrc_ret_607;
 }
 
-char* QemuE2eHarness_tpmLogPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_608 = PathTools_join(QemuE2eHarness_tpmDir(self), "swtpm.log");
+char* QemuE2eHarness_tpmSocketPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_608 = PathTools_join(QemuE2eHarness_tpmDir(self), "swtpm.sock");
     return __btrc_ret_608;
 }
 
-char* QemuE2eHarness_sshKeyPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_609 = PathTools_join(self->spec->workDir, "id_ed25519");
+char* QemuE2eHarness_tpmPidPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_609 = PathTools_join(QemuE2eHarness_tpmDir(self), "swtpm.pid");
     return __btrc_ret_609;
 }
 
-char* QemuE2eHarness_sshPubKeyPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_610 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_sshKeyPath(self), ".pub"));
+char* QemuE2eHarness_tpmLogPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_610 = PathTools_join(QemuE2eHarness_tpmDir(self), "swtpm.log");
     return __btrc_ret_610;
 }
 
-char* QemuE2eHarness_bootDir(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_611 = PathTools_join(self->spec->workDir, "boot");
+char* QemuE2eHarness_sshKeyPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_611 = PathTools_join(self->spec->workDir, "id_ed25519");
     return __btrc_ret_611;
 }
 
-char* QemuE2eHarness_bootKernelFile(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_612 = PathTools_join(QemuE2eHarness_bootDir(self), "kernel.path");
+char* QemuE2eHarness_sshPubKeyPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_612 = __btrc_str_track(__btrc_strcat(QemuE2eHarness_sshKeyPath(self), ".pub"));
     return __btrc_ret_612;
 }
 
-char* QemuE2eHarness_bootInitrdFile(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_613 = PathTools_join(QemuE2eHarness_bootDir(self), "initrd.path");
+char* QemuE2eHarness_bootDir(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_613 = PathTools_join(self->spec->workDir, "boot");
     return __btrc_ret_613;
 }
 
-char* QemuE2eHarness_bootAppendFile(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_614 = PathTools_join(QemuE2eHarness_bootDir(self), "append.txt");
+char* QemuE2eHarness_bootKernelFile(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_614 = PathTools_join(QemuE2eHarness_bootDir(self), "kernel.path");
     return __btrc_ret_614;
 }
 
-char* QemuE2eHarness_firmwareVarsPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_615 = PathTools_join(self->spec->workDir, "edk2-vars.fd");
+char* QemuE2eHarness_bootInitrdFile(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_615 = PathTools_join(QemuE2eHarness_bootDir(self), "initrd.path");
     return __btrc_ret_615;
 }
 
-char* QemuE2eHarness_firmwareVarsSnapshotPath(QemuE2eHarness* self, char* name) {
-    __auto_type __btrc_ret_616 = PathTools_join(self->spec->workDir, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("edk2-vars.", name)), ".fd")));
+char* QemuE2eHarness_bootAppendFile(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_616 = PathTools_join(QemuE2eHarness_bootDir(self), "append.txt");
     return __btrc_ret_616;
 }
 
-char* QemuE2eHarness_parentStateDir(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_617 = PathTools_join(self->spec->stateRoot, self->spec->parentState);
+char* QemuE2eHarness_firmwareVarsPath(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_617 = PathTools_join(self->spec->workDir, "edk2-vars.fd");
     return __btrc_ret_617;
 }
 
-char* QemuE2eHarness_parentWorkDirFile(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_618 = PathTools_join(QemuE2eHarness_parentStateDir(self), "workDir");
+char* QemuE2eHarness_firmwareVarsSnapshotPath(QemuE2eHarness* self, char* name) {
+    __auto_type __btrc_ret_618 = PathTools_join(self->spec->workDir, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("edk2-vars.", name)), ".fd")));
     return __btrc_ret_618;
 }
 
-char* QemuE2eHarness_backingDiskFile(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_619 = PathTools_join(self->spec->workDir, "backing-disk");
+char* QemuE2eHarness_parentStateDir(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_619 = PathTools_join(self->spec->stateRoot, self->spec->parentState);
     return __btrc_ret_619;
+}
+
+char* QemuE2eHarness_parentWorkDirFile(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_620 = PathTools_join(QemuE2eHarness_parentStateDir(self), "workDir");
+    return __btrc_ret_620;
+}
+
+char* QemuE2eHarness_backingDiskFile(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_621 = PathTools_join(self->spec->workDir, "backing-disk");
+    return __btrc_ret_621;
 }
 
 char* QemuE2eHarness_absolutePath(QemuE2eHarness* self, char* path) {
@@ -14890,8 +14896,8 @@ char* QemuE2eHarness_absolutePath(QemuE2eHarness* self, char* path) {
     if (!ExecResult_ok(result)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Failed to resolve path ", path)));
     }
-    __auto_type __btrc_ret_620 = __btrc_str_track(__btrc_trim(ExecResult_stdout(result)));
-    return __btrc_ret_620;
+    __auto_type __btrc_ret_622 = ExecResult_trimmed(result);
+    return __btrc_ret_622;
 }
 
 void QemuE2eHarness_ensureWorkDir(QemuE2eHarness* self) {
@@ -14900,79 +14906,79 @@ void QemuE2eHarness_ensureWorkDir(QemuE2eHarness* self) {
 }
 
 char* QemuE2eHarness_qemuBinary(QemuE2eHarness* self) {
-    int __fstr_621_len = snprintf(NULL, 0, "qemu-system-%s", self->spec->arch);
-    char* __fstr_621_buf = __btrc_str_track(((char*)malloc((__fstr_621_len + 1))));
-    snprintf(__fstr_621_buf, (__fstr_621_len + 1), "qemu-system-%s", self->spec->arch);
-    __auto_type __btrc_ret_622 = __fstr_621_buf;
-    return __btrc_ret_622;
-}
-
-bool QemuE2eHarness_argEnabled(QemuE2eHarness* self, char* key) {
-    __auto_type __btrc_ret_623 = (strcmp(btrc_Map_string_string_getOrDefault(self->spec->args, key, "false"), "true") == 0);
-    return __btrc_ret_623;
-}
-
-bool QemuE2eHarness_tpm2Enabled(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_624 = QemuE2eHarness_argEnabled(self, "tpm2");
+    int __fstr_623_len = snprintf(NULL, 0, "qemu-system-%s", self->spec->arch);
+    char* __fstr_623_buf = __btrc_str_track(((char*)malloc((__fstr_623_len + 1))));
+    snprintf(__fstr_623_buf, (__fstr_623_len + 1), "qemu-system-%s", self->spec->arch);
+    __auto_type __btrc_ret_624 = __fstr_623_buf;
     return __btrc_ret_624;
 }
 
-bool QemuE2eHarness_secureBootEnabled(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_625 = QemuE2eHarness_argEnabled(self, "secureBoot");
+bool QemuE2eHarness_argEnabled(QemuE2eHarness* self, char* key) {
+    __auto_type __btrc_ret_625 = (strcmp(btrc_Map_string_string_getOrDefault(self->spec->args, key, "false"), "true") == 0);
     return __btrc_ret_625;
 }
 
-bool QemuE2eHarness_uefiEnabled(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_626 = ((QemuE2eHarness_argEnabled(self, "uefi") || QemuE2eHarness_argEnabled(self, "uefiDisk")) || QemuE2eHarness_secureBootEnabled(self));
+bool QemuE2eHarness_tpm2Enabled(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_626 = QemuE2eHarness_argEnabled(self, "tpm2");
     return __btrc_ret_626;
+}
+
+bool QemuE2eHarness_secureBootEnabled(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_627 = QemuE2eHarness_argEnabled(self, "secureBoot");
+    return __btrc_ret_627;
+}
+
+bool QemuE2eHarness_uefiEnabled(QemuE2eHarness* self) {
+    __auto_type __btrc_ret_628 = ((QemuE2eHarness_argEnabled(self, "uefi") || QemuE2eHarness_argEnabled(self, "uefiDisk")) || QemuE2eHarness_secureBootEnabled(self));
+    return __btrc_ret_628;
 }
 
 bool QemuE2eHarness_shouldUseUefi(QemuE2eHarness* self, bool fromIso) {
     if (strcmp(self->spec->arch, "aarch64") == 0) {
-        __auto_type __btrc_ret_627 = true;
-        return __btrc_ret_627;
-    }
-    if (QemuE2eHarness_argEnabled(self, "uefi")) {
-        __auto_type __btrc_ret_628 = true;
-        return __btrc_ret_628;
-    }
-    if ((!fromIso) && QemuE2eHarness_uefiEnabled(self)) {
         __auto_type __btrc_ret_629 = true;
         return __btrc_ret_629;
     }
-    if (fromIso && QemuE2eHarness_argEnabled(self, "uefiIso")) {
+    if (QemuE2eHarness_argEnabled(self, "uefi")) {
         __auto_type __btrc_ret_630 = true;
         return __btrc_ret_630;
     }
-    __auto_type __btrc_ret_631 = false;
-    return __btrc_ret_631;
+    if ((!fromIso) && QemuE2eHarness_uefiEnabled(self)) {
+        __auto_type __btrc_ret_631 = true;
+        return __btrc_ret_631;
+    }
+    if (fromIso && QemuE2eHarness_argEnabled(self, "uefiIso")) {
+        __auto_type __btrc_ret_632 = true;
+        return __btrc_ret_632;
+    }
+    __auto_type __btrc_ret_633 = false;
+    return __btrc_ret_633;
 }
 
 bool QemuE2eHarness_hostArchMatchesGuest(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_632 = (strcmp(VmSpecParser_hostArch(), self->spec->arch) == 0);
-    return __btrc_ret_632;
+    __auto_type __btrc_ret_634 = (strcmp(VmSpecParser_hostArch(), self->spec->arch) == 0);
+    return __btrc_ret_634;
 }
 
 char* QemuE2eHarness_qemuSharePath(QemuE2eHarness* self, char* fileName) {
     char* script = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("bin=$(command -v ", UnixShell_quote(QemuE2eHarness_qemuBinary(self)))), ") || exit 1; ")), "path=$(dirname $(dirname \"$bin\"))/share/qemu/")), UnixShell_quote(fileName))), "; ")), "test -f \"$path\" || exit 1; printf %s \"$path\""));
     ExecResult* result = UnixShell_runUnchecked(self->shell, script);
     if (!ExecResult_ok(result)) {
-        __auto_type __btrc_ret_633 = "";
-        return __btrc_ret_633;
+        __auto_type __btrc_ret_635 = "";
+        return __btrc_ret_635;
     }
-    __auto_type __btrc_ret_634 = Strings_copy(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))));
-    return __btrc_ret_634;
+    __auto_type __btrc_ret_636 = ExecResult_trimmed(result);
+    return __btrc_ret_636;
 }
 
 char* QemuE2eHarness_findFirst(QemuE2eHarness* self, char* findArgs) {
-    __auto_type __btrc_ret_635 = __btrc_str_track(__btrc_trim(ExecResult_stdout(UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("find ", findArgs)), " -print -quit 2>/dev/null"))))));
-    return __btrc_ret_635;
+    __auto_type __btrc_ret_637 = ExecResult_trimmed(UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("find ", findArgs)), " -print -quit 2>/dev/null"))));
+    return __btrc_ret_637;
 }
 
 char* QemuE2eHarness_firmwareCodePath(QemuE2eHarness* self) {
     if (QemuE2eHarness_secureBootEnabled(self)) {
-        __auto_type __btrc_ret_636 = QemuE2eHarness_secureFirmwareCodePath(self);
-        return __btrc_ret_636;
+        __auto_type __btrc_ret_638 = QemuE2eHarness_secureFirmwareCodePath(self);
+        return __btrc_ret_638;
     }
     if (strcmp(self->spec->arch, "aarch64") == 0) {
         char* packaged = QemuE2eHarness_qemuSharePath(self, "edk2-aarch64-code.fd");
@@ -14980,8 +14986,8 @@ char* QemuE2eHarness_firmwareCodePath(QemuE2eHarness* self) {
             return packaged;
         }
         if (FileSystem_exists("/opt/homebrew/share/qemu/edk2-aarch64-code.fd")) {
-            __auto_type __btrc_ret_637 = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
-            return __btrc_ret_637;
+            __auto_type __btrc_ret_639 = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
+            return __btrc_ret_639;
         }
     }
     if (strcmp(self->spec->arch, "x86_64") == 0) {
@@ -14990,8 +14996,8 @@ char* QemuE2eHarness_firmwareCodePath(QemuE2eHarness* self) {
             return packaged;
         }
     }
-    __auto_type __btrc_ret_638 = QemuE2eHarness_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_CODE.fd");
-    return __btrc_ret_638;
+    __auto_type __btrc_ret_640 = QemuE2eHarness_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_CODE.fd");
+    return __btrc_ret_640;
 }
 
 char* QemuE2eHarness_secureFirmwareCodePath(QemuE2eHarness* self) {
@@ -15000,19 +15006,19 @@ char* QemuE2eHarness_secureFirmwareCodePath(QemuE2eHarness* self) {
         if (!__btrc_isEmpty(store)) {
             return store;
         }
-        __auto_type __btrc_ret_639 = QemuE2eHarness_findFirst(self, "\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
-        return __btrc_ret_639;
+        __auto_type __btrc_ret_641 = QemuE2eHarness_findFirst(self, "\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
+        return __btrc_ret_641;
     }
     if (!(strcmp(self->spec->arch, "x86_64") == 0)) {
-        __auto_type __btrc_ret_640 = "";
-        return __btrc_ret_640;
+        __auto_type __btrc_ret_642 = "";
+        return __btrc_ret_642;
     }
     char* packaged = QemuE2eHarness_qemuSharePath(self, "edk2-x86_64-secure-code.fd");
     if (!__btrc_isEmpty(packaged)) {
         return packaged;
     }
-    __auto_type __btrc_ret_641 = QemuE2eHarness_findFirst(self, "/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
-    return __btrc_ret_641;
+    __auto_type __btrc_ret_643 = QemuE2eHarness_findFirst(self, "/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
+    return __btrc_ret_643;
 }
 
 char* QemuE2eHarness_firmwareVarsTemplatePath(QemuE2eHarness* self) {
@@ -15038,8 +15044,8 @@ char* QemuE2eHarness_firmwareVarsTemplatePath(QemuE2eHarness* self) {
             return packaged;
         }
     }
-    __auto_type __btrc_ret_642 = QemuE2eHarness_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_VARS.fd");
-    return __btrc_ret_642;
+    __auto_type __btrc_ret_644 = QemuE2eHarness_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_VARS.fd");
+    return __btrc_ret_644;
 }
 
 void QemuE2eHarness_makeFirmwareVarsWritable(QemuE2eHarness* self) {
@@ -15062,17 +15068,17 @@ void QemuE2eHarness_setupFirmwareVars(QemuE2eHarness* self) {
         QemuE2eHarness_makeFirmwareVarsWritable(self);
         return;
     }
-    int __fstr_644_len = snprintf(NULL, 0, "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuE2eHarness_firmwareVarsPath(self)));
-    char* __fstr_644_buf = __btrc_str_track(((char*)malloc((__fstr_644_len + 1))));
-    snprintf(__fstr_644_buf, (__fstr_644_len + 1), "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuE2eHarness_firmwareVarsPath(self)));
-    UnixShell_runRaw(self->shell, __fstr_644_buf, false, true, "");
+    int __fstr_646_len = snprintf(NULL, 0, "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuE2eHarness_firmwareVarsPath(self)));
+    char* __fstr_646_buf = __btrc_str_track(((char*)malloc((__fstr_646_len + 1))));
+    snprintf(__fstr_646_buf, (__fstr_646_len + 1), "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuE2eHarness_firmwareVarsPath(self)));
+    UnixShell_runRaw(self->shell, __fstr_646_buf, false, true, "");
     QemuE2eHarness_makeFirmwareVarsWritable(self);
 }
 
 bool QemuE2eHarness_commandExists(QemuE2eHarness* self, char* name) {
     ExecResult* result = UnixShell_runRaw(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("command -v ", UnixShell_quote(name))), " >/dev/null 2>&1")), false, false, "");
-    __auto_type __btrc_ret_645 = ExecResult_ok(result);
-    return __btrc_ret_645;
+    __auto_type __btrc_ret_647 = ExecResult_ok(result);
+    return __btrc_ret_647;
 }
 
 void QemuE2eHarness_requireCommand(QemuE2eHarness* self, char* name) {
@@ -15084,17 +15090,17 @@ void QemuE2eHarness_requireCommand(QemuE2eHarness* self, char* name) {
 bool QemuE2eHarness_qemuDeviceAvailable(QemuE2eHarness* self, char* deviceName) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(QemuE2eHarness_qemuBinary(self), " -device help 2>/dev/null | grep -q ")), UnixShell_quote(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("name \"", deviceName)), "\"")))));
     ExecResult* result = UnixShell_runRaw(self->shell, command, false, false, "");
-    __auto_type __btrc_ret_646 = ExecResult_ok(result);
-    return __btrc_ret_646;
+    __auto_type __btrc_ret_648 = ExecResult_ok(result);
+    return __btrc_ret_648;
 }
 
 char* QemuE2eHarness_tpmQemuDevice(QemuE2eHarness* self) {
     if (strcmp(self->spec->arch, "aarch64") == 0) {
-        __auto_type __btrc_ret_647 = "tpm-tis-device";
-        return __btrc_ret_647;
+        __auto_type __btrc_ret_649 = "tpm-tis-device";
+        return __btrc_ret_649;
     }
-    __auto_type __btrc_ret_648 = "tpm-tis";
-    return __btrc_ret_648;
+    __auto_type __btrc_ret_650 = "tpm-tis";
+    return __btrc_ret_650;
 }
 
 void QemuE2eHarness_requireTpm2Capability(QemuE2eHarness* self) {
@@ -15130,20 +15136,20 @@ char* QemuE2eHarness_secureBootCapabilityReport(QemuE2eHarness* self) {
     char* device = QemuE2eHarness_tpmQemuDevice(self);
     bool tpmDevice = (qemu && QemuE2eHarness_qemuDeviceAvailable(self, device));
     bool available = ((((((strcmp(self->spec->arch, "x86_64") == 0) && qemu) && swtpm) && tpmDevice) && (!__btrc_isEmpty(firmware))) && (!__btrc_isEmpty(vars)));
-    __auto_type __btrc_ret_649 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("secureBootQemu=", (available ? "available" : "unavailable"))), "\narch=")), self->spec->arch)), "\nqemu=")), (qemu ? "yes" : "no"))), "\nswtpm=")), (swtpm ? "yes" : "no"))), "\ntpmDevice=")), (tpmDevice ? device : "missing"))), "\nfirmware=")), (__btrc_isEmpty(firmware) ? "missing" : firmware))), "\nvars=")), (__btrc_isEmpty(vars) ? "missing" : vars)));
-    return __btrc_ret_649;
+    __auto_type __btrc_ret_651 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("secureBootQemu=", (available ? "available" : "unavailable"))), "\narch=")), self->spec->arch)), "\nqemu=")), (qemu ? "yes" : "no"))), "\nswtpm=")), (swtpm ? "yes" : "no"))), "\ntpmDevice=")), (tpmDevice ? device : "missing"))), "\nfirmware=")), (__btrc_isEmpty(firmware) ? "missing" : firmware))), "\nvars=")), (__btrc_isEmpty(vars) ? "missing" : vars)));
+    return __btrc_ret_651;
 }
 
 bool QemuE2eHarness_isDarwin(QemuE2eHarness* self) {
     ExecResult* result = UnixShell_run(self->shell, "uname -s");
-    __auto_type __btrc_ret_650 = (strcmp(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))), "Darwin") == 0);
-    return __btrc_ret_650;
+    __auto_type __btrc_ret_652 = (strcmp(ExecResult_trimmed(result), "Darwin") == 0);
+    return __btrc_ret_652;
 }
 
 char* QemuE2eHarness_stripLeadingSlash(QemuE2eHarness* self, char* path) {
     if (__btrc_startsWith(path, "/")) {
-        __auto_type __btrc_ret_651 = __btrc_str_track(__btrc_substring(path, 1, (((int)strlen(path)) - 1)));
-        return __btrc_ret_651;
+        __auto_type __btrc_ret_653 = __btrc_str_track(__btrc_substring(path, 1, (((int)strlen(path)) - 1)));
+        return __btrc_ret_653;
     }
     return path;
 }
@@ -15151,16 +15157,16 @@ char* QemuE2eHarness_stripLeadingSlash(QemuE2eHarness* self, char* path) {
 char* QemuE2eHarness_valueAfterLinePrefix(QemuE2eHarness* self, char* text, char* prefix, int start) {
     int pos = Strings_find(text, prefix, start);
     if (pos < 0) {
-        __auto_type __btrc_ret_652 = "";
-        return __btrc_ret_652;
+        __auto_type __btrc_ret_654 = "";
+        return __btrc_ret_654;
     }
     (pos = (pos + ((int)strlen(prefix))));
     int end = pos;
     while ((text[end] != '\0') && (text[end] != '\n')) {
         (end++);
     }
-    __auto_type __btrc_ret_653 = __btrc_str_track(__btrc_trim(JsonObject_slice(text, pos, end)));
-    return __btrc_ret_653;
+    __auto_type __btrc_ret_655 = __btrc_str_track(__btrc_trim(JsonObject_slice(text, pos, end)));
+    return __btrc_ret_655;
 }
 
 void QemuE2eHarness_extractBootSerial(QemuE2eHarness* self) {
@@ -15208,10 +15214,10 @@ void QemuE2eHarness_downloadIso(QemuE2eHarness* self) {
     if (__btrc_isEmpty(self->spec->isoUrl)) {
         NixosLog_fatal("No iso or isoUrl in VM spec");
     }
-    int __fstr_654_len = snprintf(NULL, 0, "%s.tmp", self->spec->iso);
-    char* __fstr_654_buf = __btrc_str_track(((char*)malloc((__fstr_654_len + 1))));
-    snprintf(__fstr_654_buf, (__fstr_654_len + 1), "%s.tmp", self->spec->iso);
-    char* tmp = __fstr_654_buf;
+    int __fstr_656_len = snprintf(NULL, 0, "%s.tmp", self->spec->iso);
+    char* __fstr_656_buf = __btrc_str_track(((char*)malloc((__fstr_656_len + 1))));
+    snprintf(__fstr_656_buf, (__fstr_656_len + 1), "%s.tmp", self->spec->iso);
+    char* tmp = __fstr_656_buf;
     Command* curl = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("curl"), "-L"), "-o"), tmp), self->spec->isoUrl), false);
     ExecResult* result = UnixShell_runCommand(self->shell, curl);
     if (!ExecResult_ok(result)) {
@@ -15234,8 +15240,8 @@ void QemuE2eHarness_createSshKey(QemuE2eHarness* self) {
 }
 
 char* QemuE2eHarness_sshPubKey(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_655 = __btrc_str_track(__btrc_trim(Path_readAll(QemuE2eHarness_sshPubKeyPath(self))));
-    return __btrc_ret_655;
+    __auto_type __btrc_ret_657 = __btrc_str_track(__btrc_trim(Path_readAll(QemuE2eHarness_sshPubKeyPath(self))));
+    return __btrc_ret_657;
 }
 
 void QemuE2eHarness_createDisk(QemuE2eHarness* self) {
@@ -15272,10 +15278,10 @@ void QemuE2eHarness_requireParentState(QemuE2eHarness* self) {
         return;
     }
     if (!FileSystem_exists(VmTestSpec_parentHashFile(self->spec))) {
-        int __fstr_657_len = snprintf(NULL, 0, "Missing parent state %s; run its test first", self->spec->parentState);
-        char* __fstr_657_buf = __btrc_str_track(((char*)malloc((__fstr_657_len + 1))));
-        snprintf(__fstr_657_buf, (__fstr_657_len + 1), "Missing parent state %s; run its test first", self->spec->parentState);
-        NixosLog_fatal(__fstr_657_buf);
+        int __fstr_659_len = snprintf(NULL, 0, "Missing parent state %s; run its test first", self->spec->parentState);
+        char* __fstr_659_buf = __btrc_str_track(((char*)malloc((__fstr_659_len + 1))));
+        snprintf(__fstr_659_buf, (__fstr_659_len + 1), "Missing parent state %s; run its test first", self->spec->parentState);
+        NixosLog_fatal(__fstr_659_buf);
     }
 }
 
@@ -15286,10 +15292,10 @@ void QemuE2eHarness_copyIfExists(QemuE2eHarness* self, char* source, char* targe
     Command* cp = Command_capture(Command_arg(Command_arg(Command_new("cp"), source), target), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cp);
     if (!ExecResult_ok(result)) {
-        int __fstr_659_len = snprintf(NULL, 0, "Failed to copy state artifact %s", source);
-        char* __fstr_659_buf = __btrc_str_track(((char*)malloc((__fstr_659_len + 1))));
-        snprintf(__fstr_659_buf, (__fstr_659_len + 1), "Failed to copy state artifact %s", source);
-        NixosLog_fatal(__fstr_659_buf);
+        int __fstr_661_len = snprintf(NULL, 0, "Failed to copy state artifact %s", source);
+        char* __fstr_661_buf = __btrc_str_track(((char*)malloc((__fstr_661_len + 1))));
+        snprintf(__fstr_661_buf, (__fstr_661_len + 1), "Failed to copy state artifact %s", source);
+        NixosLog_fatal(__fstr_661_buf);
     }
 }
 
@@ -15301,10 +15307,10 @@ void QemuE2eHarness_copyTreeIfExists(QemuE2eHarness* self, char* source, char* t
     Command* cp = Command_capture(Command_arg(Command_arg(Command_arg(Command_new("cp"), "-R"), source), target), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cp);
     if (!ExecResult_ok(result)) {
-        int __fstr_661_len = snprintf(NULL, 0, "Failed to copy state tree %s", source);
-        char* __fstr_661_buf = __btrc_str_track(((char*)malloc((__fstr_661_len + 1))));
-        snprintf(__fstr_661_buf, (__fstr_661_len + 1), "Failed to copy state tree %s", source);
-        NixosLog_fatal(__fstr_661_buf);
+        int __fstr_663_len = snprintf(NULL, 0, "Failed to copy state tree %s", source);
+        char* __fstr_663_buf = __btrc_str_track(((char*)malloc((__fstr_663_len + 1))));
+        snprintf(__fstr_663_buf, (__fstr_663_len + 1), "Failed to copy state tree %s", source);
+        NixosLog_fatal(__fstr_663_buf);
     }
 }
 
@@ -15314,10 +15320,10 @@ void QemuE2eHarness_inheritState(QemuE2eHarness* self) {
         return;
     }
     if (!FileSystem_exists(QemuE2eHarness_parentWorkDirFile(self))) {
-        int __fstr_663_len = snprintf(NULL, 0, "Parent state %s has no workDir record", self->spec->parentState);
-        char* __fstr_663_buf = __btrc_str_track(((char*)malloc((__fstr_663_len + 1))));
-        snprintf(__fstr_663_buf, (__fstr_663_len + 1), "Parent state %s has no workDir record", self->spec->parentState);
-        NixosLog_fatal(__fstr_663_buf);
+        int __fstr_665_len = snprintf(NULL, 0, "Parent state %s has no workDir record", self->spec->parentState);
+        char* __fstr_665_buf = __btrc_str_track(((char*)malloc((__fstr_665_len + 1))));
+        snprintf(__fstr_665_buf, (__fstr_665_len + 1), "Parent state %s has no workDir record", self->spec->parentState);
+        NixosLog_fatal(__fstr_665_buf);
     }
     char* parentWorkDir = __btrc_str_track(__btrc_trim(Path_readAll(QemuE2eHarness_parentWorkDirFile(self))));
     QemuE2eHarness_ensureWorkDir(self);
@@ -15370,40 +15376,40 @@ void QemuE2eHarness_recordState(QemuE2eHarness* self) {
 
 bool QemuE2eHarness_isRunning(QemuE2eHarness* self) {
     if (!FileSystem_exists(QemuE2eHarness_pidPath(self))) {
-        __auto_type __btrc_ret_664 = false;
-        return __btrc_ret_664;
+        __auto_type __btrc_ret_666 = false;
+        return __btrc_ret_666;
     }
     ExecResult* result = UnixShell_runRaw(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("kill -0 $(cat ", UnixShell_quote(QemuE2eHarness_pidPath(self)))), ") 2>/dev/null")), false, false, "");
-    __auto_type __btrc_ret_665 = ExecResult_ok(result);
-    return __btrc_ret_665;
+    __auto_type __btrc_ret_667 = ExecResult_ok(result);
+    return __btrc_ret_667;
 }
 
 bool QemuE2eHarness_hasSnapshot(QemuE2eHarness* self, char* name) {
     if (!FileSystem_exists(QemuE2eHarness_diskPath(self))) {
-        __auto_type __btrc_ret_666 = false;
-        return __btrc_ret_666;
+        __auto_type __btrc_ret_668 = false;
+        return __btrc_ret_668;
     }
     ExecResult* result = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("qemu-img snapshot -l ", UnixShell_quote(QemuE2eHarness_diskPath(self)))), " | awk '{print $2}'")));
     if (!ExecResult_ok(result)) {
-        __auto_type __btrc_ret_667 = false;
-        return __btrc_ret_667;
+        __auto_type __btrc_ret_669 = false;
+        return __btrc_ret_669;
     }
     btrc_Vector_string* lines = Strings_split(ExecResult_stdout(result), "\n");
-    int __n_669 = btrc_Vector_string_iterLen(lines);
-    for (int __i_668 = 0; (__i_668 < __n_669); (__i_668++)) {
-        char* line = btrc_Vector_string_iterGet(lines, __i_668);
+    int __n_671 = btrc_Vector_string_iterLen(lines);
+    for (int __i_670 = 0; (__i_670 < __n_671); (__i_670++)) {
+        char* line = btrc_Vector_string_iterGet(lines, __i_670);
         if (strcmp(__btrc_str_track(__btrc_trim(line)), name) == 0) {
-            __auto_type __btrc_ret_670 = true;
-            return __btrc_ret_670;
+            __auto_type __btrc_ret_672 = true;
+            return __btrc_ret_672;
         }
     }
-    __auto_type __btrc_ret_671 = false;
-    return __btrc_ret_671;
+    __auto_type __btrc_ret_673 = false;
+    return __btrc_ret_673;
 }
 
 bool QemuE2eHarness_hasBackingDisk(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_672 = FileSystem_exists(QemuE2eHarness_backingDiskFile(self));
-    return __btrc_ret_672;
+    __auto_type __btrc_ret_674 = FileSystem_exists(QemuE2eHarness_backingDiskFile(self));
+    return __btrc_ret_674;
 }
 
 char* QemuE2eHarness_sshOptionsForShell(QemuE2eHarness* self) {
@@ -15425,13 +15431,13 @@ char* QemuE2eHarness_sshOptionsForShell(QemuE2eHarness* self) {
     btrc_Vector_string_push(opts, "-i");
     btrc_Vector_string_push(opts, QemuE2eHarness_sshKeyPath(self));
     btrc_Vector_string* quoted = btrc_Vector_string_new();
-    int __n_674 = btrc_Vector_string_iterLen(opts);
-    for (int __i_673 = 0; (__i_673 < __n_674); (__i_673++)) {
-        char* opt = btrc_Vector_string_iterGet(opts, __i_673);
+    int __n_676 = btrc_Vector_string_iterLen(opts);
+    for (int __i_675 = 0; (__i_675 < __n_676); (__i_675++)) {
+        char* opt = btrc_Vector_string_iterGet(opts, __i_675);
         btrc_Vector_string_push(quoted, UnixShell_quote(opt));
     }
-    __auto_type __btrc_ret_675 = btrc_Vector_string_join(quoted, " ");
-    return __btrc_ret_675;
+    __auto_type __btrc_ret_677 = btrc_Vector_string_join(quoted, " ");
+    return __btrc_ret_677;
 }
 
 void QemuE2eHarness_printStatus(QemuE2eHarness* self) {
@@ -15703,8 +15709,8 @@ void QemuE2eHarness_rebootDisk(QemuE2eHarness* self) {
 }
 
 Command* QemuE2eHarness_addSshOptions(QemuE2eHarness* self, Command* cmd) {
-    __auto_type __btrc_ret_676 = Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(cmd, "-o"), "StrictHostKeyChecking=no"), "-o"), "UserKnownHostsFile=/dev/null"), "-o"), "LogLevel=ERROR"), "-o"), "BatchMode=yes"), "-o"), "IdentitiesOnly=yes"), "-o"), "ConnectTimeout=3"), "-o"), "ConnectionAttempts=1"), "-i"), QemuE2eHarness_sshKeyPath(self));
-    return __btrc_ret_676;
+    __auto_type __btrc_ret_678 = Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(cmd, "-o"), "StrictHostKeyChecking=no"), "-o"), "UserKnownHostsFile=/dev/null"), "-o"), "LogLevel=ERROR"), "-o"), "BatchMode=yes"), "-o"), "IdentitiesOnly=yes"), "-o"), "ConnectTimeout=3"), "-o"), "ConnectionAttempts=1"), "-i"), QemuE2eHarness_sshKeyPath(self));
+    return __btrc_ret_678;
 }
 
 ExecResult* QemuE2eHarness_sshWithTimeout(QemuE2eHarness* self, char* command, bool checkStatus, int timeoutSeconds) {
@@ -15714,8 +15720,8 @@ ExecResult* QemuE2eHarness_sshWithTimeout(QemuE2eHarness* self, char* command, b
 }
 
 ExecResult* QemuE2eHarness_ssh(QemuE2eHarness* self, char* command, bool checkStatus) {
-    __auto_type __btrc_ret_677 = QemuE2eHarness_sshWithTimeout(self, command, checkStatus, 5);
-    return __btrc_ret_677;
+    __auto_type __btrc_ret_679 = QemuE2eHarness_sshWithTimeout(self, command, checkStatus, 5);
+    return __btrc_ret_679;
 }
 
 bool QemuE2eHarness_waitForSsh(QemuE2eHarness* self, int timeout) {
@@ -15723,8 +15729,8 @@ bool QemuE2eHarness_waitForSsh(QemuE2eHarness* self, int timeout) {
     while (elapsed < timeout) {
         ExecResult* result = QemuE2eHarness_ssh(self, "true", false);
         if (ExecResult_ok(result)) {
-            __auto_type __btrc_ret_678 = true;
-            return __btrc_ret_678;
+            __auto_type __btrc_ret_680 = true;
+            return __btrc_ret_680;
         }
         QemuE2eHarness_sleepSeconds(self, 3);
         (elapsed = (elapsed + 8));
@@ -15732,41 +15738,41 @@ bool QemuE2eHarness_waitForSsh(QemuE2eHarness* self, int timeout) {
             QemuE2eHarness_bootstrapSsh(self);
         }
     }
-    __auto_type __btrc_ret_679 = false;
-    return __btrc_ret_679;
+    __auto_type __btrc_ret_681 = false;
+    return __btrc_ret_681;
 }
 
 ExecResult* QemuE2eHarness_host(QemuE2eHarness* self, char* command, bool checkStatus) {
-    __auto_type __btrc_ret_680 = UnixShell_runRaw(self->shell, command, true, checkStatus, "");
-    return __btrc_ret_680;
+    __auto_type __btrc_ret_682 = UnixShell_runRaw(self->shell, command, true, checkStatus, "");
+    return __btrc_ret_682;
 }
 
 char* QemuE2eHarness_workspaceRoot(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_681 = btrc_Map_string_string_getOrDefault(self->spec->args, "workspaceRoot", ".");
-    return __btrc_ret_681;
+    __auto_type __btrc_ret_683 = btrc_Map_string_string_getOrDefault(self->spec->args, "workspaceRoot", ".");
+    return __btrc_ret_683;
 }
 
 ExecResult* QemuE2eHarness_workspaceFileExists(QemuE2eHarness* self, char* relativePath) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cd ", UnixShell_quote(QemuE2eHarness_workspaceRoot(self)))), " && test -f ")), UnixShell_quote(relativePath))), " && printf exists"));
-    __auto_type __btrc_ret_682 = UnixShell_runRaw(self->shell, command, true, false, "");
-    return __btrc_ret_682;
+    __auto_type __btrc_ret_684 = UnixShell_runRaw(self->shell, command, true, false, "");
+    return __btrc_ret_684;
 }
 
 ExecResult* QemuE2eHarness_nixEval(QemuE2eHarness* self, char* attribute, int timeoutSeconds) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cd ", UnixShell_quote(QemuE2eHarness_workspaceRoot(self)))), " && timeout ")), Strings_fromInt(timeoutSeconds))), " nix eval ")), UnixShell_quote(__btrc_str_track(__btrc_strcat(".#", attribute))))), " --show-trace"));
-    __auto_type __btrc_ret_683 = UnixShell_runRaw(self->shell, command, true, false, "");
-    return __btrc_ret_683;
+    __auto_type __btrc_ret_685 = UnixShell_runRaw(self->shell, command, true, false, "");
+    return __btrc_ret_685;
 }
 
 ExecResult* QemuE2eHarness_qmp(QemuE2eHarness* self, char* command, int timeoutSeconds) {
     if (!FileSystem_exists(QemuE2eHarness_qmpPath(self))) {
-        __auto_type __btrc_ret_684 = ExecResult_new(1, "", __btrc_str_track(__btrc_strcat("QMP socket does not exist: ", QemuE2eHarness_qmpPath(self))), "");
-        return __btrc_ret_684;
+        __auto_type __btrc_ret_686 = ExecResult_new(1, "", __btrc_str_track(__btrc_strcat("QMP socket does not exist: ", QemuE2eHarness_qmpPath(self))), "");
+        return __btrc_ret_686;
     }
     char* payload = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{\"execute\":\"qmp_capabilities\"}\n", command)), "\n"));
     char* rendered = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf %s ", UnixShell_quote(payload))), " | timeout ")), Strings_fromInt(timeoutSeconds))), " socat - ")), UnixShell_quote(__btrc_str_track(__btrc_strcat("UNIX-CONNECT:", QemuE2eHarness_qmpPath(self))))));
-    __auto_type __btrc_ret_685 = UnixShell_runRaw(self->shell, rendered, true, false, "");
-    return __btrc_ret_685;
+    __auto_type __btrc_ret_687 = UnixShell_runRaw(self->shell, rendered, true, false, "");
+    return __btrc_ret_687;
 }
 
 void QemuE2eHarness_copyWorkspace(QemuE2eHarness* self, char* localPath, char* remotePath) {
@@ -15863,10 +15869,10 @@ void QemuE2eHarness_restore(QemuE2eHarness* self, char* name) {
 }
 
 void QemuE2eHarness_copyTo(QemuE2eHarness* self, char* localPath, char* remotePath) {
-    int __fstr_686_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
-    char* __fstr_686_buf = __btrc_str_track(((char*)malloc((__fstr_686_len + 1))));
-    snprintf(__fstr_686_buf, (__fstr_686_len + 1), "root@localhost:%s", remotePath);
-    Command* cmd = Command_capture(Command_arg(Command_arg(QemuE2eHarness_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), localPath), __fstr_686_buf), false);
+    int __fstr_688_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
+    char* __fstr_688_buf = __btrc_str_track(((char*)malloc((__fstr_688_len + 1))));
+    snprintf(__fstr_688_buf, (__fstr_688_len + 1), "root@localhost:%s", remotePath);
+    Command* cmd = Command_capture(Command_arg(Command_arg(QemuE2eHarness_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), localPath), __fstr_688_buf), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
         NixosLog_fatal("Failed to copy file to VM");
@@ -15874,10 +15880,10 @@ void QemuE2eHarness_copyTo(QemuE2eHarness* self, char* localPath, char* remotePa
 }
 
 void QemuE2eHarness_copyFrom(QemuE2eHarness* self, char* remotePath, char* localPath) {
-    int __fstr_687_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
-    char* __fstr_687_buf = __btrc_str_track(((char*)malloc((__fstr_687_len + 1))));
-    snprintf(__fstr_687_buf, (__fstr_687_len + 1), "root@localhost:%s", remotePath);
-    Command* cmd = Command_capture(Command_arg(Command_arg(QemuE2eHarness_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), __fstr_687_buf), localPath), false);
+    int __fstr_689_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
+    char* __fstr_689_buf = __btrc_str_track(((char*)malloc((__fstr_689_len + 1))));
+    snprintf(__fstr_689_buf, (__fstr_689_len + 1), "root@localhost:%s", remotePath);
+    Command* cmd = Command_capture(Command_arg(Command_arg(QemuE2eHarness_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), __fstr_689_buf), localPath), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
         NixosLog_fatal("Failed to copy file from VM");
@@ -15982,21 +15988,21 @@ void VmTestRunner_fail(VmTestRunner* self, char* message) {
 
 bool VmTestRunner_outputMatches(VmTestRunner* self, ExecResult* result, char* expect) {
     if (__btrc_isEmpty(expect)) {
-        __auto_type __btrc_ret_689 = true;
-        return __btrc_ret_689;
+        __auto_type __btrc_ret_691 = true;
+        return __btrc_ret_691;
     }
-    __auto_type __btrc_ret_690 = __btrc_strContains(ExecResult_stdout(result), expect);
-    return __btrc_ret_690;
+    __auto_type __btrc_ret_692 = __btrc_strContains(ExecResult_stdout(result), expect);
+    return __btrc_ret_692;
 }
 
 void VmTestRunner_assertResult(VmTestRunner* self, char* label, ExecResult* result, char* expect) {
     if (!ExecResult_ok(result)) {
-        Console_error(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))));
+        Console_error(ExecResult_trimmed(result));
         VmTestRunner_fail(self, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(label, " failed with exit code ")), Strings_fromInt(result->code))));
         return;
     }
     if (!VmTestRunner_outputMatches(self, result, expect)) {
-        Console_error(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))));
+        Console_error(ExecResult_trimmed(result));
         VmTestRunner_fail(self, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(label, " output did not contain expected text: ")), expect)));
     }
 }
@@ -16160,9 +16166,9 @@ int VmTestRunner_run(VmTestRunner* self) {
     if (self->spec->operations->len == 0) {
         NixosLog_fatal("VM spec has no operations");
     }
-    int __n_692 = btrc_Vector_VmOperation_iterLen(self->spec->operations);
-    for (int __i_691 = 0; (__i_691 < __n_692); (__i_691++)) {
-        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->spec->operations, __i_691);
+    int __n_694 = btrc_Vector_VmOperation_iterLen(self->spec->operations);
+    for (int __i_693 = 0; (__i_693 < __n_694); (__i_693++)) {
+        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->spec->operations, __i_693);
         if (self->failures > 0) {
             break;
         }
@@ -16170,12 +16176,12 @@ int VmTestRunner_run(VmTestRunner* self) {
     }
     if (self->failures > 0) {
         QemuE2eHarness_stop(self->vm);
-        __auto_type __btrc_ret_693 = 1;
-        return __btrc_ret_693;
+        __auto_type __btrc_ret_695 = 1;
+        return __btrc_ret_695;
     }
     NixosLog_info(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("e2e ", self->spec->name)), ": pass")));
-    __auto_type __btrc_ret_694 = 0;
-    return __btrc_ret_694;
+    __auto_type __btrc_ret_696 = 0;
+    return __btrc_ret_696;
 }
 
 void VmGraphNode_init(VmGraphNode* self) {
@@ -16187,10 +16193,10 @@ void VmGraphNode_init(VmGraphNode* self) {
             btrc_Vector_string_free(self->after);
         }
     }
-    btrc_Vector_string* __list_696 = btrc_Vector_string_new();
-    (self->after = __list_696);
-    btrc_Vector_string* __list_695 = btrc_Vector_string_new();
-    (__list_695->__rc++);
+    btrc_Vector_string* __list_698 = btrc_Vector_string_new();
+    (self->after = __list_698);
+    btrc_Vector_string* __list_697 = btrc_Vector_string_new();
+    (__list_697->__rc++);
     if (self->args != NULL) {
         if ((--self->args->__rc) <= 0) {
             btrc_Map_string_string_free(self->args);
@@ -16235,19 +16241,19 @@ void VmTestGraph_init(VmTestGraph* self) {
             btrc_Vector_string_free(self->defaults);
         }
     }
-    btrc_Vector_string* __list_698 = btrc_Vector_string_new();
-    (self->defaults = __list_698);
-    btrc_Vector_string* __list_697 = btrc_Vector_string_new();
-    (__list_697->__rc++);
+    btrc_Vector_string* __list_700 = btrc_Vector_string_new();
+    (self->defaults = __list_700);
+    btrc_Vector_string* __list_699 = btrc_Vector_string_new();
+    (__list_699->__rc++);
     if (self->nodes != NULL) {
         if ((--self->nodes->__rc) <= 0) {
             btrc_Vector_VmGraphNode_free(self->nodes);
         }
     }
-    btrc_Vector_VmGraphNode* __list_700 = btrc_Vector_VmGraphNode_new();
-    (self->nodes = __list_700);
-    btrc_Vector_VmGraphNode* __list_699 = btrc_Vector_VmGraphNode_new();
-    (__list_699->__rc++);
+    btrc_Vector_VmGraphNode* __list_702 = btrc_Vector_VmGraphNode_new();
+    (self->nodes = __list_702);
+    btrc_Vector_VmGraphNode* __list_701 = btrc_Vector_VmGraphNode_new();
+    (__list_701->__rc++);
 }
 
 VmTestGraph* VmTestGraph_new(void) {
@@ -16275,49 +16281,49 @@ void VmTestGraph_destroy(VmTestGraph* self) {
 }
 
 VmGraphNode* VmTestGraph_node(VmTestGraph* self, char* id) {
-    int __n_702 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
-    for (int __i_701 = 0; (__i_701 < __n_702); (__i_701++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_701);
+    int __n_704 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
+    for (int __i_703 = 0; (__i_703 < __n_704); (__i_703++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_703);
         if (strcmp(node->id, id) == 0) {
             return node;
         }
     }
     NixosLog_fatal(__btrc_str_track(__btrc_strcat("Unknown graph node: ", id)));
-    __auto_type __btrc_ret_703 = VmGraphNode_new();
-    return __btrc_ret_703;
+    __auto_type __btrc_ret_705 = VmGraphNode_new();
+    return __btrc_ret_705;
 }
 
 char* VmTestGraph_resolvedSpecPath(VmTestGraph* self, VmGraphNode* node) {
     if (__btrc_startsWith(node->specPath, "/")) {
-        __auto_type __btrc_ret_704 = node->specPath;
-        return __btrc_ret_704;
+        __auto_type __btrc_ret_706 = node->specPath;
+        return __btrc_ret_706;
     }
     if (FileSystem_exists(node->specPath)) {
-        __auto_type __btrc_ret_705 = node->specPath;
-        return __btrc_ret_705;
+        __auto_type __btrc_ret_707 = node->specPath;
+        return __btrc_ret_707;
     }
-    __auto_type __btrc_ret_706 = PathTools_join(self->baseDir, node->specPath);
-    return __btrc_ret_706;
+    __auto_type __btrc_ret_708 = PathTools_join(self->baseDir, node->specPath);
+    return __btrc_ret_708;
 }
 
 char* VmTestGraph_resolvedWorkspaceRoot(VmTestGraph* self) {
     if (__btrc_startsWith(self->workspaceRoot, "/")) {
-        __auto_type __btrc_ret_707 = self->workspaceRoot;
-        return __btrc_ret_707;
+        __auto_type __btrc_ret_709 = self->workspaceRoot;
+        return __btrc_ret_709;
     }
-    __auto_type __btrc_ret_708 = PathTools_join(self->baseDir, self->workspaceRoot);
-    return __btrc_ret_708;
+    __auto_type __btrc_ret_710 = PathTools_join(self->baseDir, self->workspaceRoot);
+    return __btrc_ret_710;
 }
 
 btrc_Vector_string* VmTestGraph_defaultTargets(VmTestGraph* self) {
     if (!btrc_Vector_string_isEmpty(self->defaults)) {
-        __auto_type __btrc_ret_709 = self->defaults;
-        return __btrc_ret_709;
+        __auto_type __btrc_ret_711 = self->defaults;
+        return __btrc_ret_711;
     }
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_711 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
-    for (int __i_710 = 0; (__i_710 < __n_711); (__i_710++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_710);
+    int __n_713 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
+    for (int __i_712 = 0; (__i_712 < __n_713); (__i_712++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_712);
         btrc_Vector_string_push(result, node->id);
     }
     return result;
@@ -16440,10 +16446,10 @@ VmGraphNode* VmGraphParser_node(char* objectText) {
     char* argsText = VmSpecParser_objectField(objectText, "args");
     if (!__btrc_isEmpty(argsText)) {
         JsonObject* parsed = JsonObject_parse(argsText);
-        int __n_713 = btrc_Map_string_string_iterLen(parsed->values);
-        for (int __i_712 = 0; (__i_712 < __n_713); (__i_712++)) {
-            char* key = btrc_Map_string_string_iterGet(parsed->values, __i_712);
-            char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_712);
+        int __n_715 = btrc_Map_string_string_iterLen(parsed->values);
+        for (int __i_714 = 0; (__i_714 < __n_715); (__i_714++)) {
+            char* key = btrc_Map_string_string_iterGet(parsed->values, __i_714);
+            char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_714);
             btrc_Map_string_string_put(node->args, key, value);
         }
     }
@@ -16475,9 +16481,9 @@ VmTestGraph* VmGraphParser_readFile(char* path) {
     }
     (graph->defaults = VmGraphParser_stringArray(text, "default"));
     (VmGraphParser_stringArray(text, "default")->__rc++);
-    int __n_715 = btrc_Vector_string_iterLen(VmGraphParser_objectArray(text, "nodes"));
-    for (int __i_714 = 0; (__i_714 < __n_715); (__i_714++)) {
-        char* objectText = btrc_Vector_string_iterGet(VmGraphParser_objectArray(text, "nodes"), __i_714);
+    int __n_717 = btrc_Vector_string_iterLen(VmGraphParser_objectArray(text, "nodes"));
+    for (int __i_716 = 0; (__i_716 < __n_717); (__i_716++)) {
+        char* objectText = btrc_Vector_string_iterGet(VmGraphParser_objectArray(text, "nodes"), __i_716);
         btrc_Vector_VmGraphNode_push(graph->nodes, VmGraphParser_node(objectText));
     }
     if (btrc_Vector_VmGraphNode_isEmpty(graph->nodes)) {
@@ -16512,19 +16518,19 @@ void VmGraphRunner_init(VmGraphRunner* self, VmTestGraph* graph, btrc_Map_string
             btrc_Vector_string_free(self->done);
         }
     }
-    btrc_Vector_string* __list_717 = btrc_Vector_string_new();
-    (self->done = __list_717);
-    btrc_Vector_string* __list_716 = btrc_Vector_string_new();
-    (__list_716->__rc++);
+    btrc_Vector_string* __list_719 = btrc_Vector_string_new();
+    (self->done = __list_719);
+    btrc_Vector_string* __list_718 = btrc_Vector_string_new();
+    (__list_718->__rc++);
     if (self->visiting != NULL) {
         if ((--self->visiting->__rc) <= 0) {
             btrc_Vector_string_free(self->visiting);
         }
     }
-    btrc_Vector_string* __list_719 = btrc_Vector_string_new();
-    (self->visiting = __list_719);
-    btrc_Vector_string* __list_718 = btrc_Vector_string_new();
-    (__list_718->__rc++);
+    btrc_Vector_string* __list_721 = btrc_Vector_string_new();
+    (self->visiting = __list_721);
+    btrc_Vector_string* __list_720 = btrc_Vector_string_new();
+    (__list_720->__rc++);
     (self->sourceHashValue = "");
 }
 
@@ -16564,8 +16570,8 @@ void VmGraphRunner_destroy(VmGraphRunner* self) {
 
 char* VmGraphRunner_sourceHash(VmGraphRunner* self) {
     if (!__btrc_isEmpty(self->sourceHashValue)) {
-        __auto_type __btrc_ret_720 = self->sourceHashValue;
-        return __btrc_ret_720;
+        __auto_type __btrc_ret_722 = self->sourceHashValue;
+        return __btrc_ret_722;
     }
     char* root = VmTestGraph_resolvedWorkspaceRoot(self->graph);
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cd ", UnixShell_quote(root))), " && find . -type f")), " ! -path './.git/*'")), " ! -path '*/.vm/*'")), " ! -path '*/build/*'")), " ! -path '*/secrets/*'")), " ! -path './result/*'")), " ! -name '.DS_Store'")), " ! -name '._*'")), " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)")), " -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'"));
@@ -16580,11 +16586,11 @@ char* VmGraphRunner_sourceHash(VmGraphRunner* self) {
         if (!ExecResult_ok(tool)) {
             NixosLog_fatal(__btrc_str_track(__btrc_strcat("Failed to compute nixosctl hash for ", toolPath)));
         }
-        (toolHash = __btrc_str_track(__btrc_trim(ExecResult_stdout(tool))));
+        (toolHash = ExecResult_trimmed(tool));
     }
-    (self->sourceHashValue = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))), ":nixosctl=")), toolHash)));
-    __auto_type __btrc_ret_721 = self->sourceHashValue;
-    return __btrc_ret_721;
+    (self->sourceHashValue = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(ExecResult_trimmed(result), ":nixosctl=")), toolHash)));
+    __auto_type __btrc_ret_723 = self->sourceHashValue;
+    return __btrc_ret_723;
 }
 
 VmTestSpec* VmGraphRunner_specFor(VmGraphRunner* self, VmGraphNode* node) {
@@ -16595,16 +16601,16 @@ VmTestSpec* VmGraphRunner_specFor(VmGraphRunner* self, VmGraphNode* node) {
     VmTestSpec_setArg(spec, "sourceHash", VmGraphRunner_sourceHash(self));
     VmGraphRunner_applyStructuralOverrides(self, spec, node->args);
     VmGraphRunner_applyStructuralOverrides(self, spec, self->args);
-    int __n_723 = btrc_Map_string_string_iterLen(node->args);
-    for (int __i_722 = 0; (__i_722 < __n_723); (__i_722++)) {
-        char* key = btrc_Map_string_string_iterGet(node->args, __i_722);
-        char* value = btrc_Map_string_string_iterValueAt(node->args, __i_722);
+    int __n_725 = btrc_Map_string_string_iterLen(node->args);
+    for (int __i_724 = 0; (__i_724 < __n_725); (__i_724++)) {
+        char* key = btrc_Map_string_string_iterGet(node->args, __i_724);
+        char* value = btrc_Map_string_string_iterValueAt(node->args, __i_724);
         VmTestSpec_setArg(spec, key, value);
     }
-    int __n_725 = btrc_Map_string_string_iterLen(self->args);
-    for (int __i_724 = 0; (__i_724 < __n_725); (__i_724++)) {
-        char* key = btrc_Map_string_string_iterGet(self->args, __i_724);
-        char* value = btrc_Map_string_string_iterValueAt(self->args, __i_724);
+    int __n_727 = btrc_Map_string_string_iterLen(self->args);
+    for (int __i_726 = 0; (__i_726 < __n_727); (__i_726++)) {
+        char* key = btrc_Map_string_string_iterGet(self->args, __i_726);
+        char* value = btrc_Map_string_string_iterValueAt(self->args, __i_726);
         VmTestSpec_setArg(spec, key, value);
     }
     VmTestSpec_expandArgs(spec);
@@ -16661,18 +16667,18 @@ void VmGraphRunner_applyStructuralOverrides(VmGraphRunner* self, VmTestSpec* spe
 }
 
 void VmGraphRunner_list(VmGraphRunner* self) {
-    int __n_727 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
-    for (int __i_726 = 0; (__i_726 < __n_727); (__i_726++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_726);
+    int __n_729 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
+    for (int __i_728 = 0; (__i_728 < __n_729); (__i_728++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_728);
         char* parents = (btrc_Vector_string_isEmpty(node->after) ? "root" : btrc_Vector_string_join(node->after, ","));
         Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(node->id, " <- ")), parents)), " :: ")), VmTestGraph_resolvedSpecPath(self->graph, node))));
     }
 }
 
 void VmGraphRunner_status(VmGraphRunner* self) {
-    int __n_729 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
-    for (int __i_728 = 0; (__i_728 < __n_729); (__i_728++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_728);
+    int __n_731 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
+    for (int __i_730 = 0; (__i_730 < __n_731); (__i_730++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_730);
         VmTestSpec* spec = VmGraphRunner_specFor(self, node);
         char* recorded = "missing";
         if (FileSystem_exists(VmTestSpec_stateHashFile(spec))) {
@@ -16685,64 +16691,64 @@ void VmGraphRunner_status(VmGraphRunner* self) {
 
 int VmGraphRunner_operationCoverage(VmGraphRunner* self) {
     btrc_Vector_string* covered = btrc_Vector_string_new();
-    int __n_731 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
-    for (int __i_730 = 0; (__i_730 < __n_731); (__i_730++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_730);
+    int __n_733 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
+    for (int __i_732 = 0; (__i_732 < __n_733); (__i_732++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_732);
         VmTestSpec* spec = VmSpecParser_readFile(VmTestGraph_resolvedSpecPath(self->graph, node));
-        int __n_733 = btrc_Vector_VmOperation_iterLen(spec->operations);
-        for (int __i_732 = 0; (__i_732 < __n_733); (__i_732++)) {
-            VmOperation* op = btrc_Vector_VmOperation_iterGet(spec->operations, __i_732);
+        int __n_735 = btrc_Vector_VmOperation_iterLen(spec->operations);
+        for (int __i_734 = 0; (__i_734 < __n_735); (__i_734++)) {
+            VmOperation* op = btrc_Vector_VmOperation_iterGet(spec->operations, __i_734);
             if ((!__btrc_isEmpty(op->kind)) && (!btrc_Vector_string_contains(covered, op->kind))) {
                 btrc_Vector_string_push(covered, op->kind);
             }
         }
     }
     btrc_Vector_string* missing = btrc_Vector_string_new();
-    int __n_735 = btrc_Vector_string_iterLen(VmOperationCatalog_all());
-    for (int __i_734 = 0; (__i_734 < __n_735); (__i_734++)) {
-        char* kind = btrc_Vector_string_iterGet(VmOperationCatalog_all(), __i_734);
+    int __n_737 = btrc_Vector_string_iterLen(VmOperationCatalog_all());
+    for (int __i_736 = 0; (__i_736 < __n_737); (__i_736++)) {
+        char* kind = btrc_Vector_string_iterGet(VmOperationCatalog_all(), __i_736);
         if (!btrc_Vector_string_contains(covered, kind)) {
             btrc_Vector_string_push(missing, kind);
         }
     }
     if (!btrc_Vector_string_isEmpty(missing)) {
         Console_error(__btrc_str_track(__btrc_strcat("Missing e2e operation coverage: ", btrc_Vector_string_join(missing, ", "))));
-        __auto_type __btrc_ret_736 = 1;
-        return __btrc_ret_736;
+        __auto_type __btrc_ret_738 = 1;
+        return __btrc_ret_738;
     }
     Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("E2E operation coverage: ", Strings_fromInt(covered->len))), "/")), Strings_fromInt(VmOperationCatalog_all()->len))));
-    __auto_type __btrc_ret_737 = 0;
-    return __btrc_ret_737;
+    __auto_type __btrc_ret_739 = 0;
+    return __btrc_ret_739;
 }
 
 bool VmGraphRunner_force(VmGraphRunner* self) {
-    __auto_type __btrc_ret_738 = (strcmp(btrc_Map_string_string_getOrDefault(self->args, "force", "false"), "true") == 0);
-    return __btrc_ret_738;
+    __auto_type __btrc_ret_740 = (strcmp(btrc_Map_string_string_getOrDefault(self->args, "force", "false"), "true") == 0);
+    return __btrc_ret_740;
 }
 
 bool VmGraphRunner_ready(VmGraphRunner* self, VmTestSpec* spec) {
     if (!FileSystem_exists(VmTestSpec_stateHashFile(spec))) {
-        __auto_type __btrc_ret_739 = false;
-        return __btrc_ret_739;
+        __auto_type __btrc_ret_741 = false;
+        return __btrc_ret_741;
     }
     char* saved = __btrc_str_track(__btrc_trim(Path_readAll(VmTestSpec_stateHashFile(spec))));
-    __auto_type __btrc_ret_740 = (strcmp(saved, spec->stateHash) == 0);
-    return __btrc_ret_740;
+    __auto_type __btrc_ret_742 = (strcmp(saved, spec->stateHash) == 0);
+    return __btrc_ret_742;
 }
 
 int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
     if (btrc_Vector_string_contains(self->done, id)) {
-        __auto_type __btrc_ret_741 = 0;
-        return __btrc_ret_741;
+        __auto_type __btrc_ret_743 = 0;
+        return __btrc_ret_743;
     }
     if (btrc_Vector_string_contains(self->visiting, id)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Cycle in graph at ", id)));
     }
     btrc_Vector_string_push(self->visiting, id);
     VmGraphNode* node = VmTestGraph_node(self->graph, id);
-    int __n_743 = btrc_Vector_string_iterLen(node->after);
-    for (int __i_742 = 0; (__i_742 < __n_743); (__i_742++)) {
-        char* parent = btrc_Vector_string_iterGet(node->after, __i_742);
+    int __n_745 = btrc_Vector_string_iterLen(node->after);
+    for (int __i_744 = 0; (__i_744 < __n_745); (__i_744++)) {
+        char* parent = btrc_Vector_string_iterGet(node->after, __i_744);
         int parentResult = VmGraphRunner_runNode(self, parent);
         if (parentResult != 0) {
             btrc_Vector_string_removeAll(self->visiting, id);
@@ -16754,8 +16760,8 @@ int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
         NixosLog_info(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("graph ", self->graph->name)), ": skip ")), node->id)), " -> ")), spec->state)), "@")), spec->stateHashShort)));
         btrc_Vector_string_push(self->done, id);
         btrc_Vector_string_removeAll(self->visiting, id);
-        __auto_type __btrc_ret_744 = 0;
-        return __btrc_ret_744;
+        __auto_type __btrc_ret_746 = 0;
+        return __btrc_ret_746;
     }
     NixosLog_info(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("graph ", self->graph->name)), ": run ")), node->id)), " -> ")), spec->state)), "@")), spec->stateHashShort)));
     VmTestRunner* runner = VmTestRunner_new(spec);
@@ -16771,13 +16777,13 @@ int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
     }
     btrc_Vector_string_push(self->done, id);
     btrc_Vector_string_removeAll(self->visiting, id);
-    __auto_type __btrc_ret_745 = 0;
+    __auto_type __btrc_ret_747 = 0;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmTestRunner_destroy(runner);
         }
     }
-    return __btrc_ret_745;
+    return __btrc_ret_747;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmTestRunner_destroy(runner);
@@ -16787,16 +16793,16 @@ int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
 
 int VmGraphRunner_run(VmGraphRunner* self, btrc_Vector_string* targets) {
     btrc_Vector_string* selected = (btrc_Vector_string_isEmpty(targets) ? VmTestGraph_defaultTargets(self->graph) : targets);
-    int __n_747 = btrc_Vector_string_iterLen(selected);
-    for (int __i_746 = 0; (__i_746 < __n_747); (__i_746++)) {
-        char* id = btrc_Vector_string_iterGet(selected, __i_746);
+    int __n_749 = btrc_Vector_string_iterLen(selected);
+    for (int __i_748 = 0; (__i_748 < __n_749); (__i_748++)) {
+        char* id = btrc_Vector_string_iterGet(selected, __i_748);
         int result = VmGraphRunner_runNode(self, id);
         if (result != 0) {
             return result;
         }
     }
-    __auto_type __btrc_ret_748 = 0;
-    return __btrc_ret_748;
+    __auto_type __btrc_ret_750 = 0;
+    return __btrc_ret_750;
 }
 
 void NixosCtl_init(NixosCtl* self) {
@@ -16831,8 +16837,8 @@ void NixosCtl_destroy(NixosCtl* self) {
 }
 
 char* NixosCtl_env(char* name, char* fallback) {
-    __auto_type __btrc_ret_749 = Environment_get(name, fallback);
-    return __btrc_ret_749;
+    __auto_type __btrc_ret_751 = Environment_get(name, fallback);
+    return __btrc_ret_751;
 }
 
 void NixosCtl_usage(NixosCtl* self) {
@@ -16863,36 +16869,36 @@ char* NixosCtl_tail(NixosCtl* self, CliArgs* args, int startIndex) {
     for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
         btrc_Vector_string_push(parts, CliArgs_get(args, i));
     }
-    __auto_type __btrc_ret_750 = btrc_Vector_string_join(parts, " ");
-    return __btrc_ret_750;
+    __auto_type __btrc_ret_752 = btrc_Vector_string_join(parts, " ");
+    return __btrc_ret_752;
 }
 
 bool NixosCtl_needsRoot(NixosCtl* self, char* command) {
     if (strcmp(NixosCtl_env("NIXOSCTL_ASSUME_ROOT_FOR_TESTS", "false"), "true") == 0) {
-        __auto_type __btrc_ret_751 = false;
-        return __btrc_ret_751;
+        __auto_type __btrc_ret_753 = false;
+        return __btrc_ret_753;
     }
-    __auto_type __btrc_ret_752 = (((((((((strcmp(command, "update") == 0) || (strcmp(command, "upgrade") == 0)) || (strcmp(command, "install") == 0)) || (strcmp(command, "snapshot") == 0)) || (strcmp(command, "diff") == 0)) || (strcmp(command, "fix-permissions") == 0)) || (strcmp(command, "change-password") == 0)) || (strcmp(command, "secure-boot") == 0)) || (strcmp(command, "tpm2") == 0));
-    return __btrc_ret_752;
+    __auto_type __btrc_ret_754 = (((((((((strcmp(command, "update") == 0) || (strcmp(command, "upgrade") == 0)) || (strcmp(command, "install") == 0)) || (strcmp(command, "snapshot") == 0)) || (strcmp(command, "diff") == 0)) || (strcmp(command, "fix-permissions") == 0)) || (strcmp(command, "change-password") == 0)) || (strcmp(command, "secure-boot") == 0)) || (strcmp(command, "tpm2") == 0));
+    return __btrc_ret_754;
 }
 
 int NixosCtl_sudoSelf(NixosCtl* self, CliArgs* args) {
     Command* sudo = Command_new("sudo");
     Command_arg(sudo, args->program);
-    int __n_754 = btrc_Vector_string_iterLen(args->values);
-    for (int __i_753 = 0; (__i_753 < __n_754); (__i_753++)) {
-        char* value = btrc_Vector_string_iterGet(args->values, __i_753);
+    int __n_756 = btrc_Vector_string_iterLen(args->values);
+    for (int __i_755 = 0; (__i_755 < __n_756); (__i_755++)) {
+        char* value = btrc_Vector_string_iterGet(args->values, __i_755);
         Command_arg(sudo, value);
     }
     Command_capture(sudo, false);
     ExecResult* result = UnixShell_runCommand(UnixShell_new(), sudo);
-    __auto_type __btrc_ret_755 = result->code;
+    __auto_type __btrc_ret_757 = result->code;
     if (sudo != NULL) {
         if ((--sudo->__rc) <= 0) {
             Command_destroy(sudo);
         }
     }
-    return __btrc_ret_755;
+    return __btrc_ret_757;
     if (sudo != NULL) {
         if ((--sudo->__rc) <= 0) {
             Command_destroy(sudo);
@@ -16910,26 +16916,6 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
     char* action = CliArgs_get(args, 2);
     if (strcmp(action, "status") == 0) {
         QemuE2eHarness_printStatus(vm);
-        __auto_type __btrc_ret_756 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_756;
-    }
-    if (strcmp(action, "hash") == 0) {
-        Console_log(spec->stateHash);
-        __auto_type __btrc_ret_757 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_757;
-    }
-    if (strcmp(action, "setup") == 0) {
-        QemuE2eHarness_setup(vm);
         __auto_type __btrc_ret_758 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16938,8 +16924,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_758;
     }
-    if (strcmp(action, "download-iso") == 0) {
-        QemuE2eHarness_downloadIso(vm);
+    if (strcmp(action, "hash") == 0) {
+        Console_log(spec->stateHash);
         __auto_type __btrc_ret_759 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16948,8 +16934,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_759;
     }
-    if (strcmp(action, "create-key") == 0) {
-        QemuE2eHarness_createSshKey(vm);
+    if (strcmp(action, "setup") == 0) {
+        QemuE2eHarness_setup(vm);
         __auto_type __btrc_ret_760 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16958,8 +16944,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_760;
     }
-    if (strcmp(action, "create-disk") == 0) {
-        QemuE2eHarness_createDisk(vm);
+    if (strcmp(action, "download-iso") == 0) {
+        QemuE2eHarness_downloadIso(vm);
         __auto_type __btrc_ret_761 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16968,8 +16954,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_761;
     }
-    if (strcmp(action, "up") == 0) {
-        QemuE2eHarness_upFromIso(vm);
+    if (strcmp(action, "create-key") == 0) {
+        QemuE2eHarness_createSshKey(vm);
         __auto_type __btrc_ret_762 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16978,8 +16964,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_762;
     }
-    if (strcmp(action, "boot-iso") == 0) {
-        QemuE2eHarness_start(vm, true);
+    if (strcmp(action, "create-disk") == 0) {
+        QemuE2eHarness_createDisk(vm);
         __auto_type __btrc_ret_763 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16988,8 +16974,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_763;
     }
-    if (strcmp(action, "boot-disk") == 0) {
-        QemuE2eHarness_start(vm, false);
+    if (strcmp(action, "up") == 0) {
+        QemuE2eHarness_upFromIso(vm);
         __auto_type __btrc_ret_764 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -16998,8 +16984,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_764;
     }
-    if (strcmp(action, "bootstrap-ssh") == 0) {
-        QemuE2eHarness_bootstrapSsh(vm);
+    if (strcmp(action, "boot-iso") == 0) {
+        QemuE2eHarness_start(vm, true);
         __auto_type __btrc_ret_765 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17008,17 +16994,18 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_765;
     }
-    if (strcmp(action, "wait-ssh") == 0) {
-        int timeout = Strings_toInt(CliArgs_valueAfter(args, "--timeout", "180"));
-        if (!QemuE2eHarness_waitForSsh(vm, timeout)) {
-            __auto_type __btrc_ret_766 = 1;
-            if (vm != NULL) {
-                if ((--vm->__rc) <= 0) {
-                    QemuE2eHarness_destroy(vm);
-                }
+    if (strcmp(action, "boot-disk") == 0) {
+        QemuE2eHarness_start(vm, false);
+        __auto_type __btrc_ret_766 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
             }
-            return __btrc_ret_766;
         }
+        return __btrc_ret_766;
+    }
+    if (strcmp(action, "bootstrap-ssh") == 0) {
+        QemuE2eHarness_bootstrapSsh(vm);
         __auto_type __btrc_ret_767 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17027,29 +17014,18 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_767;
     }
-    if (strcmp(action, "ssh") == 0) {
-        char* command = NixosCtl_tail(self, args, 3);
-        if (__btrc_isEmpty(command)) {
-            NixosLog_fatal("Usage: nixosctl vm <spec.json> ssh <command>");
-        }
-        ExecResult* result = QemuE2eHarness_ssh(vm, command, false);
-        Console_log(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))));
-        __auto_type __btrc_ret_768 = result->code;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
+    if (strcmp(action, "wait-ssh") == 0) {
+        int timeout = Strings_toInt(CliArgs_valueAfter(args, "--timeout", "180"));
+        if (!QemuE2eHarness_waitForSsh(vm, timeout)) {
+            __auto_type __btrc_ret_768 = 1;
+            if (vm != NULL) {
+                if ((--vm->__rc) <= 0) {
+                    QemuE2eHarness_destroy(vm);
+                }
             }
+            return __btrc_ret_768;
         }
-        return __btrc_ret_768;
-    }
-    if (strcmp(action, "host") == 0) {
-        char* command = NixosCtl_tail(self, args, 3);
-        if (__btrc_isEmpty(command)) {
-            NixosLog_fatal("Usage: nixosctl vm <spec.json> host <command>");
-        }
-        ExecResult* result = QemuE2eHarness_host(vm, command, false);
-        Console_log(__btrc_str_track(__btrc_trim(ExecResult_stdout(result))));
-        __auto_type __btrc_ret_769 = result->code;
+        __auto_type __btrc_ret_769 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
@@ -17057,9 +17033,14 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_769;
     }
-    if (strcmp(action, "copy-workspace") == 0) {
-        QemuE2eHarness_copyWorkspace(vm, CliArgs_valueAfter(args, "--local", ".."), CliArgs_valueAfter(args, "--remote", "/etc/nixos"));
-        __auto_type __btrc_ret_770 = 0;
+    if (strcmp(action, "ssh") == 0) {
+        char* command = NixosCtl_tail(self, args, 3);
+        if (__btrc_isEmpty(command)) {
+            NixosLog_fatal("Usage: nixosctl vm <spec.json> ssh <command>");
+        }
+        ExecResult* result = QemuE2eHarness_ssh(vm, command, false);
+        Console_log(ExecResult_trimmed(result));
+        __auto_type __btrc_ret_770 = result->code;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
@@ -17067,9 +17048,14 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_770;
     }
-    if (strcmp(action, "configure-vm-host") == 0) {
-        QemuE2eHarness_configureVmHost(vm);
-        __auto_type __btrc_ret_771 = 0;
+    if (strcmp(action, "host") == 0) {
+        char* command = NixosCtl_tail(self, args, 3);
+        if (__btrc_isEmpty(command)) {
+            NixosLog_fatal("Usage: nixosctl vm <spec.json> host <command>");
+        }
+        ExecResult* result = QemuE2eHarness_host(vm, command, false);
+        Console_log(ExecResult_trimmed(result));
+        __auto_type __btrc_ret_771 = result->code;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
@@ -17077,8 +17063,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_771;
     }
-    if (strcmp(action, "install-nixos") == 0) {
-        QemuE2eHarness_installNixosGuest(vm);
+    if (strcmp(action, "copy-workspace") == 0) {
+        QemuE2eHarness_copyWorkspace(vm, CliArgs_valueAfter(args, "--local", ".."), CliArgs_valueAfter(args, "--remote", "/etc/nixos"));
         __auto_type __btrc_ret_772 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17087,8 +17073,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_772;
     }
-    if (strcmp(action, "reboot-disk") == 0) {
-        QemuE2eHarness_rebootDisk(vm);
+    if (strcmp(action, "configure-vm-host") == 0) {
+        QemuE2eHarness_configureVmHost(vm);
         __auto_type __btrc_ret_773 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17097,8 +17083,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_773;
     }
-    if (strcmp(action, "snapshot") == 0) {
-        QemuE2eHarness_snapshot(vm, CliArgs_valueAfter(args, "--name", "manual"));
+    if (strcmp(action, "install-nixos") == 0) {
+        QemuE2eHarness_installNixosGuest(vm);
         __auto_type __btrc_ret_774 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17107,8 +17093,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_774;
     }
-    if (strcmp(action, "restore") == 0) {
-        QemuE2eHarness_restore(vm, CliArgs_valueAfter(args, "--name", "manual"));
+    if (strcmp(action, "reboot-disk") == 0) {
+        QemuE2eHarness_rebootDisk(vm);
         __auto_type __btrc_ret_775 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17117,8 +17103,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_775;
     }
-    if (strcmp(action, "record-state") == 0) {
-        QemuE2eHarness_recordState(vm);
+    if (strcmp(action, "snapshot") == 0) {
+        QemuE2eHarness_snapshot(vm, CliArgs_valueAfter(args, "--name", "manual"));
         __auto_type __btrc_ret_776 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17127,8 +17113,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_776;
     }
-    if (strcmp(action, "stop") == 0) {
-        QemuE2eHarness_stop(vm);
+    if (strcmp(action, "restore") == 0) {
+        QemuE2eHarness_restore(vm, CliArgs_valueAfter(args, "--name", "manual"));
         __auto_type __btrc_ret_777 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17137,8 +17123,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_777;
     }
-    if (strcmp(action, "reset-state") == 0) {
-        QemuE2eHarness_resetState(vm);
+    if (strcmp(action, "record-state") == 0) {
+        QemuE2eHarness_recordState(vm);
         __auto_type __btrc_ret_778 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17147,9 +17133,8 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_778;
     }
-    if (strcmp(action, "clean-state") == 0) {
-        QemuE2eHarness_resetState(vm);
-        QemuE2eHarness_cleanStateRecord(vm);
+    if (strcmp(action, "stop") == 0) {
+        QemuE2eHarness_stop(vm);
         __auto_type __btrc_ret_779 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
@@ -17158,14 +17143,35 @@ int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
         }
         return __btrc_ret_779;
     }
+    if (strcmp(action, "reset-state") == 0) {
+        QemuE2eHarness_resetState(vm);
+        __auto_type __btrc_ret_780 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_780;
+    }
+    if (strcmp(action, "clean-state") == 0) {
+        QemuE2eHarness_resetState(vm);
+        QemuE2eHarness_cleanStateRecord(vm);
+        __auto_type __btrc_ret_781 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_781;
+    }
     NixosLog_fatal(__btrc_str_track(__btrc_strcat("Unknown vm action: ", action)));
-    __auto_type __btrc_ret_780 = 1;
+    __auto_type __btrc_ret_782 = 1;
     if (vm != NULL) {
         if ((--vm->__rc) <= 0) {
             QemuE2eHarness_destroy(vm);
         }
     }
-    return __btrc_ret_780;
+    return __btrc_ret_782;
     if (vm != NULL) {
         if ((--vm->__rc) <= 0) {
             QemuE2eHarness_destroy(vm);
@@ -17227,23 +17233,23 @@ int NixosCtl_runGraph(NixosCtl* self, CliArgs* args) {
     VmGraphRunner* runner = VmGraphRunner_new(graph, overrides);
     if (strcmp(action, "list") == 0) {
         VmGraphRunner_list(runner);
-        __auto_type __btrc_ret_781 = 0;
+        __auto_type __btrc_ret_783 = 0;
         if (runner != NULL) {
             if ((--runner->__rc) <= 0) {
                 VmGraphRunner_destroy(runner);
             }
         }
-        return __btrc_ret_781;
+        return __btrc_ret_783;
     }
     if (strcmp(action, "status") == 0) {
         VmGraphRunner_status(runner);
-        __auto_type __btrc_ret_782 = 0;
+        __auto_type __btrc_ret_784 = 0;
         if (runner != NULL) {
             if ((--runner->__rc) <= 0) {
                 VmGraphRunner_destroy(runner);
             }
         }
-        return __btrc_ret_782;
+        return __btrc_ret_784;
     }
     if (strcmp(action, "coverage") == 0) {
         int code = VmGraphRunner_operationCoverage(runner);
@@ -17264,13 +17270,13 @@ int NixosCtl_runGraph(NixosCtl* self, CliArgs* args) {
         return code;
     }
     NixosLog_fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
-    __auto_type __btrc_ret_783 = 1;
+    __auto_type __btrc_ret_785 = 1;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmGraphRunner_destroy(runner);
         }
     }
-    return __btrc_ret_783;
+    return __btrc_ret_785;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmGraphRunner_destroy(runner);
@@ -17281,21 +17287,21 @@ int NixosCtl_runGraph(NixosCtl* self, CliArgs* args) {
 int NixosCtl_run(NixosCtl* self, CliArgs* args) {
     if (CliArgs_count(args) == 0) {
         NixosCtl_usage(self);
-        __auto_type __btrc_ret_784 = 1;
-        return __btrc_ret_784;
+        __auto_type __btrc_ret_786 = 1;
+        return __btrc_ret_786;
     }
     char* cmd = CliArgs_command(args);
     if (NixosCtl_needsRoot(self, cmd) && (!Platform_isRoot())) {
-        __auto_type __btrc_ret_785 = NixosCtl_sudoSelf(self, args);
-        return __btrc_ret_785;
+        __auto_type __btrc_ret_787 = NixosCtl_sudoSelf(self, args);
+        return __btrc_ret_787;
     }
     if (strcmp(cmd, "eval") == 0) {
         if (CliArgs_count(args) < 2) {
             NixosLog_fatal("Usage: nixosctl eval <attribute>");
         }
         Console_log(NixosConfig_evalRaw(self->config, CliArgs_get(args, 1)));
-        __auto_type __btrc_ret_786 = 0;
-        return __btrc_ret_786;
+        __auto_type __btrc_ret_788 = 0;
+        return __btrc_ret_788;
     }
     if ((strcmp(cmd, "update") == 0) || (strcmp(cmd, "upgrade") == 0)) {
         RebuildOptions* options = RebuildOptions_new();
@@ -17304,13 +17310,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         (options->clean = ((CliArgs_has(args, "--clean") || CliArgs_has(args, "--upgrade")) || (strcmp(cmd, "upgrade") == 0)));
         (options->upgrade = (CliArgs_has(args, "--upgrade") || (strcmp(cmd, "upgrade") == 0)));
         NixosRebuilder_update(NixosRebuilder_new(self->config), options);
-        __auto_type __btrc_ret_787 = 0;
+        __auto_type __btrc_ret_789 = 0;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 RebuildOptions_destroy(options);
             }
         }
-        return __btrc_ret_787;
+        return __btrc_ret_789;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 RebuildOptions_destroy(options);
@@ -17336,25 +17342,25 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         if (confirmed || Interactive_confirm(installer->interactive, "Install NixOS?")) {
             ExecResult* installed = Installer_installNixos(installer);
             if (!ExecResult_ok(installed)) {
-                __auto_type __btrc_ret_788 = installed->code;
+                __auto_type __btrc_ret_790 = installed->code;
                 if (installer != NULL) {
                     if ((--installer->__rc) <= 0) {
                         Installer_destroy(installer);
                     }
                 }
-                return __btrc_ret_788;
+                return __btrc_ret_790;
             }
         } else if (Interactive_confirm(installer->interactive, "Permission NixOS?")) {
             Installer_permissionNixos(installer);
         }
         Interactive_askToReboot(installer->interactive);
-        __auto_type __btrc_ret_789 = 0;
+        __auto_type __btrc_ret_791 = 0;
         if (installer != NULL) {
             if ((--installer->__rc) <= 0) {
                 Installer_destroy(installer);
             }
         }
-        return __btrc_ret_789;
+        return __btrc_ret_791;
         if (installer != NULL) {
             if ((--installer->__rc) <= 0) {
                 Installer_destroy(installer);
@@ -17363,8 +17369,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
     }
     if (strcmp(cmd, "snapshot") == 0) {
         SnapshotManager_createInitialSnapshots(SnapshotManager_new(self->config));
-        __auto_type __btrc_ret_790 = 0;
-        return __btrc_ret_790;
+        __auto_type __btrc_ret_792 = 0;
+        return __btrc_ret_792;
     }
     if (strcmp(cmd, "diff") == 0) {
         DiffOptions* options = DiffOptions_new();
@@ -17379,13 +17385,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         (options->pattern = CliArgs_valueAfter(args, "--pattern", ""));
         (options->diffignore = CliArgs_valueAfter(args, "--diffignore", ""));
         DiffScanner_print(DiffScanner_new(self->config), options);
-        __auto_type __btrc_ret_791 = 0;
+        __auto_type __btrc_ret_793 = 0;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 DiffOptions_destroy(options);
             }
         }
-        return __btrc_ret_791;
+        return __btrc_ret_793;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 DiffOptions_destroy(options);
@@ -17398,8 +17404,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             (username = NixosCtl_env("USER", "root"));
         }
         PermissionsManager_secureTree(PermissionsManager_new(self->config), username);
-        __auto_type __btrc_ret_792 = 0;
-        return __btrc_ret_792;
+        __auto_type __btrc_ret_794 = 0;
+        return __btrc_ret_794;
     }
     if (strcmp(cmd, "change-password") == 0) {
         if (CliArgs_has(args, "--full-disk-encryption-only") && CliArgs_has(args, "--user-account-only")) {
@@ -17417,13 +17423,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             (newPassword = Interactive_askPasswordConfirmed(interactive, "Enter new password"));
         }
         PasswordManager_change(PasswordManager_new(self->config), oldPassword, newPassword, changeFde, changeUser, CliArgs_has(args, "--update-tpm2"));
-        __auto_type __btrc_ret_793 = 0;
+        __auto_type __btrc_ret_795 = 0;
         if (interactive != NULL) {
             if ((--interactive->__rc) <= 0) {
                 Interactive_destroy(interactive);
             }
         }
-        return __btrc_ret_793;
+        return __btrc_ret_795;
         if (interactive != NULL) {
             if ((--interactive->__rc) <= 0) {
                 Interactive_destroy(interactive);
@@ -17438,26 +17444,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "enable") == 0) {
             SecureBootManager_enable(manager, CliArgs_has(args, "--microsoft"));
-            __auto_type __btrc_ret_794 = 0;
-            if (manager != NULL) {
-                if ((--manager->__rc) <= 0) {
-                    SecureBootManager_destroy(manager);
-                }
-            }
-            return __btrc_ret_794;
-        }
-        if (strcmp(action, "disable") == 0) {
-            SecureBootManager_disable(manager);
-            __auto_type __btrc_ret_795 = 0;
-            if (manager != NULL) {
-                if ((--manager->__rc) <= 0) {
-                    SecureBootManager_destroy(manager);
-                }
-            }
-            return __btrc_ret_795;
-        }
-        if (strcmp(action, "status") == 0) {
-            SecureBootManager_status(manager);
             __auto_type __btrc_ret_796 = 0;
             if (manager != NULL) {
                 if ((--manager->__rc) <= 0) {
@@ -17465,6 +17451,26 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_796;
+        }
+        if (strcmp(action, "disable") == 0) {
+            SecureBootManager_disable(manager);
+            __auto_type __btrc_ret_797 = 0;
+            if (manager != NULL) {
+                if ((--manager->__rc) <= 0) {
+                    SecureBootManager_destroy(manager);
+                }
+            }
+            return __btrc_ret_797;
+        }
+        if (strcmp(action, "status") == 0) {
+            SecureBootManager_status(manager);
+            __auto_type __btrc_ret_798 = 0;
+            if (manager != NULL) {
+                if ((--manager->__rc) <= 0) {
+                    SecureBootManager_destroy(manager);
+                }
+            }
+            return __btrc_ret_798;
         }
         NixosLog_fatal("Usage: nixosctl secure-boot <enable|disable|status>");
         if (manager != NULL) {
@@ -17481,13 +17487,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "status") == 0) {
             Tpm2Manager_status(tpm);
-            __auto_type __btrc_ret_797 = 0;
+            __auto_type __btrc_ret_799 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_797;
+            return __btrc_ret_799;
         }
         if (strcmp(action, "enable") == 0) {
             if (!Tpm2Manager_exists(tpm)) {
@@ -17499,25 +17505,25 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             if (!Tpm2Manager_enroll(tpm)) {
                 NixosLog_fatal("TPM2 enrollment failed");
             }
-            __auto_type __btrc_ret_798 = 0;
+            __auto_type __btrc_ret_800 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_798;
+            return __btrc_ret_800;
         }
         if (strcmp(action, "disable") == 0) {
             if (!Tpm2Manager_wipe(tpm)) {
                 NixosLog_fatal("TPM2 wipe failed");
             }
-            __auto_type __btrc_ret_799 = 0;
+            __auto_type __btrc_ret_801 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_799;
+            return __btrc_ret_801;
         }
         if (tpm != NULL) {
             if ((--tpm->__rc) <= 0) {
@@ -17533,29 +17539,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "list") == 0) {
             DisplayManager_list(displays);
-            __auto_type __btrc_ret_800 = 0;
-            if (displays != NULL) {
-                if ((--displays->__rc) <= 0) {
-                    DisplayManager_destroy(displays);
-                }
-            }
-            return __btrc_ret_800;
-        }
-        if (strcmp(action, "layout") == 0) {
-            DisplayManager_layout(displays);
-            __auto_type __btrc_ret_801 = 0;
-            if (displays != NULL) {
-                if ((--displays->__rc) <= 0) {
-                    DisplayManager_destroy(displays);
-                }
-            }
-            return __btrc_ret_801;
-        }
-        if (CliArgs_count(args) < 3) {
-            NixosLog_fatal("Missing display argument");
-        }
-        if (strcmp(action, "enable") == 0) {
-            DisplayManager_enable(displays, CliArgs_get(args, 2));
             __auto_type __btrc_ret_802 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -17564,8 +17547,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_802;
         }
-        if (strcmp(action, "disable") == 0) {
-            DisplayManager_disable(displays, CliArgs_get(args, 2));
+        if (strcmp(action, "layout") == 0) {
+            DisplayManager_layout(displays);
             __auto_type __btrc_ret_803 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -17574,8 +17557,11 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_803;
         }
-        if (strcmp(action, "primary") == 0) {
-            DisplayManager_primary(displays, CliArgs_get(args, 2));
+        if (CliArgs_count(args) < 3) {
+            NixosLog_fatal("Missing display argument");
+        }
+        if (strcmp(action, "enable") == 0) {
+            DisplayManager_enable(displays, CliArgs_get(args, 2));
             __auto_type __btrc_ret_804 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -17584,8 +17570,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_804;
         }
-        if (strcmp(action, "dpms") == 0) {
-            DisplayManager_dpms(displays, CliArgs_get(args, 2));
+        if (strcmp(action, "disable") == 0) {
+            DisplayManager_disable(displays, CliArgs_get(args, 2));
             __auto_type __btrc_ret_805 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -17593,6 +17579,26 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_805;
+        }
+        if (strcmp(action, "primary") == 0) {
+            DisplayManager_primary(displays, CliArgs_get(args, 2));
+            __auto_type __btrc_ret_806 = 0;
+            if (displays != NULL) {
+                if ((--displays->__rc) <= 0) {
+                    DisplayManager_destroy(displays);
+                }
+            }
+            return __btrc_ret_806;
+        }
+        if (strcmp(action, "dpms") == 0) {
+            DisplayManager_dpms(displays, CliArgs_get(args, 2));
+            __auto_type __btrc_ret_807 = 0;
+            if (displays != NULL) {
+                if ((--displays->__rc) <= 0) {
+                    DisplayManager_destroy(displays);
+                }
+            }
+            return __btrc_ret_807;
         }
         if (displays != NULL) {
             if ((--displays->__rc) <= 0) {
@@ -17608,29 +17614,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "list") == 0) {
             AudioManager_list(audio);
-            __auto_type __btrc_ret_806 = 0;
-            if (audio != NULL) {
-                if ((--audio->__rc) <= 0) {
-                    AudioManager_destroy(audio);
-                }
-            }
-            return __btrc_ret_806;
-        }
-        if (strcmp(action, "current") == 0) {
-            Console_log(AudioManager_current(audio));
-            __auto_type __btrc_ret_807 = 0;
-            if (audio != NULL) {
-                if ((--audio->__rc) <= 0) {
-                    AudioManager_destroy(audio);
-                }
-            }
-            return __btrc_ret_807;
-        }
-        if (strcmp(action, "set") == 0) {
-            if (CliArgs_count(args) < 3) {
-                NixosLog_fatal("Usage: nixosctl audio set <sink>");
-            }
-            AudioManager_set(audio, CliArgs_get(args, 2));
             __auto_type __btrc_ret_808 = 0;
             if (audio != NULL) {
                 if ((--audio->__rc) <= 0) {
@@ -17638,6 +17621,29 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_808;
+        }
+        if (strcmp(action, "current") == 0) {
+            Console_log(AudioManager_current(audio));
+            __auto_type __btrc_ret_809 = 0;
+            if (audio != NULL) {
+                if ((--audio->__rc) <= 0) {
+                    AudioManager_destroy(audio);
+                }
+            }
+            return __btrc_ret_809;
+        }
+        if (strcmp(action, "set") == 0) {
+            if (CliArgs_count(args) < 3) {
+                NixosLog_fatal("Usage: nixosctl audio set <sink>");
+            }
+            AudioManager_set(audio, CliArgs_get(args, 2));
+            __auto_type __btrc_ret_810 = 0;
+            if (audio != NULL) {
+                if ((--audio->__rc) <= 0) {
+                    AudioManager_destroy(audio);
+                }
+            }
+            return __btrc_ret_810;
         }
         if (audio != NULL) {
             if ((--audio->__rc) <= 0) {
@@ -17652,27 +17658,7 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         CaffeineManager* caffeine = CaffeineManager_new();
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "status") == 0) {
-            __auto_type __btrc_ret_809 = (CaffeineManager_enabled(caffeine) ? 0 : 1);
-            if (caffeine != NULL) {
-                if ((--caffeine->__rc) <= 0) {
-                    CaffeineManager_destroy(caffeine);
-                }
-            }
-            return __btrc_ret_809;
-        }
-        if (strcmp(action, "enable") == 0) {
-            CaffeineManager_enable(caffeine);
-            __auto_type __btrc_ret_810 = 0;
-            if (caffeine != NULL) {
-                if ((--caffeine->__rc) <= 0) {
-                    CaffeineManager_destroy(caffeine);
-                }
-            }
-            return __btrc_ret_810;
-        }
-        if (strcmp(action, "disable") == 0) {
-            CaffeineManager_disable(caffeine);
-            __auto_type __btrc_ret_811 = 0;
+            __auto_type __btrc_ret_811 = (CaffeineManager_enabled(caffeine) ? 0 : 1);
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
                     CaffeineManager_destroy(caffeine);
@@ -17680,8 +17666,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_811;
         }
-        if (strcmp(action, "toggle") == 0) {
-            CaffeineManager_toggle(caffeine);
+        if (strcmp(action, "enable") == 0) {
+            CaffeineManager_enable(caffeine);
             __auto_type __btrc_ret_812 = 0;
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
@@ -17689,6 +17675,26 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_812;
+        }
+        if (strcmp(action, "disable") == 0) {
+            CaffeineManager_disable(caffeine);
+            __auto_type __btrc_ret_813 = 0;
+            if (caffeine != NULL) {
+                if ((--caffeine->__rc) <= 0) {
+                    CaffeineManager_destroy(caffeine);
+                }
+            }
+            return __btrc_ret_813;
+        }
+        if (strcmp(action, "toggle") == 0) {
+            CaffeineManager_toggle(caffeine);
+            __auto_type __btrc_ret_814 = 0;
+            if (caffeine != NULL) {
+                if ((--caffeine->__rc) <= 0) {
+                    CaffeineManager_destroy(caffeine);
+                }
+            }
+            return __btrc_ret_814;
         }
         if (caffeine != NULL) {
             if ((--caffeine->__rc) <= 0) {
@@ -17704,23 +17710,23 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "update") == 0) {
             SystemUi_update(system);
-            __auto_type __btrc_ret_813 = 0;
+            __auto_type __btrc_ret_815 = 0;
             if (system != NULL) {
                 if ((--system->__rc) <= 0) {
                     SystemUi_destroy(system);
                 }
             }
-            return __btrc_ret_813;
+            return __btrc_ret_815;
         }
         if (strcmp(action, "upgrade") == 0) {
             SystemUi_upgrade(system);
-            __auto_type __btrc_ret_814 = 0;
+            __auto_type __btrc_ret_816 = 0;
             if (system != NULL) {
                 if ((--system->__rc) <= 0) {
                     SystemUi_destroy(system);
                 }
             }
-            return __btrc_ret_814;
+            return __btrc_ret_816;
         }
         if (system != NULL) {
             if ((--system->__rc) <= 0) {
@@ -17729,8 +17735,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         }
     }
     if (strcmp(cmd, "vm") == 0) {
-        __auto_type __btrc_ret_815 = NixosCtl_runVm(self, args);
-        return __btrc_ret_815;
+        __auto_type __btrc_ret_817 = NixosCtl_runVm(self, args);
+        return __btrc_ret_817;
     }
     if (strcmp(cmd, "e2e") == 0) {
         if (CliArgs_count(args) < 2) {
@@ -17753,12 +17759,12 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         }
     }
     if (strcmp(cmd, "graph") == 0) {
-        __auto_type __btrc_ret_816 = NixosCtl_runGraph(self, args);
-        return __btrc_ret_816;
+        __auto_type __btrc_ret_818 = NixosCtl_runGraph(self, args);
+        return __btrc_ret_818;
     }
     NixosCtl_usage(self);
-    __auto_type __btrc_ret_817 = 1;
-    return __btrc_ret_817;
+    __auto_type __btrc_ret_819 = 1;
+    return __btrc_ret_819;
 }
 
 int main(int argc, char** argv) {

@@ -73,7 +73,7 @@ class DiffScanner {
             ExecResult tx = self.shell.runUnchecked("echo \"$(sudo btrfs subvolume find-new "
                 + UnixShell.quote(clean)
                 + " 9999999)\" | cut -d' ' -f4");
-            string transaction = tx.stdout().trim();
+            string transaction = tx.trimmed();
             ExecResult changes = self.shell.runUnchecked("btrfs subvolume find-new "
                 + UnixShell.quote(tmp)
                 + " "
