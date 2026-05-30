@@ -15025,14 +15025,14 @@ char* QemuE2eHarness_firmwareCodePath(QemuE2eHarness* self) {
 
 char* QemuE2eHarness_secureFirmwareCodePath(QemuE2eHarness* self) {
     if (strcmp(self->spec->arch, "aarch64") == 0) {
-        ExecResult* deb = UnixShell_runUnchecked(self->shell, "find \"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd -print -quit 2>/dev/null");
-        char* dsb = __btrc_str_track(__btrc_trim(ExecResult_stdout(deb)));
-        if (!__btrc_isEmpty(dsb)) {
-            __auto_type __btrc_ret_638 = Strings_copy(dsb);
+        ExecResult* store = UnixShell_runUnchecked(self->shell, "find /nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd' -print -quit 2>/dev/null");
+        char* ssb = __btrc_str_track(__btrc_trim(ExecResult_stdout(store)));
+        if (!__btrc_isEmpty(ssb)) {
+            __auto_type __btrc_ret_638 = Strings_copy(ssb);
             return __btrc_ret_638;
         }
-        ExecResult* aav = UnixShell_runUnchecked(self->shell, "find /nix/store -maxdepth 5 -name AAVMF_CODE.fd -print -quit 2>/dev/null");
-        __auto_type __btrc_ret_639 = Strings_copy(__btrc_str_track(__btrc_trim(ExecResult_stdout(aav))));
+        ExecResult* deb = UnixShell_runUnchecked(self->shell, "find \"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd -print -quit 2>/dev/null");
+        __auto_type __btrc_ret_639 = Strings_copy(__btrc_str_track(__btrc_trim(ExecResult_stdout(deb))));
         return __btrc_ret_639;
     }
     if (!(strcmp(self->spec->arch, "x86_64") == 0)) {
@@ -15054,16 +15054,16 @@ char* QemuE2eHarness_secureFirmwareCodePath(QemuE2eHarness* self) {
 
 char* QemuE2eHarness_firmwareVarsTemplatePath(QemuE2eHarness* self) {
     if (QemuE2eHarness_secureBootEnabled(self) && (strcmp(self->spec->arch, "aarch64") == 0)) {
+        ExecResult* store = UnixShell_runUnchecked(self->shell, "find /nix/store -path '*aavmf-secboot*/AAVMF_VARS.fd' -print -quit 2>/dev/null");
+        char* ssv = __btrc_str_track(__btrc_trim(ExecResult_stdout(store)));
+        if (!__btrc_isEmpty(ssv)) {
+            __auto_type __btrc_ret_642 = Strings_copy(ssv);
+            return __btrc_ret_642;
+        }
         ExecResult* deb = UnixShell_runUnchecked(self->shell, "find \"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd -print -quit 2>/dev/null");
         char* dvp = __btrc_str_track(__btrc_trim(ExecResult_stdout(deb)));
         if (!__btrc_isEmpty(dvp)) {
-            __auto_type __btrc_ret_642 = Strings_copy(dvp);
-            return __btrc_ret_642;
-        }
-        ExecResult* aav = UnixShell_runUnchecked(self->shell, "find /nix/store -maxdepth 5 -name AAVMF_VARS.fd -print -quit 2>/dev/null");
-        char* sbv = __btrc_str_track(__btrc_trim(ExecResult_stdout(aav)));
-        if (!__btrc_isEmpty(sbv)) {
-            __auto_type __btrc_ret_643 = Strings_copy(sbv);
+            __auto_type __btrc_ret_643 = Strings_copy(dvp);
             return __btrc_ret_643;
         }
     }
@@ -15160,13 +15160,10 @@ void QemuE2eHarness_requireUefiCapability(QemuE2eHarness* self) {
 }
 
 void QemuE2eHarness_requireSecureBootCapability(QemuE2eHarness* self) {
-    if (!(strcmp(self->spec->arch, "x86_64") == 0)) {
-        NixosLog_fatal("Secure Boot QEMU enforcement currently requires x86_64 secure EDK2 firmware");
-    }
     char* codePath = QemuE2eHarness_secureFirmwareCodePath(self);
     char* varsPath = QemuE2eHarness_firmwareVarsTemplatePath(self);
     if (__btrc_isEmpty(codePath) || __btrc_isEmpty(varsPath)) {
-        NixosLog_fatal("QEMU Secure Boot firmware is unavailable for x86_64");
+        NixosLog_fatal(__btrc_str_track(__btrc_strcat("QEMU Secure Boot firmware is unavailable for ", self->spec->arch)));
     }
     QemuE2eHarness_requireTpm2Capability(self);
 }

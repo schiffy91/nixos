@@ -111,11 +111,13 @@ class QemuE2eHarness {
 
     public string secureFirmwareCodePath() {
         if (self.spec.arch.equals("aarch64")) {
+            // Enforcing secboot AAVMF from the reproducible nix derivation
+            // (tests/shell.nix), or a manual .vm/firmware override.
+            ExecResult store = self.shell.runUnchecked("find /nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd' -print -quit 2>/dev/null");
+            string ssb = store.stdout().trim();
+            if (!ssb.isEmpty()) { return Strings.copy(ssb); }
             ExecResult deb = self.shell.runUnchecked("find \"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd -print -quit 2>/dev/null");
-            string dsb = deb.stdout().trim();
-            if (!dsb.isEmpty()) { return Strings.copy(dsb); }
-            ExecResult aav = self.shell.runUnchecked("find /nix/store -maxdepth 5 -name AAVMF_CODE.fd -print -quit 2>/dev/null");
-            return Strings.copy(aav.stdout().trim());
+            return Strings.copy(deb.stdout().trim());
         }
         if (!self.spec.arch.equals("x86_64")) { return ""; }
         string packaged = self.qemuSharePath("edk2-x86_64-secure-code.fd");
@@ -128,12 +130,12 @@ class QemuE2eHarness {
 
     public string firmwareVarsTemplatePath() {
         if (self.secureBootEnabled() && self.spec.arch.equals("aarch64")) {
+            ExecResult store = self.shell.runUnchecked("find /nix/store -path '*aavmf-secboot*/AAVMF_VARS.fd' -print -quit 2>/dev/null");
+            string ssv = store.stdout().trim();
+            if (!ssv.isEmpty()) { return Strings.copy(ssv); }
             ExecResult deb = self.shell.runUnchecked("find \"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd -print -quit 2>/dev/null");
             string dvp = deb.stdout().trim();
             if (!dvp.isEmpty()) { return Strings.copy(dvp); }
-            ExecResult aav = self.shell.runUnchecked("find /nix/store -maxdepth 5 -name AAVMF_VARS.fd -print -quit 2>/dev/null");
-            string sbv = aav.stdout().trim();
-            if (!sbv.isEmpty()) { return Strings.copy(sbv); }
         }
         if (self.spec.arch.equals("aarch64")) {
             string packaged = self.qemuSharePath("edk2-arm-vars.fd");
@@ -217,13 +219,14 @@ class QemuE2eHarness {
     }
 
     public void requireSecureBootCapability() {
-        if (!self.spec.arch.equals("x86_64")) {
-            NixosLog.fatal("Secure Boot QEMU enforcement currently requires x86_64 secure EDK2 firmware");
-        }
+        // Secure Boot enforcement is done by the firmware (signature checks vs
+        // enrolled keys); it needs an enforcing secboot firmware but NOT QEMU's
+        // secure world. x86_64 uses the bundled edk2-x86_64-secure-code.fd;
+        // aarch64 uses an AAVMF_CODE.secboot.fd under .vm/firmware, under HVF.
         string codePath = self.secureFirmwareCodePath();
         string varsPath = self.firmwareVarsTemplatePath();
         if (codePath.isEmpty() || varsPath.isEmpty()) {
-            NixosLog.fatal("QEMU Secure Boot firmware is unavailable for x86_64");
+            NixosLog.fatal("QEMU Secure Boot firmware is unavailable for " + self.spec.arch);
         }
         self.requireTpm2Capability();
     }

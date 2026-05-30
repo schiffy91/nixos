@@ -182,24 +182,24 @@ file just to satisfy style output.
 - `Disk-Operation` targets are disko entrypoints, not installed boot targets.
   They use `modules/system/disk-operation.nix` so `nix flake check` can evaluate
   every `nixosConfiguration`.
-- aarch64 Secure Boot: the Lanzaboote install + signing + key-enrollment
-  staging are validated on aarch64 under HVF (`secure-boot-aarch64` scenario —
-  installs, boots, `sbctl verify` → signed, `secure-boot-enroll force` staged).
-  **Secure-boot firmware for aarch64 QEMU exists** — Debian's
-  `AAVMF_CODE.secboot.fd` (and nixpkgs `OVMF.override{secureBoot=true}` builds an
-  AAVMF too); the firmware was never the blocker. Runtime *enforcement*
-  (`bootctl: Secure Boot: enabled`) needs QEMU `-machine virt,secure=on` (ARM
-  TrustZone/EL3) + that enforcing secboot AAVMF. Two obstacles to validating
-  enforcement on this Apple Silicon Mac, both real: (1) HVF "does not support
-  providing Security extensions (TrustZone) to the guest CPU", so it needs
-  `-accel tcg` (software emulation); and (2) under TCG the secboot AAVMF +
-  secure world hangs at firmware init in this QEMU setup (a deep QEMU/EDK2
-  secure-world issue, not chased further). Validating enforcement needs a
-  TrustZone-capable aarch64 host. Harness gotchas found while chasing this:
-  secure boot keys off the `secureBoot` **arg** (`argEnabled`), which is
-  distinct from `bootTarget=Secure-Boot`; and `requireSecureBootCapability` +
-  `secureFirmwareCodePath` previously hard-gated x86_64. x86_64 enforcement uses
-  QEMU's bundled `edk2-x86_64-secure-code.fd` and works.
+- aarch64 Secure Boot is **fully validated end-to-end on aarch64 QEMU under HVF**
+  (`secure-boot-aarch64`, passing, ~6 min): installs with Lanzaboote, signs the
+  system (`sbctl verify`), auto-enrolls keys across a reboot, and `bootctl status`
+  → **Secure Boot: enabled**. Hard-won facts:
+  1. Secure-boot firmware for aarch64 QEMU exists — Debian's
+     `AAVMF_CODE.secboot.fd`, fetched + extracted reproducibly by a nix
+     derivation in `tests/shell.nix`. nixpkgs `OVMF.override{secureBoot=true}`
+     builds a *non-enforcing* AAVMF (boots but reports Secure Boot unsupported),
+     so use the Debian `.secboot` build, not nixpkgs (cf. nixpkgs#288184).
+  2. Enforcement is a firmware signature check — it needs the secboot firmware
+     but **NOT** QEMU's secure world. Do **not** add `-machine virt,secure=on`:
+     HVF can't virtualize EL3/TrustZone, and even under `-accel tcg` the secboot
+     AAVMF hangs at firmware init with `secure=on`. (An earlier doc revision
+     wrongly concluded enforcement "needs TrustZone" — it does not.)
+  3. The harness keys secure boot off the `secureBoot` **arg** (`argEnabled`),
+     which is distinct from `bootTarget=Secure-Boot`; `requireSecureBootCapability`
+     + `secureFirmwareCodePath` used to hard-gate x86_64 (now arch-agnostic).
+  x86_64 uses QEMU's bundled `edk2-x86_64-secure-code.fd`.
 - The Google Drive (CloudStorage/FUSE) mount can serve stale git reads. Prefer
   non-worktree agents on the live tree; if you must use a worktree, verify it
   forked off the live `HEAD`, not a stale ref.
