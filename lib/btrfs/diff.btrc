@@ -54,7 +54,8 @@ class DiffScanner {
 
     public Vector<string> mountPoints() {
         Vector<string> result = [];
-        for volume in self.snapshots.resetSubvolumes() {
+        Vector<ResetSubvolume> volumes = self.snapshots.resetSubvolumes();
+        for volume in volumes {
             result.push(volume.mountPoint);
         }
         return result;
@@ -62,7 +63,8 @@ class DiffScanner {
 
     public Vector<string> changedFiles() {
         Vector<string> result = [];
-        for volume in self.snapshots.resetSubvolumes() {
+        Vector<ResetSubvolume> volumes = self.snapshots.resetSubvolumes();
+        for volume in volumes {
             string tmp = PathTools.join(PathTools.join(self.snapshots.snapshotsPath(), volume.name), "tmp");
             string clean = self.snapshots.cleanSnapshotPath(volume.name);
             self.snapshots.deleteSubvolume(tmp);
@@ -216,7 +218,8 @@ class DiffScanner {
         Vector<string> ignores = self.ignorePatterns(ignorePath);
         Vector<string> ephemeral = [];
         Vector<string> persistedPaths = [];
-        for path in self.changedFiles() {
+        Vector<string> changed = self.changedFiles();
+        for path in changed {
             if (self.isPersisted(path, keepList)) {
                 persistedPaths.push(path);
                 continue;

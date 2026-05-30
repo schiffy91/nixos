@@ -81,13 +81,15 @@ class AudioManager {
         string currentSink = self.current();
         Vector<string> entries = [];
         Vector<string> covered = [];
-        for preset in self.labels.audioPresets() {
+        Vector<AudioPreset> presets = self.labels.audioPresets();
+        for preset in presets {
             string name = preset.sink.isEmpty() ? preset.label : preset.sink;
             string label = preset.label.isEmpty() ? name : preset.label;
             entries.push(self.entryJson(name, label, "", !preset.sink.isEmpty() && preset.sink.equals(currentSink)));
             if (!preset.sink.isEmpty()) { covered.push(preset.sink); }
         }
-        for sink in self.sinks() {
+        Vector<AudioSink> allSinks = self.sinks();
+        for sink in allSinks {
             if (!covered.contains(sink.name)) {
                 string label = sink.description.isEmpty() ? sink.name : sink.description;
                 entries.push(self.entryJson(sink.name, label, sink.description, sink.name.equals(currentSink)));
@@ -97,7 +99,8 @@ class AudioManager {
     }
 
     public AudioPreset findPreset(string selector) {
-        for preset in self.labels.audioPresets() {
+        Vector<AudioPreset> presets = self.labels.audioPresets();
+        for preset in presets {
             if (selector.equals(preset.label) || selector.equals(preset.sink)) {
                 return preset;
             }

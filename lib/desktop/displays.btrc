@@ -157,14 +157,16 @@ class DisplayManager {
     }
 
     public void layout() {
-        for rule in self.labels.layoutRules() {
+        Vector<DisplayLayoutRule> rules = self.labels.layoutRules();
+        for rule in rules {
             self.applyLayout(rule.display);
         }
     }
 
     public void applyLayout(string name) {
         DisplayLayoutRule selected = DisplayLayoutRule();
-        for rule in self.labels.layoutRules() {
+        Vector<DisplayLayoutRule> rules = self.labels.layoutRules();
+        for rule in rules {
             if (rule.display.equals(name)) { selected = rule; }
         }
         if (selected.display.isEmpty()) { return; }
@@ -183,7 +185,8 @@ class DisplayManager {
 
     public void list() {
         Vector<string> rows = [];
-        for output in self.outputs() {
+        Vector<DisplayOutput> all = self.outputs();
+        for output in all {
             rows.push(output.json());
         }
         Console.log("[" + rows.join(",") + "]");

@@ -11711,9 +11711,10 @@ void SnapshotManager_createCleanSnapshot(SnapshotManager* self, ResetSubvolume* 
 }
 
 void SnapshotManager_createInitialSnapshots(SnapshotManager* self) {
-    int __n_425 = btrc_Vector_ResetSubvolume_iterLen(SnapshotManager_resetSubvolumes(self));
+    btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self);
+    int __n_425 = btrc_Vector_ResetSubvolume_iterLen(volumes);
     for (int __i_424 = 0; (__i_424 < __n_425); (__i_424++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(SnapshotManager_resetSubvolumes(self), __i_424);
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_424);
         SnapshotManager_createCleanSnapshot(self, volume);
     }
 }
@@ -12168,9 +12169,10 @@ btrc_Vector_string* DiffScanner_ignorePatterns(DiffScanner* self, char* path) {
 
 btrc_Vector_string* DiffScanner_mountPoints(DiffScanner* self) {
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_445 = btrc_Vector_ResetSubvolume_iterLen(SnapshotManager_resetSubvolumes(self->snapshots));
+    btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self->snapshots);
+    int __n_445 = btrc_Vector_ResetSubvolume_iterLen(volumes);
     for (int __i_444 = 0; (__i_444 < __n_445); (__i_444++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(SnapshotManager_resetSubvolumes(self->snapshots), __i_444);
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_444);
         btrc_Vector_string_push(result, volume->mountPoint);
     }
     return result;
@@ -12178,9 +12180,10 @@ btrc_Vector_string* DiffScanner_mountPoints(DiffScanner* self) {
 
 btrc_Vector_string* DiffScanner_changedFiles(DiffScanner* self) {
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_447 = btrc_Vector_ResetSubvolume_iterLen(SnapshotManager_resetSubvolumes(self->snapshots));
+    btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self->snapshots);
+    int __n_447 = btrc_Vector_ResetSubvolume_iterLen(volumes);
     for (int __i_446 = 0; (__i_446 < __n_447); (__i_446++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(SnapshotManager_resetSubvolumes(self->snapshots), __i_446);
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_446);
         char* tmp = PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self->snapshots), volume->name), "tmp");
         char* clean = SnapshotManager_cleanSnapshotPath(self->snapshots, volume->name);
         SnapshotManager_deleteSubvolume(self->snapshots, tmp);
@@ -12385,9 +12388,10 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
     btrc_Vector_string* ignores = DiffScanner_ignorePatterns(self, ignorePath);
     btrc_Vector_string* ephemeral = btrc_Vector_string_new();
     btrc_Vector_string* persistedPaths = btrc_Vector_string_new();
-    int __n_479 = btrc_Vector_string_iterLen(DiffScanner_changedFiles(self));
+    btrc_Vector_string* changed = DiffScanner_changedFiles(self);
+    int __n_479 = btrc_Vector_string_iterLen(changed);
     for (int __i_478 = 0; (__i_478 < __n_479); (__i_478++)) {
-        char* path = btrc_Vector_string_iterGet(DiffScanner_changedFiles(self), __i_478);
+        char* path = btrc_Vector_string_iterGet(changed, __i_478);
         if (DiffScanner_isPersisted(self, path, keepList)) {
             btrc_Vector_string_push(persistedPaths, path);
             continue;
@@ -13441,9 +13445,10 @@ void AudioManager_list(AudioManager* self) {
     char* currentSink = AudioManager_current(self);
     btrc_Vector_string* entries = btrc_Vector_string_new();
     btrc_Vector_string* covered = btrc_Vector_string_new();
-    int __n_519 = btrc_Vector_AudioPreset_iterLen(LabelsConfig_audioPresets(self->labels));
+    btrc_Vector_AudioPreset* presets = LabelsConfig_audioPresets(self->labels);
+    int __n_519 = btrc_Vector_AudioPreset_iterLen(presets);
     for (int __i_518 = 0; (__i_518 < __n_519); (__i_518++)) {
-        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(LabelsConfig_audioPresets(self->labels), __i_518);
+        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_518);
         char* name = (__btrc_isEmpty(preset->sink) ? preset->label : preset->sink);
         char* label = (__btrc_isEmpty(preset->label) ? name : preset->label);
         btrc_Vector_string_push(entries, AudioManager_entryJson(self, name, label, "", ((!__btrc_isEmpty(preset->sink)) && (strcmp(preset->sink, currentSink) == 0))));
@@ -13451,9 +13456,10 @@ void AudioManager_list(AudioManager* self) {
             btrc_Vector_string_push(covered, preset->sink);
         }
     }
-    int __n_521 = btrc_Vector_AudioSink_iterLen(AudioManager_sinks(self));
+    btrc_Vector_AudioSink* allSinks = AudioManager_sinks(self);
+    int __n_521 = btrc_Vector_AudioSink_iterLen(allSinks);
     for (int __i_520 = 0; (__i_520 < __n_521); (__i_520++)) {
-        AudioSink* sink = btrc_Vector_AudioSink_iterGet(AudioManager_sinks(self), __i_520);
+        AudioSink* sink = btrc_Vector_AudioSink_iterGet(allSinks, __i_520);
         if (!btrc_Vector_string_contains(covered, sink->name)) {
             char* label = (__btrc_isEmpty(sink->description) ? sink->name : sink->description);
             btrc_Vector_string_push(entries, AudioManager_entryJson(self, sink->name, label, sink->description, (strcmp(sink->name, currentSink) == 0)));
@@ -13463,9 +13469,10 @@ void AudioManager_list(AudioManager* self) {
 }
 
 AudioPreset* AudioManager_findPreset(AudioManager* self, char* selector) {
-    int __n_523 = btrc_Vector_AudioPreset_iterLen(LabelsConfig_audioPresets(self->labels));
+    btrc_Vector_AudioPreset* presets = LabelsConfig_audioPresets(self->labels);
+    int __n_523 = btrc_Vector_AudioPreset_iterLen(presets);
     for (int __i_522 = 0; (__i_522 < __n_523); (__i_522++)) {
-        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(LabelsConfig_audioPresets(self->labels), __i_522);
+        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_522);
         if ((strcmp(selector, preset->label) == 0) || (strcmp(selector, preset->sink) == 0)) {
             return preset;
         }
@@ -13816,18 +13823,20 @@ void DisplayManager_dpms(DisplayManager* self, char* state) {
 }
 
 void DisplayManager_layout(DisplayManager* self) {
-    int __n_544 = btrc_Vector_DisplayLayoutRule_iterLen(LabelsConfig_layoutRules(self->labels));
+    btrc_Vector_DisplayLayoutRule* rules = LabelsConfig_layoutRules(self->labels);
+    int __n_544 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
     for (int __i_543 = 0; (__i_543 < __n_544); (__i_543++)) {
-        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(LabelsConfig_layoutRules(self->labels), __i_543);
+        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_543);
         DisplayManager_applyLayout(self, rule->display);
     }
 }
 
 void DisplayManager_applyLayout(DisplayManager* self, char* name) {
     DisplayLayoutRule* selected = DisplayLayoutRule_new();
-    int __n_546 = btrc_Vector_DisplayLayoutRule_iterLen(LabelsConfig_layoutRules(self->labels));
+    btrc_Vector_DisplayLayoutRule* rules = LabelsConfig_layoutRules(self->labels);
+    int __n_546 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
     for (int __i_545 = 0; (__i_545 < __n_546); (__i_545++)) {
-        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(LabelsConfig_layoutRules(self->labels), __i_545);
+        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_545);
         if (strcmp(rule->display, name) == 0) {
             (selected = rule);
         }
@@ -13879,9 +13888,10 @@ void DisplayManager_applyLayout(DisplayManager* self, char* name) {
 
 void DisplayManager_list(DisplayManager* self) {
     btrc_Vector_string* rows = btrc_Vector_string_new();
-    int __n_548 = btrc_Vector_DisplayOutput_iterLen(DisplayManager_outputs(self));
+    btrc_Vector_DisplayOutput* all = DisplayManager_outputs(self);
+    int __n_548 = btrc_Vector_DisplayOutput_iterLen(all);
     for (int __i_547 = 0; (__i_547 < __n_548); (__i_547++)) {
-        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(DisplayManager_outputs(self), __i_547);
+        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(all, __i_547);
         btrc_Vector_string_push(rows, DisplayOutput_json(output));
     }
     Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("[", btrc_Vector_string_join(rows, ","))), "]")));

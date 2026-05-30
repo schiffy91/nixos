@@ -169,7 +169,8 @@ class SnapshotManager {
     }
 
     public void createInitialSnapshots() {
-        for volume in self.resetSubvolumes() {
+        Vector<ResetSubvolume> volumes = self.resetSubvolumes();
+        for volume in volumes {
             self.createCleanSnapshot(volume);
         }
     }
