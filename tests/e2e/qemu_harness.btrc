@@ -110,6 +110,13 @@ class QemuE2eHarness {
     }
 
     public string secureFirmwareCodePath() {
+        if (self.spec.arch.equals("aarch64")) {
+            ExecResult deb = self.shell.runUnchecked("find \"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd -print -quit 2>/dev/null");
+            string dsb = deb.stdout().trim();
+            if (!dsb.isEmpty()) { return Strings.copy(dsb); }
+            ExecResult aav = self.shell.runUnchecked("find /nix/store -maxdepth 5 -name AAVMF_CODE.fd -print -quit 2>/dev/null");
+            return Strings.copy(aav.stdout().trim());
+        }
         if (!self.spec.arch.equals("x86_64")) { return ""; }
         string packaged = self.qemuSharePath("edk2-x86_64-secure-code.fd");
         if (!packaged.isEmpty()) { return packaged; }
@@ -120,6 +127,14 @@ class QemuE2eHarness {
     }
 
     public string firmwareVarsTemplatePath() {
+        if (self.secureBootEnabled() && self.spec.arch.equals("aarch64")) {
+            ExecResult deb = self.shell.runUnchecked("find \"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd -print -quit 2>/dev/null");
+            string dvp = deb.stdout().trim();
+            if (!dvp.isEmpty()) { return Strings.copy(dvp); }
+            ExecResult aav = self.shell.runUnchecked("find /nix/store -maxdepth 5 -name AAVMF_VARS.fd -print -quit 2>/dev/null");
+            string sbv = aav.stdout().trim();
+            if (!sbv.isEmpty()) { return Strings.copy(sbv); }
+        }
         if (self.spec.arch.equals("aarch64")) {
             string packaged = self.qemuSharePath("edk2-arm-vars.fd");
             if (!packaged.isEmpty()) { return packaged; }

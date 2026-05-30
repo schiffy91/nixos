@@ -182,9 +182,18 @@ file just to satisfy style output.
 - `Disk-Operation` targets are disko entrypoints, not installed boot targets.
   They use `modules/system/disk-operation.nix` so `nix flake check` can evaluate
   every `nixosConfiguration`.
-- Secure Boot enforcement in QEMU is x86_64-specific because secure EDK2
-  firmware availability is the limiting capability. Do not pretend aarch64
-  Secure Boot works until the firmware path is real.
+- aarch64 Secure Boot: the Lanzaboote install + signing + key-enrollment
+  staging are validated on aarch64 (`secure-boot-aarch64` scenario — installs,
+  boots, `sbctl verify` → signed, `secure-boot-enroll force` staged). Runtime
+  *enforcement* (`bootctl: Secure Boot: enabled`) needs QEMU
+  `-machine virt,secure=on` (ARM TrustZone/EL3), which Apple Silicon's HVF
+  cannot provide ("HVF does not support providing Security extensions") — it
+  requires `-accel tcg` (slow software emulation) or a TrustZone-capable host,
+  plus an *enforcing* secboot AAVMF (Debian's `AAVMF_CODE.secboot.fd`;
+  nixpkgs `OVMF.override{secureBoot=true}` builds a non-enforcing `AAVMF_CODE.fd`
+  that reports "disabled (unsupported)", cf. nixpkgs#288184). Secure-boot
+  firmware for aarch64 QEMU *does* exist — the gap is the HVF hypervisor, not
+  the firmware. x86_64 uses QEMU's bundled `edk2-x86_64-secure-code.fd`.
 - The Google Drive (CloudStorage/FUSE) mount can serve stale git reads. Prefer
   non-worktree agents on the live tree; if you must use a worktree, verify it
   forked off the live `HEAD`, not a stale ref.

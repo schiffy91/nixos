@@ -324,6 +324,21 @@
         "tpm2": "true",
         "immutabilityMode": "reset"
       }
+    },
+    {
+      "id": "secure-boot-aarch64",
+      "spec": "secure-boot-aarch64/test.json",
+      "after": [
+        "installer-ssh"
+      ],
+      "args": {
+        "bootTarget": "Secure-Boot",
+        "tpm2": "true",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityMode": "reset",
+        "immutabilityEnabled": "true"
+      }
     }
   ]
 }

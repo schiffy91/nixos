@@ -293,6 +293,10 @@ make -C tests graph-full
 Immutability/CLI scenario nodes: `immutability-reset`, `immutability-disabled`,
 `immutability-snapshot-only`, `immutability-restore`, `immutability-orphan`,
 `immutability-files`, `immutability-onupdate`, `nixosctl-cli`, `nixosctl-diff`.
+Hardware nodes: `tpm2-probe`, `tpm2-enroll` (LUKS TPM2 enroll/wipe on an
+encrypted install), `secure-boot-aarch64` (Lanzaboote install + sign + enroll
+staging; runtime enforcement needs QEMU `secure=on`/TrustZone, which Apple HVF
+lacks — see `FOR_CLAUDE.md`), and the x86_64 `secure-boot-*` nodes.
 
 Targets that boot QEMU or install NixOS can take time. The early graph is the
 right default for normal development. The full graph should be used before

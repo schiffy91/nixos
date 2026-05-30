@@ -11,9 +11,14 @@
 
 let
   inherit (pkgs) lib stdenv;
+  # aarch64 Secure-Boot firmware (AAVMF_CODE.fd / AAVMF_VARS.fd), substituted from
+  # the binary cache so the harness can boot aarch64 Secure-Boot VMs even on a
+  # non-Linux host (QEMU on macOS can't locally build the firmware).
+  aarch64Pkgs = import pkgs.path { system = "aarch64-linux"; config.allowUnfree = true; };
+  aavmfSecboot = (aarch64Pkgs.OVMF.override { secureBoot = true; }).fd;
 in
 pkgs.mkShell {
-  packages = with pkgs; [
+  packages = (with pkgs; [
     bash
     coreutils
     curl
@@ -28,8 +33,8 @@ pkgs.mkShell {
     socat
     swtpm
     util-linux
-  ] ++ lib.optionals stdenv.isLinux [
-    OVMF
+  ]) ++ [ aavmfSecboot ] ++ lib.optionals stdenv.isLinux [
+    pkgs.OVMF
   ];
 
   shellHook = ''
