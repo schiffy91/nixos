@@ -36,79 +36,32 @@ class LabelsConfig {
     }
 
     public string displayLabel(string name) {
-        bool inDisplays = false;
-        for line in Strings.split(self.content, "\n") {
-            string trimmed = line.trim();
-            string section = Toml.sectionName(trimmed);
-            if (section.equals("displays")) {
-                inDisplays = true;
-                continue;
-            }
-            if (!section.isEmpty() || !Toml.tableArrayName(trimmed).isEmpty()) {
-                inDisplays = false;
-            }
-            if (inDisplays && Toml.key(trimmed).equals(name)) {
-                return Toml.value(trimmed);
-            }
-        }
-        return name;
+        return Toml.sectionMap(self.content, "displays").getOrDefault(name, name);
     }
 
     public Vector<DisplayLayoutRule> layoutRules() {
         Vector<DisplayLayoutRule> result = [];
-        DisplayLayoutRule current = DisplayLayoutRule();
-        bool inLayout = false;
-        for line in Strings.split(self.content, "\n") {
-            string trimmed = line.trim();
-            string table = Toml.tableArrayName(trimmed);
-            if (table.equals("layout")) {
-                if (inLayout && !current.display.isEmpty()) { result.push(current); }
-                current = DisplayLayoutRule();
-                inLayout = true;
-                continue;
-            }
-            if ((!Toml.sectionName(trimmed).isEmpty() || !table.isEmpty()) && !table.equals("layout")) {
-                if (inLayout && !current.display.isEmpty()) { result.push(current); }
-                inLayout = false;
-            }
-            if (!inLayout || Strings.find(trimmed, "=", 0) < 0) { continue; }
-            string key = Toml.key(trimmed);
-            string value = Toml.value(trimmed);
-            if (key.equals("display")) { current.display = value; }
-            if (key.equals("position")) { current.position = value; }
-            if (key.equals("relative_to")) { current.relativeTo = value; }
+        for block in Toml.tableArrayBlocks(self.content, "layout") {
+            DisplayLayoutRule rule = DisplayLayoutRule();
+            rule.display = block.getOrDefault("display", "");
+            rule.position = block.getOrDefault("position", "");
+            rule.relativeTo = block.getOrDefault("relative_to", "");
+            if (!rule.display.isEmpty()) { result.push(rule); }
         }
-        if (inLayout && !current.display.isEmpty()) { result.push(current); }
         return result;
     }
 
     public Vector<AudioPreset> audioPresets() {
         Vector<AudioPreset> result = [];
-        AudioPreset current = AudioPreset();
-        bool inAudio = false;
-        for line in Strings.split(self.content, "\n") {
-            string trimmed = line.trim();
-            string table = Toml.tableArrayName(trimmed);
-            if (table.equals("audio")) {
-                if (inAudio && (!current.sink.isEmpty() || !current.label.isEmpty())) { result.push(current); }
-                current = AudioPreset();
-                inAudio = true;
-                continue;
-            }
-            if ((!Toml.sectionName(trimmed).isEmpty() || !table.isEmpty()) && !table.equals("audio")) {
-                if (inAudio && (!current.sink.isEmpty() || !current.label.isEmpty())) { result.push(current); }
-                inAudio = false;
-            }
-            if (!inAudio || Strings.find(trimmed, "=", 0) < 0) { continue; }
-            string key = Toml.key(trimmed);
-            string value = Toml.value(trimmed);
-            if (key.equals("label")) { current.label = value; }
-            if (key.equals("card")) { current.card = value; }
-            if (key.equals("profile")) { current.profile = value; }
-            if (key.equals("sink")) { current.sink = value; }
-            if (key.equals("volume")) { current.volume = value; }
+        for block in Toml.tableArrayBlocks(self.content, "audio") {
+            AudioPreset preset = AudioPreset();
+            preset.label = block.getOrDefault("label", "");
+            preset.card = block.getOrDefault("card", "");
+            preset.profile = block.getOrDefault("profile", "");
+            preset.sink = block.getOrDefault("sink", "");
+            preset.volume = block.getOrDefault("volume", "");
+            if (!preset.sink.isEmpty() || !preset.label.isEmpty()) { result.push(preset); }
         }
-        if (inAudio && (!current.sink.isEmpty() || !current.label.isEmpty())) { result.push(current); }
         return result;
     }
 }
