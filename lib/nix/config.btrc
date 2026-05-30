@@ -70,18 +70,16 @@ class NixosConfig {
         return self.paths.root + "#" + self.host() + "-" + self.target();
     }
 
+    public Command nixCmd() {
+        return Command("nix")
+            .arg("--extra-experimental-features").arg("nix-command")
+            .arg("--extra-experimental-features").arg("flakes");
+    }
+
     public string inputLockedRev(string inputName) {
-        Command cmd = Command("nix");
-        cmd.arg("--extra-experimental-features");
-        cmd.arg("nix-command");
-        cmd.arg("--extra-experimental-features");
-        cmd.arg("flakes");
-        cmd.arg("flake");
-        cmd.arg("metadata");
-        cmd.arg(inputName);
-        cmd.arg("--json");
-        cmd.arg("-I");
-        cmd.arg(self.paths.root);
+        Command cmd = self.nixCmd()
+            .arg("flake").arg("metadata").arg(inputName)
+            .arg("--json").arg("-I").arg(self.paths.root);
         ExecResult result = self.shell.runCommand(cmd);
         if (!result.ok()) { return "master"; }
         string json = result.stdout();
@@ -101,13 +99,9 @@ class NixosConfig {
         if (self.cache.has(key)) {
             return self.cache.get(key);
         }
-        Command cmd = Command("nix");
-        cmd.arg("--extra-experimental-features");
-        cmd.arg("nix-command");
-        cmd.arg("--extra-experimental-features");
-        cmd.arg("flakes");
-        cmd.arg("eval");
-        cmd.arg(self.paths.root + "#nixosConfigurations." + self.host() + "-" + self.target() + "." + attribute);
+        Command cmd = self.nixCmd()
+            .arg("eval")
+            .arg(self.paths.root + "#nixosConfigurations." + self.host() + "-" + self.target() + "." + attribute);
         ExecResult result = self.shell.runCommand(cmd);
         if (!result.ok()) {
             NixosLog.fatal("nix eval failed for " + attribute);

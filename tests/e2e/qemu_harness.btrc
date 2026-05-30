@@ -88,6 +88,11 @@ class QemuE2eHarness {
         return Strings.copy(result.stdout().trim());
     }
 
+    // Run `find <args> -print -quit`, return the first match (trimmed, "" if none).
+    public string findFirst(string findArgs) {
+        return self.shell.runUnchecked("find " + findArgs + " -print -quit 2>/dev/null").stdout().trim();
+    }
+
     public string firmwareCodePath() {
         if (self.secureBootEnabled()) {
             return self.secureFirmwareCodePath();
@@ -103,39 +108,29 @@ class QemuE2eHarness {
             string packaged = self.qemuSharePath("edk2-x86_64-code.fd");
             if (!packaged.isEmpty()) { return packaged; }
         }
-        ExecResult result = self.shell.runUnchecked("find /nix/store -maxdepth 4 -name OVMF_CODE.fd -print -quit 2>/dev/null");
-        string found = result.stdout().trim();
-        if (!found.isEmpty()) { return found; }
-        return "";
+        return self.findFirst("/nix/store -maxdepth 4 -name OVMF_CODE.fd");
     }
 
     public string secureFirmwareCodePath() {
         if (self.spec.arch.equals("aarch64")) {
             // Enforcing secboot AAVMF from the reproducible nix derivation
             // (tests/shell.nix), or a manual .vm/firmware override.
-            ExecResult store = self.shell.runUnchecked("find /nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd' -print -quit 2>/dev/null");
-            string ssb = store.stdout().trim();
-            if (!ssb.isEmpty()) { return Strings.copy(ssb); }
-            ExecResult deb = self.shell.runUnchecked("find \"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd -print -quit 2>/dev/null");
-            return Strings.copy(deb.stdout().trim());
+            string store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd'");
+            if (!store.isEmpty()) { return store; }
+            return self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
         }
         if (!self.spec.arch.equals("x86_64")) { return ""; }
         string packaged = self.qemuSharePath("edk2-x86_64-secure-code.fd");
         if (!packaged.isEmpty()) { return packaged; }
-        ExecResult result = self.shell.runUnchecked("find /nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\) -print -quit 2>/dev/null");
-        string found = result.stdout().trim();
-        if (!found.isEmpty()) { return found; }
-        return "";
+        return self.findFirst("/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
     }
 
     public string firmwareVarsTemplatePath() {
         if (self.secureBootEnabled() && self.spec.arch.equals("aarch64")) {
-            ExecResult store = self.shell.runUnchecked("find /nix/store -path '*aavmf-secboot*/AAVMF_VARS.fd' -print -quit 2>/dev/null");
-            string ssv = store.stdout().trim();
-            if (!ssv.isEmpty()) { return Strings.copy(ssv); }
-            ExecResult deb = self.shell.runUnchecked("find \"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd -print -quit 2>/dev/null");
-            string dvp = deb.stdout().trim();
-            if (!dvp.isEmpty()) { return Strings.copy(dvp); }
+            string store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_VARS.fd'");
+            if (!store.isEmpty()) { return store; }
+            string deb = self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd");
+            if (!deb.isEmpty()) { return deb; }
         }
         if (self.spec.arch.equals("aarch64")) {
             string packaged = self.qemuSharePath("edk2-arm-vars.fd");
@@ -145,10 +140,7 @@ class QemuE2eHarness {
             string packaged = self.qemuSharePath("edk2-i386-vars.fd");
             if (!packaged.isEmpty()) { return packaged; }
         }
-        ExecResult result = self.shell.runUnchecked("find /nix/store -maxdepth 4 -name OVMF_VARS.fd -print -quit 2>/dev/null");
-        string found = result.stdout().trim();
-        if (!found.isEmpty()) { return found; }
-        return "";
+        return self.findFirst("/nix/store -maxdepth 4 -name OVMF_VARS.fd");
     }
 
     public void makeFirmwareVarsWritable() {
