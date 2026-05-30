@@ -253,6 +253,46 @@ class MembraneRun {
     }
 }
 
+/* Centralized btrfs CLI vocabulary. Every btrfs subcommand the membrane issues
+ * is built here, so a syntax change touches one place and call sites read as
+ * verbs rather than arg chains. capture(false) streams output to the terminal;
+ * check(false) hands a non-zero exit back to the caller instead of aborting. */
+class MembraneBtrfs {
+    class Command show(string path) {
+        return Command("btrfs").arg("subvolume").arg("show").arg(path).check(false);
+    }
+
+    class Command getReadonly(string path) {
+        return Command("btrfs").arg("property").arg("get").arg("-ts").arg(path).arg("ro").check(false);
+    }
+
+    class Command listChildren(string path) {
+        return Command("btrfs").arg("subvolume").arg("list").arg("-o").arg(path);
+    }
+
+    class Command deleteSubvol(string path) {
+        return Command("btrfs").arg("subvolume").arg("delete").arg(path).capture(false);
+    }
+
+    class Command createSubvol(string path) {
+        return Command("btrfs").arg("subvolume").arg("create").arg(path).capture(false);
+    }
+
+    class Command snapshot(string source, string destination, bool readonly) {
+        Command command = Command("btrfs").arg("subvolume").arg("snapshot");
+        if (readonly) { command.arg("-r"); }
+        return command.arg(source).arg(destination).capture(false);
+    }
+
+    class Command clearReadonly(string path) {
+        return Command("btrfs").arg("property").arg("set").arg("-ts").arg(path).arg("ro").arg("false").capture(false);
+    }
+
+    class Command sync(string top) {
+        return Command("btrfs").arg("filesystem").arg("sync").arg(top).capture(false);
+    }
+}
+
 class SemipermeableMembrane {
     public MembraneRun run;
     public string device;
@@ -289,24 +329,12 @@ class SemipermeableMembrane {
 
     public bool isSubvolume(string path) {
         if (!FileSystem.exists(path)) { return false; }
-        Command command = Command("btrfs")
-            .arg("subvolume")
-            .arg("show")
-            .arg(path)
-            .check(false);
-        ExecResult result = self.run.shell.runCommand(command);
+        ExecResult result = self.run.shell.runCommand(MembraneBtrfs.show(path));
         return result.ok();
     }
 
     public bool isReadonly(string path) {
-        Command command = Command("btrfs")
-            .arg("property")
-            .arg("get")
-            .arg("-ts")
-            .arg(path)
-            .arg("ro")
-            .check(false);
-        ExecResult result = self.run.shell.runCommand(command);
+        ExecResult result = self.run.shell.runCommand(MembraneBtrfs.getReadonly(path));
         return result.ok() && result.stdout().contains("ro=true");
     }
 
@@ -338,12 +366,7 @@ class SemipermeableMembrane {
     public Vector<string> childSubvolumes(string path) {
         Vector<string> result = [];
         if (!FileSystem.isDir(path)) { return result; }
-        Command command = Command("btrfs")
-            .arg("subvolume")
-            .arg("list")
-            .arg("-o")
-            .arg(path);
-        ExecResult listed = self.run.runCommand(command);
+        ExecResult listed = self.run.runCommand(MembraneBtrfs.listChildren(path));
         if (!listed.ok()) { self.run.fatal("list " + path); }
         for line in Strings.split(listed.stdout(), "\n") {
             int marker = Strings.find(line, " path ", 0);
@@ -366,29 +389,14 @@ class SemipermeableMembrane {
         // would index a shrinking vector out of bounds (segfault).
         Vector<string> children = self.childSubvolumes(path);
         for child in children {
-            Command childCommand = Command("btrfs")
-                .arg("subvolume")
-                .arg("delete")
-                .arg(child)
-                .capture(false);
-            self.run.requireCommand(childCommand);
+            self.run.requireCommand(MembraneBtrfs.deleteSubvol(child));
         }
-        Command command = Command("btrfs")
-            .arg("subvolume")
-            .arg("delete")
-            .arg(path)
-            .capture(false);
-        self.run.requireCommand(command);
+        self.run.requireCommand(MembraneBtrfs.deleteSubvol(path));
     }
 
     public void makeSubvolume(string path) {
         self.run.mkdirp(PathTools.dirname(path));
-        Command command = Command("btrfs")
-            .arg("subvolume")
-            .arg("create")
-            .arg(path)
-            .capture(false);
-        self.run.requireCommand(command);
+        self.run.requireCommand(MembraneBtrfs.createSubvol(path));
     }
 
     public void snapshot(string source, string destination, bool readonly) {
@@ -396,24 +404,9 @@ class SemipermeableMembrane {
             self.run.fatal("Source missing: " + source);
         }
         self.deleteSubvolume(destination);
-        Command command = Command("btrfs")
-            .arg("subvolume")
-            .arg("snapshot");
-        if (readonly) { command.arg("-r"); }
-        command.arg(source);
-        command.arg(destination);
-        command.capture(false);
-        self.run.requireCommand(command);
+        self.run.requireCommand(MembraneBtrfs.snapshot(source, destination, readonly));
         if (!readonly) {
-            Command rw = Command("btrfs")
-                .arg("property")
-                .arg("set")
-                .arg("-ts")
-                .arg(destination)
-                .arg("ro")
-                .arg("false")
-                .capture(false);
-            self.run.requireCommand(rw);
+            self.run.requireCommand(MembraneBtrfs.clearReadonly(destination));
         }
     }
 
@@ -783,12 +776,7 @@ class SemipermeableMembrane {
                 self.run.fatal("Unknown mode: " + self.mode);
             }
         }
-        Command sync = Command("btrfs")
-            .arg("filesystem")
-            .arg("sync")
-            .arg(self.run.top)
-            .capture(false);
-        self.run.requireCommand(sync);
+        self.run.requireCommand(MembraneBtrfs.sync(self.run.top));
         self.unmountTop();
         self.run.log("Semipermeable membrane complete");
     }
@@ -883,12 +871,7 @@ class SemipermeableMembrane {
         for volume in volumes {
             self.snapshotCleanVolume(volume);
         }
-        Command sync = Command("btrfs")
-            .arg("filesystem")
-            .arg("sync")
-            .arg(self.run.top)
-            .capture(false);
-        self.run.requireCommand(sync);
+        self.run.requireCommand(MembraneBtrfs.sync(self.run.top));
         self.unmountTop();
         self.run.log("snapshot-clean complete");
     }
