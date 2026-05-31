@@ -1,0 +1,88 @@
+/* Host-side VM assets created before first boot: the installer ISO (downloaded
+ * if missing), the SSH keypair, and the qcow2 disk; setup() also extracts the
+ * serial boot kernel. Self-contained — holds the spec + its own shell, computes
+ * its paths, and delegates boot-serial extraction to the serial collaborator.
+ */
+class VmAssets {
+    public VmTestSpec spec;
+    public UnixShell shell;
+    public QemuSerial serial;
+
+    public VmAssets(VmTestSpec spec, QemuSerial serial) {
+        self.spec = spec;
+        self.shell = UnixShell();
+        self.serial = serial;
+    }
+
+    public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
+    public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
+    public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
+
+    public void ensureWorkDir() {
+        FileSystem.mkdirp(self.spec.workDir);
+        FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
+    }
+
+    public void downloadIso() {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.spec.iso)) { return; }
+        if (self.spec.isoUrl.isEmpty()) {
+            NixosLog.fatal("No iso or isoUrl in VM spec");
+        }
+        string tmp = f"{self.spec.iso}.tmp";
+        Command curl = Command("curl")
+            .arg("-L")
+            .arg("-o")
+            .arg(tmp)
+            .arg(self.spec.isoUrl)
+            .capture(false);
+        ExecResult result = self.shell.runCommand(curl);
+        if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
+        Command mv = Command("mv")
+            .arg(tmp)
+            .arg(self.spec.iso)
+            .capture(false);
+        self.shell.runCommand(mv);
+    }
+
+    public void createSshKey() {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.sshKeyPath())) { return; }
+        Command cmd = Command("ssh-keygen")
+            .arg("-t")
+            .arg("ed25519")
+            .arg("-N")
+            .arg("")
+            .arg("-f")
+            .arg(self.sshKeyPath())
+            .arg("-q")
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }
+    }
+
+    public string sshPubKey() {
+        return Path.readAll(self.sshPubKeyPath()).trim();
+    }
+
+    public void createDisk() {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.diskPath())) { return; }
+        Command cmd = Command("qemu-img")
+            .arg("create")
+            .arg("-f")
+            .arg("qcow2")
+            .arg(self.diskPath())
+            .arg(self.spec.diskSize)
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to create VM disk"); }
+    }
+
+    public void setup() {
+        self.downloadIso();
+        self.createSshKey();
+        self.createDisk();
+        self.serial.extractBootSerial();
+    }
+}
