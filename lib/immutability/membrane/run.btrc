@@ -1,0 +1,85 @@
+class MembraneRun {
+    public UnixShell shell;
+    public Timer timer;
+    public string top;
+    public bool dryRun;
+
+    public MembraneRun(bool dryRun) {
+        self.shell = UnixShell();
+        self.timer = Timer();
+        self.timer.start();
+        self.top = Environment.get("SEMIPERMEABLE_MEMBRANE_MOUNT_PATH", MembraneConstants.topBase() + "." + Strings.fromInt(Platform.pid()));
+        self.dryRun = dryRun;
+    }
+
+    public string elapsed() {
+        return "[" + Strings.fromFloat(self.timer.elapsed()) + "s]";
+    }
+
+    public string path(string rel) {
+        string base = MembranePaths.trimTrailingSlashes(self.top);
+        string child = MembranePaths.trimSlashes(rel);
+        if (child.isEmpty()) { return base; }
+        return PathTools.join(base, child);
+    }
+
+    public void log(string message) {
+        Console.error(self.elapsed() + " " + message);
+    }
+
+    public void fatal(string message) {
+        NixosLog.fatal(self.elapsed() + " ERR " + message);
+    }
+
+    public ExecResult runCommand(Command command) {
+        string rendered = command.render();
+        if (self.dryRun) {
+            self.log("DRY " + rendered);
+            return ExecResult(0, "", "", rendered);
+        }
+        self.log(rendered);
+        return self.shell.runCommand(command);
+    }
+
+    public ExecResult runRaw(string command, bool captureOutput, bool checkStatus) {
+        if (self.dryRun) {
+            self.log("DRY " + command);
+            return ExecResult(0, "", "", command);
+        }
+        self.log(command);
+        return self.shell.runRaw(command, captureOutput, checkStatus, "");
+    }
+
+    public void requireCommand(Command command) {
+        ExecResult result = self.runCommand(command);
+        if (!result.ok()) { self.fatal("Failed: " + command.render()); }
+    }
+
+    public void requireRaw(string command) {
+        ExecResult result = self.runRaw(command, false, true);
+        if (!result.ok()) { self.fatal("Failed: " + command); }
+    }
+
+    public void mkdirp(string path) {
+        if (self.dryRun) {
+            self.log("DRY mkdir -p " + UnixShell.quote(path));
+            return;
+        }
+        FileSystem.mkdirp(path);
+    }
+
+    public void removePath(string path) {
+        if (self.dryRun) {
+            self.log("DRY rm -rf " + UnixShell.quote(path));
+            return;
+        }
+        if (FileSystem.exists(path) || FileSystem.isSymlink(path)) {
+            FileSystem.removeRecursive(path);
+        }
+    }
+
+    public void renamePath(string source, string destination) {
+        self.requireRaw("mv --no-copy " + UnixShell.quote(source) + " " + UnixShell.quote(destination));
+    }
+}
+

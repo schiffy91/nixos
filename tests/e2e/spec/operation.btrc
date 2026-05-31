@@ -1,0 +1,29 @@
+class VmOperation {
+    public string kind;
+    public string command;
+    public string expect;
+    public string name;
+    public string localPath;
+    public string remotePath;
+    public int timeout;
+
+    public VmOperation() {
+        self.kind = "";
+        self.command = "";
+        self.expect = "";
+        self.name = "";
+        self.localPath = "";
+        self.remotePath = "";
+        self.timeout = 120;
+    }
+
+    public void expandArgs(Map<string, string> args) {
+        self.kind = VmSpecParser.expandArgs(self.kind, args);
+        self.command = VmSpecParser.expandArgs(self.command, args);
+        self.expect = VmSpecParser.expandArgs(self.expect, args);
+        self.name = VmSpecParser.expandArgs(self.name, args);
+        self.localPath = VmSpecParser.expandArgs(self.localPath, args);
+        self.remotePath = VmSpecParser.expandArgs(self.remotePath, args);
+    }
+}
+

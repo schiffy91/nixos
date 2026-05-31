@@ -1,0 +1,14 @@
+class VmGraphNode {
+    public string id;
+    public string specPath;
+    public Vector<string> after;
+    public Map<string, string> args;
+
+    public VmGraphNode() {
+        self.id = "";
+        self.specPath = "";
+        self.after = [];
+        self.args = {};
+    }
+}
+

@@ -1,0 +1,344 @@
+class VmSpecParser {
+    class string hostArch() {
+        UnixShell shell = UnixShell();
+        ExecResult result = shell.run("uname -m");
+        string machine = result.trimmed();
+        if (machine.contains("arm64") || machine.contains("aarch64")) {
+            return "aarch64";
+        }
+        return "x86_64";
+    }
+
+    class string defaultIsoUrl(string arch) {
+        return "https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-" + arch + "-linux.iso";
+    }
+
+    class string expandArgs(string text, Map<string, string> args) {
+        string result = Strings.copy(text);
+        for key, value in args {
+            result = Strings.replace(result, "{{" + key + "}}", value);
+        }
+        for key, value in args {
+            result = Strings.replace(result, "${" + key + "}", value);
+        }
+        return result;
+    }
+
+    class int skipSpaces(string text, int i) {
+        int len = text.len();
+        while (i < len && (text[i] == ' ' || text[i] == '\n' || text[i] == '\t' || text[i] == '\r')) {
+            i++;
+        }
+        return i;
+    }
+
+    class int keyPosition(string text, string key) {
+        return Strings.find(text, "\"" + key + "\"", 0);
+    }
+
+    class string objectField(string text, string key) {
+        int pos = VmSpecParser.keyPosition(text, key);
+        if (pos < 0) { return ""; }
+        int colon = Strings.find(text, ":", pos);
+        if (colon < 0) { return ""; }
+        int i = VmSpecParser.skipSpaces(text, colon + 1);
+        int len = text.len();
+        if (i >= len || text[i] != '{') { return ""; }
+        int depth = 0;
+        bool inString = false;
+        bool escaped = false;
+        for (int j = i; j < len; j++) {
+            char c = text[j];
+            if (inString) {
+                if (!escaped && c == (char)34) { inString = false; }
+                escaped = !escaped && c == '\\';
+                if (c != '\\') { escaped = false; }
+                continue;
+            }
+            if (c == (char)34) {
+                inString = true;
+                escaped = false;
+                continue;
+            }
+            if (c == '{') {
+                depth++;
+                continue;
+            }
+            if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return JsonObject.slice(text, i, j + 1);
+                }
+            }
+        }
+        return "";
+    }
+
+    class Map<string, string> argsObject(string text) {
+        Map<string, string> result = {};
+        string objectText = VmSpecParser.objectField(text, "args");
+        if (objectText.isEmpty()) { return result; }
+        JsonObject parsed = JsonObject.parse(objectText);
+        for key, value in parsed.values {
+            result.put(key, value);
+        }
+        return result;
+    }
+
+    class string parseStringValue(string text, int i, string fallback) {
+        int len = text.len();
+        i = VmSpecParser.skipSpaces(text, i);
+        if (i >= len || text[i] != (char)34) { return fallback; }
+        i++;
+        int start = i;
+        bool escaped = false;
+        while (i < len) {
+            if (!escaped && text[i] == (char)34) {
+                return JsonObject.unescape(JsonObject.slice(text, start, i));
+            }
+            escaped = !escaped && text[i] == '\\';
+            if (text[i] != '\\') { escaped = false; }
+            i++;
+        }
+        return fallback;
+    }
+
+    class string field(string text, string key, string fallback) {
+        int pos = VmSpecParser.keyPosition(text, key);
+        if (pos < 0) { return fallback; }
+        int colon = Strings.find(text, ":", pos);
+        if (colon < 0) { return fallback; }
+        int i = VmSpecParser.skipSpaces(text, colon + 1);
+        int len = text.len();
+        if (i < len && text[i] == (char)34) {
+            return VmSpecParser.parseStringValue(text, i, fallback);
+        }
+        int start = i;
+        while (i < len && text[i] != ',' && text[i] != '}' && text[i] != ']') {
+            i++;
+        }
+        string raw = JsonObject.slice(text, start, i).trim();
+        if (raw.isEmpty()) { return fallback; }
+        return raw;
+    }
+
+    class int intField(string text, string key, int fallback) {
+        string raw = VmSpecParser.field(text, key, "");
+        if (raw.isEmpty()) { return fallback; }
+        return Strings.toInt(raw);
+    }
+
+    class VmOperation operation(string objectText) {
+        VmOperation op = VmOperation();
+        op.kind = VmSpecParser.field(objectText, "op", "");
+        op.command = VmSpecParser.field(objectText, "command", "");
+        op.expect = VmSpecParser.field(objectText, "expect", "");
+        op.name = VmSpecParser.field(objectText, "name", "");
+        op.localPath = VmSpecParser.field(objectText, "local", "");
+        op.remotePath = VmSpecParser.field(objectText, "remote", "");
+        op.timeout = VmSpecParser.intField(objectText, "timeout", 120);
+        return op;
+    }
+
+    class Vector<VmOperation> operations(string text) {
+        Vector<VmOperation> result = [];
+        int pos = VmSpecParser.keyPosition(text, "operations");
+        if (pos < 0) { return result; }
+        int arrayStart = Strings.find(text, "[", pos);
+        if (arrayStart < 0) { return result; }
+        int len = text.len();
+        int depth = 0;
+        int start = -1;
+        bool inString = false;
+        bool escaped = false;
+        for (int i = arrayStart + 1; i < len; i++) {
+            char c = text[i];
+            if (inString) {
+                if (!escaped && c == (char)34) { inString = false; }
+                escaped = !escaped && c == '\\';
+                if (c != '\\') { escaped = false; }
+                continue;
+            }
+            if (c == (char)34) {
+                inString = true;
+                escaped = false;
+                continue;
+            }
+            if (c == '{') {
+                if (depth == 0) { start = i; }
+                depth++;
+                continue;
+            }
+            if (c == '}') {
+                depth--;
+                if (depth == 0 && start >= 0) {
+                    string objectText = JsonObject.slice(text, start, i + 1);
+                    result.push(VmSpecParser.operation(objectText));
+                    start = -1;
+                }
+                continue;
+            }
+            if (c == ']' && depth == 0) { break; }
+        }
+        return result;
+    }
+
+    class VmTestSpec parse(string text) {
+        VmTestSpec spec = VmTestSpec();
+        spec.name = VmSpecParser.field(text, "name", spec.name);
+        spec.state = VmSpecParser.field(text, "state", spec.name);
+        spec.parentState = VmSpecParser.field(text, "parentState", spec.parentState);
+        spec.stateRoot = VmSpecParser.field(text, "stateRoot", spec.stateRoot);
+        spec.stateMaterial = VmSpecParser.field(text, "stateMaterial", spec.stateMaterial);
+        spec.workDir = VmSpecParser.field(text, "workDir", ".vm/e2e/" + spec.name);
+        spec.arch = VmSpecParser.field(text, "arch", spec.arch);
+        spec.iso = VmSpecParser.field(text, "iso", PathTools.join(PathTools.join(".vm", "iso"), "nixos-minimal-" + spec.arch + ".iso"));
+        spec.isoUrl = VmSpecParser.field(text, "isoUrl", VmSpecParser.defaultIsoUrl(spec.arch));
+        spec.diskSize = VmSpecParser.field(text, "diskSize", spec.diskSize);
+        spec.memory = VmSpecParser.field(text, "memory", spec.memory);
+        spec.cpus = VmSpecParser.intField(text, "cpus", spec.cpus);
+        spec.sshPort = VmSpecParser.intField(text, "sshPort", spec.sshPort);
+        spec.args = VmSpecParser.argsObject(text);
+        spec.operations = VmSpecParser.operations(text);
+        return spec;
+    }
+
+    class void applySpecField(VmTestSpec spec, string key, string value) {
+        if (key.equals("name")) { spec.name = value; return; }
+        if (key.equals("state")) { spec.state = value; return; }
+        if (key.equals("parentState")) { spec.parentState = value; return; }
+        if (key.equals("stateRoot")) { spec.stateRoot = value; return; }
+        if (key.equals("stateMaterial")) { spec.stateMaterial = value; return; }
+        if (key.equals("workDir")) { spec.workDir = value; return; }
+        if (key.equals("arch")) { spec.arch = value; return; }
+        if (key.equals("iso")) { spec.iso = value; return; }
+        if (key.equals("isoUrl")) { spec.isoUrl = value; return; }
+        if (key.equals("diskSize")) { spec.diskSize = value; return; }
+        if (key.equals("memory")) { spec.memory = value; return; }
+        if (key.equals("cpus")) { spec.cpus = Strings.toInt(value); return; }
+        if (key.equals("sshPort")) { spec.sshPort = Strings.toInt(value); return; }
+    }
+
+    class void applyOperationField(VmOperation op, string key, string value) {
+        if (key.equals("op")) { op.kind = value; return; }
+        if (key.equals("kind")) { op.kind = value; return; }
+        if (key.equals("command")) { op.command = value; return; }
+        if (key.equals("expect")) { op.expect = value; return; }
+        if (key.equals("name")) { op.name = value; return; }
+        if (key.equals("local")) { op.localPath = value; return; }
+        if (key.equals("remote")) { op.remotePath = value; return; }
+        if (key.equals("timeout")) { op.timeout = Strings.toInt(value); return; }
+    }
+
+    class bool hasOperation(VmOperation op) {
+        return !op.kind.isEmpty() || !op.command.isEmpty() || !op.name.isEmpty();
+    }
+
+    class string yamlKey(string line) {
+        int pos = Strings.find(line, ":", 0);
+        if (pos < 0) { return ""; }
+        return Toml.unquote(line.substring(0, pos).trim());
+    }
+
+    class string yamlValue(string line) {
+        int pos = Strings.find(line, ":", 0);
+        if (pos < 0) { return ""; }
+        return Toml.unquote(Toml.stripInlineComment(line.substring(pos + 1, line.len() - pos - 1)).trim());
+    }
+
+    class VmTestSpec parseToml(string text) {
+        VmTestSpec spec = VmTestSpec();
+        string section = "root";
+        VmOperation op = VmOperation();
+        Vector<string> lines = Strings.split(text, "\n");
+        for line in lines {
+            string cleaned = Toml.stripInlineComment(line);
+            if (cleaned.isEmpty()) { continue; }
+            string arrayName = Toml.tableArrayName(cleaned);
+            if (arrayName.equals("operations")) {
+                if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+                op = VmOperation();
+                section = "operations";
+                continue;
+            }
+            string sectionName = Toml.sectionName(cleaned);
+            if (!sectionName.isEmpty()) {
+                if (VmSpecParser.hasOperation(op)) {
+                    spec.operations.push(op);
+                    op = VmOperation();
+                }
+                section = sectionName;
+                continue;
+            }
+            string key = Toml.key(cleaned);
+            if (key.isEmpty()) { continue; }
+            string value = Toml.value(cleaned);
+            if (section.equals("args")) {
+                spec.args.put(key, value);
+                continue;
+            }
+            if (section.equals("operations")) {
+                VmSpecParser.applyOperationField(op, key, value);
+                continue;
+            }
+            VmSpecParser.applySpecField(spec, key, value);
+        }
+        if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+        return spec;
+    }
+
+    class VmTestSpec parseYaml(string text) {
+        VmTestSpec spec = VmTestSpec();
+        string section = "root";
+        VmOperation op = VmOperation();
+        Vector<string> lines = Strings.split(text, "\n");
+        for raw in lines {
+            string line = Toml.stripInlineComment(raw);
+            if (line.trim().isEmpty()) { continue; }
+            string trimmed = line.trim();
+            if (trimmed.equals("args:")) {
+                if (VmSpecParser.hasOperation(op)) {
+                    spec.operations.push(op);
+                    op = VmOperation();
+                }
+                section = "args";
+                continue;
+            }
+            if (trimmed.equals("operations:")) {
+                section = "operations";
+                continue;
+            }
+            if (trimmed.startsWith("- ")) {
+                if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+                op = VmOperation();
+                section = "operations";
+                string rest = trimmed.substring(2, trimmed.len() - 2).trim();
+                if (!rest.isEmpty()) {
+                    VmSpecParser.applyOperationField(op, VmSpecParser.yamlKey(rest), VmSpecParser.yamlValue(rest));
+                }
+                continue;
+            }
+            string key = VmSpecParser.yamlKey(trimmed);
+            if (key.isEmpty()) { continue; }
+            string value = VmSpecParser.yamlValue(trimmed);
+            if (section.equals("args")) {
+                spec.args.put(key, value);
+                continue;
+            }
+            if (section.equals("operations")) {
+                VmSpecParser.applyOperationField(op, key, value);
+                continue;
+            }
+            VmSpecParser.applySpecField(spec, key, value);
+        }
+        if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+        return spec;
+    }
+
+    class VmTestSpec readFile(string path) {
+        string text = Path.readAll(path);
+        if (path.endsWith(".toml")) { return VmSpecParser.parseToml(text); }
+        if (path.endsWith(".yaml") || path.endsWith(".yml")) { return VmSpecParser.parseYaml(text); }
+        return VmSpecParser.parse(text);
+    }
+}

@@ -1,0 +1,173 @@
+class VmTestSpec {
+    public string name;
+    public string workDir;
+    public string arch;
+    public string iso;
+    public string isoUrl;
+    public string diskSize;
+    public string memory;
+    public int cpus;
+    public int sshPort;
+    public string state;
+    public string parentState;
+    public string stateRoot;
+    public string stateMaterial;
+    public string parentHash;
+    public string stateHash;
+    public string stateHashShort;
+    public Map<string, string> args;
+    public Vector<VmOperation> operations;
+
+    public VmTestSpec() {
+        self.name = "vm-test";
+        self.workDir = ".vm/e2e/vm-test";
+        self.arch = VmSpecParser.hostArch();
+        self.iso = "";
+        self.isoUrl = "";
+        self.diskSize = "30G";
+        self.memory = "4G";
+        self.cpus = 4;
+        self.sshPort = 2222;
+        self.state = "vm-test";
+        self.parentState = "root";
+        self.stateRoot = ".vm/e2e/chain";
+        self.stateMaterial = "";
+        self.parentHash = "root";
+        self.stateHash = "";
+        self.stateHashShort = "";
+        self.args = {};
+        self.operations = [];
+    }
+
+    public void setArg(string key, string value) {
+        self.args.put(key, value);
+    }
+
+    public void setArgPair(string pair) {
+        int pos = Strings.find(pair, "=", 0);
+        if (pos <= 0) {
+            NixosLog.fatal("Expected --arg key=value, got " + pair);
+        }
+        string key = JsonObject.slice(pair, 0, pos);
+        string value = JsonObject.slice(pair, pos + 1, pair.len());
+        self.setArg(key, value);
+    }
+
+    public void setDerivedArgs() {
+        self.args.putIfAbsent("name", self.name);
+        self.args.putIfAbsent("workDir", self.workDir);
+        self.args.putIfAbsent("arch", self.arch);
+        self.args.putIfAbsent("iso", self.iso);
+        self.args.putIfAbsent("isoUrl", self.isoUrl);
+        self.args.putIfAbsent("diskSize", self.diskSize);
+        self.args.putIfAbsent("memory", self.memory);
+        self.args.putIfAbsent("cpus", Strings.fromInt(self.cpus));
+        self.args.putIfAbsent("sshPort", Strings.fromInt(self.sshPort));
+        self.args.putIfAbsent("state", self.state);
+        self.args.putIfAbsent("parentState", self.parentState);
+        self.args.putIfAbsent("stateRoot", self.stateRoot);
+        self.args.putIfAbsent("stateMaterial", self.stateMaterial);
+        self.args.putIfAbsent("parentHash", self.parentHash);
+        self.args.putIfAbsent("stateHash", self.stateHash);
+        self.args.putIfAbsent("stateHashShort", self.stateHashShort);
+    }
+
+    public void refreshDerivedArgs() {
+        self.args.put("name", self.name);
+        self.args.put("workDir", self.workDir);
+        self.args.put("arch", self.arch);
+        self.args.put("iso", self.iso);
+        self.args.put("isoUrl", self.isoUrl);
+        self.args.put("diskSize", self.diskSize);
+        self.args.put("memory", self.memory);
+        self.args.put("cpus", Strings.fromInt(self.cpus));
+        self.args.put("sshPort", Strings.fromInt(self.sshPort));
+        self.args.put("state", self.state);
+        self.args.put("parentState", self.parentState);
+        self.args.put("stateRoot", self.stateRoot);
+        self.args.put("stateMaterial", self.stateMaterial);
+        self.args.put("parentHash", self.parentHash);
+        self.args.put("stateHash", self.stateHash);
+        self.args.put("stateHashShort", self.stateHashShort);
+    }
+
+    public string stateDir() {
+        return PathTools.join(self.stateRoot, self.state);
+    }
+
+    public string stateHashFile() {
+        return PathTools.join(self.stateDir(), "hash");
+    }
+
+    public string parentHashFile() {
+        return PathTools.join(PathTools.join(self.stateRoot, self.parentState), "hash");
+    }
+
+    public string resolveParentHash() {
+        if (self.parentState.equals("root") || self.parentState.isEmpty()) {
+            return "root";
+        }
+        string path = self.parentHashFile();
+        if (FileSystem.exists(path)) {
+            return Path.readAll(path).trim();
+        }
+        return "missing:" + self.parentState;
+    }
+
+    public string operationsMaterial() {
+        Vector<string> lines = [];
+        for op in self.operations {
+            lines.push("op=" + op.kind);
+            lines.push("name=" + op.name);
+            lines.push("command=" + op.command);
+            lines.push("expect=" + op.expect);
+            lines.push("local=" + op.localPath);
+            lines.push("remote=" + op.remotePath);
+            lines.push("timeout=" + Strings.fromInt(op.timeout));
+        }
+        return lines.join("\n");
+    }
+
+    public string hashMaterial() {
+        string material = self.stateMaterial;
+        if (material.isEmpty()) {
+            material = f"{self.name}:{self.arch}:{self.isoUrl}:{self.diskSize}:{self.memory}:{self.cpus}:{self.sshPort}";
+        }
+        return f"parent={self.parentHash}\nstate={self.state}\nmaterial={material}\noperations=\n{self.operationsMaterial()}\n";
+    }
+
+    public void computeStateHash() {
+        self.parentHash = self.resolveParentHash();
+        string command = "printf %s " + UnixShell.quote(self.hashMaterial()) + " | (if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi) | awk '{print $1}'";
+        ExecResult result = UnixShell().run(command);
+        if (!result.ok()) {
+            NixosLog.fatal("Failed to compute state hash for " + self.state);
+        }
+        self.stateHash = result.trimmed();
+        self.stateHashShort = self.stateHash.substring(0, 12);
+    }
+
+    public void expandArgs() {
+        string rawWorkDir = self.workDir;
+        self.setDerivedArgs();
+        self.name = VmSpecParser.expandArgs(self.name, self.args);
+        self.arch = VmSpecParser.expandArgs(self.arch, self.args);
+        self.iso = VmSpecParser.expandArgs(self.iso, self.args);
+        self.isoUrl = VmSpecParser.expandArgs(self.isoUrl, self.args);
+        self.diskSize = VmSpecParser.expandArgs(self.diskSize, self.args);
+        self.memory = VmSpecParser.expandArgs(self.memory, self.args);
+        self.state = VmSpecParser.expandArgs(self.state, self.args);
+        self.parentState = VmSpecParser.expandArgs(self.parentState, self.args);
+        self.stateRoot = VmSpecParser.expandArgs(self.stateRoot, self.args);
+        self.stateMaterial = VmSpecParser.expandArgs(self.stateMaterial, self.args);
+        self.refreshDerivedArgs();
+        self.computeStateHash();
+        self.refreshDerivedArgs();
+        self.workDir = VmSpecParser.expandArgs(rawWorkDir, self.args);
+        self.refreshDerivedArgs();
+        for op in self.operations {
+            op.expandArgs(self.args);
+        }
+    }
+}
+

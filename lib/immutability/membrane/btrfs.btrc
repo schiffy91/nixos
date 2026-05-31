@@ -1,0 +1,40 @@
+/* Centralized btrfs CLI vocabulary. Every btrfs subcommand the membrane issues
+ * is built here, so a syntax change touches one place and call sites read as
+ * verbs rather than arg chains. capture(false) streams output to the terminal;
+ * check(false) hands a non-zero exit back to the caller instead of aborting. */
+class MembraneBtrfs {
+    class Command show(string path) {
+        return Command("btrfs").arg("subvolume").arg("show").arg(path).check(false);
+    }
+
+    class Command getReadonly(string path) {
+        return Command("btrfs").arg("property").arg("get").arg("-ts").arg(path).arg("ro").check(false);
+    }
+
+    class Command listChildren(string path) {
+        return Command("btrfs").arg("subvolume").arg("list").arg("-o").arg(path);
+    }
+
+    class Command deleteSubvol(string path) {
+        return Command("btrfs").arg("subvolume").arg("delete").arg(path).capture(false);
+    }
+
+    class Command createSubvol(string path) {
+        return Command("btrfs").arg("subvolume").arg("create").arg(path).capture(false);
+    }
+
+    class Command snapshot(string source, string destination, bool readonly) {
+        Command command = Command("btrfs").arg("subvolume").arg("snapshot");
+        if (readonly) { command.arg("-r"); }
+        return command.arg(source).arg(destination).capture(false);
+    }
+
+    class Command clearReadonly(string path) {
+        return Command("btrfs").arg("property").arg("set").arg("-ts").arg(path).arg("ro").arg("false").capture(false);
+    }
+
+    class Command sync(string top) {
+        return Command("btrfs").arg("filesystem").arg("sync").arg(top).capture(false);
+    }
+}
+
