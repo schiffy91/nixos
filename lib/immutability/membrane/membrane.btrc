@@ -4,6 +4,7 @@ class SemipermeableMembrane {
     public MembranePlanner planner;
     public MembraneMounts mounts;
     public MembraneSlots slots;
+    public MembraneOrphans orphans;
     public string device;
     public string snapshotsSubvolume;
     public string cleanName;
@@ -20,6 +21,7 @@ class SemipermeableMembrane {
         self.planner = MembranePlanner(self.fs);
         self.mounts = MembraneMounts(self.run, self.fs);
         self.slots = MembraneSlots(self.fs, self.run);
+        self.orphans = MembraneOrphans(self.fs, self.run);
         self.device = "";
         self.snapshotsSubvolume = "";
         self.cleanName = "";
@@ -34,47 +36,6 @@ class SemipermeableMembrane {
     class bool envDryRun() {
         string value = Environment.get("SEMIPERMEABLE_MEMBRANE_DRY_RUN", "");
         return value.equals("1") || value.equals("true") || value.equals("yes") || value.equals("on");
-    }
-
-    public void ensureNamespaces() {
-        Vector<string> namespaces = [
-            self.persistRoot,
-            PathTools.join(self.persistRoot, MembraneConstants.dirs()),
-            PathTools.join(self.persistRoot, MembraneConstants.meta()),
-            PathTools.join(PathTools.join(self.persistRoot, MembraneConstants.meta()), MembraneConstants.files())
-        ];
-        for rel in namespaces {
-            string path = self.run.path(rel);
-            if (!self.fs.exists(path)) {
-                self.fs.makeSubvolume(path);
-            } else if (!self.fs.isSubvolume(path)) {
-                self.run.fatal("not a subvolume: " + path);
-            }
-        }
-    }
-
-    public bool keyInSpec(Vector<string> validKeys, string key) {
-        for v in validKeys {
-            if (v.equals(key)) { return true; }
-        }
-        return false;
-    }
-
-    public void pruneOrphans() {
-        Vector<string> validKeys = [];
-        for spec in self.specs {
-            validKeys.push(MembranePaths.key(spec.absPath));
-        }
-        string dirsPath = self.run.path(PathTools.join(self.persistRoot, MembraneConstants.dirs()));
-        // Snapshot the listing: deleting inside a loop over self.method() re-evaluates the call.
-        Vector<string> children = self.fs.childSubvolumes(dirsPath);
-        for child in children {
-            string key = PathTools.basename(child);
-            if (!self.keyInSpec(validKeys, key)) {
-                self.run.log("Pruning orphaned persist subvolume " + key);
-                self.fs.deleteSubvolume(child);
-            }
-        }
     }
 
     public Vector<MembraneSpec> specsForVolume(string volume) {
@@ -183,9 +144,9 @@ class SemipermeableMembrane {
             return;
         }
         self.mounts.mountTop(self.device, self.assumeMounted);
-        self.ensureNamespaces();
+        self.orphans.ensureNamespaces(self.persistRoot);
         if (self.mode.equals(MembraneConstants.converge()) || self.mode.equals(MembraneConstants.reset()) || self.mode.equals(MembraneConstants.prepareOnly())) {
-            self.pruneOrphans();
+            self.orphans.pruneOrphans(self.persistRoot, self.specs);
         }
         for volume in self.volumes {
             if (self.mode.equals(MembraneConstants.converge()) || self.mode.equals(MembraneConstants.reset()) || self.mode.equals(MembraneConstants.prepareOnly())) {
