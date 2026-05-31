@@ -1,3 +1,4 @@
+#include "btrc_stdlib.h"
 #define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,273 +28,9 @@
 #include <fnmatch.h>
 #include <time.h>
 
-static inline char* __btrc_strdup(const char* s) {
-    if (!s) return NULL;
-    size_t len = strlen(s) + 1;
-    char* copy = (char*)malloc(len);
-    if (!copy) { fprintf(stderr, "btrc: out of memory (strdup %zu bytes)\n", len); exit(1); }
-    memcpy(copy, s, len);
-    return copy;
-}
-
-static inline void* __btrc_safe_realloc(void* ptr, size_t size) {
-    void* result = realloc(ptr, size);
-    if (!result && size > 0) { fprintf(stderr, "btrc: out of memory (realloc %zu bytes)\n", size); exit(1); }
-    return result;
-}
-
-static inline void* __btrc_safe_calloc(size_t count, size_t size) {
-    void* result = calloc(count, size);
-    if (!result && count > 0) { fprintf(stderr, "btrc: out of memory (calloc %zu bytes)\n", count * size); exit(1); }
-    return result;
-}
-
-static inline int __btrc_div_int(int a, int b) {
-    if (b == 0) { fprintf(stderr, "Division by zero\n"); exit(1); }
-    return a / b;
-}
-
-static inline double __btrc_div_double(double a, double b) {
-    if (b == 0.0) { fprintf(stderr, "Division by zero\n"); exit(1); }
-    return a / b;
-}
-
-static inline int __btrc_mod_int(int a, int b) {
-    if (b == 0) { fprintf(stderr, "Modulo by zero\n"); exit(1); }
-    return a % b;
-}
-
-/* btrc string temp pool (dynamic) */
-static int __btrc_str_pool_cap = 256;
-static char** __btrc_str_pool = NULL;
-static int __btrc_str_pool_top = 0;
-
-static inline char* __btrc_str_track(char* s) {
-    if (!__btrc_str_pool) {
-        __btrc_str_pool = (char**)malloc(sizeof(char*) * __btrc_str_pool_cap);
-    }
-    if (__btrc_str_pool_top >= __btrc_str_pool_cap) {
-        __btrc_str_pool_cap *= 2;
-        __btrc_str_pool = (char**)realloc(__btrc_str_pool, sizeof(char*) * __btrc_str_pool_cap);
-        if (!__btrc_str_pool) { fprintf(stderr, "btrc: string pool OOM\n"); exit(1); }
-    }
-    __btrc_str_pool[__btrc_str_pool_top++] = s;
-    return s;
-}
-
-static inline char* __btrc_substring(const char* s, int start, int len) {
-    if (!s) { char* r = (char*)malloc(1); r[0] = '\0'; return r; }
-    int slen = (int)strlen(s);
-    if (start < 0) start = 0;
-    if (start > slen) start = slen;
-    if (start + len > slen) len = slen - start;
-    if (len < 0) len = 0;
-    char* result = (char*)malloc(len + 1);
-    strncpy(result, s + start, len);
-    result[len] = '\0';
-    return result;
-}
-
-static inline char* __btrc_trim(const char* s) {
-    if (!s) { char* r = (char*)malloc(1); r[0] = '\0'; return r; }
-    while (*s && isspace((unsigned char)*s)) s++;
-    if (*s == '\0') { char* r = (char*)malloc(1); r[0]='\0'; return r; }
-    const char* end = s + strlen(s) - 1;
-    while (end > s && isspace((unsigned char)*end)) end--;
-    int len = (int)(end - s + 1);
-    char* result = (char*)malloc(len + 1);
-    strncpy(result, s, len);
-    result[len] = '\0';
-    return result;
-}
-
-static inline char* __btrc_toLower(const char* s) {
-    if (!s) { char* r = (char*)malloc(1); r[0] = '\0'; return r; }
-    int len = (int)strlen(s);
-    char* result = (char*)malloc(len + 1);
-    for (int i = 0; i < len; i++) result[i] = (char)tolower((unsigned char)s[i]);
-    result[len] = '\0';
-    return result;
-}
-
-static inline char* __btrc_strcat(const char* a, const char* b) {
-    if (!a && !b) { char* r = (char*)malloc(1); r[0] = '\0'; return r; }
-    if (!a) return __btrc_strdup(b);
-    if (!b) return __btrc_strdup(a);
-    int la = (int)strlen(a), lb = (int)strlen(b);
-    char* r = (char*)malloc(la + lb + 1);
-    memcpy(r, a, la);
-    memcpy(r + la, b, lb + 1);
-    return r;
-}
-
-static inline bool __btrc_isEmpty(const char* s) {
-    if (!s) return true;
-    return s[0] == '\0';
-}
-
-static inline bool __btrc_startsWith(const char* s, const char* prefix) {
-    if (!s || !prefix) return false;
-    return strncmp(s, prefix, strlen(prefix)) == 0;
-}
-
-static inline bool __btrc_endsWith(const char* s, const char* suffix) {
-    if (!s || !suffix) return false;
-    int slen = (int)strlen(s);
-    int suflen = (int)strlen(suffix);
-    if (suflen > slen) return false;
-    return strcmp(s + slen - suflen, suffix) == 0;
-}
-
-static inline bool __btrc_strContains(const char* s, const char* sub) {
-    if (!s || !sub) return false;
-    return strstr(s, sub) != NULL;
-}
-
-static inline unsigned int __btrc_hash_str(const char* s) {
-    unsigned int h = 5381;
-    while (*s) { h = ((h << 5) + h) + (unsigned char)*s++; }
-    return h;
-}
-
-/* ARC cascade-destroy tracking: avoid reading freed memory */
-static int __btrc_tracking = 0;
-static void** __btrc_destroyed = NULL;
-static int __btrc_destroyed_count = 0;
-static int __btrc_destroyed_cap = 0;
-static void __btrc_mark_destroyed(void* ptr) {
-    if (__btrc_destroyed_count >= __btrc_destroyed_cap) {
-        __btrc_destroyed_cap = __btrc_destroyed_cap ? __btrc_destroyed_cap * 2 : 256;
-        __btrc_destroyed = (void**)__btrc_safe_realloc(__btrc_destroyed, sizeof(void*) * __btrc_destroyed_cap);
-    }
-    __btrc_destroyed[__btrc_destroyed_count++] = ptr;
-}
-static int __btrc_is_destroyed(void* ptr) {
-    for (int i = 0; i < __btrc_destroyed_count; i++)
-        if (__btrc_destroyed[i] == ptr) return 1;
-    return 0;
-}
-
 #define _DARWIN_C_SOURCE
 
-typedef struct Strings Strings;
-void Strings_destroy(Strings* self);
-typedef struct Console Console;
-void Console_destroy(Console* self);
-typedef struct File File;
-void File_destroy(File* self);
-typedef struct Path Path;
-void Path_destroy(Path* self);
-typedef struct UnixPlatform UnixPlatform;
-void UnixPlatform_destroy(UnixPlatform* self);
-typedef struct Platform Platform;
-void Platform_destroy(Platform* self);
-typedef struct Environment Environment;
-void Environment_destroy(Environment* self);
-typedef struct ProcessStatus ProcessStatus;
-void ProcessStatus_destroy(ProcessStatus* self);
-typedef struct UnixPipe UnixPipe;
-void UnixPipe_destroy(UnixPipe* self);
-typedef struct UnixProcess UnixProcess;
-void UnixProcess_destroy(UnixProcess* self);
-typedef struct ShellWords ShellWords;
-void ShellWords_destroy(ShellWords* self);
-typedef struct ExecResult ExecResult;
-void ExecResult_destroy(ExecResult* self);
-typedef struct Command Command;
-void Command_destroy(Command* self);
-typedef struct UnixShell UnixShell;
-void UnixShell_destroy(UnixShell* self);
-typedef struct PowerShell PowerShell;
-void PowerShell_destroy(PowerShell* self);
-typedef struct UnixPamPassword UnixPamPassword;
-void UnixPamPassword_destroy(UnixPamPassword* self);
-typedef struct FileStatus FileStatus;
-void FileStatus_destroy(FileStatus* self);
-typedef struct Directory Directory;
-void Directory_destroy(Directory* self);
-typedef struct UnixFileSystem UnixFileSystem;
-void UnixFileSystem_destroy(UnixFileSystem* self);
-typedef struct PathTools PathTools;
-void PathTools_destroy(PathTools* self);
-typedef struct FileSystem FileSystem;
-void FileSystem_destroy(FileSystem* self);
-typedef struct DaemonSpec DaemonSpec;
-void DaemonSpec_destroy(DaemonSpec* self);
-typedef struct DaemonController DaemonController;
-void DaemonController_destroy(DaemonController* self);
-typedef struct AppSpec AppSpec;
-void AppSpec_destroy(AppSpec* self);
-typedef struct DaemonApp DaemonApp;
-void DaemonApp_destroy(DaemonApp* self);
-typedef struct Html Html;
-void Html_destroy(Html* self);
-typedef struct UiNode UiNode;
-void UiNode_destroy(UiNode* self);
-typedef struct UiDocument UiDocument;
-void UiDocument_destroy(UiDocument* self);
-typedef struct HtmlView HtmlView;
-void HtmlView_destroy(HtmlView* self);
-typedef struct NativeView NativeView;
-void NativeView_destroy(NativeView* self);
-typedef struct Window Window;
-void Window_destroy(Window* self);
-typedef struct TrayItem TrayItem;
-void TrayItem_destroy(TrayItem* self);
-typedef struct Tray Tray;
-void Tray_destroy(Tray* self);
-typedef struct HtmlUiBackend HtmlUiBackend;
-void HtmlUiBackend_destroy(HtmlUiBackend* self);
-typedef struct NativeUiBackend NativeUiBackend;
-void NativeUiBackend_destroy(NativeUiBackend* self);
-typedef struct LinuxUiBuilder LinuxUiBuilder;
-void LinuxUiBuilder_destroy(LinuxUiBuilder* self);
-typedef struct MacUiBuilder MacUiBuilder;
-void MacUiBuilder_destroy(MacUiBuilder* self);
-typedef struct WindowsUiBuilder WindowsUiBuilder;
-void WindowsUiBuilder_destroy(WindowsUiBuilder* self);
-typedef struct Ui Ui;
-void Ui_destroy(Ui* self);
-typedef struct NativeUi NativeUi;
-void NativeUi_destroy(NativeUi* self);
-typedef struct UiRuntime UiRuntime;
-void UiRuntime_destroy(UiRuntime* self);
-typedef struct Signal Signal;
-void Signal_destroy(Signal* self);
-typedef struct JsonObject JsonObject;
-void JsonObject_destroy(JsonObject* self);
-typedef struct Toml Toml;
-void Toml_destroy(Toml* self);
-typedef struct UnixPattern UnixPattern;
-void UnixPattern_destroy(UnixPattern* self);
-typedef struct Pattern Pattern;
-void Pattern_destroy(Pattern* self);
-typedef struct Math Math;
-void Math_destroy(Math* self);
-typedef struct DateTime DateTime;
-void DateTime_destroy(DateTime* self);
-typedef struct Timer Timer;
-void Timer_destroy(Timer* self);
-typedef struct Random Random;
-void Random_destroy(Random* self);
-typedef struct Error Error;
-void Error_destroy(Error* self);
-typedef struct ValueError ValueError;
-void ValueError_destroy(ValueError* self);
-typedef struct IOError IOError;
-void IOError_destroy(IOError* self);
-typedef struct TypeError TypeError;
-void TypeError_destroy(TypeError* self);
-typedef struct IndexError IndexError;
-void IndexError_destroy(IndexError* self);
-typedef struct KeyError KeyError;
-void KeyError_destroy(KeyError* self);
-typedef struct CliArgs CliArgs;
-void CliArgs_destroy(CliArgs* self);
-typedef struct CliCommand CliCommand;
-void CliCommand_destroy(CliCommand* self);
 typedef struct NixosLog NixosLog;
-void NixosLog_destroy(NixosLog* self);
 typedef struct NixosPaths NixosPaths;
 void NixosPaths_destroy(NixosPaths* self);
 typedef struct LocalConfigFile LocalConfigFile;
@@ -315,11 +52,9 @@ void SnapshotManager_destroy(SnapshotManager* self);
 typedef struct RebuildOptions RebuildOptions;
 void RebuildOptions_destroy(RebuildOptions* self);
 typedef struct NixosRebuilder NixosRebuilder;
-void NixosRebuilder_destroy(NixosRebuilder* self);
 typedef struct DiffOptions DiffOptions;
 void DiffOptions_destroy(DiffOptions* self);
 typedef struct DiffScanner DiffScanner;
-void DiffScanner_destroy(DiffScanner* self);
 typedef struct Installer Installer;
 void Installer_destroy(Installer* self);
 typedef struct SecureBootManager SecureBootManager;
@@ -327,7 +62,6 @@ void SecureBootManager_destroy(SecureBootManager* self);
 typedef struct Tpm2Manager Tpm2Manager;
 void Tpm2Manager_destroy(Tpm2Manager* self);
 typedef struct PasswordManager PasswordManager;
-void PasswordManager_destroy(PasswordManager* self);
 typedef struct DisplayLayoutRule DisplayLayoutRule;
 void DisplayLayoutRule_destroy(DisplayLayoutRule* self);
 typedef struct AudioPreset AudioPreset;
@@ -351,7 +85,6 @@ void VmOperation_destroy(VmOperation* self);
 typedef struct VmTestSpec VmTestSpec;
 void VmTestSpec_destroy(VmTestSpec* self);
 typedef struct VmSpecParser VmSpecParser;
-void VmSpecParser_destroy(VmSpecParser* self);
 typedef struct SshClient SshClient;
 void SshClient_destroy(SshClient* self);
 typedef struct QemuSerial QemuSerial;
@@ -369,7 +102,6 @@ void VmAssets_destroy(VmAssets* self);
 typedef struct QemuE2eHarness QemuE2eHarness;
 void QemuE2eHarness_destroy(QemuE2eHarness* self);
 typedef struct VmOperationCatalog VmOperationCatalog;
-void VmOperationCatalog_destroy(VmOperationCatalog* self);
 typedef struct VmTestRunner VmTestRunner;
 void VmTestRunner_destroy(VmTestRunner* self);
 typedef struct VmGraphNode VmGraphNode;
@@ -377,20 +109,11 @@ void VmGraphNode_destroy(VmGraphNode* self);
 typedef struct VmTestGraph VmTestGraph;
 void VmTestGraph_destroy(VmTestGraph* self);
 typedef struct VmGraphParser VmGraphParser;
-void VmGraphParser_destroy(VmGraphParser* self);
 typedef struct VmGraphRunner VmGraphRunner;
 void VmGraphRunner_destroy(VmGraphRunner* self);
 typedef struct E2eCli E2eCli;
-void E2eCli_destroy(E2eCli* self);
 typedef struct NixosCtl NixosCtl;
 void NixosCtl_destroy(NixosCtl* self);
-typedef struct btrc_Vector_string btrc_Vector_string;
-typedef struct btrc_Vector_UiNode btrc_Vector_UiNode;
-typedef struct btrc_Vector_TrayItem btrc_Vector_TrayItem;
-typedef struct btrc_Vector_bool btrc_Vector_bool;
-typedef struct btrc_Vector_Map_string_string btrc_Vector_Map_string_string;
-typedef struct btrc_Vector_int btrc_Vector_int;
-typedef struct btrc_Vector_float btrc_Vector_float;
 typedef struct btrc_Vector_ResetSubvolume btrc_Vector_ResetSubvolume;
 typedef struct btrc_Vector_DisplayLayoutRule btrc_Vector_DisplayLayoutRule;
 typedef struct btrc_Vector_AudioPreset btrc_Vector_AudioPreset;
@@ -398,238 +121,6 @@ typedef struct btrc_Vector_AudioSink btrc_Vector_AudioSink;
 typedef struct btrc_Vector_DisplayOutput btrc_Vector_DisplayOutput;
 typedef struct btrc_Vector_VmOperation btrc_Vector_VmOperation;
 typedef struct btrc_Vector_VmGraphNode btrc_Vector_VmGraphNode;
-typedef struct btrc_Map_string_string btrc_Map_string_string;
-typedef struct btrc_Map_string_bool btrc_Map_string_bool;
-void Strings_init(Strings* self);
-char* Strings_copy(char* s);
-char* Strings_replace(char* s, char* old, char* replacement);
-btrc_Vector_string* Strings_split(char* s, char* delim);
-bool Strings_isDigit(char c);
-bool Strings_isAlpha(char c);
-int Strings_toInt(char* s);
-int Strings_count(char* s, char* sub);
-int Strings_find(char* s, char* sub, int start);
-int Strings_compare(char* left, char* right);
-char* Strings_removePrefix(char* s, char* prefix);
-char* Strings_fromInt(int n);
-void Console_init(Console* self);
-void Console_log(char* msg);
-void Console_error(char* msg);
-void File_init(File* self, char* path, char* mode);
-File* File_new(char* path, char* mode);
-bool File_ok(File* self);
-char* File_read(File* self);
-void File_write(File* self, char* text);
-void File_close(File* self);
-void Path_init(Path* self);
-char* Path_readAll(char* path);
-void Path_writeAll(char* path, char* content);
-void UnixPlatform_init(UnixPlatform* self);
-int UnixPlatform_pid(void);
-int UnixPlatform_euid(void);
-void Platform_init(Platform* self);
-int Platform_pid(void);
-int Platform_euid(void);
-bool Platform_isRoot(void);
-void Environment_init(Environment* self);
-char* Environment_get(char* name, char* fallback);
-FILE* popen(const char* command, const char* mode);
-int pclose(FILE* stream);
-void ProcessStatus_init(ProcessStatus* self, int raw);
-ProcessStatus* ProcessStatus_new(int raw);
-int ProcessStatus_code(ProcessStatus* self);
-void UnixPipe_init(UnixPipe* self, char* command);
-UnixPipe* UnixPipe_new(char* command);
-bool UnixPipe_ok(UnixPipe* self);
-char* UnixPipe_readAll(UnixPipe* self);
-ProcessStatus* UnixPipe_close(UnixPipe* self);
-void UnixProcess_init(UnixProcess* self);
-ProcessStatus* UnixProcess_system(char* command);
-UnixPipe* UnixProcess_pipe(char* command);
-void ShellWords_init(ShellWords* self);
-bool ShellWords_isSafeArgChar(char c);
-bool ShellWords_isSafeArg(char* raw);
-char* ShellWords_quote(char* raw);
-char* ShellWords_redact(char* text, char* sensitive);
-void ExecResult_init(ExecResult* self, int code, char* out, char* err, char* command);
-ExecResult* ExecResult_new(int code, char* out, char* err, char* command);
-bool ExecResult_ok(ExecResult* self);
-char* ExecResult_stdout(ExecResult* self);
-char* ExecResult_trimmed(ExecResult* self);
-void Command_init(Command* self, char* executable);
-Command* Command_new(char* executable);
-Command* Command_arg(Command* self, char* value);
-Command* Command_flag(Command* self, char* name, char* value);
-Command* Command_envVar(Command* self, char* name, char* value);
-Command* Command_capture(Command* self, bool enabled);
-Command* Command_check(Command* self, bool enabled);
-Command* Command_redact(Command* self, char* value);
-char* Command_renderEnv(Command* self, char* item);
-char* Command_render(Command* self);
-void UnixShell_init(UnixShell* self);
-UnixShell* UnixShell_new(void);
-char* UnixShell_quote(char* raw);
-char* UnixShell_redactText(char* text, char* sensitive);
-void UnixShell_chroot(UnixShell* self, char* path);
-void UnixShell_clearChroot(UnixShell* self);
-ExecResult* UnixShell_run(UnixShell* self, char* command);
-ExecResult* UnixShell_runUnchecked(UnixShell* self, char* command);
-ExecResult* UnixShell_runCommand(UnixShell* self, Command* command);
-ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput, bool checkStatus, char* sensitive);
-void PowerShell_init(PowerShell* self);
-int forkpty(int* amaster, char* name, void* termp, void* winp);
-void UnixPamPassword_init(UnixPamPassword* self);
-bool UnixPamPassword_change(char* user, char* oldPassword, char* newPassword);
-char* mkdtemp(char* templatePath);
-void FileStatus_init(FileStatus* self, char* path);
-FileStatus* FileStatus_new(char* path);
-bool FileStatus_exists(FileStatus* self);
-bool FileStatus_isDir(FileStatus* self);
-bool FileStatus_isFile(FileStatus* self);
-bool FileStatus_isSymlink(FileStatus* self);
-void Directory_init(Directory* self, char* path);
-Directory* Directory_new(char* path);
-btrc_Vector_string* Directory_entries(Directory* self);
-void UnixFileSystem_init(UnixFileSystem* self);
-int UnixFileSystem_statusCode(int raw);
-int UnixFileSystem_chmodPath(char* path, int mode);
-int UnixFileSystem_mkdirPath(char* path, int mode);
-int UnixFileSystem_runShell(char* command);
-int UnixFileSystem_mkdirp(char* path);
-int UnixFileSystem_removeRecursive(char* path);
-int UnixFileSystem_symlinkPath(char* target, char* linkPath);
-char* UnixFileSystem_readLink(char* path);
-char* UnixFileSystem_tempDir(char* prefix);
-void PathTools_init(PathTools* self);
-char* PathTools_shellQuote(char* raw);
-char* PathTools_basename(char* path);
-char* PathTools_dirname(char* path);
-char* PathTools_join(char* left, char* right);
-void FileSystem_init(FileSystem* self);
-bool FileSystem_exists(char* path);
-bool FileSystem_isSymlink(char* path);
-int FileSystem_chmod(char* path, int mode);
-int FileSystem_mkdir(char* path, int mode);
-int FileSystem_mkdirp(char* path);
-int FileSystem_removeRecursive(char* path);
-int FileSystem_symlink(char* target, char* linkPath);
-char* FileSystem_readLink(char* path);
-char* FileSystem_tempDir(char* prefix);
-void FileSystem_writeText(char* path, char* content);
-void DaemonSpec_init(DaemonSpec* self, char* name, Command* command);
-char* DaemonSpec_renderStartCommand(DaemonSpec* self);
-void DaemonController_init(DaemonController* self);
-void AppSpec_init(AppSpec* self, char* name);
-AppSpec* AppSpec_withVersion(AppSpec* self, char* version);
-void DaemonApp_init(DaemonApp* self, char* name, DaemonSpec* daemon);
-void Html_init(Html* self);
-char* Html_escape(char* raw);
-void UiNode_init(UiNode* self, char* tag);
-UiNode* UiNode_new(char* tag);
-UiNode* UiNode_text(UiNode* self, char* value);
-UiNode* UiNode_raw(UiNode* self, char* value);
-UiNode* UiNode_attr(UiNode* self, char* name, char* value);
-char* UiNode_renderAttributes(UiNode* self);
-bool UiNode_isVoidElement(UiNode* self);
-char* UiNode_renderHtml(UiNode* self);
-void UiDocument_init(UiDocument* self, char* title, UiNode* body);
-UiDocument* UiDocument_new(char* title, UiNode* body);
-char* UiDocument_renderHtml(UiDocument* self);
-void UiDocument_writeHtml(UiDocument* self, char* path);
-void HtmlView_init(HtmlView* self, UiDocument* document);
-void HtmlView_write(HtmlView* self, char* path);
-void NativeView_init(NativeView* self, UiNode* root);
-void Window_init(Window* self, char* title, int width, int height, HtmlView* html);
-void TrayItem_init(TrayItem* self, char* label, char* command);
-TrayItem* TrayItem_new(char* label, char* command);
-void Tray_init(Tray* self, char* title);
-void HtmlUiBackend_init(HtmlUiBackend* self, char* opener);
-HtmlUiBackend* HtmlUiBackend_new(char* opener);
-Command* HtmlUiBackend_openCommand(HtmlUiBackend* self, char* path);
-ExecResult* HtmlUiBackend_openFile(HtmlUiBackend* self, char* path);
-ExecResult* HtmlUiBackend_openWindow(HtmlUiBackend* self, Window* window, char* path);
-void NativeUiBackend_init(NativeUiBackend* self, char* name, HtmlUiBackend* htmlBackend);
-NativeUiBackend* NativeUiBackend_new(char* name, HtmlUiBackend* htmlBackend);
-bool NativeUiBackend_isMac(NativeUiBackend* self);
-bool NativeUiBackend_isLinux(NativeUiBackend* self);
-Command* NativeUiBackend_notifyCommand(NativeUiBackend* self, char* title, char* body);
-Command* NativeUiBackend_alertCommand(NativeUiBackend* self, char* title, char* body);
-ExecResult* NativeUiBackend_notify(NativeUiBackend* self, char* title, char* body);
-ExecResult* NativeUiBackend_alert(NativeUiBackend* self, char* title, char* body);
-void LinuxUiBuilder_init(LinuxUiBuilder* self);
-HtmlUiBackend* LinuxUiBuilder_html(void);
-NativeUiBackend* LinuxUiBuilder_native(void);
-void MacUiBuilder_init(MacUiBuilder* self);
-HtmlUiBackend* MacUiBuilder_html(void);
-NativeUiBackend* MacUiBuilder_native(void);
-void WindowsUiBuilder_init(WindowsUiBuilder* self);
-HtmlUiBackend* WindowsUiBuilder_html(void);
-NativeUiBackend* WindowsUiBuilder_native(void);
-void Ui_init(Ui* self);
-Ui* Ui_new(void);
-void NativeUi_init(NativeUi* self);
-char* NativeUi_applescriptString(char* raw);
-void UiRuntime_init(UiRuntime* self);
-typedef struct __btrc_spawn_env_1 __btrc_spawn_env_1;
-typedef struct __btrc_spawn_env_2 __btrc_spawn_env_2;
-void Signal_init(Signal* self);
-void JsonObject_init(JsonObject* self);
-JsonObject* JsonObject_new(void);
-char* JsonObject_escape(char* text);
-char* JsonObject_unescape(char* text);
-void JsonObject_setString(JsonObject* self, char* key, char* value);
-void JsonObject_setRaw(JsonObject* self, char* key, char* value);
-void JsonObject_setBool(JsonObject* self, char* key, bool value);
-void JsonObject_setInt(JsonObject* self, char* key, int value);
-char* JsonObject_getString(JsonObject* self, char* key, char* fallback);
-char* JsonObject_stringify(JsonObject* self);
-int JsonObject_skipSpaces(char* text, int i);
-char* JsonObject_slice(char* text, int start, int end);
-int JsonObject_stringEnd(char* text, int start);
-JsonObject* JsonObject_parse(char* text);
-JsonObject* JsonObject_readFile(char* path);
-void JsonObject_writeFile(JsonObject* self, char* path);
-void Toml_init(Toml* self);
-char* Toml_stripInlineComment(char* raw);
-char* Toml_unquote(char* raw);
-char* Toml_key(char* line);
-char* Toml_value(char* line);
-char* Toml_sectionName(char* line);
-char* Toml_tableArrayName(char* line);
-btrc_Map_string_string* Toml_sectionMap(char* content, char* section);
-btrc_Vector_Map_string_string* Toml_tableArrayBlocks(char* content, char* table);
-void UnixPattern_init(UnixPattern* self);
-bool UnixPattern_matches(char* pattern, char* text);
-void Pattern_init(Pattern* self);
-bool Pattern_matches(char* pattern, char* text);
-void Math_init(Math* self);
-int Math_abs(int x);
-int Math_factorial(int n);
-int Math_gcd(int a, int b);
-void DateTime_init(DateTime* self, int year, int month, int day, int hour, int minute, int second);
-DateTime* DateTime_new(int year, int month, int day, int hour, int minute, int second);
-void Timer_init(Timer* self);
-void Random_init(Random* self);
-void Random_seed(Random* self, int s);
-void Random_seedTime(Random* self);
-int Random_randint(Random* self, int lo, int hi);
-float Random_random(Random* self);
-void Error_init(Error* self, char* message, int code);
-char* Error_toString(Error* self);
-void ValueError_init(ValueError* self, char* message);
-void IOError_init(IOError* self, char* message);
-void TypeError_init(TypeError* self, char* message);
-void IndexError_init(IndexError* self, char* message);
-void KeyError_init(KeyError* self, char* message);
-void CliArgs_init(CliArgs* self, int argc, char** argv);
-CliArgs* CliArgs_new(int argc, char** argv);
-int CliArgs_count(CliArgs* self);
-char* CliArgs_get(CliArgs* self, int index);
-char* CliArgs_command(CliArgs* self);
-bool CliArgs_has(CliArgs* self, char* flag);
-char* CliArgs_valueAfter(CliArgs* self, char* flag, char* fallback);
-void CliCommand_init(CliCommand* self, char* name);
-void NixosLog_init(NixosLog* self);
 char* NixosLog_gray(void);
 char* NixosLog_orange(void);
 char* NixosLog_red(void);
@@ -855,7 +346,6 @@ char* VmTestSpec_operationsMaterial(VmTestSpec* self);
 char* VmTestSpec_hashMaterial(VmTestSpec* self);
 void VmTestSpec_computeStateHash(VmTestSpec* self);
 void VmTestSpec_expandArgs(VmTestSpec* self);
-void VmSpecParser_init(VmSpecParser* self);
 char* VmSpecParser_hostArch(void);
 char* VmSpecParser_defaultIsoUrl(char* arch);
 char* VmSpecParser_expandArgs(char* text, btrc_Map_string_string* args);
@@ -1003,7 +493,6 @@ char* QemuE2eHarness_diskPath(QemuE2eHarness* self);
 char* QemuE2eHarness_pidPath(QemuE2eHarness* self);
 char* QemuE2eHarness_monitorPath(QemuE2eHarness* self);
 char* QemuE2eHarness_qmpPath(QemuE2eHarness* self);
-char* QemuE2eHarness_sshKeyPath(QemuE2eHarness* self);
 void QemuE2eHarness_ensureWorkDir(QemuE2eHarness* self);
 void QemuE2eHarness_downloadIso(QemuE2eHarness* self);
 void QemuE2eHarness_createSshKey(QemuE2eHarness* self);
@@ -1043,7 +532,6 @@ void QemuE2eHarness_configureVmHost(QemuE2eHarness* self);
 void QemuE2eHarness_installNixosGuest(QemuE2eHarness* self);
 void QemuE2eHarness_snapshot(QemuE2eHarness* self, char* name);
 void QemuE2eHarness_restore(QemuE2eHarness* self, char* name);
-void VmOperationCatalog_init(VmOperationCatalog* self);
 btrc_Vector_string* VmOperationCatalog_all(void);
 void VmTestRunner_init(VmTestRunner* self, VmTestSpec* spec);
 VmTestRunner* VmTestRunner_new(VmTestSpec* spec);
@@ -1060,7 +548,6 @@ VmGraphNode* VmTestGraph_node(VmTestGraph* self, char* id);
 char* VmTestGraph_resolvedSpecPath(VmTestGraph* self, VmGraphNode* node);
 char* VmTestGraph_resolvedWorkspaceRoot(VmTestGraph* self);
 btrc_Vector_string* VmTestGraph_defaultTargets(VmTestGraph* self);
-void VmGraphParser_init(VmGraphParser* self);
 btrc_Vector_string* VmGraphParser_stringArray(char* text, char* key);
 btrc_Vector_string* VmGraphParser_objectArray(char* text, char* key);
 VmGraphNode* VmGraphParser_node(char* objectText);
@@ -1093,33 +580,6 @@ void NixosCtl_usage(NixosCtl* self);
 bool NixosCtl_needsRoot(NixosCtl* self, char* command);
 int NixosCtl_sudoSelf(NixosCtl* self, CliArgs* args);
 int NixosCtl_run(NixosCtl* self, CliArgs* args);
-typedef bool (*__btrc_fn_bool_string)(char*);
-typedef void (*__btrc_fn_void_string)(char*);
-typedef char* (*__btrc_fn_string_string)(char*);
-typedef char* (*__btrc_fn_string_string_string)(char*, char*);
-typedef bool (*__btrc_fn_bool_UiNode)(UiNode*);
-typedef void (*__btrc_fn_void_UiNode)(UiNode*);
-typedef UiNode* (*__btrc_fn_UiNode_UiNode)(UiNode*);
-typedef UiNode* (*__btrc_fn_UiNode_UiNode_UiNode)(UiNode*, UiNode*);
-typedef bool (*__btrc_fn_bool_TrayItem)(TrayItem*);
-typedef void (*__btrc_fn_void_TrayItem)(TrayItem*);
-typedef TrayItem* (*__btrc_fn_TrayItem_TrayItem)(TrayItem*);
-typedef TrayItem* (*__btrc_fn_TrayItem_TrayItem_TrayItem)(TrayItem*, TrayItem*);
-typedef bool (*__btrc_fn_bool_bool)(bool);
-typedef void (*__btrc_fn_void_bool)(bool);
-typedef bool (*__btrc_fn_bool_bool_bool)(bool, bool);
-typedef bool (*__btrc_fn_bool_Map_string_string)(btrc_Map_string_string*);
-typedef void (*__btrc_fn_void_Map_string_string)(btrc_Map_string_string*);
-typedef btrc_Map_string_string* (*__btrc_fn_Map_string_string_Map_string_string)(btrc_Map_string_string*);
-typedef btrc_Map_string_string* (*__btrc_fn_Map_string_string_Map_string_string_Map_string_string)(btrc_Map_string_string*, btrc_Map_string_string*);
-typedef bool (*__btrc_fn_bool_int)(int);
-typedef void (*__btrc_fn_void_int)(int);
-typedef int (*__btrc_fn_int_int)(int);
-typedef int (*__btrc_fn_int_int_int)(int, int);
-typedef bool (*__btrc_fn_bool_float)(float);
-typedef void (*__btrc_fn_void_float)(float);
-typedef float (*__btrc_fn_float_float)(float);
-typedef float (*__btrc_fn_float_float_float)(float, float);
 typedef bool (*__btrc_fn_bool_ResetSubvolume)(ResetSubvolume*);
 typedef void (*__btrc_fn_void_ResetSubvolume)(ResetSubvolume*);
 typedef ResetSubvolume* (*__btrc_fn_ResetSubvolume_ResetSubvolume)(ResetSubvolume*);
@@ -1148,64 +608,6 @@ typedef bool (*__btrc_fn_bool_VmGraphNode)(VmGraphNode*);
 typedef void (*__btrc_fn_void_VmGraphNode)(VmGraphNode*);
 typedef VmGraphNode* (*__btrc_fn_VmGraphNode_VmGraphNode)(VmGraphNode*);
 typedef VmGraphNode* (*__btrc_fn_VmGraphNode_VmGraphNode_VmGraphNode)(VmGraphNode*, VmGraphNode*);
-
-struct btrc_Vector_string {
-    int __rc;
-    char** data;
-    int len;
-    int cap;
-};
-
-struct btrc_Vector_UiNode {
-    int __rc;
-    UiNode** data;
-    int len;
-    int cap;
-};
-
-struct btrc_Vector_TrayItem {
-    int __rc;
-    TrayItem** data;
-    int len;
-    int cap;
-};
-
-struct btrc_Vector_bool {
-    int __rc;
-    bool* data;
-    int len;
-    int cap;
-};
-
-struct btrc_Map_string_string {
-    int __rc;
-    char** keys;
-    char** values;
-    bool* occupied;
-    int len;
-    int cap;
-};
-
-struct btrc_Vector_Map_string_string {
-    int __rc;
-    btrc_Map_string_string** data;
-    int len;
-    int cap;
-};
-
-struct btrc_Vector_int {
-    int __rc;
-    int* data;
-    int len;
-    int cap;
-};
-
-struct btrc_Vector_float {
-    int __rc;
-    float* data;
-    int len;
-    int cap;
-};
 
 struct btrc_Vector_ResetSubvolume {
     int __rc;
@@ -1254,349 +656,6 @@ struct btrc_Vector_VmGraphNode {
     VmGraphNode** data;
     int len;
     int cap;
-};
-
-struct btrc_Map_string_bool {
-    int __rc;
-    char** keys;
-    bool* values;
-    bool* occupied;
-    int len;
-    int cap;
-};
-
-struct Strings {
-    int __rc;
-};
-
-struct Console {
-    int __rc;
-};
-
-struct File {
-    int __rc;
-    FILE* handle;
-    char* path;
-    char* mode;
-    bool is_open;
-};
-
-struct Path {
-    int __rc;
-};
-
-struct UnixPlatform {
-    int __rc;
-};
-
-struct Platform {
-    int __rc;
-};
-
-struct Environment {
-    int __rc;
-};
-
-struct ProcessStatus {
-    int __rc;
-    int raw;
-};
-
-struct UnixPipe {
-    int __rc;
-    FILE* handle;
-    char* command;
-};
-
-struct UnixProcess {
-    int __rc;
-};
-
-struct ShellWords {
-    int __rc;
-};
-
-struct ExecResult {
-    int __rc;
-    int code;
-    char* out;
-    char* err;
-    char* command;
-};
-
-struct Command {
-    int __rc;
-    char* executable;
-    btrc_Vector_string* args;
-    btrc_Vector_string* env;
-    bool useSudo;
-    bool captureOutput;
-    bool checkStatus;
-    bool mergeStderr;
-    char* sensitive;
-};
-
-struct UnixShell {
-    int __rc;
-    bool logCommands;
-    char* chrootPath;
-};
-
-struct PowerShell {
-    int __rc;
-};
-
-struct UnixPamPassword {
-    int __rc;
-};
-
-struct FileStatus {
-    int __rc;
-    char* path;
-    int mode;
-    int linkMode;
-    bool found;
-    bool linkFound;
-};
-
-struct Directory {
-    int __rc;
-    char* path;
-};
-
-struct UnixFileSystem {
-    int __rc;
-};
-
-struct PathTools {
-    int __rc;
-};
-
-struct FileSystem {
-    int __rc;
-};
-
-struct DaemonSpec {
-    int __rc;
-    char* name;
-    Command* command;
-    char* pidFile;
-    char* logFile;
-    char* workingDirectory;
-    bool autoRestart;
-};
-
-struct DaemonController {
-    int __rc;
-    UnixShell* shell;
-};
-
-struct AppSpec {
-    int __rc;
-    char* name;
-    char* version;
-};
-
-struct DaemonApp {
-    int __rc;
-    char* name;
-    char* version;
-    DaemonSpec* daemon;
-};
-
-struct Html {
-    int __rc;
-};
-
-struct UiNode {
-    int __rc;
-    char* tag;
-    char* textContent;
-    bool rawText;
-    btrc_Vector_string* attributes;
-    btrc_Vector_UiNode* children;
-};
-
-struct UiDocument {
-    int __rc;
-    char* title;
-    char* css;
-    UiNode* body;
-};
-
-struct HtmlView {
-    int __rc;
-    UiDocument* document;
-};
-
-struct NativeView {
-    int __rc;
-    UiNode* root;
-};
-
-struct Window {
-    int __rc;
-    char* title;
-    int width;
-    int height;
-    HtmlView* html;
-};
-
-struct TrayItem {
-    int __rc;
-    char* label;
-    char* command;
-    bool enabled;
-};
-
-struct Tray {
-    int __rc;
-    char* title;
-    char* tooltip;
-    char* iconPath;
-    btrc_Vector_TrayItem* items;
-};
-
-struct HtmlUiBackend {
-    int __rc;
-    char* opener;
-};
-
-struct NativeUiBackend {
-    int __rc;
-    char* name;
-    HtmlUiBackend* htmlBackend;
-};
-
-struct LinuxUiBuilder {
-    int __rc;
-};
-
-struct MacUiBuilder {
-    int __rc;
-};
-
-struct WindowsUiBuilder {
-    int __rc;
-};
-
-struct Ui {
-    int __rc;
-};
-
-struct NativeUi {
-    int __rc;
-};
-
-struct UiRuntime {
-    int __rc;
-};
-
-struct __btrc_spawn_env_1 {
-    Command* command;
-};
-
-struct __btrc_spawn_env_2 {
-    NativeUiBackend* backend;
-    char* body;
-    char* title;
-};
-
-struct Signal {
-    int __rc;
-    btrc_Vector_string* events;
-};
-
-struct JsonObject {
-    int __rc;
-    btrc_Map_string_string* values;
-    btrc_Map_string_bool* quoted;
-};
-
-struct Toml {
-    int __rc;
-};
-
-struct UnixPattern {
-    int __rc;
-};
-
-struct Pattern {
-    int __rc;
-};
-
-struct Math {
-    int __rc;
-};
-
-struct DateTime {
-    int __rc;
-    int year;
-    int month;
-    int day;
-    int hour;
-    int minute;
-    int second;
-};
-
-struct Timer {
-    int __rc;
-    clock_t start_time;
-    clock_t end_time;
-    bool running;
-};
-
-struct Random {
-    int __rc;
-    bool seeded;
-};
-
-struct Error {
-    int __rc;
-    char* message;
-    int code;
-};
-
-struct ValueError {
-    int __rc;
-    char* message;
-    int code;
-};
-
-struct IOError {
-    int __rc;
-    char* message;
-    int code;
-};
-
-struct TypeError {
-    int __rc;
-    char* message;
-    int code;
-};
-
-struct IndexError {
-    int __rc;
-    char* message;
-    int code;
-};
-
-struct KeyError {
-    int __rc;
-    char* message;
-    int code;
-};
-
-struct CliArgs {
-    int __rc;
-    char* program;
-    btrc_Vector_string* values;
-};
-
-struct CliCommand {
-    int __rc;
-    char* name;
-    btrc_Vector_string* aliases;
 };
 
 struct NixosLog {
@@ -1927,386 +986,6 @@ struct NixosCtl {
     int __rc;
     NixosConfig* config;
 };
-
-/* Type-dependent comparison/hashing macros for generic collections.
- * Uses __builtin_choose_expr — unselected branch is NOT evaluated.
- * Cast chain (void*)(intptr_t) avoids float-to-pointer hard errors. */
-#define __btrc_eq(a, b) __builtin_choose_expr( \
-    __builtin_types_compatible_p(__typeof__(a), char*), \
-    strcmp((const char*)(void*)(intptr_t)(a), (const char*)(void*)(intptr_t)(b)) == 0, \
-    (a) == (b))
-#define __btrc_lt(a, b) __builtin_choose_expr( \
-    __builtin_types_compatible_p(__typeof__(a), char*), \
-    strcmp((const char*)(void*)(intptr_t)(a), (const char*)(void*)(intptr_t)(b)) < 0, \
-    (a) < (b))
-#define __btrc_gt(a, b) __builtin_choose_expr( \
-    __builtin_types_compatible_p(__typeof__(a), char*), \
-    strcmp((const char*)(void*)(intptr_t)(a), (const char*)(void*)(intptr_t)(b)) > 0, \
-    (a) > (b))
-#define __btrc_hash(k) __builtin_choose_expr( \
-    __builtin_types_compatible_p(__typeof__(k), char*), \
-    __btrc_hash_str((const char*)(void*)(intptr_t)(k)), \
-    (unsigned int)(intptr_t)(k))
-
-static void btrc_Vector_string_init(btrc_Vector_string* self);
-static btrc_Vector_string* btrc_Vector_string_new(void);
-static void btrc_Vector_string_destroy(btrc_Vector_string* self);
-static void btrc_Vector_string_push(btrc_Vector_string* self, char* val);
-static char* btrc_Vector_string_pop(btrc_Vector_string* self);
-static char* btrc_Vector_string_get(btrc_Vector_string* self, int i);
-static void btrc_Vector_string_set(btrc_Vector_string* self, int i, char* val);
-static void btrc_Vector_string_free(btrc_Vector_string* self);
-static void btrc_Vector_string_remove(btrc_Vector_string* self, int idx);
-static void btrc_Vector_string_reverse(btrc_Vector_string* self);
-static btrc_Vector_string* btrc_Vector_string_reversed(btrc_Vector_string* self);
-static void btrc_Vector_string_swap(btrc_Vector_string* self, int i, int j);
-static void btrc_Vector_string_clear(btrc_Vector_string* self);
-static void btrc_Vector_string_fill(btrc_Vector_string* self, char* val);
-static int btrc_Vector_string_size(btrc_Vector_string* self);
-static bool btrc_Vector_string_isEmpty(btrc_Vector_string* self);
-static char* btrc_Vector_string_first(btrc_Vector_string* self);
-static char* btrc_Vector_string_last(btrc_Vector_string* self);
-static btrc_Vector_string* btrc_Vector_string_slice(btrc_Vector_string* self, int start, int end);
-static btrc_Vector_string* btrc_Vector_string_take(btrc_Vector_string* self, int n);
-static btrc_Vector_string* btrc_Vector_string_drop(btrc_Vector_string* self, int n);
-static void btrc_Vector_string_extend(btrc_Vector_string* self, btrc_Vector_string* other);
-static void btrc_Vector_string_insert(btrc_Vector_string* self, int idx, char* val);
-static bool btrc_Vector_string_contains(btrc_Vector_string* self, char* val);
-static int btrc_Vector_string_indexOf(btrc_Vector_string* self, char* val);
-static int btrc_Vector_string_lastIndexOf(btrc_Vector_string* self, char* val);
-static int btrc_Vector_string_count(btrc_Vector_string* self, char* val);
-static void btrc_Vector_string_removeAll(btrc_Vector_string* self, char* val);
-static btrc_Vector_string* btrc_Vector_string_distinct(btrc_Vector_string* self);
-static void btrc_Vector_string_sort(btrc_Vector_string* self);
-static btrc_Vector_string* btrc_Vector_string_sorted(btrc_Vector_string* self);
-static char* btrc_Vector_string_min(btrc_Vector_string* self);
-static char* btrc_Vector_string_max(btrc_Vector_string* self);
-static char* btrc_Vector_string_sum(btrc_Vector_string* self);
-static char* btrc_Vector_string_join(btrc_Vector_string* self, char* sep);
-static char* btrc_Vector_string_joinToString(btrc_Vector_string* self, char* sep);
-static btrc_Vector_string* btrc_Vector_string_filter(btrc_Vector_string* self, __btrc_fn_bool_string pred);
-static int btrc_Vector_string_findIndex(btrc_Vector_string* self, __btrc_fn_bool_string pred);
-static void btrc_Vector_string_forEach(btrc_Vector_string* self, __btrc_fn_void_string fn);
-static btrc_Vector_string* btrc_Vector_string_map(btrc_Vector_string* self, __btrc_fn_string_string fn);
-static bool btrc_Vector_string_any(btrc_Vector_string* self, __btrc_fn_bool_string pred);
-static bool btrc_Vector_string_all(btrc_Vector_string* self, __btrc_fn_bool_string pred);
-static char* btrc_Vector_string_reduce(btrc_Vector_string* self, char* init, __btrc_fn_string_string_string fn);
-static btrc_Vector_string* btrc_Vector_string_copy(btrc_Vector_string* self);
-static void btrc_Vector_string_removeAt(btrc_Vector_string* self, int idx);
-static int btrc_Vector_string_iterLen(btrc_Vector_string* self);
-static char* btrc_Vector_string_iterGet(btrc_Vector_string* self, int i);
-
-static void btrc_Vector_UiNode_init(btrc_Vector_UiNode* self);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_new(void);
-static void btrc_Vector_UiNode_destroy(btrc_Vector_UiNode* self);
-static void btrc_Vector_UiNode_push(btrc_Vector_UiNode* self, UiNode* val);
-static UiNode* btrc_Vector_UiNode_pop(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_get(btrc_Vector_UiNode* self, int i);
-static void btrc_Vector_UiNode_set(btrc_Vector_UiNode* self, int i, UiNode* val);
-static void btrc_Vector_UiNode_free(btrc_Vector_UiNode* self);
-static void btrc_Vector_UiNode_remove(btrc_Vector_UiNode* self, int idx);
-static void btrc_Vector_UiNode_reverse(btrc_Vector_UiNode* self);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_reversed(btrc_Vector_UiNode* self);
-static void btrc_Vector_UiNode_swap(btrc_Vector_UiNode* self, int i, int j);
-static void btrc_Vector_UiNode_clear(btrc_Vector_UiNode* self);
-static void btrc_Vector_UiNode_fill(btrc_Vector_UiNode* self, UiNode* val);
-static int btrc_Vector_UiNode_size(btrc_Vector_UiNode* self);
-static bool btrc_Vector_UiNode_isEmpty(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_first(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_last(btrc_Vector_UiNode* self);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_slice(btrc_Vector_UiNode* self, int start, int end);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_take(btrc_Vector_UiNode* self, int n);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_drop(btrc_Vector_UiNode* self, int n);
-static void btrc_Vector_UiNode_extend(btrc_Vector_UiNode* self, btrc_Vector_UiNode* other);
-static void btrc_Vector_UiNode_insert(btrc_Vector_UiNode* self, int idx, UiNode* val);
-static bool btrc_Vector_UiNode_contains(btrc_Vector_UiNode* self, UiNode* val);
-static int btrc_Vector_UiNode_indexOf(btrc_Vector_UiNode* self, UiNode* val);
-static int btrc_Vector_UiNode_lastIndexOf(btrc_Vector_UiNode* self, UiNode* val);
-static int btrc_Vector_UiNode_count(btrc_Vector_UiNode* self, UiNode* val);
-static void btrc_Vector_UiNode_removeAll(btrc_Vector_UiNode* self, UiNode* val);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_distinct(btrc_Vector_UiNode* self);
-static void btrc_Vector_UiNode_sort(btrc_Vector_UiNode* self);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_sorted(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_min(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_max(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_sum(btrc_Vector_UiNode* self);
-static char* btrc_Vector_UiNode_join(btrc_Vector_UiNode* self, char* sep);
-static char* btrc_Vector_UiNode_joinToString(btrc_Vector_UiNode* self, char* sep);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_filter(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred);
-static int btrc_Vector_UiNode_findIndex(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred);
-static void btrc_Vector_UiNode_forEach(btrc_Vector_UiNode* self, __btrc_fn_void_UiNode fn);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_map(btrc_Vector_UiNode* self, __btrc_fn_UiNode_UiNode fn);
-static bool btrc_Vector_UiNode_any(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred);
-static bool btrc_Vector_UiNode_all(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred);
-static UiNode* btrc_Vector_UiNode_reduce(btrc_Vector_UiNode* self, UiNode* init, __btrc_fn_UiNode_UiNode_UiNode fn);
-static btrc_Vector_UiNode* btrc_Vector_UiNode_copy(btrc_Vector_UiNode* self);
-static void btrc_Vector_UiNode_removeAt(btrc_Vector_UiNode* self, int idx);
-static int btrc_Vector_UiNode_iterLen(btrc_Vector_UiNode* self);
-static UiNode* btrc_Vector_UiNode_iterGet(btrc_Vector_UiNode* self, int i);
-
-static void btrc_Vector_TrayItem_init(btrc_Vector_TrayItem* self);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_new(void);
-static void btrc_Vector_TrayItem_destroy(btrc_Vector_TrayItem* self);
-static void btrc_Vector_TrayItem_push(btrc_Vector_TrayItem* self, TrayItem* val);
-static TrayItem* btrc_Vector_TrayItem_pop(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_get(btrc_Vector_TrayItem* self, int i);
-static void btrc_Vector_TrayItem_set(btrc_Vector_TrayItem* self, int i, TrayItem* val);
-static void btrc_Vector_TrayItem_free(btrc_Vector_TrayItem* self);
-static void btrc_Vector_TrayItem_remove(btrc_Vector_TrayItem* self, int idx);
-static void btrc_Vector_TrayItem_reverse(btrc_Vector_TrayItem* self);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_reversed(btrc_Vector_TrayItem* self);
-static void btrc_Vector_TrayItem_swap(btrc_Vector_TrayItem* self, int i, int j);
-static void btrc_Vector_TrayItem_clear(btrc_Vector_TrayItem* self);
-static void btrc_Vector_TrayItem_fill(btrc_Vector_TrayItem* self, TrayItem* val);
-static int btrc_Vector_TrayItem_size(btrc_Vector_TrayItem* self);
-static bool btrc_Vector_TrayItem_isEmpty(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_first(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_last(btrc_Vector_TrayItem* self);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_slice(btrc_Vector_TrayItem* self, int start, int end);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_take(btrc_Vector_TrayItem* self, int n);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_drop(btrc_Vector_TrayItem* self, int n);
-static void btrc_Vector_TrayItem_extend(btrc_Vector_TrayItem* self, btrc_Vector_TrayItem* other);
-static void btrc_Vector_TrayItem_insert(btrc_Vector_TrayItem* self, int idx, TrayItem* val);
-static bool btrc_Vector_TrayItem_contains(btrc_Vector_TrayItem* self, TrayItem* val);
-static int btrc_Vector_TrayItem_indexOf(btrc_Vector_TrayItem* self, TrayItem* val);
-static int btrc_Vector_TrayItem_lastIndexOf(btrc_Vector_TrayItem* self, TrayItem* val);
-static int btrc_Vector_TrayItem_count(btrc_Vector_TrayItem* self, TrayItem* val);
-static void btrc_Vector_TrayItem_removeAll(btrc_Vector_TrayItem* self, TrayItem* val);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_distinct(btrc_Vector_TrayItem* self);
-static void btrc_Vector_TrayItem_sort(btrc_Vector_TrayItem* self);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_sorted(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_min(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_max(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_sum(btrc_Vector_TrayItem* self);
-static char* btrc_Vector_TrayItem_join(btrc_Vector_TrayItem* self, char* sep);
-static char* btrc_Vector_TrayItem_joinToString(btrc_Vector_TrayItem* self, char* sep);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_filter(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred);
-static int btrc_Vector_TrayItem_findIndex(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred);
-static void btrc_Vector_TrayItem_forEach(btrc_Vector_TrayItem* self, __btrc_fn_void_TrayItem fn);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_map(btrc_Vector_TrayItem* self, __btrc_fn_TrayItem_TrayItem fn);
-static bool btrc_Vector_TrayItem_any(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred);
-static bool btrc_Vector_TrayItem_all(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred);
-static TrayItem* btrc_Vector_TrayItem_reduce(btrc_Vector_TrayItem* self, TrayItem* init, __btrc_fn_TrayItem_TrayItem_TrayItem fn);
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_copy(btrc_Vector_TrayItem* self);
-static void btrc_Vector_TrayItem_removeAt(btrc_Vector_TrayItem* self, int idx);
-static int btrc_Vector_TrayItem_iterLen(btrc_Vector_TrayItem* self);
-static TrayItem* btrc_Vector_TrayItem_iterGet(btrc_Vector_TrayItem* self, int i);
-
-static void btrc_Vector_bool_init(btrc_Vector_bool* self);
-static btrc_Vector_bool* btrc_Vector_bool_new(void);
-static void btrc_Vector_bool_destroy(btrc_Vector_bool* self);
-static void btrc_Vector_bool_push(btrc_Vector_bool* self, bool val);
-static bool btrc_Vector_bool_pop(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_get(btrc_Vector_bool* self, int i);
-static void btrc_Vector_bool_set(btrc_Vector_bool* self, int i, bool val);
-static void btrc_Vector_bool_free(btrc_Vector_bool* self);
-static void btrc_Vector_bool_remove(btrc_Vector_bool* self, int idx);
-static void btrc_Vector_bool_reverse(btrc_Vector_bool* self);
-static btrc_Vector_bool* btrc_Vector_bool_reversed(btrc_Vector_bool* self);
-static void btrc_Vector_bool_swap(btrc_Vector_bool* self, int i, int j);
-static void btrc_Vector_bool_clear(btrc_Vector_bool* self);
-static void btrc_Vector_bool_fill(btrc_Vector_bool* self, bool val);
-static int btrc_Vector_bool_size(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_isEmpty(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_first(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_last(btrc_Vector_bool* self);
-static btrc_Vector_bool* btrc_Vector_bool_slice(btrc_Vector_bool* self, int start, int end);
-static btrc_Vector_bool* btrc_Vector_bool_take(btrc_Vector_bool* self, int n);
-static btrc_Vector_bool* btrc_Vector_bool_drop(btrc_Vector_bool* self, int n);
-static void btrc_Vector_bool_extend(btrc_Vector_bool* self, btrc_Vector_bool* other);
-static void btrc_Vector_bool_insert(btrc_Vector_bool* self, int idx, bool val);
-static bool btrc_Vector_bool_contains(btrc_Vector_bool* self, bool val);
-static int btrc_Vector_bool_indexOf(btrc_Vector_bool* self, bool val);
-static int btrc_Vector_bool_lastIndexOf(btrc_Vector_bool* self, bool val);
-static int btrc_Vector_bool_count(btrc_Vector_bool* self, bool val);
-static void btrc_Vector_bool_removeAll(btrc_Vector_bool* self, bool val);
-static btrc_Vector_bool* btrc_Vector_bool_distinct(btrc_Vector_bool* self);
-static void btrc_Vector_bool_sort(btrc_Vector_bool* self);
-static btrc_Vector_bool* btrc_Vector_bool_sorted(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_min(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_max(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_sum(btrc_Vector_bool* self);
-static char* btrc_Vector_bool_join(btrc_Vector_bool* self, char* sep);
-static char* btrc_Vector_bool_joinToString(btrc_Vector_bool* self, char* sep);
-static btrc_Vector_bool* btrc_Vector_bool_filter(btrc_Vector_bool* self, __btrc_fn_bool_bool pred);
-static int btrc_Vector_bool_findIndex(btrc_Vector_bool* self, __btrc_fn_bool_bool pred);
-static void btrc_Vector_bool_forEach(btrc_Vector_bool* self, __btrc_fn_void_bool fn);
-static btrc_Vector_bool* btrc_Vector_bool_map(btrc_Vector_bool* self, __btrc_fn_bool_bool fn);
-static bool btrc_Vector_bool_any(btrc_Vector_bool* self, __btrc_fn_bool_bool pred);
-static bool btrc_Vector_bool_all(btrc_Vector_bool* self, __btrc_fn_bool_bool pred);
-static bool btrc_Vector_bool_reduce(btrc_Vector_bool* self, bool init, __btrc_fn_bool_bool_bool fn);
-static btrc_Vector_bool* btrc_Vector_bool_copy(btrc_Vector_bool* self);
-static void btrc_Vector_bool_removeAt(btrc_Vector_bool* self, int idx);
-static int btrc_Vector_bool_iterLen(btrc_Vector_bool* self);
-static bool btrc_Vector_bool_iterGet(btrc_Vector_bool* self, int i);
-
-static void btrc_Map_string_string_init(btrc_Map_string_string* self);
-static btrc_Map_string_string* btrc_Map_string_string_new(void);
-static void btrc_Map_string_string_destroy(btrc_Map_string_string* self);
-static void btrc_Map_string_string_resize(btrc_Map_string_string* self);
-static void btrc_Map_string_string_put(btrc_Map_string_string* self, char* key, char* value);
-static char* btrc_Map_string_string_get(btrc_Map_string_string* self, char* key);
-static char* btrc_Map_string_string_getOrDefault(btrc_Map_string_string* self, char* key, char* fallback);
-static bool btrc_Map_string_string_has(btrc_Map_string_string* self, char* key);
-static bool btrc_Map_string_string_contains(btrc_Map_string_string* self, char* key);
-static void btrc_Map_string_string_putIfAbsent(btrc_Map_string_string* self, char* key, char* value);
-static void btrc_Map_string_string_free(btrc_Map_string_string* self);
-static void btrc_Map_string_string_remove(btrc_Map_string_string* self, char* key);
-static void btrc_Map_string_string_clear(btrc_Map_string_string* self);
-static int btrc_Map_string_string_size(btrc_Map_string_string* self);
-static bool btrc_Map_string_string_isEmpty(btrc_Map_string_string* self);
-static btrc_Vector_string* btrc_Map_string_string_keys(btrc_Map_string_string* self);
-static btrc_Vector_string* btrc_Map_string_string_values(btrc_Map_string_string* self);
-static bool btrc_Map_string_string_containsValue(btrc_Map_string_string* self, char* value);
-static void btrc_Map_string_string_set(btrc_Map_string_string* self, char* key, char* value);
-static void btrc_Map_string_string_merge(btrc_Map_string_string* self, btrc_Map_string_string* other);
-static int btrc_Map_string_string_iterLen(btrc_Map_string_string* self);
-static char* btrc_Map_string_string_iterGet(btrc_Map_string_string* self, int n);
-static char* btrc_Map_string_string_iterValueAt(btrc_Map_string_string* self, int n);
-
-static void btrc_Vector_Map_string_string_init(btrc_Vector_Map_string_string* self);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_new(void);
-static void btrc_Vector_Map_string_string_destroy(btrc_Vector_Map_string_string* self);
-static void btrc_Vector_Map_string_string_push(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_pop(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_get(btrc_Vector_Map_string_string* self, int i);
-static void btrc_Vector_Map_string_string_set(btrc_Vector_Map_string_string* self, int i, btrc_Map_string_string* val);
-static void btrc_Vector_Map_string_string_free(btrc_Vector_Map_string_string* self);
-static void btrc_Vector_Map_string_string_remove(btrc_Vector_Map_string_string* self, int idx);
-static void btrc_Vector_Map_string_string_reverse(btrc_Vector_Map_string_string* self);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_reversed(btrc_Vector_Map_string_string* self);
-static void btrc_Vector_Map_string_string_swap(btrc_Vector_Map_string_string* self, int i, int j);
-static void btrc_Vector_Map_string_string_clear(btrc_Vector_Map_string_string* self);
-static void btrc_Vector_Map_string_string_fill(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static int btrc_Vector_Map_string_string_size(btrc_Vector_Map_string_string* self);
-static bool btrc_Vector_Map_string_string_isEmpty(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_first(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_last(btrc_Vector_Map_string_string* self);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_slice(btrc_Vector_Map_string_string* self, int start, int end);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_take(btrc_Vector_Map_string_string* self, int n);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_drop(btrc_Vector_Map_string_string* self, int n);
-static void btrc_Vector_Map_string_string_extend(btrc_Vector_Map_string_string* self, btrc_Vector_Map_string_string* other);
-static void btrc_Vector_Map_string_string_insert(btrc_Vector_Map_string_string* self, int idx, btrc_Map_string_string* val);
-static bool btrc_Vector_Map_string_string_contains(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static int btrc_Vector_Map_string_string_indexOf(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static int btrc_Vector_Map_string_string_lastIndexOf(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static int btrc_Vector_Map_string_string_count(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static void btrc_Vector_Map_string_string_removeAll(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_distinct(btrc_Vector_Map_string_string* self);
-static void btrc_Vector_Map_string_string_sort(btrc_Vector_Map_string_string* self);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_sorted(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_min(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_max(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_sum(btrc_Vector_Map_string_string* self);
-static char* btrc_Vector_Map_string_string_join(btrc_Vector_Map_string_string* self, char* sep);
-static char* btrc_Vector_Map_string_string_joinToString(btrc_Vector_Map_string_string* self, char* sep);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_filter(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred);
-static int btrc_Vector_Map_string_string_findIndex(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred);
-static void btrc_Vector_Map_string_string_forEach(btrc_Vector_Map_string_string* self, __btrc_fn_void_Map_string_string fn);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_map(btrc_Vector_Map_string_string* self, __btrc_fn_Map_string_string_Map_string_string fn);
-static bool btrc_Vector_Map_string_string_any(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred);
-static bool btrc_Vector_Map_string_string_all(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_reduce(btrc_Vector_Map_string_string* self, btrc_Map_string_string* init, __btrc_fn_Map_string_string_Map_string_string_Map_string_string fn);
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_copy(btrc_Vector_Map_string_string* self);
-static void btrc_Vector_Map_string_string_removeAt(btrc_Vector_Map_string_string* self, int idx);
-static int btrc_Vector_Map_string_string_iterLen(btrc_Vector_Map_string_string* self);
-static btrc_Map_string_string* btrc_Vector_Map_string_string_iterGet(btrc_Vector_Map_string_string* self, int i);
-
-static void btrc_Vector_int_init(btrc_Vector_int* self);
-static btrc_Vector_int* btrc_Vector_int_new(void);
-static void btrc_Vector_int_destroy(btrc_Vector_int* self);
-static void btrc_Vector_int_push(btrc_Vector_int* self, int val);
-static int btrc_Vector_int_pop(btrc_Vector_int* self);
-static int btrc_Vector_int_get(btrc_Vector_int* self, int i);
-static void btrc_Vector_int_set(btrc_Vector_int* self, int i, int val);
-static void btrc_Vector_int_free(btrc_Vector_int* self);
-static void btrc_Vector_int_remove(btrc_Vector_int* self, int idx);
-static void btrc_Vector_int_reverse(btrc_Vector_int* self);
-static btrc_Vector_int* btrc_Vector_int_reversed(btrc_Vector_int* self);
-static void btrc_Vector_int_swap(btrc_Vector_int* self, int i, int j);
-static void btrc_Vector_int_clear(btrc_Vector_int* self);
-static void btrc_Vector_int_fill(btrc_Vector_int* self, int val);
-static int btrc_Vector_int_size(btrc_Vector_int* self);
-static bool btrc_Vector_int_isEmpty(btrc_Vector_int* self);
-static int btrc_Vector_int_first(btrc_Vector_int* self);
-static int btrc_Vector_int_last(btrc_Vector_int* self);
-static btrc_Vector_int* btrc_Vector_int_slice(btrc_Vector_int* self, int start, int end);
-static btrc_Vector_int* btrc_Vector_int_take(btrc_Vector_int* self, int n);
-static btrc_Vector_int* btrc_Vector_int_drop(btrc_Vector_int* self, int n);
-static void btrc_Vector_int_extend(btrc_Vector_int* self, btrc_Vector_int* other);
-static void btrc_Vector_int_insert(btrc_Vector_int* self, int idx, int val);
-static bool btrc_Vector_int_contains(btrc_Vector_int* self, int val);
-static int btrc_Vector_int_indexOf(btrc_Vector_int* self, int val);
-static int btrc_Vector_int_lastIndexOf(btrc_Vector_int* self, int val);
-static int btrc_Vector_int_count(btrc_Vector_int* self, int val);
-static void btrc_Vector_int_removeAll(btrc_Vector_int* self, int val);
-static btrc_Vector_int* btrc_Vector_int_distinct(btrc_Vector_int* self);
-static void btrc_Vector_int_sort(btrc_Vector_int* self);
-static btrc_Vector_int* btrc_Vector_int_sorted(btrc_Vector_int* self);
-static int btrc_Vector_int_min(btrc_Vector_int* self);
-static int btrc_Vector_int_max(btrc_Vector_int* self);
-static int btrc_Vector_int_sum(btrc_Vector_int* self);
-static char* btrc_Vector_int_join(btrc_Vector_int* self, char* sep);
-static char* btrc_Vector_int_joinToString(btrc_Vector_int* self, char* sep);
-static btrc_Vector_int* btrc_Vector_int_filter(btrc_Vector_int* self, __btrc_fn_bool_int pred);
-static int btrc_Vector_int_findIndex(btrc_Vector_int* self, __btrc_fn_bool_int pred);
-static void btrc_Vector_int_forEach(btrc_Vector_int* self, __btrc_fn_void_int fn);
-static btrc_Vector_int* btrc_Vector_int_map(btrc_Vector_int* self, __btrc_fn_int_int fn);
-static bool btrc_Vector_int_any(btrc_Vector_int* self, __btrc_fn_bool_int pred);
-static bool btrc_Vector_int_all(btrc_Vector_int* self, __btrc_fn_bool_int pred);
-static int btrc_Vector_int_reduce(btrc_Vector_int* self, int init, __btrc_fn_int_int_int fn);
-static btrc_Vector_int* btrc_Vector_int_copy(btrc_Vector_int* self);
-static void btrc_Vector_int_removeAt(btrc_Vector_int* self, int idx);
-static int btrc_Vector_int_iterLen(btrc_Vector_int* self);
-static int btrc_Vector_int_iterGet(btrc_Vector_int* self, int i);
-
-static void btrc_Vector_float_init(btrc_Vector_float* self);
-static btrc_Vector_float* btrc_Vector_float_new(void);
-static void btrc_Vector_float_destroy(btrc_Vector_float* self);
-static void btrc_Vector_float_push(btrc_Vector_float* self, float val);
-static float btrc_Vector_float_pop(btrc_Vector_float* self);
-static float btrc_Vector_float_get(btrc_Vector_float* self, int i);
-static void btrc_Vector_float_set(btrc_Vector_float* self, int i, float val);
-static void btrc_Vector_float_free(btrc_Vector_float* self);
-static void btrc_Vector_float_remove(btrc_Vector_float* self, int idx);
-static void btrc_Vector_float_reverse(btrc_Vector_float* self);
-static btrc_Vector_float* btrc_Vector_float_reversed(btrc_Vector_float* self);
-static void btrc_Vector_float_swap(btrc_Vector_float* self, int i, int j);
-static void btrc_Vector_float_clear(btrc_Vector_float* self);
-static void btrc_Vector_float_fill(btrc_Vector_float* self, float val);
-static int btrc_Vector_float_size(btrc_Vector_float* self);
-static bool btrc_Vector_float_isEmpty(btrc_Vector_float* self);
-static float btrc_Vector_float_first(btrc_Vector_float* self);
-static float btrc_Vector_float_last(btrc_Vector_float* self);
-static btrc_Vector_float* btrc_Vector_float_slice(btrc_Vector_float* self, int start, int end);
-static btrc_Vector_float* btrc_Vector_float_take(btrc_Vector_float* self, int n);
-static btrc_Vector_float* btrc_Vector_float_drop(btrc_Vector_float* self, int n);
-static void btrc_Vector_float_extend(btrc_Vector_float* self, btrc_Vector_float* other);
-static void btrc_Vector_float_insert(btrc_Vector_float* self, int idx, float val);
-static bool btrc_Vector_float_contains(btrc_Vector_float* self, float val);
-static int btrc_Vector_float_indexOf(btrc_Vector_float* self, float val);
-static int btrc_Vector_float_lastIndexOf(btrc_Vector_float* self, float val);
-static int btrc_Vector_float_count(btrc_Vector_float* self, float val);
-static void btrc_Vector_float_removeAll(btrc_Vector_float* self, float val);
-static btrc_Vector_float* btrc_Vector_float_distinct(btrc_Vector_float* self);
-static void btrc_Vector_float_sort(btrc_Vector_float* self);
-static btrc_Vector_float* btrc_Vector_float_sorted(btrc_Vector_float* self);
-static float btrc_Vector_float_min(btrc_Vector_float* self);
-static float btrc_Vector_float_max(btrc_Vector_float* self);
-static float btrc_Vector_float_sum(btrc_Vector_float* self);
-static char* btrc_Vector_float_join(btrc_Vector_float* self, char* sep);
-static char* btrc_Vector_float_joinToString(btrc_Vector_float* self, char* sep);
-static btrc_Vector_float* btrc_Vector_float_filter(btrc_Vector_float* self, __btrc_fn_bool_float pred);
-static int btrc_Vector_float_findIndex(btrc_Vector_float* self, __btrc_fn_bool_float pred);
-static void btrc_Vector_float_forEach(btrc_Vector_float* self, __btrc_fn_void_float fn);
-static btrc_Vector_float* btrc_Vector_float_map(btrc_Vector_float* self, __btrc_fn_float_float fn);
-static bool btrc_Vector_float_any(btrc_Vector_float* self, __btrc_fn_bool_float pred);
-static bool btrc_Vector_float_all(btrc_Vector_float* self, __btrc_fn_bool_float pred);
-static float btrc_Vector_float_reduce(btrc_Vector_float* self, float init, __btrc_fn_float_float_float fn);
-static btrc_Vector_float* btrc_Vector_float_copy(btrc_Vector_float* self);
-static void btrc_Vector_float_removeAt(btrc_Vector_float* self, int idx);
-static int btrc_Vector_float_iterLen(btrc_Vector_float* self);
-static float btrc_Vector_float_iterGet(btrc_Vector_float* self, int i);
 
 static void btrc_Vector_ResetSubvolume_init(btrc_Vector_ResetSubvolume* self);
 static btrc_Vector_ResetSubvolume* btrc_Vector_ResetSubvolume_new(void);
@@ -2643,3085 +1322,6 @@ static btrc_Vector_VmGraphNode* btrc_Vector_VmGraphNode_copy(btrc_Vector_VmGraph
 static void btrc_Vector_VmGraphNode_removeAt(btrc_Vector_VmGraphNode* self, int idx);
 static int btrc_Vector_VmGraphNode_iterLen(btrc_Vector_VmGraphNode* self);
 static VmGraphNode* btrc_Vector_VmGraphNode_iterGet(btrc_Vector_VmGraphNode* self, int i);
-
-static void btrc_Map_string_bool_init(btrc_Map_string_bool* self);
-static btrc_Map_string_bool* btrc_Map_string_bool_new(void);
-static void btrc_Map_string_bool_destroy(btrc_Map_string_bool* self);
-static void btrc_Map_string_bool_resize(btrc_Map_string_bool* self);
-static void btrc_Map_string_bool_put(btrc_Map_string_bool* self, char* key, bool value);
-static bool btrc_Map_string_bool_get(btrc_Map_string_bool* self, char* key);
-static bool btrc_Map_string_bool_getOrDefault(btrc_Map_string_bool* self, char* key, bool fallback);
-static bool btrc_Map_string_bool_has(btrc_Map_string_bool* self, char* key);
-static bool btrc_Map_string_bool_contains(btrc_Map_string_bool* self, char* key);
-static void btrc_Map_string_bool_putIfAbsent(btrc_Map_string_bool* self, char* key, bool value);
-static void btrc_Map_string_bool_free(btrc_Map_string_bool* self);
-static void btrc_Map_string_bool_remove(btrc_Map_string_bool* self, char* key);
-static void btrc_Map_string_bool_clear(btrc_Map_string_bool* self);
-static int btrc_Map_string_bool_size(btrc_Map_string_bool* self);
-static bool btrc_Map_string_bool_isEmpty(btrc_Map_string_bool* self);
-static btrc_Vector_string* btrc_Map_string_bool_keys(btrc_Map_string_bool* self);
-static btrc_Vector_bool* btrc_Map_string_bool_values(btrc_Map_string_bool* self);
-static bool btrc_Map_string_bool_containsValue(btrc_Map_string_bool* self, bool value);
-static void btrc_Map_string_bool_set(btrc_Map_string_bool* self, char* key, bool value);
-static void btrc_Map_string_bool_merge(btrc_Map_string_bool* self, btrc_Map_string_bool* other);
-static int btrc_Map_string_bool_iterLen(btrc_Map_string_bool* self);
-static char* btrc_Map_string_bool_iterGet(btrc_Map_string_bool* self, int n);
-static bool btrc_Map_string_bool_iterValueAt(btrc_Map_string_bool* self, int n);
-
-static void UiNode_visit(UiNode* self, void (*fn)(void**)) {
-    (void)self;
-    (void)fn;
-}
-
-static void btrc_Vector_string_init(btrc_Vector_string* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_string* btrc_Vector_string_new(void) {
-    btrc_Vector_string* self = ((btrc_Vector_string*)malloc(sizeof(btrc_Vector_string)));
-    memset(self, 0, sizeof(btrc_Vector_string));
-    btrc_Vector_string_init(self);
-    return self;
-}
-
-static void btrc_Vector_string_destroy(btrc_Vector_string* self) {
-    free(self);
-}
-
-static void btrc_Vector_string_push(btrc_Vector_string* self, char* val) {
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((char**)__btrc_safe_realloc(self->data, (sizeof(char*) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static char* btrc_Vector_string_pop(btrc_Vector_string* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static char* btrc_Vector_string_get(btrc_Vector_string* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_string_set(btrc_Vector_string* self, int i, char* val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_string_free(btrc_Vector_string* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_string_remove(btrc_Vector_string* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_string_reverse(btrc_Vector_string* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        char* tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_string* btrc_Vector_string_reversed(btrc_Vector_string* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_string_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_string_swap(btrc_Vector_string* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    char* tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_string_clear(btrc_Vector_string* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_string_fill(btrc_Vector_string* self, char* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_string_size(btrc_Vector_string* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_string_isEmpty(btrc_Vector_string* self) {
-    return (self->len == 0);
-}
-
-static char* btrc_Vector_string_first(btrc_Vector_string* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static char* btrc_Vector_string_last(btrc_Vector_string* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_string* btrc_Vector_string_slice(btrc_Vector_string* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_string_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_string* btrc_Vector_string_take(btrc_Vector_string* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_string_slice(self, 0, n);
-}
-
-static btrc_Vector_string* btrc_Vector_string_drop(btrc_Vector_string* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_string_slice(self, n, self->len);
-}
-
-static void btrc_Vector_string_extend(btrc_Vector_string* self, btrc_Vector_string* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_string_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_string_insert(btrc_Vector_string* self, int idx, char* val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((char**)__btrc_safe_realloc(self->data, (sizeof(char*) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_string_contains(btrc_Vector_string* self, char* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_string_indexOf(btrc_Vector_string* self, char* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_string_lastIndexOf(btrc_Vector_string* self, char* val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_string_count(btrc_Vector_string* self, char* val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_string_removeAll(btrc_Vector_string* self, char* val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_string* btrc_Vector_string_distinct(btrc_Vector_string* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_string_contains(result, self->data[i])) {
-            btrc_Vector_string_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_string_sort(btrc_Vector_string* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        char* key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_string* btrc_Vector_string_sorted(btrc_Vector_string* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_string_push(result, self->data[i]);
-    }
-    btrc_Vector_string_sort(result);
-    return result;
-}
-
-static char* btrc_Vector_string_min(btrc_Vector_string* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    char* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static char* btrc_Vector_string_max(btrc_Vector_string* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    char* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static char* btrc_Vector_string_join(btrc_Vector_string* self, char* sep) {
-    int total = 0;
-    int sep_len = ((int)strlen(sep));
-    for (int i = 0; (i < self->len); (i++)) {
-        (total = (total + ((int)strlen(self->data[i]))));
-        if (i < (self->len - 1)) {
-            (total = (total + sep_len));
-        }
-    }
-    char* result = ((char*)malloc((total + 1)));
-    int pos = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        int slen = ((int)strlen(self->data[i]));
-        memcpy((result + pos), self->data[i], slen);
-        (pos = (pos + slen));
-        if (i < (self->len - 1)) {
-            memcpy((result + pos), sep, sep_len);
-            (pos = (pos + sep_len));
-        }
-    }
-    (result[pos] = '\0');
-    return result;
-}
-
-static char* btrc_Vector_string_joinToString(btrc_Vector_string* self, char* sep) {
-    return btrc_Vector_string_join(self, sep);
-}
-
-static btrc_Vector_string* btrc_Vector_string_filter(btrc_Vector_string* self, __btrc_fn_bool_string pred) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_string_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_string_findIndex(btrc_Vector_string* self, __btrc_fn_bool_string pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_string_forEach(btrc_Vector_string* self, __btrc_fn_void_string fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_string* btrc_Vector_string_map(btrc_Vector_string* self, __btrc_fn_string_string fn) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_string_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_string_any(btrc_Vector_string* self, __btrc_fn_bool_string pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_string_all(btrc_Vector_string* self, __btrc_fn_bool_string pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static char* btrc_Vector_string_reduce(btrc_Vector_string* self, char* init, __btrc_fn_string_string_string fn) {
-    char* acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_string* btrc_Vector_string_copy(btrc_Vector_string* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_string_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_string_removeAt(btrc_Vector_string* self, int idx) {
-    btrc_Vector_string_remove(self, idx);
-}
-
-static int btrc_Vector_string_iterLen(btrc_Vector_string* self) {
-    return self->len;
-}
-
-static char* btrc_Vector_string_iterGet(btrc_Vector_string* self, int i) {
-    return self->data[i];
-}
-
-static void btrc_Vector_UiNode_init(btrc_Vector_UiNode* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_new(void) {
-    btrc_Vector_UiNode* self = ((btrc_Vector_UiNode*)malloc(sizeof(btrc_Vector_UiNode)));
-    memset(self, 0, sizeof(btrc_Vector_UiNode));
-    btrc_Vector_UiNode_init(self);
-    return self;
-}
-
-static void btrc_Vector_UiNode_destroy(btrc_Vector_UiNode* self) {
-    free(self);
-}
-
-static void btrc_Vector_UiNode_push(btrc_Vector_UiNode* self, UiNode* val) {
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((UiNode**)__btrc_safe_realloc(self->data, (sizeof(UiNode*) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static UiNode* btrc_Vector_UiNode_pop(btrc_Vector_UiNode* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static UiNode* btrc_Vector_UiNode_get(btrc_Vector_UiNode* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_UiNode_set(btrc_Vector_UiNode* self, int i, UiNode* val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    if (self->data[i]) {
-        if ((--self->data[i]->__rc) <= 0) {
-            UiNode_destroy(self->data[i]);
-        }
-    }
-    (val->__rc++);
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_UiNode_free(btrc_Vector_UiNode* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                UiNode_destroy(self->data[i]);
-            }
-        }
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_UiNode_remove(btrc_Vector_UiNode* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->data[idx]) {
-        if ((--self->data[idx]->__rc) <= 0) {
-            UiNode_destroy(self->data[idx]);
-        }
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_UiNode_reverse(btrc_Vector_UiNode* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        UiNode* tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_reversed(btrc_Vector_UiNode* self) {
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_UiNode_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_UiNode_swap(btrc_Vector_UiNode* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    UiNode* tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_UiNode_clear(btrc_Vector_UiNode* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                UiNode_destroy(self->data[i]);
-            }
-        }
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_UiNode_fill(btrc_Vector_UiNode* self, UiNode* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                UiNode_destroy(self->data[i]);
-            }
-        }
-        (val->__rc++);
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_UiNode_size(btrc_Vector_UiNode* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_UiNode_isEmpty(btrc_Vector_UiNode* self) {
-    return (self->len == 0);
-}
-
-static UiNode* btrc_Vector_UiNode_first(btrc_Vector_UiNode* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static UiNode* btrc_Vector_UiNode_last(btrc_Vector_UiNode* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_slice(btrc_Vector_UiNode* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_UiNode_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_take(btrc_Vector_UiNode* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_UiNode_slice(self, 0, n);
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_drop(btrc_Vector_UiNode* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_UiNode_slice(self, n, self->len);
-}
-
-static void btrc_Vector_UiNode_extend(btrc_Vector_UiNode* self, btrc_Vector_UiNode* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_UiNode_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_UiNode_insert(btrc_Vector_UiNode* self, int idx, UiNode* val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((UiNode**)__btrc_safe_realloc(self->data, (sizeof(UiNode*) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_UiNode_contains(btrc_Vector_UiNode* self, UiNode* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_UiNode_indexOf(btrc_Vector_UiNode* self, UiNode* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_UiNode_lastIndexOf(btrc_Vector_UiNode* self, UiNode* val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_UiNode_count(btrc_Vector_UiNode* self, UiNode* val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_UiNode_removeAll(btrc_Vector_UiNode* self, UiNode* val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        } else if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                UiNode_destroy(self->data[i]);
-            }
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_distinct(btrc_Vector_UiNode* self) {
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_UiNode_contains(result, self->data[i])) {
-            btrc_Vector_UiNode_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_UiNode_sort(btrc_Vector_UiNode* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        UiNode* key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_sorted(btrc_Vector_UiNode* self) {
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_UiNode_push(result, self->data[i]);
-    }
-    btrc_Vector_UiNode_sort(result);
-    return result;
-}
-
-static UiNode* btrc_Vector_UiNode_min(btrc_Vector_UiNode* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    UiNode* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static UiNode* btrc_Vector_UiNode_max(btrc_Vector_UiNode* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    UiNode* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_filter(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred) {
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_UiNode_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_UiNode_findIndex(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_UiNode_forEach(btrc_Vector_UiNode* self, __btrc_fn_void_UiNode fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_map(btrc_Vector_UiNode* self, __btrc_fn_UiNode_UiNode fn) {
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_UiNode_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_UiNode_any(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_UiNode_all(btrc_Vector_UiNode* self, __btrc_fn_bool_UiNode pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static UiNode* btrc_Vector_UiNode_reduce(btrc_Vector_UiNode* self, UiNode* init, __btrc_fn_UiNode_UiNode_UiNode fn) {
-    UiNode* acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_UiNode* btrc_Vector_UiNode_copy(btrc_Vector_UiNode* self) {
-    btrc_Vector_UiNode* result = btrc_Vector_UiNode_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_UiNode_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_UiNode_removeAt(btrc_Vector_UiNode* self, int idx) {
-    btrc_Vector_UiNode_remove(self, idx);
-}
-
-static int btrc_Vector_UiNode_iterLen(btrc_Vector_UiNode* self) {
-    return self->len;
-}
-
-static UiNode* btrc_Vector_UiNode_iterGet(btrc_Vector_UiNode* self, int i) {
-    return self->data[i];
-}
-
-static void btrc_Vector_TrayItem_init(btrc_Vector_TrayItem* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_new(void) {
-    btrc_Vector_TrayItem* self = ((btrc_Vector_TrayItem*)malloc(sizeof(btrc_Vector_TrayItem)));
-    memset(self, 0, sizeof(btrc_Vector_TrayItem));
-    btrc_Vector_TrayItem_init(self);
-    return self;
-}
-
-static void btrc_Vector_TrayItem_destroy(btrc_Vector_TrayItem* self) {
-    free(self);
-}
-
-static void btrc_Vector_TrayItem_push(btrc_Vector_TrayItem* self, TrayItem* val) {
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((TrayItem**)__btrc_safe_realloc(self->data, (sizeof(TrayItem*) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static TrayItem* btrc_Vector_TrayItem_pop(btrc_Vector_TrayItem* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static TrayItem* btrc_Vector_TrayItem_get(btrc_Vector_TrayItem* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_TrayItem_set(btrc_Vector_TrayItem* self, int i, TrayItem* val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    if (self->data[i]) {
-        if ((--self->data[i]->__rc) <= 0) {
-            TrayItem_destroy(self->data[i]);
-        }
-    }
-    (val->__rc++);
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_TrayItem_free(btrc_Vector_TrayItem* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                TrayItem_destroy(self->data[i]);
-            }
-        }
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_TrayItem_remove(btrc_Vector_TrayItem* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->data[idx]) {
-        if ((--self->data[idx]->__rc) <= 0) {
-            TrayItem_destroy(self->data[idx]);
-        }
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_TrayItem_reverse(btrc_Vector_TrayItem* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        TrayItem* tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_reversed(btrc_Vector_TrayItem* self) {
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_TrayItem_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_TrayItem_swap(btrc_Vector_TrayItem* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    TrayItem* tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_TrayItem_clear(btrc_Vector_TrayItem* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                TrayItem_destroy(self->data[i]);
-            }
-        }
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_TrayItem_fill(btrc_Vector_TrayItem* self, TrayItem* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                TrayItem_destroy(self->data[i]);
-            }
-        }
-        (val->__rc++);
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_TrayItem_size(btrc_Vector_TrayItem* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_TrayItem_isEmpty(btrc_Vector_TrayItem* self) {
-    return (self->len == 0);
-}
-
-static TrayItem* btrc_Vector_TrayItem_first(btrc_Vector_TrayItem* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static TrayItem* btrc_Vector_TrayItem_last(btrc_Vector_TrayItem* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_slice(btrc_Vector_TrayItem* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_TrayItem_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_take(btrc_Vector_TrayItem* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_TrayItem_slice(self, 0, n);
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_drop(btrc_Vector_TrayItem* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_TrayItem_slice(self, n, self->len);
-}
-
-static void btrc_Vector_TrayItem_extend(btrc_Vector_TrayItem* self, btrc_Vector_TrayItem* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_TrayItem_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_TrayItem_insert(btrc_Vector_TrayItem* self, int idx, TrayItem* val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((TrayItem**)__btrc_safe_realloc(self->data, (sizeof(TrayItem*) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_TrayItem_contains(btrc_Vector_TrayItem* self, TrayItem* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_TrayItem_indexOf(btrc_Vector_TrayItem* self, TrayItem* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_TrayItem_lastIndexOf(btrc_Vector_TrayItem* self, TrayItem* val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_TrayItem_count(btrc_Vector_TrayItem* self, TrayItem* val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_TrayItem_removeAll(btrc_Vector_TrayItem* self, TrayItem* val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        } else if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                TrayItem_destroy(self->data[i]);
-            }
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_distinct(btrc_Vector_TrayItem* self) {
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_TrayItem_contains(result, self->data[i])) {
-            btrc_Vector_TrayItem_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_TrayItem_sort(btrc_Vector_TrayItem* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        TrayItem* key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_sorted(btrc_Vector_TrayItem* self) {
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_TrayItem_push(result, self->data[i]);
-    }
-    btrc_Vector_TrayItem_sort(result);
-    return result;
-}
-
-static TrayItem* btrc_Vector_TrayItem_min(btrc_Vector_TrayItem* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    TrayItem* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static TrayItem* btrc_Vector_TrayItem_max(btrc_Vector_TrayItem* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    TrayItem* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_filter(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred) {
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_TrayItem_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_TrayItem_findIndex(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_TrayItem_forEach(btrc_Vector_TrayItem* self, __btrc_fn_void_TrayItem fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_map(btrc_Vector_TrayItem* self, __btrc_fn_TrayItem_TrayItem fn) {
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_TrayItem_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_TrayItem_any(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_TrayItem_all(btrc_Vector_TrayItem* self, __btrc_fn_bool_TrayItem pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static TrayItem* btrc_Vector_TrayItem_reduce(btrc_Vector_TrayItem* self, TrayItem* init, __btrc_fn_TrayItem_TrayItem_TrayItem fn) {
-    TrayItem* acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_TrayItem* btrc_Vector_TrayItem_copy(btrc_Vector_TrayItem* self) {
-    btrc_Vector_TrayItem* result = btrc_Vector_TrayItem_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_TrayItem_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_TrayItem_removeAt(btrc_Vector_TrayItem* self, int idx) {
-    btrc_Vector_TrayItem_remove(self, idx);
-}
-
-static int btrc_Vector_TrayItem_iterLen(btrc_Vector_TrayItem* self) {
-    return self->len;
-}
-
-static TrayItem* btrc_Vector_TrayItem_iterGet(btrc_Vector_TrayItem* self, int i) {
-    return self->data[i];
-}
-
-static void btrc_Vector_bool_init(btrc_Vector_bool* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_new(void) {
-    btrc_Vector_bool* self = ((btrc_Vector_bool*)malloc(sizeof(btrc_Vector_bool)));
-    memset(self, 0, sizeof(btrc_Vector_bool));
-    btrc_Vector_bool_init(self);
-    return self;
-}
-
-static void btrc_Vector_bool_destroy(btrc_Vector_bool* self) {
-    free(self);
-}
-
-static void btrc_Vector_bool_push(btrc_Vector_bool* self, bool val) {
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((bool*)__btrc_safe_realloc(self->data, (sizeof(bool) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_bool_pop(btrc_Vector_bool* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static bool btrc_Vector_bool_get(btrc_Vector_bool* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_bool_set(btrc_Vector_bool* self, int i, bool val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_bool_free(btrc_Vector_bool* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_bool_remove(btrc_Vector_bool* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_bool_reverse(btrc_Vector_bool* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        bool tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_reversed(btrc_Vector_bool* self) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_bool_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_bool_swap(btrc_Vector_bool* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    bool tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_bool_clear(btrc_Vector_bool* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_bool_fill(btrc_Vector_bool* self, bool val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_bool_size(btrc_Vector_bool* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_bool_isEmpty(btrc_Vector_bool* self) {
-    return (self->len == 0);
-}
-
-static bool btrc_Vector_bool_first(btrc_Vector_bool* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static bool btrc_Vector_bool_last(btrc_Vector_bool* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_slice(btrc_Vector_bool* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_bool_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_take(btrc_Vector_bool* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_bool_slice(self, 0, n);
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_drop(btrc_Vector_bool* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_bool_slice(self, n, self->len);
-}
-
-static void btrc_Vector_bool_extend(btrc_Vector_bool* self, btrc_Vector_bool* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_bool_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_bool_insert(btrc_Vector_bool* self, int idx, bool val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((bool*)__btrc_safe_realloc(self->data, (sizeof(bool) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_bool_contains(btrc_Vector_bool* self, bool val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_bool_indexOf(btrc_Vector_bool* self, bool val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_bool_lastIndexOf(btrc_Vector_bool* self, bool val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_bool_count(btrc_Vector_bool* self, bool val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_bool_removeAll(btrc_Vector_bool* self, bool val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_distinct(btrc_Vector_bool* self) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_bool_contains(result, self->data[i])) {
-            btrc_Vector_bool_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_bool_sort(btrc_Vector_bool* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        bool key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_sorted(btrc_Vector_bool* self) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_bool_push(result, self->data[i]);
-    }
-    btrc_Vector_bool_sort(result);
-    return result;
-}
-
-static bool btrc_Vector_bool_min(btrc_Vector_bool* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    bool m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static bool btrc_Vector_bool_max(btrc_Vector_bool* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    bool m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static bool btrc_Vector_bool_sum(btrc_Vector_bool* self) {
-    bool s = ((bool)0);
-    for (int i = 0; (i < self->len); (i++)) {
-        (s = (s + self->data[i]));
-    }
-    return s;
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_filter(btrc_Vector_bool* self, __btrc_fn_bool_bool pred) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_bool_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_bool_findIndex(btrc_Vector_bool* self, __btrc_fn_bool_bool pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_bool_forEach(btrc_Vector_bool* self, __btrc_fn_void_bool fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_map(btrc_Vector_bool* self, __btrc_fn_bool_bool fn) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_bool_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_bool_any(btrc_Vector_bool* self, __btrc_fn_bool_bool pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_bool_all(btrc_Vector_bool* self, __btrc_fn_bool_bool pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool btrc_Vector_bool_reduce(btrc_Vector_bool* self, bool init, __btrc_fn_bool_bool_bool fn) {
-    bool acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_bool* btrc_Vector_bool_copy(btrc_Vector_bool* self) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_bool_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_bool_removeAt(btrc_Vector_bool* self, int idx) {
-    btrc_Vector_bool_remove(self, idx);
-}
-
-static int btrc_Vector_bool_iterLen(btrc_Vector_bool* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_bool_iterGet(btrc_Vector_bool* self, int i) {
-    return self->data[i];
-}
-
-static void btrc_Map_string_string_init(btrc_Map_string_string* self) {
-    self->__rc = 1;
-    (self->cap = 16);
-    (self->len = 0);
-    (self->keys = ((char**)__btrc_safe_calloc(16, sizeof(char*))));
-    (self->values = ((char**)__btrc_safe_calloc(16, sizeof(char*))));
-    (self->occupied = ((bool*)__btrc_safe_calloc(16, sizeof(bool))));
-}
-
-static btrc_Map_string_string* btrc_Map_string_string_new(void) {
-    btrc_Map_string_string* self = ((btrc_Map_string_string*)malloc(sizeof(btrc_Map_string_string)));
-    memset(self, 0, sizeof(btrc_Map_string_string));
-    btrc_Map_string_string_init(self);
-    return self;
-}
-
-static void btrc_Map_string_string_destroy(btrc_Map_string_string* self) {
-    free(self);
-}
-
-static void btrc_Map_string_string_resize(btrc_Map_string_string* self) {
-    int old_cap = self->cap;
-    char** old_keys = self->keys;
-    char** old_values = self->values;
-    bool* old_occupied = self->occupied;
-    (self->cap = (self->cap * 2));
-    (self->len = 0);
-    (self->keys = ((char**)__btrc_safe_calloc(self->cap, sizeof(char*))));
-    (self->values = ((char**)__btrc_safe_calloc(self->cap, sizeof(char*))));
-    (self->occupied = ((bool*)__btrc_safe_calloc(self->cap, sizeof(bool))));
-    for (int i = 0; (i < old_cap); (i++)) {
-        if (old_occupied[i]) {
-            btrc_Map_string_string_put(self, old_keys[i], old_values[i]);
-        }
-    }
-    free(old_keys);
-    free(old_values);
-    free(old_occupied);
-}
-
-static void btrc_Map_string_string_put(btrc_Map_string_string* self, char* key, char* value) {
-    if ((self->len * 4) >= (self->cap * 3)) {
-        btrc_Map_string_string_resize(self);
-    }
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            (self->values[idx] = value);
-            return;
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    (self->keys[idx] = key);
-    (self->values[idx] = value);
-    (self->occupied[idx] = true);
-    (self->len++);
-}
-
-static char* btrc_Map_string_string_get(btrc_Map_string_string* self, char* key) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            return self->values[idx];
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    fprintf(stderr, "Map key not found\n");
-    exit(1);
-    return self->values[0];
-}
-
-static char* btrc_Map_string_string_getOrDefault(btrc_Map_string_string* self, char* key, char* fallback) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            return self->values[idx];
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    return fallback;
-}
-
-static bool btrc_Map_string_string_has(btrc_Map_string_string* self, char* key) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            return true;
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    return false;
-}
-
-static bool btrc_Map_string_string_contains(btrc_Map_string_string* self, char* key) {
-    return btrc_Map_string_string_has(self, key);
-}
-
-static void btrc_Map_string_string_putIfAbsent(btrc_Map_string_string* self, char* key, char* value) {
-    if (!btrc_Map_string_string_has(self, key)) {
-        btrc_Map_string_string_put(self, key, value);
-    }
-}
-
-static void btrc_Map_string_string_free(btrc_Map_string_string* self) {
-    free(self->keys);
-    free(self->values);
-    free(self->occupied);
-    (self->keys = NULL);
-    (self->values = NULL);
-    (self->occupied = NULL);
-    (self->cap = 0);
-    (self->len = 0);
-}
-
-static void btrc_Map_string_string_remove(btrc_Map_string_string* self, char* key) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            (self->occupied[idx] = false);
-            (self->len--);
-            unsigned int j = ((idx + 1) % self->cap);
-            while (self->occupied[j]) {
-                char* rk = self->keys[j];
-                char* rv = self->values[j];
-                (self->occupied[j] = false);
-                (self->len--);
-                btrc_Map_string_string_put(self, rk, rv);
-                (j = ((j + 1) % self->cap));
-            }
-            return;
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-}
-
-static void btrc_Map_string_string_clear(btrc_Map_string_string* self) {
-    for (int i = 0; (i < self->cap); (i++)) {
-        (self->occupied[i] = false);
-    }
-    (self->len = 0);
-}
-
-static int btrc_Map_string_string_size(btrc_Map_string_string* self) {
-    return self->len;
-}
-
-static bool btrc_Map_string_string_isEmpty(btrc_Map_string_string* self) {
-    return (self->len == 0);
-}
-
-static btrc_Vector_string* btrc_Map_string_string_keys(btrc_Map_string_string* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            btrc_Vector_string_push(result, self->keys[i]);
-        }
-    }
-    return result;
-}
-
-static btrc_Vector_string* btrc_Map_string_string_values(btrc_Map_string_string* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            btrc_Vector_string_push(result, self->values[i]);
-        }
-    }
-    return result;
-}
-
-static bool btrc_Map_string_string_containsValue(btrc_Map_string_string* self, char* value) {
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i] && __btrc_eq(self->values[i], value)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static void btrc_Map_string_string_set(btrc_Map_string_string* self, char* key, char* value) {
-    btrc_Map_string_string_put(self, key, value);
-}
-
-static void btrc_Map_string_string_merge(btrc_Map_string_string* self, btrc_Map_string_string* other) {
-    for (int i = 0; (i < other->cap); (i++)) {
-        if (other->occupied[i]) {
-            btrc_Map_string_string_put(self, other->keys[i], other->values[i]);
-        }
-    }
-}
-
-static int btrc_Map_string_string_iterLen(btrc_Map_string_string* self) {
-    return self->len;
-}
-
-static char* btrc_Map_string_string_iterGet(btrc_Map_string_string* self, int n) {
-    int count = 0;
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            if (count == n) {
-                return self->keys[i];
-            }
-            (count++);
-        }
-    }
-    fprintf(stderr, "Map iterGet: index out of bounds\n");
-    exit(1);
-    return self->keys[0];
-}
-
-static char* btrc_Map_string_string_iterValueAt(btrc_Map_string_string* self, int n) {
-    int count = 0;
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            if (count == n) {
-                return self->values[i];
-            }
-            (count++);
-        }
-    }
-    fprintf(stderr, "Map iterValueAt: index out of bounds\n");
-    exit(1);
-    return self->values[0];
-}
-
-static void btrc_Vector_Map_string_string_init(btrc_Vector_Map_string_string* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_new(void) {
-    btrc_Vector_Map_string_string* self = ((btrc_Vector_Map_string_string*)malloc(sizeof(btrc_Vector_Map_string_string)));
-    memset(self, 0, sizeof(btrc_Vector_Map_string_string));
-    btrc_Vector_Map_string_string_init(self);
-    return self;
-}
-
-static void btrc_Vector_Map_string_string_destroy(btrc_Vector_Map_string_string* self) {
-    free(self);
-}
-
-static void btrc_Vector_Map_string_string_push(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((btrc_Map_string_string**)__btrc_safe_realloc(self->data, (sizeof(btrc_Map_string_string*) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_pop(btrc_Vector_Map_string_string* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_get(btrc_Vector_Map_string_string* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_Map_string_string_set(btrc_Vector_Map_string_string* self, int i, btrc_Map_string_string* val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    if (self->data[i]) {
-        if ((--self->data[i]->__rc) <= 0) {
-            btrc_Map_string_string_free(self->data[i]);
-        }
-    }
-    (val->__rc++);
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_Map_string_string_free(btrc_Vector_Map_string_string* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                btrc_Map_string_string_free(self->data[i]);
-            }
-        }
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_Map_string_string_remove(btrc_Vector_Map_string_string* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->data[idx]) {
-        if ((--self->data[idx]->__rc) <= 0) {
-            btrc_Map_string_string_free(self->data[idx]);
-        }
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_Map_string_string_reverse(btrc_Vector_Map_string_string* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        btrc_Map_string_string* tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_reversed(btrc_Vector_Map_string_string* self) {
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_Map_string_string_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_Map_string_string_swap(btrc_Vector_Map_string_string* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    btrc_Map_string_string* tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_Map_string_string_clear(btrc_Vector_Map_string_string* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                btrc_Map_string_string_free(self->data[i]);
-            }
-        }
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_Map_string_string_fill(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                btrc_Map_string_string_free(self->data[i]);
-            }
-        }
-        (val->__rc++);
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_Map_string_string_size(btrc_Vector_Map_string_string* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_Map_string_string_isEmpty(btrc_Vector_Map_string_string* self) {
-    return (self->len == 0);
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_first(btrc_Vector_Map_string_string* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_last(btrc_Vector_Map_string_string* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_slice(btrc_Vector_Map_string_string* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_Map_string_string_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_take(btrc_Vector_Map_string_string* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_Map_string_string_slice(self, 0, n);
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_drop(btrc_Vector_Map_string_string* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_Map_string_string_slice(self, n, self->len);
-}
-
-static void btrc_Vector_Map_string_string_extend(btrc_Vector_Map_string_string* self, btrc_Vector_Map_string_string* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_Map_string_string_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_Map_string_string_insert(btrc_Vector_Map_string_string* self, int idx, btrc_Map_string_string* val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((btrc_Map_string_string**)__btrc_safe_realloc(self->data, (sizeof(btrc_Map_string_string*) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_Map_string_string_contains(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_Map_string_string_indexOf(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_Map_string_string_lastIndexOf(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_Map_string_string_count(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_Map_string_string_removeAll(btrc_Vector_Map_string_string* self, btrc_Map_string_string* val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        } else if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                btrc_Map_string_string_free(self->data[i]);
-            }
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_distinct(btrc_Vector_Map_string_string* self) {
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_Map_string_string_contains(result, self->data[i])) {
-            btrc_Vector_Map_string_string_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_Map_string_string_sort(btrc_Vector_Map_string_string* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        btrc_Map_string_string* key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_sorted(btrc_Vector_Map_string_string* self) {
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_Map_string_string_push(result, self->data[i]);
-    }
-    btrc_Vector_Map_string_string_sort(result);
-    return result;
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_min(btrc_Vector_Map_string_string* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    btrc_Map_string_string* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_max(btrc_Vector_Map_string_string* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    btrc_Map_string_string* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_filter(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred) {
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_Map_string_string_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_Map_string_string_findIndex(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_Map_string_string_forEach(btrc_Vector_Map_string_string* self, __btrc_fn_void_Map_string_string fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_map(btrc_Vector_Map_string_string* self, __btrc_fn_Map_string_string_Map_string_string fn) {
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_Map_string_string_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_Map_string_string_any(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_Map_string_string_all(btrc_Vector_Map_string_string* self, __btrc_fn_bool_Map_string_string pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_reduce(btrc_Vector_Map_string_string* self, btrc_Map_string_string* init, __btrc_fn_Map_string_string_Map_string_string_Map_string_string fn) {
-    btrc_Map_string_string* acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_Map_string_string* btrc_Vector_Map_string_string_copy(btrc_Vector_Map_string_string* self) {
-    btrc_Vector_Map_string_string* result = btrc_Vector_Map_string_string_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_Map_string_string_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_Map_string_string_removeAt(btrc_Vector_Map_string_string* self, int idx) {
-    btrc_Vector_Map_string_string_remove(self, idx);
-}
-
-static int btrc_Vector_Map_string_string_iterLen(btrc_Vector_Map_string_string* self) {
-    return self->len;
-}
-
-static btrc_Map_string_string* btrc_Vector_Map_string_string_iterGet(btrc_Vector_Map_string_string* self, int i) {
-    return self->data[i];
-}
-
-static void btrc_Vector_int_init(btrc_Vector_int* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_int* btrc_Vector_int_new(void) {
-    btrc_Vector_int* self = ((btrc_Vector_int*)malloc(sizeof(btrc_Vector_int)));
-    memset(self, 0, sizeof(btrc_Vector_int));
-    btrc_Vector_int_init(self);
-    return self;
-}
-
-static void btrc_Vector_int_destroy(btrc_Vector_int* self) {
-    free(self);
-}
-
-static void btrc_Vector_int_push(btrc_Vector_int* self, int val) {
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((int*)__btrc_safe_realloc(self->data, (sizeof(int) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static int btrc_Vector_int_pop(btrc_Vector_int* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static int btrc_Vector_int_get(btrc_Vector_int* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_int_set(btrc_Vector_int* self, int i, int val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_int_free(btrc_Vector_int* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_int_remove(btrc_Vector_int* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_int_reverse(btrc_Vector_int* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        int tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_int* btrc_Vector_int_reversed(btrc_Vector_int* self) {
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_int_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_int_swap(btrc_Vector_int* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    int tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_int_clear(btrc_Vector_int* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_int_fill(btrc_Vector_int* self, int val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_int_size(btrc_Vector_int* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_int_isEmpty(btrc_Vector_int* self) {
-    return (self->len == 0);
-}
-
-static int btrc_Vector_int_first(btrc_Vector_int* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static int btrc_Vector_int_last(btrc_Vector_int* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_int* btrc_Vector_int_slice(btrc_Vector_int* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_int_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_int* btrc_Vector_int_take(btrc_Vector_int* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_int_slice(self, 0, n);
-}
-
-static btrc_Vector_int* btrc_Vector_int_drop(btrc_Vector_int* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_int_slice(self, n, self->len);
-}
-
-static void btrc_Vector_int_extend(btrc_Vector_int* self, btrc_Vector_int* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_int_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_int_insert(btrc_Vector_int* self, int idx, int val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((int*)__btrc_safe_realloc(self->data, (sizeof(int) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_int_contains(btrc_Vector_int* self, int val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_int_indexOf(btrc_Vector_int* self, int val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_int_lastIndexOf(btrc_Vector_int* self, int val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_int_count(btrc_Vector_int* self, int val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_int_removeAll(btrc_Vector_int* self, int val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_int* btrc_Vector_int_distinct(btrc_Vector_int* self) {
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_int_contains(result, self->data[i])) {
-            btrc_Vector_int_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_int_sort(btrc_Vector_int* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        int key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_int* btrc_Vector_int_sorted(btrc_Vector_int* self) {
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_int_push(result, self->data[i]);
-    }
-    btrc_Vector_int_sort(result);
-    return result;
-}
-
-static int btrc_Vector_int_min(btrc_Vector_int* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    int m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static int btrc_Vector_int_max(btrc_Vector_int* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    int m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static int btrc_Vector_int_sum(btrc_Vector_int* self) {
-    int s = ((int)0);
-    for (int i = 0; (i < self->len); (i++)) {
-        (s = (s + self->data[i]));
-    }
-    return s;
-}
-
-static btrc_Vector_int* btrc_Vector_int_filter(btrc_Vector_int* self, __btrc_fn_bool_int pred) {
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_int_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_int_findIndex(btrc_Vector_int* self, __btrc_fn_bool_int pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_int_forEach(btrc_Vector_int* self, __btrc_fn_void_int fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_int* btrc_Vector_int_map(btrc_Vector_int* self, __btrc_fn_int_int fn) {
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_int_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_int_any(btrc_Vector_int* self, __btrc_fn_bool_int pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_int_all(btrc_Vector_int* self, __btrc_fn_bool_int pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static int btrc_Vector_int_reduce(btrc_Vector_int* self, int init, __btrc_fn_int_int_int fn) {
-    int acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_int* btrc_Vector_int_copy(btrc_Vector_int* self) {
-    btrc_Vector_int* result = btrc_Vector_int_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_int_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_int_removeAt(btrc_Vector_int* self, int idx) {
-    btrc_Vector_int_remove(self, idx);
-}
-
-static int btrc_Vector_int_iterLen(btrc_Vector_int* self) {
-    return self->len;
-}
-
-static int btrc_Vector_int_iterGet(btrc_Vector_int* self, int i) {
-    return self->data[i];
-}
-
-static void btrc_Vector_float_init(btrc_Vector_float* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_float* btrc_Vector_float_new(void) {
-    btrc_Vector_float* self = ((btrc_Vector_float*)malloc(sizeof(btrc_Vector_float)));
-    memset(self, 0, sizeof(btrc_Vector_float));
-    btrc_Vector_float_init(self);
-    return self;
-}
-
-static void btrc_Vector_float_destroy(btrc_Vector_float* self) {
-    free(self);
-}
-
-static void btrc_Vector_float_push(btrc_Vector_float* self, float val) {
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((float*)__btrc_safe_realloc(self->data, (sizeof(float) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static float btrc_Vector_float_pop(btrc_Vector_float* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static float btrc_Vector_float_get(btrc_Vector_float* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_float_set(btrc_Vector_float* self, int i, float val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_float_free(btrc_Vector_float* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_float_remove(btrc_Vector_float* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_float_reverse(btrc_Vector_float* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        float tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_float* btrc_Vector_float_reversed(btrc_Vector_float* self) {
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_float_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_float_swap(btrc_Vector_float* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    float tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_float_clear(btrc_Vector_float* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_float_fill(btrc_Vector_float* self, float val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_float_size(btrc_Vector_float* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_float_isEmpty(btrc_Vector_float* self) {
-    return (self->len == 0);
-}
-
-static float btrc_Vector_float_first(btrc_Vector_float* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static float btrc_Vector_float_last(btrc_Vector_float* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_float* btrc_Vector_float_slice(btrc_Vector_float* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_float_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_float* btrc_Vector_float_take(btrc_Vector_float* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_float_slice(self, 0, n);
-}
-
-static btrc_Vector_float* btrc_Vector_float_drop(btrc_Vector_float* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_float_slice(self, n, self->len);
-}
-
-static void btrc_Vector_float_extend(btrc_Vector_float* self, btrc_Vector_float* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_float_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_float_insert(btrc_Vector_float* self, int idx, float val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((float*)__btrc_safe_realloc(self->data, (sizeof(float) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_float_contains(btrc_Vector_float* self, float val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_float_indexOf(btrc_Vector_float* self, float val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_float_lastIndexOf(btrc_Vector_float* self, float val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_float_count(btrc_Vector_float* self, float val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_float_removeAll(btrc_Vector_float* self, float val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_float* btrc_Vector_float_distinct(btrc_Vector_float* self) {
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_float_contains(result, self->data[i])) {
-            btrc_Vector_float_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_float_sort(btrc_Vector_float* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        float key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_float* btrc_Vector_float_sorted(btrc_Vector_float* self) {
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_float_push(result, self->data[i]);
-    }
-    btrc_Vector_float_sort(result);
-    return result;
-}
-
-static float btrc_Vector_float_min(btrc_Vector_float* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    float m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static float btrc_Vector_float_max(btrc_Vector_float* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    float m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static float btrc_Vector_float_sum(btrc_Vector_float* self) {
-    float s = ((float)0);
-    for (int i = 0; (i < self->len); (i++)) {
-        (s = (s + self->data[i]));
-    }
-    return s;
-}
-
-static btrc_Vector_float* btrc_Vector_float_filter(btrc_Vector_float* self, __btrc_fn_bool_float pred) {
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_float_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_float_findIndex(btrc_Vector_float* self, __btrc_fn_bool_float pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_float_forEach(btrc_Vector_float* self, __btrc_fn_void_float fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_float* btrc_Vector_float_map(btrc_Vector_float* self, __btrc_fn_float_float fn) {
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_float_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_float_any(btrc_Vector_float* self, __btrc_fn_bool_float pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_float_all(btrc_Vector_float* self, __btrc_fn_bool_float pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static float btrc_Vector_float_reduce(btrc_Vector_float* self, float init, __btrc_fn_float_float_float fn) {
-    float acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_float* btrc_Vector_float_copy(btrc_Vector_float* self) {
-    btrc_Vector_float* result = btrc_Vector_float_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_float_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_float_removeAt(btrc_Vector_float* self, int idx) {
-    btrc_Vector_float_remove(self, idx);
-}
-
-static int btrc_Vector_float_iterLen(btrc_Vector_float* self) {
-    return self->len;
-}
-
-static float btrc_Vector_float_iterGet(btrc_Vector_float* self, int i) {
-    return self->data[i];
-}
 
 static void btrc_Vector_ResetSubvolume_init(btrc_Vector_ResetSubvolume* self) {
     self->__rc = 1;
@@ -8628,2837 +4228,20 @@ static VmGraphNode* btrc_Vector_VmGraphNode_iterGet(btrc_Vector_VmGraphNode* sel
     return self->data[i];
 }
 
-static void btrc_Map_string_bool_init(btrc_Map_string_bool* self) {
-    self->__rc = 1;
-    (self->cap = 16);
-    (self->len = 0);
-    (self->keys = ((char**)__btrc_safe_calloc(16, sizeof(char*))));
-    (self->values = ((bool*)__btrc_safe_calloc(16, sizeof(bool))));
-    (self->occupied = ((bool*)__btrc_safe_calloc(16, sizeof(bool))));
-}
-
-static btrc_Map_string_bool* btrc_Map_string_bool_new(void) {
-    btrc_Map_string_bool* self = ((btrc_Map_string_bool*)malloc(sizeof(btrc_Map_string_bool)));
-    memset(self, 0, sizeof(btrc_Map_string_bool));
-    btrc_Map_string_bool_init(self);
-    return self;
-}
-
-static void btrc_Map_string_bool_destroy(btrc_Map_string_bool* self) {
-    free(self);
-}
-
-static void btrc_Map_string_bool_resize(btrc_Map_string_bool* self) {
-    int old_cap = self->cap;
-    char** old_keys = self->keys;
-    bool* old_values = self->values;
-    bool* old_occupied = self->occupied;
-    (self->cap = (self->cap * 2));
-    (self->len = 0);
-    (self->keys = ((char**)__btrc_safe_calloc(self->cap, sizeof(char*))));
-    (self->values = ((bool*)__btrc_safe_calloc(self->cap, sizeof(bool))));
-    (self->occupied = ((bool*)__btrc_safe_calloc(self->cap, sizeof(bool))));
-    for (int i = 0; (i < old_cap); (i++)) {
-        if (old_occupied[i]) {
-            btrc_Map_string_bool_put(self, old_keys[i], old_values[i]);
-        }
-    }
-    free(old_keys);
-    free(old_values);
-    free(old_occupied);
-}
-
-static void btrc_Map_string_bool_put(btrc_Map_string_bool* self, char* key, bool value) {
-    if ((self->len * 4) >= (self->cap * 3)) {
-        btrc_Map_string_bool_resize(self);
-    }
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            (self->values[idx] = value);
-            return;
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    (self->keys[idx] = key);
-    (self->values[idx] = value);
-    (self->occupied[idx] = true);
-    (self->len++);
-}
-
-static bool btrc_Map_string_bool_get(btrc_Map_string_bool* self, char* key) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            return self->values[idx];
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    fprintf(stderr, "Map key not found\n");
-    exit(1);
-    return self->values[0];
-}
-
-static bool btrc_Map_string_bool_getOrDefault(btrc_Map_string_bool* self, char* key, bool fallback) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            return self->values[idx];
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    return fallback;
-}
-
-static bool btrc_Map_string_bool_has(btrc_Map_string_bool* self, char* key) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            return true;
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-    return false;
-}
-
-static bool btrc_Map_string_bool_contains(btrc_Map_string_bool* self, char* key) {
-    return btrc_Map_string_bool_has(self, key);
-}
-
-static void btrc_Map_string_bool_putIfAbsent(btrc_Map_string_bool* self, char* key, bool value) {
-    if (!btrc_Map_string_bool_has(self, key)) {
-        btrc_Map_string_bool_put(self, key, value);
-    }
-}
-
-static void btrc_Map_string_bool_free(btrc_Map_string_bool* self) {
-    free(self->keys);
-    free(self->values);
-    free(self->occupied);
-    (self->keys = NULL);
-    (self->values = NULL);
-    (self->occupied = NULL);
-    (self->cap = 0);
-    (self->len = 0);
-}
-
-static void btrc_Map_string_bool_remove(btrc_Map_string_bool* self, char* key) {
-    unsigned int idx = (__btrc_hash(key) % self->cap);
-    while (self->occupied[idx]) {
-        if (__btrc_eq(self->keys[idx], key)) {
-            (self->occupied[idx] = false);
-            (self->len--);
-            unsigned int j = ((idx + 1) % self->cap);
-            while (self->occupied[j]) {
-                char* rk = self->keys[j];
-                bool rv = self->values[j];
-                (self->occupied[j] = false);
-                (self->len--);
-                btrc_Map_string_bool_put(self, rk, rv);
-                (j = ((j + 1) % self->cap));
-            }
-            return;
-        }
-        (idx = ((idx + 1) % self->cap));
-    }
-}
-
-static void btrc_Map_string_bool_clear(btrc_Map_string_bool* self) {
-    for (int i = 0; (i < self->cap); (i++)) {
-        (self->occupied[i] = false);
-    }
-    (self->len = 0);
-}
-
-static int btrc_Map_string_bool_size(btrc_Map_string_bool* self) {
-    return self->len;
-}
-
-static bool btrc_Map_string_bool_isEmpty(btrc_Map_string_bool* self) {
-    return (self->len == 0);
-}
-
-static btrc_Vector_string* btrc_Map_string_bool_keys(btrc_Map_string_bool* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            btrc_Vector_string_push(result, self->keys[i]);
-        }
-    }
-    return result;
-}
-
-static btrc_Vector_bool* btrc_Map_string_bool_values(btrc_Map_string_bool* self) {
-    btrc_Vector_bool* result = btrc_Vector_bool_new();
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            btrc_Vector_bool_push(result, self->values[i]);
-        }
-    }
-    return result;
-}
-
-static bool btrc_Map_string_bool_containsValue(btrc_Map_string_bool* self, bool value) {
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i] && __btrc_eq(self->values[i], value)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static void btrc_Map_string_bool_set(btrc_Map_string_bool* self, char* key, bool value) {
-    btrc_Map_string_bool_put(self, key, value);
-}
-
-static void btrc_Map_string_bool_merge(btrc_Map_string_bool* self, btrc_Map_string_bool* other) {
-    for (int i = 0; (i < other->cap); (i++)) {
-        if (other->occupied[i]) {
-            btrc_Map_string_bool_put(self, other->keys[i], other->values[i]);
-        }
-    }
-}
-
-static int btrc_Map_string_bool_iterLen(btrc_Map_string_bool* self) {
-    return self->len;
-}
-
-static char* btrc_Map_string_bool_iterGet(btrc_Map_string_bool* self, int n) {
-    int count = 0;
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            if (count == n) {
-                return self->keys[i];
-            }
-            (count++);
-        }
-    }
-    fprintf(stderr, "Map iterGet: index out of bounds\n");
-    exit(1);
-    return self->keys[0];
-}
-
-static bool btrc_Map_string_bool_iterValueAt(btrc_Map_string_bool* self, int n) {
-    int count = 0;
-    for (int i = 0; (i < self->cap); (i++)) {
-        if (self->occupied[i]) {
-            if (count == n) {
-                return self->values[i];
-            }
-            (count++);
-        }
-    }
-    fprintf(stderr, "Map iterValueAt: index out of bounds\n");
-    exit(1);
-    return self->values[0];
-}
-
-void Strings_init(Strings* self) {
-    self->__rc = 1;
-}
-
-void Strings_destroy(Strings* self) {
-    free(self);
-}
-
-char* Strings_copy(char* s) {
-    int __fstr_1_len = snprintf(NULL, 0, "%s", s);
-    char* __fstr_1_buf = __btrc_str_track(((char*)malloc((__fstr_1_len + 1))));
-    snprintf(__fstr_1_buf, (__fstr_1_len + 1), "%s", s);
-    __auto_type __btrc_ret_2 = __fstr_1_buf;
-    return __btrc_ret_2;
-}
-
-char* Strings_replace(char* s, char* old, char* replacement) {
-    if (s == NULL) {
-        __auto_type __btrc_ret_4 = "";
-        return __btrc_ret_4;
-    }
-    if ((old == NULL) || (replacement == NULL)) {
-        __auto_type __btrc_ret_5 = Strings_copy(s);
-        return __btrc_ret_5;
-    }
-    int slen = ((int)strlen(s));
-    int oldlen = ((int)strlen(old));
-    if (oldlen == 0) {
-        __auto_type __btrc_ret_6 = Strings_copy(s);
-        return __btrc_ret_6;
-    }
-    int replen = ((int)strlen(replacement));
-    int cap = ((slen * 2) + 1);
-    char* result = ((char*)malloc(cap));
-    int rlen = 0;
-    int i = 0;
-    while (i < slen) {
-        if (((i + oldlen) <= slen) && (strncmp((s + i), old, oldlen) == 0)) {
-            while ((rlen + replen) >= cap) {
-                (cap = (cap * 2));
-                (result = ((char*)realloc(result, cap)));
-            }
-            memcpy((result + rlen), replacement, replen);
-            (rlen = (rlen + replen));
-            (i = (i + oldlen));
-        } else {
-            if ((rlen + 1) >= cap) {
-                (cap = (cap * 2));
-                (result = ((char*)realloc(result, cap)));
-            }
-            (result[rlen] = s[i]);
-            (rlen++);
-            (i++);
-        }
-    }
-    (result[rlen] = '\0');
-    return result;
-}
-
-btrc_Vector_string* Strings_split(char* s, char* delim) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    if ((s == NULL) || (delim == NULL)) {
-        return result;
-    }
-    int dlen = ((int)strlen(delim));
-    if (dlen == 0) {
-        return result;
-    }
-    char* p = s;
-    while (*p) {
-        char* found = strstr(p, delim);
-        int seglen = ((found != NULL) ? ((int)(found - p)) : ((int)strlen(p)));
-        char* item = ((char*)malloc((seglen + 1)));
-        memcpy(item, p, seglen);
-        (item[seglen] = '\0');
-        btrc_Vector_string_push(result, item);
-        if (found == NULL) {
-            break;
-        }
-        (p = (found + dlen));
-    }
-    return result;
-}
-
-bool Strings_isDigit(char c) {
-    __auto_type __btrc_ret_7 = ((c >= '0') && (c <= '9'));
-    return __btrc_ret_7;
-}
-
-bool Strings_isAlpha(char c) {
-    __auto_type __btrc_ret_8 = (((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z')));
-    return __btrc_ret_8;
-}
-
-int Strings_toInt(char* s) {
-    if (s == NULL) {
-        __auto_type __btrc_ret_11 = 0;
-        return __btrc_ret_11;
-    }
-    char* value = __btrc_str_track(__btrc_trim(s));
-    if (__btrc_isEmpty(value)) {
-        __auto_type __btrc_ret_12 = 0;
-        return __btrc_ret_12;
-    }
-    int sign = 1;
-    int i = 0;
-    if (__btrc_startsWith(value, "-")) {
-        (sign = (-1));
-        (i = 1);
-    } else if (__btrc_startsWith(value, "+")) {
-        (i = 1);
-    }
-    int result = 0;
-    while ((i < ((int)strlen(value))) && Strings_isDigit(value[i])) {
-        (result = ((result * 10) + (value[i] - '0')));
-        (i++);
-    }
-    __auto_type __btrc_ret_13 = (result * sign);
-    return __btrc_ret_13;
-}
-
-int Strings_count(char* s, char* sub) {
-    int slen = ((int)strlen(s));
-    int sublen = ((int)strlen(sub));
-    if (sublen == 0) {
-        __auto_type __btrc_ret_15 = 0;
-        return __btrc_ret_15;
-    }
-    int n = 0;
-    int i = 0;
-    while ((i + sublen) <= slen) {
-        if (strncmp((s + i), sub, sublen) == 0) {
-            (n++);
-            (i = (i + sublen));
-        } else {
-            (i++);
-        }
-    }
-    return n;
-}
-
-int Strings_find(char* s, char* sub, int start) {
-    int slen = ((int)strlen(s));
-    int sublen = ((int)strlen(sub));
-    if (start < 0) {
-        (start = 0);
-    }
-    if (sublen == 0) {
-        return start;
-    }
-    int i = start;
-    while ((i + sublen) <= slen) {
-        if (strncmp((s + i), sub, sublen) == 0) {
-            return i;
-        }
-        (i++);
-    }
-    __auto_type __btrc_ret_16 = (-1);
-    return __btrc_ret_16;
-}
-
-int Strings_compare(char* left, char* right) {
-    if ((left == NULL) && (right == NULL)) {
-        __auto_type __btrc_ret_18 = 0;
-        return __btrc_ret_18;
-    }
-    if (left == NULL) {
-        __auto_type __btrc_ret_19 = (-1);
-        return __btrc_ret_19;
-    }
-    if (right == NULL) {
-        __auto_type __btrc_ret_20 = 1;
-        return __btrc_ret_20;
-    }
-    int i = 0;
-    while ((left[i] != '\0') && (right[i] != '\0')) {
-        if (left[i] < right[i]) {
-            __auto_type __btrc_ret_21 = (-1);
-            return __btrc_ret_21;
-        }
-        if (left[i] > right[i]) {
-            __auto_type __btrc_ret_22 = 1;
-            return __btrc_ret_22;
-        }
-        (i++);
-    }
-    if ((left[i] == '\0') && (right[i] == '\0')) {
-        __auto_type __btrc_ret_23 = 0;
-        return __btrc_ret_23;
-    }
-    if (left[i] == '\0') {
-        __auto_type __btrc_ret_24 = (-1);
-        return __btrc_ret_24;
-    }
-    __auto_type __btrc_ret_25 = 1;
-    return __btrc_ret_25;
-}
-
-char* Strings_removePrefix(char* s, char* prefix) {
-    if (!__btrc_startsWith(s, prefix)) {
-        __auto_type __btrc_ret_30 = Strings_copy(s);
-        return __btrc_ret_30;
-    }
-    __auto_type __btrc_ret_31 = __btrc_str_track(__btrc_substring(s, ((int)strlen(prefix)), (((int)strlen(s)) - ((int)strlen(prefix)))));
-    return __btrc_ret_31;
-}
-
-char* Strings_fromInt(int n) {
-    char* buf = ((char*)malloc(32));
-    snprintf(buf, 32, "%d", n);
-    return buf;
-}
-
-void Console_init(Console* self) {
-    self->__rc = 1;
-}
-
-void Console_destroy(Console* self) {
-    free(self);
-}
-
-void Console_log(char* msg) {
-    printf("%s\n", msg);
-}
-
-void Console_error(char* msg) {
-    fprintf(stderr, "%s\n", msg);
-}
-
-void File_init(File* self, char* path, char* mode) {
-    self->__rc = 1;
-    (self->path = path);
-    (self->mode = mode);
-    (self->handle = fopen(path, mode));
-    (self->is_open = (self->handle != NULL));
-}
-
-File* File_new(char* path, char* mode) {
-    File* self = ((File*)malloc(sizeof(File)));
-    memset(self, 0, sizeof(File));
-    File_init(self, path, mode);
-    return self;
-}
-
-void File_destroy(File* self) {
-    File_close(self);
-    free(self);
-}
-
-bool File_ok(File* self) {
-    __auto_type __btrc_ret_40 = self->is_open;
-    return __btrc_ret_40;
-}
-
-char* File_read(File* self) {
-    if (!self->is_open) {
-        __auto_type __btrc_ret_41 = "";
-        return __btrc_ret_41;
-    }
-    fseek(self->handle, 0, SEEK_END);
-    long size = ftell(self->handle);
-    fseek(self->handle, 0, SEEK_SET);
-    char* buf = ((char*)malloc((size + 1)));
-    long n = ((long)fread(buf, 1, size, self->handle));
-    (buf[n] = '\0');
-    return buf;
-}
-
-void File_write(File* self, char* text) {
-    if (!self->is_open) {
-        return;
-    }
-    fputs(text, self->handle);
-}
-
-void File_close(File* self) {
-    if (self->is_open) {
-        if (((int)strlen(self->path)) > 0) {
-            fclose(self->handle);
-        }
-        (self->is_open = false);
-    }
-}
-
-void Path_init(Path* self) {
-    self->__rc = 1;
-}
-
-void Path_destroy(Path* self) {
-    free(self);
-}
-
-char* Path_readAll(char* path) {
-    File* f = File_new(path, "r");
-    if (!File_ok(f)) {
-        __auto_type __btrc_ret_49 = "";
-        if (f != NULL) {
-            if ((--f->__rc) <= 0) {
-                File_destroy(f);
-            }
-        }
-        return __btrc_ret_49;
-    }
-    char* content = File_read(f);
-    File_close(f);
-    if (f != NULL) {
-        if ((--f->__rc) <= 0) {
-            File_destroy(f);
-        }
-    }
-    return content;
-    if (f != NULL) {
-        if ((--f->__rc) <= 0) {
-            File_destroy(f);
-        }
-    }
-}
-
-void Path_writeAll(char* path, char* content) {
-    File* f = File_new(path, "w");
-    if (!File_ok(f)) {
-        if (f != NULL) {
-            if ((--f->__rc) <= 0) {
-                File_destroy(f);
-            }
-        }
-        return;
-    }
-    File_write(f, content);
-    File_close(f);
-    if (f != NULL) {
-        if ((--f->__rc) <= 0) {
-            File_destroy(f);
-        }
-    }
-}
-
-void UnixPlatform_init(UnixPlatform* self) {
-    self->__rc = 1;
-}
-
-void UnixPlatform_destroy(UnixPlatform* self) {
-    free(self);
-}
-
-int UnixPlatform_pid(void) {
-    __auto_type __btrc_ret_50 = ((int)getpid());
-    return __btrc_ret_50;
-}
-
-int UnixPlatform_euid(void) {
-    __auto_type __btrc_ret_51 = ((int)geteuid());
-    return __btrc_ret_51;
-}
-
-void Platform_init(Platform* self) {
-    self->__rc = 1;
-}
-
-void Platform_destroy(Platform* self) {
-    free(self);
-}
-
-int Platform_pid(void) {
-    __auto_type __btrc_ret_55 = UnixPlatform_pid();
-    return __btrc_ret_55;
-}
-
-int Platform_euid(void) {
-    __auto_type __btrc_ret_56 = UnixPlatform_euid();
-    return __btrc_ret_56;
-}
-
-bool Platform_isRoot(void) {
-    __auto_type __btrc_ret_57 = (Platform_euid() == 0);
-    return __btrc_ret_57;
-}
-
-void Environment_init(Environment* self) {
-    self->__rc = 1;
-}
-
-void Environment_destroy(Environment* self) {
-    free(self);
-}
-
-char* Environment_get(char* name, char* fallback) {
-    char* value = getenv(name);
-    if ((value == NULL) || __btrc_isEmpty(value)) {
-        return fallback;
-    }
-    __auto_type __btrc_ret_58 = Strings_copy(value);
-    return __btrc_ret_58;
-}
-
-void ProcessStatus_init(ProcessStatus* self, int raw) {
-    self->__rc = 1;
-    (self->raw = raw);
-}
-
-ProcessStatus* ProcessStatus_new(int raw) {
-    ProcessStatus* self = ((ProcessStatus*)malloc(sizeof(ProcessStatus)));
-    memset(self, 0, sizeof(ProcessStatus));
-    ProcessStatus_init(self, raw);
-    return self;
-}
-
-void ProcessStatus_destroy(ProcessStatus* self) {
-    free(self);
-}
-
-int ProcessStatus_code(ProcessStatus* self) {
-    if (self->raw == (-1)) {
-        __auto_type __btrc_ret_60 = 127;
-        return __btrc_ret_60;
-    }
-    if (self->raw > 255) {
-        __auto_type __btrc_ret_61 = __btrc_div_int(self->raw, 256);
-        return __btrc_ret_61;
-    }
-    __auto_type __btrc_ret_62 = self->raw;
-    return __btrc_ret_62;
-}
-
-void UnixPipe_init(UnixPipe* self, char* command) {
-    self->__rc = 1;
-    (self->command = command);
-    (self->handle = popen(command, "r"));
-}
-
-UnixPipe* UnixPipe_new(char* command) {
-    UnixPipe* self = ((UnixPipe*)malloc(sizeof(UnixPipe)));
-    memset(self, 0, sizeof(UnixPipe));
-    UnixPipe_init(self, command);
-    return self;
-}
-
-void UnixPipe_destroy(UnixPipe* self) {
-    if (self->handle != NULL) {
-        pclose(self->handle);
-        (self->handle = NULL);
-    }
-    free(self);
-}
-
-bool UnixPipe_ok(UnixPipe* self) {
-    __auto_type __btrc_ret_64 = (self->handle != NULL);
-    return __btrc_ret_64;
-}
-
-char* UnixPipe_readAll(UnixPipe* self) {
-    if (!UnixPipe_ok(self)) {
-        __auto_type __btrc_ret_65 = "";
-        return __btrc_ret_65;
-    }
-    int cap = 4096;
-    int len = 0;
-    char* buffer = ((char*)malloc(cap));
-    int ch = fgetc(self->handle);
-    while (ch != EOF) {
-        if ((len + 2) >= cap) {
-            (cap = (cap * 2));
-            (buffer = ((char*)realloc(buffer, cap)));
-        }
-        (buffer[len] = ((char)ch));
-        (len++);
-        (ch = fgetc(self->handle));
-    }
-    (buffer[len] = '\0');
-    return buffer;
-}
-
-ProcessStatus* UnixPipe_close(UnixPipe* self) {
-    if (!UnixPipe_ok(self)) {
-        __auto_type __btrc_ret_66 = ProcessStatus_new((-1));
-        return __btrc_ret_66;
-    }
-    int raw = pclose(self->handle);
-    (self->handle = NULL);
-    __auto_type __btrc_ret_67 = ProcessStatus_new(raw);
-    return __btrc_ret_67;
-}
-
-void UnixProcess_init(UnixProcess* self) {
-    self->__rc = 1;
-}
-
-void UnixProcess_destroy(UnixProcess* self) {
-    free(self);
-}
-
-ProcessStatus* UnixProcess_system(char* command) {
-    __auto_type __btrc_ret_68 = ProcessStatus_new(system(command));
-    return __btrc_ret_68;
-}
-
-UnixPipe* UnixProcess_pipe(char* command) {
-    __auto_type __btrc_ret_69 = UnixPipe_new(command);
-    return __btrc_ret_69;
-}
-
-void ShellWords_init(ShellWords* self) {
-    self->__rc = 1;
-}
-
-void ShellWords_destroy(ShellWords* self) {
-    free(self);
-}
-
-bool ShellWords_isSafeArgChar(char c) {
-    if ((c >= 'a') && (c <= 'z')) {
-        __auto_type __btrc_ret_70 = true;
-        return __btrc_ret_70;
-    }
-    if ((c >= 'A') && (c <= 'Z')) {
-        __auto_type __btrc_ret_71 = true;
-        return __btrc_ret_71;
-    }
-    if ((c >= '0') && (c <= '9')) {
-        __auto_type __btrc_ret_72 = true;
-        return __btrc_ret_72;
-    }
-    __auto_type __btrc_ret_73 = ((((((((c == '_') || (c == '-')) || (c == '.')) || (c == '/')) || (c == ':')) || (c == '=')) || (c == ',')) || (c == '+'));
-    return __btrc_ret_73;
-}
-
-bool ShellWords_isSafeArg(char* raw) {
-    int len = ((int)strlen(raw));
-    if (len == 0) {
-        __auto_type __btrc_ret_74 = false;
-        return __btrc_ret_74;
-    }
-    for (int __i_75 = 0; (raw[__i_75] != '\0'); (__i_75++)) {
-        char ch = raw[__i_75];
-        if (!ShellWords_isSafeArgChar(ch)) {
-            __auto_type __btrc_ret_76 = false;
-            return __btrc_ret_76;
-        }
-    }
-    __auto_type __btrc_ret_77 = true;
-    return __btrc_ret_77;
-}
-
-char* ShellWords_quote(char* raw) {
-    if (ShellWords_isSafeArg(raw)) {
-        __auto_type __btrc_ret_78 = Strings_copy(raw);
-        return __btrc_ret_78;
-    }
-    char* escaped = Strings_replace(raw, "'", "'\\''");
-    __auto_type __btrc_ret_79 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("'", escaped)), "'"));
-    return __btrc_ret_79;
-}
-
-char* ShellWords_redact(char* text, char* sensitive) {
-    if (__btrc_isEmpty(sensitive)) {
-        return text;
-    }
-    __auto_type __btrc_ret_80 = Strings_replace(text, sensitive, "***");
-    return __btrc_ret_80;
-}
-
-void ExecResult_init(ExecResult* self, int code, char* out, char* err, char* command) {
-    self->__rc = 1;
-    (self->code = code);
-    (self->out = out);
-    (self->err = err);
-    (self->command = command);
-}
-
-ExecResult* ExecResult_new(int code, char* out, char* err, char* command) {
-    ExecResult* self = ((ExecResult*)malloc(sizeof(ExecResult)));
-    memset(self, 0, sizeof(ExecResult));
-    ExecResult_init(self, code, out, err, command);
-    return self;
-}
-
-void ExecResult_destroy(ExecResult* self) {
-    free(self);
-}
-
-bool ExecResult_ok(ExecResult* self) {
-    __auto_type __btrc_ret_81 = (self->code == 0);
-    return __btrc_ret_81;
-}
-
-char* ExecResult_stdout(ExecResult* self) {
-    __auto_type __btrc_ret_82 = self->out;
-    return __btrc_ret_82;
-}
-
-char* ExecResult_trimmed(ExecResult* self) {
-    __auto_type __btrc_ret_83 = __btrc_str_track(__btrc_trim(self->out));
-    return __btrc_ret_83;
-}
-
-void Command_init(Command* self, char* executable) {
-    self->__rc = 1;
-    (self->executable = executable);
-    if (self->args != NULL) {
-        if ((--self->args->__rc) <= 0) {
-            btrc_Vector_string_free(self->args);
-        }
-    }
-    btrc_Vector_string* __list_86 = btrc_Vector_string_new();
-    (self->args = __list_86);
-    btrc_Vector_string* __list_85 = btrc_Vector_string_new();
-    (__list_85->__rc++);
-    if (self->env != NULL) {
-        if ((--self->env->__rc) <= 0) {
-            btrc_Vector_string_free(self->env);
-        }
-    }
-    btrc_Vector_string* __list_88 = btrc_Vector_string_new();
-    (self->env = __list_88);
-    btrc_Vector_string* __list_87 = btrc_Vector_string_new();
-    (__list_87->__rc++);
-    (self->useSudo = false);
-    (self->captureOutput = true);
-    (self->checkStatus = true);
-    (self->mergeStderr = true);
-    (self->sensitive = "");
-}
-
-Command* Command_new(char* executable) {
-    Command* self = ((Command*)malloc(sizeof(Command)));
-    memset(self, 0, sizeof(Command));
-    Command_init(self, executable);
-    return self;
-}
-
-void Command_destroy(Command* self) {
-    if (self->args != NULL) {
-        if ((--self->args->__rc) <= 0) {
-            btrc_Vector_string_free(self->args);
-        }
-    }
-    if (self->env != NULL) {
-        if ((--self->env->__rc) <= 0) {
-            btrc_Vector_string_free(self->env);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-Command* Command_arg(Command* self, char* value) {
-    btrc_Vector_string_push(self->args, value);
-    __auto_type __btrc_ret_89 = self;
-    return __btrc_ret_89;
-}
-
-Command* Command_flag(Command* self, char* name, char* value) {
-    btrc_Vector_string_push(self->args, name);
-    btrc_Vector_string_push(self->args, value);
-    __auto_type __btrc_ret_90 = self;
-    return __btrc_ret_90;
-}
-
-Command* Command_envVar(Command* self, char* name, char* value) {
-    int __fstr_92_len = snprintf(NULL, 0, "%s=%s", name, value);
-    char* __fstr_92_buf = __btrc_str_track(((char*)malloc((__fstr_92_len + 1))));
-    snprintf(__fstr_92_buf, (__fstr_92_len + 1), "%s=%s", name, value);
-    btrc_Vector_string_push(self->env, __fstr_92_buf);
-    __auto_type __btrc_ret_93 = self;
-    return __btrc_ret_93;
-}
-
-Command* Command_capture(Command* self, bool enabled) {
-    (self->captureOutput = enabled);
-    __auto_type __btrc_ret_95 = self;
-    return __btrc_ret_95;
-}
-
-Command* Command_check(Command* self, bool enabled) {
-    (self->checkStatus = enabled);
-    __auto_type __btrc_ret_96 = self;
-    return __btrc_ret_96;
-}
-
-Command* Command_redact(Command* self, char* value) {
-    (self->sensitive = value);
-    __auto_type __btrc_ret_98 = self;
-    return __btrc_ret_98;
-}
-
-char* Command_renderEnv(Command* self, char* item) {
-    int split = Strings_find(item, "=", 0);
-    if (split <= 0) {
-        __auto_type __btrc_ret_99 = ShellWords_quote(item);
-        return __btrc_ret_99;
-    }
-    char* name = __btrc_str_track(__btrc_substring(item, 0, split));
-    char* value = __btrc_str_track(__btrc_substring(item, (split + 1), ((((int)strlen(item)) - split) - 1)));
-    __auto_type __btrc_ret_100 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(name, "=")), ShellWords_quote(value)));
-    return __btrc_ret_100;
-}
-
-char* Command_render(Command* self) {
-    btrc_Vector_string* parts = btrc_Vector_string_new();
-    int __n_102 = btrc_Vector_string_iterLen(self->env);
-    for (int __i_101 = 0; (__i_101 < __n_102); (__i_101++)) {
-        char* item = btrc_Vector_string_iterGet(self->env, __i_101);
-        btrc_Vector_string_push(parts, Command_renderEnv(self, item));
-    }
-    if (self->useSudo) {
-        btrc_Vector_string_push(parts, "sudo");
-    }
-    btrc_Vector_string_push(parts, ShellWords_quote(self->executable));
-    int __n_104 = btrc_Vector_string_iterLen(self->args);
-    for (int __i_103 = 0; (__i_103 < __n_104); (__i_103++)) {
-        char* item = btrc_Vector_string_iterGet(self->args, __i_103);
-        btrc_Vector_string_push(parts, ShellWords_quote(item));
-    }
-    if (self->mergeStderr) {
-        btrc_Vector_string_push(parts, "2>&1");
-    }
-    __auto_type __btrc_ret_105 = btrc_Vector_string_join(parts, " ");
-    return __btrc_ret_105;
-}
-
-void UnixShell_init(UnixShell* self) {
-    self->__rc = 1;
-    (self->logCommands = false);
-    (self->chrootPath = "");
-}
-
-UnixShell* UnixShell_new(void) {
-    UnixShell* self = ((UnixShell*)malloc(sizeof(UnixShell)));
-    memset(self, 0, sizeof(UnixShell));
-    UnixShell_init(self);
-    return self;
-}
-
-void UnixShell_destroy(UnixShell* self) {
-    free(self);
-}
-
-char* UnixShell_quote(char* raw) {
-    __auto_type __btrc_ret_106 = ShellWords_quote(raw);
-    return __btrc_ret_106;
-}
-
-char* UnixShell_redactText(char* text, char* sensitive) {
-    __auto_type __btrc_ret_107 = ShellWords_redact(text, sensitive);
-    return __btrc_ret_107;
-}
-
-void UnixShell_chroot(UnixShell* self, char* path) {
-    (self->chrootPath = path);
-}
-
-void UnixShell_clearChroot(UnixShell* self) {
-    (self->chrootPath = "");
-}
-
-ExecResult* UnixShell_run(UnixShell* self, char* command) {
-    __auto_type __btrc_ret_108 = UnixShell_runRaw(self, command, true, true, "");
-    return __btrc_ret_108;
-}
-
-ExecResult* UnixShell_runUnchecked(UnixShell* self, char* command) {
-    __auto_type __btrc_ret_109 = UnixShell_runRaw(self, command, true, false, "");
-    return __btrc_ret_109;
-}
-
-ExecResult* UnixShell_runCommand(UnixShell* self, Command* command) {
-    __auto_type __btrc_ret_110 = UnixShell_runRaw(self, Command_render(command), command->captureOutput, command->checkStatus, command->sensitive);
-    return __btrc_ret_110;
-}
-
-ExecResult* UnixShell_runRaw(UnixShell* self, char* command, bool captureOutput, bool checkStatus, char* sensitive) {
-    char* rendered = command;
-    if (((int)strlen(self->chrootPath)) > 0) {
-        int __fstr_112_len = snprintf(NULL, 0, "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
-        char* __fstr_112_buf = __btrc_str_track(((char*)malloc((__fstr_112_len + 1))));
-        snprintf(__fstr_112_buf, (__fstr_112_len + 1), "nixos-enter --root %s --command %s", ShellWords_quote(self->chrootPath), ShellWords_quote(command));
-        (rendered = __fstr_112_buf);
-    }
-    if (self->logCommands) {
-        char* visible = UnixShell_redactText(rendered, sensitive);
-        fprintf(stderr, "LOG: %s\n", visible);
-    }
-    if (!captureOutput) {
-        ProcessStatus* status = UnixProcess_system(rendered);
-        int code = ProcessStatus_code(status);
-        if (checkStatus && (code != 0)) {
-            fprintf(stderr, "Command failed (%d): %s\n", code, UnixShell_redactText(rendered, sensitive));
-        }
-        __auto_type __btrc_ret_113 = ExecResult_new(code, "", "", rendered);
-        return __btrc_ret_113;
-    }
-    UnixPipe* pipe = UnixProcess_pipe(rendered);
-    if (!UnixPipe_ok(pipe)) {
-        __auto_type __btrc_ret_114 = ExecResult_new(127, "", "popen failed", rendered);
-        return __btrc_ret_114;
-    }
-    char* output = UnixPipe_readAll(pipe);
-    ProcessStatus* status = UnixPipe_close(pipe);
-    int code = ProcessStatus_code(status);
-    if (checkStatus && (code != 0)) {
-        fprintf(stderr, "Command failed (%d): %s\n", code, UnixShell_redactText(rendered, sensitive));
-    }
-    __auto_type __btrc_ret_115 = ExecResult_new(code, output, "", rendered);
-    return __btrc_ret_115;
-}
-
-void PowerShell_init(PowerShell* self) {
-    self->__rc = 1;
-}
-
-void PowerShell_destroy(PowerShell* self) {
-    free(self);
-}
-
-void UnixPamPassword_init(UnixPamPassword* self) {
-    self->__rc = 1;
-}
-
-void UnixPamPassword_destroy(UnixPamPassword* self) {
-    free(self);
-}
-
-bool UnixPamPassword_change(char* user, char* oldPassword, char* newPassword) {
-    struct passwd* pw = getpwnam(user);
-    if (pw == NULL) {
-        __auto_type __btrc_ret_117 = false;
-        return __btrc_ret_117;
-    }
-    int fd = (-1);
-    pid_t pid = forkpty((&fd), NULL, NULL, NULL);
-    if (pid < 0) {
-        __auto_type __btrc_ret_118 = false;
-        return __btrc_ret_118;
-    }
-    if (pid == 0) {
-        setgid(pw->pw_gid);
-        setuid(pw->pw_uid);
-        setenv("HOME", pw->pw_dir, 1);
-        setenv("USER", user, 1);
-        setenv("LOGNAME", user, 1);
-        setenv("PATH", "/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin", 1);
-        execlp("passwd", "passwd", ((char*)NULL));
-        _exit(127);
-    }
-    char* responses[3];
-    (responses[0] = oldPassword);
-    (responses[1] = newPassword);
-    (responses[2] = newPassword);
-    int response = 0;
-    time_t deadline = (time(NULL) + 30);
-    char buffer[4096];
-    while ((time(NULL) < deadline) && (response < 3)) {
-        fd_set readfds;
-        FD_ZERO((&readfds));
-        FD_SET(fd, (&readfds));
-        struct timeval timeout;
-        (timeout.tv_sec = 5);
-        (timeout.tv_usec = 0);
-        int ready = select((fd + 1), (&readfds), NULL, NULL, (&timeout));
-        if (ready < 0) {
-            break;
-        }
-        if (ready == 0) {
-            continue;
-        }
-        ssize_t n = read(fd, buffer, sizeof(buffer));
-        if (n <= 0) {
-            break;
-        }
-        bool prompt = false;
-        for (ssize_t i = 0; (i < n); (i++)) {
-            if (buffer[i] == ':') {
-                (prompt = true);
-            }
-        }
-        if (prompt) {
-            write(fd, responses[response], strlen(responses[response]));
-            write(fd, "\n", 1);
-            (response++);
-            usleep(200000);
-        }
-    }
-    close(fd);
-    int status = 0;
-    waitpid(pid, (&status), 0);
-    __auto_type __btrc_ret_119 = (WIFEXITED(status) && (WEXITSTATUS(status) == 0));
-    return __btrc_ret_119;
-}
-
-void FileStatus_init(FileStatus* self, char* path) {
-    self->__rc = 1;
-    (self->path = path);
-    struct stat st;
-    (self->found = (stat(path, (&st)) == 0));
-    (self->mode = (self->found ? ((int)st.st_mode) : 0));
-    struct stat lst;
-    (self->linkFound = (lstat(path, (&lst)) == 0));
-    (self->linkMode = (self->linkFound ? ((int)lst.st_mode) : 0));
-}
-
-FileStatus* FileStatus_new(char* path) {
-    FileStatus* self = ((FileStatus*)malloc(sizeof(FileStatus)));
-    memset(self, 0, sizeof(FileStatus));
-    FileStatus_init(self, path);
-    return self;
-}
-
-void FileStatus_destroy(FileStatus* self) {
-    free(self);
-}
-
-bool FileStatus_exists(FileStatus* self) {
-    __auto_type __btrc_ret_120 = self->found;
-    return __btrc_ret_120;
-}
-
-bool FileStatus_isDir(FileStatus* self) {
-    __auto_type __btrc_ret_121 = (self->found && S_ISDIR(self->mode));
-    return __btrc_ret_121;
-}
-
-bool FileStatus_isFile(FileStatus* self) {
-    __auto_type __btrc_ret_122 = (self->found && S_ISREG(self->mode));
-    return __btrc_ret_122;
-}
-
-bool FileStatus_isSymlink(FileStatus* self) {
-    __auto_type __btrc_ret_123 = (self->linkFound && S_ISLNK(self->linkMode));
-    return __btrc_ret_123;
-}
-
-void Directory_init(Directory* self, char* path) {
-    self->__rc = 1;
-    (self->path = path);
-}
-
-Directory* Directory_new(char* path) {
-    Directory* self = ((Directory*)malloc(sizeof(Directory)));
-    memset(self, 0, sizeof(Directory));
-    Directory_init(self, path);
-    return self;
-}
-
-void Directory_destroy(Directory* self) {
-    free(self);
-}
-
-btrc_Vector_string* Directory_entries(Directory* self) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    DIR* dir = opendir(self->path);
-    if (dir == NULL) {
-        return result;
-    }
-    struct dirent* entry = readdir(dir);
-    while (entry != NULL) {
-        char* name = entry->d_name;
-        if ((!(strcmp(name, ".") == 0)) && (!(strcmp(name, "..") == 0))) {
-            btrc_Vector_string_push(result, Strings_copy(name));
-        }
-        (entry = readdir(dir));
-    }
-    closedir(dir);
-    return result;
-}
-
-void UnixFileSystem_init(UnixFileSystem* self) {
-    self->__rc = 1;
-}
-
-void UnixFileSystem_destroy(UnixFileSystem* self) {
-    free(self);
-}
-
-int UnixFileSystem_statusCode(int raw) {
-    if (raw == (-1)) {
-        __auto_type __btrc_ret_124 = 127;
-        return __btrc_ret_124;
-    }
-    if (raw > 255) {
-        __auto_type __btrc_ret_125 = __btrc_div_int(raw, 256);
-        return __btrc_ret_125;
-    }
-    return raw;
-}
-
-int UnixFileSystem_chmodPath(char* path, int mode) {
-    __auto_type __btrc_ret_126 = chmod(path, ((mode_t)mode));
-    return __btrc_ret_126;
-}
-
-int UnixFileSystem_mkdirPath(char* path, int mode) {
-    __auto_type __btrc_ret_127 = mkdir(path, ((mode_t)mode));
-    return __btrc_ret_127;
-}
-
-int UnixFileSystem_runShell(char* command) {
-    __auto_type __btrc_ret_128 = UnixFileSystem_statusCode(system(command));
-    return __btrc_ret_128;
-}
-
-int UnixFileSystem_mkdirp(char* path) {
-    char* quoted = PathTools_shellQuote(path);
-    int __fstr_129_len = snprintf(NULL, 0, "mkdir -p %s", quoted);
-    char* __fstr_129_buf = __btrc_str_track(((char*)malloc((__fstr_129_len + 1))));
-    snprintf(__fstr_129_buf, (__fstr_129_len + 1), "mkdir -p %s", quoted);
-    __auto_type __btrc_ret_130 = UnixFileSystem_runShell(__fstr_129_buf);
-    return __btrc_ret_130;
-}
-
-int UnixFileSystem_removeRecursive(char* path) {
-    char* quoted = PathTools_shellQuote(path);
-    int __fstr_131_len = snprintf(NULL, 0, "rm -rf %s", quoted);
-    char* __fstr_131_buf = __btrc_str_track(((char*)malloc((__fstr_131_len + 1))));
-    snprintf(__fstr_131_buf, (__fstr_131_len + 1), "rm -rf %s", quoted);
-    __auto_type __btrc_ret_132 = UnixFileSystem_runShell(__fstr_131_buf);
-    return __btrc_ret_132;
-}
-
-int UnixFileSystem_symlinkPath(char* target, char* linkPath) {
-    __auto_type __btrc_ret_133 = symlink(target, linkPath);
-    return __btrc_ret_133;
-}
-
-char* UnixFileSystem_readLink(char* path) {
-    char buffer[4096];
-    ssize_t length = readlink(path, buffer, 4095);
-    if (length < 0) {
-        __auto_type __btrc_ret_134 = "";
-        return __btrc_ret_134;
-    }
-    (buffer[length] = '\0');
-    __auto_type __btrc_ret_135 = Strings_copy(buffer);
-    return __btrc_ret_135;
-}
-
-char* UnixFileSystem_tempDir(char* prefix) {
-    char* base = Environment_get("TMPDIR", "/tmp");
-    char* templatePath = PathTools_join(base, __btrc_str_track(__btrc_strcat(prefix, ".XXXXXX")));
-    char* raw = Strings_copy(templatePath);
-    char* result = mkdtemp(raw);
-    if (result == NULL) {
-        __auto_type __btrc_ret_136 = "";
-        return __btrc_ret_136;
-    }
-    __auto_type __btrc_ret_137 = Strings_copy(result);
-    return __btrc_ret_137;
-}
-
-void PathTools_init(PathTools* self) {
-    self->__rc = 1;
-}
-
-void PathTools_destroy(PathTools* self) {
-    free(self);
-}
-
-char* PathTools_shellQuote(char* raw) {
-    __auto_type __btrc_ret_138 = ShellWords_quote(raw);
-    return __btrc_ret_138;
-}
-
-char* PathTools_basename(char* path) {
-    int len = ((int)strlen(path));
-    if (len == 0) {
-        __auto_type __btrc_ret_139 = "";
-        return __btrc_ret_139;
-    }
-    int end = (len - 1);
-    while ((end > 0) && (path[end] == '/')) {
-        (end--);
-    }
-    int start = end;
-    while ((start > 0) && (path[(start - 1)] != '/')) {
-        (start--);
-    }
-    int outLen = ((end - start) + 1);
-    char* result = ((char*)malloc((outLen + 1)));
-    memcpy(result, (path + start), outLen);
-    (result[outLen] = '\0');
-    return result;
-}
-
-char* PathTools_dirname(char* path) {
-    int len = ((int)strlen(path));
-    if (len == 0) {
-        __auto_type __btrc_ret_140 = ".";
-        return __btrc_ret_140;
-    }
-    int end = (len - 1);
-    while ((end > 0) && (path[end] == '/')) {
-        (end--);
-    }
-    while ((end > 0) && (path[end] != '/')) {
-        (end--);
-    }
-    if (end == 0) {
-        if (path[0] == '/') {
-            __auto_type __btrc_ret_141 = "/";
-            return __btrc_ret_141;
-        }
-        __auto_type __btrc_ret_142 = ".";
-        return __btrc_ret_142;
-    }
-    char* result = ((char*)malloc((end + 1)));
-    memcpy(result, path, end);
-    (result[end] = '\0');
-    return result;
-}
-
-char* PathTools_join(char* left, char* right) {
-    if (((int)strlen(left)) == 0) {
-        __auto_type __btrc_ret_143 = Strings_copy(right);
-        return __btrc_ret_143;
-    }
-    if (((int)strlen(right)) == 0) {
-        __auto_type __btrc_ret_144 = Strings_copy(left);
-        return __btrc_ret_144;
-    }
-    if (left[(((int)strlen(left)) - 1)] == '/') {
-        int __fstr_145_len = snprintf(NULL, 0, "%s%s", left, right);
-        char* __fstr_145_buf = __btrc_str_track(((char*)malloc((__fstr_145_len + 1))));
-        snprintf(__fstr_145_buf, (__fstr_145_len + 1), "%s%s", left, right);
-        __auto_type __btrc_ret_146 = __fstr_145_buf;
-        return __btrc_ret_146;
-    }
-    int __fstr_147_len = snprintf(NULL, 0, "%s/%s", left, right);
-    char* __fstr_147_buf = __btrc_str_track(((char*)malloc((__fstr_147_len + 1))));
-    snprintf(__fstr_147_buf, (__fstr_147_len + 1), "%s/%s", left, right);
-    __auto_type __btrc_ret_148 = __fstr_147_buf;
-    return __btrc_ret_148;
-}
-
-void FileSystem_init(FileSystem* self) {
-    self->__rc = 1;
-}
-
-void FileSystem_destroy(FileSystem* self) {
-    free(self);
-}
-
-bool FileSystem_exists(char* path) {
-    FileStatus* status = FileStatus_new(path);
-    bool result = FileStatus_exists(status);
-    if (status != NULL) {
-        if ((--status->__rc) <= 0) {
-            FileStatus_destroy(status);
-        }
-    }
-    return result;
-    if (status != NULL) {
-        if ((--status->__rc) <= 0) {
-            FileStatus_destroy(status);
-        }
-    }
-}
-
-bool FileSystem_isSymlink(char* path) {
-    FileStatus* status = FileStatus_new(path);
-    bool result = FileStatus_isSymlink(status);
-    if (status != NULL) {
-        if ((--status->__rc) <= 0) {
-            FileStatus_destroy(status);
-        }
-    }
-    return result;
-    if (status != NULL) {
-        if ((--status->__rc) <= 0) {
-            FileStatus_destroy(status);
-        }
-    }
-}
-
-int FileSystem_chmod(char* path, int mode) {
-    __auto_type __btrc_ret_149 = UnixFileSystem_chmodPath(path, mode);
-    return __btrc_ret_149;
-}
-
-int FileSystem_mkdir(char* path, int mode) {
-    __auto_type __btrc_ret_150 = UnixFileSystem_mkdirPath(path, mode);
-    return __btrc_ret_150;
-}
-
-int FileSystem_mkdirp(char* path) {
-    __auto_type __btrc_ret_151 = UnixFileSystem_mkdirp(path);
-    return __btrc_ret_151;
-}
-
-int FileSystem_removeRecursive(char* path) {
-    __auto_type __btrc_ret_152 = UnixFileSystem_removeRecursive(path);
-    return __btrc_ret_152;
-}
-
-int FileSystem_symlink(char* target, char* linkPath) {
-    __auto_type __btrc_ret_153 = UnixFileSystem_symlinkPath(target, linkPath);
-    return __btrc_ret_153;
-}
-
-char* FileSystem_readLink(char* path) {
-    __auto_type __btrc_ret_154 = UnixFileSystem_readLink(path);
-    return __btrc_ret_154;
-}
-
-char* FileSystem_tempDir(char* prefix) {
-    __auto_type __btrc_ret_155 = UnixFileSystem_tempDir(prefix);
-    return __btrc_ret_155;
-}
-
-void FileSystem_writeText(char* path, char* content) {
-    Path_writeAll(path, content);
-}
-
-void DaemonSpec_init(DaemonSpec* self, char* name, Command* command) {
-    self->__rc = 1;
-    (self->name = name);
-    if (self->command != NULL) {
-        if ((--self->command->__rc) <= 0) {
-            Command_destroy(self->command);
-        }
-    }
-    (self->command = command);
-    (command->__rc++);
-    int __fstr_157_len = snprintf(NULL, 0, "/tmp/%s.pid", name);
-    char* __fstr_157_buf = __btrc_str_track(((char*)malloc((__fstr_157_len + 1))));
-    snprintf(__fstr_157_buf, (__fstr_157_len + 1), "/tmp/%s.pid", name);
-    (self->pidFile = __fstr_157_buf);
-    int __fstr_158_len = snprintf(NULL, 0, "/tmp/%s.log", name);
-    char* __fstr_158_buf = __btrc_str_track(((char*)malloc((__fstr_158_len + 1))));
-    snprintf(__fstr_158_buf, (__fstr_158_len + 1), "/tmp/%s.log", name);
-    (self->logFile = __fstr_158_buf);
-    (self->workingDirectory = "");
-    (self->autoRestart = false);
-}
-
-void DaemonSpec_destroy(DaemonSpec* self) {
-    if (self->command != NULL) {
-        if ((--self->command->__rc) <= 0) {
-            Command_destroy(self->command);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-char* DaemonSpec_renderStartCommand(DaemonSpec* self) {
-    char* rendered = Command_render(self->command);
-    int __fstr_163_len = snprintf(NULL, 0, "cd %s && ", UnixShell_quote(self->workingDirectory));
-    char* __fstr_163_buf = __btrc_str_track(((char*)malloc((__fstr_163_len + 1))));
-    snprintf(__fstr_163_buf, (__fstr_163_len + 1), "cd %s && ", UnixShell_quote(self->workingDirectory));
-    char* prefix = (__btrc_isEmpty(self->workingDirectory) ? "" : __fstr_163_buf);
-    int __fstr_164_len = snprintf(NULL, 0, "%snohup %s >> %s 2>&1 & echo $! > %s", prefix, rendered, UnixShell_quote(self->logFile), UnixShell_quote(self->pidFile));
-    char* __fstr_164_buf = __btrc_str_track(((char*)malloc((__fstr_164_len + 1))));
-    snprintf(__fstr_164_buf, (__fstr_164_len + 1), "%snohup %s >> %s 2>&1 & echo $! > %s", prefix, rendered, UnixShell_quote(self->logFile), UnixShell_quote(self->pidFile));
-    __auto_type __btrc_ret_165 = __fstr_164_buf;
-    return __btrc_ret_165;
-}
-
-void DaemonController_init(DaemonController* self) {
-    self->__rc = 1;
-    if (self->shell != NULL) {
-        if ((--self->shell->__rc) <= 0) {
-            UnixShell_destroy(self->shell);
-        }
-    }
-    (self->shell = UnixShell_new());
-    (UnixShell_new()->__rc++);
-}
-
-void DaemonController_destroy(DaemonController* self) {
-    if (self->shell != NULL) {
-        if ((--self->shell->__rc) <= 0) {
-            UnixShell_destroy(self->shell);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void AppSpec_init(AppSpec* self, char* name) {
-    self->__rc = 1;
-    (self->name = name);
-    (self->version = "0.0.0");
-}
-
-void AppSpec_destroy(AppSpec* self) {
-    free(self);
-}
-
-AppSpec* AppSpec_withVersion(AppSpec* self, char* version) {
-    (self->version = version);
-    __auto_type __btrc_ret_171 = self;
-    return __btrc_ret_171;
-}
-
-void DaemonApp_init(DaemonApp* self, char* name, DaemonSpec* daemon) {
-    self->__rc = 1;
-    (self->name = name);
-    (self->version = "0.0.0");
-    if (self->daemon != NULL) {
-        if ((--self->daemon->__rc) <= 0) {
-            DaemonSpec_destroy(self->daemon);
-        }
-    }
-    (self->daemon = daemon);
-    (daemon->__rc++);
-}
-
-void DaemonApp_destroy(DaemonApp* self) {
-    if (self->daemon != NULL) {
-        if ((--self->daemon->__rc) <= 0) {
-            DaemonSpec_destroy(self->daemon);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void Html_init(Html* self) {
-    self->__rc = 1;
-}
-
-void Html_destroy(Html* self) {
-    free(self);
-}
-
-char* Html_escape(char* raw) {
-    char* text = Strings_replace(raw, "&", "&amp;");
-    (text = Strings_replace(text, "\"", "&quot;"));
-    (text = Strings_replace(text, "<", "&lt;"));
-    (text = Strings_replace(text, ">", "&gt;"));
-    return text;
-}
-
-void UiNode_init(UiNode* self, char* tag) {
-    self->__rc = 1;
-    (self->tag = tag);
-    (self->textContent = "");
-    (self->rawText = false);
-    if (self->attributes != NULL) {
-        if ((--self->attributes->__rc) <= 0) {
-            btrc_Vector_string_free(self->attributes);
-        }
-    }
-    btrc_Vector_string* __list_173 = btrc_Vector_string_new();
-    (self->attributes = __list_173);
-    btrc_Vector_string* __list_172 = btrc_Vector_string_new();
-    (__list_172->__rc++);
-    if (self->children != NULL) {
-        if ((--self->children->__rc) <= 0) {
-            btrc_Vector_UiNode_free(self->children);
-        }
-    }
-    btrc_Vector_UiNode* __list_175 = btrc_Vector_UiNode_new();
-    (self->children = __list_175);
-    btrc_Vector_UiNode* __list_174 = btrc_Vector_UiNode_new();
-    (__list_174->__rc++);
-}
-
-UiNode* UiNode_new(char* tag) {
-    UiNode* self = ((UiNode*)malloc(sizeof(UiNode)));
-    memset(self, 0, sizeof(UiNode));
-    UiNode_init(self, tag);
-    return self;
-}
-
-void UiNode_destroy(UiNode* self) {
-    if (self->attributes != NULL) {
-        if ((--self->attributes->__rc) <= 0) {
-            btrc_Vector_string_free(self->attributes);
-        }
-    }
-    if (self->children != NULL) {
-        if ((--self->children->__rc) <= 0) {
-            btrc_Vector_UiNode_free(self->children);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-UiNode* UiNode_text(UiNode* self, char* value) {
-    (self->textContent = value);
-    (self->rawText = false);
-    __auto_type __btrc_ret_176 = self;
-    return __btrc_ret_176;
-}
-
-UiNode* UiNode_raw(UiNode* self, char* value) {
-    (self->textContent = value);
-    (self->rawText = true);
-    __auto_type __btrc_ret_177 = self;
-    return __btrc_ret_177;
-}
-
-UiNode* UiNode_attr(UiNode* self, char* name, char* value) {
-    int __fstr_179_len = snprintf(NULL, 0, "%s='%s'", name, Html_escape(value));
-    char* __fstr_179_buf = __btrc_str_track(((char*)malloc((__fstr_179_len + 1))));
-    snprintf(__fstr_179_buf, (__fstr_179_len + 1), "%s='%s'", name, Html_escape(value));
-    btrc_Vector_string_push(self->attributes, __fstr_179_buf);
-    __auto_type __btrc_ret_180 = self;
-    return __btrc_ret_180;
-}
-
-char* UiNode_renderAttributes(UiNode* self) {
-    if (self->attributes->len == 0) {
-        __auto_type __btrc_ret_188 = "";
-        return __btrc_ret_188;
-    }
-    __auto_type __btrc_ret_189 = __btrc_str_track(__btrc_strcat(" ", btrc_Vector_string_join(self->attributes, " ")));
-    return __btrc_ret_189;
-}
-
-bool UiNode_isVoidElement(UiNode* self) {
-    __auto_type __btrc_ret_190 = ((((((strcmp(self->tag, "br") == 0) || (strcmp(self->tag, "hr") == 0)) || (strcmp(self->tag, "img") == 0)) || (strcmp(self->tag, "input") == 0)) || (strcmp(self->tag, "link") == 0)) || (strcmp(self->tag, "meta") == 0));
-    return __btrc_ret_190;
-}
-
-char* UiNode_renderHtml(UiNode* self) {
-    char* attrs = UiNode_renderAttributes(self);
-    if (UiNode_isVoidElement(self)) {
-        int __fstr_191_len = snprintf(NULL, 0, "<%s%s>", self->tag, attrs);
-        char* __fstr_191_buf = __btrc_str_track(((char*)malloc((__fstr_191_len + 1))));
-        snprintf(__fstr_191_buf, (__fstr_191_len + 1), "<%s%s>", self->tag, attrs);
-        __auto_type __btrc_ret_192 = __fstr_191_buf;
-        return __btrc_ret_192;
-    }
-    char* body = "";
-    if (!__btrc_isEmpty(self->textContent)) {
-        (body = (self->rawText ? self->textContent : Html_escape(self->textContent)));
-    }
-    int __n_194 = btrc_Vector_UiNode_iterLen(self->children);
-    for (int __i_193 = 0; (__i_193 < __n_194); (__i_193++)) {
-        UiNode* node = btrc_Vector_UiNode_iterGet(self->children, __i_193);
-        int __fstr_195_len = snprintf(NULL, 0, "%s%s", body, UiNode_renderHtml(node));
-        char* __fstr_195_buf = __btrc_str_track(((char*)malloc((__fstr_195_len + 1))));
-        snprintf(__fstr_195_buf, (__fstr_195_len + 1), "%s%s", body, UiNode_renderHtml(node));
-        (body = __fstr_195_buf);
-    }
-    int __fstr_196_len = snprintf(NULL, 0, "<%s%s>%s</%s>", self->tag, attrs, body, self->tag);
-    char* __fstr_196_buf = __btrc_str_track(((char*)malloc((__fstr_196_len + 1))));
-    snprintf(__fstr_196_buf, (__fstr_196_len + 1), "<%s%s>%s</%s>", self->tag, attrs, body, self->tag);
-    __auto_type __btrc_ret_197 = __fstr_196_buf;
-    return __btrc_ret_197;
-}
-
-void UiDocument_init(UiDocument* self, char* title, UiNode* body) {
-    self->__rc = 1;
-    (self->title = title);
-    (self->css = "");
-    if (self->body != NULL) {
-        if ((--self->body->__rc) <= 0) {
-            UiNode_destroy(self->body);
-        }
-    }
-    (self->body = body);
-    (body->__rc++);
-}
-
-UiDocument* UiDocument_new(char* title, UiNode* body) {
-    UiDocument* self = ((UiDocument*)malloc(sizeof(UiDocument)));
-    memset(self, 0, sizeof(UiDocument));
-    UiDocument_init(self, title, body);
-    return self;
-}
-
-void UiDocument_destroy(UiDocument* self) {
-    if (self->body != NULL) {
-        if ((--self->body->__rc) <= 0) {
-            UiNode_destroy(self->body);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-char* UiDocument_renderHtml(UiDocument* self) {
-    int __fstr_199_len = snprintf(NULL, 0, "<style>%s</style>", self->css);
-    char* __fstr_199_buf = __btrc_str_track(((char*)malloc((__fstr_199_len + 1))));
-    snprintf(__fstr_199_buf, (__fstr_199_len + 1), "<style>%s</style>", self->css);
-    char* cssBlock = (__btrc_isEmpty(self->css) ? "" : __fstr_199_buf);
-    int __fstr_200_len = snprintf(NULL, 0, "<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title>%s</head><body>%s</body></html>", Html_escape(self->title), cssBlock, UiNode_renderHtml(self->body));
-    char* __fstr_200_buf = __btrc_str_track(((char*)malloc((__fstr_200_len + 1))));
-    snprintf(__fstr_200_buf, (__fstr_200_len + 1), "<!doctype html><html><head><meta charset=\"utf-8\"><title>%s</title>%s</head><body>%s</body></html>", Html_escape(self->title), cssBlock, UiNode_renderHtml(self->body));
-    __auto_type __btrc_ret_201 = __fstr_200_buf;
-    return __btrc_ret_201;
-}
-
-void UiDocument_writeHtml(UiDocument* self, char* path) {
-    FileSystem_writeText(path, UiDocument_renderHtml(self));
-}
-
-void HtmlView_init(HtmlView* self, UiDocument* document) {
-    self->__rc = 1;
-    if (self->document != NULL) {
-        if ((--self->document->__rc) <= 0) {
-            UiDocument_destroy(self->document);
-        }
-    }
-    (self->document = document);
-    (document->__rc++);
-}
-
-void HtmlView_destroy(HtmlView* self) {
-    if (self->document != NULL) {
-        if ((--self->document->__rc) <= 0) {
-            UiDocument_destroy(self->document);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void HtmlView_write(HtmlView* self, char* path) {
-    UiDocument_writeHtml(self->document, path);
-}
-
-void NativeView_init(NativeView* self, UiNode* root) {
-    self->__rc = 1;
-    if (self->root != NULL) {
-        if ((--self->root->__rc) <= 0) {
-            UiNode_destroy(self->root);
-        }
-    }
-    (self->root = root);
-    (root->__rc++);
-}
-
-void NativeView_destroy(NativeView* self) {
-    if (self->root != NULL) {
-        if ((--self->root->__rc) <= 0) {
-            UiNode_destroy(self->root);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void Window_init(Window* self, char* title, int width, int height, HtmlView* html) {
-    self->__rc = 1;
-    (self->title = title);
-    (self->width = width);
-    (self->height = height);
-    if (self->html != NULL) {
-        if ((--self->html->__rc) <= 0) {
-            HtmlView_destroy(self->html);
-        }
-    }
-    (self->html = html);
-    (html->__rc++);
-}
-
-void Window_destroy(Window* self) {
-    if (self->html != NULL) {
-        if ((--self->html->__rc) <= 0) {
-            HtmlView_destroy(self->html);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void TrayItem_init(TrayItem* self, char* label, char* command) {
-    self->__rc = 1;
-    (self->label = label);
-    (self->command = command);
-    (self->enabled = true);
-}
-
-TrayItem* TrayItem_new(char* label, char* command) {
-    TrayItem* self = ((TrayItem*)malloc(sizeof(TrayItem)));
-    memset(self, 0, sizeof(TrayItem));
-    TrayItem_init(self, label, command);
-    return self;
-}
-
-void TrayItem_destroy(TrayItem* self) {
-    free(self);
-}
-
-void Tray_init(Tray* self, char* title) {
-    self->__rc = 1;
-    (self->title = title);
-    (self->tooltip = title);
-    (self->iconPath = "");
-    if (self->items != NULL) {
-        if ((--self->items->__rc) <= 0) {
-            btrc_Vector_TrayItem_free(self->items);
-        }
-    }
-    btrc_Vector_TrayItem* __list_207 = btrc_Vector_TrayItem_new();
-    (self->items = __list_207);
-    btrc_Vector_TrayItem* __list_206 = btrc_Vector_TrayItem_new();
-    (__list_206->__rc++);
-}
-
-void Tray_destroy(Tray* self) {
-    if (self->items != NULL) {
-        if ((--self->items->__rc) <= 0) {
-            btrc_Vector_TrayItem_free(self->items);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void HtmlUiBackend_init(HtmlUiBackend* self, char* opener) {
-    self->__rc = 1;
-    (self->opener = opener);
-}
-
-HtmlUiBackend* HtmlUiBackend_new(char* opener) {
-    HtmlUiBackend* self = ((HtmlUiBackend*)malloc(sizeof(HtmlUiBackend)));
-    memset(self, 0, sizeof(HtmlUiBackend));
-    HtmlUiBackend_init(self, opener);
-    return self;
-}
-
-void HtmlUiBackend_destroy(HtmlUiBackend* self) {
-    free(self);
-}
-
-Command* HtmlUiBackend_openCommand(HtmlUiBackend* self, char* path) {
-    __auto_type __btrc_ret_212 = Command_check(Command_capture(Command_arg(Command_new(self->opener), path), false), false);
-    return __btrc_ret_212;
-}
-
-ExecResult* HtmlUiBackend_openFile(HtmlUiBackend* self, char* path) {
-    UnixShell* shell = UnixShell_new();
-    __auto_type __btrc_ret_213 = UnixShell_runCommand(shell, HtmlUiBackend_openCommand(self, path));
-    if (shell != NULL) {
-        if ((--shell->__rc) <= 0) {
-            UnixShell_destroy(shell);
-        }
-    }
-    return __btrc_ret_213;
-    if (shell != NULL) {
-        if ((--shell->__rc) <= 0) {
-            UnixShell_destroy(shell);
-        }
-    }
-}
-
-ExecResult* HtmlUiBackend_openWindow(HtmlUiBackend* self, Window* window, char* path) {
-    HtmlView_write(window->html, path);
-    __auto_type __btrc_ret_214 = HtmlUiBackend_openFile(self, path);
-    return __btrc_ret_214;
-}
-
-void NativeUiBackend_init(NativeUiBackend* self, char* name, HtmlUiBackend* htmlBackend) {
-    self->__rc = 1;
-    (self->name = name);
-    if (self->htmlBackend != NULL) {
-        if ((--self->htmlBackend->__rc) <= 0) {
-            HtmlUiBackend_destroy(self->htmlBackend);
-        }
-    }
-    (self->htmlBackend = htmlBackend);
-    (htmlBackend->__rc++);
-}
-
-NativeUiBackend* NativeUiBackend_new(char* name, HtmlUiBackend* htmlBackend) {
-    NativeUiBackend* self = ((NativeUiBackend*)malloc(sizeof(NativeUiBackend)));
-    memset(self, 0, sizeof(NativeUiBackend));
-    NativeUiBackend_init(self, name, htmlBackend);
-    return self;
-}
-
-void NativeUiBackend_destroy(NativeUiBackend* self) {
-    if (self->htmlBackend != NULL) {
-        if ((--self->htmlBackend->__rc) <= 0) {
-            HtmlUiBackend_destroy(self->htmlBackend);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-bool NativeUiBackend_isMac(NativeUiBackend* self) {
-    __auto_type __btrc_ret_215 = (strcmp(self->name, "macos") == 0);
-    return __btrc_ret_215;
-}
-
-bool NativeUiBackend_isLinux(NativeUiBackend* self) {
-    __auto_type __btrc_ret_216 = (strcmp(self->name, "linux") == 0);
-    return __btrc_ret_216;
-}
-
-Command* NativeUiBackend_notifyCommand(NativeUiBackend* self, char* title, char* body) {
-    if (NativeUiBackend_isMac(self)) {
-        char* script = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("display notification ", NativeUi_applescriptString(body))), " with title ")), NativeUi_applescriptString(title)));
-        __auto_type __btrc_ret_218 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("osascript"), "-e"), script), false), false);
-        return __btrc_ret_218;
-    }
-    if (NativeUiBackend_isLinux(self)) {
-        __auto_type __btrc_ret_219 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("notify-send"), title), body), false), false);
-        return __btrc_ret_219;
-    }
-    __auto_type __btrc_ret_220 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_new("powershell"), "-NoProfile"), "-Command"), "Write-Error 'Native notifications are TODO for Windows'"), false), false);
-    return __btrc_ret_220;
-}
-
-Command* NativeUiBackend_alertCommand(NativeUiBackend* self, char* title, char* body) {
-    if (NativeUiBackend_isMac(self)) {
-        char* script = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("display dialog ", NativeUi_applescriptString(body))), " with title ")), NativeUi_applescriptString(title))), " buttons {\"OK\"} default button \"OK\""));
-        __auto_type __btrc_ret_221 = Command_check(Command_capture(Command_arg(Command_arg(Command_new("osascript"), "-e"), script), false), false);
-        return __btrc_ret_221;
-    }
-    if (NativeUiBackend_isLinux(self)) {
-        __auto_type __btrc_ret_222 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("zenity"), "--info"), "--title"), title), "--text"), body), false), false);
-        return __btrc_ret_222;
-    }
-    __auto_type __btrc_ret_223 = Command_check(Command_capture(Command_arg(Command_arg(Command_arg(Command_new("powershell"), "-NoProfile"), "-Command"), "Write-Error 'Native dialogs are TODO for Windows'"), false), false);
-    return __btrc_ret_223;
-}
-
-ExecResult* NativeUiBackend_notify(NativeUiBackend* self, char* title, char* body) {
-    __auto_type __btrc_ret_224 = UnixShell_runCommand(UnixShell_new(), NativeUiBackend_notifyCommand(self, title, body));
-    return __btrc_ret_224;
-}
-
-ExecResult* NativeUiBackend_alert(NativeUiBackend* self, char* title, char* body) {
-    __auto_type __btrc_ret_225 = UnixShell_runCommand(UnixShell_new(), NativeUiBackend_alertCommand(self, title, body));
-    return __btrc_ret_225;
-}
-
-void LinuxUiBuilder_init(LinuxUiBuilder* self) {
-    self->__rc = 1;
-}
-
-void LinuxUiBuilder_destroy(LinuxUiBuilder* self) {
-    free(self);
-}
-
-HtmlUiBackend* LinuxUiBuilder_html(void) {
-    __auto_type __btrc_ret_228 = HtmlUiBackend_new("xdg-open");
-    return __btrc_ret_228;
-}
-
-NativeUiBackend* LinuxUiBuilder_native(void) {
-    __auto_type __btrc_ret_229 = NativeUiBackend_new("linux", LinuxUiBuilder_html());
-    return __btrc_ret_229;
-}
-
-void MacUiBuilder_init(MacUiBuilder* self) {
-    self->__rc = 1;
-}
-
-void MacUiBuilder_destroy(MacUiBuilder* self) {
-    free(self);
-}
-
-HtmlUiBackend* MacUiBuilder_html(void) {
-    __auto_type __btrc_ret_230 = HtmlUiBackend_new("open");
-    return __btrc_ret_230;
-}
-
-NativeUiBackend* MacUiBuilder_native(void) {
-    __auto_type __btrc_ret_231 = NativeUiBackend_new("macos", MacUiBuilder_html());
-    return __btrc_ret_231;
-}
-
-void WindowsUiBuilder_init(WindowsUiBuilder* self) {
-    self->__rc = 1;
-}
-
-void WindowsUiBuilder_destroy(WindowsUiBuilder* self) {
-    free(self);
-}
-
-HtmlUiBackend* WindowsUiBuilder_html(void) {
-    __auto_type __btrc_ret_232 = HtmlUiBackend_new("powershell");
-    return __btrc_ret_232;
-}
-
-NativeUiBackend* WindowsUiBuilder_native(void) {
-    __auto_type __btrc_ret_233 = NativeUiBackend_new("windows", WindowsUiBuilder_html());
-    return __btrc_ret_233;
-}
-
-void Ui_init(Ui* self) {
-    self->__rc = 1;
-}
-
-Ui* Ui_new(void) {
-    Ui* self = ((Ui*)malloc(sizeof(Ui)));
-    memset(self, 0, sizeof(Ui));
-    Ui_init(self);
-    return self;
-}
-
-void Ui_destroy(Ui* self) {
-    free(self);
-}
-
-void NativeUi_init(NativeUi* self) {
-    self->__rc = 1;
-}
-
-void NativeUi_destroy(NativeUi* self) {
-    free(self);
-}
-
-char* NativeUi_applescriptString(char* raw) {
-    char* escaped = Strings_replace(raw, "\\", "\\\\");
-    (escaped = Strings_replace(escaped, "\"", "\\\""));
-    __auto_type __btrc_ret_241 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escaped)), "\""));
-    return __btrc_ret_241;
-}
-
-void UiRuntime_init(UiRuntime* self) {
-    self->__rc = 1;
-}
-
-void UiRuntime_destroy(UiRuntime* self) {
-    free(self);
-}
-
-static void* __btrc_spawn_wrapper_1(void* __arg) {
-    __btrc_spawn_env_1* __env = ((__btrc_spawn_env_1*)__arg);
-    Command* command = __env->command;
-    ExecResult* result = UnixShell_runCommand(UnixShell_new(), command);
-    __auto_type __btrc_ret_245 = result->code;
-    void* __result = ((void*)((intptr_t)__btrc_ret_245));
-    if (command != NULL) {
-        if ((--command->__rc) <= 0) {
-            Command_destroy(command);
-        }
-    }
-    free(__env);
-    return __result;
-}
-
-static void* __btrc_spawn_wrapper_2(void* __arg) {
-    __btrc_spawn_env_2* __env = ((__btrc_spawn_env_2*)__arg);
-    NativeUiBackend* backend = __env->backend;
-    char* body = __env->body;
-    char* title = __env->title;
-    ExecResult* result = NativeUiBackend_notify(backend, title, body);
-    __auto_type __btrc_ret_247 = result->code;
-    void* __result = ((void*)((intptr_t)__btrc_ret_247));
-    if (backend != NULL) {
-        if ((--backend->__rc) <= 0) {
-            NativeUiBackend_destroy(backend);
-        }
-    }
-    free(__env);
-    return __result;
-}
-
-void Signal_init(Signal* self) {
-    self->__rc = 1;
-    if (self->events != NULL) {
-        if ((--self->events->__rc) <= 0) {
-            btrc_Vector_string_free(self->events);
-        }
-    }
-    btrc_Vector_string* __list_250 = btrc_Vector_string_new();
-    (self->events = __list_250);
-    btrc_Vector_string* __list_249 = btrc_Vector_string_new();
-    (__list_249->__rc++);
-}
-
-void Signal_destroy(Signal* self) {
-    if (self->events != NULL) {
-        if ((--self->events->__rc) <= 0) {
-            btrc_Vector_string_free(self->events);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void JsonObject_init(JsonObject* self) {
-    self->__rc = 1;
-    if (self->values != NULL) {
-        if ((--self->values->__rc) <= 0) {
-            btrc_Map_string_string_free(self->values);
-        }
-    }
-    (self->values = btrc_Map_string_string_new());
-    (btrc_Map_string_string_new()->__rc++);
-    if (self->quoted != NULL) {
-        if ((--self->quoted->__rc) <= 0) {
-            btrc_Map_string_bool_free(self->quoted);
-        }
-    }
-    (self->quoted = btrc_Map_string_bool_new());
-    (btrc_Map_string_bool_new()->__rc++);
-}
-
-JsonObject* JsonObject_new(void) {
-    JsonObject* self = ((JsonObject*)malloc(sizeof(JsonObject)));
-    memset(self, 0, sizeof(JsonObject));
-    JsonObject_init(self);
-    return self;
-}
-
-void JsonObject_destroy(JsonObject* self) {
-    if (self->values != NULL) {
-        if ((--self->values->__rc) <= 0) {
-            btrc_Map_string_string_free(self->values);
-        }
-    }
-    if (self->quoted != NULL) {
-        if ((--self->quoted->__rc) <= 0) {
-            btrc_Map_string_bool_free(self->quoted);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-char* JsonObject_escape(char* text) {
-    if (text == NULL) {
-        __auto_type __btrc_ret_254 = "";
-        return __btrc_ret_254;
-    }
-    char* escaped = Strings_replace(text, "\\", "\\\\");
-    (escaped = Strings_replace(escaped, "\"", "\\\""));
-    (escaped = Strings_replace(escaped, "\n", "\\n"));
-    return escaped;
-}
-
-char* JsonObject_unescape(char* text) {
-    char* result = "";
-    bool escaped = false;
-    for (int i = 0; (i < ((int)strlen(text))); (i++)) {
-        char* current = __btrc_str_track(__btrc_substring(text, i, 1));
-        if (escaped) {
-            if (strcmp(current, "n") == 0) {
-                (result = __btrc_str_track(__btrc_strcat(result, "\n")));
-            } else if (strcmp(current, "r") == 0) {
-                (result = __btrc_str_track(__btrc_strcat(result, "\r")));
-            } else if (strcmp(current, "t") == 0) {
-                (result = __btrc_str_track(__btrc_strcat(result, "\t")));
-            } else {
-                (result = __btrc_str_track(__btrc_strcat(result, current)));
-            }
-            (escaped = false);
-            continue;
-        }
-        if (strcmp(current, "\\") == 0) {
-            (escaped = true);
-            continue;
-        }
-        (result = __btrc_str_track(__btrc_strcat(result, current)));
-    }
-    if (escaped) {
-        (result = __btrc_str_track(__btrc_strcat(result, "\\")));
-    }
-    return result;
-}
-
-void JsonObject_setString(JsonObject* self, char* key, char* value) {
-    btrc_Map_string_string_put(self->values, key, value);
-    btrc_Map_string_bool_put(self->quoted, key, true);
-}
-
-void JsonObject_setRaw(JsonObject* self, char* key, char* value) {
-    btrc_Map_string_string_put(self->values, key, value);
-    btrc_Map_string_bool_put(self->quoted, key, false);
-}
-
-void JsonObject_setBool(JsonObject* self, char* key, bool value) {
-    btrc_Map_string_string_put(self->values, key, (value ? "true" : "false"));
-    btrc_Map_string_bool_put(self->quoted, key, false);
-}
-
-void JsonObject_setInt(JsonObject* self, char* key, int value) {
-    btrc_Map_string_string_put(self->values, key, Strings_fromInt(value));
-    btrc_Map_string_bool_put(self->quoted, key, false);
-}
-
-char* JsonObject_getString(JsonObject* self, char* key, char* fallback) {
-    if (!btrc_Map_string_string_has(self->values, key)) {
-        return fallback;
-    }
-    __auto_type __btrc_ret_256 = btrc_Map_string_string_get(self->values, key);
-    return __btrc_ret_256;
-}
-
-char* JsonObject_stringify(JsonObject* self) {
-    btrc_Vector_string* fields = btrc_Vector_string_new();
-    int __n_261 = btrc_Map_string_string_iterLen(self->values);
-    for (int __i_260 = 0; (__i_260 < __n_261); (__i_260++)) {
-        char* key = btrc_Map_string_string_iterGet(self->values, __i_260);
-        char* value = btrc_Map_string_string_iterValueAt(self->values, __i_260);
-        char* escapedKey = JsonObject_escape(key);
-        char* field = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escapedKey)), "\":"));
-        if (btrc_Map_string_bool_getOrDefault(self->quoted, key, true)) {
-            char* escapedValue = JsonObject_escape(value);
-            (field = __btrc_str_track(__btrc_strcat(field, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", escapedValue)), "\"")))));
-        } else {
-            (field = __btrc_str_track(__btrc_strcat(field, value)));
-        }
-        btrc_Vector_string_push(fields, field);
-    }
-    __auto_type __btrc_ret_262 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{", btrc_Vector_string_join(fields, ","))), "}"));
-    return __btrc_ret_262;
-}
-
-int JsonObject_skipSpaces(char* text, int i) {
-    int len = ((int)strlen(text));
-    while ((i < len) && ((((text[i] == ' ') || (text[i] == '\n')) || (text[i] == '\t')) || (text[i] == '\r'))) {
-        (i++);
-    }
-    return i;
-}
-
-char* JsonObject_slice(char* text, int start, int end) {
-    int len = (end - start);
-    char* result = ((char*)malloc((len + 1)));
-    memcpy(result, (text + start), len);
-    (result[len] = '\0');
-    return result;
-}
-
-int JsonObject_stringEnd(char* text, int start) {
-    int len = ((int)strlen(text));
-    bool escaped = false;
-    int i = start;
-    while (i < len) {
-        if ((!escaped) && (text[i] == ((char)34))) {
-            return i;
-        }
-        (escaped = ((!escaped) && (text[i] == '\\')));
-        if (text[i] != '\\') {
-            (escaped = false);
-        }
-        (i++);
-    }
-    return len;
-}
-
-JsonObject* JsonObject_parse(char* text) {
-    JsonObject* obj = JsonObject_new();
-    int len = ((int)strlen(text));
-    int i = 0;
-    while (i < len) {
-        (i = JsonObject_skipSpaces(text, i));
-        if (i >= len) {
-            break;
-        }
-        if (text[i] != ((char)34)) {
-            (i++);
-            continue;
-        }
-        (i++);
-        int keyStart = i;
-        (i = JsonObject_stringEnd(text, keyStart));
-        char* key = JsonObject_unescape(JsonObject_slice(text, keyStart, i));
-        (i++);
-        (i = JsonObject_skipSpaces(text, i));
-        if ((i < len) && (text[i] == ':')) {
-            (i++);
-        }
-        (i = JsonObject_skipSpaces(text, i));
-        if (i >= len) {
-            break;
-        }
-        if (text[i] == ((char)34)) {
-            (i++);
-            int valueStart = i;
-            (i = JsonObject_stringEnd(text, valueStart));
-            char* value = JsonObject_unescape(JsonObject_slice(text, valueStart, i));
-            JsonObject_setString(obj, key, value);
-            (i++);
-        } else {
-            int valueStart = i;
-            while (((i < len) && (text[i] != ',')) && (text[i] != '}')) {
-                (i++);
-            }
-            int valueEnd = i;
-            while ((valueEnd > valueStart) && ((((text[(valueEnd - 1)] == ' ') || (text[(valueEnd - 1)] == '\n')) || (text[(valueEnd - 1)] == '\t')) || (text[(valueEnd - 1)] == '\r'))) {
-                (valueEnd--);
-            }
-            char* value = JsonObject_slice(text, valueStart, valueEnd);
-            JsonObject_setRaw(obj, key, value);
-        }
-    }
-    return obj;
-    if (obj != NULL) {
-        if ((--obj->__rc) <= 0) {
-            JsonObject_destroy(obj);
-        }
-    }
-}
-
-JsonObject* JsonObject_readFile(char* path) {
-    __auto_type __btrc_ret_263 = JsonObject_parse(Path_readAll(path));
-    return __btrc_ret_263;
-}
-
-void JsonObject_writeFile(JsonObject* self, char* path) {
-    Path_writeAll(path, JsonObject_stringify(self));
-}
-
-void Toml_init(Toml* self) {
-    self->__rc = 1;
-}
-
-void Toml_destroy(Toml* self) {
-    free(self);
-}
-
-char* Toml_stripInlineComment(char* raw) {
-    bool inString = false;
-    bool escaped = false;
-    int len = ((int)strlen(raw));
-    for (int i = 0; (i < len); (i++)) {
-        char c = raw[i];
-        if (inString) {
-            if ((!escaped) && (c == ((char)34))) {
-                (inString = false);
-            }
-            (escaped = ((!escaped) && (c == '\\')));
-            if (c != '\\') {
-                (escaped = false);
-            }
-            continue;
-        }
-        if (c == ((char)34)) {
-            (inString = true);
-            (escaped = false);
-            continue;
-        }
-        if (c == '#') {
-            __auto_type __btrc_ret_264 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(raw, 0, i))));
-            return __btrc_ret_264;
-        }
-    }
-    __auto_type __btrc_ret_265 = __btrc_str_track(__btrc_trim(raw));
-    return __btrc_ret_265;
-}
-
-char* Toml_unquote(char* raw) {
-    char* value = __btrc_str_track(__btrc_trim(raw));
-    if ((__btrc_startsWith(value, "\"") && __btrc_endsWith(value, "\"")) && (((int)strlen(value)) >= 2)) {
-        __auto_type __btrc_ret_266 = __btrc_str_track(__btrc_substring(value, 1, (((int)strlen(value)) - 2)));
-        return __btrc_ret_266;
-    }
-    if ((__btrc_startsWith(value, "'") && __btrc_endsWith(value, "'")) && (((int)strlen(value)) >= 2)) {
-        __auto_type __btrc_ret_267 = __btrc_str_track(__btrc_substring(value, 1, (((int)strlen(value)) - 2)));
-        return __btrc_ret_267;
-    }
-    return value;
-}
-
-char* Toml_key(char* line) {
-    char* cleaned = Toml_stripInlineComment(line);
-    int pos = Strings_find(cleaned, "=", 0);
-    if (pos < 0) {
-        __auto_type __btrc_ret_268 = "";
-        return __btrc_ret_268;
-    }
-    __auto_type __btrc_ret_269 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 0, pos)))));
-    return __btrc_ret_269;
-}
-
-char* Toml_value(char* line) {
-    char* cleaned = Toml_stripInlineComment(line);
-    int pos = Strings_find(cleaned, "=", 0);
-    if (pos < 0) {
-        __auto_type __btrc_ret_270 = "";
-        return __btrc_ret_270;
-    }
-    __auto_type __btrc_ret_271 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, (pos + 1), ((((int)strlen(cleaned)) - pos) - 1))))));
-    return __btrc_ret_271;
-}
-
-char* Toml_sectionName(char* line) {
-    char* cleaned = Toml_stripInlineComment(line);
-    if ((!__btrc_startsWith(cleaned, "[")) || (!__btrc_endsWith(cleaned, "]"))) {
-        __auto_type __btrc_ret_272 = "";
-        return __btrc_ret_272;
-    }
-    if (__btrc_startsWith(cleaned, "[[")) {
-        __auto_type __btrc_ret_273 = "";
-        return __btrc_ret_273;
-    }
-    __auto_type __btrc_ret_274 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 1, (((int)strlen(cleaned)) - 2)))));
-    return __btrc_ret_274;
-}
-
-char* Toml_tableArrayName(char* line) {
-    char* cleaned = Toml_stripInlineComment(line);
-    if ((!__btrc_startsWith(cleaned, "[[")) || (!__btrc_endsWith(cleaned, "]]"))) {
-        __auto_type __btrc_ret_275 = "";
-        return __btrc_ret_275;
-    }
-    __auto_type __btrc_ret_276 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(cleaned, 2, (((int)strlen(cleaned)) - 4)))));
-    return __btrc_ret_276;
-}
-
-btrc_Map_string_string* Toml_sectionMap(char* content, char* section) {
-    btrc_Map_string_string* result = btrc_Map_string_string_new();
-    bool inSection = false;
-    int __n_278 = btrc_Vector_string_iterLen(Strings_split(content, "\n"));
-    for (int __i_277 = 0; (__i_277 < __n_278); (__i_277++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(content, "\n"), __i_277);
-        char* trimmed = __btrc_str_track(__btrc_trim(line));
-        char* name = Toml_sectionName(trimmed);
-        if (strcmp(name, section) == 0) {
-            (inSection = true);
-            continue;
-        }
-        if ((!__btrc_isEmpty(name)) || (!__btrc_isEmpty(Toml_tableArrayName(trimmed)))) {
-            (inSection = false);
-            continue;
-        }
-        if (!inSection) {
-            continue;
-        }
-        char* field = Toml_key(trimmed);
-        if (!__btrc_isEmpty(field)) {
-            btrc_Map_string_string_put(result, field, Toml_value(trimmed));
-        }
-    }
-    return result;
-}
-
-btrc_Vector_Map_string_string* Toml_tableArrayBlocks(char* content, char* table) {
-    btrc_Vector_Map_string_string* blocks = btrc_Vector_Map_string_string_new();
-    btrc_Map_string_string* current = btrc_Map_string_string_new();
-    bool inTable = false;
-    int __n_280 = btrc_Vector_string_iterLen(Strings_split(content, "\n"));
-    for (int __i_279 = 0; (__i_279 < __n_280); (__i_279++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(content, "\n"), __i_279);
-        char* trimmed = __btrc_str_track(__btrc_trim(line));
-        char* name = Toml_tableArrayName(trimmed);
-        if (strcmp(name, table) == 0) {
-            if (inTable) {
-                btrc_Vector_Map_string_string_push(blocks, current);
-            }
-            (current = btrc_Map_string_string_new());
-            (inTable = true);
-            continue;
-        }
-        if ((!__btrc_isEmpty(Toml_sectionName(trimmed))) || (!__btrc_isEmpty(name))) {
-            if (inTable) {
-                btrc_Vector_Map_string_string_push(blocks, current);
-            }
-            (inTable = false);
-            continue;
-        }
-        if (!inTable) {
-            continue;
-        }
-        char* field = Toml_key(trimmed);
-        if (!__btrc_isEmpty(field)) {
-            btrc_Map_string_string_put(current, field, Toml_value(trimmed));
-        }
-    }
-    if (inTable) {
-        btrc_Vector_Map_string_string_push(blocks, current);
-    }
-    return blocks;
-}
-
-void UnixPattern_init(UnixPattern* self) {
-    self->__rc = 1;
-}
-
-void UnixPattern_destroy(UnixPattern* self) {
-    free(self);
-}
-
-bool UnixPattern_matches(char* pattern, char* text) {
-    __auto_type __btrc_ret_281 = (fnmatch(pattern, text, 0) == 0);
-    return __btrc_ret_281;
-}
-
-void Pattern_init(Pattern* self) {
-    self->__rc = 1;
-}
-
-void Pattern_destroy(Pattern* self) {
-    free(self);
-}
-
-bool Pattern_matches(char* pattern, char* text) {
-    __auto_type __btrc_ret_282 = UnixPattern_matches(pattern, text);
-    return __btrc_ret_282;
-}
-
-void Math_init(Math* self) {
-    self->__rc = 1;
-}
-
-void Math_destroy(Math* self) {
-    free(self);
-}
-
-int Math_abs(int x) {
-    if (x < 0) {
-        __auto_type __btrc_ret_291 = (-x);
-        return __btrc_ret_291;
-    }
-    return x;
-}
-
-int Math_factorial(int n) {
-    if (n <= 1) {
-        __auto_type __btrc_ret_295 = 1;
-        return __btrc_ret_295;
-    }
-    __auto_type __btrc_ret_296 = (n * Math_factorial((n - 1)));
-    return __btrc_ret_296;
-}
-
-int Math_gcd(int a, int b) {
-    while (b != 0) {
-        int temp = b;
-        (b = __btrc_mod_int(a, b));
-        (a = temp);
-    }
-    return a;
-}
-
-void DateTime_init(DateTime* self, int year, int month, int day, int hour, int minute, int second) {
-    self->__rc = 1;
-    (self->year = year);
-    (self->month = month);
-    (self->day = day);
-    (self->hour = hour);
-    (self->minute = minute);
-    (self->second = second);
-}
-
-DateTime* DateTime_new(int year, int month, int day, int hour, int minute, int second) {
-    DateTime* self = ((DateTime*)malloc(sizeof(DateTime)));
-    memset(self, 0, sizeof(DateTime));
-    DateTime_init(self, year, month, day, hour, minute, second);
-    return self;
-}
-
-void DateTime_destroy(DateTime* self) {
-    free(self);
-}
-
-void Timer_init(Timer* self) {
-    self->__rc = 1;
-    (self->start_time = 0);
-    (self->end_time = 0);
-    (self->running = false);
-}
-
-void Timer_destroy(Timer* self) {
-    free(self);
-}
-
-void Random_init(Random* self) {
-    self->__rc = 1;
-    (self->seeded = false);
-}
-
-void Random_destroy(Random* self) {
-    free(self);
-}
-
-void Random_seed(Random* self, int s) {
-    srand(s);
-    (self->seeded = true);
-}
-
-void Random_seedTime(Random* self) {
-    srand(((unsigned int)time(NULL)));
-    (self->seeded = true);
-}
-
-int Random_randint(Random* self, int lo, int hi) {
-    if (!self->seeded) {
-        Random_seedTime(self);
-    }
-    __auto_type __btrc_ret_335 = (lo + (rand() % ((hi - lo) + 1)));
-    return __btrc_ret_335;
-}
-
-float Random_random(Random* self) {
-    if (!self->seeded) {
-        Random_seedTime(self);
-    }
-    __auto_type __btrc_ret_336 = __btrc_div_double(((float)rand()), ((float)RAND_MAX));
-    return __btrc_ret_336;
-}
-
-void Error_init(Error* self, char* message, int code) {
-    self->__rc = 1;
-    (self->message = message);
-    (self->code = code);
-}
-
-void Error_destroy(Error* self) {
-    free(self);
-}
-
-char* Error_toString(Error* self) {
-    __auto_type __btrc_ret_339 = self->message;
-    return __btrc_ret_339;
-}
-
-void ValueError_init(ValueError* self, char* message) {
-    self->__rc = 1;
-    (self->message = message);
-    (self->code = 1);
-}
-
-void ValueError_destroy(ValueError* self) {
-    free(self);
-}
-
-void IOError_init(IOError* self, char* message) {
-    self->__rc = 1;
-    (self->message = message);
-    (self->code = 2);
-}
-
-void IOError_destroy(IOError* self) {
-    free(self);
-}
-
-void TypeError_init(TypeError* self, char* message) {
-    self->__rc = 1;
-    (self->message = message);
-    (self->code = 3);
-}
-
-void TypeError_destroy(TypeError* self) {
-    free(self);
-}
-
-void IndexError_init(IndexError* self, char* message) {
-    self->__rc = 1;
-    (self->message = message);
-    (self->code = 4);
-}
-
-void IndexError_destroy(IndexError* self) {
-    free(self);
-}
-
-void KeyError_init(KeyError* self, char* message) {
-    self->__rc = 1;
-    (self->message = message);
-    (self->code = 5);
-}
-
-void KeyError_destroy(KeyError* self) {
-    free(self);
-}
-
-void CliArgs_init(CliArgs* self, int argc, char** argv) {
-    self->__rc = 1;
-    (self->program = ((argc > 0) ? Strings_copy(argv[0]) : ""));
-    if (self->values != NULL) {
-        if ((--self->values->__rc) <= 0) {
-            btrc_Vector_string_free(self->values);
-        }
-    }
-    btrc_Vector_string* __list_341 = btrc_Vector_string_new();
-    (self->values = __list_341);
-    btrc_Vector_string* __list_340 = btrc_Vector_string_new();
-    (__list_340->__rc++);
-    for (int i = 1; (i < argc); (i++)) {
-        btrc_Vector_string_push(self->values, Strings_copy(argv[i]));
-    }
-}
-
-CliArgs* CliArgs_new(int argc, char** argv) {
-    CliArgs* self = ((CliArgs*)malloc(sizeof(CliArgs)));
-    memset(self, 0, sizeof(CliArgs));
-    CliArgs_init(self, argc, argv);
-    return self;
-}
-
-void CliArgs_destroy(CliArgs* self) {
-    if (self->values != NULL) {
-        if ((--self->values->__rc) <= 0) {
-            btrc_Vector_string_free(self->values);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-int CliArgs_count(CliArgs* self) {
-    __auto_type __btrc_ret_342 = self->values->len;
-    return __btrc_ret_342;
-}
-
-char* CliArgs_get(CliArgs* self, int index) {
-    __auto_type __btrc_ret_343 = btrc_Vector_string_get(self->values, index);
-    return __btrc_ret_343;
-}
-
-char* CliArgs_command(CliArgs* self) {
-    if (self->values->len == 0) {
-        __auto_type __btrc_ret_344 = "";
-        return __btrc_ret_344;
-    }
-    __auto_type __btrc_ret_345 = btrc_Vector_string_get(self->values, 0);
-    return __btrc_ret_345;
-}
-
-bool CliArgs_has(CliArgs* self, char* flag) {
-    int __n_347 = btrc_Vector_string_iterLen(self->values);
-    for (int __i_346 = 0; (__i_346 < __n_347); (__i_346++)) {
-        char* value = btrc_Vector_string_iterGet(self->values, __i_346);
-        if (strcmp(value, flag) == 0) {
-            __auto_type __btrc_ret_348 = true;
-            return __btrc_ret_348;
-        }
-    }
-    __auto_type __btrc_ret_349 = false;
-    return __btrc_ret_349;
-}
-
-char* CliArgs_valueAfter(CliArgs* self, char* flag, char* fallback) {
-    for (int i = 0; (i < (self->values->len - 1)); (i++)) {
-        if (strcmp(btrc_Vector_string_get(self->values, i), flag) == 0) {
-            __auto_type __btrc_ret_350 = btrc_Vector_string_get(self->values, (i + 1));
-            return __btrc_ret_350;
-        }
-    }
-    return fallback;
-}
-
-void CliCommand_init(CliCommand* self, char* name) {
-    self->__rc = 1;
-    (self->name = name);
-    if (self->aliases != NULL) {
-        if ((--self->aliases->__rc) <= 0) {
-            btrc_Vector_string_free(self->aliases);
-        }
-    }
-    btrc_Vector_string* __list_356 = btrc_Vector_string_new();
-    (self->aliases = __list_356);
-    btrc_Vector_string* __list_355 = btrc_Vector_string_new();
-    (__list_355->__rc++);
-}
-
-void CliCommand_destroy(CliCommand* self) {
-    if (self->aliases != NULL) {
-        if ((--self->aliases->__rc) <= 0) {
-            btrc_Vector_string_free(self->aliases);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
-void NixosLog_init(NixosLog* self) {
-    self->__rc = 1;
-}
-
-void NixosLog_destroy(NixosLog* self) {
-    free(self);
-}
-
 char* NixosLog_gray(void) {
-    __auto_type __btrc_ret_362 = "\033[90m";
-    return __btrc_ret_362;
+    return "\033[90m";
 }
 
 char* NixosLog_orange(void) {
-    __auto_type __btrc_ret_363 = "\033[38;5;208m";
-    return __btrc_ret_363;
+    return "\033[38;5;208m";
 }
 
 char* NixosLog_red(void) {
-    __auto_type __btrc_ret_364 = "\033[31m";
-    return __btrc_ret_364;
+    return "\033[31m";
 }
 
 char* NixosLog_reset(void) {
-    __auto_type __btrc_ret_365 = "\033[0m";
-    return __btrc_ret_365;
+    return "\033[0m";
 }
 
 void NixosLog_info(char* message) {
@@ -11491,18 +4274,15 @@ void NixosPaths_destroy(NixosPaths* self) {
 }
 
 char* NixosPaths_configPath(NixosPaths* self) {
-    __auto_type __btrc_ret_366 = PathTools_join(self->root, "config.json");
-    return __btrc_ret_366;
+    return PathTools_join(self->root, "config.json");
 }
 
 char* NixosPaths_hostsPath(NixosPaths* self) {
-    __auto_type __btrc_ret_369 = PathTools_join(self->root, "modules/hosts");
-    return __btrc_ret_369;
+    return PathTools_join(self->root, "modules/hosts");
 }
 
 char* NixosPaths_secretsPathFallback(NixosPaths* self) {
-    __auto_type __btrc_ret_370 = PathTools_join(self->root, "secrets");
-    return __btrc_ret_370;
+    return PathTools_join(self->root, "secrets");
 }
 
 void LocalConfigFile_init(LocalConfigFile* self, char* path) {
@@ -11522,17 +4302,14 @@ void LocalConfigFile_destroy(LocalConfigFile* self) {
 }
 
 bool LocalConfigFile_exists(LocalConfigFile* self) {
-    __auto_type __btrc_ret_371 = FileSystem_exists(self->path);
-    return __btrc_ret_371;
+    return FileSystem_exists(self->path);
 }
 
 JsonObject* LocalConfigFile_read(LocalConfigFile* self) {
     if (!LocalConfigFile_exists(self)) {
-        __auto_type __btrc_ret_372 = JsonObject_new();
-        return __btrc_ret_372;
+        return JsonObject_new();
     }
-    __auto_type __btrc_ret_373 = JsonObject_readFile(self->path);
-    return __btrc_ret_373;
+    return JsonObject_readFile(self->path);
 }
 
 void LocalConfigFile_overwrite(LocalConfigFile* self, JsonObject* data) {
@@ -11544,8 +4321,7 @@ void LocalConfigFile_overwrite(LocalConfigFile* self, JsonObject* data) {
 char* LocalConfigFile_getString(LocalConfigFile* self, char* key, char* fallback) {
     JsonObject* data = LocalConfigFile_read(self);
     char* value = JsonObject_getString(data, key, fallback);
-    __auto_type __btrc_ret_374 = Strings_copy(value);
-    return __btrc_ret_374;
+    return Strings_copy(value);
 }
 
 void LocalConfigFile_setString(LocalConfigFile* self, char* key, char* value) {
@@ -11587,32 +4363,27 @@ void Interactive_destroy(Interactive* self) {
 char* Interactive_ask(Interactive* self, char* prompt) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf ", UnixShell_quote(__btrc_str_track(__btrc_strcat(prompt, " "))))), " >&2; IFS= read -r value; printf '%s' \"$value\""));
     ExecResult* result = UnixShell_runRaw(self->shell, command, true, false, "");
-    __auto_type __btrc_ret_375 = ExecResult_stdout(result);
-    return __btrc_ret_375;
+    return ExecResult_stdout(result);
 }
 
 bool Interactive_confirm(Interactive* self, char* prompt) {
     while (true) {
         char* response = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_toLower(Interactive_ask(self, __btrc_str_track(__btrc_strcat(prompt, " (y/n):")))))));
         if ((strcmp(response, "y") == 0) || (strcmp(response, "yes") == 0)) {
-            __auto_type __btrc_ret_376 = true;
-            return __btrc_ret_376;
+            return true;
         }
         if ((strcmp(response, "n") == 0) || (strcmp(response, "no") == 0)) {
-            __auto_type __btrc_ret_377 = false;
-            return __btrc_ret_377;
+            return false;
         }
         Console_error("Invalid input. Enter 'y' or 'n'.");
     }
-    __auto_type __btrc_ret_378 = false;
-    return __btrc_ret_378;
+    return false;
 }
 
 char* Interactive_askPassword(Interactive* self, char* prompt) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf ", UnixShell_quote(__btrc_str_track(__btrc_strcat(prompt, ": "))))), " >&2; stty -echo; IFS= read -r value; stty echo; printf '\\n' >&2; printf '%s' \"$value\""));
     ExecResult* result = UnixShell_runRaw(self->shell, command, true, false, "");
-    __auto_type __btrc_ret_379 = ExecResult_stdout(result);
-    return __btrc_ret_379;
+    return ExecResult_stdout(result);
 }
 
 char* Interactive_askPasswordConfirmed(Interactive* self, char* prompt) {
@@ -11624,16 +4395,15 @@ char* Interactive_askPasswordConfirmed(Interactive* self, char* prompt) {
         }
         NixosLog_error("Passwords do not match.");
     }
-    __auto_type __btrc_ret_380 = "";
-    return __btrc_ret_380;
+    return "";
 }
 
 char* Interactive_askHostPath(Interactive* self, char* hostsPath) {
     ExecResult* found = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("find ", UnixShell_quote(hostsPath))), " -type f -name '*.nix' | sort")));
     btrc_Vector_string* candidates = btrc_Vector_string_new();
-    int __n_382 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(found), "\n"));
-    for (int __i_381 = 0; (__i_381 < __n_382); (__i_381++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(found), "\n"), __i_381);
+    int __n_65 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(found), "\n"));
+    for (int __i_64 = 0; (__i_64 < __n_65); (__i_64++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(found), "\n"), __i_64);
         char* path = __btrc_str_track(__btrc_trim(line));
         if (__btrc_isEmpty(path)) {
             continue;
@@ -11656,13 +4426,11 @@ char* Interactive_askHostPath(Interactive* self, char* hostsPath) {
         }
         int selected = (Strings_toInt(__btrc_str_track(__btrc_trim(Interactive_ask(self, ">")))) - 1);
         if ((selected >= 0) && (selected < candidates->len)) {
-            __auto_type __btrc_ret_383 = btrc_Vector_string_get(candidates, selected);
-            return __btrc_ret_383;
+            return btrc_Vector_string_get(candidates, selected);
         }
         NixosLog_error("Invalid choice.");
     }
-    __auto_type __btrc_ret_384 = btrc_Vector_string_get(candidates, 0);
-    return __btrc_ret_384;
+    return btrc_Vector_string_get(candidates, 0);
 }
 
 void Interactive_askToReboot(Interactive* self) {
@@ -11703,13 +4471,11 @@ void NixEvalCache_destroy(NixEvalCache* self) {
 }
 
 bool NixEvalCache_has(NixEvalCache* self, char* key) {
-    __auto_type __btrc_ret_385 = btrc_Map_string_string_has(self->values, key);
-    return __btrc_ret_385;
+    return btrc_Map_string_string_has(self->values, key);
 }
 
 char* NixEvalCache_get(NixEvalCache* self, char* key) {
-    __auto_type __btrc_ret_386 = btrc_Map_string_string_get(self->values, key);
-    return __btrc_ret_386;
+    return btrc_Map_string_string_get(self->values, key);
 }
 
 void NixEvalCache_put(NixEvalCache* self, char* key, char* value) {
@@ -11783,18 +4549,15 @@ void NixosConfig_destroy(NixosConfig* self) {
 }
 
 bool NixosConfig_exists(NixosConfig* self) {
-    __auto_type __btrc_ret_387 = LocalConfigFile_exists(self->local);
-    return __btrc_ret_387;
+    return LocalConfigFile_exists(self->local);
 }
 
 char* NixosConfig_hostPath(NixosConfig* self) {
-    __auto_type __btrc_ret_388 = LocalConfigFile_getString(self->local, "host_path", "");
-    return __btrc_ret_388;
+    return LocalConfigFile_getString(self->local, "host_path", "");
 }
 
 char* NixosConfig_target(NixosConfig* self) {
-    __auto_type __btrc_ret_389 = LocalConfigFile_getString(self->local, "target", "Standard-Boot");
-    return __btrc_ret_389;
+    return LocalConfigFile_getString(self->local, "target", "Standard-Boot");
 }
 
 void NixosConfig_reset(NixosConfig* self, char* hostPath, char* target) {
@@ -11811,48 +4574,41 @@ void NixosConfig_reset(NixosConfig* self, char* hostPath, char* target) {
 
 char* NixosConfig_host(NixosConfig* self) {
     char* base = PathTools_basename(NixosConfig_hostPath(self));
-    __auto_type __btrc_ret_390 = Strings_replace(base, ".nix", "");
-    return __btrc_ret_390;
+    return Strings_replace(base, ".nix", "");
 }
 
 char* NixosConfig_flakeRef(NixosConfig* self) {
-    __auto_type __btrc_ret_392 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->paths->root, "#")), NixosConfig_host(self))), "-")), NixosConfig_target(self)));
-    return __btrc_ret_392;
+    return __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->paths->root, "#")), NixosConfig_host(self))), "-")), NixosConfig_target(self)));
 }
 
 Command* NixosConfig_nixCmd(NixosConfig* self) {
-    __auto_type __btrc_ret_393 = Command_arg(Command_arg(Command_arg(Command_arg(Command_new("nix"), "--extra-experimental-features"), "nix-command"), "--extra-experimental-features"), "flakes");
-    return __btrc_ret_393;
+    return Command_arg(Command_arg(Command_arg(Command_arg(Command_new("nix"), "--extra-experimental-features"), "nix-command"), "--extra-experimental-features"), "flakes");
 }
 
 char* NixosConfig_inputLockedRev(NixosConfig* self, char* inputName) {
     Command* cmd = Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(NixosConfig_nixCmd(self), "flake"), "metadata"), inputName), "--json"), "-I"), self->paths->root);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
-        __auto_type __btrc_ret_394 = "master";
-        return __btrc_ret_394;
+        return "master";
     }
     char* json = ExecResult_stdout(result);
     char* marker = "\"rev\":\"";
     int start = Strings_find(json, marker, 0);
     if (start < 0) {
-        __auto_type __btrc_ret_395 = "master";
-        return __btrc_ret_395;
+        return "master";
     }
     (start = (start + ((int)strlen(marker))));
     int end = start;
     while ((json[end] != '\0') && (json[end] != '"')) {
         (end++);
     }
-    __auto_type __btrc_ret_396 = JsonObject_slice(json, start, end);
-    return __btrc_ret_396;
+    return JsonObject_slice(json, start, end);
 }
 
 char* NixosConfig_evalRaw(NixosConfig* self, char* attribute) {
     char* key = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(NixosConfig_flakeRef(self), ":")), attribute));
     if (NixEvalCache_has(self->cache, key)) {
-        __auto_type __btrc_ret_397 = NixEvalCache_get(self->cache, key);
-        return __btrc_ret_397;
+        return NixEvalCache_get(self->cache, key);
     }
     Command* cmd = Command_arg(Command_arg(NixosConfig_nixCmd(self), "eval"), __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->paths->root, "#nixosConfigurations.")), NixosConfig_host(self))), "-")), NixosConfig_target(self))), ".")), attribute)));
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
@@ -11867,59 +4623,48 @@ char* NixosConfig_evalRaw(NixosConfig* self, char* attribute) {
 
 bool NixosConfig_evalBool(NixosConfig* self, char* attribute) {
     char* value = NixosConfig_evalRaw(self, attribute);
-    __auto_type __btrc_ret_398 = (strcmp(value, "true") == 0);
-    return __btrc_ret_398;
+    return (strcmp(value, "true") == 0);
 }
 
 char* NixosConfig_standardTarget(NixosConfig* self) {
-    __auto_type __btrc_ret_399 = "Standard-Boot";
-    return __btrc_ret_399;
+    return "Standard-Boot";
 }
 
 char* NixosConfig_secureBootTarget(NixosConfig* self) {
-    __auto_type __btrc_ret_400 = "Secure-Boot";
-    return __btrc_ret_400;
+    return "Secure-Boot";
 }
 
 char* NixosConfig_diskOperationTarget(NixosConfig* self) {
-    __auto_type __btrc_ret_401 = "Disk-Operation";
-    return __btrc_ret_401;
+    return "Disk-Operation";
 }
 
 char* NixosConfig_username(NixosConfig* self) {
-    __auto_type __btrc_ret_402 = NixosConfig_evalRaw(self, "config.settings.user.admin.username");
-    return __btrc_ret_402;
+    return NixosConfig_evalRaw(self, "config.settings.user.admin.username");
 }
 
 char* NixosConfig_secretsPath(NixosConfig* self) {
-    __auto_type __btrc_ret_403 = NixosConfig_evalRaw(self, "config.settings.secrets.path");
-    return __btrc_ret_403;
+    return NixosConfig_evalRaw(self, "config.settings.secrets.path");
 }
 
 char* NixosConfig_hashedPasswordPath(NixosConfig* self) {
     char* name = NixosConfig_evalRaw(self, "config.settings.secrets.hashedPasswordFile");
-    __auto_type __btrc_ret_404 = PathTools_join(NixosConfig_secretsPath(self), name);
-    return __btrc_ret_404;
+    return PathTools_join(NixosConfig_secretsPath(self), name);
 }
 
 char* NixosConfig_diskDevice(NixosConfig* self) {
-    __auto_type __btrc_ret_405 = NixosConfig_evalRaw(self, "config.settings.disk.device");
-    return __btrc_ret_405;
+    return NixosConfig_evalRaw(self, "config.settings.disk.device");
 }
 
 char* NixosConfig_rootPartLabelPath(NixosConfig* self) {
-    __auto_type __btrc_ret_406 = NixosConfig_evalRaw(self, "config.settings.disk.by.partlabel.root");
-    return __btrc_ret_406;
+    return NixosConfig_evalRaw(self, "config.settings.disk.by.partlabel.root");
 }
 
 char* NixosConfig_tpmDevice(NixosConfig* self) {
-    __auto_type __btrc_ret_407 = NixosConfig_evalRaw(self, "config.settings.tpm.device");
-    return __btrc_ret_407;
+    return NixosConfig_evalRaw(self, "config.settings.tpm.device");
 }
 
 char* NixosConfig_tpmVersionPath(NixosConfig* self) {
-    __auto_type __btrc_ret_408 = NixosConfig_evalRaw(self, "config.settings.tpm.versionPath");
-    return __btrc_ret_408;
+    return NixosConfig_evalRaw(self, "config.settings.tpm.versionPath");
 }
 
 void SecretsManager_init(SecretsManager* self, NixosConfig* config) {
@@ -11977,8 +4722,7 @@ void SecretsManager_destroy(SecretsManager* self) {
 }
 
 bool SecretsManager_hasHashedPassword(SecretsManager* self) {
-    __auto_type __btrc_ret_409 = FileSystem_exists(NixosConfig_hashedPasswordPath(self->config));
-    return __btrc_ret_409;
+    return FileSystem_exists(NixosConfig_hashedPasswordPath(self->config));
 }
 
 void SecretsManager_writeHashedPassword(SecretsManager* self, char* hashed) {
@@ -11988,15 +4732,12 @@ void SecretsManager_writeHashedPassword(SecretsManager* self, char* hashed) {
 
 bool SecretsManager_needsPassword(SecretsManager* self, char* plainTextPasswordPath) {
     if (!SecretsManager_hasHashedPassword(self)) {
-        __auto_type __btrc_ret_410 = true;
-        return __btrc_ret_410;
+        return true;
     }
     if ((!__btrc_isEmpty(plainTextPasswordPath)) && (!FileSystem_exists(plainTextPasswordPath))) {
-        __auto_type __btrc_ret_411 = true;
-        return __btrc_ret_411;
+        return true;
     }
-    __auto_type __btrc_ret_412 = false;
-    return __btrc_ret_412;
+    return false;
 }
 
 char* SecretsManager_hashPassword(SecretsManager* self, char* password) {
@@ -12009,13 +4750,13 @@ char* SecretsManager_hashPassword(SecretsManager* self, char* password) {
     if (!ExecResult_ok(result)) {
         NixosLog_fatal("mkpasswd failed");
     }
-    __auto_type __btrc_ret_413 = ExecResult_trimmed(result);
+    char* __btrc_ret_66 = ExecResult_trimmed(result);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_413;
+    return __btrc_ret_66;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12089,8 +4830,7 @@ void PermissionsManager_destroy(PermissionsManager* self) {
 }
 
 char* PermissionsManager_ignorePredicate(PermissionsManager* self) {
-    __auto_type __btrc_ret_414 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\\( -path ", UnixShell_quote("*/secrets*"))), " -o -path ")), UnixShell_quote("*/.venv*"))), " -o -path ")), UnixShell_quote("*/.direnv*"))), " \\)"));
-    return __btrc_ret_414;
+    return __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\\( -path ", UnixShell_quote("*/secrets*"))), " -o -path ")), UnixShell_quote("*/.venv*"))), " -o -path ")), UnixShell_quote("*/.direnv*"))), " \\)"));
 }
 
 void PermissionsManager_findChmod(PermissionsManager* self, char* quotedRoot, char* ignores, char* predicate, char* mode) {
@@ -12219,34 +4959,29 @@ char* SnapshotManager_hostPath(SnapshotManager* self, char* path) {
         return path;
     }
     if (strcmp(path, "/") == 0) {
-        __auto_type __btrc_ret_415 = self->rootPrefix;
-        return __btrc_ret_415;
+        return self->rootPrefix;
     }
     if (__btrc_startsWith(path, "/")) {
-        __auto_type __btrc_ret_416 = __btrc_str_track(__btrc_strcat(self->rootPrefix, path));
-        return __btrc_ret_416;
+        return __btrc_str_track(__btrc_strcat(self->rootPrefix, path));
     }
-    __auto_type __btrc_ret_417 = PathTools_join(self->rootPrefix, path);
-    return __btrc_ret_417;
+    return PathTools_join(self->rootPrefix, path);
 }
 
 char* SnapshotManager_snapshotsPath(SnapshotManager* self) {
-    __auto_type __btrc_ret_418 = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.mountPoint");
-    return __btrc_ret_418;
+    return NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.mountPoint");
 }
 
 char* SnapshotManager_cleanName(SnapshotManager* self) {
-    __auto_type __btrc_ret_419 = NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName");
-    return __btrc_ret_419;
+    return NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName");
 }
 
 btrc_Vector_ResetSubvolume* SnapshotManager_resetSubvolumes(SnapshotManager* self) {
     btrc_Vector_ResetSubvolume* result = btrc_Vector_ResetSubvolume_new();
     char* raw = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
     btrc_Vector_string* pairs = Strings_split(raw, " ");
-    int __n_421 = btrc_Vector_string_iterLen(pairs);
-    for (int __i_420 = 0; (__i_420 < __n_421); (__i_420++)) {
-        char* pair = btrc_Vector_string_iterGet(pairs, __i_420);
+    int __n_68 = btrc_Vector_string_iterLen(pairs);
+    for (int __i_67 = 0; (__i_67 < __n_68); (__i_67++)) {
+        char* pair = btrc_Vector_string_iterGet(pairs, __i_67);
         if (__btrc_isEmpty(pair)) {
             continue;
         }
@@ -12259,25 +4994,21 @@ btrc_Vector_ResetSubvolume* SnapshotManager_resetSubvolumes(SnapshotManager* sel
 }
 
 char* SnapshotManager_cleanSnapshotPath(SnapshotManager* self, char* subvolumeName) {
-    __auto_type __btrc_ret_422 = PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self), subvolumeName), SnapshotManager_cleanName(self));
-    return __btrc_ret_422;
+    return PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self), subvolumeName), SnapshotManager_cleanName(self));
 }
 
 bool SnapshotManager_isSubvolume(SnapshotManager* self, char* path) {
     if (!FileSystem_exists(path)) {
-        __auto_type __btrc_ret_423 = false;
-        return __btrc_ret_423;
+        return false;
     }
     Command* cmd = Command_check(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "subvolume"), "show"), path), false);
-    __auto_type __btrc_ret_424 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
-    return __btrc_ret_424;
+    return ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
 }
 
 bool SnapshotManager_isReadonly(SnapshotManager* self, char* path) {
     Command* cmd = Command_check(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "property"), "get"), "-ts"), path), "ro"), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
-    __auto_type __btrc_ret_425 = (ExecResult_ok(result) && __btrc_strContains(ExecResult_stdout(result), "ro=true"));
-    return __btrc_ret_425;
+    return (ExecResult_ok(result) && __btrc_strContains(ExecResult_stdout(result), "ro=true"));
 }
 
 btrc_Vector_string* SnapshotManager_childSubvolumes(SnapshotManager* self, char* path) {
@@ -12289,9 +5020,9 @@ btrc_Vector_string* SnapshotManager_childSubvolumes(SnapshotManager* self, char*
     }
     char* snapshotsName = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.name");
     char* snapshotsMount = SnapshotManager_snapshotsPath(self);
-    int __n_427 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
-    for (int __i_426 = 0; (__i_426 < __n_427); (__i_426++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_426);
+    int __n_70 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
+    for (int __i_69 = 0; (__i_69 < __n_70); (__i_69++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_69);
         int marker = Strings_find(line, " path ", 0);
         if (marker < 0) {
             continue;
@@ -12315,9 +5046,9 @@ void SnapshotManager_deleteSubvolume(SnapshotManager* self, char* path) {
     if (!SnapshotManager_isSubvolume(self, path)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Refusing to delete non-subvolume: ", path)));
     }
-    int __n_429 = btrc_Vector_string_iterLen(SnapshotManager_childSubvolumes(self, path));
-    for (int __i_428 = 0; (__i_428 < __n_429); (__i_428++)) {
-        char* child = btrc_Vector_string_iterGet(SnapshotManager_childSubvolumes(self, path), __i_428);
+    int __n_72 = btrc_Vector_string_iterLen(SnapshotManager_childSubvolumes(self, path));
+    for (int __i_71 = 0; (__i_71 < __n_72); (__i_71++)) {
+        char* child = btrc_Vector_string_iterGet(SnapshotManager_childSubvolumes(self, path), __i_71);
         SnapshotManager_deleteSubvolume(self, child);
     }
     Command* cmd = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("btrfs"), "subvolume"), "delete"), "-C"), path), false);
@@ -12368,9 +5099,9 @@ void SnapshotManager_createCleanSnapshot(SnapshotManager* self, ResetSubvolume* 
 
 void SnapshotManager_createInitialSnapshots(SnapshotManager* self) {
     btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self);
-    int __n_431 = btrc_Vector_ResetSubvolume_iterLen(volumes);
-    for (int __i_430 = 0; (__i_430 < __n_431); (__i_430++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_430);
+    int __n_74 = btrc_Vector_ResetSubvolume_iterLen(volumes);
+    for (int __i_73 = 0; (__i_73 < __n_74); (__i_73++)) {
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_73);
         SnapshotManager_createCleanSnapshot(self, volume);
     }
 }
@@ -12426,39 +5157,17 @@ NixosRebuilder* NixosRebuilder_new(NixosConfig* config) {
     return self;
 }
 
-void NixosRebuilder_destroy(NixosRebuilder* self) {
-    if (self->config != NULL) {
-        if ((--self->config->__rc) <= 0) {
-            NixosConfig_destroy(self->config);
-        }
-    }
-    if (self->shell != NULL) {
-        if ((--self->shell->__rc) <= 0) {
-            UnixShell_destroy(self->shell);
-        }
-    }
-    if (self->interactive != NULL) {
-        if ((--self->interactive->__rc) <= 0) {
-            Interactive_destroy(self->interactive);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
 ExecResult* NixosRebuilder_runNixCollectGarbage(NixosRebuilder* self) {
     Command* cmd = Command_new("nix-collect-garbage");
     Command_arg(cmd, "-d");
     Command_capture(cmd, false);
-    __auto_type __btrc_ret_432 = UnixShell_runCommand(self->shell, cmd);
+    ExecResult* __btrc_ret_75 = UnixShell_runCommand(self->shell, cmd);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_432;
+    return __btrc_ret_75;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12471,13 +5180,13 @@ ExecResult* NixosRebuilder_verifyStore(NixosRebuilder* self) {
     Command_arg(cmd, "--verify");
     Command_arg(cmd, "--repair");
     Command_capture(cmd, false);
-    __auto_type __btrc_ret_433 = UnixShell_runCommand(self->shell, cmd);
+    ExecResult* __btrc_ret_76 = UnixShell_runCommand(self->shell, cmd);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_433;
+    return __btrc_ret_76;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12491,13 +5200,13 @@ ExecResult* NixosRebuilder_updateFlake(NixosRebuilder* self) {
     Command_arg(cmd, "update");
     Command_flag(cmd, "--flake", self->config->paths->root);
     Command_capture(cmd, false);
-    __auto_type __btrc_ret_434 = UnixShell_runCommand(self->shell, cmd);
+    ExecResult* __btrc_ret_77 = UnixShell_runCommand(self->shell, cmd);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_434;
+    return __btrc_ret_77;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12513,13 +5222,13 @@ ExecResult* NixosRebuilder_switchSystem(NixosRebuilder* self, RebuildOptions* op
         Command_envVar(cmd, "NIXOS_INSTALL_BOOTLOADER", "1");
     }
     Command_capture(cmd, false);
-    __auto_type __btrc_ret_435 = UnixShell_runCommand(self->shell, cmd);
+    ExecResult* __btrc_ret_78 = UnixShell_runCommand(self->shell, cmd);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_435;
+    return __btrc_ret_78;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -12529,11 +5238,9 @@ ExecResult* NixosRebuilder_switchSystem(NixosRebuilder* self, RebuildOptions* op
 
 char* NixosRebuilder_immutabilityDevice(NixosRebuilder* self) {
     if (NixosConfig_evalBool(self->config, "config.settings.disk.encryption.enable")) {
-        __auto_type __btrc_ret_436 = NixosConfig_evalRaw(self->config, "config.settings.disk.by.mapper.root");
-        return __btrc_ret_436;
+        return NixosConfig_evalRaw(self->config, "config.settings.disk.by.mapper.root");
     }
-    __auto_type __btrc_ret_437 = NixosConfig_rootPartLabelPath(self->config);
-    return __btrc_ret_437;
+    return NixosConfig_rootPartLabelPath(self->config);
 }
 
 void NixosRebuilder_bootstrapConfigIfMissing(NixosRebuilder* self, RebuildOptions* options) {
@@ -12548,19 +5255,17 @@ void NixosRebuilder_bootstrapConfigIfMissing(NixosRebuilder* self, RebuildOption
 
 char* NixosRebuilder_plainTextPasswordPath(NixosRebuilder* self) {
     if (NixosConfig_evalBool(self->config, "config.settings.disk.encryption.enable")) {
-        __auto_type __btrc_ret_438 = NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
-        return __btrc_ret_438;
+        return NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
     }
-    __auto_type __btrc_ret_439 = "";
-    return __btrc_ret_439;
+    return "";
 }
 
 char* NixosRebuilder_homeManagerLogs(NixosRebuilder* self) {
     ExecResult* result = UnixShell_runUnchecked(self->shell, "journalctl -u 'home-manager-*.service' --no-pager -o cat -q -r");
     btrc_Vector_string* lines = btrc_Vector_string_new();
-    int __n_441 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(result), "\n"));
-    for (int __i_440 = 0; (__i_440 < __n_441); (__i_440++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(result), "\n"), __i_440);
+    int __n_80 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(result), "\n"));
+    for (int __i_79 = 0; (__i_79 < __n_80); (__i_79++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(result), "\n"), __i_79);
         if (strcmp(line, "Starting Home Manager activation") == 0) {
             break;
         }
@@ -12572,8 +5277,7 @@ char* NixosRebuilder_homeManagerLogs(NixosRebuilder* self) {
         }
     }
     btrc_Vector_string_reverse(lines);
-    __auto_type __btrc_ret_442 = __btrc_str_track(__btrc_trim(btrc_Vector_string_join(lines, "\n")));
-    return __btrc_ret_442;
+    return __btrc_str_track(__btrc_trim(btrc_Vector_string_join(lines, "\n")));
 }
 
 void NixosRebuilder_refreshImmutableSnapshots(NixosRebuilder* self) {
@@ -12641,22 +5345,22 @@ void NixosRebuilder_refreshImmutableSnapshots(NixosRebuilder* self) {
 
 void NixosRebuilder_convergeMembrane(NixosRebuilder* self, char* mode, bool dryRun) {
     NixosLog_info("Converging semipermeable membrane after update");
-    btrc_Vector_string* __list_443 = btrc_Vector_string_new();
-    btrc_Vector_string_push(__list_443, "/run/current-system/sw/bin/semipermeable_membrane");
-    btrc_Vector_string_push(__list_443, NixosRebuilder_immutabilityDevice(self));
-    btrc_Vector_string_push(__list_443, NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.name"));
-    btrc_Vector_string_push(__list_443, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName"));
-    btrc_Vector_string_push(__list_443, mode);
-    btrc_Vector_string_push(__list_443, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot"));
-    btrc_Vector_string_push(__list_443, "/etc/semipermeable_membrane/spec.tsv");
-    btrc_Vector_string* args = __list_443;
+    btrc_Vector_string* __list_81 = btrc_Vector_string_new();
+    btrc_Vector_string_push(__list_81, "/run/current-system/sw/bin/semipermeable_membrane");
+    btrc_Vector_string_push(__list_81, NixosRebuilder_immutabilityDevice(self));
+    btrc_Vector_string_push(__list_81, NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.snapshots.name"));
+    btrc_Vector_string_push(__list_81, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.snapshots.cleanName"));
+    btrc_Vector_string_push(__list_81, mode);
+    btrc_Vector_string_push(__list_81, NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.semipermeable_membrane.persist.subvolumeRoot"));
+    btrc_Vector_string_push(__list_81, "/etc/semipermeable_membrane/spec.tsv");
+    btrc_Vector_string* args = __list_81;
     if (dryRun) {
         btrc_Vector_string_insert(args, 1, "--dry-run");
     }
     char* pairs = NixosConfig_evalRaw(self->config, "config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
-    int __n_445 = btrc_Vector_string_iterLen(Strings_split(pairs, " "));
-    for (int __i_444 = 0; (__i_444 < __n_445); (__i_444++)) {
-        char* pair = btrc_Vector_string_iterGet(Strings_split(pairs, " "), __i_444);
+    int __n_83 = btrc_Vector_string_iterLen(Strings_split(pairs, " "));
+    for (int __i_82 = 0; (__i_82 < __n_83); (__i_82++)) {
+        char* pair = btrc_Vector_string_iterGet(Strings_split(pairs, " "), __i_82);
         if (!__btrc_isEmpty(__btrc_str_track(__btrc_trim(pair)))) {
             btrc_Vector_string_push(args, __btrc_str_track(__btrc_trim(pair)));
         }
@@ -12769,36 +5473,14 @@ DiffScanner* DiffScanner_new(NixosConfig* config) {
     return self;
 }
 
-void DiffScanner_destroy(DiffScanner* self) {
-    if (self->config != NULL) {
-        if ((--self->config->__rc) <= 0) {
-            NixosConfig_destroy(self->config);
-        }
-    }
-    if (self->snapshots != NULL) {
-        if ((--self->snapshots->__rc) <= 0) {
-            SnapshotManager_destroy(self->snapshots);
-        }
-    }
-    if (self->shell != NULL) {
-        if ((--self->shell->__rc) <= 0) {
-            UnixShell_destroy(self->shell);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
 btrc_Vector_string* DiffScanner_keepPaths(DiffScanner* self) {
     char* raw = NixosConfig_evalRaw(self->config, "config.settings.disk.immutability.persist.paths");
     (raw = Strings_replace(raw, "[", ""));
     (raw = Strings_replace(raw, "]", ""));
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_447 = btrc_Vector_string_iterLen(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "));
-    for (int __i_446 = 0; (__i_446 < __n_447); (__i_446++)) {
-        char* item = btrc_Vector_string_iterGet(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "), __i_446);
+    int __n_85 = btrc_Vector_string_iterLen(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "));
+    for (int __i_84 = 0; (__i_84 < __n_85); (__i_84++)) {
+        char* item = btrc_Vector_string_iterGet(Strings_split(__btrc_str_track(__btrc_trim(raw)), " "), __i_84);
         if (!__btrc_isEmpty(__btrc_str_track(__btrc_trim(item)))) {
             btrc_Vector_string_push(result, __btrc_str_track(__btrc_trim(item)));
         }
@@ -12811,9 +5493,9 @@ btrc_Vector_string* DiffScanner_ignorePatterns(DiffScanner* self, char* path) {
     if (!FileSystem_exists(path)) {
         return patterns;
     }
-    int __n_449 = btrc_Vector_string_iterLen(Strings_split(Path_readAll(path), "\n"));
-    for (int __i_448 = 0; (__i_448 < __n_449); (__i_448++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(Path_readAll(path), "\n"), __i_448);
+    int __n_87 = btrc_Vector_string_iterLen(Strings_split(Path_readAll(path), "\n"));
+    for (int __i_86 = 0; (__i_86 < __n_87); (__i_86++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(Path_readAll(path), "\n"), __i_86);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         if ((!__btrc_isEmpty(trimmed)) && (!__btrc_startsWith(trimmed, "#"))) {
             btrc_Vector_string_push(patterns, trimmed);
@@ -12825,9 +5507,9 @@ btrc_Vector_string* DiffScanner_ignorePatterns(DiffScanner* self, char* path) {
 btrc_Vector_string* DiffScanner_mountPoints(DiffScanner* self) {
     btrc_Vector_string* result = btrc_Vector_string_new();
     btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self->snapshots);
-    int __n_451 = btrc_Vector_ResetSubvolume_iterLen(volumes);
-    for (int __i_450 = 0; (__i_450 < __n_451); (__i_450++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_450);
+    int __n_89 = btrc_Vector_ResetSubvolume_iterLen(volumes);
+    for (int __i_88 = 0; (__i_88 < __n_89); (__i_88++)) {
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_88);
         btrc_Vector_string_push(result, volume->mountPoint);
     }
     return result;
@@ -12836,9 +5518,9 @@ btrc_Vector_string* DiffScanner_mountPoints(DiffScanner* self) {
 btrc_Vector_string* DiffScanner_changedFiles(DiffScanner* self) {
     btrc_Vector_string* result = btrc_Vector_string_new();
     btrc_Vector_ResetSubvolume* volumes = SnapshotManager_resetSubvolumes(self->snapshots);
-    int __n_453 = btrc_Vector_ResetSubvolume_iterLen(volumes);
-    for (int __i_452 = 0; (__i_452 < __n_453); (__i_452++)) {
-        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_452);
+    int __n_91 = btrc_Vector_ResetSubvolume_iterLen(volumes);
+    for (int __i_90 = 0; (__i_90 < __n_91); (__i_90++)) {
+        ResetSubvolume* volume = btrc_Vector_ResetSubvolume_iterGet(volumes, __i_90);
         char* tmp = PathTools_join(PathTools_join(SnapshotManager_snapshotsPath(self->snapshots), volume->name), "tmp");
         char* clean = SnapshotManager_cleanSnapshotPath(self->snapshots, volume->name);
         SnapshotManager_deleteSubvolume(self->snapshots, tmp);
@@ -12847,9 +5529,9 @@ btrc_Vector_string* DiffScanner_changedFiles(DiffScanner* self) {
         char* transaction = ExecResult_trimmed(tx);
         ExecResult* changes = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("btrfs subvolume find-new ", UnixShell_quote(tmp))), " ")), UnixShell_quote(transaction))), " | sed '$d' | cut -f17- -d' ' | sort | uniq")));
         if (ExecResult_ok(changes)) {
-            int __n_455 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(changes), "\n"));
-            for (int __i_454 = 0; (__i_454 < __n_455); (__i_454++)) {
-                char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(changes), "\n"), __i_454);
+            int __n_93 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(changes), "\n"));
+            for (int __i_92 = 0; (__i_92 < __n_93); (__i_92++)) {
+                char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(changes), "\n"), __i_92);
                 if (!__btrc_isEmpty(__btrc_str_track(__btrc_trim(line)))) {
                     char* full = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(volume->mountPoint, "/")), __btrc_str_track(__btrc_trim(line))));
                     btrc_Vector_string_push(result, Strings_replace(full, "//", "/"));
@@ -12862,38 +5544,32 @@ btrc_Vector_string* DiffScanner_changedFiles(DiffScanner* self) {
 }
 
 bool DiffScanner_isPersisted(DiffScanner* self, char* path, btrc_Vector_string* keepPaths) {
-    int __n_457 = btrc_Vector_string_iterLen(keepPaths);
-    for (int __i_456 = 0; (__i_456 < __n_457); (__i_456++)) {
-        char* keepPath = btrc_Vector_string_iterGet(keepPaths, __i_456);
+    int __n_95 = btrc_Vector_string_iterLen(keepPaths);
+    for (int __i_94 = 0; (__i_94 < __n_95); (__i_94++)) {
+        char* keepPath = btrc_Vector_string_iterGet(keepPaths, __i_94);
         if ((strcmp(path, keepPath) == 0) || __btrc_startsWith(path, __btrc_str_track(__btrc_strcat(keepPath, "/")))) {
-            __auto_type __btrc_ret_458 = true;
-            return __btrc_ret_458;
+            return true;
         }
     }
-    __auto_type __btrc_ret_459 = false;
-    return __btrc_ret_459;
+    return false;
 }
 
 bool DiffScanner_matchesPattern(DiffScanner* self, char* path, char* pattern) {
     if (__btrc_isEmpty(pattern)) {
-        __auto_type __btrc_ret_460 = true;
-        return __btrc_ret_460;
+        return true;
     }
-    __auto_type __btrc_ret_461 = Pattern_matches(__btrc_str_track(__btrc_toLower(pattern)), __btrc_str_track(__btrc_toLower(path)));
-    return __btrc_ret_461;
+    return Pattern_matches(__btrc_str_track(__btrc_toLower(pattern)), __btrc_str_track(__btrc_toLower(path)));
 }
 
 bool DiffScanner_ignored(DiffScanner* self, char* path, btrc_Vector_string* patterns) {
-    int __n_463 = btrc_Vector_string_iterLen(patterns);
-    for (int __i_462 = 0; (__i_462 < __n_463); (__i_462++)) {
-        char* pattern = btrc_Vector_string_iterGet(patterns, __i_462);
+    int __n_97 = btrc_Vector_string_iterLen(patterns);
+    for (int __i_96 = 0; (__i_96 < __n_97); (__i_96++)) {
+        char* pattern = btrc_Vector_string_iterGet(patterns, __i_96);
         if (Pattern_matches(pattern, path)) {
-            __auto_type __btrc_ret_464 = true;
-            return __btrc_ret_464;
+            return true;
         }
     }
-    __auto_type __btrc_ret_465 = false;
-    return __btrc_ret_465;
+    return false;
 }
 
 char* DiffScanner_topAncestor(DiffScanner* self, char* path, btrc_Vector_string* keepList, btrc_Vector_string* mounts) {
@@ -12908,9 +5584,9 @@ char* DiffScanner_topAncestor(DiffScanner* self, char* path, btrc_Vector_string*
             continue;
         }
         bool coversKeep = false;
-        int __n_467 = btrc_Vector_string_iterLen(keepList);
-        for (int __i_466 = 0; (__i_466 < __n_467); (__i_466++)) {
-            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_466);
+        int __n_99 = btrc_Vector_string_iterLen(keepList);
+        for (int __i_98 = 0; (__i_98 < __n_99); (__i_98++)) {
+            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_98);
             if (__btrc_startsWith(keepPath, __btrc_str_track(__btrc_strcat(ancestor, "/")))) {
                 (coversKeep = true);
             }
@@ -12925,9 +5601,9 @@ char* DiffScanner_topAncestor(DiffScanner* self, char* path, btrc_Vector_string*
 
 btrc_Vector_string* DiffScanner_collapse(DiffScanner* self, btrc_Vector_string* paths, btrc_Vector_string* keepList, btrc_Vector_string* mounts) {
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_469 = btrc_Vector_string_iterLen(paths);
-    for (int __i_468 = 0; (__i_468 < __n_469); (__i_468++)) {
-        char* path = btrc_Vector_string_iterGet(paths, __i_468);
+    int __n_101 = btrc_Vector_string_iterLen(paths);
+    for (int __i_100 = 0; (__i_100 < __n_101); (__i_100++)) {
+        char* path = btrc_Vector_string_iterGet(paths, __i_100);
         btrc_Vector_string_push(result, DiffScanner_topAncestor(self, path, keepList, mounts));
     }
     btrc_Vector_string* distinct = btrc_Vector_string_distinct(result);
@@ -12937,12 +5613,12 @@ btrc_Vector_string* DiffScanner_collapse(DiffScanner* self, btrc_Vector_string* 
 
 btrc_Vector_string* DiffScanner_collapseToPersist(DiffScanner* self, btrc_Vector_string* persisted, btrc_Vector_string* keepList) {
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_471 = btrc_Vector_string_iterLen(persisted);
-    for (int __i_470 = 0; (__i_470 < __n_471); (__i_470++)) {
-        char* path = btrc_Vector_string_iterGet(persisted, __i_470);
-        int __n_473 = btrc_Vector_string_iterLen(keepList);
-        for (int __i_472 = 0; (__i_472 < __n_473); (__i_472++)) {
-            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_472);
+    int __n_103 = btrc_Vector_string_iterLen(persisted);
+    for (int __i_102 = 0; (__i_102 < __n_103); (__i_102++)) {
+        char* path = btrc_Vector_string_iterGet(persisted, __i_102);
+        int __n_105 = btrc_Vector_string_iterLen(keepList);
+        for (int __i_104 = 0; (__i_104 < __n_105); (__i_104++)) {
+            char* keepPath = btrc_Vector_string_iterGet(keepList, __i_104);
             if ((strcmp(path, keepPath) == 0) || __btrc_startsWith(path, __btrc_str_track(__btrc_strcat(keepPath, "/")))) {
                 btrc_Vector_string_push(result, keepPath);
                 break;
@@ -12959,13 +5635,13 @@ btrc_Vector_string* DiffScanner_atDepth(DiffScanner* self, btrc_Vector_string* b
         return bases;
     }
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_475 = btrc_Vector_string_iterLen(bases);
-    for (int __i_474 = 0; (__i_474 < __n_475); (__i_474++)) {
-        char* base = btrc_Vector_string_iterGet(bases, __i_474);
+    int __n_107 = btrc_Vector_string_iterLen(bases);
+    for (int __i_106 = 0; (__i_106 < __n_107); (__i_106++)) {
+        char* base = btrc_Vector_string_iterGet(bases, __i_106);
         char* prefix = __btrc_str_track(__btrc_strcat(base, "/"));
-        int __n_477 = btrc_Vector_string_iterLen(source);
-        for (int __i_476 = 0; (__i_476 < __n_477); (__i_476++)) {
-            char* path = btrc_Vector_string_iterGet(source, __i_476);
+        int __n_109 = btrc_Vector_string_iterLen(source);
+        for (int __i_108 = 0; (__i_108 < __n_109); (__i_108++)) {
+            char* path = btrc_Vector_string_iterGet(source, __i_108);
             if (!__btrc_startsWith(path, prefix)) {
                 continue;
             }
@@ -12996,9 +5672,9 @@ btrc_Vector_string* DiffScanner_filterPattern(DiffScanner* self, btrc_Vector_str
         return input;
     }
     btrc_Vector_string* output = btrc_Vector_string_new();
-    int __n_479 = btrc_Vector_string_iterLen(input);
-    for (int __i_478 = 0; (__i_478 < __n_479); (__i_478++)) {
-        char* path = btrc_Vector_string_iterGet(input, __i_478);
+    int __n_111 = btrc_Vector_string_iterLen(input);
+    for (int __i_110 = 0; (__i_110 < __n_111); (__i_110++)) {
+        char* path = btrc_Vector_string_iterGet(input, __i_110);
         if (DiffScanner_matchesPattern(self, path, pattern)) {
             btrc_Vector_string_push(output, path);
         }
@@ -13012,9 +5688,9 @@ btrc_Vector_string* DiffScanner_previousCache(DiffScanner* self, char* cachePath
         return result;
     }
     JsonObject* data = JsonObject_readFile(cachePath);
-    int __n_481 = btrc_Vector_string_iterLen(btrc_Map_string_string_keys(data->values));
-    for (int __i_480 = 0; (__i_480 < __n_481); (__i_480++)) {
-        char* key = btrc_Vector_string_iterGet(btrc_Map_string_string_keys(data->values), __i_480);
+    int __n_113 = btrc_Vector_string_iterLen(btrc_Map_string_string_keys(data->values));
+    for (int __i_112 = 0; (__i_112 < __n_113); (__i_112++)) {
+        char* key = btrc_Vector_string_iterGet(btrc_Map_string_string_keys(data->values), __i_112);
         btrc_Vector_string_push(result, key);
     }
     return result;
@@ -13022,9 +5698,9 @@ btrc_Vector_string* DiffScanner_previousCache(DiffScanner* self, char* cachePath
 
 void DiffScanner_writeCache(DiffScanner* self, char* cachePath, btrc_Vector_string* paths) {
     JsonObject* data = JsonObject_new();
-    int __n_483 = btrc_Vector_string_iterLen(paths);
-    for (int __i_482 = 0; (__i_482 < __n_483); (__i_482++)) {
-        char* path = btrc_Vector_string_iterGet(paths, __i_482);
+    int __n_115 = btrc_Vector_string_iterLen(paths);
+    for (int __i_114 = 0; (__i_114 < __n_115); (__i_114++)) {
+        char* path = btrc_Vector_string_iterGet(paths, __i_114);
         JsonObject_setBool(data, path, true);
     }
     FileSystem_mkdirp(PathTools_dirname(cachePath));
@@ -13044,9 +5720,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
     btrc_Vector_string* ephemeral = btrc_Vector_string_new();
     btrc_Vector_string* persistedPaths = btrc_Vector_string_new();
     btrc_Vector_string* changed = DiffScanner_changedFiles(self);
-    int __n_485 = btrc_Vector_string_iterLen(changed);
-    for (int __i_484 = 0; (__i_484 < __n_485); (__i_484++)) {
-        char* path = btrc_Vector_string_iterGet(changed, __i_484);
+    int __n_117 = btrc_Vector_string_iterLen(changed);
+    for (int __i_116 = 0; (__i_116 < __n_117); (__i_116++)) {
+        char* path = btrc_Vector_string_iterGet(changed, __i_116);
         if (DiffScanner_isPersisted(self, path, keepList)) {
             btrc_Vector_string_push(persistedPaths, path);
             continue;
@@ -13071,9 +5747,9 @@ void DiffScanner_print(DiffScanner* self, DiffOptions* options) {
     } else {
         NixosLog_error("\nCHANGES TO DELETE:");
     }
-    int __n_487 = btrc_Vector_string_iterLen(output);
-    for (int __i_486 = 0; (__i_486 < __n_487); (__i_486++)) {
-        char* path = btrc_Vector_string_iterGet(output, __i_486);
+    int __n_119 = btrc_Vector_string_iterLen(output);
+    for (int __i_118 = 0; (__i_118 < __n_119); (__i_118++)) {
+        char* path = btrc_Vector_string_iterGet(output, __i_118);
         Console_error(path);
     }
 }
@@ -13085,9 +5761,9 @@ btrc_Vector_string* DiffScanner_selectEphemeral(DiffScanner* self, btrc_Vector_s
     DiffScanner_writeCache(self, cachePath, top);
     if (options->recent) {
         btrc_Vector_string* recent = btrc_Vector_string_new();
-        int __n_489 = btrc_Vector_string_iterLen(top);
-        for (int __i_488 = 0; (__i_488 < __n_489); (__i_488++)) {
-            char* path = btrc_Vector_string_iterGet(top, __i_488);
+        int __n_121 = btrc_Vector_string_iterLen(top);
+        for (int __i_120 = 0; (__i_120 < __n_121); (__i_120++)) {
+            char* path = btrc_Vector_string_iterGet(top, __i_120);
             if (!btrc_Vector_string_contains(previous, path)) {
                 btrc_Vector_string_push(recent, path);
             }
@@ -13096,9 +5772,9 @@ btrc_Vector_string* DiffScanner_selectEphemeral(DiffScanner* self, btrc_Vector_s
     }
     if (!options->showSymlinks) {
         btrc_Vector_string* filtered = btrc_Vector_string_new();
-        int __n_491 = btrc_Vector_string_iterLen(top);
-        for (int __i_490 = 0; (__i_490 < __n_491); (__i_490++)) {
-            char* path = btrc_Vector_string_iterGet(top, __i_490);
+        int __n_123 = btrc_Vector_string_iterLen(top);
+        for (int __i_122 = 0; (__i_122 < __n_123); (__i_122++)) {
+            char* path = btrc_Vector_string_iterGet(top, __i_122);
             if (!FileSystem_isSymlink(path)) {
                 btrc_Vector_string_push(filtered, path);
             }
@@ -13107,9 +5783,9 @@ btrc_Vector_string* DiffScanner_selectEphemeral(DiffScanner* self, btrc_Vector_s
     }
     if (!__btrc_isEmpty(options->showChildren)) {
         bool covers = false;
-        int __n_493 = btrc_Vector_string_iterLen(top);
-        for (int __i_492 = 0; (__i_492 < __n_493); (__i_492++)) {
-            char* path = btrc_Vector_string_iterGet(top, __i_492);
+        int __n_125 = btrc_Vector_string_iterLen(top);
+        for (int __i_124 = 0; (__i_124 < __n_125); (__i_124++)) {
+            char* path = btrc_Vector_string_iterGet(top, __i_124);
             if (((strcmp(path, options->showChildren) == 0) || __btrc_startsWith(options->showChildren, __btrc_str_track(__btrc_strcat(path, "/")))) || __btrc_startsWith(path, __btrc_str_track(__btrc_strcat(options->showChildren, "/")))) {
                 (covers = true);
             }
@@ -13118,11 +5794,9 @@ btrc_Vector_string* DiffScanner_selectEphemeral(DiffScanner* self, btrc_Vector_s
         if (covers) {
             btrc_Vector_string_push(bases, options->showChildren);
         }
-        __auto_type __btrc_ret_494 = DiffScanner_atDepth(self, bases, ephemeral, options->depth);
-        return __btrc_ret_494;
+        return DiffScanner_atDepth(self, bases, ephemeral, options->depth);
     }
-    __auto_type __btrc_ret_495 = DiffScanner_atDepth(self, top, ephemeral, options->depth);
-    return __btrc_ret_495;
+    return DiffScanner_atDepth(self, top, ephemeral, options->depth);
 }
 
 void Installer_init(Installer* self, NixosConfig* config) {
@@ -13186,18 +5860,15 @@ ExecResult* Installer_runDisko(Installer* self, char* mode, char* extraArgs) {
         (rev = "master");
     }
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("nix --extra-experimental-features nix-command --extra-experimental-features flakes run ", "github:nix-community/disko/")), rev)), " --verbose -- --show-trace --flake ")), UnixShell_quote(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(self->config->paths->root, "#")), NixosConfig_host(self->config))), "-")), NixosConfig_diskOperationTarget(self->config)))))), " --mode ")), UnixShell_quote(mode))), " --root-mountpoint ")), UnixShell_quote(self->mountPoint))), " ")), extraArgs));
-    __auto_type __btrc_ret_496 = UnixShell_runRaw(self->shell, command, false, true, "");
-    return __btrc_ret_496;
+    return UnixShell_runRaw(self->shell, command, false, true, "");
 }
 
 ExecResult* Installer_mountDisk(Installer* self) {
-    __auto_type __btrc_ret_497 = Installer_runDisko(self, "mount", "");
-    return __btrc_ret_497;
+    return Installer_runDisko(self, "mount", "");
 }
 
 ExecResult* Installer_eraseAndMountDisk(Installer* self) {
-    __auto_type __btrc_ret_498 = Installer_runDisko(self, "destroy,format,mount", "--yes-wipe-all-disks");
-    return __btrc_ret_498;
+    return Installer_runDisko(self, "destroy,format,mount", "--yes-wipe-all-disks");
 }
 
 ExecResult* Installer_installNixos(Installer* self) {
@@ -13269,11 +5940,9 @@ void Installer_permissionNixos(Installer* self) {
 
 char* Installer_plainTextPasswordPath(Installer* self) {
     if (NixosConfig_evalBool(self->config, "config.settings.disk.encryption.enable")) {
-        __auto_type __btrc_ret_499 = NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
-        return __btrc_ret_499;
+        return NixosConfig_evalRaw(self->config, "config.settings.disk.encryption.plainTextPasswordFile");
     }
-    __auto_type __btrc_ret_500 = "";
-    return __btrc_ret_500;
+    return "";
 }
 
 void Installer_bootstrapConfigIfMissing(Installer* self) {
@@ -13464,9 +6133,9 @@ void SecureBootManager_verify(SecureBootManager* self) {
         NixosLog_info("All EFI binaries are signed");
         return;
     }
-    int __n_504 = btrc_Vector_string_iterLen(unsignedPaths);
-    for (int __i_503 = 0; (__i_503 < __n_504); (__i_503++)) {
-        char* path = btrc_Vector_string_iterGet(unsignedPaths, __i_503);
+    int __n_127 = btrc_Vector_string_iterLen(unsignedPaths);
+    for (int __i_126 = 0; (__i_126 < __n_127); (__i_126++)) {
+        char* path = btrc_Vector_string_iterGet(unsignedPaths, __i_126);
         NixosLog_error(__btrc_str_track(__btrc_strcat("NOT signed: ", path)));
     }
 }
@@ -13552,12 +6221,10 @@ void Tpm2Manager_destroy(Tpm2Manager* self) {
 
 bool Tpm2Manager_exists(Tpm2Manager* self) {
     if (!FileSystem_exists(NixosConfig_tpmDevice(self->config))) {
-        __auto_type __btrc_ret_505 = false;
-        return __btrc_ret_505;
+        return false;
     }
     char* version = __btrc_str_track(__btrc_trim(Path_readAll(NixosConfig_tpmVersionPath(self->config))));
-    __auto_type __btrc_ret_506 = (strcmp(version, "2") == 0);
-    return __btrc_ret_506;
+    return (strcmp(version, "2") == 0);
 }
 
 bool Tpm2Manager_diskEncrypted(Tpm2Manager* self) {
@@ -13566,13 +6233,13 @@ bool Tpm2Manager_diskEncrypted(Tpm2Manager* self) {
     Command_arg(cmd, NixosConfig_rootPartLabelPath(self->config));
     Command_check(cmd, false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
-    __auto_type __btrc_ret_507 = ExecResult_ok(result);
+    bool __btrc_ret_128 = ExecResult_ok(result);
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_507;
+    return __btrc_ret_128;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -13588,13 +6255,13 @@ bool Tpm2Manager_enroll(Tpm2Manager* self) {
     Command_arg(cmd, "--tpm2-pcrs=7+12");
     Command_capture(cmd, false);
     Command_check(cmd, false);
-    __auto_type __btrc_ret_508 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
+    bool __btrc_ret_129 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_508;
+    return __btrc_ret_129;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -13608,13 +6275,13 @@ bool Tpm2Manager_wipe(Tpm2Manager* self) {
     Command_arg(cmd, "--wipe-slot=tpm2");
     Command_capture(cmd, false);
     Command_check(cmd, false);
-    __auto_type __btrc_ret_509 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
+    bool __btrc_ret_130 = ExecResult_ok(UnixShell_runCommand(self->shell, cmd));
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
         }
     }
-    return __btrc_ret_509;
+    return __btrc_ret_130;
     if (cmd != NULL) {
         if ((--cmd->__rc) <= 0) {
             Command_destroy(cmd);
@@ -13662,33 +6329,10 @@ PasswordManager* PasswordManager_new(NixosConfig* config) {
     return self;
 }
 
-void PasswordManager_destroy(PasswordManager* self) {
-    if (self->config != NULL) {
-        if ((--self->config->__rc) <= 0) {
-            NixosConfig_destroy(self->config);
-        }
-    }
-    if (self->shell != NULL) {
-        if ((--self->shell->__rc) <= 0) {
-            UnixShell_destroy(self->shell);
-        }
-    }
-    if (self->secrets != NULL) {
-        if ((--self->secrets->__rc) <= 0) {
-            SecretsManager_destroy(self->secrets);
-        }
-    }
-    if (__btrc_tracking) {
-        __btrc_mark_destroyed(self);
-    }
-    free(self);
-}
-
 bool PasswordManager_changeLuksPassword(PasswordManager* self, char* oldPassword, char* newPassword) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf '%s\\n%s' ", UnixShell_quote(oldPassword))), " ")), UnixShell_quote(newPassword))), " | cryptsetup luksChangeKey ")), UnixShell_quote(NixosConfig_rootPartLabelPath(self->config))));
     ExecResult* result = UnixShell_runRaw(self->shell, command, false, false, oldPassword);
-    __auto_type __btrc_ret_510 = ExecResult_ok(result);
-    return __btrc_ret_510;
+    return ExecResult_ok(result);
 }
 
 void PasswordManager_fallbackChangeUserPassword(PasswordManager* self, char* user, char* password) {
@@ -13807,15 +6451,14 @@ void LabelsConfig_destroy(LabelsConfig* self) {
 }
 
 char* LabelsConfig_displayLabel(LabelsConfig* self, char* name) {
-    __auto_type __btrc_ret_511 = btrc_Map_string_string_getOrDefault(Toml_sectionMap(self->content, "displays"), name, name);
-    return __btrc_ret_511;
+    return btrc_Map_string_string_getOrDefault(Toml_sectionMap(self->content, "displays"), name, name);
 }
 
 btrc_Vector_DisplayLayoutRule* LabelsConfig_layoutRules(LabelsConfig* self) {
     btrc_Vector_DisplayLayoutRule* result = btrc_Vector_DisplayLayoutRule_new();
-    int __n_513 = btrc_Vector_Map_string_string_iterLen(Toml_tableArrayBlocks(self->content, "layout"));
-    for (int __i_512 = 0; (__i_512 < __n_513); (__i_512++)) {
-        btrc_Map_string_string* block = btrc_Vector_Map_string_string_iterGet(Toml_tableArrayBlocks(self->content, "layout"), __i_512);
+    int __n_132 = btrc_Vector_Map_string_string_iterLen(Toml_tableArrayBlocks(self->content, "layout"));
+    for (int __i_131 = 0; (__i_131 < __n_132); (__i_131++)) {
+        btrc_Map_string_string* block = btrc_Vector_Map_string_string_iterGet(Toml_tableArrayBlocks(self->content, "layout"), __i_131);
         DisplayLayoutRule* rule = DisplayLayoutRule_new();
         (rule->display = btrc_Map_string_string_getOrDefault(block, "display", ""));
         (rule->position = btrc_Map_string_string_getOrDefault(block, "position", ""));
@@ -13834,9 +6477,9 @@ btrc_Vector_DisplayLayoutRule* LabelsConfig_layoutRules(LabelsConfig* self) {
 
 btrc_Vector_AudioPreset* LabelsConfig_audioPresets(LabelsConfig* self) {
     btrc_Vector_AudioPreset* result = btrc_Vector_AudioPreset_new();
-    int __n_515 = btrc_Vector_Map_string_string_iterLen(Toml_tableArrayBlocks(self->content, "audio"));
-    for (int __i_514 = 0; (__i_514 < __n_515); (__i_514++)) {
-        btrc_Map_string_string* block = btrc_Vector_Map_string_string_iterGet(Toml_tableArrayBlocks(self->content, "audio"), __i_514);
+    int __n_134 = btrc_Vector_Map_string_string_iterLen(Toml_tableArrayBlocks(self->content, "audio"));
+    for (int __i_133 = 0; (__i_133 < __n_134); (__i_133++)) {
+        btrc_Map_string_string* block = btrc_Vector_Map_string_string_iterGet(Toml_tableArrayBlocks(self->content, "audio"), __i_133);
         AudioPreset* preset = AudioPreset_new();
         (preset->label = btrc_Map_string_string_getOrDefault(block, "label", ""));
         (preset->card = btrc_Map_string_string_getOrDefault(block, "card", ""));
@@ -13916,34 +6559,29 @@ void AudioManager_destroy(AudioManager* self) {
 
 char* AudioManager_current(AudioManager* self) {
     ExecResult* result = UnixShell_runUnchecked(self->shell, "pactl get-default-sink");
-    __auto_type __btrc_ret_516 = ExecResult_trimmed(result);
-    return __btrc_ret_516;
+    return ExecResult_trimmed(result);
 }
 
 char* AudioManager_jsonStringValue(AudioManager* self, char* line, char* key) {
     char* marker = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", key)), "\""));
     int pos = Strings_find(line, marker, 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_517 = "";
-        return __btrc_ret_517;
+        return "";
     }
     int colon = Strings_find(line, ":", pos);
     if (colon < 0) {
-        __auto_type __btrc_ret_518 = "";
-        return __btrc_ret_518;
+        return "";
     }
     int quote = Strings_find(line, "\"", (colon + 1));
     if (quote < 0) {
-        __auto_type __btrc_ret_519 = "";
-        return __btrc_ret_519;
+        return "";
     }
     int end = (quote + 1);
     bool escaped = false;
     while (end < ((int)strlen(line))) {
         char c = line[end];
         if ((!escaped) && (c == ((char)34))) {
-            __auto_type __btrc_ret_520 = JsonObject_slice(line, (quote + 1), end);
-            return __btrc_ret_520;
+            return JsonObject_slice(line, (quote + 1), end);
         }
         (escaped = ((!escaped) && (c == '\\')));
         if (c != '\\') {
@@ -13951,17 +6589,16 @@ char* AudioManager_jsonStringValue(AudioManager* self, char* line, char* key) {
         }
         (end++);
     }
-    __auto_type __btrc_ret_521 = "";
-    return __btrc_ret_521;
+    return "";
 }
 
 btrc_Vector_AudioSink* AudioManager_sinks(AudioManager* self) {
     btrc_Vector_AudioSink* result = btrc_Vector_AudioSink_new();
     ExecResult* listed = UnixShell_runUnchecked(self->shell, "pactl -f json list sinks");
     AudioSink* current = AudioSink_new();
-    int __n_523 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
-    for (int __i_522 = 0; (__i_522 < __n_523); (__i_522++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_522);
+    int __n_136 = btrc_Vector_string_iterLen(Strings_split(ExecResult_stdout(listed), "\n"));
+    for (int __i_135 = 0; (__i_135 < __n_136); (__i_135++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(ExecResult_stdout(listed), "\n"), __i_135);
         char* name = AudioManager_jsonStringValue(self, line, "name");
         if (!__btrc_isEmpty(name)) {
             if (!__btrc_isEmpty(current->name)) {
@@ -14019,9 +6656,9 @@ void AudioManager_list(AudioManager* self) {
     btrc_Vector_string* entries = btrc_Vector_string_new();
     btrc_Vector_string* covered = btrc_Vector_string_new();
     btrc_Vector_AudioPreset* presets = LabelsConfig_audioPresets(self->labels);
-    int __n_525 = btrc_Vector_AudioPreset_iterLen(presets);
-    for (int __i_524 = 0; (__i_524 < __n_525); (__i_524++)) {
-        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_524);
+    int __n_138 = btrc_Vector_AudioPreset_iterLen(presets);
+    for (int __i_137 = 0; (__i_137 < __n_138); (__i_137++)) {
+        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_137);
         char* name = (__btrc_isEmpty(preset->sink) ? preset->label : preset->sink);
         char* label = (__btrc_isEmpty(preset->label) ? name : preset->label);
         btrc_Vector_string_push(entries, AudioManager_entryJson(self, name, label, "", ((!__btrc_isEmpty(preset->sink)) && (strcmp(preset->sink, currentSink) == 0))));
@@ -14030,9 +6667,9 @@ void AudioManager_list(AudioManager* self) {
         }
     }
     btrc_Vector_AudioSink* allSinks = AudioManager_sinks(self);
-    int __n_527 = btrc_Vector_AudioSink_iterLen(allSinks);
-    for (int __i_526 = 0; (__i_526 < __n_527); (__i_526++)) {
-        AudioSink* sink = btrc_Vector_AudioSink_iterGet(allSinks, __i_526);
+    int __n_140 = btrc_Vector_AudioSink_iterLen(allSinks);
+    for (int __i_139 = 0; (__i_139 < __n_140); (__i_139++)) {
+        AudioSink* sink = btrc_Vector_AudioSink_iterGet(allSinks, __i_139);
         if (!btrc_Vector_string_contains(covered, sink->name)) {
             char* label = (__btrc_isEmpty(sink->description) ? sink->name : sink->description);
             btrc_Vector_string_push(entries, AudioManager_entryJson(self, sink->name, label, sink->description, (strcmp(sink->name, currentSink) == 0)));
@@ -14043,15 +6680,14 @@ void AudioManager_list(AudioManager* self) {
 
 AudioPreset* AudioManager_findPreset(AudioManager* self, char* selector) {
     btrc_Vector_AudioPreset* presets = LabelsConfig_audioPresets(self->labels);
-    int __n_529 = btrc_Vector_AudioPreset_iterLen(presets);
-    for (int __i_528 = 0; (__i_528 < __n_529); (__i_528++)) {
-        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_528);
+    int __n_142 = btrc_Vector_AudioPreset_iterLen(presets);
+    for (int __i_141 = 0; (__i_141 < __n_142); (__i_141++)) {
+        AudioPreset* preset = btrc_Vector_AudioPreset_iterGet(presets, __i_141);
         if ((strcmp(selector, preset->label) == 0) || (strcmp(selector, preset->sink) == 0)) {
             return preset;
         }
     }
-    __auto_type __btrc_ret_530 = AudioPreset_new();
-    return __btrc_ret_530;
+    return AudioPreset_new();
 }
 
 void AudioManager_applyPreset(AudioManager* self, AudioPreset* preset) {
@@ -14113,27 +6749,23 @@ void CaffeineManager_destroy(CaffeineManager* self) {
 
 int CaffeineManager_pid(CaffeineManager* self) {
     if (!FileSystem_exists(self->pidFile)) {
-        __auto_type __btrc_ret_531 = 0;
-        return __btrc_ret_531;
+        return 0;
     }
     int existing = Strings_toInt(__btrc_str_track(__btrc_trim(Path_readAll(self->pidFile))));
     if (existing <= 0) {
         FileSystem_removeRecursive(self->pidFile);
-        __auto_type __btrc_ret_532 = 0;
-        return __btrc_ret_532;
+        return 0;
     }
     ExecResult* alive = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat("kill -0 ", Strings_fromInt(existing))));
     if (!ExecResult_ok(alive)) {
         FileSystem_removeRecursive(self->pidFile);
-        __auto_type __btrc_ret_533 = 0;
-        return __btrc_ret_533;
+        return 0;
     }
     return existing;
 }
 
 bool CaffeineManager_enabled(CaffeineManager* self) {
-    __auto_type __btrc_ret_534 = (CaffeineManager_pid(self) > 0);
-    return __btrc_ret_534;
+    return (CaffeineManager_pid(self) > 0);
 }
 
 void CaffeineManager_enable(CaffeineManager* self) {
@@ -14252,29 +6884,25 @@ void DisplayManager_destroy(DisplayManager* self) {
 
 char* DisplayManager_kscreen(DisplayManager* self) {
     ExecResult* result = UnixShell_runUnchecked(self->shell, "kscreen-doctor -o | sed -E 's/\\x1b\\[[0-9;]*m//g'");
-    __auto_type __btrc_ret_535 = ExecResult_stdout(result);
-    return __btrc_ret_535;
+    return ExecResult_stdout(result);
 }
 
 bool DisplayManager_drmConnected(DisplayManager* self, char* name) {
     char* status = PathTools_join(PathTools_join("/sys/class/drm", __btrc_str_track(__btrc_strcat("card*-", name))), "status");
     ExecResult* result = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cat ", status)), " 2>/dev/null | head -n 1")));
-    __auto_type __btrc_ret_536 = (strcmp(ExecResult_trimmed(result), "connected") == 0);
-    return __btrc_ret_536;
+    return (strcmp(ExecResult_trimmed(result), "connected") == 0);
 }
 
 char* DisplayManager_lineValue(DisplayManager* self, char* block, char* prefix) {
-    int __n_538 = btrc_Vector_string_iterLen(Strings_split(block, "\n"));
-    for (int __i_537 = 0; (__i_537 < __n_538); (__i_537++)) {
-        char* line = btrc_Vector_string_iterGet(Strings_split(block, "\n"), __i_537);
+    int __n_144 = btrc_Vector_string_iterLen(Strings_split(block, "\n"));
+    for (int __i_143 = 0; (__i_143 < __n_144); (__i_143++)) {
+        char* line = btrc_Vector_string_iterGet(Strings_split(block, "\n"), __i_143);
         char* trimmed = __btrc_str_track(__btrc_trim(line));
         if (__btrc_startsWith(trimmed, prefix)) {
-            __auto_type __btrc_ret_539 = __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(trimmed, ((int)strlen(prefix)), (((int)strlen(trimmed)) - ((int)strlen(prefix)))))));
-            return __btrc_ret_539;
+            return __btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(trimmed, ((int)strlen(prefix)), (((int)strlen(trimmed)) - ((int)strlen(prefix)))))));
         }
     }
-    __auto_type __btrc_ret_540 = "";
-    return __btrc_ret_540;
+    return "";
 }
 
 DisplayOutput* DisplayManager_parseBlock(DisplayManager* self, char* block) {
@@ -14296,25 +6924,25 @@ DisplayOutput* DisplayManager_parseBlock(DisplayManager* self, char* block) {
     if (!__btrc_isEmpty(priority)) {
         (output->priority = Strings_toInt(priority));
     }
-    btrc_Vector_string* __list_541 = btrc_Vector_string_new();
-    btrc_Vector_string_push(__list_541, "HDMI");
-    btrc_Vector_string_push(__list_541, "DisplayPort");
-    btrc_Vector_string_push(__list_541, "VGA");
-    btrc_Vector_string_push(__list_541, "DVI");
-    btrc_Vector_string_push(__list_541, "Panel");
-    btrc_Vector_string_push(__list_541, "TV");
-    btrc_Vector_string_push(__list_541, "Unknown");
-    int __n_543 = btrc_Vector_string_iterLen(__list_541);
-    for (int __i_542 = 0; (__i_542 < __n_543); (__i_542++)) {
-        btrc_Vector_string* __list_541 = btrc_Vector_string_new();
-        btrc_Vector_string_push(__list_541, "HDMI");
-        btrc_Vector_string_push(__list_541, "DisplayPort");
-        btrc_Vector_string_push(__list_541, "VGA");
-        btrc_Vector_string_push(__list_541, "DVI");
-        btrc_Vector_string_push(__list_541, "Panel");
-        btrc_Vector_string_push(__list_541, "TV");
-        btrc_Vector_string_push(__list_541, "Unknown");
-        char* kind = btrc_Vector_string_iterGet(__list_541, __i_542);
+    btrc_Vector_string* __list_145 = btrc_Vector_string_new();
+    btrc_Vector_string_push(__list_145, "HDMI");
+    btrc_Vector_string_push(__list_145, "DisplayPort");
+    btrc_Vector_string_push(__list_145, "VGA");
+    btrc_Vector_string_push(__list_145, "DVI");
+    btrc_Vector_string_push(__list_145, "Panel");
+    btrc_Vector_string_push(__list_145, "TV");
+    btrc_Vector_string_push(__list_145, "Unknown");
+    int __n_147 = btrc_Vector_string_iterLen(__list_145);
+    for (int __i_146 = 0; (__i_146 < __n_147); (__i_146++)) {
+        btrc_Vector_string* __list_145 = btrc_Vector_string_new();
+        btrc_Vector_string_push(__list_145, "HDMI");
+        btrc_Vector_string_push(__list_145, "DisplayPort");
+        btrc_Vector_string_push(__list_145, "VGA");
+        btrc_Vector_string_push(__list_145, "DVI");
+        btrc_Vector_string_push(__list_145, "Panel");
+        btrc_Vector_string_push(__list_145, "TV");
+        btrc_Vector_string_push(__list_145, "Unknown");
+        char* kind = btrc_Vector_string_iterGet(__list_145, __i_146);
         if (__btrc_strContains(block, __btrc_str_track(__btrc_strcat("\t", kind)))) {
             (output->kind = kind);
         }
@@ -14351,9 +6979,9 @@ void DisplayManager_applyGeometry(DisplayManager* self, DisplayOutput* output, c
 
 btrc_Vector_DisplayOutput* DisplayManager_outputs(DisplayManager* self) {
     btrc_Vector_DisplayOutput* result = btrc_Vector_DisplayOutput_new();
-    int __n_545 = btrc_Vector_string_iterLen(Strings_split(DisplayManager_kscreen(self), "Output: "));
-    for (int __i_544 = 0; (__i_544 < __n_545); (__i_544++)) {
-        char* block = btrc_Vector_string_iterGet(Strings_split(DisplayManager_kscreen(self), "Output: "), __i_544);
+    int __n_149 = btrc_Vector_string_iterLen(Strings_split(DisplayManager_kscreen(self), "Output: "));
+    for (int __i_148 = 0; (__i_148 < __n_149); (__i_148++)) {
+        char* block = btrc_Vector_string_iterGet(Strings_split(DisplayManager_kscreen(self), "Output: "), __i_148);
         char* trimmed = __btrc_str_track(__btrc_trim(block));
         if (__btrc_isEmpty(trimmed)) {
             continue;
@@ -14367,15 +6995,14 @@ btrc_Vector_DisplayOutput* DisplayManager_outputs(DisplayManager* self) {
 }
 
 DisplayOutput* DisplayManager_findOutput(DisplayManager* self, char* name, btrc_Vector_DisplayOutput* outputs) {
-    int __n_547 = btrc_Vector_DisplayOutput_iterLen(outputs);
-    for (int __i_546 = 0; (__i_546 < __n_547); (__i_546++)) {
-        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(outputs, __i_546);
+    int __n_151 = btrc_Vector_DisplayOutput_iterLen(outputs);
+    for (int __i_150 = 0; (__i_150 < __n_151); (__i_150++)) {
+        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(outputs, __i_150);
         if (strcmp(output->name, name) == 0) {
             return output;
         }
     }
-    __auto_type __btrc_ret_548 = DisplayOutput_new();
-    return __btrc_ret_548;
+    return DisplayOutput_new();
 }
 
 void DisplayManager_run(DisplayManager* self, char* arg) {
@@ -14403,9 +7030,9 @@ void DisplayManager_dpms(DisplayManager* self, char* state) {
 
 void DisplayManager_layout(DisplayManager* self) {
     btrc_Vector_DisplayLayoutRule* rules = LabelsConfig_layoutRules(self->labels);
-    int __n_550 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
-    for (int __i_549 = 0; (__i_549 < __n_550); (__i_549++)) {
-        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_549);
+    int __n_153 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
+    for (int __i_152 = 0; (__i_152 < __n_153); (__i_152++)) {
+        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_152);
         DisplayManager_applyLayout(self, rule->display);
     }
 }
@@ -14413,9 +7040,9 @@ void DisplayManager_layout(DisplayManager* self) {
 void DisplayManager_applyLayout(DisplayManager* self, char* name) {
     DisplayLayoutRule* selected = DisplayLayoutRule_new();
     btrc_Vector_DisplayLayoutRule* rules = LabelsConfig_layoutRules(self->labels);
-    int __n_552 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
-    for (int __i_551 = 0; (__i_551 < __n_552); (__i_551++)) {
-        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_551);
+    int __n_155 = btrc_Vector_DisplayLayoutRule_iterLen(rules);
+    for (int __i_154 = 0; (__i_154 < __n_155); (__i_154++)) {
+        DisplayLayoutRule* rule = btrc_Vector_DisplayLayoutRule_iterGet(rules, __i_154);
         if (strcmp(rule->display, name) == 0) {
             (selected = rule);
         }
@@ -14461,9 +7088,9 @@ void DisplayManager_applyLayout(DisplayManager* self, char* name) {
 void DisplayManager_list(DisplayManager* self) {
     btrc_Vector_string* rows = btrc_Vector_string_new();
     btrc_Vector_DisplayOutput* all = DisplayManager_outputs(self);
-    int __n_554 = btrc_Vector_DisplayOutput_iterLen(all);
-    for (int __i_553 = 0; (__i_553 < __n_554); (__i_553++)) {
-        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(all, __i_553);
+    int __n_157 = btrc_Vector_DisplayOutput_iterLen(all);
+    for (int __i_156 = 0; (__i_156 < __n_157); (__i_156++)) {
+        DisplayOutput* output = btrc_Vector_DisplayOutput_iterGet(all, __i_156);
         btrc_Vector_string_push(rows, DisplayOutput_json(output));
     }
     Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("[", btrc_Vector_string_join(rows, ","))), "]")));
@@ -14575,10 +7202,10 @@ void VmTestSpec_init(VmTestSpec* self) {
             btrc_Vector_VmOperation_free(self->operations);
         }
     }
-    btrc_Vector_VmOperation* __list_556 = btrc_Vector_VmOperation_new();
-    (self->operations = __list_556);
-    btrc_Vector_VmOperation* __list_555 = btrc_Vector_VmOperation_new();
-    (__list_555->__rc++);
+    btrc_Vector_VmOperation* __list_159 = btrc_Vector_VmOperation_new();
+    (self->operations = __list_159);
+    btrc_Vector_VmOperation* __list_158 = btrc_Vector_VmOperation_new();
+    (__list_158->__rc++);
 }
 
 VmTestSpec* VmTestSpec_new(void) {
@@ -14658,39 +7285,33 @@ void VmTestSpec_refreshDerivedArgs(VmTestSpec* self) {
 }
 
 char* VmTestSpec_stateDir(VmTestSpec* self) {
-    __auto_type __btrc_ret_557 = PathTools_join(self->stateRoot, self->state);
-    return __btrc_ret_557;
+    return PathTools_join(self->stateRoot, self->state);
 }
 
 char* VmTestSpec_stateHashFile(VmTestSpec* self) {
-    __auto_type __btrc_ret_558 = PathTools_join(VmTestSpec_stateDir(self), "hash");
-    return __btrc_ret_558;
+    return PathTools_join(VmTestSpec_stateDir(self), "hash");
 }
 
 char* VmTestSpec_parentHashFile(VmTestSpec* self) {
-    __auto_type __btrc_ret_559 = PathTools_join(PathTools_join(self->stateRoot, self->parentState), "hash");
-    return __btrc_ret_559;
+    return PathTools_join(PathTools_join(self->stateRoot, self->parentState), "hash");
 }
 
 char* VmTestSpec_resolveParentHash(VmTestSpec* self) {
     if ((strcmp(self->parentState, "root") == 0) || __btrc_isEmpty(self->parentState)) {
-        __auto_type __btrc_ret_560 = "root";
-        return __btrc_ret_560;
+        return "root";
     }
     char* path = VmTestSpec_parentHashFile(self);
     if (FileSystem_exists(path)) {
-        __auto_type __btrc_ret_561 = __btrc_str_track(__btrc_trim(Path_readAll(path)));
-        return __btrc_ret_561;
+        return __btrc_str_track(__btrc_trim(Path_readAll(path)));
     }
-    __auto_type __btrc_ret_562 = __btrc_str_track(__btrc_strcat("missing:", self->parentState));
-    return __btrc_ret_562;
+    return __btrc_str_track(__btrc_strcat("missing:", self->parentState));
 }
 
 char* VmTestSpec_operationsMaterial(VmTestSpec* self) {
     btrc_Vector_string* lines = btrc_Vector_string_new();
-    int __n_564 = btrc_Vector_VmOperation_iterLen(self->operations);
-    for (int __i_563 = 0; (__i_563 < __n_564); (__i_563++)) {
-        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_563);
+    int __n_161 = btrc_Vector_VmOperation_iterLen(self->operations);
+    for (int __i_160 = 0; (__i_160 < __n_161); (__i_160++)) {
+        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_160);
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("op=", op->kind)));
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("name=", op->name)));
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("command=", op->command)));
@@ -14699,23 +7320,21 @@ char* VmTestSpec_operationsMaterial(VmTestSpec* self) {
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("remote=", op->remotePath)));
         btrc_Vector_string_push(lines, __btrc_str_track(__btrc_strcat("timeout=", Strings_fromInt(op->timeout))));
     }
-    __auto_type __btrc_ret_565 = btrc_Vector_string_join(lines, "\n");
-    return __btrc_ret_565;
+    return btrc_Vector_string_join(lines, "\n");
 }
 
 char* VmTestSpec_hashMaterial(VmTestSpec* self) {
     char* material = self->stateMaterial;
     if (__btrc_isEmpty(material)) {
-        int __fstr_566_len = snprintf(NULL, 0, "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
-        char* __fstr_566_buf = __btrc_str_track(((char*)malloc((__fstr_566_len + 1))));
-        snprintf(__fstr_566_buf, (__fstr_566_len + 1), "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
-        (material = __fstr_566_buf);
+        int __fstr_162_len = snprintf(NULL, 0, "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
+        char* __fstr_162_buf = __btrc_str_track(((char*)malloc((__fstr_162_len + 1))));
+        snprintf(__fstr_162_buf, (__fstr_162_len + 1), "%s:%s:%s:%s:%s:%d:%d", self->name, self->arch, self->isoUrl, self->diskSize, self->memory, self->cpus, self->sshPort);
+        (material = __fstr_162_buf);
     }
-    int __fstr_567_len = snprintf(NULL, 0, "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
-    char* __fstr_567_buf = __btrc_str_track(((char*)malloc((__fstr_567_len + 1))));
-    snprintf(__fstr_567_buf, (__fstr_567_len + 1), "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
-    __auto_type __btrc_ret_568 = __fstr_567_buf;
-    return __btrc_ret_568;
+    int __fstr_163_len = snprintf(NULL, 0, "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
+    char* __fstr_163_buf = __btrc_str_track(((char*)malloc((__fstr_163_len + 1))));
+    snprintf(__fstr_163_buf, (__fstr_163_len + 1), "parent=%s\nstate=%s\nmaterial=%s\noperations=\n%s\n", self->parentHash, self->state, material, VmTestSpec_operationsMaterial(self));
+    return __fstr_163_buf;
 }
 
 void VmTestSpec_computeStateHash(VmTestSpec* self) {
@@ -14747,19 +7366,11 @@ void VmTestSpec_expandArgs(VmTestSpec* self) {
     VmTestSpec_refreshDerivedArgs(self);
     (self->workDir = VmSpecParser_expandArgs(rawWorkDir, self->args));
     VmTestSpec_refreshDerivedArgs(self);
-    int __n_570 = btrc_Vector_VmOperation_iterLen(self->operations);
-    for (int __i_569 = 0; (__i_569 < __n_570); (__i_569++)) {
-        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_569);
+    int __n_165 = btrc_Vector_VmOperation_iterLen(self->operations);
+    for (int __i_164 = 0; (__i_164 < __n_165); (__i_164++)) {
+        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->operations, __i_164);
         VmOperation_expandArgs(op, self->args);
     }
-}
-
-void VmSpecParser_init(VmSpecParser* self) {
-    self->__rc = 1;
-}
-
-void VmSpecParser_destroy(VmSpecParser* self) {
-    free(self);
 }
 
 char* VmSpecParser_hostArch(void) {
@@ -14767,21 +7378,21 @@ char* VmSpecParser_hostArch(void) {
     ExecResult* result = UnixShell_run(shell, "uname -m");
     char* machine = ExecResult_trimmed(result);
     if (__btrc_strContains(machine, "arm64") || __btrc_strContains(machine, "aarch64")) {
-        __auto_type __btrc_ret_571 = "aarch64";
+        char* __btrc_ret_166 = "aarch64";
         if (shell != NULL) {
             if ((--shell->__rc) <= 0) {
                 UnixShell_destroy(shell);
             }
         }
-        return __btrc_ret_571;
+        return __btrc_ret_166;
     }
-    __auto_type __btrc_ret_572 = "x86_64";
+    char* __btrc_ret_167 = "x86_64";
     if (shell != NULL) {
         if ((--shell->__rc) <= 0) {
             UnixShell_destroy(shell);
         }
     }
-    return __btrc_ret_572;
+    return __btrc_ret_167;
     if (shell != NULL) {
         if ((--shell->__rc) <= 0) {
             UnixShell_destroy(shell);
@@ -14790,22 +7401,21 @@ char* VmSpecParser_hostArch(void) {
 }
 
 char* VmSpecParser_defaultIsoUrl(char* arch) {
-    __auto_type __btrc_ret_573 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-", arch)), "-linux.iso"));
-    return __btrc_ret_573;
+    return __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-", arch)), "-linux.iso"));
 }
 
 char* VmSpecParser_expandArgs(char* text, btrc_Map_string_string* args) {
     char* result = Strings_copy(text);
-    int __n_575 = btrc_Map_string_string_iterLen(args);
-    for (int __i_574 = 0; (__i_574 < __n_575); (__i_574++)) {
-        char* key = btrc_Map_string_string_iterGet(args, __i_574);
-        char* value = btrc_Map_string_string_iterValueAt(args, __i_574);
+    int __n_169 = btrc_Map_string_string_iterLen(args);
+    for (int __i_168 = 0; (__i_168 < __n_169); (__i_168++)) {
+        char* key = btrc_Map_string_string_iterGet(args, __i_168);
+        char* value = btrc_Map_string_string_iterValueAt(args, __i_168);
         (result = Strings_replace(result, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{{", key)), "}}")), value));
     }
-    int __n_577 = btrc_Map_string_string_iterLen(args);
-    for (int __i_576 = 0; (__i_576 < __n_577); (__i_576++)) {
-        char* key = btrc_Map_string_string_iterGet(args, __i_576);
-        char* value = btrc_Map_string_string_iterValueAt(args, __i_576);
+    int __n_171 = btrc_Map_string_string_iterLen(args);
+    for (int __i_170 = 0; (__i_170 < __n_171); (__i_170++)) {
+        char* key = btrc_Map_string_string_iterGet(args, __i_170);
+        char* value = btrc_Map_string_string_iterValueAt(args, __i_170);
         (result = Strings_replace(result, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("${", key)), "}")), value));
     }
     return result;
@@ -14820,26 +7430,22 @@ int VmSpecParser_skipSpaces(char* text, int i) {
 }
 
 int VmSpecParser_keyPosition(char* text, char* key) {
-    __auto_type __btrc_ret_578 = Strings_find(text, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", key)), "\"")), 0);
-    return __btrc_ret_578;
+    return Strings_find(text, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("\"", key)), "\"")), 0);
 }
 
 char* VmSpecParser_objectField(char* text, char* key) {
     int pos = VmSpecParser_keyPosition(text, key);
     if (pos < 0) {
-        __auto_type __btrc_ret_579 = "";
-        return __btrc_ret_579;
+        return "";
     }
     int colon = Strings_find(text, ":", pos);
     if (colon < 0) {
-        __auto_type __btrc_ret_580 = "";
-        return __btrc_ret_580;
+        return "";
     }
     int i = VmSpecParser_skipSpaces(text, (colon + 1));
     int len = ((int)strlen(text));
     if ((i >= len) || (text[i] != '{')) {
-        __auto_type __btrc_ret_581 = "";
-        return __btrc_ret_581;
+        return "";
     }
     int depth = 0;
     bool inString = false;
@@ -14868,13 +7474,11 @@ char* VmSpecParser_objectField(char* text, char* key) {
         if (c == '}') {
             (depth--);
             if (depth == 0) {
-                __auto_type __btrc_ret_582 = JsonObject_slice(text, i, (j + 1));
-                return __btrc_ret_582;
+                return JsonObject_slice(text, i, (j + 1));
             }
         }
     }
-    __auto_type __btrc_ret_583 = "";
-    return __btrc_ret_583;
+    return "";
 }
 
 btrc_Map_string_string* VmSpecParser_argsObject(char* text) {
@@ -14884,10 +7488,10 @@ btrc_Map_string_string* VmSpecParser_argsObject(char* text) {
         return result;
     }
     JsonObject* parsed = JsonObject_parse(objectText);
-    int __n_585 = btrc_Map_string_string_iterLen(parsed->values);
-    for (int __i_584 = 0; (__i_584 < __n_585); (__i_584++)) {
-        char* key = btrc_Map_string_string_iterGet(parsed->values, __i_584);
-        char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_584);
+    int __n_173 = btrc_Map_string_string_iterLen(parsed->values);
+    for (int __i_172 = 0; (__i_172 < __n_173); (__i_172++)) {
+        char* key = btrc_Map_string_string_iterGet(parsed->values, __i_172);
+        char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_172);
         btrc_Map_string_string_put(result, key, value);
     }
     return result;
@@ -14904,8 +7508,7 @@ char* VmSpecParser_parseStringValue(char* text, int i, char* fallback) {
     bool escaped = false;
     while (i < len) {
         if ((!escaped) && (text[i] == ((char)34))) {
-            __auto_type __btrc_ret_586 = JsonObject_unescape(JsonObject_slice(text, start, i));
-            return __btrc_ret_586;
+            return JsonObject_unescape(JsonObject_slice(text, start, i));
         }
         (escaped = ((!escaped) && (text[i] == '\\')));
         if (text[i] != '\\') {
@@ -14928,8 +7531,7 @@ char* VmSpecParser_field(char* text, char* key, char* fallback) {
     int i = VmSpecParser_skipSpaces(text, (colon + 1));
     int len = ((int)strlen(text));
     if ((i < len) && (text[i] == ((char)34))) {
-        __auto_type __btrc_ret_587 = VmSpecParser_parseStringValue(text, i, fallback);
-        return __btrc_ret_587;
+        return VmSpecParser_parseStringValue(text, i, fallback);
     }
     int start = i;
     while ((((i < len) && (text[i] != ',')) && (text[i] != '}')) && (text[i] != ']')) {
@@ -14947,8 +7549,7 @@ int VmSpecParser_intField(char* text, char* key, int fallback) {
     if (__btrc_isEmpty(raw)) {
         return fallback;
     }
-    __auto_type __btrc_ret_588 = Strings_toInt(raw);
-    return __btrc_ret_588;
+    return Strings_toInt(raw);
 }
 
 VmOperation* VmSpecParser_operation(char* objectText) {
@@ -15151,28 +7752,23 @@ void VmSpecParser_applyOperationField(VmOperation* op, char* key, char* value) {
 }
 
 bool VmSpecParser_hasOperation(VmOperation* op) {
-    __auto_type __btrc_ret_589 = (((!__btrc_isEmpty(op->kind)) || (!__btrc_isEmpty(op->command))) || (!__btrc_isEmpty(op->name)));
-    return __btrc_ret_589;
+    return (((!__btrc_isEmpty(op->kind)) || (!__btrc_isEmpty(op->command))) || (!__btrc_isEmpty(op->name)));
 }
 
 char* VmSpecParser_yamlKey(char* line) {
     int pos = Strings_find(line, ":", 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_590 = "";
-        return __btrc_ret_590;
+        return "";
     }
-    __auto_type __btrc_ret_591 = Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(line, 0, pos)))));
-    return __btrc_ret_591;
+    return Toml_unquote(__btrc_str_track(__btrc_trim(__btrc_str_track(__btrc_substring(line, 0, pos)))));
 }
 
 char* VmSpecParser_yamlValue(char* line) {
     int pos = Strings_find(line, ":", 0);
     if (pos < 0) {
-        __auto_type __btrc_ret_592 = "";
-        return __btrc_ret_592;
+        return "";
     }
-    __auto_type __btrc_ret_593 = Toml_unquote(__btrc_str_track(__btrc_trim(Toml_stripInlineComment(__btrc_str_track(__btrc_substring(line, (pos + 1), ((((int)strlen(line)) - pos) - 1)))))));
-    return __btrc_ret_593;
+    return Toml_unquote(__btrc_str_track(__btrc_trim(Toml_stripInlineComment(__btrc_str_track(__btrc_substring(line, (pos + 1), ((((int)strlen(line)) - pos) - 1)))))));
 }
 
 VmTestSpec* VmSpecParser_parseToml(char* text) {
@@ -15180,9 +7776,9 @@ VmTestSpec* VmSpecParser_parseToml(char* text) {
     char* section = "root";
     VmOperation* op = VmOperation_new();
     btrc_Vector_string* lines = Strings_split(text, "\n");
-    int __n_595 = btrc_Vector_string_iterLen(lines);
-    for (int __i_594 = 0; (__i_594 < __n_595); (__i_594++)) {
-        char* line = btrc_Vector_string_iterGet(lines, __i_594);
+    int __n_175 = btrc_Vector_string_iterLen(lines);
+    for (int __i_174 = 0; (__i_174 < __n_175); (__i_174++)) {
+        char* line = btrc_Vector_string_iterGet(lines, __i_174);
         char* cleaned = Toml_stripInlineComment(line);
         if (__btrc_isEmpty(cleaned)) {
             continue;
@@ -15246,9 +7842,9 @@ VmTestSpec* VmSpecParser_parseYaml(char* text) {
     char* section = "root";
     VmOperation* op = VmOperation_new();
     btrc_Vector_string* lines = Strings_split(text, "\n");
-    int __n_597 = btrc_Vector_string_iterLen(lines);
-    for (int __i_596 = 0; (__i_596 < __n_597); (__i_596++)) {
-        char* raw = btrc_Vector_string_iterGet(lines, __i_596);
+    int __n_177 = btrc_Vector_string_iterLen(lines);
+    for (int __i_176 = 0; (__i_176 < __n_177); (__i_176++)) {
+        char* raw = btrc_Vector_string_iterGet(lines, __i_176);
         char* line = Toml_stripInlineComment(raw);
         if (__btrc_isEmpty(__btrc_str_track(__btrc_trim(line)))) {
             continue;
@@ -15317,15 +7913,12 @@ VmTestSpec* VmSpecParser_parseYaml(char* text) {
 VmTestSpec* VmSpecParser_readFile(char* path) {
     char* text = Path_readAll(path);
     if (__btrc_endsWith(path, ".toml")) {
-        __auto_type __btrc_ret_598 = VmSpecParser_parseToml(text);
-        return __btrc_ret_598;
+        return VmSpecParser_parseToml(text);
     }
     if (__btrc_endsWith(path, ".yaml") || __btrc_endsWith(path, ".yml")) {
-        __auto_type __btrc_ret_599 = VmSpecParser_parseYaml(text);
-        return __btrc_ret_599;
+        return VmSpecParser_parseYaml(text);
     }
-    __auto_type __btrc_ret_600 = VmSpecParser_parse(text);
-    return __btrc_ret_600;
+    return VmSpecParser_parse(text);
 }
 
 void SshClient_init(SshClient* self, VmTestSpec* spec) {
@@ -15371,18 +7964,15 @@ void SshClient_destroy(SshClient* self) {
 }
 
 char* SshClient_sshKeyPath(SshClient* self) {
-    __auto_type __btrc_ret_601 = PathTools_join(self->spec->workDir, "id_ed25519");
-    return __btrc_ret_601;
+    return PathTools_join(self->spec->workDir, "id_ed25519");
 }
 
 char* SshClient_qmpPath(SshClient* self) {
-    __auto_type __btrc_ret_602 = PathTools_join(self->spec->workDir, "qmp.sock");
-    return __btrc_ret_602;
+    return PathTools_join(self->spec->workDir, "qmp.sock");
 }
 
 char* SshClient_workspaceRoot(SshClient* self) {
-    __auto_type __btrc_ret_603 = btrc_Map_string_string_getOrDefault(self->spec->args, "workspaceRoot", ".");
-    return __btrc_ret_603;
+    return btrc_Map_string_string_getOrDefault(self->spec->args, "workspaceRoot", ".");
 }
 
 btrc_Vector_string* SshClient_sshOptionList(SshClient* self) {
@@ -15409,20 +7999,19 @@ btrc_Vector_string* SshClient_sshOptionList(SshClient* self) {
 char* SshClient_sshOptionsForShell(SshClient* self) {
     btrc_Vector_string* quoted = btrc_Vector_string_new();
     btrc_Vector_string* opts = SshClient_sshOptionList(self);
-    int __n_605 = btrc_Vector_string_iterLen(opts);
-    for (int __i_604 = 0; (__i_604 < __n_605); (__i_604++)) {
-        char* opt = btrc_Vector_string_iterGet(opts, __i_604);
+    int __n_179 = btrc_Vector_string_iterLen(opts);
+    for (int __i_178 = 0; (__i_178 < __n_179); (__i_178++)) {
+        char* opt = btrc_Vector_string_iterGet(opts, __i_178);
         btrc_Vector_string_push(quoted, UnixShell_quote(opt));
     }
-    __auto_type __btrc_ret_606 = btrc_Vector_string_join(quoted, " ");
-    return __btrc_ret_606;
+    return btrc_Vector_string_join(quoted, " ");
 }
 
 Command* SshClient_addSshOptions(SshClient* self, Command* cmd) {
     btrc_Vector_string* opts = SshClient_sshOptionList(self);
-    int __n_608 = btrc_Vector_string_iterLen(opts);
-    for (int __i_607 = 0; (__i_607 < __n_608); (__i_607++)) {
-        char* opt = btrc_Vector_string_iterGet(opts, __i_607);
+    int __n_181 = btrc_Vector_string_iterLen(opts);
+    for (int __i_180 = 0; (__i_180 < __n_181); (__i_180++)) {
+        char* opt = btrc_Vector_string_iterGet(opts, __i_180);
         Command_arg(cmd, opt);
     }
     return cmd;
@@ -15435,36 +8024,30 @@ ExecResult* SshClient_sshWithTimeout(SshClient* self, char* command, bool checkS
 }
 
 ExecResult* SshClient_ssh(SshClient* self, char* command, bool checkStatus) {
-    __auto_type __btrc_ret_609 = SshClient_sshWithTimeout(self, command, checkStatus, 5);
-    return __btrc_ret_609;
+    return SshClient_sshWithTimeout(self, command, checkStatus, 5);
 }
 
 ExecResult* SshClient_host(SshClient* self, char* command, bool checkStatus) {
-    __auto_type __btrc_ret_610 = UnixShell_runRaw(self->shell, command, true, checkStatus, "");
-    return __btrc_ret_610;
+    return UnixShell_runRaw(self->shell, command, true, checkStatus, "");
 }
 
 ExecResult* SshClient_workspaceFileExists(SshClient* self, char* relativePath) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cd ", UnixShell_quote(SshClient_workspaceRoot(self)))), " && test -f ")), UnixShell_quote(relativePath))), " && printf exists"));
-    __auto_type __btrc_ret_611 = UnixShell_runRaw(self->shell, command, true, false, "");
-    return __btrc_ret_611;
+    return UnixShell_runRaw(self->shell, command, true, false, "");
 }
 
 ExecResult* SshClient_nixEval(SshClient* self, char* attribute, int timeoutSeconds) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cd ", UnixShell_quote(SshClient_workspaceRoot(self)))), " && timeout ")), Strings_fromInt(timeoutSeconds))), " nix eval ")), UnixShell_quote(__btrc_str_track(__btrc_strcat(".#", attribute))))), " --show-trace"));
-    __auto_type __btrc_ret_612 = UnixShell_runRaw(self->shell, command, true, false, "");
-    return __btrc_ret_612;
+    return UnixShell_runRaw(self->shell, command, true, false, "");
 }
 
 ExecResult* SshClient_qmp(SshClient* self, char* command, int timeoutSeconds) {
     if (!FileSystem_exists(SshClient_qmpPath(self))) {
-        __auto_type __btrc_ret_613 = ExecResult_new(1, "", __btrc_str_track(__btrc_strcat("QMP socket does not exist: ", SshClient_qmpPath(self))), "");
-        return __btrc_ret_613;
+        return ExecResult_new(1, "", __btrc_str_track(__btrc_strcat("QMP socket does not exist: ", SshClient_qmpPath(self))), "");
     }
     char* payload = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("{\"execute\":\"qmp_capabilities\"}\n", command)), "\n"));
     char* rendered = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("printf %s ", UnixShell_quote(payload))), " | timeout ")), Strings_fromInt(timeoutSeconds))), " socat - ")), UnixShell_quote(__btrc_str_track(__btrc_strcat("UNIX-CONNECT:", SshClient_qmpPath(self))))));
-    __auto_type __btrc_ret_614 = UnixShell_runRaw(self->shell, rendered, true, false, "");
-    return __btrc_ret_614;
+    return UnixShell_runRaw(self->shell, rendered, true, false, "");
 }
 
 void SshClient_copyWorkspace(SshClient* self, char* localPath, char* remotePath) {
@@ -15480,10 +8063,10 @@ void SshClient_copyWorkspace(SshClient* self, char* localPath, char* remotePath)
 }
 
 void SshClient_copyTo(SshClient* self, char* localPath, char* remotePath) {
-    int __fstr_615_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
-    char* __fstr_615_buf = __btrc_str_track(((char*)malloc((__fstr_615_len + 1))));
-    snprintf(__fstr_615_buf, (__fstr_615_len + 1), "root@localhost:%s", remotePath);
-    Command* cmd = Command_capture(Command_arg(Command_arg(SshClient_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), localPath), __fstr_615_buf), false);
+    int __fstr_182_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
+    char* __fstr_182_buf = __btrc_str_track(((char*)malloc((__fstr_182_len + 1))));
+    snprintf(__fstr_182_buf, (__fstr_182_len + 1), "root@localhost:%s", remotePath);
+    Command* cmd = Command_capture(Command_arg(Command_arg(SshClient_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), localPath), __fstr_182_buf), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
         NixosLog_fatal("Failed to copy file to VM");
@@ -15491,10 +8074,10 @@ void SshClient_copyTo(SshClient* self, char* localPath, char* remotePath) {
 }
 
 void SshClient_copyFrom(SshClient* self, char* remotePath, char* localPath) {
-    int __fstr_616_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
-    char* __fstr_616_buf = __btrc_str_track(((char*)malloc((__fstr_616_len + 1))));
-    snprintf(__fstr_616_buf, (__fstr_616_len + 1), "root@localhost:%s", remotePath);
-    Command* cmd = Command_capture(Command_arg(Command_arg(SshClient_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), __fstr_616_buf), localPath), false);
+    int __fstr_183_len = snprintf(NULL, 0, "root@localhost:%s", remotePath);
+    char* __fstr_183_buf = __btrc_str_track(((char*)malloc((__fstr_183_len + 1))));
+    snprintf(__fstr_183_buf, (__fstr_183_len + 1), "root@localhost:%s", remotePath);
+    Command* cmd = Command_capture(Command_arg(Command_arg(SshClient_addSshOptions(self, Command_arg(Command_arg(Command_arg(Command_new("scp"), "-r"), "-P"), Strings_fromInt(self->spec->sshPort))), __fstr_183_buf), localPath), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cmd);
     if (!ExecResult_ok(result)) {
         NixosLog_fatal("Failed to copy file from VM");
@@ -15544,54 +8127,44 @@ void QemuSerial_destroy(QemuSerial* self) {
 }
 
 char* QemuSerial_serialBasePath(QemuSerial* self) {
-    __auto_type __btrc_ret_617 = PathTools_join(self->spec->workDir, "serial");
-    return __btrc_ret_617;
+    return PathTools_join(self->spec->workDir, "serial");
 }
 
 char* QemuSerial_serialInPath(QemuSerial* self) {
-    __auto_type __btrc_ret_618 = __btrc_str_track(__btrc_strcat(QemuSerial_serialBasePath(self), ".in"));
-    return __btrc_ret_618;
+    return __btrc_str_track(__btrc_strcat(QemuSerial_serialBasePath(self), ".in"));
 }
 
 char* QemuSerial_serialOutPath(QemuSerial* self) {
-    __auto_type __btrc_ret_619 = __btrc_str_track(__btrc_strcat(QemuSerial_serialBasePath(self), ".out"));
-    return __btrc_ret_619;
+    return __btrc_str_track(__btrc_strcat(QemuSerial_serialBasePath(self), ".out"));
 }
 
 char* QemuSerial_serialLogPath(QemuSerial* self) {
-    __auto_type __btrc_ret_620 = __btrc_str_track(__btrc_strcat(QemuSerial_serialBasePath(self), ".log"));
-    return __btrc_ret_620;
+    return __btrc_str_track(__btrc_strcat(QemuSerial_serialBasePath(self), ".log"));
 }
 
 char* QemuSerial_serialReaderPidPath(QemuSerial* self) {
-    __auto_type __btrc_ret_621 = PathTools_join(self->spec->workDir, "serial-reader.pid");
-    return __btrc_ret_621;
+    return PathTools_join(self->spec->workDir, "serial-reader.pid");
 }
 
 char* QemuSerial_bootDir(QemuSerial* self) {
-    __auto_type __btrc_ret_622 = PathTools_join(self->spec->workDir, "boot");
-    return __btrc_ret_622;
+    return PathTools_join(self->spec->workDir, "boot");
 }
 
 char* QemuSerial_bootKernelFile(QemuSerial* self) {
-    __auto_type __btrc_ret_623 = PathTools_join(QemuSerial_bootDir(self), "kernel.path");
-    return __btrc_ret_623;
+    return PathTools_join(QemuSerial_bootDir(self), "kernel.path");
 }
 
 char* QemuSerial_bootInitrdFile(QemuSerial* self) {
-    __auto_type __btrc_ret_624 = PathTools_join(QemuSerial_bootDir(self), "initrd.path");
-    return __btrc_ret_624;
+    return PathTools_join(QemuSerial_bootDir(self), "initrd.path");
 }
 
 char* QemuSerial_bootAppendFile(QemuSerial* self) {
-    __auto_type __btrc_ret_625 = PathTools_join(QemuSerial_bootDir(self), "append.txt");
-    return __btrc_ret_625;
+    return PathTools_join(QemuSerial_bootDir(self), "append.txt");
 }
 
 char* QemuSerial_stripLeadingSlash(QemuSerial* self, char* path) {
     if (__btrc_startsWith(path, "/")) {
-        __auto_type __btrc_ret_626 = __btrc_str_track(__btrc_substring(path, 1, (((int)strlen(path)) - 1)));
-        return __btrc_ret_626;
+        return __btrc_str_track(__btrc_substring(path, 1, (((int)strlen(path)) - 1)));
     }
     return path;
 }
@@ -15599,16 +8172,14 @@ char* QemuSerial_stripLeadingSlash(QemuSerial* self, char* path) {
 char* QemuSerial_valueAfterLinePrefix(QemuSerial* self, char* text, char* prefix, int start) {
     int pos = Strings_find(text, prefix, start);
     if (pos < 0) {
-        __auto_type __btrc_ret_627 = "";
-        return __btrc_ret_627;
+        return "";
     }
     (pos = (pos + ((int)strlen(prefix))));
     int end = pos;
     while ((text[end] != '\0') && (text[end] != '\n')) {
         (end++);
     }
-    __auto_type __btrc_ret_628 = __btrc_str_track(__btrc_trim(JsonObject_slice(text, pos, end)));
-    return __btrc_ret_628;
+    return __btrc_str_track(__btrc_trim(JsonObject_slice(text, pos, end)));
 }
 
 void QemuSerial_extractBootSerial(QemuSerial* self) {
@@ -15743,114 +8314,92 @@ void QemuFirmware_destroy(QemuFirmware* self) {
 }
 
 char* QemuFirmware_firmwareVarsPath(QemuFirmware* self) {
-    __auto_type __btrc_ret_629 = PathTools_join(self->spec->workDir, "edk2-vars.fd");
-    return __btrc_ret_629;
+    return PathTools_join(self->spec->workDir, "edk2-vars.fd");
 }
 
 char* QemuFirmware_firmwareVarsSnapshotPath(QemuFirmware* self, char* name) {
-    __auto_type __btrc_ret_630 = PathTools_join(self->spec->workDir, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("edk2-vars.", name)), ".fd")));
-    return __btrc_ret_630;
+    return PathTools_join(self->spec->workDir, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("edk2-vars.", name)), ".fd")));
 }
 
 char* QemuFirmware_tpmDir(QemuFirmware* self) {
-    __auto_type __btrc_ret_631 = PathTools_join(self->spec->workDir, "tpm");
-    return __btrc_ret_631;
+    return PathTools_join(self->spec->workDir, "tpm");
 }
 
 char* QemuFirmware_tpmStateDir(QemuFirmware* self) {
-    __auto_type __btrc_ret_632 = PathTools_join(QemuFirmware_tpmDir(self), "state");
-    return __btrc_ret_632;
+    return PathTools_join(QemuFirmware_tpmDir(self), "state");
 }
 
 char* QemuFirmware_tpmSocketPath(QemuFirmware* self) {
-    __auto_type __btrc_ret_633 = PathTools_join(QemuFirmware_tpmDir(self), "swtpm.sock");
-    return __btrc_ret_633;
+    return PathTools_join(QemuFirmware_tpmDir(self), "swtpm.sock");
 }
 
 char* QemuFirmware_tpmPidPath(QemuFirmware* self) {
-    __auto_type __btrc_ret_634 = PathTools_join(QemuFirmware_tpmDir(self), "swtpm.pid");
-    return __btrc_ret_634;
+    return PathTools_join(QemuFirmware_tpmDir(self), "swtpm.pid");
 }
 
 char* QemuFirmware_tpmLogPath(QemuFirmware* self) {
-    __auto_type __btrc_ret_635 = PathTools_join(QemuFirmware_tpmDir(self), "swtpm.log");
-    return __btrc_ret_635;
+    return PathTools_join(QemuFirmware_tpmDir(self), "swtpm.log");
 }
 
 char* QemuFirmware_qemuBinary(QemuFirmware* self) {
-    int __fstr_636_len = snprintf(NULL, 0, "qemu-system-%s", self->spec->arch);
-    char* __fstr_636_buf = __btrc_str_track(((char*)malloc((__fstr_636_len + 1))));
-    snprintf(__fstr_636_buf, (__fstr_636_len + 1), "qemu-system-%s", self->spec->arch);
-    __auto_type __btrc_ret_637 = __fstr_636_buf;
-    return __btrc_ret_637;
+    int __fstr_184_len = snprintf(NULL, 0, "qemu-system-%s", self->spec->arch);
+    char* __fstr_184_buf = __btrc_str_track(((char*)malloc((__fstr_184_len + 1))));
+    snprintf(__fstr_184_buf, (__fstr_184_len + 1), "qemu-system-%s", self->spec->arch);
+    return __fstr_184_buf;
 }
 
 bool QemuFirmware_argEnabled(QemuFirmware* self, char* key) {
-    __auto_type __btrc_ret_638 = (strcmp(btrc_Map_string_string_getOrDefault(self->spec->args, key, "false"), "true") == 0);
-    return __btrc_ret_638;
+    return (strcmp(btrc_Map_string_string_getOrDefault(self->spec->args, key, "false"), "true") == 0);
 }
 
 bool QemuFirmware_tpm2Enabled(QemuFirmware* self) {
-    __auto_type __btrc_ret_639 = QemuFirmware_argEnabled(self, "tpm2");
-    return __btrc_ret_639;
+    return QemuFirmware_argEnabled(self, "tpm2");
 }
 
 bool QemuFirmware_secureBootEnabled(QemuFirmware* self) {
-    __auto_type __btrc_ret_640 = QemuFirmware_argEnabled(self, "secureBoot");
-    return __btrc_ret_640;
+    return QemuFirmware_argEnabled(self, "secureBoot");
 }
 
 bool QemuFirmware_uefiEnabled(QemuFirmware* self) {
-    __auto_type __btrc_ret_641 = ((QemuFirmware_argEnabled(self, "uefi") || QemuFirmware_argEnabled(self, "uefiDisk")) || QemuFirmware_secureBootEnabled(self));
-    return __btrc_ret_641;
+    return ((QemuFirmware_argEnabled(self, "uefi") || QemuFirmware_argEnabled(self, "uefiDisk")) || QemuFirmware_secureBootEnabled(self));
 }
 
 bool QemuFirmware_shouldUseUefi(QemuFirmware* self, bool fromIso) {
     if (strcmp(self->spec->arch, "aarch64") == 0) {
-        __auto_type __btrc_ret_642 = true;
-        return __btrc_ret_642;
+        return true;
     }
     if (QemuFirmware_argEnabled(self, "uefi")) {
-        __auto_type __btrc_ret_643 = true;
-        return __btrc_ret_643;
+        return true;
     }
     if ((!fromIso) && QemuFirmware_uefiEnabled(self)) {
-        __auto_type __btrc_ret_644 = true;
-        return __btrc_ret_644;
+        return true;
     }
     if (fromIso && QemuFirmware_argEnabled(self, "uefiIso")) {
-        __auto_type __btrc_ret_645 = true;
-        return __btrc_ret_645;
+        return true;
     }
-    __auto_type __btrc_ret_646 = false;
-    return __btrc_ret_646;
+    return false;
 }
 
 bool QemuFirmware_hostArchMatchesGuest(QemuFirmware* self) {
-    __auto_type __btrc_ret_647 = (strcmp(VmSpecParser_hostArch(), self->spec->arch) == 0);
-    return __btrc_ret_647;
+    return (strcmp(VmSpecParser_hostArch(), self->spec->arch) == 0);
 }
 
 char* QemuFirmware_qemuSharePath(QemuFirmware* self, char* fileName) {
     char* script = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("bin=$(command -v ", UnixShell_quote(QemuFirmware_qemuBinary(self)))), ") || exit 1; ")), "path=$(dirname $(dirname \"$bin\"))/share/qemu/")), UnixShell_quote(fileName))), "; ")), "test -f \"$path\" || exit 1; printf %s \"$path\""));
     ExecResult* result = UnixShell_runUnchecked(self->shell, script);
     if (!ExecResult_ok(result)) {
-        __auto_type __btrc_ret_648 = "";
-        return __btrc_ret_648;
+        return "";
     }
-    __auto_type __btrc_ret_649 = ExecResult_trimmed(result);
-    return __btrc_ret_649;
+    return ExecResult_trimmed(result);
 }
 
 char* QemuFirmware_findFirst(QemuFirmware* self, char* findArgs) {
-    __auto_type __btrc_ret_650 = ExecResult_trimmed(UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("find ", findArgs)), " -print -quit 2>/dev/null"))));
-    return __btrc_ret_650;
+    return ExecResult_trimmed(UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("find ", findArgs)), " -print -quit 2>/dev/null"))));
 }
 
 char* QemuFirmware_firmwareCodePath(QemuFirmware* self) {
     if (QemuFirmware_secureBootEnabled(self)) {
-        __auto_type __btrc_ret_651 = QemuFirmware_secureFirmwareCodePath(self);
-        return __btrc_ret_651;
+        return QemuFirmware_secureFirmwareCodePath(self);
     }
     if (strcmp(self->spec->arch, "aarch64") == 0) {
         char* packaged = QemuFirmware_qemuSharePath(self, "edk2-aarch64-code.fd");
@@ -15858,8 +8407,7 @@ char* QemuFirmware_firmwareCodePath(QemuFirmware* self) {
             return packaged;
         }
         if (FileSystem_exists("/opt/homebrew/share/qemu/edk2-aarch64-code.fd")) {
-            __auto_type __btrc_ret_652 = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
-            return __btrc_ret_652;
+            return "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
         }
     }
     if (strcmp(self->spec->arch, "x86_64") == 0) {
@@ -15868,8 +8416,7 @@ char* QemuFirmware_firmwareCodePath(QemuFirmware* self) {
             return packaged;
         }
     }
-    __auto_type __btrc_ret_653 = QemuFirmware_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_CODE.fd");
-    return __btrc_ret_653;
+    return QemuFirmware_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_CODE.fd");
 }
 
 char* QemuFirmware_secureFirmwareCodePath(QemuFirmware* self) {
@@ -15878,19 +8425,16 @@ char* QemuFirmware_secureFirmwareCodePath(QemuFirmware* self) {
         if (!__btrc_isEmpty(store)) {
             return store;
         }
-        __auto_type __btrc_ret_654 = QemuFirmware_findFirst(self, "\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
-        return __btrc_ret_654;
+        return QemuFirmware_findFirst(self, "\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
     }
     if (!(strcmp(self->spec->arch, "x86_64") == 0)) {
-        __auto_type __btrc_ret_655 = "";
-        return __btrc_ret_655;
+        return "";
     }
     char* packaged = QemuFirmware_qemuSharePath(self, "edk2-x86_64-secure-code.fd");
     if (!__btrc_isEmpty(packaged)) {
         return packaged;
     }
-    __auto_type __btrc_ret_656 = QemuFirmware_findFirst(self, "/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
-    return __btrc_ret_656;
+    return QemuFirmware_findFirst(self, "/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
 }
 
 char* QemuFirmware_firmwareVarsTemplatePath(QemuFirmware* self) {
@@ -15916,8 +8460,7 @@ char* QemuFirmware_firmwareVarsTemplatePath(QemuFirmware* self) {
             return packaged;
         }
     }
-    __auto_type __btrc_ret_657 = QemuFirmware_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_VARS.fd");
-    return __btrc_ret_657;
+    return QemuFirmware_findFirst(self, "/nix/store -maxdepth 4 -name OVMF_VARS.fd");
 }
 
 void QemuFirmware_makeFirmwareVarsWritable(QemuFirmware* self) {
@@ -15940,17 +8483,16 @@ void QemuFirmware_setupFirmwareVars(QemuFirmware* self) {
         QemuFirmware_makeFirmwareVarsWritable(self);
         return;
     }
-    int __fstr_659_len = snprintf(NULL, 0, "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuFirmware_firmwareVarsPath(self)));
-    char* __fstr_659_buf = __btrc_str_track(((char*)malloc((__fstr_659_len + 1))));
-    snprintf(__fstr_659_buf, (__fstr_659_len + 1), "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuFirmware_firmwareVarsPath(self)));
-    UnixShell_runRaw(self->shell, __fstr_659_buf, false, true, "");
+    int __fstr_186_len = snprintf(NULL, 0, "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuFirmware_firmwareVarsPath(self)));
+    char* __fstr_186_buf = __btrc_str_track(((char*)malloc((__fstr_186_len + 1))));
+    snprintf(__fstr_186_buf, (__fstr_186_len + 1), "dd if=/dev/zero of=%s bs=1M count=64", UnixShell_quote(QemuFirmware_firmwareVarsPath(self)));
+    UnixShell_runRaw(self->shell, __fstr_186_buf, false, true, "");
     QemuFirmware_makeFirmwareVarsWritable(self);
 }
 
 bool QemuFirmware_commandExists(QemuFirmware* self, char* name) {
     ExecResult* result = UnixShell_runRaw(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("command -v ", UnixShell_quote(name))), " >/dev/null 2>&1")), false, false, "");
-    __auto_type __btrc_ret_660 = ExecResult_ok(result);
-    return __btrc_ret_660;
+    return ExecResult_ok(result);
 }
 
 void QemuFirmware_requireCommand(QemuFirmware* self, char* name) {
@@ -15962,17 +8504,14 @@ void QemuFirmware_requireCommand(QemuFirmware* self, char* name) {
 bool QemuFirmware_qemuDeviceAvailable(QemuFirmware* self, char* deviceName) {
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(QemuFirmware_qemuBinary(self), " -device help 2>/dev/null | grep -q ")), UnixShell_quote(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("name \"", deviceName)), "\"")))));
     ExecResult* result = UnixShell_runRaw(self->shell, command, false, false, "");
-    __auto_type __btrc_ret_661 = ExecResult_ok(result);
-    return __btrc_ret_661;
+    return ExecResult_ok(result);
 }
 
 char* QemuFirmware_tpmQemuDevice(QemuFirmware* self) {
     if (strcmp(self->spec->arch, "aarch64") == 0) {
-        __auto_type __btrc_ret_662 = "tpm-tis-device";
-        return __btrc_ret_662;
+        return "tpm-tis-device";
     }
-    __auto_type __btrc_ret_663 = "tpm-tis";
-    return __btrc_ret_663;
+    return "tpm-tis";
 }
 
 void QemuFirmware_requireTpm2Capability(QemuFirmware* self) {
@@ -16008,14 +8547,12 @@ char* QemuFirmware_secureBootCapabilityReport(QemuFirmware* self) {
     char* device = QemuFirmware_tpmQemuDevice(self);
     bool tpmDevice = (qemu && QemuFirmware_qemuDeviceAvailable(self, device));
     bool available = ((((((strcmp(self->spec->arch, "x86_64") == 0) && qemu) && swtpm) && tpmDevice) && (!__btrc_isEmpty(firmware))) && (!__btrc_isEmpty(vars)));
-    __auto_type __btrc_ret_664 = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("secureBootQemu=", (available ? "available" : "unavailable"))), "\narch=")), self->spec->arch)), "\nqemu=")), (qemu ? "yes" : "no"))), "\nswtpm=")), (swtpm ? "yes" : "no"))), "\ntpmDevice=")), (tpmDevice ? device : "missing"))), "\nfirmware=")), (__btrc_isEmpty(firmware) ? "missing" : firmware))), "\nvars=")), (__btrc_isEmpty(vars) ? "missing" : vars)));
-    return __btrc_ret_664;
+    return __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("secureBootQemu=", (available ? "available" : "unavailable"))), "\narch=")), self->spec->arch)), "\nqemu=")), (qemu ? "yes" : "no"))), "\nswtpm=")), (swtpm ? "yes" : "no"))), "\ntpmDevice=")), (tpmDevice ? device : "missing"))), "\nfirmware=")), (__btrc_isEmpty(firmware) ? "missing" : firmware))), "\nvars=")), (__btrc_isEmpty(vars) ? "missing" : vars)));
 }
 
 bool QemuFirmware_isDarwin(QemuFirmware* self) {
     ExecResult* result = UnixShell_run(self->shell, "uname -s");
-    __auto_type __btrc_ret_665 = (strcmp(ExecResult_trimmed(result), "Darwin") == 0);
-    return __btrc_ret_665;
+    return (strcmp(ExecResult_trimmed(result), "Darwin") == 0);
 }
 
 void QemuFirmware_startSwtpm(QemuFirmware* self) {
@@ -16144,38 +8681,31 @@ void VmStateStore_destroy(VmStateStore* self) {
 }
 
 char* VmStateStore_diskPath(VmStateStore* self) {
-    __auto_type __btrc_ret_666 = PathTools_join(self->spec->workDir, "disk.qcow2");
-    return __btrc_ret_666;
+    return PathTools_join(self->spec->workDir, "disk.qcow2");
 }
 
 char* VmStateStore_pidPath(VmStateStore* self) {
-    __auto_type __btrc_ret_667 = PathTools_join(self->spec->workDir, "qemu.pid");
-    return __btrc_ret_667;
+    return PathTools_join(self->spec->workDir, "qemu.pid");
 }
 
 char* VmStateStore_sshKeyPath(VmStateStore* self) {
-    __auto_type __btrc_ret_668 = PathTools_join(self->spec->workDir, "id_ed25519");
-    return __btrc_ret_668;
+    return PathTools_join(self->spec->workDir, "id_ed25519");
 }
 
 char* VmStateStore_sshPubKeyPath(VmStateStore* self) {
-    __auto_type __btrc_ret_669 = __btrc_str_track(__btrc_strcat(VmStateStore_sshKeyPath(self), ".pub"));
-    return __btrc_ret_669;
+    return __btrc_str_track(__btrc_strcat(VmStateStore_sshKeyPath(self), ".pub"));
 }
 
 char* VmStateStore_parentStateDir(VmStateStore* self) {
-    __auto_type __btrc_ret_670 = PathTools_join(self->spec->stateRoot, self->spec->parentState);
-    return __btrc_ret_670;
+    return PathTools_join(self->spec->stateRoot, self->spec->parentState);
 }
 
 char* VmStateStore_parentWorkDirFile(VmStateStore* self) {
-    __auto_type __btrc_ret_671 = PathTools_join(VmStateStore_parentStateDir(self), "workDir");
-    return __btrc_ret_671;
+    return PathTools_join(VmStateStore_parentStateDir(self), "workDir");
 }
 
 char* VmStateStore_backingDiskFile(VmStateStore* self) {
-    __auto_type __btrc_ret_672 = PathTools_join(self->spec->workDir, "backing-disk");
-    return __btrc_ret_672;
+    return PathTools_join(self->spec->workDir, "backing-disk");
 }
 
 void VmStateStore_ensureWorkDir(VmStateStore* self) {
@@ -16189,8 +8719,7 @@ char* VmStateStore_absolutePath(VmStateStore* self, char* path) {
     if (!ExecResult_ok(result)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Failed to resolve path ", path)));
     }
-    __auto_type __btrc_ret_673 = ExecResult_trimmed(result);
-    return __btrc_ret_673;
+    return ExecResult_trimmed(result);
 }
 
 void VmStateStore_cleanStateRecord(VmStateStore* self) {
@@ -16202,10 +8731,10 @@ void VmStateStore_requireParentState(VmStateStore* self) {
         return;
     }
     if (!FileSystem_exists(VmTestSpec_parentHashFile(self->spec))) {
-        int __fstr_675_len = snprintf(NULL, 0, "Missing parent state %s; run its test first", self->spec->parentState);
-        char* __fstr_675_buf = __btrc_str_track(((char*)malloc((__fstr_675_len + 1))));
-        snprintf(__fstr_675_buf, (__fstr_675_len + 1), "Missing parent state %s; run its test first", self->spec->parentState);
-        NixosLog_fatal(__fstr_675_buf);
+        int __fstr_188_len = snprintf(NULL, 0, "Missing parent state %s; run its test first", self->spec->parentState);
+        char* __fstr_188_buf = __btrc_str_track(((char*)malloc((__fstr_188_len + 1))));
+        snprintf(__fstr_188_buf, (__fstr_188_len + 1), "Missing parent state %s; run its test first", self->spec->parentState);
+        NixosLog_fatal(__fstr_188_buf);
     }
 }
 
@@ -16216,10 +8745,10 @@ void VmStateStore_copyIfExists(VmStateStore* self, char* source, char* target) {
     Command* cp = Command_capture(Command_arg(Command_arg(Command_new("cp"), source), target), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cp);
     if (!ExecResult_ok(result)) {
-        int __fstr_677_len = snprintf(NULL, 0, "Failed to copy state artifact %s", source);
-        char* __fstr_677_buf = __btrc_str_track(((char*)malloc((__fstr_677_len + 1))));
-        snprintf(__fstr_677_buf, (__fstr_677_len + 1), "Failed to copy state artifact %s", source);
-        NixosLog_fatal(__fstr_677_buf);
+        int __fstr_190_len = snprintf(NULL, 0, "Failed to copy state artifact %s", source);
+        char* __fstr_190_buf = __btrc_str_track(((char*)malloc((__fstr_190_len + 1))));
+        snprintf(__fstr_190_buf, (__fstr_190_len + 1), "Failed to copy state artifact %s", source);
+        NixosLog_fatal(__fstr_190_buf);
     }
 }
 
@@ -16231,10 +8760,10 @@ void VmStateStore_copyTreeIfExists(VmStateStore* self, char* source, char* targe
     Command* cp = Command_capture(Command_arg(Command_arg(Command_arg(Command_new("cp"), "-R"), source), target), false);
     ExecResult* result = UnixShell_runCommand(self->shell, cp);
     if (!ExecResult_ok(result)) {
-        int __fstr_679_len = snprintf(NULL, 0, "Failed to copy state tree %s", source);
-        char* __fstr_679_buf = __btrc_str_track(((char*)malloc((__fstr_679_len + 1))));
-        snprintf(__fstr_679_buf, (__fstr_679_len + 1), "Failed to copy state tree %s", source);
-        NixosLog_fatal(__fstr_679_buf);
+        int __fstr_192_len = snprintf(NULL, 0, "Failed to copy state tree %s", source);
+        char* __fstr_192_buf = __btrc_str_track(((char*)malloc((__fstr_192_len + 1))));
+        snprintf(__fstr_192_buf, (__fstr_192_len + 1), "Failed to copy state tree %s", source);
+        NixosLog_fatal(__fstr_192_buf);
     }
 }
 
@@ -16244,10 +8773,10 @@ void VmStateStore_inheritState(VmStateStore* self) {
         return;
     }
     if (!FileSystem_exists(VmStateStore_parentWorkDirFile(self))) {
-        int __fstr_681_len = snprintf(NULL, 0, "Parent state %s has no workDir record", self->spec->parentState);
-        char* __fstr_681_buf = __btrc_str_track(((char*)malloc((__fstr_681_len + 1))));
-        snprintf(__fstr_681_buf, (__fstr_681_len + 1), "Parent state %s has no workDir record", self->spec->parentState);
-        NixosLog_fatal(__fstr_681_buf);
+        int __fstr_194_len = snprintf(NULL, 0, "Parent state %s has no workDir record", self->spec->parentState);
+        char* __fstr_194_buf = __btrc_str_track(((char*)malloc((__fstr_194_len + 1))));
+        snprintf(__fstr_194_buf, (__fstr_194_len + 1), "Parent state %s has no workDir record", self->spec->parentState);
+        NixosLog_fatal(__fstr_194_buf);
     }
     char* parentWorkDir = __btrc_str_track(__btrc_trim(Path_readAll(VmStateStore_parentWorkDirFile(self))));
     VmStateStore_ensureWorkDir(self);
@@ -16300,40 +8829,33 @@ void VmStateStore_recordState(VmStateStore* self) {
 
 bool VmStateStore_isRunning(VmStateStore* self) {
     if (!FileSystem_exists(VmStateStore_pidPath(self))) {
-        __auto_type __btrc_ret_682 = false;
-        return __btrc_ret_682;
+        return false;
     }
     ExecResult* result = UnixShell_runRaw(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("kill -0 $(cat ", UnixShell_quote(VmStateStore_pidPath(self)))), ") 2>/dev/null")), false, false, "");
-    __auto_type __btrc_ret_683 = ExecResult_ok(result);
-    return __btrc_ret_683;
+    return ExecResult_ok(result);
 }
 
 bool VmStateStore_hasSnapshot(VmStateStore* self, char* name) {
     if (!FileSystem_exists(VmStateStore_diskPath(self))) {
-        __auto_type __btrc_ret_684 = false;
-        return __btrc_ret_684;
+        return false;
     }
     ExecResult* result = UnixShell_runUnchecked(self->shell, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("qemu-img snapshot -l ", UnixShell_quote(VmStateStore_diskPath(self)))), " | awk '{print $2}'")));
     if (!ExecResult_ok(result)) {
-        __auto_type __btrc_ret_685 = false;
-        return __btrc_ret_685;
+        return false;
     }
     btrc_Vector_string* lines = Strings_split(ExecResult_stdout(result), "\n");
-    int __n_687 = btrc_Vector_string_iterLen(lines);
-    for (int __i_686 = 0; (__i_686 < __n_687); (__i_686++)) {
-        char* line = btrc_Vector_string_iterGet(lines, __i_686);
+    int __n_196 = btrc_Vector_string_iterLen(lines);
+    for (int __i_195 = 0; (__i_195 < __n_196); (__i_195++)) {
+        char* line = btrc_Vector_string_iterGet(lines, __i_195);
         if (strcmp(__btrc_str_track(__btrc_trim(line)), name) == 0) {
-            __auto_type __btrc_ret_688 = true;
-            return __btrc_ret_688;
+            return true;
         }
     }
-    __auto_type __btrc_ret_689 = false;
-    return __btrc_ret_689;
+    return false;
 }
 
 bool VmStateStore_hasBackingDisk(VmStateStore* self) {
-    __auto_type __btrc_ret_690 = FileSystem_exists(VmStateStore_backingDiskFile(self));
-    return __btrc_ret_690;
+    return FileSystem_exists(VmStateStore_backingDiskFile(self));
 }
 
 void VmStateStore_printStatus(VmStateStore* self) {
@@ -16397,8 +8919,7 @@ void VmProvisioner_destroy(VmProvisioner* self) {
 }
 
 char* VmProvisioner_pubKey(VmProvisioner* self) {
-    __auto_type __btrc_ret_691 = __btrc_str_track(__btrc_trim(Path_readAll(PathTools_join(self->spec->workDir, "id_ed25519.pub"))));
-    return __btrc_ret_691;
+    return __btrc_str_track(__btrc_trim(Path_readAll(PathTools_join(self->spec->workDir, "id_ed25519.pub"))));
 }
 
 void VmProvisioner_configureVmHost(VmProvisioner* self) {
@@ -16446,11 +8967,9 @@ bool VmProvisioner_installNixosGuest(VmProvisioner* self) {
     ExecResult* result = SshClient_sshWithTimeout(self->remote, command, false, timeoutSeconds);
     if ((!ExecResult_ok(result)) || (!__btrc_strContains(ExecResult_stdout(result), "INSTALL_OK"))) {
         Console_error(ExecResult_stdout(result));
-        __auto_type __btrc_ret_692 = false;
-        return __btrc_ret_692;
+        return false;
     }
-    __auto_type __btrc_ret_693 = true;
-    return __btrc_ret_693;
+    return true;
 }
 
 void QemuCommandBuilder_init(QemuCommandBuilder* self, VmTestSpec* spec, QemuFirmware* firmware, QemuSerial* serial) {
@@ -16508,18 +9027,15 @@ void QemuCommandBuilder_destroy(QemuCommandBuilder* self) {
 }
 
 char* QemuCommandBuilder_diskPath(QemuCommandBuilder* self) {
-    __auto_type __btrc_ret_694 = PathTools_join(self->spec->workDir, "disk.qcow2");
-    return __btrc_ret_694;
+    return PathTools_join(self->spec->workDir, "disk.qcow2");
 }
 
 char* QemuCommandBuilder_monitorPath(QemuCommandBuilder* self) {
-    __auto_type __btrc_ret_695 = PathTools_join(self->spec->workDir, "monitor.sock");
-    return __btrc_ret_695;
+    return PathTools_join(self->spec->workDir, "monitor.sock");
 }
 
 char* QemuCommandBuilder_qmpPath(QemuCommandBuilder* self) {
-    __auto_type __btrc_ret_696 = PathTools_join(self->spec->workDir, "qmp.sock");
-    return __btrc_ret_696;
+    return PathTools_join(self->spec->workDir, "qmp.sock");
 }
 
 void QemuCommandBuilder_addAccelerator(QemuCommandBuilder* self, Command* cmd) {
@@ -16668,18 +9184,15 @@ void VmAssets_destroy(VmAssets* self) {
 }
 
 char* VmAssets_sshKeyPath(VmAssets* self) {
-    __auto_type __btrc_ret_697 = PathTools_join(self->spec->workDir, "id_ed25519");
-    return __btrc_ret_697;
+    return PathTools_join(self->spec->workDir, "id_ed25519");
 }
 
 char* VmAssets_sshPubKeyPath(VmAssets* self) {
-    __auto_type __btrc_ret_698 = __btrc_str_track(__btrc_strcat(VmAssets_sshKeyPath(self), ".pub"));
-    return __btrc_ret_698;
+    return __btrc_str_track(__btrc_strcat(VmAssets_sshKeyPath(self), ".pub"));
 }
 
 char* VmAssets_diskPath(VmAssets* self) {
-    __auto_type __btrc_ret_699 = PathTools_join(self->spec->workDir, "disk.qcow2");
-    return __btrc_ret_699;
+    return PathTools_join(self->spec->workDir, "disk.qcow2");
 }
 
 void VmAssets_ensureWorkDir(VmAssets* self) {
@@ -16695,10 +9208,10 @@ void VmAssets_downloadIso(VmAssets* self) {
     if (__btrc_isEmpty(self->spec->isoUrl)) {
         NixosLog_fatal("No iso or isoUrl in VM spec");
     }
-    int __fstr_700_len = snprintf(NULL, 0, "%s.tmp", self->spec->iso);
-    char* __fstr_700_buf = __btrc_str_track(((char*)malloc((__fstr_700_len + 1))));
-    snprintf(__fstr_700_buf, (__fstr_700_len + 1), "%s.tmp", self->spec->iso);
-    char* tmp = __fstr_700_buf;
+    int __fstr_197_len = snprintf(NULL, 0, "%s.tmp", self->spec->iso);
+    char* __fstr_197_buf = __btrc_str_track(((char*)malloc((__fstr_197_len + 1))));
+    snprintf(__fstr_197_buf, (__fstr_197_len + 1), "%s.tmp", self->spec->iso);
+    char* tmp = __fstr_197_buf;
     Command* curl = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("curl"), "-L"), "-o"), tmp), self->spec->isoUrl), false);
     ExecResult* result = UnixShell_runCommand(self->shell, curl);
     if (!ExecResult_ok(result)) {
@@ -16721,8 +9234,7 @@ void VmAssets_createSshKey(VmAssets* self) {
 }
 
 char* VmAssets_sshPubKey(VmAssets* self) {
-    __auto_type __btrc_ret_701 = __btrc_str_track(__btrc_trim(Path_readAll(VmAssets_sshPubKeyPath(self))));
-    return __btrc_ret_701;
+    return __btrc_str_track(__btrc_trim(Path_readAll(VmAssets_sshPubKeyPath(self))));
 }
 
 void VmAssets_createDisk(VmAssets* self) {
@@ -16871,28 +9383,19 @@ void QemuE2eHarness_destroy(QemuE2eHarness* self) {
 }
 
 char* QemuE2eHarness_diskPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_702 = PathTools_join(self->spec->workDir, "disk.qcow2");
-    return __btrc_ret_702;
+    return PathTools_join(self->spec->workDir, "disk.qcow2");
 }
 
 char* QemuE2eHarness_pidPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_703 = PathTools_join(self->spec->workDir, "qemu.pid");
-    return __btrc_ret_703;
+    return PathTools_join(self->spec->workDir, "qemu.pid");
 }
 
 char* QemuE2eHarness_monitorPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_704 = PathTools_join(self->spec->workDir, "monitor.sock");
-    return __btrc_ret_704;
+    return PathTools_join(self->spec->workDir, "monitor.sock");
 }
 
 char* QemuE2eHarness_qmpPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_705 = PathTools_join(self->spec->workDir, "qmp.sock");
-    return __btrc_ret_705;
-}
-
-char* QemuE2eHarness_sshKeyPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_706 = PathTools_join(self->spec->workDir, "id_ed25519");
-    return __btrc_ret_706;
+    return PathTools_join(self->spec->workDir, "qmp.sock");
 }
 
 void QemuE2eHarness_ensureWorkDir(QemuE2eHarness* self) {
@@ -16909,8 +9412,7 @@ void QemuE2eHarness_createSshKey(QemuE2eHarness* self) {
 }
 
 char* QemuE2eHarness_sshPubKey(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_708 = VmAssets_sshPubKey(self->assets);
-    return __btrc_ret_708;
+    return VmAssets_sshPubKey(self->assets);
 }
 
 void QemuE2eHarness_createDisk(QemuE2eHarness* self) {
@@ -17015,33 +9517,27 @@ void QemuE2eHarness_rebootDisk(QemuE2eHarness* self) {
 }
 
 ExecResult* QemuE2eHarness_ssh(QemuE2eHarness* self, char* command, bool checkStatus) {
-    __auto_type __btrc_ret_709 = SshClient_ssh(self->remote, command, checkStatus);
-    return __btrc_ret_709;
+    return SshClient_ssh(self->remote, command, checkStatus);
 }
 
 ExecResult* QemuE2eHarness_sshWithTimeout(QemuE2eHarness* self, char* command, bool checkStatus, int timeoutSeconds) {
-    __auto_type __btrc_ret_710 = SshClient_sshWithTimeout(self->remote, command, checkStatus, timeoutSeconds);
-    return __btrc_ret_710;
+    return SshClient_sshWithTimeout(self->remote, command, checkStatus, timeoutSeconds);
 }
 
 ExecResult* QemuE2eHarness_host(QemuE2eHarness* self, char* command, bool checkStatus) {
-    __auto_type __btrc_ret_711 = SshClient_host(self->remote, command, checkStatus);
-    return __btrc_ret_711;
+    return SshClient_host(self->remote, command, checkStatus);
 }
 
 ExecResult* QemuE2eHarness_nixEval(QemuE2eHarness* self, char* attribute, int timeoutSeconds) {
-    __auto_type __btrc_ret_712 = SshClient_nixEval(self->remote, attribute, timeoutSeconds);
-    return __btrc_ret_712;
+    return SshClient_nixEval(self->remote, attribute, timeoutSeconds);
 }
 
 ExecResult* QemuE2eHarness_qmp(QemuE2eHarness* self, char* command, int timeoutSeconds) {
-    __auto_type __btrc_ret_713 = SshClient_qmp(self->remote, command, timeoutSeconds);
-    return __btrc_ret_713;
+    return SshClient_qmp(self->remote, command, timeoutSeconds);
 }
 
 ExecResult* QemuE2eHarness_workspaceFileExists(QemuE2eHarness* self, char* relativePath) {
-    __auto_type __btrc_ret_714 = SshClient_workspaceFileExists(self->remote, relativePath);
-    return __btrc_ret_714;
+    return SshClient_workspaceFileExists(self->remote, relativePath);
 }
 
 void QemuE2eHarness_copyWorkspace(QemuE2eHarness* self, char* localPath, char* remotePath) {
@@ -17057,8 +9553,7 @@ void QemuE2eHarness_copyFrom(QemuE2eHarness* self, char* remotePath, char* local
 }
 
 char* QemuE2eHarness_serialLogPath(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_715 = QemuSerial_serialLogPath(self->serial);
-    return __btrc_ret_715;
+    return QemuSerial_serialLogPath(self->serial);
 }
 
 void QemuE2eHarness_serialSend(QemuE2eHarness* self, char* command) {
@@ -17082,8 +9577,7 @@ void QemuE2eHarness_requireSecureBootCapability(QemuE2eHarness* self) {
 }
 
 char* QemuE2eHarness_secureBootCapabilityReport(QemuE2eHarness* self) {
-    __auto_type __btrc_ret_716 = QemuFirmware_secureBootCapabilityReport(self->firmware);
-    return __btrc_ret_716;
+    return QemuFirmware_secureBootCapabilityReport(self->firmware);
 }
 
 bool QemuE2eHarness_waitForSsh(QemuE2eHarness* self, int timeout) {
@@ -17091,8 +9585,7 @@ bool QemuE2eHarness_waitForSsh(QemuE2eHarness* self, int timeout) {
     while (elapsed < timeout) {
         ExecResult* result = QemuE2eHarness_ssh(self, "true", false);
         if (ExecResult_ok(result)) {
-            __auto_type __btrc_ret_717 = true;
-            return __btrc_ret_717;
+            return true;
         }
         QemuE2eHarness_sleepSeconds(self, 3);
         (elapsed = (elapsed + 8));
@@ -17100,8 +9593,7 @@ bool QemuE2eHarness_waitForSsh(QemuE2eHarness* self, int timeout) {
             QemuE2eHarness_bootstrapSsh(self);
         }
     }
-    __auto_type __btrc_ret_718 = false;
-    return __btrc_ret_718;
+    return false;
 }
 
 void QemuE2eHarness_configureVmHost(QemuE2eHarness* self) {
@@ -17144,14 +9636,6 @@ void QemuE2eHarness_restore(QemuE2eHarness* self, char* name) {
         UnixShell_runCommand(self->shell, cp);
         QemuFirmware_makeFirmwareVarsWritable(self->firmware);
     }
-}
-
-void VmOperationCatalog_init(VmOperationCatalog* self) {
-    self->__rc = 1;
-}
-
-void VmOperationCatalog_destroy(VmOperationCatalog* self) {
-    free(self);
 }
 
 btrc_Vector_string* VmOperationCatalog_all(void) {
@@ -17244,11 +9728,9 @@ void VmTestRunner_fail(VmTestRunner* self, char* message) {
 
 bool VmTestRunner_outputMatches(VmTestRunner* self, ExecResult* result, char* expect) {
     if (__btrc_isEmpty(expect)) {
-        __auto_type __btrc_ret_720 = true;
-        return __btrc_ret_720;
+        return true;
     }
-    __auto_type __btrc_ret_721 = __btrc_strContains(ExecResult_stdout(result), expect);
-    return __btrc_ret_721;
+    return __btrc_strContains(ExecResult_stdout(result), expect);
 }
 
 void VmTestRunner_assertResult(VmTestRunner* self, char* label, ExecResult* result, char* expect) {
@@ -17422,9 +9904,9 @@ int VmTestRunner_run(VmTestRunner* self) {
     if (self->spec->operations->len == 0) {
         NixosLog_fatal("VM spec has no operations");
     }
-    int __n_723 = btrc_Vector_VmOperation_iterLen(self->spec->operations);
-    for (int __i_722 = 0; (__i_722 < __n_723); (__i_722++)) {
-        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->spec->operations, __i_722);
+    int __n_199 = btrc_Vector_VmOperation_iterLen(self->spec->operations);
+    for (int __i_198 = 0; (__i_198 < __n_199); (__i_198++)) {
+        VmOperation* op = btrc_Vector_VmOperation_iterGet(self->spec->operations, __i_198);
         if (self->failures > 0) {
             break;
         }
@@ -17432,12 +9914,10 @@ int VmTestRunner_run(VmTestRunner* self) {
     }
     if (self->failures > 0) {
         QemuE2eHarness_stop(self->vm);
-        __auto_type __btrc_ret_724 = 1;
-        return __btrc_ret_724;
+        return 1;
     }
     NixosLog_info(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("e2e ", self->spec->name)), ": pass")));
-    __auto_type __btrc_ret_725 = 0;
-    return __btrc_ret_725;
+    return 0;
 }
 
 void VmGraphNode_init(VmGraphNode* self) {
@@ -17449,10 +9929,10 @@ void VmGraphNode_init(VmGraphNode* self) {
             btrc_Vector_string_free(self->after);
         }
     }
-    btrc_Vector_string* __list_727 = btrc_Vector_string_new();
-    (self->after = __list_727);
-    btrc_Vector_string* __list_726 = btrc_Vector_string_new();
-    (__list_726->__rc++);
+    btrc_Vector_string* __list_201 = btrc_Vector_string_new();
+    (self->after = __list_201);
+    btrc_Vector_string* __list_200 = btrc_Vector_string_new();
+    (__list_200->__rc++);
     if (self->args != NULL) {
         if ((--self->args->__rc) <= 0) {
             btrc_Map_string_string_free(self->args);
@@ -17497,19 +9977,19 @@ void VmTestGraph_init(VmTestGraph* self) {
             btrc_Vector_string_free(self->defaults);
         }
     }
-    btrc_Vector_string* __list_729 = btrc_Vector_string_new();
-    (self->defaults = __list_729);
-    btrc_Vector_string* __list_728 = btrc_Vector_string_new();
-    (__list_728->__rc++);
+    btrc_Vector_string* __list_203 = btrc_Vector_string_new();
+    (self->defaults = __list_203);
+    btrc_Vector_string* __list_202 = btrc_Vector_string_new();
+    (__list_202->__rc++);
     if (self->nodes != NULL) {
         if ((--self->nodes->__rc) <= 0) {
             btrc_Vector_VmGraphNode_free(self->nodes);
         }
     }
-    btrc_Vector_VmGraphNode* __list_731 = btrc_Vector_VmGraphNode_new();
-    (self->nodes = __list_731);
-    btrc_Vector_VmGraphNode* __list_730 = btrc_Vector_VmGraphNode_new();
-    (__list_730->__rc++);
+    btrc_Vector_VmGraphNode* __list_205 = btrc_Vector_VmGraphNode_new();
+    (self->nodes = __list_205);
+    btrc_Vector_VmGraphNode* __list_204 = btrc_Vector_VmGraphNode_new();
+    (__list_204->__rc++);
 }
 
 VmTestGraph* VmTestGraph_new(void) {
@@ -17537,60 +10017,45 @@ void VmTestGraph_destroy(VmTestGraph* self) {
 }
 
 VmGraphNode* VmTestGraph_node(VmTestGraph* self, char* id) {
-    int __n_733 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
-    for (int __i_732 = 0; (__i_732 < __n_733); (__i_732++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_732);
+    int __n_207 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
+    for (int __i_206 = 0; (__i_206 < __n_207); (__i_206++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_206);
         if (strcmp(node->id, id) == 0) {
             return node;
         }
     }
     NixosLog_fatal(__btrc_str_track(__btrc_strcat("Unknown graph node: ", id)));
-    __auto_type __btrc_ret_734 = VmGraphNode_new();
-    return __btrc_ret_734;
+    return VmGraphNode_new();
 }
 
 char* VmTestGraph_resolvedSpecPath(VmTestGraph* self, VmGraphNode* node) {
     if (__btrc_startsWith(node->specPath, "/")) {
-        __auto_type __btrc_ret_735 = node->specPath;
-        return __btrc_ret_735;
+        return node->specPath;
     }
     if (FileSystem_exists(node->specPath)) {
-        __auto_type __btrc_ret_736 = node->specPath;
-        return __btrc_ret_736;
+        return node->specPath;
     }
-    __auto_type __btrc_ret_737 = PathTools_join(self->baseDir, node->specPath);
-    return __btrc_ret_737;
+    return PathTools_join(self->baseDir, node->specPath);
 }
 
 char* VmTestGraph_resolvedWorkspaceRoot(VmTestGraph* self) {
     if (__btrc_startsWith(self->workspaceRoot, "/")) {
-        __auto_type __btrc_ret_738 = self->workspaceRoot;
-        return __btrc_ret_738;
+        return self->workspaceRoot;
     }
-    __auto_type __btrc_ret_739 = PathTools_join(self->baseDir, self->workspaceRoot);
-    return __btrc_ret_739;
+    return PathTools_join(self->baseDir, self->workspaceRoot);
 }
 
 btrc_Vector_string* VmTestGraph_defaultTargets(VmTestGraph* self) {
     if (!btrc_Vector_string_isEmpty(self->defaults)) {
-        __auto_type __btrc_ret_740 = self->defaults;
-        return __btrc_ret_740;
+        return self->defaults;
     }
     btrc_Vector_string* result = btrc_Vector_string_new();
-    int __n_742 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
-    for (int __i_741 = 0; (__i_741 < __n_742); (__i_741++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_741);
+    int __n_209 = btrc_Vector_VmGraphNode_iterLen(self->nodes);
+    for (int __i_208 = 0; (__i_208 < __n_209); (__i_208++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->nodes, __i_208);
         btrc_Vector_string_push(result, node->id);
     }
     return result;
-}
-
-void VmGraphParser_init(VmGraphParser* self) {
-    self->__rc = 1;
-}
-
-void VmGraphParser_destroy(VmGraphParser* self) {
-    free(self);
 }
 
 btrc_Vector_string* VmGraphParser_stringArray(char* text, char* key) {
@@ -17702,10 +10167,10 @@ VmGraphNode* VmGraphParser_node(char* objectText) {
     char* argsText = VmSpecParser_objectField(objectText, "args");
     if (!__btrc_isEmpty(argsText)) {
         JsonObject* parsed = JsonObject_parse(argsText);
-        int __n_744 = btrc_Map_string_string_iterLen(parsed->values);
-        for (int __i_743 = 0; (__i_743 < __n_744); (__i_743++)) {
-            char* key = btrc_Map_string_string_iterGet(parsed->values, __i_743);
-            char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_743);
+        int __n_211 = btrc_Map_string_string_iterLen(parsed->values);
+        for (int __i_210 = 0; (__i_210 < __n_211); (__i_210++)) {
+            char* key = btrc_Map_string_string_iterGet(parsed->values, __i_210);
+            char* value = btrc_Map_string_string_iterValueAt(parsed->values, __i_210);
             btrc_Map_string_string_put(node->args, key, value);
         }
     }
@@ -17737,9 +10202,9 @@ VmTestGraph* VmGraphParser_readFile(char* path) {
     }
     (graph->defaults = VmGraphParser_stringArray(text, "default"));
     (VmGraphParser_stringArray(text, "default")->__rc++);
-    int __n_746 = btrc_Vector_string_iterLen(VmGraphParser_objectArray(text, "nodes"));
-    for (int __i_745 = 0; (__i_745 < __n_746); (__i_745++)) {
-        char* objectText = btrc_Vector_string_iterGet(VmGraphParser_objectArray(text, "nodes"), __i_745);
+    int __n_213 = btrc_Vector_string_iterLen(VmGraphParser_objectArray(text, "nodes"));
+    for (int __i_212 = 0; (__i_212 < __n_213); (__i_212++)) {
+        char* objectText = btrc_Vector_string_iterGet(VmGraphParser_objectArray(text, "nodes"), __i_212);
         btrc_Vector_VmGraphNode_push(graph->nodes, VmGraphParser_node(objectText));
     }
     if (btrc_Vector_VmGraphNode_isEmpty(graph->nodes)) {
@@ -17774,19 +10239,19 @@ void VmGraphRunner_init(VmGraphRunner* self, VmTestGraph* graph, btrc_Map_string
             btrc_Vector_string_free(self->done);
         }
     }
-    btrc_Vector_string* __list_748 = btrc_Vector_string_new();
-    (self->done = __list_748);
-    btrc_Vector_string* __list_747 = btrc_Vector_string_new();
-    (__list_747->__rc++);
+    btrc_Vector_string* __list_215 = btrc_Vector_string_new();
+    (self->done = __list_215);
+    btrc_Vector_string* __list_214 = btrc_Vector_string_new();
+    (__list_214->__rc++);
     if (self->visiting != NULL) {
         if ((--self->visiting->__rc) <= 0) {
             btrc_Vector_string_free(self->visiting);
         }
     }
-    btrc_Vector_string* __list_750 = btrc_Vector_string_new();
-    (self->visiting = __list_750);
-    btrc_Vector_string* __list_749 = btrc_Vector_string_new();
-    (__list_749->__rc++);
+    btrc_Vector_string* __list_217 = btrc_Vector_string_new();
+    (self->visiting = __list_217);
+    btrc_Vector_string* __list_216 = btrc_Vector_string_new();
+    (__list_216->__rc++);
     (self->sourceHashValue = "");
 }
 
@@ -17826,8 +10291,7 @@ void VmGraphRunner_destroy(VmGraphRunner* self) {
 
 char* VmGraphRunner_sourceHash(VmGraphRunner* self) {
     if (!__btrc_isEmpty(self->sourceHashValue)) {
-        __auto_type __btrc_ret_751 = self->sourceHashValue;
-        return __btrc_ret_751;
+        return self->sourceHashValue;
     }
     char* root = VmTestGraph_resolvedWorkspaceRoot(self->graph);
     char* command = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cd ", UnixShell_quote(root))), " && find . -type f")), " ! -path './.git/*'")), " ! -path '*/.vm/*'")), " ! -path '*/build/*'")), " ! -path '*/secrets/*'")), " ! -path './result/*'")), " ! -name '.DS_Store'")), " ! -name '._*'")), " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)")), " -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'"));
@@ -17845,8 +10309,7 @@ char* VmGraphRunner_sourceHash(VmGraphRunner* self) {
         (toolHash = ExecResult_trimmed(tool));
     }
     (self->sourceHashValue = __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(ExecResult_trimmed(result), ":nixosctl=")), toolHash)));
-    __auto_type __btrc_ret_752 = self->sourceHashValue;
-    return __btrc_ret_752;
+    return self->sourceHashValue;
 }
 
 VmTestSpec* VmGraphRunner_specFor(VmGraphRunner* self, VmGraphNode* node) {
@@ -17857,16 +10320,16 @@ VmTestSpec* VmGraphRunner_specFor(VmGraphRunner* self, VmGraphNode* node) {
     VmTestSpec_setArg(spec, "sourceHash", VmGraphRunner_sourceHash(self));
     VmGraphRunner_applyStructuralOverrides(self, spec, node->args);
     VmGraphRunner_applyStructuralOverrides(self, spec, self->args);
-    int __n_754 = btrc_Map_string_string_iterLen(node->args);
-    for (int __i_753 = 0; (__i_753 < __n_754); (__i_753++)) {
-        char* key = btrc_Map_string_string_iterGet(node->args, __i_753);
-        char* value = btrc_Map_string_string_iterValueAt(node->args, __i_753);
+    int __n_219 = btrc_Map_string_string_iterLen(node->args);
+    for (int __i_218 = 0; (__i_218 < __n_219); (__i_218++)) {
+        char* key = btrc_Map_string_string_iterGet(node->args, __i_218);
+        char* value = btrc_Map_string_string_iterValueAt(node->args, __i_218);
         VmTestSpec_setArg(spec, key, value);
     }
-    int __n_756 = btrc_Map_string_string_iterLen(self->args);
-    for (int __i_755 = 0; (__i_755 < __n_756); (__i_755++)) {
-        char* key = btrc_Map_string_string_iterGet(self->args, __i_755);
-        char* value = btrc_Map_string_string_iterValueAt(self->args, __i_755);
+    int __n_221 = btrc_Map_string_string_iterLen(self->args);
+    for (int __i_220 = 0; (__i_220 < __n_221); (__i_220++)) {
+        char* key = btrc_Map_string_string_iterGet(self->args, __i_220);
+        char* value = btrc_Map_string_string_iterValueAt(self->args, __i_220);
         VmTestSpec_setArg(spec, key, value);
     }
     VmTestSpec_expandArgs(spec);
@@ -17923,18 +10386,18 @@ void VmGraphRunner_applyStructuralOverrides(VmGraphRunner* self, VmTestSpec* spe
 }
 
 void VmGraphRunner_list(VmGraphRunner* self) {
-    int __n_758 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
-    for (int __i_757 = 0; (__i_757 < __n_758); (__i_757++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_757);
+    int __n_223 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
+    for (int __i_222 = 0; (__i_222 < __n_223); (__i_222++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_222);
         char* parents = (btrc_Vector_string_isEmpty(node->after) ? "root" : btrc_Vector_string_join(node->after, ","));
         Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(node->id, " <- ")), parents)), " :: ")), VmTestGraph_resolvedSpecPath(self->graph, node))));
     }
 }
 
 void VmGraphRunner_status(VmGraphRunner* self) {
-    int __n_760 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
-    for (int __i_759 = 0; (__i_759 < __n_760); (__i_759++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_759);
+    int __n_225 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
+    for (int __i_224 = 0; (__i_224 < __n_225); (__i_224++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_224);
         VmTestSpec* spec = VmGraphRunner_specFor(self, node);
         char* recorded = "missing";
         if (FileSystem_exists(VmTestSpec_stateHashFile(spec))) {
@@ -17947,64 +10410,58 @@ void VmGraphRunner_status(VmGraphRunner* self) {
 
 int VmGraphRunner_operationCoverage(VmGraphRunner* self) {
     btrc_Vector_string* covered = btrc_Vector_string_new();
-    int __n_762 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
-    for (int __i_761 = 0; (__i_761 < __n_762); (__i_761++)) {
-        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_761);
+    int __n_227 = btrc_Vector_VmGraphNode_iterLen(self->graph->nodes);
+    for (int __i_226 = 0; (__i_226 < __n_227); (__i_226++)) {
+        VmGraphNode* node = btrc_Vector_VmGraphNode_iterGet(self->graph->nodes, __i_226);
         VmTestSpec* spec = VmSpecParser_readFile(VmTestGraph_resolvedSpecPath(self->graph, node));
-        int __n_764 = btrc_Vector_VmOperation_iterLen(spec->operations);
-        for (int __i_763 = 0; (__i_763 < __n_764); (__i_763++)) {
-            VmOperation* op = btrc_Vector_VmOperation_iterGet(spec->operations, __i_763);
+        int __n_229 = btrc_Vector_VmOperation_iterLen(spec->operations);
+        for (int __i_228 = 0; (__i_228 < __n_229); (__i_228++)) {
+            VmOperation* op = btrc_Vector_VmOperation_iterGet(spec->operations, __i_228);
             if ((!__btrc_isEmpty(op->kind)) && (!btrc_Vector_string_contains(covered, op->kind))) {
                 btrc_Vector_string_push(covered, op->kind);
             }
         }
     }
     btrc_Vector_string* missing = btrc_Vector_string_new();
-    int __n_766 = btrc_Vector_string_iterLen(VmOperationCatalog_all());
-    for (int __i_765 = 0; (__i_765 < __n_766); (__i_765++)) {
-        char* kind = btrc_Vector_string_iterGet(VmOperationCatalog_all(), __i_765);
+    int __n_231 = btrc_Vector_string_iterLen(VmOperationCatalog_all());
+    for (int __i_230 = 0; (__i_230 < __n_231); (__i_230++)) {
+        char* kind = btrc_Vector_string_iterGet(VmOperationCatalog_all(), __i_230);
         if (!btrc_Vector_string_contains(covered, kind)) {
             btrc_Vector_string_push(missing, kind);
         }
     }
     if (!btrc_Vector_string_isEmpty(missing)) {
         Console_error(__btrc_str_track(__btrc_strcat("Missing e2e operation coverage: ", btrc_Vector_string_join(missing, ", "))));
-        __auto_type __btrc_ret_767 = 1;
-        return __btrc_ret_767;
+        return 1;
     }
     Console_log(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("E2E operation coverage: ", Strings_fromInt(covered->len))), "/")), Strings_fromInt(VmOperationCatalog_all()->len))));
-    __auto_type __btrc_ret_768 = 0;
-    return __btrc_ret_768;
+    return 0;
 }
 
 bool VmGraphRunner_force(VmGraphRunner* self) {
-    __auto_type __btrc_ret_769 = (strcmp(btrc_Map_string_string_getOrDefault(self->args, "force", "false"), "true") == 0);
-    return __btrc_ret_769;
+    return (strcmp(btrc_Map_string_string_getOrDefault(self->args, "force", "false"), "true") == 0);
 }
 
 bool VmGraphRunner_ready(VmGraphRunner* self, VmTestSpec* spec) {
     if (!FileSystem_exists(VmTestSpec_stateHashFile(spec))) {
-        __auto_type __btrc_ret_770 = false;
-        return __btrc_ret_770;
+        return false;
     }
     char* saved = __btrc_str_track(__btrc_trim(Path_readAll(VmTestSpec_stateHashFile(spec))));
-    __auto_type __btrc_ret_771 = (strcmp(saved, spec->stateHash) == 0);
-    return __btrc_ret_771;
+    return (strcmp(saved, spec->stateHash) == 0);
 }
 
 int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
     if (btrc_Vector_string_contains(self->done, id)) {
-        __auto_type __btrc_ret_772 = 0;
-        return __btrc_ret_772;
+        return 0;
     }
     if (btrc_Vector_string_contains(self->visiting, id)) {
         NixosLog_fatal(__btrc_str_track(__btrc_strcat("Cycle in graph at ", id)));
     }
     btrc_Vector_string_push(self->visiting, id);
     VmGraphNode* node = VmTestGraph_node(self->graph, id);
-    int __n_774 = btrc_Vector_string_iterLen(node->after);
-    for (int __i_773 = 0; (__i_773 < __n_774); (__i_773++)) {
-        char* parent = btrc_Vector_string_iterGet(node->after, __i_773);
+    int __n_233 = btrc_Vector_string_iterLen(node->after);
+    for (int __i_232 = 0; (__i_232 < __n_233); (__i_232++)) {
+        char* parent = btrc_Vector_string_iterGet(node->after, __i_232);
         int parentResult = VmGraphRunner_runNode(self, parent);
         if (parentResult != 0) {
             btrc_Vector_string_removeAll(self->visiting, id);
@@ -18016,8 +10473,7 @@ int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
         NixosLog_info(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("graph ", self->graph->name)), ": skip ")), node->id)), " -> ")), spec->state)), "@")), spec->stateHashShort)));
         btrc_Vector_string_push(self->done, id);
         btrc_Vector_string_removeAll(self->visiting, id);
-        __auto_type __btrc_ret_775 = 0;
-        return __btrc_ret_775;
+        return 0;
     }
     NixosLog_info(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("graph ", self->graph->name)), ": run ")), node->id)), " -> ")), spec->state)), "@")), spec->stateHashShort)));
     VmTestRunner* runner = VmTestRunner_new(spec);
@@ -18033,13 +10489,13 @@ int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
     }
     btrc_Vector_string_push(self->done, id);
     btrc_Vector_string_removeAll(self->visiting, id);
-    __auto_type __btrc_ret_776 = 0;
+    int __btrc_ret_234 = 0;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmTestRunner_destroy(runner);
         }
     }
-    return __btrc_ret_776;
+    return __btrc_ret_234;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmTestRunner_destroy(runner);
@@ -18049,16 +10505,15 @@ int VmGraphRunner_runNode(VmGraphRunner* self, char* id) {
 
 int VmGraphRunner_run(VmGraphRunner* self, btrc_Vector_string* targets) {
     btrc_Vector_string* selected = (btrc_Vector_string_isEmpty(targets) ? VmTestGraph_defaultTargets(self->graph) : targets);
-    int __n_778 = btrc_Vector_string_iterLen(selected);
-    for (int __i_777 = 0; (__i_777 < __n_778); (__i_777++)) {
-        char* id = btrc_Vector_string_iterGet(selected, __i_777);
+    int __n_236 = btrc_Vector_string_iterLen(selected);
+    for (int __i_235 = 0; (__i_235 < __n_236); (__i_235++)) {
+        char* id = btrc_Vector_string_iterGet(selected, __i_235);
         int result = VmGraphRunner_runNode(self, id);
         if (result != 0) {
             return result;
         }
     }
-    __auto_type __btrc_ret_779 = 0;
-    return __btrc_ret_779;
+    return 0;
 }
 
 void E2eCli_init(E2eCli* self) {
@@ -18072,17 +10527,12 @@ E2eCli* E2eCli_new(void) {
     return self;
 }
 
-void E2eCli_destroy(E2eCli* self) {
-    free(self);
-}
-
 char* E2eCli_tail(E2eCli* self, CliArgs* args, int startIndex) {
     btrc_Vector_string* parts = btrc_Vector_string_new();
     for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
         btrc_Vector_string_push(parts, CliArgs_get(args, i));
     }
-    __auto_type __btrc_ret_780 = btrc_Vector_string_join(parts, " ");
-    return __btrc_ret_780;
+    return btrc_Vector_string_join(parts, " ");
 }
 
 void E2eCli_applySpecArgs(E2eCli* self, VmTestSpec* spec, CliArgs* args, int startIndex) {
@@ -18114,122 +10564,122 @@ int E2eCli_runVm(E2eCli* self, CliArgs* args) {
     char* action = CliArgs_get(args, 2);
     if (strcmp(action, "status") == 0) {
         QemuE2eHarness_printStatus(vm);
-        __auto_type __btrc_ret_781 = 0;
+        int __btrc_ret_237 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_781;
+        return __btrc_ret_237;
     }
     if (strcmp(action, "hash") == 0) {
         Console_log(spec->stateHash);
-        __auto_type __btrc_ret_782 = 0;
+        int __btrc_ret_238 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_782;
+        return __btrc_ret_238;
     }
     if (strcmp(action, "setup") == 0) {
         QemuE2eHarness_setup(vm);
-        __auto_type __btrc_ret_783 = 0;
+        int __btrc_ret_239 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_783;
+        return __btrc_ret_239;
     }
     if (strcmp(action, "download-iso") == 0) {
         QemuE2eHarness_downloadIso(vm);
-        __auto_type __btrc_ret_784 = 0;
+        int __btrc_ret_240 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_784;
+        return __btrc_ret_240;
     }
     if (strcmp(action, "create-key") == 0) {
         QemuE2eHarness_createSshKey(vm);
-        __auto_type __btrc_ret_785 = 0;
+        int __btrc_ret_241 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_785;
+        return __btrc_ret_241;
     }
     if (strcmp(action, "create-disk") == 0) {
         QemuE2eHarness_createDisk(vm);
-        __auto_type __btrc_ret_786 = 0;
+        int __btrc_ret_242 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_786;
+        return __btrc_ret_242;
     }
     if (strcmp(action, "up") == 0) {
         QemuE2eHarness_upFromIso(vm);
-        __auto_type __btrc_ret_787 = 0;
+        int __btrc_ret_243 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_787;
+        return __btrc_ret_243;
     }
     if (strcmp(action, "boot-iso") == 0) {
         QemuE2eHarness_start(vm, true);
-        __auto_type __btrc_ret_788 = 0;
+        int __btrc_ret_244 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_788;
+        return __btrc_ret_244;
     }
     if (strcmp(action, "boot-disk") == 0) {
         QemuE2eHarness_start(vm, false);
-        __auto_type __btrc_ret_789 = 0;
+        int __btrc_ret_245 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_789;
+        return __btrc_ret_245;
     }
     if (strcmp(action, "bootstrap-ssh") == 0) {
         QemuE2eHarness_bootstrapSsh(vm);
-        __auto_type __btrc_ret_790 = 0;
+        int __btrc_ret_246 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_790;
+        return __btrc_ret_246;
     }
     if (strcmp(action, "wait-ssh") == 0) {
         int timeout = Strings_toInt(CliArgs_valueAfter(args, "--timeout", "180"));
         if (!QemuE2eHarness_waitForSsh(vm, timeout)) {
-            __auto_type __btrc_ret_791 = 1;
+            int __btrc_ret_247 = 1;
             if (vm != NULL) {
                 if ((--vm->__rc) <= 0) {
                     QemuE2eHarness_destroy(vm);
                 }
             }
-            return __btrc_ret_791;
+            return __btrc_ret_247;
         }
-        __auto_type __btrc_ret_792 = 0;
+        int __btrc_ret_248 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_792;
+        return __btrc_ret_248;
     }
     if (strcmp(action, "ssh") == 0) {
         char* command = E2eCli_tail(self, args, 3);
@@ -18238,13 +10688,13 @@ int E2eCli_runVm(E2eCli* self, CliArgs* args) {
         }
         ExecResult* result = QemuE2eHarness_ssh(vm, command, false);
         Console_log(ExecResult_trimmed(result));
-        __auto_type __btrc_ret_793 = result->code;
+        int __btrc_ret_249 = result->code;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_793;
+        return __btrc_ret_249;
     }
     if (strcmp(action, "host") == 0) {
         char* command = E2eCli_tail(self, args, 3);
@@ -18253,123 +10703,123 @@ int E2eCli_runVm(E2eCli* self, CliArgs* args) {
         }
         ExecResult* result = QemuE2eHarness_host(vm, command, false);
         Console_log(ExecResult_trimmed(result));
-        __auto_type __btrc_ret_794 = result->code;
+        int __btrc_ret_250 = result->code;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_794;
+        return __btrc_ret_250;
     }
     if (strcmp(action, "copy-workspace") == 0) {
         QemuE2eHarness_copyWorkspace(vm, CliArgs_valueAfter(args, "--local", ".."), CliArgs_valueAfter(args, "--remote", "/etc/nixos"));
-        __auto_type __btrc_ret_795 = 0;
+        int __btrc_ret_251 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_795;
+        return __btrc_ret_251;
     }
     if (strcmp(action, "configure-vm-host") == 0) {
         QemuE2eHarness_configureVmHost(vm);
-        __auto_type __btrc_ret_796 = 0;
+        int __btrc_ret_252 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_796;
+        return __btrc_ret_252;
     }
     if (strcmp(action, "install-nixos") == 0) {
         QemuE2eHarness_installNixosGuest(vm);
-        __auto_type __btrc_ret_797 = 0;
+        int __btrc_ret_253 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_797;
+        return __btrc_ret_253;
     }
     if (strcmp(action, "reboot-disk") == 0) {
         QemuE2eHarness_rebootDisk(vm);
-        __auto_type __btrc_ret_798 = 0;
+        int __btrc_ret_254 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_798;
+        return __btrc_ret_254;
     }
     if (strcmp(action, "snapshot") == 0) {
         QemuE2eHarness_snapshot(vm, CliArgs_valueAfter(args, "--name", "manual"));
-        __auto_type __btrc_ret_799 = 0;
+        int __btrc_ret_255 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_799;
+        return __btrc_ret_255;
     }
     if (strcmp(action, "restore") == 0) {
         QemuE2eHarness_restore(vm, CliArgs_valueAfter(args, "--name", "manual"));
-        __auto_type __btrc_ret_800 = 0;
+        int __btrc_ret_256 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_800;
+        return __btrc_ret_256;
     }
     if (strcmp(action, "record-state") == 0) {
         QemuE2eHarness_recordState(vm);
-        __auto_type __btrc_ret_801 = 0;
+        int __btrc_ret_257 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_801;
+        return __btrc_ret_257;
     }
     if (strcmp(action, "stop") == 0) {
         QemuE2eHarness_stop(vm);
-        __auto_type __btrc_ret_802 = 0;
+        int __btrc_ret_258 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_802;
+        return __btrc_ret_258;
     }
     if (strcmp(action, "reset-state") == 0) {
         QemuE2eHarness_resetState(vm);
-        __auto_type __btrc_ret_803 = 0;
+        int __btrc_ret_259 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_803;
+        return __btrc_ret_259;
     }
     if (strcmp(action, "clean-state") == 0) {
         QemuE2eHarness_resetState(vm);
         QemuE2eHarness_cleanStateRecord(vm);
-        __auto_type __btrc_ret_804 = 0;
+        int __btrc_ret_260 = 0;
         if (vm != NULL) {
             if ((--vm->__rc) <= 0) {
                 QemuE2eHarness_destroy(vm);
             }
         }
-        return __btrc_ret_804;
+        return __btrc_ret_260;
     }
     NixosLog_fatal(__btrc_str_track(__btrc_strcat("Unknown vm action: ", action)));
-    __auto_type __btrc_ret_805 = 1;
+    int __btrc_ret_261 = 1;
     if (vm != NULL) {
         if ((--vm->__rc) <= 0) {
             QemuE2eHarness_destroy(vm);
         }
     }
-    return __btrc_ret_805;
+    return __btrc_ret_261;
     if (vm != NULL) {
         if ((--vm->__rc) <= 0) {
             QemuE2eHarness_destroy(vm);
@@ -18431,23 +10881,23 @@ int E2eCli_runGraph(E2eCli* self, CliArgs* args) {
     VmGraphRunner* runner = VmGraphRunner_new(graph, overrides);
     if (strcmp(action, "list") == 0) {
         VmGraphRunner_list(runner);
-        __auto_type __btrc_ret_806 = 0;
+        int __btrc_ret_262 = 0;
         if (runner != NULL) {
             if ((--runner->__rc) <= 0) {
                 VmGraphRunner_destroy(runner);
             }
         }
-        return __btrc_ret_806;
+        return __btrc_ret_262;
     }
     if (strcmp(action, "status") == 0) {
         VmGraphRunner_status(runner);
-        __auto_type __btrc_ret_807 = 0;
+        int __btrc_ret_263 = 0;
         if (runner != NULL) {
             if ((--runner->__rc) <= 0) {
                 VmGraphRunner_destroy(runner);
             }
         }
-        return __btrc_ret_807;
+        return __btrc_ret_263;
     }
     if (strcmp(action, "coverage") == 0) {
         int code = VmGraphRunner_operationCoverage(runner);
@@ -18468,13 +10918,13 @@ int E2eCli_runGraph(E2eCli* self, CliArgs* args) {
         return code;
     }
     NixosLog_fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
-    __auto_type __btrc_ret_808 = 1;
+    int __btrc_ret_264 = 1;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmGraphRunner_destroy(runner);
         }
     }
-    return __btrc_ret_808;
+    return __btrc_ret_264;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmGraphRunner_destroy(runner);
@@ -18489,13 +10939,13 @@ int E2eCli_runE2e(E2eCli* self, CliArgs* args) {
     VmTestSpec* spec = VmSpecParser_readFile(CliArgs_get(args, 1));
     E2eCli_applySpecArgs(self, spec, args, 2);
     VmTestRunner* runner = VmTestRunner_new(spec);
-    __auto_type __btrc_ret_809 = VmTestRunner_run(runner);
+    int __btrc_ret_265 = VmTestRunner_run(runner);
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmTestRunner_destroy(runner);
         }
     }
-    return __btrc_ret_809;
+    return __btrc_ret_265;
     if (runner != NULL) {
         if ((--runner->__rc) <= 0) {
             VmTestRunner_destroy(runner);
@@ -18535,8 +10985,7 @@ void NixosCtl_destroy(NixosCtl* self) {
 }
 
 char* NixosCtl_env(char* name, char* fallback) {
-    __auto_type __btrc_ret_810 = Environment_get(name, fallback);
-    return __btrc_ret_810;
+    return Environment_get(name, fallback);
 }
 
 void NixosCtl_usage(NixosCtl* self) {
@@ -18545,30 +10994,28 @@ void NixosCtl_usage(NixosCtl* self) {
 
 bool NixosCtl_needsRoot(NixosCtl* self, char* command) {
     if (strcmp(NixosCtl_env("NIXOSCTL_ASSUME_ROOT_FOR_TESTS", "false"), "true") == 0) {
-        __auto_type __btrc_ret_811 = false;
-        return __btrc_ret_811;
+        return false;
     }
-    __auto_type __btrc_ret_812 = (((((((((strcmp(command, "update") == 0) || (strcmp(command, "upgrade") == 0)) || (strcmp(command, "install") == 0)) || (strcmp(command, "snapshot") == 0)) || (strcmp(command, "diff") == 0)) || (strcmp(command, "fix-permissions") == 0)) || (strcmp(command, "change-password") == 0)) || (strcmp(command, "secure-boot") == 0)) || (strcmp(command, "tpm2") == 0));
-    return __btrc_ret_812;
+    return (((((((((strcmp(command, "update") == 0) || (strcmp(command, "upgrade") == 0)) || (strcmp(command, "install") == 0)) || (strcmp(command, "snapshot") == 0)) || (strcmp(command, "diff") == 0)) || (strcmp(command, "fix-permissions") == 0)) || (strcmp(command, "change-password") == 0)) || (strcmp(command, "secure-boot") == 0)) || (strcmp(command, "tpm2") == 0));
 }
 
 int NixosCtl_sudoSelf(NixosCtl* self, CliArgs* args) {
     Command* sudo = Command_new("sudo");
     Command_arg(sudo, args->program);
-    int __n_814 = btrc_Vector_string_iterLen(args->values);
-    for (int __i_813 = 0; (__i_813 < __n_814); (__i_813++)) {
-        char* value = btrc_Vector_string_iterGet(args->values, __i_813);
+    int __n_267 = btrc_Vector_string_iterLen(args->values);
+    for (int __i_266 = 0; (__i_266 < __n_267); (__i_266++)) {
+        char* value = btrc_Vector_string_iterGet(args->values, __i_266);
         Command_arg(sudo, value);
     }
     Command_capture(sudo, false);
     ExecResult* result = UnixShell_runCommand(UnixShell_new(), sudo);
-    __auto_type __btrc_ret_815 = result->code;
+    int __btrc_ret_268 = result->code;
     if (sudo != NULL) {
         if ((--sudo->__rc) <= 0) {
             Command_destroy(sudo);
         }
     }
-    return __btrc_ret_815;
+    return __btrc_ret_268;
     if (sudo != NULL) {
         if ((--sudo->__rc) <= 0) {
             Command_destroy(sudo);
@@ -18579,21 +11026,18 @@ int NixosCtl_sudoSelf(NixosCtl* self, CliArgs* args) {
 int NixosCtl_run(NixosCtl* self, CliArgs* args) {
     if (CliArgs_count(args) == 0) {
         NixosCtl_usage(self);
-        __auto_type __btrc_ret_816 = 1;
-        return __btrc_ret_816;
+        return 1;
     }
     char* cmd = CliArgs_command(args);
     if (NixosCtl_needsRoot(self, cmd) && (!Platform_isRoot())) {
-        __auto_type __btrc_ret_817 = NixosCtl_sudoSelf(self, args);
-        return __btrc_ret_817;
+        return NixosCtl_sudoSelf(self, args);
     }
     if (strcmp(cmd, "eval") == 0) {
         if (CliArgs_count(args) < 2) {
             NixosLog_fatal("Usage: nixosctl eval <attribute>");
         }
         Console_log(NixosConfig_evalRaw(self->config, CliArgs_get(args, 1)));
-        __auto_type __btrc_ret_818 = 0;
-        return __btrc_ret_818;
+        return 0;
     }
     if ((strcmp(cmd, "update") == 0) || (strcmp(cmd, "upgrade") == 0)) {
         RebuildOptions* options = RebuildOptions_new();
@@ -18602,13 +11046,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         (options->clean = ((CliArgs_has(args, "--clean") || CliArgs_has(args, "--upgrade")) || (strcmp(cmd, "upgrade") == 0)));
         (options->upgrade = (CliArgs_has(args, "--upgrade") || (strcmp(cmd, "upgrade") == 0)));
         NixosRebuilder_update(NixosRebuilder_new(self->config), options);
-        __auto_type __btrc_ret_819 = 0;
+        int __btrc_ret_269 = 0;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 RebuildOptions_destroy(options);
             }
         }
-        return __btrc_ret_819;
+        return __btrc_ret_269;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 RebuildOptions_destroy(options);
@@ -18634,25 +11078,25 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         if (confirmed || Interactive_confirm(installer->interactive, "Install NixOS?")) {
             ExecResult* installed = Installer_installNixos(installer);
             if (!ExecResult_ok(installed)) {
-                __auto_type __btrc_ret_820 = installed->code;
+                int __btrc_ret_270 = installed->code;
                 if (installer != NULL) {
                     if ((--installer->__rc) <= 0) {
                         Installer_destroy(installer);
                     }
                 }
-                return __btrc_ret_820;
+                return __btrc_ret_270;
             }
         } else if (Interactive_confirm(installer->interactive, "Permission NixOS?")) {
             Installer_permissionNixos(installer);
         }
         Interactive_askToReboot(installer->interactive);
-        __auto_type __btrc_ret_821 = 0;
+        int __btrc_ret_271 = 0;
         if (installer != NULL) {
             if ((--installer->__rc) <= 0) {
                 Installer_destroy(installer);
             }
         }
-        return __btrc_ret_821;
+        return __btrc_ret_271;
         if (installer != NULL) {
             if ((--installer->__rc) <= 0) {
                 Installer_destroy(installer);
@@ -18661,8 +11105,7 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
     }
     if (strcmp(cmd, "snapshot") == 0) {
         SnapshotManager_createInitialSnapshots(SnapshotManager_new(self->config));
-        __auto_type __btrc_ret_822 = 0;
-        return __btrc_ret_822;
+        return 0;
     }
     if (strcmp(cmd, "diff") == 0) {
         DiffOptions* options = DiffOptions_new();
@@ -18677,13 +11120,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         (options->pattern = CliArgs_valueAfter(args, "--pattern", ""));
         (options->diffignore = CliArgs_valueAfter(args, "--diffignore", ""));
         DiffScanner_print(DiffScanner_new(self->config), options);
-        __auto_type __btrc_ret_823 = 0;
+        int __btrc_ret_272 = 0;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 DiffOptions_destroy(options);
             }
         }
-        return __btrc_ret_823;
+        return __btrc_ret_272;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 DiffOptions_destroy(options);
@@ -18696,8 +11139,7 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             (username = NixosCtl_env("USER", "root"));
         }
         PermissionsManager_secureTree(PermissionsManager_new(self->config), username);
-        __auto_type __btrc_ret_824 = 0;
-        return __btrc_ret_824;
+        return 0;
     }
     if (strcmp(cmd, "change-password") == 0) {
         if (CliArgs_has(args, "--full-disk-encryption-only") && CliArgs_has(args, "--user-account-only")) {
@@ -18715,13 +11157,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             (newPassword = Interactive_askPasswordConfirmed(interactive, "Enter new password"));
         }
         PasswordManager_change(PasswordManager_new(self->config), oldPassword, newPassword, changeFde, changeUser, CliArgs_has(args, "--update-tpm2"));
-        __auto_type __btrc_ret_825 = 0;
+        int __btrc_ret_273 = 0;
         if (interactive != NULL) {
             if ((--interactive->__rc) <= 0) {
                 Interactive_destroy(interactive);
             }
         }
-        return __btrc_ret_825;
+        return __btrc_ret_273;
         if (interactive != NULL) {
             if ((--interactive->__rc) <= 0) {
                 Interactive_destroy(interactive);
@@ -18736,33 +11178,33 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "enable") == 0) {
             SecureBootManager_enable(manager, CliArgs_has(args, "--microsoft"));
-            __auto_type __btrc_ret_826 = 0;
+            int __btrc_ret_274 = 0;
             if (manager != NULL) {
                 if ((--manager->__rc) <= 0) {
                     SecureBootManager_destroy(manager);
                 }
             }
-            return __btrc_ret_826;
+            return __btrc_ret_274;
         }
         if (strcmp(action, "disable") == 0) {
             SecureBootManager_disable(manager);
-            __auto_type __btrc_ret_827 = 0;
+            int __btrc_ret_275 = 0;
             if (manager != NULL) {
                 if ((--manager->__rc) <= 0) {
                     SecureBootManager_destroy(manager);
                 }
             }
-            return __btrc_ret_827;
+            return __btrc_ret_275;
         }
         if (strcmp(action, "status") == 0) {
             SecureBootManager_status(manager);
-            __auto_type __btrc_ret_828 = 0;
+            int __btrc_ret_276 = 0;
             if (manager != NULL) {
                 if ((--manager->__rc) <= 0) {
                     SecureBootManager_destroy(manager);
                 }
             }
-            return __btrc_ret_828;
+            return __btrc_ret_276;
         }
         NixosLog_fatal("Usage: nixosctl secure-boot <enable|disable|status>");
         if (manager != NULL) {
@@ -18779,13 +11221,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "status") == 0) {
             Tpm2Manager_status(tpm);
-            __auto_type __btrc_ret_829 = 0;
+            int __btrc_ret_277 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_829;
+            return __btrc_ret_277;
         }
         if (strcmp(action, "enable") == 0) {
             if (!Tpm2Manager_exists(tpm)) {
@@ -18797,25 +11239,25 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             if (!Tpm2Manager_enroll(tpm)) {
                 NixosLog_fatal("TPM2 enrollment failed");
             }
-            __auto_type __btrc_ret_830 = 0;
+            int __btrc_ret_278 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_830;
+            return __btrc_ret_278;
         }
         if (strcmp(action, "disable") == 0) {
             if (!Tpm2Manager_wipe(tpm)) {
                 NixosLog_fatal("TPM2 wipe failed");
             }
-            __auto_type __btrc_ret_831 = 0;
+            int __btrc_ret_279 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_831;
+            return __btrc_ret_279;
         }
         if (tpm != NULL) {
             if ((--tpm->__rc) <= 0) {
@@ -18831,66 +11273,66 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "list") == 0) {
             DisplayManager_list(displays);
-            __auto_type __btrc_ret_832 = 0;
+            int __btrc_ret_280 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
                     DisplayManager_destroy(displays);
                 }
             }
-            return __btrc_ret_832;
+            return __btrc_ret_280;
         }
         if (strcmp(action, "layout") == 0) {
             DisplayManager_layout(displays);
-            __auto_type __btrc_ret_833 = 0;
+            int __btrc_ret_281 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
                     DisplayManager_destroy(displays);
                 }
             }
-            return __btrc_ret_833;
+            return __btrc_ret_281;
         }
         if (CliArgs_count(args) < 3) {
             NixosLog_fatal("Missing display argument");
         }
         if (strcmp(action, "enable") == 0) {
             DisplayManager_enable(displays, CliArgs_get(args, 2));
-            __auto_type __btrc_ret_834 = 0;
+            int __btrc_ret_282 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
                     DisplayManager_destroy(displays);
                 }
             }
-            return __btrc_ret_834;
+            return __btrc_ret_282;
         }
         if (strcmp(action, "disable") == 0) {
             DisplayManager_disable(displays, CliArgs_get(args, 2));
-            __auto_type __btrc_ret_835 = 0;
+            int __btrc_ret_283 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
                     DisplayManager_destroy(displays);
                 }
             }
-            return __btrc_ret_835;
+            return __btrc_ret_283;
         }
         if (strcmp(action, "primary") == 0) {
             DisplayManager_primary(displays, CliArgs_get(args, 2));
-            __auto_type __btrc_ret_836 = 0;
+            int __btrc_ret_284 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
                     DisplayManager_destroy(displays);
                 }
             }
-            return __btrc_ret_836;
+            return __btrc_ret_284;
         }
         if (strcmp(action, "dpms") == 0) {
             DisplayManager_dpms(displays, CliArgs_get(args, 2));
-            __auto_type __btrc_ret_837 = 0;
+            int __btrc_ret_285 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
                     DisplayManager_destroy(displays);
                 }
             }
-            return __btrc_ret_837;
+            return __btrc_ret_285;
         }
         if (displays != NULL) {
             if ((--displays->__rc) <= 0) {
@@ -18906,36 +11348,36 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "list") == 0) {
             AudioManager_list(audio);
-            __auto_type __btrc_ret_838 = 0;
+            int __btrc_ret_286 = 0;
             if (audio != NULL) {
                 if ((--audio->__rc) <= 0) {
                     AudioManager_destroy(audio);
                 }
             }
-            return __btrc_ret_838;
+            return __btrc_ret_286;
         }
         if (strcmp(action, "current") == 0) {
             Console_log(AudioManager_current(audio));
-            __auto_type __btrc_ret_839 = 0;
+            int __btrc_ret_287 = 0;
             if (audio != NULL) {
                 if ((--audio->__rc) <= 0) {
                     AudioManager_destroy(audio);
                 }
             }
-            return __btrc_ret_839;
+            return __btrc_ret_287;
         }
         if (strcmp(action, "set") == 0) {
             if (CliArgs_count(args) < 3) {
                 NixosLog_fatal("Usage: nixosctl audio set <sink>");
             }
             AudioManager_set(audio, CliArgs_get(args, 2));
-            __auto_type __btrc_ret_840 = 0;
+            int __btrc_ret_288 = 0;
             if (audio != NULL) {
                 if ((--audio->__rc) <= 0) {
                     AudioManager_destroy(audio);
                 }
             }
-            return __btrc_ret_840;
+            return __btrc_ret_288;
         }
         if (audio != NULL) {
             if ((--audio->__rc) <= 0) {
@@ -18950,43 +11392,43 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         CaffeineManager* caffeine = CaffeineManager_new();
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "status") == 0) {
-            __auto_type __btrc_ret_841 = (CaffeineManager_enabled(caffeine) ? 0 : 1);
+            int __btrc_ret_289 = (CaffeineManager_enabled(caffeine) ? 0 : 1);
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
                     CaffeineManager_destroy(caffeine);
                 }
             }
-            return __btrc_ret_841;
+            return __btrc_ret_289;
         }
         if (strcmp(action, "enable") == 0) {
             CaffeineManager_enable(caffeine);
-            __auto_type __btrc_ret_842 = 0;
+            int __btrc_ret_290 = 0;
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
                     CaffeineManager_destroy(caffeine);
                 }
             }
-            return __btrc_ret_842;
+            return __btrc_ret_290;
         }
         if (strcmp(action, "disable") == 0) {
             CaffeineManager_disable(caffeine);
-            __auto_type __btrc_ret_843 = 0;
+            int __btrc_ret_291 = 0;
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
                     CaffeineManager_destroy(caffeine);
                 }
             }
-            return __btrc_ret_843;
+            return __btrc_ret_291;
         }
         if (strcmp(action, "toggle") == 0) {
             CaffeineManager_toggle(caffeine);
-            __auto_type __btrc_ret_844 = 0;
+            int __btrc_ret_292 = 0;
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
                     CaffeineManager_destroy(caffeine);
                 }
             }
-            return __btrc_ret_844;
+            return __btrc_ret_292;
         }
         if (caffeine != NULL) {
             if ((--caffeine->__rc) <= 0) {
@@ -19002,23 +11444,23 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "update") == 0) {
             SystemUi_update(system);
-            __auto_type __btrc_ret_845 = 0;
+            int __btrc_ret_293 = 0;
             if (system != NULL) {
                 if ((--system->__rc) <= 0) {
                     SystemUi_destroy(system);
                 }
             }
-            return __btrc_ret_845;
+            return __btrc_ret_293;
         }
         if (strcmp(action, "upgrade") == 0) {
             SystemUi_upgrade(system);
-            __auto_type __btrc_ret_846 = 0;
+            int __btrc_ret_294 = 0;
             if (system != NULL) {
                 if ((--system->__rc) <= 0) {
                     SystemUi_destroy(system);
                 }
             }
-            return __btrc_ret_846;
+            return __btrc_ret_294;
         }
         if (system != NULL) {
             if ((--system->__rc) <= 0) {
@@ -19027,20 +11469,16 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         }
     }
     if (strcmp(cmd, "vm") == 0) {
-        __auto_type __btrc_ret_847 = E2eCli_runVm(E2eCli_new(), args);
-        return __btrc_ret_847;
+        return E2eCli_runVm(E2eCli_new(), args);
     }
     if (strcmp(cmd, "e2e") == 0) {
-        __auto_type __btrc_ret_848 = E2eCli_runE2e(E2eCli_new(), args);
-        return __btrc_ret_848;
+        return E2eCli_runE2e(E2eCli_new(), args);
     }
     if (strcmp(cmd, "graph") == 0) {
-        __auto_type __btrc_ret_849 = E2eCli_runGraph(E2eCli_new(), args);
-        return __btrc_ret_849;
+        return E2eCli_runGraph(E2eCli_new(), args);
     }
     NixosCtl_usage(self);
-    __auto_type __btrc_ret_850 = 1;
-    return __btrc_ret_850;
+    return 1;
 }
 
 int main(int argc, char** argv) {

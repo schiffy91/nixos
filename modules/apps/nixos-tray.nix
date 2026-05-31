@@ -1,4 +1,4 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, inputs, btrcStdlib, ... }:
 # Native NixOS management system tray. Compiles the checked-in transpiled C
 # (generated/nixos-tray.c, from bin/nixos-tray.btrc) together with the btrc
 # stdlib's Linux StatusNotifierItem shim, and runs it as a graphical-session
@@ -8,6 +8,8 @@
 #   btrcpy --no-stdlib bin/nixos-tray.btrc -o build/nixos-tray.c \
 #     && cp build/nixos-tray.c generated/nixos-tray.c
 let
+  # The stdlib comes from the precompiled archive (btrcStdlib module arg); only
+  # the platform tray shim (non-vendored C) still comes from the btrc source tree.
   trayDir = "${inputs.btrc}/src/stdlib/tray";
   nixosTrayBin = pkgs.stdenv.mkDerivation {
     name = "nixos-tray";
@@ -15,8 +17,8 @@ let
     nativeBuildInputs = [ pkgs.pkg-config pkgs.makeWrapper ];
     buildInputs = [ pkgs.dbus ];
     buildPhase = ''
-      $CC -std=c11 -O2 -I${trayDir} \
-        ${../../generated/nixos-tray.c} ${trayDir}/btrc_tray_linux.c \
+      $CC -std=c11 -O2 -I${btrcStdlib.incDir} -I${trayDir} ${btrcStdlib.gcFlags} \
+        ${../../generated/nixos-tray.c} ${trayDir}/btrc_tray_linux.c ${btrcStdlib.stdlibInput} \
         $(pkg-config --cflags --libs dbus-1) -lm -lpthread -o nixos-tray
     '';
     installPhase = ''

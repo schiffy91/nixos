@@ -1,4 +1,4 @@
-{ config, lib, pkgs, utils, ... }:
+{ config, lib, pkgs, utils, btrcStdlib, ... }:
 let
 	device = if config.settings.disk.encryption.enable then config.settings.disk.by.mapper.root else config.settings.disk.by.partlabel.root;
 	deviceDependency = if config.settings.disk.encryption.enable then "dev-mapper-${config.settings.disk.label.root}.device" else "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
@@ -44,10 +44,14 @@ let
 
 	semipermeableMembraneBin = pkgs.stdenv.mkDerivation {
 		name = "semipermeable_membrane";
-		src = ../../generated/semipermeable_membrane.c;
 		dontUnpack = true;
+		# Program-only C (stdlib referenced, not inlined) linked against the
+		# precompiled stdlib archive. Static, so the binary stays self-contained
+		# in the initrd. See modules/apps/btrc.nix.
 		buildPhase = ''
-			$CC -std=c11 -O2 -o semipermeable_membrane $src -lm -lpthread
+			$CC -std=c11 -O2 -I${btrcStdlib.incDir} ${btrcStdlib.gcFlags} \
+				${../../generated/semipermeable_membrane.c} ${btrcStdlib.stdlibInput} \
+				-lm -lpthread -o semipermeable_membrane
 		'';
 		installPhase = "mkdir -p $out/bin && cp semipermeable_membrane $out/bin/";
 	};

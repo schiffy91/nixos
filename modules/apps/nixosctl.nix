@@ -1,15 +1,18 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, btrcStdlib, ... }:
 let
   # Build nixosctl from the checked-in transpiled C (mirrors
   # semipermeableMembraneBin in modules/system/immutability.nix). Regenerate
   # generated/nixosctl.c with `make generated` after editing bin/nixosctl.btrc.
   nixosctlBin = pkgs.stdenv.mkDerivation {
     name = "nixosctl";
-    src = ../../generated/nixosctl.c;
     dontUnpack = true;
     nativeBuildInputs = [ pkgs.makeWrapper ];
+    # Program-only C linked against the precompiled stdlib archive
+    # (modules/apps/btrc.nix), instead of inlining the whole stdlib.
     buildPhase = ''
-      $CC -std=c11 -O2 -o nixosctl $src -lm -lpthread -lutil
+      $CC -std=c11 -O2 -I${btrcStdlib.incDir} ${btrcStdlib.gcFlags} \
+        ${../../generated/nixosctl.c} ${btrcStdlib.stdlibInput} \
+        -lm -lpthread -lutil -o nixosctl
     '';
     installPhase = ''
       mkdir -p $out/bin
