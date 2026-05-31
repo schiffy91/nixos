@@ -1,0 +1,161 @@
+/* The `nixosctl vm|e2e|graph` command surface — the test-harness CLI, split out
+ * of NixosCtl so the top-level tool keeps only the real NixOS commands.
+ * Stateless: each method drives the e2e classes (QemuE2eHarness, VmTestRunner,
+ * VmGraphRunner) from parsed CliArgs.
+ */
+class E2eCli {
+    public string tail(CliArgs args, int startIndex) {
+        Vector<string> parts = [];
+        for (int i = startIndex; i < args.count(); i++) {
+            parts.push(args.get(i));
+        }
+        return parts.join(" ");
+    }
+
+    public void applySpecArgs(VmTestSpec spec, CliArgs args, int startIndex) {
+        for (int i = startIndex; i < args.count(); i++) {
+            string value = args.get(i);
+            if (value.equals("--arg")) {
+                if (i + 1 >= args.count()) {
+                    NixosLog.fatal("Expected --arg key=value");
+                }
+                spec.setArgPair(args.get(i + 1));
+                i++;
+                continue;
+            }
+            if (value.startsWith("--arg=")) {
+                spec.setArgPair(Strings.removePrefix(value, "--arg="));
+                continue;
+            }
+        }
+        spec.expandArgs();
+    }
+
+    public int runVm(CliArgs args) {
+        if (args.count() < 3) {
+            NixosLog.fatal("Usage: nixosctl vm <spec.json> <status|hash|setup|up|boot-iso|boot-disk|bootstrap-ssh|wait-ssh|ssh|snapshot|restore|stop|reset-state|clean-state>");
+        }
+        VmTestSpec spec = VmSpecParser.readFile(args.get(1));
+        self.applySpecArgs(spec, args, 3);
+        QemuE2eHarness vm = QemuE2eHarness(spec);
+        string action = args.get(2);
+
+        if (action.equals("status")) { vm.printStatus(); return 0; }
+        if (action.equals("hash")) { Console.log(spec.stateHash); return 0; }
+        if (action.equals("setup")) { vm.setup(); return 0; }
+        if (action.equals("download-iso")) { vm.downloadIso(); return 0; }
+        if (action.equals("create-key")) { vm.createSshKey(); return 0; }
+        if (action.equals("create-disk")) { vm.createDisk(); return 0; }
+        if (action.equals("up")) { vm.upFromIso(); return 0; }
+        if (action.equals("boot-iso")) { vm.start(true); return 0; }
+        if (action.equals("boot-disk")) { vm.start(false); return 0; }
+        if (action.equals("bootstrap-ssh")) { vm.bootstrapSsh(); return 0; }
+        if (action.equals("wait-ssh")) {
+            int timeout = Strings.toInt(args.valueAfter("--timeout", "180"));
+            if (!vm.waitForSsh(timeout)) { return 1; }
+            return 0;
+        }
+        if (action.equals("ssh")) {
+            string command = self.tail(args, 3);
+            if (command.isEmpty()) { NixosLog.fatal("Usage: nixosctl vm <spec.json> ssh <command>"); }
+            ExecResult result = vm.ssh(command, false);
+            Console.log(result.trimmed());
+            return result.code;
+        }
+        if (action.equals("host")) {
+            string command = self.tail(args, 3);
+            if (command.isEmpty()) { NixosLog.fatal("Usage: nixosctl vm <spec.json> host <command>"); }
+            ExecResult result = vm.host(command, false);
+            Console.log(result.trimmed());
+            return result.code;
+        }
+        if (action.equals("copy-workspace")) {
+            vm.copyWorkspace(args.valueAfter("--local", ".."), args.valueAfter("--remote", "/etc/nixos"));
+            return 0;
+        }
+        if (action.equals("configure-vm-host")) { vm.configureVmHost(); return 0; }
+        if (action.equals("install-nixos")) { vm.installNixosGuest(); return 0; }
+        if (action.equals("reboot-disk")) { vm.rebootDisk(); return 0; }
+        if (action.equals("snapshot")) { vm.snapshot(args.valueAfter("--name", "manual")); return 0; }
+        if (action.equals("restore")) { vm.restore(args.valueAfter("--name", "manual")); return 0; }
+        if (action.equals("record-state")) { vm.recordState(); return 0; }
+        if (action.equals("stop")) { vm.stop(); return 0; }
+        if (action.equals("reset-state")) { vm.resetState(); return 0; }
+        if (action.equals("clean-state")) { vm.resetState(); vm.cleanStateRecord(); return 0; }
+
+        NixosLog.fatal("Unknown vm action: " + action);
+        return 1;
+    }
+
+    public Map<string, string> graphArgs(CliArgs args, int startIndex) {
+        Map<string, string> result = {};
+        for (int i = startIndex; i < args.count(); i++) {
+            string value = args.get(i);
+            if (value.equals("--arg")) {
+                if (i + 1 >= args.count()) { NixosLog.fatal("Expected --arg key=value"); }
+                int pos = Strings.find(args.get(i + 1), "=", 0);
+                if (pos <= 0) { NixosLog.fatal("Expected --arg key=value"); }
+                result.put(JsonObject.slice(args.get(i + 1), 0, pos), JsonObject.slice(args.get(i + 1), pos + 1, args.get(i + 1).len()));
+                i++;
+                continue;
+            }
+            if (value.startsWith("--arg=")) {
+                string pair = Strings.removePrefix(value, "--arg=");
+                int pos = Strings.find(pair, "=", 0);
+                if (pos <= 0) { NixosLog.fatal("Expected --arg=key=value"); }
+                result.put(JsonObject.slice(pair, 0, pos), JsonObject.slice(pair, pos + 1, pair.len()));
+            }
+        }
+        return result;
+    }
+
+    public Vector<string> graphTargets(CliArgs args, int startIndex) {
+        Vector<string> result = [];
+        for (int i = startIndex; i < args.count(); i++) {
+            string value = args.get(i);
+            if (value.equals("--arg")) {
+                i++;
+                continue;
+            }
+            if (value.startsWith("--arg=")) { continue; }
+            result.push(value);
+        }
+        return result;
+    }
+
+    public int runGraph(CliArgs args) {
+        if (args.count() < 3) {
+            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
+        }
+        VmTestGraph graph = VmGraphParser.readFile(args.get(1));
+        string action = args.get(2);
+        Map<string, string> overrides = self.graphArgs(args, 3);
+        VmGraphRunner runner = VmGraphRunner(graph, overrides);
+        if (action.equals("list")) {
+            runner.list();
+            return 0;
+        }
+        if (action.equals("status")) {
+            runner.status();
+            return 0;
+        }
+        if (action.equals("coverage")) {
+            int code = runner.operationCoverage();
+            return code;
+        }
+        if (action.equals("run")) {
+            int code = runner.run(self.graphTargets(args, 3));
+            return code;
+        }
+        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
+        return 1;
+    }
+
+    public int runE2e(CliArgs args) {
+        if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl e2e <spec.json>"); }
+        VmTestSpec spec = VmSpecParser.readFile(args.get(1));
+        self.applySpecArgs(spec, args, 2);
+        VmTestRunner runner = VmTestRunner(spec);
+        return runner.run();
+    }
+}

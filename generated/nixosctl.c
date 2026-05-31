@@ -374,6 +374,8 @@ typedef struct VmGraphParser VmGraphParser;
 void VmGraphParser_destroy(VmGraphParser* self);
 typedef struct VmGraphRunner VmGraphRunner;
 void VmGraphRunner_destroy(VmGraphRunner* self);
+typedef struct E2eCli E2eCli;
+void E2eCli_destroy(E2eCli* self);
 typedef struct NixosCtl NixosCtl;
 void NixosCtl_destroy(NixosCtl* self);
 typedef struct btrc_Vector_string btrc_Vector_string;
@@ -1048,18 +1050,21 @@ bool VmGraphRunner_force(VmGraphRunner* self);
 bool VmGraphRunner_ready(VmGraphRunner* self, VmTestSpec* spec);
 int VmGraphRunner_runNode(VmGraphRunner* self, char* id);
 int VmGraphRunner_run(VmGraphRunner* self, btrc_Vector_string* targets);
+void E2eCli_init(E2eCli* self);
+E2eCli* E2eCli_new(void);
+char* E2eCli_tail(E2eCli* self, CliArgs* args, int startIndex);
+void E2eCli_applySpecArgs(E2eCli* self, VmTestSpec* spec, CliArgs* args, int startIndex);
+int E2eCli_runVm(E2eCli* self, CliArgs* args);
+btrc_Map_string_string* E2eCli_graphArgs(E2eCli* self, CliArgs* args, int startIndex);
+btrc_Vector_string* E2eCli_graphTargets(E2eCli* self, CliArgs* args, int startIndex);
+int E2eCli_runGraph(E2eCli* self, CliArgs* args);
+int E2eCli_runE2e(E2eCli* self, CliArgs* args);
 void NixosCtl_init(NixosCtl* self);
 NixosCtl* NixosCtl_new(void);
 char* NixosCtl_env(char* name, char* fallback);
 void NixosCtl_usage(NixosCtl* self);
-void NixosCtl_applySpecArgs(NixosCtl* self, VmTestSpec* spec, CliArgs* args, int startIndex);
-char* NixosCtl_tail(NixosCtl* self, CliArgs* args, int startIndex);
 bool NixosCtl_needsRoot(NixosCtl* self, char* command);
 int NixosCtl_sudoSelf(NixosCtl* self, CliArgs* args);
-int NixosCtl_runVm(NixosCtl* self, CliArgs* args);
-btrc_Map_string_string* NixosCtl_graphArgs(NixosCtl* self, CliArgs* args, int startIndex);
-btrc_Vector_string* NixosCtl_graphTargets(NixosCtl* self, CliArgs* args, int startIndex);
-int NixosCtl_runGraph(NixosCtl* self, CliArgs* args);
 int NixosCtl_run(NixosCtl* self, CliArgs* args);
 typedef bool (*__btrc_fn_bool_string)(char*);
 typedef void (*__btrc_fn_void_string)(char*);
@@ -1862,6 +1867,10 @@ struct VmGraphRunner {
     btrc_Vector_string* done;
     btrc_Vector_string* visiting;
     char* sourceHashValue;
+};
+
+struct E2eCli {
+    int __rc;
 };
 
 struct NixosCtl {
@@ -17742,6 +17751,448 @@ int VmGraphRunner_run(VmGraphRunner* self, btrc_Vector_string* targets) {
     return __btrc_ret_769;
 }
 
+void E2eCli_init(E2eCli* self) {
+    self->__rc = 1;
+}
+
+E2eCli* E2eCli_new(void) {
+    E2eCli* self = ((E2eCli*)malloc(sizeof(E2eCli)));
+    memset(self, 0, sizeof(E2eCli));
+    E2eCli_init(self);
+    return self;
+}
+
+void E2eCli_destroy(E2eCli* self) {
+    free(self);
+}
+
+char* E2eCli_tail(E2eCli* self, CliArgs* args, int startIndex) {
+    btrc_Vector_string* parts = btrc_Vector_string_new();
+    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
+        btrc_Vector_string_push(parts, CliArgs_get(args, i));
+    }
+    __auto_type __btrc_ret_770 = btrc_Vector_string_join(parts, " ");
+    return __btrc_ret_770;
+}
+
+void E2eCli_applySpecArgs(E2eCli* self, VmTestSpec* spec, CliArgs* args, int startIndex) {
+    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
+        char* value = CliArgs_get(args, i);
+        if (strcmp(value, "--arg") == 0) {
+            if ((i + 1) >= CliArgs_count(args)) {
+                NixosLog_fatal("Expected --arg key=value");
+            }
+            VmTestSpec_setArgPair(spec, CliArgs_get(args, (i + 1)));
+            (i++);
+            continue;
+        }
+        if (__btrc_startsWith(value, "--arg=")) {
+            VmTestSpec_setArgPair(spec, Strings_removePrefix(value, "--arg="));
+            continue;
+        }
+    }
+    VmTestSpec_expandArgs(spec);
+}
+
+int E2eCli_runVm(E2eCli* self, CliArgs* args) {
+    if (CliArgs_count(args) < 3) {
+        NixosLog_fatal("Usage: nixosctl vm <spec.json> <status|hash|setup|up|boot-iso|boot-disk|bootstrap-ssh|wait-ssh|ssh|snapshot|restore|stop|reset-state|clean-state>");
+    }
+    VmTestSpec* spec = VmSpecParser_readFile(CliArgs_get(args, 1));
+    E2eCli_applySpecArgs(self, spec, args, 3);
+    QemuE2eHarness* vm = QemuE2eHarness_new(spec);
+    char* action = CliArgs_get(args, 2);
+    if (strcmp(action, "status") == 0) {
+        QemuE2eHarness_printStatus(vm);
+        __auto_type __btrc_ret_771 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_771;
+    }
+    if (strcmp(action, "hash") == 0) {
+        Console_log(spec->stateHash);
+        __auto_type __btrc_ret_772 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_772;
+    }
+    if (strcmp(action, "setup") == 0) {
+        QemuE2eHarness_setup(vm);
+        __auto_type __btrc_ret_773 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_773;
+    }
+    if (strcmp(action, "download-iso") == 0) {
+        QemuE2eHarness_downloadIso(vm);
+        __auto_type __btrc_ret_774 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_774;
+    }
+    if (strcmp(action, "create-key") == 0) {
+        QemuE2eHarness_createSshKey(vm);
+        __auto_type __btrc_ret_775 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_775;
+    }
+    if (strcmp(action, "create-disk") == 0) {
+        QemuE2eHarness_createDisk(vm);
+        __auto_type __btrc_ret_776 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_776;
+    }
+    if (strcmp(action, "up") == 0) {
+        QemuE2eHarness_upFromIso(vm);
+        __auto_type __btrc_ret_777 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_777;
+    }
+    if (strcmp(action, "boot-iso") == 0) {
+        QemuE2eHarness_start(vm, true);
+        __auto_type __btrc_ret_778 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_778;
+    }
+    if (strcmp(action, "boot-disk") == 0) {
+        QemuE2eHarness_start(vm, false);
+        __auto_type __btrc_ret_779 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_779;
+    }
+    if (strcmp(action, "bootstrap-ssh") == 0) {
+        QemuE2eHarness_bootstrapSsh(vm);
+        __auto_type __btrc_ret_780 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_780;
+    }
+    if (strcmp(action, "wait-ssh") == 0) {
+        int timeout = Strings_toInt(CliArgs_valueAfter(args, "--timeout", "180"));
+        if (!QemuE2eHarness_waitForSsh(vm, timeout)) {
+            __auto_type __btrc_ret_781 = 1;
+            if (vm != NULL) {
+                if ((--vm->__rc) <= 0) {
+                    QemuE2eHarness_destroy(vm);
+                }
+            }
+            return __btrc_ret_781;
+        }
+        __auto_type __btrc_ret_782 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_782;
+    }
+    if (strcmp(action, "ssh") == 0) {
+        char* command = E2eCli_tail(self, args, 3);
+        if (__btrc_isEmpty(command)) {
+            NixosLog_fatal("Usage: nixosctl vm <spec.json> ssh <command>");
+        }
+        ExecResult* result = QemuE2eHarness_ssh(vm, command, false);
+        Console_log(ExecResult_trimmed(result));
+        __auto_type __btrc_ret_783 = result->code;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_783;
+    }
+    if (strcmp(action, "host") == 0) {
+        char* command = E2eCli_tail(self, args, 3);
+        if (__btrc_isEmpty(command)) {
+            NixosLog_fatal("Usage: nixosctl vm <spec.json> host <command>");
+        }
+        ExecResult* result = QemuE2eHarness_host(vm, command, false);
+        Console_log(ExecResult_trimmed(result));
+        __auto_type __btrc_ret_784 = result->code;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_784;
+    }
+    if (strcmp(action, "copy-workspace") == 0) {
+        QemuE2eHarness_copyWorkspace(vm, CliArgs_valueAfter(args, "--local", ".."), CliArgs_valueAfter(args, "--remote", "/etc/nixos"));
+        __auto_type __btrc_ret_785 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_785;
+    }
+    if (strcmp(action, "configure-vm-host") == 0) {
+        QemuE2eHarness_configureVmHost(vm);
+        __auto_type __btrc_ret_786 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_786;
+    }
+    if (strcmp(action, "install-nixos") == 0) {
+        QemuE2eHarness_installNixosGuest(vm);
+        __auto_type __btrc_ret_787 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_787;
+    }
+    if (strcmp(action, "reboot-disk") == 0) {
+        QemuE2eHarness_rebootDisk(vm);
+        __auto_type __btrc_ret_788 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_788;
+    }
+    if (strcmp(action, "snapshot") == 0) {
+        QemuE2eHarness_snapshot(vm, CliArgs_valueAfter(args, "--name", "manual"));
+        __auto_type __btrc_ret_789 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_789;
+    }
+    if (strcmp(action, "restore") == 0) {
+        QemuE2eHarness_restore(vm, CliArgs_valueAfter(args, "--name", "manual"));
+        __auto_type __btrc_ret_790 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_790;
+    }
+    if (strcmp(action, "record-state") == 0) {
+        QemuE2eHarness_recordState(vm);
+        __auto_type __btrc_ret_791 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_791;
+    }
+    if (strcmp(action, "stop") == 0) {
+        QemuE2eHarness_stop(vm);
+        __auto_type __btrc_ret_792 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_792;
+    }
+    if (strcmp(action, "reset-state") == 0) {
+        QemuE2eHarness_resetState(vm);
+        __auto_type __btrc_ret_793 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_793;
+    }
+    if (strcmp(action, "clean-state") == 0) {
+        QemuE2eHarness_resetState(vm);
+        QemuE2eHarness_cleanStateRecord(vm);
+        __auto_type __btrc_ret_794 = 0;
+        if (vm != NULL) {
+            if ((--vm->__rc) <= 0) {
+                QemuE2eHarness_destroy(vm);
+            }
+        }
+        return __btrc_ret_794;
+    }
+    NixosLog_fatal(__btrc_str_track(__btrc_strcat("Unknown vm action: ", action)));
+    __auto_type __btrc_ret_795 = 1;
+    if (vm != NULL) {
+        if ((--vm->__rc) <= 0) {
+            QemuE2eHarness_destroy(vm);
+        }
+    }
+    return __btrc_ret_795;
+    if (vm != NULL) {
+        if ((--vm->__rc) <= 0) {
+            QemuE2eHarness_destroy(vm);
+        }
+    }
+}
+
+btrc_Map_string_string* E2eCli_graphArgs(E2eCli* self, CliArgs* args, int startIndex) {
+    btrc_Map_string_string* result = btrc_Map_string_string_new();
+    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
+        char* value = CliArgs_get(args, i);
+        if (strcmp(value, "--arg") == 0) {
+            if ((i + 1) >= CliArgs_count(args)) {
+                NixosLog_fatal("Expected --arg key=value");
+            }
+            int pos = Strings_find(CliArgs_get(args, (i + 1)), "=", 0);
+            if (pos <= 0) {
+                NixosLog_fatal("Expected --arg key=value");
+            }
+            btrc_Map_string_string_put(result, JsonObject_slice(CliArgs_get(args, (i + 1)), 0, pos), JsonObject_slice(CliArgs_get(args, (i + 1)), (pos + 1), ((int)strlen(CliArgs_get(args, (i + 1))))));
+            (i++);
+            continue;
+        }
+        if (__btrc_startsWith(value, "--arg=")) {
+            char* pair = Strings_removePrefix(value, "--arg=");
+            int pos = Strings_find(pair, "=", 0);
+            if (pos <= 0) {
+                NixosLog_fatal("Expected --arg=key=value");
+            }
+            btrc_Map_string_string_put(result, JsonObject_slice(pair, 0, pos), JsonObject_slice(pair, (pos + 1), ((int)strlen(pair))));
+        }
+    }
+    return result;
+}
+
+btrc_Vector_string* E2eCli_graphTargets(E2eCli* self, CliArgs* args, int startIndex) {
+    btrc_Vector_string* result = btrc_Vector_string_new();
+    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
+        char* value = CliArgs_get(args, i);
+        if (strcmp(value, "--arg") == 0) {
+            (i++);
+            continue;
+        }
+        if (__btrc_startsWith(value, "--arg=")) {
+            continue;
+        }
+        btrc_Vector_string_push(result, value);
+    }
+    return result;
+}
+
+int E2eCli_runGraph(E2eCli* self, CliArgs* args) {
+    if (CliArgs_count(args) < 3) {
+        NixosLog_fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
+    }
+    VmTestGraph* graph = VmGraphParser_readFile(CliArgs_get(args, 1));
+    char* action = CliArgs_get(args, 2);
+    btrc_Map_string_string* overrides = E2eCli_graphArgs(self, args, 3);
+    VmGraphRunner* runner = VmGraphRunner_new(graph, overrides);
+    if (strcmp(action, "list") == 0) {
+        VmGraphRunner_list(runner);
+        __auto_type __btrc_ret_796 = 0;
+        if (runner != NULL) {
+            if ((--runner->__rc) <= 0) {
+                VmGraphRunner_destroy(runner);
+            }
+        }
+        return __btrc_ret_796;
+    }
+    if (strcmp(action, "status") == 0) {
+        VmGraphRunner_status(runner);
+        __auto_type __btrc_ret_797 = 0;
+        if (runner != NULL) {
+            if ((--runner->__rc) <= 0) {
+                VmGraphRunner_destroy(runner);
+            }
+        }
+        return __btrc_ret_797;
+    }
+    if (strcmp(action, "coverage") == 0) {
+        int code = VmGraphRunner_operationCoverage(runner);
+        if (runner != NULL) {
+            if ((--runner->__rc) <= 0) {
+                VmGraphRunner_destroy(runner);
+            }
+        }
+        return code;
+    }
+    if (strcmp(action, "run") == 0) {
+        int code = VmGraphRunner_run(runner, E2eCli_graphTargets(self, args, 3));
+        if (runner != NULL) {
+            if ((--runner->__rc) <= 0) {
+                VmGraphRunner_destroy(runner);
+            }
+        }
+        return code;
+    }
+    NixosLog_fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
+    __auto_type __btrc_ret_798 = 1;
+    if (runner != NULL) {
+        if ((--runner->__rc) <= 0) {
+            VmGraphRunner_destroy(runner);
+        }
+    }
+    return __btrc_ret_798;
+    if (runner != NULL) {
+        if ((--runner->__rc) <= 0) {
+            VmGraphRunner_destroy(runner);
+        }
+    }
+}
+
+int E2eCli_runE2e(E2eCli* self, CliArgs* args) {
+    if (CliArgs_count(args) < 2) {
+        NixosLog_fatal("Usage: nixosctl e2e <spec.json>");
+    }
+    VmTestSpec* spec = VmSpecParser_readFile(CliArgs_get(args, 1));
+    E2eCli_applySpecArgs(self, spec, args, 2);
+    VmTestRunner* runner = VmTestRunner_new(spec);
+    __auto_type __btrc_ret_799 = VmTestRunner_run(runner);
+    if (runner != NULL) {
+        if ((--runner->__rc) <= 0) {
+            VmTestRunner_destroy(runner);
+        }
+    }
+    return __btrc_ret_799;
+    if (runner != NULL) {
+        if ((--runner->__rc) <= 0) {
+            VmTestRunner_destroy(runner);
+        }
+    }
+}
+
 void NixosCtl_init(NixosCtl* self) {
     self->__rc = 1;
     char* root = Environment_get("NIXOS_CONFIG_ROOT", "/etc/nixos");
@@ -17774,449 +18225,43 @@ void NixosCtl_destroy(NixosCtl* self) {
 }
 
 char* NixosCtl_env(char* name, char* fallback) {
-    __auto_type __btrc_ret_770 = Environment_get(name, fallback);
-    return __btrc_ret_770;
+    __auto_type __btrc_ret_800 = Environment_get(name, fallback);
+    return __btrc_ret_800;
 }
 
 void NixosCtl_usage(NixosCtl* self) {
     Console_log("Usage: nixosctl <eval|update|upgrade|install|snapshot|diff|fix-permissions|change-password|secure-boot|tpm2|displays|audio|caffeine|system|vm|e2e|graph> [args]");
 }
 
-void NixosCtl_applySpecArgs(NixosCtl* self, VmTestSpec* spec, CliArgs* args, int startIndex) {
-    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
-        char* value = CliArgs_get(args, i);
-        if (strcmp(value, "--arg") == 0) {
-            if ((i + 1) >= CliArgs_count(args)) {
-                NixosLog_fatal("Expected --arg key=value");
-            }
-            VmTestSpec_setArgPair(spec, CliArgs_get(args, (i + 1)));
-            (i++);
-            continue;
-        }
-        if (__btrc_startsWith(value, "--arg=")) {
-            VmTestSpec_setArgPair(spec, Strings_removePrefix(value, "--arg="));
-            continue;
-        }
-    }
-    VmTestSpec_expandArgs(spec);
-}
-
-char* NixosCtl_tail(NixosCtl* self, CliArgs* args, int startIndex) {
-    btrc_Vector_string* parts = btrc_Vector_string_new();
-    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
-        btrc_Vector_string_push(parts, CliArgs_get(args, i));
-    }
-    __auto_type __btrc_ret_771 = btrc_Vector_string_join(parts, " ");
-    return __btrc_ret_771;
-}
-
 bool NixosCtl_needsRoot(NixosCtl* self, char* command) {
     if (strcmp(NixosCtl_env("NIXOSCTL_ASSUME_ROOT_FOR_TESTS", "false"), "true") == 0) {
-        __auto_type __btrc_ret_772 = false;
-        return __btrc_ret_772;
+        __auto_type __btrc_ret_801 = false;
+        return __btrc_ret_801;
     }
-    __auto_type __btrc_ret_773 = (((((((((strcmp(command, "update") == 0) || (strcmp(command, "upgrade") == 0)) || (strcmp(command, "install") == 0)) || (strcmp(command, "snapshot") == 0)) || (strcmp(command, "diff") == 0)) || (strcmp(command, "fix-permissions") == 0)) || (strcmp(command, "change-password") == 0)) || (strcmp(command, "secure-boot") == 0)) || (strcmp(command, "tpm2") == 0));
-    return __btrc_ret_773;
+    __auto_type __btrc_ret_802 = (((((((((strcmp(command, "update") == 0) || (strcmp(command, "upgrade") == 0)) || (strcmp(command, "install") == 0)) || (strcmp(command, "snapshot") == 0)) || (strcmp(command, "diff") == 0)) || (strcmp(command, "fix-permissions") == 0)) || (strcmp(command, "change-password") == 0)) || (strcmp(command, "secure-boot") == 0)) || (strcmp(command, "tpm2") == 0));
+    return __btrc_ret_802;
 }
 
 int NixosCtl_sudoSelf(NixosCtl* self, CliArgs* args) {
     Command* sudo = Command_new("sudo");
     Command_arg(sudo, args->program);
-    int __n_775 = btrc_Vector_string_iterLen(args->values);
-    for (int __i_774 = 0; (__i_774 < __n_775); (__i_774++)) {
-        char* value = btrc_Vector_string_iterGet(args->values, __i_774);
+    int __n_804 = btrc_Vector_string_iterLen(args->values);
+    for (int __i_803 = 0; (__i_803 < __n_804); (__i_803++)) {
+        char* value = btrc_Vector_string_iterGet(args->values, __i_803);
         Command_arg(sudo, value);
     }
     Command_capture(sudo, false);
     ExecResult* result = UnixShell_runCommand(UnixShell_new(), sudo);
-    __auto_type __btrc_ret_776 = result->code;
+    __auto_type __btrc_ret_805 = result->code;
     if (sudo != NULL) {
         if ((--sudo->__rc) <= 0) {
             Command_destroy(sudo);
         }
     }
-    return __btrc_ret_776;
+    return __btrc_ret_805;
     if (sudo != NULL) {
         if ((--sudo->__rc) <= 0) {
             Command_destroy(sudo);
-        }
-    }
-}
-
-int NixosCtl_runVm(NixosCtl* self, CliArgs* args) {
-    if (CliArgs_count(args) < 3) {
-        NixosLog_fatal("Usage: nixosctl vm <spec.json> <status|hash|setup|up|boot-iso|boot-disk|bootstrap-ssh|wait-ssh|ssh|snapshot|restore|stop|reset-state|clean-state>");
-    }
-    VmTestSpec* spec = VmSpecParser_readFile(CliArgs_get(args, 1));
-    NixosCtl_applySpecArgs(self, spec, args, 3);
-    QemuE2eHarness* vm = QemuE2eHarness_new(spec);
-    char* action = CliArgs_get(args, 2);
-    if (strcmp(action, "status") == 0) {
-        QemuE2eHarness_printStatus(vm);
-        __auto_type __btrc_ret_777 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_777;
-    }
-    if (strcmp(action, "hash") == 0) {
-        Console_log(spec->stateHash);
-        __auto_type __btrc_ret_778 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_778;
-    }
-    if (strcmp(action, "setup") == 0) {
-        QemuE2eHarness_setup(vm);
-        __auto_type __btrc_ret_779 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_779;
-    }
-    if (strcmp(action, "download-iso") == 0) {
-        QemuE2eHarness_downloadIso(vm);
-        __auto_type __btrc_ret_780 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_780;
-    }
-    if (strcmp(action, "create-key") == 0) {
-        QemuE2eHarness_createSshKey(vm);
-        __auto_type __btrc_ret_781 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_781;
-    }
-    if (strcmp(action, "create-disk") == 0) {
-        QemuE2eHarness_createDisk(vm);
-        __auto_type __btrc_ret_782 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_782;
-    }
-    if (strcmp(action, "up") == 0) {
-        QemuE2eHarness_upFromIso(vm);
-        __auto_type __btrc_ret_783 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_783;
-    }
-    if (strcmp(action, "boot-iso") == 0) {
-        QemuE2eHarness_start(vm, true);
-        __auto_type __btrc_ret_784 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_784;
-    }
-    if (strcmp(action, "boot-disk") == 0) {
-        QemuE2eHarness_start(vm, false);
-        __auto_type __btrc_ret_785 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_785;
-    }
-    if (strcmp(action, "bootstrap-ssh") == 0) {
-        QemuE2eHarness_bootstrapSsh(vm);
-        __auto_type __btrc_ret_786 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_786;
-    }
-    if (strcmp(action, "wait-ssh") == 0) {
-        int timeout = Strings_toInt(CliArgs_valueAfter(args, "--timeout", "180"));
-        if (!QemuE2eHarness_waitForSsh(vm, timeout)) {
-            __auto_type __btrc_ret_787 = 1;
-            if (vm != NULL) {
-                if ((--vm->__rc) <= 0) {
-                    QemuE2eHarness_destroy(vm);
-                }
-            }
-            return __btrc_ret_787;
-        }
-        __auto_type __btrc_ret_788 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_788;
-    }
-    if (strcmp(action, "ssh") == 0) {
-        char* command = NixosCtl_tail(self, args, 3);
-        if (__btrc_isEmpty(command)) {
-            NixosLog_fatal("Usage: nixosctl vm <spec.json> ssh <command>");
-        }
-        ExecResult* result = QemuE2eHarness_ssh(vm, command, false);
-        Console_log(ExecResult_trimmed(result));
-        __auto_type __btrc_ret_789 = result->code;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_789;
-    }
-    if (strcmp(action, "host") == 0) {
-        char* command = NixosCtl_tail(self, args, 3);
-        if (__btrc_isEmpty(command)) {
-            NixosLog_fatal("Usage: nixosctl vm <spec.json> host <command>");
-        }
-        ExecResult* result = QemuE2eHarness_host(vm, command, false);
-        Console_log(ExecResult_trimmed(result));
-        __auto_type __btrc_ret_790 = result->code;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_790;
-    }
-    if (strcmp(action, "copy-workspace") == 0) {
-        QemuE2eHarness_copyWorkspace(vm, CliArgs_valueAfter(args, "--local", ".."), CliArgs_valueAfter(args, "--remote", "/etc/nixos"));
-        __auto_type __btrc_ret_791 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_791;
-    }
-    if (strcmp(action, "configure-vm-host") == 0) {
-        QemuE2eHarness_configureVmHost(vm);
-        __auto_type __btrc_ret_792 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_792;
-    }
-    if (strcmp(action, "install-nixos") == 0) {
-        QemuE2eHarness_installNixosGuest(vm);
-        __auto_type __btrc_ret_793 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_793;
-    }
-    if (strcmp(action, "reboot-disk") == 0) {
-        QemuE2eHarness_rebootDisk(vm);
-        __auto_type __btrc_ret_794 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_794;
-    }
-    if (strcmp(action, "snapshot") == 0) {
-        QemuE2eHarness_snapshot(vm, CliArgs_valueAfter(args, "--name", "manual"));
-        __auto_type __btrc_ret_795 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_795;
-    }
-    if (strcmp(action, "restore") == 0) {
-        QemuE2eHarness_restore(vm, CliArgs_valueAfter(args, "--name", "manual"));
-        __auto_type __btrc_ret_796 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_796;
-    }
-    if (strcmp(action, "record-state") == 0) {
-        QemuE2eHarness_recordState(vm);
-        __auto_type __btrc_ret_797 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_797;
-    }
-    if (strcmp(action, "stop") == 0) {
-        QemuE2eHarness_stop(vm);
-        __auto_type __btrc_ret_798 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_798;
-    }
-    if (strcmp(action, "reset-state") == 0) {
-        QemuE2eHarness_resetState(vm);
-        __auto_type __btrc_ret_799 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_799;
-    }
-    if (strcmp(action, "clean-state") == 0) {
-        QemuE2eHarness_resetState(vm);
-        QemuE2eHarness_cleanStateRecord(vm);
-        __auto_type __btrc_ret_800 = 0;
-        if (vm != NULL) {
-            if ((--vm->__rc) <= 0) {
-                QemuE2eHarness_destroy(vm);
-            }
-        }
-        return __btrc_ret_800;
-    }
-    NixosLog_fatal(__btrc_str_track(__btrc_strcat("Unknown vm action: ", action)));
-    __auto_type __btrc_ret_801 = 1;
-    if (vm != NULL) {
-        if ((--vm->__rc) <= 0) {
-            QemuE2eHarness_destroy(vm);
-        }
-    }
-    return __btrc_ret_801;
-    if (vm != NULL) {
-        if ((--vm->__rc) <= 0) {
-            QemuE2eHarness_destroy(vm);
-        }
-    }
-}
-
-btrc_Map_string_string* NixosCtl_graphArgs(NixosCtl* self, CliArgs* args, int startIndex) {
-    btrc_Map_string_string* result = btrc_Map_string_string_new();
-    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
-        char* value = CliArgs_get(args, i);
-        if (strcmp(value, "--arg") == 0) {
-            if ((i + 1) >= CliArgs_count(args)) {
-                NixosLog_fatal("Expected --arg key=value");
-            }
-            int pos = Strings_find(CliArgs_get(args, (i + 1)), "=", 0);
-            if (pos <= 0) {
-                NixosLog_fatal("Expected --arg key=value");
-            }
-            btrc_Map_string_string_put(result, JsonObject_slice(CliArgs_get(args, (i + 1)), 0, pos), JsonObject_slice(CliArgs_get(args, (i + 1)), (pos + 1), ((int)strlen(CliArgs_get(args, (i + 1))))));
-            (i++);
-            continue;
-        }
-        if (__btrc_startsWith(value, "--arg=")) {
-            char* pair = Strings_removePrefix(value, "--arg=");
-            int pos = Strings_find(pair, "=", 0);
-            if (pos <= 0) {
-                NixosLog_fatal("Expected --arg=key=value");
-            }
-            btrc_Map_string_string_put(result, JsonObject_slice(pair, 0, pos), JsonObject_slice(pair, (pos + 1), ((int)strlen(pair))));
-        }
-    }
-    return result;
-}
-
-btrc_Vector_string* NixosCtl_graphTargets(NixosCtl* self, CliArgs* args, int startIndex) {
-    btrc_Vector_string* result = btrc_Vector_string_new();
-    for (int i = startIndex; (i < CliArgs_count(args)); (i++)) {
-        char* value = CliArgs_get(args, i);
-        if (strcmp(value, "--arg") == 0) {
-            (i++);
-            continue;
-        }
-        if (__btrc_startsWith(value, "--arg=")) {
-            continue;
-        }
-        btrc_Vector_string_push(result, value);
-    }
-    return result;
-}
-
-int NixosCtl_runGraph(NixosCtl* self, CliArgs* args) {
-    if (CliArgs_count(args) < 3) {
-        NixosLog_fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
-    }
-    VmTestGraph* graph = VmGraphParser_readFile(CliArgs_get(args, 1));
-    char* action = CliArgs_get(args, 2);
-    btrc_Map_string_string* overrides = NixosCtl_graphArgs(self, args, 3);
-    VmGraphRunner* runner = VmGraphRunner_new(graph, overrides);
-    if (strcmp(action, "list") == 0) {
-        VmGraphRunner_list(runner);
-        __auto_type __btrc_ret_802 = 0;
-        if (runner != NULL) {
-            if ((--runner->__rc) <= 0) {
-                VmGraphRunner_destroy(runner);
-            }
-        }
-        return __btrc_ret_802;
-    }
-    if (strcmp(action, "status") == 0) {
-        VmGraphRunner_status(runner);
-        __auto_type __btrc_ret_803 = 0;
-        if (runner != NULL) {
-            if ((--runner->__rc) <= 0) {
-                VmGraphRunner_destroy(runner);
-            }
-        }
-        return __btrc_ret_803;
-    }
-    if (strcmp(action, "coverage") == 0) {
-        int code = VmGraphRunner_operationCoverage(runner);
-        if (runner != NULL) {
-            if ((--runner->__rc) <= 0) {
-                VmGraphRunner_destroy(runner);
-            }
-        }
-        return code;
-    }
-    if (strcmp(action, "run") == 0) {
-        int code = VmGraphRunner_run(runner, NixosCtl_graphTargets(self, args, 3));
-        if (runner != NULL) {
-            if ((--runner->__rc) <= 0) {
-                VmGraphRunner_destroy(runner);
-            }
-        }
-        return code;
-    }
-    NixosLog_fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
-    __auto_type __btrc_ret_804 = 1;
-    if (runner != NULL) {
-        if ((--runner->__rc) <= 0) {
-            VmGraphRunner_destroy(runner);
-        }
-    }
-    return __btrc_ret_804;
-    if (runner != NULL) {
-        if ((--runner->__rc) <= 0) {
-            VmGraphRunner_destroy(runner);
         }
     }
 }
@@ -18224,21 +18269,21 @@ int NixosCtl_runGraph(NixosCtl* self, CliArgs* args) {
 int NixosCtl_run(NixosCtl* self, CliArgs* args) {
     if (CliArgs_count(args) == 0) {
         NixosCtl_usage(self);
-        __auto_type __btrc_ret_805 = 1;
-        return __btrc_ret_805;
+        __auto_type __btrc_ret_806 = 1;
+        return __btrc_ret_806;
     }
     char* cmd = CliArgs_command(args);
     if (NixosCtl_needsRoot(self, cmd) && (!Platform_isRoot())) {
-        __auto_type __btrc_ret_806 = NixosCtl_sudoSelf(self, args);
-        return __btrc_ret_806;
+        __auto_type __btrc_ret_807 = NixosCtl_sudoSelf(self, args);
+        return __btrc_ret_807;
     }
     if (strcmp(cmd, "eval") == 0) {
         if (CliArgs_count(args) < 2) {
             NixosLog_fatal("Usage: nixosctl eval <attribute>");
         }
         Console_log(NixosConfig_evalRaw(self->config, CliArgs_get(args, 1)));
-        __auto_type __btrc_ret_807 = 0;
-        return __btrc_ret_807;
+        __auto_type __btrc_ret_808 = 0;
+        return __btrc_ret_808;
     }
     if ((strcmp(cmd, "update") == 0) || (strcmp(cmd, "upgrade") == 0)) {
         RebuildOptions* options = RebuildOptions_new();
@@ -18247,13 +18292,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         (options->clean = ((CliArgs_has(args, "--clean") || CliArgs_has(args, "--upgrade")) || (strcmp(cmd, "upgrade") == 0)));
         (options->upgrade = (CliArgs_has(args, "--upgrade") || (strcmp(cmd, "upgrade") == 0)));
         NixosRebuilder_update(NixosRebuilder_new(self->config), options);
-        __auto_type __btrc_ret_808 = 0;
+        __auto_type __btrc_ret_809 = 0;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 RebuildOptions_destroy(options);
             }
         }
-        return __btrc_ret_808;
+        return __btrc_ret_809;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 RebuildOptions_destroy(options);
@@ -18279,25 +18324,25 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         if (confirmed || Interactive_confirm(installer->interactive, "Install NixOS?")) {
             ExecResult* installed = Installer_installNixos(installer);
             if (!ExecResult_ok(installed)) {
-                __auto_type __btrc_ret_809 = installed->code;
+                __auto_type __btrc_ret_810 = installed->code;
                 if (installer != NULL) {
                     if ((--installer->__rc) <= 0) {
                         Installer_destroy(installer);
                     }
                 }
-                return __btrc_ret_809;
+                return __btrc_ret_810;
             }
         } else if (Interactive_confirm(installer->interactive, "Permission NixOS?")) {
             Installer_permissionNixos(installer);
         }
         Interactive_askToReboot(installer->interactive);
-        __auto_type __btrc_ret_810 = 0;
+        __auto_type __btrc_ret_811 = 0;
         if (installer != NULL) {
             if ((--installer->__rc) <= 0) {
                 Installer_destroy(installer);
             }
         }
-        return __btrc_ret_810;
+        return __btrc_ret_811;
         if (installer != NULL) {
             if ((--installer->__rc) <= 0) {
                 Installer_destroy(installer);
@@ -18306,8 +18351,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
     }
     if (strcmp(cmd, "snapshot") == 0) {
         SnapshotManager_createInitialSnapshots(SnapshotManager_new(self->config));
-        __auto_type __btrc_ret_811 = 0;
-        return __btrc_ret_811;
+        __auto_type __btrc_ret_812 = 0;
+        return __btrc_ret_812;
     }
     if (strcmp(cmd, "diff") == 0) {
         DiffOptions* options = DiffOptions_new();
@@ -18322,13 +18367,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         (options->pattern = CliArgs_valueAfter(args, "--pattern", ""));
         (options->diffignore = CliArgs_valueAfter(args, "--diffignore", ""));
         DiffScanner_print(DiffScanner_new(self->config), options);
-        __auto_type __btrc_ret_812 = 0;
+        __auto_type __btrc_ret_813 = 0;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 DiffOptions_destroy(options);
             }
         }
-        return __btrc_ret_812;
+        return __btrc_ret_813;
         if (options != NULL) {
             if ((--options->__rc) <= 0) {
                 DiffOptions_destroy(options);
@@ -18341,8 +18386,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             (username = NixosCtl_env("USER", "root"));
         }
         PermissionsManager_secureTree(PermissionsManager_new(self->config), username);
-        __auto_type __btrc_ret_813 = 0;
-        return __btrc_ret_813;
+        __auto_type __btrc_ret_814 = 0;
+        return __btrc_ret_814;
     }
     if (strcmp(cmd, "change-password") == 0) {
         if (CliArgs_has(args, "--full-disk-encryption-only") && CliArgs_has(args, "--user-account-only")) {
@@ -18360,13 +18405,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             (newPassword = Interactive_askPasswordConfirmed(interactive, "Enter new password"));
         }
         PasswordManager_change(PasswordManager_new(self->config), oldPassword, newPassword, changeFde, changeUser, CliArgs_has(args, "--update-tpm2"));
-        __auto_type __btrc_ret_814 = 0;
+        __auto_type __btrc_ret_815 = 0;
         if (interactive != NULL) {
             if ((--interactive->__rc) <= 0) {
                 Interactive_destroy(interactive);
             }
         }
-        return __btrc_ret_814;
+        return __btrc_ret_815;
         if (interactive != NULL) {
             if ((--interactive->__rc) <= 0) {
                 Interactive_destroy(interactive);
@@ -18381,16 +18426,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "enable") == 0) {
             SecureBootManager_enable(manager, CliArgs_has(args, "--microsoft"));
-            __auto_type __btrc_ret_815 = 0;
-            if (manager != NULL) {
-                if ((--manager->__rc) <= 0) {
-                    SecureBootManager_destroy(manager);
-                }
-            }
-            return __btrc_ret_815;
-        }
-        if (strcmp(action, "disable") == 0) {
-            SecureBootManager_disable(manager);
             __auto_type __btrc_ret_816 = 0;
             if (manager != NULL) {
                 if ((--manager->__rc) <= 0) {
@@ -18399,8 +18434,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_816;
         }
-        if (strcmp(action, "status") == 0) {
-            SecureBootManager_status(manager);
+        if (strcmp(action, "disable") == 0) {
+            SecureBootManager_disable(manager);
             __auto_type __btrc_ret_817 = 0;
             if (manager != NULL) {
                 if ((--manager->__rc) <= 0) {
@@ -18408,6 +18443,16 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_817;
+        }
+        if (strcmp(action, "status") == 0) {
+            SecureBootManager_status(manager);
+            __auto_type __btrc_ret_818 = 0;
+            if (manager != NULL) {
+                if ((--manager->__rc) <= 0) {
+                    SecureBootManager_destroy(manager);
+                }
+            }
+            return __btrc_ret_818;
         }
         NixosLog_fatal("Usage: nixosctl secure-boot <enable|disable|status>");
         if (manager != NULL) {
@@ -18424,13 +18469,13 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "status") == 0) {
             Tpm2Manager_status(tpm);
-            __auto_type __btrc_ret_818 = 0;
+            __auto_type __btrc_ret_819 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
                     Tpm2Manager_destroy(tpm);
                 }
             }
-            return __btrc_ret_818;
+            return __btrc_ret_819;
         }
         if (strcmp(action, "enable") == 0) {
             if (!Tpm2Manager_exists(tpm)) {
@@ -18442,18 +18487,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             if (!Tpm2Manager_enroll(tpm)) {
                 NixosLog_fatal("TPM2 enrollment failed");
             }
-            __auto_type __btrc_ret_819 = 0;
-            if (tpm != NULL) {
-                if ((--tpm->__rc) <= 0) {
-                    Tpm2Manager_destroy(tpm);
-                }
-            }
-            return __btrc_ret_819;
-        }
-        if (strcmp(action, "disable") == 0) {
-            if (!Tpm2Manager_wipe(tpm)) {
-                NixosLog_fatal("TPM2 wipe failed");
-            }
             __auto_type __btrc_ret_820 = 0;
             if (tpm != NULL) {
                 if ((--tpm->__rc) <= 0) {
@@ -18461,6 +18494,18 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_820;
+        }
+        if (strcmp(action, "disable") == 0) {
+            if (!Tpm2Manager_wipe(tpm)) {
+                NixosLog_fatal("TPM2 wipe failed");
+            }
+            __auto_type __btrc_ret_821 = 0;
+            if (tpm != NULL) {
+                if ((--tpm->__rc) <= 0) {
+                    Tpm2Manager_destroy(tpm);
+                }
+            }
+            return __btrc_ret_821;
         }
         if (tpm != NULL) {
             if ((--tpm->__rc) <= 0) {
@@ -18476,16 +18521,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "list") == 0) {
             DisplayManager_list(displays);
-            __auto_type __btrc_ret_821 = 0;
-            if (displays != NULL) {
-                if ((--displays->__rc) <= 0) {
-                    DisplayManager_destroy(displays);
-                }
-            }
-            return __btrc_ret_821;
-        }
-        if (strcmp(action, "layout") == 0) {
-            DisplayManager_layout(displays);
             __auto_type __btrc_ret_822 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -18494,11 +18529,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_822;
         }
-        if (CliArgs_count(args) < 3) {
-            NixosLog_fatal("Missing display argument");
-        }
-        if (strcmp(action, "enable") == 0) {
-            DisplayManager_enable(displays, CliArgs_get(args, 2));
+        if (strcmp(action, "layout") == 0) {
+            DisplayManager_layout(displays);
             __auto_type __btrc_ret_823 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -18507,8 +18539,11 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_823;
         }
-        if (strcmp(action, "disable") == 0) {
-            DisplayManager_disable(displays, CliArgs_get(args, 2));
+        if (CliArgs_count(args) < 3) {
+            NixosLog_fatal("Missing display argument");
+        }
+        if (strcmp(action, "enable") == 0) {
+            DisplayManager_enable(displays, CliArgs_get(args, 2));
             __auto_type __btrc_ret_824 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -18517,8 +18552,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_824;
         }
-        if (strcmp(action, "primary") == 0) {
-            DisplayManager_primary(displays, CliArgs_get(args, 2));
+        if (strcmp(action, "disable") == 0) {
+            DisplayManager_disable(displays, CliArgs_get(args, 2));
             __auto_type __btrc_ret_825 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -18527,8 +18562,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_825;
         }
-        if (strcmp(action, "dpms") == 0) {
-            DisplayManager_dpms(displays, CliArgs_get(args, 2));
+        if (strcmp(action, "primary") == 0) {
+            DisplayManager_primary(displays, CliArgs_get(args, 2));
             __auto_type __btrc_ret_826 = 0;
             if (displays != NULL) {
                 if ((--displays->__rc) <= 0) {
@@ -18536,6 +18571,16 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_826;
+        }
+        if (strcmp(action, "dpms") == 0) {
+            DisplayManager_dpms(displays, CliArgs_get(args, 2));
+            __auto_type __btrc_ret_827 = 0;
+            if (displays != NULL) {
+                if ((--displays->__rc) <= 0) {
+                    DisplayManager_destroy(displays);
+                }
+            }
+            return __btrc_ret_827;
         }
         if (displays != NULL) {
             if ((--displays->__rc) <= 0) {
@@ -18551,16 +18596,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "list") == 0) {
             AudioManager_list(audio);
-            __auto_type __btrc_ret_827 = 0;
-            if (audio != NULL) {
-                if ((--audio->__rc) <= 0) {
-                    AudioManager_destroy(audio);
-                }
-            }
-            return __btrc_ret_827;
-        }
-        if (strcmp(action, "current") == 0) {
-            Console_log(AudioManager_current(audio));
             __auto_type __btrc_ret_828 = 0;
             if (audio != NULL) {
                 if ((--audio->__rc) <= 0) {
@@ -18569,11 +18604,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_828;
         }
-        if (strcmp(action, "set") == 0) {
-            if (CliArgs_count(args) < 3) {
-                NixosLog_fatal("Usage: nixosctl audio set <sink>");
-            }
-            AudioManager_set(audio, CliArgs_get(args, 2));
+        if (strcmp(action, "current") == 0) {
+            Console_log(AudioManager_current(audio));
             __auto_type __btrc_ret_829 = 0;
             if (audio != NULL) {
                 if ((--audio->__rc) <= 0) {
@@ -18581,6 +18613,19 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_829;
+        }
+        if (strcmp(action, "set") == 0) {
+            if (CliArgs_count(args) < 3) {
+                NixosLog_fatal("Usage: nixosctl audio set <sink>");
+            }
+            AudioManager_set(audio, CliArgs_get(args, 2));
+            __auto_type __btrc_ret_830 = 0;
+            if (audio != NULL) {
+                if ((--audio->__rc) <= 0) {
+                    AudioManager_destroy(audio);
+                }
+            }
+            return __btrc_ret_830;
         }
         if (audio != NULL) {
             if ((--audio->__rc) <= 0) {
@@ -18595,17 +18640,7 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         CaffeineManager* caffeine = CaffeineManager_new();
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "status") == 0) {
-            __auto_type __btrc_ret_830 = (CaffeineManager_enabled(caffeine) ? 0 : 1);
-            if (caffeine != NULL) {
-                if ((--caffeine->__rc) <= 0) {
-                    CaffeineManager_destroy(caffeine);
-                }
-            }
-            return __btrc_ret_830;
-        }
-        if (strcmp(action, "enable") == 0) {
-            CaffeineManager_enable(caffeine);
-            __auto_type __btrc_ret_831 = 0;
+            __auto_type __btrc_ret_831 = (CaffeineManager_enabled(caffeine) ? 0 : 1);
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
                     CaffeineManager_destroy(caffeine);
@@ -18613,8 +18648,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_831;
         }
-        if (strcmp(action, "disable") == 0) {
-            CaffeineManager_disable(caffeine);
+        if (strcmp(action, "enable") == 0) {
+            CaffeineManager_enable(caffeine);
             __auto_type __btrc_ret_832 = 0;
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
@@ -18623,8 +18658,8 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_832;
         }
-        if (strcmp(action, "toggle") == 0) {
-            CaffeineManager_toggle(caffeine);
+        if (strcmp(action, "disable") == 0) {
+            CaffeineManager_disable(caffeine);
             __auto_type __btrc_ret_833 = 0;
             if (caffeine != NULL) {
                 if ((--caffeine->__rc) <= 0) {
@@ -18632,6 +18667,16 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
                 }
             }
             return __btrc_ret_833;
+        }
+        if (strcmp(action, "toggle") == 0) {
+            CaffeineManager_toggle(caffeine);
+            __auto_type __btrc_ret_834 = 0;
+            if (caffeine != NULL) {
+                if ((--caffeine->__rc) <= 0) {
+                    CaffeineManager_destroy(caffeine);
+                }
+            }
+            return __btrc_ret_834;
         }
         if (caffeine != NULL) {
             if ((--caffeine->__rc) <= 0) {
@@ -18647,16 +18692,6 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         char* action = CliArgs_get(args, 1);
         if (strcmp(action, "update") == 0) {
             SystemUi_update(system);
-            __auto_type __btrc_ret_834 = 0;
-            if (system != NULL) {
-                if ((--system->__rc) <= 0) {
-                    SystemUi_destroy(system);
-                }
-            }
-            return __btrc_ret_834;
-        }
-        if (strcmp(action, "upgrade") == 0) {
-            SystemUi_upgrade(system);
             __auto_type __btrc_ret_835 = 0;
             if (system != NULL) {
                 if ((--system->__rc) <= 0) {
@@ -18665,6 +18700,16 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
             }
             return __btrc_ret_835;
         }
+        if (strcmp(action, "upgrade") == 0) {
+            SystemUi_upgrade(system);
+            __auto_type __btrc_ret_836 = 0;
+            if (system != NULL) {
+                if ((--system->__rc) <= 0) {
+                    SystemUi_destroy(system);
+                }
+            }
+            return __btrc_ret_836;
+        }
         if (system != NULL) {
             if ((--system->__rc) <= 0) {
                 SystemUi_destroy(system);
@@ -18672,36 +18717,20 @@ int NixosCtl_run(NixosCtl* self, CliArgs* args) {
         }
     }
     if (strcmp(cmd, "vm") == 0) {
-        __auto_type __btrc_ret_836 = NixosCtl_runVm(self, args);
-        return __btrc_ret_836;
-    }
-    if (strcmp(cmd, "e2e") == 0) {
-        if (CliArgs_count(args) < 2) {
-            NixosLog_fatal("Usage: nixosctl e2e <spec.json>");
-        }
-        VmTestSpec* spec = VmSpecParser_readFile(CliArgs_get(args, 1));
-        NixosCtl_applySpecArgs(self, spec, args, 2);
-        VmTestRunner* runner = VmTestRunner_new(spec);
-        int result = VmTestRunner_run(runner);
-        if (runner != NULL) {
-            if ((--runner->__rc) <= 0) {
-                VmTestRunner_destroy(runner);
-            }
-        }
-        return result;
-        if (runner != NULL) {
-            if ((--runner->__rc) <= 0) {
-                VmTestRunner_destroy(runner);
-            }
-        }
-    }
-    if (strcmp(cmd, "graph") == 0) {
-        __auto_type __btrc_ret_837 = NixosCtl_runGraph(self, args);
+        __auto_type __btrc_ret_837 = E2eCli_runVm(E2eCli_new(), args);
         return __btrc_ret_837;
     }
+    if (strcmp(cmd, "e2e") == 0) {
+        __auto_type __btrc_ret_838 = E2eCli_runE2e(E2eCli_new(), args);
+        return __btrc_ret_838;
+    }
+    if (strcmp(cmd, "graph") == 0) {
+        __auto_type __btrc_ret_839 = E2eCli_runGraph(E2eCli_new(), args);
+        return __btrc_ret_839;
+    }
     NixosCtl_usage(self);
-    __auto_type __btrc_ret_838 = 1;
-    return __btrc_ret_838;
+    __auto_type __btrc_ret_840 = 1;
+    return __btrc_ret_840;
 }
 
 int main(int argc, char** argv) {
