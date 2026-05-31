@@ -18,4 +18,5 @@
 #include "membrane/paths.btrc"
 #include "membrane/run.btrc"
 #include "membrane/btrfs.btrc"
+#include "membrane/fs.btrc"
 #include "membrane/membrane.btrc"
