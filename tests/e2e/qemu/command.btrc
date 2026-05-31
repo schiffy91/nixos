@@ -1,0 +1,102 @@
+/* Assembles the QEMU argv for a boot: accelerator, machine/cpu, firmware, RAM/
+ * CPUs, disk + user-net, console sockets, TPM, and boot media. build() returns
+ * the Command up to (but not including) -daemonize/-pidfile, which start() adds.
+ * Pulls firmware/console fragments from the firmware + serial collaborators.
+ */
+class QemuCommandBuilder {
+    public VmTestSpec spec;
+    public QemuFirmware firmware;
+    public QemuSerial serial;
+
+    public QemuCommandBuilder(VmTestSpec spec, QemuFirmware firmware, QemuSerial serial) {
+        self.spec = spec;
+        self.firmware = firmware;
+        self.serial = serial;
+    }
+
+    public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
+    public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
+    public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
+
+    public void addAccelerator(Command cmd) {
+        if (self.firmware.isDarwin()) {
+            cmd.arg("-accel");
+            cmd.arg(self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg");
+        } else if (self.firmware.hostArchMatchesGuest()) {
+            cmd.arg("-enable-kvm");
+        } else {
+            cmd.arg("-accel");
+            cmd.arg("tcg");
+        }
+    }
+
+    public void addMachine(Command cmd) {
+        if (!self.spec.arch.equals("aarch64")) { return; }
+        cmd.arg("-machine");
+        cmd.arg("virt");
+        cmd.arg("-cpu");
+        cmd.arg(self.firmware.hostArchMatchesGuest() ? "host" : "max");
+        cmd.arg("-device");
+        cmd.arg("virtio-rng-pci");
+    }
+
+    public void addMemoryCpus(Command cmd) {
+        cmd.arg("-m");
+        cmd.arg(self.spec.memory);
+        cmd.arg("-smp");
+        cmd.arg(Strings.fromInt(self.spec.cpus));
+    }
+
+    public void addStorageAndNetwork(Command cmd) {
+        cmd.arg("-drive");
+        cmd.arg("file=" + self.diskPath() + ",format=qcow2,if=virtio,cache=none");
+        cmd.arg("-netdev");
+        cmd.arg("user,id=net0,hostfwd=tcp::" + Strings.fromInt(self.spec.sshPort) + "-:22");
+        cmd.arg("-device");
+        cmd.arg("virtio-net-pci,netdev=net0");
+    }
+
+    public void addConsole(Command cmd) {
+        cmd.arg("-display");
+        cmd.arg("none");
+        cmd.arg("-serial");
+        cmd.arg("pipe:" + self.serial.serialBasePath());
+        cmd.arg("-monitor");
+        cmd.arg("unix:" + self.monitorPath() + ",server,nowait");
+        cmd.arg("-qmp");
+        cmd.arg("unix:" + self.qmpPath() + ",server,nowait");
+    }
+
+    public void addBootMedia(Command cmd, bool fromIso) {
+        if (!fromIso) { return; }
+        if (self.spec.arch.equals("x86_64") && !self.firmware.shouldUseUefi(fromIso)) {
+            self.serial.extractBootSerial();
+            cmd.arg("-kernel");
+            cmd.arg(Path.readAll(self.serial.bootKernelFile()).trim());
+            cmd.arg("-initrd");
+            cmd.arg(Path.readAll(self.serial.bootInitrdFile()).trim());
+            cmd.arg("-append");
+            cmd.arg(Path.readAll(self.serial.bootAppendFile()).trim());
+            cmd.arg("-cdrom");
+            cmd.arg(self.spec.iso);
+        } else {
+            cmd.arg("-cdrom");
+            cmd.arg(self.spec.iso);
+            cmd.arg("-boot");
+            cmd.arg("d");
+        }
+    }
+
+    public Command build(bool fromIso) {
+        Command cmd = Command(self.firmware.qemuBinary());
+        self.addAccelerator(cmd);
+        self.addMachine(cmd);
+        self.firmware.addFirmware(cmd, fromIso);
+        self.addMemoryCpus(cmd);
+        self.addStorageAndNetwork(cmd);
+        self.addConsole(cmd);
+        self.firmware.addTpm2(cmd);
+        self.addBootMedia(cmd, fromIso);
+        return cmd;
+    }
+}
