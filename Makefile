@@ -63,7 +63,7 @@ check test: stdlib-sync-check quick stateful-host
 host-smoke: quick
 
 stdlib-sync-check:
-	diff -qr --exclude=build vendor/btrc-stdlib "$$BTRC_SRC/src/stdlib"
+	diff -qr --exclude=build vendor/btrc-stdlib "$$(btrcpy --stdlib-dir)"
 
 app-settings: $(BIN)
 	$(MAKE) -C tests app-settings

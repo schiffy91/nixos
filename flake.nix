@@ -57,8 +57,6 @@
             coreutils
             stdenv.cc
           ];
-          # btrc source tree, for `make stdlib-sync-check`.
-          BTRC_SRC = inputs.btrc;
         };
       });
       nixosConfigurations = lib.listToAttrs (
