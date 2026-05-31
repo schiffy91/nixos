@@ -1,32 +1,28 @@
 #include "qemu/ssh.btrc"
 #include "qemu/serial.btrc"
+#include "qemu/firmware.btrc"
 
 class QemuE2eHarness {
     public VmTestSpec spec;
     public UnixShell shell;
     public SshClient remote;
     public QemuSerial serial;
+    public QemuFirmware firmware;
 
     public QemuE2eHarness(VmTestSpec spec) {
         self.spec = spec;
         self.shell = UnixShell();
         self.remote = SshClient(spec);
         self.serial = QemuSerial(spec);
+        self.firmware = QemuFirmware(spec);
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
     public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
     public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
-    public string tpmDir() { return PathTools.join(self.spec.workDir, "tpm"); }
-    public string tpmStateDir() { return PathTools.join(self.tpmDir(), "state"); }
-    public string tpmSocketPath() { return PathTools.join(self.tpmDir(), "swtpm.sock"); }
-    public string tpmPidPath() { return PathTools.join(self.tpmDir(), "swtpm.pid"); }
-    public string tpmLogPath() { return PathTools.join(self.tpmDir(), "swtpm.log"); }
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
-    public string firmwareVarsPath() { return PathTools.join(self.spec.workDir, "edk2-vars.fd"); }
-    public string firmwareVarsSnapshotPath(string name) { return PathTools.join(self.spec.workDir, "edk2-vars." + name + ".fd"); }
     public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
     public string parentWorkDirFile() { return PathTools.join(self.parentStateDir(), "workDir"); }
     public string backingDiskFile() { return PathTools.join(self.spec.workDir, "backing-disk"); }
@@ -43,209 +39,6 @@ class QemuE2eHarness {
     public void ensureWorkDir() {
         FileSystem.mkdirp(self.spec.workDir);
         FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
-    }
-
-    public string qemuBinary() {
-        return f"qemu-system-{self.spec.arch}";
-    }
-
-    public bool argEnabled(string key) {
-        return self.spec.args.getOrDefault(key, "false").equals("true");
-    }
-
-    public bool tpm2Enabled() {
-        return self.argEnabled("tpm2");
-    }
-
-    public bool secureBootEnabled() {
-        return self.argEnabled("secureBoot");
-    }
-
-    public bool uefiEnabled() {
-        return self.argEnabled("uefi") || self.argEnabled("uefiDisk") || self.secureBootEnabled();
-    }
-
-    public bool shouldUseUefi(bool fromIso) {
-        if (self.spec.arch.equals("aarch64")) { return true; }
-        if (self.argEnabled("uefi")) { return true; }
-        if (!fromIso && self.uefiEnabled()) { return true; }
-        if (fromIso && self.argEnabled("uefiIso")) { return true; }
-        return false;
-    }
-
-    public bool hostArchMatchesGuest() {
-        return VmSpecParser.hostArch().equals(self.spec.arch);
-    }
-
-    public string qemuSharePath(string fileName) {
-        string script = "bin=$(command -v " + UnixShell.quote(self.qemuBinary()) + ") || exit 1; "
-            + "path=$(dirname $(dirname \"$bin\"))/share/qemu/" + UnixShell.quote(fileName) + "; "
-            + "test -f \"$path\" || exit 1; printf %s \"$path\"";
-        ExecResult result = self.shell.runUnchecked(script);
-        if (!result.ok()) { return ""; }
-        return result.trimmed();
-    }
-
-    // Run `find <args> -print -quit`, return the first match (trimmed, "" if none).
-    public string findFirst(string findArgs) {
-        return self.shell.runUnchecked("find " + findArgs + " -print -quit 2>/dev/null").trimmed();
-    }
-
-    public string firmwareCodePath() {
-        if (self.secureBootEnabled()) {
-            return self.secureFirmwareCodePath();
-        }
-        if (self.spec.arch.equals("aarch64")) {
-            string packaged = self.qemuSharePath("edk2-aarch64-code.fd");
-            if (!packaged.isEmpty()) { return packaged; }
-            if (FileSystem.exists("/opt/homebrew/share/qemu/edk2-aarch64-code.fd")) {
-                return "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
-            }
-        }
-        if (self.spec.arch.equals("x86_64")) {
-            string packaged = self.qemuSharePath("edk2-x86_64-code.fd");
-            if (!packaged.isEmpty()) { return packaged; }
-        }
-        return self.findFirst("/nix/store -maxdepth 4 -name OVMF_CODE.fd");
-    }
-
-    public string secureFirmwareCodePath() {
-        if (self.spec.arch.equals("aarch64")) {
-            // Enforcing secboot AAVMF from the reproducible nix derivation
-            // (tests/shell.nix), or a manual .vm/firmware override.
-            string store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd'");
-            if (!store.isEmpty()) { return store; }
-            return self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
-        }
-        if (!self.spec.arch.equals("x86_64")) { return ""; }
-        string packaged = self.qemuSharePath("edk2-x86_64-secure-code.fd");
-        if (!packaged.isEmpty()) { return packaged; }
-        return self.findFirst("/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
-    }
-
-    public string firmwareVarsTemplatePath() {
-        if (self.secureBootEnabled() && self.spec.arch.equals("aarch64")) {
-            string store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_VARS.fd'");
-            if (!store.isEmpty()) { return store; }
-            string deb = self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd");
-            if (!deb.isEmpty()) { return deb; }
-        }
-        if (self.spec.arch.equals("aarch64")) {
-            string packaged = self.qemuSharePath("edk2-arm-vars.fd");
-            if (!packaged.isEmpty()) { return packaged; }
-        }
-        if (self.spec.arch.equals("x86_64")) {
-            string packaged = self.qemuSharePath("edk2-i386-vars.fd");
-            if (!packaged.isEmpty()) { return packaged; }
-        }
-        return self.findFirst("/nix/store -maxdepth 4 -name OVMF_VARS.fd");
-    }
-
-    public void makeFirmwareVarsWritable() {
-        Command chmod = Command("chmod")
-            .arg("600")
-            .arg(self.firmwareVarsPath())
-            .capture(false)
-            .check(false);
-        self.shell.runCommand(chmod);
-    }
-
-    public void setupFirmwareVars() {
-        if (FileSystem.exists(self.firmwareVarsPath())) {
-            self.makeFirmwareVarsWritable();
-            return;
-        }
-        string template = self.firmwareVarsTemplatePath();
-        if (!template.isEmpty()) {
-            Command cp = Command("cp")
-                .arg(template)
-                .arg(self.firmwareVarsPath())
-                .capture(false);
-            ExecResult result = self.shell.runCommand(cp);
-            if (!result.ok()) { NixosLog.fatal("Failed to copy EDK2 vars file"); }
-            self.makeFirmwareVarsWritable();
-            return;
-        }
-        self.shell.runRaw(f"dd if=/dev/zero of={UnixShell.quote(self.firmwareVarsPath())} bs=1M count=64", false, true, "");
-        self.makeFirmwareVarsWritable();
-    }
-
-    public bool commandExists(string name) {
-        ExecResult result = self.shell.runRaw("command -v " + UnixShell.quote(name) + " >/dev/null 2>&1", false, false, "");
-        return result.ok();
-    }
-
-    public void requireCommand(string name) {
-        if (!self.commandExists(name)) {
-            NixosLog.fatal("Missing required command: " + name);
-        }
-    }
-
-    public bool qemuDeviceAvailable(string deviceName) {
-        string command = self.qemuBinary() + " -device help 2>/dev/null | grep -q " + UnixShell.quote("name \"" + deviceName + "\"");
-        ExecResult result = self.shell.runRaw(command, false, false, "");
-        return result.ok();
-    }
-
-    public string tpmQemuDevice() {
-        if (self.spec.arch.equals("aarch64")) { return "tpm-tis-device"; }
-        return "tpm-tis";
-    }
-
-    public void requireTpm2Capability() {
-        self.requireCommand("swtpm");
-        string deviceName = self.tpmQemuDevice();
-        if (!self.qemuDeviceAvailable(deviceName)) {
-            NixosLog.fatal("QEMU TPM2 device is unavailable: " + deviceName);
-        }
-    }
-
-    public void requireUefiCapability() {
-        string codePath = self.firmwareCodePath();
-        string varsPath = self.firmwareVarsTemplatePath();
-        if (codePath.isEmpty() || varsPath.isEmpty()) {
-            NixosLog.fatal("QEMU UEFI firmware is unavailable for " + self.spec.arch);
-        }
-    }
-
-    public void requireSecureBootCapability() {
-        // Secure Boot enforcement is done by the firmware (signature checks vs
-        // enrolled keys); it needs an enforcing secboot firmware but NOT QEMU's
-        // secure world. x86_64 uses the bundled edk2-x86_64-secure-code.fd;
-        // aarch64 uses an AAVMF_CODE.secboot.fd under .vm/firmware, under HVF.
-        string codePath = self.secureFirmwareCodePath();
-        string varsPath = self.firmwareVarsTemplatePath();
-        if (codePath.isEmpty() || varsPath.isEmpty()) {
-            NixosLog.fatal("QEMU Secure Boot firmware is unavailable for " + self.spec.arch);
-        }
-        self.requireTpm2Capability();
-    }
-
-    public string secureBootCapabilityReport() {
-        bool qemu = self.commandExists(self.qemuBinary());
-        bool swtpm = self.commandExists("swtpm");
-        string firmware = self.secureFirmwareCodePath();
-        string vars = self.firmwareVarsTemplatePath();
-        string device = self.tpmQemuDevice();
-        bool tpmDevice = qemu && self.qemuDeviceAvailable(device);
-        bool available = self.spec.arch.equals("x86_64")
-            && qemu
-            && swtpm
-            && tpmDevice
-            && !firmware.isEmpty()
-            && !vars.isEmpty();
-        return "secureBootQemu=" + (available ? "available" : "unavailable")
-            + "\narch=" + self.spec.arch
-            + "\nqemu=" + (qemu ? "yes" : "no")
-            + "\nswtpm=" + (swtpm ? "yes" : "no")
-            + "\ntpmDevice=" + (tpmDevice ? device : "missing")
-            + "\nfirmware=" + (firmware.isEmpty() ? "missing" : firmware)
-            + "\nvars=" + (vars.isEmpty() ? "missing" : vars);
-    }
-
-    public bool isDarwin() {
-        ExecResult result = self.shell.run("uname -s");
-        return result.trimmed().equals("Darwin");
     }
 
     public void downloadIso() {
@@ -370,8 +163,8 @@ class QemuE2eHarness {
         }
         self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519"), self.sshKeyPath());
         self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519.pub"), self.sshPubKeyPath());
-        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmwareVarsPath());
-        self.copyTreeIfExists(PathTools.join(parentWorkDir, "tpm"), self.tpmDir());
+        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmware.firmwareVarsPath());
+        self.copyTreeIfExists(PathTools.join(parentWorkDir, "tpm"), self.firmware.tpmDir());
     }
 
     public void recordState() {
@@ -388,9 +181,9 @@ class QemuE2eHarness {
         metadata.setString("iso", self.spec.iso);
         metadata.setString("isoUrl", self.spec.isoUrl);
         metadata.setString("disk", self.diskPath());
-        metadata.setString("uefi", self.uefiEnabled() ? "true" : "false");
-        metadata.setString("secureBoot", self.secureBootEnabled() ? "true" : "false");
-        metadata.setString("tpm2", self.tpm2Enabled() ? "true" : "false");
+        metadata.setString("uefi", self.firmware.uefiEnabled() ? "true" : "false");
+        metadata.setString("secureBoot", self.firmware.secureBootEnabled() ? "true" : "false");
+        metadata.setString("tpm2", self.firmware.tpm2Enabled() ? "true" : "false");
         if (FileSystem.exists(self.backingDiskFile())) {
             metadata.setString("delta", "qcow2-backing");
             metadata.setString("backingDisk", Path.readAll(self.backingDiskFile()).trim());
@@ -439,81 +232,11 @@ class QemuE2eHarness {
         Console.log("Recorded:  " + recorded + " " + self.spec.stateDir());
     }
 
-    public void startSwtpm() {
-        if (!self.tpm2Enabled()) { return; }
-        self.requireTpm2Capability();
-        FileSystem.mkdirp(self.tpmStateDir());
-        FileSystem.removeRecursive(self.tpmSocketPath());
-        if (FileSystem.exists(self.tpmPidPath())) {
-            ExecResult running = self.shell.runRaw("kill -0 $(cat " + UnixShell.quote(self.tpmPidPath()) + ") 2>/dev/null", false, false, "");
-            if (running.ok()) { return; }
-            FileSystem.removeRecursive(self.tpmPidPath());
-        }
-
-        Command cmd = Command("swtpm")
-            .arg("socket")
-            .arg("--tpm2")
-            .arg("--tpmstate")
-            .arg("dir=" + self.tpmStateDir())
-            .arg("--ctrl")
-            .arg("type=unixio,path=" + self.tpmSocketPath())
-            .arg("--daemon")
-            .arg("--pid")
-            .arg("file=" + self.tpmPidPath())
-            .arg("--log")
-            .arg("file=" + self.tpmLogPath() + ",level=20")
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
-        if (!result.ok()) { NixosLog.fatal("Failed to start swtpm"); }
-        string waitCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do test -S "
-            + UnixShell.quote(self.tpmSocketPath())
-            + " && exit 0; sleep 1; done; exit 1";
-        ExecResult ready = self.shell.runRaw(waitCommand, false, false, "");
-        if (!ready.ok()) { NixosLog.fatal("swtpm socket did not become ready"); }
-    }
-
-    public void stopSwtpm() {
-        if (FileSystem.exists(self.tpmPidPath())) {
-            string quotedPid = UnixShell.quote(self.tpmPidPath());
-            self.shell.runRaw("pid=$(cat " + quotedPid + "); kill $pid 2>/dev/null || true", false, false, "");
-            FileSystem.removeRecursive(self.tpmPidPath());
-        }
-        FileSystem.removeRecursive(self.tpmSocketPath());
-    }
-
-    public void addFirmware(Command cmd, bool fromIso) {
-        if (!self.shouldUseUefi(fromIso)) { return; }
-        self.requireUefiCapability();
-        if (self.secureBootEnabled()) { self.requireSecureBootCapability(); }
-        if (self.spec.arch.equals("x86_64")) {
-            cmd.arg("-machine");
-            cmd.arg("q35");
-        }
-        self.setupFirmwareVars();
-        string codePath = self.firmwareCodePath();
-        if (codePath.isEmpty()) { NixosLog.fatal("Could not find EDK2 firmware for " + self.spec.arch); }
-        cmd.arg("-drive");
-        cmd.arg("if=pflash,format=raw,readonly=on,file=" + codePath);
-        cmd.arg("-drive");
-        cmd.arg("if=pflash,format=raw,file=" + self.firmwareVarsPath());
-    }
-
-    public void addTpm2(Command cmd) {
-        if (!self.tpm2Enabled()) { return; }
-        self.startSwtpm();
-        cmd.arg("-chardev");
-        cmd.arg("socket,id=chrtpm,path=" + self.tpmSocketPath());
-        cmd.arg("-tpmdev");
-        cmd.arg("emulator,id=tpm0,chardev=chrtpm");
-        cmd.arg("-device");
-        cmd.arg(self.tpmQemuDevice() + ",tpmdev=tpm0");
-    }
-
     public void addAccelerator(Command cmd) {
-        if (self.isDarwin()) {
+        if (self.firmware.isDarwin()) {
             cmd.arg("-accel");
-            cmd.arg(self.hostArchMatchesGuest() ? "hvf" : "tcg");
-        } else if (self.hostArchMatchesGuest()) {
+            cmd.arg(self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg");
+        } else if (self.firmware.hostArchMatchesGuest()) {
             cmd.arg("-enable-kvm");
         } else {
             cmd.arg("-accel");
@@ -526,7 +249,7 @@ class QemuE2eHarness {
         cmd.arg("-machine");
         cmd.arg("virt");
         cmd.arg("-cpu");
-        cmd.arg(self.hostArchMatchesGuest() ? "host" : "max");
+        cmd.arg(self.firmware.hostArchMatchesGuest() ? "host" : "max");
         cmd.arg("-device");
         cmd.arg("virtio-rng-pci");
     }
@@ -560,7 +283,7 @@ class QemuE2eHarness {
 
     public void addBootMedia(Command cmd, bool fromIso) {
         if (!fromIso) { return; }
-        if (self.spec.arch.equals("x86_64") && !self.shouldUseUefi(fromIso)) {
+        if (self.spec.arch.equals("x86_64") && !self.firmware.shouldUseUefi(fromIso)) {
             self.serial.extractBootSerial();
             cmd.arg("-kernel");
             cmd.arg(Path.readAll(self.serial.bootKernelFile()).trim());
@@ -584,14 +307,14 @@ class QemuE2eHarness {
             NixosLog.info("QEMU pidfile exists; assuming VM is already running");
             return;
         }
-        Command cmd = Command(self.qemuBinary());
+        Command cmd = Command(self.firmware.qemuBinary());
         self.addAccelerator(cmd);
         self.addMachine(cmd);
-        self.addFirmware(cmd, fromIso);
+        self.firmware.addFirmware(cmd, fromIso);
         self.addMemoryCpus(cmd);
         self.addStorageAndNetwork(cmd);
         self.addConsole(cmd);
-        self.addTpm2(cmd);
+        self.firmware.addTpm2(cmd);
         self.addBootMedia(cmd, fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
@@ -602,7 +325,7 @@ class QemuE2eHarness {
         ExecResult result = self.shell.runCommand(cmd);
         if (!result.ok()) {
             self.serial.stopSerialReader();
-            self.stopSwtpm();
+            self.firmware.stopSwtpm();
             NixosLog.fatal("Failed to start QEMU");
         }
     }
@@ -618,7 +341,7 @@ class QemuE2eHarness {
         FileSystem.removeRecursive(self.qmpPath());
         FileSystem.removeRecursive(self.serial.serialInPath());
         FileSystem.removeRecursive(self.serial.serialOutPath());
-        self.stopSwtpm();
+        self.firmware.stopSwtpm();
     }
 
     public void sleepSeconds(int seconds) {
@@ -667,6 +390,13 @@ class QemuE2eHarness {
     // Serial console lives in QemuSerial (qemu/serial.btrc); these delegate.
     public string serialLogPath() { return self.serial.serialLogPath(); }
     public void serialSend(string command) { self.serial.serialSend(command); }
+
+    // Capability checks live in QemuFirmware (qemu/firmware.btrc); these delegate.
+    public void requireCommand(string name) { self.firmware.requireCommand(name); }
+    public void requireTpm2Capability() { self.firmware.requireTpm2Capability(); }
+    public void requireUefiCapability() { self.firmware.requireUefiCapability(); }
+    public void requireSecureBootCapability() { self.firmware.requireSecureBootCapability(); }
+    public string secureBootCapabilityReport() { return self.firmware.secureBootCapabilityReport(); }
 
     public bool waitForSsh(int timeout) {
         int elapsed = 0;
@@ -810,10 +540,10 @@ class QemuE2eHarness {
             .capture(false);
         ExecResult result = self.shell.runCommand(cmd);
         if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
-        if (FileSystem.exists(self.firmwareVarsPath())) {
+        if (FileSystem.exists(self.firmware.firmwareVarsPath())) {
             Command cp = Command("cp")
-                .arg(self.firmwareVarsPath())
-                .arg(self.firmwareVarsSnapshotPath(name))
+                .arg(self.firmware.firmwareVarsPath())
+                .arg(self.firmware.firmwareVarsSnapshotPath(name))
                 .capture(false);
             self.shell.runCommand(cp);
         }
@@ -833,13 +563,13 @@ class QemuE2eHarness {
             .capture(false);
         ExecResult result = self.shell.runCommand(cmd);
         if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
-        if (FileSystem.exists(self.firmwareVarsSnapshotPath(name))) {
+        if (FileSystem.exists(self.firmware.firmwareVarsSnapshotPath(name))) {
             Command cp = Command("cp")
-                .arg(self.firmwareVarsSnapshotPath(name))
-                .arg(self.firmwareVarsPath())
+                .arg(self.firmware.firmwareVarsSnapshotPath(name))
+                .arg(self.firmware.firmwareVarsPath())
                 .capture(false);
             self.shell.runCommand(cp);
-            self.makeFirmwareVarsWritable();
+            self.firmware.makeFirmwareVarsWritable();
         }
     }
 
