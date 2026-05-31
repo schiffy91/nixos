@@ -1,25 +1,23 @@
 #include "qemu/ssh.btrc"
+#include "qemu/serial.btrc"
 
 class QemuE2eHarness {
     public VmTestSpec spec;
     public UnixShell shell;
     public SshClient remote;
+    public QemuSerial serial;
 
     public QemuE2eHarness(VmTestSpec spec) {
         self.spec = spec;
         self.shell = UnixShell();
         self.remote = SshClient(spec);
+        self.serial = QemuSerial(spec);
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
     public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
     public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
-    public string serialBasePath() { return PathTools.join(self.spec.workDir, "serial"); }
-    public string serialInPath() { return self.serialBasePath() + ".in"; }
-    public string serialOutPath() { return self.serialBasePath() + ".out"; }
-    public string serialLogPath() { return self.serialBasePath() + ".log"; }
-    public string serialReaderPidPath() { return PathTools.join(self.spec.workDir, "serial-reader.pid"); }
     public string tpmDir() { return PathTools.join(self.spec.workDir, "tpm"); }
     public string tpmStateDir() { return PathTools.join(self.tpmDir(), "state"); }
     public string tpmSocketPath() { return PathTools.join(self.tpmDir(), "swtpm.sock"); }
@@ -27,10 +25,6 @@ class QemuE2eHarness {
     public string tpmLogPath() { return PathTools.join(self.tpmDir(), "swtpm.log"); }
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
-    public string bootDir() { return PathTools.join(self.spec.workDir, "boot"); }
-    public string bootKernelFile() { return PathTools.join(self.bootDir(), "kernel.path"); }
-    public string bootInitrdFile() { return PathTools.join(self.bootDir(), "initrd.path"); }
-    public string bootAppendFile() { return PathTools.join(self.bootDir(), "append.txt"); }
     public string firmwareVarsPath() { return PathTools.join(self.spec.workDir, "edk2-vars.fd"); }
     public string firmwareVarsSnapshotPath(string name) { return PathTools.join(self.spec.workDir, "edk2-vars." + name + ".fd"); }
     public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
@@ -254,69 +248,6 @@ class QemuE2eHarness {
         return result.trimmed().equals("Darwin");
     }
 
-    public string stripLeadingSlash(string path) {
-        if (path.startsWith("/")) {
-            return path.substring(1, path.len() - 1);
-        }
-        return path;
-    }
-
-    public string valueAfterLinePrefix(string text, string prefix, int start) {
-        int pos = Strings.find(text, prefix, start);
-        if (pos < 0) { return ""; }
-        pos = pos + prefix.len();
-        int end = pos;
-        while (text[end] != '\0' && text[end] != '\n') {
-            end++;
-        }
-        return JsonObject.slice(text, pos, end).trim();
-    }
-
-    public void extractBootSerial() {
-        if (!self.spec.arch.equals("x86_64")) { return; }
-        if (FileSystem.exists(self.bootAppendFile())) { return; }
-        FileSystem.mkdirp(self.bootDir());
-
-        Command cfgExtract = Command("bsdtar")
-            .arg("-xf")
-            .arg(self.spec.iso)
-            .arg("-C")
-            .arg(self.bootDir())
-            .arg("isolinux/isolinux.cfg")
-            .capture(false);
-        ExecResult cfgResult = self.shell.runCommand(cfgExtract);
-        if (!cfgResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
-
-        string cfgPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
-        string cfg = Path.readAll(cfgPath);
-        int label = Strings.find(cfg, "LABEL boot-serial", 0);
-        if (label < 0) { NixosLog.fatal("Could not find boot-serial entry in installer ISO"); }
-
-        string kernelIso = self.valueAfterLinePrefix(cfg, "LINUX ", label);
-        string append = self.valueAfterLinePrefix(cfg, "APPEND ", label);
-        string initrdIso = self.valueAfterLinePrefix(cfg, "INITRD ", label);
-        if (kernelIso.isEmpty() || initrdIso.isEmpty() || append.isEmpty()) {
-            NixosLog.fatal("Incomplete boot-serial entry in installer ISO");
-        }
-
-        string kernelRel = self.stripLeadingSlash(kernelIso);
-        string initrdRel = self.stripLeadingSlash(initrdIso);
-        Command bootExtract = Command("bsdtar")
-            .arg("-xf")
-            .arg(self.spec.iso)
-            .arg("-C")
-            .arg(self.bootDir())
-            .arg(kernelRel)
-            .arg(initrdRel)
-            .capture(false);
-        ExecResult bootResult = self.shell.runCommand(bootExtract);
-        if (!bootResult.ok()) { NixosLog.fatal("Failed to extract serial boot kernel/initrd from ISO"); }
-
-        Path.writeAll(self.bootKernelFile(), PathTools.join(self.bootDir(), kernelRel));
-        Path.writeAll(self.bootInitrdFile(), PathTools.join(self.bootDir(), initrdRel));
-        Path.writeAll(self.bootAppendFile(), append);
-    }
-
     public void downloadIso() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.spec.iso)) { return; }
@@ -377,7 +308,7 @@ class QemuE2eHarness {
         self.downloadIso();
         self.createSshKey();
         self.createDisk();
-        self.extractBootSerial();
+        self.serial.extractBootSerial();
     }
 
     public void resetState() {
@@ -508,37 +439,6 @@ class QemuE2eHarness {
         Console.log("Recorded:  " + recorded + " " + self.spec.stateDir());
     }
 
-    public void prepareSerialPipe() {
-        FileSystem.removeRecursive(self.serialInPath());
-        FileSystem.removeRecursive(self.serialOutPath());
-        Command inPipe = Command("mkfifo");
-        inPipe.arg(self.serialInPath());
-        inPipe.capture(false);
-        ExecResult inResult = self.shell.runCommand(inPipe);
-        if (!inResult.ok()) { NixosLog.fatal("Failed to create VM serial input pipe"); }
-        Command outPipe = Command("mkfifo");
-        outPipe.arg(self.serialOutPath());
-        outPipe.capture(false);
-        ExecResult outResult = self.shell.runCommand(outPipe);
-        if (!outResult.ok()) { NixosLog.fatal("Failed to create VM serial output pipe"); }
-    }
-
-    public void startSerialReader() {
-        FileSystem.removeRecursive(self.serialReaderPidPath());
-        FileSystem.removeRecursive(self.serialLogPath());
-        string outPath = UnixShell.quote(self.serialOutPath());
-        string logPath = UnixShell.quote(self.serialLogPath());
-        string pidPath = UnixShell.quote(self.serialReaderPidPath());
-        self.shell.runRaw("(cat " + outPath + " >> " + logPath + ") & echo $! > " + pidPath, false, false, "");
-    }
-
-    public void stopSerialReader() {
-        if (!FileSystem.exists(self.serialReaderPidPath())) { return; }
-        string pidPath = UnixShell.quote(self.serialReaderPidPath());
-        self.shell.runRaw("pid=$(cat " + pidPath + "); kill $pid 2>/dev/null || true", false, false, "");
-        FileSystem.removeRecursive(self.serialReaderPidPath());
-    }
-
     public void startSwtpm() {
         if (!self.tpm2Enabled()) { return; }
         self.requireTpm2Capability();
@@ -651,7 +551,7 @@ class QemuE2eHarness {
         cmd.arg("-display");
         cmd.arg("none");
         cmd.arg("-serial");
-        cmd.arg("pipe:" + self.serialBasePath());
+        cmd.arg("pipe:" + self.serial.serialBasePath());
         cmd.arg("-monitor");
         cmd.arg("unix:" + self.monitorPath() + ",server,nowait");
         cmd.arg("-qmp");
@@ -661,13 +561,13 @@ class QemuE2eHarness {
     public void addBootMedia(Command cmd, bool fromIso) {
         if (!fromIso) { return; }
         if (self.spec.arch.equals("x86_64") && !self.shouldUseUefi(fromIso)) {
-            self.extractBootSerial();
+            self.serial.extractBootSerial();
             cmd.arg("-kernel");
-            cmd.arg(Path.readAll(self.bootKernelFile()).trim());
+            cmd.arg(Path.readAll(self.serial.bootKernelFile()).trim());
             cmd.arg("-initrd");
-            cmd.arg(Path.readAll(self.bootInitrdFile()).trim());
+            cmd.arg(Path.readAll(self.serial.bootInitrdFile()).trim());
             cmd.arg("-append");
-            cmd.arg(Path.readAll(self.bootAppendFile()).trim());
+            cmd.arg(Path.readAll(self.serial.bootAppendFile()).trim());
             cmd.arg("-cdrom");
             cmd.arg(self.spec.iso);
         } else {
@@ -693,22 +593,22 @@ class QemuE2eHarness {
         self.addConsole(cmd);
         self.addTpm2(cmd);
         self.addBootMedia(cmd, fromIso);
-        self.prepareSerialPipe();
-        self.startSerialReader();
+        self.serial.prepareSerialPipe();
+        self.serial.startSerialReader();
         cmd.arg("-daemonize");
         cmd.arg("-pidfile");
         cmd.arg(self.pidPath());
         cmd.capture(false);
         ExecResult result = self.shell.runCommand(cmd);
         if (!result.ok()) {
-            self.stopSerialReader();
+            self.serial.stopSerialReader();
             self.stopSwtpm();
             NixosLog.fatal("Failed to start QEMU");
         }
     }
 
     public void stop() {
-        self.stopSerialReader();
+        self.serial.stopSerialReader();
         if (FileSystem.exists(self.pidPath())) {
             string quotedPid = UnixShell.quote(self.pidPath());
             self.shell.runRaw("pid=$(cat " + quotedPid + "); kill $pid 2>/dev/null || true; sleep 2; kill -0 $pid 2>/dev/null && kill -9 $pid 2>/dev/null || true", false, false, "");
@@ -716,8 +616,8 @@ class QemuE2eHarness {
         }
         FileSystem.removeRecursive(self.monitorPath());
         FileSystem.removeRecursive(self.qmpPath());
-        FileSystem.removeRecursive(self.serialInPath());
-        FileSystem.removeRecursive(self.serialOutPath());
+        FileSystem.removeRecursive(self.serial.serialInPath());
+        FileSystem.removeRecursive(self.serial.serialOutPath());
         self.stopSwtpm();
     }
 
@@ -725,16 +625,11 @@ class QemuE2eHarness {
         self.shell.runRaw("sleep " + Strings.fromInt(seconds), false, false, "");
     }
 
-    public void serialSend(string command) {
-        string payload = command + "\n";
-        self.shell.runRaw("printf %s " + UnixShell.quote(payload) + " > " + UnixShell.quote(self.serialInPath()), false, false, "");
-    }
-
     public void bootstrapSsh() {
         self.createSshKey();
         string key = self.sshPubKey();
-        self.serialSend("");
-        self.serialSend("sudo install -d -m 700 /root/.ssh; echo " + UnixShell.quote(key) + " | sudo tee /root/.ssh/authorized_keys > /dev/null; sudo chmod 600 /root/.ssh/authorized_keys; sudo systemctl restart sshd");
+        self.serial.serialSend("");
+        self.serial.serialSend("sudo install -d -m 700 /root/.ssh; echo " + UnixShell.quote(key) + " | sudo tee /root/.ssh/authorized_keys > /dev/null; sudo chmod 600 /root/.ssh/authorized_keys; sudo systemctl restart sshd");
         self.sleepSeconds(5);
     }
 
@@ -768,6 +663,10 @@ class QemuE2eHarness {
     public void copyWorkspace(string localPath, string remotePath) { self.remote.copyWorkspace(localPath, remotePath); }
     public void copyTo(string localPath, string remotePath) { self.remote.copyTo(localPath, remotePath); }
     public void copyFrom(string remotePath, string localPath) { self.remote.copyFrom(remotePath, localPath); }
+
+    // Serial console lives in QemuSerial (qemu/serial.btrc); these delegate.
+    public string serialLogPath() { return self.serial.serialLogPath(); }
+    public void serialSend(string command) { self.serial.serialSend(command); }
 
     public bool waitForSsh(int timeout) {
         int elapsed = 0;

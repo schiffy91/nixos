@@ -1,0 +1,124 @@
+/* VM serial console: named-pipe wiring, the background reader, sending input,
+ * and extracting the installer ISO's boot-serial kernel/initrd/append.
+ *
+ * Self-contained: holds its own spec + shell and owns the serial + boot paths
+ * (only the harness's addConsole/addBootMedia reach in, via self.serial).
+ */
+class QemuSerial {
+    public VmTestSpec spec;
+    public UnixShell shell;
+
+    public QemuSerial(VmTestSpec spec) {
+        self.spec = spec;
+        self.shell = UnixShell();
+    }
+
+    public string serialBasePath() { return PathTools.join(self.spec.workDir, "serial"); }
+    public string serialInPath() { return self.serialBasePath() + ".in"; }
+    public string serialOutPath() { return self.serialBasePath() + ".out"; }
+    public string serialLogPath() { return self.serialBasePath() + ".log"; }
+    public string serialReaderPidPath() { return PathTools.join(self.spec.workDir, "serial-reader.pid"); }
+    public string bootDir() { return PathTools.join(self.spec.workDir, "boot"); }
+    public string bootKernelFile() { return PathTools.join(self.bootDir(), "kernel.path"); }
+    public string bootInitrdFile() { return PathTools.join(self.bootDir(), "initrd.path"); }
+    public string bootAppendFile() { return PathTools.join(self.bootDir(), "append.txt"); }
+
+    public string stripLeadingSlash(string path) {
+        if (path.startsWith("/")) {
+            return path.substring(1, path.len() - 1);
+        }
+        return path;
+    }
+
+    public string valueAfterLinePrefix(string text, string prefix, int start) {
+        int pos = Strings.find(text, prefix, start);
+        if (pos < 0) { return ""; }
+        pos = pos + prefix.len();
+        int end = pos;
+        while (text[end] != '\0' && text[end] != '\n') {
+            end++;
+        }
+        return JsonObject.slice(text, pos, end).trim();
+    }
+
+    public void extractBootSerial() {
+        if (!self.spec.arch.equals("x86_64")) { return; }
+        if (FileSystem.exists(self.bootAppendFile())) { return; }
+        FileSystem.mkdirp(self.bootDir());
+
+        Command cfgExtract = Command("bsdtar")
+            .arg("-xf")
+            .arg(self.spec.iso)
+            .arg("-C")
+            .arg(self.bootDir())
+            .arg("isolinux/isolinux.cfg")
+            .capture(false);
+        ExecResult cfgResult = self.shell.runCommand(cfgExtract);
+        if (!cfgResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
+
+        string cfgPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
+        string cfg = Path.readAll(cfgPath);
+        int label = Strings.find(cfg, "LABEL boot-serial", 0);
+        if (label < 0) { NixosLog.fatal("Could not find boot-serial entry in installer ISO"); }
+
+        string kernelIso = self.valueAfterLinePrefix(cfg, "LINUX ", label);
+        string append = self.valueAfterLinePrefix(cfg, "APPEND ", label);
+        string initrdIso = self.valueAfterLinePrefix(cfg, "INITRD ", label);
+        if (kernelIso.isEmpty() || initrdIso.isEmpty() || append.isEmpty()) {
+            NixosLog.fatal("Incomplete boot-serial entry in installer ISO");
+        }
+
+        string kernelRel = self.stripLeadingSlash(kernelIso);
+        string initrdRel = self.stripLeadingSlash(initrdIso);
+        Command bootExtract = Command("bsdtar")
+            .arg("-xf")
+            .arg(self.spec.iso)
+            .arg("-C")
+            .arg(self.bootDir())
+            .arg(kernelRel)
+            .arg(initrdRel)
+            .capture(false);
+        ExecResult bootResult = self.shell.runCommand(bootExtract);
+        if (!bootResult.ok()) { NixosLog.fatal("Failed to extract serial boot kernel/initrd from ISO"); }
+
+        Path.writeAll(self.bootKernelFile(), PathTools.join(self.bootDir(), kernelRel));
+        Path.writeAll(self.bootInitrdFile(), PathTools.join(self.bootDir(), initrdRel));
+        Path.writeAll(self.bootAppendFile(), append);
+    }
+
+    public void prepareSerialPipe() {
+        FileSystem.removeRecursive(self.serialInPath());
+        FileSystem.removeRecursive(self.serialOutPath());
+        Command inPipe = Command("mkfifo");
+        inPipe.arg(self.serialInPath());
+        inPipe.capture(false);
+        ExecResult inResult = self.shell.runCommand(inPipe);
+        if (!inResult.ok()) { NixosLog.fatal("Failed to create VM serial input pipe"); }
+        Command outPipe = Command("mkfifo");
+        outPipe.arg(self.serialOutPath());
+        outPipe.capture(false);
+        ExecResult outResult = self.shell.runCommand(outPipe);
+        if (!outResult.ok()) { NixosLog.fatal("Failed to create VM serial output pipe"); }
+    }
+
+    public void startSerialReader() {
+        FileSystem.removeRecursive(self.serialReaderPidPath());
+        FileSystem.removeRecursive(self.serialLogPath());
+        string outPath = UnixShell.quote(self.serialOutPath());
+        string logPath = UnixShell.quote(self.serialLogPath());
+        string pidPath = UnixShell.quote(self.serialReaderPidPath());
+        self.shell.runRaw("(cat " + outPath + " >> " + logPath + ") & echo $! > " + pidPath, false, false, "");
+    }
+
+    public void stopSerialReader() {
+        if (!FileSystem.exists(self.serialReaderPidPath())) { return; }
+        string pidPath = UnixShell.quote(self.serialReaderPidPath());
+        self.shell.runRaw("pid=$(cat " + pidPath + "); kill $pid 2>/dev/null || true", false, false, "");
+        FileSystem.removeRecursive(self.serialReaderPidPath());
+    }
+
+    public void serialSend(string command) {
+        string payload = command + "\n";
+        self.shell.runRaw("printf %s " + UnixShell.quote(payload) + " > " + UnixShell.quote(self.serialInPath()), false, false, "");
+    }
+}
