@@ -7,11 +7,15 @@ class PermissionsManager {
         self.shell = UnixShell();
     }
 
-    public string ignorePredicate(string quotedRoot) {
+    public string ignorePredicate() {
         return "\\( -path " + UnixShell.quote("*/secrets*")
             + " -o -path " + UnixShell.quote("*/.venv*")
             + " -o -path " + UnixShell.quote("*/.direnv*")
             + " \\)";
+    }
+
+    public void findChmod(string quotedRoot, string ignores, string predicate, string mode) {
+        self.shell.runRaw("find " + quotedRoot + " " + ignores + " -prune -o " + predicate + " -exec chmod " + mode + " {} +", false, false, "");
     }
 
     public void secureSecretsPath(string path) {
@@ -36,10 +40,10 @@ class PermissionsManager {
         }
 
         string quotedRoot = UnixShell.quote(root);
-        string ignores = self.ignorePredicate(quotedRoot);
-        self.shell.runRaw("find " + quotedRoot + " " + ignores + " -prune -o -type d -exec chmod 755 {} +", false, false, "");
-        self.shell.runRaw("find " + quotedRoot + " " + ignores + " -prune -o -type f -exec chmod 644 {} +", false, false, "");
-        self.shell.runRaw("find " + quotedRoot + " " + ignores + " -prune -o \\( -path '*/scripts/*' -o -path '*/bin/*' \\) -exec chmod 755 {} +", false, false, "");
+        string ignores = self.ignorePredicate();
+        self.findChmod(quotedRoot, ignores, "-type d", "755");
+        self.findChmod(quotedRoot, ignores, "-type f", "644");
+        self.findChmod(quotedRoot, ignores, "\\( -path '*/scripts/*' -o -path '*/bin/*' \\)", "755");
         string gitObjects = PathTools.join(root, ".git/objects");
         if (FileSystem.exists(gitObjects)) {
             self.shell.runRaw("find " + UnixShell.quote(gitObjects) + " -type f -exec chmod 444 {} +", false, false, "");

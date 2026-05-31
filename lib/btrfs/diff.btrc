@@ -232,37 +232,7 @@ class DiffScanner {
             Vector<string> bases = self.collapseToPersist(persistedPaths, keepList);
             output = self.atDepth(bases, persistedPaths, options.depth);
         } else {
-            Vector<string> top = self.collapse(ephemeral, keepList, mounts);
-            string cachePath = "/tmp/etc/nixos/scripts/bin/diff/cache.json";
-            Vector<string> previous = self.previousCache(cachePath);
-            self.writeCache(cachePath, top);
-            if (options.recent) {
-                Vector<string> recent = [];
-                for path in top {
-                    if (!previous.contains(path)) { recent.push(path); }
-                }
-                top = recent;
-            }
-            if (!options.showSymlinks) {
-                Vector<string> filtered = [];
-                for path in top {
-                    if (!FileSystem.isSymlink(path)) { filtered.push(path); }
-                }
-                top = filtered;
-            }
-            if (!options.showChildren.isEmpty()) {
-                bool covers = false;
-                for path in top {
-                    if (path.equals(options.showChildren) || options.showChildren.startsWith(path + "/") || path.startsWith(options.showChildren + "/")) {
-                        covers = true;
-                    }
-                }
-                Vector<string> bases = [];
-                if (covers) { bases.push(options.showChildren); }
-                output = self.atDepth(bases, ephemeral, options.depth);
-            } else {
-                output = self.atDepth(top, ephemeral, options.depth);
-            }
+            output = self.selectEphemeral(ephemeral, keepList, mounts, options);
         }
         output = self.filterPattern(output, options.pattern);
         if (output.len == 0) { return; }
@@ -274,5 +244,38 @@ class DiffScanner {
         for path in output {
             Console.error(path);
         }
+    }
+
+    public Vector<string> selectEphemeral(Vector<string> ephemeral, Vector<string> keepList, Vector<string> mounts, DiffOptions options) {
+        Vector<string> top = self.collapse(ephemeral, keepList, mounts);
+        string cachePath = "/tmp/etc/nixos/scripts/bin/diff/cache.json";
+        Vector<string> previous = self.previousCache(cachePath);
+        self.writeCache(cachePath, top);
+        if (options.recent) {
+            Vector<string> recent = [];
+            for path in top {
+                if (!previous.contains(path)) { recent.push(path); }
+            }
+            top = recent;
+        }
+        if (!options.showSymlinks) {
+            Vector<string> filtered = [];
+            for path in top {
+                if (!FileSystem.isSymlink(path)) { filtered.push(path); }
+            }
+            top = filtered;
+        }
+        if (!options.showChildren.isEmpty()) {
+            bool covers = false;
+            for path in top {
+                if (path.equals(options.showChildren) || options.showChildren.startsWith(path + "/") || path.startsWith(options.showChildren + "/")) {
+                    covers = true;
+                }
+            }
+            Vector<string> bases = [];
+            if (covers) { bases.push(options.showChildren); }
+            return self.atDepth(bases, ephemeral, options.depth);
+        }
+        return self.atDepth(top, ephemeral, options.depth);
     }
 }

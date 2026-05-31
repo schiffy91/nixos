@@ -122,6 +122,15 @@ class NixosRebuilder {
             NixosLog.info("Refreshing immutable CLEAN snapshots after update");
             snapshots.createInitialSnapshots();
         }
+        self.convergeMembrane(mode, dryRun);
+        if (dryRun) {
+            NixosLog.info("DRY would start semipermeable-membrane-mounts.service");
+            return;
+        }
+        self.shell.runRaw("systemctl start semipermeable-membrane-mounts.service", false, false, "");
+    }
+
+    public void convergeMembrane(string mode, bool dryRun) {
         NixosLog.info("Converging semipermeable membrane after update");
         Vector<string> args = [
             "/run/current-system/sw/bin/semipermeable_membrane",
@@ -144,11 +153,6 @@ class NixosRebuilder {
         membrane.capture(false);
         membrane.check(false);
         self.shell.runCommand(membrane);
-        if (dryRun) {
-            NixosLog.info("DRY would start semipermeable-membrane-mounts.service");
-            return;
-        }
-        self.shell.runRaw("systemctl start semipermeable-membrane-mounts.service", false, false, "");
     }
 
     public void update(RebuildOptions options) {
