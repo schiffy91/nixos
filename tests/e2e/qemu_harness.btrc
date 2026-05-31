@@ -1,10 +1,14 @@
+#include "qemu/ssh.btrc"
+
 class QemuE2eHarness {
     public VmTestSpec spec;
     public UnixShell shell;
+    public SshClient remote;
 
     public QemuE2eHarness(VmTestSpec spec) {
         self.spec = spec;
         self.shell = UnixShell();
+        self.remote = SshClient(spec);
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
@@ -486,28 +490,6 @@ class QemuE2eHarness {
         return FileSystem.exists(self.backingDiskFile());
     }
 
-    public Vector<string> sshOptionList() {
-        Vector<string> opts = [];
-        opts.push("-o"); opts.push("StrictHostKeyChecking=no");
-        opts.push("-o"); opts.push("UserKnownHostsFile=/dev/null");
-        opts.push("-o"); opts.push("LogLevel=ERROR");
-        opts.push("-o"); opts.push("BatchMode=yes");
-        opts.push("-o"); opts.push("IdentitiesOnly=yes");
-        opts.push("-o"); opts.push("ConnectTimeout=3");
-        opts.push("-o"); opts.push("ConnectionAttempts=1");
-        opts.push("-i"); opts.push(self.sshKeyPath());
-        return opts;
-    }
-
-    public string sshOptionsForShell() {
-        Vector<string> quoted = [];
-        Vector<string> opts = self.sshOptionList();
-        for opt in opts {
-            quoted.push(UnixShell.quote(opt));
-        }
-        return quoted.join(" ");
-    }
-
     public void printStatus() {
         string recorded = "no";
         if (FileSystem.exists(self.spec.stateHashFile())) {
@@ -776,30 +758,16 @@ class QemuE2eHarness {
         }
     }
 
-    public Command addSshOptions(Command cmd) {
-        Vector<string> opts = self.sshOptionList();
-        for opt in opts {
-            cmd.arg(opt);
-        }
-        return cmd;
-    }
-
-    public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
-        Command cmd = self.addSshOptions(Command("timeout")
-            .arg(Strings.fromInt(timeoutSeconds))
-            .arg("ssh")
-            .arg("-p")
-            .arg(Strings.fromInt(self.spec.sshPort)))
-            .arg("root@localhost")
-            .arg(command)
-            .check(checkStatus);
-        ExecResult result = self.shell.runCommand(cmd);
-        return result;
-    }
-
-    public ExecResult ssh(string command, bool checkStatus) {
-        return self.sshWithTimeout(command, checkStatus, 5);
-    }
+    // Remote execution lives in SshClient (qemu/ssh.btrc); these delegate.
+    public ExecResult ssh(string command, bool checkStatus) { return self.remote.ssh(command, checkStatus); }
+    public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) { return self.remote.sshWithTimeout(command, checkStatus, timeoutSeconds); }
+    public ExecResult host(string command, bool checkStatus) { return self.remote.host(command, checkStatus); }
+    public ExecResult nixEval(string attribute, int timeoutSeconds) { return self.remote.nixEval(attribute, timeoutSeconds); }
+    public ExecResult qmp(string command, int timeoutSeconds) { return self.remote.qmp(command, timeoutSeconds); }
+    public ExecResult workspaceFileExists(string relativePath) { return self.remote.workspaceFileExists(relativePath); }
+    public void copyWorkspace(string localPath, string remotePath) { self.remote.copyWorkspace(localPath, remotePath); }
+    public void copyTo(string localPath, string remotePath) { self.remote.copyTo(localPath, remotePath); }
+    public void copyFrom(string remotePath, string localPath) { self.remote.copyFrom(remotePath, localPath); }
 
     public bool waitForSsh(int timeout) {
         int elapsed = 0;
@@ -813,62 +781,6 @@ class QemuE2eHarness {
             }
         }
         return false;
-    }
-
-    public ExecResult host(string command, bool checkStatus) {
-        return self.shell.runRaw(command, true, checkStatus, "");
-    }
-
-    public string workspaceRoot() {
-        return self.spec.args.getOrDefault("workspaceRoot", ".");
-    }
-
-    public ExecResult workspaceFileExists(string relativePath) {
-        string command = "cd " + UnixShell.quote(self.workspaceRoot())
-            + " && test -f " + UnixShell.quote(relativePath)
-            + " && printf exists";
-        return self.shell.runRaw(command, true, false, "");
-    }
-
-    public ExecResult nixEval(string attribute, int timeoutSeconds) {
-        string command = "cd " + UnixShell.quote(self.workspaceRoot())
-            + " && timeout "
-            + Strings.fromInt(timeoutSeconds)
-            + " nix eval "
-            + UnixShell.quote(".#" + attribute)
-            + " --show-trace";
-        return self.shell.runRaw(command, true, false, "");
-    }
-
-    public ExecResult qmp(string command, int timeoutSeconds) {
-        if (!FileSystem.exists(self.qmpPath())) {
-            return ExecResult(1, "", "QMP socket does not exist: " + self.qmpPath(), "");
-        }
-        string payload = "{\"execute\":\"qmp_capabilities\"}\n" + command + "\n";
-        string rendered = "printf %s "
-            + UnixShell.quote(payload)
-            + " | timeout "
-            + Strings.fromInt(timeoutSeconds)
-            + " socat - "
-            + UnixShell.quote("UNIX-CONNECT:" + self.qmpPath());
-        return self.shell.runRaw(rendered, true, false, "");
-    }
-
-    public void copyWorkspace(string localPath, string remotePath) {
-        string source = localPath.isEmpty() ? ".." : localPath;
-        string target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
-        string remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
-        string tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
-            + UnixShell.quote(source)
-            + " .";
-        string ssh = "ssh -p "
-            + Strings.fromInt(self.spec.sshPort)
-            + " "
-            + self.sshOptionsForShell()
-            + " root@localhost "
-            + UnixShell.quote(remote);
-        ExecResult result = self.shell.runRaw(tar + " | " + ssh, false, true, "");
-        if (!result.ok()) { NixosLog.fatal("Failed to copy workspace into VM"); }
     }
 
     public void configureVmHost() {
@@ -1032,27 +944,4 @@ class QemuE2eHarness {
         }
     }
 
-    public void copyTo(string localPath, string remotePath) {
-        Command cmd = self.addSshOptions(Command("scp")
-            .arg("-r")
-            .arg("-P")
-            .arg(Strings.fromInt(self.spec.sshPort)))
-            .arg(localPath)
-            .arg(f"root@localhost:{remotePath}")
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
-        if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
-    }
-
-    public void copyFrom(string remotePath, string localPath) {
-        Command cmd = self.addSshOptions(Command("scp")
-            .arg("-r")
-            .arg("-P")
-            .arg(Strings.fromInt(self.spec.sshPort)))
-            .arg(f"root@localhost:{remotePath}")
-            .arg(localPath)
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
-        if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
-    }
 }

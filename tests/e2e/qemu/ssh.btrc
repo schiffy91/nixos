@@ -1,0 +1,143 @@
+/* Remote execution against the test VM — SSH, SCP, QMP, and workspace copy.
+ *
+ * Self-contained: holds its own spec + shell and computes the two paths it
+ * needs (ssh key, qmp socket) from spec.workDir, so it has no reference back to
+ * the harness. QemuE2eHarness owns one of these as `self.remote` and exposes
+ * thin delegating wrappers for the runner/CLI call sites.
+ */
+class SshClient {
+    public VmTestSpec spec;
+    public UnixShell shell;
+
+    public SshClient(VmTestSpec spec) {
+        self.spec = spec;
+        self.shell = UnixShell();
+    }
+
+    public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
+    public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
+    public string workspaceRoot() { return self.spec.args.getOrDefault("workspaceRoot", "."); }
+
+    public Vector<string> sshOptionList() {
+        Vector<string> opts = [];
+        opts.push("-o"); opts.push("StrictHostKeyChecking=no");
+        opts.push("-o"); opts.push("UserKnownHostsFile=/dev/null");
+        opts.push("-o"); opts.push("LogLevel=ERROR");
+        opts.push("-o"); opts.push("BatchMode=yes");
+        opts.push("-o"); opts.push("IdentitiesOnly=yes");
+        opts.push("-o"); opts.push("ConnectTimeout=3");
+        opts.push("-o"); opts.push("ConnectionAttempts=1");
+        opts.push("-i"); opts.push(self.sshKeyPath());
+        return opts;
+    }
+
+    public string sshOptionsForShell() {
+        Vector<string> quoted = [];
+        Vector<string> opts = self.sshOptionList();
+        for opt in opts {
+            quoted.push(UnixShell.quote(opt));
+        }
+        return quoted.join(" ");
+    }
+
+    public Command addSshOptions(Command cmd) {
+        Vector<string> opts = self.sshOptionList();
+        for opt in opts {
+            cmd.arg(opt);
+        }
+        return cmd;
+    }
+
+    public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
+        Command cmd = self.addSshOptions(Command("timeout")
+            .arg(Strings.fromInt(timeoutSeconds))
+            .arg("ssh")
+            .arg("-p")
+            .arg(Strings.fromInt(self.spec.sshPort)))
+            .arg("root@localhost")
+            .arg(command)
+            .check(checkStatus);
+        ExecResult result = self.shell.runCommand(cmd);
+        return result;
+    }
+
+    public ExecResult ssh(string command, bool checkStatus) {
+        return self.sshWithTimeout(command, checkStatus, 5);
+    }
+
+    public ExecResult host(string command, bool checkStatus) {
+        return self.shell.runRaw(command, true, checkStatus, "");
+    }
+
+    public ExecResult workspaceFileExists(string relativePath) {
+        string command = "cd " + UnixShell.quote(self.workspaceRoot())
+            + " && test -f " + UnixShell.quote(relativePath)
+            + " && printf exists";
+        return self.shell.runRaw(command, true, false, "");
+    }
+
+    public ExecResult nixEval(string attribute, int timeoutSeconds) {
+        string command = "cd " + UnixShell.quote(self.workspaceRoot())
+            + " && timeout "
+            + Strings.fromInt(timeoutSeconds)
+            + " nix eval "
+            + UnixShell.quote(".#" + attribute)
+            + " --show-trace";
+        return self.shell.runRaw(command, true, false, "");
+    }
+
+    public ExecResult qmp(string command, int timeoutSeconds) {
+        if (!FileSystem.exists(self.qmpPath())) {
+            return ExecResult(1, "", "QMP socket does not exist: " + self.qmpPath(), "");
+        }
+        string payload = "{\"execute\":\"qmp_capabilities\"}\n" + command + "\n";
+        string rendered = "printf %s "
+            + UnixShell.quote(payload)
+            + " | timeout "
+            + Strings.fromInt(timeoutSeconds)
+            + " socat - "
+            + UnixShell.quote("UNIX-CONNECT:" + self.qmpPath());
+        return self.shell.runRaw(rendered, true, false, "");
+    }
+
+    public void copyWorkspace(string localPath, string remotePath) {
+        string source = localPath.isEmpty() ? ".." : localPath;
+        string target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
+        string remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
+        string tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
+            + UnixShell.quote(source)
+            + " .";
+        string ssh = "ssh -p "
+            + Strings.fromInt(self.spec.sshPort)
+            + " "
+            + self.sshOptionsForShell()
+            + " root@localhost "
+            + UnixShell.quote(remote);
+        ExecResult result = self.shell.runRaw(tar + " | " + ssh, false, true, "");
+        if (!result.ok()) { NixosLog.fatal("Failed to copy workspace into VM"); }
+    }
+
+    public void copyTo(string localPath, string remotePath) {
+        Command cmd = self.addSshOptions(Command("scp")
+            .arg("-r")
+            .arg("-P")
+            .arg(Strings.fromInt(self.spec.sshPort)))
+            .arg(localPath)
+            .arg(f"root@localhost:{remotePath}")
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
+    }
+
+    public void copyFrom(string remotePath, string localPath) {
+        Command cmd = self.addSshOptions(Command("scp")
+            .arg("-r")
+            .arg("-P")
+            .arg(Strings.fromInt(self.spec.sshPort)))
+            .arg(f"root@localhost:{remotePath}")
+            .arg(localPath)
+            .capture(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
+    }
+}
