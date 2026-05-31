@@ -2,6 +2,7 @@
 #include "qemu/serial.btrc"
 #include "qemu/firmware.btrc"
 #include "qemu/state.btrc"
+#include "qemu/provisioner.btrc"
 
 class QemuE2eHarness {
     public VmTestSpec spec;
@@ -10,6 +11,7 @@ class QemuE2eHarness {
     public QemuSerial serial;
     public QemuFirmware firmware;
     public VmStateStore state;
+    public VmProvisioner provisioner;
 
     public QemuE2eHarness(VmTestSpec spec) {
         self.spec = spec;
@@ -18,6 +20,7 @@ class QemuE2eHarness {
         self.serial = QemuSerial(spec);
         self.firmware = QemuFirmware(spec);
         self.state = VmStateStore(spec, self.firmware);
+        self.provisioner = VmProvisioner(spec, self.remote);
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
@@ -289,118 +292,11 @@ class QemuE2eHarness {
     }
 
     public void configureVmHost() {
-        string mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
-        string enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
-        string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
-        string desktop = self.spec.args.getOrDefault("desktop", "none");
-        string encryption = self.spec.args.getOrDefault("encryption", "false");
-        string luksPass = "testpass123";
-        bool secureBootTarget = bootTargetName.equals("Secure-Boot");
-        string otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
-        string serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
-        string initrdModules = self.spec.arch.equals("aarch64")
-            ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
-            : "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"tpm_tis\" ]";
-        string hostDir = "/etc/nixos/modules/hosts/" + self.spec.arch + "/VM-TEST";
-        string hostPath = hostDir + "/VM-TEST.nix";
-        string pubkey = self.sshPubKey();
-        string passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
-        string secureBootSettings = secureBootTarget
-            ? "  settings.boot.pkiBundle = \"/var/lib/sbctl\";\n"
-            : "";
-        string secureBootModulePath = "/etc/nixos/modules/system/vm-test-secure-boot.nix";
-        string secureBootModule = "{ config, lib, pkgs, ... }: {\n"
-            + "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {\n"
-            + "    boot.loader.timeout = lib.mkForce 0;\n"
-            + "    boot.lanzaboote.autoGenerateKeys.enable = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.enable = true;\n"
-            + "    boot.lanzaboote.allowUnsigned = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.includeMicrosoftKeys = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.autoReboot = false;\n"
-            + "    environment.systemPackages = [ pkgs.sbctl ];\n"
-            + "  };\n"
-            + "}\n";
-        string secureBootModuleCommand = secureBootTarget
-            ? "printf %s " + UnixShell.quote(secureBootModule) + " > " + UnixShell.quote(secureBootModulePath) + "; "
-            : "";
-        string hostNix = "{ lib, ... }: {\n"
-            + "  networking.hostName = \"VM-TEST\";\n"
-            + "  networking.firewall.enable = lib.mkForce false;\n"
-            + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
-            + "  boot.kernelParams = [ \"console=" + serialConsole + "\" ];\n"
-            + "  boot.initrd.availableKernelModules = " + initrdModules + ";\n"
-            + "  boot.plymouth.enable = lib.mkForce false;\n"
-            + "  services.getty.autologinUser = lib.mkForce \"root\";\n"
-            + "  services.openssh.enable = lib.mkForce true;\n"
-            + "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";\n"
-            + "  services.openssh.settings.UseDns = lib.mkForce false;\n"
-            + "  settings.user.admin.autoUnlockWallet.enabled = false;\n"
-            + "  settings.user.admin.homeManager.enable = false;\n"
-            + "  settings.networking.identityAgent = \"none\";\n"
-            + "  settings.networking.lanSubnet = \"10.0.2.0/24\";\n"
-            + "  settings.disk.device = \"/dev/vda\";\n"
-            + "  settings.disk.encryption.enable = " + encryption + ";\n"
-            + "  settings.disk.immutability.enable = " + enabled + ";\n"
-            + "  settings.disk.immutability.mode = \"" + mode + "\";\n"
-            + "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];\n"
-            + "  settings.disk.immutability.semipermeable_membrane.mode = \"" + mode + "\";\n"
-            + "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";\n"
-            + "  settings.disk.swap.size = \"2G\";\n"
-            + secureBootSettings
-            + "}\n";
-        string localConfig = "{\"host_path\":\"modules/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix\",\"target\":\"" + bootTargetName + "\"}\n";
-        string luksCommand = encryption.equals("true")
-            ? "printf %s " + UnixShell.quote(luksPass) + " > /tmp/plain_text_password.txt; chmod 600 /tmp/plain_text_password.txt; "
-            : "";
-        string command = "set -e; "
-            + luksCommand
-            + "rm -rf /etc/nixos/modules/hosts/" + otherArch + "; "
-            + "rm -f " + UnixShell.quote(secureBootModulePath) + "; "
-            + secureBootModuleCommand
-            + "find /etc/nixos/modules/apps -maxdepth 1 -type f -name '*.nix' ! -name 'nixosctl.nix' -delete; "
-            + "find /etc/nixos/modules/apps/home-manager -maxdepth 1 -type f -name '*.nix' -delete 2>/dev/null || true; "
-            + "mkdir -p /etc/nixos/modules/apps/home-manager; "
-            + "touch /etc/nixos/modules/apps/home-manager/.keep; "
-            + "mkdir -p /etc/nixos/secrets; "
-            + "printf %s " + UnixShell.quote(passwordHash) + " > /etc/nixos/secrets/hashed_password.txt; "
-            + "chmod 600 /etc/nixos/secrets/hashed_password.txt; "
-            + "mkdir -p " + UnixShell.quote(hostDir) + "; "
-            + "printf %s " + UnixShell.quote(hostNix) + " > " + UnixShell.quote(hostPath) + "; "
-            + "printf %s " + UnixShell.quote(localConfig) + " > /etc/nixos/config.json; "
-            + "git -C /etc/nixos init; "
-            + "git config --global --add safe.directory /etc/nixos; "
-            + "git -C /etc/nixos add -A; "
-            + "git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty";
-        ExecResult result = self.sshWithTimeout(command, false, 120);
-        if (!result.ok()) {
-            Console.error(result.stdout());
-            NixosLog.fatal("Failed to configure VM host");
-        }
+        self.provisioner.configureVmHost();
     }
 
     public void installNixosGuest() {
-        string diskTarget = "VM-TEST-Disk-Operation";
-        string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
-        bool secureBootTarget = bootTargetName.equals("Secure-Boot");
-        string bootTarget = "VM-TEST-" + bootTargetName;
-        string nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
-        string disko = nix + " run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#"
-            + diskTarget
-            + " --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
-        string install = "mkdir -p /mnt/etc; rm -rf /mnt/etc/nixos; cp -r /etc/nixos /mnt/etc/nixos; mkdir -p /mnt/nix/tmp; TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#"
-            + bootTarget
-            + " --root /mnt --no-channel-copy --show-trace --no-root-password --cores 0";
-        string lanzabooteInstall = secureBootTarget
-            ? "nixos-enter --root /mnt --command "
-                + UnixShell.quote("set -e; cmd=$(nix --extra-experimental-features nix-command --extra-experimental-features flakes eval --raw /etc/nixos#nixosConfigurations.VM-TEST-Secure-Boot.config.boot.lanzaboote.installCommand); tmp=$(mktemp -d); ln -s /nix/var/nix/profiles/system \"$tmp/system-1-link\"; sh -c \"$cmd --public-key /var/lib/sbctl/keys/db/db.pem --private-key /var/lib/sbctl/keys/db/db.key /boot $tmp/system-1-link\"; rm -rf \"$tmp\"")
-            : "true";
-        string snapshots = "nixos-enter --root /mnt --command "
-            + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --add safe.directory /etc/nixos || true");
-        string command = "set -e; " + disko + "; " + install + "; " + lanzabooteInstall + "; " + snapshots + "; echo INSTALL_OK";
-        int timeoutSeconds = secureBootTarget ? 7200 : 3600;
-        ExecResult result = self.sshWithTimeout(command, false, timeoutSeconds);
-        if (!result.ok() || !result.stdout().contains("INSTALL_OK")) {
-            Console.error(result.stdout());
+        if (!self.provisioner.installNixosGuest()) {
             self.stop();
             NixosLog.fatal("NixOS installation failed");
         }
