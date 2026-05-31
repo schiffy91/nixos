@@ -19,4 +19,6 @@
 #include "membrane/run.btrc"
 #include "membrane/btrfs.btrc"
 #include "membrane/fs.btrc"
+#include "membrane/planner.btrc"
+#include "membrane/mounts.btrc"
 #include "membrane/membrane.btrc"

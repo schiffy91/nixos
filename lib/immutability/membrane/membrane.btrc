@@ -1,6 +1,8 @@
 class SemipermeableMembrane {
     public MembraneRun run;
     public MembraneFs fs;
+    public MembranePlanner planner;
+    public MembraneMounts mounts;
     public string device;
     public string snapshotsSubvolume;
     public string cleanName;
@@ -14,6 +16,8 @@ class SemipermeableMembrane {
     public SemipermeableMembrane(bool dryRun, bool assumeMounted) {
         self.run = MembraneRun(dryRun);
         self.fs = MembraneFs(self.run);
+        self.planner = MembranePlanner(self.fs);
+        self.mounts = MembraneMounts(self.run, self.fs);
         self.device = "";
         self.snapshotsSubvolume = "";
         self.cleanName = "";
@@ -102,69 +106,6 @@ class SemipermeableMembrane {
         self.fs.deleteSubvolume(next);
     }
 
-    public int compareSpecs(MembraneSpec left, MembraneSpec right) {
-        int volume = Strings.compare(left.volume, right.volume);
-        if (volume != 0) { return volume; }
-        int leftDepth = Strings.count(left.relPath, "/");
-        int rightDepth = Strings.count(right.relPath, "/");
-        if (leftDepth != rightDepth) { return leftDepth - rightDepth; }
-        if (left.relPath.len() != right.relPath.len()) { return left.relPath.len() - right.relPath.len(); }
-        return Strings.compare(left.relPath, right.relPath);
-    }
-
-    public void pushSpecSorted(Vector<MembraneSpec> specs, MembraneSpec spec) {
-        int index = 0;
-        while (index < specs.len && self.compareSpecs(specs.get(index), spec) <= 0) {
-            index++;
-        }
-        specs.insert(index, spec);
-    }
-
-    public Vector<MembraneSpec> sortedSpecs(Vector<MembraneSpec> input) {
-        Vector<MembraneSpec> sorted = [];
-        for spec in input {
-            self.pushSpecSorted(sorted, spec);
-        }
-        return sorted;
-    }
-
-    public string resolveKind(string live, string clean, MembraneSpec spec) {
-        string path = self.fs.sourcePath(live, clean, spec.relPath);
-        if (path.isEmpty()) { return "file"; }
-        if (FileSystem.isDir(path)) { return "dir"; }
-        return "file";
-    }
-
-    public bool planAlreadyCovers(Vector<MembranePlan> plans, MembraneSpec spec) {
-        for plan in plans {
-            if (plan.spec.volume.equals(spec.volume) && plan.spec.relPath.equals(spec.relPath)) {
-                return true;
-            }
-            if (plan.spec.volume.equals(spec.volume) && plan.kind.equals("dir") && MembranePaths.ancestor(plan.spec.relPath, spec.relPath)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public Vector<MembranePlan> makePlan(Vector<MembraneSpec> specs, string live, string clean) {
-        Vector<MembranePlan> plans = [];
-        // Sort once; `for x in self.method()` re-evaluates the call each pass.
-        Vector<MembraneSpec> ordered = self.sortedSpecs(specs);
-        for spec in ordered {
-            string kind = spec.kind;
-            if (kind.equals("auto")) {
-                kind = self.resolveKind(live, clean, spec);
-            }
-            if (self.planAlreadyCovers(plans, spec)) { continue; }
-            string store = kind.equals("dir")
-                ? MembranePaths.dirStore(self.persistRoot, spec.absPath)
-                : MembranePaths.fileStore(self.persistRoot, spec.absPath);
-            plans.push(MembranePlan(spec, kind, store));
-        }
-        return plans;
-    }
-
     public Vector<MembraneSpec> specsForVolume(string volume) {
         Vector<MembraneSpec> result = [];
         for spec in self.specs {
@@ -189,7 +130,7 @@ class SemipermeableMembrane {
         if (!self.fs.isSubvolume(live)) { self.run.fatal("live is not a subvolume: " + live); }
         self.fs.deleteSubvolume(next);
 
-        Vector<MembranePlan> plans = self.makePlan(self.specsForVolume(volume.name), live, clean);
+        Vector<MembranePlan> plans = self.planner.makePlan(self.specsForVolume(volume.name), live, clean, self.persistRoot);
         self.restorePersistentDirs(plans, live, clean);
         self.restorePersistentFiles(plans, live, clean);
 
@@ -305,38 +246,6 @@ class SemipermeableMembrane {
         }
     }
 
-    public void mountTop() {
-        if (self.assumeMounted) {
-            if (!FileSystem.isDir(self.run.top)) {
-                self.run.fatal("missing mount path: " + self.run.top);
-            }
-            return;
-        }
-        self.run.mkdirp(self.run.top);
-        Command command = Command("mount")
-            .arg("-t")
-            .arg("btrfs")
-            .arg("-o")
-            .arg("subvolid=5,user_subvol_rm_allowed")
-            .arg(self.device)
-            .arg(self.run.top)
-            .capture(false);
-        self.run.requireCommand(command);
-    }
-
-    public void unmountTop() {
-        if (self.assumeMounted) { return; }
-        Command command = Command("umount")
-            .arg("-R")
-            .arg(self.run.top)
-            .capture(false)
-            .check(false);
-        self.run.runCommand(command);
-        if (self.run.top.startsWith(MembraneConstants.topBase() + ".")) {
-            FileSystem.removeRecursive(self.run.top);
-        }
-    }
-
     public void configure(string device, string snapshotsSubvolume, string cleanName, string mode, string persistRoot, string specFile, Vector<string> volumeArgs) {
         self.device = device;
         self.snapshotsSubvolume = MembranePaths.normSubvol(snapshotsSubvolume);
@@ -360,7 +269,7 @@ class SemipermeableMembrane {
             self.run.log("DRY add --assume-mounted to walk mounted test roots");
             return;
         }
-        self.mountTop();
+        self.mounts.mountTop(self.device, self.assumeMounted);
         self.ensureNamespaces();
         if (self.mode.equals(MembraneConstants.converge()) || self.mode.equals(MembraneConstants.reset()) || self.mode.equals(MembraneConstants.prepareOnly())) {
             self.pruneOrphans();
@@ -381,26 +290,8 @@ class SemipermeableMembrane {
             }
         }
         self.run.requireCommand(MembraneBtrfs.sync(self.run.top));
-        self.unmountTop();
+        self.mounts.unmountTop(self.assumeMounted);
         self.run.log("Semipermeable membrane complete");
-    }
-
-    public bool coveredBy(Vector<string> selected, string target) {
-        for s in selected {
-            if (target.startsWith(s + "/")) { return true; }
-        }
-        return false;
-    }
-
-    public void mountTarget(string target, string subvol) {
-        self.run.mkdirp(target);
-        if (self.fs.mounted(target)) { return; }
-        Command command = Command("mount")
-            .arg("-t").arg("btrfs")
-            .arg("-o").arg("subvol=" + subvol + ",compress=zstd,noatime")
-            .arg(self.device).arg(target)
-            .capture(false);
-        self.run.requireCommand(command);
     }
 
     public void configureMount(string device, string persistRoot, string specFile) {
@@ -411,32 +302,7 @@ class SemipermeableMembrane {
     }
 
     public void mountPersist() {
-        self.run.log("Mounting persistent subvolumes dry_run=" + (self.run.dryRun ? "true" : "false"));
-        bool mountedTop = false;
-        if (!self.assumeMounted && !self.fs.mounted(self.run.top)) {
-            self.run.mkdirp(self.run.top);
-            Command m = Command("mount")
-                .arg("-t").arg("btrfs")
-                .arg("-o").arg("ro,subvolid=5")
-                .arg(self.device).arg(self.run.top)
-                .capture(false);
-            self.run.requireCommand(m);
-            mountedTop = true;
-        }
-        Vector<string> selected = [];
-        for spec in self.specs {
-            string target = spec.absPath;
-            if (self.coveredBy(selected, target)) { continue; }
-            string subvol = PathTools.join(PathTools.join(self.persistRoot, MembraneConstants.dirs()), MembranePaths.key(target));
-            if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
-            self.mountTarget(target, subvol);
-            selected.push(target);
-        }
-        if (mountedTop) {
-            Command u = Command("umount").arg(self.run.top).capture(false).check(false);
-            self.run.runCommand(u);
-        }
-        self.run.log("Persistent mounts complete");
+        self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted);
     }
 
     public void configureSnapshotClean(string device, string snapshotsSubvolume, string cleanName, Vector<string> volumeArgs) {
@@ -446,38 +312,8 @@ class SemipermeableMembrane {
         self.readVolumes(volumeArgs);
     }
 
-    public void snapshotCleanVolume(MembraneVolume volume) {
-        string live = self.run.path(volume.name);
-        string root = PathTools.join(self.snapshotsSubvolume, volume.name);
-        string clean = self.run.path(PathTools.join(root, self.cleanName));
-        if (!self.fs.exists(live)) { self.run.fatal("live missing: " + live); }
-        if (!self.fs.isSubvolume(live)) { self.run.fatal("live is not a subvolume: " + live); }
-        // snapshot() deletes the prior CLEAN (and any nested subvolumes,
-        // deepest-first) before taking a fresh read-only snapshot of live.
-        self.run.log("Re-capturing CLEAN baseline for " + volume.name + " from live subvolume");
-        self.fs.snapshot(live, clean, true);
-    }
-
     public void snapshotCleanAll() {
-        Vector<string> names = [];
-        // `for x in self.volumes` reads a field, but the loop below mutates
-        // btrfs (delete + recreate CLEAN), so snapshot the volume list into a
-        // local Vector first: re-evaluating a list-returning call mid-loop has
-        // previously caused a segfault + subvolume leak.
-        Vector<MembraneVolume> volumes = self.volumes;
-        for volume in volumes { names.push(volume.name); }
-        self.run.log("snapshot-clean dry_run=" + (self.run.dryRun ? "true" : "false") + " device=" + self.device + " subvolumes=" + names.join(" "));
-        if (self.run.dryRun && !self.assumeMounted) {
-            self.run.log("DRY add --assume-mounted to walk mounted test roots");
-            return;
-        }
-        self.mountTop();
-        for volume in volumes {
-            self.snapshotCleanVolume(volume);
-        }
-        self.run.requireCommand(MembraneBtrfs.sync(self.run.top));
-        self.unmountTop();
-        self.run.log("snapshot-clean complete");
+        self.mounts.snapshotCleanAll(self.device, self.snapshotsSubvolume, self.cleanName, self.volumes, self.assumeMounted);
     }
 
     class int cli(CliArgs args) {

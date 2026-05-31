@@ -1,0 +1,123 @@
+/* Mounting + the two non-reset modes. Mounts the btrfs top (subvolid=5) for the
+ * reset/snapshot passes, mounts each persistent subvolume for the mount-persist
+ * service, and re-captures CLEAN baselines for snapshot-clean. Shares the
+ * engine's MembraneRun (so run.top stays consistent) and its MembraneFs; the
+ * engine passes its config (device/persistRoot/...) as arguments.
+ */
+class MembraneMounts {
+    public MembraneRun run;
+    public MembraneFs fs;
+
+    public MembraneMounts(MembraneRun run, MembraneFs fs) {
+        self.run = run;
+        self.fs = fs;
+    }
+
+    public void mountTop(string device, bool assumeMounted) {
+        if (assumeMounted) {
+            if (!FileSystem.isDir(self.run.top)) {
+                self.run.fatal("missing mount path: " + self.run.top);
+            }
+            return;
+        }
+        self.run.mkdirp(self.run.top);
+        Command command = Command("mount")
+            .arg("-t")
+            .arg("btrfs")
+            .arg("-o")
+            .arg("subvolid=5,user_subvol_rm_allowed")
+            .arg(device)
+            .arg(self.run.top)
+            .capture(false);
+        self.run.requireCommand(command);
+    }
+
+    public void unmountTop(bool assumeMounted) {
+        if (assumeMounted) { return; }
+        Command command = Command("umount")
+            .arg("-R")
+            .arg(self.run.top)
+            .capture(false)
+            .check(false);
+        self.run.runCommand(command);
+        if (self.run.top.startsWith(MembraneConstants.topBase() + ".")) {
+            FileSystem.removeRecursive(self.run.top);
+        }
+    }
+
+    public bool coveredBy(Vector<string> selected, string target) {
+        for s in selected {
+            if (target.startsWith(s + "/")) { return true; }
+        }
+        return false;
+    }
+
+    public void mountTarget(string device, string target, string subvol) {
+        self.run.mkdirp(target);
+        if (self.fs.mounted(target)) { return; }
+        Command command = Command("mount")
+            .arg("-t").arg("btrfs")
+            .arg("-o").arg("subvol=" + subvol + ",compress=zstd,noatime")
+            .arg(device).arg(target)
+            .capture(false);
+        self.run.requireCommand(command);
+    }
+
+    public void mountPersist(string device, string persistRoot, Vector<MembraneSpec> specs, bool assumeMounted) {
+        self.run.log("Mounting persistent subvolumes dry_run=" + (self.run.dryRun ? "true" : "false"));
+        bool mountedTop = false;
+        if (!assumeMounted && !self.fs.mounted(self.run.top)) {
+            self.run.mkdirp(self.run.top);
+            Command m = Command("mount")
+                .arg("-t").arg("btrfs")
+                .arg("-o").arg("ro,subvolid=5")
+                .arg(device).arg(self.run.top)
+                .capture(false);
+            self.run.requireCommand(m);
+            mountedTop = true;
+        }
+        Vector<string> selected = [];
+        for spec in specs {
+            string target = spec.absPath;
+            if (self.coveredBy(selected, target)) { continue; }
+            string subvol = PathTools.join(PathTools.join(persistRoot, MembraneConstants.dirs()), MembranePaths.key(target));
+            if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
+            self.mountTarget(device, target, subvol);
+            selected.push(target);
+        }
+        if (mountedTop) {
+            Command u = Command("umount").arg(self.run.top).capture(false).check(false);
+            self.run.runCommand(u);
+        }
+        self.run.log("Persistent mounts complete");
+    }
+
+    public void snapshotCleanVolume(MembraneVolume volume, string snapshotsSubvolume, string cleanName) {
+        string live = self.run.path(volume.name);
+        string root = PathTools.join(snapshotsSubvolume, volume.name);
+        string clean = self.run.path(PathTools.join(root, cleanName));
+        if (!self.fs.exists(live)) { self.run.fatal("live missing: " + live); }
+        if (!self.fs.isSubvolume(live)) { self.run.fatal("live is not a subvolume: " + live); }
+        // snapshot() deletes the prior CLEAN (and any nested subvolumes,
+        // deepest-first) before taking a fresh read-only snapshot of live.
+        self.run.log("Re-capturing CLEAN baseline for " + volume.name + " from live subvolume");
+        self.fs.snapshot(live, clean, true);
+    }
+
+    public void snapshotCleanAll(string device, string snapshotsSubvolume, string cleanName, Vector<MembraneVolume> volumes, bool assumeMounted) {
+        Vector<string> names = [];
+        for volume in volumes { names.push(volume.name); }
+        self.run.log("snapshot-clean dry_run=" + (self.run.dryRun ? "true" : "false") + " device=" + device + " subvolumes=" + names.join(" "));
+        if (self.run.dryRun && !assumeMounted) {
+            self.run.log("DRY add --assume-mounted to walk mounted test roots");
+            return;
+        }
+        self.mountTop(device, assumeMounted);
+        for volume in volumes {
+            self.snapshotCleanVolume(volume, snapshotsSubvolume, cleanName);
+        }
+        self.run.requireCommand(MembraneBtrfs.sync(self.run.top));
+        self.unmountTop(assumeMounted);
+        self.run.log("snapshot-clean complete");
+    }
+}

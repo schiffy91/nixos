@@ -249,6 +249,10 @@ typedef struct MembraneBtrfs MembraneBtrfs;
 void MembraneBtrfs_destroy(MembraneBtrfs* self);
 typedef struct MembraneFs MembraneFs;
 void MembraneFs_destroy(MembraneFs* self);
+typedef struct MembranePlanner MembranePlanner;
+void MembranePlanner_destroy(MembranePlanner* self);
+typedef struct MembraneMounts MembraneMounts;
+void MembraneMounts_destroy(MembraneMounts* self);
 typedef struct SemipermeableMembrane SemipermeableMembrane;
 void SemipermeableMembrane_destroy(SemipermeableMembrane* self);
 typedef struct btrc_Vector_string btrc_Vector_string;
@@ -256,8 +260,8 @@ typedef struct btrc_Vector_bool btrc_Vector_bool;
 typedef struct btrc_Vector_int btrc_Vector_int;
 typedef struct btrc_Vector_float btrc_Vector_float;
 typedef struct btrc_Vector_MembraneSpec btrc_Vector_MembraneSpec;
-typedef struct btrc_Vector_MembraneVolume btrc_Vector_MembraneVolume;
 typedef struct btrc_Vector_MembranePlan btrc_Vector_MembranePlan;
+typedef struct btrc_Vector_MembraneVolume btrc_Vector_MembraneVolume;
 typedef struct btrc_Map_string_string btrc_Map_string_string;
 typedef struct btrc_Map_string_bool btrc_Map_string_bool;
 void Strings_init(Strings* self);
@@ -493,6 +497,23 @@ void MembraneFs_snapshot(MembraneFs* self, char* source, char* destination, bool
 char* MembraneFs_sourcePath(MembraneFs* self, char* live, char* clean, char* relPath);
 void MembraneFs_copyPath(MembraneFs* self, char* source, char* destination);
 void MembraneFs_copyDirectoryContents(MembraneFs* self, char* source, char* destination);
+void MembranePlanner_init(MembranePlanner* self, MembraneFs* fs);
+MembranePlanner* MembranePlanner_new(MembraneFs* fs);
+int MembranePlanner_compareSpecs(MembranePlanner* self, MembraneSpec* left, MembraneSpec* right);
+void MembranePlanner_pushSpecSorted(MembranePlanner* self, btrc_Vector_MembraneSpec* specs, MembraneSpec* spec);
+btrc_Vector_MembraneSpec* MembranePlanner_sortedSpecs(MembranePlanner* self, btrc_Vector_MembraneSpec* input);
+char* MembranePlanner_resolveKind(MembranePlanner* self, char* live, char* clean, MembraneSpec* spec);
+bool MembranePlanner_planAlreadyCovers(MembranePlanner* self, btrc_Vector_MembranePlan* plans, MembraneSpec* spec);
+btrc_Vector_MembranePlan* MembranePlanner_makePlan(MembranePlanner* self, btrc_Vector_MembraneSpec* specs, char* live, char* clean, char* persistRoot);
+void MembraneMounts_init(MembraneMounts* self, MembraneRun* run, MembraneFs* fs);
+MembraneMounts* MembraneMounts_new(MembraneRun* run, MembraneFs* fs);
+void MembraneMounts_mountTop(MembraneMounts* self, char* device, bool assumeMounted);
+void MembraneMounts_unmountTop(MembraneMounts* self, bool assumeMounted);
+bool MembraneMounts_coveredBy(MembraneMounts* self, btrc_Vector_string* selected, char* target);
+void MembraneMounts_mountTarget(MembraneMounts* self, char* device, char* target, char* subvol);
+void MembraneMounts_mountPersist(MembraneMounts* self, char* device, char* persistRoot, btrc_Vector_MembraneSpec* specs, bool assumeMounted);
+void MembraneMounts_snapshotCleanVolume(MembraneMounts* self, MembraneVolume* volume, char* snapshotsSubvolume, char* cleanName);
+void MembraneMounts_snapshotCleanAll(MembraneMounts* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_MembraneVolume* volumes, bool assumeMounted);
 void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool assumeMounted);
 SemipermeableMembrane* SemipermeableMembrane_new(bool dryRun, bool assumeMounted);
 bool SemipermeableMembrane_envDryRun(void);
@@ -501,12 +522,6 @@ bool SemipermeableMembrane_keyInSpec(SemipermeableMembrane* self, btrc_Vector_st
 void SemipermeableMembrane_pruneOrphans(SemipermeableMembrane* self);
 void SemipermeableMembrane_rotate(SemipermeableMembrane* self, char* volume, char* live);
 void SemipermeableMembrane_publish(SemipermeableMembrane* self, MembraneVolume* volume, char* live, char* next);
-int SemipermeableMembrane_compareSpecs(SemipermeableMembrane* self, MembraneSpec* left, MembraneSpec* right);
-void SemipermeableMembrane_pushSpecSorted(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, MembraneSpec* spec);
-btrc_Vector_MembraneSpec* SemipermeableMembrane_sortedSpecs(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* input);
-char* SemipermeableMembrane_resolveKind(SemipermeableMembrane* self, char* live, char* clean, MembraneSpec* spec);
-bool SemipermeableMembrane_planAlreadyCovers(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, MembraneSpec* spec);
-btrc_Vector_MembranePlan* SemipermeableMembrane_makePlan(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, char* live, char* clean);
 btrc_Vector_MembraneSpec* SemipermeableMembrane_specsForVolume(SemipermeableMembrane* self, char* volume);
 void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolume* volume);
 void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean);
@@ -516,16 +531,11 @@ void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolu
 void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self);
 bool SemipermeableMembrane_volumeSeen(SemipermeableMembrane* self, btrc_Vector_MembraneVolume* volumes, char* name);
 void SemipermeableMembrane_readVolumes(SemipermeableMembrane* self, btrc_Vector_string* args);
-void SemipermeableMembrane_mountTop(SemipermeableMembrane* self);
-void SemipermeableMembrane_unmountTop(SemipermeableMembrane* self);
 void SemipermeableMembrane_configure(SemipermeableMembrane* self, char* device, char* snapshotsSubvolume, char* cleanName, char* mode, char* persistRoot, char* specFile, btrc_Vector_string* volumeArgs);
 void SemipermeableMembrane_runAll(SemipermeableMembrane* self);
-bool SemipermeableMembrane_coveredBy(SemipermeableMembrane* self, btrc_Vector_string* selected, char* target);
-void SemipermeableMembrane_mountTarget(SemipermeableMembrane* self, char* target, char* subvol);
 void SemipermeableMembrane_configureMount(SemipermeableMembrane* self, char* device, char* persistRoot, char* specFile);
 void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self);
 void SemipermeableMembrane_configureSnapshotClean(SemipermeableMembrane* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_string* volumeArgs);
-void SemipermeableMembrane_snapshotCleanVolume(SemipermeableMembrane* self, MembraneVolume* volume);
 void SemipermeableMembrane_snapshotCleanAll(SemipermeableMembrane* self);
 int SemipermeableMembrane_cli(CliArgs* args);
 typedef bool (*__btrc_fn_bool_string)(char*);
@@ -547,14 +557,14 @@ typedef bool (*__btrc_fn_bool_MembraneSpec)(MembraneSpec*);
 typedef void (*__btrc_fn_void_MembraneSpec)(MembraneSpec*);
 typedef MembraneSpec* (*__btrc_fn_MembraneSpec_MembraneSpec)(MembraneSpec*);
 typedef MembraneSpec* (*__btrc_fn_MembraneSpec_MembraneSpec_MembraneSpec)(MembraneSpec*, MembraneSpec*);
-typedef bool (*__btrc_fn_bool_MembraneVolume)(MembraneVolume*);
-typedef void (*__btrc_fn_void_MembraneVolume)(MembraneVolume*);
-typedef MembraneVolume* (*__btrc_fn_MembraneVolume_MembraneVolume)(MembraneVolume*);
-typedef MembraneVolume* (*__btrc_fn_MembraneVolume_MembraneVolume_MembraneVolume)(MembraneVolume*, MembraneVolume*);
 typedef bool (*__btrc_fn_bool_MembranePlan)(MembranePlan*);
 typedef void (*__btrc_fn_void_MembranePlan)(MembranePlan*);
 typedef MembranePlan* (*__btrc_fn_MembranePlan_MembranePlan)(MembranePlan*);
 typedef MembranePlan* (*__btrc_fn_MembranePlan_MembranePlan_MembranePlan)(MembranePlan*, MembranePlan*);
+typedef bool (*__btrc_fn_bool_MembraneVolume)(MembraneVolume*);
+typedef void (*__btrc_fn_void_MembraneVolume)(MembraneVolume*);
+typedef MembraneVolume* (*__btrc_fn_MembraneVolume_MembraneVolume)(MembraneVolume*);
+typedef MembraneVolume* (*__btrc_fn_MembraneVolume_MembraneVolume_MembraneVolume)(MembraneVolume*, MembraneVolume*);
 
 struct btrc_Vector_string {
     int __rc;
@@ -591,16 +601,16 @@ struct btrc_Vector_MembraneSpec {
     int cap;
 };
 
-struct btrc_Vector_MembraneVolume {
+struct btrc_Vector_MembranePlan {
     int __rc;
-    MembraneVolume** data;
+    MembranePlan** data;
     int len;
     int cap;
 };
 
-struct btrc_Vector_MembranePlan {
+struct btrc_Vector_MembraneVolume {
     int __rc;
-    MembranePlan** data;
+    MembraneVolume** data;
     int len;
     int cap;
 };
@@ -875,10 +885,23 @@ struct MembraneFs {
     MembraneRun* run;
 };
 
+struct MembranePlanner {
+    int __rc;
+    MembraneFs* fs;
+};
+
+struct MembraneMounts {
+    int __rc;
+    MembraneRun* run;
+    MembraneFs* fs;
+};
+
 struct SemipermeableMembrane {
     int __rc;
     MembraneRun* run;
     MembraneFs* fs;
+    MembranePlanner* planner;
+    MembraneMounts* mounts;
     char* device;
     char* snapshotsSubvolume;
     char* cleanName;
@@ -1150,54 +1173,6 @@ static void btrc_Vector_MembraneSpec_removeAt(btrc_Vector_MembraneSpec* self, in
 static int btrc_Vector_MembraneSpec_iterLen(btrc_Vector_MembraneSpec* self);
 static MembraneSpec* btrc_Vector_MembraneSpec_iterGet(btrc_Vector_MembraneSpec* self, int i);
 
-static void btrc_Vector_MembraneVolume_init(btrc_Vector_MembraneVolume* self);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_new(void);
-static void btrc_Vector_MembraneVolume_destroy(btrc_Vector_MembraneVolume* self);
-static void btrc_Vector_MembraneVolume_push(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static MembraneVolume* btrc_Vector_MembraneVolume_pop(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_get(btrc_Vector_MembraneVolume* self, int i);
-static void btrc_Vector_MembraneVolume_set(btrc_Vector_MembraneVolume* self, int i, MembraneVolume* val);
-static void btrc_Vector_MembraneVolume_free(btrc_Vector_MembraneVolume* self);
-static void btrc_Vector_MembraneVolume_remove(btrc_Vector_MembraneVolume* self, int idx);
-static void btrc_Vector_MembraneVolume_reverse(btrc_Vector_MembraneVolume* self);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_reversed(btrc_Vector_MembraneVolume* self);
-static void btrc_Vector_MembraneVolume_swap(btrc_Vector_MembraneVolume* self, int i, int j);
-static void btrc_Vector_MembraneVolume_clear(btrc_Vector_MembraneVolume* self);
-static void btrc_Vector_MembraneVolume_fill(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static int btrc_Vector_MembraneVolume_size(btrc_Vector_MembraneVolume* self);
-static bool btrc_Vector_MembraneVolume_isEmpty(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_first(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_last(btrc_Vector_MembraneVolume* self);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_slice(btrc_Vector_MembraneVolume* self, int start, int end);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_take(btrc_Vector_MembraneVolume* self, int n);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_drop(btrc_Vector_MembraneVolume* self, int n);
-static void btrc_Vector_MembraneVolume_extend(btrc_Vector_MembraneVolume* self, btrc_Vector_MembraneVolume* other);
-static void btrc_Vector_MembraneVolume_insert(btrc_Vector_MembraneVolume* self, int idx, MembraneVolume* val);
-static bool btrc_Vector_MembraneVolume_contains(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static int btrc_Vector_MembraneVolume_indexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static int btrc_Vector_MembraneVolume_lastIndexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static int btrc_Vector_MembraneVolume_count(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static void btrc_Vector_MembraneVolume_removeAll(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_distinct(btrc_Vector_MembraneVolume* self);
-static void btrc_Vector_MembraneVolume_sort(btrc_Vector_MembraneVolume* self);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_sorted(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_min(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_max(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_sum(btrc_Vector_MembraneVolume* self);
-static char* btrc_Vector_MembraneVolume_join(btrc_Vector_MembraneVolume* self, char* sep);
-static char* btrc_Vector_MembraneVolume_joinToString(btrc_Vector_MembraneVolume* self, char* sep);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_filter(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
-static int btrc_Vector_MembraneVolume_findIndex(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
-static void btrc_Vector_MembraneVolume_forEach(btrc_Vector_MembraneVolume* self, __btrc_fn_void_MembraneVolume fn);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_map(btrc_Vector_MembraneVolume* self, __btrc_fn_MembraneVolume_MembraneVolume fn);
-static bool btrc_Vector_MembraneVolume_any(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
-static bool btrc_Vector_MembraneVolume_all(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
-static MembraneVolume* btrc_Vector_MembraneVolume_reduce(btrc_Vector_MembraneVolume* self, MembraneVolume* init, __btrc_fn_MembraneVolume_MembraneVolume_MembraneVolume fn);
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_copy(btrc_Vector_MembraneVolume* self);
-static void btrc_Vector_MembraneVolume_removeAt(btrc_Vector_MembraneVolume* self, int idx);
-static int btrc_Vector_MembraneVolume_iterLen(btrc_Vector_MembraneVolume* self);
-static MembraneVolume* btrc_Vector_MembraneVolume_iterGet(btrc_Vector_MembraneVolume* self, int i);
-
 static void btrc_Vector_MembranePlan_init(btrc_Vector_MembranePlan* self);
 static btrc_Vector_MembranePlan* btrc_Vector_MembranePlan_new(void);
 static void btrc_Vector_MembranePlan_destroy(btrc_Vector_MembranePlan* self);
@@ -1245,6 +1220,54 @@ static btrc_Vector_MembranePlan* btrc_Vector_MembranePlan_copy(btrc_Vector_Membr
 static void btrc_Vector_MembranePlan_removeAt(btrc_Vector_MembranePlan* self, int idx);
 static int btrc_Vector_MembranePlan_iterLen(btrc_Vector_MembranePlan* self);
 static MembranePlan* btrc_Vector_MembranePlan_iterGet(btrc_Vector_MembranePlan* self, int i);
+
+static void btrc_Vector_MembraneVolume_init(btrc_Vector_MembraneVolume* self);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_new(void);
+static void btrc_Vector_MembraneVolume_destroy(btrc_Vector_MembraneVolume* self);
+static void btrc_Vector_MembraneVolume_push(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static MembraneVolume* btrc_Vector_MembraneVolume_pop(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_get(btrc_Vector_MembraneVolume* self, int i);
+static void btrc_Vector_MembraneVolume_set(btrc_Vector_MembraneVolume* self, int i, MembraneVolume* val);
+static void btrc_Vector_MembraneVolume_free(btrc_Vector_MembraneVolume* self);
+static void btrc_Vector_MembraneVolume_remove(btrc_Vector_MembraneVolume* self, int idx);
+static void btrc_Vector_MembraneVolume_reverse(btrc_Vector_MembraneVolume* self);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_reversed(btrc_Vector_MembraneVolume* self);
+static void btrc_Vector_MembraneVolume_swap(btrc_Vector_MembraneVolume* self, int i, int j);
+static void btrc_Vector_MembraneVolume_clear(btrc_Vector_MembraneVolume* self);
+static void btrc_Vector_MembraneVolume_fill(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static int btrc_Vector_MembraneVolume_size(btrc_Vector_MembraneVolume* self);
+static bool btrc_Vector_MembraneVolume_isEmpty(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_first(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_last(btrc_Vector_MembraneVolume* self);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_slice(btrc_Vector_MembraneVolume* self, int start, int end);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_take(btrc_Vector_MembraneVolume* self, int n);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_drop(btrc_Vector_MembraneVolume* self, int n);
+static void btrc_Vector_MembraneVolume_extend(btrc_Vector_MembraneVolume* self, btrc_Vector_MembraneVolume* other);
+static void btrc_Vector_MembraneVolume_insert(btrc_Vector_MembraneVolume* self, int idx, MembraneVolume* val);
+static bool btrc_Vector_MembraneVolume_contains(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static int btrc_Vector_MembraneVolume_indexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static int btrc_Vector_MembraneVolume_lastIndexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static int btrc_Vector_MembraneVolume_count(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static void btrc_Vector_MembraneVolume_removeAll(btrc_Vector_MembraneVolume* self, MembraneVolume* val);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_distinct(btrc_Vector_MembraneVolume* self);
+static void btrc_Vector_MembraneVolume_sort(btrc_Vector_MembraneVolume* self);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_sorted(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_min(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_max(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_sum(btrc_Vector_MembraneVolume* self);
+static char* btrc_Vector_MembraneVolume_join(btrc_Vector_MembraneVolume* self, char* sep);
+static char* btrc_Vector_MembraneVolume_joinToString(btrc_Vector_MembraneVolume* self, char* sep);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_filter(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
+static int btrc_Vector_MembraneVolume_findIndex(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
+static void btrc_Vector_MembraneVolume_forEach(btrc_Vector_MembraneVolume* self, __btrc_fn_void_MembraneVolume fn);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_map(btrc_Vector_MembraneVolume* self, __btrc_fn_MembraneVolume_MembraneVolume fn);
+static bool btrc_Vector_MembraneVolume_any(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
+static bool btrc_Vector_MembraneVolume_all(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred);
+static MembraneVolume* btrc_Vector_MembraneVolume_reduce(btrc_Vector_MembraneVolume* self, MembraneVolume* init, __btrc_fn_MembraneVolume_MembraneVolume_MembraneVolume fn);
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_copy(btrc_Vector_MembraneVolume* self);
+static void btrc_Vector_MembraneVolume_removeAt(btrc_Vector_MembraneVolume* self, int idx);
+static int btrc_Vector_MembraneVolume_iterLen(btrc_Vector_MembraneVolume* self);
+static MembraneVolume* btrc_Vector_MembraneVolume_iterGet(btrc_Vector_MembraneVolume* self, int i);
 
 static void btrc_Map_string_string_init(btrc_Map_string_string* self);
 static btrc_Map_string_string* btrc_Map_string_string_new(void);
@@ -3289,421 +3312,6 @@ static MembraneSpec* btrc_Vector_MembraneSpec_iterGet(btrc_Vector_MembraneSpec* 
     return self->data[i];
 }
 
-static void btrc_Vector_MembraneVolume_init(btrc_Vector_MembraneVolume* self) {
-    self->__rc = 1;
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_new(void) {
-    btrc_Vector_MembraneVolume* self = ((btrc_Vector_MembraneVolume*)malloc(sizeof(btrc_Vector_MembraneVolume)));
-    memset(self, 0, sizeof(btrc_Vector_MembraneVolume));
-    btrc_Vector_MembraneVolume_init(self);
-    return self;
-}
-
-static void btrc_Vector_MembraneVolume_destroy(btrc_Vector_MembraneVolume* self) {
-    free(self);
-}
-
-static void btrc_Vector_MembraneVolume_push(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((MembraneVolume**)__btrc_safe_realloc(self->data, (sizeof(MembraneVolume*) * self->cap))));
-    }
-    (self->data[self->len] = val);
-    (self->len++);
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_pop(btrc_Vector_MembraneVolume* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector pop from empty list\n");
-        exit(1);
-    }
-    (self->len--);
-    return self->data[self->len];
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_get(btrc_Vector_MembraneVolume* self, int i) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    return self->data[i];
-}
-
-static void btrc_Vector_MembraneVolume_set(btrc_Vector_MembraneVolume* self, int i, MembraneVolume* val) {
-    if ((i < 0) || (i >= self->len)) {
-        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
-        exit(1);
-    }
-    if (self->data[i]) {
-        if ((--self->data[i]->__rc) <= 0) {
-            MembraneVolume_destroy(self->data[i]);
-        }
-    }
-    (val->__rc++);
-    (self->data[i] = val);
-}
-
-static void btrc_Vector_MembraneVolume_free(btrc_Vector_MembraneVolume* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                MembraneVolume_destroy(self->data[i]);
-            }
-        }
-    }
-    free(self->data);
-    (self->data = NULL);
-    (self->len = 0);
-    (self->cap = 0);
-}
-
-static void btrc_Vector_MembraneVolume_remove(btrc_Vector_MembraneVolume* self, int idx) {
-    if ((idx < 0) || (idx >= self->len)) {
-        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
-        exit(1);
-    }
-    if (self->data[idx]) {
-        if ((--self->data[idx]->__rc) <= 0) {
-            MembraneVolume_destroy(self->data[idx]);
-        }
-    }
-    for (int i = idx; (i < (self->len - 1)); (i++)) {
-        (self->data[i] = self->data[(i + 1)]);
-    }
-    (self->len--);
-}
-
-static void btrc_Vector_MembraneVolume_reverse(btrc_Vector_MembraneVolume* self) {
-    for (int i = 0; (i < (self->len / 2)); (i++)) {
-        MembraneVolume* tmp = self->data[i];
-        (self->data[i] = self->data[((self->len - 1) - i)]);
-        (self->data[((self->len - 1) - i)] = tmp);
-    }
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_reversed(btrc_Vector_MembraneVolume* self) {
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        btrc_Vector_MembraneVolume_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_MembraneVolume_swap(btrc_Vector_MembraneVolume* self, int i, int j) {
-    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
-        fprintf(stderr, "Vector swap index out of bounds\n");
-        exit(1);
-    }
-    MembraneVolume* tmp = self->data[i];
-    (self->data[i] = self->data[j]);
-    (self->data[j] = tmp);
-}
-
-static void btrc_Vector_MembraneVolume_clear(btrc_Vector_MembraneVolume* self) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                MembraneVolume_destroy(self->data[i]);
-            }
-        }
-    }
-    (self->len = 0);
-}
-
-static void btrc_Vector_MembraneVolume_fill(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                MembraneVolume_destroy(self->data[i]);
-            }
-        }
-        (val->__rc++);
-        (self->data[i] = val);
-    }
-}
-
-static int btrc_Vector_MembraneVolume_size(btrc_Vector_MembraneVolume* self) {
-    return self->len;
-}
-
-static bool btrc_Vector_MembraneVolume_isEmpty(btrc_Vector_MembraneVolume* self) {
-    return (self->len == 0);
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_first(btrc_Vector_MembraneVolume* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.first() called on empty list\n");
-        exit(1);
-    }
-    return self->data[0];
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_last(btrc_Vector_MembraneVolume* self) {
-    if (self->len == 0) {
-        fprintf(stderr, "Vector.last() called on empty list\n");
-        exit(1);
-    }
-    return self->data[(self->len - 1)];
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_slice(btrc_Vector_MembraneVolume* self, int start, int end) {
-    if (start < 0) {
-        (start = (self->len + start));
-    }
-    if (end < 0) {
-        (end = (self->len + end));
-    }
-    if (start < 0) {
-        (start = 0);
-    }
-    if (end > self->len) {
-        (end = self->len);
-    }
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = start; (i < end); (i++)) {
-        btrc_Vector_MembraneVolume_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_take(btrc_Vector_MembraneVolume* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_MembraneVolume_slice(self, 0, n);
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_drop(btrc_Vector_MembraneVolume* self, int n) {
-    if (n > self->len) {
-        (n = self->len);
-    }
-    if (n < 0) {
-        (n = 0);
-    }
-    return btrc_Vector_MembraneVolume_slice(self, n, self->len);
-}
-
-static void btrc_Vector_MembraneVolume_extend(btrc_Vector_MembraneVolume* self, btrc_Vector_MembraneVolume* other) {
-    for (int i = 0; (i < other->len); (i++)) {
-        btrc_Vector_MembraneVolume_push(self, other->data[i]);
-    }
-}
-
-static void btrc_Vector_MembraneVolume_insert(btrc_Vector_MembraneVolume* self, int idx, MembraneVolume* val) {
-    if ((idx < 0) || (idx > self->len)) {
-        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
-        exit(1);
-    }
-    (val->__rc++);
-    if (self->len >= self->cap) {
-        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
-        (self->data = ((MembraneVolume**)__btrc_safe_realloc(self->data, (sizeof(MembraneVolume*) * self->cap))));
-    }
-    for (int i = self->len; (i > idx); (i--)) {
-        (self->data[i] = self->data[(i - 1)]);
-    }
-    (self->data[idx] = val);
-    (self->len++);
-}
-
-static bool btrc_Vector_MembraneVolume_contains(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int btrc_Vector_MembraneVolume_indexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_MembraneVolume_lastIndexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    for (int i = (self->len - 1); (i >= 0); (i--)) {
-        if (__btrc_eq(self->data[i], val)) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int btrc_Vector_MembraneVolume_count(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    int c = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (__btrc_eq(self->data[i], val)) {
-            (c++);
-        }
-    }
-    return c;
-}
-
-static void btrc_Vector_MembraneVolume_removeAll(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
-    int j = 0;
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!__btrc_eq(self->data[i], val)) {
-            (self->data[j] = self->data[i]);
-            (j++);
-        } else if (self->data[i]) {
-            if ((--self->data[i]->__rc) <= 0) {
-                MembraneVolume_destroy(self->data[i]);
-            }
-        }
-    }
-    (self->len = j);
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_distinct(btrc_Vector_MembraneVolume* self) {
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!btrc_Vector_MembraneVolume_contains(result, self->data[i])) {
-            btrc_Vector_MembraneVolume_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static void btrc_Vector_MembraneVolume_sort(btrc_Vector_MembraneVolume* self) {
-    for (int i = 1; (i < self->len); (i++)) {
-        MembraneVolume* key = self->data[i];
-        int j = (i - 1);
-        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
-            (self->data[(j + 1)] = self->data[j]);
-            (j = (j - 1));
-        }
-        (self->data[(j + 1)] = key);
-    }
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_sorted(btrc_Vector_MembraneVolume* self) {
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_MembraneVolume_push(result, self->data[i]);
-    }
-    btrc_Vector_MembraneVolume_sort(result);
-    return result;
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_min(btrc_Vector_MembraneVolume* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector min on empty list\n");
-        exit(1);
-    }
-    MembraneVolume* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_lt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_max(btrc_Vector_MembraneVolume* self) {
-    if (self->len <= 0) {
-        fprintf(stderr, "Vector max on empty list\n");
-        exit(1);
-    }
-    MembraneVolume* m = self->data[0];
-    for (int i = 1; (i < self->len); (i++)) {
-        if (__btrc_gt(self->data[i], m)) {
-            (m = self->data[i]);
-        }
-    }
-    return m;
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_filter(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            btrc_Vector_MembraneVolume_push(result, self->data[i]);
-        }
-    }
-    return result;
-}
-
-static int btrc_Vector_MembraneVolume_findIndex(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static void btrc_Vector_MembraneVolume_forEach(btrc_Vector_MembraneVolume* self, __btrc_fn_void_MembraneVolume fn) {
-    for (int i = 0; (i < self->len); (i++)) {
-        fn(self->data[i]);
-    }
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_map(btrc_Vector_MembraneVolume* self, __btrc_fn_MembraneVolume_MembraneVolume fn) {
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_MembraneVolume_push(result, fn(self->data[i]));
-    }
-    return result;
-}
-
-static bool btrc_Vector_MembraneVolume_any(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (pred(self->data[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool btrc_Vector_MembraneVolume_all(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
-    for (int i = 0; (i < self->len); (i++)) {
-        if (!pred(self->data[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_reduce(btrc_Vector_MembraneVolume* self, MembraneVolume* init, __btrc_fn_MembraneVolume_MembraneVolume_MembraneVolume fn) {
-    MembraneVolume* acc = init;
-    for (int i = 0; (i < self->len); (i++)) {
-        (acc = fn(acc, self->data[i]));
-    }
-    return acc;
-}
-
-static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_copy(btrc_Vector_MembraneVolume* self) {
-    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
-    for (int i = 0; (i < self->len); (i++)) {
-        btrc_Vector_MembraneVolume_push(result, self->data[i]);
-    }
-    return result;
-}
-
-static void btrc_Vector_MembraneVolume_removeAt(btrc_Vector_MembraneVolume* self, int idx) {
-    btrc_Vector_MembraneVolume_remove(self, idx);
-}
-
-static int btrc_Vector_MembraneVolume_iterLen(btrc_Vector_MembraneVolume* self) {
-    return self->len;
-}
-
-static MembraneVolume* btrc_Vector_MembraneVolume_iterGet(btrc_Vector_MembraneVolume* self, int i) {
-    return self->data[i];
-}
-
 static void btrc_Vector_MembranePlan_init(btrc_Vector_MembranePlan* self) {
     self->__rc = 1;
     (self->data = NULL);
@@ -4116,6 +3724,421 @@ static int btrc_Vector_MembranePlan_iterLen(btrc_Vector_MembranePlan* self) {
 }
 
 static MembranePlan* btrc_Vector_MembranePlan_iterGet(btrc_Vector_MembranePlan* self, int i) {
+    return self->data[i];
+}
+
+static void btrc_Vector_MembraneVolume_init(btrc_Vector_MembraneVolume* self) {
+    self->__rc = 1;
+    (self->data = NULL);
+    (self->len = 0);
+    (self->cap = 0);
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_new(void) {
+    btrc_Vector_MembraneVolume* self = ((btrc_Vector_MembraneVolume*)malloc(sizeof(btrc_Vector_MembraneVolume)));
+    memset(self, 0, sizeof(btrc_Vector_MembraneVolume));
+    btrc_Vector_MembraneVolume_init(self);
+    return self;
+}
+
+static void btrc_Vector_MembraneVolume_destroy(btrc_Vector_MembraneVolume* self) {
+    free(self);
+}
+
+static void btrc_Vector_MembraneVolume_push(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    (val->__rc++);
+    if (self->len >= self->cap) {
+        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
+        (self->data = ((MembraneVolume**)__btrc_safe_realloc(self->data, (sizeof(MembraneVolume*) * self->cap))));
+    }
+    (self->data[self->len] = val);
+    (self->len++);
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_pop(btrc_Vector_MembraneVolume* self) {
+    if (self->len <= 0) {
+        fprintf(stderr, "Vector pop from empty list\n");
+        exit(1);
+    }
+    (self->len--);
+    return self->data[self->len];
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_get(btrc_Vector_MembraneVolume* self, int i) {
+    if ((i < 0) || (i >= self->len)) {
+        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
+        exit(1);
+    }
+    return self->data[i];
+}
+
+static void btrc_Vector_MembraneVolume_set(btrc_Vector_MembraneVolume* self, int i, MembraneVolume* val) {
+    if ((i < 0) || (i >= self->len)) {
+        fprintf(stderr, "Vector index out of bounds: %d (len=%d)\n", i, self->len);
+        exit(1);
+    }
+    if (self->data[i]) {
+        if ((--self->data[i]->__rc) <= 0) {
+            MembraneVolume_destroy(self->data[i]);
+        }
+    }
+    (val->__rc++);
+    (self->data[i] = val);
+}
+
+static void btrc_Vector_MembraneVolume_free(btrc_Vector_MembraneVolume* self) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (self->data[i]) {
+            if ((--self->data[i]->__rc) <= 0) {
+                MembraneVolume_destroy(self->data[i]);
+            }
+        }
+    }
+    free(self->data);
+    (self->data = NULL);
+    (self->len = 0);
+    (self->cap = 0);
+}
+
+static void btrc_Vector_MembraneVolume_remove(btrc_Vector_MembraneVolume* self, int idx) {
+    if ((idx < 0) || (idx >= self->len)) {
+        fprintf(stderr, "Vector remove index out of bounds: %d (len=%d)\n", idx, self->len);
+        exit(1);
+    }
+    if (self->data[idx]) {
+        if ((--self->data[idx]->__rc) <= 0) {
+            MembraneVolume_destroy(self->data[idx]);
+        }
+    }
+    for (int i = idx; (i < (self->len - 1)); (i++)) {
+        (self->data[i] = self->data[(i + 1)]);
+    }
+    (self->len--);
+}
+
+static void btrc_Vector_MembraneVolume_reverse(btrc_Vector_MembraneVolume* self) {
+    for (int i = 0; (i < (self->len / 2)); (i++)) {
+        MembraneVolume* tmp = self->data[i];
+        (self->data[i] = self->data[((self->len - 1) - i)]);
+        (self->data[((self->len - 1) - i)] = tmp);
+    }
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_reversed(btrc_Vector_MembraneVolume* self) {
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = (self->len - 1); (i >= 0); (i--)) {
+        btrc_Vector_MembraneVolume_push(result, self->data[i]);
+    }
+    return result;
+}
+
+static void btrc_Vector_MembraneVolume_swap(btrc_Vector_MembraneVolume* self, int i, int j) {
+    if ((((i < 0) || (i >= self->len)) || (j < 0)) || (j >= self->len)) {
+        fprintf(stderr, "Vector swap index out of bounds\n");
+        exit(1);
+    }
+    MembraneVolume* tmp = self->data[i];
+    (self->data[i] = self->data[j]);
+    (self->data[j] = tmp);
+}
+
+static void btrc_Vector_MembraneVolume_clear(btrc_Vector_MembraneVolume* self) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (self->data[i]) {
+            if ((--self->data[i]->__rc) <= 0) {
+                MembraneVolume_destroy(self->data[i]);
+            }
+        }
+    }
+    (self->len = 0);
+}
+
+static void btrc_Vector_MembraneVolume_fill(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (self->data[i]) {
+            if ((--self->data[i]->__rc) <= 0) {
+                MembraneVolume_destroy(self->data[i]);
+            }
+        }
+        (val->__rc++);
+        (self->data[i] = val);
+    }
+}
+
+static int btrc_Vector_MembraneVolume_size(btrc_Vector_MembraneVolume* self) {
+    return self->len;
+}
+
+static bool btrc_Vector_MembraneVolume_isEmpty(btrc_Vector_MembraneVolume* self) {
+    return (self->len == 0);
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_first(btrc_Vector_MembraneVolume* self) {
+    if (self->len == 0) {
+        fprintf(stderr, "Vector.first() called on empty list\n");
+        exit(1);
+    }
+    return self->data[0];
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_last(btrc_Vector_MembraneVolume* self) {
+    if (self->len == 0) {
+        fprintf(stderr, "Vector.last() called on empty list\n");
+        exit(1);
+    }
+    return self->data[(self->len - 1)];
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_slice(btrc_Vector_MembraneVolume* self, int start, int end) {
+    if (start < 0) {
+        (start = (self->len + start));
+    }
+    if (end < 0) {
+        (end = (self->len + end));
+    }
+    if (start < 0) {
+        (start = 0);
+    }
+    if (end > self->len) {
+        (end = self->len);
+    }
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = start; (i < end); (i++)) {
+        btrc_Vector_MembraneVolume_push(result, self->data[i]);
+    }
+    return result;
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_take(btrc_Vector_MembraneVolume* self, int n) {
+    if (n > self->len) {
+        (n = self->len);
+    }
+    if (n < 0) {
+        (n = 0);
+    }
+    return btrc_Vector_MembraneVolume_slice(self, 0, n);
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_drop(btrc_Vector_MembraneVolume* self, int n) {
+    if (n > self->len) {
+        (n = self->len);
+    }
+    if (n < 0) {
+        (n = 0);
+    }
+    return btrc_Vector_MembraneVolume_slice(self, n, self->len);
+}
+
+static void btrc_Vector_MembraneVolume_extend(btrc_Vector_MembraneVolume* self, btrc_Vector_MembraneVolume* other) {
+    for (int i = 0; (i < other->len); (i++)) {
+        btrc_Vector_MembraneVolume_push(self, other->data[i]);
+    }
+}
+
+static void btrc_Vector_MembraneVolume_insert(btrc_Vector_MembraneVolume* self, int idx, MembraneVolume* val) {
+    if ((idx < 0) || (idx > self->len)) {
+        fprintf(stderr, "Vector insert index out of bounds: %d (size %d)\n", idx, self->len);
+        exit(1);
+    }
+    (val->__rc++);
+    if (self->len >= self->cap) {
+        (self->cap = ((self->cap == 0) ? 4 : (self->cap * 2)));
+        (self->data = ((MembraneVolume**)__btrc_safe_realloc(self->data, (sizeof(MembraneVolume*) * self->cap))));
+    }
+    for (int i = self->len; (i > idx); (i--)) {
+        (self->data[i] = self->data[(i - 1)]);
+    }
+    (self->data[idx] = val);
+    (self->len++);
+}
+
+static bool btrc_Vector_MembraneVolume_contains(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (__btrc_eq(self->data[i], val)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int btrc_Vector_MembraneVolume_indexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (__btrc_eq(self->data[i], val)) {
+            return i;
+        }
+    }
+    return (-1);
+}
+
+static int btrc_Vector_MembraneVolume_lastIndexOf(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    for (int i = (self->len - 1); (i >= 0); (i--)) {
+        if (__btrc_eq(self->data[i], val)) {
+            return i;
+        }
+    }
+    return (-1);
+}
+
+static int btrc_Vector_MembraneVolume_count(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    int c = 0;
+    for (int i = 0; (i < self->len); (i++)) {
+        if (__btrc_eq(self->data[i], val)) {
+            (c++);
+        }
+    }
+    return c;
+}
+
+static void btrc_Vector_MembraneVolume_removeAll(btrc_Vector_MembraneVolume* self, MembraneVolume* val) {
+    int j = 0;
+    for (int i = 0; (i < self->len); (i++)) {
+        if (!__btrc_eq(self->data[i], val)) {
+            (self->data[j] = self->data[i]);
+            (j++);
+        } else if (self->data[i]) {
+            if ((--self->data[i]->__rc) <= 0) {
+                MembraneVolume_destroy(self->data[i]);
+            }
+        }
+    }
+    (self->len = j);
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_distinct(btrc_Vector_MembraneVolume* self) {
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = 0; (i < self->len); (i++)) {
+        if (!btrc_Vector_MembraneVolume_contains(result, self->data[i])) {
+            btrc_Vector_MembraneVolume_push(result, self->data[i]);
+        }
+    }
+    return result;
+}
+
+static void btrc_Vector_MembraneVolume_sort(btrc_Vector_MembraneVolume* self) {
+    for (int i = 1; (i < self->len); (i++)) {
+        MembraneVolume* key = self->data[i];
+        int j = (i - 1);
+        while ((j >= 0) && __btrc_lt(key, self->data[j])) {
+            (self->data[(j + 1)] = self->data[j]);
+            (j = (j - 1));
+        }
+        (self->data[(j + 1)] = key);
+    }
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_sorted(btrc_Vector_MembraneVolume* self) {
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = 0; (i < self->len); (i++)) {
+        btrc_Vector_MembraneVolume_push(result, self->data[i]);
+    }
+    btrc_Vector_MembraneVolume_sort(result);
+    return result;
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_min(btrc_Vector_MembraneVolume* self) {
+    if (self->len <= 0) {
+        fprintf(stderr, "Vector min on empty list\n");
+        exit(1);
+    }
+    MembraneVolume* m = self->data[0];
+    for (int i = 1; (i < self->len); (i++)) {
+        if (__btrc_lt(self->data[i], m)) {
+            (m = self->data[i]);
+        }
+    }
+    return m;
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_max(btrc_Vector_MembraneVolume* self) {
+    if (self->len <= 0) {
+        fprintf(stderr, "Vector max on empty list\n");
+        exit(1);
+    }
+    MembraneVolume* m = self->data[0];
+    for (int i = 1; (i < self->len); (i++)) {
+        if (__btrc_gt(self->data[i], m)) {
+            (m = self->data[i]);
+        }
+    }
+    return m;
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_filter(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = 0; (i < self->len); (i++)) {
+        if (pred(self->data[i])) {
+            btrc_Vector_MembraneVolume_push(result, self->data[i]);
+        }
+    }
+    return result;
+}
+
+static int btrc_Vector_MembraneVolume_findIndex(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (pred(self->data[i])) {
+            return i;
+        }
+    }
+    return (-1);
+}
+
+static void btrc_Vector_MembraneVolume_forEach(btrc_Vector_MembraneVolume* self, __btrc_fn_void_MembraneVolume fn) {
+    for (int i = 0; (i < self->len); (i++)) {
+        fn(self->data[i]);
+    }
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_map(btrc_Vector_MembraneVolume* self, __btrc_fn_MembraneVolume_MembraneVolume fn) {
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = 0; (i < self->len); (i++)) {
+        btrc_Vector_MembraneVolume_push(result, fn(self->data[i]));
+    }
+    return result;
+}
+
+static bool btrc_Vector_MembraneVolume_any(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (pred(self->data[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool btrc_Vector_MembraneVolume_all(btrc_Vector_MembraneVolume* self, __btrc_fn_bool_MembraneVolume pred) {
+    for (int i = 0; (i < self->len); (i++)) {
+        if (!pred(self->data[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_reduce(btrc_Vector_MembraneVolume* self, MembraneVolume* init, __btrc_fn_MembraneVolume_MembraneVolume_MembraneVolume fn) {
+    MembraneVolume* acc = init;
+    for (int i = 0; (i < self->len); (i++)) {
+        (acc = fn(acc, self->data[i]));
+    }
+    return acc;
+}
+
+static btrc_Vector_MembraneVolume* btrc_Vector_MembraneVolume_copy(btrc_Vector_MembraneVolume* self) {
+    btrc_Vector_MembraneVolume* result = btrc_Vector_MembraneVolume_new();
+    for (int i = 0; (i < self->len); (i++)) {
+        btrc_Vector_MembraneVolume_push(result, self->data[i]);
+    }
+    return result;
+}
+
+static void btrc_Vector_MembraneVolume_removeAt(btrc_Vector_MembraneVolume* self, int idx) {
+    btrc_Vector_MembraneVolume_remove(self, idx);
+}
+
+static int btrc_Vector_MembraneVolume_iterLen(btrc_Vector_MembraneVolume* self) {
+    return self->len;
+}
+
+static MembraneVolume* btrc_Vector_MembraneVolume_iterGet(btrc_Vector_MembraneVolume* self, int i) {
     return self->data[i];
 }
 
@@ -6883,6 +6906,278 @@ void MembraneFs_copyDirectoryContents(MembraneFs* self, char* source, char* dest
     MembraneRun_requireRaw(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("cp --reflink=always -a ", UnixShell_quote(PathTools_join(source, ".")))), " ")), UnixShell_quote(destination))));
 }
 
+void MembranePlanner_init(MembranePlanner* self, MembraneFs* fs) {
+    self->__rc = 1;
+    if (self->fs != NULL) {
+        if ((--self->fs->__rc) <= 0) {
+            MembraneFs_destroy(self->fs);
+        }
+    }
+    (self->fs = fs);
+    (fs->__rc++);
+}
+
+MembranePlanner* MembranePlanner_new(MembraneFs* fs) {
+    MembranePlanner* self = ((MembranePlanner*)malloc(sizeof(MembranePlanner)));
+    memset(self, 0, sizeof(MembranePlanner));
+    MembranePlanner_init(self, fs);
+    return self;
+}
+
+void MembranePlanner_destroy(MembranePlanner* self) {
+    if (self->fs != NULL) {
+        if ((--self->fs->__rc) <= 0) {
+            MembraneFs_destroy(self->fs);
+        }
+    }
+    if (__btrc_tracking) {
+        __btrc_mark_destroyed(self);
+    }
+    free(self);
+}
+
+int MembranePlanner_compareSpecs(MembranePlanner* self, MembraneSpec* left, MembraneSpec* right) {
+    int volume = Strings_compare(left->volume, right->volume);
+    if (volume != 0) {
+        return volume;
+    }
+    int leftDepth = Strings_count(left->relPath, "/");
+    int rightDepth = Strings_count(right->relPath, "/");
+    if (leftDepth != rightDepth) {
+        __auto_type __btrc_ret_314 = (leftDepth - rightDepth);
+        return __btrc_ret_314;
+    }
+    if (((int)strlen(left->relPath)) != ((int)strlen(right->relPath))) {
+        __auto_type __btrc_ret_315 = (((int)strlen(left->relPath)) - ((int)strlen(right->relPath)));
+        return __btrc_ret_315;
+    }
+    __auto_type __btrc_ret_316 = Strings_compare(left->relPath, right->relPath);
+    return __btrc_ret_316;
+}
+
+void MembranePlanner_pushSpecSorted(MembranePlanner* self, btrc_Vector_MembraneSpec* specs, MembraneSpec* spec) {
+    int index = 0;
+    while ((index < specs->len) && (MembranePlanner_compareSpecs(self, btrc_Vector_MembraneSpec_get(specs, index), spec) <= 0)) {
+        (index++);
+    }
+    btrc_Vector_MembraneSpec_insert(specs, index, spec);
+}
+
+btrc_Vector_MembraneSpec* MembranePlanner_sortedSpecs(MembranePlanner* self, btrc_Vector_MembraneSpec* input) {
+    btrc_Vector_MembraneSpec* sorted = btrc_Vector_MembraneSpec_new();
+    int __n_318 = btrc_Vector_MembraneSpec_iterLen(input);
+    for (int __i_317 = 0; (__i_317 < __n_318); (__i_317++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(input, __i_317);
+        MembranePlanner_pushSpecSorted(self, sorted, spec);
+    }
+    return sorted;
+}
+
+char* MembranePlanner_resolveKind(MembranePlanner* self, char* live, char* clean, MembraneSpec* spec) {
+    char* path = MembraneFs_sourcePath(self->fs, live, clean, spec->relPath);
+    if (__btrc_isEmpty(path)) {
+        __auto_type __btrc_ret_319 = "file";
+        return __btrc_ret_319;
+    }
+    if (FileSystem_isDir(path)) {
+        __auto_type __btrc_ret_320 = "dir";
+        return __btrc_ret_320;
+    }
+    __auto_type __btrc_ret_321 = "file";
+    return __btrc_ret_321;
+}
+
+bool MembranePlanner_planAlreadyCovers(MembranePlanner* self, btrc_Vector_MembranePlan* plans, MembraneSpec* spec) {
+    int __n_323 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_322 = 0; (__i_322 < __n_323); (__i_322++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_322);
+        if ((strcmp(plan->spec->volume, spec->volume) == 0) && (strcmp(plan->spec->relPath, spec->relPath) == 0)) {
+            __auto_type __btrc_ret_324 = true;
+            return __btrc_ret_324;
+        }
+        if (((strcmp(plan->spec->volume, spec->volume) == 0) && (strcmp(plan->kind, "dir") == 0)) && MembranePaths_ancestor(plan->spec->relPath, spec->relPath)) {
+            __auto_type __btrc_ret_325 = true;
+            return __btrc_ret_325;
+        }
+    }
+    __auto_type __btrc_ret_326 = false;
+    return __btrc_ret_326;
+}
+
+btrc_Vector_MembranePlan* MembranePlanner_makePlan(MembranePlanner* self, btrc_Vector_MembraneSpec* specs, char* live, char* clean, char* persistRoot) {
+    btrc_Vector_MembranePlan* plans = btrc_Vector_MembranePlan_new();
+    btrc_Vector_MembraneSpec* ordered = MembranePlanner_sortedSpecs(self, specs);
+    int __n_328 = btrc_Vector_MembraneSpec_iterLen(ordered);
+    for (int __i_327 = 0; (__i_327 < __n_328); (__i_327++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(ordered, __i_327);
+        char* kind = spec->kind;
+        if (strcmp(kind, "auto") == 0) {
+            (kind = MembranePlanner_resolveKind(self, live, clean, spec));
+        }
+        if (MembranePlanner_planAlreadyCovers(self, plans, spec)) {
+            continue;
+        }
+        char* store = ((strcmp(kind, "dir") == 0) ? MembranePaths_dirStore(persistRoot, spec->absPath) : MembranePaths_fileStore(persistRoot, spec->absPath));
+        btrc_Vector_MembranePlan_push(plans, MembranePlan_new(spec, kind, store));
+    }
+    return plans;
+}
+
+void MembraneMounts_init(MembraneMounts* self, MembraneRun* run, MembraneFs* fs) {
+    self->__rc = 1;
+    if (self->run != NULL) {
+        if ((--self->run->__rc) <= 0) {
+            MembraneRun_destroy(self->run);
+        }
+    }
+    (self->run = run);
+    (run->__rc++);
+    if (self->fs != NULL) {
+        if ((--self->fs->__rc) <= 0) {
+            MembraneFs_destroy(self->fs);
+        }
+    }
+    (self->fs = fs);
+    (fs->__rc++);
+}
+
+MembraneMounts* MembraneMounts_new(MembraneRun* run, MembraneFs* fs) {
+    MembraneMounts* self = ((MembraneMounts*)malloc(sizeof(MembraneMounts)));
+    memset(self, 0, sizeof(MembraneMounts));
+    MembraneMounts_init(self, run, fs);
+    return self;
+}
+
+void MembraneMounts_destroy(MembraneMounts* self) {
+    if (self->run != NULL) {
+        if ((--self->run->__rc) <= 0) {
+            MembraneRun_destroy(self->run);
+        }
+    }
+    if (self->fs != NULL) {
+        if ((--self->fs->__rc) <= 0) {
+            MembraneFs_destroy(self->fs);
+        }
+    }
+    if (__btrc_tracking) {
+        __btrc_mark_destroyed(self);
+    }
+    free(self);
+}
+
+void MembraneMounts_mountTop(MembraneMounts* self, char* device, bool assumeMounted) {
+    if (assumeMounted) {
+        if (!FileSystem_isDir(self->run->top)) {
+            MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("missing mount path: ", self->run->top)));
+        }
+        return;
+    }
+    MembraneRun_mkdirp(self->run, self->run->top);
+    Command* command = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), "subvolid=5,user_subvol_rm_allowed"), device), self->run->top), false);
+    MembraneRun_requireCommand(self->run, command);
+}
+
+void MembraneMounts_unmountTop(MembraneMounts* self, bool assumeMounted) {
+    if (assumeMounted) {
+        return;
+    }
+    Command* command = Command_check(Command_capture(Command_arg(Command_arg(Command_new("umount"), "-R"), self->run->top), false), false);
+    MembraneRun_runCommand(self->run, command);
+    if (__btrc_startsWith(self->run->top, __btrc_str_track(__btrc_strcat(MembraneConstants_topBase(), ".")))) {
+        FileSystem_removeRecursive(self->run->top);
+    }
+}
+
+bool MembraneMounts_coveredBy(MembraneMounts* self, btrc_Vector_string* selected, char* target) {
+    int __n_330 = btrc_Vector_string_iterLen(selected);
+    for (int __i_329 = 0; (__i_329 < __n_330); (__i_329++)) {
+        char* s = btrc_Vector_string_iterGet(selected, __i_329);
+        if (__btrc_startsWith(target, __btrc_str_track(__btrc_strcat(s, "/")))) {
+            __auto_type __btrc_ret_331 = true;
+            return __btrc_ret_331;
+        }
+    }
+    __auto_type __btrc_ret_332 = false;
+    return __btrc_ret_332;
+}
+
+void MembraneMounts_mountTarget(MembraneMounts* self, char* device, char* target, char* subvol) {
+    MembraneRun_mkdirp(self->run, target);
+    if (MembraneFs_mounted(self->fs, target)) {
+        return;
+    }
+    Command* command = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("subvol=", subvol)), ",compress=zstd,noatime"))), device), target), false);
+    MembraneRun_requireCommand(self->run, command);
+}
+
+void MembraneMounts_mountPersist(MembraneMounts* self, char* device, char* persistRoot, btrc_Vector_MembraneSpec* specs, bool assumeMounted) {
+    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat("Mounting persistent subvolumes dry_run=", (self->run->dryRun ? "true" : "false"))));
+    bool mountedTop = false;
+    if ((!assumeMounted) && (!MembraneFs_mounted(self->fs, self->run->top))) {
+        MembraneRun_mkdirp(self->run, self->run->top);
+        Command* m = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), "ro,subvolid=5"), device), self->run->top), false);
+        MembraneRun_requireCommand(self->run, m);
+        (mountedTop = true);
+    }
+    btrc_Vector_string* selected = btrc_Vector_string_new();
+    int __n_334 = btrc_Vector_MembraneSpec_iterLen(specs);
+    for (int __i_333 = 0; (__i_333 < __n_334); (__i_333++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(specs, __i_333);
+        char* target = spec->absPath;
+        if (MembraneMounts_coveredBy(self, selected, target)) {
+            continue;
+        }
+        char* subvol = PathTools_join(PathTools_join(persistRoot, MembraneConstants_dirs()), MembranePaths_key(target));
+        if (!MembraneFs_isSubvolume(self->fs, MembraneRun_path(self->run, subvol))) {
+            continue;
+        }
+        MembraneMounts_mountTarget(self, device, target, subvol);
+        btrc_Vector_string_push(selected, target);
+    }
+    if (mountedTop) {
+        Command* u = Command_check(Command_capture(Command_arg(Command_new("umount"), self->run->top), false), false);
+        MembraneRun_runCommand(self->run, u);
+    }
+    MembraneRun_log(self->run, "Persistent mounts complete");
+}
+
+void MembraneMounts_snapshotCleanVolume(MembraneMounts* self, MembraneVolume* volume, char* snapshotsSubvolume, char* cleanName) {
+    char* live = MembraneRun_path(self->run, volume->name);
+    char* root = PathTools_join(snapshotsSubvolume, volume->name);
+    char* clean = MembraneRun_path(self->run, PathTools_join(root, cleanName));
+    if (!MembraneFs_exists(self->fs, live)) {
+        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live missing: ", live)));
+    }
+    if (!MembraneFs_isSubvolume(self->fs, live)) {
+        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live is not a subvolume: ", live)));
+    }
+    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("Re-capturing CLEAN baseline for ", volume->name)), " from live subvolume")));
+    MembraneFs_snapshot(self->fs, live, clean, true);
+}
+
+void MembraneMounts_snapshotCleanAll(MembraneMounts* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_MembraneVolume* volumes, bool assumeMounted) {
+    btrc_Vector_string* names = btrc_Vector_string_new();
+    int __n_336 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_335 = 0; (__i_335 < __n_336); (__i_335++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_335);
+        btrc_Vector_string_push(names, volume->name);
+    }
+    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("snapshot-clean dry_run=", (self->run->dryRun ? "true" : "false"))), " device=")), device)), " subvolumes=")), btrc_Vector_string_join(names, " "))));
+    if (self->run->dryRun && (!assumeMounted)) {
+        MembraneRun_log(self->run, "DRY add --assume-mounted to walk mounted test roots");
+        return;
+    }
+    MembraneMounts_mountTop(self, device, assumeMounted);
+    int __n_338 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_337 = 0; (__i_337 < __n_338); (__i_337++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_337);
+        MembraneMounts_snapshotCleanVolume(self, volume, snapshotsSubvolume, cleanName);
+    }
+    MembraneRun_requireCommand(self->run, MembraneBtrfs_sync(self->run->top));
+    MembraneMounts_unmountTop(self, assumeMounted);
+    MembraneRun_log(self->run, "snapshot-clean complete");
+}
+
 void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool assumeMounted) {
     self->__rc = 1;
     if (self->run != NULL) {
@@ -6899,6 +7194,20 @@ void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool a
     }
     (self->fs = MembraneFs_new(self->run));
     (MembraneFs_new(self->run)->__rc++);
+    if (self->planner != NULL) {
+        if ((--self->planner->__rc) <= 0) {
+            MembranePlanner_destroy(self->planner);
+        }
+    }
+    (self->planner = MembranePlanner_new(self->fs));
+    (MembranePlanner_new(self->fs)->__rc++);
+    if (self->mounts != NULL) {
+        if ((--self->mounts->__rc) <= 0) {
+            MembraneMounts_destroy(self->mounts);
+        }
+    }
+    (self->mounts = MembraneMounts_new(self->run, self->fs));
+    (MembraneMounts_new(self->run, self->fs)->__rc++);
     (self->device = "");
     (self->snapshotsSubvolume = "");
     (self->cleanName = "");
@@ -6910,19 +7219,19 @@ void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool a
             btrc_Vector_MembraneSpec_free(self->specs);
         }
     }
-    btrc_Vector_MembraneSpec* __list_315 = btrc_Vector_MembraneSpec_new();
-    (self->specs = __list_315);
-    btrc_Vector_MembraneSpec* __list_314 = btrc_Vector_MembraneSpec_new();
-    (__list_314->__rc++);
+    btrc_Vector_MembraneSpec* __list_340 = btrc_Vector_MembraneSpec_new();
+    (self->specs = __list_340);
+    btrc_Vector_MembraneSpec* __list_339 = btrc_Vector_MembraneSpec_new();
+    (__list_339->__rc++);
     if (self->volumes != NULL) {
         if ((--self->volumes->__rc) <= 0) {
             btrc_Vector_MembraneVolume_free(self->volumes);
         }
     }
-    btrc_Vector_MembraneVolume* __list_317 = btrc_Vector_MembraneVolume_new();
-    (self->volumes = __list_317);
-    btrc_Vector_MembraneVolume* __list_316 = btrc_Vector_MembraneVolume_new();
-    (__list_316->__rc++);
+    btrc_Vector_MembraneVolume* __list_342 = btrc_Vector_MembraneVolume_new();
+    (self->volumes = __list_342);
+    btrc_Vector_MembraneVolume* __list_341 = btrc_Vector_MembraneVolume_new();
+    (__list_341->__rc++);
     (self->assumeMounted = assumeMounted);
 }
 
@@ -6944,6 +7253,16 @@ void SemipermeableMembrane_destroy(SemipermeableMembrane* self) {
             MembraneFs_destroy(self->fs);
         }
     }
+    if (self->planner != NULL) {
+        if ((--self->planner->__rc) <= 0) {
+            MembranePlanner_destroy(self->planner);
+        }
+    }
+    if (self->mounts != NULL) {
+        if ((--self->mounts->__rc) <= 0) {
+            MembraneMounts_destroy(self->mounts);
+        }
+    }
     if (self->specs != NULL) {
         if ((--self->specs->__rc) <= 0) {
             btrc_Vector_MembraneSpec_free(self->specs);
@@ -6962,20 +7281,20 @@ void SemipermeableMembrane_destroy(SemipermeableMembrane* self) {
 
 bool SemipermeableMembrane_envDryRun(void) {
     char* value = Environment_get("SEMIPERMEABLE_MEMBRANE_DRY_RUN", "");
-    __auto_type __btrc_ret_318 = ((((strcmp(value, "1") == 0) || (strcmp(value, "true") == 0)) || (strcmp(value, "yes") == 0)) || (strcmp(value, "on") == 0));
-    return __btrc_ret_318;
+    __auto_type __btrc_ret_343 = ((((strcmp(value, "1") == 0) || (strcmp(value, "true") == 0)) || (strcmp(value, "yes") == 0)) || (strcmp(value, "on") == 0));
+    return __btrc_ret_343;
 }
 
 void SemipermeableMembrane_ensureNamespaces(SemipermeableMembrane* self) {
-    btrc_Vector_string* __list_319 = btrc_Vector_string_new();
-    btrc_Vector_string_push(__list_319, self->persistRoot);
-    btrc_Vector_string_push(__list_319, PathTools_join(self->persistRoot, MembraneConstants_dirs()));
-    btrc_Vector_string_push(__list_319, PathTools_join(self->persistRoot, MembraneConstants_meta()));
-    btrc_Vector_string_push(__list_319, PathTools_join(PathTools_join(self->persistRoot, MembraneConstants_meta()), MembraneConstants_files()));
-    btrc_Vector_string* namespaces = __list_319;
-    int __n_321 = btrc_Vector_string_iterLen(namespaces);
-    for (int __i_320 = 0; (__i_320 < __n_321); (__i_320++)) {
-        char* rel = btrc_Vector_string_iterGet(namespaces, __i_320);
+    btrc_Vector_string* __list_344 = btrc_Vector_string_new();
+    btrc_Vector_string_push(__list_344, self->persistRoot);
+    btrc_Vector_string_push(__list_344, PathTools_join(self->persistRoot, MembraneConstants_dirs()));
+    btrc_Vector_string_push(__list_344, PathTools_join(self->persistRoot, MembraneConstants_meta()));
+    btrc_Vector_string_push(__list_344, PathTools_join(PathTools_join(self->persistRoot, MembraneConstants_meta()), MembraneConstants_files()));
+    btrc_Vector_string* namespaces = __list_344;
+    int __n_346 = btrc_Vector_string_iterLen(namespaces);
+    for (int __i_345 = 0; (__i_345 < __n_346); (__i_345++)) {
+        char* rel = btrc_Vector_string_iterGet(namespaces, __i_345);
         char* path = MembraneRun_path(self->run, rel);
         if (!MembraneFs_exists(self->fs, path)) {
             MembraneFs_makeSubvolume(self->fs, path);
@@ -6986,30 +7305,30 @@ void SemipermeableMembrane_ensureNamespaces(SemipermeableMembrane* self) {
 }
 
 bool SemipermeableMembrane_keyInSpec(SemipermeableMembrane* self, btrc_Vector_string* validKeys, char* key) {
-    int __n_323 = btrc_Vector_string_iterLen(validKeys);
-    for (int __i_322 = 0; (__i_322 < __n_323); (__i_322++)) {
-        char* v = btrc_Vector_string_iterGet(validKeys, __i_322);
+    int __n_348 = btrc_Vector_string_iterLen(validKeys);
+    for (int __i_347 = 0; (__i_347 < __n_348); (__i_347++)) {
+        char* v = btrc_Vector_string_iterGet(validKeys, __i_347);
         if (strcmp(v, key) == 0) {
-            __auto_type __btrc_ret_324 = true;
-            return __btrc_ret_324;
+            __auto_type __btrc_ret_349 = true;
+            return __btrc_ret_349;
         }
     }
-    __auto_type __btrc_ret_325 = false;
-    return __btrc_ret_325;
+    __auto_type __btrc_ret_350 = false;
+    return __btrc_ret_350;
 }
 
 void SemipermeableMembrane_pruneOrphans(SemipermeableMembrane* self) {
     btrc_Vector_string* validKeys = btrc_Vector_string_new();
-    int __n_327 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-    for (int __i_326 = 0; (__i_326 < __n_327); (__i_326++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_326);
+    int __n_352 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+    for (int __i_351 = 0; (__i_351 < __n_352); (__i_351++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_351);
         btrc_Vector_string_push(validKeys, MembranePaths_key(spec->absPath));
     }
     char* dirsPath = MembraneRun_path(self->run, PathTools_join(self->persistRoot, MembraneConstants_dirs()));
     btrc_Vector_string* children = MembraneFs_childSubvolumes(self->fs, dirsPath);
-    int __n_329 = btrc_Vector_string_iterLen(children);
-    for (int __i_328 = 0; (__i_328 < __n_329); (__i_328++)) {
-        char* child = btrc_Vector_string_iterGet(children, __i_328);
+    int __n_354 = btrc_Vector_string_iterLen(children);
+    for (int __i_353 = 0; (__i_353 < __n_354); (__i_353++)) {
+        char* child = btrc_Vector_string_iterGet(children, __i_353);
         char* key = PathTools_basename(child);
         if (!SemipermeableMembrane_keyInSpec(self, validKeys, key)) {
             MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat("Pruning orphaned persist subvolume ", key)));
@@ -7051,98 +7370,11 @@ void SemipermeableMembrane_publish(SemipermeableMembrane* self, MembraneVolume* 
     MembraneFs_deleteSubvolume(self->fs, next);
 }
 
-int SemipermeableMembrane_compareSpecs(SemipermeableMembrane* self, MembraneSpec* left, MembraneSpec* right) {
-    int volume = Strings_compare(left->volume, right->volume);
-    if (volume != 0) {
-        return volume;
-    }
-    int leftDepth = Strings_count(left->relPath, "/");
-    int rightDepth = Strings_count(right->relPath, "/");
-    if (leftDepth != rightDepth) {
-        __auto_type __btrc_ret_330 = (leftDepth - rightDepth);
-        return __btrc_ret_330;
-    }
-    if (((int)strlen(left->relPath)) != ((int)strlen(right->relPath))) {
-        __auto_type __btrc_ret_331 = (((int)strlen(left->relPath)) - ((int)strlen(right->relPath)));
-        return __btrc_ret_331;
-    }
-    __auto_type __btrc_ret_332 = Strings_compare(left->relPath, right->relPath);
-    return __btrc_ret_332;
-}
-
-void SemipermeableMembrane_pushSpecSorted(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, MembraneSpec* spec) {
-    int index = 0;
-    while ((index < specs->len) && (SemipermeableMembrane_compareSpecs(self, btrc_Vector_MembraneSpec_get(specs, index), spec) <= 0)) {
-        (index++);
-    }
-    btrc_Vector_MembraneSpec_insert(specs, index, spec);
-}
-
-btrc_Vector_MembraneSpec* SemipermeableMembrane_sortedSpecs(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* input) {
-    btrc_Vector_MembraneSpec* sorted = btrc_Vector_MembraneSpec_new();
-    int __n_334 = btrc_Vector_MembraneSpec_iterLen(input);
-    for (int __i_333 = 0; (__i_333 < __n_334); (__i_333++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(input, __i_333);
-        SemipermeableMembrane_pushSpecSorted(self, sorted, spec);
-    }
-    return sorted;
-}
-
-char* SemipermeableMembrane_resolveKind(SemipermeableMembrane* self, char* live, char* clean, MembraneSpec* spec) {
-    char* path = MembraneFs_sourcePath(self->fs, live, clean, spec->relPath);
-    if (__btrc_isEmpty(path)) {
-        __auto_type __btrc_ret_335 = "file";
-        return __btrc_ret_335;
-    }
-    if (FileSystem_isDir(path)) {
-        __auto_type __btrc_ret_336 = "dir";
-        return __btrc_ret_336;
-    }
-    __auto_type __btrc_ret_337 = "file";
-    return __btrc_ret_337;
-}
-
-bool SemipermeableMembrane_planAlreadyCovers(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, MembraneSpec* spec) {
-    int __n_339 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_338 = 0; (__i_338 < __n_339); (__i_338++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_338);
-        if ((strcmp(plan->spec->volume, spec->volume) == 0) && (strcmp(plan->spec->relPath, spec->relPath) == 0)) {
-            __auto_type __btrc_ret_340 = true;
-            return __btrc_ret_340;
-        }
-        if (((strcmp(plan->spec->volume, spec->volume) == 0) && (strcmp(plan->kind, "dir") == 0)) && MembranePaths_ancestor(plan->spec->relPath, spec->relPath)) {
-            __auto_type __btrc_ret_341 = true;
-            return __btrc_ret_341;
-        }
-    }
-    __auto_type __btrc_ret_342 = false;
-    return __btrc_ret_342;
-}
-
-btrc_Vector_MembranePlan* SemipermeableMembrane_makePlan(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, char* live, char* clean) {
-    btrc_Vector_MembranePlan* plans = btrc_Vector_MembranePlan_new();
-    btrc_Vector_MembraneSpec* ordered = SemipermeableMembrane_sortedSpecs(self, specs);
-    int __n_344 = btrc_Vector_MembraneSpec_iterLen(ordered);
-    for (int __i_343 = 0; (__i_343 < __n_344); (__i_343++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(ordered, __i_343);
-        char* kind = spec->kind;
-        if (strcmp(kind, "auto") == 0) {
-            (kind = SemipermeableMembrane_resolveKind(self, live, clean, spec));
-        }
-        if (SemipermeableMembrane_planAlreadyCovers(self, plans, spec)) {
-            continue;
-        }
-        char* store = ((strcmp(kind, "dir") == 0) ? MembranePaths_dirStore(self->persistRoot, spec->absPath) : MembranePaths_fileStore(self->persistRoot, spec->absPath));
-        btrc_Vector_MembranePlan_push(plans, MembranePlan_new(spec, kind, store));
-    }
-    return plans;
-}
-
 btrc_Vector_MembraneSpec* SemipermeableMembrane_specsForVolume(SemipermeableMembrane* self, char* volume) {
     btrc_Vector_MembraneSpec* result = btrc_Vector_MembraneSpec_new();
-    int __n_346 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-    for (int __i_345 = 0; (__i_345 < __n_346); (__i_345++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_345);
+    int __n_356 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+    for (int __i_355 = 0; (__i_355 < __n_356); (__i_355++)) {
+        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_355);
         if (strcmp(spec->volume, volume) == 0) {
             btrc_Vector_MembraneSpec_push(result, spec);
         }
@@ -7168,7 +7400,7 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
         MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live is not a subvolume: ", live)));
     }
     MembraneFs_deleteSubvolume(self->fs, next);
-    btrc_Vector_MembranePlan* plans = SemipermeableMembrane_makePlan(self, SemipermeableMembrane_specsForVolume(self, volume->name), live, clean);
+    btrc_Vector_MembranePlan* plans = MembranePlanner_makePlan(self->planner, SemipermeableMembrane_specsForVolume(self, volume->name), live, clean, self->persistRoot);
     SemipermeableMembrane_restorePersistentDirs(self, plans, live, clean);
     SemipermeableMembrane_restorePersistentFiles(self, plans, live, clean);
     SemipermeableMembrane_rotate(self, volume->name, live);
@@ -7178,9 +7410,9 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
 }
 
 void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean) {
-    int __n_348 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_347 = 0; (__i_347 < __n_348); (__i_347++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_347);
+    int __n_358 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_357 = 0; (__i_357 < __n_358); (__i_357++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_357);
         if (!(strcmp(plan->kind, "dir") == 0)) {
             continue;
         }
@@ -7198,9 +7430,9 @@ void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, bt
 }
 
 void SemipermeableMembrane_restorePersistentFiles(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean) {
-    int __n_350 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_349 = 0; (__i_349 < __n_350); (__i_349++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_349);
+    int __n_360 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_359 = 0; (__i_359 < __n_360); (__i_359++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_359);
         if (!(strcmp(plan->kind, "file") == 0)) {
             continue;
         }
@@ -7219,9 +7451,9 @@ void SemipermeableMembrane_restorePersistentFiles(SemipermeableMembrane* self, b
 }
 
 void SemipermeableMembrane_populateNext(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* next) {
-    int __n_352 = btrc_Vector_MembranePlan_iterLen(plans);
-    for (int __i_351 = 0; (__i_351 < __n_352); (__i_351++)) {
-        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_351);
+    int __n_362 = btrc_Vector_MembranePlan_iterLen(plans);
+    for (int __i_361 = 0; (__i_361 < __n_362); (__i_361++)) {
+        MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_361);
         char* target = PathTools_join(next, plan->spec->relPath);
         MembraneRun_removePath(self->run, target);
         if (strcmp(plan->kind, "dir") == 0) {
@@ -7249,9 +7481,9 @@ void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolu
 
 void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self) {
     char* content = FileSystem_readText(self->specFile);
-    int __n_354 = btrc_Vector_string_iterLen(Strings_split(content, "\n"));
-    for (int __i_353 = 0; (__i_353 < __n_354); (__i_353++)) {
-        char* raw = btrc_Vector_string_iterGet(Strings_split(content, "\n"), __i_353);
+    int __n_364 = btrc_Vector_string_iterLen(Strings_split(content, "\n"));
+    for (int __i_363 = 0; (__i_363 < __n_364); (__i_363++)) {
+        char* raw = btrc_Vector_string_iterGet(Strings_split(content, "\n"), __i_363);
         char* line = __btrc_str_track(__btrc_trim(raw));
         if (__btrc_isEmpty(line) || __btrc_startsWith(line, "#")) {
             continue;
@@ -7273,32 +7505,32 @@ void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self) {
 }
 
 bool SemipermeableMembrane_volumeSeen(SemipermeableMembrane* self, btrc_Vector_MembraneVolume* volumes, char* name) {
-    int __n_356 = btrc_Vector_MembraneVolume_iterLen(volumes);
-    for (int __i_355 = 0; (__i_355 < __n_356); (__i_355++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_355);
+    int __n_366 = btrc_Vector_MembraneVolume_iterLen(volumes);
+    for (int __i_365 = 0; (__i_365 < __n_366); (__i_365++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_365);
         if (strcmp(volume->name, name) == 0) {
-            __auto_type __btrc_ret_357 = true;
-            return __btrc_ret_357;
+            __auto_type __btrc_ret_367 = true;
+            return __btrc_ret_367;
         }
     }
-    __auto_type __btrc_ret_358 = false;
-    return __btrc_ret_358;
+    __auto_type __btrc_ret_368 = false;
+    return __btrc_ret_368;
 }
 
 void SemipermeableMembrane_readVolumes(SemipermeableMembrane* self, btrc_Vector_string* args) {
     if (btrc_Vector_string_isEmpty(args)) {
-        int __n_360 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-        for (int __i_359 = 0; (__i_359 < __n_360); (__i_359++)) {
-            MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_359);
+        int __n_370 = btrc_Vector_MembraneSpec_iterLen(self->specs);
+        for (int __i_369 = 0; (__i_369 < __n_370); (__i_369++)) {
+            MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_369);
             if (!SemipermeableMembrane_volumeSeen(self, self->volumes, spec->volume)) {
                 btrc_Vector_MembraneVolume_push(self->volumes, MembraneVolume_new(spec->volume, "/"));
             }
         }
         return;
     }
-    int __n_362 = btrc_Vector_string_iterLen(args);
-    for (int __i_361 = 0; (__i_361 < __n_362); (__i_361++)) {
-        char* arg = btrc_Vector_string_iterGet(args, __i_361);
+    int __n_372 = btrc_Vector_string_iterLen(args);
+    for (int __i_371 = 0; (__i_371 < __n_372); (__i_371++)) {
+        char* arg = btrc_Vector_string_iterGet(args, __i_371);
         int marker = Strings_find(arg, "=", 0);
         if (marker < 0) {
             NixosLog_fatal(__btrc_str_track(__btrc_strcat("bad volume arg: ", arg)));
@@ -7306,29 +7538,6 @@ void SemipermeableMembrane_readVolumes(SemipermeableMembrane* self, btrc_Vector_
         char* name = __btrc_str_track(__btrc_substring(arg, 0, marker));
         char* mountPoint = __btrc_str_track(__btrc_substring(arg, (marker + 1), ((((int)strlen(arg)) - marker) - 1)));
         btrc_Vector_MembraneVolume_push(self->volumes, MembraneVolume_new(MembranePaths_normSubvol(name), MembranePaths_normMount(mountPoint)));
-    }
-}
-
-void SemipermeableMembrane_mountTop(SemipermeableMembrane* self) {
-    if (self->assumeMounted) {
-        if (!FileSystem_isDir(self->run->top)) {
-            MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("missing mount path: ", self->run->top)));
-        }
-        return;
-    }
-    MembraneRun_mkdirp(self->run, self->run->top);
-    Command* command = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), "subvolid=5,user_subvol_rm_allowed"), self->device), self->run->top), false);
-    MembraneRun_requireCommand(self->run, command);
-}
-
-void SemipermeableMembrane_unmountTop(SemipermeableMembrane* self) {
-    if (self->assumeMounted) {
-        return;
-    }
-    Command* command = Command_check(Command_capture(Command_arg(Command_arg(Command_new("umount"), "-R"), self->run->top), false), false);
-    MembraneRun_runCommand(self->run, command);
-    if (__btrc_startsWith(self->run->top, __btrc_str_track(__btrc_strcat(MembraneConstants_topBase(), ".")))) {
-        FileSystem_removeRecursive(self->run->top);
     }
 }
 
@@ -7345,9 +7554,9 @@ void SemipermeableMembrane_configure(SemipermeableMembrane* self, char* device, 
 
 void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
     btrc_Vector_string* names = btrc_Vector_string_new();
-    int __n_364 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
-    for (int __i_363 = 0; (__i_363 < __n_364); (__i_363++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_363);
+    int __n_374 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
+    for (int __i_373 = 0; (__i_373 < __n_374); (__i_373++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_373);
         btrc_Vector_string_push(names, volume->name);
     }
     MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("Mode=", self->mode)), " dry_run=")), (self->run->dryRun ? "true" : "false"))), " device=")), self->device)), " subvolumes=")), btrc_Vector_string_join(names, " "))));
@@ -7359,14 +7568,14 @@ void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
         MembraneRun_log(self->run, "DRY add --assume-mounted to walk mounted test roots");
         return;
     }
-    SemipermeableMembrane_mountTop(self);
+    MembraneMounts_mountTop(self->mounts, self->device, self->assumeMounted);
     SemipermeableMembrane_ensureNamespaces(self);
     if (((strcmp(self->mode, MembraneConstants_converge()) == 0) || (strcmp(self->mode, MembraneConstants_reset()) == 0)) || (strcmp(self->mode, MembraneConstants_prepareOnly()) == 0)) {
         SemipermeableMembrane_pruneOrphans(self);
     }
-    int __n_366 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
-    for (int __i_365 = 0; (__i_365 < __n_366); (__i_365++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_365);
+    int __n_376 = btrc_Vector_MembraneVolume_iterLen(self->volumes);
+    for (int __i_375 = 0; (__i_375 < __n_376); (__i_375++)) {
+        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(self->volumes, __i_375);
         if (((strcmp(self->mode, MembraneConstants_converge()) == 0) || (strcmp(self->mode, MembraneConstants_reset()) == 0)) || (strcmp(self->mode, MembraneConstants_prepareOnly()) == 0)) {
             SemipermeableMembrane_resetVolume(self, volume);
         } else if (strcmp(self->mode, MembraneConstants_snapshotOnly()) == 0) {
@@ -7382,30 +7591,8 @@ void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
         }
     }
     MembraneRun_requireCommand(self->run, MembraneBtrfs_sync(self->run->top));
-    SemipermeableMembrane_unmountTop(self);
+    MembraneMounts_unmountTop(self->mounts, self->assumeMounted);
     MembraneRun_log(self->run, "Semipermeable membrane complete");
-}
-
-bool SemipermeableMembrane_coveredBy(SemipermeableMembrane* self, btrc_Vector_string* selected, char* target) {
-    int __n_368 = btrc_Vector_string_iterLen(selected);
-    for (int __i_367 = 0; (__i_367 < __n_368); (__i_367++)) {
-        char* s = btrc_Vector_string_iterGet(selected, __i_367);
-        if (__btrc_startsWith(target, __btrc_str_track(__btrc_strcat(s, "/")))) {
-            __auto_type __btrc_ret_369 = true;
-            return __btrc_ret_369;
-        }
-    }
-    __auto_type __btrc_ret_370 = false;
-    return __btrc_ret_370;
-}
-
-void SemipermeableMembrane_mountTarget(SemipermeableMembrane* self, char* target, char* subvol) {
-    MembraneRun_mkdirp(self->run, target);
-    if (MembraneFs_mounted(self->fs, target)) {
-        return;
-    }
-    Command* command = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("subvol=", subvol)), ",compress=zstd,noatime"))), self->device), target), false);
-    MembraneRun_requireCommand(self->run, command);
 }
 
 void SemipermeableMembrane_configureMount(SemipermeableMembrane* self, char* device, char* persistRoot, char* specFile) {
@@ -7416,34 +7603,7 @@ void SemipermeableMembrane_configureMount(SemipermeableMembrane* self, char* dev
 }
 
 void SemipermeableMembrane_mountPersist(SemipermeableMembrane* self) {
-    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat("Mounting persistent subvolumes dry_run=", (self->run->dryRun ? "true" : "false"))));
-    bool mountedTop = false;
-    if ((!self->assumeMounted) && (!MembraneFs_mounted(self->fs, self->run->top))) {
-        MembraneRun_mkdirp(self->run, self->run->top);
-        Command* m = Command_capture(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_arg(Command_new("mount"), "-t"), "btrfs"), "-o"), "ro,subvolid=5"), self->device), self->run->top), false);
-        MembraneRun_requireCommand(self->run, m);
-        (mountedTop = true);
-    }
-    btrc_Vector_string* selected = btrc_Vector_string_new();
-    int __n_372 = btrc_Vector_MembraneSpec_iterLen(self->specs);
-    for (int __i_371 = 0; (__i_371 < __n_372); (__i_371++)) {
-        MembraneSpec* spec = btrc_Vector_MembraneSpec_iterGet(self->specs, __i_371);
-        char* target = spec->absPath;
-        if (SemipermeableMembrane_coveredBy(self, selected, target)) {
-            continue;
-        }
-        char* subvol = PathTools_join(PathTools_join(self->persistRoot, MembraneConstants_dirs()), MembranePaths_key(target));
-        if (!MembraneFs_isSubvolume(self->fs, MembraneRun_path(self->run, subvol))) {
-            continue;
-        }
-        SemipermeableMembrane_mountTarget(self, target, subvol);
-        btrc_Vector_string_push(selected, target);
-    }
-    if (mountedTop) {
-        Command* u = Command_check(Command_capture(Command_arg(Command_new("umount"), self->run->top), false), false);
-        MembraneRun_runCommand(self->run, u);
-    }
-    MembraneRun_log(self->run, "Persistent mounts complete");
+    MembraneMounts_mountPersist(self->mounts, self->device, self->persistRoot, self->specs, self->assumeMounted);
 }
 
 void SemipermeableMembrane_configureSnapshotClean(SemipermeableMembrane* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_string* volumeArgs) {
@@ -7453,42 +7613,8 @@ void SemipermeableMembrane_configureSnapshotClean(SemipermeableMembrane* self, c
     SemipermeableMembrane_readVolumes(self, volumeArgs);
 }
 
-void SemipermeableMembrane_snapshotCleanVolume(SemipermeableMembrane* self, MembraneVolume* volume) {
-    char* live = MembraneRun_path(self->run, volume->name);
-    char* root = PathTools_join(self->snapshotsSubvolume, volume->name);
-    char* clean = MembraneRun_path(self->run, PathTools_join(root, self->cleanName));
-    if (!MembraneFs_exists(self->fs, live)) {
-        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live missing: ", live)));
-    }
-    if (!MembraneFs_isSubvolume(self->fs, live)) {
-        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live is not a subvolume: ", live)));
-    }
-    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("Re-capturing CLEAN baseline for ", volume->name)), " from live subvolume")));
-    MembraneFs_snapshot(self->fs, live, clean, true);
-}
-
 void SemipermeableMembrane_snapshotCleanAll(SemipermeableMembrane* self) {
-    btrc_Vector_string* names = btrc_Vector_string_new();
-    btrc_Vector_MembraneVolume* volumes = self->volumes;
-    int __n_374 = btrc_Vector_MembraneVolume_iterLen(volumes);
-    for (int __i_373 = 0; (__i_373 < __n_374); (__i_373++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_373);
-        btrc_Vector_string_push(names, volume->name);
-    }
-    MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("snapshot-clean dry_run=", (self->run->dryRun ? "true" : "false"))), " device=")), self->device)), " subvolumes=")), btrc_Vector_string_join(names, " "))));
-    if (self->run->dryRun && (!self->assumeMounted)) {
-        MembraneRun_log(self->run, "DRY add --assume-mounted to walk mounted test roots");
-        return;
-    }
-    SemipermeableMembrane_mountTop(self);
-    int __n_376 = btrc_Vector_MembraneVolume_iterLen(volumes);
-    for (int __i_375 = 0; (__i_375 < __n_376); (__i_375++)) {
-        MembraneVolume* volume = btrc_Vector_MembraneVolume_iterGet(volumes, __i_375);
-        SemipermeableMembrane_snapshotCleanVolume(self, volume);
-    }
-    MembraneRun_requireCommand(self->run, MembraneBtrfs_sync(self->run->top));
-    SemipermeableMembrane_unmountTop(self);
-    MembraneRun_log(self->run, "snapshot-clean complete");
+    MembraneMounts_snapshotCleanAll(self->mounts, self->device, self->snapshotsSubvolume, self->cleanName, self->volumes, self->assumeMounted);
 }
 
 int SemipermeableMembrane_cli(CliArgs* args) {
