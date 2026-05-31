@@ -3,6 +3,7 @@ class SemipermeableMembrane {
     public MembraneFs fs;
     public MembranePlanner planner;
     public MembraneMounts mounts;
+    public MembraneSlots slots;
     public string device;
     public string snapshotsSubvolume;
     public string cleanName;
@@ -18,6 +19,7 @@ class SemipermeableMembrane {
         self.fs = MembraneFs(self.run);
         self.planner = MembranePlanner(self.fs);
         self.mounts = MembraneMounts(self.run, self.fs);
+        self.slots = MembraneSlots(self.fs, self.run);
         self.device = "";
         self.snapshotsSubvolume = "";
         self.cleanName = "";
@@ -75,37 +77,6 @@ class SemipermeableMembrane {
         }
     }
 
-    public void rotate(string volume, string live) {
-        string root = PathTools.join(self.snapshotsSubvolume, volume);
-        string a = self.run.path(PathTools.join(root, MembraneConstants.a()));
-        string b = self.run.path(PathTools.join(root, MembraneConstants.b()));
-        string c = self.run.path(PathTools.join(root, MembraneConstants.c()));
-        self.fs.deleteSubvolume(c);
-        if (self.fs.exists(b)) {
-            self.fs.snapshot(b, c, true);
-            self.fs.deleteSubvolume(b);
-        }
-        if (self.fs.exists(a)) {
-            self.fs.snapshot(a, b, true);
-            self.fs.deleteSubvolume(a);
-        }
-        self.fs.snapshot(live, a, true);
-    }
-
-    public void publish(MembraneVolume volume, string live, string next) {
-        if (!self.fs.exists(next)) { return; }
-        if (!self.run.dryRun && !volume.mountPoint.equals("/") && self.fs.mounted(volume.mountPoint)) {
-            self.run.log("WRN " + volume.mountPoint + " mounted; leaving NEXT for boot");
-            return;
-        }
-        if (!self.fs.exists(live)) {
-            self.run.renamePath(next, live);
-            return;
-        }
-        self.run.requireRaw("mv -T --exchange --no-copy " + UnixShell.quote(live) + " " + UnixShell.quote(next));
-        self.fs.deleteSubvolume(next);
-    }
-
     public Vector<MembraneSpec> specsForVolume(string volume) {
         Vector<MembraneSpec> result = [];
         for spec in self.specs {
@@ -124,7 +95,7 @@ class SemipermeableMembrane {
             self.run.fatal("bad CLEAN: " + clean);
         }
         if (!self.fs.exists(live)) {
-            self.publish(volume, live, next);
+            self.slots.publish(volume, live, next);
         }
         if (!self.fs.exists(live)) { self.run.fatal("live missing: " + live); }
         if (!self.fs.isSubvolume(live)) { self.run.fatal("live is not a subvolume: " + live); }
@@ -134,10 +105,10 @@ class SemipermeableMembrane {
         self.restorePersistentDirs(plans, live, clean);
         self.restorePersistentFiles(plans, live, clean);
 
-        self.rotate(volume.name, live);
+        self.slots.rotate(volume.name, live, self.snapshotsSubvolume);
         self.fs.snapshot(clean, next, false);
         self.populateNext(plans, next);
-        self.publish(volume, live, next);
+        self.slots.publish(volume, live, next);
     }
 
     public void restorePersistentDirs(Vector<MembranePlan> plans, string live, string clean) {
@@ -186,18 +157,6 @@ class SemipermeableMembrane {
                 }
             }
         }
-    }
-
-    public void restoreSlot(MembraneVolume volume, string slot) {
-        string root = PathTools.join(self.snapshotsSubvolume, volume.name);
-        string live = self.run.path(volume.name);
-        string next = self.run.path(PathTools.join(root, MembraneConstants.next()));
-        string source = self.run.path(PathTools.join(root, slot));
-        if (!self.fs.exists(source) || !self.fs.isSubvolume(source)) {
-            self.run.fatal("restore source missing: " + source);
-        }
-        self.fs.snapshot(source, next, false);
-        self.publish(volume, live, next);
     }
 
     public void readSpecs() {
@@ -278,13 +237,13 @@ class SemipermeableMembrane {
             if (self.mode.equals(MembraneConstants.converge()) || self.mode.equals(MembraneConstants.reset()) || self.mode.equals(MembraneConstants.prepareOnly())) {
                 self.resetVolume(volume);
             } else if (self.mode.equals(MembraneConstants.snapshotOnly())) {
-                self.rotate(volume.name, self.run.path(volume.name));
+                self.slots.rotate(volume.name, self.run.path(volume.name), self.snapshotsSubvolume);
             } else if (self.mode.equals(MembraneConstants.restoreA()) || self.mode.equals(MembraneConstants.restorePrevious())) {
-                self.restoreSlot(volume, MembraneConstants.a());
+                self.slots.restoreSlot(volume, MembraneConstants.a(), self.snapshotsSubvolume);
             } else if (self.mode.equals(MembraneConstants.restoreB()) || self.mode.equals(MembraneConstants.restorePenultimate())) {
-                self.restoreSlot(volume, MembraneConstants.b());
+                self.slots.restoreSlot(volume, MembraneConstants.b(), self.snapshotsSubvolume);
             } else if (self.mode.equals(MembraneConstants.restoreC())) {
-                self.restoreSlot(volume, MembraneConstants.c());
+                self.slots.restoreSlot(volume, MembraneConstants.c(), self.snapshotsSubvolume);
             } else {
                 self.run.fatal("Unknown mode: " + self.mode);
             }

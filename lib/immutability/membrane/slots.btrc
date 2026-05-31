@@ -1,0 +1,58 @@
+/* A/B/C snapshot-slot rotation and atomic publish. rotate() shifts live -> A ->
+ * B -> C (dropping the oldest); publish() swaps a populated NEXT into LIVE (or
+ * leaves it for boot when LIVE is mounted); restoreSlot() snapshots a chosen
+ * slot into NEXT and publishes it. Operates over the fs collaborator + run; the
+ * engine passes its snapshotsSubvolume.
+ */
+class MembraneSlots {
+    public MembraneFs fs;
+    public MembraneRun run;
+
+    public MembraneSlots(MembraneFs fs, MembraneRun run) {
+        self.fs = fs;
+        self.run = run;
+    }
+
+    public void rotate(string volume, string live, string snapshotsSubvolume) {
+        string root = PathTools.join(snapshotsSubvolume, volume);
+        string a = self.run.path(PathTools.join(root, MembraneConstants.a()));
+        string b = self.run.path(PathTools.join(root, MembraneConstants.b()));
+        string c = self.run.path(PathTools.join(root, MembraneConstants.c()));
+        self.fs.deleteSubvolume(c);
+        if (self.fs.exists(b)) {
+            self.fs.snapshot(b, c, true);
+            self.fs.deleteSubvolume(b);
+        }
+        if (self.fs.exists(a)) {
+            self.fs.snapshot(a, b, true);
+            self.fs.deleteSubvolume(a);
+        }
+        self.fs.snapshot(live, a, true);
+    }
+
+    public void publish(MembraneVolume volume, string live, string next) {
+        if (!self.fs.exists(next)) { return; }
+        if (!self.run.dryRun && !volume.mountPoint.equals("/") && self.fs.mounted(volume.mountPoint)) {
+            self.run.log("WRN " + volume.mountPoint + " mounted; leaving NEXT for boot");
+            return;
+        }
+        if (!self.fs.exists(live)) {
+            self.run.renamePath(next, live);
+            return;
+        }
+        self.run.requireRaw("mv -T --exchange --no-copy " + UnixShell.quote(live) + " " + UnixShell.quote(next));
+        self.fs.deleteSubvolume(next);
+    }
+
+    public void restoreSlot(MembraneVolume volume, string slot, string snapshotsSubvolume) {
+        string root = PathTools.join(snapshotsSubvolume, volume.name);
+        string live = self.run.path(volume.name);
+        string next = self.run.path(PathTools.join(root, MembraneConstants.next()));
+        string source = self.run.path(PathTools.join(root, slot));
+        if (!self.fs.exists(source) || !self.fs.isSubvolume(source)) {
+            self.run.fatal("restore source missing: " + source);
+        }
+        self.fs.snapshot(source, next, false);
+        self.publish(volume, live, next);
+    }
+}

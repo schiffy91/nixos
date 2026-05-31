@@ -253,6 +253,8 @@ typedef struct MembranePlanner MembranePlanner;
 void MembranePlanner_destroy(MembranePlanner* self);
 typedef struct MembraneMounts MembraneMounts;
 void MembraneMounts_destroy(MembraneMounts* self);
+typedef struct MembraneSlots MembraneSlots;
+void MembraneSlots_destroy(MembraneSlots* self);
 typedef struct SemipermeableMembrane SemipermeableMembrane;
 void SemipermeableMembrane_destroy(SemipermeableMembrane* self);
 typedef struct btrc_Vector_string btrc_Vector_string;
@@ -514,20 +516,22 @@ void MembraneMounts_mountTarget(MembraneMounts* self, char* device, char* target
 void MembraneMounts_mountPersist(MembraneMounts* self, char* device, char* persistRoot, btrc_Vector_MembraneSpec* specs, bool assumeMounted);
 void MembraneMounts_snapshotCleanVolume(MembraneMounts* self, MembraneVolume* volume, char* snapshotsSubvolume, char* cleanName);
 void MembraneMounts_snapshotCleanAll(MembraneMounts* self, char* device, char* snapshotsSubvolume, char* cleanName, btrc_Vector_MembraneVolume* volumes, bool assumeMounted);
+void MembraneSlots_init(MembraneSlots* self, MembraneFs* fs, MembraneRun* run);
+MembraneSlots* MembraneSlots_new(MembraneFs* fs, MembraneRun* run);
+void MembraneSlots_rotate(MembraneSlots* self, char* volume, char* live, char* snapshotsSubvolume);
+void MembraneSlots_publish(MembraneSlots* self, MembraneVolume* volume, char* live, char* next);
+void MembraneSlots_restoreSlot(MembraneSlots* self, MembraneVolume* volume, char* slot, char* snapshotsSubvolume);
 void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool assumeMounted);
 SemipermeableMembrane* SemipermeableMembrane_new(bool dryRun, bool assumeMounted);
 bool SemipermeableMembrane_envDryRun(void);
 void SemipermeableMembrane_ensureNamespaces(SemipermeableMembrane* self);
 bool SemipermeableMembrane_keyInSpec(SemipermeableMembrane* self, btrc_Vector_string* validKeys, char* key);
 void SemipermeableMembrane_pruneOrphans(SemipermeableMembrane* self);
-void SemipermeableMembrane_rotate(SemipermeableMembrane* self, char* volume, char* live);
-void SemipermeableMembrane_publish(SemipermeableMembrane* self, MembraneVolume* volume, char* live, char* next);
 btrc_Vector_MembraneSpec* SemipermeableMembrane_specsForVolume(SemipermeableMembrane* self, char* volume);
 void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolume* volume);
 void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean);
 void SemipermeableMembrane_restorePersistentFiles(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean);
 void SemipermeableMembrane_populateNext(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* next);
-void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolume* volume, char* slot);
 void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self);
 bool SemipermeableMembrane_volumeSeen(SemipermeableMembrane* self, btrc_Vector_MembraneVolume* volumes, char* name);
 void SemipermeableMembrane_readVolumes(SemipermeableMembrane* self, btrc_Vector_string* args);
@@ -896,12 +900,19 @@ struct MembraneMounts {
     MembraneFs* fs;
 };
 
+struct MembraneSlots {
+    int __rc;
+    MembraneFs* fs;
+    MembraneRun* run;
+};
+
 struct SemipermeableMembrane {
     int __rc;
     MembraneRun* run;
     MembraneFs* fs;
     MembranePlanner* planner;
     MembraneMounts* mounts;
+    MembraneSlots* slots;
     char* device;
     char* snapshotsSubvolume;
     char* cleanName;
@@ -7178,6 +7189,93 @@ void MembraneMounts_snapshotCleanAll(MembraneMounts* self, char* device, char* s
     MembraneRun_log(self->run, "snapshot-clean complete");
 }
 
+void MembraneSlots_init(MembraneSlots* self, MembraneFs* fs, MembraneRun* run) {
+    self->__rc = 1;
+    if (self->fs != NULL) {
+        if ((--self->fs->__rc) <= 0) {
+            MembraneFs_destroy(self->fs);
+        }
+    }
+    (self->fs = fs);
+    (fs->__rc++);
+    if (self->run != NULL) {
+        if ((--self->run->__rc) <= 0) {
+            MembraneRun_destroy(self->run);
+        }
+    }
+    (self->run = run);
+    (run->__rc++);
+}
+
+MembraneSlots* MembraneSlots_new(MembraneFs* fs, MembraneRun* run) {
+    MembraneSlots* self = ((MembraneSlots*)malloc(sizeof(MembraneSlots)));
+    memset(self, 0, sizeof(MembraneSlots));
+    MembraneSlots_init(self, fs, run);
+    return self;
+}
+
+void MembraneSlots_destroy(MembraneSlots* self) {
+    if (self->fs != NULL) {
+        if ((--self->fs->__rc) <= 0) {
+            MembraneFs_destroy(self->fs);
+        }
+    }
+    if (self->run != NULL) {
+        if ((--self->run->__rc) <= 0) {
+            MembraneRun_destroy(self->run);
+        }
+    }
+    if (__btrc_tracking) {
+        __btrc_mark_destroyed(self);
+    }
+    free(self);
+}
+
+void MembraneSlots_rotate(MembraneSlots* self, char* volume, char* live, char* snapshotsSubvolume) {
+    char* root = PathTools_join(snapshotsSubvolume, volume);
+    char* a = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_a()));
+    char* b = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_b()));
+    char* c = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_c()));
+    MembraneFs_deleteSubvolume(self->fs, c);
+    if (MembraneFs_exists(self->fs, b)) {
+        MembraneFs_snapshot(self->fs, b, c, true);
+        MembraneFs_deleteSubvolume(self->fs, b);
+    }
+    if (MembraneFs_exists(self->fs, a)) {
+        MembraneFs_snapshot(self->fs, a, b, true);
+        MembraneFs_deleteSubvolume(self->fs, a);
+    }
+    MembraneFs_snapshot(self->fs, live, a, true);
+}
+
+void MembraneSlots_publish(MembraneSlots* self, MembraneVolume* volume, char* live, char* next) {
+    if (!MembraneFs_exists(self->fs, next)) {
+        return;
+    }
+    if (((!self->run->dryRun) && (!(strcmp(volume->mountPoint, "/") == 0))) && MembraneFs_mounted(self->fs, volume->mountPoint)) {
+        MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("WRN ", volume->mountPoint)), " mounted; leaving NEXT for boot")));
+        return;
+    }
+    if (!MembraneFs_exists(self->fs, live)) {
+        MembraneRun_renamePath(self->run, next, live);
+        return;
+    }
+    MembraneRun_requireRaw(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("mv -T --exchange --no-copy ", UnixShell_quote(live))), " ")), UnixShell_quote(next))));
+    MembraneFs_deleteSubvolume(self->fs, next);
+}
+
+void MembraneSlots_restoreSlot(MembraneSlots* self, MembraneVolume* volume, char* slot, char* snapshotsSubvolume) {
+    char* root = PathTools_join(snapshotsSubvolume, volume->name);
+    char* live = MembraneRun_path(self->run, volume->name);
+    char* next = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_next()));
+    char* source = MembraneRun_path(self->run, PathTools_join(root, slot));
+    if ((!MembraneFs_exists(self->fs, source)) || (!MembraneFs_isSubvolume(self->fs, source))) {
+        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("restore source missing: ", source)));
+    }
+    MembraneFs_snapshot(self->fs, source, next, false);
+    MembraneSlots_publish(self, volume, live, next);
+}
+
 void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool assumeMounted) {
     self->__rc = 1;
     if (self->run != NULL) {
@@ -7208,6 +7306,13 @@ void SemipermeableMembrane_init(SemipermeableMembrane* self, bool dryRun, bool a
     }
     (self->mounts = MembraneMounts_new(self->run, self->fs));
     (MembraneMounts_new(self->run, self->fs)->__rc++);
+    if (self->slots != NULL) {
+        if ((--self->slots->__rc) <= 0) {
+            MembraneSlots_destroy(self->slots);
+        }
+    }
+    (self->slots = MembraneSlots_new(self->fs, self->run));
+    (MembraneSlots_new(self->fs, self->run)->__rc++);
     (self->device = "");
     (self->snapshotsSubvolume = "");
     (self->cleanName = "");
@@ -7261,6 +7366,11 @@ void SemipermeableMembrane_destroy(SemipermeableMembrane* self) {
     if (self->mounts != NULL) {
         if ((--self->mounts->__rc) <= 0) {
             MembraneMounts_destroy(self->mounts);
+        }
+    }
+    if (self->slots != NULL) {
+        if ((--self->slots->__rc) <= 0) {
+            MembraneSlots_destroy(self->slots);
         }
     }
     if (self->specs != NULL) {
@@ -7337,39 +7447,6 @@ void SemipermeableMembrane_pruneOrphans(SemipermeableMembrane* self) {
     }
 }
 
-void SemipermeableMembrane_rotate(SemipermeableMembrane* self, char* volume, char* live) {
-    char* root = PathTools_join(self->snapshotsSubvolume, volume);
-    char* a = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_a()));
-    char* b = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_b()));
-    char* c = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_c()));
-    MembraneFs_deleteSubvolume(self->fs, c);
-    if (MembraneFs_exists(self->fs, b)) {
-        MembraneFs_snapshot(self->fs, b, c, true);
-        MembraneFs_deleteSubvolume(self->fs, b);
-    }
-    if (MembraneFs_exists(self->fs, a)) {
-        MembraneFs_snapshot(self->fs, a, b, true);
-        MembraneFs_deleteSubvolume(self->fs, a);
-    }
-    MembraneFs_snapshot(self->fs, live, a, true);
-}
-
-void SemipermeableMembrane_publish(SemipermeableMembrane* self, MembraneVolume* volume, char* live, char* next) {
-    if (!MembraneFs_exists(self->fs, next)) {
-        return;
-    }
-    if (((!self->run->dryRun) && (!(strcmp(volume->mountPoint, "/") == 0))) && MembraneFs_mounted(self->fs, volume->mountPoint)) {
-        MembraneRun_log(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("WRN ", volume->mountPoint)), " mounted; leaving NEXT for boot")));
-        return;
-    }
-    if (!MembraneFs_exists(self->fs, live)) {
-        MembraneRun_renamePath(self->run, next, live);
-        return;
-    }
-    MembraneRun_requireRaw(self->run, __btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat(__btrc_str_track(__btrc_strcat("mv -T --exchange --no-copy ", UnixShell_quote(live))), " ")), UnixShell_quote(next))));
-    MembraneFs_deleteSubvolume(self->fs, next);
-}
-
 btrc_Vector_MembraneSpec* SemipermeableMembrane_specsForVolume(SemipermeableMembrane* self, char* volume) {
     btrc_Vector_MembraneSpec* result = btrc_Vector_MembraneSpec_new();
     int __n_356 = btrc_Vector_MembraneSpec_iterLen(self->specs);
@@ -7391,7 +7468,7 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
         MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("bad CLEAN: ", clean)));
     }
     if (!MembraneFs_exists(self->fs, live)) {
-        SemipermeableMembrane_publish(self, volume, live, next);
+        MembraneSlots_publish(self->slots, volume, live, next);
     }
     if (!MembraneFs_exists(self->fs, live)) {
         MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("live missing: ", live)));
@@ -7403,10 +7480,10 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
     btrc_Vector_MembranePlan* plans = MembranePlanner_makePlan(self->planner, SemipermeableMembrane_specsForVolume(self, volume->name), live, clean, self->persistRoot);
     SemipermeableMembrane_restorePersistentDirs(self, plans, live, clean);
     SemipermeableMembrane_restorePersistentFiles(self, plans, live, clean);
-    SemipermeableMembrane_rotate(self, volume->name, live);
+    MembraneSlots_rotate(self->slots, volume->name, live, self->snapshotsSubvolume);
     MembraneFs_snapshot(self->fs, clean, next, false);
     SemipermeableMembrane_populateNext(self, plans, next);
-    SemipermeableMembrane_publish(self, volume, live, next);
+    MembraneSlots_publish(self->slots, volume, live, next);
 }
 
 void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean) {
@@ -7465,18 +7542,6 @@ void SemipermeableMembrane_populateNext(SemipermeableMembrane* self, btrc_Vector
             }
         }
     }
-}
-
-void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolume* volume, char* slot) {
-    char* root = PathTools_join(self->snapshotsSubvolume, volume->name);
-    char* live = MembraneRun_path(self->run, volume->name);
-    char* next = MembraneRun_path(self->run, PathTools_join(root, MembraneConstants_next()));
-    char* source = MembraneRun_path(self->run, PathTools_join(root, slot));
-    if ((!MembraneFs_exists(self->fs, source)) || (!MembraneFs_isSubvolume(self->fs, source))) {
-        MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("restore source missing: ", source)));
-    }
-    MembraneFs_snapshot(self->fs, source, next, false);
-    SemipermeableMembrane_publish(self, volume, live, next);
 }
 
 void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self) {
@@ -7579,13 +7644,13 @@ void SemipermeableMembrane_runAll(SemipermeableMembrane* self) {
         if (((strcmp(self->mode, MembraneConstants_converge()) == 0) || (strcmp(self->mode, MembraneConstants_reset()) == 0)) || (strcmp(self->mode, MembraneConstants_prepareOnly()) == 0)) {
             SemipermeableMembrane_resetVolume(self, volume);
         } else if (strcmp(self->mode, MembraneConstants_snapshotOnly()) == 0) {
-            SemipermeableMembrane_rotate(self, volume->name, MembraneRun_path(self->run, volume->name));
+            MembraneSlots_rotate(self->slots, volume->name, MembraneRun_path(self->run, volume->name), self->snapshotsSubvolume);
         } else if ((strcmp(self->mode, MembraneConstants_restoreA()) == 0) || (strcmp(self->mode, MembraneConstants_restorePrevious()) == 0)) {
-            SemipermeableMembrane_restoreSlot(self, volume, MembraneConstants_a());
+            MembraneSlots_restoreSlot(self->slots, volume, MembraneConstants_a(), self->snapshotsSubvolume);
         } else if ((strcmp(self->mode, MembraneConstants_restoreB()) == 0) || (strcmp(self->mode, MembraneConstants_restorePenultimate()) == 0)) {
-            SemipermeableMembrane_restoreSlot(self, volume, MembraneConstants_b());
+            MembraneSlots_restoreSlot(self->slots, volume, MembraneConstants_b(), self->snapshotsSubvolume);
         } else if (strcmp(self->mode, MembraneConstants_restoreC()) == 0) {
-            SemipermeableMembrane_restoreSlot(self, volume, MembraneConstants_c());
+            MembraneSlots_restoreSlot(self->slots, volume, MembraneConstants_c(), self->snapshotsSubvolume);
         } else {
             MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("Unknown mode: ", self->mode)));
         }
