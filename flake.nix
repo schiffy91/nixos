@@ -47,37 +47,18 @@
           };
         };
     in {
-      btrcSrc = inputs.btrc;
-      apps = eachSystem (system: _pkgs: {
-        btrc = {
-          type = "app";
-          program = "${inputs.btrc.packages.${system}.btrcpy}/bin/btrcpy";
-        };
-        btrcpy = self.apps.${system}.btrc;
-        default = self.apps.${system}.btrc;
-      });
-      packages = eachSystem (system: _pkgs: {
-        btrc = inputs.btrc.packages.${system}.btrcpy;
-        btrcpy = inputs.btrc.packages.${system}.btrcpy;
-        default = inputs.btrc.packages.${system}.btrcpy;
-      });
       devShells = eachSystem (system: pkgs: {
-        btrc-build = pkgs.mkShell {
-          packages = with pkgs; [
-            inputs.btrc.packages.${system}.btrcpy
-            coreutils
-            gnumake
-            stdenv.cc
-          ];
-        };
         default = pkgs.mkShell {
           packages = with pkgs; [
             inputs.btrc.packages.${system}.btrcpy
             gnumake
             nixd
             git
+            coreutils
             stdenv.cc
           ];
+          # btrc source tree, for `make stdlib-sync-check`.
+          BTRC_SRC = inputs.btrc;
         };
       });
       nixosConfigurations = lib.listToAttrs (

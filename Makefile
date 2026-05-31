@@ -1,9 +1,5 @@
-NIXOS_FLAKE ?= .
-BTRC_APP ?= $(NIXOS_FLAKE)\#btrc
-BTRC_BUILD_SHELL ?= $(NIXOS_FLAKE)\#btrc-build
-BTRC_SRC_ATTR ?= $(NIXOS_FLAKE)\#btrcSrc
-BTRC ?= nix run "$(BTRC_APP)" --
-BTRC_BUILD ?= nix develop "$(BTRC_BUILD_SHELL)" --command
+# btrcpy and cc come from the dev shell (`nix develop`, or direnv via .envrc).
+BTRC ?= btrcpy
 PYTHON ?= python3
 CC ?= cc
 CFLAGS ?= -std=c11 -pedantic
@@ -43,10 +39,10 @@ $(MEMBRANE_C_OUT): $(SOURCES) | dirs
 build: $(BINS)
 
 $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT)
-	$(BTRC_BUILD) $(CC) $(CFLAGS) "$(CURDIR)/$(NIXOSCTL_C_OUT)" -o "$(CURDIR)/$(NIXOSCTL_BIN)" $(NIXOSCTL_LIBS)
+	$(CC) $(CFLAGS) "$(CURDIR)/$(NIXOSCTL_C_OUT)" -o "$(CURDIR)/$(NIXOSCTL_BIN)" $(NIXOSCTL_LIBS)
 
 $(MEMBRANE_BIN): $(MEMBRANE_C_OUT)
-	$(BTRC_BUILD) $(CC) $(CFLAGS) "$(CURDIR)/$(MEMBRANE_C_OUT)" -o "$(CURDIR)/$(MEMBRANE_BIN)" $(MEMBRANE_LIBS)
+	$(CC) $(CFLAGS) "$(CURDIR)/$(MEMBRANE_C_OUT)" -o "$(CURDIR)/$(MEMBRANE_BIN)" $(MEMBRANE_LIBS)
 
 generated: $(MEMBRANE_C_OUT) $(NIXOSCTL_C_OUT)
 	mkdir -p $(GENERATED_DIR)
@@ -67,8 +63,7 @@ check test: stdlib-sync-check quick stateful-host
 host-smoke: quick
 
 stdlib-sync-check:
-	btrc_src="$$(nix eval --raw "$(BTRC_SRC_ATTR)")"; \
-	diff -qr --exclude=build vendor/btrc-stdlib "$$btrc_src/src/stdlib"
+	diff -qr --exclude=build vendor/btrc-stdlib "$$BTRC_SRC/src/stdlib"
 
 app-settings: $(BIN)
 	$(MAKE) -C tests app-settings

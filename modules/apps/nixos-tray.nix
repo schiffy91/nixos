@@ -4,8 +4,8 @@
 # stdlib's Linux StatusNotifierItem shim, and runs it as a graphical-session
 # user service. Replaces the former PyQt6 tray daemon in helper.nix.
 #
-# Regenerate generated/nixos-tray.c with:
-#   nix run .#btrc -- --no-stdlib bin/nixos-tray.btrc -o build/nixos-tray.c \
+# Regenerate generated/nixos-tray.c with (inside the dev shell):
+#   btrcpy --no-stdlib bin/nixos-tray.btrc -o build/nixos-tray.c \
 #     && cp build/nixos-tray.c generated/nixos-tray.c
 let
   trayDir = "${inputs.btrc}/src/stdlib/tray";
