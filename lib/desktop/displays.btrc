@@ -87,23 +87,25 @@ class DisplayManager {
         for kind in ["HDMI", "DisplayPort", "VGA", "DVI", "Panel", "TV", "Unknown"] {
             if (block.contains("\t" + kind)) { output.kind = kind; }
         }
-        string geometry = self.lineValue(block, "Geometry: ");
-        if (!geometry.isEmpty()) {
-            Vector<string> parts = Strings.split(geometry, " ");
-            if (parts.len >= 2) {
-                Vector<string> xy = Strings.split(parts.get(0), ",");
-                Vector<string> wh = Strings.split(parts.get(1), "x");
-                if (xy.len >= 2) {
-                    output.x = Strings.toInt(xy.get(0));
-                    output.y = Strings.toInt(xy.get(1));
-                }
-                if (wh.len >= 2) {
-                    output.width = Strings.toInt(wh.get(0));
-                    output.height = Strings.toInt(wh.get(1));
-                }
-            }
-        }
+        self.applyGeometry(output, block);
         return output;
+    }
+
+    public void applyGeometry(DisplayOutput output, string block) {
+        string geometry = self.lineValue(block, "Geometry: ");
+        if (geometry.isEmpty()) { return; }
+        Vector<string> parts = Strings.split(geometry, " ");
+        if (parts.len < 2) { return; }
+        Vector<string> xy = Strings.split(parts.get(0), ",");
+        Vector<string> wh = Strings.split(parts.get(1), "x");
+        if (xy.len >= 2) {
+            output.x = Strings.toInt(xy.get(0));
+            output.y = Strings.toInt(xy.get(1));
+        }
+        if (wh.len >= 2) {
+            output.width = Strings.toInt(wh.get(0));
+            output.height = Strings.toInt(wh.get(1));
+        }
     }
 
     public Vector<DisplayOutput> outputs() {
@@ -176,10 +178,10 @@ class DisplayManager {
         if (display.name.isEmpty() || anchor.name.isEmpty() || !display.enabled) { return; }
         int px = anchor.x;
         int py = anchor.y;
-        if (selected.position.equals("left-of")) { px = anchor.x - display.width; py = anchor.y; }
-        if (selected.position.equals("right-of")) { px = anchor.x + anchor.width; py = anchor.y; }
-        if (selected.position.equals("above")) { px = anchor.x; py = anchor.y - display.height; }
-        if (selected.position.equals("below")) { px = anchor.x; py = anchor.y + anchor.height; }
+        if (selected.position.equals("left-of")) { px = anchor.x - display.width; }
+        else if (selected.position.equals("right-of")) { px = anchor.x + anchor.width; }
+        else if (selected.position.equals("above")) { py = anchor.y - display.height; }
+        else if (selected.position.equals("below")) { py = anchor.y + anchor.height; }
         self.run("output." + display.name + ".position." + Strings.fromInt(px) + "," + Strings.fromInt(py));
     }
 

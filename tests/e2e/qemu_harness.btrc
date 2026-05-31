@@ -486,26 +486,22 @@ class QemuE2eHarness {
         return FileSystem.exists(self.backingDiskFile());
     }
 
-    public string sshOptionsForShell() {
+    public Vector<string> sshOptionList() {
         Vector<string> opts = [];
-        opts.push("-o");
-        opts.push("StrictHostKeyChecking=no");
-        opts.push("-o");
-        opts.push("UserKnownHostsFile=/dev/null");
-        opts.push("-o");
-        opts.push("LogLevel=ERROR");
-        opts.push("-o");
-        opts.push("BatchMode=yes");
-        opts.push("-o");
-        opts.push("IdentitiesOnly=yes");
-        opts.push("-o");
-        opts.push("ConnectTimeout=3");
-        opts.push("-o");
-        opts.push("ConnectionAttempts=1");
-        opts.push("-i");
-        opts.push(self.sshKeyPath());
+        opts.push("-o"); opts.push("StrictHostKeyChecking=no");
+        opts.push("-o"); opts.push("UserKnownHostsFile=/dev/null");
+        opts.push("-o"); opts.push("LogLevel=ERROR");
+        opts.push("-o"); opts.push("BatchMode=yes");
+        opts.push("-o"); opts.push("IdentitiesOnly=yes");
+        opts.push("-o"); opts.push("ConnectTimeout=3");
+        opts.push("-o"); opts.push("ConnectionAttempts=1");
+        opts.push("-i"); opts.push(self.sshKeyPath());
+        return opts;
+    }
 
+    public string sshOptionsForShell() {
         Vector<string> quoted = [];
+        Vector<string> opts = self.sshOptionList();
         for opt in opts {
             quoted.push(UnixShell.quote(opt));
         }
@@ -631,43 +627,45 @@ class QemuE2eHarness {
         cmd.arg(self.tpmQemuDevice() + ",tpmdev=tpm0");
     }
 
-    public void start(bool fromIso) {
-        self.ensureWorkDir();
-        if (FileSystem.exists(self.pidPath())) {
-            NixosLog.info("QEMU pidfile exists; assuming VM is already running");
-            return;
-        }
-        Command cmd = Command(self.qemuBinary());
+    public void addAccelerator(Command cmd) {
         if (self.isDarwin()) {
             cmd.arg("-accel");
             cmd.arg(self.hostArchMatchesGuest() ? "hvf" : "tcg");
+        } else if (self.hostArchMatchesGuest()) {
+            cmd.arg("-enable-kvm");
         } else {
-            if (self.hostArchMatchesGuest()) {
-                cmd.arg("-enable-kvm");
-            } else {
-                cmd.arg("-accel");
-                cmd.arg("tcg");
-            }
+            cmd.arg("-accel");
+            cmd.arg("tcg");
         }
-        if (self.spec.arch.equals("aarch64")) {
-            cmd.arg("-machine");
-            cmd.arg("virt");
-            cmd.arg("-cpu");
-            cmd.arg(self.hostArchMatchesGuest() ? "host" : "max");
-            cmd.arg("-device");
-            cmd.arg("virtio-rng-pci");
-        }
-        self.addFirmware(cmd, fromIso);
+    }
+
+    public void addMachine(Command cmd) {
+        if (!self.spec.arch.equals("aarch64")) { return; }
+        cmd.arg("-machine");
+        cmd.arg("virt");
+        cmd.arg("-cpu");
+        cmd.arg(self.hostArchMatchesGuest() ? "host" : "max");
+        cmd.arg("-device");
+        cmd.arg("virtio-rng-pci");
+    }
+
+    public void addMemoryCpus(Command cmd) {
         cmd.arg("-m");
         cmd.arg(self.spec.memory);
         cmd.arg("-smp");
         cmd.arg(Strings.fromInt(self.spec.cpus));
+    }
+
+    public void addStorageAndNetwork(Command cmd) {
         cmd.arg("-drive");
         cmd.arg("file=" + self.diskPath() + ",format=qcow2,if=virtio,cache=none");
         cmd.arg("-netdev");
         cmd.arg("user,id=net0,hostfwd=tcp::" + Strings.fromInt(self.spec.sshPort) + "-:22");
         cmd.arg("-device");
         cmd.arg("virtio-net-pci,netdev=net0");
+    }
+
+    public void addConsole(Command cmd) {
         cmd.arg("-display");
         cmd.arg("none");
         cmd.arg("-serial");
@@ -676,25 +674,43 @@ class QemuE2eHarness {
         cmd.arg("unix:" + self.monitorPath() + ",server,nowait");
         cmd.arg("-qmp");
         cmd.arg("unix:" + self.qmpPath() + ",server,nowait");
-        self.addTpm2(cmd);
-        if (fromIso) {
-            if (self.spec.arch.equals("x86_64") && !self.shouldUseUefi(fromIso)) {
-                self.extractBootSerial();
-                cmd.arg("-kernel");
-                cmd.arg(Path.readAll(self.bootKernelFile()).trim());
-                cmd.arg("-initrd");
-                cmd.arg(Path.readAll(self.bootInitrdFile()).trim());
-                cmd.arg("-append");
-                cmd.arg(Path.readAll(self.bootAppendFile()).trim());
-                cmd.arg("-cdrom");
-                cmd.arg(self.spec.iso);
-            } else {
-                cmd.arg("-cdrom");
-                cmd.arg(self.spec.iso);
-                cmd.arg("-boot");
-                cmd.arg("d");
-            }
+    }
+
+    public void addBootMedia(Command cmd, bool fromIso) {
+        if (!fromIso) { return; }
+        if (self.spec.arch.equals("x86_64") && !self.shouldUseUefi(fromIso)) {
+            self.extractBootSerial();
+            cmd.arg("-kernel");
+            cmd.arg(Path.readAll(self.bootKernelFile()).trim());
+            cmd.arg("-initrd");
+            cmd.arg(Path.readAll(self.bootInitrdFile()).trim());
+            cmd.arg("-append");
+            cmd.arg(Path.readAll(self.bootAppendFile()).trim());
+            cmd.arg("-cdrom");
+            cmd.arg(self.spec.iso);
+        } else {
+            cmd.arg("-cdrom");
+            cmd.arg(self.spec.iso);
+            cmd.arg("-boot");
+            cmd.arg("d");
         }
+    }
+
+    public void start(bool fromIso) {
+        self.ensureWorkDir();
+        if (FileSystem.exists(self.pidPath())) {
+            NixosLog.info("QEMU pidfile exists; assuming VM is already running");
+            return;
+        }
+        Command cmd = Command(self.qemuBinary());
+        self.addAccelerator(cmd);
+        self.addMachine(cmd);
+        self.addFirmware(cmd, fromIso);
+        self.addMemoryCpus(cmd);
+        self.addStorageAndNetwork(cmd);
+        self.addConsole(cmd);
+        self.addTpm2(cmd);
+        self.addBootMedia(cmd, fromIso);
         self.prepareSerialPipe();
         self.startSerialReader();
         cmd.arg("-daemonize");
@@ -761,15 +777,11 @@ class QemuE2eHarness {
     }
 
     public Command addSshOptions(Command cmd) {
-        return cmd
-            .arg("-o").arg("StrictHostKeyChecking=no")
-            .arg("-o").arg("UserKnownHostsFile=/dev/null")
-            .arg("-o").arg("LogLevel=ERROR")
-            .arg("-o").arg("BatchMode=yes")
-            .arg("-o").arg("IdentitiesOnly=yes")
-            .arg("-o").arg("ConnectTimeout=3")
-            .arg("-o").arg("ConnectionAttempts=1")
-            .arg("-i").arg(self.sshKeyPath());
+        Vector<string> opts = self.sshOptionList();
+        for opt in opts {
+            cmd.arg(opt);
+        }
+        return cmd;
     }
 
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
