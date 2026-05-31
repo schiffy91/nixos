@@ -505,6 +505,9 @@ bool SemipermeableMembrane_planAlreadyCovers(SemipermeableMembrane* self, btrc_V
 btrc_Vector_MembranePlan* SemipermeableMembrane_makePlan(SemipermeableMembrane* self, btrc_Vector_MembraneSpec* specs, char* live, char* clean);
 btrc_Vector_MembraneSpec* SemipermeableMembrane_specsForVolume(SemipermeableMembrane* self, char* volume);
 void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolume* volume);
+void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean);
+void SemipermeableMembrane_restorePersistentFiles(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean);
+void SemipermeableMembrane_populateNext(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* next);
 void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolume* volume, char* slot);
 void SemipermeableMembrane_readSpecs(SemipermeableMembrane* self);
 bool SemipermeableMembrane_volumeSeen(SemipermeableMembrane* self, btrc_Vector_MembraneVolume* volumes, char* name);
@@ -7114,6 +7117,15 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
     }
     SemipermeableMembrane_deleteSubvolume(self, next);
     btrc_Vector_MembranePlan* plans = SemipermeableMembrane_makePlan(self, SemipermeableMembrane_specsForVolume(self, volume->name), live, clean);
+    SemipermeableMembrane_restorePersistentDirs(self, plans, live, clean);
+    SemipermeableMembrane_restorePersistentFiles(self, plans, live, clean);
+    SemipermeableMembrane_rotate(self, volume->name, live);
+    SemipermeableMembrane_snapshot(self, clean, next, false);
+    SemipermeableMembrane_populateNext(self, plans, next);
+    SemipermeableMembrane_publish(self, volume, live, next);
+}
+
+void SemipermeableMembrane_restorePersistentDirs(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean) {
     int __n_348 = btrc_Vector_MembranePlan_iterLen(plans);
     for (int __i_347 = 0; (__i_347 < __n_348); (__i_347++)) {
         MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_347);
@@ -7131,6 +7143,9 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
             MembraneRun_fatal(self->run, __btrc_str_track(__btrc_strcat("not a subvolume: ", store)));
         }
     }
+}
+
+void SemipermeableMembrane_restorePersistentFiles(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* live, char* clean) {
     int __n_350 = btrc_Vector_MembranePlan_iterLen(plans);
     for (int __i_349 = 0; (__i_349 < __n_350); (__i_349++)) {
         MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_349);
@@ -7149,8 +7164,9 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
             MembraneRun_removePath(self->run, destination);
         }
     }
-    SemipermeableMembrane_rotate(self, volume->name, live);
-    SemipermeableMembrane_snapshot(self, clean, next, false);
+}
+
+void SemipermeableMembrane_populateNext(SemipermeableMembrane* self, btrc_Vector_MembranePlan* plans, char* next) {
     int __n_352 = btrc_Vector_MembranePlan_iterLen(plans);
     for (int __i_351 = 0; (__i_351 < __n_352); (__i_351++)) {
         MembranePlan* plan = btrc_Vector_MembranePlan_iterGet(plans, __i_351);
@@ -7165,7 +7181,6 @@ void SemipermeableMembrane_resetVolume(SemipermeableMembrane* self, MembraneVolu
             }
         }
     }
-    SemipermeableMembrane_publish(self, volume, live, next);
 }
 
 void SemipermeableMembrane_restoreSlot(SemipermeableMembrane* self, MembraneVolume* volume, char* slot) {

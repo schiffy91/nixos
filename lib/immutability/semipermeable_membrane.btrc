@@ -598,6 +598,16 @@ class SemipermeableMembrane {
         self.deleteSubvolume(next);
 
         Vector<MembranePlan> plans = self.makePlan(self.specsForVolume(volume.name), live, clean);
+        self.restorePersistentDirs(plans, live, clean);
+        self.restorePersistentFiles(plans, live, clean);
+
+        self.rotate(volume.name, live);
+        self.snapshot(clean, next, false);
+        self.populateNext(plans, next);
+        self.publish(volume, live, next);
+    }
+
+    public void restorePersistentDirs(Vector<MembranePlan> plans, string live, string clean) {
         for plan in plans {
             if (!plan.kind.equals("dir")) { continue; }
             string store = self.run.path(plan.store);
@@ -611,6 +621,9 @@ class SemipermeableMembrane {
                 self.run.fatal("not a subvolume: " + store);
             }
         }
+    }
+
+    public void restorePersistentFiles(Vector<MembranePlan> plans, string live, string clean) {
         for plan in plans {
             if (!plan.kind.equals("file")) { continue; }
             string destination = self.run.path(plan.store);
@@ -625,9 +638,9 @@ class SemipermeableMembrane {
                 self.run.removePath(destination);
             }
         }
+    }
 
-        self.rotate(volume.name, live);
-        self.snapshot(clean, next, false);
+    public void populateNext(Vector<MembranePlan> plans, string next) {
         for plan in plans {
             string target = PathTools.join(next, plan.spec.relPath);
             self.run.removePath(target);
@@ -640,7 +653,6 @@ class SemipermeableMembrane {
                 }
             }
         }
-        self.publish(volume, live, next);
     }
 
     public void restoreSlot(MembraneVolume volume, string slot) {
