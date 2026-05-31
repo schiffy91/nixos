@@ -1,0 +1,164 @@
+/* VM state lifecycle: qcow2-backed state inheritance from a parent, the state
+ * record/metadata, and status/snapshot queries.
+ *
+ * Holds spec + shell + the firmware collaborator (for firmware-vars/TPM paths
+ * and capability flags in the metadata). The disk-mutating snapshot/restore and
+ * the stop-then-wipe resetState stay on the harness (they orchestrate stop());
+ * the harness reads queries here via self.state and delegates the runner-facing
+ * methods.
+ */
+class VmStateStore {
+    public VmTestSpec spec;
+    public UnixShell shell;
+    public QemuFirmware firmware;
+
+    public VmStateStore(VmTestSpec spec, QemuFirmware firmware) {
+        self.spec = spec;
+        self.shell = UnixShell();
+        self.firmware = firmware;
+    }
+
+    public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
+    public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
+    public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
+    public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
+    public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
+    public string parentWorkDirFile() { return PathTools.join(self.parentStateDir(), "workDir"); }
+    public string backingDiskFile() { return PathTools.join(self.spec.workDir, "backing-disk"); }
+
+    public void ensureWorkDir() {
+        FileSystem.mkdirp(self.spec.workDir);
+        FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
+    }
+
+    public string absolutePath(string path) {
+        Command command = Command("sh")
+            .arg("-c")
+            .arg("cd " + UnixShell.quote(PathTools.dirname(path)) + " && printf '%s/%s' \"$PWD\" " + UnixShell.quote(PathTools.basename(path)));
+        ExecResult result = self.shell.runCommand(command);
+        if (!result.ok()) { NixosLog.fatal("Failed to resolve path " + path); }
+        return result.trimmed();
+    }
+
+    public void cleanStateRecord() {
+        FileSystem.removeRecursive(self.spec.stateDir());
+    }
+
+    public void requireParentState() {
+        if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
+        if (!FileSystem.exists(self.spec.parentHashFile())) {
+            NixosLog.fatal(f"Missing parent state {self.spec.parentState}; run its test first");
+        }
+    }
+
+    public void copyIfExists(string source, string target) {
+        if (!FileSystem.exists(source)) { return; }
+        Command cp = Command("cp").arg(source).arg(target).capture(false);
+        ExecResult result = self.shell.runCommand(cp);
+        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
+    }
+
+    public void copyTreeIfExists(string source, string target) {
+        if (!FileSystem.exists(source)) { return; }
+        FileSystem.removeRecursive(target);
+        Command cp = Command("cp").arg("-R").arg(source).arg(target).capture(false);
+        ExecResult result = self.shell.runCommand(cp);
+        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }
+    }
+
+    public void inheritState() {
+        self.requireParentState();
+        if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
+        if (!FileSystem.exists(self.parentWorkDirFile())) {
+            NixosLog.fatal(f"Parent state {self.spec.parentState} has no workDir record");
+        }
+        string parentWorkDir = Path.readAll(self.parentWorkDirFile()).trim();
+        self.ensureWorkDir();
+        string parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
+        if (!FileSystem.exists(self.diskPath()) && FileSystem.exists(parentDisk)) {
+            string backing = self.absolutePath(parentDisk);
+            Command create = Command("qemu-img")
+                .arg("create")
+                .arg("-f")
+                .arg("qcow2")
+                .arg("-F")
+                .arg("qcow2")
+                .arg("-b")
+                .arg(backing)
+                .arg(self.diskPath())
+                .capture(false);
+            ExecResult result = self.shell.runCommand(create);
+            if (!result.ok()) { NixosLog.fatal("Failed to create qcow2 state delta for " + self.spec.state); }
+            Path.writeAll(self.backingDiskFile(), backing + "\n");
+        }
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519"), self.sshKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519.pub"), self.sshPubKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmware.firmwareVarsPath());
+        self.copyTreeIfExists(PathTools.join(parentWorkDir, "tpm"), self.firmware.tpmDir());
+    }
+
+    public void recordState() {
+        FileSystem.mkdirp(self.spec.stateDir());
+        Path.writeAll(self.spec.stateHashFile(), self.spec.stateHash + "\n");
+        Path.writeAll(PathTools.join(self.spec.stateDir(), "workDir"), self.spec.workDir + "\n");
+        JsonObject metadata = JsonObject();
+        metadata.setString("state", self.spec.state);
+        metadata.setString("parentState", self.spec.parentState);
+        metadata.setString("parentHash", self.spec.parentHash);
+        metadata.setString("hash", self.spec.stateHash);
+        metadata.setString("hashShort", self.spec.stateHashShort);
+        metadata.setString("workDir", self.spec.workDir);
+        metadata.setString("iso", self.spec.iso);
+        metadata.setString("isoUrl", self.spec.isoUrl);
+        metadata.setString("disk", self.diskPath());
+        metadata.setString("uefi", self.firmware.uefiEnabled() ? "true" : "false");
+        metadata.setString("secureBoot", self.firmware.secureBootEnabled() ? "true" : "false");
+        metadata.setString("tpm2", self.firmware.tpm2Enabled() ? "true" : "false");
+        if (FileSystem.exists(self.backingDiskFile())) {
+            metadata.setString("delta", "qcow2-backing");
+            metadata.setString("backingDisk", Path.readAll(self.backingDiskFile()).trim());
+        } else {
+            metadata.setString("delta", "base");
+        }
+        metadata.writeFile(PathTools.join(self.spec.stateDir(), "metadata.json"));
+    }
+
+    public bool isRunning() {
+        if (!FileSystem.exists(self.pidPath())) { return false; }
+        ExecResult result = self.shell.runRaw("kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null", false, false, "");
+        return result.ok();
+    }
+
+    public bool hasSnapshot(string name) {
+        if (!FileSystem.exists(self.diskPath())) { return false; }
+        ExecResult result = self.shell.runUnchecked("qemu-img snapshot -l " + UnixShell.quote(self.diskPath()) + " | awk '{print $2}'");
+        if (!result.ok()) { return false; }
+        Vector<string> lines = Strings.split(result.stdout(), "\n");
+        for line in lines {
+            if (line.trim().equals(name)) { return true; }
+        }
+        return false;
+    }
+
+    public bool hasBackingDisk() {
+        return FileSystem.exists(self.backingDiskFile());
+    }
+
+    public void printStatus() {
+        string recorded = "no";
+        if (FileSystem.exists(self.spec.stateHashFile())) {
+            string savedHash = Path.readAll(self.spec.stateHashFile()).trim();
+            recorded = savedHash.equals(self.spec.stateHash) ? "yes" : "stale";
+        }
+        Console.log("State:     " + self.spec.state);
+        Console.log("Hash:      " + self.spec.stateHash);
+        Console.log("Parent:    " + self.spec.parentState + " (" + self.spec.parentHash + ")");
+        Console.log("Work dir:  " + self.spec.workDir);
+        Console.log("Arch:      " + self.spec.arch);
+        Console.log("ISO:       " + (FileSystem.exists(self.spec.iso) ? "yes" : "no") + " " + self.spec.iso);
+        Console.log("Disk:      " + (FileSystem.exists(self.diskPath()) ? "yes" : "no") + " " + self.diskPath());
+        Console.log("SSH key:   " + (FileSystem.exists(self.sshKeyPath()) ? "yes" : "no") + " " + self.sshKeyPath());
+        Console.log("Running:   " + (self.isRunning() ? "yes" : "no"));
+        Console.log("Recorded:  " + recorded + " " + self.spec.stateDir());
+    }
+}
