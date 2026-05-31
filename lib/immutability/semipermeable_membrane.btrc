@@ -22,4 +22,5 @@
 #include "membrane/planner.btrc"
 #include "membrane/mounts.btrc"
 #include "membrane/slots.btrc"
+#include "membrane/config.btrc"
 #include "membrane/membrane.btrc"
