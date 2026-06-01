@@ -10,7 +10,9 @@ coverage/
 .coverage
 .claude
 /result
-modules/apps/pkg-overrides/proton-custom/src/
-modules/apps/pkg-overrides/test/.build/
+nix/apps/pkg-overrides/proton-custom/src/
+nix/apps/pkg-overrides/test/.build/
 build/
 .btrc-cache/
+generated/
+bin/

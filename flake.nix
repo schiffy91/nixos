@@ -17,7 +17,7 @@
       isHostEntry = path: lib.hasSuffix ".nix" path && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
       systemModuleFiles = lib.filter
         (path: lib.hasSuffix ".nix" path && baseNameOf path != "disk-operation.nix")
-        (lib.filesystem.listFilesRecursive ./modules/system);
+        (lib.filesystem.listFilesRecursive ./nix/system);
       mkNixosSystem = hostFile: target:
         let
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
@@ -26,7 +26,7 @@
             if lib.hasInfix "Boot" target then
               [{ settings.boot.method = lib.mkForce target; }] ++ systemModuleFiles
             else
-              [ ./modules/system/disk-operation.nix ];
+              [ ./nix/system/disk-operation.nix ];
           pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
         in {
           name = "${name}-${target}";
@@ -34,7 +34,7 @@
             inherit system;
             specialArgs = { inherit self inputs pkgs-unstable; };
             modules = [{
-              imports = [ ./modules/settings.nix hostFile ] ++ targetModules;
+              imports = [ ./nix/settings.nix hostFile ] ++ targetModules;
               config = {
                 nix = {
                   channel.enable = false;
@@ -64,7 +64,7 @@
           (mkNixosSystem hostFile "Disk-Operation")
           (mkNixosSystem hostFile "Standard-Boot")
           (mkNixosSystem hostFile "Secure-Boot")
-        ]) (lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./modules/hosts))
+        ]) (lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./nix/hosts))
       );
     };
 }

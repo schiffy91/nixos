@@ -1,0 +1,64 @@
+import std.*;
+import ../core/*;
+import ../system/{config,rebuild}.btrc;
+
+class Tpm2Manager {
+    public NixosConfig config;
+    public UnixShell shell;
+
+    public Tpm2Manager(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+    }
+
+    public bool exists() {
+        if (!FileSystem.exists(self.config.tpmDevice())) { return false; }
+        string version = Path.readAll(self.config.tpmVersionPath()).trim();
+        return version.equals("2");
+    }
+
+    public bool diskEncrypted() {
+        Command cmd = Command("cryptsetup");
+        cmd.arg("isLuks");
+        cmd.arg(self.config.rootPartLabelPath());
+        cmd.check(false);
+        ExecResult result = self.shell.runCommand(cmd);
+        return result.ok();
+    }
+
+    public bool enroll() {
+        Command cmd = Command("systemd-cryptenroll");
+        cmd.arg(self.config.rootPartLabelPath());
+        cmd.arg("--wipe-slot=tpm2");
+        cmd.arg("--tpm2-device=" + self.config.tpmDevice());
+        cmd.arg("--tpm2-pcrs=7+12");
+        cmd.capture(false);
+        cmd.check(false);
+        return self.shell.runCommand(cmd).ok();
+    }
+
+    public bool wipe() {
+        Command cmd = Command("systemd-cryptenroll");
+        cmd.arg(self.config.rootPartLabelPath());
+        cmd.arg("--wipe-slot=tpm2");
+        cmd.capture(false);
+        cmd.check(false);
+        return self.shell.runCommand(cmd).ok();
+    }
+
+    public void status() {
+        Console.log("TPM2 device: " + self.config.tpmDevice());
+        Command list = Command("systemd-cryptenroll")
+            .arg("--tpm2-device=list")
+            .arg(self.config.rootPartLabelPath())
+            .capture(false)
+            .check(false);
+        self.shell.runCommand(list);
+        Command dump = Command("cryptsetup")
+            .arg("luksDump")
+            .arg(self.config.rootPartLabelPath())
+            .capture(false)
+            .check(false);
+        self.shell.runCommand(dump);
+    }
+}

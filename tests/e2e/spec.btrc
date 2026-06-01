@@ -1,3 +1,13 @@
+import std.*;
+import ../../btrc/core/*;
+import ./spec/*;
+import ./qemu/*;
+import ./graph/*;
+import ./spec.btrc;
+import ./qemu_harness.btrc;
+import ./runner.btrc;
+import ./graph.btrc;
+
 /* VM test spec — module aggregator (one class per file under spec/).
  * btrc #include is textual, so the transpiled C is identical to the former
  * single file. Dependency order: operation -> spec -> parser.
@@ -6,6 +16,3 @@
  *   test_spec   VmTestSpec     — a scenario (state + operations)
  *   parser      VmSpecParser   — JSON -> VmTestSpec
  */
-#include "spec/operation.btrc"
-#include "spec/test_spec.btrc"
-#include "spec/parser.btrc"

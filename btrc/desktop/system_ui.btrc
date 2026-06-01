@@ -1,0 +1,30 @@
+import std.*;
+import ../core/*;
+import ../system/config.btrc;
+
+class SystemUi {
+    public UnixShell shell;
+
+    public SystemUi() {
+        self.shell = UnixShell();
+    }
+
+    public void terminal(string command) {
+        Command cmd = Command("konsole")
+            .arg("-e")
+            .arg("bash")
+            .arg("-c")
+            .arg(command + "; echo; read -rp 'Press enter to close...'");
+        cmd.capture(false);
+        cmd.check(false);
+        self.shell.runCommand(cmd);
+    }
+
+    public void update() {
+        self.terminal("sudo nixosctl update");
+    }
+
+    public void upgrade() {
+        self.terminal("sudo nixosctl upgrade");
+    }
+}

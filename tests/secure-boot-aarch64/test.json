@@ -5,7 +5,7 @@
   "stateMaterial": "secure-boot-aarch64:lanzaboote:secboot-fw:hvf:tpm2=true:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
   "args": {
     "immutabilityVersion": "v2",
-    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset",
     "immutabilityEnabled": "true",
     "bootTarget": "Secure-Boot",

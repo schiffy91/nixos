@@ -1,0 +1,24 @@
+import std.*;
+import ./*;
+
+class ImmutabilityConstants {
+    class string topBase() { return "/run/immutability-top"; }
+    class string dirs() { return "dirs"; }
+    class string meta() { return ".immutability"; }
+    class string files() { return "files"; }
+    class string next() { return "NEXT"; }
+    class string a() { return "A"; }
+    class string b() { return "B"; }
+    class string c() { return "C"; }
+    class string disabled() { return "disabled"; }
+    class string converge() { return "converge"; }
+    class string reset() { return "reset"; }
+    class string prepareOnly() { return "prepare-only"; }
+    class string snapshotOnly() { return "snapshot-only"; }
+    class string restoreA() { return "restore-a"; }
+    class string restoreB() { return "restore-b"; }
+    class string restoreC() { return "restore-c"; }
+    class string restorePrevious() { return "restore-previous"; }
+    class string restorePenultimate() { return "restore-penultimate"; }
+}
+

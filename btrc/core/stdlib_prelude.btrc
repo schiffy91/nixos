@@ -1,0 +1,3 @@
+import std.*;
+
+/* Canonical stdlib import for strict, program-only builds. */

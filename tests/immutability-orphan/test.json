@@ -5,7 +5,7 @@
   "stateMaterial": "immutability-test:orphan:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}",
   "args": {
     "immutabilityVersion": "v2",
-    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset"
   },
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",

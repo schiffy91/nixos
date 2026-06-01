@@ -1,3 +1,7 @@
+import std.*;
+import ../../../btrc/core/*;
+import ./*;
+
 class VmTestSpec {
     public string name;
     public string workDir;

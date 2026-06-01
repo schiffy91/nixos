@@ -1,0 +1,9 @@
+import std.*;
+import ../core/log.btrc;
+import ./runtime.btrc;
+
+int main(int argc, char** argv) {
+    CliArgs args = CliArgs(argc, argv);
+    int code = Immutability.cli(args);
+    return code;
+}

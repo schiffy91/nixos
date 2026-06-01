@@ -5,7 +5,7 @@
   "stateMaterial": "immutability-test:restore:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}",
   "args": {
     "immutabilityVersion": "v2",
-    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset"
   },
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
@@ -29,11 +29,11 @@
     { "op": "guest", "command": "test ! -e /root/gen && printf wiped", "expect": "wiped" },
     { "op": "guest", "command": "set -e; echo GAMMA > /root/gen" },
 
-    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-previous\"/g' /etc/nixos/modules/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-previous\"/g' /etc/nixos/nix/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "cat /root/gen", "expect": "BETA" },
 
-    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/modules/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/nix/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "cat /root/gen", "expect": "ALPHA" },
 

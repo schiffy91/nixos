@@ -1,3 +1,8 @@
+import std.*;
+import ../../../btrc/core/*;
+import ../spec/*;
+import ./*;
+
 /* Host/QEMU capabilities, UEFI/EDK2 firmware discovery + vars, swept-TPM
  * (swtpm), and the QEMU command fragments for firmware and TPM.
  *

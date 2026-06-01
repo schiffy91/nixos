@@ -7,7 +7,7 @@
     "encryption": "true",
     "tpm2": "true",
     "immutabilityVersion": "v2",
-    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset",
     "immutabilityEnabled": "true",
     "bootloader": "systemd-boot",

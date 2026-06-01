@@ -1,3 +1,8 @@
+import std.*;
+import ../../../btrc/core/*;
+import ../spec/*;
+import ./*;
+
 /* Assembles the QEMU argv for a boot: accelerator, machine/cpu, firmware, RAM/
  * CPUs, disk + user-net, console sockets, TPM, and boot media. build() returns
  * the Command up to (but not including) -daemonize/-pidfile, which start() adds.

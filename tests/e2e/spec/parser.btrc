@@ -1,3 +1,7 @@
+import std.*;
+import ../../../btrc/core/*;
+import ./*;
+
 class VmSpecParser {
     class string hostArch() {
         UnixShell shell = UnixShell();

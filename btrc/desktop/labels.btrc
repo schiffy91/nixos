@@ -1,0 +1,71 @@
+import std.*;
+import ../core/*;
+import ../system/config.btrc;
+
+class DisplayLayoutRule {
+    public string display;
+    public string position;
+    public string relativeTo;
+
+    public DisplayLayoutRule() {
+        self.display = "";
+        self.position = "";
+        self.relativeTo = "";
+    }
+}
+
+class AudioPreset {
+    public string label;
+    public string card;
+    public string profile;
+    public string sink;
+    public string volume;
+
+    public AudioPreset() {
+        self.label = "";
+        self.card = "";
+        self.profile = "";
+        self.sink = "";
+        self.volume = "";
+    }
+}
+
+class LabelsConfig {
+    public string path;
+    public string content;
+
+    public LabelsConfig() {
+        self.path = Environment.get("NIXOS_CONFIG", "");
+        self.content = self.path.isEmpty() ? "" : Path.readAll(self.path);
+    }
+
+    public string displayLabel(string name) {
+        return Toml.sectionMap(self.content, "displays").getOrDefault(name, name);
+    }
+
+    public Vector<DisplayLayoutRule> layoutRules() {
+        Vector<DisplayLayoutRule> result = [];
+        for block in Toml.tableArrayBlocks(self.content, "layout") {
+            DisplayLayoutRule rule = DisplayLayoutRule();
+            rule.display = block.getOrDefault("display", "");
+            rule.position = block.getOrDefault("position", "");
+            rule.relativeTo = block.getOrDefault("relative_to", "");
+            if (!rule.display.isEmpty()) { result.push(rule); }
+        }
+        return result;
+    }
+
+    public Vector<AudioPreset> audioPresets() {
+        Vector<AudioPreset> result = [];
+        for block in Toml.tableArrayBlocks(self.content, "audio") {
+            AudioPreset preset = AudioPreset();
+            preset.label = block.getOrDefault("label", "");
+            preset.card = block.getOrDefault("card", "");
+            preset.profile = block.getOrDefault("profile", "");
+            preset.sink = block.getOrDefault("sink", "");
+            preset.volume = block.getOrDefault("volume", "");
+            if (!preset.sink.isEmpty() || !preset.label.isEmpty()) { result.push(preset); }
+        }
+        return result;
+    }
+}

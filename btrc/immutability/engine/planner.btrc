@@ -1,0 +1,78 @@
+import std.*;
+import ./*;
+
+/* Turns the persist specs into an ordered, de-duplicated plan: stable spec
+ * ordering (shallowest first), auto dir/file kind resolution against the live
+ * or clean tree, and ancestor-coverage pruning. Pure planning over the fs
+ * collaborator; the engine calls makePlan() with the run's persistRoot.
+ */
+class ImmutabilityPlanner {
+    public ImmutabilityFs fs;
+
+    public ImmutabilityPlanner(ImmutabilityFs fs) {
+        self.fs = fs;
+    }
+
+    public int compareSpecs(ImmutabilitySpec left, ImmutabilitySpec right) {
+        int volume = Strings.compare(left.volume, right.volume);
+        if (volume != 0) { return volume; }
+        int leftDepth = Strings.count(left.relPath, "/");
+        int rightDepth = Strings.count(right.relPath, "/");
+        if (leftDepth != rightDepth) { return leftDepth - rightDepth; }
+        if (left.relPath.len() != right.relPath.len()) { return left.relPath.len() - right.relPath.len(); }
+        return Strings.compare(left.relPath, right.relPath);
+    }
+
+    public void pushSpecSorted(Vector<ImmutabilitySpec> specs, ImmutabilitySpec spec) {
+        int index = 0;
+        while (index < specs.len && self.compareSpecs(specs.get(index), spec) <= 0) {
+            index++;
+        }
+        specs.insert(index, spec);
+    }
+
+    public Vector<ImmutabilitySpec> sortedSpecs(Vector<ImmutabilitySpec> input) {
+        Vector<ImmutabilitySpec> sorted = [];
+        for spec in input {
+            self.pushSpecSorted(sorted, spec);
+        }
+        return sorted;
+    }
+
+    public string resolveKind(string live, string clean, ImmutabilitySpec spec) {
+        string path = self.fs.sourcePath(live, clean, spec.relPath);
+        if (path.isEmpty()) { return "file"; }
+        if (FileSystem.isDir(path)) { return "dir"; }
+        return "file";
+    }
+
+    public bool planAlreadyCovers(Vector<ImmutabilityPlan> plans, ImmutabilitySpec spec) {
+        for plan in plans {
+            if (plan.spec.volume.equals(spec.volume) && plan.spec.relPath.equals(spec.relPath)) {
+                return true;
+            }
+            if (plan.spec.volume.equals(spec.volume) && plan.kind.equals("dir") && ImmutabilityPaths.ancestor(plan.spec.relPath, spec.relPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Vector<ImmutabilityPlan> makePlan(Vector<ImmutabilitySpec> specs, string live, string clean, string persistRoot) {
+        Vector<ImmutabilityPlan> plans = [];
+        // Sort once; `for x in self.method()` re-evaluates the call each pass.
+        Vector<ImmutabilitySpec> ordered = self.sortedSpecs(specs);
+        for spec in ordered {
+            string kind = spec.kind;
+            if (kind.equals("auto")) {
+                kind = self.resolveKind(live, clean, spec);
+            }
+            if (self.planAlreadyCovers(plans, spec)) { continue; }
+            string store = kind.equals("dir")
+                ? ImmutabilityPaths.dirStore(persistRoot, spec.absPath)
+                : ImmutabilityPaths.fileStore(persistRoot, spec.absPath);
+            plans.push(ImmutabilityPlan(spec, kind, store));
+        }
+        return plans;
+    }
+}

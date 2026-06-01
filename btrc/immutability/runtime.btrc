@@ -1,0 +1,16 @@
+import std.*;
+import ./engine/*;
+
+/* Immutability — module aggregator.
+ *
+ * The implementation is split one-class-per-file under engine/. This file is
+ * the runtime import point used by btrc/immutability/immutability.btrc.
+ *
+ *   constants  ImmutabilityConstants            — string/literal constants
+ *   types      ImmutabilityAbsPath, …Spec,      — small value types
+ *              …Volume, …Plan
+ *   paths      ImmutabilityPaths                — path math (static)
+ *   run        ImmutabilityRun                  — process/IO context
+ *   btrfs      ImmutabilityBtrfs                — btrfs CLI vocabulary (static)
+ *   immutability   Immutability        — the reset/snapshot engine
+ */

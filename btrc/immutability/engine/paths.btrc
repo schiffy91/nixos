@@ -1,0 +1,104 @@
+import std.*;
+import ../../core/log.btrc;
+import ./*;
+
+class ImmutabilityPaths {
+    class string trimSlashes(string raw) {
+        string value = raw.trim();
+        int start = 0;
+        int end = value.len();
+        while (start < end && value[start] == '/') { start++; }
+        while (end > start && value[end - 1] == '/') { end--; }
+        return value.substring(start, end - start);
+    }
+
+    class string trimTrailingSlashes(string raw) {
+        string value = raw.trim();
+        int end = value.len();
+        while (end > 1 && value[end - 1] == '/') { end--; }
+        return value.substring(0, end);
+    }
+
+    class bool validRel(string path) {
+        if (path.isEmpty()) { return false; }
+        if (path.contains("\t") || path.contains("!")) { return false; }
+        for part in Strings.split(path, "/") {
+            if (part.isEmpty() || part.equals(".") || part.equals("..")) { return false; }
+        }
+        return true;
+    }
+
+    class string normSubvol(string raw) {
+        string value = ImmutabilityPaths.trimSlashes(raw);
+        if (!ImmutabilityPaths.validRel(value)) {
+            NixosLog.fatal("bad subvolume: " + raw);
+        }
+        return value;
+    }
+
+    class string normMount(string raw) {
+        string value = raw.trim();
+        if (value.isEmpty() || value.equals("/")) { return "/"; }
+        value = ImmutabilityPaths.trimTrailingSlashes(value);
+        if (!value.startsWith("/")) {
+            NixosLog.fatal("bad mount: " + raw);
+        }
+        string rel = value.substring(1, value.len() - 1);
+        if (!ImmutabilityPaths.validRel(rel)) {
+            NixosLog.fatal("bad mount: " + raw);
+        }
+        return value;
+    }
+
+    class ImmutabilityAbsPath normAbs(string raw) {
+        string value = raw.trim();
+        bool slash = value.len() > 1 && value.endsWith("/");
+        value = ImmutabilityPaths.trimTrailingSlashes(value);
+        if (!value.startsWith("/") || value.equals("/")) {
+            NixosLog.fatal("bad keep path: " + raw);
+        }
+        string rel = value.substring(1, value.len() - 1);
+        if (!ImmutabilityPaths.validRel(rel)) {
+            NixosLog.fatal("bad keep path: " + raw);
+        }
+        return ImmutabilityAbsPath(value, slash);
+    }
+
+    class string relToMount(string absPath, string mountPoint) {
+        if (mountPoint.equals("/")) {
+            return absPath.substring(1, absPath.len() - 1);
+        }
+        string prefix = mountPoint + "/";
+        if (!absPath.startsWith(prefix)) {
+            NixosLog.fatal(absPath + " not under " + mountPoint);
+        }
+        return absPath.substring(prefix.len(), absPath.len() - prefix.len());
+    }
+
+    class string kind(string raw) {
+        string value = raw.trim();
+        if (value.equals("auto")) { return "auto"; }
+        if (value.equals("directory") || value.equals("dir")) { return "dir"; }
+        if (value.equals("file")) { return "file"; }
+        NixosLog.fatal("bad kind: " + raw);
+        return "auto";
+    }
+
+    class bool ancestor(string parent, string child) {
+        return child.startsWith(parent + "/");
+    }
+
+    class string key(string absPath) {
+        string rel = absPath.substring(1, absPath.len() - 1);
+        return Strings.replace(rel, "/", "!");
+    }
+
+    class string dirStore(string persistRoot, string absPath) {
+        return PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(absPath));
+    }
+
+    class string fileStore(string persistRoot, string absPath) {
+        string root = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.meta()), ImmutabilityConstants.files());
+        return PathTools.join(root, ImmutabilityPaths.key(absPath));
+    }
+}

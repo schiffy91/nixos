@@ -1,3 +1,7 @@
+import std.*;
+import ../../../btrc/core/*;
+import ./*;
+
 class VmOperation {
     public string kind;
     public string command;

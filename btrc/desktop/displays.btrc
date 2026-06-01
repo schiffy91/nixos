@@ -1,0 +1,201 @@
+import std.*;
+import ../core/*;
+import ../system/config.btrc;
+import ./labels.btrc;
+
+class DisplayOutput {
+    public string name;
+    public string label;
+    public string kind;
+    public int priority;
+    public int x;
+    public int y;
+    public int width;
+    public int height;
+    public bool enabled;
+    public bool connected;
+
+    public DisplayOutput() {
+        self.name = "";
+        self.label = "";
+        self.kind = "";
+        self.priority = 999;
+        self.x = 0;
+        self.y = 0;
+        self.width = 0;
+        self.height = 0;
+        self.enabled = false;
+        self.connected = false;
+    }
+
+    public string json() {
+        JsonObject obj = JsonObject();
+        obj.setString("name", self.name);
+        obj.setString("label", self.label);
+        obj.setString("type", self.kind);
+        obj.setBool("enabled", self.enabled);
+        obj.setBool("connected", self.connected);
+        obj.setInt("priority", self.priority);
+        obj.setRaw("geometry", "{\"x\":" + Strings.fromInt(self.x)
+            + ",\"y\":" + Strings.fromInt(self.y)
+            + ",\"w\":" + Strings.fromInt(self.width)
+            + ",\"h\":" + Strings.fromInt(self.height)
+            + "}");
+        string encoded = obj.stringify();
+        return encoded;
+    }
+}
+
+class DisplayManager {
+    public UnixShell shell;
+    public LabelsConfig labels;
+
+    public DisplayManager() {
+        self.shell = UnixShell();
+        self.labels = LabelsConfig();
+    }
+
+    public string kscreen() {
+        ExecResult result = self.shell.runUnchecked("kscreen-doctor -o | sed -E 's/\\x1b\\[[0-9;]*m//g'");
+        return result.stdout();
+    }
+
+    public bool drmConnected(string name) {
+        string status = PathTools.join(PathTools.join("/sys/class/drm", "card*-" + name), "status");
+        ExecResult result = self.shell.runUnchecked("cat " + status + " 2>/dev/null | head -n 1");
+        return result.trimmed().equals("connected");
+    }
+
+    public string lineValue(string block, string prefix) {
+        for line in Strings.split(block, "\n") {
+            string trimmed = line.trim();
+            if (trimmed.startsWith(prefix)) {
+                return trimmed.substring(prefix.len(), trimmed.len() - prefix.len()).trim();
+            }
+        }
+        return "";
+    }
+
+    public DisplayOutput parseBlock(string block) {
+        DisplayOutput output = DisplayOutput();
+        Vector<string> lines = Strings.split(block, "\n");
+        if (lines.len == 0) { return output; }
+        string header = lines.get(0).trim();
+        Vector<string> headerParts = Strings.split(header, " ");
+        if (headerParts.len < 2) { return output; }
+        output.name = headerParts.get(1);
+        output.label = self.labels.displayLabel(output.name);
+        output.enabled = block.contains("\tenabled");
+        output.connected = block.contains("\tconnected") || self.drmConnected(output.name);
+        string priority = self.lineValue(block, "priority ");
+        if (!priority.isEmpty()) { output.priority = Strings.toInt(priority); }
+        for kind in ["HDMI", "DisplayPort", "VGA", "DVI", "Panel", "TV", "Unknown"] {
+            if (block.contains("\t" + kind)) { output.kind = kind; }
+        }
+        self.applyGeometry(output, block);
+        return output;
+    }
+
+    public void applyGeometry(DisplayOutput output, string block) {
+        string geometry = self.lineValue(block, "Geometry: ");
+        if (geometry.isEmpty()) { return; }
+        Vector<string> parts = Strings.split(geometry, " ");
+        if (parts.len < 2) { return; }
+        Vector<string> xy = Strings.split(parts.get(0), ",");
+        Vector<string> wh = Strings.split(parts.get(1), "x");
+        if (xy.len >= 2) {
+            output.x = Strings.toInt(xy.get(0));
+            output.y = Strings.toInt(xy.get(1));
+        }
+        if (wh.len >= 2) {
+            output.width = Strings.toInt(wh.get(0));
+            output.height = Strings.toInt(wh.get(1));
+        }
+    }
+
+    public Vector<DisplayOutput> outputs() {
+        Vector<DisplayOutput> result = [];
+        for block in Strings.split(self.kscreen(), "Output: ") {
+            string trimmed = block.trim();
+            if (trimmed.isEmpty()) { continue; }
+            DisplayOutput output = self.parseBlock(trimmed);
+            if (!output.name.isEmpty() && (output.connected || output.enabled)) {
+                result.push(output);
+            }
+        }
+        return result;
+    }
+
+    public DisplayOutput findOutput(string name, Vector<DisplayOutput> outputs) {
+        for output in outputs {
+            if (output.name.equals(name)) { return output; }
+        }
+        return DisplayOutput();
+    }
+
+    public void run(string arg) {
+        Command cmd = Command("kscreen-doctor")
+            .arg(arg)
+            .capture(false)
+            .check(false);
+        self.shell.runCommand(cmd);
+    }
+
+    public void enable(string name) {
+        self.run("output." + name + ".enable");
+        self.applyLayout(name);
+    }
+
+    public void disable(string name) {
+        self.run("output." + name + ".disable");
+    }
+
+    public void primary(string name) {
+        self.run("output." + name + ".priority.1");
+    }
+
+    public void dpms(string state) {
+        Command cmd = Command("kscreen-doctor")
+            .arg("--dpms")
+            .arg(state)
+            .capture(false)
+            .check(false);
+        self.shell.runCommand(cmd);
+    }
+
+    public void layout() {
+        Vector<DisplayLayoutRule> rules = self.labels.layoutRules();
+        for rule in rules {
+            self.applyLayout(rule.display);
+        }
+    }
+
+    public void applyLayout(string name) {
+        DisplayLayoutRule selected = DisplayLayoutRule();
+        Vector<DisplayLayoutRule> rules = self.labels.layoutRules();
+        for rule in rules {
+            if (rule.display.equals(name)) { selected = rule; }
+        }
+        if (selected.display.isEmpty()) { return; }
+        Vector<DisplayOutput> all = self.outputs();
+        DisplayOutput display = self.findOutput(selected.display, all);
+        DisplayOutput anchor = self.findOutput(selected.relativeTo, all);
+        if (display.name.isEmpty() || anchor.name.isEmpty() || !display.enabled) { return; }
+        int px = anchor.x;
+        int py = anchor.y;
+        if (selected.position.equals("left-of")) { px = anchor.x - display.width; }
+        else if (selected.position.equals("right-of")) { px = anchor.x + anchor.width; }
+        else if (selected.position.equals("above")) { py = anchor.y - display.height; }
+        else if (selected.position.equals("below")) { py = anchor.y + anchor.height; }
+        self.run("output." + display.name + ".position." + Strings.fromInt(px) + "," + Strings.fromInt(py));
+    }
+
+    public void list() {
+        Vector<string> rows = [];
+        Vector<DisplayOutput> all = self.outputs();
+        for output in all {
+            rows.push(output.json());
+        }
+        Console.log("[" + rows.join(",") + "]");
+    }
+}

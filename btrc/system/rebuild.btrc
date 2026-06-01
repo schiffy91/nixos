@@ -1,0 +1,185 @@
+import std.*;
+import ../core/*;
+import ./{config,secrets,permissions,rebuild,password}.btrc;
+import ../btrfs/snapshot.btrc;
+import ../hardware/tpm2.btrc;
+
+class RebuildOptions {
+    public bool rebuildFileSystem;
+    public bool reboot;
+    public bool clean;
+    public bool upgrade;
+
+    public RebuildOptions() {
+        self.rebuildFileSystem = false;
+        self.reboot = false;
+        self.clean = false;
+        self.upgrade = false;
+    }
+}
+
+class NixosRebuilder {
+    public NixosConfig config;
+    public UnixShell shell;
+    public Interactive interactive;
+
+    public NixosRebuilder(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+        self.interactive = Interactive();
+    }
+
+    public ExecResult runNixCollectGarbage() {
+        Command cmd = Command("nix-collect-garbage");
+        cmd.arg("-d");
+        cmd.capture(false);
+        return self.shell.runCommand(cmd);
+    }
+
+    public ExecResult verifyStore() {
+        Command cmd = Command("nix-store");
+        cmd.arg("--verify");
+        cmd.arg("--repair");
+        cmd.capture(false);
+        return self.shell.runCommand(cmd);
+    }
+
+    public ExecResult updateFlake() {
+        Command cmd = Command("nix");
+        cmd.arg("flake");
+        cmd.arg("update");
+        cmd.flag("--flake", self.config.paths.root);
+        cmd.capture(false);
+        return self.shell.runCommand(cmd);
+    }
+
+    public ExecResult switchSystem(RebuildOptions options) {
+        Command cmd = Command("nixos-rebuild");
+        cmd.arg("switch");
+        cmd.flag("--flake", self.config.flakeRef());
+        if (options.rebuildFileSystem) {
+            cmd.envVar("NIXOS_INSTALL_BOOTLOADER", "1");
+        }
+        cmd.capture(false);
+        return self.shell.runCommand(cmd);
+    }
+
+    public string immutabilityDevice() {
+        if (self.config.evalBool("config.settings.disk.encryption.enable")) {
+            return self.config.evalRaw("config.settings.disk.by.mapper.root");
+        }
+        return self.config.rootPartLabelPath();
+    }
+
+    public void bootstrapConfigIfMissing(RebuildOptions options) {
+        if (self.config.exists()) { return; }
+        NixosLog.error("'" + self.config.paths.configPath() + "' is missing.");
+        string hostPath = self.interactive.askHostPath(self.config.paths.hostsPath());
+        self.config.reset(hostPath, self.config.standardTarget());
+        options.rebuildFileSystem = true;
+    }
+
+    public string plainTextPasswordPath() {
+        if (self.config.evalBool("config.settings.disk.encryption.enable")) {
+            return self.config.evalRaw("config.settings.disk.encryption.plainTextPasswordFile");
+        }
+        return "";
+    }
+
+    public string homeManagerLogs() {
+        ExecResult result = self.shell.runUnchecked("journalctl -u 'home-manager-*.service' --no-pager -o cat -q -r");
+        Vector<string> lines = [];
+        for line in Strings.split(result.stdout(), "\n") {
+            if (line.equals("Starting Home Manager activation")) { break; }
+            if (line.startsWith("Starting ") || line.startsWith("Stopping ") || line.startsWith("Stopped ") || line.startsWith("Finished ") || line.startsWith("Activating ")) {
+                continue;
+            }
+            if (!line.trim().isEmpty()) { lines.push(line); }
+        }
+        lines.reverse();
+        return lines.join("\n").trim();
+    }
+
+    public void refreshImmutableSnapshots() {
+        if (!self.config.evalBool("config.settings.disk.immutability.enable")) { return; }
+        if (!self.config.evalBool("config.settings.disk.immutability.enforce.onUpdate")) { return; }
+
+        SnapshotManager snapshots = SnapshotManager(self.config);
+        string mode = self.config.evalRaw("config.settings.disk.immutability.mode");
+        if (mode.equals("disabled")) {
+            NixosLog.info("Immutability mode is disabled; skipping update enforcement");
+            return;
+        }
+        bool dryRun = self.config.evalBool("config.settings.disk.immutability.dryRun");
+        if (dryRun) {
+            NixosLog.info("DRY would refresh immutable CLEAN snapshots after update");
+        } else {
+            NixosLog.info("Refreshing immutable CLEAN snapshots after update");
+            snapshots.createInitialSnapshots();
+        }
+        self.convergeImmutability(mode, dryRun);
+        if (dryRun) {
+            NixosLog.info("DRY would start immutability-mounts.service");
+            return;
+        }
+        self.shell.runRaw("systemctl start immutability-mounts.service", false, false, "");
+    }
+
+    public void convergeImmutability(string mode, bool dryRun) {
+        NixosLog.info("Converging immutability after update");
+        Vector<string> args = [
+            "/run/current-system/sw/bin/immutability",
+            self.immutabilityDevice(),
+            self.config.evalRaw("config.settings.disk.subvolumes.snapshots.name"),
+            self.config.evalRaw("config.settings.disk.immutability.persist.snapshots.cleanName"),
+            mode,
+            self.config.evalRaw("config.settings.disk.immutability.persist.subvolumeRoot"),
+            "/etc/immutability/spec.tsv"
+        ];
+        if (dryRun) { args.insert(1, "--dry-run"); }
+        string pairs = self.config.evalRaw("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
+        for pair in Strings.split(pairs, " ") {
+            if (!pair.trim().isEmpty()) { args.push(pair.trim()); }
+        }
+        Command immutability = Command(args.get(0));
+        for (int i = 1; i < args.len; i++) {
+            immutability.arg(args.get(i));
+        }
+        immutability.capture(false);
+        immutability.check(false);
+        self.shell.runCommand(immutability);
+    }
+
+    public void update(RebuildOptions options) {
+        self.bootstrapConfigIfMissing(options);
+        string username = self.config.username();
+        if (options.clean || options.upgrade) {
+            self.runNixCollectGarbage();
+            FileSystem.removeRecursive("/root/.cache");
+            self.verifyStore();
+        }
+        if (options.upgrade) {
+            FileSystem.removeRecursive("/root/.cache");
+            self.updateFlake();
+        }
+        SecretsManager(self.config).createIfMissing(self.plainTextPasswordPath());
+        PermissionsManager(self.config).secureTree(username);
+        ExecResult result = self.switchSystem(options);
+        if (!result.ok()) {
+            NixosLog.fatal("nixos-rebuild switch failed");
+        }
+        PermissionsManager(self.config).secureTree(username);
+        self.refreshImmutableSnapshots();
+        string logs = self.homeManagerLogs();
+        if (!logs.isEmpty()) { Console.log(logs); }
+        if (options.reboot) {
+            Command reboot = Command("shutdown");
+            reboot.arg("-r");
+            reboot.arg("now");
+            reboot.capture(false);
+            self.shell.runCommand(reboot);
+        } else {
+            self.interactive.askToReboot();
+        }
+    }
+}

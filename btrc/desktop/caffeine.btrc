@@ -1,0 +1,52 @@
+import std.*;
+import ../core/*;
+import ../system/config.btrc;
+
+class CaffeineManager {
+    public UnixShell shell;
+    public string pidFile;
+
+    public CaffeineManager() {
+        self.shell = UnixShell();
+        string runtime = Environment.get("XDG_RUNTIME_DIR", "/tmp");
+        self.pidFile = PathTools.join(runtime, "nixos-caffeine.pid");
+    }
+
+    public int pid() {
+        if (!FileSystem.exists(self.pidFile)) { return 0; }
+        int existing = Strings.toInt(Path.readAll(self.pidFile).trim());
+        if (existing <= 0) {
+            FileSystem.removeRecursive(self.pidFile);
+            return 0;
+        }
+        ExecResult alive = self.shell.runUnchecked("kill -0 " + Strings.fromInt(existing));
+        if (!alive.ok()) {
+            FileSystem.removeRecursive(self.pidFile);
+            return 0;
+        }
+        return existing;
+    }
+
+    public bool enabled() {
+        return self.pid() > 0;
+    }
+
+    public void enable() {
+        if (self.enabled()) { return; }
+        string command = "systemd-inhibit --what=idle --who=nixos --why='User disabled sleep' sleep infinity >/dev/null 2>&1 & echo $! > " + UnixShell.quote(self.pidFile);
+        self.shell.runRaw(command, false, true, "");
+    }
+
+    public void disable() {
+        int existing = self.pid();
+        if (existing > 0) {
+            self.shell.runUnchecked("kill " + Strings.fromInt(existing));
+        }
+        FileSystem.removeRecursive(self.pidFile);
+    }
+
+    public void toggle() {
+        if (self.enabled()) { self.disable(); }
+        else { self.enable(); }
+    }
+}

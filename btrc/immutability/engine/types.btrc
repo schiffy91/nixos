@@ -1,0 +1,51 @@
+import std.*;
+import ./*;
+
+class ImmutabilityAbsPath {
+    public string path;
+    public bool endedWithSlash;
+
+    public ImmutabilityAbsPath(string path, bool endedWithSlash) {
+        self.path = path;
+        self.endedWithSlash = endedWithSlash;
+    }
+}
+
+class ImmutabilitySpec {
+    public string volume;
+    public string mountPoint;
+    public string absPath;
+    public string relPath;
+    public string kind;
+
+    public ImmutabilitySpec(string volume, string mountPoint, string absPath, string relPath, string kind) {
+        self.volume = volume;
+        self.mountPoint = mountPoint;
+        self.absPath = absPath;
+        self.relPath = relPath;
+        self.kind = kind;
+    }
+}
+
+class ImmutabilityVolume {
+    public string name;
+    public string mountPoint;
+
+    public ImmutabilityVolume(string name, string mountPoint) {
+        self.name = name;
+        self.mountPoint = mountPoint;
+    }
+}
+
+class ImmutabilityPlan {
+    public ImmutabilitySpec spec;
+    public string kind;
+    public string store;
+
+    public ImmutabilityPlan(ImmutabilitySpec spec, string kind, string store) {
+        self.spec = spec;
+        self.kind = kind;
+        self.store = store;
+    }
+}
+

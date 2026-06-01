@@ -1,3 +1,8 @@
+import std.*;
+import ../../../btrc/core/*;
+import ../spec/*;
+import ./*;
+
 /* Remote execution against the test VM — SSH, SCP, QMP, and workspace copy.
  *
  * Self-contained: holds its own spec + shell and computes the two paths it

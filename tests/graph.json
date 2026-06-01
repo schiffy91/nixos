@@ -141,7 +141,7 @@
         "name": "install-reset",
         "state": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset",
         "immutabilityEnabled": "true"
       }
@@ -156,7 +156,7 @@
         "name": "install-disabled",
         "state": "installed-disabled",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "disabled",
         "immutabilityEnabled": "false"
       }
@@ -170,7 +170,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -183,7 +183,7 @@
       "args": {
         "parentState": "installed-disabled",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "disabled"
       }
     },
@@ -196,7 +196,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -209,7 +209,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -222,7 +222,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -253,7 +253,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -266,7 +266,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -279,7 +279,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -292,7 +292,7 @@
       "args": {
         "parentState": "installed-reset",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },
@@ -308,7 +308,7 @@
         "encryption": "true",
         "tpm2": "true",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset",
         "immutabilityEnabled": "true"
       }
@@ -335,7 +335,7 @@
         "bootTarget": "Secure-Boot",
         "tpm2": "true",
         "immutabilityVersion": "v2",
-        "immutabilityImplementation": "semipermeable_membrane",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset",
         "immutabilityEnabled": "true"
       }

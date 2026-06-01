@@ -1,0 +1,21 @@
+import std.*;
+
+class NixosLog {
+    class string gray() { return "\033[90m"; }
+    class string orange() { return "\033[38;5;208m"; }
+    class string red() { return "\033[31m"; }
+    class string reset() { return "\033[0m"; }
+
+    class void info(string message) {
+        Console.error(NixosLog.gray() + "LOG: " + message + NixosLog.reset());
+    }
+
+    class void error(string message) {
+        Console.error(NixosLog.orange() + "ERROR: " + message + NixosLog.reset());
+    }
+
+    class void fatal(string message) {
+        Console.error(NixosLog.red() + message + NixosLog.reset());
+        exit(1);
+    }
+}

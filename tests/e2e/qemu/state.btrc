@@ -1,3 +1,8 @@
+import std.*;
+import ../../../btrc/core/*;
+import ../spec/*;
+import ./*;
+
 /* VM state lifecycle: qcow2-backed state inheritance from a parent, the state
  * record/metadata, and status/snapshot queries.
  *

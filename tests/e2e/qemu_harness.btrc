@@ -1,10 +1,12 @@
-#include "qemu/ssh.btrc"
-#include "qemu/serial.btrc"
-#include "qemu/firmware.btrc"
-#include "qemu/state.btrc"
-#include "qemu/provisioner.btrc"
-#include "qemu/command.btrc"
-#include "qemu/assets.btrc"
+import std.*;
+import ../../btrc/core/*;
+import ./spec/*;
+import ./qemu/*;
+import ./graph/*;
+import ./spec.btrc;
+import ./qemu_harness.btrc;
+import ./runner.btrc;
+import ./graph.btrc;
 
 class QemuE2eHarness {
     public VmTestSpec spec;

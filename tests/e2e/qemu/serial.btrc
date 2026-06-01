@@ -1,3 +1,8 @@
+import std.*;
+import ../../../btrc/core/*;
+import ../spec/*;
+import ./*;
+
 /* VM serial console: named-pipe wiring, the background reader, sending input,
  * and extracting the installer ISO's boot-serial kernel/initrd/append.
  *

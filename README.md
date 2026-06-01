@@ -1,10 +1,10 @@
 # NixOS Configuration
 
 This repository is the flake-backed NixOS configuration for the machines in
-`modules/hosts`, with local management tooling written in BTRC. System
+`nix/hosts`, with local management tooling written in BTRC. System
 management is Nix plus BTRC end to end; there is no Python or Rust in the
 management layer (the only Python left is an x86-gated Sunshine EDID packaging
-helper under `modules/apps/pkg-overrides/`).
+helper under `nix/apps/pkg-overrides/`).
 
 ## Current Hosts
 
@@ -30,7 +30,7 @@ nix eval .#nixosConfigurations.QEMU-Disk-Operation.config.disko.devices.disk.mai
 ```
 
 `Disk-Operation` targets are disko entrypoints, not installed boot targets. They
-import `modules/system/disk-operation.nix`, which wraps the disk layout with the
+import `nix/system/disk-operation.nix`, which wraps the disk layout with the
 minimal boot/user defaults needed for the NixOS module graph to evaluate cleanly.
 
 ## Repository Layout
@@ -38,16 +38,17 @@ minimal boot/user defaults needed for the NixOS module graph to evaluate cleanly
 | Path | Purpose |
 |---|---|
 | `flake.nix` | Host discovery, `nixosConfigurations`, and the pinned BTRC compiler input |
-| `modules/settings.nix` | Central typed settings interface shared across hosts and modules |
-| `modules/system/` | Shared NixOS system modules |
-| `modules/apps/` | Globally imported app and helper modules; each optional app is settings-gated |
-| `modules/apps/pkg-overrides/` | Custom package overrides for Proton, Rocksmith assets, Sunshine, and Battle.net helper tooling |
-| `modules/hosts/x86_64/FRACTAL-NORTH/` | Main workstation host modules and host-specific data |
-| `modules/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
-| `bin/` | BTRC entrypoints: `nixosctl.btrc` (management CLI) and `semipermeable_membrane.btrc` (immutability) |
-| `lib/` | BTRC libraries (`lib/btrfs`, `lib/immutability`, …) |
-| `generated/` | Checked-in transpiled C that Nix compiles (`nixosctl.c`, `semipermeable_membrane.c`) |
-| `vendor/btrc-stdlib/` | Vendored BTRC stdlib used by the `--no-stdlib` build |
+| `nix/settings.nix` | Central typed settings interface shared across hosts and modules |
+| `nix/system/` | Shared NixOS system modules |
+| `nix/apps/` | Globally imported app and helper modules; each optional app is settings-gated |
+| `nix/apps/pkg-overrides/` | Custom package overrides for Proton, Rocksmith assets, Sunshine, and Battle.net helper tooling |
+| `nix/hosts/x86_64/FRACTAL-NORTH/` | Main workstation host modules and host-specific data |
+| `nix/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
+| `btrc/system/` | BTRC management CLI entrypoint and system helpers |
+| `btrc/immutability/` | BTRC immutability entrypoint and engine modules |
+| `btrc/btrfs/`, `btrc/core/`, `btrc/desktop/`, `btrc/hardware/`, `btrc/install/` | BTRC support libraries grouped by subsystem |
+| `build/` | Gitignored local compiler intermediates and binaries |
+| `inputs.btrc` | Flake-provided BTRC compiler and precompiled stdlib archive source |
 | `tests/` | Declarative VM e2e graph and per-scenario specs |
 | `Makefile` | Root build/test contract (`make build`, `make check`, `make -C tests graph-*`) |
 | `FOR_CLAUDE.md` | Handoff notes for future Claude Code sessions |
@@ -55,14 +56,14 @@ minimal boot/user defaults needed for the NixOS module graph to evaluate cleanly
 Host discovery is convention-based:
 
 ```text
-modules/hosts/<architecture>/<HOST>/<HOST>.nix
+nix/hosts/<architecture>/<HOST>/<HOST>.nix
 ```
 
-That convention is why `modules/hosts/aarch64/QEMU/QEMU.nix` is discovered.
+That convention is why `nix/hosts/aarch64/QEMU/QEMU.nix` is discovered.
 
 ## Settings Model
 
-`modules/settings.nix` defines the repo's stable configuration interface. Host
+`nix/settings.nix` defines the repo's stable configuration interface. Host
 modules should prefer overriding `settings.*` instead of directly changing
 shared modules whenever a value is host policy rather than module structure.
 
@@ -115,20 +116,20 @@ part of the shared desktop surface, not an app install.
 
 ### Boot
 
-`modules/system/boot.nix` selects behavior from `settings.boot.method`.
+`nix/system/boot.nix` selects behavior from `settings.boot.method`.
 
 | Method | Behavior |
 |---|---|
 | `Standard-Boot` | Enables systemd-boot |
 | `Secure-Boot` | Disables systemd-boot directly and enables Lanzaboote |
-| `Disk-Operation` | Not handled by this module; the flake imports `modules/system/disk-operation.nix` for this target |
+| `Disk-Operation` | Not handled by this module; the flake imports `nix/system/disk-operation.nix` for this target |
 
 The shared boot module sets current kernel packages, Plymouth, quiet boot
 parameters, EFI mount point, and generation limits.
 
 ### Disk
 
-`modules/system/disk.nix` owns the `disko` layout. The default model is:
+`nix/system/disk.nix` owns the `disko` layout. The default model is:
 
 | Layer | Default |
 |---|---|
@@ -138,13 +139,14 @@ parameters, EFI mount point, and generation limits.
 | Subvolumes | `@root`, `@home`, `@nix`, `@var`, `@snapshots`, `@swap` |
 
 The QEMU host overrides the disk to `/dev/vda`, disables encryption, enables
-semipermeable immutability v2, and sets a small swap size suitable for VM use.
+the immutability reset workflow, and sets a small swap size suitable for VM use.
 
 ### Immutability
 
-`modules/system/immutability.nix` drives the BTRC **semipermeable membrane**, the
-sole immutability implementation. It is generated into
-`generated/semipermeable_membrane.c` and built by Nix as a C program.
+`nix/system/immutability.nix` drives the BTRC **immutability**, the
+sole immutability implementation. Its source entrypoint is
+`btrc/immutability/immutability.btrc`; Nix builds it with the flake-pinned
+BTRC compiler and a generated stdlib archive.
 
 | Mode | Behavior |
 |---|---|
@@ -165,7 +167,7 @@ reset. The source-of-truth persist list is
 
 ### Desktop
 
-`modules/system/desktop.nix` enables the Plasma 6 Wayland desktop, SDDM, dconf,
+`nix/system/desktop.nix` enables the Plasma 6 Wayland desktop, SDDM, dconf,
 graphics, cursor packages, and selected KDE integrations. It also overlays a
 KWin HDR screencast patch used by the Sunshine workflow.
 
@@ -173,24 +175,24 @@ Host-specific desktop state lives in the host modules:
 
 | File | Role |
 |---|---|
-| `modules/hosts/x86_64/FRACTAL-NORTH/gpu.nix` | NVIDIA/AMD graphics setup, device symlinks, KWin DRM devices |
-| `modules/hosts/x86_64/FRACTAL-NORTH/audio.nix` | Low-latency PipeWire and device-specific audio rules |
-| `modules/hosts/x86_64/FRACTAL-NORTH/input.nix` | Controller and mouse receiver support |
-| `modules/hosts/x86_64/FRACTAL-NORTH/sunshine.nix` | Sunshine service, streaming display EDID, streaming display setup |
+| `nix/hosts/x86_64/FRACTAL-NORTH/gpu.nix` | NVIDIA/AMD graphics setup, device symlinks, KWin DRM devices |
+| `nix/hosts/x86_64/FRACTAL-NORTH/audio.nix` | Low-latency PipeWire and device-specific audio rules |
+| `nix/hosts/x86_64/FRACTAL-NORTH/input.nix` | Controller and mouse receiver support |
+| `nix/hosts/x86_64/FRACTAL-NORTH/sunshine.nix` | Sunshine service, streaming display EDID, streaming display setup |
 
 ### Networking And Security
 
-`modules/system/networking.nix` owns NetworkManager, firewall rules, mDNS,
+`nix/system/networking.nix` owns NetworkManager, firewall rules, mDNS,
 OpenSSH, SSH agent forwarding, and optional primary-interface enforcement.
 Firewall LAN allow rules are derived from shared service flags and
 `settings.networking.ports.{tcp,udp}`.
 
-`modules/system/admin.nix` imports Home Manager and every top-level app module
-under `modules/apps`. It defines the immutable admin user and Home Manager
+`nix/system/admin.nix` imports Home Manager and every top-level app module
+under `nix/apps`. It defines the immutable admin user and Home Manager
 baseline. User mutability is disabled, so password changes must update the
 hashed password file and rebuild.
 
-`modules/system/sudolessAllowlist.nix` is opt-in through
+`nix/system/sudolessAllowlist.nix` is opt-in through
 `settings.sudolessAllowlist.enable`.
 
 ## Apps And Package Overrides
@@ -212,7 +214,7 @@ The app layer is globally imported but policy-gated through `settings.apps`.
 | `sunshine.nix` | Overlays the custom Sunshine package on x86_64 and sets runtime library paths when Sunshine is enabled |
 | `vscode.nix` | Installs VSCode from the unstable package set |
 
-The custom Proton tree under `modules/apps/pkg-overrides/proton-custom` is a
+The custom Proton tree under `nix/apps/pkg-overrides/proton-custom` is a
 large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that
 area focused and avoid broad formatting churn; its local README has the
 development loop.
@@ -224,24 +226,22 @@ explicitly out of scope for the BTRC rewrite.
 
 The management tooling is BTRC at the repository root. The compiler is consumed
 through the flake input `inputs.btrc`, pinned in `flake.lock` to
-`github:schiffy91/btrc`. The Makefile builds through `nix run .#btrc` and
-`nix develop .#btrc-build`, so the dependency is explicit in the flake graph.
+`github:schiffy91/btrc`. The dev shell provides `btrcpy`; local and Nix builds
+compile with `--strict-imports` against a generated stdlib archive.
 
 | Path | Purpose |
 |---|---|
-| `bin/nixosctl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
-| `bin/semipermeable_membrane.btrc` | BTRC entrypoint for the immutability runtime |
-| `lib/btrfs` | Snapshot and diff helpers |
-| `lib/immutability` | Semipermeable membrane |
-| `vendor/btrc-stdlib` | Vendored BTRC stdlib |
+| `btrc/system/nixosctl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
+| `btrc/immutability/immutability.btrc` | BTRC entrypoint for the immutability runtime |
+| `btrc/btrfs` | Snapshot and diff helpers |
+| `btrc/immutability` | Immutability |
 | `tests/e2e` | Declarative VM graph and test runner |
 
-Build from the repo root (regenerate checked-in C after editing a `.btrc`):
+Build from the repo root:
 
 ```bash
-make build              # transpile + compile nixosctl and semipermeable_membrane
-make generated          # refresh generated/*.c for the Nix modules
-make stdlib-sync-check
+make build              # transpile + compile nixosctl and immutability
+make clean              # remove gitignored compiler outputs
 ```
 
 Common `nixosctl` commands after build:
@@ -256,7 +256,7 @@ sudo build/nixosctl secure-boot status
 sudo build/nixosctl tpm2 status
 ```
 
-On installed hosts the CLI is packaged as `nixosctl` (see `modules/apps/nixosctl.nix`)
+On installed hosts the CLI is packaged as `nixosctl` (see `nix/apps/nixosctl.nix`)
 and is on `PATH`. The native system tray (macOS menu bar / Linux Wayland
 StatusNotifierItem) is implemented in the BTRC stdlib in the sibling `../btrc`
 repo; wiring it into `helper.nix` is pending publishing that branch and bumping
@@ -371,7 +371,7 @@ The migration to BTRC is complete. Current state:
 | Nix eval/update/install/diff/permissions | BTRC |
 | Audio/display/caffeine/system helper backends | BTRC |
 | TPM2 and Secure Boot helpers | BTRC with VM capability coverage |
-| Semipermeable immutability | BTRC; checked in as generated C for Nix builds |
+| Immutability | BTRC source compiled by the flake-pinned compiler |
 | Native system tray | Implemented in BTRC stdlib (`../btrc`); helper wiring pending publish |
 | VFIO | Removed for now |
 | Python / Rust | Removed (only an x86-gated Sunshine EDID packaging helper remains) |
@@ -381,7 +381,7 @@ The migration to BTRC is complete. Current state:
 1. Prefer `settings.*` for host policy.
 2. Keep architecture-specific behavior as capability gates, not broad host-level removal.
 3. Keep app installs under `settings.apps.*`.
-4. Keep QEMU-specific aarch64 assumptions inside `modules/hosts/aarch64/QEMU`.
+4. Keep QEMU-specific aarch64 assumptions inside `nix/hosts/aarch64/QEMU`.
 5. Do not add tests that only assert that broken or unimplemented behavior is absent.
 6. Add positive tests for expected behavior.
 7. Run at least the BTRC build and relevant graph node after touching BTRC or VM test code.

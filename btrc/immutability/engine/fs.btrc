@@ -1,0 +1,130 @@
+import std.*;
+import ./*;
+
+/* Filesystem + btrfs primitives the immutability builds on: subvolume queries,
+ * snapshot/create/delete, and reflink copies. Holds the ImmutabilityRun (process
+ * context) and issues btrfs via the ImmutabilityBtrfs vocabulary. The engine owns
+ * one as self.fs; these never call back into the reset/snapshot algorithm.
+ */
+class ImmutabilityFs {
+    public ImmutabilityRun run;
+
+    public ImmutabilityFs(ImmutabilityRun run) {
+        self.run = run;
+    }
+
+    public bool exists(string path) {
+        return FileSystem.exists(path) || FileSystem.isSymlink(path);
+    }
+
+    public bool isSubvolume(string path) {
+        if (!FileSystem.exists(path)) { return false; }
+        ExecResult result = self.run.shell.runCommand(ImmutabilityBtrfs.show(path));
+        return result.ok();
+    }
+
+    public bool isReadonly(string path) {
+        ExecResult result = self.run.shell.runCommand(ImmutabilityBtrfs.getReadonly(path));
+        return result.ok() && result.stdout().contains("ro=true");
+    }
+
+    public bool mounted(string path) {
+        Command command = Command("findmnt")
+            .arg("--mountpoint")
+            .arg(path)
+            .check(false);
+        ExecResult result = self.run.shell.runCommand(command);
+        return result.ok();
+    }
+
+    public int compareDeepestFirst(string left, string right) {
+        int leftDepth = Strings.count(left, "/");
+        int rightDepth = Strings.count(right, "/");
+        if (leftDepth != rightDepth) { return rightDepth - leftDepth; }
+        if (left.len() != right.len()) { return right.len() - left.len(); }
+        return Strings.compare(left, right);
+    }
+
+    public void pushChildSorted(Vector<string> paths, string path) {
+        int index = 0;
+        while (index < paths.len && self.compareDeepestFirst(paths.get(index), path) <= 0) {
+            index++;
+        }
+        paths.insert(index, path);
+    }
+
+    public Vector<string> childSubvolumes(string path) {
+        Vector<string> result = [];
+        if (!FileSystem.isDir(path)) { return result; }
+        ExecResult listed = self.run.runCommand(ImmutabilityBtrfs.listChildren(path));
+        if (!listed.ok()) { self.run.fatal("list " + path); }
+        for line in Strings.split(listed.stdout(), "\n") {
+            int marker = Strings.find(line, " path ", 0);
+            if (marker < 0) { continue; }
+            string child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            string childPath = self.run.path(child);
+            if (ImmutabilityPaths.ancestor(path, childPath)) {
+                self.pushChildSorted(result, childPath);
+            }
+        }
+        return result;
+    }
+
+    public void deleteSubvolume(string path) {
+        if (!FileSystem.isDir(path)) { return; }
+        // childSubvolumes returns every descendant subvolume deepest-first, so
+        // deleting them in that order clears all nesting before the parent.
+        // Snapshot the listing into a local first: `for x in self.method()`
+        // re-evaluates the call each iteration, so deleting inside the loop
+        // would index a shrinking vector out of bounds (segfault).
+        Vector<string> children = self.childSubvolumes(path);
+        for child in children {
+            self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(child));
+        }
+        self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(path));
+    }
+
+    public void makeSubvolume(string path) {
+        self.run.mkdirp(PathTools.dirname(path));
+        self.run.requireCommand(ImmutabilityBtrfs.createSubvol(path));
+    }
+
+    public void snapshot(string source, string destination, bool readonly) {
+        if (!FileSystem.isDir(source)) {
+            self.run.fatal("Source missing: " + source);
+        }
+        self.deleteSubvolume(destination);
+        self.run.requireCommand(ImmutabilityBtrfs.snapshot(source, destination, readonly));
+        if (!readonly) {
+            self.run.requireCommand(ImmutabilityBtrfs.clearReadonly(destination));
+        }
+    }
+
+    public string sourcePath(string live, string clean, string relPath) {
+        string livePath = PathTools.join(live, relPath);
+        if (self.exists(livePath)) { return livePath; }
+        string cleanPath = PathTools.join(clean, relPath);
+        if (self.exists(cleanPath)) { return cleanPath; }
+        return "";
+    }
+
+    public void copyPath(string source, string destination) {
+        self.run.mkdirp(PathTools.dirname(destination));
+        Command command = Command("cp")
+            .arg("--reflink=always")
+            .arg("-a")
+            .arg(source)
+            .arg(destination)
+            .capture(false);
+        self.run.requireCommand(command);
+    }
+
+    public void copyDirectoryContents(string source, string destination) {
+        if (!FileSystem.isDir(source)) { return; }
+        Vector<string> nested = self.childSubvolumes(source);
+        if (!nested.isEmpty()) {
+            self.run.fatal("nested subvolumes in persisted dir: " + nested.join(" "));
+        }
+        self.run.requireRaw("cp --reflink=always -a " + UnixShell.quote(PathTools.join(source, ".")) + " " + UnixShell.quote(destination));
+    }
+}

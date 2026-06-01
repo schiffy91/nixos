@@ -5,7 +5,7 @@
   "stateMaterial": "live-install:nixos:immutability={{immutabilityVersion}}:implementation={{immutabilityImplementation}}:mode={{immutabilityMode}}:boot={{bootloader}}:layout={{diskLayout}}:swap={{swapSize}}:desktop={{desktop}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
   "args": {
     "immutabilityVersion": "v2",
-    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset",
     "immutabilityEnabled": "true",
     "bootloader": "systemd-boot",

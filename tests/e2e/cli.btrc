@@ -1,3 +1,13 @@
+import std.*;
+import ../../btrc/core/*;
+import ./spec/*;
+import ./qemu/*;
+import ./graph/*;
+import ./spec.btrc;
+import ./qemu_harness.btrc;
+import ./runner.btrc;
+import ./graph.btrc;
+
 /* The `nixosctl vm|e2e|graph` command surface — the test-harness CLI, split out
  * of NixosCtl so the top-level tool keeps only the real NixOS commands.
  * Stateless: each method drives the e2e classes (QemuE2eHarness, VmTestRunner,

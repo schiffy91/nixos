@@ -1,3 +1,8 @@
+import std.*;
+import ../../../btrc/core/*;
+import ../spec/*;
+import ./*;
+
 /* Host-side VM assets created before first boot: the installer ISO (downloaded
  * if missing), the SSH keypair, and the qcow2 disk; setup() also extracts the
  * serial boot kernel. Self-contained — holds the spec + its own shell, computes

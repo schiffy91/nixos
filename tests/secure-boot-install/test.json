@@ -5,7 +5,7 @@
   "stateMaterial": "secure-boot-install:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:tpm2={{tpm2}}:source={{sourceHash}}",
   "args": {
     "immutabilityVersion": "v2",
-    "immutabilityImplementation": "semipermeable_membrane",
+    "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset",
     "immutabilityEnabled": "true",
     "bootTarget": "Secure-Boot",

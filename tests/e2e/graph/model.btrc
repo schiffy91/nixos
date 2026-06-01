@@ -1,3 +1,10 @@
+import std.*;
+import ../spec/*;
+import ./*;
+import ../../../btrc/core/*;
+import ../runner.btrc;
+import ../qemu_harness.btrc;
+
 class VmTestGraph {
     public string name;
     public string path;
