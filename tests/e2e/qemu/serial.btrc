@@ -124,6 +124,10 @@ class QemuSerial {
 
     public void serialSend(string command) {
         string payload = command + "\n";
-        self.shell.runRaw("printf %s " + UnixShell.quote(payload) + " > " + UnixShell.quote(self.serialInPath()), false, false, "");
+        string write = "printf %s " + UnixShell.quote(payload) + " > " + UnixShell.quote(self.serialInPath());
+        ExecResult result = self.shell.runRaw("timeout 5 sh -c " + UnixShell.quote(write), false, false, "");
+        if (!result.ok()) {
+            NixosLog.fatal("Failed to send command to VM serial console: " + self.serialInPath());
+        }
     }
 }

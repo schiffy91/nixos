@@ -18,118 +18,35 @@ class VmSpecParser {
     }
 
     class string expandArgs(string text, Map<string, string> args) {
-        string result = Strings.copy(text);
-        for key, value in args {
-            result = Strings.replace(result, "{{" + key + "}}", value);
-        }
-        for key, value in args {
-            result = Strings.replace(result, "${" + key + "}", value);
-        }
-        return result;
+        return GraphJson.expand(text, args);
     }
 
     class int skipSpaces(string text, int i) {
-        int len = text.len();
-        while (i < len && (text[i] == ' ' || text[i] == '\n' || text[i] == '\t' || text[i] == '\r')) {
-            i++;
-        }
-        return i;
+        return GraphJson.skipSpaces(text, i);
     }
 
     class int keyPosition(string text, string key) {
-        return Strings.find(text, "\"" + key + "\"", 0);
+        return GraphJson.keyPosition(text, key);
     }
 
     class string objectField(string text, string key) {
-        int pos = VmSpecParser.keyPosition(text, key);
-        if (pos < 0) { return ""; }
-        int colon = Strings.find(text, ":", pos);
-        if (colon < 0) { return ""; }
-        int i = VmSpecParser.skipSpaces(text, colon + 1);
-        int len = text.len();
-        if (i >= len || text[i] != '{') { return ""; }
-        int depth = 0;
-        bool inString = false;
-        bool escaped = false;
-        for (int j = i; j < len; j++) {
-            char c = text[j];
-            if (inString) {
-                if (!escaped && c == (char)34) { inString = false; }
-                escaped = !escaped && c == '\\';
-                if (c != '\\') { escaped = false; }
-                continue;
-            }
-            if (c == (char)34) {
-                inString = true;
-                escaped = false;
-                continue;
-            }
-            if (c == '{') {
-                depth++;
-                continue;
-            }
-            if (c == '}') {
-                depth--;
-                if (depth == 0) {
-                    return JsonObject.slice(text, i, j + 1);
-                }
-            }
-        }
-        return "";
+        return GraphJson.objectField(text, key);
     }
 
     class Map<string, string> argsObject(string text) {
-        Map<string, string> result = {};
-        string objectText = VmSpecParser.objectField(text, "args");
-        if (objectText.isEmpty()) { return result; }
-        JsonObject parsed = JsonObject.parse(objectText);
-        for key, value in parsed.values {
-            result.put(key, value);
-        }
-        return result;
+        return GraphJson.argsObject(text);
     }
 
     class string parseStringValue(string text, int i, string fallback) {
-        int len = text.len();
-        i = VmSpecParser.skipSpaces(text, i);
-        if (i >= len || text[i] != (char)34) { return fallback; }
-        i++;
-        int start = i;
-        bool escaped = false;
-        while (i < len) {
-            if (!escaped && text[i] == (char)34) {
-                return JsonObject.unescape(JsonObject.slice(text, start, i));
-            }
-            escaped = !escaped && text[i] == '\\';
-            if (text[i] != '\\') { escaped = false; }
-            i++;
-        }
-        return fallback;
+        return GraphJson.parseStringValue(text, i, fallback);
     }
 
     class string field(string text, string key, string fallback) {
-        int pos = VmSpecParser.keyPosition(text, key);
-        if (pos < 0) { return fallback; }
-        int colon = Strings.find(text, ":", pos);
-        if (colon < 0) { return fallback; }
-        int i = VmSpecParser.skipSpaces(text, colon + 1);
-        int len = text.len();
-        if (i < len && text[i] == (char)34) {
-            return VmSpecParser.parseStringValue(text, i, fallback);
-        }
-        int start = i;
-        while (i < len && text[i] != ',' && text[i] != '}' && text[i] != ']') {
-            i++;
-        }
-        string raw = JsonObject.slice(text, start, i).trim();
-        if (raw.isEmpty()) { return fallback; }
-        return raw;
+        return GraphJson.field(text, key, fallback);
     }
 
     class int intField(string text, string key, int fallback) {
-        string raw = VmSpecParser.field(text, key, "");
-        if (raw.isEmpty()) { return fallback; }
-        return Strings.toInt(raw);
+        return GraphJson.intField(text, key, fallback);
     }
 
     class VmOperation operation(string objectText) {
@@ -146,43 +63,8 @@ class VmSpecParser {
 
     class Vector<VmOperation> operations(string text) {
         Vector<VmOperation> result = [];
-        int pos = VmSpecParser.keyPosition(text, "operations");
-        if (pos < 0) { return result; }
-        int arrayStart = Strings.find(text, "[", pos);
-        if (arrayStart < 0) { return result; }
-        int len = text.len();
-        int depth = 0;
-        int start = -1;
-        bool inString = false;
-        bool escaped = false;
-        for (int i = arrayStart + 1; i < len; i++) {
-            char c = text[i];
-            if (inString) {
-                if (!escaped && c == (char)34) { inString = false; }
-                escaped = !escaped && c == '\\';
-                if (c != '\\') { escaped = false; }
-                continue;
-            }
-            if (c == (char)34) {
-                inString = true;
-                escaped = false;
-                continue;
-            }
-            if (c == '{') {
-                if (depth == 0) { start = i; }
-                depth++;
-                continue;
-            }
-            if (c == '}') {
-                depth--;
-                if (depth == 0 && start >= 0) {
-                    string objectText = JsonObject.slice(text, start, i + 1);
-                    result.push(VmSpecParser.operation(objectText));
-                    start = -1;
-                }
-                continue;
-            }
-            if (c == ']' && depth == 0) { break; }
+        for objectText in GraphJson.objectArray(text, "operations") {
+            result.push(VmSpecParser.operation(objectText));
         }
         return result;
     }

@@ -6,14 +6,10 @@ import ./graph/*;
 import ./spec.btrc;
 import ./qemu_harness.btrc;
 import ./runner.btrc;
-import ./graph.btrc;
 
-/* VM test graph — module aggregator (one class per file under graph/).
- * btrc #include is textual, so the transpiled C is identical to the former
- * single file. Dependency order: node -> model -> parser -> runner.
+/* VM test graph module aggregator.
  *
- *   node     VmGraphNode     — one node (id, deps, spec ref)
- *   model    VmTestGraph     — the node set
- *   parser   VmGraphParser   — JSON -> VmTestGraph
- *   runner   VmGraphRunner   — topological run + status/coverage
+ * std.graph owns the JSON graph model, parser, CLI arg helpers, and dependency
+ * traversal. The local graph runner only maps graph nodes onto VM specs and
+ * QEMU-backed operations.
  */

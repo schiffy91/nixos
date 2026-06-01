@@ -1,22 +1,18 @@
 import std.*;
+import std.graph;
 import ../spec/*;
-import ./*;
 import ../../../btrc/core/*;
 import ../runner.btrc;
 import ../qemu_harness.btrc;
 
 class VmGraphRunner {
-    public VmTestGraph graph;
+    public ExecutionGraph graph;
     public Map<string, string> args;
-    public Vector<string> done;
-    public Vector<string> visiting;
     public string sourceHashValue;
 
-    public VmGraphRunner(VmTestGraph graph, Map<string, string> args) {
+    public VmGraphRunner(ExecutionGraph graph, Map<string, string> args) {
         self.graph = graph;
         self.args = args;
-        self.done = [];
-        self.visiting = [];
         self.sourceHashValue = "";
     }
 
@@ -51,7 +47,7 @@ class VmGraphRunner {
         return self.sourceHashValue;
     }
 
-    public VmTestSpec specFor(VmGraphNode node) {
+    public VmTestSpec specFor(GraphNode node) {
         VmTestSpec spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(node));
         spec.setArg("graphName", self.graph.name);
         spec.setArg("nodeId", node.id);
@@ -93,10 +89,7 @@ class VmGraphRunner {
     }
 
     public void list() {
-        for node in self.graph.nodes {
-            string parents = node.after.isEmpty() ? "root" : node.after.join(",");
-            Console.log(node.id + " <- " + parents + " :: " + self.graph.resolvedSpecPath(node));
-        }
+        GraphReport.list(self.graph);
     }
 
     public void status() {
@@ -146,41 +139,23 @@ class VmGraphRunner {
         return saved.equals(spec.stateHash);
     }
 
-    public int runNode(string id) {
-        if (self.done.contains(id)) { return 0; }
-        if (self.visiting.contains(id)) { NixosLog.fatal("Cycle in graph at " + id); }
-        self.visiting.push(id);
-        VmGraphNode node = self.graph.node(id);
-        for parent in node.after {
-            int parentResult = self.runNode(parent);
-            if (parentResult != 0) {
-                self.visiting.removeAll(id);
-                return parentResult;
-            }
-        }
-        VmTestSpec spec = self.specFor(node);
-        if (!self.force() && self.ready(spec)) {
-            NixosLog.info("graph " + self.graph.name + ": skip " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
-            self.done.push(id);
-            self.visiting.removeAll(id);
-            return 0;
-        }
-        NixosLog.info("graph " + self.graph.name + ": run " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
-        VmTestRunner runner = VmTestRunner(spec);
-        int result = runner.run();
-        if (result != 0) {
-            self.visiting.removeAll(id);
-            return result;
-        }
-        self.done.push(id);
-        self.visiting.removeAll(id);
-        return 0;
-    }
-
     public int run(Vector<string> targets) {
-        Vector<string> selected = targets.isEmpty() ? self.graph.defaultTargets() : targets;
-        for id in selected {
-            int result = self.runNode(id);
+        GraphTraversal traversal = GraphTraversal(self.graph);
+        Vector<string> order = traversal.order(targets);
+        if (!traversal.ok()) {
+            NixosLog.fatal(traversal.error);
+        }
+
+        for id in order {
+            GraphNode node = self.graph.node(id);
+            VmTestSpec spec = self.specFor(node);
+            if (!self.force() && self.ready(spec)) {
+                NixosLog.info("graph " + self.graph.name + ": skip " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
+                continue;
+            }
+            NixosLog.info("graph " + self.graph.name + ": run " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
+            VmTestRunner runner = VmTestRunner(spec);
+            int result = runner.run();
             if (result != 0) { return result; }
         }
         return 0;

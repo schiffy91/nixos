@@ -1,4 +1,5 @@
 import std.*;
+import std.graph;
 import ../../btrc/core/*;
 import ./spec/*;
 import ./qemu/*;
@@ -98,46 +99,18 @@ class E2eCli {
     }
 
     public Map<string, string> graphArgs(CliArgs args, int startIndex) {
-        Map<string, string> result = {};
-        for (int i = startIndex; i < args.count(); i++) {
-            string value = args.get(i);
-            if (value.equals("--arg")) {
-                if (i + 1 >= args.count()) { NixosLog.fatal("Expected --arg key=value"); }
-                int pos = Strings.find(args.get(i + 1), "=", 0);
-                if (pos <= 0) { NixosLog.fatal("Expected --arg key=value"); }
-                result.put(JsonObject.slice(args.get(i + 1), 0, pos), JsonObject.slice(args.get(i + 1), pos + 1, args.get(i + 1).len()));
-                i++;
-                continue;
-            }
-            if (value.startsWith("--arg=")) {
-                string pair = Strings.removePrefix(value, "--arg=");
-                int pos = Strings.find(pair, "=", 0);
-                if (pos <= 0) { NixosLog.fatal("Expected --arg=key=value"); }
-                result.put(JsonObject.slice(pair, 0, pos), JsonObject.slice(pair, pos + 1, pair.len()));
-            }
-        }
-        return result;
+        return GraphCli.args(args, startIndex);
     }
 
     public Vector<string> graphTargets(CliArgs args, int startIndex) {
-        Vector<string> result = [];
-        for (int i = startIndex; i < args.count(); i++) {
-            string value = args.get(i);
-            if (value.equals("--arg")) {
-                i++;
-                continue;
-            }
-            if (value.startsWith("--arg=")) { continue; }
-            result.push(value);
-        }
-        return result;
+        return GraphCli.targets(args, startIndex);
     }
 
     public int runGraph(CliArgs args) {
         if (args.count() < 3) {
             NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
         }
-        VmTestGraph graph = VmGraphParser.readFile(args.get(1));
+        ExecutionGraph graph = GraphParser.readFile(args.get(1));
         string action = args.get(2);
         Map<string, string> overrides = self.graphArgs(args, 3);
         VmGraphRunner runner = VmGraphRunner(graph, overrides);

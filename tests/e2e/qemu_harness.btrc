@@ -26,7 +26,7 @@ class QemuE2eHarness {
         self.serial = QemuSerial(spec);
         self.firmware = QemuFirmware(spec);
         self.state = VmStateStore(spec, self.firmware);
-        self.provisioner = VmProvisioner(spec, self.remote);
+        self.provisioner = VmProvisioner(spec, self.remote, self.state);
         self.qemuCmd = QemuCommandBuilder(spec, self.firmware, self.serial);
         self.assets = VmAssets(spec, self.serial);
     }
@@ -35,6 +35,9 @@ class QemuE2eHarness {
     public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
     public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
+    public string qemuLogPath() { return PathTools.join(self.spec.workDir, "qemu.log"); }
+    public string qemuExitPath() { return PathTools.join(self.spec.workDir, "qemu.exit"); }
+    public string qemuStopLogPath() { return PathTools.join(self.spec.workDir, "qemu-stop.log"); }
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
 
@@ -66,31 +69,57 @@ class QemuE2eHarness {
     public void start(bool fromIso) {
         self.ensureWorkDir();
         if (FileSystem.exists(self.pidPath())) {
-            NixosLog.info("QEMU pidfile exists; assuming VM is already running");
-            return;
+            if (self.state.isRunning()) {
+                self.state.rememberPid(Path.readAll(self.pidPath()).trim());
+                NixosLog.info("QEMU pidfile exists; assuming VM is already running");
+                return;
+            }
+            FileSystem.removeRecursive(self.pidPath());
         }
         Command cmd = self.qemuCmd.build(fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
+        FileSystem.removeRecursive(self.qemuLogPath());
+        FileSystem.removeRecursive(self.qemuExitPath());
         cmd.arg("-daemonize");
         cmd.arg("-pidfile");
         cmd.arg(self.pidPath());
-        cmd.capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+        cmd.mergeError(false);
+        string launch = cmd.render() + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1";
+        ExecResult result = self.shell.runRaw(launch, false, false, "");
         if (!result.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
-            NixosLog.fatal("Failed to start QEMU");
+            NixosLog.fatal("Failed to start QEMU; QEMU log: " + self.qemuLogPath());
+        }
+        string readyCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do "
+            + "test -s " + UnixShell.quote(self.pidPath())
+            + " && kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null && exit 0; "
+            + "sleep 1; done; exit 1";
+        ExecResult ready = self.shell.runRaw(readyCommand, false, false, "");
+        if (!ready.ok()) {
+            self.serial.stopSerialReader();
+            self.firmware.stopSwtpm();
+            NixosLog.fatal("QEMU did not stay running after launch; QEMU log: " + self.qemuLogPath());
+        }
+        self.state.rememberPid(Path.readAll(self.pidPath()).trim());
+        if (!self.state.isRunning()) {
+            self.serial.stopSerialReader();
+            self.firmware.stopSwtpm();
+            NixosLog.fatal("QEMU exited before it was ready; " + self.state.runningDetail() + "; serial log: " + self.serialLogPath() + "; QEMU log: " + self.qemuLogPath());
         }
     }
 
     public void stop() {
         self.serial.stopSerialReader();
-        if (FileSystem.exists(self.pidPath())) {
-            string quotedPid = UnixShell.quote(self.pidPath());
-            self.shell.runRaw("pid=$(cat " + quotedPid + "); kill $pid 2>/dev/null || true; sleep 2; kill -0 $pid 2>/dev/null && kill -9 $pid 2>/dev/null || true", false, false, "");
+        string pid = self.state.currentPid();
+        if (!pid.isEmpty()) {
+            string quotedPid = UnixShell.quote(pid);
+            string quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
+            self.shell.runRaw("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true", false, false, "");
             FileSystem.removeRecursive(self.pidPath());
         }
+        self.state.clearPid();
         FileSystem.removeRecursive(self.monitorPath());
         FileSystem.removeRecursive(self.qmpPath());
         FileSystem.removeRecursive(self.serial.serialInPath());
@@ -103,6 +132,9 @@ class QemuE2eHarness {
     }
 
     public void bootstrapSsh() {
+        if (!self.state.isRunning()) {
+            NixosLog.fatal("Cannot bootstrap SSH because QEMU is not running; " + self.state.runningDetail() + "; serial log: " + self.serialLogPath() + "; QEMU log: " + self.qemuLogPath());
+        }
         self.createSshKey();
         string key = self.sshPubKey();
         self.serial.serialSend("");
@@ -155,6 +187,10 @@ class QemuE2eHarness {
     public bool waitForSsh(int timeout) {
         int elapsed = 0;
         while (elapsed < timeout) {
+            if (!self.state.isRunning()) {
+                NixosLog.error("QEMU exited while waiting for SSH; " + self.state.runningDetail() + "; serial log: " + self.serialLogPath() + "; QEMU log: " + self.qemuLogPath());
+                return false;
+            }
             ExecResult result = self.ssh("true", false);
             if (result.ok()) { return true; }
             self.sleepSeconds(3);

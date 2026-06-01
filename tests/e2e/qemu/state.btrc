@@ -16,11 +16,13 @@ class VmStateStore {
     public VmTestSpec spec;
     public UnixShell shell;
     public QemuFirmware firmware;
+    public string runningPid;
 
     public VmStateStore(VmTestSpec spec, QemuFirmware firmware) {
         self.spec = spec;
         self.shell = UnixShell();
         self.firmware = firmware;
+        self.runningPid = "";
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
@@ -30,6 +32,20 @@ class VmStateStore {
     public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
     public string parentWorkDirFile() { return PathTools.join(self.parentStateDir(), "workDir"); }
     public string backingDiskFile() { return PathTools.join(self.spec.workDir, "backing-disk"); }
+
+    public void rememberPid(string pid) {
+        self.runningPid = pid.trim();
+    }
+
+    public void clearPid() {
+        self.runningPid = "";
+    }
+
+    public string currentPid() {
+        if (!self.runningPid.isEmpty()) { return self.runningPid; }
+        if (!FileSystem.exists(self.pidPath())) { return ""; }
+        return Path.readAll(self.pidPath()).trim();
+    }
 
     public void ensureWorkDir() {
         FileSystem.mkdirp(self.spec.workDir);
@@ -129,9 +145,17 @@ class VmStateStore {
     }
 
     public bool isRunning() {
-        if (!FileSystem.exists(self.pidPath())) { return false; }
-        ExecResult result = self.shell.runRaw("kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null", false, false, "");
+        string pid = self.currentPid();
+        if (pid.isEmpty()) { return false; }
+        ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -q 'qemu-system-'", false, false, "");
         return result.ok();
+    }
+
+    public string runningDetail() {
+        string pid = self.currentPid();
+        if (pid.isEmpty()) { return "missing pidfile " + self.pidPath(); }
+        ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; if kill -0 \"$pid\" 2>/dev/null; then printf 'pid=%s running ' \"$pid\"; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; else printf 'pid=%s not-running' \"$pid\"; fi", true, false, "");
+        return result.trimmed();
     }
 
     public bool hasSnapshot(string name) {

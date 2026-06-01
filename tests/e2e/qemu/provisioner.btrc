@@ -12,14 +12,20 @@ import ./*;
 class VmProvisioner {
     public VmTestSpec spec;
     public SshClient remote;
+    public VmStateStore state;
 
-    public VmProvisioner(VmTestSpec spec, SshClient remote) {
+    public VmProvisioner(VmTestSpec spec, SshClient remote, VmStateStore state) {
         self.spec = spec;
         self.remote = remote;
+        self.state = state;
     }
 
     public string pubKey() {
         return Path.readAll(PathTools.join(self.spec.workDir, "id_ed25519.pub")).trim();
+    }
+
+    public string qemuLogPath() {
+        return PathTools.join(self.spec.workDir, "qemu.log");
     }
 
     public void configureVmHost() {
@@ -129,13 +135,69 @@ class VmProvisioner {
             : "true";
         string snapshots = "nixos-enter --root /mnt --command "
             + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --add safe.directory /etc/nixos || true");
-        string command = "set -e; " + disko + "; " + install + "; " + lanzabooteInstall + "; " + snapshots + "; echo INSTALL_OK";
+        string script = "set -ex\n"
+            + "printf INSTALL_START > /tmp/nixos-install.status\n"
+            + disko + "\n"
+            + install + "\n"
+            + lanzabooteInstall + "\n"
+            + snapshots + "\n"
+            + "printf INSTALL_OK > /tmp/nixos-install.status\n";
+        string runner = "rm -f /tmp/nixos-install.pipe; mkfifo /tmp/nixos-install.pipe; "
+            + "tee /tmp/nixos-install.log < /tmp/nixos-install.pipe > /dev/ttyS0 & teepid=$!; "
+            + "sh /tmp/nixos-install.sh > /tmp/nixos-install.pipe 2>&1 < /dev/null; "
+            + "code=$?; "
+            + "wait $teepid || true; rm -f /tmp/nixos-install.pipe; "
+            + "if [ $code -ne 0 ]; then printf 'INSTALL_FAIL:%s\\n' \"$code\" > /tmp/nixos-install.status; fi";
+        string launch = "set -e; "
+            + "rm -f /tmp/nixos-install.status /tmp/nixos-install.log /tmp/nixos-install.sh; "
+            + "printf %s " + UnixShell.quote(script) + " > /tmp/nixos-install.sh; "
+            + "chmod +x /tmp/nixos-install.sh; "
+            + "nohup sh -c " + UnixShell.quote(runner) + " >/dev/null 2>&1 &";
         int timeoutSeconds = secureBootTarget ? 7200 : 3600;
-        ExecResult result = self.remote.sshWithTimeout(command, false, timeoutSeconds);
-        if (!result.ok() || !result.stdout().contains("INSTALL_OK")) {
-            Console.error(result.stdout());
+        ExecResult launched = self.remote.sshWithTimeout(launch, false, 30);
+        if (!launched.ok()) {
+            Console.error(launched.stdout());
             return false;
         }
-        return true;
+        return self.waitForInstallStatus(timeoutSeconds);
+    }
+
+    public void printInstallLog() {
+        string command = "if test -f /tmp/nixos-install.log; then tail -n 240 /tmp/nixos-install.log; fi; "
+            + "if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi";
+        ExecResult log = self.remote.sshWithTimeout(command, false, 30);
+        if (log.ok()) { Console.error(log.stdout()); }
+    }
+
+    public bool waitForInstallStatus(int timeoutSeconds) {
+        int elapsed = 0;
+        int unavailable = 0;
+        while (elapsed < timeoutSeconds) {
+            if (!self.state.isRunning()) {
+                NixosLog.error("QEMU exited while NixOS installation was running; " + self.state.runningDetail() + "; QEMU log: " + self.qemuLogPath());
+                self.printInstallLog();
+                return false;
+            }
+            ExecResult status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
+            if (status.ok()) {
+                unavailable = 0;
+                string text = status.stdout();
+                if (text.contains("INSTALL_OK")) { return true; }
+                if (text.contains("INSTALL_FAIL")) {
+                    self.printInstallLog();
+                    return false;
+                }
+            } else {
+                unavailable++;
+                if (unavailable >= 20) {
+                    self.printInstallLog();
+                    return false;
+                }
+            }
+            self.remote.host("sleep 15", false);
+            elapsed = elapsed + 15;
+        }
+        self.printInstallLog();
+        return false;
     }
 }

@@ -201,7 +201,7 @@ in {
     settings.apps.onePassword.enable = mkSetting bool true;
 
     # Link the BTRC binaries (immutability, nixosctl, tray) against the stdlib
-    # compiled once into a static archive (nix/apps/btrc.nix), instead of
+    # compiled once into a static archive (nix/system/btrc.nix), instead of
     # re-compiling the whole stdlib inlined into each. Static either way, so the
     # initrd immutability stays self-contained. Off = build the stdlib into each
     # binary (no shared archive).
