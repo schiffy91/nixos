@@ -1,0 +1,21 @@
+import std.*;
+
+class VmSpecArgs {
+    class string hostArch() {
+        UnixShell shell = UnixShell();
+        ExecResult result = shell.run("uname -m");
+        string machine = result.trimmed();
+        if (machine.contains("arm64") || machine.contains("aarch64")) {
+            return "aarch64";
+        }
+        return "x86_64";
+    }
+
+    class string defaultIsoUrl(string arch) {
+        return "https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-" + arch + "-linux.iso";
+    }
+
+    class string expand(string text, Map<string, string> args) {
+        return JsonText.expand(text, args);
+    }
+}

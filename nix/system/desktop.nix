@@ -59,6 +59,6 @@ in lib.mkIf config.settings.desktop.enable {
       print-manager
     ];
   };
-  security.pam.services.sddm.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;
-  security.pam.services.passwd.enableKwallet = config.settings.user.admin.autoUnlockWallet.enabled;  # pam_kwallet hooks chauthtok → wallet re-encrypts on passwd
+  security.pam.services.sddm.enableKwallet = config.settings.users.admin.autoUnlockWallet.enabled;
+  security.pam.services.passwd.enableKwallet = config.settings.users.admin.autoUnlockWallet.enabled;  # pam_kwallet hooks chauthtok → wallet re-encrypts on passwd
 }

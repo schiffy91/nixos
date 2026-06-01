@@ -1,7 +1,8 @@
 import std.*;
-import ../../../btrc/core/*;
-import ../spec/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ../spec.btrc;
+import ./firmware.btrc;
+import ./serial.btrc;
 
 /* Assembles the QEMU argv for a boot: accelerator, machine/cpu, firmware, RAM/
  * CPUs, disk + user-net, console sockets, TPM, and boot media. build() returns
@@ -12,26 +13,38 @@ class QemuCommandBuilder {
     public VmTestSpec spec;
     public QemuFirmware firmware;
     public QemuSerial serial;
+    public UnixShell shell;
 
     public QemuCommandBuilder(VmTestSpec spec, QemuFirmware firmware, QemuSerial serial) {
         self.spec = spec;
         self.firmware = firmware;
         self.serial = serial;
+        self.shell = UnixShell();
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
     public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
 
+    // Give each VM a workdir-local executable name so pid checks and host
+    // process inspection use the e2e state identity, not a generic QEMU name.
+    public void ensureVmLaunchBinary() {
+        string command = "set -e; bin=$(command -v " + UnixShell.quote(self.firmware.qemuBinary()) + "); target=" + UnixShell.quote(self.spec.vmLaunchBinary()) + "; rm -f \"$target\"; cp \"$bin\" \"$target\"; chmod 755 \"$target\"";
+        ExecResult result = self.shell.runRaw(command, false, false, "");
+        if (!result.ok()) {
+            NixosLog.fatal("Failed to create isolated VM launcher " + self.spec.vmLaunchBinary());
+        }
+    }
+
     public void addAccelerator(Command cmd) {
         if (self.firmware.isDarwin()) {
             cmd.arg("-accel");
-            cmd.arg(self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg");
+            cmd.arg(self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg,thread=multi");
         } else if (self.firmware.hostArchMatchesGuest()) {
             cmd.arg("-enable-kvm");
         } else {
             cmd.arg("-accel");
-            cmd.arg("tcg");
+            cmd.arg("tcg,thread=multi");
         }
     }
 
@@ -50,6 +63,8 @@ class QemuCommandBuilder {
         cmd.arg(self.spec.memory);
         cmd.arg("-smp");
         cmd.arg(Strings.fromInt(self.spec.cpus));
+        cmd.arg("-name");
+        cmd.arg(self.spec.vmProcessName());
     }
 
     public void addStorageAndNetwork(Command cmd) {
@@ -93,9 +108,11 @@ class QemuCommandBuilder {
     }
 
     public Command build(bool fromIso) {
-        Command cmd = Command(self.firmware.qemuBinary());
+        self.ensureVmLaunchBinary();
+        Command cmd = Command(self.spec.vmLaunchBinary());
         self.addAccelerator(cmd);
         self.addMachine(cmd);
+        self.firmware.addFirmwareData(cmd);
         self.firmware.addFirmware(cmd, fromIso);
         self.addMemoryCpus(cmd);
         self.addStorageAndNetwork(cmd);

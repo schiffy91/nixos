@@ -1,6 +1,6 @@
 { config, pkgs, lib, ... }:
 let
-  user = config.settings.user.admin.username;
+  user = config.settings.users.admin.username;
   home = "/home/${user}";
   steamPath = "${home}/.local/share/Steam";
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;

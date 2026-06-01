@@ -33,6 +33,41 @@
     },
     {
       "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.nixosctl.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.nixosctl.configPath",
+      "expect": "nixosctl.toml"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.users.agent.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.users.users.agent.isNormalUser",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.users.users.agent.group",
+      "expect": "agent"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.home-manager.users.agent.programs.direnv.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.disk.immutability.persist.paths",
+      "expect": "/home/agent/work"
+    },
+    {
+      "op": "nix-eval",
       "command": "nixosConfigurations.QEMU-Standard-Boot.config.settings.apps.enable",
       "expect": "true"
     },

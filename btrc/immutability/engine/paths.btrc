@@ -1,6 +1,7 @@
 import std.*;
 import ../../core/log.btrc;
-import ./*;
+import ./constants.btrc;
+import ./types.btrc;
 
 class ImmutabilityPaths {
     class string trimSlashes(string raw) {

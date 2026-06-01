@@ -4,7 +4,7 @@ let
     && config.settings.apps.battlenet.enable
     && config.settings.apps.steam.enable
     && pkgs.stdenv.hostPlatform.isx86_64;
-  user = config.settings.user.admin.username;
+  user = config.settings.users.admin.username;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
   proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.customName}";
@@ -176,7 +176,7 @@ let
     '';
   };
 in lib.mkIf enabled {
-  environment.systemPackages = [ launcher desktop captureHelper ];
+  users.users.${user}.packages = [ launcher desktop captureHelper ];
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
     if [ -f "${exe}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} "$(dirname ${iconPath})"

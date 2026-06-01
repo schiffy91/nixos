@@ -1,7 +1,7 @@
 import std.*;
 import std.graph;
-import ../spec/*;
-import ../../../btrc/core/*;
+import ../../../btrc/core/log.btrc;
+import ../spec.btrc;
 import ../runner.btrc;
 import ../qemu_harness.btrc;
 
@@ -74,7 +74,7 @@ class VmGraphRunner {
             spec.iso = PathTools.join(PathTools.join(".vm", "iso"), "nixos-minimal-" + spec.arch + ".iso");
         }
         if (archChanged && !overrides.has("isoUrl")) {
-            spec.isoUrl = VmSpecParser.defaultIsoUrl(spec.arch);
+            spec.isoUrl = VmSpecArgs.defaultIsoUrl(spec.arch);
         }
         if (overrides.has("iso")) { spec.iso = overrides.get("iso"); }
         if (overrides.has("isoUrl")) { spec.isoUrl = overrides.get("isoUrl"); }

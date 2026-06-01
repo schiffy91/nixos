@@ -1,6 +1,7 @@
 import std.*;
-import ../core/*;
-import ../system/{config,rebuild}.btrc;
+import ../core/log.btrc;
+import ../system/config.btrc;
+import ../system/rebuild.btrc;
 
 class SecureBootManager {
     public NixosConfig config;

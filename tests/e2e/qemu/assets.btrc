@@ -1,7 +1,7 @@
 import std.*;
-import ../../../btrc/core/*;
-import ../spec/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ../spec.btrc;
+import ./serial.btrc;
 
 /* Host-side VM assets created before first boot: the installer ISO (downloaded
  * if missing), the SSH keypair, and the qcow2 disk; setup() also extracts the

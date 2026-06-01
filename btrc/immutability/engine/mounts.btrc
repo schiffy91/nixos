@@ -1,5 +1,10 @@
 import std.*;
-import ./*;
+import ./btrfs.btrc;
+import ./constants.btrc;
+import ./fs.btrc;
+import ./paths.btrc;
+import ./run.btrc;
+import ./types.btrc;
 
 /* Mounting + the two non-reset modes. Mounts the btrfs top (subvolid=5) for the
  * reset/snapshot passes, mounts each persistent subvolume for the mount-persist

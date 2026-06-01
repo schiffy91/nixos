@@ -1,7 +1,6 @@
 import std.*;
-import ../../../btrc/core/*;
-import ../spec/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ../spec.btrc;
 
 /* VM serial console: named-pipe wiring, the background reader, sending input,
  * and extracting the installer ISO's boot-serial kernel/initrd/append.
@@ -118,7 +117,8 @@ class QemuSerial {
     public void stopSerialReader() {
         if (!FileSystem.exists(self.serialReaderPidPath())) { return; }
         string pidPath = UnixShell.quote(self.serialReaderPidPath());
-        self.shell.runRaw("pid=$(cat " + pidPath + "); kill $pid 2>/dev/null || true", false, false, "");
+        string outPath = UnixShell.quote(self.serialOutPath());
+        self.shell.runRaw("pid=$(cat " + pidPath + "); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + outPath + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", false, false, "");
         FileSystem.removeRecursive(self.serialReaderPidPath());
     }
 

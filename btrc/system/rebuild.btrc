@@ -1,8 +1,10 @@
 import std.*;
-import ../core/*;
-import ./{config,secrets,permissions,rebuild,password}.btrc;
+import ../core/interactive.btrc;
+import ../core/log.btrc;
 import ../btrfs/snapshot.btrc;
-import ../hardware/tpm2.btrc;
+import ./config.btrc;
+import ./secrets.btrc;
+import ./permissions.btrc;
 
 class RebuildOptions {
     public bool rebuildFileSystem;

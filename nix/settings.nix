@@ -2,22 +2,65 @@
 let
   mkSetting = type: defaultValue: lib.mkOption { inherit type; default = defaultValue; };
   snapshotVolume = lib.lists.findFirst (volume: volume.flag == "snapshots") null config.settings.disk.subvolumes.volumes;
+  adminHome = "/home/${config.settings.users.admin.username}";
+  agentHome = "/home/${config.settings.users.agent.username}";
 in {
   options = with lib.types; {
     ##### Secrets ##### 
     settings.secrets.path = mkSetting str "/etc/nixos/secrets";
     settings.secrets.hashedPasswordFile = mkSetting str "hashed_password.txt";
     ##### Admin ##### 
-    settings.user.admin.username = mkSetting str "alexanderschiffhauer";
-    settings.user.admin.publicName = mkSetting str "Alexander Schiffhauer";
-    settings.user.admin.publicEmail = mkSetting str "Alexander.Schiffhauer@gmail.com";
-    settings.user.admin.autoLogin.enable = mkSetting bool false;
-    settings.user.admin.autoLock.enable = mkSetting bool true;
-    settings.user.admin.autoUnlockWallet.enabled = mkSetting bool true;
-    settings.user.admin.authorizedKeys = mkSetting (listOf str) [
+    settings.users.admin.username = mkSetting str "alexanderschiffhauer";
+    settings.users.admin.publicName = mkSetting str "Alexander Schiffhauer";
+    settings.users.admin.publicEmail = mkSetting str "Alexander.Schiffhauer@gmail.com";
+    settings.users.admin.autoLogin.enable = mkSetting bool false;
+    settings.users.admin.autoLock.enable = mkSetting bool true;
+    settings.users.admin.autoUnlockWallet.enabled = mkSetting bool true;
+    settings.users.admin.authorizedKeys = mkSetting (listOf str) [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINJsoluI1m5T4iwuCbpSdHvLVdemN3v7wMrqk4e+XJA0"
     ];
-    settings.user.admin.homeManager.enable = mkSetting bool true;
+    settings.users.admin.extraGroups = mkSetting (listOf str) [ "wheel" "networkmanager" ];
+    settings.users.admin.homeManager.enable = mkSetting bool true;
+    ##### Agent #####
+    settings.users.agent.enable = mkSetting bool true;
+    settings.users.agent.username = mkSetting str "agent";
+    settings.users.agent.publicName = mkSetting str "Agent";
+    settings.users.agent.publicEmail = mkSetting str "agent@localhost";
+    settings.users.agent.authorizedKeys = mkSetting (listOf str) config.settings.users.admin.authorizedKeys;
+    settings.users.agent.extraGroups = mkSetting (listOf str) [];
+    settings.users.agent.homeManager.enable = mkSetting bool true;
+    settings.users.agent.packages = mkSetting (listOf package) (with pkgs; [
+      bashInteractive
+      coreutils
+      git
+      ripgrep
+      fd
+      jq
+      curl
+      wget
+      gnumake
+      gcc
+      python313
+      nodejs
+      nixd
+      shellcheck
+    ]);
+    settings.users.agent.persist.paths = mkSetting (listOf str) [
+      "${agentHome}/work"
+      "${agentHome}/Downloads"
+      "${agentHome}/.bash_history"
+      "${agentHome}/.ssh/known_hosts"
+      "${agentHome}/.cache"
+      "${agentHome}/.config"
+      "${agentHome}/.local/bin"
+      "${agentHome}/.local/share"
+      "${agentHome}/.local/state"
+      "${agentHome}/.npm"
+      "${agentHome}/.cargo"
+      "${agentHome}/.codex"
+      "${agentHome}/.claude"
+      "${agentHome}/.claude.json"
+    ];
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
     ##### Disk: Labels #####
@@ -68,7 +111,7 @@ in {
     settings.disk.immutability.enforce.onUpdate = mkSetting bool false;
     settings.disk.immutability.persist.subvolumeRoot = mkSetting str "@persist";
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";
-    settings.disk.immutability.persist.paths = mkSetting (listOf str) [
+    settings.disk.immutability.persist.paths = mkSetting (listOf str) ([
       ##### Core System Files #####
       "/etc/machine-id"
       "/etc/nixos"
@@ -84,80 +127,80 @@ in {
       ##### Secure Boot #####
       "${config.settings.boot.pkiBundle}"
       ##### Files & Folders #####
-      "/home/${config.settings.user.admin.username}/Downloads"
-      "/home/${config.settings.user.admin.username}/.bash_history"
-      "/home/${config.settings.user.admin.username}/.config/dconf/user"
-      "/home/${config.settings.user.admin.username}/.config/xsettingsd/xsettingsd.conf"
-      "/home/${config.settings.user.admin.username}/.cache"
-      "/home/${config.settings.user.admin.username}/.pki"
+      "${adminHome}/Downloads"
+      "${adminHome}/.bash_history"
+      "${adminHome}/.config/dconf/user"
+      "${adminHome}/.config/xsettingsd/xsettingsd.conf"
+      "${adminHome}/.cache"
+      "${adminHome}/.pki"
       ##### SSH #####
-      "/home/${config.settings.user.admin.username}/.ssh/known_hosts"
+      "${adminHome}/.ssh/known_hosts"
       ##### Network Manager #####
-      "/home/${config.settings.user.admin.username}/.cert/nm-openvpn"
+      "${adminHome}/.cert/nm-openvpn"
       ##### Direnv #####
-      "/home/${config.settings.user.admin.username}/.local/share/direnv"
+      "${adminHome}/.local/share/direnv"
       ##### Plasma #####
-      "/home/${config.settings.user.admin.username}/.config/gtk-3.0"
-      "/home/${config.settings.user.admin.username}/.config/gtk-4.0"
-      "/home/${config.settings.user.admin.username}/.config/gtkrc-2.0"
-      "/home/${config.settings.user.admin.username}/.config/gtkrc"
-      "/home/${config.settings.user.admin.username}/.icons"
-      "/home/${config.settings.user.admin.username}/.config/kcmfonts"
-      "/home/${config.settings.user.admin.username}/.config/kcminputrc"
-      "/home/${config.settings.user.admin.username}/.config/kdedefaults"
-      "/home/${config.settings.user.admin.username}/.config/kdeglobals"
-      "/home/${config.settings.user.admin.username}/.config/konsolesshconfig"
-      "/home/${config.settings.user.admin.username}/.config/kwalletrc"
-      "/home/${config.settings.user.admin.username}/.config/kwinoutputconfig.json"
-      "/home/${config.settings.user.admin.username}/.config/kwinrc"
-      "/home/${config.settings.user.admin.username}/.config/menu"
-      "/home/${config.settings.user.admin.username}/.config/plasma-org.kde.plasma.desktop-appletsrc"
-      "/home/${config.settings.user.admin.username}/.config/plasmashellrc"
-      "/home/${config.settings.user.admin.username}/.config/QtProject.conf"
-      "/home/${config.settings.user.admin.username}/.config/systemsettingsrc"
-      "/home/${config.settings.user.admin.username}/.config/Trolltech.conf"
-      "/home/${config.settings.user.admin.username}/.gtkrc-2.0"
-      "/home/${config.settings.user.admin.username}/.local/share/baloo/index-lock"
-      "/home/${config.settings.user.admin.username}/.local/share/kactivitymanagerd"
-      "/home/${config.settings.user.admin.username}/.local/share/recently-used.xbel"
-      "/home/${config.settings.user.admin.username}/.local/state/konsolestaterc"
-      "/home/${config.settings.user.admin.username}/.local/state/systemsettingsstaterc"
+      "${adminHome}/.config/gtk-3.0"
+      "${adminHome}/.config/gtk-4.0"
+      "${adminHome}/.config/gtkrc-2.0"
+      "${adminHome}/.config/gtkrc"
+      "${adminHome}/.icons"
+      "${adminHome}/.config/kcmfonts"
+      "${adminHome}/.config/kcminputrc"
+      "${adminHome}/.config/kdedefaults"
+      "${adminHome}/.config/kdeglobals"
+      "${adminHome}/.config/konsolesshconfig"
+      "${adminHome}/.config/kwalletrc"
+      "${adminHome}/.config/kwinoutputconfig.json"
+      "${adminHome}/.config/kwinrc"
+      "${adminHome}/.config/menu"
+      "${adminHome}/.config/plasma-org.kde.plasma.desktop-appletsrc"
+      "${adminHome}/.config/plasmashellrc"
+      "${adminHome}/.config/QtProject.conf"
+      "${adminHome}/.config/systemsettingsrc"
+      "${adminHome}/.config/Trolltech.conf"
+      "${adminHome}/.gtkrc-2.0"
+      "${adminHome}/.local/share/baloo/index-lock"
+      "${adminHome}/.local/share/kactivitymanagerd"
+      "${adminHome}/.local/share/recently-used.xbel"
+      "${adminHome}/.local/state/konsolestaterc"
+      "${adminHome}/.local/state/systemsettingsstaterc"
       ##### Kwallet #####
-      "/home/${config.settings.user.admin.username}/.local/share/kwalletd"
+      "${adminHome}/.local/share/kwalletd"
       ##### Klipper #####
-      "/home/${config.settings.user.admin.username}/.local/share/klipper/history2.lst"
+      "${adminHome}/.local/share/klipper/history2.lst"
       ##### 1Password #####
-      "/home/${config.settings.user.admin.username}/.config/1Password"
+      "${adminHome}/.config/1Password"
       ##### Chrome #####
-      "/home/${config.settings.user.admin.username}/.config/google-chrome"
-      "/home/${config.settings.user.admin.username}/.local/share/applications"
-      "/home/${config.settings.user.admin.username}/.local/share/icons"
-      "/home/${config.settings.user.admin.username}/.local/share/desktop-directories"
+      "${adminHome}/.config/google-chrome"
+      "${adminHome}/.local/share/applications"
+      "${adminHome}/.local/share/icons"
+      "${adminHome}/.local/share/desktop-directories"
       ##### VSCode #####
-      "/home/${config.settings.user.admin.username}/.config/Code"
-      "/home/${config.settings.user.admin.username}/.vscode"
+      "${adminHome}/.config/Code"
+      "${adminHome}/.vscode"
       ##### Codex #####
-      "/home/${config.settings.user.admin.username}/.codex"
+      "${adminHome}/.codex"
       ##### Sunshine #####
-      "/home/${config.settings.user.admin.username}/.config/sunshine"
-      "/home/${config.settings.user.admin.username}/.local/share/flatpak/db"
+      "${adminHome}/.config/sunshine"
+      "${adminHome}/.local/share/flatpak/db"
       ##### Mullvad #####
       "/etc/mullvad-vpn/"
-      "/home/${config.settings.user.admin.username}/.config/Mullvad VPN"
+      "${adminHome}/.config/Mullvad VPN"
       ##### Claude #####
-      "/home/${config.settings.user.admin.username}/.claude"
-      "/home/${config.settings.user.admin.username}/.claude.json"
+      "${adminHome}/.claude"
+      "${adminHome}/.claude.json"
       ##### Steam #####
-      "/home/${config.settings.user.admin.username}/.local/share/Steam"
-      "/home/${config.settings.user.admin.username}/.steam"
+      "${adminHome}/.local/share/Steam"
+      "${adminHome}/.steam"
       ##### Games #####
-      "/home/${config.settings.user.admin.username}/Games"
-      "/home/${config.settings.user.admin.username}/.local/share/umu"
+      "${adminHome}/Games"
+      "${adminHome}/.local/share/umu"
       ##### Apple Music #####
-      "/home/${config.settings.user.admin.username}/.config/sh.cider.genten"
+      "${adminHome}/.config/sh.cider.genten"
       ##### rclone #####
-      "/home/${config.settings.user.admin.username}/.config/rclone"
-    ];
+      "${adminHome}/.config/rclone"
+    ] ++ lib.optionals config.settings.users.agent.enable config.settings.users.agent.persist.paths);
     ##### Sleep #####
     settings.sleep.allowHibernation = mkSetting bool false;
     ##### Boot #####
@@ -197,7 +240,7 @@ in {
     settings.apps.claude.enable = mkSetting bool true;
     settings.apps.cursor.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
-    settings.apps.nixosHelper.enable = mkSetting bool true;
+    settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.onePassword.enable = mkSetting bool true;
 
     # Link the BTRC binaries (immutability, nixosctl, tray) against the stdlib
@@ -229,8 +272,8 @@ in {
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
-    ##### NixOS Helper #####
-    settings.nixosHelper.configPath = mkSetting str "";
+    ##### nixosctl #####
+    settings.nixosctl.configPath = mkSetting str "";
     ##### Sudoless Allowlist #####
     settings.sudolessAllowlist.enable   = mkSetting bool false;
     settings.sudolessAllowlist.nopasswd = mkSetting (attrsOf bool) {

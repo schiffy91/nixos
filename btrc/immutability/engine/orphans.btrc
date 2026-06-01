@@ -1,5 +1,9 @@
 import std.*;
-import ./*;
+import ./constants.btrc;
+import ./fs.btrc;
+import ./paths.btrc;
+import ./run.btrc;
+import ./types.btrc;
 
 /* Namespace + orphan hygiene for the persist store: ensureNamespaces creates
  * the persistRoot / dirs / meta / files subvolumes, and pruneOrphans drops any

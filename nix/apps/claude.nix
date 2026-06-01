@@ -1,7 +1,6 @@
 { config, lib, ... }: let
-  user = config.settings.user.admin.username;
-in lib.mkIf (config.settings.apps.enable && config.settings.apps.claude.enable) {
-  home-manager.users.${user}.home.file.".claude/skills/nixos-init/SKILL.md".text = ''
+  user = config.settings.users.admin.username;
+  skillText = ''
     ---
     name: nixos-init
     description: Load full context for the NixOS configuration at /etc/nixos by reading the flake and every module file. Use when starting work on this repo, before answering questions about the system config, or when the user asks to init/load the nixos config.
@@ -16,4 +15,8 @@ in lib.mkIf (config.settings.apps.enable && config.settings.apps.claude.enable) 
     2) Make a git worktree with a short and succinct label for the project.
     3) If existing changes in git, ask me what to do with them.
   '';
+in lib.mkIf (config.settings.apps.enable
+             && config.settings.apps.claude.enable
+             && config.settings.users.admin.homeManager.enable) {
+  home-manager.users.${user}.home.file.".claude/skills/nixos-init/SKILL.md".text = skillText;
 }

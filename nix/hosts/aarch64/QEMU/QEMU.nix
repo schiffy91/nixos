@@ -22,7 +22,7 @@
       identityAgent = "none";
       lanSubnet = "10.0.2.0/24";
     };
-    user.admin = {
+    users.admin = {
       autoLogin.enable = false;
       autoLock.enable = false;
       autoUnlockWallet.enabled = false;

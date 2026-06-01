@@ -21,7 +21,7 @@
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 180 },
 
-    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"snapshot-only\"/g' /etc/nixos/nix/hosts/aarch64/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"snapshot-only\"/g' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "set -e; echo ephemeral-1 > /root/e2e-ephemeral-marker" },
     { "op": "reboot-disk" },

@@ -1,12 +1,7 @@
 import std.*;
-import ../../btrc/core/*;
-import ./spec/*;
-import ./qemu/*;
-import ./graph/*;
+import ../../btrc/core/log.btrc;
 import ./spec.btrc;
 import ./qemu_harness.btrc;
-import ./runner.btrc;
-import ./graph.btrc;
 
 class VmOperationCatalog {
     class Vector<string> all() {

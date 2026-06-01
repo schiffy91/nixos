@@ -32,9 +32,9 @@ in {
     session.sessionRestore.restoreOpenApplicationsOnLogin = "startWithEmptySession";
     ##### Auto Lock #####
     kscreenlocker = {
-      autoLock = settings.user.admin.autoLock.enable;
-      lockOnResume = settings.user.admin.autoLock.enable;
-      timeout = if settings.user.admin.autoLock.enable then 10 else null;
+      autoLock = settings.users.admin.autoLock.enable;
+      lockOnResume = settings.users.admin.autoLock.enable;
+      timeout = if settings.users.admin.autoLock.enable then 10 else null;
     };
     ##### Config Files #####
      configFile = {
@@ -109,9 +109,9 @@ in {
   ##### Konsole #####
   programs.konsole = {
     enable = true;
-    defaultProfile = settings.user.admin.username;
-    profiles.${settings.user.admin.username} = {
-      name = settings.user.admin.username;
+    defaultProfile = settings.users.admin.username;
+    profiles.${settings.users.admin.username} = {
+      name = settings.users.admin.username;
       extraConfig = {
         "Cursor Options".CursorShape = 2;
         "Keyboard".KeyBindings = "macos";

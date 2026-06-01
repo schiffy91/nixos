@@ -1,6 +1,6 @@
 { config, pkgs, lib, ... }:
 let
-  user = config.settings.user.admin.username;
+  user = config.settings.users.admin.username;
   home = "/home/${user}";
   compatDir = "${home}/.local/share/Steam/compatibilitytools.d";
   enabled = config.settings.apps.enable && config.settings.apps.steam.enable;

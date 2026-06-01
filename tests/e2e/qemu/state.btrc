@@ -1,7 +1,7 @@
 import std.*;
-import ../../../btrc/core/*;
-import ../spec/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ../spec.btrc;
+import ./firmware.btrc;
 
 /* VM state lifecycle: qcow2-backed state inheritance from a parent, the state
  * record/metadata, and status/snapshot queries.
@@ -26,12 +26,14 @@ class VmStateStore {
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
-    public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
-    public string qemuExitPath() { return PathTools.join(self.spec.workDir, "qemu.exit"); }
+    public string pidPath() { return self.spec.vmPidPath(); }
+    public string legacyPidPath() { return self.spec.legacyVmPidPath(); }
+    public string qemuExitPath() { return self.spec.vmExitPath(); }
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
     public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
     public string parentWorkDirFile() { return PathTools.join(self.parentStateDir(), "workDir"); }
+    public string parentMetadataPath() { return PathTools.join(self.parentStateDir(), "metadata.json"); }
     public string backingDiskFile() { return PathTools.join(self.spec.workDir, "backing-disk"); }
 
     public void rememberPid(string pid) {
@@ -44,8 +46,9 @@ class VmStateStore {
 
     public string currentPid() {
         if (!self.runningPid.isEmpty()) { return self.runningPid; }
-        if (!FileSystem.exists(self.pidPath())) { return ""; }
-        return Path.readAll(self.pidPath()).trim();
+        if (FileSystem.exists(self.pidPath())) { return Path.readAll(self.pidPath()).trim(); }
+        if (FileSystem.exists(self.legacyPidPath())) { return Path.readAll(self.legacyPidPath()).trim(); }
+        return "";
     }
 
     public void ensureWorkDir() {
@@ -88,12 +91,27 @@ class VmStateStore {
         if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }
     }
 
+    public void inheritParentFirmwareArgs() {
+        if (!FileSystem.exists(self.parentMetadataPath())) { return; }
+        JsonObject metadata = JsonObject.readFile(self.parentMetadataPath());
+        if (metadata.getString("uefi", "false").equals("true") && !self.spec.args.has("uefi") && !self.spec.args.has("uefiDisk")) {
+            self.spec.setArg("uefiDisk", "true");
+        }
+        if (metadata.getString("secureBoot", "false").equals("true") && !self.spec.args.has("secureBoot")) {
+            self.spec.setArg("secureBoot", "true");
+        }
+        if (metadata.getString("tpm2", "false").equals("true") && !self.spec.args.has("tpm2")) {
+            self.spec.setArg("tpm2", "true");
+        }
+    }
+
     public void inheritState() {
         self.requireParentState();
         if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
         if (!FileSystem.exists(self.parentWorkDirFile())) {
             NixosLog.fatal(f"Parent state {self.spec.parentState} has no workDir record");
         }
+        self.inheritParentFirmwareArgs();
         string parentWorkDir = Path.readAll(self.parentWorkDirFile()).trim();
         self.ensureWorkDir();
         string parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
@@ -148,7 +166,7 @@ class VmStateStore {
     public bool isRunning() {
         string pid = self.currentPid();
         if (pid.isEmpty()) { return false; }
-        ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -q 'qemu-system-'", false, false, "");
+        ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + UnixShell.quote(self.spec.vmProcessName()) + " >/dev/null", false, false, "");
         return result.ok();
     }
 

@@ -28,6 +28,7 @@ in lib.mkIf enabled {
     wantedBy = [ "graphical-session.target" ];
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" "plasma-kwin_wayland.service" ];
+    unitConfig.ConditionUser = config.settings.users.admin.username;
     serviceConfig = {
       Type = "oneshot";
       ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";  # let KWin settle before we touch outputs

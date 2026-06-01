@@ -1,6 +1,5 @@
 import std.*;
-import ../../../btrc/core/*;
-import ./*;
+import ./args.btrc;
 
 class VmOperation {
     public string kind;
@@ -22,12 +21,11 @@ class VmOperation {
     }
 
     public void expandArgs(Map<string, string> args) {
-        self.kind = VmSpecParser.expandArgs(self.kind, args);
-        self.command = VmSpecParser.expandArgs(self.command, args);
-        self.expect = VmSpecParser.expandArgs(self.expect, args);
-        self.name = VmSpecParser.expandArgs(self.name, args);
-        self.localPath = VmSpecParser.expandArgs(self.localPath, args);
-        self.remotePath = VmSpecParser.expandArgs(self.remotePath, args);
+        self.kind = VmSpecArgs.expand(self.kind, args);
+        self.command = VmSpecArgs.expand(self.command, args);
+        self.expect = VmSpecArgs.expand(self.expect, args);
+        self.name = VmSpecArgs.expand(self.name, args);
+        self.localPath = VmSpecArgs.expand(self.localPath, args);
+        self.remotePath = VmSpecArgs.expand(self.remotePath, args);
     }
 }
-

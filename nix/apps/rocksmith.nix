@@ -4,7 +4,7 @@ let
     && config.settings.apps.rocksmith.enable
     && config.settings.apps.steam.enable
     && pkgs.stdenv.hostPlatform.isx86_64;
-  user = config.settings.user.admin.username;
+  user = config.settings.users.admin.username;
   home = "/home/${user}";
   sampleSize = config.settings.rocksmith.sampleSize;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''

@@ -1,12 +1,13 @@
 import std.*;
-import ../../btrc/core/*;
-import ./spec/*;
-import ./qemu/*;
-import ./graph/*;
+import ../../btrc/core/log.btrc;
 import ./spec.btrc;
-import ./qemu_harness.btrc;
-import ./runner.btrc;
-import ./graph.btrc;
+import ./qemu/assets.btrc;
+import ./qemu/command.btrc;
+import ./qemu/firmware.btrc;
+import ./qemu/provisioner.btrc;
+import ./qemu/serial.btrc;
+import ./qemu/ssh.btrc;
+import ./qemu/state.btrc;
 
 class QemuE2eHarness {
     public VmTestSpec spec;
@@ -18,6 +19,7 @@ class QemuE2eHarness {
     public VmProvisioner provisioner;
     public QemuCommandBuilder qemuCmd;
     public VmAssets assets;
+    public bool bootedFromIso;
 
     public QemuE2eHarness(VmTestSpec spec) {
         self.spec = spec;
@@ -29,15 +31,19 @@ class QemuE2eHarness {
         self.provisioner = VmProvisioner(spec, self.remote, self.state);
         self.qemuCmd = QemuCommandBuilder(spec, self.firmware, self.serial);
         self.assets = VmAssets(spec, self.serial);
+        self.bootedFromIso = false;
     }
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
-    public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
+    public string pidPath() { return self.spec.vmPidPath(); }
+    public string legacyPidPath() { return self.spec.legacyVmPidPath(); }
     public string monitorPath() { return PathTools.join(self.spec.workDir, "monitor.sock"); }
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
-    public string qemuLogPath() { return PathTools.join(self.spec.workDir, "qemu.log"); }
-    public string qemuExitPath() { return PathTools.join(self.spec.workDir, "qemu.exit"); }
-    public string qemuStopLogPath() { return PathTools.join(self.spec.workDir, "qemu-stop.log"); }
+    public string qemuLogPath() { return self.spec.vmLogPath(); }
+    public string qemuSupervisorLogPath() { return self.spec.vmSupervisorLogPath(); }
+    public string qemuSupervisorScriptPath() { return self.spec.vmSupervisorScriptPath(); }
+    public string qemuExitPath() { return self.spec.vmExitPath(); }
+    public string qemuStopLogPath() { return self.spec.vmStopLogPath(); }
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
 
@@ -68,30 +74,58 @@ class QemuE2eHarness {
 
     public void start(bool fromIso) {
         self.ensureWorkDir();
+        self.bootedFromIso = fromIso;
+        if (self.state.isRunning()) {
+            self.state.rememberPid(self.state.currentPid());
+            NixosLog.info("QEMU pidfile exists; assuming VM is already running");
+            return;
+        }
         if (FileSystem.exists(self.pidPath())) {
-            if (self.state.isRunning()) {
-                self.state.rememberPid(Path.readAll(self.pidPath()).trim());
-                NixosLog.info("QEMU pidfile exists; assuming VM is already running");
-                return;
-            }
             FileSystem.removeRecursive(self.pidPath());
+        }
+        if (FileSystem.exists(self.legacyPidPath())) {
+            FileSystem.removeRecursive(self.legacyPidPath());
         }
         Command cmd = self.qemuCmd.build(fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
         FileSystem.removeRecursive(self.qemuLogPath());
+        FileSystem.removeRecursive(self.qemuSupervisorLogPath());
         FileSystem.removeRecursive(self.qemuExitPath());
         cmd.mergeError(false);
-        string supervisor = "rm -f " + UnixShell.quote(self.pidPath()) + " " + UnixShell.quote(self.qemuExitPath()) + "; "
-            + cmd.render() + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "
-            + "qpid=$!; printf '%s\\n' \"$qpid\" > " + UnixShell.quote(self.pidPath()) + "; "
+        string qemuExec = "exec " + cmd.render();
+        string qemuPythonSetsid = "import os, sys; os.setsid(); os.execl('/bin/sh', 'sh', '-c', sys.argv[1])";
+        string qemuLaunch = "if command -v setsid >/dev/null 2>&1; then "
+            + "setsid sh -c " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "
+            + "else "
+            + "python3 -c " + UnixShell.quote(qemuPythonSetsid) + " " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "
+            + "fi";
+        string supervisor = "log=" + UnixShell.quote(self.qemuSupervisorLogPath())
+            + "; pid_path=" + UnixShell.quote(self.pidPath())
+            + "; exit_path=" + UnixShell.quote(self.qemuExitPath())
+            + "; rm -f \"$pid_path\" \"$exit_path\"; qpid=; "
+            + "supervisor_signal() { signum=\"$1\"; printf 'signal=%s supervisor=%s qpid=%s time=%s\\n' \"$signum\" \"$$\" \"$qpid\" \"$(date -u +%FT%TZ)\" >> \"$log\"; if [ -n \"$qpid\" ]; then kill \"$qpid\" 2>/dev/null || true; fi; exit $((128 + signum)); }; "
+            + "trap 'supervisor_signal 1' HUP; trap 'supervisor_signal 2' INT; trap 'supervisor_signal 15' TERM; "
+            + "{ printf 'supervisor=%s time=%s\\n' \"$$\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> \"$log\" 2>&1; "
+            + qemuLaunch + "; qpid=$!; printf '%s\\n' \"$qpid\" > \"$pid_path\"; "
+            + "{ printf 'qpid=%s time=%s\\n' \"$qpid\" \"$(date -u +%FT%TZ)\"; ps -p \"$qpid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> \"$log\" 2>&1; "
             + "wait \"$qpid\"; rc=$?; "
-            + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" > " + UnixShell.quote(self.qemuExitPath());
+            + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" > \"$exit_path\"; "
+            + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" >> \"$log\"; exit \"$rc\"";
+        string writeSupervisor = "printf %s " + UnixShell.quote(supervisor)
+            + " > " + UnixShell.quote(self.qemuSupervisorScriptPath())
+            + "; chmod 700 " + UnixShell.quote(self.qemuSupervisorScriptPath());
+        ExecResult wroteSupervisor = self.shell.runRaw(writeSupervisor, false, false, "");
+        if (!wroteSupervisor.ok()) {
+            self.serial.stopSerialReader();
+            self.firmware.stopSwtpm();
+            NixosLog.fatal("Failed to write VM supervisor script: " + self.qemuSupervisorScriptPath());
+        }
         string pythonSetsid = "import os, sys; os.setsid(); os.execvp('sh', ['sh', '-c', sys.argv[1]])";
         string launch = "if command -v setsid >/dev/null 2>&1; then "
-            + "nohup setsid sh -c " + UnixShell.quote(supervisor) + " >/dev/null 2>&1 & "
+            + "nohup setsid sh " + UnixShell.quote(self.qemuSupervisorScriptPath()) + " >/dev/null 2>&1 & "
             + "else "
-            + "nohup python3 -c " + UnixShell.quote(pythonSetsid) + " " + UnixShell.quote(supervisor) + " >/dev/null 2>&1 & "
+            + "nohup python3 -c " + UnixShell.quote(pythonSetsid) + " " + UnixShell.quote("sh " + UnixShell.quote(self.qemuSupervisorScriptPath())) + " >/dev/null 2>&1 & "
             + "fi";
         ExecResult result = self.shell.runRaw(launch, false, false, "");
         if (!result.ok()) {
@@ -123,8 +157,10 @@ class QemuE2eHarness {
         if (!pid.isEmpty()) {
             string quotedPid = UnixShell.quote(pid);
             string quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
-            self.shell.runRaw("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true", false, false, "");
+            string quotedProcessName = UnixShell.quote(self.spec.vmProcessName());
+            self.shell.runRaw("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedProcessName + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true; else printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" " + quotedProcessName + " \"$(date -u +%FT%TZ)\" >> " + quotedStopLog + "; fi", false, false, "");
             FileSystem.removeRecursive(self.pidPath());
+            FileSystem.removeRecursive(self.legacyPidPath());
         }
         self.state.clearPid();
         FileSystem.removeRecursive(self.monitorPath());
@@ -160,12 +196,20 @@ class QemuE2eHarness {
     }
 
     public void rebootDisk() {
-        self.ssh("reboot", false);
-        self.sleepSeconds(5);
-        self.stop();
-        self.start(false);
-        if (!self.waitForSsh(180)) {
-            NixosLog.fatal("SSH was not ready after disk reboot");
+        self.bootedFromIso = false;
+        string priorBootId = self.currentBootId();
+        if (priorBootId.isEmpty()) {
+            NixosLog.fatal("Cannot reboot disk VM because current boot id is unavailable");
+        }
+        self.ssh("(sync; systemctl reboot) >/dev/null 2>&1 &", false);
+        if (!self.waitForSshDown(90)) {
+            NixosLog.fatal("SSH stayed up after disk reboot request");
+        }
+        if (!self.state.isRunning()) {
+            self.start(false);
+        }
+        if (!self.waitForBootIdChange(priorBootId, 300)) {
+            NixosLog.fatal("SSH was not ready on a new boot after disk reboot");
         }
     }
 
@@ -193,18 +237,61 @@ class QemuE2eHarness {
 
     public bool waitForSsh(int timeout) {
         int elapsed = 0;
+        int successes = 0;
         while (elapsed < timeout) {
             if (!self.state.isRunning()) {
                 NixosLog.error("QEMU exited while waiting for SSH; " + self.state.runningDetail() + "; serial log: " + self.serialLogPath() + "; QEMU log: " + self.qemuLogPath());
                 return false;
             }
             ExecResult result = self.ssh("true", false);
-            if (result.ok()) { return true; }
+            if (result.ok()) {
+                successes = successes + 1;
+                if (successes >= 2) { return true; }
+            } else {
+                successes = 0;
+            }
             self.sleepSeconds(3);
-            elapsed = elapsed + 8;
-            if (elapsed > 0 && elapsed % 24 == 0) {
+            elapsed = elapsed + 3;
+            if (self.bootedFromIso && elapsed > 0 && elapsed % 24 == 0) {
                 self.bootstrapSsh();
             }
+        }
+        return false;
+    }
+
+    public string currentBootId() {
+        ExecResult result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 10);
+        if (!result.ok()) { return ""; }
+        return result.stdout().trim();
+    }
+
+    public bool waitForBootIdChange(string previousBootId, int timeout) {
+        int elapsed = 0;
+        while (elapsed < timeout) {
+            if (!self.state.isRunning()) {
+                self.start(false);
+            }
+            ExecResult result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 5);
+            if (result.ok()) {
+                string bootId = result.stdout().trim();
+                if (!bootId.isEmpty() && !bootId.equals(previousBootId)) {
+                    return true;
+                }
+            }
+            self.sleepSeconds(3);
+            elapsed = elapsed + 3;
+        }
+        return false;
+    }
+
+    public bool waitForSshDown(int timeout) {
+        int elapsed = 0;
+        while (elapsed < timeout) {
+            if (!self.state.isRunning()) { return true; }
+            ExecResult result = self.ssh("true", false);
+            if (!result.ok()) { return true; }
+            self.sleepSeconds(2);
+            elapsed = elapsed + 2;
         }
         return false;
     }

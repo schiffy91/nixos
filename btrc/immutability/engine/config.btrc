@@ -1,6 +1,7 @@
 import std.*;
 import ../../core/log.btrc;
-import ./*;
+import ./paths.btrc;
+import ./types.btrc;
 
 /* Parses the immutability's inputs: the tab-separated spec file (volume, mount,
  * abs-path, kind) into ImmutabilitySpec rows, and the `name=mount` volume args (or,

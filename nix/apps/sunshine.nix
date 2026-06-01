@@ -13,7 +13,13 @@ in {
   # isn't strictly required, but keep it set for the upstream-shipped service unit
   # in case the wrapper path drops it.
   systemd.user.services = lib.mkIf (enabled && config.services.sunshine.enable) {
-    sunshine.environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
-    "app-dev.lizardbyte.app.Sunshine".environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+    sunshine = {
+      unitConfig.ConditionUser = config.settings.users.admin.username;
+      environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+    };
+    "app-dev.lizardbyte.app.Sunshine" = {
+      unitConfig.ConditionUser = config.settings.users.admin.username;
+      environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+    };
   };
 }

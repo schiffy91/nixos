@@ -5,7 +5,7 @@ import std.tray;
  * (Linux). Each item launches a nixosctl command in a terminal so the user sees
  * progress and can authenticate for privileged actions. Built and packaged by
  * nix/apps/nixos-tray.nix and started as a graphical-session user service
- * from nix/apps/helper.nix. Native backend: the btrc stdlib SystemTray.
+ * from nix/apps/nixos-tray.nix. Native backend: the btrc stdlib SystemTray.
  *
  * Vendored-stdlib build: explicit include order, --no-stdlib (mirrors nixosctl).
  */

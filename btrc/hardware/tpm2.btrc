@@ -1,6 +1,5 @@
 import std.*;
-import ../core/*;
-import ../system/{config,rebuild}.btrc;
+import ../system/config.btrc;
 
 class Tpm2Manager {
     public NixosConfig config;

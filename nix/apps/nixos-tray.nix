@@ -19,14 +19,15 @@ let
   };
 in
 lib.mkIf (config.settings.apps.enable
-          && config.settings.apps.nixosHelper.enable
+          && config.settings.apps.nixosctl.enable
           && config.settings.desktop.enable) {
-  environment.systemPackages = [ nixosTrayBin ];
+  users.users.${config.settings.users.admin.username}.packages = [ nixosTrayBin ];
   systemd.user.services.nixos-tray = {
     description = "NixOS management system tray";
     wantedBy = [ "graphical-session.target" ];
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];
+    unitConfig.ConditionUser = config.settings.users.admin.username;
     serviceConfig = {
       ExecStart = "${nixosTrayBin}/bin/nixos-tray";
       Restart = "on-failure";

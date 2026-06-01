@@ -1,26 +1,10 @@
 import std.*;
-import ../../../btrc/core/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ./args.btrc;
+import ./operation.btrc;
+import ./test_spec.btrc;
 
 class VmSpecParser {
-    class string hostArch() {
-        UnixShell shell = UnixShell();
-        ExecResult result = shell.run("uname -m");
-        string machine = result.trimmed();
-        if (machine.contains("arm64") || machine.contains("aarch64")) {
-            return "aarch64";
-        }
-        return "x86_64";
-    }
-
-    class string defaultIsoUrl(string arch) {
-        return "https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-" + arch + "-linux.iso";
-    }
-
-    class string expandArgs(string text, Map<string, string> args) {
-        return JsonText.expand(text, args);
-    }
-
     class int skipSpaces(string text, int i) {
         return JsonText.skipSpaces(text, i);
     }
@@ -79,7 +63,7 @@ class VmSpecParser {
         spec.workDir = VmSpecParser.field(text, "workDir", ".vm/e2e/" + spec.name);
         spec.arch = VmSpecParser.field(text, "arch", spec.arch);
         spec.iso = VmSpecParser.field(text, "iso", PathTools.join(PathTools.join(".vm", "iso"), "nixos-minimal-" + spec.arch + ".iso"));
-        spec.isoUrl = VmSpecParser.field(text, "isoUrl", VmSpecParser.defaultIsoUrl(spec.arch));
+        spec.isoUrl = VmSpecParser.field(text, "isoUrl", VmSpecArgs.defaultIsoUrl(spec.arch));
         spec.diskSize = VmSpecParser.field(text, "diskSize", spec.diskSize);
         spec.memory = VmSpecParser.field(text, "memory", spec.memory);
         spec.cpus = VmSpecParser.intField(text, "cpus", spec.cpus);

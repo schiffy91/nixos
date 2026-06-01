@@ -1,11 +1,6 @@
 import std.*;
-import ../../btrc/core/*;
-import ./spec/*;
-import ./qemu/*;
-import ./graph/*;
-import ./spec.btrc;
-import ./qemu_harness.btrc;
-import ./runner.btrc;
+import std.graph;
+import ./graph/runner.btrc;
 
 /* VM test graph module aggregator.
  *

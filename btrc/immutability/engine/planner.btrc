@@ -1,5 +1,7 @@
 import std.*;
-import ./*;
+import ./fs.btrc;
+import ./paths.btrc;
+import ./types.btrc;
 
 /* Turns the persist specs into an ordered, de-duplicated plan: stable spec
  * ordering (shallowest first), auto dir/file kind resolution against the live

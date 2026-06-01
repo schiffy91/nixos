@@ -1,8 +1,6 @@
 import std.*;
-import ../core/*;
-import ./{config,secrets,permissions,rebuild,password}.btrc;
-import ../btrfs/snapshot.btrc;
-import ../hardware/tpm2.btrc;
+import ../core/log.btrc;
+import ../core/paths.btrc;
 
 class NixEvalCache {
     public Map<string, string> values;
@@ -128,7 +126,7 @@ class NixosConfig {
     public string diskOperationTarget() { return "Disk-Operation"; }
 
     public string username() {
-        return self.evalRaw("config.settings.user.admin.username");
+        return self.evalRaw("config.settings.users.admin.username");
     }
 
     public string secretsPath() {

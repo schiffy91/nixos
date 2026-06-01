@@ -7,8 +7,8 @@ let
     extraLibs = [ "-lm" "-lpthread" "-lutil" ];
     extraInstall = ''
       wrapProgram $out/bin/nixosctl \
-        ${lib.optionalString (config.settings.nixosHelper.configPath != "")
-          "--set NIXOS_CONFIG ${lib.escapeShellArg config.settings.nixosHelper.configPath}"} \
+        ${lib.optionalString (config.settings.nixosctl.configPath != "")
+          "--set NIXOS_CONFIG ${lib.escapeShellArg config.settings.nixosctl.configPath}"} \
         --prefix PATH : ${lib.makeBinPath (with pkgs; [
           kdePackages.libkscreen
           kdePackages.konsole
@@ -25,6 +25,6 @@ let
         ])}
     '';
   };
-in lib.mkIf (config.settings.apps.enable && config.settings.apps.nixosHelper.enable) {
+in lib.mkIf (config.settings.apps.enable && config.settings.apps.nixosctl.enable) {
   environment.systemPackages = [ nixosctlBin ];
 }

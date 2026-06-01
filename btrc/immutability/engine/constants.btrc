@@ -1,5 +1,4 @@
 import std.*;
-import ./*;
 
 class ImmutabilityConstants {
     class string topBase() { return "/run/immutability-top"; }
@@ -21,4 +20,3 @@ class ImmutabilityConstants {
     class string restorePrevious() { return "restore-previous"; }
     class string restorePenultimate() { return "restore-penultimate"; }
 }
-

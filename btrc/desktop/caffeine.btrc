@@ -1,6 +1,4 @@
 import std.*;
-import ../core/*;
-import ../system/config.btrc;
 
 class CaffeineManager {
     public UnixShell shell;

@@ -1,6 +1,6 @@
 { config, host, pkgs, ... }: {
   ##### Rocksmith / Quad Cortex #####
-  users.users.${config.settings.user.admin.username}.extraGroups = [ "audio" "rtkit" "pipewire" ];
+  users.users.${config.settings.users.admin.username}.extraGroups = [ "audio" "rtkit" "pipewire" ];
   security.pam.loginLimits = [
     { domain = "@audio"; item = "memlock"; type = "-"; value = "unlimited"; }
     { domain = "@audio"; item = "rtprio"; type = "-"; value = "99"; }

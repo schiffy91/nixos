@@ -32,6 +32,19 @@ let
   };
 
   shellWords = words: lib.concatStringsSep " " words;
+  sourceRoot = ../../.;
+  btrcProgramSource = lib.cleanSourceWith {
+    src = sourceRoot;
+    filter = path: type:
+      let
+        rel = lib.removePrefix "${toString sourceRoot}/" (toString path);
+      in
+        rel == "btrc"
+        || lib.hasPrefix "btrc/" rel
+        || rel == "tests"
+        || rel == "tests/e2e"
+        || lib.hasPrefix "tests/e2e/" rel;
+  };
 
   buildBtrcProgram =
     { name
@@ -45,7 +58,7 @@ let
     }:
     pkgs.stdenv.mkDerivation {
       inherit name buildInputs;
-      src = ../../.;
+      src = btrcProgramSource;
       nativeBuildInputs = [ btrcpy ] ++ nativeBuildInputs;
       buildPhase = ''
         export HOME=$TMPDIR

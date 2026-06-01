@@ -1,5 +1,8 @@
 import std.*;
-import ./*;
+import ./constants.btrc;
+import ./fs.btrc;
+import ./run.btrc;
+import ./types.btrc;
 
 /* A/B/C snapshot-slot rotation and atomic publish. rotate() shifts live -> A ->
  * B -> C (dropping the oldest); publish() swaps a populated NEXT into LIVE (or

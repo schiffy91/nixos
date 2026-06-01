@@ -81,7 +81,7 @@ in {
       scaleFactor = display.primary.scaleFactor;
       primary     = true;
     }];
-    nixosHelper.configPath = "${./nixos-helper.toml}";
+    nixosctl.configPath = "${./nixosctl.toml}";
     sudolessAllowlist.enable = true;
   };
 }

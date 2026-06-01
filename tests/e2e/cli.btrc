@@ -1,9 +1,6 @@
 import std.*;
 import std.graph;
-import ../../btrc/core/*;
-import ./spec/*;
-import ./qemu/*;
-import ./graph/*;
+import ../../btrc/core/log.btrc;
 import ./spec.btrc;
 import ./qemu_harness.btrc;
 import ./runner.btrc;
@@ -23,6 +20,29 @@ class E2eCli {
         return parts.join(" ");
     }
 
+    public void applyStructuralOverrides(VmTestSpec spec) {
+        bool archChanged = spec.args.has("arch");
+        if (spec.args.has("name")) { spec.name = spec.args.get("name"); }
+        if (spec.args.has("workDir")) { spec.workDir = spec.args.get("workDir"); }
+        if (spec.args.has("arch")) { spec.arch = spec.args.get("arch"); }
+        if (archChanged && !spec.args.has("iso")) {
+            spec.iso = PathTools.join(PathTools.join(".vm", "iso"), "nixos-minimal-" + spec.arch + ".iso");
+        }
+        if (archChanged && !spec.args.has("isoUrl")) {
+            spec.isoUrl = VmSpecArgs.defaultIsoUrl(spec.arch);
+        }
+        if (spec.args.has("iso")) { spec.iso = spec.args.get("iso"); }
+        if (spec.args.has("isoUrl")) { spec.isoUrl = spec.args.get("isoUrl"); }
+        if (spec.args.has("diskSize")) { spec.diskSize = spec.args.get("diskSize"); }
+        if (spec.args.has("memory")) { spec.memory = spec.args.get("memory"); }
+        if (spec.args.has("cpus")) { spec.cpus = Strings.toInt(spec.args.get("cpus")); }
+        if (spec.args.has("sshPort")) { spec.sshPort = Strings.toInt(spec.args.get("sshPort")); }
+        if (spec.args.has("state")) { spec.state = spec.args.get("state"); }
+        if (spec.args.has("parentState")) { spec.parentState = spec.args.get("parentState"); }
+        if (spec.args.has("stateRoot")) { spec.stateRoot = spec.args.get("stateRoot"); }
+        if (spec.args.has("stateMaterial")) { spec.stateMaterial = spec.args.get("stateMaterial"); }
+    }
+
     public void applySpecArgs(VmTestSpec spec, CliArgs args, int startIndex) {
         for (int i = startIndex; i < args.count(); i++) {
             string value = args.get(i);
@@ -39,6 +59,7 @@ class E2eCli {
                 continue;
             }
         }
+        self.applyStructuralOverrides(spec);
         spec.expandArgs();
     }
 

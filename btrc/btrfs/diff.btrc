@@ -1,5 +1,6 @@
 import std.*;
-import ../core/*;
+import ../core/log.btrc;
+import ./snapshot.btrc;
 import ../system/config.btrc;
 
 class DiffOptions {

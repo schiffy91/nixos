@@ -1,7 +1,6 @@
 import std.*;
-import ../../../btrc/core/*;
-import ../spec/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ../spec.btrc;
 
 /* Remote execution against the test VM — SSH, SCP, QMP, and workspace copy.
  *

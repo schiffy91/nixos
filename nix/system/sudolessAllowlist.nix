@@ -6,7 +6,7 @@ in
 lib.mkIf cfg.enable {
   environment.systemPackages = map (name: pkgs.${name}) (active cfg.packages);
   security.sudo.extraRules = [{
-    users    = [ config.settings.user.admin.username ];
+    users    = [ config.settings.users.admin.username ];
     commands = map (cmd: { command = "/run/current-system/sw/bin/${cmd}"; options = [ "NOPASSWD" ]; }) (active cfg.nopasswd);
   }];
 }

@@ -1,5 +1,5 @@
 { config, pkgs, lib, ... }: let
-  user = config.settings.user.admin.username;
+  user = config.settings.users.admin.username;
   src = config.settings.desktop.cursor.path;
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.cursor.enable) {
   system.activationScripts.cursorIcons = lib.stringAfter [ "users" ] ''

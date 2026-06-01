@@ -1,8 +1,6 @@
 import std.*;
-import ../core/*;
-import ./{config,secrets,permissions,rebuild,password}.btrc;
-import ../btrfs/snapshot.btrc;
-import ../hardware/tpm2.btrc;
+import ./config.btrc;
+import ./secrets.btrc;
 
 class PermissionsManager {
     public NixosConfig config;

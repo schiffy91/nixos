@@ -1,6 +1,7 @@
 import std.*;
-import ../../../btrc/core/*;
-import ./*;
+import ../../../btrc/core/log.btrc;
+import ./args.btrc;
+import ./operation.btrc;
 
 class VmTestSpec {
     public string name;
@@ -25,13 +26,13 @@ class VmTestSpec {
     public VmTestSpec() {
         self.name = "vm-test";
         self.workDir = ".vm/e2e/vm-test";
-        self.arch = VmSpecParser.hostArch();
+        self.arch = VmSpecArgs.hostArch();
         self.iso = "";
         self.isoUrl = "";
         self.diskSize = "30G";
         self.memory = "4G";
         self.cpus = 4;
-        self.sshPort = 2222;
+        self.sshPort = 2223;
         self.state = "vm-test";
         self.parentState = "root";
         self.stateRoot = ".vm/e2e/chain";
@@ -107,6 +108,42 @@ class VmTestSpec {
         return PathTools.join(PathTools.join(self.stateRoot, self.parentState), "hash");
     }
 
+    public string vmProcessName() {
+        return "nixos-e2e-vm-" + self.arch + "-" + self.stateHashShort;
+    }
+
+    public string vmLaunchBinary() {
+        return PathTools.join(self.workDir, self.vmProcessName());
+    }
+
+    public string vmPidPath() {
+        return PathTools.join(self.workDir, "vm.pid");
+    }
+
+    public string legacyVmPidPath() {
+        return PathTools.join(self.workDir, "qemu.pid");
+    }
+
+    public string vmLogPath() {
+        return PathTools.join(self.workDir, "vm.log");
+    }
+
+    public string vmSupervisorLogPath() {
+        return PathTools.join(self.workDir, "vm-supervisor.log");
+    }
+
+    public string vmSupervisorScriptPath() {
+        return PathTools.join(self.workDir, "vm-supervisor.sh");
+    }
+
+    public string vmExitPath() {
+        return PathTools.join(self.workDir, "vm.exit");
+    }
+
+    public string vmStopLogPath() {
+        return PathTools.join(self.workDir, "vm-stop.log");
+    }
+
     public string resolveParentHash() {
         if (self.parentState.equals("root") || self.parentState.isEmpty()) {
             return "root";
@@ -154,24 +191,23 @@ class VmTestSpec {
     public void expandArgs() {
         string rawWorkDir = self.workDir;
         self.setDerivedArgs();
-        self.name = VmSpecParser.expandArgs(self.name, self.args);
-        self.arch = VmSpecParser.expandArgs(self.arch, self.args);
-        self.iso = VmSpecParser.expandArgs(self.iso, self.args);
-        self.isoUrl = VmSpecParser.expandArgs(self.isoUrl, self.args);
-        self.diskSize = VmSpecParser.expandArgs(self.diskSize, self.args);
-        self.memory = VmSpecParser.expandArgs(self.memory, self.args);
-        self.state = VmSpecParser.expandArgs(self.state, self.args);
-        self.parentState = VmSpecParser.expandArgs(self.parentState, self.args);
-        self.stateRoot = VmSpecParser.expandArgs(self.stateRoot, self.args);
-        self.stateMaterial = VmSpecParser.expandArgs(self.stateMaterial, self.args);
+        self.name = VmSpecArgs.expand(self.name, self.args);
+        self.arch = VmSpecArgs.expand(self.arch, self.args);
+        self.iso = VmSpecArgs.expand(self.iso, self.args);
+        self.isoUrl = VmSpecArgs.expand(self.isoUrl, self.args);
+        self.diskSize = VmSpecArgs.expand(self.diskSize, self.args);
+        self.memory = VmSpecArgs.expand(self.memory, self.args);
+        self.state = VmSpecArgs.expand(self.state, self.args);
+        self.parentState = VmSpecArgs.expand(self.parentState, self.args);
+        self.stateRoot = VmSpecArgs.expand(self.stateRoot, self.args);
+        self.stateMaterial = VmSpecArgs.expand(self.stateMaterial, self.args);
         self.refreshDerivedArgs();
         self.computeStateHash();
         self.refreshDerivedArgs();
-        self.workDir = VmSpecParser.expandArgs(rawWorkDir, self.args);
+        self.workDir = VmSpecArgs.expand(rawWorkDir, self.args);
         self.refreshDerivedArgs();
         for op in self.operations {
             op.expandArgs(self.args);
         }
     }
 }
-

@@ -1,5 +1,4 @@
 import std.*;
-import ./*;
 
 /* Centralized btrfs CLI vocabulary. Every btrfs subcommand the immutability issues
  * is built here, so a syntax change touches one place and call sites read as
@@ -40,4 +39,3 @@ class ImmutabilityBtrfs {
         return Command("btrfs").arg("filesystem").arg("sync").arg(top).capture(false);
     }
 }
-

@@ -1,18 +1,19 @@
 { config, pkgs, lib, ... }:
 let
-  user = config.settings.user.admin.username;
+  user = config.settings.users.admin.username;
   home = "/home/${user}";
   mountPoint = "${home}/Drive";
   remote = "gdrive:";
   configFile = "${home}/.config/rclone/rclone.conf";
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.rclone.enable) {
-  environment.systemPackages = [ pkgs.rclone ];
+  users.users.${user}.packages = [ pkgs.rclone ];
 
   systemd.user.services.rclone-drive = {
     description = "rclone mount: Google Drive at ~/Drive";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     wantedBy = [ "default.target" ];
+    unitConfig.ConditionUser = user;
     unitConfig.ConditionPathExists = configFile; # skip until `rclone config` is done
     environment.PATH = lib.mkForce "/run/wrappers/bin"; # need setuid fusermount3
     serviceConfig = {

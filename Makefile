@@ -1,4 +1,4 @@
-# btrcpy and cc come from the dev shell (`nix develop`, or direnv via .envrc).
+# btrcpy and cc come from the dev shell (`nix develop`, `nix-shell`, or direnv).
 BTRC ?= btrcpy
 PYTHON ?= python3
 CC ?= cc

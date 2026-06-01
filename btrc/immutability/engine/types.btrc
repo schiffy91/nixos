@@ -1,5 +1,4 @@
 import std.*;
-import ./*;
 
 class ImmutabilityAbsPath {
     public string path;
@@ -48,4 +47,3 @@ class ImmutabilityPlan {
         self.store = store;
     }
 }
-

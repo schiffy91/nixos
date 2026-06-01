@@ -1,5 +1,7 @@
 import std.*;
-import ./*;
+import ./btrfs.btrc;
+import ./paths.btrc;
+import ./run.btrc;
 
 /* Filesystem + btrfs primitives the immutability builds on: subvolume queries,
  * snapshot/create/delete, and reflink copies. Holds the ImmutabilityRun (process

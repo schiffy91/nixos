@@ -10,7 +10,7 @@
   boot.loader.systemd-boot.enable = lib.mkForce false;
   boot.loader.generic-extlinux-compatible.enable = lib.mkForce false;
 
-  users.users.${config.settings.user.admin.username} = {
+  users.users.${config.settings.users.admin.username} = {
     isNormalUser = lib.mkDefault true;
   };
 }

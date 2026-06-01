@@ -1,5 +1,5 @@
 import std.*;
-import ../core/*;
+import ../core/log.btrc;
 import ../system/config.btrc;
 
 class ResetSubvolume {

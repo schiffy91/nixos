@@ -71,7 +71,8 @@ Important setting groups:
 
 | Setting prefix | Purpose |
 |---|---|
-| `settings.user.admin.*` | Single-admin username, public identity, authorized keys, autologin, lock behavior, Home Manager enablement |
+| `settings.users.admin.*` | Admin username, public identity, authorized keys, autologin, lock behavior, Home Manager enablement |
+| `settings.users.agent.*` | Isolated agent user, packages, SSH keys, and persisted workspace/cache paths |
 | `settings.disk.*` | Disk device, partition labels, btrfs subvolumes, swap, encryption, immutability |
 | `settings.boot.*` | Boot method, secure-boot PKI bundle, generation limit, timeout |
 | `settings.tpm.*` | TPM2 device and version paths |
@@ -80,7 +81,7 @@ Important setting groups:
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
 | `settings.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
-| `settings.nixosHelper.*` | NixOS helper config path |
+| `settings.nixosctl.*` | `nixosctl` config path |
 | `settings.sudolessAllowlist.*` | Optional sudo NOPASSWD command/package allowlist |
 
 ### App Flags
@@ -95,7 +96,7 @@ settings.apps.battlenet.enable = true;
 settings.apps.claude.enable = true;
 settings.apps.cursor.enable = true;
 settings.apps.git.enable = true;
-settings.apps.nixosHelper.enable = true;
+settings.apps.nixosctl.enable = true;
 settings.apps.rclone.enable = true;
 settings.apps.rocksmith.enable = true;
 settings.apps.steam.enable = true;
@@ -187,10 +188,11 @@ OpenSSH, SSH agent forwarding, and optional primary-interface enforcement.
 Firewall LAN allow rules are derived from shared service flags and
 `settings.networking.ports.{tcp,udp}`.
 
-`nix/system/admin.nix` imports Home Manager and every top-level app module
-under `nix/apps`. It defines the immutable admin user and Home Manager
-baseline. User mutability is disabled, so password changes must update the
-hashed password file and rebuild.
+`nix/system/users.nix` imports Home Manager and every top-level app module
+under `nix/apps`. It defines immutable users: the interactive admin account and
+an isolated agent account with its own Home Manager profile and tool set. User
+mutability is disabled, so password changes must update the hashed password file
+and rebuild.
 
 `nix/system/sudolessAllowlist.nix` is opt-in through
 `settings.sudolessAllowlist.enable`.
@@ -206,8 +208,7 @@ The app layer is globally imported but policy-gated through `settings.apps`.
 | `battlenet.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `claude.nix` | Installs a Claude skill that teaches Claude how to load this repo |
 | `cursor.nix` | Symlinks the configured cursor theme into user icon paths |
-| `git.nix` | Configures Git identity |
-| `helper.nix` | Wires the live desktop helper to the packaged `nixosctl`; native tray pending (see below) |
+| `git.nix` | Enables system Git; per-user identities live in Home Manager |
 | `nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `rclone.nix` | Defines a user rclone mount for `~/Drive` |
 | `steam.nix` | Exports Steam tool names and configures installed Steam apps when Steam is enabled |
@@ -258,9 +259,8 @@ sudo build/nixosctl tpm2 status
 
 On installed hosts the CLI is packaged as `nixosctl` (see `nix/apps/nixosctl.nix`)
 and is on `PATH`. The native system tray (macOS menu bar / Linux Wayland
-StatusNotifierItem) is implemented in the BTRC stdlib in the sibling `../btrc`
-repo; wiring it into `helper.nix` is pending publishing that branch and bumping
-`flake.lock`.
+StatusNotifierItem) is implemented in the BTRC stdlib and packaged by
+`nix/apps/nixos-tray.nix`.
 
 ## E2E VM Testing
 
