@@ -5,7 +5,7 @@ import ./*;
 
 /* Assembles the QEMU argv for a boot: accelerator, machine/cpu, firmware, RAM/
  * CPUs, disk + user-net, console sockets, TPM, and boot media. build() returns
- * the Command up to (but not including) -daemonize/-pidfile, which start() adds.
+ * the foreground QEMU Command; QemuE2eHarness.start wraps it in a supervisor.
  * Pulls firmware/console fragments from the firmware + serial collaborators.
  */
 class QemuCommandBuilder {

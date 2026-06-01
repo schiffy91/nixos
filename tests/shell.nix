@@ -45,6 +45,7 @@ pkgs.mkShell {
     jq
     libarchive
     openssh
+    python3
     qemu
     socat
     swtpm

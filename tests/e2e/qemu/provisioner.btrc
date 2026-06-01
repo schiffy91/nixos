@@ -142,24 +142,85 @@ class VmProvisioner {
             + lanzabooteInstall + "\n"
             + snapshots + "\n"
             + "printf INSTALL_OK > /tmp/nixos-install.status\n";
-        string runner = "rm -f /tmp/nixos-install.pipe; mkfifo /tmp/nixos-install.pipe; "
+        string servicePath = "/run/current-system/sw/bin:/run/wrappers/bin:/nix/var/nix/profiles/default/bin:/bin:/usr/bin";
+        string runner = "PATH=" + UnixShell.quote(servicePath) + "; export PATH; HOME=/root; export HOME; "
+            + "rm -f /tmp/nixos-install.pipe; mkfifo /tmp/nixos-install.pipe; "
             + "tee /tmp/nixos-install.log < /tmp/nixos-install.pipe > /dev/ttyS0 & teepid=$!; "
             + "sh /tmp/nixos-install.sh > /tmp/nixos-install.pipe 2>&1 < /dev/null; "
             + "code=$?; "
             + "wait $teepid || true; rm -f /tmp/nixos-install.pipe; "
             + "if [ $code -ne 0 ]; then printf 'INSTALL_FAIL:%s\\n' \"$code\" > /tmp/nixos-install.status; fi";
-        string launch = "set -e; "
+        string prepare = "set -e; "
             + "rm -f /tmp/nixos-install.status /tmp/nixos-install.log /tmp/nixos-install.sh; "
             + "printf %s " + UnixShell.quote(script) + " > /tmp/nixos-install.sh; "
-            + "chmod +x /tmp/nixos-install.sh; "
-            + "nohup sh -c " + UnixShell.quote(runner) + " >/dev/null 2>&1 &";
+            + "chmod +x /tmp/nixos-install.sh";
+        string launch = "set -e; "
+            + "systemctl reset-failed nixos-install-e2e.service 2>/dev/null || true; "
+            + "systemctl is-active --quiet nixos-install-e2e.service && exit 0; "
+            + "systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c " + UnixShell.quote(runner);
         int timeoutSeconds = secureBootTarget ? 7200 : 3600;
-        ExecResult launched = self.remote.sshWithTimeout(launch, false, 30);
-        if (!launched.ok()) {
-            Console.error(launched.stdout());
+        ExecResult prepared = self.sshWithRetries(prepare, 60, 3);
+        if (!prepared.ok()) {
+            Console.error(prepared.stdout());
+            return false;
+        }
+        if (!self.launchInstall(launch)) {
             return false;
         }
         return self.waitForInstallStatus(timeoutSeconds);
+    }
+
+    public ExecResult sshWithRetries(string command, int timeoutSeconds, int attempts) {
+        int attempt = 0;
+        ExecResult last = ExecResult(1, "", "", "");
+        while (attempt < attempts) {
+            last = self.remote.sshWithTimeout(command, false, timeoutSeconds);
+            if (last.ok()) { return last; }
+            attempt = attempt + 1;
+            if (attempt < attempts) { self.remote.host("sleep 3", false); }
+        }
+        return last;
+    }
+
+    public string installStatusText() {
+        ExecResult status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
+        if (!status.ok()) { return ""; }
+        return status.stdout();
+    }
+
+    public bool installWasLaunched() {
+        string text = self.installStatusText();
+        if (text.contains("INSTALL_START")) { return true; }
+        if (text.contains("INSTALL_OK")) { return true; }
+        if (text.contains("INSTALL_FAIL")) { return true; }
+        ExecResult active = self.remote.sshWithTimeout("systemctl is-active --quiet nixos-install-e2e.service", false, 10);
+        return active.ok();
+    }
+
+    public bool waitForInstallLaunch(int timeoutSeconds) {
+        int elapsed = 0;
+        while (elapsed < timeoutSeconds) {
+            if (!self.state.isRunning()) {
+                NixosLog.error("QEMU exited while launching NixOS installation; " + self.state.runningDetail() + "; QEMU log: " + self.qemuLogPath());
+                return false;
+            }
+            if (self.installWasLaunched()) { return true; }
+            self.remote.host("sleep 3", false);
+            elapsed = elapsed + 3;
+        }
+        return false;
+    }
+
+    public bool launchInstall(string launch) {
+        int attempts = 0;
+        while (attempts < 3) {
+            ExecResult launched = self.remote.sshWithTimeout(launch, false, 30);
+            if (launched.ok()) { return true; }
+            Console.error(launched.stdout());
+            if (self.waitForInstallLaunch(15)) { return true; }
+            attempts = attempts + 1;
+        }
+        return self.waitForInstallLaunch(30);
     }
 
     public void printInstallLog() {

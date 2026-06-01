@@ -27,6 +27,7 @@ class VmStateStore {
 
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
     public string pidPath() { return PathTools.join(self.spec.workDir, "qemu.pid"); }
+    public string qemuExitPath() { return PathTools.join(self.spec.workDir, "qemu.exit"); }
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
     public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
@@ -153,9 +154,13 @@ class VmStateStore {
 
     public string runningDetail() {
         string pid = self.currentPid();
-        if (pid.isEmpty()) { return "missing pidfile " + self.pidPath(); }
+        string exitDetail = "";
+        if (FileSystem.exists(self.qemuExitPath())) {
+            exitDetail = "; " + Path.readAll(self.qemuExitPath()).trim();
+        }
+        if (pid.isEmpty()) { return "missing pidfile " + self.pidPath() + exitDetail; }
         ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; if kill -0 \"$pid\" 2>/dev/null; then printf 'pid=%s running ' \"$pid\"; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; else printf 'pid=%s not-running' \"$pid\"; fi", true, false, "");
-        return result.trimmed();
+        return result.trimmed() + exitDetail;
     }
 
     public bool hasSnapshot(string name) {

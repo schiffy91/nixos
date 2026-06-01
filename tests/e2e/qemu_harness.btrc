@@ -81,11 +81,18 @@ class QemuE2eHarness {
         self.serial.startSerialReader();
         FileSystem.removeRecursive(self.qemuLogPath());
         FileSystem.removeRecursive(self.qemuExitPath());
-        cmd.arg("-daemonize");
-        cmd.arg("-pidfile");
-        cmd.arg(self.pidPath());
         cmd.mergeError(false);
-        string launch = cmd.render() + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1";
+        string supervisor = "rm -f " + UnixShell.quote(self.pidPath()) + " " + UnixShell.quote(self.qemuExitPath()) + "; "
+            + cmd.render() + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "
+            + "qpid=$!; printf '%s\\n' \"$qpid\" > " + UnixShell.quote(self.pidPath()) + "; "
+            + "wait \"$qpid\"; rc=$?; "
+            + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" > " + UnixShell.quote(self.qemuExitPath());
+        string pythonSetsid = "import os, sys; os.setsid(); os.execvp('sh', ['sh', '-c', sys.argv[1]])";
+        string launch = "if command -v setsid >/dev/null 2>&1; then "
+            + "nohup setsid sh -c " + UnixShell.quote(supervisor) + " >/dev/null 2>&1 & "
+            + "else "
+            + "nohup python3 -c " + UnixShell.quote(pythonSetsid) + " " + UnixShell.quote(supervisor) + " >/dev/null 2>&1 & "
+            + "fi";
         ExecResult result = self.shell.runRaw(launch, false, false, "");
         if (!result.ok()) {
             self.serial.stopSerialReader();

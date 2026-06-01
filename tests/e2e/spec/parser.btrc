@@ -18,35 +18,35 @@ class VmSpecParser {
     }
 
     class string expandArgs(string text, Map<string, string> args) {
-        return GraphJson.expand(text, args);
+        return JsonText.expand(text, args);
     }
 
     class int skipSpaces(string text, int i) {
-        return GraphJson.skipSpaces(text, i);
+        return JsonText.skipSpaces(text, i);
     }
 
     class int keyPosition(string text, string key) {
-        return GraphJson.keyPosition(text, key);
+        return JsonText.keyPosition(text, key);
     }
 
     class string objectField(string text, string key) {
-        return GraphJson.objectField(text, key);
+        return JsonText.objectField(text, key);
     }
 
     class Map<string, string> argsObject(string text) {
-        return GraphJson.argsObject(text);
+        return JsonText.argsObject(text);
     }
 
     class string parseStringValue(string text, int i, string fallback) {
-        return GraphJson.parseStringValue(text, i, fallback);
+        return JsonText.parseStringValue(text, i, fallback);
     }
 
     class string field(string text, string key, string fallback) {
-        return GraphJson.field(text, key, fallback);
+        return JsonText.field(text, key, fallback);
     }
 
     class int intField(string text, string key, int fallback) {
-        return GraphJson.intField(text, key, fallback);
+        return JsonText.intField(text, key, fallback);
     }
 
     class VmOperation operation(string objectText) {
@@ -63,7 +63,7 @@ class VmSpecParser {
 
     class Vector<VmOperation> operations(string text) {
         Vector<VmOperation> result = [];
-        for objectText in GraphJson.objectArray(text, "operations") {
+        for objectText in JsonText.objectArray(text, "operations") {
             result.push(VmSpecParser.operation(objectText));
         }
         return result;
