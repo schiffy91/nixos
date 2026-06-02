@@ -94,6 +94,7 @@ class Immutability {
                 string source = self.fs.sourcePath(live, clean, plan.spec.relPath);
                 if (!source.isEmpty()) {
                     self.fs.copyDirectoryContents(source, store);
+                    self.fs.matchOwnerAndMode(source, store);
                 }
             } else if (!self.fs.isSubvolume(store)) {
                 self.run.fatal("not a subvolume: " + store);

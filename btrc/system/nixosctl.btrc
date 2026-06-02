@@ -109,6 +109,31 @@ class NixosCtl {
         return result.code;
     }
 
+    public bool needsTestShell(string command) {
+        if (NixosCtl.env("NIXOS_BTRC_TEST_SHELL", "").equals("1")) {
+            return false;
+        }
+        return command.equals("vm")
+            || command.equals("e2e")
+            || command.equals("graph");
+    }
+
+    public int nixShellSelf(CliArgs args) {
+        string shellPath = PathTools.join(self.config.paths.root, "tests/shell.nix");
+        string runCmd = "export NIXOS_BTRC_TEST_SHELL=1 && exec " + UnixShell.quote(args.program);
+        for value in args.values {
+            runCmd = runCmd + " " + UnixShell.quote(value);
+        }
+        NixosLog.info("nixosctl " + args.command() + ": entering tests/shell.nix (qemu/swtpm/socat). First entry can take a minute.");
+        Command ns = Command("nix-shell")
+            .arg(shellPath)
+            .arg("--run")
+            .arg(runCmd)
+            .capture(false);
+        ExecResult result = UnixShell().runCommand(ns);
+        return result.code;
+    }
+
     public int run(CliArgs args) {
         if (args.count() == 0) {
             self.usage();
@@ -119,6 +144,9 @@ class NixosCtl {
         if (cmd.equals("--help") || cmd.equals("-h") || cmd.equals("help")) {
             self.usage();
             return 0;
+        }
+        if (self.needsTestShell(cmd)) {
+            return self.nixShellSelf(args);
         }
         if (self.needsRoot(cmd) && !Platform.isRoot()) {
             return self.sudoSelf(args);

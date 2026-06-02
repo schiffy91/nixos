@@ -129,4 +129,16 @@ class ImmutabilityFs {
         }
         self.run.requireRaw("cp --reflink=always -a " + UnixShell.quote(PathTools.join(source, ".")) + " " + UnixShell.quote(destination));
     }
+
+    /* btrfs subvolume create yields a root:root 0755 subvol regardless of the
+     * source dir's owner/mode. After populating contents with cp -a (which
+     * doesn't touch the destination itself), copy the source's owner+mode
+     * onto the persist subvol root so mounting it back at the live path
+     * preserves the original ownership (e.g. ~/.cache must stay 0700 user
+     * or apps that write at .cache root break). One-shot at first creation. */
+    public void matchOwnerAndMode(string source, string destination) {
+        if (!FileSystem.exists(source) || !FileSystem.isDir(destination)) { return; }
+        self.run.requireRaw("chown --reference=" + UnixShell.quote(source) + " " + UnixShell.quote(destination));
+        self.run.requireRaw("chmod --reference=" + UnixShell.quote(source) + " " + UnixShell.quote(destination));
+    }
 }
