@@ -378,6 +378,19 @@
         "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
+    },
+    {
+      "id": "immutability-special-files",
+      "spec": "immutability-special-files/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
     }
   ]
 }

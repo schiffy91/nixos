@@ -28,6 +28,8 @@
     { "op": "guest", "command": "systemctl is-failed immutability.service 2>&1 || printf service-ok", "expect": "service-ok" },
     { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!special-fifo-test' && printf persist-subvol-created", "expect": "persist-subvol-created" },
     { "op": "guest", "command": "test -f /opt/special-fifo-test/regular.txt && printf regular-file-preserved", "expect": "regular-file-preserved" },
+    { "op": "guest", "command": "test ! -e /opt/special-fifo-test/lock-fifo && printf fifo-stripped-from-persist", "expect": "fifo-stripped-from-persist" },
+    { "op": "guest", "command": "journalctl -b -u immutability.service 2>&1 | grep -q 'non-persistable' && printf engine-logged-strip", "expect": "engine-logged-strip" },
     { "op": "snapshot", "name": "special-files-tested" },
     { "op": "record-state" },
     { "op": "stop" }

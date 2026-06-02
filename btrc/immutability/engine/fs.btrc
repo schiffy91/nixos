@@ -128,6 +128,32 @@ class ImmutabilityFs {
             self.run.fatal("nested subvolumes in persisted dir: " + nested.join(" "));
         }
         self.run.requireRaw("cp --reflink=always -a " + UnixShell.quote(PathTools.join(source, ".")) + " " + UnixShell.quote(destination));
+        self.stripNonPersistable(destination);
+    }
+
+    /* cp -a recreates FIFOs/sockets/char/block devices via mknodat as fresh
+     * empty nodes. Persisting those nodes is incoherent: every reset cycle
+     * the empty node bind-mounts over the live one, destroying named-pipe
+     * identity and connected-listener state. Worse, populateNext bakes the
+     * dead nodes into CLEAN, so the rot compounds across rotations.
+     * Strip from destination after copy; log the casualties so the operator
+     * can prune their persist.paths config rather than ship a degraded
+     * subvolume forever. */
+    public void stripNonPersistable(string destination) {
+        if (!FileSystem.isDir(destination)) { return; }
+        ExecResult listing = self.run.shell.runRaw(
+            "find " + UnixShell.quote(destination) + " -mindepth 1 \\! \\( -type f -o -type d -o -type l \\) -print -delete 2>/dev/null",
+            true, false, ""
+        );
+        if (!listing.ok()) { return; }
+        Vector<string> stripped = [];
+        for line in Strings.split(listing.stdout(), "\n") {
+            string trimmed = line.trim();
+            if (!trimmed.isEmpty()) { stripped.push(trimmed); }
+        }
+        if (!stripped.isEmpty()) {
+            self.run.log("stripped " + Strings.fromInt(stripped.len) + " non-persistable entries (FIFO/socket/device): " + stripped.join(" "));
+        }
     }
 
     /* btrfs subvolume create yields a root:root 0755 subvol regardless of the
