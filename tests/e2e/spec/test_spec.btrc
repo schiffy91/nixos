@@ -174,7 +174,14 @@ class VmTestSpec {
         if (material.isEmpty()) {
             material = f"{self.name}:{self.arch}:{self.isoUrl}:{self.diskSize}:{self.memory}:{self.cpus}:{self.sshPort}";
         }
-        return f"parent={self.parentHash}\nstate={self.state}\nmaterial={material}\noperations=\n{self.operationsMaterial()}\n";
+        // Fold the workspace source hash into every state hash unconditionally.
+        // VmGraphRunner.specFor sets `sourceHash` before expandArgs(), so this
+        // catches edits to nix/, btrc/, tests/ even when the test JSON's
+        // stateMaterial template doesn't reference {{sourceHash}}. Without this,
+        // a cached installed-reset disk built from an old engine silently masks
+        // every subsequent "fix verification" run.
+        string srcHash = self.args.getOrDefault("sourceHash", "no-source-hash");
+        return f"parent={self.parentHash}\nstate={self.state}\nmaterial={material}\nsrc={srcHash}\noperations=\n{self.operationsMaterial()}\n";
     }
 
     public void computeStateHash() {
