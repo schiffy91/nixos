@@ -189,6 +189,10 @@ class Immutability {
         self.specs = ImmutabilityConfig.readSpecs(self.specFile);
     }
 
+    public void setMountRootPrefix(string prefix) {
+        self.mounts.setRootPrefix(prefix);
+    }
+
     public void mountPersist() {
         self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted);
     }
@@ -207,6 +211,7 @@ class Immutability {
     class int cli(CliArgs args) {
         bool dryRun = Immutability.envDryRun();
         bool assumeMounted = false;
+        string rootPrefix = "";
         int index = 0;
         while (index < args.count()) {
             string value = args.get(index);
@@ -220,14 +225,24 @@ class Immutability {
                 index++;
                 continue;
             }
+            if (value.equals("--root-prefix")) {
+                if (index + 1 >= args.count()) {
+                    Console.error("--root-prefix requires a path argument");
+                    return 1;
+                }
+                rootPrefix = args.get(index + 1);
+                index = index + 2;
+                continue;
+            }
             break;
         }
         if (index < args.count() && args.get(index).equals("mount")) {
             if (args.count() < index + 4) {
-                Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
+                Console.error("Usage: immutability [--dry-run] [--root-prefix <path>] mount <device> <persist_root> <spec_file>");
                 return 1;
             }
             Immutability mounter = Immutability(dryRun, assumeMounted);
+            mounter.setMountRootPrefix(rootPrefix);
             mounter.configureMount(args.get(index + 1), args.get(index + 2), args.get(index + 3));
             mounter.mountPersist();
             return 0;

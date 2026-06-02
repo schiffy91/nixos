@@ -1,0 +1,35 @@
+{
+  "name": "immutability-special-files",
+  "state": "immutability-special-files",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-special-files:v1:fifo-socket-in-persist-must-not-abort-reset:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2242,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -e; mkdir -p /opt/special-fifo-test && mkfifo /opt/special-fifo-test/lock-fifo && printf real-data > /opt/special-fifo-test/regular.txt && ls -la /opt/special-fifo-test/lock-fifo | cut -c1", "expect": "p" },
+    { "op": "guest", "command": "set -e; sed -i 's|\"/etc/nixos\"|\"/etc/nixos\" \"/opt/special-fifo-test\"|' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix && grep -q 'special-fifo-test' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix && printf spec-edited", "expect": "spec-edited" },
+    { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot 2>&1 | tail -5 && printf switched", "expect": "switched", "timeout": 1800 },
+    { "op": "guest", "command": "grep -q 'opt/special-fifo-test' /etc/immutability/spec.tsv && printf spec-has-path", "expect": "spec-has-path" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "systemctl is-failed immutability.service 2>&1 || printf service-ok", "expect": "service-ok" },
+    { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!special-fifo-test' && printf persist-subvol-created", "expect": "persist-subvol-created" },
+    { "op": "guest", "command": "test -f /opt/special-fifo-test/regular.txt && printf regular-file-preserved", "expect": "regular-file-preserved" },
+    { "op": "snapshot", "name": "special-files-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

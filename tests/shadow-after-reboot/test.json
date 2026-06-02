@@ -1,0 +1,32 @@
+{
+  "name": "shadow-after-reboot",
+  "state": "shadow-after-reboot",
+  "parentState": "installed-reset",
+  "stateMaterial": "shadow-after-reboot:v1:assert-/etc/shadow-survives-reset-cycle:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2240,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "getent shadow alexanderschiffhauer | cut -d: -f2 | head -c1", "expect": "$" },
+    { "op": "guest", "command": "head -c 3 /etc/nixos/secrets/hashed_password.txt", "expect": "$6$" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "head -c 3 /etc/nixos/secrets/hashed_password.txt", "expect": "$6$" },
+    { "op": "guest", "command": "getent shadow alexanderschiffhauer | cut -d: -f2 | head -c1", "expect": "$" },
+    { "op": "snapshot", "name": "shadow-after-reboot-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

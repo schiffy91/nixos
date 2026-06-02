@@ -15,6 +15,7 @@ class PermissionsManager {
         return "\\( -path " + UnixShell.quote("*/secrets*")
             + " -o -path " + UnixShell.quote("*/.venv*")
             + " -o -path " + UnixShell.quote("*/.direnv*")
+            + " -o -path " + UnixShell.quote("*/.vm*")
             + " \\)";
     }
 
