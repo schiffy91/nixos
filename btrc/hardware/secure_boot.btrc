@@ -49,58 +49,17 @@ class SecureBootManager {
         self.shell.runCommand(enroll);
     }
 
-    public string compactJson(string text) {
-        string compact = Strings.replace(text, " ", "");
-        compact = Strings.replace(compact, "\n", "");
-        compact = Strings.replace(compact, "\t", "");
-        compact = Strings.replace(compact, "\r", "");
-        return compact;
-    }
-
     public Vector<string> unsignedFromJson(string json) {
+        // sbctl verify --json emits {"<file_path>": {"is_signed": <bool>, ...}, ...}.
+        // JsonObject.parse correctly reads top-level keys; JsonText.objectField pulls
+        // each balanced nested object, and JsonText.field extracts its is_signed.
         Vector<string> result = [];
-        int len = json.len();
-        int i = 0;
-        while (i < len) {
-            while (i < len && json[i] != (char)34) { i++; }
-            if (i >= len) { break; }
-            int keyStart = i + 1;
-            i = keyStart;
-            while (i < len && json[i] != (char)34) { i++; }
-            if (i >= len) { break; }
-            string key = JsonObject.slice(json, keyStart, i);
-            i++;
-            while (i < len && json[i] != '{') { i++; }
-            if (i >= len) { break; }
-            int bodyStart = i;
-            int depth = 0;
-            bool inString = false;
-            bool escaped = false;
-            for (; i < len; i++) {
-                char c = json[i];
-                if (inString) {
-                    if (!escaped && c == (char)34) { inString = false; }
-                    escaped = !escaped && c == '\\';
-                    if (c != '\\') { escaped = false; }
-                    continue;
-                }
-                if (c == (char)34) {
-                    inString = true;
-                    escaped = false;
-                    continue;
-                }
-                if (c == '{') { depth++; }
-                if (c == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        string body = JsonObject.slice(json, bodyStart, i + 1);
-                        if (self.compactJson(body).contains("\"is_signed\":false")) {
-                            result.push(key);
-                        }
-                        i++;
-                        break;
-                    }
-                }
+        JsonObject top = JsonObject.parse(json);
+        for key, _ in top.values {
+            string body = JsonText.objectField(json, key);
+            if (body.isEmpty()) { continue; }
+            if (JsonText.field(body, "is_signed", "true").equals("false")) {
+                result.push(key);
             }
         }
         return result;

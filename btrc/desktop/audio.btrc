@@ -1,5 +1,5 @@
 import std.*;
-import ./labels.btrc;
+import ./hardware_ui_labels.btrc;
 
 class AudioSink {
     public string name;
