@@ -103,8 +103,13 @@ class NixosRebuilder {
     }
 
     public void refreshImmutableSnapshots() {
-        if (!self.config.evalBool("config.settings.disk.immutability.enable")) { return; }
-        if (!self.config.evalBool("config.settings.disk.immutability.enforce.onUpdate")) { return; }
+        NixosLog.info("refreshImmutableSnapshots: entered");
+        bool enabled = self.config.evalBool("config.settings.disk.immutability.enable");
+        NixosLog.info("refreshImmutableSnapshots: immutability.enable=" + (enabled ? "true" : "false"));
+        if (!enabled) { return; }
+        bool onUpdate = self.config.evalBool("config.settings.disk.immutability.enforce.onUpdate");
+        NixosLog.info("refreshImmutableSnapshots: enforce.onUpdate=" + (onUpdate ? "true" : "false"));
+        if (!onUpdate) { return; }
 
         SnapshotManager snapshots = SnapshotManager(self.config);
         string mode = self.config.evalRaw("config.settings.disk.immutability.mode");
