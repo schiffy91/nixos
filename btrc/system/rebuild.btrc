@@ -170,7 +170,12 @@ class NixosRebuilder {
             FileSystem.removeRecursive("/root/.cache");
             self.updateFlake();
         }
-        SecretsManager(self.config).createIfMissing(self.plainTextPasswordPath());
+        // The plaintext password file (/tmp/...) is only read by disko during
+        // `nixosctl install` for LUKS format. A normal update doesn't need it,
+        // and /tmp is wiped on every reboot, so passing the plaintext path
+        // here would spuriously prompt "Set your password" on every update.
+        // Pass empty string so we only prompt when the hash itself is missing.
+        SecretsManager(self.config).createIfMissing("");
         PermissionsManager(self.config).secureTree(username);
         ExecResult result = self.switchSystem(options);
         if (!result.ok()) {
