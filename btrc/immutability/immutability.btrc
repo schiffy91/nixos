@@ -27,6 +27,7 @@ class Immutability {
     public Vector<ImmutabilitySpec> specs;
     public Vector<ImmutabilityVolume> volumes;
     public bool assumeMounted;
+    public string rootPrefix;
 
     public Immutability(bool dryRun, bool assumeMounted) {
         self.run = ImmutabilityRun(dryRun);
@@ -44,6 +45,7 @@ class Immutability {
         self.specs = [];
         self.volumes = [];
         self.assumeMounted = assumeMounted;
+        self.rootPrefix = "";
     }
 
     class bool envDryRun() {
@@ -182,15 +184,16 @@ class Immutability {
         self.run.log("Immutability complete");
     }
 
-    public void configureMount(string device, string persistRoot, string specFile) {
+    public void configureMount(string device, string persistRoot, string specFile, string rootPrefix) {
         self.device = device;
         self.persistRoot = ImmutabilityPaths.normSubvol(persistRoot);
         self.specFile = specFile;
+        self.rootPrefix = rootPrefix;
         self.specs = ImmutabilityConfig.readSpecs(self.specFile);
     }
 
     public void mountPersist() {
-        self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted);
+        self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted, self.rootPrefix);
     }
 
     public void configureSnapshotClean(string device, string snapshotsSubvolume, string cleanName, Vector<string> volumeArgs) {
@@ -223,12 +226,58 @@ class Immutability {
             break;
         }
         if (index < args.count() && args.get(index).equals("mount")) {
-            if (args.count() < index + 4) {
-                Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
+            index++;
+            string rootPrefix = "";
+            Vector<string> positionals = [];
+            while (index < args.count()) {
+                string arg = args.get(index);
+                if (arg.equals("--root-prefix")) {
+                    if (index + 1 >= args.count()) {
+                        Console.error("--root-prefix requires a value");
+                        return 1;
+                    }
+                    rootPrefix = args.get(index + 1);
+                    index += 2;
+                    continue;
+                }
+                positionals.push(arg);
+                index++;
+            }
+            if (positionals.len != 3) {
+                Console.error("Usage: immutability [--dry-run] mount [--root-prefix <path>] <device> <persist_root> <spec_file>");
                 return 1;
             }
+            if (!rootPrefix.isEmpty()) {
+                if (!rootPrefix.startsWith("/")) {
+                    Console.error("--root-prefix must be an absolute path: " + rootPrefix);
+                    return 1;
+                }
+                // Strip trailing slashes so "/sysroot/" + "/opt/x" becomes "/sysroot/opt/x"
+                // not "/sysroot//opt/x". "/" itself collapses to "" (no-op).
+                while (rootPrefix.endsWith("/") && rootPrefix.len() > 1) {
+                    rootPrefix = rootPrefix.substring(0, rootPrefix.len() - 1);
+                }
+                if (rootPrefix.equals("/")) { rootPrefix = ""; }
+            }
+            if (!rootPrefix.isEmpty()) {
+                // Defense against silently bind-mounting onto initramfs tmpfs:
+                // refuse unless --root-prefix is itself a real mountpoint.
+                if (!FileSystem.isDir(rootPrefix)) {
+                    Console.error("--root-prefix path does not exist or is not a directory: " + rootPrefix);
+                    return 1;
+                }
+                Command checkMount = Command("findmnt")
+                    .arg("--mountpoint")
+                    .arg(rootPrefix)
+                    .check(false);
+                ExecResult mp = UnixShell().runCommand(checkMount);
+                if (!mp.ok()) {
+                    Console.error("--root-prefix is not a mountpoint (binds would land on initramfs): " + rootPrefix);
+                    return 1;
+                }
+            }
             Immutability mounter = Immutability(dryRun, assumeMounted);
-            mounter.configureMount(args.get(index + 1), args.get(index + 2), args.get(index + 3));
+            mounter.configureMount(positionals.get(0), positionals.get(1), positionals.get(2), rootPrefix);
             mounter.mountPersist();
             return 0;
         }

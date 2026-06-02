@@ -71,8 +71,13 @@ class ImmutabilityMounts {
         self.run.requireCommand(command);
     }
 
-    public void mountPersist(string device, string persistRoot, Vector<ImmutabilitySpec> specs, bool assumeMounted) {
-        self.run.log("Mounting persistent subvolumes dry_run=" + (self.run.dryRun ? "true" : "false"));
+    /* rootPrefix lets the engine bind persist subvolumes onto a different
+     * filesystem root than `/` — used from initrd where the future root is
+     * mounted at /sysroot. Pass "" to mount at the literal spec path (stage 2).
+     * The coveredBy ancestry check operates in prefixed space so siblings
+     * sharing a prefix-relative ancestor still collapse correctly. */
+    public void mountPersist(string device, string persistRoot, Vector<ImmutabilitySpec> specs, bool assumeMounted, string rootPrefix) {
+        self.run.log("Mounting persistent subvolumes dry_run=" + (self.run.dryRun ? "true" : "false") + " root_prefix=" + (rootPrefix.isEmpty() ? "/" : rootPrefix));
         bool mountedTop = false;
         if (!assumeMounted && !self.fs.mounted(self.run.top)) {
             self.run.mkdirp(self.run.top);
@@ -86,9 +91,9 @@ class ImmutabilityMounts {
         }
         Vector<string> selected = [];
         for spec in specs {
-            string target = spec.absPath;
+            string target = rootPrefix + spec.absPath;
             if (self.coveredBy(selected, target)) { continue; }
-            string subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(target));
+            string subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(spec.absPath));
             if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
             self.mountTarget(device, target, subvol);
             selected.push(target);

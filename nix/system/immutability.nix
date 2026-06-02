@@ -98,6 +98,32 @@ lib.mkMerge [
 						${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}${immutabilityCommandArgs} ${immutabilityPairArgs}
 					'';
 				};
+				# Bind each persist subvolume onto /sysroot BEFORE activation runs.
+				# Without this, initrd-nixos-activation writes to the freshly-reset
+				# @root/@home (which sees empty persist paths), and stage-2
+				# immutability-mounts only stacks the bind on top afterward —
+				# shadowing every activation-time write that targeted a persist
+				# path. The shadow-after-reboot bug (initrd activation can't read
+				# /etc/nixos/secrets/hashed_password.txt → writes "!" to /etc/shadow
+				# → user lockout) and its ~6 home-directory siblings (1Password
+				# agent.toml, proton-custom symlinks, etc.) all share this cause.
+				# Marked requiredBy on the activation service so a mount failure
+				# blocks activation rather than silently degrading the boot.
+				services."immutability-mounts" = {
+					description = "Bind immutability persist subvolumes onto /sysroot before activation";
+					requiredBy = [ "initrd-nixos-activation.service" ];
+					requires = [ deviceDependency ];
+					after = [ "immutability.service" "sysroot.mount" deviceDependency ];
+					before = [ "initrd-nixos-activation.service" ];
+					unitConfig.DefaultDependencies = "no";
+					serviceConfig = {
+						Type = "oneshot";
+						RemainAfterExit = true;
+					};
+					script = ''
+						${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}mount --root-prefix /sysroot ${lib.escapeShellArg device} ${lib.escapeShellArg immutabilityPersistRoot} ${immutabilitySpecFile}
+					'';
+				};
 			};
 		};
 	};
