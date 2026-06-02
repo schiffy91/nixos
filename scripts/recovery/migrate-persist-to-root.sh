@@ -255,6 +255,10 @@ main() {
     else
         note "APPLY MODE: filesystem changes will be made"
     fi
+    # Guarantee cleanup runs even on die() / signal — without this, an
+    # error after side-mounts land leaks /run/migrate-<pid> with btrfs
+    # mounts the operator then has to chase down by hand.
+    trap '[[ -d "${WORK_ROOT:-}" ]] && cleanup' EXIT
     note "step 1/8: preflight";            preflight
     note "step 2/8: read_spec";             read_spec
     note "step 3/8: filter_active_binds";   filter_active_binds
@@ -262,7 +266,10 @@ main() {
     note "step 5/8: snapshot_persist";      snapshot_persist
     note "step 6/8: side_mount_targets";    side_mount_targets
     note "step 7/8: rsync_into_root";       rsync_into_root
-    note "step 8/8: verify + cleanup";      verify_nixos_git; cleanup
+    note "step 8/8: verify";                verify_nixos_git
+    # cleanup is the trap; don't run it twice
+    trap - EXIT
+    cleanup
     note "done."
     note ""
     note "Next steps (operator):"
