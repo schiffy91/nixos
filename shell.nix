@@ -1,6 +1,6 @@
 { system ? builtins.currentSystem }:
 let
-  flake = builtins.getFlake (toString ./.);
+  flake = builtins.getFlake "git+file://${toString ./.}";
   pkgs = flake.inputs.nixpkgs.legacyPackages.${system};
 in
 pkgs.mkShell {
