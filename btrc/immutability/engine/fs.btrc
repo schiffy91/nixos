@@ -112,13 +112,8 @@ class ImmutabilityFs {
 
     public void copyPath(string source, string destination) {
         self.run.mkdirp(PathTools.dirname(destination));
-        // --reflink=auto: prefer reflink (btrfs CoW, saves space) but fall back
-        // to a normal copy for file types that don't support reflink (FIFOs,
-        // sockets, char/block devices). With --reflink=always, cp returns
-        // EINVAL on the first special file under a persist path and the whole
-        // reset aborts mid-flight. See P2.2.
         Command command = Command("cp")
-            .arg("--reflink=auto")
+            .arg("--reflink=always")
             .arg("-a")
             .arg(source)
             .arg(destination)
@@ -132,7 +127,7 @@ class ImmutabilityFs {
         if (!nested.isEmpty()) {
             self.run.fatal("nested subvolumes in persisted dir: " + nested.join(" "));
         }
-        self.run.requireRaw("cp --reflink=auto -a " + UnixShell.quote(PathTools.join(source, ".")) + " " + UnixShell.quote(destination));
+        self.run.requireRaw("cp --reflink=always -a " + UnixShell.quote(PathTools.join(source, ".")) + " " + UnixShell.quote(destination));
     }
 
     /* btrfs subvolume create yields a root:root 0755 subvol regardless of the

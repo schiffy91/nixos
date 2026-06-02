@@ -15,16 +15,10 @@ import ./types.btrc;
 class ImmutabilityMounts {
     public ImmutabilityRun run;
     public ImmutabilityFs fs;
-    public string rootPrefix;
 
     public ImmutabilityMounts(ImmutabilityRun run, ImmutabilityFs fs) {
         self.run = run;
         self.fs = fs;
-        self.rootPrefix = "";
-    }
-
-    public void setRootPrefix(string prefix) {
-        self.rootPrefix = prefix;
     }
 
     public void mountTop(string device, bool assumeMounted) {
@@ -67,13 +61,12 @@ class ImmutabilityMounts {
     }
 
     public void mountTarget(string device, string target, string subvol) {
-        string fullTarget = self.rootPrefix + target;
-        self.run.mkdirp(fullTarget);
-        if (self.fs.mounted(fullTarget)) { return; }
+        self.run.mkdirp(target);
+        if (self.fs.mounted(target)) { return; }
         Command command = Command("mount")
             .arg("-t").arg("btrfs")
             .arg("-o").arg("subvol=" + subvol + ",compress=zstd,noatime")
-            .arg(device).arg(fullTarget)
+            .arg(device).arg(target)
             .capture(false);
         self.run.requireCommand(command);
     }
