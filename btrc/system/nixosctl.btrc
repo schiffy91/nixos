@@ -35,7 +35,52 @@ class NixosCtl {
     }
 
     public void usage() {
-        Console.log("Usage: nixosctl <eval|update|upgrade|install|snapshot|diff|fix-permissions|change-password|secure-boot|tpm2|displays|audio|caffeine|system|vm|e2e|graph> [args]");
+        Console.log("Usage: nixosctl <command> [options]");
+        Console.log("");
+        Console.log("System lifecycle:");
+        Console.log("  update [--clean] [--upgrade] [--rebuild-filesystem] [--reboot]");
+        Console.log("                              Rebuild and switch the current system.");
+        Console.log("                              --clean   nix-collect-garbage + verify --repair first.");
+        Console.log("                              --upgrade Refresh flake inputs (implies --clean).");
+        Console.log("                              --rebuild-filesystem  Re-enroll the bootloader.");
+        Console.log("                              --reboot  Reboot after activation.");
+        Console.log("  upgrade [...]               Alias for: update --upgrade --clean");
+        Console.log("  install [--format] [--yes] [--collect-garbage] [--debug]");
+        Console.log("                              Format/mount disk and run nixos-install.");
+        Console.log("  fix-permissions             Re-apply secure-tree ownership/modes.");
+        Console.log("  eval <attribute>            Evaluate a NixOS config attribute as raw text.");
+        Console.log("");
+        Console.log("Disk + immutability:");
+        Console.log("  snapshot                    Capture a fresh CLEAN snapshot now.");
+        Console.log("  diff [--recent] [--pattern <p>] [--depth <n>]");
+        Console.log("       [--show-symlinks] [--show-persist-paths] [--show-children <path>]");
+        Console.log("       [--diffignore <file>]");
+        Console.log("                              Show files diverged from the CLEAN snapshot.");
+        Console.log("");
+        Console.log("Boot + crypto:");
+        Console.log("  secure-boot <enable|disable|status> [--microsoft]");
+        Console.log("                              Manage Lanzaboote / Secure Boot enrollment.");
+        Console.log("  tpm2 <enable|disable|status>");
+        Console.log("                              Manage TPM2 LUKS keyslot.");
+        Console.log("  change-password [--old <p>] [--new <p>] [--update-tpm2]");
+        Console.log("                  [--full-disk-encryption-only | --user-account-only]");
+        Console.log("                              Rotate LUKS + user account password.");
+        Console.log("");
+        Console.log("Hardware:");
+        Console.log("  displays <list|layout|enable|disable|primary|dpms> [output]");
+        Console.log("  audio <list|current|set> [sink]");
+        Console.log("  caffeine <status|enable|disable|toggle>");
+        Console.log("");
+        Console.log("UI helpers:");
+        Console.log("  system <update|upgrade>     KDE notification wrapper around update/upgrade.");
+        Console.log("");
+        Console.log("Testing:");
+        Console.log("  vm <args>                   Boot the host config in a QEMU VM.");
+        Console.log("  e2e <args>                  Run end-to-end test scenarios.");
+        Console.log("  graph <args>                Inspect / render the test-scenario graph.");
+        Console.log("");
+        Console.log("Privileged commands auto-elevate via sudo. Set NIXOS_CONFIG_ROOT to point");
+        Console.log("at a tree other than /etc/nixos.");
     }
 
     public bool needsRoot(string command) {
@@ -71,6 +116,10 @@ class NixosCtl {
         }
 
         string cmd = args.command();
+        if (cmd.equals("--help") || cmd.equals("-h") || cmd.equals("help")) {
+            self.usage();
+            return 0;
+        }
         if (self.needsRoot(cmd) && !Platform.isRoot()) {
             return self.sudoSelf(args);
         }

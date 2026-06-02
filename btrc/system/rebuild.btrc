@@ -124,7 +124,10 @@ class NixosRebuilder {
             NixosLog.info("DRY would start immutability-mounts.service");
             return;
         }
-        self.shell.runRaw("systemctl start immutability-mounts.service", false, false, "");
+        ExecResult mountStart = self.shell.runRaw("systemctl start immutability-mounts.service", false, true, "");
+        if (!mountStart.ok()) {
+            NixosLog.fatal("immutability-mounts.service failed to start; system left without persist overlays. Investigate with: journalctl -u immutability-mounts.service");
+        }
     }
 
     public void convergeImmutability(string mode, bool dryRun) {
@@ -148,8 +151,11 @@ class NixosRebuilder {
             immutability.arg(args.get(i));
         }
         immutability.capture(false);
-        immutability.check(false);
-        self.shell.runCommand(immutability);
+        immutability.check(true);
+        ExecResult convergeResult = self.shell.runCommand(immutability);
+        if (!convergeResult.ok()) {
+            NixosLog.fatal("immutability converge failed; refusing to start immutability-mounts.service");
+        }
     }
 
     public void update(RebuildOptions options) {

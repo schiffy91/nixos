@@ -253,7 +253,7 @@ class DiffScanner {
 
     public Vector<string> selectEphemeral(Vector<string> ephemeral, Vector<string> keepList, Vector<string> mounts, DiffOptions options) {
         Vector<string> top = self.collapse(ephemeral, keepList, mounts);
-        string cachePath = "/tmp/etc/nixos/scripts/bin/diff/cache.json";
+        string cachePath = "/tmp/nixosctl/diff/cache.json";
         Vector<string> previous = self.previousCache(cachePath);
         self.writeCache(cachePath, top);
         if (options.recent) {
