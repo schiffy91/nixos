@@ -11,8 +11,12 @@ import std.tray;
  */
 
 int main() {
-    SystemTray tray = SystemTray("NixOS")
-        .tip("NixOS management")
+    string iconPath = Environment.get("NIXOS_TRAY_ICON", "");
+    SystemTray tray = SystemTray("NixOS");
+    if (!iconPath.isEmpty()) {
+        tray.icon(iconPath);
+    }
+    tray.tip("NixOS management")
         .item("Rebuild (switch)", "konsole -e sudo nixosctl update")
         .item("Upgrade & rebuild", "konsole -e sudo nixosctl update --upgrade")
         .item("Snapshot now", "konsole -e sudo nixosctl snapshot")

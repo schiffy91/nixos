@@ -10,7 +10,12 @@ let
     extraCInputs = [ "${trayDir}/btrc_tray_linux.c" ];
     extraLibs = [ "$(pkg-config --cflags --libs dbus-1)" "-lm" "-lpthread" ];
     extraInstall = ''
+      install -Dm644 ${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg \
+        $out/share/icons/hicolor/scalable/apps/nixos-tray.svg
+      install -Dm644 ${pkgs.nixos-icons}/share/icons/hicolor/256x256/apps/nix-snowflake.png \
+        $out/share/icons/hicolor/256x256/apps/nixos-tray.png
       wrapProgram $out/bin/nixos-tray \
+        --set NIXOS_TRAY_ICON "$out/share/icons/hicolor/256x256/apps/nixos-tray.png" \
         --prefix PATH : ${lib.makeBinPath (with pkgs; [
           kdePackages.konsole
           xdg-utils
