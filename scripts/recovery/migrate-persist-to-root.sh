@@ -86,7 +86,8 @@ preflight() {
     [[ -r "$SPEC_FILE" ]] || die "no immutability spec at $SPEC_FILE; is immutability service installed?"
     command -v btrfs >/dev/null || die "btrfs binary not in PATH"
     command -v rsync >/dev/null || die "rsync binary not in PATH"
-    command -v lsof >/dev/null || die "lsof binary not in PATH"
+    # lsof is OPTIONAL — only used for the informational open-fd report
+    # in warn_open_fds. Missing lsof drops to a notice and continues.
 
     # Discover the btrfs device backing /
     DEVICE=$(findmnt -no SOURCE / | sed 's/\[.*//')
@@ -142,8 +143,12 @@ filter_active_binds() {
 }
 
 # Warn about open file descriptors that would EBUSY the eventual side-mount
-# umount. Doesn't block; operator decides.
+# umount. Doesn't block; operator decides. Skips entirely if lsof is absent.
 warn_open_fds() {
+    if ! command -v lsof >/dev/null; then
+        note "(skipping open-fd report; lsof not in PATH — install it on the host for diagnostics)"
+        return
+    fi
     note "--- open file descriptors under persist paths (informational) ---"
     local found=0
     for i in "${ACTIVE_INDICES[@]}"; do
@@ -249,15 +254,14 @@ main() {
     else
         note "APPLY MODE: filesystem changes will be made"
     fi
-    preflight
-    read_spec
-    filter_active_binds
-    warn_open_fds
-    snapshot_persist
-    side_mount_targets
-    rsync_into_root
-    verify_nixos_git
-    cleanup
+    note "step 1/8: preflight";            preflight
+    note "step 2/8: read_spec";             read_spec
+    note "step 3/8: filter_active_binds";   filter_active_binds
+    note "step 4/8: warn_open_fds";         warn_open_fds
+    note "step 5/8: snapshot_persist";      snapshot_persist
+    note "step 6/8: side_mount_targets";    side_mount_targets
+    note "step 7/8: rsync_into_root";       rsync_into_root
+    note "step 8/8: verify + cleanup";      verify_nixos_git; cleanup
     note "done."
     note ""
     note "Next steps (operator):"
