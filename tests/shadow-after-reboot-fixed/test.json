@@ -1,0 +1,39 @@
+{
+  "name": "shadow-after-reboot-fixed",
+  "state": "shadow-after-reboot-fixed",
+  "parentState": "installed-reset",
+  "stateMaterial": "shadow-after-reboot-fixed:v3:hashedPassword-baked-in:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2241,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-to", "local": "btrc/immutability", "remote": "/tmp/immutability-patched" },
+    { "op": "guest", "command": "set -e; rm -rf /etc/nixos/btrc/immutability && mv /tmp/immutability-patched /etc/nixos/btrc/immutability && printf src-ok", "expect": "src-ok" },
+    { "op": "copy-to", "local": "nix/system/immutability.nix", "remote": "/tmp/immutability.nix.new" },
+    { "op": "guest", "command": "mv /tmp/immutability.nix.new /etc/nixos/nix/system/immutability.nix && printf nix-ok", "expect": "nix-ok" },
+    { "op": "copy-to", "local": "nix/system/users.nix", "remote": "/tmp/users.nix.new" },
+    { "op": "guest", "command": "mv /tmp/users.nix.new /etc/nixos/nix/system/users.nix && printf users-ok", "expect": "users-ok" },
+    { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot 2>&1 | tail -3 && printf done", "expect": "done", "timeout": 1800 },
+    { "op": "guest", "command": "getent shadow alexanderschiffhauer | cut -d: -f2 | head -c1", "expect": "$" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "getent shadow alexanderschiffhauer | cut -d: -f2 | head -c1", "expect": "$" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "getent shadow alexanderschiffhauer | cut -d: -f2 | head -c1", "expect": "$" },
+    { "op": "snapshot", "name": "p2.1-fixed" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

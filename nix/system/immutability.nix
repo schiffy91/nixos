@@ -107,9 +107,17 @@ lib.mkMerge [
 		# time so future factory-resets revert to the updated generation rather
 		# than the original install. snapshot-clean replaces each reset volume's
 		# read-only CLEAN snapshot with a fresh `-r` snapshot of the live subvolume.
-		system.activationScripts.immutabilitySnapshotClean.text = ''
-			export PATH=${lib.makeBinPath (with pkgs; [ btrfs-progs coreutils util-linux ])}:$PATH
-			${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}snapshot-clean ${immutabilitySnapshotCleanArgs} ${immutabilityPairArgs}
-		'';
+		#
+		# deps = [ "users" ] is load-bearing: otherwise snapshot-clean can capture
+		# /etc/shadow before the users activation rewrites it from hashedPasswordFile,
+		# baking a locked (":!:") shadow into CLEAN — every subsequent reset boot
+		# then rolls the account back to locked and login fails.
+		system.activationScripts.immutabilitySnapshotClean = {
+			deps = [ "users" ];
+			text = ''
+				export PATH=${lib.makeBinPath (with pkgs; [ btrfs-progs coreutils util-linux ])}:$PATH
+				${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}snapshot-clean ${immutabilitySnapshotCleanArgs} ${immutabilityPairArgs}
+			'';
+		};
 	})
 ]

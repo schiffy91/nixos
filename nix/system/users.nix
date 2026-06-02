@@ -23,7 +23,18 @@ in {
       isNormalUser = true;
       group = admin.username;
       extraGroups = admin.extraGroups;
-      hashedPasswordFile = "${config.settings.secrets.path}/${config.settings.secrets.hashedPasswordFile}";
+      # Read the hash at NIX EVAL TIME (not at activation time). This bakes the
+      # hash into the generation's /etc/static/users-groups.json, so the
+      # `update-users-groups.pl` activation script never has to open the secrets
+      # file on disk — sidestepping the boot-time bind-mount race where
+      # initrd-nixos-activation runs before /etc/nixos's @persist bind-mount
+      # lands and falls back to writing ":!:" into /etc/shadow.
+      # Use a relative path (resolved by Nix from users.nix's directory) so the
+      # file is read via the Nix store import mechanism and works under pure
+      # evaluation. The file must exist at flake-eval time (which it does — the
+      # installer and `nixosctl change-password` always write it before any
+      # nixos-rebuild that uses this option).
+      hashedPassword = lib.fileContents (../../secrets + "/${config.settings.secrets.hashedPasswordFile}");
       openssh.authorizedKeys.keys = admin.authorizedKeys;
     };
   } // lib.optionalAttrs agent.enable {
