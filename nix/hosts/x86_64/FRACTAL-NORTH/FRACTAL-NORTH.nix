@@ -72,8 +72,7 @@ in {
     disk = {
       inherit (disk) device;
       encryption.enable = true;
-      immutability.enable = true;
-      immutability.enforce.onUpdate = true;
+      immutability.enable = false;
       swap.size = disk.swapSize;
     };
     tpm.device = tpm.device;
