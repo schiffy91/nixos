@@ -71,7 +71,7 @@ class VmProvisioner {
         string hostNix = "{ lib, pkgs, ... }: {\n"
             + "  networking.hostName = \"VM-TEST\";\n"
             + "  networking.firewall.enable = lib.mkForce false;\n"
-            + "  environment.systemPackages = [ pkgs.pamtester ];\n"
+            + "  environment.systemPackages = with pkgs; [ pamtester rsync lsof ];\n"
             + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
             + "  boot.kernelParams = [ \"console=" + serialConsole + "\" ];\n"
             + "  boot.initrd.availableKernelModules = " + initrdModules + ";\n"

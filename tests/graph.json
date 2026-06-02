@@ -391,6 +391,19 @@
         "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
+    },
+    {
+      "id": "recovery-migrate-persist-to-root",
+      "spec": "recovery-migrate-persist-to-root/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
     }
   ]
 }

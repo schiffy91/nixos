@@ -1,0 +1,35 @@
+{
+  "name": "recovery-migrate-persist-to-root",
+  "state": "recovery-migrate-persist-to-root",
+  "parentState": "installed-reset",
+  "stateMaterial": "recovery-migrate:v1:dry-run-then-apply-then-verify-marker-in-@root:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2243,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "findmnt --mountpoint /etc/nixos >/dev/null && printf bind-active", "expect": "bind-active" },
+    { "op": "guest", "command": "cd /etc/nixos && git -c user.name=recovery-test -c user.email=test@test commit --allow-empty -m 'RECOVERY-TEST-MARKER' >/dev/null && git rev-parse --short HEAD > /tmp/marker.sha && head -c 7 /tmp/marker.sha | head -c 1", "expect": "" },
+    { "op": "copy-to", "local": "scripts/recovery/migrate-persist-to-root.sh", "remote": "/tmp/migrate.sh" },
+    { "op": "guest", "command": "chmod +x /tmp/migrate.sh && /tmp/migrate.sh --dry-run 2>&1 | grep -q 'DRY-RUN MODE' && /tmp/migrate.sh --dry-run 2>&1 | grep -q 'DRY  rsync' && printf dry-ok", "expect": "dry-ok" },
+    { "op": "guest", "command": "/tmp/migrate.sh --apply 2>&1 | tail -20; printf '\\nexit=%s' \"$?\"", "expect": "exit=0" },
+    { "op": "guest", "command": "DEV=$(findmnt -no SOURCE / | sed 's/\\[.*//') && mkdir -p /mnt/check-root && mount -t btrfs -o subvol=@root \"$DEV\" /mnt/check-root && marker=$(cat /tmp/marker.sha) && cd /mnt/check-root/etc/nixos && git log --oneline -5 | grep -q \"$marker\" && umount /mnt/check-root && rmdir /mnt/check-root && printf marker-now-in-@root", "expect": "marker-now-in-@root" },
+    { "op": "guest", "command": "DEV=$(findmnt -no SOURCE / | sed 's/\\[.*//') && mkdir -p /mnt/check-root && mount -t btrfs -o subvol=@root \"$DEV\" /mnt/check-root && test -f /mnt/check-root/etc/nixos/secrets/hashed_password.txt && umount /mnt/check-root && rmdir /mnt/check-root && printf secrets-preserved", "expect": "secrets-preserved" },
+    { "op": "snapshot", "name": "recovery-migrate-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}
