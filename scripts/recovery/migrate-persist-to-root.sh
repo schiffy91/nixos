@@ -114,12 +114,18 @@ read_spec() {
     SPEC_KEYS=()
     while IFS=$'\t' read -r volume mount abspath kind; do
         [[ -z "$volume" || "$volume" == \#* ]] && continue
-        # Match ImmutabilityPaths.key(): replace every / with ! and trim
-        # leading ! (so /etc/nixos -> etc!nixos)
-        key=${abspath#/}
-        key=${key//\//!}
+        # Engine normalizes the abspath before key derivation: strip the
+        # leading `/` AND any trailing `/`, then replace each `/` with `!`.
+        # FRACTAL-NORTH's spec.tsv has paths like `/etc/mullvad-vpn/`
+        # (trailing slash) whose key the engine renders as `etc!mullvad-vpn`,
+        # NOT `etc!mullvad-vpn!`.
+        normalized=${abspath#/}
+        normalized=${normalized%/}
+        key=${normalized//\//!}
+        # findmnt also needs the trailing-slash-stripped form to match the
+        # actual mountpoint (paths in /proc/mounts have no trailing slash).
         SPEC_VOLUMES+=("$volume")
-        SPEC_ABSPATHS+=("$abspath")
+        SPEC_ABSPATHS+=("/$normalized")
         SPEC_KEYS+=("$key")
     done < "$SPEC_FILE"
     [[ ${#SPEC_ABSPATHS[@]} -gt 0 ]] || die "spec is empty; nothing to migrate"
