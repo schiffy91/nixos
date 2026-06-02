@@ -365,6 +365,19 @@
         "immutabilityMode": "reset",
         "immutabilityEnabled": "true"
       }
+    },
+    {
+      "id": "shadow-after-reboot",
+      "spec": "shadow-after-reboot/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
     }
   ]
 }
