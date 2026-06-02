@@ -2,7 +2,7 @@
     system = "x86_64-linux";
     config.allowUnfree = true;
   }
-, battlenetRoot ? "/etc/nixos/nix/apps/pkg-overrides/test"
+, battlenetRoot ? "/etc/nixos/nix/apps/battlenet-tests"
 , protonRoot ? "/etc/nixos/nix/apps/pkg-overrides/proton-custom"
 }:
 

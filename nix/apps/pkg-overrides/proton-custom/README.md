@@ -53,7 +53,7 @@ windows sized to the swap-chain extent. Wine owns the DComp object model,
 Win32 lifetime, popup placement, and tray icon bridge.
 
 The installed `battlenet` wrapper has no CPU-compositing fallback or ANGLE
-backend override. App-specific diagnostics live in `nix/apps/pkg-overrides/test`,
+backend override. App-specific diagnostics live in `nix/apps/battlenet-tests`,
 not in the desktop launcher.
 
 ## Promotion Build
@@ -172,7 +172,7 @@ git -C "$PROTON_CUSTOM_WINE_SRC" commit -am 'dcomp: describe the tested fix'
 make wine-format-patch RANGE='-1 HEAD'
 ```
 
-Battle.net repro/debug loops live in `nix/apps/pkg-overrides/test`, not
+Battle.net repro/debug loops live in `nix/apps/battlenet-tests`, not
 here. Use that Makefile when exercising the launcher.
 
 Return to the pinned Nix store compat tool with:

@@ -195,6 +195,7 @@ in {
       "${adminHome}/.steam"
       ##### Games #####
       "${adminHome}/Games"
+      "${adminHome}/.local/share/containers"
       "${adminHome}/.local/share/umu"
       ##### Apple Music #####
       "${adminHome}/.config/sh.cider.genten"
@@ -272,6 +273,9 @@ in {
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
+    settings.rocksmith.cdlcPath = mkSetting str "${adminHome}/Games/Rocksmith/cdlc";
+    settings.rocksmith.slopsmith.configPath = mkSetting str "${adminHome}/Games/Rocksmith/slopsmith/config";
+    settings.rocksmith.slopsmith.port = mkSetting port 8000;
     ##### nixosctl #####
     settings.nixosctl.configPath = mkSetting str "";
     ##### Sudoless Allowlist #####

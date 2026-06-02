@@ -5,7 +5,7 @@ MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 NIXOS ?= /etc/nixos
-BATTLENET_DIR ?= $(NIXOS)/nix/apps/pkg-overrides/test
+BATTLENET_DIR ?= $(NIXOS)/nix/apps/battlenet-tests
 PROTON_DIR ?= $(NIXOS)/nix/apps/pkg-overrides/proton-custom
 
 BUILD_MODE ?= changed

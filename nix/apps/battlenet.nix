@@ -147,7 +147,7 @@ let
   captureHelper = pkgs.stdenv.mkDerivation {
     pname = "battlenet-capture-window";
     version = "1";
-    src = ./pkg-overrides/test/battlenet-capture-window.c;
+    src = ./battlenet-tests/battlenet-capture-window.c;
     dontUnpack = true;
     nativeBuildInputs = [ pkgs.pkg-config ];
     buildInputs = [ pkgs.glib ];

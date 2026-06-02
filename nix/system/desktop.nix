@@ -7,6 +7,7 @@ in lib.mkIf config.settings.desktop.enable {
   # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
   # screencast stream so Sunshine can capture genuine HDR pixels from the
   # compositor instead of 8-bit-truncated SDR.
+  # https://invent.kde.org/plasma/kwin/-/merge_requests/8293
   nixpkgs.overlays = [
     (_final: prev: {
       kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {

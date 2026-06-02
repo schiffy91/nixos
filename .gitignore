@@ -11,7 +11,7 @@ coverage/
 .claude
 /result
 nix/apps/pkg-overrides/proton-custom/src/
-nix/apps/pkg-overrides/test/.build/
+nix/apps/battlenet-tests/.build/
 build/
 .btrc-cache/
 generated/
