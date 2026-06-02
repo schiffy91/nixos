@@ -94,9 +94,10 @@ preflight() {
     [[ -n "$DEVICE" ]] || die "could not detect device backing /"
     note "btrfs device: $DEVICE"
 
-    # @persist subvol layout (matches engine/constants.btrc)
+    # @persist subvol layout (matches engine/constants.btrc — dirs() = "dirs",
+    # NOT ".immutability/dirs" which is for the file-kind meta tree)
     PERSIST_ROOT="@persist"
-    DIRS_SUBPATH=".immutability/dirs"
+    DIRS_SUBPATH="dirs"
     note "persist root: $PERSIST_ROOT/$DIRS_SUBPATH"
 
     note "spec file: $SPEC_FILE"
