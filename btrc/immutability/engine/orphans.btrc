@@ -6,9 +6,10 @@ import ./run.btrc;
 import ./types.btrc;
 
 /* Namespace + orphan hygiene for the persist store: ensureNamespaces creates
- * the persistRoot / dirs / meta / files subvolumes, and pruneOrphans drops any
- * dir-store subvolume whose key no longer appears in the specs. Operates over
- * the fs collaborator + run; the engine passes persistRoot (and the specs).
+ * the persistRoot / dirs / .orphans / meta / files subvolumes, and pruneOrphans
+ * quarantines (rename, not delete) any dir-store subvolume whose key no longer
+ * appears in the specs. Operates over the fs collaborator + run; the engine
+ * passes persistRoot (and the specs).
  */
 class ImmutabilityOrphans {
     public ImmutabilityFs fs;
@@ -23,6 +24,7 @@ class ImmutabilityOrphans {
         Vector<string> namespaces = [
             persistRoot,
             PathTools.join(persistRoot, ImmutabilityConstants.dirs()),
+            PathTools.join(persistRoot, ImmutabilityConstants.orphans()),
             PathTools.join(persistRoot, ImmutabilityConstants.meta()),
             PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.meta()), ImmutabilityConstants.files())
         ];
@@ -43,19 +45,27 @@ class ImmutabilityOrphans {
         return false;
     }
 
+    public string quarantineStamp() {
+        DateTime now = DateTime.now();
+        return Strings.replace(Strings.replace(now.format(), " ", "T"), ":", "");
+    }
+
     public void pruneOrphans(string persistRoot, Vector<ImmutabilitySpec> specs) {
         Vector<string> validKeys = [];
         for spec in specs {
             validKeys.push(ImmutabilityPaths.key(spec.absPath));
         }
         string dirsPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.dirs()));
-        // Snapshot the listing: deleting inside a loop over self.method() re-evaluates the call.
+        string orphansPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.orphans()));
+        // Snapshot the listing: moving inside a loop over self.method() re-evaluates the call.
         Vector<string> children = self.fs.childSubvolumes(dirsPath);
+        string stamp = self.quarantineStamp();
         for child in children {
             string key = PathTools.basename(child);
             if (!self.keyInSpec(validKeys, key)) {
-                self.run.log("Pruning orphaned persist subvolume " + key);
-                self.fs.deleteSubvolume(child);
+                string trashPath = PathTools.join(orphansPath, key + "-" + stamp);
+                self.run.log("Quarantining orphaned persist subvolume " + key + " -> " + trashPath + " (delete manually after review)");
+                self.run.renamePath(child, trashPath);
             }
         }
     }

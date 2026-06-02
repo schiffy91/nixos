@@ -3,6 +3,7 @@ import std.*;
 class ImmutabilityConstants {
     class string topBase() { return "/run/immutability-top"; }
     class string dirs() { return "dirs"; }
+    class string orphans() { return ".orphans"; }
     class string meta() { return ".immutability"; }
     class string files() { return "files"; }
     class string next() { return "NEXT"; }

@@ -62,9 +62,11 @@ class NixosCtl {
         Console.log("                              Manage Lanzaboote / Secure Boot enrollment.");
         Console.log("  tpm2 <enable|disable|status>");
         Console.log("                              Manage TPM2 LUKS keyslot.");
-        Console.log("  change-password [--old <p>] [--new <p>] [--update-tpm2]");
+        Console.log("  change-password [--update-tpm2]");
         Console.log("                  [--full-disk-encryption-only | --user-account-only]");
         Console.log("                              Rotate LUKS + user account password.");
+        Console.log("                              Prompts interactively. To script, set");
+        Console.log("                              NIXOS_OLD_PASSWORD + NIXOS_NEW_PASSWORD env vars.");
         Console.log("");
         Console.log("Hardware:");
         Console.log("  displays <list|layout|enable|disable|primary|dpms> [output]");
@@ -198,10 +200,13 @@ class NixosCtl {
             if (args.has("--full-disk-encryption-only") && args.has("--user-account-only")) {
                 NixosLog.fatal("Cannot use both --full-disk-encryption-only and --user-account-only");
             }
+            if (args.has("--old") || args.has("--new")) {
+                NixosLog.fatal("--old/--new are unsupported: passwords on argv leak via /proc/<pid>/cmdline and survive the sudo re-exec. Set NIXOS_OLD_PASSWORD / NIXOS_NEW_PASSWORD in the environment, or run change-password interactively.");
+            }
             bool changeFde = !args.has("--user-account-only");
             bool changeUser = !args.has("--full-disk-encryption-only");
-            string oldPassword = args.valueAfter("--old", NixosCtl.env("NIXOS_OLD_PASSWORD", ""));
-            string newPassword = args.valueAfter("--new", NixosCtl.env("NIXOS_NEW_PASSWORD", ""));
+            string oldPassword = NixosCtl.env("NIXOS_OLD_PASSWORD", "");
+            string newPassword = NixosCtl.env("NIXOS_NEW_PASSWORD", "");
             Interactive interactive = Interactive();
             if ((changeFde || changeUser) && oldPassword.isEmpty()) {
                 oldPassword = interactive.askPassword("Enter current password (LUKS + account)");
