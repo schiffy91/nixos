@@ -25,6 +25,7 @@
     { "op": "reboot-disk" },
     { "op": "guest", "command": "head -c 3 /etc/nixos/secrets/hashed_password.txt", "expect": "$6$" },
     { "op": "guest", "command": "getent shadow alexanderschiffhauer | cut -d: -f2 | head -c1", "expect": "$" },
+    { "op": "guest", "command": "echo testpass123 | pamtester login alexanderschiffhauer authenticate >/dev/null 2>&1 && printf pam-auth-ok", "expect": "pam-auth-ok" },
     { "op": "snapshot", "name": "shadow-after-reboot-tested" },
     { "op": "record-state" },
     { "op": "stop" }

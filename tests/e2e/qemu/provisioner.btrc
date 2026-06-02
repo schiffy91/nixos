@@ -45,7 +45,11 @@ class VmProvisioner {
         string hostDir = "/etc/nixos/nix/hosts/" + self.spec.arch + "/VM-TEST";
         string hostPath = hostDir + "/VM-TEST.nix";
         string pubkey = self.pubKey();
-        string passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
+        // Cleartext "testpass123" — used by PAM auth assertions in
+        // shadow-after-reboot and the production-like-host tests. If you
+        // change this, regenerate via:
+        //   mkpasswd -m sha-512 -S vmtestvmtest 'testpass123'
+        string passwordHash = "$6$vmtestvmtest$90BT1aUw7NOKFjJ5DzjGCCmVQBpjQjV3JqyqkzHEA3zuhg88sp.ekZudnUZidp/zFnuoK.DAay9D16tWrjsWx1";
         string secureBootSettings = secureBootTarget
             ? "  settings.boot.pkiBundle = \"/var/lib/sbctl\";\n"
             : "";
@@ -64,9 +68,10 @@ class VmProvisioner {
         string secureBootModuleCommand = secureBootTarget
             ? "printf %s " + UnixShell.quote(secureBootModule) + " > " + UnixShell.quote(secureBootModulePath) + "; "
             : "";
-        string hostNix = "{ lib, ... }: {\n"
+        string hostNix = "{ lib, pkgs, ... }: {\n"
             + "  networking.hostName = \"VM-TEST\";\n"
             + "  networking.firewall.enable = lib.mkForce false;\n"
+            + "  environment.systemPackages = [ pkgs.pamtester ];\n"
             + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
             + "  boot.kernelParams = [ \"console=" + serialConsole + "\" ];\n"
             + "  boot.initrd.availableKernelModules = " + initrdModules + ";\n"
