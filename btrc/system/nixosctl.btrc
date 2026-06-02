@@ -109,13 +109,20 @@ class NixosCtl {
         return result.code;
     }
 
-    public bool needsTestShell(string command) {
+    public bool needsTestShell(CliArgs args) {
         if (NixosCtl.env("NIXOS_BTRC_TEST_SHELL", "").equals("1")) {
             return false;
         }
-        return command.equals("vm")
-            || command.equals("e2e")
-            || command.equals("graph");
+        string command = args.command();
+        // Re-exec under tests/shell.nix only when there are enough args to
+        // actually launch a VM. Usage-only invocations (e.g. `nixosctl vm`
+        // with no further args) fall through to the inner handler which
+        // prints help and exits, avoiding a 30-second nix-shell warm-up
+        // just to render a usage string.
+        if (command.equals("vm")) { return args.count() >= 3; }
+        if (command.equals("e2e")) { return args.count() >= 2; }
+        if (command.equals("graph")) { return args.count() >= 3; }
+        return false;
     }
 
     public int nixShellSelf(CliArgs args) {
@@ -145,7 +152,7 @@ class NixosCtl {
             self.usage();
             return 0;
         }
-        if (self.needsTestShell(cmd)) {
+        if (self.needsTestShell(args)) {
             return self.nixShellSelf(args);
         }
         if (self.needsRoot(cmd) && !Platform.isRoot()) {

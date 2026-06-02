@@ -24,6 +24,7 @@
     { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!fake' && printf present", "expect": "present" },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!fake' && printf present || printf pruned", "expect": "pruned" },
+    { "op": "guest", "command": "btrfs subvolume list / | grep -Eq '\\.orphans/opt!fake-' && printf quarantined", "expect": "quarantined" },
     { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/etc!nixos' && printf kept", "expect": "kept" },
     { "op": "snapshot", "name": "orphan-tested" },
     { "op": "record-state" },
