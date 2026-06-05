@@ -26,7 +26,7 @@ class SnapshotManager {
     public string hostPath(string path) {
         if (self.rootPrefix.isEmpty()) { return path; }
         if (path.equals("/")) { return self.rootPrefix; }
-        if (path.startsWith("/")) { return self.rootPrefix + path; }
+        if (path.startsWith("/")) { return f"{self.rootPrefix}{path}"; }
         return PathTools.join(self.rootPrefix, path);
     }
 
@@ -40,11 +40,11 @@ class SnapshotManager {
 
     public Vector<ResetSubvolume> resetSubvolumes() {
         Vector<ResetSubvolume> result = [];
-        string raw = self.config.evalRaw("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
-        Vector<string> pairs = Strings.split(raw, " ");
+        var raw = self.config.evalRaw("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
+        var pairs = Strings.split(raw, " ");
         for pair in pairs {
             if (pair.isEmpty()) { continue; }
-            Vector<string> parts = Strings.split(pair, "=");
+            var parts = Strings.split(pair, "=");
             if (parts.len >= 2) {
                 result.push(ResetSubvolume(parts.get(0), parts.get(1)));
             }
@@ -58,50 +58,48 @@ class SnapshotManager {
 
     public bool isSubvolume(string path) {
         if (!FileSystem.exists(path)) { return false; }
-        Command cmd = Command("btrfs")
+        var cmd = Command("btrfs")
             .arg("subvolume")
             .arg("show")
-            .arg(path)
-            .check(false);
-        return self.shell.runCommand(cmd).ok();
+            .arg(path);
+        return self.shell.run(cmd.render(), logFailure=false).ok();
     }
 
     public bool isReadonly(string path) {
-        Command cmd = Command("btrfs")
+        var cmd = Command("btrfs")
             .arg("property")
             .arg("get")
             .arg("-ts")
             .arg(path)
-            .arg("ro")
-            .check(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg("ro");
+        var result = self.shell.run(cmd.render(), logFailure=false);
         return result.ok() && result.stdout().contains("ro=true");
     }
 
     public Vector<string> childSubvolumes(string path) {
         Vector<string> result = [];
-        Command cmd = Command("btrfs")
+        var cmd = Command("btrfs")
             .arg("subvolume")
             .arg("list")
             .arg("-o")
-            .arg(path)
-            .check(false);
-        ExecResult listed = self.shell.runCommand(cmd);
+            .arg(path);
+        var listed = self.shell.run(cmd.render(), logFailure=false);
         if (!listed.ok()) {
-            NixosLog.fatal("Failed to list child subvolumes under " + path);
+            NixosLog.fatal(f"Failed to list child subvolumes under {path}");
         }
-        string snapshotsName = self.config.evalRaw("config.settings.disk.subvolumes.snapshots.name");
-        string snapshotsMount = self.snapshotsPath();
+        var snapshotsName = self.config.evalRaw("config.settings.disk.subvolumes.snapshots.name");
+        var snapshotsMount = self.snapshotsPath();
+        var snapshotsPrefix = f"{snapshotsName}/";
         for line in Strings.split(listed.stdout(), "\n") {
-            int marker = Strings.find(line, " path ", 0);
+            var marker = Strings.find(line, " path ", 0);
             if (marker < 0) { continue; }
-            string child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            var child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
             if (child.equals(snapshotsName)) {
                 result.push(self.hostPath(snapshotsMount));
-            } else if (child.startsWith(snapshotsName + "/")) {
+            } else if (child.startsWith(snapshotsPrefix)) {
                 result.push(self.hostPath(PathTools.join(snapshotsMount, child.substring(snapshotsName.len() + 1, child.len() - snapshotsName.len() - 1))));
             } else {
-                result.push(self.hostPath("/" + child));
+                result.push(self.hostPath(f"/{child}"));
             }
         }
         return result;
@@ -110,70 +108,68 @@ class SnapshotManager {
     public void deleteSubvolume(string path) {
         if (!FileSystem.exists(path)) { return; }
         if (!self.isSubvolume(path)) {
-            NixosLog.fatal("Refusing to delete non-subvolume: " + path);
+            NixosLog.fatal(f"Refusing to delete non-subvolume: {path}");
         }
         for child in self.childSubvolumes(path) {
             self.deleteSubvolume(child);
         }
-        Command cmd = Command("btrfs")
+        var cmd = Command("btrfs")
             .arg("subvolume")
             .arg("delete")
             .arg("-C")
-            .arg(path)
-            .capture(false);
-        self.shell.runCommand(cmd);
+            .arg(path);
+        self.shell.run(cmd.render(), stdout=CommandOutput.stream());
     }
 
     public void createReadonlySnapshot(string source, string destination) {
         self.deleteSubvolume(destination);
         FileSystem.mkdirp(PathTools.dirname(destination));
-        Command cmd = Command("btrfs")
+        var cmd = Command("btrfs")
             .arg("subvolume")
             .arg("snapshot")
             .arg("-r")
             .arg(source)
-            .arg(destination)
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(destination);
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) {
-            NixosLog.fatal("Failed to create readonly snapshot " + destination);
+            NixosLog.fatal(f"Failed to create readonly snapshot {destination}");
         }
     }
 
     public void createCleanSnapshot(ResetSubvolume volume) {
-        string clean = self.hostPath(self.cleanSnapshotPath(volume.name));
-        string source = self.hostPath(volume.mountPoint);
-        string temporary = clean + ".tmp." + Strings.fromInt(Platform.pid());
+        var clean = self.hostPath(self.cleanSnapshotPath(volume.name));
+        var source = self.hostPath(volume.mountPoint);
+        var temporary = f"{clean}.tmp.{Platform.pid()}";
         self.deleteSubvolume(temporary);
         self.createReadonlySnapshot(source, temporary);
         if (!self.isSubvolume(temporary)) {
-            NixosLog.fatal("CLEAN temporary is not a subvolume: " + temporary);
+            NixosLog.fatal(f"CLEAN temporary is not a subvolume: {temporary}");
         }
         if (!self.isReadonly(temporary)) {
-            NixosLog.fatal("CLEAN temporary is not readonly: " + temporary);
+            NixosLog.fatal(f"CLEAN temporary is not readonly: {temporary}");
         }
-        string parent = PathTools.dirname(clean);
+        var parent = PathTools.dirname(clean);
         self.deleteSubvolume(PathTools.join(parent, "READY"));
         self.deleteSubvolume(PathTools.join(parent, "NEXT"));
         if (FileSystem.exists(clean)) {
             if (!self.isSubvolume(clean)) {
-                NixosLog.fatal("Refusing to replace non-subvolume CLEAN: " + clean);
+                NixosLog.fatal(f"Refusing to replace non-subvolume CLEAN: {clean}");
             }
-            self.shell.runRaw("mv -T --exchange --no-copy " + UnixShell.quote(temporary) + " " + UnixShell.quote(clean), false, true, "");
+            self.shell.run(f"mv -T --exchange --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream());
             self.deleteSubvolume(temporary);
         } else {
-            self.shell.runRaw("mv --no-copy " + UnixShell.quote(temporary) + " " + UnixShell.quote(clean), false, true, "");
+            self.shell.run(f"mv --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream());
         }
         if (!self.isSubvolume(clean)) {
-            NixosLog.fatal("CLEAN is not a subvolume: " + clean);
+            NixosLog.fatal(f"CLEAN is not a subvolume: {clean}");
         }
         if (!self.isReadonly(clean)) {
-            NixosLog.fatal("CLEAN is not readonly: " + clean);
+            NixosLog.fatal(f"CLEAN is not readonly: {clean}");
         }
     }
 
     public void createInitialSnapshots() {
-        Vector<ResetSubvolume> volumes = self.resetSubvolumes();
+        var volumes = self.resetSubvolumes();
         for volume in volumes {
             self.createCleanSnapshot(volume);
         }

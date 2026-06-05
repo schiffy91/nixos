@@ -11,22 +11,23 @@
   outputs = inputs@{ self, ... }:
     let
       lib = inputs.nixpkgs.lib;
-      systems = [ "aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux" ];
-      pkgsFor = system: import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
-      eachSystem = fn: lib.genAttrs systems (system: fn system (pkgsFor system));
+      bootableTargets = [ "Standard-Boot" "Secure-Boot" ];
+      diskOperationTargets = [ "Disk-Operation" ];
       isHostEntry = path: lib.hasSuffix ".nix" path && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
-      systemModuleFiles = lib.filter
-        (path: lib.hasSuffix ".nix" path && baseNameOf path != "disk-operation.nix")
-        (lib.filesystem.listFilesRecursive ./nix/system);
+      hostFiles = lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./nix/hosts);
+      systemModuleFiles = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./nix/system);
+      baseConfig = {
+        nix = {
+          channel.enable = false;
+          settings.experimental-features = [ "nix-command" "flakes" ];
+        };
+        nixpkgs.config.allowUnfree = true;
+        system.stateVersion = "24.11";
+      };
       mkNixosSystem = hostFile: target:
         let
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
           system = "${baseNameOf (dirOf (dirOf hostFile))}-linux";
-          targetModules =
-            if lib.hasInfix "Boot" target then
-              [{ settings.boot.method = lib.mkForce target; }] ++ systemModuleFiles
-            else
-              [ ./nix/system/disk-operation.nix ];
           pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
         in {
           name = "${name}-${target}";
@@ -34,37 +35,30 @@
             inherit system;
             specialArgs = { inherit self inputs pkgs-unstable; };
             modules = [{
-              imports = [ ./nix/settings.nix hostFile ] ++ targetModules;
-              config = {
-                nix = {
-                  channel.enable = false;
-                  settings.experimental-features = [ "nix-command" "flakes" ];
-                };
-                nixpkgs.config.allowUnfree = true;
-                system.stateVersion = "24.11";
-              };
+              imports = [ ./nix/settings.nix hostFile { settings.boot.method = lib.mkForce target; } ] ++ systemModuleFiles;
+              config = baseConfig;
             }];
           };
         };
-    in {
-      devShells = eachSystem (system: pkgs: {
-        default = pkgs.mkShell {
-          packages = with pkgs; [
-            inputs.btrc.packages.${system}.btrcpy
-            gnumake
-            nixd
-            git
-            coreutils
-            stdenv.cc
-          ];
+      mkDiskoConfiguration = hostFile: target:
+        let
+          name = lib.removeSuffix ".nix" (baseNameOf hostFile);
+          system = "${baseNameOf (dirOf (dirOf hostFile))}-linux";
+          pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
+          nixos = lib.nixosSystem {
+            inherit system;
+            specialArgs = { inherit self inputs pkgs-unstable; };
+            modules = [{
+              imports = [ ./nix/settings.nix hostFile ./nix/system/disk.nix ];
+              config = baseConfig;
+            }];
+          };
+        in {
+          name = "${name}-${target}";
+          value = nixos.config.disko.devices;
         };
-      });
-      nixosConfigurations = lib.listToAttrs (
-        lib.concatMap (hostFile: [
-          (mkNixosSystem hostFile "Disk-Operation")
-          (mkNixosSystem hostFile "Standard-Boot")
-          (mkNixosSystem hostFile "Secure-Boot")
-        ]) (lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./nix/hosts))
-      );
+    in {
+      diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
+      nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
     };
 }

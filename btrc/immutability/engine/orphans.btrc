@@ -21,7 +21,7 @@ class ImmutabilityOrphans {
     }
 
     public void ensureNamespaces(string persistRoot) {
-        Vector<string> namespaces = [
+        var namespaces = [
             persistRoot,
             PathTools.join(persistRoot, ImmutabilityConstants.dirs()),
             PathTools.join(persistRoot, ImmutabilityConstants.orphans()),
@@ -29,11 +29,11 @@ class ImmutabilityOrphans {
             PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.meta()), ImmutabilityConstants.files())
         ];
         for rel in namespaces {
-            string path = self.run.path(rel);
+            var path = self.run.path(rel);
             if (!self.fs.exists(path)) {
                 self.fs.makeSubvolume(path);
             } else if (!self.fs.isSubvolume(path)) {
-                self.run.fatal("not a subvolume: " + path);
+                self.run.fatal(f"not a subvolume: {path}");
             }
         }
     }
@@ -46,7 +46,7 @@ class ImmutabilityOrphans {
     }
 
     public string quarantineStamp() {
-        DateTime now = DateTime.now();
+        var now = DateTime.now();
         return Strings.replace(Strings.replace(now.format(), " ", "T"), ":", "");
     }
 
@@ -55,16 +55,16 @@ class ImmutabilityOrphans {
         for spec in specs {
             validKeys.push(ImmutabilityPaths.key(spec.absPath));
         }
-        string dirsPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.dirs()));
-        string orphansPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.orphans()));
+        var dirsPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.dirs()));
+        var orphansPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.orphans()));
         // Snapshot the listing: moving inside a loop over self.method() re-evaluates the call.
-        Vector<string> children = self.fs.childSubvolumes(dirsPath);
-        string stamp = self.quarantineStamp();
+        var children = self.fs.childSubvolumes(dirsPath);
+        var stamp = self.quarantineStamp();
         for child in children {
-            string key = PathTools.basename(child);
+            var key = PathTools.basename(child);
             if (!self.keyInSpec(validKeys, key)) {
-                string trashPath = PathTools.join(orphansPath, key + "-" + stamp);
-                self.run.log("Quarantining orphaned persist subvolume " + key + " -> " + trashPath + " (delete manually after review)");
+                var trashPath = PathTools.join(orphansPath, f"{key}-{stamp}");
+                self.run.log(f"Quarantining orphaned persist subvolume {key} -> {trashPath} (delete manually after review)");
                 self.run.renamePath(child, trashPath);
             }
         }

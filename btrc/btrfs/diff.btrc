@@ -35,7 +35,7 @@ class DiffScanner {
     }
 
     public Vector<string> keepPaths() {
-        string raw = self.config.evalRaw("config.settings.disk.immutability.persist.paths");
+        var raw = self.config.evalRaw("config.settings.disk.immutability.persist.paths");
         raw = Strings.replace(raw, "[", "");
         raw = Strings.replace(raw, "]", "");
         Vector<string> result = [];
@@ -49,7 +49,7 @@ class DiffScanner {
         Vector<string> patterns = [];
         if (!FileSystem.exists(path)) { return patterns; }
         for line in Strings.split(Path.readAll(path), "\n") {
-            string trimmed = line.trim();
+            var trimmed = line.trim();
             if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
                 patterns.push(trimmed);
             }
@@ -59,7 +59,7 @@ class DiffScanner {
 
     public Vector<string> mountPoints() {
         Vector<string> result = [];
-        Vector<ResetSubvolume> volumes = self.snapshots.resetSubvolumes();
+        var volumes = self.snapshots.resetSubvolumes();
         for volume in volumes {
             result.push(volume.mountPoint);
         }
@@ -68,26 +68,23 @@ class DiffScanner {
 
     public Vector<string> changedFiles() {
         Vector<string> result = [];
-        Vector<ResetSubvolume> volumes = self.snapshots.resetSubvolumes();
+        var volumes = self.snapshots.resetSubvolumes();
         for volume in volumes {
-            string tmp = PathTools.join(PathTools.join(self.snapshots.snapshotsPath(), volume.name), "tmp");
-            string clean = self.snapshots.cleanSnapshotPath(volume.name);
+            var tmp = PathTools.join(PathTools.join(self.snapshots.snapshotsPath(), volume.name), "tmp");
+            var clean = self.snapshots.cleanSnapshotPath(volume.name);
             self.snapshots.deleteSubvolume(tmp);
             self.snapshots.createReadonlySnapshot(volume.mountPoint, tmp);
 
-            ExecResult tx = self.shell.runUnchecked("echo \"$(sudo btrfs subvolume find-new "
-                + UnixShell.quote(clean)
-                + " 9999999)\" | cut -d' ' -f4");
-            string transaction = tx.trimmed();
-            ExecResult changes = self.shell.runUnchecked("btrfs subvolume find-new "
-                + UnixShell.quote(tmp)
-                + " "
-                + UnixShell.quote(transaction)
-                + " | sed '$d' | cut -f17- -d' ' | sort | uniq");
+            var quotedClean = UnixShell.quote(clean);
+            var tx = self.shell.run(f"echo \"$(sudo btrfs subvolume find-new {quotedClean} 9999999)\" | cut -d' ' -f4", logFailure=false);
+            var transaction = tx.trimmed();
+            var quotedTmp = UnixShell.quote(tmp);
+            var quotedTransaction = UnixShell.quote(transaction);
+            var changes = self.shell.run(f"btrfs subvolume find-new {quotedTmp} {quotedTransaction} | sed '$d' | cut -f17- -d' ' | sort | uniq", logFailure=false);
             if (changes.ok()) {
                 for line in Strings.split(changes.stdout(), "\n") {
                     if (!line.trim().isEmpty()) {
-                        string full = volume.mountPoint + "/" + line.trim();
+                        var full = f"{volume.mountPoint}/{line.trim()}";
                         result.push(Strings.replace(full, "//", "/"));
                     }
                 }
@@ -100,7 +97,8 @@ class DiffScanner {
 
     public bool isPersisted(string path, Vector<string> keepPaths) {
         for keepPath in keepPaths {
-            if (path.equals(keepPath) || path.startsWith(keepPath + "/")) {
+            var keepPrefix = f"{keepPath}/";
+            if (path.equals(keepPath) || path.startsWith(keepPrefix)) {
                 return true;
             }
         }
@@ -120,15 +118,16 @@ class DiffScanner {
     }
 
     public string topAncestor(string path, Vector<string> keepList, Vector<string> mounts) {
-        Vector<string> segments = Strings.split(path, "/");
-        string ancestor = "";
+        var segments = Strings.split(path, "/");
+        var ancestor = "";
         for (int i = 1; i < segments.len; i++) {
             if (segments.get(i).isEmpty()) { continue; }
-            ancestor = ancestor + "/" + segments.get(i);
+            ancestor = f"{ancestor}/{segments.get(i)}";
             if (mounts.contains(ancestor)) { continue; }
-            bool coversKeep = false;
+            var coversKeep = false;
             for keepPath in keepList {
-                if (keepPath.startsWith(ancestor + "/")) { coversKeep = true; }
+                var ancestorPrefix = f"{ancestor}/";
+                if (keepPath.startsWith(ancestorPrefix)) { coversKeep = true; }
             }
             if (coversKeep) { continue; }
             return ancestor;
@@ -141,7 +140,7 @@ class DiffScanner {
         for path in paths {
             result.push(self.topAncestor(path, keepList, mounts));
         }
-        Vector<string> distinct = result.distinct();
+        var distinct = result.distinct();
         distinct.sort();
         return distinct;
     }
@@ -150,13 +149,14 @@ class DiffScanner {
         Vector<string> result = [];
         for path in persisted {
             for keepPath in keepList {
-                if (path.equals(keepPath) || path.startsWith(keepPath + "/")) {
+                var keepPrefix = f"{keepPath}/";
+                if (path.equals(keepPath) || path.startsWith(keepPrefix)) {
                     result.push(keepPath);
                     break;
                 }
             }
         }
-        Vector<string> distinct = result.distinct();
+        var distinct = result.distinct();
         distinct.sort();
         return distinct;
     }
@@ -165,25 +165,25 @@ class DiffScanner {
         if (depth == 0) { return bases; }
         Vector<string> result = [];
         for base in bases {
-            string prefix = base + "/";
+            var prefix = f"{base}/";
             for path in source {
                 if (!path.startsWith(prefix)) { continue; }
                 if (depth < 0) {
                     result.push(path);
                 } else {
-                    Vector<string> parts = Strings.split(path, "/");
-                    int wanted = Strings.count(base, "/") + depth + 1;
-                    string collapsed = "";
+                    var parts = Strings.split(path, "/");
+                    var wanted = Strings.count(base, "/") + depth + 1;
+                    var collapsed = "";
                     for (int i = 1; i < parts.len && i <= wanted; i++) {
                         if (!parts.get(i).isEmpty()) {
-                            collapsed = collapsed + "/" + parts.get(i);
+                            collapsed = f"{collapsed}/{parts.get(i)}";
                         }
                     }
                     if (!collapsed.isEmpty()) { result.push(collapsed); }
                 }
             }
         }
-        Vector<string> distinct = result.distinct();
+        var distinct = result.distinct();
         distinct.sort();
         return distinct;
     }
@@ -200,7 +200,7 @@ class DiffScanner {
     public Vector<string> previousCache(string cachePath) {
         Vector<string> result = [];
         if (!FileSystem.exists(cachePath)) { return result; }
-        JsonObject data = JsonObject.readFile(cachePath);
+        var data = JsonObject.readFile(cachePath);
         for key in data.values.keys() {
             result.push(key);
         }
@@ -208,7 +208,7 @@ class DiffScanner {
     }
 
     public void writeCache(string cachePath, Vector<string> paths) {
-        JsonObject data = JsonObject();
+        var data = JsonObject();
         for path in paths {
             data.setBool(path, true);
         }
@@ -217,13 +217,13 @@ class DiffScanner {
     }
 
     public void print(DiffOptions options) {
-        Vector<string> keepList = self.keepPaths();
-        Vector<string> mounts = self.mountPoints();
-        string ignorePath = options.diffignore.isEmpty() ? PathTools.join(self.config.paths.root, "btrc/btrfs/.diffignore") : options.diffignore;
-        Vector<string> ignores = self.ignorePatterns(ignorePath);
+        var keepList = self.keepPaths();
+        var mounts = self.mountPoints();
+        var ignorePath = options.diffignore.isEmpty() ? PathTools.join(self.config.paths.root, "btrc/btrfs/.diffignore") : options.diffignore;
+        var ignores = self.ignorePatterns(ignorePath);
         Vector<string> ephemeral = [];
         Vector<string> persistedPaths = [];
-        Vector<string> changed = self.changedFiles();
+        var changed = self.changedFiles();
         for path in changed {
             if (self.isPersisted(path, keepList)) {
                 persistedPaths.push(path);
@@ -234,7 +234,7 @@ class DiffScanner {
 
         Vector<string> output = [];
         if (options.showPersistPaths) {
-            Vector<string> bases = self.collapseToPersist(persistedPaths, keepList);
+            var bases = self.collapseToPersist(persistedPaths, keepList);
             output = self.atDepth(bases, persistedPaths, options.depth);
         } else {
             output = self.selectEphemeral(ephemeral, keepList, mounts, options);
@@ -252,9 +252,9 @@ class DiffScanner {
     }
 
     public Vector<string> selectEphemeral(Vector<string> ephemeral, Vector<string> keepList, Vector<string> mounts, DiffOptions options) {
-        Vector<string> top = self.collapse(ephemeral, keepList, mounts);
-        string cachePath = "/tmp/nixosctl/diff/cache.json";
-        Vector<string> previous = self.previousCache(cachePath);
+        var top = self.collapse(ephemeral, keepList, mounts);
+        var cachePath = "/tmp/nixosctl/diff/cache.json";
+        var previous = self.previousCache(cachePath);
         self.writeCache(cachePath, top);
         if (options.recent) {
             Vector<string> recent = [];
@@ -271,9 +271,11 @@ class DiffScanner {
             top = filtered;
         }
         if (!options.showChildren.isEmpty()) {
-            bool covers = false;
+            var covers = false;
             for path in top {
-                if (path.equals(options.showChildren) || options.showChildren.startsWith(path + "/") || path.startsWith(options.showChildren + "/")) {
+                var pathPrefix = f"{path}/";
+                var childrenPrefix = f"{options.showChildren}/";
+                if (path.equals(options.showChildren) || options.showChildren.startsWith(pathPrefix) || path.startsWith(childrenPrefix)) {
                     covers = true;
                 }
             }

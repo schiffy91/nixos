@@ -37,7 +37,7 @@ class SshClient {
 
     public string sshOptionsForShell() {
         Vector<string> quoted = [];
-        Vector<string> opts = self.sshOptionList();
+        var opts = self.sshOptionList();
         for opt in opts {
             quoted.push(UnixShell.quote(opt));
         }
@@ -45,7 +45,7 @@ class SshClient {
     }
 
     public Command addSshOptions(Command cmd) {
-        Vector<string> opts = self.sshOptionList();
+        var opts = self.sshOptionList();
         for opt in opts {
             cmd.arg(opt);
         }
@@ -53,15 +53,14 @@ class SshClient {
     }
 
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
-        Command cmd = self.addSshOptions(Command("timeout")
+        var cmd = self.addSshOptions(Command("timeout")
             .arg(Strings.fromInt(timeoutSeconds))
             .arg("ssh")
             .arg("-p")
             .arg(Strings.fromInt(self.spec.sshPort)))
             .arg("root@localhost")
-            .arg(command)
-            .check(checkStatus);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(command);
+        var result = self.shell.run(cmd.render(), logFailure=checkStatus);
         return result;
     }
 
@@ -70,78 +69,76 @@ class SshClient {
     }
 
     public ExecResult host(string command, bool checkStatus) {
-        return self.shell.runRaw(command, true, checkStatus, "");
+        return self.shell.run(command, logFailure=checkStatus);
     }
 
     public ExecResult workspaceFileExists(string relativePath) {
-        string command = "cd " + UnixShell.quote(self.workspaceRoot())
+        var command = "cd " + UnixShell.quote(self.workspaceRoot())
             + " && test -f " + UnixShell.quote(relativePath)
             + " && printf exists";
-        return self.shell.runRaw(command, true, false, "");
+        return self.shell.run(command, logFailure=false);
     }
 
     public ExecResult nixEval(string attribute, int timeoutSeconds) {
-        string command = "cd " + UnixShell.quote(self.workspaceRoot())
+        var command = "cd " + UnixShell.quote(self.workspaceRoot())
             + " && timeout "
             + Strings.fromInt(timeoutSeconds)
             + " nix eval "
             + UnixShell.quote(".#" + attribute)
             + " --show-trace";
-        return self.shell.runRaw(command, true, false, "");
+        return self.shell.run(command, logFailure=false);
     }
 
     public ExecResult qmp(string command, int timeoutSeconds) {
         if (!FileSystem.exists(self.qmpPath())) {
             return ExecResult(1, "", "QMP socket does not exist: " + self.qmpPath(), "");
         }
-        string payload = "{\"execute\":\"qmp_capabilities\"}\n" + command + "\n";
-        string rendered = "printf %s "
+        var payload = "{\"execute\":\"qmp_capabilities\"}\n" + command + "\n";
+        var rendered = "printf %s "
             + UnixShell.quote(payload)
             + " | timeout "
             + Strings.fromInt(timeoutSeconds)
             + " socat - "
             + UnixShell.quote("UNIX-CONNECT:" + self.qmpPath());
-        return self.shell.runRaw(rendered, true, false, "");
+        return self.shell.run(rendered, logFailure=false);
     }
 
     public void copyWorkspace(string localPath, string remotePath) {
-        string source = localPath.isEmpty() ? ".." : localPath;
-        string target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
-        string remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
-        string tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
+        var source = localPath.isEmpty() ? ".." : localPath;
+        var target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
+        var remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
+        var tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
             + UnixShell.quote(source)
             + " .";
-        string ssh = "ssh -p "
+        var ssh = "ssh -p "
             + Strings.fromInt(self.spec.sshPort)
             + " "
             + self.sshOptionsForShell()
             + " root@localhost "
             + UnixShell.quote(remote);
-        ExecResult result = self.shell.runRaw(tar + " | " + ssh, false, true, "");
+        var result = self.shell.run(tar + " | " + ssh, stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy workspace into VM"); }
     }
 
     public void copyTo(string localPath, string remotePath) {
-        Command cmd = self.addSshOptions(Command("scp")
+        var cmd = self.addSshOptions(Command("scp")
             .arg("-r")
             .arg("-P")
             .arg(Strings.fromInt(self.spec.sshPort)))
             .arg(localPath)
-            .arg(f"root@localhost:{remotePath}")
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(f"root@localhost:{remotePath}");
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
     }
 
     public void copyFrom(string remotePath, string localPath) {
-        Command cmd = self.addSshOptions(Command("scp")
+        var cmd = self.addSshOptions(Command("scp")
             .arg("-r")
             .arg("-P")
             .arg(Strings.fromInt(self.spec.sshPort)))
             .arg(f"root@localhost:{remotePath}")
-            .arg(localPath)
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(localPath);
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
     }
 }

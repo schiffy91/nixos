@@ -49,12 +49,12 @@ class VmTestSpec {
     }
 
     public void setArgPair(string pair) {
-        int pos = Strings.find(pair, "=", 0);
+        var pos = Strings.find(pair, "=", 0);
         if (pos <= 0) {
             NixosLog.fatal("Expected --arg key=value, got " + pair);
         }
-        string key = JsonObject.slice(pair, 0, pos);
-        string value = JsonObject.slice(pair, pos + 1, pair.len());
+        var key = JsonObject.slice(pair, 0, pos);
+        var value = JsonObject.slice(pair, pos + 1, pair.len());
         self.setArg(key, value);
     }
 
@@ -148,7 +148,7 @@ class VmTestSpec {
         if (self.parentState.equals("root") || self.parentState.isEmpty()) {
             return "root";
         }
-        string path = self.parentHashFile();
+        var path = self.parentHashFile();
         if (FileSystem.exists(path)) {
             return Path.readAll(path).trim();
         }
@@ -170,7 +170,7 @@ class VmTestSpec {
     }
 
     public string hashMaterial() {
-        string material = self.stateMaterial;
+        var material = self.stateMaterial;
         if (material.isEmpty()) {
             material = f"{self.name}:{self.arch}:{self.isoUrl}:{self.diskSize}:{self.memory}:{self.cpus}:{self.sshPort}";
         }
@@ -179,8 +179,8 @@ class VmTestSpec {
 
     public void computeStateHash() {
         self.parentHash = self.resolveParentHash();
-        string command = "printf %s " + UnixShell.quote(self.hashMaterial()) + " | (if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi) | awk '{print $1}'";
-        ExecResult result = UnixShell().run(command);
+        var command = "printf %s " + UnixShell.quote(self.hashMaterial()) + " | (if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi) | awk '{print $1}'";
+        var result = UnixShell().run(command);
         if (!result.ok()) {
             NixosLog.fatal("Failed to compute state hash for " + self.state);
         }
@@ -189,7 +189,7 @@ class VmTestSpec {
     }
 
     public void expandArgs() {
-        string rawWorkDir = self.workDir;
+        var rawWorkDir = self.workDir;
         self.setDerivedArgs();
         self.name = VmSpecArgs.expand(self.name, self.args);
         self.arch = VmSpecArgs.expand(self.arch, self.args);

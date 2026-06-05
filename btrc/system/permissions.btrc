@@ -12,56 +12,57 @@ class PermissionsManager {
     }
 
     public string ignorePredicate() {
-        return "\\( -path " + UnixShell.quote("*/secrets*")
-            + " -o -path " + UnixShell.quote("*/.venv*")
-            + " -o -path " + UnixShell.quote("*/.direnv*")
-            + " \\)";
+        var secrets = UnixShell.quote("*/secrets*");
+        var venv = UnixShell.quote("*/.venv*");
+        var direnv = UnixShell.quote("*/.direnv*");
+        return f"\\( -path {secrets} -o -path {venv} -o -path {direnv} \\)";
     }
 
     public void findChmod(string quotedRoot, string ignores, string predicate, string mode) {
-        self.shell.runRaw("find " + quotedRoot + " " + ignores + " -prune -o " + predicate + " -exec chmod " + mode + " {} +", false, false, "");
+        var execArg = "{}";
+        self.shell.run(f"find {quotedRoot} {ignores} -prune -o {predicate} -exec chmod {mode} {execArg} +", stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void secureSecretsPath(string path) {
         if (!FileSystem.exists(path)) { return; }
-        string quoted = UnixShell.quote(path);
+        var quoted = UnixShell.quote(path);
         if (Platform.isRoot()) {
-            self.shell.runRaw("chown -R root:root " + quoted, false, false, "");
+            self.shell.run(f"chown -R root:root {quoted}", stdout=CommandOutput.stream(), logFailure=false);
         }
-        self.shell.runRaw("find " + quoted + " -type d -exec chmod 700 {} +", false, false, "");
-        self.shell.runRaw("find " + quoted + " -type f -exec chmod 600 {} +", false, false, "");
+        var execArg = "{}";
+        self.shell.run(f"find {quoted} -type d -exec chmod 700 {execArg} +", stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"find {quoted} -type f -exec chmod 600 {execArg} +", stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void secureTree(string username) {
-        string root = self.config.paths.root;
+        var root = self.config.paths.root;
         if (Platform.isRoot()) {
-            Command chownRoot = Command("chown");
-            chownRoot.arg("-R");
-            chownRoot.arg(username);
-            chownRoot.arg(root);
-            chownRoot.capture(false);
-            self.shell.runCommand(chownRoot);
+            var chownRoot = Command("chown")
+                .arg("-R")
+                .arg(username)
+                .arg(root);
+            self.shell.run(chownRoot.render(), stdout=CommandOutput.stream());
         }
 
-        string quotedRoot = UnixShell.quote(root);
-        string ignores = self.ignorePredicate();
+        var quotedRoot = UnixShell.quote(root);
+        var ignores = self.ignorePredicate();
         self.findChmod(quotedRoot, ignores, "-type d", "755");
         self.findChmod(quotedRoot, ignores, "-type f", "644");
         self.findChmod(quotedRoot, ignores, "-path '*/bin/*'", "755");
-        string gitObjects = PathTools.join(root, ".git/objects");
+        var gitObjects = PathTools.join(root, ".git/objects");
         if (FileSystem.exists(gitObjects)) {
-            self.shell.runRaw("find " + UnixShell.quote(gitObjects) + " -type f -exec chmod 444 {} +", false, false, "");
+            var quotedGitObjects = UnixShell.quote(gitObjects);
+            var execArg = "{}";
+            self.shell.run(f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +", stdout=CommandOutput.stream(), logFailure=false);
         }
 
-        Command safe = Command("git");
-        safe.arg("config");
-        safe.arg("--global");
-        safe.arg("--add");
-        safe.arg("safe.directory");
-        safe.arg(root);
-        safe.capture(false);
-        safe.check(false);
-        self.shell.runCommand(safe);
+        var safe = Command("git")
+            .arg("config")
+            .arg("--global")
+            .arg("--add")
+            .arg("safe.directory")
+            .arg(root);
+        self.shell.run(safe.render(), stdout=CommandOutput.stream(), logFailure=false);
 
         if (self.config.exists()) {
             SecretsManager(self.config).secure();

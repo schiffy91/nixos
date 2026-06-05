@@ -15,38 +15,35 @@ class SecureBootManager {
     public void removeOldEntries() {
         FileSystem.mkdirp("/boot/EFI/Linux");
         FileSystem.mkdirp("/var/lib/sbctl");
-        self.shell.runRaw("find /boot/EFI/Linux -type f -name 'linux-*.efi' -delete", false, false, "");
+        self.shell.run("find /boot/EFI/Linux -type f -name 'linux-*.efi' -delete", stdout=CommandOutput.stream(), logFailure=false);
         FileSystem.removeRecursive("/etc/secureboot");
     }
 
     public bool keysEnrolled() {
-        ExecResult result = self.shell.runUnchecked("sbctl status 2>&1");
+        var result = self.shell.run("sbctl status 2>&1", logFailure=false);
         return result.stdout().toLower().contains("secure boot:") && result.stdout().toLower().contains("enabled");
     }
 
     public bool keysSigned() {
-        ExecResult result = self.shell.runUnchecked("sbctl verify 2>&1");
+        var result = self.shell.run("sbctl verify 2>&1", logFailure=false);
         return result.stdout().toLower().contains("is signed");
     }
 
     public void createKeys() {
-        Command create = Command("sbctl");
-        create.arg("create-keys");
-        create.capture(false);
-        create.check(false);
-        self.shell.runCommand(create);
+        var create = Command("sbctl")
+            .arg("create-keys");
+        self.shell.run(create.render(), stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void enrollKeys(bool microsoft) {
-        Command enroll = Command("sbctl");
-        enroll.arg("enroll-keys");
+        var enroll = Command("sbctl")
+            .arg("enroll-keys");
         if (microsoft) {
             enroll.arg("--microsoft");
         } else {
             enroll.arg("--yes-this-might-brick-my-machine");
         }
-        enroll.capture(false);
-        self.shell.runCommand(enroll);
+        self.shell.run(enroll.render(), stdout=CommandOutput.stream());
     }
 
     public Vector<string> unsignedFromJson(string json) {
@@ -54,9 +51,9 @@ class SecureBootManager {
         // JsonObject.parse correctly reads top-level keys; JsonText.objectField pulls
         // each balanced nested object, and JsonText.field extracts its is_signed.
         Vector<string> result = [];
-        JsonObject top = JsonObject.parse(json);
+        var top = JsonObject.parse(json);
         for key, _ in top.values {
-            string body = JsonText.objectField(json, key);
+            var body = JsonText.objectField(json, key);
             if (body.isEmpty()) { continue; }
             if (JsonText.field(body, "is_signed", "true").equals("false")) {
                 result.push(key);
@@ -66,23 +63,22 @@ class SecureBootManager {
     }
 
     public void verify() {
-        Command verify = Command("sbctl")
+        var verify = Command("sbctl")
             .arg("verify")
-            .arg("--json")
-            .check(false);
-        ExecResult result = self.shell.runCommand(verify);
-        string output = result.trimmed();
+            .arg("--json");
+        var result = self.shell.run(verify.render(), logFailure=false);
+        var output = result.trimmed();
         if (output.isEmpty() || output.equals("null")) {
             NixosLog.error("No EFI binaries registered");
             return;
         }
-        Vector<string> unsignedPaths = self.unsignedFromJson(output);
+        var unsignedPaths = self.unsignedFromJson(output);
         if (unsignedPaths.isEmpty()) {
             NixosLog.info("All EFI binaries are signed");
             return;
         }
         for path in unsignedPaths {
-            NixosLog.error("NOT signed: " + path);
+            NixosLog.error(f"NOT signed: {path}");
         }
     }
 
@@ -91,7 +87,7 @@ class SecureBootManager {
         self.createKeys();
         self.enrollKeys(microsoft);
         self.config.local.setString("target", self.config.secureBootTarget());
-        RebuildOptions options = RebuildOptions();
+        var options = RebuildOptions();
         options.rebuildFileSystem = true;
         options.clean = true;
         NixosRebuilder(self.config).update(options);
@@ -101,18 +97,16 @@ class SecureBootManager {
     public void disable() {
         self.removeOldEntries();
         self.config.local.setString("target", self.config.standardTarget());
-        RebuildOptions options = RebuildOptions();
+        var options = RebuildOptions();
         options.rebuildFileSystem = true;
         options.clean = true;
         NixosRebuilder(self.config).update(options);
     }
 
     public void status() {
-        Command status = Command("sbctl")
-            .arg("status")
-            .capture(false)
-            .check(false);
-        self.shell.runCommand(status);
+        var status = Command("sbctl")
+            .arg("status");
+        self.shell.run(status.render(), stdout=CommandOutput.stream(), logFailure=false);
         self.verify();
     }
 }

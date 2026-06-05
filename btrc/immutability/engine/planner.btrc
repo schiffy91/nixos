@@ -16,17 +16,17 @@ class ImmutabilityPlanner {
     }
 
     public int compareSpecs(ImmutabilitySpec left, ImmutabilitySpec right) {
-        int volume = Strings.compare(left.volume, right.volume);
+        var volume = Strings.compare(left.volume, right.volume);
         if (volume != 0) { return volume; }
-        int leftDepth = Strings.count(left.relPath, "/");
-        int rightDepth = Strings.count(right.relPath, "/");
+        var leftDepth = Strings.count(left.relPath, "/");
+        var rightDepth = Strings.count(right.relPath, "/");
         if (leftDepth != rightDepth) { return leftDepth - rightDepth; }
         if (left.relPath.len() != right.relPath.len()) { return left.relPath.len() - right.relPath.len(); }
         return Strings.compare(left.relPath, right.relPath);
     }
 
     public void pushSpecSorted(Vector<ImmutabilitySpec> specs, ImmutabilitySpec spec) {
-        int index = 0;
+        var index = 0;
         while (index < specs.len && self.compareSpecs(specs.get(index), spec) <= 0) {
             index++;
         }
@@ -42,7 +42,7 @@ class ImmutabilityPlanner {
     }
 
     public string resolveKind(string live, string clean, ImmutabilitySpec spec) {
-        string path = self.fs.sourcePath(live, clean, spec.relPath);
+        var path = self.fs.sourcePath(live, clean, spec.relPath);
         if (path.isEmpty()) { return "file"; }
         if (FileSystem.isDir(path)) { return "dir"; }
         return "file";
@@ -63,14 +63,14 @@ class ImmutabilityPlanner {
     public Vector<ImmutabilityPlan> makePlan(Vector<ImmutabilitySpec> specs, string live, string clean, string persistRoot) {
         Vector<ImmutabilityPlan> plans = [];
         // Sort once; `for x in self.method()` re-evaluates the call each pass.
-        Vector<ImmutabilitySpec> ordered = self.sortedSpecs(specs);
+        var ordered = self.sortedSpecs(specs);
         for spec in ordered {
-            string kind = spec.kind;
+            var kind = spec.kind;
             if (kind.equals("auto")) {
                 kind = self.resolveKind(live, clean, spec);
             }
             if (self.planAlreadyCovers(plans, spec)) { continue; }
-            string store = kind.equals("dir")
+            var store = kind.equals("dir")
                 ? ImmutabilityPaths.dirStore(persistRoot, spec.absPath)
                 : ImmutabilityPaths.fileStore(persistRoot, spec.absPath);
             plans.push(ImmutabilityPlan(spec, kind, store));

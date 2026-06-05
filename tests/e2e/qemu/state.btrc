@@ -57,10 +57,10 @@ class VmStateStore {
     }
 
     public string absolutePath(string path) {
-        Command command = Command("sh")
+        var command = Command("sh")
             .arg("-c")
             .arg("cd " + UnixShell.quote(PathTools.dirname(path)) + " && printf '%s/%s' \"$PWD\" " + UnixShell.quote(PathTools.basename(path)));
-        ExecResult result = self.shell.runCommand(command);
+        var result = self.shell.run(command.render());
         if (!result.ok()) { NixosLog.fatal("Failed to resolve path " + path); }
         return result.trimmed();
     }
@@ -78,22 +78,22 @@ class VmStateStore {
 
     public void copyIfExists(string source, string target) {
         if (!FileSystem.exists(source)) { return; }
-        Command cp = Command("cp").arg(source).arg(target).capture(false);
-        ExecResult result = self.shell.runCommand(cp);
+        var cp = Command("cp").arg(source).arg(target);
+        var result = self.shell.run(cp.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
     }
 
     public void copyTreeIfExists(string source, string target) {
         if (!FileSystem.exists(source)) { return; }
         FileSystem.removeRecursive(target);
-        Command cp = Command("cp").arg("-R").arg(source).arg(target).capture(false);
-        ExecResult result = self.shell.runCommand(cp);
+        var cp = Command("cp").arg("-R").arg(source).arg(target);
+        var result = self.shell.run(cp.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }
     }
 
     public void inheritParentFirmwareArgs() {
         if (!FileSystem.exists(self.parentMetadataPath())) { return; }
-        JsonObject metadata = JsonObject.readFile(self.parentMetadataPath());
+        var metadata = JsonObject.readFile(self.parentMetadataPath());
         if (metadata.getString("uefi", "false").equals("true") && !self.spec.args.has("uefi") && !self.spec.args.has("uefiDisk")) {
             self.spec.setArg("uefiDisk", "true");
         }
@@ -112,12 +112,12 @@ class VmStateStore {
             NixosLog.fatal(f"Parent state {self.spec.parentState} has no workDir record");
         }
         self.inheritParentFirmwareArgs();
-        string parentWorkDir = Path.readAll(self.parentWorkDirFile()).trim();
+        var parentWorkDir = Path.readAll(self.parentWorkDirFile()).trim();
         self.ensureWorkDir();
-        string parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
+        var parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
         if (!FileSystem.exists(self.diskPath()) && FileSystem.exists(parentDisk)) {
-            string backing = self.absolutePath(parentDisk);
-            Command create = Command("qemu-img")
+            var backing = self.absolutePath(parentDisk);
+            var create = Command("qemu-img")
                 .arg("create")
                 .arg("-f")
                 .arg("qcow2")
@@ -125,9 +125,8 @@ class VmStateStore {
                 .arg("qcow2")
                 .arg("-b")
                 .arg(backing)
-                .arg(self.diskPath())
-                .capture(false);
-            ExecResult result = self.shell.runCommand(create);
+                .arg(self.diskPath());
+            var result = self.shell.run(create.render(), stdout=CommandOutput.stream());
             if (!result.ok()) { NixosLog.fatal("Failed to create qcow2 state delta for " + self.spec.state); }
             Path.writeAll(self.backingDiskFile(), backing + "\n");
         }
@@ -141,7 +140,7 @@ class VmStateStore {
         FileSystem.mkdirp(self.spec.stateDir());
         Path.writeAll(self.spec.stateHashFile(), self.spec.stateHash + "\n");
         Path.writeAll(PathTools.join(self.spec.stateDir(), "workDir"), self.spec.workDir + "\n");
-        JsonObject metadata = JsonObject();
+        var metadata = JsonObject();
         metadata.setString("state", self.spec.state);
         metadata.setString("parentState", self.spec.parentState);
         metadata.setString("parentHash", self.spec.parentHash);
@@ -164,28 +163,28 @@ class VmStateStore {
     }
 
     public bool isRunning() {
-        string pid = self.currentPid();
+        var pid = self.currentPid();
         if (pid.isEmpty()) { return false; }
-        ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + UnixShell.quote(self.spec.vmProcessName()) + " >/dev/null", false, false, "");
+        var result = self.shell.run("pid=" + UnixShell.quote(pid) + "; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + UnixShell.quote(self.spec.vmProcessName()) + " >/dev/null", stdout=CommandOutput.stream(), logFailure=false);
         return result.ok();
     }
 
     public string runningDetail() {
-        string pid = self.currentPid();
-        string exitDetail = "";
+        var pid = self.currentPid();
+        var exitDetail = "";
         if (FileSystem.exists(self.qemuExitPath())) {
             exitDetail = "; " + Path.readAll(self.qemuExitPath()).trim();
         }
         if (pid.isEmpty()) { return "missing pidfile " + self.pidPath() + exitDetail; }
-        ExecResult result = self.shell.runRaw("pid=" + UnixShell.quote(pid) + "; if kill -0 \"$pid\" 2>/dev/null; then printf 'pid=%s running ' \"$pid\"; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; else printf 'pid=%s not-running' \"$pid\"; fi", true, false, "");
+        var result = self.shell.run("pid=" + UnixShell.quote(pid) + "; if kill -0 \"$pid\" 2>/dev/null; then printf 'pid=%s running ' \"$pid\"; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; else printf 'pid=%s not-running' \"$pid\"; fi", logFailure=false);
         return result.trimmed() + exitDetail;
     }
 
     public bool hasSnapshot(string name) {
         if (!FileSystem.exists(self.diskPath())) { return false; }
-        ExecResult result = self.shell.runUnchecked("qemu-img snapshot -l " + UnixShell.quote(self.diskPath()) + " | awk '{print $2}'");
+        var result = self.shell.run("qemu-img snapshot -l " + UnixShell.quote(self.diskPath()) + " | awk '{print $2}'", logFailure=false);
         if (!result.ok()) { return false; }
-        Vector<string> lines = Strings.split(result.stdout(), "\n");
+        var lines = Strings.split(result.stdout(), "\n");
         for line in lines {
             if (line.trim().equals(name)) { return true; }
         }
@@ -197,9 +196,9 @@ class VmStateStore {
     }
 
     public void printStatus() {
-        string recorded = "no";
+        var recorded = "no";
         if (FileSystem.exists(self.spec.stateHashFile())) {
-            string savedHash = Path.readAll(self.spec.stateHashFile()).trim();
+            var savedHash = Path.readAll(self.spec.stateHashFile()).trim();
             recorded = savedHash.equals(self.spec.stateHash) ? "yes" : "stale";
         }
         Console.log("State:     " + self.spec.state);

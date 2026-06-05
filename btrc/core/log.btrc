@@ -7,15 +7,15 @@ class NixosLog {
     class string reset() { return "\033[0m"; }
 
     class void info(string message) {
-        Console.error(NixosLog.gray() + "LOG: " + message + NixosLog.reset());
+        Console.error(f"{NixosLog.gray()}LOG: {message}{NixosLog.reset()}");
     }
 
     class void error(string message) {
-        Console.error(NixosLog.orange() + "ERROR: " + message + NixosLog.reset());
+        Console.error(f"{NixosLog.orange()}ERROR: {message}{NixosLog.reset()}");
     }
 
     class void fatal(string message) {
-        Console.error(NixosLog.red() + message + NixosLog.reset());
+        Console.error(f"{NixosLog.red()}{message}{NixosLog.reset()}");
         exit(1);
     }
 }

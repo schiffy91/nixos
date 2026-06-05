@@ -32,15 +32,17 @@ let
 		lib.escapeShellArg "${volume.name}=${volume.mountPoint}"
 	) resetVolumes;
 	immutabilityCommandArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName immutabilityMode immutabilityPersistRoot immutabilitySpecFile ];
-	immutabilitySnapshotCleanArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName ];
 	immutabilityResetMountUnits = map (volume: "${utils.escapeSystemdPath volume.mountPoint}.mount") resetVolumes;
-	immutabilitySpecFile = pkgs.writeText "immutability-spec" (
-		lib.concatStringsSep "\n" (
-			lib.concatMap (volume:
-				map (path: "${volume.name}\t${volume.mountPoint}\t${path}\tauto") (sortPaths (pathsForVolume volume))
-			) resetVolumes
-		) + "\n"
-	);
+	immutabilitySpecFile = (pkgs.formats.toml {}).generate "immutability-spec.toml" {
+		keep = lib.concatMap (volume:
+			map (path: {
+				inherit path;
+				kind = "auto";
+				mountPoint = volume.mountPoint;
+				volume = volume.name;
+			}) (sortPaths (pathsForVolume volume))
+		) resetVolumes;
+	};
 
 	immutabilityBin = buildBtrcProgram {
 		name = "immutability";
@@ -52,7 +54,7 @@ in
 lib.mkMerge [
 (lib.mkIf immutabilityEnabled {
 	environment.systemPackages = [ immutabilityBin ];
-	environment.etc."immutability/spec.tsv".source = immutabilitySpecFile;
+	environment.etc."immutability/spec.toml".source = immutabilitySpecFile;
 	systemd.services."immutability-mounts" = {
 		description = "Mount immutability persistent BTRFS subvolumes into place";
 		wantedBy = lib.optionals config.settings.disk.immutability.enforce.onReboot [ "local-fs.target" ];
@@ -101,15 +103,5 @@ lib.mkMerge [
 			};
 		};
 	};
-	})
-	(lib.mkIf (immutabilityEnabled && config.settings.disk.immutability.enforce.onUpdate) {
-		# Re-capture the CLEAN baseline of the freshly-activated system at switch
-		# time so future factory-resets revert to the updated generation rather
-		# than the original install. snapshot-clean replaces each reset volume's
-		# read-only CLEAN snapshot with a fresh `-r` snapshot of the live subvolume.
-		system.activationScripts.immutabilitySnapshotClean.text = ''
-			export PATH=${lib.makeBinPath (with pkgs; [ btrfs-progs coreutils util-linux ])}:$PATH
-			${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}snapshot-clean ${immutabilitySnapshotCleanArgs} ${immutabilityPairArgs}
-		'';
 	})
 ]

@@ -13,61 +13,54 @@ class ImmutabilityRun {
         self.shell = UnixShell();
         self.timer = Timer();
         self.timer.start();
-        self.top = Environment.get("IMMUTABILITY_MOUNT_PATH", ImmutabilityConstants.topBase() + "." + Strings.fromInt(Platform.pid()));
+        self.top = Environment.get("IMMUTABILITY_MOUNT_PATH", f"{ImmutabilityConstants.topBase()}.{Platform.pid()}");
         self.dryRun = dryRun;
     }
 
     public string elapsed() {
-        return "[" + Strings.fromFloat(self.timer.elapsed()) + "s]";
+        return f"[{self.timer.elapsed()}s]";
     }
 
     public string path(string rel) {
-        string base = ImmutabilityPaths.trimTrailingSlashes(self.top);
-        string child = ImmutabilityPaths.trimSlashes(rel);
+        var base = ImmutabilityPaths.trimTrailingSlashes(self.top);
+        var child = ImmutabilityPaths.trimSlashes(rel);
         if (child.isEmpty()) { return base; }
         return PathTools.join(base, child);
     }
 
     public void log(string message) {
-        Console.error(self.elapsed() + " " + message);
+        Console.error(f"{self.elapsed()} {message}");
     }
 
     public void fatal(string message) {
-        NixosLog.fatal(self.elapsed() + " ERR " + message);
+        NixosLog.fatal(f"{self.elapsed()} ERR {message}");
     }
 
-    public ExecResult runCommand(Command command) {
-        string rendered = command.render();
+    public ExecResult run(string command,
+                          string stdout = "collect",
+                          string stderr = "combine",
+                          bool logFailure = true) {
         if (self.dryRun) {
-            self.log("DRY " + rendered);
-            return ExecResult(0, "", "", rendered);
-        }
-        self.log(rendered);
-        return self.shell.runCommand(command);
-    }
-
-    public ExecResult runRaw(string command, bool captureOutput, bool checkStatus) {
-        if (self.dryRun) {
-            self.log("DRY " + command);
+            self.log(f"DRY {command}");
             return ExecResult(0, "", "", command);
         }
         self.log(command);
-        return self.shell.runRaw(command, captureOutput, checkStatus, "");
+        return self.shell.run(command, stdout=stdout, stderr=stderr, logFailure=logFailure);
     }
 
     public void requireCommand(Command command) {
-        ExecResult result = self.runCommand(command);
-        if (!result.ok()) { self.fatal("Failed: " + command.render()); }
+        var result = self.run(command.render(), stdout=CommandOutput.stream());
+        if (!result.ok()) { self.fatal(f"Failed: {command.render()}"); }
     }
 
     public void requireRaw(string command) {
-        ExecResult result = self.runRaw(command, false, true);
-        if (!result.ok()) { self.fatal("Failed: " + command); }
+        var result = self.run(command, stdout=CommandOutput.stream());
+        if (!result.ok()) { self.fatal(f"Failed: {command}"); }
     }
 
     public void mkdirp(string path) {
         if (self.dryRun) {
-            self.log("DRY mkdir -p " + UnixShell.quote(path));
+            self.log(f"DRY mkdir -p {UnixShell.quote(path)}");
             return;
         }
         FileSystem.mkdirp(path);
@@ -75,7 +68,7 @@ class ImmutabilityRun {
 
     public void removePath(string path) {
         if (self.dryRun) {
-            self.log("DRY rm -rf " + UnixShell.quote(path));
+            self.log(f"DRY rm -rf {UnixShell.quote(path)}");
             return;
         }
         if (FileSystem.exists(path) || FileSystem.isSymlink(path)) {
@@ -84,6 +77,8 @@ class ImmutabilityRun {
     }
 
     public void renamePath(string source, string destination) {
-        self.requireRaw("mv --no-copy " + UnixShell.quote(source) + " " + UnixShell.quote(destination));
+        var quotedSource = UnixShell.quote(source);
+        var quotedDestination = UnixShell.quote(destination);
+        self.requireRaw(f"mv --no-copy {quotedSource} {quotedDestination}");
     }
 }

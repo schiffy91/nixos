@@ -6,18 +6,18 @@ class CaffeineManager {
 
     public CaffeineManager() {
         self.shell = UnixShell();
-        string runtime = Environment.get("XDG_RUNTIME_DIR", "/tmp");
+        var runtime = Environment.get("XDG_RUNTIME_DIR", "/tmp");
         self.pidFile = PathTools.join(runtime, "nixos-caffeine.pid");
     }
 
     public int pid() {
         if (!FileSystem.exists(self.pidFile)) { return 0; }
-        int existing = Strings.toInt(Path.readAll(self.pidFile).trim());
+        var existing = Strings.toInt(Path.readAll(self.pidFile).trim());
         if (existing <= 0) {
             FileSystem.removeRecursive(self.pidFile);
             return 0;
         }
-        ExecResult alive = self.shell.runUnchecked("kill -0 " + Strings.fromInt(existing));
+        var alive = self.shell.run(f"kill -0 {existing}", logFailure=false);
         if (!alive.ok()) {
             FileSystem.removeRecursive(self.pidFile);
             return 0;
@@ -31,14 +31,14 @@ class CaffeineManager {
 
     public void enable() {
         if (self.enabled()) { return; }
-        string command = "systemd-inhibit --what=idle --who=nixos --why='User disabled sleep' sleep infinity >/dev/null 2>&1 & echo $! > " + UnixShell.quote(self.pidFile);
-        self.shell.runRaw(command, false, true, "");
+        var command = f"systemd-inhibit --what=idle --who=nixos --why='User disabled sleep' sleep infinity >/dev/null 2>&1 & echo $! > {UnixShell.quote(self.pidFile)}";
+        self.shell.run(command, stdout=CommandOutput.stream());
     }
 
     public void disable() {
-        int existing = self.pid();
+        var existing = self.pid();
         if (existing > 0) {
-            self.shell.runUnchecked("kill " + Strings.fromInt(existing));
+            self.shell.run(f"kill {existing}", logFailure=false);
         }
         FileSystem.removeRecursive(self.pidFile);
     }

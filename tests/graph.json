@@ -76,6 +76,16 @@
       }
     },
     {
+      "id": "installer-download-aarch64",
+      "spec": "installer-download/test.json",
+      "after": [],
+      "args": {
+        "name": "installer-download-aarch64",
+        "state": "base-iso-aarch64",
+        "arch": "aarch64"
+      }
+    },
+    {
       "id": "installer-ssh",
       "spec": "installer-ssh/test.json",
       "after": [
@@ -108,6 +118,20 @@
         "parentState": "base-iso-x86_64",
         "arch": "x86_64",
         "sshPort": "2230"
+      }
+    },
+    {
+      "id": "installer-ssh-aarch64",
+      "spec": "installer-ssh/test.json",
+      "after": [
+        "installer-download-aarch64"
+      ],
+      "args": {
+        "name": "installer-ssh-aarch64",
+        "state": "installer-ssh-aarch64",
+        "parentState": "base-iso-aarch64",
+        "arch": "aarch64",
+        "sshPort": "2231"
       }
     },
     {
@@ -144,6 +168,84 @@
         "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset",
         "immutabilityEnabled": "true"
+      }
+    },
+    {
+      "id": "install-reset-x86_64",
+      "spec": "install-system/test.json",
+      "after": [
+        "installer-ssh-x86_64"
+      ],
+      "args": {
+        "name": "install-reset-x86_64",
+        "state": "installed-reset-x86_64",
+        "parentState": "installer-ssh-x86_64",
+        "arch": "x86_64",
+        "sshPort": "2239",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "immutabilityEnabled": "true"
+      }
+    },
+    {
+      "id": "install-reset-aarch64",
+      "spec": "install-system/test.json",
+      "after": [
+        "installer-ssh-aarch64"
+      ],
+      "args": {
+        "name": "install-reset-aarch64",
+        "state": "installed-reset-aarch64",
+        "parentState": "installer-ssh-aarch64",
+        "arch": "aarch64",
+        "sshPort": "2240",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "immutabilityEnabled": "true"
+      }
+    },
+    {
+      "id": "recovery-boot-x86_64",
+      "spec": "recovery-boot/test.json",
+      "after": [
+        "installer-ssh-x86_64"
+      ],
+      "args": {
+        "name": "recovery-boot-x86_64",
+        "state": "recovery-boot-x86_64",
+        "parentState": "installer-ssh-x86_64",
+        "arch": "x86_64",
+        "sshPort": "2241"
+      }
+    },
+    {
+      "id": "recovery-boot-aarch64",
+      "spec": "recovery-boot/test.json",
+      "after": [
+        "installer-ssh-aarch64"
+      ],
+      "args": {
+        "name": "recovery-boot-aarch64",
+        "state": "recovery-boot-aarch64",
+        "parentState": "installer-ssh-aarch64",
+        "arch": "aarch64",
+        "sshPort": "2242"
+      }
+    },
+    {
+      "id": "recovery-secure-boot",
+      "spec": "recovery-secure-boot/test.json",
+      "after": [
+        "installer-ssh-x86_64"
+      ],
+      "args": {
+        "name": "recovery-secure-boot",
+        "state": "recovery-secure-boot",
+        "parentState": "installer-ssh-x86_64",
+        "arch": "x86_64",
+        "sshPort": "2243"
       }
     },
     {
@@ -299,19 +401,6 @@
     {
       "id": "nixosctl-diff",
       "spec": "nixosctl-diff/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-onupdate",
-      "spec": "immutability-onupdate/test.json",
       "after": [
         "install-reset"
       ],

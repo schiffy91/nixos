@@ -1,7 +1,6 @@
 import std.*;
 import ../core/interactive.btrc;
 import ../core/log.btrc;
-import ../btrfs/snapshot.btrc;
 import ./config.btrc;
 import ./secrets.btrc;
 import ./permissions.btrc;
@@ -32,51 +31,41 @@ class NixosRebuilder {
     }
 
     public ExecResult runNixCollectGarbage() {
-        Command cmd = Command("nix-collect-garbage");
-        cmd.arg("-d");
-        cmd.capture(false);
-        return self.shell.runCommand(cmd);
+        var cmd = Command("nix-collect-garbage")
+            .arg("-d");
+        return self.shell.run(cmd.render(), stdout=CommandOutput.stream());
     }
 
     public ExecResult verifyStore() {
-        Command cmd = Command("nix-store");
-        cmd.arg("--verify");
-        cmd.arg("--repair");
-        cmd.capture(false);
-        return self.shell.runCommand(cmd);
+        var cmd = Command("nix-store")
+            .arg("--verify")
+            .arg("--repair");
+        return self.shell.run(cmd.render(), stdout=CommandOutput.stream());
     }
 
     public ExecResult updateFlake() {
-        Command cmd = Command("nix");
-        cmd.arg("flake");
-        cmd.arg("update");
-        cmd.flag("--flake", self.config.paths.root);
-        cmd.capture(false);
-        return self.shell.runCommand(cmd);
+        var cmd = Command("nix")
+            .arg("flake")
+            .arg("update")
+            .flag("--flake", self.config.paths.root);
+        return self.shell.run(cmd.render(), stdout=CommandOutput.stream());
     }
 
     public ExecResult switchSystem(RebuildOptions options) {
-        Command cmd = Command("nixos-rebuild");
-        cmd.arg("switch");
-        cmd.flag("--flake", self.config.flakeRef());
+        var cmd = Command("nixos-rebuild")
+            .arg("switch")
+            .flag("--flake", self.config.flakeRef());
+        Vector<string> env = [];
         if (options.rebuildFileSystem) {
-            cmd.envVar("NIXOS_INSTALL_BOOTLOADER", "1");
+            env.push("NIXOS_INSTALL_BOOTLOADER=1");
         }
-        cmd.capture(false);
-        return self.shell.runCommand(cmd);
-    }
-
-    public string immutabilityDevice() {
-        if (self.config.evalBool("config.settings.disk.encryption.enable")) {
-            return self.config.evalRaw("config.settings.disk.by.mapper.root");
-        }
-        return self.config.rootPartLabelPath();
+        return self.shell.run(cmd.render(), stdout=CommandOutput.stream(), env=env);
     }
 
     public void bootstrapConfigIfMissing(RebuildOptions options) {
         if (self.config.exists()) { return; }
-        NixosLog.error("'" + self.config.paths.configPath() + "' is missing.");
-        string hostPath = self.interactive.askHostPath(self.config.paths.hostsPath());
+        NixosLog.error(f"'{self.config.paths.configPath()}' is missing.");
+        var hostPath = self.interactive.askHostPath(self.config.paths.hostsPath());
         self.config.reset(hostPath, self.config.standardTarget());
         options.rebuildFileSystem = true;
     }
@@ -89,7 +78,7 @@ class NixosRebuilder {
     }
 
     public string homeManagerLogs() {
-        ExecResult result = self.shell.runUnchecked("journalctl -u 'home-manager-*.service' --no-pager -o cat -q -r");
+        var result = self.shell.run("journalctl -u 'home-manager-*.service' --no-pager -o cat -q -r", logFailure=false);
         Vector<string> lines = [];
         for line in Strings.split(result.stdout(), "\n") {
             if (line.equals("Starting Home Manager activation")) { break; }
@@ -102,70 +91,9 @@ class NixosRebuilder {
         return lines.join("\n").trim();
     }
 
-    public void refreshImmutableSnapshots() {
-        NixosLog.info("refreshImmutableSnapshots: entered");
-        bool enabled = self.config.evalBool("config.settings.disk.immutability.enable");
-        NixosLog.info("refreshImmutableSnapshots: immutability.enable=" + (enabled ? "true" : "false"));
-        if (!enabled) { return; }
-        bool onUpdate = self.config.evalBool("config.settings.disk.immutability.enforce.onUpdate");
-        NixosLog.info("refreshImmutableSnapshots: enforce.onUpdate=" + (onUpdate ? "true" : "false"));
-        if (!onUpdate) { return; }
-
-        SnapshotManager snapshots = SnapshotManager(self.config);
-        string mode = self.config.evalRaw("config.settings.disk.immutability.mode");
-        if (mode.equals("disabled")) {
-            NixosLog.info("Immutability mode is disabled; skipping update enforcement");
-            return;
-        }
-        bool dryRun = self.config.evalBool("config.settings.disk.immutability.dryRun");
-        if (dryRun) {
-            NixosLog.info("DRY would refresh immutable CLEAN snapshots after update");
-        } else {
-            NixosLog.info("Refreshing immutable CLEAN snapshots after update");
-            snapshots.createInitialSnapshots();
-        }
-        self.convergeImmutability(mode, dryRun);
-        if (dryRun) {
-            NixosLog.info("DRY would start immutability-mounts.service");
-            return;
-        }
-        ExecResult mountStart = self.shell.runRaw("systemctl start immutability-mounts.service", false, true, "");
-        if (!mountStart.ok()) {
-            NixosLog.fatal("immutability-mounts.service failed to start; system left without persist overlays. Investigate with: journalctl -u immutability-mounts.service");
-        }
-    }
-
-    public void convergeImmutability(string mode, bool dryRun) {
-        NixosLog.info("Converging immutability after update");
-        Vector<string> args = [
-            "/run/current-system/sw/bin/immutability",
-            self.immutabilityDevice(),
-            self.config.evalRaw("config.settings.disk.subvolumes.snapshots.name"),
-            self.config.evalRaw("config.settings.disk.immutability.persist.snapshots.cleanName"),
-            mode,
-            self.config.evalRaw("config.settings.disk.immutability.persist.subvolumeRoot"),
-            "/etc/immutability/spec.tsv"
-        ];
-        if (dryRun) { args.insert(1, "--dry-run"); }
-        string pairs = self.config.evalRaw("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
-        for pair in Strings.split(pairs, " ") {
-            if (!pair.trim().isEmpty()) { args.push(pair.trim()); }
-        }
-        Command immutability = Command(args.get(0));
-        for (int i = 1; i < args.len; i++) {
-            immutability.arg(args.get(i));
-        }
-        immutability.capture(false);
-        immutability.check(true);
-        ExecResult convergeResult = self.shell.runCommand(immutability);
-        if (!convergeResult.ok()) {
-            NixosLog.fatal("immutability converge failed; refusing to start immutability-mounts.service");
-        }
-    }
-
     public void update(RebuildOptions options) {
         self.bootstrapConfigIfMissing(options);
-        string username = self.config.username();
+        var username = self.config.username();
         if (options.clean || options.upgrade) {
             self.runNixCollectGarbage();
             FileSystem.removeRecursive("/root/.cache");
@@ -182,20 +110,18 @@ class NixosRebuilder {
         // Pass empty string so we only prompt when the hash itself is missing.
         SecretsManager(self.config).createIfMissing("");
         PermissionsManager(self.config).secureTree(username);
-        ExecResult result = self.switchSystem(options);
+        var result = self.switchSystem(options);
         if (!result.ok()) {
             NixosLog.fatal("nixos-rebuild switch failed");
         }
         PermissionsManager(self.config).secureTree(username);
-        self.refreshImmutableSnapshots();
-        string logs = self.homeManagerLogs();
+        var logs = self.homeManagerLogs();
         if (!logs.isEmpty()) { Console.log(logs); }
         if (options.reboot) {
-            Command reboot = Command("shutdown");
-            reboot.arg("-r");
-            reboot.arg("now");
-            reboot.capture(false);
-            self.shell.runCommand(reboot);
+            var reboot = Command("shutdown")
+                .arg("-r")
+                .arg("now");
+            self.shell.run(reboot.render(), stdout=CommandOutput.stream());
         } else {
             self.interactive.askToReboot();
         }

@@ -86,21 +86,20 @@ class QemuE2eHarness {
         if (FileSystem.exists(self.legacyPidPath())) {
             FileSystem.removeRecursive(self.legacyPidPath());
         }
-        Command cmd = self.qemuCmd.build(fromIso);
+        var cmd = self.qemuCmd.build(fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
         FileSystem.removeRecursive(self.qemuLogPath());
         FileSystem.removeRecursive(self.qemuSupervisorLogPath());
         FileSystem.removeRecursive(self.qemuExitPath());
-        cmd.mergeError(false);
-        string qemuExec = "exec " + cmd.render();
-        string qemuPythonSetsid = "import os, sys; os.setsid(); os.execl('/bin/sh', 'sh', '-c', sys.argv[1])";
-        string qemuLaunch = "if command -v setsid >/dev/null 2>&1; then "
+        var qemuExec = "exec " + cmd.render();
+        var qemuPythonSetsid = "import os, sys; os.setsid(); os.execl('/bin/sh', 'sh', '-c', sys.argv[1])";
+        var qemuLaunch = "if command -v setsid >/dev/null 2>&1; then "
             + "setsid sh -c " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "
             + "else "
             + "python3 -c " + UnixShell.quote(qemuPythonSetsid) + " " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "
             + "fi";
-        string supervisor = "log=" + UnixShell.quote(self.qemuSupervisorLogPath())
+        var supervisor = "log=" + UnixShell.quote(self.qemuSupervisorLogPath())
             + "; pid_path=" + UnixShell.quote(self.pidPath())
             + "; exit_path=" + UnixShell.quote(self.qemuExitPath())
             + "; rm -f \"$pid_path\" \"$exit_path\"; qpid=; "
@@ -112,32 +111,32 @@ class QemuE2eHarness {
             + "wait \"$qpid\"; rc=$?; "
             + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" > \"$exit_path\"; "
             + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" >> \"$log\"; exit \"$rc\"";
-        string writeSupervisor = "printf %s " + UnixShell.quote(supervisor)
+        var writeSupervisor = "printf %s " + UnixShell.quote(supervisor)
             + " > " + UnixShell.quote(self.qemuSupervisorScriptPath())
             + "; chmod 700 " + UnixShell.quote(self.qemuSupervisorScriptPath());
-        ExecResult wroteSupervisor = self.shell.runRaw(writeSupervisor, false, false, "");
+        var wroteSupervisor = self.shell.run(writeSupervisor, stdout=CommandOutput.stream(), logFailure=false);
         if (!wroteSupervisor.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
             NixosLog.fatal("Failed to write VM supervisor script: " + self.qemuSupervisorScriptPath());
         }
-        string pythonSetsid = "import os, sys; os.setsid(); os.execvp('sh', ['sh', '-c', sys.argv[1]])";
-        string launch = "if command -v setsid >/dev/null 2>&1; then "
+        var pythonSetsid = "import os, sys; os.setsid(); os.execvp('sh', ['sh', '-c', sys.argv[1]])";
+        var launch = "if command -v setsid >/dev/null 2>&1; then "
             + "nohup setsid sh " + UnixShell.quote(self.qemuSupervisorScriptPath()) + " >/dev/null 2>&1 & "
             + "else "
             + "nohup python3 -c " + UnixShell.quote(pythonSetsid) + " " + UnixShell.quote("sh " + UnixShell.quote(self.qemuSupervisorScriptPath())) + " >/dev/null 2>&1 & "
             + "fi";
-        ExecResult result = self.shell.runRaw(launch, false, false, "");
+        var result = self.shell.run(launch, stdout=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
             NixosLog.fatal("Failed to start QEMU; QEMU log: " + self.qemuLogPath());
         }
-        string readyCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do "
+        var readyCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do "
             + "test -s " + UnixShell.quote(self.pidPath())
             + " && kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null && exit 0; "
             + "sleep 1; done; exit 1";
-        ExecResult ready = self.shell.runRaw(readyCommand, false, false, "");
+        var ready = self.shell.run(readyCommand, stdout=CommandOutput.stream(), logFailure=false);
         if (!ready.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
@@ -153,12 +152,12 @@ class QemuE2eHarness {
 
     public void stop() {
         self.serial.stopSerialReader();
-        string pid = self.state.currentPid();
+        var pid = self.state.currentPid();
         if (!pid.isEmpty()) {
-            string quotedPid = UnixShell.quote(pid);
-            string quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
-            string quotedProcessName = UnixShell.quote(self.spec.vmProcessName());
-            self.shell.runRaw("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedProcessName + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true; else printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" " + quotedProcessName + " \"$(date -u +%FT%TZ)\" >> " + quotedStopLog + "; fi", false, false, "");
+            var quotedPid = UnixShell.quote(pid);
+            var quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
+            var quotedProcessName = UnixShell.quote(self.spec.vmProcessName());
+            self.shell.run("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedProcessName + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true; else printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" " + quotedProcessName + " \"$(date -u +%FT%TZ)\" >> " + quotedStopLog + "; fi", stdout=CommandOutput.stream(), logFailure=false);
             FileSystem.removeRecursive(self.pidPath());
             FileSystem.removeRecursive(self.legacyPidPath());
         }
@@ -171,7 +170,7 @@ class QemuE2eHarness {
     }
 
     public void sleepSeconds(int seconds) {
-        self.shell.runRaw("sleep " + Strings.fromInt(seconds), false, false, "");
+        self.shell.run(f"sleep {seconds}", stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void bootstrapSsh() {
@@ -179,7 +178,7 @@ class QemuE2eHarness {
             NixosLog.fatal("Cannot bootstrap SSH because QEMU is not running; " + self.state.runningDetail() + "; serial log: " + self.serialLogPath() + "; QEMU log: " + self.qemuLogPath());
         }
         self.createSshKey();
-        string key = self.sshPubKey();
+        var key = self.sshPubKey();
         self.serial.serialSend("");
         self.serial.serialSend("sudo install -d -m 700 /root/.ssh; echo " + UnixShell.quote(key) + " | sudo tee /root/.ssh/authorized_keys > /dev/null; sudo chmod 600 /root/.ssh/authorized_keys; sudo systemctl restart sshd");
         self.sleepSeconds(5);
@@ -197,7 +196,7 @@ class QemuE2eHarness {
 
     public void rebootDisk() {
         self.bootedFromIso = false;
-        string priorBootId = self.currentBootId();
+        var priorBootId = self.currentBootId();
         if (priorBootId.isEmpty()) {
             NixosLog.fatal("Cannot reboot disk VM because current boot id is unavailable");
         }
@@ -210,6 +209,29 @@ class QemuE2eHarness {
         }
         if (!self.waitForBootIdChange(priorBootId, 300)) {
             NixosLog.fatal("SSH was not ready on a new boot after disk reboot");
+        }
+    }
+
+    public void rebootRecovery() {
+        self.bootedFromIso = false;
+        var priorBootId = self.currentBootId();
+        if (priorBootId.isEmpty()) {
+            NixosLog.fatal("Cannot reboot recovery VM because current boot id is unavailable");
+        }
+        var command = "set -e; bootctl list | grep -F nixos-recovery.conf; bootctl set-oneshot nixos-recovery.conf; (sync; systemctl reboot) >/dev/null 2>&1 &";
+        var requested = self.sshWithTimeout(command, false, 30);
+        if (!requested.ok()) {
+            Console.error(requested.trimmed());
+            NixosLog.fatal("Failed to request one-shot recovery boot");
+        }
+        if (!self.waitForSshDown(90)) {
+            NixosLog.fatal("SSH stayed up after recovery reboot request");
+        }
+        if (!self.state.isRunning()) {
+            self.start(false);
+        }
+        if (!self.waitForBootIdChange(priorBootId, 300)) {
+            NixosLog.fatal("SSH was not ready after recovery boot");
         }
     }
 
@@ -236,14 +258,14 @@ class QemuE2eHarness {
     public string secureBootCapabilityReport() { return self.firmware.secureBootCapabilityReport(); }
 
     public bool waitForSsh(int timeout) {
-        int elapsed = 0;
-        int successes = 0;
+        var elapsed = 0;
+        var successes = 0;
         while (elapsed < timeout) {
             if (!self.state.isRunning()) {
                 NixosLog.error("QEMU exited while waiting for SSH; " + self.state.runningDetail() + "; serial log: " + self.serialLogPath() + "; QEMU log: " + self.qemuLogPath());
                 return false;
             }
-            ExecResult result = self.ssh("true", false);
+            var result = self.ssh("true", false);
             if (result.ok()) {
                 successes = successes + 1;
                 if (successes >= 2) { return true; }
@@ -260,20 +282,20 @@ class QemuE2eHarness {
     }
 
     public string currentBootId() {
-        ExecResult result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 10);
+        var result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 10);
         if (!result.ok()) { return ""; }
         return result.stdout().trim();
     }
 
     public bool waitForBootIdChange(string previousBootId, int timeout) {
-        int elapsed = 0;
+        var elapsed = 0;
         while (elapsed < timeout) {
             if (!self.state.isRunning()) {
                 self.start(false);
             }
-            ExecResult result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 5);
+            var result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 5);
             if (result.ok()) {
-                string bootId = result.stdout().trim();
+                var bootId = result.stdout().trim();
                 if (!bootId.isEmpty() && !bootId.equals(previousBootId)) {
                     return true;
                 }
@@ -285,10 +307,10 @@ class QemuE2eHarness {
     }
 
     public bool waitForSshDown(int timeout) {
-        int elapsed = 0;
+        var elapsed = 0;
         while (elapsed < timeout) {
             if (!self.state.isRunning()) { return true; }
-            ExecResult result = self.ssh("true", false);
+            var result = self.ssh("true", false);
             if (!result.ok()) { return true; }
             self.sleepSeconds(2);
             elapsed = elapsed + 2;
@@ -309,20 +331,18 @@ class QemuE2eHarness {
 
     public void snapshot(string name) {
         self.stop();
-        Command cmd = Command("qemu-img")
+        var cmd = Command("qemu-img")
             .arg("snapshot")
             .arg("-c")
             .arg(name)
-            .arg(self.diskPath())
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(self.diskPath());
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsPath())) {
-            Command cp = Command("cp")
+            var cp = Command("cp")
                 .arg(self.firmware.firmwareVarsPath())
-                .arg(self.firmware.firmwareVarsSnapshotPath(name))
-                .capture(false);
-            self.shell.runCommand(cp);
+                .arg(self.firmware.firmwareVarsSnapshotPath(name));
+            self.shell.run(cp.render(), stdout=CommandOutput.stream());
         }
     }
 
@@ -332,20 +352,18 @@ class QemuE2eHarness {
             NixosLog.info("Snapshot " + name + " is inherited through qcow2 backing; restore is a no-op");
             return;
         }
-        Command cmd = Command("qemu-img")
+        var cmd = Command("qemu-img")
             .arg("snapshot")
             .arg("-a")
             .arg(name)
-            .arg(self.diskPath())
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(self.diskPath());
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsSnapshotPath(name))) {
-            Command cp = Command("cp")
+            var cp = Command("cp")
                 .arg(self.firmware.firmwareVarsSnapshotPath(name))
-                .arg(self.firmware.firmwareVarsPath())
-                .capture(false);
-            self.shell.runCommand(cp);
+                .arg(self.firmware.firmwareVarsPath());
+            self.shell.run(cp.render(), stdout=CommandOutput.stream());
             self.firmware.makeFirmwareVarsWritable();
         }
     }

@@ -34,35 +34,32 @@ class VmAssets {
         if (self.spec.isoUrl.isEmpty()) {
             NixosLog.fatal("No iso or isoUrl in VM spec");
         }
-        string tmp = f"{self.spec.iso}.tmp";
-        Command curl = Command("curl")
+        var tmp = f"{self.spec.iso}.tmp";
+        var curl = Command("curl")
             .arg("-L")
             .arg("-o")
             .arg(tmp)
-            .arg(self.spec.isoUrl)
-            .capture(false);
-        ExecResult result = self.shell.runCommand(curl);
+            .arg(self.spec.isoUrl);
+        var result = self.shell.run(curl.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
-        Command mv = Command("mv")
+        var mv = Command("mv")
             .arg(tmp)
-            .arg(self.spec.iso)
-            .capture(false);
-        self.shell.runCommand(mv);
+            .arg(self.spec.iso);
+        self.shell.run(mv.render(), stdout=CommandOutput.stream());
     }
 
     public void createSshKey() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.sshKeyPath())) { return; }
-        Command cmd = Command("ssh-keygen")
+        var cmd = Command("ssh-keygen")
             .arg("-t")
             .arg("ed25519")
             .arg("-N")
             .arg("")
             .arg("-f")
             .arg(self.sshKeyPath())
-            .arg("-q")
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg("-q");
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }
     }
 
@@ -73,14 +70,13 @@ class VmAssets {
     public void createDisk() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.diskPath())) { return; }
-        Command cmd = Command("qemu-img")
+        var cmd = Command("qemu-img")
             .arg("create")
             .arg("-f")
             .arg("qcow2")
             .arg(self.diskPath())
-            .arg(self.spec.diskSize)
-            .capture(false);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(self.spec.diskSize);
+        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM disk"); }
     }
 

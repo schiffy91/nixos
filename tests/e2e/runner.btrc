@@ -29,6 +29,7 @@ class VmOperationCatalog {
         kinds.push("sleep");
         kinds.push("guest");
         kinds.push("reboot-disk");
+        kinds.push("reboot-recovery");
         kinds.push("host");
         kinds.push("workspace-file");
         kinds.push("nix-eval");
@@ -57,7 +58,7 @@ class VmTestRunner {
     }
 
     class VmTestRunner fromFile(string path) {
-        VmTestSpec spec = VmSpecParser.readFile(path);
+        var spec = VmSpecParser.readFile(path);
         spec.expandArgs();
         return VmTestRunner(spec);
     }
@@ -124,7 +125,7 @@ class VmTestRunner {
             return;
         }
         if (op.kind.equals("validate-immutability-v2")) {
-            string version = self.spec.args.getOrDefault("immutabilityVersion", "");
+            var version = self.spec.args.getOrDefault("immutabilityVersion", "");
             if (!version.equals("v2")) {
                 self.fail("btrc E2E specs must use immutabilityVersion=v2; v1 belongs only to the original Rust implementation");
             }
@@ -177,7 +178,7 @@ class VmTestRunner {
             return;
         }
         if (op.kind.equals("guest")) {
-            ExecResult result = self.vm.sshWithTimeout(op.command, false, op.timeout);
+            var result = self.vm.sshWithTimeout(op.command, false, op.timeout);
             self.assertResult("guest command", result, op.expect);
             return;
         }
@@ -185,23 +186,27 @@ class VmTestRunner {
             self.vm.rebootDisk();
             return;
         }
+        if (op.kind.equals("reboot-recovery")) {
+            self.vm.rebootRecovery();
+            return;
+        }
         if (op.kind.equals("host")) {
-            ExecResult result = self.vm.host(op.command, false);
+            var result = self.vm.host(op.command, false);
             self.assertResult("host command", result, op.expect);
             return;
         }
         if (op.kind.equals("workspace-file")) {
-            ExecResult result = self.vm.workspaceFileExists(op.command);
+            var result = self.vm.workspaceFileExists(op.command);
             self.assertResult("workspace file " + op.command, result, op.expect);
             return;
         }
         if (op.kind.equals("nix-eval")) {
-            ExecResult result = self.vm.nixEval(op.command, op.timeout);
+            var result = self.vm.nixEval(op.command, op.timeout);
             self.assertResult("nix eval " + op.command, result, op.expect);
             return;
         }
         if (op.kind.equals("qmp")) {
-            ExecResult result = self.vm.qmp(op.command, op.timeout);
+            var result = self.vm.qmp(op.command, op.timeout);
             self.assertResult("qmp command", result, op.expect);
             return;
         }

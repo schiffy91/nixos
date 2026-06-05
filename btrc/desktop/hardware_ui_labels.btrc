@@ -44,7 +44,7 @@ class LabelsConfig {
     public Vector<DisplayLayoutRule> layoutRules() {
         Vector<DisplayLayoutRule> result = [];
         for block in Toml.tableArrayBlocks(self.content, "layout") {
-            DisplayLayoutRule rule = DisplayLayoutRule();
+            var rule = DisplayLayoutRule();
             rule.display = block.getOrDefault("display", "");
             rule.position = block.getOrDefault("position", "");
             rule.relativeTo = block.getOrDefault("relative_to", "");
@@ -56,7 +56,7 @@ class LabelsConfig {
     public Vector<AudioPreset> audioPresets() {
         Vector<AudioPreset> result = [];
         for block in Toml.tableArrayBlocks(self.content, "audio") {
-            AudioPreset preset = AudioPreset();
+            var preset = AudioPreset();
             preset.label = block.getOrDefault("label", "");
             preset.card = block.getOrDefault("card", "");
             preset.profile = block.getOrDefault("profile", "");

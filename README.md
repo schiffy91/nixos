@@ -13,25 +13,27 @@ helper under `nix/apps/pkg-overrides/`).
 | `FRACTAL-NORTH` | `x86_64-linux` | Main desktop/workstation configuration |
 | `QEMU` | `aarch64-linux` | Declarative ARM guest used for Nix evaluation and VM-oriented testing |
 
-Each host is exposed with three flake targets:
+Each host is exposed with bootable NixOS targets and disk-operation disko
+targets:
 
 | Target suffix | Purpose |
 |---|---|
-| `Disk-Operation` | Disk layout only, used by `disko` during installation |
 | `Standard-Boot` | Full system with systemd-boot |
 | `Secure-Boot` | Full system with Lanzaboote secure boot |
+| `Disk-Operation` | Disk layout only, exposed under `diskoConfigurations` for `disko` |
 
 Examples:
 
 ```bash
 nix eval .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.toplevel.drvPath
 nix eval .#nixosConfigurations.QEMU-Standard-Boot.config.networking.hostName
-nix eval .#nixosConfigurations.QEMU-Disk-Operation.config.disko.devices.disk.main.device
+nix eval .#diskoConfigurations.QEMU-Disk-Operation.disk.main.device
 ```
 
 `Disk-Operation` targets are disko entrypoints, not installed boot targets. They
-import `nix/system/disk-operation.nix`, which wraps the disk layout with the
-minimal boot/user defaults needed for the NixOS module graph to evaluate cleanly.
+import `nix/system/disk.nix` directly from `flake.nix` and do not appear under
+`nixosConfigurations`, so they avoid bootloader and user assertions that only
+matter for real NixOS profiles.
 
 ## Repository Layout
 
@@ -51,7 +53,6 @@ minimal boot/user defaults needed for the NixOS module graph to evaluate cleanly
 | `inputs.btrc` | Flake-provided BTRC compiler and precompiled stdlib archive source |
 | `tests/` | Declarative VM e2e graph and per-scenario specs |
 | `Makefile` | Root build/test contract (`make build`, `make check`, `make -C tests graph-*`) |
-| `FOR_CLAUDE.md` | Handoff notes for future Claude Code sessions |
 
 Host discovery is convention-based:
 
@@ -90,10 +91,12 @@ Every global app module has a default-on settings switch:
 
 ```nix
 settings.apps.enable = true;
+settings.apps.agents.enable = true;
 settings.apps.onePassword.enable = true;
 settings.apps.bash.enable = true;
 settings.apps.battlenet.enable = true;
 settings.apps.claude.enable = true;
+settings.apps.codex.enable = true;
 settings.apps.cursor.enable = true;
 settings.apps.git.enable = true;
 settings.apps.nixosctl.enable = true;
@@ -123,10 +126,47 @@ part of the shared desktop surface, not an app install.
 |---|---|
 | `Standard-Boot` | Enables systemd-boot |
 | `Secure-Boot` | Disables systemd-boot directly and enables Lanzaboote |
-| `Disk-Operation` | Not handled by this module; the flake imports `nix/system/disk-operation.nix` for this target |
+| `Disk-Operation` | Not handled by this module; the flake exposes `nix/system/disk.nix` through `diskoConfigurations` |
 
 The shared boot module sets current kernel packages, Plymouth, quiet boot
 parameters, EFI mount point, and generation limits.
+
+### Recovery
+
+`settings.disk.recovery.enable = true` adds a `RECOVERY` vfat partition to the
+destructive disko layout and enables the `nixos-recovery-boot-entry` service on
+installed systems. The recovery image is not a downloaded ISO; it is a
+self-contained NixOS UKI built from `nix/system/recovery.nix`.
+
+On switch, the service requires `/boot` and `/recovery` to be mounted, then
+installs:
+
+| Path | Purpose |
+|---|---|
+| `/boot/EFI/recovery/nixos-recovery.efi` | UKI loaded by the installed boot menu |
+| `/boot/loader/entries/nixos-recovery.conf` | systemd-boot/Lanzaboote menu entry |
+| `/recovery/EFI/recovery/nixos-recovery.efi` | copy stored on the recovery partition |
+| `/recovery/EFI/BOOT/BOOT*.EFI` | firmware fallback boot path for the recovery partition |
+| `/recovery/loader/loader.conf` | standalone loader config for recovery media boot |
+
+Standard-Boot and Secure-Boot use the same loader entry; the secure path signs
+the UKI with the configured db keys when they exist. Updating the recovery image
+is a rebuild. Changing the recovery partition size on an already-installed disk
+is a real partition resize operation, not something this config does online.
+
+For an existing machine such as FRACTAL-NORTH, create the partition from a live
+environment after backup and disk inspection. If there is already free space,
+the shape is:
+
+```bash
+sgdisk -n 0:0:+4G -t 0:EA00 -c 0:FRACTAL-NORTH-main-recovery /dev/nvme0n1
+mkfs.vfat -n RECOVERY /dev/disk/by-partlabel/FRACTAL-NORTH-main-recovery
+```
+
+If the root partition currently consumes the disk, first shrink the filesystem
+and partition offline with a machine-specific plan, then add the recovery
+partition. After `/recovery` exists and mounts, `nixos-rebuild switch` populates
+the UKI and boot entry.
 
 ### Disk
 
@@ -156,10 +196,11 @@ BTRC compiler and a generated stdlib archive.
 | `restore-previous` / `restore-penultimate` | Roll back to rotation slot A / B |
 | `disabled` | No reset |
 
-`enforce.onReboot` wires the initrd reset + mounts service; `enforce.onUpdate`
-adds a `snapshot-clean` activation that re-captures the `CLEAN` baseline at
-`nixos-rebuild switch`. Orphaned `@persist/dirs/<key>` subvolumes (keys no longer
-in the spec) are pruned on a reconciling reset.
+`enforce.onReboot` wires the initrd reset + mounts service. Updates do not
+rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
+the only automatic immutability reconciliation path. Orphaned
+`@persist/dirs/<key>` subvolumes (keys no longer in the spec) are pruned on a
+reconciling reset.
 
 The v2 mode persists selected files/directories by materializing persistent
 btrfs subvolumes under `@persist` and bind-mounting selected targets after
@@ -206,7 +247,9 @@ The app layer is globally imported but policy-gated through `settings.apps`.
 | `1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `bash.nix` | Adds `nix-shell-with-pkgs` helper |
 | `battlenet.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
-| `claude.nix` | Installs a Claude skill that teaches Claude how to load this repo |
+| `agents.nix` | Installs shared skills under `~/.agents/skills` for users with Home Manager |
+| `claude.nix` | Symlinks shared skills into Claude's `~/.claude/skills` tree |
+| `codex.nix` | Symlinks shared skills into Codex's `~/.codex/skills` tree without replacing built-in skills |
 | `cursor.nix` | Symlinks the configured cursor theme into user icon paths |
 | `git.nix` | Enables system Git; per-user identities live in Home Manager |
 | `nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
@@ -331,8 +374,8 @@ nix flake check --all-systems --no-build --show-trace
 For disk-only targets, evaluate disk attributes directly:
 
 ```bash
-nix eval .#nixosConfigurations.QEMU-Disk-Operation.config.disko.devices.disk.main.device --show-trace
-nix eval .#nixosConfigurations.QEMU-Disk-Operation.config.disko.devices.disk.main.content.partitions.root.content.type --show-trace
+nix eval .#diskoConfigurations.QEMU-Disk-Operation.disk.main.device --show-trace
+nix eval .#diskoConfigurations.QEMU-Disk-Operation.disk.main.content.partitions.root.content.type --show-trace
 ```
 
 For Nix linting:

@@ -48,22 +48,22 @@ class NixosConfig {
     }
 
     public void reset(string hostPath, string target) {
-        JsonObject data = JsonObject();
+        var data = JsonObject();
         data.setString("host_path", hostPath);
         data.setString("target", target);
         self.local.overwrite(data);
     }
 
     public string host() {
-        string base = PathTools.basename(self.hostPath());
+        var base = PathTools.basename(self.hostPath());
         return Strings.replace(base, ".nix", "");
     }
 
     public string architecture() {
-        string parent = PathTools.dirname(self.hostPath());
-        string hostDir = PathTools.basename(parent);
-        string hostFile = PathTools.basename(self.hostPath());
-        string hostName = Strings.replace(hostFile, ".nix", "");
+        var parent = PathTools.dirname(self.hostPath());
+        var hostDir = PathTools.basename(parent);
+        var hostFile = PathTools.basename(self.hostPath());
+        var hostName = Strings.replace(hostFile, ".nix", "");
         if (hostDir.equals(hostName)) {
             return PathTools.basename(PathTools.dirname(parent));
         }
@@ -71,7 +71,7 @@ class NixosConfig {
     }
 
     public string flakeRef() {
-        return self.paths.root + "#" + self.host() + "-" + self.target();
+        return f"{self.paths.root}#{self.host()}-{self.target()}";
     }
 
     public Command nixCmd() {
@@ -81,17 +81,17 @@ class NixosConfig {
     }
 
     public string inputLockedRev(string inputName) {
-        Command cmd = self.nixCmd()
+        var cmd = self.nixCmd()
             .arg("flake").arg("metadata").arg(inputName)
             .arg("--json").arg("-I").arg(self.paths.root);
-        ExecResult result = self.shell.runCommand(cmd);
+        var result = self.shell.run(cmd.render());
         if (!result.ok()) { return "master"; }
-        string json = result.stdout();
-        string marker = "\"rev\":\"";
-        int start = Strings.find(json, marker, 0);
+        var json = result.stdout();
+        var marker = "\"rev\":\"";
+        var start = Strings.find(json, marker, 0);
         if (start < 0) { return "master"; }
         start = start + marker.len();
-        int end = start;
+        var end = start;
         while (json[end] != '\0' && json[end] != '"') {
             end++;
         }
@@ -99,25 +99,25 @@ class NixosConfig {
     }
 
     public string evalRaw(string attribute) {
-        string key = self.flakeRef() + ":" + attribute;
+        var key = f"{self.flakeRef()}:{attribute}";
         if (self.cache.has(key)) {
             return self.cache.get(key);
         }
-        Command cmd = self.nixCmd()
+        var cmd = self.nixCmd()
             .arg("eval")
-            .arg(self.paths.root + "#nixosConfigurations." + self.host() + "-" + self.target() + "." + attribute);
-        ExecResult result = self.shell.runCommand(cmd);
+            .arg(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(cmd.render());
         if (!result.ok()) {
-            NixosLog.fatal("nix eval failed for " + attribute);
+            NixosLog.fatal(f"nix eval failed for {attribute}");
         }
-        string value = result.trimmed();
+        var value = result.trimmed();
         value = Strings.replace(value, "\"", "");
         self.cache.put(key, value);
         return value;
     }
 
     public bool evalBool(string attribute) {
-        string value = self.evalRaw(attribute);
+        var value = self.evalRaw(attribute);
         return value.equals("true");
     }
 
@@ -134,7 +134,7 @@ class NixosConfig {
     }
 
     public string hashedPasswordPath() {
-        string name = self.evalRaw("config.settings.secrets.hashedPasswordFile");
+        var name = self.evalRaw("config.settings.secrets.hashedPasswordFile");
         return PathTools.join(self.secretsPath(), name);
     }
 

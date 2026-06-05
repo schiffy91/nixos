@@ -35,10 +35,10 @@ class QemuSerial {
     }
 
     public string valueAfterLinePrefix(string text, string prefix, int start) {
-        int pos = Strings.find(text, prefix, start);
+        var pos = Strings.find(text, prefix, start);
         if (pos < 0) { return ""; }
         pos = pos + prefix.len();
-        int end = pos;
+        var end = pos;
         while (text[end] != '\0' && text[end] != '\n') {
             end++;
         }
@@ -50,39 +50,37 @@ class QemuSerial {
         if (FileSystem.exists(self.bootAppendFile())) { return; }
         FileSystem.mkdirp(self.bootDir());
 
-        Command cfgExtract = Command("bsdtar")
+        var cfgExtract = Command("bsdtar")
             .arg("-xf")
             .arg(self.spec.iso)
             .arg("-C")
             .arg(self.bootDir())
-            .arg("isolinux/isolinux.cfg")
-            .capture(false);
-        ExecResult cfgResult = self.shell.runCommand(cfgExtract);
+            .arg("isolinux/isolinux.cfg");
+        var cfgResult = self.shell.run(cfgExtract.render(), stdout=CommandOutput.stream());
         if (!cfgResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
 
-        string cfgPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
-        string cfg = Path.readAll(cfgPath);
-        int label = Strings.find(cfg, "LABEL boot-serial", 0);
+        var cfgPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
+        var cfg = Path.readAll(cfgPath);
+        var label = Strings.find(cfg, "LABEL boot-serial", 0);
         if (label < 0) { NixosLog.fatal("Could not find boot-serial entry in installer ISO"); }
 
-        string kernelIso = self.valueAfterLinePrefix(cfg, "LINUX ", label);
-        string append = self.valueAfterLinePrefix(cfg, "APPEND ", label);
-        string initrdIso = self.valueAfterLinePrefix(cfg, "INITRD ", label);
+        var kernelIso = self.valueAfterLinePrefix(cfg, "LINUX ", label);
+        var append = self.valueAfterLinePrefix(cfg, "APPEND ", label);
+        var initrdIso = self.valueAfterLinePrefix(cfg, "INITRD ", label);
         if (kernelIso.isEmpty() || initrdIso.isEmpty() || append.isEmpty()) {
             NixosLog.fatal("Incomplete boot-serial entry in installer ISO");
         }
 
-        string kernelRel = self.stripLeadingSlash(kernelIso);
-        string initrdRel = self.stripLeadingSlash(initrdIso);
-        Command bootExtract = Command("bsdtar")
+        var kernelRel = self.stripLeadingSlash(kernelIso);
+        var initrdRel = self.stripLeadingSlash(initrdIso);
+        var bootExtract = Command("bsdtar")
             .arg("-xf")
             .arg(self.spec.iso)
             .arg("-C")
             .arg(self.bootDir())
             .arg(kernelRel)
-            .arg(initrdRel)
-            .capture(false);
-        ExecResult bootResult = self.shell.runCommand(bootExtract);
+            .arg(initrdRel);
+        var bootResult = self.shell.run(bootExtract.render(), stdout=CommandOutput.stream());
         if (!bootResult.ok()) { NixosLog.fatal("Failed to extract serial boot kernel/initrd from ISO"); }
 
         Path.writeAll(self.bootKernelFile(), PathTools.join(self.bootDir(), kernelRel));
@@ -93,41 +91,39 @@ class QemuSerial {
     public void prepareSerialPipe() {
         FileSystem.removeRecursive(self.serialInPath());
         FileSystem.removeRecursive(self.serialOutPath());
-        Command inPipe = Command("mkfifo");
-        inPipe.arg(self.serialInPath());
-        inPipe.capture(false);
-        ExecResult inResult = self.shell.runCommand(inPipe);
+        var inPipe = Command("mkfifo")
+            .arg(self.serialInPath());
+        var inResult = self.shell.run(inPipe.render(), stdout=CommandOutput.stream());
         if (!inResult.ok()) { NixosLog.fatal("Failed to create VM serial input pipe"); }
-        Command outPipe = Command("mkfifo");
-        outPipe.arg(self.serialOutPath());
-        outPipe.capture(false);
-        ExecResult outResult = self.shell.runCommand(outPipe);
+        var outPipe = Command("mkfifo")
+            .arg(self.serialOutPath());
+        var outResult = self.shell.run(outPipe.render(), stdout=CommandOutput.stream());
         if (!outResult.ok()) { NixosLog.fatal("Failed to create VM serial output pipe"); }
     }
 
     public void startSerialReader() {
         FileSystem.removeRecursive(self.serialReaderPidPath());
         FileSystem.removeRecursive(self.serialLogPath());
-        string outPath = UnixShell.quote(self.serialOutPath());
-        string logPath = UnixShell.quote(self.serialLogPath());
-        string pidPath = UnixShell.quote(self.serialReaderPidPath());
-        self.shell.runRaw("(cat " + outPath + " >> " + logPath + ") & echo $! > " + pidPath, false, false, "");
+        var outPath = UnixShell.quote(self.serialOutPath());
+        var logPath = UnixShell.quote(self.serialLogPath());
+        var pidPath = UnixShell.quote(self.serialReaderPidPath());
+        self.shell.run(f"(cat {outPath} >> {logPath}) & echo $! > {pidPath}", stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void stopSerialReader() {
         if (!FileSystem.exists(self.serialReaderPidPath())) { return; }
-        string pidPath = UnixShell.quote(self.serialReaderPidPath());
-        string outPath = UnixShell.quote(self.serialOutPath());
-        self.shell.runRaw("pid=$(cat " + pidPath + "); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + outPath + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", false, false, "");
+        var pidPath = UnixShell.quote(self.serialReaderPidPath());
+        var outPath = UnixShell.quote(self.serialOutPath());
+        self.shell.run(f"pid=$(cat {pidPath}); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F {outPath} >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", stdout=CommandOutput.stream(), logFailure=false);
         FileSystem.removeRecursive(self.serialReaderPidPath());
     }
 
     public void serialSend(string command) {
-        string payload = command + "\n";
-        string write = "printf %s " + UnixShell.quote(payload) + " > " + UnixShell.quote(self.serialInPath());
-        ExecResult result = self.shell.runRaw("timeout 5 sh -c " + UnixShell.quote(write), false, false, "");
+        var payload = f"{command}\n";
+        var write = f"printf %s {UnixShell.quote(payload)} > {UnixShell.quote(self.serialInPath())}";
+        var result = self.shell.run(f"timeout 5 sh -c {UnixShell.quote(write)}", stdout=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
-            NixosLog.fatal("Failed to send command to VM serial console: " + self.serialInPath());
+            NixosLog.fatal(f"Failed to send command to VM serial console: {self.serialInPath()}");
         }
     }
 }

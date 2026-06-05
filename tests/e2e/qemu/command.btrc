@@ -29,87 +29,87 @@ class QemuCommandBuilder {
     // Give each VM a workdir-local executable name so pid checks and host
     // process inspection use the e2e state identity, not a generic QEMU name.
     public void ensureVmLaunchBinary() {
-        string command = "set -e; bin=$(command -v " + UnixShell.quote(self.firmware.qemuBinary()) + "); target=" + UnixShell.quote(self.spec.vmLaunchBinary()) + "; rm -f \"$target\"; cp \"$bin\" \"$target\"; chmod 755 \"$target\"";
-        ExecResult result = self.shell.runRaw(command, false, false, "");
+        var command = f"set -e; bin=$(command -v {UnixShell.quote(self.firmware.qemuBinary())}); target={UnixShell.quote(self.spec.vmLaunchBinary())}; rm -f \"$target\"; cp \"$bin\" \"$target\"; chmod 755 \"$target\"";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
-            NixosLog.fatal("Failed to create isolated VM launcher " + self.spec.vmLaunchBinary());
+            NixosLog.fatal(f"Failed to create isolated VM launcher {self.spec.vmLaunchBinary()}");
         }
     }
 
     public void addAccelerator(Command cmd) {
         if (self.firmware.isDarwin()) {
-            cmd.arg("-accel");
-            cmd.arg(self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg,thread=multi");
+            cmd.arg("-accel")
+                .arg(self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg,thread=multi");
         } else if (self.firmware.hostArchMatchesGuest()) {
             cmd.arg("-enable-kvm");
         } else {
-            cmd.arg("-accel");
-            cmd.arg("tcg,thread=multi");
+            cmd.arg("-accel")
+                .arg("tcg,thread=multi");
         }
     }
 
     public void addMachine(Command cmd) {
         if (!self.spec.arch.equals("aarch64")) { return; }
-        cmd.arg("-machine");
-        cmd.arg("virt");
-        cmd.arg("-cpu");
-        cmd.arg(self.firmware.hostArchMatchesGuest() ? "host" : "max");
-        cmd.arg("-device");
-        cmd.arg("virtio-rng-pci");
+        cmd.arg("-machine")
+            .arg("virt")
+            .arg("-cpu")
+            .arg(self.firmware.hostArchMatchesGuest() ? "host" : "max")
+            .arg("-device")
+            .arg("virtio-rng-pci");
     }
 
     public void addMemoryCpus(Command cmd) {
-        cmd.arg("-m");
-        cmd.arg(self.spec.memory);
-        cmd.arg("-smp");
-        cmd.arg(Strings.fromInt(self.spec.cpus));
-        cmd.arg("-name");
-        cmd.arg(self.spec.vmProcessName());
+        cmd.arg("-m")
+            .arg(self.spec.memory)
+            .arg("-smp")
+            .arg(Strings.fromInt(self.spec.cpus))
+            .arg("-name")
+            .arg(self.spec.vmProcessName());
     }
 
     public void addStorageAndNetwork(Command cmd) {
-        cmd.arg("-drive");
-        cmd.arg("file=" + self.diskPath() + ",format=qcow2,if=virtio,cache=none");
-        cmd.arg("-netdev");
-        cmd.arg("user,id=net0,hostfwd=tcp::" + Strings.fromInt(self.spec.sshPort) + "-:22");
-        cmd.arg("-device");
-        cmd.arg("virtio-net-pci,netdev=net0");
+        cmd.arg("-drive")
+            .arg(f"file={self.diskPath()},format=qcow2,if=virtio,cache=none")
+            .arg("-netdev")
+            .arg(f"user,id=net0,hostfwd=tcp::{self.spec.sshPort}-:22")
+            .arg("-device")
+            .arg("virtio-net-pci,netdev=net0");
     }
 
     public void addConsole(Command cmd) {
-        cmd.arg("-display");
-        cmd.arg("none");
-        cmd.arg("-serial");
-        cmd.arg("pipe:" + self.serial.serialBasePath());
-        cmd.arg("-monitor");
-        cmd.arg("unix:" + self.monitorPath() + ",server,nowait");
-        cmd.arg("-qmp");
-        cmd.arg("unix:" + self.qmpPath() + ",server,nowait");
+        cmd.arg("-display")
+            .arg("none")
+            .arg("-serial")
+            .arg(f"pipe:{self.serial.serialBasePath()}")
+            .arg("-monitor")
+            .arg(f"unix:{self.monitorPath()},server,nowait")
+            .arg("-qmp")
+            .arg(f"unix:{self.qmpPath()},server,nowait");
     }
 
     public void addBootMedia(Command cmd, bool fromIso) {
         if (!fromIso) { return; }
         if (self.spec.arch.equals("x86_64") && !self.firmware.shouldUseUefi(fromIso)) {
             self.serial.extractBootSerial();
-            cmd.arg("-kernel");
-            cmd.arg(Path.readAll(self.serial.bootKernelFile()).trim());
-            cmd.arg("-initrd");
-            cmd.arg(Path.readAll(self.serial.bootInitrdFile()).trim());
-            cmd.arg("-append");
-            cmd.arg(Path.readAll(self.serial.bootAppendFile()).trim());
-            cmd.arg("-cdrom");
-            cmd.arg(self.spec.iso);
+            cmd.arg("-kernel")
+                .arg(Path.readAll(self.serial.bootKernelFile()).trim())
+                .arg("-initrd")
+                .arg(Path.readAll(self.serial.bootInitrdFile()).trim())
+                .arg("-append")
+                .arg(Path.readAll(self.serial.bootAppendFile()).trim())
+                .arg("-cdrom")
+                .arg(self.spec.iso);
         } else {
-            cmd.arg("-cdrom");
-            cmd.arg(self.spec.iso);
-            cmd.arg("-boot");
-            cmd.arg("d");
+            cmd.arg("-cdrom")
+                .arg(self.spec.iso)
+                .arg("-boot")
+                .arg("d");
         }
     }
 
     public Command build(bool fromIso) {
         self.ensureVmLaunchBinary();
-        Command cmd = Command(self.spec.vmLaunchBinary());
+        var cmd = Command(self.spec.vmLaunchBinary());
         self.addAccelerator(cmd);
         self.addMachine(cmd);
         self.firmware.addFirmwareData(cmd);

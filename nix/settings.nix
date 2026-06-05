@@ -60,6 +60,7 @@ in {
       "${agentHome}/.codex"
       "${agentHome}/.claude"
       "${agentHome}/.claude.json"
+      "${agentHome}/.gemini"
     ];
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
@@ -68,12 +69,22 @@ in {
     settings.disk.label.disk = mkSetting str "disk";
     settings.disk.label.main = mkSetting str "main";
     settings.disk.label.boot = mkSetting str "boot";
+    settings.disk.label.recovery = mkSetting str "recovery";
     settings.disk.label.root = mkSetting str "root";
     settings.disk.partlabel.boot = mkSetting str "${config.settings.disk.label.disk}-${config.settings.disk.label.main}-${config.settings.disk.label.boot}";
+    settings.disk.partlabel.recovery = mkSetting str "${config.settings.disk.label.disk}-${config.settings.disk.label.main}-${config.settings.disk.label.recovery}";
     settings.disk.partlabel.root = mkSetting str "${config.settings.disk.label.disk}-${config.settings.disk.label.main}-${config.settings.disk.label.root}";
     settings.disk.by.partlabel.boot = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.boot}";
+    settings.disk.by.partlabel.recovery = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.recovery}";
     settings.disk.by.partlabel.root = mkSetting str "/dev/disk/by-partlabel/${config.settings.disk.partlabel.root}";
     settings.disk.by.mapper.root = mkSetting str "/dev/mapper/${config.settings.disk.label.root}";
+    ##### Disk: Recovery #####
+    settings.disk.recovery.enable = mkSetting bool false;
+    settings.disk.recovery.size = mkSetting str "4G";
+    settings.disk.recovery.mountPoint = mkSetting str "/recovery";
+    settings.disk.recovery.filesystemLabel = mkSetting str "RECOVERY";
+    settings.disk.recovery.efiPath = mkSetting str "EFI/recovery/nixos-recovery.efi";
+    settings.disk.recovery.entryPath = mkSetting str "loader/entries/nixos-recovery.conf";
     ##### Disk: Subvolumes #####
     settings.disk.subvolumes.volumes = mkSetting (listOf (submodule{ 
       options = { 
@@ -108,7 +119,6 @@ in {
     settings.disk.immutability.mode = mkSetting (enum [ "converge" "reset" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-previous" "restore-penultimate" "disabled" ]) "converge";
     settings.disk.immutability.dryRun = mkSetting bool false;
     settings.disk.immutability.enforce.onReboot = mkSetting bool true;
-    settings.disk.immutability.enforce.onUpdate = mkSetting bool false;
     settings.disk.immutability.persist.subvolumeRoot = mkSetting str "@persist";
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) ([
@@ -181,15 +191,16 @@ in {
       "${adminHome}/.vscode"
       ##### Codex #####
       "${adminHome}/.codex"
+      ##### Agents #####
+      "${adminHome}/.claude"
+      "${adminHome}/.claude.json"
+      "${adminHome}/.gemini"
       ##### Sunshine #####
       "${adminHome}/.config/sunshine"
       "${adminHome}/.local/share/flatpak/db"
       ##### Mullvad #####
       "/etc/mullvad-vpn/"
       "${adminHome}/.config/Mullvad VPN"
-      ##### Claude #####
-      "${adminHome}/.claude"
-      "${adminHome}/.claude.json"
       ##### Steam #####
       "${adminHome}/.local/share/Steam"
       "${adminHome}/.steam"
@@ -236,9 +247,11 @@ in {
     settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
     ##### Apps #####
     settings.apps.enable = mkSetting bool true;
+    settings.apps.agents.enable = mkSetting bool true;
     settings.apps.bash.enable = mkSetting bool true;
     settings.apps.battlenet.enable = mkSetting bool true;
     settings.apps.claude.enable = mkSetting bool true;
+    settings.apps.codex.enable = mkSetting bool true;
     settings.apps.cursor.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
     settings.apps.nixosctl.enable = mkSetting bool true;
@@ -286,19 +299,19 @@ in {
       ethtool       = true;
       mount         = true;
       umount        = true;
-      losetup        = true;
-      "mkfs.btrfs"   = true;
-      btrfs          = true;
-      python3        = true;
-      nixos          = true;
-      systemctl      = true;
-      immutability = true;
+      losetup       = true;
+      "mkfs.btrfs"  = true;
+      btrfs         = true;
+      python3       = true;
+      nixos         = true;
+      systemctl     = true;
+      immutability  = true;
     };
     settings.sudolessAllowlist.packages = mkSetting (attrsOf bool) {
-      tcpdump     = true;
-      ethtool     = true;
-      python3     = true;
-      moonlight-qt = true;
+      tcpdump       = true;
+      ethtool       = true;
+      python3       = true;
+      moonlight-qt  = true;
     };
   };
 }

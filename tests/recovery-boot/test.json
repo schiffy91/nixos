@@ -1,0 +1,40 @@
+{
+  "name": "recovery-boot",
+  "state": "recovery-boot",
+  "parentState": "installer-ssh",
+  "stateMaterial": "recovery-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:recovery={{recovery}}:size={{recoverySize}}:source={{sourceHash}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset",
+    "immutabilityEnabled": "true",
+    "bootloader": "systemd-boot",
+    "bootTarget": "Standard-Boot",
+    "recovery": "true",
+    "recoverySize": "4G"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2241,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "live-ssh" },
+    { "op": "boot-iso" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "configure-vm-host" },
+    { "op": "install-nixos" },
+    { "op": "stop" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 300 },
+    { "op": "guest", "command": "set -e; for i in $(seq 1 300); do result=$(systemctl show -p Result --value nixos-recovery-boot-entry.service 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status nixos-recovery-boot-entry.service; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value nixos-recovery-boot-entry.service)\" = success; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI ;; aarch64) fallback=BOOTAA64.EFI ;; *) fallback=BOOTUNKNOWN.EFI ;; esac; test -f /boot/loader/entries/nixos-recovery.conf; test -f /boot/EFI/recovery/nixos-recovery.efi; test -f /recovery/EFI/recovery/nixos-recovery.efi; test -f \"/recovery/EFI/BOOT/$fallback\"; bootctl list | grep -F nixos-recovery.conf; printf recovery-entry-ok", "expect": "recovery-entry-ok" },
+    { "op": "reboot-recovery" },
+    { "op": "guest", "command": "set -e; test \"$(hostname)\" = nixos-recovery; test -x /run/current-system/sw/bin/btrfs; test -x /run/current-system/sw/bin/cryptsetup; printf recovery-boot-ok", "expect": "recovery-boot-ok" },
+    { "op": "stop" }
+  ]
+}

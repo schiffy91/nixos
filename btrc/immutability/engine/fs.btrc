@@ -21,34 +21,33 @@ class ImmutabilityFs {
 
     public bool isSubvolume(string path) {
         if (!FileSystem.exists(path)) { return false; }
-        ExecResult result = self.run.shell.runCommand(ImmutabilityBtrfs.show(path));
+        var result = self.run.shell.run(ImmutabilityBtrfs.show(path).render(), logFailure=false);
         return result.ok();
     }
 
     public bool isReadonly(string path) {
-        ExecResult result = self.run.shell.runCommand(ImmutabilityBtrfs.getReadonly(path));
+        var result = self.run.shell.run(ImmutabilityBtrfs.getReadonly(path).render(), logFailure=false);
         return result.ok() && result.stdout().contains("ro=true");
     }
 
     public bool mounted(string path) {
-        Command command = Command("findmnt")
+        var command = Command("findmnt")
             .arg("--mountpoint")
-            .arg(path)
-            .check(false);
-        ExecResult result = self.run.shell.runCommand(command);
+            .arg(path);
+        var result = self.run.shell.run(command.render(), logFailure=false);
         return result.ok();
     }
 
     public int compareDeepestFirst(string left, string right) {
-        int leftDepth = Strings.count(left, "/");
-        int rightDepth = Strings.count(right, "/");
+        var leftDepth = Strings.count(left, "/");
+        var rightDepth = Strings.count(right, "/");
         if (leftDepth != rightDepth) { return rightDepth - leftDepth; }
         if (left.len() != right.len()) { return right.len() - left.len(); }
         return Strings.compare(left, right);
     }
 
     public void pushChildSorted(Vector<string> paths, string path) {
-        int index = 0;
+        var index = 0;
         while (index < paths.len && self.compareDeepestFirst(paths.get(index), path) <= 0) {
             index++;
         }
@@ -58,13 +57,13 @@ class ImmutabilityFs {
     public Vector<string> childSubvolumes(string path) {
         Vector<string> result = [];
         if (!FileSystem.isDir(path)) { return result; }
-        ExecResult listed = self.run.runCommand(ImmutabilityBtrfs.listChildren(path));
-        if (!listed.ok()) { self.run.fatal("list " + path); }
+        var listed = self.run.run(ImmutabilityBtrfs.listChildren(path).render());
+        if (!listed.ok()) { self.run.fatal(f"list {path}"); }
         for line in Strings.split(listed.stdout(), "\n") {
-            int marker = Strings.find(line, " path ", 0);
+            var marker = Strings.find(line, " path ", 0);
             if (marker < 0) { continue; }
-            string child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
-            string childPath = self.run.path(child);
+            var child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            var childPath = self.run.path(child);
             if (ImmutabilityPaths.ancestor(path, childPath)) {
                 self.pushChildSorted(result, childPath);
             }
@@ -79,7 +78,7 @@ class ImmutabilityFs {
         // Snapshot the listing into a local first: `for x in self.method()`
         // re-evaluates the call each iteration, so deleting inside the loop
         // would index a shrinking vector out of bounds (segfault).
-        Vector<string> children = self.childSubvolumes(path);
+        var children = self.childSubvolumes(path);
         for child in children {
             self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(child));
         }
@@ -93,7 +92,7 @@ class ImmutabilityFs {
 
     public void snapshot(string source, string destination, bool readonly) {
         if (!FileSystem.isDir(source)) {
-            self.run.fatal("Source missing: " + source);
+            self.run.fatal(f"Source missing: {source}");
         }
         self.deleteSubvolume(destination);
         self.run.requireCommand(ImmutabilityBtrfs.snapshot(source, destination, readonly));
@@ -103,31 +102,33 @@ class ImmutabilityFs {
     }
 
     public string sourcePath(string live, string clean, string relPath) {
-        string livePath = PathTools.join(live, relPath);
+        var livePath = PathTools.join(live, relPath);
         if (self.exists(livePath)) { return livePath; }
-        string cleanPath = PathTools.join(clean, relPath);
+        var cleanPath = PathTools.join(clean, relPath);
         if (self.exists(cleanPath)) { return cleanPath; }
         return "";
     }
 
     public void copyPath(string source, string destination) {
         self.run.mkdirp(PathTools.dirname(destination));
-        Command command = Command("cp")
+        var command = Command("cp")
             .arg("--reflink=always")
             .arg("-a")
             .arg(source)
-            .arg(destination)
-            .capture(false);
+            .arg(destination);
         self.run.requireCommand(command);
     }
 
     public void copyDirectoryContents(string source, string destination) {
         if (!FileSystem.isDir(source)) { return; }
-        Vector<string> nested = self.childSubvolumes(source);
+        var nested = self.childSubvolumes(source);
         if (!nested.isEmpty()) {
-            self.run.fatal("nested subvolumes in persisted dir: " + nested.join(" "));
+            var paths = nested.join(" ");
+            self.run.fatal(f"nested subvolumes in persisted dir: {paths}");
         }
-        self.run.requireRaw("cp --reflink=always -a " + UnixShell.quote(PathTools.join(source, ".")) + " " + UnixShell.quote(destination));
+        var sourceContents = UnixShell.quote(PathTools.join(source, "."));
+        var quotedDestination = UnixShell.quote(destination);
+        self.run.requireRaw(f"cp --reflink=always -a {sourceContents} {quotedDestination}");
     }
 
     /* btrfs subvolume create yields a root:root 0755 subvol regardless of the
@@ -138,7 +139,9 @@ class ImmutabilityFs {
      * or apps that write at .cache root break). One-shot at first creation. */
     public void matchOwnerAndMode(string source, string destination) {
         if (!FileSystem.exists(source) || !FileSystem.isDir(destination)) { return; }
-        self.run.requireRaw("chown --reference=" + UnixShell.quote(source) + " " + UnixShell.quote(destination));
-        self.run.requireRaw("chmod --reference=" + UnixShell.quote(source) + " " + UnixShell.quote(destination));
+        var quotedSource = UnixShell.quote(source);
+        var quotedDestination = UnixShell.quote(destination);
+        self.run.requireRaw(f"chown --reference={quotedSource} {quotedDestination}");
+        self.run.requireRaw(f"chmod --reference={quotedSource} {quotedDestination}");
     }
 }

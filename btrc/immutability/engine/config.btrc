@@ -3,30 +3,31 @@ import ../../core/log.btrc;
 import ./paths.btrc;
 import ./types.btrc;
 
-/* Parses the immutability's inputs: the tab-separated spec file (volume, mount,
- * abs-path, kind) into ImmutabilitySpec rows, and the `name=mount` volume args (or,
+/* Parses the immutability's inputs: the TOML spec file into ImmutabilitySpec
+ * rows, and the `name=mount` volume args (or,
  * when none are given, one volume per distinct spec) into ImmutabilityVolume rows.
  * Pure: static readers returning the parsed vectors for the engine to hold.
  */
 class ImmutabilityConfig {
     class Vector<ImmutabilitySpec> readSpecs(string specFile) {
         Vector<ImmutabilitySpec> result = [];
-        string content = FileSystem.readText(specFile);
-        for raw in Strings.split(content, "\n") {
-            string line = raw.trim();
-            if (line.isEmpty() || line.startsWith("#")) { continue; }
-            Vector<string> parts = Strings.split(raw, "\t");
-            if (parts.len != 4) {
-                NixosLog.fatal(specFile + " expected 4 tab-separated fields: " + raw);
+        var rows = Toml.tableArrayBlocks(FileSystem.readText(specFile), "keep");
+        for row in rows {
+            var rawVolume = row.getOrDefault("volume", "");
+            var rawMountPoint = row.getOrDefault("mountPoint", "");
+            var rawPath = row.getOrDefault("path", "");
+            var rawKind = row.getOrDefault("kind", "auto");
+            if (rawVolume.isEmpty() || rawMountPoint.isEmpty() || rawPath.isEmpty()) {
+                NixosLog.fatal(f"{specFile} [[keep]] entries require volume, mountPoint, and path");
             }
-            string volume = ImmutabilityPaths.normSubvol(parts.get(0));
-            string mountPoint = ImmutabilityPaths.normMount(parts.get(1));
-            ImmutabilityAbsPath abs = ImmutabilityPaths.normAbs(parts.get(2));
-            string kind = ImmutabilityPaths.kind(parts.get(3));
+            var volume = ImmutabilityPaths.normSubvol(rawVolume);
+            var mountPoint = ImmutabilityPaths.normMount(rawMountPoint);
+            var abs = ImmutabilityPaths.normAbs(rawPath);
+            var kind = ImmutabilityPaths.kind(rawKind);
             if (kind.equals("auto") && abs.endedWithSlash) {
                 kind = "dir";
             }
-            string rel = ImmutabilityPaths.relToMount(abs.path, mountPoint);
+            var rel = ImmutabilityPaths.relToMount(abs.path, mountPoint);
             result.push(ImmutabilitySpec(volume, mountPoint, abs.path, rel, kind));
         }
         return result;
@@ -50,10 +51,10 @@ class ImmutabilityConfig {
             return result;
         }
         for arg in args {
-            int marker = Strings.find(arg, "=", 0);
-            if (marker < 0) { NixosLog.fatal("bad volume arg: " + arg); }
-            string name = arg.substring(0, marker);
-            string mountPoint = arg.substring(marker + 1, arg.len() - marker - 1);
+            var marker = Strings.find(arg, "=", 0);
+            if (marker < 0) { NixosLog.fatal(f"bad volume arg: {arg}"); }
+            var name = arg.substring(0, marker);
+            var mountPoint = arg.substring(marker + 1, arg.len() - marker - 1);
             result.push(ImmutabilityVolume(ImmutabilityPaths.normSubvol(name), ImmutabilityPaths.normMount(mountPoint)));
         }
         return result;

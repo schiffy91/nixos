@@ -26,20 +26,21 @@ class DisplayOutput {
         self.connected = false;
     }
 
-    public string json() {
-        JsonObject obj = JsonObject();
-        obj.setString("name", self.name);
-        obj.setString("label", self.label);
-        obj.setString("type", self.kind);
-        obj.setBool("enabled", self.enabled);
-        obj.setBool("connected", self.connected);
-        obj.setInt("priority", self.priority);
-        obj.setRaw("geometry", "{\"x\":" + Strings.fromInt(self.x)
-            + ",\"y\":" + Strings.fromInt(self.y)
-            + ",\"w\":" + Strings.fromInt(self.width)
-            + ",\"h\":" + Strings.fromInt(self.height)
-            + "}");
-        string encoded = obj.stringify();
+    public string toJson() {
+        var json = JsonObject();
+        json.setString("name", self.name);
+        json.setString("label", self.label);
+        json.setString("type", self.kind);
+        json.setBool("enabled", self.enabled);
+        json.setBool("connected", self.connected);
+        json.setInt("priority", self.priority);
+        var geometry = JsonObject();
+        geometry.setInt("x", self.x);
+        geometry.setInt("y", self.y);
+        geometry.setInt("w", self.width);
+        geometry.setInt("h", self.height);
+        json.setRaw("geometry", geometry.stringify());
+        var encoded = json.stringify();
         return encoded;
     }
 }
@@ -54,19 +55,19 @@ class DisplayManager {
     }
 
     public string kscreen() {
-        ExecResult result = self.shell.runUnchecked("kscreen-doctor -o | sed -E 's/\\x1b\\[[0-9;]*m//g'");
+        var result = self.shell.run("kscreen-doctor -o | sed -E 's/\\x1b\\[[0-9;]*m//g'", logFailure=false);
         return result.stdout();
     }
 
     public bool drmConnected(string name) {
-        string status = PathTools.join(PathTools.join("/sys/class/drm", "card*-" + name), "status");
-        ExecResult result = self.shell.runUnchecked("cat " + status + " 2>/dev/null | head -n 1");
+        var status = PathTools.join(PathTools.join("/sys/class/drm", f"card*-{name}"), "status");
+        var result = self.shell.run(f"cat {status} 2>/dev/null | head -n 1", logFailure=false);
         return result.trimmed().equals("connected");
     }
 
     public string lineValue(string block, string prefix) {
         for line in Strings.split(block, "\n") {
-            string trimmed = line.trim();
+            var trimmed = line.trim();
             if (trimmed.startsWith(prefix)) {
                 return trimmed.substring(prefix.len(), trimmed.len() - prefix.len()).trim();
             }
@@ -75,32 +76,33 @@ class DisplayManager {
     }
 
     public DisplayOutput parseBlock(string block) {
-        DisplayOutput output = DisplayOutput();
-        Vector<string> lines = Strings.split(block, "\n");
+        var output = DisplayOutput();
+        var lines = Strings.split(block, "\n");
         if (lines.len == 0) { return output; }
-        string header = lines.get(0).trim();
-        Vector<string> headerParts = Strings.split(header, " ");
+        var header = lines.get(0).trim();
+        var headerParts = Strings.split(header, " ");
         if (headerParts.len < 2) { return output; }
         output.name = headerParts.get(1);
         output.label = self.labels.displayLabel(output.name);
         output.enabled = block.contains("\tenabled");
         output.connected = block.contains("\tconnected") || self.drmConnected(output.name);
-        string priority = self.lineValue(block, "priority ");
+        var priority = self.lineValue(block, "priority ");
         if (!priority.isEmpty()) { output.priority = Strings.toInt(priority); }
         for kind in ["HDMI", "DisplayPort", "VGA", "DVI", "Panel", "TV", "Unknown"] {
-            if (block.contains("\t" + kind)) { output.kind = kind; }
+            var marker = f"\t{kind}";
+            if (block.contains(marker)) { output.kind = kind; }
         }
         self.applyGeometry(output, block);
         return output;
     }
 
     public void applyGeometry(DisplayOutput output, string block) {
-        string geometry = self.lineValue(block, "Geometry: ");
+        var geometry = self.lineValue(block, "Geometry: ");
         if (geometry.isEmpty()) { return; }
-        Vector<string> parts = Strings.split(geometry, " ");
+        var parts = Strings.split(geometry, " ");
         if (parts.len < 2) { return; }
-        Vector<string> xy = Strings.split(parts.get(0), ",");
-        Vector<string> wh = Strings.split(parts.get(1), "x");
+        var xy = Strings.split(parts.get(0), ",");
+        var wh = Strings.split(parts.get(1), "x");
         if (xy.len >= 2) {
             output.x = Strings.toInt(xy.get(0));
             output.y = Strings.toInt(xy.get(1));
@@ -114,9 +116,9 @@ class DisplayManager {
     public Vector<DisplayOutput> outputs() {
         Vector<DisplayOutput> result = [];
         for block in Strings.split(self.kscreen(), "Output: ") {
-            string trimmed = block.trim();
+            var trimmed = block.trim();
             if (trimmed.isEmpty()) { continue; }
-            DisplayOutput output = self.parseBlock(trimmed);
+            var output = self.parseBlock(trimmed);
             if (!output.name.isEmpty() && (output.connected || output.enabled)) {
                 result.push(output);
             }
@@ -132,68 +134,65 @@ class DisplayManager {
     }
 
     public void run(string arg) {
-        Command cmd = Command("kscreen-doctor")
-            .arg(arg)
-            .capture(false)
-            .check(false);
-        self.shell.runCommand(cmd);
+        var cmd = Command("kscreen-doctor")
+            .arg(arg);
+        self.shell.run(cmd.render(), stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void enable(string name) {
-        self.run("output." + name + ".enable");
+        self.run(f"output.{name}.enable");
         self.applyLayout(name);
     }
 
     public void disable(string name) {
-        self.run("output." + name + ".disable");
+        self.run(f"output.{name}.disable");
     }
 
     public void primary(string name) {
-        self.run("output." + name + ".priority.1");
+        self.run(f"output.{name}.priority.1");
     }
 
     public void dpms(string state) {
-        Command cmd = Command("kscreen-doctor")
+        var cmd = Command("kscreen-doctor")
             .arg("--dpms")
-            .arg(state)
-            .capture(false)
-            .check(false);
-        self.shell.runCommand(cmd);
+            .arg(state);
+        self.shell.run(cmd.render(), stdout=CommandOutput.stream(), logFailure=false);
     }
 
     public void layout() {
-        Vector<DisplayLayoutRule> rules = self.labels.layoutRules();
+        var rules = self.labels.layoutRules();
         for rule in rules {
             self.applyLayout(rule.display);
         }
     }
 
     public void applyLayout(string name) {
-        DisplayLayoutRule selected = DisplayLayoutRule();
-        Vector<DisplayLayoutRule> rules = self.labels.layoutRules();
+        var selected = DisplayLayoutRule();
+        var rules = self.labels.layoutRules();
         for rule in rules {
             if (rule.display.equals(name)) { selected = rule; }
         }
         if (selected.display.isEmpty()) { return; }
-        Vector<DisplayOutput> all = self.outputs();
-        DisplayOutput display = self.findOutput(selected.display, all);
-        DisplayOutput anchor = self.findOutput(selected.relativeTo, all);
+        var all = self.outputs();
+        var display = self.findOutput(selected.display, all);
+        var anchor = self.findOutput(selected.relativeTo, all);
         if (display.name.isEmpty() || anchor.name.isEmpty() || !display.enabled) { return; }
-        int px = anchor.x;
-        int py = anchor.y;
+        var px = anchor.x;
+        var py = anchor.y;
         if (selected.position.equals("left-of")) { px = anchor.x - display.width; }
         else if (selected.position.equals("right-of")) { px = anchor.x + anchor.width; }
         else if (selected.position.equals("above")) { py = anchor.y - display.height; }
         else if (selected.position.equals("below")) { py = anchor.y + anchor.height; }
-        self.run("output." + display.name + ".position." + Strings.fromInt(px) + "," + Strings.fromInt(py));
+        self.run(f"output.{display.name}.position.{px},{py}");
     }
 
     public void list() {
         Vector<string> rows = [];
-        Vector<DisplayOutput> all = self.outputs();
+        var all = self.outputs();
         for output in all {
-            rows.push(output.json());
+            rows.push(output.toJson());
         }
-        Console.log("[" + rows.join(",") + "]");
+        var json = rows.join(",");
+        Console.log(f"[{json}]");
     }
 }

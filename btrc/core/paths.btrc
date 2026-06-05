@@ -47,19 +47,19 @@ class LocalConfigFile {
     }
 
     public void overwrite(JsonObject data) {
-        string dir = PathTools.dirname(self.path);
+        var dir = PathTools.dirname(self.path);
         FileSystem.mkdirp(dir);
         data.writeFile(self.path);
     }
 
     public string getString(string key, string fallback) {
-        JsonObject data = self.read();
-        string value = data.getString(key, fallback);
+        var data = self.read();
+        var value = data.getString(key, fallback);
         return Strings.copy(value);
     }
 
     public void setString(string key, string value) {
-        JsonObject data = self.read();
+        var data = self.read();
         data.setString(key, value);
         self.overwrite(data);
     }

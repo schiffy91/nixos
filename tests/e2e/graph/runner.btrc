@@ -18,8 +18,8 @@ class VmGraphRunner {
 
     public string sourceHash() {
         if (!self.sourceHashValue.isEmpty()) { return self.sourceHashValue; }
-        string root = self.graph.resolvedWorkspaceRoot();
-        string command = "cd " + UnixShell.quote(root)
+        var root = self.graph.resolvedWorkspaceRoot();
+        var command = "cd " + UnixShell.quote(root)
             + " && find . -type f"
             + " ! -path './.git/*'"
             + " ! -path '*/.vm/*'"
@@ -30,14 +30,14 @@ class VmGraphRunner {
             + " ! -name '._*'"
             + " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)"
             + " -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'";
-        ExecResult result = UnixShell().run(command);
+        var result = UnixShell().run(command);
         if (!result.ok()) {
             NixosLog.fatal("Failed to compute workspace source hash for " + root);
         }
-        string toolPath = PathTools.join(root, "build/nixosctl");
-        string toolHash = "missing";
+        var toolPath = PathTools.join(root, "build/nixosctl");
+        var toolHash = "missing";
         if (FileSystem.exists(toolPath)) {
-            ExecResult tool = UnixShell().run("shasum -a 256 " + UnixShell.quote(toolPath) + " | awk '{print $1}'");
+            var tool = UnixShell().run("shasum -a 256 " + UnixShell.quote(toolPath) + " | awk '{print $1}'");
             if (!tool.ok()) {
                 NixosLog.fatal("Failed to compute nixosctl hash for " + toolPath);
             }
@@ -48,7 +48,7 @@ class VmGraphRunner {
     }
 
     public VmTestSpec specFor(GraphNode node) {
-        VmTestSpec spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(node));
+        var spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(node));
         spec.setArg("graphName", self.graph.name);
         spec.setArg("nodeId", node.id);
         spec.setArg("workspaceRoot", self.graph.resolvedWorkspaceRoot());
@@ -66,7 +66,7 @@ class VmGraphRunner {
     }
 
     public void applyStructuralOverrides(VmTestSpec spec, Map<string, string> overrides) {
-        bool archChanged = overrides.has("arch");
+        var archChanged = overrides.has("arch");
         if (overrides.has("name")) { spec.name = overrides.get("name"); }
         if (overrides.has("workDir")) { spec.workDir = overrides.get("workDir"); }
         if (overrides.has("arch")) { spec.arch = overrides.get("arch"); }
@@ -94,10 +94,10 @@ class VmGraphRunner {
 
     public void status() {
         for node in self.graph.nodes {
-            VmTestSpec spec = self.specFor(node);
-            string recorded = "missing";
+            var spec = self.specFor(node);
+            var recorded = "missing";
             if (FileSystem.exists(spec.stateHashFile())) {
-                string saved = Path.readAll(spec.stateHashFile()).trim();
+                var saved = Path.readAll(spec.stateHashFile()).trim();
                 recorded = saved.equals(spec.stateHash) ? "ready" : "stale";
             }
             Console.log(node.id + " " + recorded + " " + spec.stateHashShort + " " + spec.stateDir());
@@ -107,7 +107,7 @@ class VmGraphRunner {
     public int operationCoverage() {
         Vector<string> covered = [];
         for node in self.graph.nodes {
-            VmTestSpec spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(node));
+            var spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(node));
             for op in spec.operations {
                 if (!op.kind.isEmpty() && !covered.contains(op.kind)) {
                     covered.push(op.kind);
@@ -135,27 +135,27 @@ class VmGraphRunner {
 
     public bool ready(VmTestSpec spec) {
         if (!FileSystem.exists(spec.stateHashFile())) { return false; }
-        string saved = Path.readAll(spec.stateHashFile()).trim();
+        var saved = Path.readAll(spec.stateHashFile()).trim();
         return saved.equals(spec.stateHash);
     }
 
     public int run(Vector<string> targets) {
-        GraphTraversal traversal = GraphTraversal(self.graph);
-        Vector<string> order = traversal.order(targets);
+        var traversal = GraphTraversal(self.graph);
+        var order = traversal.order(targets);
         if (!traversal.ok()) {
             NixosLog.fatal(traversal.error);
         }
 
         for id in order {
-            GraphNode node = self.graph.node(id);
-            VmTestSpec spec = self.specFor(node);
+            var node = self.graph.node(id);
+            var spec = self.specFor(node);
             if (!self.force() && self.ready(spec)) {
                 NixosLog.info("graph " + self.graph.name + ": skip " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
                 continue;
             }
             NixosLog.info("graph " + self.graph.name + ": run " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
-            VmTestRunner runner = VmTestRunner(spec);
-            int result = runner.run();
+            var runner = VmTestRunner(spec);
+            var result = runner.run();
             if (result != 0) { return result; }
         }
         return 0;

@@ -30,27 +30,29 @@ class VmProvisioner {
     }
 
     public void configureVmHost() {
-        string mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
-        string enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
-        string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
-        string desktop = self.spec.args.getOrDefault("desktop", "none");
-        string encryption = self.spec.args.getOrDefault("encryption", "false");
-        string luksPass = "testpass123";
-        bool secureBootTarget = bootTargetName.equals("Secure-Boot");
-        string otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
-        string serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
-        string initrdModules = self.spec.arch.equals("aarch64")
+        var mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
+        var enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
+        var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        var desktop = self.spec.args.getOrDefault("desktop", "none");
+        var encryption = self.spec.args.getOrDefault("encryption", "false");
+        var recovery = self.spec.args.getOrDefault("recovery", "false");
+        var recoverySize = self.spec.args.getOrDefault("recoverySize", "4G");
+        var luksPass = "testpass123";
+        var secureBootTarget = bootTargetName.equals("Secure-Boot");
+        var otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
+        var serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
+        var initrdModules = self.spec.arch.equals("aarch64")
             ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
             : "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"tpm_tis\" ]";
-        string hostDir = "/etc/nixos/nix/hosts/" + self.spec.arch + "/VM-TEST";
-        string hostPath = hostDir + "/VM-TEST.nix";
-        string pubkey = self.pubKey();
-        string passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
-        string secureBootSettings = secureBootTarget
+        var hostDir = "/etc/nixos/nix/hosts/" + self.spec.arch + "/VM-TEST";
+        var hostPath = hostDir + "/VM-TEST.nix";
+        var pubkey = self.pubKey();
+        var passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
+        var secureBootSettings = secureBootTarget
             ? "  settings.boot.pkiBundle = \"/var/lib/sbctl\";\n"
             : "";
-        string secureBootModulePath = "/etc/nixos/nix/system/vm-test-secure-boot.nix";
-        string secureBootModule = "{ config, lib, pkgs, ... }: {\n"
+        var secureBootModulePath = "/etc/nixos/nix/system/vm-test-secure-boot.nix";
+        var secureBootModule = "{ config, lib, pkgs, ... }: {\n"
             + "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {\n"
             + "    boot.loader.timeout = lib.mkForce 0;\n"
             + "    boot.lanzaboote.autoGenerateKeys.enable = true;\n"
@@ -61,10 +63,10 @@ class VmProvisioner {
             + "    environment.systemPackages = [ pkgs.sbctl ];\n"
             + "  };\n"
             + "}\n";
-        string secureBootModuleCommand = secureBootTarget
+        var secureBootModuleCommand = secureBootTarget
             ? "printf %s " + UnixShell.quote(secureBootModule) + " > " + UnixShell.quote(secureBootModulePath) + "; "
             : "";
-        string hostNix = "{ lib, ... }: {\n"
+        var hostNix = "{ lib, ... }: {\n"
             + "  networking.hostName = \"VM-TEST\";\n"
             + "  networking.firewall.enable = lib.mkForce false;\n"
             + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
@@ -75,11 +77,14 @@ class VmProvisioner {
             + "  services.openssh.enable = lib.mkForce true;\n"
             + "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";\n"
             + "  services.openssh.settings.UseDns = lib.mkForce false;\n"
+            + "  settings.users.admin.authorizedKeys = lib.mkForce [ \"" + pubkey + "\" ];\n"
             + "  settings.users.admin.autoUnlockWallet.enabled = false;\n"
             + "  settings.users.admin.homeManager.enable = false;\n"
             + "  settings.networking.identityAgent = \"none\";\n"
             + "  settings.networking.lanSubnet = \"10.0.2.0/24\";\n"
             + "  settings.disk.device = \"/dev/vda\";\n"
+            + "  settings.disk.recovery.enable = " + recovery + ";\n"
+            + "  settings.disk.recovery.size = \"" + recoverySize + "\";\n"
             + "  settings.disk.encryption.enable = " + encryption + ";\n"
             + "  settings.disk.immutability.enable = " + enabled + ";\n"
             + "  settings.disk.immutability.mode = \"" + mode + "\";\n"
@@ -88,11 +93,11 @@ class VmProvisioner {
             + "  settings.disk.swap.size = \"2G\";\n"
             + secureBootSettings
             + "}\n";
-        string localConfig = "{\"host_path\":\"nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix\",\"target\":\"" + bootTargetName + "\"}\n";
-        string luksCommand = encryption.equals("true")
+        var localConfig = "{\"host_path\":\"nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix\",\"target\":\"" + bootTargetName + "\"}\n";
+        var luksCommand = encryption.equals("true")
             ? "printf %s " + UnixShell.quote(luksPass) + " > /tmp/plain_text_password.txt; chmod 600 /tmp/plain_text_password.txt; "
             : "";
-        string command = "set -e; "
+        var command = "set -e; "
             + luksCommand
             + "rm -rf /etc/nixos/nix/hosts/" + otherArch + "; "
             + "rm -f " + UnixShell.quote(secureBootModulePath) + "; "
@@ -111,7 +116,7 @@ class VmProvisioner {
             + "git config --global --add safe.directory /etc/nixos; "
             + "git -C /etc/nixos add -A; "
             + "git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty";
-        ExecResult result = self.remote.sshWithTimeout(command, false, 120);
+        var result = self.remote.sshWithTimeout(command, false, 120);
         if (!result.ok()) {
             Console.error(result.stdout());
             NixosLog.fatal("Failed to configure VM host");
@@ -119,48 +124,48 @@ class VmProvisioner {
     }
 
     public bool installNixosGuest() {
-        string diskTarget = "VM-TEST-Disk-Operation";
-        string bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
-        bool secureBootTarget = bootTargetName.equals("Secure-Boot");
-        string bootTarget = "VM-TEST-" + bootTargetName;
-        string nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
-        string disko = nix + " run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#"
+        var diskTarget = "VM-TEST-Disk-Operation";
+        var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        var secureBootTarget = bootTargetName.equals("Secure-Boot");
+        var bootTarget = "VM-TEST-" + bootTargetName;
+        var nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
+        var disko = nix + " run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#"
             + diskTarget
             + " --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
-        string install = "mkdir -p /mnt/etc; rm -rf /mnt/etc/nixos; cp -r /etc/nixos /mnt/etc/nixos; mkdir -p /mnt/nix/tmp; TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#"
+        var install = "mkdir -p /mnt/etc; rm -rf /mnt/etc/nixos; cp -r /etc/nixos /mnt/etc/nixos; mkdir -p /mnt/nix/tmp; TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#"
             + bootTarget
             + " --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0";
-        string lanzabooteInstall = secureBootTarget
+        var lanzabooteInstall = secureBootTarget
             ? "nixos-enter --root /mnt --command "
                 + UnixShell.quote("set -e; mkdir -p /var/lib/sbctl; if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi; cmd=$(nix --extra-experimental-features nix-command --extra-experimental-features flakes eval --raw /etc/nixos#nixosConfigurations.VM-TEST-Secure-Boot.config.boot.lanzaboote.installCommand); tmp=$(mktemp -d); ln -s /nix/var/nix/profiles/system \"$tmp/system-1-link\"; sh -c \"$cmd --public-key /var/lib/sbctl/keys/db/db.pem --private-key /var/lib/sbctl/keys/db/db.key /boot $tmp/system-1-link\"; rm -rf \"$tmp\"")
             : "true";
-        string snapshots = "nixos-enter --root /mnt --command "
+        var snapshots = "nixos-enter --root /mnt --command "
             + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --add safe.directory /etc/nixos || true");
-        string script = "set -ex\n"
+        var script = "set -ex\n"
             + "printf INSTALL_START > /tmp/nixos-install.status\n"
             + disko + "\n"
             + install + "\n"
             + lanzabooteInstall + "\n"
             + snapshots + "\n"
             + "printf INSTALL_OK > /tmp/nixos-install.status\n";
-        string servicePath = "/run/current-system/sw/bin:/run/wrappers/bin:/nix/var/nix/profiles/default/bin:/bin:/usr/bin";
-        string runner = "PATH=" + UnixShell.quote(servicePath) + "; export PATH; HOME=/root; export HOME; "
+        var servicePath = "/run/current-system/sw/bin:/run/wrappers/bin:/nix/var/nix/profiles/default/bin:/bin:/usr/bin";
+        var runner = "PATH=" + UnixShell.quote(servicePath) + "; export PATH; HOME=/root; export HOME; "
             + "rm -f /tmp/nixos-install.pipe; mkfifo /tmp/nixos-install.pipe; "
             + "tee /tmp/nixos-install.log < /tmp/nixos-install.pipe > /dev/ttyS0 & teepid=$!; "
             + "sh /tmp/nixos-install.sh > /tmp/nixos-install.pipe 2>&1 < /dev/null; "
             + "code=$?; "
             + "wait $teepid || true; rm -f /tmp/nixos-install.pipe; "
             + "if [ $code -ne 0 ]; then printf 'INSTALL_FAIL:%s\\n' \"$code\" > /tmp/nixos-install.status; fi";
-        string prepare = "set -e; "
+        var prepare = "set -e; "
             + "rm -f /tmp/nixos-install.status /tmp/nixos-install.log /tmp/nixos-install.sh; "
             + "printf %s " + UnixShell.quote(script) + " > /tmp/nixos-install.sh; "
             + "chmod +x /tmp/nixos-install.sh";
-        string launch = "set -e; "
+        var launch = "set -e; "
             + "systemctl reset-failed nixos-install-e2e.service 2>/dev/null || true; "
             + "systemctl is-active --quiet nixos-install-e2e.service && exit 0; "
             + "systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c " + UnixShell.quote(runner);
-        int timeoutSeconds = secureBootTarget ? 7200 : 3600;
-        ExecResult prepared = self.sshWithRetries(prepare, 60, 3);
+        var timeoutSeconds = secureBootTarget ? 7200 : 3600;
+        var prepared = self.sshWithRetries(prepare, 60, 3);
         if (!prepared.ok()) {
             Console.error(prepared.stdout());
             return false;
@@ -172,8 +177,8 @@ class VmProvisioner {
     }
 
     public ExecResult sshWithRetries(string command, int timeoutSeconds, int attempts) {
-        int attempt = 0;
-        ExecResult last = ExecResult(1, "", "", "");
+        var attempt = 0;
+        var last = ExecResult(1, "", "", "");
         while (attempt < attempts) {
             last = self.remote.sshWithTimeout(command, false, timeoutSeconds);
             if (last.ok()) { return last; }
@@ -184,22 +189,22 @@ class VmProvisioner {
     }
 
     public string installStatusText() {
-        ExecResult status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
+        var status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
         if (!status.ok()) { return ""; }
         return status.stdout();
     }
 
     public bool installWasLaunched() {
-        string text = self.installStatusText();
+        var text = self.installStatusText();
         if (text.contains("INSTALL_START")) { return true; }
         if (text.contains("INSTALL_OK")) { return true; }
         if (text.contains("INSTALL_FAIL")) { return true; }
-        ExecResult active = self.remote.sshWithTimeout("systemctl is-active --quiet nixos-install-e2e.service", false, 10);
+        var active = self.remote.sshWithTimeout("systemctl is-active --quiet nixos-install-e2e.service", false, 10);
         return active.ok();
     }
 
     public bool waitForInstallLaunch(int timeoutSeconds) {
-        int elapsed = 0;
+        var elapsed = 0;
         while (elapsed < timeoutSeconds) {
             if (!self.state.isRunning()) {
                 NixosLog.error("QEMU exited while launching NixOS installation; " + self.state.runningDetail() + "; QEMU log: " + self.qemuLogPath());
@@ -213,9 +218,9 @@ class VmProvisioner {
     }
 
     public bool launchInstall(string launch) {
-        int attempts = 0;
+        var attempts = 0;
         while (attempts < 3) {
-            ExecResult launched = self.remote.sshWithTimeout(launch, false, 30);
+            var launched = self.remote.sshWithTimeout(launch, false, 30);
             if (launched.ok()) { return true; }
             Console.error(launched.stdout());
             if (self.waitForInstallLaunch(15)) { return true; }
@@ -225,25 +230,25 @@ class VmProvisioner {
     }
 
     public void printInstallLog() {
-        string command = "if test -f /tmp/nixos-install.log; then tail -n 240 /tmp/nixos-install.log; fi; "
+        var command = "if test -f /tmp/nixos-install.log; then tail -n 240 /tmp/nixos-install.log; fi; "
             + "if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi";
-        ExecResult log = self.remote.sshWithTimeout(command, false, 30);
+        var log = self.remote.sshWithTimeout(command, false, 30);
         if (log.ok()) { Console.error(log.stdout()); }
     }
 
     public bool waitForInstallStatus(int timeoutSeconds) {
-        int elapsed = 0;
-        int unavailable = 0;
+        var elapsed = 0;
+        var unavailable = 0;
         while (elapsed < timeoutSeconds) {
             if (!self.state.isRunning()) {
                 NixosLog.error("QEMU exited while NixOS installation was running; " + self.state.runningDetail() + "; QEMU log: " + self.qemuLogPath());
                 self.printInstallLog();
                 return false;
             }
-            ExecResult status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
+            var status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
             if (status.ok()) {
                 unavailable = 0;
-                string text = status.stdout();
+                var text = status.stdout();
                 if (text.contains("INSTALL_OK")) { return true; }
                 if (text.contains("INSTALL_FAIL")) {
                     self.printInstallLog();

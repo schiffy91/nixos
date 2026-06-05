@@ -34,7 +34,7 @@ class VmSpecParser {
     }
 
     class VmOperation operation(string objectText) {
-        VmOperation op = VmOperation();
+        var op = VmOperation();
         op.kind = VmSpecParser.field(objectText, "op", "");
         op.command = VmSpecParser.field(objectText, "command", "");
         op.expect = VmSpecParser.field(objectText, "expect", "");
@@ -54,7 +54,7 @@ class VmSpecParser {
     }
 
     class VmTestSpec parse(string text) {
-        VmTestSpec spec = VmTestSpec();
+        var spec = VmTestSpec();
         spec.name = VmSpecParser.field(text, "name", spec.name);
         spec.state = VmSpecParser.field(text, "state", spec.name);
         spec.parentState = VmSpecParser.field(text, "parentState", spec.parentState);
@@ -105,33 +105,33 @@ class VmSpecParser {
     }
 
     class string yamlKey(string line) {
-        int pos = Strings.find(line, ":", 0);
+        var pos = Strings.find(line, ":", 0);
         if (pos < 0) { return ""; }
         return Toml.unquote(line.substring(0, pos).trim());
     }
 
     class string yamlValue(string line) {
-        int pos = Strings.find(line, ":", 0);
+        var pos = Strings.find(line, ":", 0);
         if (pos < 0) { return ""; }
         return Toml.unquote(Toml.stripInlineComment(line.substring(pos + 1, line.len() - pos - 1)).trim());
     }
 
     class VmTestSpec parseToml(string text) {
-        VmTestSpec spec = VmTestSpec();
-        string section = "root";
-        VmOperation op = VmOperation();
-        Vector<string> lines = Strings.split(text, "\n");
+        var spec = VmTestSpec();
+        var section = "root";
+        var op = VmOperation();
+        var lines = Strings.split(text, "\n");
         for line in lines {
-            string cleaned = Toml.stripInlineComment(line);
+            var cleaned = Toml.stripInlineComment(line);
             if (cleaned.isEmpty()) { continue; }
-            string arrayName = Toml.tableArrayName(cleaned);
+            var arrayName = Toml.tableArrayName(cleaned);
             if (arrayName.equals("operations")) {
                 if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
                 op = VmOperation();
                 section = "operations";
                 continue;
             }
-            string sectionName = Toml.sectionName(cleaned);
+            var sectionName = Toml.sectionName(cleaned);
             if (!sectionName.isEmpty()) {
                 if (VmSpecParser.hasOperation(op)) {
                     spec.operations.push(op);
@@ -140,9 +140,9 @@ class VmSpecParser {
                 section = sectionName;
                 continue;
             }
-            string key = Toml.key(cleaned);
+            var key = Toml.key(cleaned);
             if (key.isEmpty()) { continue; }
-            string value = Toml.value(cleaned);
+            var value = Toml.value(cleaned);
             if (section.equals("args")) {
                 spec.args.put(key, value);
                 continue;
@@ -158,14 +158,14 @@ class VmSpecParser {
     }
 
     class VmTestSpec parseYaml(string text) {
-        VmTestSpec spec = VmTestSpec();
-        string section = "root";
-        VmOperation op = VmOperation();
-        Vector<string> lines = Strings.split(text, "\n");
+        var spec = VmTestSpec();
+        var section = "root";
+        var op = VmOperation();
+        var lines = Strings.split(text, "\n");
         for raw in lines {
-            string line = Toml.stripInlineComment(raw);
+            var line = Toml.stripInlineComment(raw);
             if (line.trim().isEmpty()) { continue; }
-            string trimmed = line.trim();
+            var trimmed = line.trim();
             if (trimmed.equals("args:")) {
                 if (VmSpecParser.hasOperation(op)) {
                     spec.operations.push(op);
@@ -182,15 +182,15 @@ class VmSpecParser {
                 if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
                 op = VmOperation();
                 section = "operations";
-                string rest = trimmed.substring(2, trimmed.len() - 2).trim();
+                var rest = trimmed.substring(2, trimmed.len() - 2).trim();
                 if (!rest.isEmpty()) {
                     VmSpecParser.applyOperationField(op, VmSpecParser.yamlKey(rest), VmSpecParser.yamlValue(rest));
                 }
                 continue;
             }
-            string key = VmSpecParser.yamlKey(trimmed);
+            var key = VmSpecParser.yamlKey(trimmed);
             if (key.isEmpty()) { continue; }
-            string value = VmSpecParser.yamlValue(trimmed);
+            var value = VmSpecParser.yamlValue(trimmed);
             if (section.equals("args")) {
                 spec.args.put(key, value);
                 continue;
@@ -206,7 +206,7 @@ class VmSpecParser {
     }
 
     class VmTestSpec readFile(string path) {
-        string text = Path.readAll(path);
+        var text = Path.readAll(path);
         if (path.endsWith(".toml")) { return VmSpecParser.parseToml(text); }
         if (path.endsWith(".yaml") || path.endsWith(".yml")) { return VmSpecParser.parseYaml(text); }
         return VmSpecParser.parse(text);

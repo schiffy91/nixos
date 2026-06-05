@@ -47,7 +47,7 @@ class Immutability {
     }
 
     class bool envDryRun() {
-        string value = Environment.get("IMMUTABILITY_DRY_RUN", "");
+        var value = Environment.get("IMMUTABILITY_DRY_RUN", "");
         return value.equals("1") || value.equals("true") || value.equals("yes") || value.equals("on");
     }
 
@@ -60,22 +60,22 @@ class Immutability {
     }
 
     public void resetVolume(ImmutabilityVolume volume) {
-        string live = self.run.path(volume.name);
-        string root = PathTools.join(self.snapshotsSubvolume, volume.name);
-        string clean = self.run.path(PathTools.join(root, self.cleanName));
-        string next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
+        var live = self.run.path(volume.name);
+        var root = PathTools.join(self.snapshotsSubvolume, volume.name);
+        var clean = self.run.path(PathTools.join(root, self.cleanName));
+        var next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
 
         if (!self.fs.exists(clean) || !self.fs.isSubvolume(clean) || !self.fs.isReadonly(clean)) {
-            self.run.fatal("bad CLEAN: " + clean);
+            self.run.fatal(f"bad CLEAN: {clean}");
         }
         if (!self.fs.exists(live)) {
             self.slots.publish(volume, live, next);
         }
-        if (!self.fs.exists(live)) { self.run.fatal("live missing: " + live); }
-        if (!self.fs.isSubvolume(live)) { self.run.fatal("live is not a subvolume: " + live); }
+        if (!self.fs.exists(live)) { self.run.fatal(f"live missing: {live}"); }
+        if (!self.fs.isSubvolume(live)) { self.run.fatal(f"live is not a subvolume: {live}"); }
         self.fs.deleteSubvolume(next);
 
-        Vector<ImmutabilityPlan> plans = self.planner.makePlan(self.specsForVolume(volume.name), live, clean, self.persistRoot);
+        var plans = self.planner.makePlan(self.specsForVolume(volume.name), live, clean, self.persistRoot);
         self.restorePersistentDirs(plans, live, clean);
         self.restorePersistentFiles(plans, live, clean);
 
@@ -88,16 +88,16 @@ class Immutability {
     public void restorePersistentDirs(Vector<ImmutabilityPlan> plans, string live, string clean) {
         for plan in plans {
             if (!plan.kind.equals("dir")) { continue; }
-            string store = self.run.path(plan.store);
+            var store = self.run.path(plan.store);
             if (!self.fs.exists(store)) {
                 self.fs.makeSubvolume(store);
-                string source = self.fs.sourcePath(live, clean, plan.spec.relPath);
+                var source = self.fs.sourcePath(live, clean, plan.spec.relPath);
                 if (!source.isEmpty()) {
                     self.fs.copyDirectoryContents(source, store);
                     self.fs.matchOwnerAndMode(source, store);
                 }
             } else if (!self.fs.isSubvolume(store)) {
-                self.run.fatal("not a subvolume: " + store);
+                self.run.fatal(f"not a subvolume: {store}");
             }
         }
     }
@@ -105,10 +105,10 @@ class Immutability {
     public void restorePersistentFiles(Vector<ImmutabilityPlan> plans, string live, string clean) {
         for plan in plans {
             if (!plan.kind.equals("file")) { continue; }
-            string destination = self.run.path(plan.store);
-            string source = self.fs.sourcePath(live, clean, plan.spec.relPath);
+            var destination = self.run.path(plan.store);
+            var source = self.fs.sourcePath(live, clean, plan.spec.relPath);
             if (!source.isEmpty()) {
-                string temporary = destination + ".tmp." + Strings.fromInt(Platform.pid());
+                var temporary = f"{destination}.tmp.{Platform.pid()}";
                 self.run.removePath(temporary);
                 self.fs.copyPath(source, temporary);
                 self.run.removePath(destination);
@@ -121,12 +121,12 @@ class Immutability {
 
     public void populateNext(Vector<ImmutabilityPlan> plans, string next) {
         for plan in plans {
-            string target = PathTools.join(next, plan.spec.relPath);
+            var target = PathTools.join(next, plan.spec.relPath);
             self.run.removePath(target);
             if (plan.kind.equals("dir")) {
                 self.run.mkdirp(target);
             } else {
-                string source = self.run.path(plan.store);
+                var source = self.run.path(plan.store);
                 if (self.fs.exists(source)) {
                     self.fs.copyPath(source, target);
                 }
@@ -148,7 +148,9 @@ class Immutability {
     public void runAll() {
         Vector<string> names = [];
         for volume in self.volumes { names.push(volume.name); }
-        self.run.log("Mode=" + self.mode + " dry_run=" + (self.run.dryRun ? "true" : "false") + " device=" + self.device + " subvolumes=" + names.join(" "));
+        var dryRun = self.run.dryRun ? "true" : "false";
+        var subvolumes = names.join(" ");
+        self.run.log(f"Mode={self.mode} dry_run={dryRun} device={self.device} subvolumes={subvolumes}");
         if (self.mode.equals(ImmutabilityConstants.disabled())) {
             self.run.log("Immutability disabled; skipping");
             return;
@@ -174,7 +176,7 @@ class Immutability {
             } else if (self.mode.equals(ImmutabilityConstants.restoreC())) {
                 self.slots.restoreSlot(volume, ImmutabilityConstants.c(), self.snapshotsSubvolume);
             } else {
-                self.run.fatal("Unknown mode: " + self.mode);
+                self.run.fatal(f"Unknown mode: {self.mode}");
             }
         }
         self.run.requireCommand(ImmutabilityBtrfs.sync(self.run.top));
@@ -193,23 +195,12 @@ class Immutability {
         self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted);
     }
 
-    public void configureSnapshotClean(string device, string snapshotsSubvolume, string cleanName, Vector<string> volumeArgs) {
-        self.device = device;
-        self.snapshotsSubvolume = ImmutabilityPaths.normSubvol(snapshotsSubvolume);
-        self.cleanName = cleanName.trim();
-        self.volumes = ImmutabilityConfig.readVolumes(volumeArgs, self.specs);
-    }
-
-    public void snapshotCleanAll() {
-        self.mounts.snapshotCleanAll(self.device, self.snapshotsSubvolume, self.cleanName, self.volumes, self.assumeMounted);
-    }
-
     class int cli(CliArgs args) {
-        bool dryRun = Immutability.envDryRun();
-        bool assumeMounted = false;
-        int index = 0;
+        var dryRun = Immutability.envDryRun();
+        var assumeMounted = false;
+        var index = 0;
         while (index < args.count()) {
-            string value = args.get(index);
+            var value = args.get(index);
             if (value.equals("--dry-run")) {
                 dryRun = true;
                 index++;
@@ -227,23 +218,9 @@ class Immutability {
                 Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
                 return 1;
             }
-            Immutability mounter = Immutability(dryRun, assumeMounted);
+            var mounter = Immutability(dryRun, assumeMounted);
             mounter.configureMount(args.get(index + 1), args.get(index + 2), args.get(index + 3));
             mounter.mountPersist();
-            return 0;
-        }
-        if (index < args.count() && args.get(index).equals("snapshot-clean")) {
-            if (args.count() < index + 4) {
-                Console.error("Usage: immutability [--dry-run] [--assume-mounted] snapshot-clean <device> <snapshots> <clean> [name=mount ...]");
-                return 1;
-            }
-            Vector<string> cleanVolumeArgs = [];
-            for (int i = index + 4; i < args.count(); i++) {
-                cleanVolumeArgs.push(args.get(i));
-            }
-            Immutability snapshotter = Immutability(dryRun, assumeMounted);
-            snapshotter.configureSnapshotClean(args.get(index + 1), args.get(index + 2), args.get(index + 3), cleanVolumeArgs);
-            snapshotter.snapshotCleanAll();
             return 0;
         }
         if (args.count() < index + 6) {
@@ -254,7 +231,7 @@ class Immutability {
         for (int i = index + 6; i < args.count(); i++) {
             volumeArgs.push(args.get(i));
         }
-        Immutability immutability = Immutability(dryRun, assumeMounted);
+        var immutability = Immutability(dryRun, assumeMounted);
         immutability.configure(
             args.get(index),
             args.get(index + 1),

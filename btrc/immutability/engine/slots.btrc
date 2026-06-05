@@ -20,10 +20,10 @@ class ImmutabilitySlots {
     }
 
     public void rotate(string volume, string live, string snapshotsSubvolume) {
-        string root = PathTools.join(snapshotsSubvolume, volume);
-        string a = self.run.path(PathTools.join(root, ImmutabilityConstants.a()));
-        string b = self.run.path(PathTools.join(root, ImmutabilityConstants.b()));
-        string c = self.run.path(PathTools.join(root, ImmutabilityConstants.c()));
+        var root = PathTools.join(snapshotsSubvolume, volume);
+        var a = self.run.path(PathTools.join(root, ImmutabilityConstants.a()));
+        var b = self.run.path(PathTools.join(root, ImmutabilityConstants.b()));
+        var c = self.run.path(PathTools.join(root, ImmutabilityConstants.c()));
         self.fs.deleteSubvolume(c);
         if (self.fs.exists(b)) {
             self.fs.snapshot(b, c, true);
@@ -39,24 +39,26 @@ class ImmutabilitySlots {
     public void publish(ImmutabilityVolume volume, string live, string next) {
         if (!self.fs.exists(next)) { return; }
         if (!self.run.dryRun && !volume.mountPoint.equals("/") && self.fs.mounted(volume.mountPoint)) {
-            self.run.log("WRN " + volume.mountPoint + " mounted; leaving NEXT for boot");
+            self.run.log(f"WRN {volume.mountPoint} mounted; leaving NEXT for boot");
             return;
         }
         if (!self.fs.exists(live)) {
             self.run.renamePath(next, live);
             return;
         }
-        self.run.requireRaw("mv -T --exchange --no-copy " + UnixShell.quote(live) + " " + UnixShell.quote(next));
+        var quotedLive = UnixShell.quote(live);
+        var quotedNext = UnixShell.quote(next);
+        self.run.requireRaw(f"mv -T --exchange --no-copy {quotedLive} {quotedNext}");
         self.fs.deleteSubvolume(next);
     }
 
     public void restoreSlot(ImmutabilityVolume volume, string slot, string snapshotsSubvolume) {
-        string root = PathTools.join(snapshotsSubvolume, volume.name);
-        string live = self.run.path(volume.name);
-        string next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
-        string source = self.run.path(PathTools.join(root, slot));
+        var root = PathTools.join(snapshotsSubvolume, volume.name);
+        var live = self.run.path(volume.name);
+        var next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
+        var source = self.run.path(PathTools.join(root, slot));
         if (!self.fs.exists(source) || !self.fs.isSubvolume(source)) {
-            self.run.fatal("restore source missing: " + source);
+            self.run.fatal(f"restore source missing: {source}");
         }
         self.fs.snapshot(source, next, false);
         self.publish(volume, live, next);

@@ -2,9 +2,9 @@ import std.*;
 
 class VmSpecArgs {
     class string hostArch() {
-        UnixShell shell = UnixShell();
-        ExecResult result = shell.run("uname -m");
-        string machine = result.trimmed();
+        var shell = UnixShell();
+        var result = shell.run("uname -m");
+        var machine = result.trimmed();
         if (machine.contains("arm64") || machine.contains("aarch64")) {
             return "aarch64";
         }

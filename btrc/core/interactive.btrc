@@ -9,16 +9,15 @@ class Interactive {
     }
 
     public string ask(string prompt) {
-        string command = "printf "
-            + UnixShell.quote(prompt + " ")
-            + " >&2; IFS= read -r value; printf '%s' \"$value\"";
-        ExecResult result = self.shell.runRaw(command, true, false, "");
+        var label = UnixShell.quote(f"{prompt} ");
+        var command = f"printf {label} >&2; IFS= read -r value; printf '%s' \"$value\"";
+        var result = self.shell.run(command, logFailure=false);
         return result.stdout();
     }
 
     public bool confirm(string prompt) {
         while (true) {
-            string response = self.ask(prompt + " (y/n):").toLower().trim();
+            var response = self.ask(f"{prompt} (y/n):").toLower().trim();
             if (response.equals("y") || response.equals("yes")) { return true; }
             if (response.equals("n") || response.equals("no")) { return false; }
             Console.error("Invalid input. Enter 'y' or 'n'.");
@@ -27,17 +26,16 @@ class Interactive {
     }
 
     public string askPassword(string prompt) {
-        string command = "printf "
-            + UnixShell.quote(prompt + ": ")
-            + " >&2; stty -echo; IFS= read -r value; stty echo; printf '\\n' >&2; printf '%s' \"$value\"";
-        ExecResult result = self.shell.runRaw(command, true, false, "");
+        var label = UnixShell.quote(f"{prompt}: ");
+        var command = f"printf {label} >&2; stty -echo; IFS= read -r value; stty echo; printf '\\n' >&2; printf '%s' \"$value\"";
+        var result = self.shell.run(command, logFailure=false);
         return result.stdout();
     }
 
     public string askPasswordConfirmed(string prompt) {
         while (true) {
-            string first = self.askPassword(prompt);
-            string second = self.askPassword("Confirm password");
+            var first = self.askPassword(prompt);
+            var second = self.askPassword("Confirm password");
             if (first.equals(second)) { return first; }
             NixosLog.error("Passwords do not match.");
         }
@@ -45,28 +43,28 @@ class Interactive {
     }
 
     public string askHostPath(string hostsPath) {
-        ExecResult found = self.shell.runUnchecked("find " + UnixShell.quote(hostsPath) + " -type f -name '*.nix' | sort");
+        var found = self.shell.run(f"find {UnixShell.quote(hostsPath)} -type f -name '*.nix' | sort");
         Vector<string> candidates = [];
         for line in Strings.split(found.stdout(), "\n") {
-            string path = line.trim();
+            var path = line.trim();
             if (path.isEmpty()) { continue; }
-            string hostName = Strings.replace(PathTools.basename(path), ".nix", "");
-            string hostDir = PathTools.basename(PathTools.dirname(path));
+            var hostName = Strings.replace(PathTools.basename(path), ".nix", "");
+            var hostDir = PathTools.basename(PathTools.dirname(path));
             if (hostName.equals(hostDir)) {
                 candidates.push(path);
             }
         }
         if (candidates.len == 0) {
-            NixosLog.fatal("No host files found under " + hostsPath);
+            NixosLog.fatal(f"No host files found under {hostsPath}");
         }
         while (true) {
             for (int i = 0; i < candidates.len; i++) {
-                string path = candidates.get(i);
-                string hostName = Strings.replace(PathTools.basename(path), ".nix", "");
-                string arch = PathTools.basename(PathTools.dirname(PathTools.dirname(path)));
-                Console.error(Strings.fromInt(i + 1) + ") " + hostName + " (" + arch + ")");
+                var path = candidates.get(i);
+                var hostName = Strings.replace(PathTools.basename(path), ".nix", "");
+                var arch = PathTools.basename(PathTools.dirname(PathTools.dirname(path)));
+                Console.error(f"{i + 1}) {hostName} ({arch})");
             }
-            int selected = Strings.toInt(self.ask(">").trim()) - 1;
+            var selected = Strings.toInt(self.ask(">").trim()) - 1;
             if (selected >= 0 && selected < candidates.len) {
                 return candidates.get(selected);
             }
@@ -77,11 +75,10 @@ class Interactive {
 
     public void askToReboot() {
         if (self.confirm("Restart now?")) {
-            Command reboot = Command("shutdown")
+            var reboot = Command("shutdown")
                 .arg("-r")
-                .arg("now")
-                .capture(false);
-            self.shell.runCommand(reboot);
+                .arg("now");
+            self.shell.run(reboot.render(), stdout=CommandOutput.stream());
         }
     }
 }

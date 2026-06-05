@@ -23,7 +23,7 @@
     { "op": "guest", "command": "set -e; test ! -e /opt/missing-persist-target && printf source-absent", "expect": "source-absent" },
     { "op": "guest", "command": "set -e; sed -i 's|\"/etc/nixos\"|\"/etc/nixos\" \"/opt/missing-persist-target\"|' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; grep -q 'opt/missing-persist-target' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix && printf spec-edited", "expect": "spec-edited" },
     { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && printf switched", "expect": "switched", "timeout": 1800 },
-    { "op": "guest", "command": "grep -q 'opt/missing-persist-target' /etc/immutability/spec.tsv && printf spec-has-path", "expect": "spec-has-path" },
+    { "op": "guest", "command": "grep -q 'opt/missing-persist-target' /etc/immutability/spec.toml && printf spec-has-path", "expect": "spec-has-path" },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!missing-persist-target' && printf has-subvol || printf no-subvol", "expect": "no-subvol" },
     { "op": "guest", "command": "btrfs subvolume list / | grep -E 'files/.*opt.*missing-persist-target' && printf has-file-store || printf no-file-store", "expect": "no-file-store" },

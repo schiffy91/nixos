@@ -44,6 +44,19 @@ in {
             mountOptions = [ "umask=0077" ];
           };
         };
+      } // lib.optionalAttrs config.settings.disk.recovery.enable {
+        ##### Recovery Partition #####
+        "${config.settings.disk.label.recovery}" = {
+          size = config.settings.disk.recovery.size;
+          type = "EA00";
+          content = {
+            type = "filesystem";
+            format = "vfat";
+            extraArgs = [ "-n" config.settings.disk.recovery.filesystemLabel ];
+            mountpoint = config.settings.disk.recovery.mountPoint;
+            mountOptions = [ "umask=0077" "nofail" "x-systemd.device-timeout=5s" ];
+          };
+        };
       } // mkRootVolume { ##### Root Partition #####
         type = "btrfs";
         extraArgs = [ "-f" ];

@@ -21,88 +21,61 @@ class AudioManager {
     }
 
     public string current() {
-        ExecResult result = self.shell.runUnchecked("pactl get-default-sink");
+        var result = self.shell.run("pactl get-default-sink", logFailure=false);
         return result.trimmed();
-    }
-
-    public string jsonStringValue(string line, string key) {
-        string marker = "\"" + key + "\"";
-        int pos = Strings.find(line, marker, 0);
-        if (pos < 0) { return ""; }
-        int colon = Strings.find(line, ":", pos);
-        if (colon < 0) { return ""; }
-        int quote = Strings.find(line, "\"", colon + 1);
-        if (quote < 0) { return ""; }
-        int end = quote + 1;
-        bool escaped = false;
-        while (end < line.len()) {
-            char c = line[end];
-            if (!escaped && c == (char)34) {
-                return JsonObject.slice(line, quote + 1, end);
-            }
-            escaped = !escaped && c == '\\';
-            if (c != '\\') { escaped = false; }
-            end++;
-        }
-        return "";
     }
 
     public Vector<AudioSink> sinks() {
         Vector<AudioSink> result = [];
-        ExecResult listed = self.shell.runUnchecked("pactl -f json list sinks");
-        AudioSink current = AudioSink();
-        for line in Strings.split(listed.stdout(), "\n") {
-            string name = self.jsonStringValue(line, "name");
-            if (!name.isEmpty()) {
-                if (!current.name.isEmpty()) { result.push(current); }
-                current = AudioSink();
-                current.name = name;
-                continue;
-            }
-            string description = self.jsonStringValue(line, "description");
-            if (!description.isEmpty()) {
-                current.description = description;
-            }
+        var listed = self.shell.run("pactl -f json list sinks", logFailure=false);
+        var sinksJson = "{\"sinks\":" + listed.stdout() + "}";
+        for sinkJson in JsonText.objectArray(sinksJson, "sinks") {
+            var name = JsonText.field(sinkJson, "name", "");
+            if (name.isEmpty()) { continue; }
+            var sink = AudioSink();
+            sink.name = name;
+            sink.description = JsonText.field(sinkJson, "description", "");
+            result.push(sink);
         }
-        if (!current.name.isEmpty()) { result.push(current); }
         return result;
     }
 
     public string entryJson(string name, string label, string description, bool isDefault) {
-        JsonObject obj = JsonObject();
-        obj.setString("name", name);
-        obj.setString("label", label);
+        var json = JsonObject();
+        json.setString("name", name);
+        json.setString("label", label);
         if (!description.isEmpty()) {
-            obj.setString("description", description);
+            json.setString("description", description);
         }
-        obj.setBool("default", isDefault);
-        string encoded = obj.stringify();
+        json.setBool("default", isDefault);
+        var encoded = json.stringify();
         return encoded;
     }
 
     public void list() {
-        string currentSink = self.current();
+        var currentSink = self.current();
         Vector<string> entries = [];
         Vector<string> covered = [];
-        Vector<AudioPreset> presets = self.labels.audioPresets();
+        var presets = self.labels.audioPresets();
         for preset in presets {
-            string name = preset.sink.isEmpty() ? preset.label : preset.sink;
-            string label = preset.label.isEmpty() ? name : preset.label;
+            var name = preset.sink.isEmpty() ? preset.label : preset.sink;
+            var label = preset.label.isEmpty() ? name : preset.label;
             entries.push(self.entryJson(name, label, "", !preset.sink.isEmpty() && preset.sink.equals(currentSink)));
             if (!preset.sink.isEmpty()) { covered.push(preset.sink); }
         }
-        Vector<AudioSink> allSinks = self.sinks();
+        var allSinks = self.sinks();
         for sink in allSinks {
             if (!covered.contains(sink.name)) {
-                string label = sink.description.isEmpty() ? sink.name : sink.description;
+                var label = sink.description.isEmpty() ? sink.name : sink.description;
                 entries.push(self.entryJson(sink.name, label, sink.description, sink.name.equals(currentSink)));
             }
         }
-        Console.log("[" + entries.join(",") + "]");
+        var json = entries.join(",");
+        Console.log(f"[{json}]");
     }
 
     public AudioPreset findPreset(string selector) {
-        Vector<AudioPreset> presets = self.labels.audioPresets();
+        var presets = self.labels.audioPresets();
         for preset in presets {
             if (selector.equals(preset.label) || selector.equals(preset.sink)) {
                 return preset;
@@ -113,44 +86,36 @@ class AudioManager {
 
     public void applyPreset(AudioPreset preset) {
         if (!preset.card.isEmpty() && !preset.profile.isEmpty()) {
-            Command profile = Command("pactl")
+            var profile = Command("pactl")
                 .arg("set-card-profile")
                 .arg(preset.card)
-                .arg(preset.profile)
-                .capture(false)
-                .check(false);
-            self.shell.runCommand(profile);
+                .arg(preset.profile);
+            self.shell.run(profile.render(), stdout=CommandOutput.stream(), logFailure=false);
         }
         if (!preset.sink.isEmpty()) {
-            Command sink = Command("pactl")
+            var sink = Command("pactl")
                 .arg("set-default-sink")
-                .arg(preset.sink)
-                .capture(false)
-                .check(false);
-            self.shell.runCommand(sink);
+                .arg(preset.sink);
+            self.shell.run(sink.render(), stdout=CommandOutput.stream(), logFailure=false);
         }
         if (!preset.sink.isEmpty() && !preset.volume.isEmpty()) {
-            Command volume = Command("pactl")
+            var volume = Command("pactl")
                 .arg("set-sink-volume")
                 .arg(preset.sink)
-                .arg(preset.volume)
-                .capture(false)
-                .check(false);
-            self.shell.runCommand(volume);
+                .arg(preset.volume);
+            self.shell.run(volume.render(), stdout=CommandOutput.stream(), logFailure=false);
         }
     }
 
     public void set(string selector) {
-        AudioPreset preset = self.findPreset(selector);
+        var preset = self.findPreset(selector);
         if (!preset.sink.isEmpty() || !preset.label.isEmpty()) {
             self.applyPreset(preset);
             return;
         }
-        Command cmd = Command("pactl")
+        var cmd = Command("pactl")
             .arg("set-default-sink")
-            .arg(selector)
-            .capture(false)
-            .check(false);
-        self.shell.runCommand(cmd);
+            .arg(selector);
+        self.shell.run(cmd.render(), stdout=CommandOutput.stream(), logFailure=false);
     }
 }
