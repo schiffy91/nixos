@@ -35,7 +35,7 @@ in {
       partitions = {
         ##### Boot Partition #####
         "${config.settings.disk.label.boot}" = {
-          size = "512M";
+          size = config.settings.disk.boot.size;
           type = "EF00";
           content = {
             type = "filesystem";

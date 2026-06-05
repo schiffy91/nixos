@@ -1,7 +1,16 @@
 { inputs, config, lib, pkgs, ... }:
 let
   efiArch = pkgs.stdenv.hostPlatform.efiArch;
+  serialConsole =
+    if pkgs.stdenv.hostPlatform.isAarch64
+    then "ttyAMA0,115200n8"
+    else "ttyS0,115200n8";
+  virtioInitrdModules =
+    if pkgs.stdenv.hostPlatform.isAarch64
+    then [ "virtio_pci" "virtio_blk" "virtio_net" "virtio_mmio" "virtio_rng" ]
+    else [ "virtio_pci" "virtio_blk" "virtio_net" "virtio_rng" ];
   fallbackBootPath = "EFI/BOOT/BOOT${lib.toUpper efiArch}.EFI";
+  legacyUkiPath = "EFI/recovery/nixos-recovery.efi";
   publicKey = "${config.settings.boot.pkiBundle}/keys/db/db.pem";
   privateKey = "${config.settings.boot.pkiBundle}/keys/db/db.key";
 
@@ -16,17 +25,16 @@ let
         system.stateVersion = config.system.stateVersion;
 
         boot = {
-          initrd.systemd.enable = true;
+          initrd = {
+            systemd.enable = true;
+            availableKernelModules = virtioInitrdModules;
+          };
           kernelParams = [
             "boot.shell_on_fail"
+            "console=${serialConsole}"
             "console=tty0"
           ];
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
-          uki = {
-            name = "nixos-recovery";
-            version = null;
-            settings.UKI.Initrd = lib.mkForce "${recoverySystem.config.system.build.netbootRamdisk}/initrd";
-          };
         };
 
         documentation.enable = lib.mkDefault false;
@@ -60,24 +68,29 @@ let
     ];
   };
 
-  recoveryUki = "${recoverySystem.config.system.build.uki}/${recoverySystem.config.system.boot.loader.ukiFile}";
+  recoveryKernel = "${recoverySystem.config.system.build.kernel}/${recoverySystem.config.system.boot.loader.kernelFile}";
+  recoveryInitrd = "${recoverySystem.config.system.build.netbootRamdisk}/initrd";
+  recoverySystemdBoot = "${pkgs.systemd}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi";
+  recoveryOptions = "init=${recoverySystem.config.system.build.toplevel}/init ${toString recoverySystem.config.boot.kernelParams}";
   recoveryEntry = pkgs.writeText "nixos-recovery.conf" ''
     title NixOS Recovery
-    efi /${config.settings.disk.recovery.efiPath}
     sort-key z_recovery
+    linux /${config.settings.disk.recovery.kernelPath}
+    initrd /${config.settings.disk.recovery.initrdPath}
+    options ${recoveryOptions}
   '';
-  recoveryLoaderConf = pkgs.writeText "nixos-recovery-loader.conf" ''
+  recoveryLoaderConf = pkgs.writeText "loader.conf" ''
     default nixos-recovery.conf
-    timeout 5
+    timeout 3
     editor no
   '';
   recoveryReadme = pkgs.writeText "nixos-recovery-README.txt" ''
     NixOS recovery partition
 
-    This partition contains a self-contained NixOS recovery UKI generated from
-    the repository's recovery module. The installed systemd-boot/lanzaboote menu
-    loads EFI/recovery/nixos-recovery.efi. The fallback EFI boot path on this
-    partition loads the same recovery entry directly from firmware.
+    This partition contains the same split NixOS recovery kernel and initrd
+    that the installed systemd-boot/lanzaboote menu loads from the ESP. The
+    recovery partition also has its own fallback systemd-boot copy at the
+    firmware fallback path for direct firmware boot.
   '';
 in
 lib.mkIf config.settings.disk.recovery.enable {
@@ -86,7 +99,9 @@ lib.mkIf config.settings.disk.recovery.enable {
     wantedBy = [ "multi-user.target" ];
     after = [ "local-fs.target" "generate-sb-keys.service" ];
     restartTriggers = [
-      recoveryUki
+      recoveryKernel
+      recoveryInitrd
+      recoverySystemdBoot
       recoveryEntry
       recoveryLoaderConf
       recoveryReadme
@@ -96,7 +111,10 @@ lib.mkIf config.settings.disk.recovery.enable {
         config.settings.disk.boot.efiSysMountPoint
         config.settings.disk.recovery.mountPoint
       ];
-      ConditionPathIsMountPoint = config.settings.disk.recovery.mountPoint;
+      ConditionPathIsMountPoint = [
+        config.settings.disk.boot.efiSysMountPoint
+        config.settings.disk.recovery.mountPoint
+      ];
     };
     serviceConfig = {
       Type = "oneshot";
@@ -107,8 +125,8 @@ lib.mkIf config.settings.disk.recovery.enable {
       set -euo pipefail
       umask 077
 
-      boot=${lib.escapeShellArg config.settings.disk.boot.efiSysMountPoint}
       recovery=${lib.escapeShellArg config.settings.disk.recovery.mountPoint}
+      boot=${lib.escapeShellArg config.settings.disk.boot.efiSysMountPoint}
       public_key=${lib.escapeShellArg publicKey}
       private_key=${lib.escapeShellArg privateKey}
 
@@ -126,10 +144,20 @@ lib.mkIf config.settings.disk.recovery.enable {
         rm -f "$tmp"
       }
 
-      install_signed ${lib.escapeShellArg recoveryUki} "$boot/${config.settings.disk.recovery.efiPath}"
-      install_signed ${lib.escapeShellArg recoveryUki} "$recovery/${config.settings.disk.recovery.efiPath}"
-      install_signed ${lib.escapeShellArg "${config.systemd.package}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi"} "$recovery/${fallbackBootPath}"
+      install_plain() {
+        source="$1"
+        target="$2"
+        mkdir -p "$(dirname "$target")"
+        install -m 0644 "$source" "$target"
+      }
 
+      install_signed ${lib.escapeShellArg recoveryKernel} "$boot/${config.settings.disk.recovery.kernelPath}"
+      install_plain ${lib.escapeShellArg recoveryInitrd} "$boot/${config.settings.disk.recovery.initrdPath}"
+      install_signed ${lib.escapeShellArg recoveryKernel} "$recovery/${config.settings.disk.recovery.kernelPath}"
+      install_plain ${lib.escapeShellArg recoveryInitrd} "$recovery/${config.settings.disk.recovery.initrdPath}"
+      install_signed ${lib.escapeShellArg recoverySystemdBoot} "$recovery/${fallbackBootPath}"
+
+      rm -f "$boot/${legacyUkiPath}" "$recovery/${legacyUkiPath}"
       install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$boot/${config.settings.disk.recovery.entryPath}"
       install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
       install -Dm0644 ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"

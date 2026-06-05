@@ -17,7 +17,7 @@
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "arch": "x86_64",
   "diskSize": "30G",
-  "memory": "8G",
+  "memory": "16G",
   "cpus": 4,
   "sshPort": 2243,
   "operations": [
@@ -37,7 +37,7 @@
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 300 },
     { "op": "guest", "command": "set -e; bootctl status; cat /boot/loader/loader.conf", "expect": "secure-boot-enroll force" },
-    { "op": "guest", "command": "set -e; for unit in generate-sb-keys.service prepare-sb-auto-enroll.service nixos-recovery-boot-entry.service; do for i in $(seq 1 300); do result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; done; verify=$(sbctl verify); printf '%s\n' \"$verify\"; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/recovery/nixos-recovery.efi is signed'; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/recovery/nixos-recovery.efi is not signed'; bootctl list | grep -F nixos-recovery.conf; printf recovery-secure-entry-ok", "expect": "recovery-secure-entry-ok" },
+    { "op": "guest", "command": "set -e; for unit in generate-sb-keys.service prepare-sb-auto-enroll.service nixos-recovery-boot-entry.service; do for i in $(seq 1 300); do state=$(systemctl show -p ActiveState --value \"$unit\" 2>/dev/null || true); result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$state\" = failed ] || [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; if [ \"$result\" = success ] && [ \"$state\" != activating ]; then break; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; test \"$(systemctl show -p ActiveState --value \"$unit\")\" != activating; done; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI ;; aarch64) fallback=BOOTAA64.EFI ;; *) fallback=BOOTUNKNOWN.EFI ;; esac; test -f /boot/loader/entries/nixos-recovery.conf; test -f /recovery/loader/entries/nixos-recovery.conf; test -f /recovery/loader/loader.conf; sbverify --list /boot/EFI/recovery/kernel.efi | grep -q 'signature certificates'; sbverify --list /recovery/EFI/recovery/kernel.efi | grep -q 'signature certificates'; sbverify --list \"/recovery/EFI/BOOT/$fallback\" | grep -q 'signature certificates'; ! test -e /boot/EFI/recovery/nixos-recovery.efi; ! test -e /recovery/EFI/recovery/nixos-recovery.efi; bootctl list | grep -F nixos-recovery.conf; bootctl list | grep -F 'linux:'; bootctl list | grep -F 'initrd:'; printf recovery-secure-entry-ok", "expect": "recovery-secure-entry-ok" },
     { "op": "reboot-recovery" },
     { "op": "guest", "command": "set -e; test \"$(hostname)\" = nixos-recovery; test -x /run/current-system/sw/bin/btrfs; test -x /run/current-system/sw/bin/cryptsetup; printf recovery-secure-boot-ok", "expect": "recovery-secure-boot-ok" },
     { "op": "stop" }

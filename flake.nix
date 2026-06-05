@@ -55,7 +55,7 @@
           };
         in {
           name = "${name}-${target}";
-          value = nixos.config.disko.devices;
+          value.disko.devices = nixos.config.disko.devices;
         };
     in {
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);

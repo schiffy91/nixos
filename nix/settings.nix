@@ -64,6 +64,7 @@ in {
     ];
     ##### Disk ##### 
     settings.disk.device = mkSetting str "";
+    settings.disk.boot.size = mkSetting str "4G";
     ##### Disk: Labels #####
     settings.disk.boot.efiSysMountPoint = mkSetting str "/boot";
     settings.disk.label.disk = mkSetting str "disk";
@@ -83,7 +84,8 @@ in {
     settings.disk.recovery.size = mkSetting str "4G";
     settings.disk.recovery.mountPoint = mkSetting str "/recovery";
     settings.disk.recovery.filesystemLabel = mkSetting str "RECOVERY";
-    settings.disk.recovery.efiPath = mkSetting str "EFI/recovery/nixos-recovery.efi";
+    settings.disk.recovery.kernelPath = mkSetting str "EFI/recovery/kernel.efi";
+    settings.disk.recovery.initrdPath = mkSetting str "EFI/recovery/initrd";
     settings.disk.recovery.entryPath = mkSetting str "loader/entries/nixos-recovery.conf";
     ##### Disk: Subvolumes #####
     settings.disk.subvolumes.volumes = mkSetting (listOf (submodule{ 

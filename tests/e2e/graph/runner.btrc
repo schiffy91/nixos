@@ -139,9 +139,34 @@ class VmGraphRunner {
         return saved.equals(spec.stateHash);
     }
 
+    public bool hasNode(string id) {
+        for node in self.graph.nodes {
+            if (node.id.equals(id)) { return true; }
+        }
+        return false;
+    }
+
+    public string resolveHostTarget(string target) {
+        if (self.hasNode(target)) { return target; }
+        var hostTarget = f"{target}-{VmSpecArgs.hostArch()}";
+        if (self.hasNode(hostTarget)) {
+            NixosLog.info(f"graph {self.graph.name}: host target {target} -> {hostTarget}");
+            return hostTarget;
+        }
+        return target;
+    }
+
+    public Vector<string> resolveHostTargets(Vector<string> targets) {
+        Vector<string> result = [];
+        for target in targets {
+            result.push(self.resolveHostTarget(target));
+        }
+        return result;
+    }
+
     public int run(Vector<string> targets) {
         var traversal = GraphTraversal(self.graph);
-        var order = traversal.order(targets);
+        var order = traversal.order(self.resolveHostTargets(targets));
         if (!traversal.ok()) {
             NixosLog.fatal(traversal.error);
         }

@@ -136,23 +136,27 @@ parameters, EFI mount point, and generation limits.
 `settings.disk.recovery.enable = true` adds a `RECOVERY` vfat partition to the
 destructive disko layout and enables the `nixos-recovery-boot-entry` service on
 installed systems. The recovery image is not a downloaded ISO; it is a
-self-contained NixOS UKI built from `nix/system/recovery.nix`.
+self-contained NixOS netboot initrd and signed EFI-stub kernel built from
+`nix/system/recovery.nix`.
 
 On switch, the service requires `/boot` and `/recovery` to be mounted, then
 installs:
 
 | Path | Purpose |
 |---|---|
-| `/boot/EFI/recovery/nixos-recovery.efi` | UKI loaded by the installed boot menu |
+| `/boot/EFI/recovery/kernel.efi` | signed recovery kernel loaded by the installed boot menu |
+| `/boot/EFI/recovery/initrd` | self-contained recovery netboot initrd |
 | `/boot/loader/entries/nixos-recovery.conf` | systemd-boot/Lanzaboote menu entry |
-| `/recovery/EFI/recovery/nixos-recovery.efi` | copy stored on the recovery partition |
-| `/recovery/EFI/BOOT/BOOT*.EFI` | firmware fallback boot path for the recovery partition |
-| `/recovery/loader/loader.conf` | standalone loader config for recovery media boot |
+| `/recovery/EFI/recovery/kernel.efi` | signed recovery kernel copy on the recovery partition |
+| `/recovery/EFI/recovery/initrd` | recovery netboot initrd copy on the recovery partition |
+| `/recovery/EFI/BOOT/BOOT*.EFI` | recovery partition systemd-boot fallback |
+| `/recovery/loader/entries/nixos-recovery.conf` | direct-firmware fallback menu entry |
 
 Standard-Boot and Secure-Boot use the same loader entry; the secure path signs
-the UKI with the configured db keys when they exist. Updating the recovery image
-is a rebuild. Changing the recovery partition size on an already-installed disk
-is a real partition resize operation, not something this config does online.
+the kernel and fallback bootloader with the configured db keys when they exist.
+Updating the recovery image is a rebuild. Changing the recovery partition size
+on an already-installed disk is a real partition resize operation, not something
+this config does online.
 
 For an existing machine such as FRACTAL-NORTH, create the partition from a live
 environment after backup and disk inspection. If there is already free space,
@@ -166,7 +170,7 @@ mkfs.vfat -n RECOVERY /dev/disk/by-partlabel/FRACTAL-NORTH-main-recovery
 If the root partition currently consumes the disk, first shrink the filesystem
 and partition offline with a machine-specific plan, then add the recovery
 partition. After `/recovery` exists and mounts, `nixos-rebuild switch` populates
-the UKI and boot entry.
+the recovery kernel, initrd, fallback bootloader, and boot entry.
 
 ### Disk
 
@@ -175,7 +179,7 @@ the UKI and boot entry.
 | Layer | Default |
 |---|---|
 | Partition table | GPT |
-| EFI partition | `512M`, vfat, mounted at `settings.disk.boot.efiSysMountPoint` |
+| EFI partition | `settings.disk.boot.size` (`4G`), vfat, mounted at `settings.disk.boot.efiSysMountPoint` |
 | Root partition | btrfs, optionally wrapped in LUKS |
 | Subvolumes | `@root`, `@home`, `@nix`, `@var`, `@snapshots`, `@swap` |
 
