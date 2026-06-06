@@ -105,7 +105,7 @@ class NixosCtl {
         for value in args.values {
             command = f"{command} {UnixShell.quote(value)}";
         }
-        var result = UnixShell().run(Command(command), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         return result.code;
     }
 
@@ -127,7 +127,8 @@ class NixosCtl {
             runCmd = f"{runCmd} {UnixShell.quote(value)}";
         }
         NixosLog.info(f"nixosctl {args.command()}: entering tests/shell.nix (qemu/swtpm/socat). First entry can take a minute.");
-        var result = UnixShell().run(Command(f"nix-shell {UnixShell.quote(shellPath)} --run {UnixShell.quote(runCmd)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"nix-shell {UnixShell.quote(shellPath)} --run {UnixShell.quote(runCmd)}";
+        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         return result.code;
     }
 
@@ -319,8 +320,7 @@ class NixosCtl {
 }
 
 int main(int argc, char** argv) {
-    CliArgs args = CliArgs(argc, argv);
-    NixosCtl app = NixosCtl();
-    int code = app.run(args);
-    return code;
+    var args = CliArgs(argc, argv);
+    var app = NixosCtl();
+    return app.run(args);
 }
