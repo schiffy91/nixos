@@ -2,6 +2,7 @@ import std.console;
 import std.json;
 import std.process;
 import std.vector;
+import ../core/log.btrc;
 import ./hardware_config.btrc;
 
 class AudioSink {
@@ -87,15 +88,22 @@ class AudioManager {
         return AudioPreset();
     }
 
+    public void runPactl(string action, string arguments) {
+        var result = self.shell.run(Command(f"pactl {action} {arguments}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (!result.ok()) {
+            NixosLog.fatal(f"pactl {action} failed");
+        }
+    }
+
     public void applyPreset(AudioPreset preset) {
         if (!preset.card.isEmpty() && !preset.profile.isEmpty()) {
-            self.shell.run(Command(f"pactl set-card-profile {UnixShell.quote(preset.card)} {UnixShell.quote(preset.profile)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            self.runPactl("set-card-profile", f"{UnixShell.quote(preset.card)} {UnixShell.quote(preset.profile)}");
         }
         if (!preset.sink.isEmpty()) {
-            self.shell.run(Command(f"pactl set-default-sink {UnixShell.quote(preset.sink)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            self.runPactl("set-default-sink", UnixShell.quote(preset.sink));
         }
         if (!preset.sink.isEmpty() && !preset.volume.isEmpty()) {
-            self.shell.run(Command(f"pactl set-sink-volume {UnixShell.quote(preset.sink)} {UnixShell.quote(preset.volume)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            self.runPactl("set-sink-volume", f"{UnixShell.quote(preset.sink)} {UnixShell.quote(preset.volume)}");
         }
     }
 
@@ -105,6 +113,6 @@ class AudioManager {
             self.applyPreset(preset);
             return;
         }
-        self.shell.run(Command(f"pactl set-default-sink {UnixShell.quote(selector)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.runPactl("set-default-sink", UnixShell.quote(selector));
     }
 }

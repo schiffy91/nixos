@@ -13,6 +13,7 @@ GRAPH_FULL_TARGETS := \
 	recovery-boot-x86_64 \
 	recovery-boot-aarch64 \
 	recovery-secure-boot \
+	recovery-secure-boot-aarch64 \
 	secure-boot-lanzaboote \
 	secure-boot-aarch64
 

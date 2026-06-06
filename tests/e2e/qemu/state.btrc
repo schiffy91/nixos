@@ -171,13 +171,25 @@ class VmStateStore {
         return result.trimmed() + exitDetail;
     }
 
+    public Vector<string> words(string line) {
+        Vector<string> result = [];
+        for part in Strings.split(line.trim(), " ") {
+            var word = part.trim();
+            if (!word.isEmpty()) { result.push(word); }
+        }
+        return result;
+    }
+
     public bool hasSnapshot(string name) {
         if (!FileSystem.exists(self.diskPath())) { return false; }
-        var result = self.shell.run("qemu-img snapshot -l " + UnixShell.quote(self.diskPath()) + " | awk '{print $2}'", logFailure=false);
-        if (!result.ok()) { return false; }
+        var result = self.shell.run(Command(f"qemu-img snapshot -l {UnixShell.quote(self.diskPath())}"), logFailure=false);
+        if (!result.ok()) {
+            NixosLog.fatal(f"Failed to list snapshots for {self.diskPath()}");
+        }
         var lines = Strings.split(result.stdout(), "\n");
         for line in lines {
-            if (line.trim().equals(name)) { return true; }
+            var fields = self.words(line);
+            if (fields.len >= 2 && fields.get(1).equals(name)) { return true; }
         }
         return false;
     }

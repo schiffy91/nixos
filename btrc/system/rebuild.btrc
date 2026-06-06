@@ -50,6 +50,12 @@ class NixosRebuilder {
         return self.shell.run(Command(f"nixos-rebuild switch --flake {UnixShell.quote(self.config.flakeRef())}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=env);
     }
 
+    public void requireOk(string action, ExecResult result) {
+        if (!result.ok()) {
+            NixosLog.fatal(f"{action} failed");
+        }
+    }
+
     public void bootstrapConfigIfMissing(RebuildOptions options) {
         if (self.config.exists()) { return; }
         NixosLog.error(f"'{self.config.paths.configPath()}' is missing.");
@@ -83,13 +89,13 @@ class NixosRebuilder {
         self.bootstrapConfigIfMissing(options);
         var username = self.config.username();
         if (options.clean || options.upgrade) {
-            self.runNixCollectGarbage();
+            self.requireOk("nix-collect-garbage", self.runNixCollectGarbage());
             FileSystem.removeRecursive("/root/.cache");
-            self.verifyStore();
+            self.requireOk("nix-store verify", self.verifyStore());
         }
         if (options.upgrade) {
             FileSystem.removeRecursive("/root/.cache");
-            self.updateFlake();
+            self.requireOk("nix flake update", self.updateFlake());
         }
         SecretsManager(self.config).createIfMissing("");
         PermissionsManager(self.config).secureTree(username);
@@ -101,7 +107,7 @@ class NixosRebuilder {
         var logs = self.homeManagerLogs();
         if (!logs.isEmpty()) { Console.log(logs); }
         if (options.reboot) {
-            self.shell.run(Command("shutdown -r now"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            self.shell.run(Command("shutdown -r now"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
         } else {
             self.interactive.askToReboot();
         }

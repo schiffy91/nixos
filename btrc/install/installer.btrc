@@ -94,7 +94,7 @@ class Installer {
     }
 
     public void collectGarbage() {
-        self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public string debugExtensionsDir() {

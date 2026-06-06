@@ -4,6 +4,7 @@ import std.json;
 import std.process;
 import std.strings;
 import std.vector;
+import ../core/log.btrc;
 import ./hardware_config.btrc;
 
 class DisplayOutput {
@@ -138,8 +139,11 @@ class DisplayManager {
         return DisplayOutput();
     }
 
-    public void run(string arg) {
-        self.shell.run(Command(f"kscreen-doctor {UnixShell.quote(arg)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+    public void run(string argument) {
+        var result = self.shell.run(Command(f"kscreen-doctor {UnixShell.quote(argument)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (!result.ok()) {
+            NixosLog.fatal(f"kscreen-doctor {argument} failed");
+        }
     }
 
     public void enable(string name) {
@@ -156,7 +160,10 @@ class DisplayManager {
     }
 
     public void dpms(string state) {
-        self.shell.run(Command(f"kscreen-doctor --dpms {UnixShell.quote(state)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(Command(f"kscreen-doctor --dpms {UnixShell.quote(state)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (!result.ok()) {
+            NixosLog.fatal(f"kscreen-doctor --dpms {state} failed");
+        }
     }
 
     public void layout() {
