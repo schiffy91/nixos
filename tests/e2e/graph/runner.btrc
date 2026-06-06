@@ -21,6 +21,22 @@ class VmGraphRunner {
         self.sourceHashValue = "";
     }
 
+    private string sha256InputCommand() {
+        return "if command -v sha256sum >/dev/null 2>&1; then "
+            + "sha256sum; else shasum -a 256; fi";
+    }
+
+    private string sha256ArgumentsCommand() {
+        return "if command -v sha256sum >/dev/null 2>&1; then "
+            + "sha256sum \"$@\"; else shasum -a 256 \"$@\"; fi";
+    }
+
+    private string sha256FileCommand(string path) {
+        var quoted = UnixShell.quote(path);
+        return "if command -v sha256sum >/dev/null 2>&1; then "
+            + f"sha256sum {quoted}; else shasum -a 256 {quoted}; fi | awk '{{print $1}}'";
+    }
+
     public string sourceHash() {
         if (!self.sourceHashValue.isEmpty()) { return self.sourceHashValue; }
         var root = self.graph.resolvedWorkspaceRoot();
@@ -38,7 +54,8 @@ class VmGraphRunner {
             + " ! -name '.DS_Store'"
             + " ! -name '._*'"
             + " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.yaml' -o -name '*.yml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)"
-            + " -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'";
+            + " -print0 | LC_ALL=C sort -z | xargs -0 sh -c '" + self.sha256ArgumentsCommand() + "' sh | "
+            + "sh -c '" + self.sha256InputCommand() + "' | awk '{print $1}'";
         var command = f"bash -o pipefail -c {UnixShell.quote(hashPipeline)}";
         var result = UnixShell().run(command);
         if (!result.ok() || result.trimmed().isEmpty()) {
@@ -47,7 +64,7 @@ class VmGraphRunner {
         var toolPath = PathTools.join(root, "build/nixosctl");
         var toolHash = "missing";
         if (FileSystem.exists(toolPath)) {
-            var toolPipeline = "sha256sum " + UnixShell.quote(toolPath) + " | awk '{print $1}'";
+            var toolPipeline = self.sha256FileCommand(toolPath);
             var tool = UnixShell().run(f"bash -o pipefail -c {UnixShell.quote(toolPipeline)}");
             if (!tool.ok() || tool.trimmed().isEmpty()) {
                 NixosLog.fatal("Failed to compute nixosctl hash for " + toolPath);
