@@ -61,17 +61,17 @@ class SnapshotManager {
 
     public bool isSubvolume(string path) {
         if (!FileSystem.exists(path)) { return false; }
-        return self.shell.run(Command(f"btrfs subvolume show {UnixShell.quote(path)}"), logFailure=false).ok();
+        return self.shell.run(f"btrfs subvolume show {UnixShell.quote(path)}", logFailure=false).ok();
     }
 
     public bool isReadonly(string path) {
-        var result = self.shell.run(Command(f"btrfs property get -ts {UnixShell.quote(path)} ro"), logFailure=false);
+        var result = self.shell.run(f"btrfs property get -ts {UnixShell.quote(path)} ro", logFailure=false);
         return result.ok() && result.stdout().contains("ro=true");
     }
 
     public Vector<string> childSubvolumes(string path) {
         Vector<string> result = [];
-        var listed = self.shell.run(Command(f"btrfs subvolume list -o {UnixShell.quote(path)}"), logFailure=false);
+        var listed = self.shell.run(f"btrfs subvolume list -o {UnixShell.quote(path)}", logFailure=false);
         if (!listed.ok()) {
             NixosLog.fatal(f"Failed to list child subvolumes under {path}");
         }
@@ -101,7 +101,7 @@ class SnapshotManager {
         for child in self.childSubvolumes(path) {
             self.deleteSubvolume(child);
         }
-        var deleted = self.shell.run(Command(f"btrfs subvolume delete -C {UnixShell.quote(path)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var deleted = self.shell.run(f"btrfs subvolume delete -C {UnixShell.quote(path)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!deleted.ok()) {
             NixosLog.fatal(f"Failed to delete subvolume: {path}");
         }
@@ -110,7 +110,7 @@ class SnapshotManager {
     public void createReadonlySnapshot(string source, string destination) {
         self.deleteSubvolume(destination);
         FileSystem.mkdirp(PathTools.dirname(destination));
-        var result = self.shell.run(Command(f"btrfs subvolume snapshot -r {UnixShell.quote(source)} {UnixShell.quote(destination)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = self.shell.run(f"btrfs subvolume snapshot -r {UnixShell.quote(source)} {UnixShell.quote(destination)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) {
             NixosLog.fatal(f"Failed to create readonly snapshot {destination}");
         }

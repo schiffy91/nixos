@@ -19,15 +19,13 @@ class Tpm2Manager {
     }
 
     public bool diskEncrypted() {
-        var result = self.shell.run(Command(f"cryptsetup isLuks {UnixShell.quote(self.config.rootPartLabelPath())}"), logFailure=false);
+        var result = self.shell.run(f"cryptsetup isLuks {UnixShell.quote(self.config.rootPartLabelPath())}", logFailure=false);
         return result.ok();
     }
 
     public bool enroll() {
-        var command = Command(
-            f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())}"
-                + f" --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.config.tpmDevice())}"
-                + " --tpm2-pcrs=7+12");
+        var command = f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())}";
+        command = f"{command} --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.config.tpmDevice())} --tpm2-pcrs=7+12";
         return self.shell.run(
             command,
             stdout=CommandOutput.stream(),
@@ -36,8 +34,7 @@ class Tpm2Manager {
     }
 
     public bool wipe() {
-        var command = Command(
-            f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2");
+        var command = f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2";
         return self.shell.run(
             command,
             stdout=CommandOutput.stream(),
@@ -48,12 +45,12 @@ class Tpm2Manager {
     public void status() {
         Console.log(f"TPM2 device: {self.config.tpmDevice()}");
         self.shell.run(
-            Command(f"systemd-cryptenroll --tpm2-device=list {UnixShell.quote(self.config.rootPartLabelPath())}"),
+            f"systemd-cryptenroll --tpm2-device=list {UnixShell.quote(self.config.rootPartLabelPath())}",
             stdout=CommandOutput.stream(),
             stderr=CommandOutput.stream(),
             logFailure=false);
         self.shell.run(
-            Command(f"cryptsetup luksDump {UnixShell.quote(self.config.rootPartLabelPath())}"),
+            f"cryptsetup luksDump {UnixShell.quote(self.config.rootPartLabelPath())}",
             stdout=CommandOutput.stream(),
             stderr=CommandOutput.stream(),
             logFailure=false);

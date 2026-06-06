@@ -52,12 +52,12 @@ class Installer {
         FileSystem.removeRecursive(PathTools.join(self.mountPoint, self.config.paths.root));
         var source = UnixShell.quote(self.config.paths.root);
         var destination = UnixShell.quote(PathTools.join(self.mountPoint, self.config.paths.root));
-        self.shell.run(Command(f"cp -r {source} {destination}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run(f"cp -r {source} {destination}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
 
         var flake = UnixShell.quote(f"{PathTools.join(self.mountPoint, self.config.paths.root)}#{self.config.host()}-{self.config.target()}");
         var root = UnixShell.quote(self.mountPoint);
         var temporaryDirectory = PathTools.join(self.mountPoint, "/nix/tmp");
-        var result = self.shell.run(Command(f"nixos-install --flake {flake} --root {root} --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"),
+        var result = self.shell.run(f"nixos-install --flake {flake} --root {root} --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0",
             stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=[f"TMPDIR={temporaryDirectory}"]);
         FileSystem.removeRecursive(PathTools.join(self.mountPoint, "/nix/tmp"));
         if (result.ok()) {
@@ -91,7 +91,7 @@ class Installer {
     }
 
     public void collectGarbage() {
-        self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run("nix-collect-garbage -d", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public string debugExtensionsDir() {

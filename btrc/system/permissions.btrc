@@ -59,7 +59,7 @@ class PermissionsManager {
         var exists = self.shell.run(f"git config --global --get-all safe.directory | grep -Fx -- {quoted} >/dev/null", logFailure=false);
         if (exists.ok()) { return; }
         self.shell.run(
-            Command(f"git config --global --add safe.directory {quoted}"),
+            f"git config --global --add safe.directory {quoted}",
             stdout=CommandOutput.stream(),
             stderr=CommandOutput.stream(),
             logFailure=false);
@@ -70,7 +70,7 @@ class PermissionsManager {
         var quotedRoot = UnixShell.quote(root);
         if (Platform.isRoot()) {
             self.shell.run(
-                Command(f"chown -R {UnixShell.quote(username)} {quotedRoot}"),
+                f"chown -R {UnixShell.quote(username)} {quotedRoot}",
                 stdout=CommandOutput.stream(),
                 stderr=CommandOutput.stream(),
                 throwOnFailure=true);

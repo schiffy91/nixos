@@ -140,7 +140,7 @@ class DisplayManager {
     }
 
     public void run(string argument) {
-        var result = self.shell.run(Command(f"kscreen-doctor {UnixShell.quote(argument)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(f"kscreen-doctor {UnixShell.quote(argument)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"kscreen-doctor {argument} failed");
         }
@@ -160,7 +160,7 @@ class DisplayManager {
     }
 
     public void dpms(string state) {
-        var result = self.shell.run(Command(f"kscreen-doctor --dpms {UnixShell.quote(state)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(f"kscreen-doctor --dpms {UnixShell.quote(state)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"kscreen-doctor --dpms {state} failed");
         }

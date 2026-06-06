@@ -99,7 +99,7 @@ class DiffScanner {
             self.snapshots.createReadonlySnapshot(volume.mountPoint, temporarySnapshot);
 
             var quotedClean = UnixShell.quote(clean);
-            var tx = self.shell.run(Command(f"btrfs subvolume find-new {quotedClean} 9999999"), logFailure=false);
+            var tx = self.shell.run(f"btrfs subvolume find-new {quotedClean} 9999999", logFailure=false);
             if (!tx.ok()) {
                 self.snapshots.deleteSubvolume(temporarySnapshot);
                 NixosLog.fatal(f"Failed to read CLEAN transaction marker: {clean}");
@@ -111,7 +111,7 @@ class DiffScanner {
             }
             var quotedTemporary = UnixShell.quote(temporarySnapshot);
             var quotedTransaction = UnixShell.quote(transaction);
-            var changes = self.shell.run(Command(f"btrfs subvolume find-new {quotedTemporary} {quotedTransaction}"), logFailure=false);
+            var changes = self.shell.run(f"btrfs subvolume find-new {quotedTemporary} {quotedTransaction}", logFailure=false);
             if (!changes.ok()) {
                 self.snapshots.deleteSubvolume(temporarySnapshot);
                 NixosLog.fatal(f"Failed to compare CLEAN snapshot: {clean}");

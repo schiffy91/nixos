@@ -89,7 +89,7 @@ class AudioManager {
     }
 
     public void runPactl(string action, string arguments) {
-        var result = self.shell.run(Command(f"pactl {action} {arguments}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(f"pactl {action} {arguments}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"pactl {action} failed");
         }

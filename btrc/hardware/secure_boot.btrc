@@ -37,7 +37,7 @@ class SecureBootManager {
 
     public void createKeys() {
         if (self.dbKeysExist()) { return; }
-        self.shell.run(Command("sbctl create-keys"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run("sbctl create-keys", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
         if (!self.dbKeysExist()) {
             NixosLog.fatal("sbctl did not create db keys");
         }
@@ -50,7 +50,7 @@ class SecureBootManager {
         } else {
             command = f"{command} --yes-this-might-brick-my-machine";
         }
-        self.shell.run(Command(command), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public Vector<string> unsignedFromJson(string json) {
@@ -68,7 +68,7 @@ class SecureBootManager {
     }
 
     public bool verify() {
-        var result = self.shell.run(Command("sbctl verify --json"), logFailure=false);
+        var result = self.shell.run("sbctl verify --json", logFailure=false);
         var output = result.trimmed();
         if (output.isEmpty() || output.equals("null")) {
             NixosLog.error("No EFI binaries registered");
@@ -115,7 +115,7 @@ class SecureBootManager {
     }
 
     public void status() {
-        self.shell.run(Command("sbctl status"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run("sbctl status", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         self.verify();
     }
 }
