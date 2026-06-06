@@ -157,7 +157,16 @@ class QemuE2eHarness {
             var quotedPid = UnixShell.quote(pid);
             var quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
             var quotedProcessName = UnixShell.quote(self.spec.vmProcessName());
-            self.shell.run("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedProcessName + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true; else printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" " + quotedProcessName + " \"$(date -u +%FT%TZ)\" >> " + quotedStopLog + "; fi", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            var dumpState = f"{{ printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; }} >> {quotedStopLog} 2>&1";
+            var matchesVm = f"kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F {quotedProcessName} >/dev/null";
+            var waitGone = "for i in $(seq 1 20); do kill -0 \"$pid\" 2>/dev/null || exit 0; sleep 0.2; done";
+            var failed = f"printf 'failed to stop pid=%s expected=%s time=%s\\n' \"$pid\" {quotedProcessName} \"$(date -u +%FT%TZ)\" >> {quotedStopLog}; exit 1";
+            var stale = f"printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" {quotedProcessName} \"$(date -u +%FT%TZ)\" >> {quotedStopLog}";
+            var command = f"pid={quotedPid}; {dumpState}; if {matchesVm}; then kill \"$pid\" 2>/dev/null || true; {waitGone}; kill -9 \"$pid\" 2>/dev/null || true; {waitGone}; {failed}; else {stale}; fi";
+            var stop = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            if (!stop.ok()) {
+                NixosLog.fatal("Failed to stop QEMU pid " + pid + "; stop log: " + self.qemuStopLogPath());
+            }
             FileSystem.removeRecursive(self.pidPath());
             FileSystem.removeRecursive(self.legacyPidPath());
         }

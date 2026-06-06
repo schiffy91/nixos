@@ -84,12 +84,18 @@ class NixosConfig {
 
     public string inputLockedRev(string inputName) {
         var lockPath = PathTools.join(self.paths.root, "flake.lock");
-        if (!FileSystem.exists(lockPath)) { return "master"; }
+        if (!FileSystem.exists(lockPath)) {
+            NixosLog.fatal(f"Missing flake lock: {lockPath}");
+        }
         var lock = Path.readAll(lockPath);
         var nodes = JsonText.objectField(lock, "nodes");
         var input = JsonText.objectField(nodes, inputName);
         var locked = JsonText.objectField(input, "locked");
-        return JsonText.field(locked, "rev", "master");
+        var rev = JsonText.field(locked, "rev", "");
+        if (rev.isEmpty()) {
+            NixosLog.fatal(f"flake.lock is missing locked rev for input: {inputName}");
+        }
+        return rev;
     }
 
     public string evalRaw(string attribute) {

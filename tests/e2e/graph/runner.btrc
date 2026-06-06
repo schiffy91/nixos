@@ -125,7 +125,20 @@ class VmGraphRunner {
             Console.error("Missing e2e operation coverage: " + missing.join(", "));
             return 1;
         }
+
+        Vector<string> missingRequired = [];
+        for id in self.graph.required {
+            if (!self.hasNode(id)) {
+                missingRequired.push(id);
+            }
+        }
+        if (!missingRequired.isEmpty()) {
+            Console.error("Missing required e2e graph nodes: " + missingRequired.join(", "));
+            return 1;
+        }
+
         Console.log("E2E operation coverage: " + Strings.fromInt(covered.len) + "/" + Strings.fromInt(VmOperationCatalog.all().len));
+        Console.log("E2E required graph nodes: " + Strings.fromInt(self.graph.required.len) + "/" + Strings.fromInt(self.graph.required.len));
         return 0;
     }
 

@@ -25,9 +25,6 @@ class Installer {
 
     public ExecResult runDisko(string mode, string extraArgs) {
         var rev = self.config.inputLockedRev("disko");
-        if (rev.isEmpty()) {
-            rev = "master";
-        }
         var flake = UnixShell.quote(f"{self.config.paths.root}#{self.config.host()}-{self.config.diskOperationTarget()}");
         var quotedMode = UnixShell.quote(mode);
         var quotedMountPoint = UnixShell.quote(self.mountPoint);

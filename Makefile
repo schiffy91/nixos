@@ -44,7 +44,7 @@ $(BTRC_STAMP): | dirs
 # then a static library for local linking.
 build-stdlib: $(STDLIB_LIB)
 
-$(STDLIB_MANIFEST): $(SOURCES) $(BTRC_STAMP) | dirs
+$(STDLIB_MANIFEST): $(SOURCES) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --build-stdlib "$(CURDIR)/$(STDLIB_DIR)"
 
 $(STDLIB_LIB): $(STDLIB_MANIFEST)
