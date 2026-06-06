@@ -83,9 +83,13 @@ class NixosConfig {
     }
 
     public string inputLockedRev(string inputName) {
-        var result = self.shell.run(Command(f"{self.nixCommand()} flake metadata {inputName} --json -I {UnixShell.quote(self.paths.root)}"));
-        if (!result.ok()) { return "master"; }
-        return JsonText.field(result.stdout(), "revision", "master");
+        var lockPath = PathTools.join(self.paths.root, "flake.lock");
+        if (!FileSystem.exists(lockPath)) { return "master"; }
+        var lock = Path.readAll(lockPath);
+        var nodes = JsonText.objectField(lock, "nodes");
+        var input = JsonText.objectField(nodes, inputName);
+        var locked = JsonText.objectField(input, "locked");
+        return JsonText.field(locked, "rev", "master");
     }
 
     public string evalRaw(string attribute) {

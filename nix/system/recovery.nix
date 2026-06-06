@@ -13,6 +13,7 @@ let
   legacyUkiPath = "EFI/recovery/nixos-recovery.efi";
   publicKey = "${config.settings.boot.pkiBundle}/keys/db/db.pem";
   privateKey = "${config.settings.boot.pkiBundle}/keys/db/db.key";
+  signingRequired = config.settings.boot.method == "Secure-Boot";
 
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
@@ -129,6 +130,12 @@ lib.mkIf config.settings.disk.recovery.enable {
       boot=${lib.escapeShellArg config.settings.disk.boot.efiSysMountPoint}
       public_key=${lib.escapeShellArg publicKey}
       private_key=${lib.escapeShellArg privateKey}
+      signing_required=${lib.escapeShellArg (if signingRequired then "1" else "0")}
+
+      if [ "$signing_required" = 1 ] && { [ ! -e "$public_key" ] || [ ! -e "$private_key" ]; }; then
+        echo "Secure-Boot recovery artifacts require sbctl db keys at $public_key and $private_key" >&2
+        exit 1
+      fi
 
       install_signed() {
         source="$1"

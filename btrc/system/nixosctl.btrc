@@ -172,11 +172,9 @@ class NixosCtl {
             SecretsManager(self.config).createIfMissing(installer.plainTextPasswordPath());
             var confirmed = args.has("--yes");
             var formatPrompt = f"Format {self.config.diskDevice()}?";
-            if (args.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt))) {
-                installer.eraseAndMountDisk();
-            } else {
-                installer.mountDisk();
-            }
+            var format = args.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
+            var prepared = installer.prepareDisk(format);
+            if (!prepared.ok()) { return prepared.code; }
             if (confirmed || installer.interactive.confirm("Install NixOS?")) {
                 var installed = installer.installNixos();
                 if (!installed.ok()) { return installed.code; }

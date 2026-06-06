@@ -42,6 +42,13 @@ class Installer {
         return self.runDisko("destroy,format,mount", "--yes-wipe-all-disks");
     }
 
+    public ExecResult prepareDisk(bool format) {
+        if (format) {
+            return self.eraseAndMountDisk();
+        }
+        return self.mountDisk();
+    }
+
     public ExecResult installNixos() {
         FileSystem.mkdirp(PathTools.join(self.mountPoint, "/nix/tmp"));
         FileSystem.removeRecursive(PathTools.join(self.mountPoint, self.config.paths.root));
@@ -89,11 +96,31 @@ class Installer {
         self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
+    public string debugExtensionsDir() {
+        return "/tmp/vscodium-extensions";
+    }
+
+    public void prepareDebugExtensions() {
+        var rev = self.config.inputLockedRev("btrc");
+        if (rev.isEmpty() || rev.equals("master")) {
+            rev = "main";
+        }
+        var flake = UnixShell.quote(f"github:schiffy91/btrc/{rev}#btrc-vscode");
+        var build = self.shell.run(f"{self.config.nixCommand()} build --no-link --print-out-paths {flake}", stderr=CommandOutput.stream(), throwOnFailure=true);
+        var source = UnixShell.quote(f"{build.trimmed()}/share/vscode/extensions/btrc-dev.btrc");
+        var directory = UnixShell.quote(self.debugExtensionsDir());
+        FileSystem.removeRecursive(self.debugExtensionsDir());
+        FileSystem.mkdirp(self.debugExtensionsDir());
+        self.shell.run(f"cp -R {source} {directory}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+    }
+
     public void debugShell() {
-        var base = "nix --extra-experimental-features nix-command --extra-experimental-features flakes run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data";
-        self.shell.run(f"{base} --install-extension ms-python.python", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-        self.shell.run(f"{base} --install-extension rogalmic.bash-debug", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-        self.shell.run(f"{base} {UnixShell.quote(self.config.paths.root)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.prepareDebugExtensions();
+        var extensions = UnixShell.quote(self.debugExtensionsDir());
+        var vscodium = f"{self.config.nixCommand()} run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data --extensions-dir {extensions}";
+        self.shell.run(f"{vscodium} --install-extension ms-python.python", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"{vscodium} --install-extension rogalmic.bash-debug", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"{vscodium} {UnixShell.quote(self.config.paths.root)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         NixosLog.fatal("Please continue in VSCodium");
     }
 }
