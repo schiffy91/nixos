@@ -6,6 +6,7 @@ in
 pkgs.mkShell {
   packages = [
     flake.inputs.btrc.packages.${system}.btrcpy
+    flake.inputs.btrc.packages.${system}.btrc-lsp
     pkgs.gnumake
     pkgs.nixd
     pkgs.git

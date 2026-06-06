@@ -75,10 +75,7 @@ class Interactive {
 
     public void askToReboot() {
         if (self.confirm("Restart now?")) {
-            var reboot = Command("shutdown")
-                .arg("-r")
-                .arg("now");
-            self.shell.run(reboot.render(), stdout=CommandOutput.stream());
+            self.shell.run(Command("shutdown -r now"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         }
     }
 }

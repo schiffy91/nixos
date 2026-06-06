@@ -15,7 +15,7 @@ class SecureBootManager {
     public void removeOldEntries() {
         FileSystem.mkdirp("/boot/EFI/Linux");
         FileSystem.mkdirp("/var/lib/sbctl");
-        self.shell.run("find /boot/EFI/Linux -type f -name 'linux-*.efi' -delete", stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run("find /boot/EFI/Linux -type f -name 'linux-*.efi' -delete", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         FileSystem.removeRecursive("/etc/secureboot");
     }
 
@@ -30,26 +30,20 @@ class SecureBootManager {
     }
 
     public void createKeys() {
-        var create = Command("sbctl")
-            .arg("create-keys");
-        self.shell.run(create.render(), stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run(Command("sbctl create-keys"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
     }
 
     public void enrollKeys(bool microsoft) {
-        var enroll = Command("sbctl")
-            .arg("enroll-keys");
+        var command = "sbctl enroll-keys";
         if (microsoft) {
-            enroll.arg("--microsoft");
+            command = f"{command} --microsoft";
         } else {
-            enroll.arg("--yes-this-might-brick-my-machine");
+            command = f"{command} --yes-this-might-brick-my-machine";
         }
-        self.shell.run(enroll.render(), stdout=CommandOutput.stream());
+        self.shell.run(Command(command), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public Vector<string> unsignedFromJson(string json) {
-        // sbctl verify --json emits {"<file_path>": {"is_signed": <bool>, ...}, ...}.
-        // JsonObject.parse correctly reads top-level keys; JsonText.objectField pulls
-        // each balanced nested object, and JsonText.field extracts its is_signed.
         Vector<string> result = [];
         var top = JsonObject.parse(json);
         for key, _ in top.values {
@@ -63,10 +57,7 @@ class SecureBootManager {
     }
 
     public void verify() {
-        var verify = Command("sbctl")
-            .arg("verify")
-            .arg("--json");
-        var result = self.shell.run(verify.render(), logFailure=false);
+        var result = self.shell.run(Command("sbctl verify --json"), logFailure=false);
         var output = result.trimmed();
         if (output.isEmpty() || output.equals("null")) {
             NixosLog.error("No EFI binaries registered");
@@ -104,9 +95,7 @@ class SecureBootManager {
     }
 
     public void status() {
-        var status = Command("sbctl")
-            .arg("status");
-        self.shell.run(status.render(), stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run(Command("sbctl status"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         self.verify();
     }
 }

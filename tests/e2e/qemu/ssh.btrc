@@ -60,7 +60,7 @@ class SshClient {
             .arg(Strings.fromInt(self.spec.sshPort)))
             .arg("root@localhost")
             .arg(command);
-        var result = self.shell.run(cmd.render(), logFailure=checkStatus);
+        var result = self.shell.run(cmd, logFailure=checkStatus);
         return result;
     }
 
@@ -116,7 +116,7 @@ class SshClient {
             + self.sshOptionsForShell()
             + " root@localhost "
             + UnixShell.quote(remote);
-        var result = self.shell.run(tar + " | " + ssh, stdout=CommandOutput.stream());
+        var result = self.shell.run(tar + " | " + ssh, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy workspace into VM"); }
     }
 
@@ -127,7 +127,7 @@ class SshClient {
             .arg(Strings.fromInt(self.spec.sshPort)))
             .arg(localPath)
             .arg(f"root@localhost:{remotePath}");
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
     }
 
@@ -138,7 +138,7 @@ class SshClient {
             .arg(Strings.fromInt(self.spec.sshPort)))
             .arg(f"root@localhost:{remotePath}")
             .arg(localPath);
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
     }
 }

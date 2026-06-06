@@ -58,32 +58,17 @@ class SnapshotManager {
 
     public bool isSubvolume(string path) {
         if (!FileSystem.exists(path)) { return false; }
-        var cmd = Command("btrfs")
-            .arg("subvolume")
-            .arg("show")
-            .arg(path);
-        return self.shell.run(cmd.render(), logFailure=false).ok();
+        return self.shell.run(Command(f"btrfs subvolume show {UnixShell.quote(path)}"), logFailure=false).ok();
     }
 
     public bool isReadonly(string path) {
-        var cmd = Command("btrfs")
-            .arg("property")
-            .arg("get")
-            .arg("-ts")
-            .arg(path)
-            .arg("ro");
-        var result = self.shell.run(cmd.render(), logFailure=false);
+        var result = self.shell.run(Command(f"btrfs property get -ts {UnixShell.quote(path)} ro"), logFailure=false);
         return result.ok() && result.stdout().contains("ro=true");
     }
 
     public Vector<string> childSubvolumes(string path) {
         Vector<string> result = [];
-        var cmd = Command("btrfs")
-            .arg("subvolume")
-            .arg("list")
-            .arg("-o")
-            .arg(path);
-        var listed = self.shell.run(cmd.render(), logFailure=false);
+        var listed = self.shell.run(Command(f"btrfs subvolume list -o {UnixShell.quote(path)}"), logFailure=false);
         if (!listed.ok()) {
             NixosLog.fatal(f"Failed to list child subvolumes under {path}");
         }
@@ -113,24 +98,13 @@ class SnapshotManager {
         for child in self.childSubvolumes(path) {
             self.deleteSubvolume(child);
         }
-        var cmd = Command("btrfs")
-            .arg("subvolume")
-            .arg("delete")
-            .arg("-C")
-            .arg(path);
-        self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        self.shell.run(Command(f"btrfs subvolume delete -C {UnixShell.quote(path)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public void createReadonlySnapshot(string source, string destination) {
         self.deleteSubvolume(destination);
         FileSystem.mkdirp(PathTools.dirname(destination));
-        var cmd = Command("btrfs")
-            .arg("subvolume")
-            .arg("snapshot")
-            .arg("-r")
-            .arg(source)
-            .arg(destination);
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var result = self.shell.run(Command(f"btrfs subvolume snapshot -r {UnixShell.quote(source)} {UnixShell.quote(destination)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) {
             NixosLog.fatal(f"Failed to create readonly snapshot {destination}");
         }
@@ -155,10 +129,10 @@ class SnapshotManager {
             if (!self.isSubvolume(clean)) {
                 NixosLog.fatal(f"Refusing to replace non-subvolume CLEAN: {clean}");
             }
-            self.shell.run(f"mv -T --exchange --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream());
+            self.shell.run(f"mv -T --exchange --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
             self.deleteSubvolume(temporary);
         } else {
-            self.shell.run(f"mv --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream());
+            self.shell.run(f"mv --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         }
         if (!self.isSubvolume(clean)) {
             NixosLog.fatal(f"CLEAN is not a subvolume: {clean}");

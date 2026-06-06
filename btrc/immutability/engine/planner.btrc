@@ -3,11 +3,6 @@ import ./fs.btrc;
 import ./paths.btrc;
 import ./types.btrc;
 
-/* Turns the persist specs into an ordered, de-duplicated plan: stable spec
- * ordering (shallowest first), auto dir/file kind resolution against the live
- * or clean tree, and ancestor-coverage pruning. Pure planning over the fs
- * collaborator; the engine calls makePlan() with the run's persistRoot.
- */
 class ImmutabilityPlanner {
     public ImmutabilityFs fs;
 
@@ -62,7 +57,6 @@ class ImmutabilityPlanner {
 
     public Vector<ImmutabilityPlan> makePlan(Vector<ImmutabilitySpec> specs, string live, string clean, string persistRoot) {
         Vector<ImmutabilityPlan> plans = [];
-        // Sort once; `for x in self.method()` re-evaluates the call each pass.
         var ordered = self.sortedSpecs(specs);
         for spec in ordered {
             var kind = spec.kind;

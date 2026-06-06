@@ -74,17 +74,12 @@ class NixosConfig {
         return f"{self.paths.root}#{self.host()}-{self.target()}";
     }
 
-    public Command nixCmd() {
-        return Command("nix")
-            .arg("--extra-experimental-features").arg("nix-command")
-            .arg("--extra-experimental-features").arg("flakes");
+    public string nixCommand() {
+        return "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
     }
 
     public string inputLockedRev(string inputName) {
-        var cmd = self.nixCmd()
-            .arg("flake").arg("metadata").arg(inputName)
-            .arg("--json").arg("-I").arg(self.paths.root);
-        var result = self.shell.run(cmd.render());
+        var result = self.shell.run(Command(f"{self.nixCommand()} flake metadata {inputName} --json -I {UnixShell.quote(self.paths.root)}"));
         if (!result.ok()) { return "master"; }
         var json = result.stdout();
         var marker = "\"rev\":\"";
@@ -103,10 +98,8 @@ class NixosConfig {
         if (self.cache.has(key)) {
             return self.cache.get(key);
         }
-        var cmd = self.nixCmd()
-            .arg("eval")
-            .arg(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(cmd.render());
+        var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(Command(f"{self.nixCommand()} eval {flake}"));
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval failed for {attribute}");
         }

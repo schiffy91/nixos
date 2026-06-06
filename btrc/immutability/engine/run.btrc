@@ -49,12 +49,12 @@ class ImmutabilityRun {
     }
 
     public void requireCommand(Command command) {
-        var result = self.run(command.render(), stdout=CommandOutput.stream());
-        if (!result.ok()) { self.fatal(f"Failed: {command.render()}"); }
+        var result = self.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!result.ok()) { self.fatal(f"Failed: {command}"); }
     }
 
     public void requireRaw(string command) {
-        var result = self.run(command, stdout=CommandOutput.stream());
+        var result = self.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { self.fatal(f"Failed: {command}"); }
     }
 

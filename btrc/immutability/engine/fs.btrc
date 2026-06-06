@@ -3,11 +3,6 @@ import ./btrfs.btrc;
 import ./paths.btrc;
 import ./run.btrc;
 
-/* Filesystem + btrfs primitives the immutability builds on: subvolume queries,
- * snapshot/create/delete, and reflink copies. Holds the ImmutabilityRun (process
- * context) and issues btrfs via the ImmutabilityBtrfs vocabulary. The engine owns
- * one as self.fs; these never call back into the reset/snapshot algorithm.
- */
 class ImmutabilityFs {
     public ImmutabilityRun run;
 
@@ -21,20 +16,17 @@ class ImmutabilityFs {
 
     public bool isSubvolume(string path) {
         if (!FileSystem.exists(path)) { return false; }
-        var result = self.run.shell.run(ImmutabilityBtrfs.show(path).render(), logFailure=false);
+        var result = self.run.shell.run(ImmutabilityBtrfs.show(path), logFailure=false);
         return result.ok();
     }
 
     public bool isReadonly(string path) {
-        var result = self.run.shell.run(ImmutabilityBtrfs.getReadonly(path).render(), logFailure=false);
+        var result = self.run.shell.run(ImmutabilityBtrfs.getReadonly(path), logFailure=false);
         return result.ok() && result.stdout().contains("ro=true");
     }
 
     public bool mounted(string path) {
-        var command = Command("findmnt")
-            .arg("--mountpoint")
-            .arg(path);
-        var result = self.run.shell.run(command.render(), logFailure=false);
+        var result = self.run.shell.run(Command(f"findmnt --mountpoint {UnixShell.quote(path)}"), logFailure=false);
         return result.ok();
     }
 
@@ -57,7 +49,7 @@ class ImmutabilityFs {
     public Vector<string> childSubvolumes(string path) {
         Vector<string> result = [];
         if (!FileSystem.isDir(path)) { return result; }
-        var listed = self.run.run(ImmutabilityBtrfs.listChildren(path).render());
+        var listed = self.run.run(ImmutabilityBtrfs.listChildren(path));
         if (!listed.ok()) { self.run.fatal(f"list {path}"); }
         for line in Strings.split(listed.stdout(), "\n") {
             var marker = Strings.find(line, " path ", 0);
@@ -73,11 +65,6 @@ class ImmutabilityFs {
 
     public void deleteSubvolume(string path) {
         if (!FileSystem.isDir(path)) { return; }
-        // childSubvolumes returns every descendant subvolume deepest-first, so
-        // deleting them in that order clears all nesting before the parent.
-        // Snapshot the listing into a local first: `for x in self.method()`
-        // re-evaluates the call each iteration, so deleting inside the loop
-        // would index a shrinking vector out of bounds (segfault).
         var children = self.childSubvolumes(path);
         for child in children {
             self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(child));
@@ -111,12 +98,7 @@ class ImmutabilityFs {
 
     public void copyPath(string source, string destination) {
         self.run.mkdirp(PathTools.dirname(destination));
-        var command = Command("cp")
-            .arg("--reflink=always")
-            .arg("-a")
-            .arg(source)
-            .arg(destination);
-        self.run.requireCommand(command);
+        self.run.requireCommand(Command(f"cp --reflink=always -a {UnixShell.quote(source)} {UnixShell.quote(destination)}"));
     }
 
     public void copyDirectoryContents(string source, string destination) {
@@ -131,12 +113,6 @@ class ImmutabilityFs {
         self.run.requireRaw(f"cp --reflink=always -a {sourceContents} {quotedDestination}");
     }
 
-    /* btrfs subvolume create yields a root:root 0755 subvol regardless of the
-     * source dir's owner/mode. After populating contents with cp -a (which
-     * doesn't touch the destination itself), copy the source's owner+mode
-     * onto the persist subvol root so mounting it back at the live path
-     * preserves the original ownership (e.g. ~/.cache must stay 0700 user
-     * or apps that write at .cache root break). One-shot at first creation. */
     public void matchOwnerAndMode(string source, string destination) {
         if (!FileSystem.exists(source) || !FileSystem.isDir(destination)) { return; }
         var quotedSource = UnixShell.quote(source);

@@ -1,15 +1,6 @@
 import std.*;
 import std.tray;
 
-/* NixOS management tray — native menu-bar (macOS) / Wayland StatusNotifierItem
- * (Linux). Each item launches a nixosctl command in a terminal so the user sees
- * progress and can authenticate for privileged actions. Built and packaged by
- * nix/apps/nixos-tray.nix and started as a graphical-session user service
- * from nix/apps/nixos-tray.nix. Native backend: the btrc stdlib SystemTray.
- *
- * Vendored-stdlib build: explicit include order, --no-stdlib (mirrors nixosctl).
- */
-
 int main() {
     string iconPath = Environment.get("NIXOS_TRAY_ICON", "");
     SystemTray tray = SystemTray("NixOS");

@@ -114,7 +114,7 @@ class QemuE2eHarness {
         var writeSupervisor = "printf %s " + UnixShell.quote(supervisor)
             + " > " + UnixShell.quote(self.qemuSupervisorScriptPath())
             + "; chmod 700 " + UnixShell.quote(self.qemuSupervisorScriptPath());
-        var wroteSupervisor = self.shell.run(writeSupervisor, stdout=CommandOutput.stream(), logFailure=false);
+        var wroteSupervisor = self.shell.run(writeSupervisor, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!wroteSupervisor.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
@@ -126,7 +126,7 @@ class QemuE2eHarness {
             + "else "
             + "nohup python3 -c " + UnixShell.quote(pythonSetsid) + " " + UnixShell.quote("sh " + UnixShell.quote(self.qemuSupervisorScriptPath())) + " >/dev/null 2>&1 & "
             + "fi";
-        var result = self.shell.run(launch, stdout=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(launch, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
@@ -136,7 +136,7 @@ class QemuE2eHarness {
             + "test -s " + UnixShell.quote(self.pidPath())
             + " && kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null && exit 0; "
             + "sleep 1; done; exit 1";
-        var ready = self.shell.run(readyCommand, stdout=CommandOutput.stream(), logFailure=false);
+        var ready = self.shell.run(readyCommand, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!ready.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
@@ -157,7 +157,7 @@ class QemuE2eHarness {
             var quotedPid = UnixShell.quote(pid);
             var quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
             var quotedProcessName = UnixShell.quote(self.spec.vmProcessName());
-            self.shell.run("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedProcessName + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true; else printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" " + quotedProcessName + " \"$(date -u +%FT%TZ)\" >> " + quotedStopLog + "; fi", stdout=CommandOutput.stream(), logFailure=false);
+            self.shell.run("pid=" + quotedPid + "; { printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; } >> " + quotedStopLog + " 2>&1; if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedProcessName + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; sleep 2; kill -0 \"$pid\" 2>/dev/null && kill -9 \"$pid\" 2>/dev/null || true; else printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" " + quotedProcessName + " \"$(date -u +%FT%TZ)\" >> " + quotedStopLog + "; fi", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
             FileSystem.removeRecursive(self.pidPath());
             FileSystem.removeRecursive(self.legacyPidPath());
         }
@@ -170,7 +170,7 @@ class QemuE2eHarness {
     }
 
     public void sleepSeconds(int seconds) {
-        self.shell.run(f"sleep {seconds}", stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"sleep {seconds}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
     }
 
     public void bootstrapSsh() {
@@ -331,18 +331,12 @@ class QemuE2eHarness {
 
     public void snapshot(string name) {
         self.stop();
-        var cmd = Command("qemu-img")
-            .arg("snapshot")
-            .arg("-c")
-            .arg(name)
-            .arg(self.diskPath());
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var cmd = Command(f"qemu-img snapshot -c {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}");
+        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsPath())) {
-            var cp = Command("cp")
-                .arg(self.firmware.firmwareVarsPath())
-                .arg(self.firmware.firmwareVarsSnapshotPath(name));
-            self.shell.run(cp.render(), stdout=CommandOutput.stream());
+            var cp = Command(f"cp {UnixShell.quote(self.firmware.firmwareVarsPath())} {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))}");
+            self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         }
     }
 
@@ -352,18 +346,12 @@ class QemuE2eHarness {
             NixosLog.info("Snapshot " + name + " is inherited through qcow2 backing; restore is a no-op");
             return;
         }
-        var cmd = Command("qemu-img")
-            .arg("snapshot")
-            .arg("-a")
-            .arg(name)
-            .arg(self.diskPath());
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var cmd = Command(f"qemu-img snapshot -a {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}");
+        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsSnapshotPath(name))) {
-            var cp = Command("cp")
-                .arg(self.firmware.firmwareVarsSnapshotPath(name))
-                .arg(self.firmware.firmwareVarsPath());
-            self.shell.run(cp.render(), stdout=CommandOutput.stream());
+            var cp = Command(f"cp {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))} {UnixShell.quote(self.firmware.firmwareVarsPath())}");
+            self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
             self.firmware.makeFirmwareVarsWritable();
         }
     }

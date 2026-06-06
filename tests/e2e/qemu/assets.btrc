@@ -35,31 +35,18 @@ class VmAssets {
             NixosLog.fatal("No iso or isoUrl in VM spec");
         }
         var tmp = f"{self.spec.iso}.tmp";
-        var curl = Command("curl")
-            .arg("-L")
-            .arg("-o")
-            .arg(tmp)
-            .arg(self.spec.isoUrl);
-        var result = self.shell.run(curl.render(), stdout=CommandOutput.stream());
+        var curl = Command(f"curl -L -o {UnixShell.quote(tmp)} {UnixShell.quote(self.spec.isoUrl)}");
+        var result = self.shell.run(curl, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
-        var mv = Command("mv")
-            .arg(tmp)
-            .arg(self.spec.iso);
-        self.shell.run(mv.render(), stdout=CommandOutput.stream());
+        var mv = Command(f"mv {UnixShell.quote(tmp)} {UnixShell.quote(self.spec.iso)}");
+        self.shell.run(mv, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public void createSshKey() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.sshKeyPath())) { return; }
-        var cmd = Command("ssh-keygen")
-            .arg("-t")
-            .arg("ed25519")
-            .arg("-N")
-            .arg("")
-            .arg("-f")
-            .arg(self.sshKeyPath())
-            .arg("-q");
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var cmd = Command(f"ssh-keygen -t ed25519 -N '' -f {UnixShell.quote(self.sshKeyPath())} -q");
+        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }
     }
 
@@ -70,13 +57,8 @@ class VmAssets {
     public void createDisk() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.diskPath())) { return; }
-        var cmd = Command("qemu-img")
-            .arg("create")
-            .arg("-f")
-            .arg("qcow2")
-            .arg(self.diskPath())
-            .arg(self.spec.diskSize);
-        var result = self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        var cmd = Command(f"qemu-img create -f qcow2 {UnixShell.quote(self.diskPath())} {UnixShell.quote(self.spec.diskSize)}");
+        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM disk"); }
     }
 

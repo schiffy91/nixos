@@ -31,35 +31,23 @@ class NixosRebuilder {
     }
 
     public ExecResult runNixCollectGarbage() {
-        var cmd = Command("nix-collect-garbage")
-            .arg("-d");
-        return self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        return self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public ExecResult verifyStore() {
-        var cmd = Command("nix-store")
-            .arg("--verify")
-            .arg("--repair");
-        return self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        return self.shell.run(Command("nix-store --verify --repair"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public ExecResult updateFlake() {
-        var cmd = Command("nix")
-            .arg("flake")
-            .arg("update")
-            .flag("--flake", self.config.paths.root);
-        return self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        return self.shell.run(Command(f"nix flake update --flake {UnixShell.quote(self.config.paths.root)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public ExecResult switchSystem(RebuildOptions options) {
-        var cmd = Command("nixos-rebuild")
-            .arg("switch")
-            .flag("--flake", self.config.flakeRef());
         Vector<string> env = [];
         if (options.rebuildFileSystem) {
             env.push("NIXOS_INSTALL_BOOTLOADER=1");
         }
-        return self.shell.run(cmd.render(), stdout=CommandOutput.stream(), env=env);
+        return self.shell.run(Command(f"nixos-rebuild switch --flake {UnixShell.quote(self.config.flakeRef())}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=env);
     }
 
     public void bootstrapConfigIfMissing(RebuildOptions options) {
@@ -103,11 +91,6 @@ class NixosRebuilder {
             FileSystem.removeRecursive("/root/.cache");
             self.updateFlake();
         }
-        // The plaintext password file (/tmp/...) is only read by disko during
-        // `nixosctl install` for LUKS format. A normal update doesn't need it,
-        // and /tmp is wiped on every reboot, so passing the plaintext path
-        // here would spuriously prompt "Set your password" on every update.
-        // Pass empty string so we only prompt when the hash itself is missing.
         SecretsManager(self.config).createIfMissing("");
         PermissionsManager(self.config).secureTree(username);
         var result = self.switchSystem(options);
@@ -118,10 +101,7 @@ class NixosRebuilder {
         var logs = self.homeManagerLogs();
         if (!logs.isEmpty()) { Console.log(logs); }
         if (options.reboot) {
-            var reboot = Command("shutdown")
-                .arg("-r")
-                .arg("now");
-            self.shell.run(reboot.render(), stdout=CommandOutput.stream());
+            self.shell.run(Command("shutdown -r now"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         } else {
             self.interactive.askToReboot();
         }

@@ -86,24 +86,13 @@ class AudioManager {
 
     public void applyPreset(AudioPreset preset) {
         if (!preset.card.isEmpty() && !preset.profile.isEmpty()) {
-            var profile = Command("pactl")
-                .arg("set-card-profile")
-                .arg(preset.card)
-                .arg(preset.profile);
-            self.shell.run(profile.render(), stdout=CommandOutput.stream(), logFailure=false);
+            self.shell.run(Command(f"pactl set-card-profile {UnixShell.quote(preset.card)} {UnixShell.quote(preset.profile)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         }
         if (!preset.sink.isEmpty()) {
-            var sink = Command("pactl")
-                .arg("set-default-sink")
-                .arg(preset.sink);
-            self.shell.run(sink.render(), stdout=CommandOutput.stream(), logFailure=false);
+            self.shell.run(Command(f"pactl set-default-sink {UnixShell.quote(preset.sink)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         }
         if (!preset.sink.isEmpty() && !preset.volume.isEmpty()) {
-            var volume = Command("pactl")
-                .arg("set-sink-volume")
-                .arg(preset.sink)
-                .arg(preset.volume);
-            self.shell.run(volume.render(), stdout=CommandOutput.stream(), logFailure=false);
+            self.shell.run(Command(f"pactl set-sink-volume {UnixShell.quote(preset.sink)} {UnixShell.quote(preset.volume)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         }
     }
 
@@ -113,9 +102,6 @@ class AudioManager {
             self.applyPreset(preset);
             return;
         }
-        var cmd = Command("pactl")
-            .arg("set-default-sink")
-            .arg(selector);
-        self.shell.run(cmd.render(), stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run(Command(f"pactl set-default-sink {UnixShell.quote(selector)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
     }
 }

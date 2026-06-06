@@ -3,11 +3,6 @@ import ../../core/log.btrc;
 import ./paths.btrc;
 import ./types.btrc;
 
-/* Parses the immutability's inputs: the TOML spec file into ImmutabilitySpec
- * rows, and the `name=mount` volume args (or,
- * when none are given, one volume per distinct spec) into ImmutabilityVolume rows.
- * Pure: static readers returning the parsed vectors for the engine to hold.
- */
 class ImmutabilityConfig {
     class Vector<ImmutabilitySpec> readSpecs(string specFile) {
         Vector<ImmutabilitySpec> result = [];

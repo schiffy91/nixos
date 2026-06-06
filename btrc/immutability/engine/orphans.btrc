@@ -5,12 +5,6 @@ import ./paths.btrc;
 import ./run.btrc;
 import ./types.btrc;
 
-/* Namespace + orphan hygiene for the persist store: ensureNamespaces creates
- * the persistRoot / dirs / .orphans / meta / files subvolumes, and pruneOrphans
- * quarantines (rename, not delete) any dir-store subvolume whose key no longer
- * appears in the specs. Operates over the fs collaborator + run; the engine
- * passes persistRoot (and the specs).
- */
 class ImmutabilityOrphans {
     public ImmutabilityFs fs;
     public ImmutabilityRun run;
@@ -57,7 +51,6 @@ class ImmutabilityOrphans {
         }
         var dirsPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.dirs()));
         var orphansPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.orphans()));
-        // Snapshot the listing: moving inside a loop over self.method() re-evaluates the call.
         var children = self.fs.childSubvolumes(dirsPath);
         var stamp = self.quarantineStamp();
         for child in children {

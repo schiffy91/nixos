@@ -31,7 +31,7 @@ class Installer {
         var quotedMode = UnixShell.quote(mode);
         var quotedMountPoint = UnixShell.quote(self.mountPoint);
         var command = f"nix --extra-experimental-features nix-command --extra-experimental-features flakes run github:nix-community/disko/{rev} --verbose -- --show-trace --flake {flake} --mode {quotedMode} --root-mountpoint {quotedMountPoint} {extraArgs}";
-        return self.shell.run(command, stdout=CommandOutput.stream());
+        return self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public ExecResult mountDisk() {
@@ -45,26 +45,15 @@ class Installer {
     public ExecResult installNixos() {
         FileSystem.mkdirp(PathTools.join(self.mountPoint, "/nix/tmp"));
         FileSystem.removeRecursive(PathTools.join(self.mountPoint, self.config.paths.root));
-        var cp = Command("cp")
-            .arg("-r")
-            .arg(self.config.paths.root)
-            .arg(PathTools.join(self.mountPoint, self.config.paths.root));
-        self.shell.run(cp.render(), stdout=CommandOutput.stream());
+        var source = UnixShell.quote(self.config.paths.root);
+        var destination = UnixShell.quote(PathTools.join(self.mountPoint, self.config.paths.root));
+        self.shell.run(Command(f"cp -r {source} {destination}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
 
-        var install = Command("nixos-install")
-            .flag("--flake", f"{PathTools.join(self.mountPoint, self.config.paths.root)}#{self.config.host()}-{self.config.target()}")
-            .flag("--root", self.mountPoint)
-            .arg("--no-channel-copy")
-            .arg("--show-trace")
-            .arg("--no-root-password")
-            .arg("--max-jobs")
-            .arg("auto")
-            .arg("--cores")
-            .arg("0");
+        var flake = UnixShell.quote(f"{PathTools.join(self.mountPoint, self.config.paths.root)}#{self.config.host()}-{self.config.target()}");
+        var root = UnixShell.quote(self.mountPoint);
         var tmpDir = PathTools.join(self.mountPoint, "/nix/tmp");
-        var result = self.shell.run(install.render(),
-            stdout=CommandOutput.stream(),
-            env=[f"TMPDIR={tmpDir}"]);
+        var result = self.shell.run(Command(f"nixos-install --flake {flake} --root {root} --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"),
+            stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=[f"TMPDIR={tmpDir}"]);
         FileSystem.removeRecursive(PathTools.join(self.mountPoint, "/nix/tmp"));
         if (result.ok()) {
             self.permissionNixos();
@@ -97,16 +86,14 @@ class Installer {
     }
 
     public void collectGarbage() {
-        var cmd = Command("nix-collect-garbage")
-            .arg("-d");
-        self.shell.run(cmd.render(), stdout=CommandOutput.stream());
+        self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public void debugShell() {
         var base = "nix --extra-experimental-features nix-command --extra-experimental-features flakes run nixpkgs#vscodium -- --no-sandbox --user-data-dir /tmp/vscodium-data";
-        self.shell.run(f"{base} --install-extension ms-python.python", stdout=CommandOutput.stream(), logFailure=false);
-        self.shell.run(f"{base} --install-extension rogalmic.bash-debug", stdout=CommandOutput.stream(), logFailure=false);
-        self.shell.run(f"{base} {UnixShell.quote(self.config.paths.root)}", stdout=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"{base} --install-extension ms-python.python", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"{base} --install-extension rogalmic.bash-debug", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"{base} {UnixShell.quote(self.config.paths.root)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         NixosLog.fatal("Please continue in VSCodium");
     }
 }

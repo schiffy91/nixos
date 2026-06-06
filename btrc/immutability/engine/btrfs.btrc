@@ -1,40 +1,36 @@
 import std.*;
 
-/* Centralized btrfs CLI vocabulary. Every btrfs subcommand the immutability issues
- * is built here, so a syntax change touches one place and call sites read as
- * verbs rather than arg chains. Execution policy stays at the run site. */
 class ImmutabilityBtrfs {
     class Command show(string path) {
-        return Command("btrfs").arg("subvolume").arg("show").arg(path);
+        return Command(f"btrfs subvolume show {UnixShell.quote(path)}");
     }
 
     class Command getReadonly(string path) {
-        return Command("btrfs").arg("property").arg("get").arg("-ts").arg(path).arg("ro");
+        return Command(f"btrfs property get -ts {UnixShell.quote(path)} ro");
     }
 
     class Command listChildren(string path) {
-        return Command("btrfs").arg("subvolume").arg("list").arg("-o").arg(path);
+        return Command(f"btrfs subvolume list -o {UnixShell.quote(path)}");
     }
 
     class Command deleteSubvol(string path) {
-        return Command("btrfs").arg("subvolume").arg("delete").arg(path);
+        return Command(f"btrfs subvolume delete {UnixShell.quote(path)}");
     }
 
     class Command createSubvol(string path) {
-        return Command("btrfs").arg("subvolume").arg("create").arg(path);
+        return Command(f"btrfs subvolume create {UnixShell.quote(path)}");
     }
 
     class Command snapshot(string source, string destination, bool readonly) {
-        var command = Command("btrfs").arg("subvolume").arg("snapshot");
-        if (readonly) { command.arg("-r"); }
-        return command.arg(source).arg(destination);
+        var flag = readonly ? "-r " : "";
+        return Command(f"btrfs subvolume snapshot {flag}{UnixShell.quote(source)} {UnixShell.quote(destination)}");
     }
 
     class Command clearReadonly(string path) {
-        return Command("btrfs").arg("property").arg("set").arg("-ts").arg(path).arg("ro").arg("false");
+        return Command(f"btrfs property set -ts {UnixShell.quote(path)} ro false");
     }
 
     class Command sync(string top) {
-        return Command("btrfs").arg("filesystem").arg("sync").arg(top);
+        return Command(f"btrfs filesystem sync {UnixShell.quote(top)}");
     }
 }

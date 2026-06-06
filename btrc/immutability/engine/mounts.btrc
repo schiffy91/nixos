@@ -6,11 +6,6 @@ import ./paths.btrc;
 import ./run.btrc;
 import ./types.btrc;
 
-/* Mounting for initrd reset passes and runtime persistent overlays. Shares the
- * engine's ImmutabilityRun (so run.top stays consistent) and its
- * ImmutabilityFs; the engine passes its config (device/persistRoot/...) as
- * arguments.
- */
 class ImmutabilityMounts {
     public ImmutabilityRun run;
     public ImmutabilityFs fs;
@@ -28,22 +23,12 @@ class ImmutabilityMounts {
             return;
         }
         self.run.mkdirp(self.run.top);
-        var command = Command("mount")
-            .arg("-t")
-            .arg("btrfs")
-            .arg("-o")
-            .arg("subvolid=5,user_subvol_rm_allowed")
-            .arg(device)
-            .arg(self.run.top);
-        self.run.requireCommand(command);
+        self.run.requireCommand(Command(f"mount -t btrfs -o subvolid=5,user_subvol_rm_allowed {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}"));
     }
 
     public void unmountTop(bool assumeMounted) {
         if (assumeMounted) { return; }
-        var command = Command("umount")
-            .arg("-R")
-            .arg(self.run.top);
-        self.run.run(command.render(), stdout=CommandOutput.stream(), logFailure=false);
+        self.run.run(Command(f"umount -R {UnixShell.quote(self.run.top)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         var topPrefix = f"{ImmutabilityConstants.topBase()}.";
         if (self.run.top.startsWith(topPrefix)) {
             FileSystem.removeRecursive(self.run.top);
@@ -62,11 +47,7 @@ class ImmutabilityMounts {
         self.run.mkdirp(target);
         if (self.fs.mounted(target)) { return; }
         var mountOptions = f"subvol={subvol},compress=zstd,noatime";
-        var command = Command("mount")
-            .arg("-t").arg("btrfs")
-            .arg("-o").arg(mountOptions)
-            .arg(device).arg(target);
-        self.run.requireCommand(command);
+        self.run.requireCommand(Command(f"mount -t btrfs -o {UnixShell.quote(mountOptions)} {UnixShell.quote(device)} {UnixShell.quote(target)}"));
     }
 
     public void mountPersist(string device, string persistRoot, Vector<ImmutabilitySpec> specs, bool assumeMounted) {
@@ -75,11 +56,7 @@ class ImmutabilityMounts {
         var mountedTop = false;
         if (!assumeMounted && !self.fs.mounted(self.run.top)) {
             self.run.mkdirp(self.run.top);
-            var m = Command("mount")
-                .arg("-t").arg("btrfs")
-                .arg("-o").arg("ro,subvolid=5")
-                .arg(device).arg(self.run.top);
-            self.run.requireCommand(m);
+            self.run.requireCommand(Command(f"mount -t btrfs -o ro,subvolid=5 {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}"));
             mountedTop = true;
         }
         Vector<string> selected = [];
@@ -92,8 +69,7 @@ class ImmutabilityMounts {
             selected.push(target);
         }
         if (mountedTop) {
-            var u = Command("umount").arg(self.run.top);
-            self.run.run(u.render(), stdout=CommandOutput.stream(), logFailure=false);
+            self.run.run(Command(f"umount {UnixShell.quote(self.run.top)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         }
         self.run.log("Persistent mounts complete");
     }

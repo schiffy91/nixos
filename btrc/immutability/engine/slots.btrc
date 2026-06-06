@@ -4,12 +4,6 @@ import ./fs.btrc;
 import ./run.btrc;
 import ./types.btrc;
 
-/* A/B/C snapshot-slot rotation and atomic publish. rotate() shifts live -> A ->
- * B -> C (dropping the oldest); publish() swaps a populated NEXT into LIVE (or
- * leaves it for boot when LIVE is mounted); restoreSlot() snapshots a chosen
- * slot into NEXT and publishes it. Operates over the fs collaborator + run; the
- * engine passes its snapshotsSubvolume.
- */
 class ImmutabilitySlots {
     public ImmutabilityFs fs;
     public ImmutabilityRun run;

@@ -32,7 +32,7 @@ class CaffeineManager {
     public void enable() {
         if (self.enabled()) { return; }
         var command = f"systemd-inhibit --what=idle --who=nixos --why='User disabled sleep' sleep infinity >/dev/null 2>&1 & echo $! > {UnixShell.quote(self.pidFile)}";
-        self.shell.run(command, stdout=CommandOutput.stream());
+        self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
     }
 
     public void disable() {
