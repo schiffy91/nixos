@@ -40,18 +40,18 @@ class SshClient {
         return quoted.join(" ");
     }
 
-    public Command addSshOptions(Command cmd) {
+    public Command addSshOptions(Command sshCommand) {
         var opts = self.sshOptionList();
         for opt in opts {
-            cmd.arg(opt);
+            sshCommand.arg(opt);
         }
-        return cmd;
+        return sshCommand;
     }
 
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
-        var cmd = self.addSshOptions(Command(f"timeout {timeoutSeconds} ssh -p {self.spec.sshPort}"))
+        var sshCommand = self.addSshOptions(Command(f"timeout {timeoutSeconds} ssh -p {self.spec.sshPort}"))
             .args(["root@localhost", command]);
-        var result = self.shell.run(cmd, logFailure=checkStatus);
+        var result = self.shell.run(sshCommand, logFailure=checkStatus);
         return result;
     }
 
@@ -112,16 +112,16 @@ class SshClient {
     }
 
     public void copyTo(string localPath, string remotePath) {
-        var cmd = self.addSshOptions(Command(f"scp -r -P {self.spec.sshPort}"))
+        var copyCommand = self.addSshOptions(Command(f"scp -r -P {self.spec.sshPort}"))
             .args([localPath, f"root@localhost:{remotePath}"]);
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = self.shell.run(copyCommand, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
     }
 
     public void copyFrom(string remotePath, string localPath) {
-        var cmd = self.addSshOptions(Command(f"scp -r -P {self.spec.sshPort}"))
+        var copyCommand = self.addSshOptions(Command(f"scp -r -P {self.spec.sshPort}"))
             .args([f"root@localhost:{remotePath}", localPath]);
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = self.shell.run(copyCommand, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
     }
 }

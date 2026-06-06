@@ -30,19 +30,19 @@ class QemuCommandBuilder {
         }
     }
 
-    public void addAccelerator(Command cmd) {
+    public void addAccelerator(Command command) {
         if (self.firmware.isDarwin()) {
-            cmd.args(["-accel", self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg,thread=multi"]);
+            command.args(["-accel", self.firmware.hostArchMatchesGuest() ? "hvf" : "tcg,thread=multi"]);
         } else if (self.firmware.hostArchMatchesGuest()) {
-            cmd.args(["-enable-kvm"]);
+            command.args(["-enable-kvm"]);
         } else {
-            cmd.args(["-accel", "tcg,thread=multi"]);
+            command.args(["-accel", "tcg,thread=multi"]);
         }
     }
 
-    public void addMachine(Command cmd) {
+    public void addMachine(Command command) {
         if (!self.spec.arch.equals("aarch64")) { return; }
-        cmd.args([
+        command.args([
             "-machine",
             "virt",
             "-cpu",
@@ -52,8 +52,8 @@ class QemuCommandBuilder {
         ]);
     }
 
-    public void addMemoryCpus(Command cmd) {
-        cmd.args([
+    public void addMemoryCpus(Command command) {
+        command.args([
             "-m",
             self.spec.memory,
             "-smp",
@@ -63,8 +63,8 @@ class QemuCommandBuilder {
         ]);
     }
 
-    public void addStorageAndNetwork(Command cmd) {
-        cmd.args([
+    public void addStorageAndNetwork(Command command) {
+        command.args([
             "-drive",
             f"file={self.diskPath()},format=qcow2,if=virtio,cache=none",
             "-netdev",
@@ -74,8 +74,8 @@ class QemuCommandBuilder {
         ]);
     }
 
-    public void addConsole(Command cmd) {
-        cmd.args([
+    public void addConsole(Command command) {
+        command.args([
             "-display",
             "none",
             "-serial",
@@ -87,11 +87,11 @@ class QemuCommandBuilder {
         ]);
     }
 
-    public void addBootMedia(Command cmd, bool fromIso) {
+    public void addBootMedia(Command command, bool fromIso) {
         if (!fromIso) { return; }
         if (self.spec.arch.equals("x86_64") && !self.firmware.shouldUseUefi(fromIso)) {
             self.serial.extractBootSerial();
-            cmd.args([
+            command.args([
                 "-kernel",
                 Path.readAll(self.serial.bootKernelFile()).trim(),
                 "-initrd",
@@ -102,22 +102,22 @@ class QemuCommandBuilder {
                 self.spec.iso
             ]);
         } else {
-            cmd.args(["-cdrom", self.spec.iso, "-boot", "d"]);
+            command.args(["-cdrom", self.spec.iso, "-boot", "d"]);
         }
     }
 
     public Command build(bool fromIso) {
         self.ensureVmLaunchBinary();
-        var cmd = Command(self.spec.vmLaunchBinary());
-        self.addAccelerator(cmd);
-        self.addMachine(cmd);
-        self.firmware.addFirmwareData(cmd);
-        self.firmware.addFirmware(cmd, fromIso);
-        self.addMemoryCpus(cmd);
-        self.addStorageAndNetwork(cmd);
-        self.addConsole(cmd);
-        self.firmware.addTpm2(cmd);
-        self.addBootMedia(cmd, fromIso);
-        return cmd;
+        var command = Command(self.spec.vmLaunchBinary());
+        self.addAccelerator(command);
+        self.addMachine(command);
+        self.firmware.addFirmwareData(command);
+        self.firmware.addFirmware(command, fromIso);
+        self.addMemoryCpus(command);
+        self.addStorageAndNetwork(command);
+        self.addConsole(command);
+        self.firmware.addTpm2(command);
+        self.addBootMedia(command, fromIso);
+        return command;
     }
 }

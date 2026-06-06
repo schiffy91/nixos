@@ -86,13 +86,13 @@ class QemuE2eHarness {
         if (FileSystem.exists(self.legacyPidPath())) {
             FileSystem.removeRecursive(self.legacyPidPath());
         }
-        var cmd = self.qemuCmd.build(fromIso);
+        var qemuCommand = self.qemuCmd.build(fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
         FileSystem.removeRecursive(self.qemuLogPath());
         FileSystem.removeRecursive(self.qemuSupervisorLogPath());
         FileSystem.removeRecursive(self.qemuExitPath());
-        var qemuExec = "exec " + cmd.render();
+        var qemuExec = "exec " + qemuCommand.render();
         var qemuPythonSetsid = "import os, sys; os.setsid(); os.execl('/bin/sh', 'sh', '-c', sys.argv[1])";
         var qemuLaunch = "if command -v setsid >/dev/null 2>&1; then "
             + "setsid sh -c " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 & "

@@ -90,8 +90,8 @@ class QemuFirmware {
         return self.firmwareDataAliasPath();
     }
 
-    public void addFirmwareData(Command cmd) {
-        cmd.args(["-L", self.prepareFirmwareDataAlias()]);
+    public void addFirmwareData(Command command) {
+        command.args(["-L", self.prepareFirmwareDataAlias()]);
     }
 
     public string findFirst(string findArgs) {
@@ -262,7 +262,7 @@ class QemuFirmware {
             FileSystem.removeRecursive(self.tpmPidPath());
         }
 
-        var cmd = Command("swtpm socket --tpm2").args([
+        var command = Command("swtpm socket --tpm2").args([
             "--tpmstate",
             "dir=" + self.tpmStateDir(),
             "--ctrl",
@@ -273,7 +273,7 @@ class QemuFirmware {
             "--log",
             "file=" + self.tpmLogPath() + ",level=20"
         ]);
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to start swtpm"); }
         var waitCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do test -S "
             + UnixShell.quote(self.tpmSocketPath())
@@ -292,18 +292,18 @@ class QemuFirmware {
         FileSystem.removeRecursive(self.tpmSocketPath());
     }
 
-    public void addFirmware(Command cmd, bool fromIso) {
+    public void addFirmware(Command command, bool fromIso) {
         if (!self.shouldUseUefi(fromIso)) { return; }
         self.requireUefiCapability();
         if (self.secureBootEnabled()) { self.requireSecureBootCapability(); }
         if (self.spec.arch.equals("x86_64")) {
-            cmd.args(["-machine", "q35"]);
+            command.args(["-machine", "q35"]);
         }
         self.setupFirmwareVars();
         var codePath = self.firmwareCodePath();
         if (codePath.isEmpty()) { NixosLog.fatal("Could not find EDK2 firmware for " + self.spec.arch); }
         var codeArg = self.prepareFirmwareCodeAlias(codePath);
-        cmd.args([
+        command.args([
             "-drive",
             f"if=pflash,format=raw,readonly=on,file={codeArg}",
             "-drive",
@@ -311,10 +311,10 @@ class QemuFirmware {
         ]);
     }
 
-    public void addTpm2(Command cmd) {
+    public void addTpm2(Command command) {
         if (!self.tpm2Enabled()) { return; }
         self.startSwtpm();
-        cmd.args([
+        command.args([
             "-chardev",
             f"socket,id=chrtpm,path={self.tpmSocketPath()}",
             "-tpmdev",

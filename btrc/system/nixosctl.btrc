@@ -138,35 +138,35 @@ class NixosCtl {
             return 1;
         }
 
-        var cmd = args.command();
-        if (cmd.equals("--help") || cmd.equals("-h") || cmd.equals("help")) {
+        var command = args.command();
+        if (command.equals("--help") || command.equals("-h") || command.equals("help")) {
             self.usage();
             return 0;
         }
         if (self.needsTestShell(args)) {
             return self.nixShellSelf(args);
         }
-        if (self.needsRoot(cmd) && !Platform.isRoot()) {
+        if (self.needsRoot(command) && !Platform.isRoot()) {
             return self.sudoSelf(args);
         }
 
-        if (cmd.equals("eval")) {
+        if (command.equals("eval")) {
             if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl eval <attribute>"); }
             Console.log(self.config.evalRaw(args.get(1)));
             return 0;
         }
 
-        if (cmd.equals("update") || cmd.equals("upgrade")) {
+        if (command.equals("update") || command.equals("upgrade")) {
             var options = RebuildOptions();
             options.rebuildFileSystem = args.has("--rebuild-filesystem");
             options.reboot = args.has("--reboot");
-            options.clean = args.has("--clean") || args.has("--upgrade") || cmd.equals("upgrade");
-            options.upgrade = args.has("--upgrade") || cmd.equals("upgrade");
+            options.clean = args.has("--clean") || args.has("--upgrade") || command.equals("upgrade");
+            options.upgrade = args.has("--upgrade") || command.equals("upgrade");
             NixosRebuilder(self.config).update(options);
             return 0;
         }
 
-        if (cmd.equals("install")) {
+        if (command.equals("install")) {
             var installer = Installer(self.config);
             if (args.has("--collect-garbage")) {
                 installer.collectGarbage();
@@ -191,7 +191,7 @@ class NixosCtl {
             return 0;
         }
 
-        if (cmd.equals("diff")) {
+        if (command.equals("diff")) {
             var options = DiffOptions();
             options.recent = args.has("--recent");
             options.showSymlinks = args.has("--show-symlinks");
@@ -205,7 +205,7 @@ class NixosCtl {
             return 0;
         }
 
-        if (cmd.equals("fix-permissions")) {
+        if (command.equals("fix-permissions")) {
             var username = NixosCtl.env("SUDO_USER", "");
             if (username.isEmpty()) {
                 username = NixosCtl.env("USER", "root");
@@ -214,7 +214,7 @@ class NixosCtl {
             return 0;
         }
 
-        if (cmd.equals("change-password")) {
+        if (command.equals("change-password")) {
             if (args.has("--full-disk-encryption-only") && args.has("--user-account-only")) {
                 NixosLog.fatal("Cannot use both --full-disk-encryption-only and --user-account-only");
             }
@@ -236,7 +236,7 @@ class NixosCtl {
             return 0;
         }
 
-        if (cmd.equals("secure-boot")) {
+        if (command.equals("secure-boot")) {
             if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl secure-boot <enable|disable|status>"); }
             var manager = SecureBootManager(self.config);
             var action = args.get(1);
@@ -246,7 +246,7 @@ class NixosCtl {
             NixosLog.fatal("Usage: nixosctl secure-boot <enable|disable|status>");
         }
 
-        if (cmd.equals("tpm2")) {
+        if (command.equals("tpm2")) {
             if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl tpm2 <enable|disable|status>"); }
             var tpm = Tpm2Manager(self.config);
             var action = args.get(1);
@@ -266,7 +266,7 @@ class NixosCtl {
             }
         }
 
-        if (cmd.equals("displays")) {
+        if (command.equals("displays")) {
             if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl displays <list|layout|enable|disable|primary|dpms> [args]"); }
             var displays = DisplayManager();
             var action = args.get(1);
@@ -279,7 +279,7 @@ class NixosCtl {
             if (action.equals("dpms")) { displays.dpms(args.get(2)); return 0; }
         }
 
-        if (cmd.equals("audio")) {
+        if (command.equals("audio")) {
             if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl audio <list|current|set> [sink]"); }
             var audio = AudioManager();
             var action = args.get(1);
@@ -292,7 +292,7 @@ class NixosCtl {
             }
         }
 
-        if (cmd.equals("caffeine")) {
+        if (command.equals("caffeine")) {
             if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl caffeine <status|enable|disable|toggle>"); }
             var caffeine = CaffeineManager();
             var action = args.get(1);
@@ -302,15 +302,15 @@ class NixosCtl {
             if (action.equals("toggle")) { caffeine.toggle(); return 0; }
         }
 
-        if (cmd.equals("vm")) {
+        if (command.equals("vm")) {
             return E2eCli().runVm(args);
         }
 
-        if (cmd.equals("e2e")) {
+        if (command.equals("e2e")) {
             return E2eCli().runE2e(args);
         }
 
-        if (cmd.equals("graph")) {
+        if (command.equals("graph")) {
             return E2eCli().runGraph(args);
         }
 
