@@ -120,6 +120,15 @@ class NixosCtl {
         return false;
     }
 
+    public string requireArg(CliArgs args, int index, string usage) {
+        if (args.count() <= index) { NixosLog.fatal(usage); }
+        return args.get(index);
+    }
+
+    public string requireAction(CliArgs args, string usage) {
+        return self.requireArg(args, 1, usage);
+    }
+
     public int nixShellSelf(CliArgs args) {
         var shellPath = PathTools.join(self.config.paths.root, "tests/shell.nix");
         var runCmd = f"export NIXOS_BTRC_TEST_SHELL=1 && exec {UnixShell.quote(args.program)}";
@@ -151,8 +160,8 @@ class NixosCtl {
         }
 
         if (command.equals("eval")) {
-            if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl eval <attribute>"); }
-            Console.log(self.config.evalRaw(args.get(1)));
+            var attribute = self.requireArg(args, 1, "Usage: nixosctl eval <attribute>");
+            Console.log(self.config.evalRaw(attribute));
             return 0;
         }
 
@@ -237,9 +246,8 @@ class NixosCtl {
         }
 
         if (command.equals("secure-boot")) {
-            if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl secure-boot <enable|disable|status>"); }
+            var action = self.requireAction(args, "Usage: nixosctl secure-boot <enable|disable|status>");
             var manager = SecureBootManager(self.config);
-            var action = args.get(1);
             if (action.equals("enable")) { manager.enable(args.has("--microsoft")); return 0; }
             if (action.equals("disable")) { manager.disable(); return 0; }
             if (action.equals("status")) { manager.status(); return 0; }
@@ -247,9 +255,8 @@ class NixosCtl {
         }
 
         if (command.equals("tpm2")) {
-            if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl tpm2 <enable|disable|status>"); }
+            var action = self.requireAction(args, "Usage: nixosctl tpm2 <enable|disable|status>");
             var tpm = Tpm2Manager(self.config);
-            var action = args.get(1);
             if (action.equals("status")) {
                 tpm.status();
                 return 0;
@@ -267,35 +274,32 @@ class NixosCtl {
         }
 
         if (command.equals("displays")) {
-            if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl displays <list|layout|enable|disable|primary|dpms> [args]"); }
+            var action = self.requireAction(args, "Usage: nixosctl displays <list|layout|enable|disable|primary|dpms> [args]");
             var displays = DisplayManager();
-            var action = args.get(1);
             if (action.equals("list")) { displays.list(); return 0; }
             if (action.equals("layout")) { displays.layout(); return 0; }
-            if (args.count() < 3) { NixosLog.fatal("Missing display argument"); }
-            if (action.equals("enable")) { displays.enable(args.get(2)); return 0; }
-            if (action.equals("disable")) { displays.disable(args.get(2)); return 0; }
-            if (action.equals("primary")) { displays.primary(args.get(2)); return 0; }
-            if (action.equals("dpms")) { displays.dpms(args.get(2)); return 0; }
+            var display = self.requireArg(args, 2, "Missing display argument");
+            if (action.equals("enable")) { displays.enable(display); return 0; }
+            if (action.equals("disable")) { displays.disable(display); return 0; }
+            if (action.equals("primary")) { displays.primary(display); return 0; }
+            if (action.equals("dpms")) { displays.dpms(display); return 0; }
         }
 
         if (command.equals("audio")) {
-            if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl audio <list|current|set> [sink]"); }
+            var action = self.requireAction(args, "Usage: nixosctl audio <list|current|set> [sink]");
             var audio = AudioManager();
-            var action = args.get(1);
             if (action.equals("list")) { audio.list(); return 0; }
             if (action.equals("current")) { Console.log(audio.current()); return 0; }
             if (action.equals("set")) {
-                if (args.count() < 3) { NixosLog.fatal("Usage: nixosctl audio set <sink>"); }
-                audio.set(args.get(2));
+                var sink = self.requireArg(args, 2, "Usage: nixosctl audio set <sink>");
+                audio.set(sink);
                 return 0;
             }
         }
 
         if (command.equals("caffeine")) {
-            if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl caffeine <status|enable|disable|toggle>"); }
+            var action = self.requireAction(args, "Usage: nixosctl caffeine <status|enable|disable|toggle>");
             var caffeine = CaffeineManager();
-            var action = args.get(1);
             if (action.equals("status")) { return caffeine.enabled() ? 0 : 1; }
             if (action.equals("enable")) { caffeine.enable(); return 0; }
             if (action.equals("disable")) { caffeine.disable(); return 0; }
