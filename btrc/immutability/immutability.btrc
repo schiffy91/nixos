@@ -274,7 +274,6 @@ class Immutability {
 }
 
 int main(int argc, char** argv) {
-    CliArgs args = CliArgs(argc, argv);
-    int code = Immutability.cli(args);
-    return code;
+    var args = CliArgs(argc, argv);
+    return Immutability.cli(args);
 }

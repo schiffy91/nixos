@@ -3,7 +3,7 @@ import ../core/paths.btrc;
 
 int main() {
     var iconPath = NixosPaths.trayIconPathFromEnv();
-    SystemTray tray = SystemTray("NixOS");
+    var tray = SystemTray("NixOS");
     if (!iconPath.isEmpty()) {
         tray.icon(iconPath);
     }
