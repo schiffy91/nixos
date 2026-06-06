@@ -1,4 +1,4 @@
-import std.*;
+import std.console;
 
 class NixosLog {
     class string gray() { return "\033[90m"; }

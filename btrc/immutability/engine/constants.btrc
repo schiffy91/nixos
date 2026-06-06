@@ -1,5 +1,3 @@
-import std.*;
-
 class ImmutabilityConstants {
     class string topBase() { return "/run/immutability-top"; }
     class string dirs() { return "dirs"; }
