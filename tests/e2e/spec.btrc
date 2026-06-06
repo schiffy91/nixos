@@ -1,15 +1,4 @@
-import std.*;
 import ./spec/args.btrc;
 import ./spec/operation.btrc;
 import ./spec/test_spec.btrc;
 import ./spec/parser.btrc;
-
-/* VM test spec — module aggregator (one class per file under spec/).
- * btrc #include is textual, so the transpiled C is identical to the former
- * single file. Dependency order: args -> operation -> test_spec -> parser.
- *
- *   args        VmSpecArgs      — host defaults + {{arg}} expansion
- *   operation   VmOperation    — one declarative step
- *   test_spec   VmTestSpec     — a scenario (state + operations)
- *   parser      VmSpecParser   — JSON -> VmTestSpec
- */

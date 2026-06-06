@@ -89,6 +89,7 @@
               settings.subvolumes.volumes;
           recoveryContract = lib.optionals hasRecovery [
             (expect "recovery.type" recovery.type "EF00")
+            (expect "recovery.label" recovery.label settings.partlabel.recovery)
             (expect "recovery.content.format" recovery.content.format "vfat")
             (expect "recovery.content.mountpoint" recovery.content.mountpoint settings.recovery.mountPoint)
             (expectContains "recovery.content.extraArgs" "-n" recovery.content.extraArgs)
@@ -99,9 +100,11 @@
             (expect "disk.type" disk.type "disk")
             (expect "disk.content.type" disk.content.type "gpt")
             (expect "boot.type" boot.type "EF00")
+            (expect "boot.label" boot.label settings.partlabel.boot)
             (expect "boot.content.format" boot.content.format "vfat")
             (expect "boot.content.mountpoint" boot.content.mountpoint settings.boot.efiSysMountPoint)
             (expect "root.size" root.size "100%")
+            (expect "root.label" root.label settings.partlabel.root)
             (expect "root.content.type" rootContent.type (if settings.encryption.enable then "luks" else "btrfs"))
             (expect "root filesystem type" btrfs.type "btrfs")
             (expect "recovery partition enabled" hasRecovery settings.recovery.enable)

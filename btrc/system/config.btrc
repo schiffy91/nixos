@@ -3,6 +3,7 @@ import std.json;
 import std.map;
 import std.process;
 import std.strings;
+import std.vector;
 import ../core/log.btrc;
 import ../core/paths.btrc;
 
@@ -109,13 +110,47 @@ class NixosConfig {
             NixosLog.fatal(f"nix eval failed for {attribute}");
         }
         var value = result.trimmed();
-        value = Strings.replace(value, "\"", "");
         self.cache.put(key, value);
         return value;
     }
 
+    public string evalString(string attribute) {
+        var key = f"{self.flakeRef()}:{attribute}:raw-string";
+        if (self.cache.has(key)) {
+            return self.cache.get(key);
+        }
+        var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(Command(f"{self.nixCommand()} eval --raw {flake}"));
+        if (!result.ok()) {
+            NixosLog.fatal(f"nix eval --raw failed for {attribute}");
+        }
+        var value = result.trimmed();
+        self.cache.put(key, value);
+        return value;
+    }
+
+    public string evalJson(string attribute) {
+        var key = f"{self.flakeRef()}:{attribute}:json";
+        if (self.cache.has(key)) {
+            return self.cache.get(key);
+        }
+        var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(Command(f"{self.nixCommand()} eval --json {flake}"));
+        if (!result.ok()) {
+            NixosLog.fatal(f"nix eval --json failed for {attribute}");
+        }
+        var value = result.trimmed();
+        self.cache.put(key, value);
+        return value;
+    }
+
+    public Vector<string> evalStringList(string attribute) {
+        var wrapped = "{\"values\":" + self.evalJson(attribute) + "}";
+        return JsonText.stringArray(wrapped, "values");
+    }
+
     public bool evalBool(string attribute) {
-        var value = self.evalRaw(attribute);
+        var value = self.evalJson(attribute);
         return value.equals("true");
     }
 
@@ -124,31 +159,31 @@ class NixosConfig {
     public string diskOperationTarget() { return "Disk-Operation"; }
 
     public string username() {
-        return self.evalRaw("config.settings.users.admin.username");
+        return self.evalString("config.settings.users.admin.username");
     }
 
     public string secretsPath() {
-        return self.evalRaw("config.settings.secrets.path");
+        return self.evalString("config.settings.secrets.path");
     }
 
     public string hashedPasswordPath() {
-        var name = self.evalRaw("config.settings.secrets.hashedPasswordFile");
+        var name = self.evalString("config.settings.secrets.hashedPasswordFile");
         return PathTools.join(self.secretsPath(), name);
     }
 
     public string diskDevice() {
-        return self.evalRaw("config.settings.disk.device");
+        return self.evalString("config.settings.disk.device");
     }
 
     public string rootPartLabelPath() {
-        return self.evalRaw("config.settings.disk.by.partlabel.root");
+        return self.evalString("config.settings.disk.by.partlabel.root");
     }
 
     public string tpmDevice() {
-        return self.evalRaw("config.settings.tpm.device");
+        return self.evalString("config.settings.tpm.device");
     }
 
     public string tpmVersionPath() {
-        return self.evalRaw("config.settings.tpm.versionPath");
+        return self.evalString("config.settings.tpm.versionPath");
     }
 }

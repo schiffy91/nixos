@@ -1,4 +1,7 @@
-import std.*;
+import std.fs;
+import std.process;
+import std.strings;
+import std.vector;
 import ./btrfs.btrc;
 import ./paths.btrc;
 import ./run.btrc;

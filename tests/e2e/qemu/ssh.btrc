@@ -1,14 +1,10 @@
-import std.*;
+import std.fs;
+import std.process;
+import std.strings;
+import std.vector;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 
-/* Remote execution against the test VM — SSH, SCP, QMP, and workspace copy.
- *
- * Self-contained: holds its own spec + shell and computes the two paths it
- * needs (ssh key, qmp socket) from spec.workDir, so it has no reference back to
- * the harness. QemuE2eHarness owns one of these as `self.remote` and exposes
- * thin delegating wrappers for the runner/CLI call sites.
- */
 class SshClient {
     public VmTestSpec spec;
     public UnixShell shell;
@@ -53,13 +49,8 @@ class SshClient {
     }
 
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) {
-        var cmd = self.addSshOptions(Command("timeout")
-            .arg(Strings.fromInt(timeoutSeconds))
-            .arg("ssh")
-            .arg("-p")
-            .arg(Strings.fromInt(self.spec.sshPort)))
-            .arg("root@localhost")
-            .arg(command);
+        var cmd = self.addSshOptions(Command(f"timeout {timeoutSeconds} ssh -p {self.spec.sshPort}"))
+            .args(["root@localhost", command]);
         var result = self.shell.run(cmd, logFailure=checkStatus);
         return result;
     }
@@ -107,7 +98,7 @@ class SshClient {
         var source = localPath.isEmpty() ? ".." : localPath;
         var target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
         var remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
-        var tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude='._*' -C "
+        var tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude=.agents --exclude=.claude --exclude=.codex --exclude=.gemini --exclude='._*' -C "
             + UnixShell.quote(source)
             + " .";
         var ssh = "ssh -p "
@@ -121,23 +112,15 @@ class SshClient {
     }
 
     public void copyTo(string localPath, string remotePath) {
-        var cmd = self.addSshOptions(Command("scp")
-            .arg("-r")
-            .arg("-P")
-            .arg(Strings.fromInt(self.spec.sshPort)))
-            .arg(localPath)
-            .arg(f"root@localhost:{remotePath}");
+        var cmd = self.addSshOptions(Command(f"scp -r -P {self.spec.sshPort}"))
+            .args([localPath, f"root@localhost:{remotePath}"]);
         var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file to VM"); }
     }
 
     public void copyFrom(string remotePath, string localPath) {
-        var cmd = self.addSshOptions(Command("scp")
-            .arg("-r")
-            .arg("-P")
-            .arg(Strings.fromInt(self.spec.sshPort)))
-            .arg(f"root@localhost:{remotePath}")
-            .arg(localPath);
+        var cmd = self.addSshOptions(Command(f"scp -r -P {self.spec.sshPort}"))
+            .args([f"root@localhost:{remotePath}", localPath]);
         var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to copy file from VM"); }
     }

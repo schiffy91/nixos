@@ -9,7 +9,6 @@
     "uefiDisk": "true"
   },
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
-  "arch": "x86_64",
   "memory": "8G",
   "cpus": 4,
   "sshPort": 2228,
@@ -21,8 +20,8 @@
     { "op": "restore", "name": "installed-secure-boot" },
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 240 },
-    { "op": "guest", "command": "set -e; bootctl status; cat /boot/loader/loader.conf", "expect": "secure-boot-enroll force" },
-    { "op": "guest", "command": "set -e; for unit in generate-sb-keys.service prepare-sb-auto-enroll.service; do for i in $(seq 1 240); do result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; done; verify=$(sbctl verify); printf '%s\n' \"$verify\"; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/BOOT/BOOTX64.EFI is signed'; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/systemd/systemd-bootx64.efi is signed'; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is signed'; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/BOOT/BOOTX64.EFI is not signed'; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/systemd/systemd-bootx64.efi is not signed'; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is not signed'", "expect": "signed" },
+    { "op": "guest", "command": "bootctl status", "expect": "Secure Boot: enabled" },
+    { "op": "guest", "command": "set -e; for unit in generate-sb-keys.service; do for i in $(seq 1 240); do result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; done; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac; verify=$(sbctl verify); printf '%s\n' \"$verify\"; printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/BOOT/$fallback is signed\"; printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/systemd/$systemd is signed\"; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is signed'; ! printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/BOOT/$fallback is not signed\"; ! printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/systemd/$systemd is not signed\"; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is not signed'", "expect": "signed" },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "bootctl status", "expect": "Secure Boot: enabled" },
     { "op": "snapshot", "name": "secure-boot-enabled" },

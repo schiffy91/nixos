@@ -23,25 +23,57 @@ class PermissionsManager {
     public void chmodMatching(string quotedRoot, string ignores, string predicate, string mode) {
         var execArg = "{}";
         var prune = ignores.isEmpty() ? "" : f"{ignores} -prune -o";
-        self.shell.run(f"find {quotedRoot} {prune} {predicate} -exec chmod {mode} {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        var command = f"find {quotedRoot} {prune} {predicate} -exec chmod {mode} {execArg} +";
+        self.shell.run(
+            command,
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            throwOnFailure=true);
     }
 
     public void secureSecretsPath(string path) {
         if (!FileSystem.exists(path)) { return; }
         var quoted = UnixShell.quote(path);
         if (Platform.isRoot()) {
-            self.shell.run(f"chown -R root:root {quoted}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+            self.shell.run(
+                f"chown -R root:root {quoted}",
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
         }
         var execArg = "{}";
-        self.shell.run(f"find {quoted} -type d -exec chmod 700 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
-        self.shell.run(f"find {quoted} -type f -exec chmod 600 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run(
+            f"find {quoted} -type d -exec chmod 700 {execArg} +",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            throwOnFailure=true);
+        self.shell.run(
+            f"find {quoted} -type f -exec chmod 600 {execArg} +",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            throwOnFailure=true);
+    }
+
+    public void trustGitDirectory(string path) {
+        var quoted = UnixShell.quote(path);
+        var exists = self.shell.run(f"git config --global --get-all safe.directory | grep -Fx -- {quoted} >/dev/null", logFailure=false);
+        if (exists.ok()) { return; }
+        self.shell.run(
+            Command(f"git config --global --add safe.directory {quoted}"),
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            logFailure=false);
     }
 
     public void secureTree(string username) {
         var root = self.config.paths.root;
         var quotedRoot = UnixShell.quote(root);
         if (Platform.isRoot()) {
-            self.shell.run(Command(f"chown -R {UnixShell.quote(username)} {quotedRoot}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+            self.shell.run(
+                Command(f"chown -R {UnixShell.quote(username)} {quotedRoot}"),
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
         }
 
         var ignores = self.ignorePredicate();
@@ -55,10 +87,14 @@ class PermissionsManager {
         if (FileSystem.exists(gitObjects)) {
             var quotedGitObjects = UnixShell.quote(gitObjects);
             var execArg = "{}";
-            self.shell.run(f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+            self.shell.run(
+                f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +",
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
         }
 
-        self.shell.run(Command(f"git config --global --add safe.directory {quotedRoot}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.trustGitDirectory(root);
 
         if (self.config.exists()) {
             SecretsManager(self.config).secure();

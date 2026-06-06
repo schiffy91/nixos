@@ -56,9 +56,9 @@ class Installer {
 
         var flake = UnixShell.quote(f"{PathTools.join(self.mountPoint, self.config.paths.root)}#{self.config.host()}-{self.config.target()}");
         var root = UnixShell.quote(self.mountPoint);
-        var tmpDir = PathTools.join(self.mountPoint, "/nix/tmp");
+        var temporaryDirectory = PathTools.join(self.mountPoint, "/nix/tmp");
         var result = self.shell.run(Command(f"nixos-install --flake {flake} --root {root} --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"),
-            stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=[f"TMPDIR={tmpDir}"]);
+            stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=[f"TMPDIR={temporaryDirectory}"]);
         FileSystem.removeRecursive(PathTools.join(self.mountPoint, "/nix/tmp"));
         if (result.ok()) {
             self.permissionNixos();
@@ -79,7 +79,7 @@ class Installer {
 
     public string plainTextPasswordPath() {
         if (self.config.evalBool("config.settings.disk.encryption.enable")) {
-            return self.config.evalRaw("config.settings.disk.encryption.plainTextPasswordFile");
+            return self.config.evalString("config.settings.disk.encryption.plainTextPasswordFile");
         }
         return "";
     }

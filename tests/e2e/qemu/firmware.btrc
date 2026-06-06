@@ -1,15 +1,8 @@
-import std.*;
+import std.fs;
+import std.process;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 
-/* Host/QEMU capabilities, UEFI/EDK2 firmware discovery + vars, swept-TPM
- * (swtpm), and the QEMU command fragments for firmware and TPM.
- *
- * Self-contained: holds spec + shell, owns the firmware-vars and TPM paths and
- * the capability flags (which the harness's launch + state code reads through
- * self.firmware). The runner reaches in for the four capability checks, exposed
- * as delegating wrappers on the harness.
- */
 class QemuFirmware {
     public VmTestSpec spec;
     public UnixShell shell;
@@ -98,11 +91,9 @@ class QemuFirmware {
     }
 
     public void addFirmwareData(Command cmd) {
-        cmd.arg("-L")
-            .arg(self.prepareFirmwareDataAlias());
+        cmd.args(["-L", self.prepareFirmwareDataAlias()]);
     }
 
-    // Run `find <args> -print -quit`, return the first match (trimmed, "" if none).
     public string findFirst(string findArgs) {
         return self.shell.run("find " + findArgs + " -print -quit 2>/dev/null", logFailure=false).trimmed();
     }
@@ -127,8 +118,6 @@ class QemuFirmware {
 
     public string secureFirmwareCodePath() {
         if (self.spec.arch.equals("aarch64")) {
-            // Enforcing secboot AAVMF from the reproducible nix derivation
-            // (tests/shell.nix), or a manual .vm/firmware override.
             var store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd'");
             if (!store.isEmpty()) { return store; }
             return self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
@@ -228,10 +217,6 @@ class QemuFirmware {
     }
 
     public void requireSecureBootCapability() {
-        // Secure Boot enforcement is done by the firmware (signature checks vs
-        // enrolled keys); it needs an enforcing secboot firmware but NOT QEMU's
-        // secure world. x86_64 uses the bundled edk2-x86_64-secure-code.fd;
-        // aarch64 uses an AAVMF_CODE.secboot.fd under .vm/firmware, under HVF.
         var codePath = self.secureFirmwareCodePath();
         var varsPath = self.firmwareVarsTemplatePath();
         if (codePath.isEmpty() || varsPath.isEmpty()) {
@@ -277,18 +262,17 @@ class QemuFirmware {
             FileSystem.removeRecursive(self.tpmPidPath());
         }
 
-        var cmd = Command("swtpm")
-            .arg("socket")
-            .arg("--tpm2")
-            .arg("--tpmstate")
-            .arg("dir=" + self.tpmStateDir())
-            .arg("--ctrl")
-            .arg("type=unixio,path=" + self.tpmSocketPath())
-            .arg("--daemon")
-            .arg("--pid")
-            .arg("file=" + self.tpmPidPath())
-            .arg("--log")
-            .arg("file=" + self.tpmLogPath() + ",level=20");
+        var cmd = Command("swtpm socket --tpm2").args([
+            "--tpmstate",
+            "dir=" + self.tpmStateDir(),
+            "--ctrl",
+            "type=unixio,path=" + self.tpmSocketPath(),
+            "--daemon",
+            "--pid",
+            "file=" + self.tpmPidPath(),
+            "--log",
+            "file=" + self.tpmLogPath() + ",level=20"
+        ]);
         var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to start swtpm"); }
         var waitCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do test -S "
@@ -313,27 +297,30 @@ class QemuFirmware {
         self.requireUefiCapability();
         if (self.secureBootEnabled()) { self.requireSecureBootCapability(); }
         if (self.spec.arch.equals("x86_64")) {
-            cmd.arg("-machine")
-                .arg("q35");
+            cmd.args(["-machine", "q35"]);
         }
         self.setupFirmwareVars();
         var codePath = self.firmwareCodePath();
         if (codePath.isEmpty()) { NixosLog.fatal("Could not find EDK2 firmware for " + self.spec.arch); }
         var codeArg = self.prepareFirmwareCodeAlias(codePath);
-        cmd.arg("-drive")
-            .arg(f"if=pflash,format=raw,readonly=on,file={codeArg}")
-            .arg("-drive")
-            .arg(f"if=pflash,format=raw,file={self.firmwareVarsPath()}");
+        cmd.args([
+            "-drive",
+            f"if=pflash,format=raw,readonly=on,file={codeArg}",
+            "-drive",
+            f"if=pflash,format=raw,file={self.firmwareVarsPath()}"
+        ]);
     }
 
     public void addTpm2(Command cmd) {
         if (!self.tpm2Enabled()) { return; }
         self.startSwtpm();
-        cmd.arg("-chardev")
-            .arg(f"socket,id=chrtpm,path={self.tpmSocketPath()}")
-            .arg("-tpmdev")
-            .arg("emulator,id=tpm0,chardev=chrtpm")
-            .arg("-device")
-            .arg(f"{self.tpmQemuDevice()},tpmdev=tpm0");
+        cmd.args([
+            "-chardev",
+            f"socket,id=chrtpm,path={self.tpmSocketPath()}",
+            "-tpmdev",
+            "emulator,id=tpm0,chardev=chrtpm",
+            "-device",
+            f"{self.tpmQemuDevice()},tpmdev=tpm0"
+        ]);
     }
 }

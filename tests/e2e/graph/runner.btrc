@@ -1,5 +1,10 @@
-import std.*;
+import std.console;
+import std.fs;
 import std.graph;
+import std.map;
+import std.process;
+import std.strings;
+import std.vector;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ../runner.btrc;
@@ -19,26 +24,32 @@ class VmGraphRunner {
     public string sourceHash() {
         if (!self.sourceHashValue.isEmpty()) { return self.sourceHashValue; }
         var root = self.graph.resolvedWorkspaceRoot();
-        var command = "cd " + UnixShell.quote(root)
+        var hashPipeline = "cd " + UnixShell.quote(root)
             + " && find . -type f"
             + " ! -path './.git/*'"
             + " ! -path '*/.vm/*'"
             + " ! -path '*/build/*'"
             + " ! -path '*/secrets/*'"
+            + " ! -path './.agents/*'"
+            + " ! -path './.claude/*'"
+            + " ! -path './.codex/*'"
+            + " ! -path './.gemini/*'"
             + " ! -path './result/*'"
             + " ! -name '.DS_Store'"
             + " ! -name '._*'"
-            + " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)"
-            + " -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'";
+            + " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.yaml' -o -name '*.yml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)"
+            + " -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'";
+        var command = f"bash -o pipefail -c {UnixShell.quote(hashPipeline)}";
         var result = UnixShell().run(command);
-        if (!result.ok()) {
+        if (!result.ok() || result.trimmed().isEmpty()) {
             NixosLog.fatal("Failed to compute workspace source hash for " + root);
         }
         var toolPath = PathTools.join(root, "build/nixosctl");
         var toolHash = "missing";
         if (FileSystem.exists(toolPath)) {
-            var tool = UnixShell().run("shasum -a 256 " + UnixShell.quote(toolPath) + " | awk '{print $1}'");
-            if (!tool.ok()) {
+            var toolPipeline = "sha256sum " + UnixShell.quote(toolPath) + " | awk '{print $1}'";
+            var tool = UnixShell().run(f"bash -o pipefail -c {UnixShell.quote(toolPipeline)}");
+            if (!tool.ok() || tool.trimmed().isEmpty()) {
                 NixosLog.fatal("Failed to compute nixosctl hash for " + toolPath);
             }
             toolHash = tool.trimmed();
@@ -53,8 +64,8 @@ class VmGraphRunner {
         spec.setArg("nodeId", node.id);
         spec.setArg("workspaceRoot", self.graph.resolvedWorkspaceRoot());
         spec.setArg("sourceHash", self.sourceHash());
-        self.applyStructuralOverrides(spec, node.args);
-        self.applyStructuralOverrides(spec, self.args);
+        spec.applyStructuralOverrides(node.args);
+        spec.applyStructuralOverrides(self.args);
         for key, value in node.args {
             spec.setArg(key, value);
         }
@@ -63,29 +74,6 @@ class VmGraphRunner {
         }
         spec.expandArgs();
         return spec;
-    }
-
-    public void applyStructuralOverrides(VmTestSpec spec, Map<string, string> overrides) {
-        var archChanged = overrides.has("arch");
-        if (overrides.has("name")) { spec.name = overrides.get("name"); }
-        if (overrides.has("workDir")) { spec.workDir = overrides.get("workDir"); }
-        if (overrides.has("arch")) { spec.arch = overrides.get("arch"); }
-        if (archChanged && !overrides.has("iso")) {
-            spec.iso = PathTools.join(PathTools.join(".vm", "iso"), "nixos-minimal-" + spec.arch + ".iso");
-        }
-        if (archChanged && !overrides.has("isoUrl")) {
-            spec.isoUrl = VmSpecArgs.defaultIsoUrl(spec.arch);
-        }
-        if (overrides.has("iso")) { spec.iso = overrides.get("iso"); }
-        if (overrides.has("isoUrl")) { spec.isoUrl = overrides.get("isoUrl"); }
-        if (overrides.has("diskSize")) { spec.diskSize = overrides.get("diskSize"); }
-        if (overrides.has("memory")) { spec.memory = overrides.get("memory"); }
-        if (overrides.has("cpus")) { spec.cpus = Strings.toInt(overrides.get("cpus")); }
-        if (overrides.has("sshPort")) { spec.sshPort = Strings.toInt(overrides.get("sshPort")); }
-        if (overrides.has("state")) { spec.state = overrides.get("state"); }
-        if (overrides.has("parentState")) { spec.parentState = overrides.get("parentState"); }
-        if (overrides.has("stateRoot")) { spec.stateRoot = overrides.get("stateRoot"); }
-        if (overrides.has("stateMaterial")) { spec.stateMaterial = overrides.get("stateMaterial"); }
     }
 
     public void list() {
@@ -101,6 +89,12 @@ class VmGraphRunner {
                 recorded = saved.equals(spec.stateHash) ? "ready" : "stale";
             }
             Console.log(node.id + " " + recorded + " " + spec.stateHashShort + " " + spec.stateDir());
+        }
+    }
+
+    public void resolve(Vector<string> targets) {
+        for target in targets {
+            Console.log(f"{target} -> {self.resolveHostTarget(target)}");
         }
     }
 
@@ -126,19 +120,47 @@ class VmGraphRunner {
             return 1;
         }
 
+        Vector<string> seenRequired = [];
+        Vector<string> duplicateRequired = [];
+        Vector<string> emptyRequired = [];
         Vector<string> missingRequired = [];
         for id in self.graph.required {
+            if (seenRequired.contains(id)) {
+                duplicateRequired.push(id);
+                continue;
+            }
+            seenRequired.push(id);
             if (!self.hasNode(id)) {
                 missingRequired.push(id);
+                continue;
             }
+            var spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(self.graph.node(id)));
+            if (spec.operations.isEmpty()) {
+                emptyRequired.push(id);
+            }
+        }
+        if (!duplicateRequired.isEmpty()) {
+            Console.error("Duplicate required e2e graph nodes: " + duplicateRequired.join(", "));
+            return 1;
         }
         if (!missingRequired.isEmpty()) {
             Console.error("Missing required e2e graph nodes: " + missingRequired.join(", "));
             return 1;
         }
+        if (!emptyRequired.isEmpty()) {
+            Console.error("Required e2e graph nodes with no operations: " + emptyRequired.join(", "));
+            return 1;
+        }
+
+        var traversal = GraphTraversal(self.graph);
+        traversal.order(self.graph.required);
+        if (!traversal.ok()) {
+            Console.error("Invalid required e2e graph traversal: " + traversal.error);
+            return 1;
+        }
 
         Console.log("E2E operation coverage: " + Strings.fromInt(covered.len) + "/" + Strings.fromInt(VmOperationCatalog.all().len));
-        Console.log("E2E required graph nodes: " + Strings.fromInt(self.graph.required.len) + "/" + Strings.fromInt(self.graph.required.len));
+        Console.log("E2E required graph nodes: " + Strings.fromInt(seenRequired.len) + "/" + Strings.fromInt(self.graph.required.len));
         return 0;
     }
 
@@ -169,6 +191,25 @@ class VmGraphRunner {
         return target;
     }
 
+    public bool architectureTarget(string target) {
+        return target.endsWith("-x86_64") || target.endsWith("-aarch64");
+    }
+
+    public bool hostArchitectureTarget(string target) {
+        return target.endsWith(f"-{VmSpecArgs.hostArch()}");
+    }
+
+    public Vector<string> hostRequiredTargets() {
+        Vector<string> result = [];
+        for target in self.graph.required {
+            if (self.architectureTarget(target) && !self.hostArchitectureTarget(target)) {
+                continue;
+            }
+            result.push(target);
+        }
+        return result;
+    }
+
     public Vector<string> resolveHostTargets(Vector<string> targets) {
         Vector<string> result = [];
         for target in targets {
@@ -197,5 +238,12 @@ class VmGraphRunner {
             if (result != 0) { return result; }
         }
         return 0;
+    }
+
+    public int runRequired() {
+        if (self.graph.required.isEmpty()) {
+            NixosLog.fatal("Graph has no required nodes");
+        }
+        return self.run(self.hostRequiredTargets());
     }
 }

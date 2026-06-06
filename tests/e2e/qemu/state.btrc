@@ -1,17 +1,13 @@
-import std.*;
+import std.console;
+import std.fs;
+import std.json;
+import std.process;
+import std.strings;
+import std.vector;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ./firmware.btrc;
 
-/* VM state lifecycle: qcow2-backed state inheritance from a parent, the state
- * record/metadata, and status/snapshot queries.
- *
- * Holds spec + shell + the firmware collaborator (for firmware-vars/TPM paths
- * and capability flags in the metadata). The disk-mutating snapshot/restore and
- * the stop-then-wipe resetState stay on the harness (they orchestrate stop());
- * the harness reads queries here via self.state and delegates the runner-facing
- * methods.
- */
 class VmStateStore {
     public VmTestSpec spec;
     public UnixShell shell;

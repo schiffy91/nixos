@@ -1,15 +1,12 @@
-import std.*;
+import std.console;
+import std.fs;
+import std.json;
+import std.process;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ./ssh.btrc;
 import ./state.btrc;
 
-/* Provisions a freshly-booted installer VM: writes the VM-TEST host module +
- * local config from the scenario args (configureVmHost), then runs disko +
- * nixos-install + CLEAN-baseline snapshots (installNixosGuest). Holds the spec
- * and the SshClient; install failures are reported up so the harness can stop
- * the VM and abort.
- */
 class VmProvisioner {
     public VmTestSpec spec;
     public SshClient remote;
@@ -56,11 +53,9 @@ class VmProvisioner {
             + "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {\n"
             + "    boot.loader.timeout = lib.mkForce 0;\n"
             + "    boot.lanzaboote.autoGenerateKeys.enable = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.enable = true;\n"
+            + "    boot.lanzaboote.autoEnrollKeys.enable = false;\n"
             + "    boot.lanzaboote.allowUnsigned = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.includeMicrosoftKeys = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.autoReboot = false;\n"
-            + "    environment.systemPackages = [ pkgs.sbctl ];\n"
+            + "    environment.systemPackages = [ pkgs.sbctl pkgs.sbsigntool ];\n"
             + "  };\n"
             + "}\n";
         var secureBootModuleCommand = secureBootTarget
@@ -96,7 +91,10 @@ class VmProvisioner {
             + "  settings.disk.swap.size = \"2G\";\n"
             + secureBootSettings
             + "}\n";
-        var localConfig = "{\"host_path\":\"nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix\",\"target\":\"" + bootTargetName + "\"}\n";
+        var local = JsonObject();
+        local.setString("host_path", "nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix");
+        local.setString("target", bootTargetName);
+        var localConfig = local.stringify() + "\n";
         var luksCommand = encryption.equals("true")
             ? "printf %s " + UnixShell.quote(luksPass) + " > /tmp/plain_text_password.txt; chmod 600 /tmp/plain_text_password.txt; "
             : "";
@@ -116,7 +114,7 @@ class VmProvisioner {
             + "printf %s " + UnixShell.quote(hostNix) + " > " + UnixShell.quote(hostPath) + "; "
             + "printf %s " + UnixShell.quote(localConfig) + " > /etc/nixos/config.json; "
             + "git -C /etc/nixos init; "
-            + "git config --global --add safe.directory /etc/nixos; "
+            + "git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos; "
             + "git -C /etc/nixos add -A; "
             + "git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty";
         var result = self.remote.sshWithTimeout(command, false, 120);
@@ -138,12 +136,35 @@ class VmProvisioner {
         var install = "mkdir -p /mnt/etc; rm -rf /mnt/etc/nixos; cp -r /etc/nixos /mnt/etc/nixos; mkdir -p /mnt/nix/tmp; TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#"
             + bootTarget
             + " --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0";
+        var secureBootKeys = "set -ex; "
+            + "mkdir -p /var/lib/sbctl; "
+            + "if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi; "
+            + "sbctl enroll-keys --yes-this-might-brick-my-machine";
+        var secureBootInstall = secureBootKeys
+            + "; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac; "
+            + "if ! test -e \"/target-boot/EFI/BOOT/$fallback\" && test -e \"/boot/EFI/BOOT/$fallback\"; then install -Dm0644 \"/boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/BOOT/$fallback\"; fi; "
+            + "if ! test -e \"/target-boot/EFI/systemd/$systemd\" && test -e \"/boot/EFI/systemd/$systemd\"; then install -Dm0644 \"/boot/EFI/systemd/$systemd\" \"/target-boot/EFI/systemd/$systemd\"; fi; "
+            + "test -e \"/target-boot/EFI/BOOT/$fallback\"; "
+            + "test -e \"/target-boot/EFI/systemd/$systemd\"; "
+            + "for file in \"/target-boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/systemd/$systemd\" /target-boot/EFI/Linux/*.efi; do "
+            + "test -e \"$file\" || continue; "
+            + "signed=$(mktemp); "
+            + "sbsign --key /var/lib/sbctl/keys/db/db.key --cert /var/lib/sbctl/keys/db/db.pem --output \"$signed\" \"$file\"; "
+            + "install -m 0644 \"$signed\" \"$file\"; "
+            + "rm -f \"$signed\"; "
+            + "sbverify --list \"$file\" | grep -q 'signature certificates'; "
+            + "done; sync";
         var lanzabooteInstall = secureBootTarget
-            ? "nixos-enter --root /mnt --command "
-                + UnixShell.quote("set -e; mkdir -p /var/lib/sbctl; if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi; cmd=$(nix --extra-experimental-features nix-command --extra-experimental-features flakes eval --raw /etc/nixos#nixosConfigurations.VM-TEST-Secure-Boot.config.boot.lanzaboote.installCommand); tmp=$(mktemp -d); ln -s /nix/var/nix/profiles/system \"$tmp/system-1-link\"; sh -c \"$cmd --public-key /var/lib/sbctl/keys/db/db.pem --private-key /var/lib/sbctl/keys/db/db.key /boot $tmp/system-1-link\"; rm -rf \"$tmp\"")
+            ? "mkdir -p /mnt/target-boot\n"
+                + "mount --bind /mnt/boot /mnt/target-boot\n"
+                + "nixos-enter --root /mnt --command "
+                + UnixShell.quote(secureBootInstall)
+                + "\n"
+                + "umount /mnt/target-boot\n"
+                + "rmdir /mnt/target-boot"
             : "true";
         var snapshots = "nixos-enter --root /mnt --command "
-            + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --add safe.directory /etc/nixos || true");
+            + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos");
         var script = "set -ex\n"
             + "printf INSTALL_START > /tmp/nixos-install.status\n"
             + disko + "\n"

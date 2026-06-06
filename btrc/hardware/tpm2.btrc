@@ -1,4 +1,6 @@
-import std.*;
+import std.console;
+import std.fs;
+import std.process;
 import ../system/config.btrc;
 
 class Tpm2Manager {
@@ -22,16 +24,38 @@ class Tpm2Manager {
     }
 
     public bool enroll() {
-        return self.shell.run(Command(f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.config.tpmDevice())} --tpm2-pcrs=7+12"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false).ok();
+        var command = Command(
+            f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())}"
+                + f" --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.config.tpmDevice())}"
+                + " --tpm2-pcrs=7+12");
+        return self.shell.run(
+            command,
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            logFailure=false).ok();
     }
 
     public bool wipe() {
-        return self.shell.run(Command(f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false).ok();
+        var command = Command(
+            f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2");
+        return self.shell.run(
+            command,
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            logFailure=false).ok();
     }
 
     public void status() {
         Console.log(f"TPM2 device: {self.config.tpmDevice()}");
-        self.shell.run(Command(f"systemd-cryptenroll --tpm2-device=list {UnixShell.quote(self.config.rootPartLabelPath())}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-        self.shell.run(Command(f"cryptsetup luksDump {UnixShell.quote(self.config.rootPartLabelPath())}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(
+            Command(f"systemd-cryptenroll --tpm2-device=list {UnixShell.quote(self.config.rootPartLabelPath())}"),
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            logFailure=false);
+        self.shell.run(
+            Command(f"cryptsetup luksDump {UnixShell.quote(self.config.rootPartLabelPath())}"),
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            logFailure=false);
     }
 }

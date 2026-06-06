@@ -1,17 +1,30 @@
-import std.*;
+import std.cli;
+import std.console;
 import std.graph;
+import std.map;
+import std.strings;
+import std.vector;
 import ../../btrc/core/log.btrc;
 import ./spec.btrc;
 import ./qemu_harness.btrc;
 import ./runner.btrc;
 import ./graph.btrc;
 
-/* The `nixosctl vm|e2e|graph` command surface — the test-harness CLI, split out
- * of NixosCtl so the top-level tool keeps only the real NixOS commands.
- * Stateless: each method drives the e2e classes (QemuE2eHarness, VmTestRunner,
- * VmGraphRunner) from parsed CliArgs.
- */
 class E2eCli {
+    public Vector<string> vmActions() {
+        return [
+            "status", "hash", "setup", "download-iso", "create-key", "create-disk",
+            "up", "boot-iso", "boot-disk", "bootstrap-ssh", "wait-ssh", "ssh", "host",
+            "copy-workspace", "configure-vm-host", "install-nixos", "reboot-disk",
+            "reboot-recovery", "snapshot", "restore", "record-state", "stop",
+            "reset-state", "clean-state"
+        ];
+    }
+
+    public string vmUsage() {
+        return "Usage: nixosctl vm <spec.json> <" + self.vmActions().join("|") + ">";
+    }
+
     public string tail(CliArgs args, int startIndex) {
         Vector<string> parts = [];
         for (int i = startIndex; i < args.count(); i++) {
@@ -20,41 +33,15 @@ class E2eCli {
         return parts.join(" ");
     }
 
-    public void applyStructuralOverrides(VmTestSpec spec) {
-        var archChanged = spec.args.has("arch");
-        if (spec.args.has("name")) { spec.name = spec.args.get("name"); }
-        if (spec.args.has("workDir")) { spec.workDir = spec.args.get("workDir"); }
-        if (spec.args.has("arch")) { spec.arch = spec.args.get("arch"); }
-        if (archChanged && !spec.args.has("iso")) {
-            spec.iso = PathTools.join(PathTools.join(".vm", "iso"), "nixos-minimal-" + spec.arch + ".iso");
-        }
-        if (archChanged && !spec.args.has("isoUrl")) {
-            spec.isoUrl = VmSpecArgs.defaultIsoUrl(spec.arch);
-        }
-        if (spec.args.has("iso")) { spec.iso = spec.args.get("iso"); }
-        if (spec.args.has("isoUrl")) { spec.isoUrl = spec.args.get("isoUrl"); }
-        if (spec.args.has("diskSize")) { spec.diskSize = spec.args.get("diskSize"); }
-        if (spec.args.has("memory")) { spec.memory = spec.args.get("memory"); }
-        if (spec.args.has("cpus")) { spec.cpus = Strings.toInt(spec.args.get("cpus")); }
-        if (spec.args.has("sshPort")) { spec.sshPort = Strings.toInt(spec.args.get("sshPort")); }
-        if (spec.args.has("state")) { spec.state = spec.args.get("state"); }
-        if (spec.args.has("parentState")) { spec.parentState = spec.args.get("parentState"); }
-        if (spec.args.has("stateRoot")) { spec.stateRoot = spec.args.get("stateRoot"); }
-        if (spec.args.has("stateMaterial")) { spec.stateMaterial = spec.args.get("stateMaterial"); }
-    }
-
     public void applySpecArgs(VmTestSpec spec, CliArgs args, int startIndex) {
         var overrides = GraphCli.args(args, startIndex);
-        for key in overrides.keys() {
-            spec.setArg(key, overrides.get(key));
-        }
-        self.applyStructuralOverrides(spec);
+        spec.applyArgOverrides(overrides);
         spec.expandArgs();
     }
 
     public int runVm(CliArgs args) {
         if (args.count() < 3) {
-            NixosLog.fatal("Usage: nixosctl vm <spec.json> <status|hash|setup|up|boot-iso|boot-disk|bootstrap-ssh|wait-ssh|ssh|snapshot|restore|reboot-disk|reboot-recovery|stop|reset-state|clean-state>");
+            NixosLog.fatal(self.vmUsage());
         }
         var spec = VmSpecParser.readFile(args.get(1));
         self.applySpecArgs(spec, args, 3);
@@ -119,7 +106,7 @@ class E2eCli {
 
     public int runGraph(CliArgs args) {
         if (args.count() < 3) {
-            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
+            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required> [node ...] [--arg key=value]");
         }
         var graph = GraphParser.readFile(args.get(1));
         var action = args.get(2);
@@ -133,6 +120,10 @@ class E2eCli {
             runner.status();
             return 0;
         }
+        if (action.equals("resolve")) {
+            runner.resolve(self.graphTargets(args, 3));
+            return 0;
+        }
         if (action.equals("coverage")) {
             var code = runner.operationCoverage();
             return code;
@@ -141,7 +132,11 @@ class E2eCli {
             var code = runner.run(self.graphTargets(args, 3));
             return code;
         }
-        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|coverage|run> [node ...] [--arg key=value]");
+        if (action.equals("run-required")) {
+            var code = runner.runRequired();
+            return code;
+        }
+        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required> [node ...] [--arg key=value]");
         return 1;
     }
 

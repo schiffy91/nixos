@@ -1,4 +1,7 @@
-import std.*;
+import std.fs;
+import std.map;
+import std.strings;
+import std.vector;
 import ../../../btrc/core/log.btrc;
 import ./args.btrc;
 import ./operation.btrc;
@@ -53,9 +56,39 @@ class VmTestSpec {
         if (pos <= 0) {
             NixosLog.fatal("Expected --arg key=value, got " + pair);
         }
-        var key = JsonObject.slice(pair, 0, pos);
-        var value = JsonObject.slice(pair, pos + 1, pair.len());
+        var key = pair.substring(0, pos);
+        var value = pair.substring(pos + 1, pair.len() - pos - 1);
         self.setArg(key, value);
+    }
+
+    public void applyStructuralOverrides(Map<string, string> overrides) {
+        var archChanged = overrides.has("arch");
+        if (overrides.has("name")) { self.name = overrides.get("name"); }
+        if (overrides.has("workDir")) { self.workDir = overrides.get("workDir"); }
+        if (overrides.has("arch")) { self.arch = overrides.get("arch"); }
+        if (archChanged && !overrides.has("iso")) {
+            self.iso = VmSpecArgs.defaultIso(self.arch);
+        }
+        if (archChanged && !overrides.has("isoUrl")) {
+            self.isoUrl = VmSpecArgs.defaultIsoUrl(self.arch);
+        }
+        if (overrides.has("iso")) { self.iso = overrides.get("iso"); }
+        if (overrides.has("isoUrl")) { self.isoUrl = overrides.get("isoUrl"); }
+        if (overrides.has("diskSize")) { self.diskSize = overrides.get("diskSize"); }
+        if (overrides.has("memory")) { self.memory = overrides.get("memory"); }
+        if (overrides.has("cpus")) { self.cpus = Strings.toInt(overrides.get("cpus")); }
+        if (overrides.has("sshPort")) { self.sshPort = Strings.toInt(overrides.get("sshPort")); }
+        if (overrides.has("state")) { self.state = overrides.get("state"); }
+        if (overrides.has("parentState")) { self.parentState = overrides.get("parentState"); }
+        if (overrides.has("stateRoot")) { self.stateRoot = overrides.get("stateRoot"); }
+        if (overrides.has("stateMaterial")) { self.stateMaterial = overrides.get("stateMaterial"); }
+    }
+
+    public void applyArgOverrides(Map<string, string> overrides) {
+        for key in overrides.keys() {
+            self.setArg(key, overrides.get(key));
+        }
+        self.applyStructuralOverrides(self.args);
     }
 
     public void setDerivedArgs() {
@@ -202,12 +235,16 @@ class VmTestSpec {
 
     public void computeStateHash() {
         self.parentHash = self.resolveParentHash();
-        var command = "(if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi) | awk '{print $1}'";
+        var hashCommand = "(if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi) | awk '{print $1}'";
+        var command = f"bash -o pipefail -c {UnixShell.quote(hashCommand)}";
         var result = UnixShell().run(command, stdin=self.hashMaterial());
         if (!result.ok()) {
             NixosLog.fatal("Failed to compute state hash for " + self.state);
         }
         self.stateHash = result.trimmed();
+        if (self.stateHash.len() < 12) {
+            NixosLog.fatal("Invalid state hash for " + self.state);
+        }
         self.stateHashShort = self.stateHash.substring(0, 12);
     }
 

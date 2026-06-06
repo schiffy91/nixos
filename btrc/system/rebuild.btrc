@@ -11,12 +11,14 @@ import ./permissions.btrc;
 class RebuildOptions {
     public bool rebuildFileSystem;
     public bool reboot;
+    public bool promptReboot;
     public bool clean;
     public bool upgrade;
 
     public RebuildOptions() {
         self.rebuildFileSystem = false;
         self.reboot = false;
+        self.promptReboot = true;
         self.clean = false;
         self.upgrade = false;
     }
@@ -34,15 +36,24 @@ class NixosRebuilder {
     }
 
     public ExecResult runNixCollectGarbage() {
-        return self.shell.run(Command("nix-collect-garbage -d"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        return self.shell.run(
+            "nix-collect-garbage -d",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream());
     }
 
     public ExecResult verifyStore() {
-        return self.shell.run(Command("nix-store --verify --repair"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        return self.shell.run(
+            "nix-store --verify --repair",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream());
     }
 
     public ExecResult updateFlake() {
-        return self.shell.run(Command(f"nix flake update --flake {UnixShell.quote(self.config.paths.root)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        return self.shell.run(
+            f"nix flake update --flake {UnixShell.quote(self.config.paths.root)}",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream());
     }
 
     public ExecResult switchSystem(RebuildOptions options) {
@@ -50,7 +61,11 @@ class NixosRebuilder {
         if (options.rebuildFileSystem) {
             env.push("NIXOS_INSTALL_BOOTLOADER=1");
         }
-        return self.shell.run(Command(f"nixos-rebuild switch --flake {UnixShell.quote(self.config.flakeRef())}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), env=env);
+        return self.shell.run(
+            f"nixos-rebuild switch --flake {UnixShell.quote(self.config.flakeRef())}",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            env=env);
     }
 
     public void requireOk(string action, ExecResult result) {
@@ -69,7 +84,7 @@ class NixosRebuilder {
 
     public string plainTextPasswordPath() {
         if (self.config.evalBool("config.settings.disk.encryption.enable")) {
-            return self.config.evalRaw("config.settings.disk.encryption.plainTextPasswordFile");
+            return self.config.evalString("config.settings.disk.encryption.plainTextPasswordFile");
         }
         return "";
     }
@@ -79,7 +94,12 @@ class NixosRebuilder {
         Vector<string> lines = [];
         for line in Strings.split(result.stdout(), "\n") {
             if (line.equals("Starting Home Manager activation")) { break; }
-            if (line.startsWith("Starting ") || line.startsWith("Stopping ") || line.startsWith("Stopped ") || line.startsWith("Finished ") || line.startsWith("Activating ")) {
+            var systemdNoise = line.startsWith("Starting ")
+                || line.startsWith("Stopping ")
+                || line.startsWith("Stopped ")
+                || line.startsWith("Finished ")
+                || line.startsWith("Activating ");
+            if (systemdNoise) {
                 continue;
             }
             if (!line.trim().isEmpty()) { lines.push(line); }
@@ -110,8 +130,12 @@ class NixosRebuilder {
         var logs = self.homeManagerLogs();
         if (!logs.isEmpty()) { Console.log(logs); }
         if (options.reboot) {
-            self.shell.run(Command("shutdown -r now"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
-        } else {
+            self.shell.run(
+                "shutdown -r now",
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
+        } else if (options.promptReboot) {
             self.interactive.askToReboot();
         }
     }

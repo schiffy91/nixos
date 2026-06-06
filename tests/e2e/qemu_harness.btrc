@@ -1,4 +1,6 @@
-import std.*;
+import std.console;
+import std.fs;
+import std.process;
 import ../../btrc/core/log.btrc;
 import ./spec.btrc;
 import ./qemu/assets.btrc;
@@ -52,7 +54,6 @@ class QemuE2eHarness {
         FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
     }
 
-    // VM assets (ISO/key/disk) live in VmAssets (qemu/assets.btrc); delegate.
     public void downloadIso() { self.assets.downloadIso(); }
     public void createSshKey() { self.assets.createSshKey(); }
     public string sshPubKey() { return self.assets.sshPubKey(); }
@@ -65,7 +66,6 @@ class QemuE2eHarness {
         self.ensureWorkDir();
     }
 
-    // State lifecycle lives in VmStateStore (qemu/state.btrc); these delegate.
     public void cleanStateRecord() { self.state.cleanStateRecord(); }
     public void requireParentState() { self.state.requireParentState(); }
     public void inheritState() { self.state.inheritState(); }
@@ -244,7 +244,6 @@ class QemuE2eHarness {
         }
     }
 
-    // Remote execution lives in SshClient (qemu/ssh.btrc); these delegate.
     public ExecResult ssh(string command, bool checkStatus) { return self.remote.ssh(command, checkStatus); }
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) { return self.remote.sshWithTimeout(command, checkStatus, timeoutSeconds); }
     public ExecResult host(string command, bool checkStatus) { return self.remote.host(command, checkStatus); }
@@ -255,11 +254,9 @@ class QemuE2eHarness {
     public void copyTo(string localPath, string remotePath) { self.remote.copyTo(localPath, remotePath); }
     public void copyFrom(string remotePath, string localPath) { self.remote.copyFrom(remotePath, localPath); }
 
-    // Serial console lives in QemuSerial (qemu/serial.btrc); these delegate.
     public string serialLogPath() { return self.serial.serialLogPath(); }
     public void serialSend(string command) { self.serial.serialSend(command); }
 
-    // Capability checks live in QemuFirmware (qemu/firmware.btrc); these delegate.
     public void requireCommand(string name) { self.firmware.requireCommand(name); }
     public void requireTpm2Capability() { self.firmware.requireTpm2Capability(); }
     public void requireUefiCapability() { self.firmware.requireUefiCapability(); }

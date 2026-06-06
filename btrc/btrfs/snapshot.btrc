@@ -35,17 +35,16 @@ class SnapshotManager {
     }
 
     public string snapshotsPath() {
-        return self.config.evalRaw("config.settings.disk.subvolumes.snapshots.mountPoint");
+        return self.config.evalString("config.settings.disk.subvolumes.snapshots.mountPoint");
     }
 
     public string cleanName() {
-        return self.config.evalRaw("config.settings.disk.immutability.persist.snapshots.cleanName");
+        return self.config.evalString("config.settings.disk.immutability.persist.snapshots.cleanName");
     }
 
     public Vector<ResetSubvolume> resetSubvolumes() {
         Vector<ResetSubvolume> result = [];
-        var raw = self.config.evalRaw("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
-        var pairs = Strings.split(raw, " ");
+        var pairs = self.config.evalStringList("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot");
         for pair in pairs {
             if (pair.isEmpty()) { continue; }
             var parts = Strings.split(pair, "=");
@@ -76,7 +75,7 @@ class SnapshotManager {
         if (!listed.ok()) {
             NixosLog.fatal(f"Failed to list child subvolumes under {path}");
         }
-        var snapshotsName = self.config.evalRaw("config.settings.disk.subvolumes.snapshots.name");
+        var snapshotsName = self.config.evalString("config.settings.disk.subvolumes.snapshots.name");
         var snapshotsMount = self.snapshotsPath();
         var snapshotsPrefix = f"{snapshotsName}/";
         for line in Strings.split(listed.stdout(), "\n") {

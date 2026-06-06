@@ -1,4 +1,7 @@
-import std.*;
+import std.json;
+import std.map;
+import std.process;
+import std.strings;
 
 class VmSpecArgs {
     class string hostArch() {
@@ -13,6 +16,10 @@ class VmSpecArgs {
 
     class string defaultIsoUrl(string arch) {
         return "https://channels.nixos.org/nixos-unstable/latest-nixos-minimal-" + arch + "-linux.iso";
+    }
+
+    class string defaultIso(string arch) {
+        return ".vm/e2e/iso/nixos-minimal-" + arch + ".iso";
     }
 
     class string expand(string text, Map<string, string> args) {

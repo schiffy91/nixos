@@ -9,11 +9,13 @@ let
     if pkgs.stdenv.hostPlatform.isAarch64
     then [ "virtio_pci" "virtio_blk" "virtio_net" "virtio_mmio" "virtio_rng" ]
     else [ "virtio_pci" "virtio_blk" "virtio_net" "virtio_rng" ];
+  adminAuthorizedKeys = config.settings.users.admin.authorizedKeys;
   fallbackBootPath = "EFI/BOOT/BOOT${lib.toUpper efiArch}.EFI";
-  legacyUkiPath = "EFI/recovery/nixos-recovery.efi";
+  legacySecureRecoveryUkiPath = "EFI/recovery/nixos-recovery.efi";
   publicKey = "${config.settings.boot.pkiBundle}/keys/db/db.pem";
   privateKey = "${config.settings.boot.pkiBundle}/keys/db/db.key";
   signingRequired = config.settings.boot.method == "Secure-Boot";
+  systemStateVersion = config.system.stateVersion;
 
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
@@ -21,9 +23,9 @@ let
       "${inputs.nixpkgs}/nixos/modules/profiles/minimal.nix"
       "${inputs.nixpkgs}/nixos/modules/profiles/installation-device.nix"
       "${inputs.nixpkgs}/nixos/modules/installer/netboot/netboot.nix"
-      ({ lib, pkgs, ... }: {
+      ({ config, lib, pkgs, ... }: {
         networking.hostName = "nixos-recovery";
-        system.stateVersion = config.system.stateVersion;
+        system.stateVersion = systemStateVersion;
 
         boot = {
           initrd = {
@@ -36,6 +38,11 @@ let
             "console=tty0"
           ];
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
+          uki = {
+            name = "nixos-recovery";
+            version = null;
+            settings.UKI.Initrd = lib.mkForce "${config.system.build.netbootRamdisk}/initrd";
+          };
         };
 
         documentation.enable = lib.mkDefault false;
@@ -47,7 +54,7 @@ let
           settings.PermitRootLogin = "prohibit-password";
         };
         users.users.root.openssh.authorizedKeys.keys =
-          config.settings.users.admin.authorizedKeys;
+          adminAuthorizedKeys;
 
         environment.systemPackages = with pkgs; [
           btrfs-progs
@@ -88,20 +95,44 @@ let
   recoveryReadme = pkgs.writeText "nixos-recovery-README.txt" ''
     NixOS recovery partition
 
-    This partition contains the same split NixOS recovery kernel and initrd
-    that the installed systemd-boot/lanzaboote menu loads from the ESP. The
-    recovery partition also has its own fallback systemd-boot copy at the
+    Standard-Boot installs a split NixOS recovery kernel and initrd.
+    Secure-Boot signs the recovery kernel and recovery fallback loader.
+    The recovery partition also has its own fallback systemd-boot copy at the
     firmware fallback path for direct firmware boot.
   '';
+  recoveryArtifactTriggers = [ recoveryKernel recoveryInitrd ];
+  installRecoveryArtifacts =
+    if signingRequired
+    then ''
+      install_secure ${lib.escapeShellArg recoveryKernel} "$boot/${config.settings.disk.recovery.kernelPath}"
+      install_secure ${lib.escapeShellArg recoveryKernel} "$recovery/${config.settings.disk.recovery.kernelPath}"
+      install_plain ${lib.escapeShellArg recoveryInitrd} "$boot/${config.settings.disk.recovery.initrdPath}"
+      install_plain ${lib.escapeShellArg recoveryInitrd} "$recovery/${config.settings.disk.recovery.initrdPath}"
+    ''
+    else ''
+      install_plain ${lib.escapeShellArg recoveryKernel} "$boot/${config.settings.disk.recovery.kernelPath}"
+      install_plain ${lib.escapeShellArg recoveryInitrd} "$boot/${config.settings.disk.recovery.initrdPath}"
+      install_plain ${lib.escapeShellArg recoveryKernel} "$recovery/${config.settings.disk.recovery.kernelPath}"
+      install_plain ${lib.escapeShellArg recoveryInitrd} "$recovery/${config.settings.disk.recovery.initrdPath}"
+    '';
+  removeLegacyRecoveryArtifacts = ''
+    rm -f "$boot/${legacySecureRecoveryUkiPath}" "$recovery/${legacySecureRecoveryUkiPath}"
+  '';
+  installRecoveryFallback =
+    if signingRequired
+    then ''
+      install_secure ${lib.escapeShellArg recoverySystemdBoot} "$recovery/${fallbackBootPath}"
+    ''
+    else ''
+      install_plain ${lib.escapeShellArg recoverySystemdBoot} "$recovery/${fallbackBootPath}"
+    '';
 in
 lib.mkIf config.settings.disk.recovery.enable {
   systemd.services.nixos-recovery-boot-entry = {
     description = "Install NixOS recovery boot artifacts";
     wantedBy = [ "multi-user.target" ];
     after = [ "local-fs.target" "generate-sb-keys.service" ];
-    restartTriggers = [
-      recoveryKernel
-      recoveryInitrd
+    restartTriggers = recoveryArtifactTriggers ++ [
       recoverySystemdBoot
       recoveryEntry
       recoveryLoaderConf
@@ -137,16 +168,12 @@ lib.mkIf config.settings.disk.recovery.enable {
         exit 1
       fi
 
-      install_signed() {
+      install_secure() {
         source="$1"
         target="$2"
         mkdir -p "$(dirname "$target")"
         tmp="$(mktemp)"
-        if [ -e "$public_key" ] && [ -e "$private_key" ]; then
-          sbsign --key "$private_key" --cert "$public_key" --output "$tmp" "$source"
-        else
-          cp "$source" "$tmp"
-        fi
+        sbsign --key "$private_key" --cert "$public_key" --output "$tmp" "$source"
         install -m 0644 "$tmp" "$target"
         rm -f "$tmp"
       }
@@ -158,13 +185,10 @@ lib.mkIf config.settings.disk.recovery.enable {
         install -m 0644 "$source" "$target"
       }
 
-      install_signed ${lib.escapeShellArg recoveryKernel} "$boot/${config.settings.disk.recovery.kernelPath}"
-      install_plain ${lib.escapeShellArg recoveryInitrd} "$boot/${config.settings.disk.recovery.initrdPath}"
-      install_signed ${lib.escapeShellArg recoveryKernel} "$recovery/${config.settings.disk.recovery.kernelPath}"
-      install_plain ${lib.escapeShellArg recoveryInitrd} "$recovery/${config.settings.disk.recovery.initrdPath}"
-      install_signed ${lib.escapeShellArg recoverySystemdBoot} "$recovery/${fallbackBootPath}"
+      ${installRecoveryArtifacts}
+      ${installRecoveryFallback}
+      ${removeLegacyRecoveryArtifacts}
 
-      rm -f "$boot/${legacyUkiPath}" "$recovery/${legacyUkiPath}"
       install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$boot/${config.settings.disk.recovery.entryPath}"
       install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
       install -Dm0644 ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"

@@ -1,4 +1,4 @@
-import std.*;
+import std.map;
 import ./args.btrc;
 
 class VmOperation {

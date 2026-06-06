@@ -18,25 +18,115 @@ class VmAssets {
     public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
     public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
+    public string isoHashPath() { return self.spec.iso + ".sha256"; }
+    public string isoSizePath() { return self.spec.iso + ".size"; }
 
     public void ensureWorkDir() {
         FileSystem.mkdirp(self.spec.workDir);
         FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
     }
 
+    public string expectedIsoHash() {
+        if (self.spec.isoUrl.isEmpty()) { return ""; }
+        var command = "curl -L --fail --silent --show-error "
+            + UnixShell.quote(self.spec.isoUrl + ".sha256")
+            + " | awk '{print $1}'";
+        var result = self.shell.run(command, logFailure=false);
+        if (!result.ok()) { NixosLog.fatal("Failed to fetch installer ISO checksum for " + self.spec.isoUrl); }
+        return result.trimmed();
+    }
+
+    public string expectedIsoSize() {
+        if (self.spec.isoUrl.isEmpty()) { return ""; }
+        var command = "curl -L --fail --silent --show-error --head "
+            + UnixShell.quote(self.spec.isoUrl)
+            + " | awk 'tolower($1) == \"content-length:\" { value = $2 } END { gsub(\"\\r\", \"\", value); print value }'";
+        var result = self.shell.run(command, logFailure=false);
+        if (!result.ok() || result.trimmed().isEmpty()) { NixosLog.fatal("Failed to fetch installer ISO size for " + self.spec.isoUrl); }
+        return result.trimmed();
+    }
+
+    public string fileSize(string path) {
+        var command = "wc -c < " + UnixShell.quote(path) + " | awk '{print $1}'";
+        var result = self.shell.run(command, logFailure=false);
+        if (!result.ok()) { return ""; }
+        return result.trimmed();
+    }
+
+    public string fileHash(string path) {
+        var quotedPath = UnixShell.quote(path);
+        var command = "(if command -v sha256sum >/dev/null 2>&1; then sha256sum "
+            + quotedPath
+            + "; else shasum -a 256 "
+            + quotedPath
+            + "; fi) | awk '{print $1}'";
+        var result = self.shell.run(command, logFailure=false);
+        if (!result.ok()) { return ""; }
+        return result.trimmed();
+    }
+
+    public bool isoMetadataValid(string expectedHash, string expectedSize) {
+        if (expectedHash.isEmpty() || expectedSize.isEmpty()) { return false; }
+        if (!FileSystem.exists(self.spec.iso)) { return false; }
+        if (!FileSystem.exists(self.isoHashPath()) || !FileSystem.exists(self.isoSizePath())) { return false; }
+        if (!Path.readAll(self.isoHashPath()).trim().equals(expectedHash)) { return false; }
+        if (!Path.readAll(self.isoSizePath()).trim().equals(expectedSize)) { return false; }
+        return self.fileSize(self.spec.iso).equals(expectedSize);
+    }
+
+    public void writeIsoMetadata(string expectedHash, string expectedSize) {
+        if (expectedHash.isEmpty() || expectedSize.isEmpty()) { return; }
+        Path.writeAll(self.isoHashPath(), expectedHash + "\n");
+        Path.writeAll(self.isoSizePath(), expectedSize + "\n");
+    }
+
+    public void removeIsoCache() {
+        FileSystem.removeRecursive(self.spec.iso);
+        FileSystem.removeRecursive(self.isoHashPath());
+        FileSystem.removeRecursive(self.isoSizePath());
+    }
+
+    public bool isoValid(string expectedHash, string expectedSize) {
+        if (self.isoMetadataValid(expectedHash, expectedSize)) { return true; }
+        if (!FileSystem.exists(self.spec.iso)) { return false; }
+        if (!expectedSize.isEmpty() && !self.fileSize(self.spec.iso).equals(expectedSize)) { return false; }
+        if (expectedHash.isEmpty()) { return true; }
+        var valid = self.fileHash(self.spec.iso).equals(expectedHash);
+        if (valid) { self.writeIsoMetadata(expectedHash, expectedSize); }
+        return valid;
+    }
+
+    public void installIso(string source, string expectedHash, string expectedSize) {
+        if (!expectedSize.isEmpty() && !self.fileSize(source).equals(expectedSize)) {
+            FileSystem.removeRecursive(source);
+            NixosLog.fatal("Downloaded installer ISO size did not match " + self.spec.isoUrl);
+        }
+        if (!expectedHash.isEmpty() && !self.fileHash(source).equals(expectedHash)) {
+            FileSystem.removeRecursive(source);
+            NixosLog.fatal("Downloaded installer ISO checksum did not match " + self.spec.isoUrl);
+        }
+        var mv = Command(f"mv {UnixShell.quote(source)} {UnixShell.quote(self.spec.iso)}");
+        var result = self.shell.run(mv, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!result.ok()) { NixosLog.fatal("Failed to install downloaded ISO"); }
+        self.writeIsoMetadata(expectedHash, expectedSize);
+    }
+
     public void downloadIso() {
         self.ensureWorkDir();
-        if (FileSystem.exists(self.spec.iso)) { return; }
         if (self.spec.isoUrl.isEmpty()) {
+            if (FileSystem.exists(self.spec.iso)) { return; }
             NixosLog.fatal("No iso or isoUrl in VM spec");
         }
-        var tmp = f"{self.spec.iso}.tmp";
-        var curl = Command(f"curl -L -o {UnixShell.quote(tmp)} {UnixShell.quote(self.spec.isoUrl)}");
+        var expectedHash = self.expectedIsoHash();
+        var expectedSize = self.expectedIsoSize();
+        if (self.isoValid(expectedHash, expectedSize)) { return; }
+        self.removeIsoCache();
+        var downloadPath = f"{self.spec.iso}.tmp";
+        FileSystem.removeRecursive(downloadPath);
+        var curl = Command(f"curl -L -o {UnixShell.quote(downloadPath)} {UnixShell.quote(self.spec.isoUrl)}");
         var result = self.shell.run(curl, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
-        var mv = Command(f"mv {UnixShell.quote(tmp)} {UnixShell.quote(self.spec.iso)}");
-        result = self.shell.run(mv, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
-        if (!result.ok()) { NixosLog.fatal("Failed to install downloaded ISO"); }
+        self.installIso(downloadPath, expectedHash, expectedSize);
     }
 
     public void createSshKey() {

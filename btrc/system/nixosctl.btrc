@@ -1,4 +1,9 @@
-import std.*;
+import std.cli;
+import std.console;
+import std.fs;
+import std.platform;
+import std.process;
+import std.strings;
 import ../core/interactive.btrc;
 import ../core/log.btrc;
 import ./config.btrc;

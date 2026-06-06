@@ -1,8 +1,6 @@
 name = "spec-toml"
-state = "spec-toml"
 parentState = "quick"
 stateMaterial = "spec-format:toml:source={{sourceHash}}"
-workDir = ".vm/e2e/{{state}}-{{stateHashShort}}"
 
 [args]
 marker = "toml-ok"
@@ -12,6 +10,11 @@ op = "require-state"
 
 [[operations]]
 op = "reset-state"
+
+[[operations]]
+op = "host"
+command = "test \"{{state}}\" = \"{{name}}\" && test \"{{workDir}}\" = \".vm/e2e/{{name}}\" && test \"{{iso}}\" = \".vm/iso/nixos-minimal-{{arch}}.iso\" && test -n \"{{isoUrl}}\" && printf derived"
+expect = "derived"
 
 [[operations]]
 op = "host"

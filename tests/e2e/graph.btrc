@@ -1,10 +1,2 @@
-import std.*;
 import std.graph;
 import ./graph/runner.btrc;
-
-/* VM test graph module aggregator.
- *
- * std.graph owns the JSON graph model, parser, CLI arg helpers, and dependency
- * traversal. The local graph runner only maps graph nodes onto VM specs and
- * QEMU-backed operations.
- */

@@ -4,6 +4,7 @@ let
   mkRootVolume = content: {
     "${config.settings.disk.label.root}" = {
       size = "100%";
+      label = config.settings.disk.partlabel.root;
       content = if !config.settings.disk.encryption.enable then content else {
         type = "luks";
         name = config.settings.disk.label.root;
@@ -36,6 +37,7 @@ in {
         ##### Boot Partition #####
         "${config.settings.disk.label.boot}" = {
           size = config.settings.disk.boot.size;
+          label = config.settings.disk.partlabel.boot;
           type = "EF00";
           content = {
             type = "filesystem";
@@ -48,6 +50,7 @@ in {
         ##### Recovery Partition #####
         "${config.settings.disk.label.recovery}" = {
           size = config.settings.disk.recovery.size;
+          label = config.settings.disk.partlabel.recovery;
           type = "EF00";
           content = {
             type = "filesystem";

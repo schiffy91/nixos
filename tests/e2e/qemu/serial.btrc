@@ -1,13 +1,9 @@
-import std.*;
+import std.fs;
+import std.process;
+import std.strings;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 
-/* VM serial console: named-pipe wiring, the background reader, sending input,
- * and extracting the installer ISO's boot-serial kernel/initrd/append.
- *
- * Self-contained: holds its own spec + shell and owns the serial + boot paths
- * (only the harness's addConsole/addBootMedia reach in, via self.serial).
- */
 class QemuSerial {
     public VmTestSpec spec;
     public UnixShell shell;
@@ -42,7 +38,7 @@ class QemuSerial {
         while (text[end] != '\0' && text[end] != '\n') {
             end++;
         }
-        return JsonObject.slice(text, pos, end).trim();
+        return text.substring(pos, end - pos).trim();
     }
 
     public void extractBootSerial() {
@@ -50,18 +46,18 @@ class QemuSerial {
         if (FileSystem.exists(self.bootAppendFile())) { return; }
         FileSystem.mkdirp(self.bootDir());
 
-        var cfgExtract = Command(f"bsdtar -xf {UnixShell.quote(self.spec.iso)} -C {UnixShell.quote(self.bootDir())} isolinux/isolinux.cfg");
-        var cfgResult = self.shell.run(cfgExtract, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
-        if (!cfgResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
+        var configExtract = Command(f"bsdtar -xf {UnixShell.quote(self.spec.iso)} -C {UnixShell.quote(self.bootDir())} isolinux/isolinux.cfg");
+        var configResult = self.shell.run(configExtract, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!configResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
 
-        var cfgPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
-        var cfg = Path.readAll(cfgPath);
-        var label = Strings.find(cfg, "LABEL boot-serial", 0);
+        var configPath = PathTools.join(PathTools.join(self.bootDir(), "isolinux"), "isolinux.cfg");
+        var configText = Path.readAll(configPath);
+        var label = Strings.find(configText, "LABEL boot-serial", 0);
         if (label < 0) { NixosLog.fatal("Could not find boot-serial entry in installer ISO"); }
 
-        var kernelIso = self.valueAfterLinePrefix(cfg, "LINUX ", label);
-        var append = self.valueAfterLinePrefix(cfg, "APPEND ", label);
-        var initrdIso = self.valueAfterLinePrefix(cfg, "INITRD ", label);
+        var kernelIso = self.valueAfterLinePrefix(configText, "LINUX ", label);
+        var append = self.valueAfterLinePrefix(configText, "APPEND ", label);
+        var initrdIso = self.valueAfterLinePrefix(configText, "INITRD ", label);
         if (kernelIso.isEmpty() || initrdIso.isEmpty() || append.isEmpty()) {
             NixosLog.fatal("Incomplete boot-serial entry in installer ISO");
         }
@@ -97,6 +93,19 @@ class QemuSerial {
         self.shell.run(f"(cat {outPath} >> {logPath}) & echo $! > {pidPath}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
     }
 
+    public bool serialReaderRunning() {
+        if (!FileSystem.exists(self.serialReaderPidPath())) { return false; }
+        var pid = Path.readAll(self.serialReaderPidPath()).trim();
+        if (pid.isEmpty()) { return false; }
+        var command = f"pid={UnixShell.quote(pid)}; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F {UnixShell.quote(self.serialOutPath())} >/dev/null";
+        return self.shell.run(command, logFailure=false).ok();
+    }
+
+    public void ensureSerialReader() {
+        if (self.serialReaderRunning()) { return; }
+        self.startSerialReader();
+    }
+
     public void stopSerialReader() {
         if (!FileSystem.exists(self.serialReaderPidPath())) { return; }
         var pidPath = UnixShell.quote(self.serialReaderPidPath());
@@ -108,9 +117,12 @@ class QemuSerial {
     public void serialSend(string command) {
         var payload = f"{command}\n";
         var write = f"printf %s {UnixShell.quote(payload)} > {UnixShell.quote(self.serialInPath())}";
-        var result = self.shell.run(f"timeout 5 sh -c {UnixShell.quote(write)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-        if (!result.ok()) {
-            NixosLog.fatal(f"Failed to send command to VM serial console: {self.serialInPath()}");
+        for (int attempt = 0; attempt < 60; attempt++) {
+            self.ensureSerialReader();
+            var result = self.shell.run(f"timeout 2 sh -c {UnixShell.quote(write)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            if (result.ok()) { return; }
+            self.shell.run("sleep 2", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         }
+        NixosLog.fatal(f"Failed to send command to VM serial console: {self.serialInPath()}");
     }
 }

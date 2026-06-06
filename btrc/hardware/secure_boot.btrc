@@ -2,6 +2,7 @@ import std.fs;
 import std.json;
 import std.process;
 import std.vector;
+import ../core/interactive.btrc;
 import ../core/log.btrc;
 import ../system/config.btrc;
 import ../system/rebuild.btrc;
@@ -23,25 +24,15 @@ class SecureBootManager {
     }
 
     public string dbPublicKey() {
-        return PathTools.join(self.config.evalRaw("config.settings.boot.pkiBundle"), "keys/db/db.pem");
+        return PathTools.join(self.config.evalString("config.settings.boot.pkiBundle"), "keys/db/db.pem");
     }
 
     public string dbPrivateKey() {
-        return PathTools.join(self.config.evalRaw("config.settings.boot.pkiBundle"), "keys/db/db.key");
+        return PathTools.join(self.config.evalString("config.settings.boot.pkiBundle"), "keys/db/db.key");
     }
 
     public bool dbKeysExist() {
         return FileSystem.exists(self.dbPublicKey()) && FileSystem.exists(self.dbPrivateKey());
-    }
-
-    public bool keysEnrolled() {
-        var result = self.shell.run("sbctl status 2>&1", logFailure=false);
-        return result.stdout().toLower().contains("secure boot:") && result.stdout().toLower().contains("enabled");
-    }
-
-    public bool keysSigned() {
-        var result = self.shell.run("sbctl verify 2>&1", logFailure=false);
-        return result.stdout().toLower().contains("is signed");
     }
 
     public void createKeys() {
@@ -68,7 +59,8 @@ class SecureBootManager {
         for key, _ in top.values {
             var body = JsonText.objectField(json, key);
             if (body.isEmpty()) { continue; }
-            if (JsonText.field(body, "is_signed", "true").equals("false")) {
+            var signature = JsonObject.parse(body);
+            if (!signature.getBool("is_signed", true)) {
                 result.push(key);
             }
         }
@@ -102,13 +94,15 @@ class SecureBootManager {
     public void enable(bool microsoft) {
         self.removeOldEntries();
         self.createKeys();
-        self.enrollKeys(microsoft);
         self.config.local.setString("target", self.config.secureBootTarget());
         var options = RebuildOptions();
         options.rebuildFileSystem = true;
         options.clean = true;
+        options.promptReboot = false;
         NixosRebuilder(self.config).update(options);
         self.requireVerified();
+        self.enrollKeys(microsoft);
+        Interactive().askToReboot();
     }
 
     public void disable() {

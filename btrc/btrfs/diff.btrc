@@ -1,4 +1,10 @@
-import std.*;
+import std.console;
+import std.fs;
+import std.json;
+import std.pattern;
+import std.process;
+import std.strings;
+import std.vector;
 import ../core/log.btrc;
 import ./snapshot.btrc;
 import ../system/config.btrc;
@@ -35,14 +41,7 @@ class DiffScanner {
     }
 
     public Vector<string> keepPaths() {
-        var raw = self.config.evalRaw("config.settings.disk.immutability.persist.paths");
-        raw = Strings.replace(raw, "[", "");
-        raw = Strings.replace(raw, "]", "");
-        Vector<string> result = [];
-        for item in Strings.split(raw.trim(), " ") {
-            if (!item.trim().isEmpty()) { result.push(item.trim()); }
-        }
-        return result;
+        return self.config.evalStringList("config.settings.disk.immutability.persist.paths");
     }
 
     public Vector<string> ignorePatterns(string path) {
@@ -94,27 +93,27 @@ class DiffScanner {
         Vector<string> result = [];
         var volumes = self.snapshots.resetSubvolumes();
         for volume in volumes {
-            var tmp = PathTools.join(PathTools.join(self.snapshots.snapshotsPath(), volume.name), "tmp");
+            var temporarySnapshot = PathTools.join(PathTools.join(self.snapshots.snapshotsPath(), volume.name), "temporary");
             var clean = self.snapshots.cleanSnapshotPath(volume.name);
-            self.snapshots.deleteSubvolume(tmp);
-            self.snapshots.createReadonlySnapshot(volume.mountPoint, tmp);
+            self.snapshots.deleteSubvolume(temporarySnapshot);
+            self.snapshots.createReadonlySnapshot(volume.mountPoint, temporarySnapshot);
 
             var quotedClean = UnixShell.quote(clean);
             var tx = self.shell.run(Command(f"btrfs subvolume find-new {quotedClean} 9999999"), logFailure=false);
             if (!tx.ok()) {
-                self.snapshots.deleteSubvolume(tmp);
+                self.snapshots.deleteSubvolume(temporarySnapshot);
                 NixosLog.fatal(f"Failed to read CLEAN transaction marker: {clean}");
             }
             var transaction = self.transactionMarker(tx.stdout());
             if (transaction.isEmpty()) {
-                self.snapshots.deleteSubvolume(tmp);
+                self.snapshots.deleteSubvolume(temporarySnapshot);
                 NixosLog.fatal(f"Failed to parse CLEAN transaction marker: {clean}");
             }
-            var quotedTmp = UnixShell.quote(tmp);
+            var quotedTemporary = UnixShell.quote(temporarySnapshot);
             var quotedTransaction = UnixShell.quote(transaction);
-            var changes = self.shell.run(Command(f"btrfs subvolume find-new {quotedTmp} {quotedTransaction}"), logFailure=false);
+            var changes = self.shell.run(Command(f"btrfs subvolume find-new {quotedTemporary} {quotedTransaction}"), logFailure=false);
             if (!changes.ok()) {
-                self.snapshots.deleteSubvolume(tmp);
+                self.snapshots.deleteSubvolume(temporarySnapshot);
                 NixosLog.fatal(f"Failed to compare CLEAN snapshot: {clean}");
             }
             for path in self.changedPaths(changes.stdout()) {
@@ -122,7 +121,7 @@ class DiffScanner {
                 result.push(Strings.replace(full, "//", "/"));
             }
 
-            self.snapshots.deleteSubvolume(tmp);
+            self.snapshots.deleteSubvolume(temporarySnapshot);
         }
         return result;
     }
