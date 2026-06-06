@@ -212,7 +212,7 @@ class Immutability {
             for volume in self.volumes {
                 self.runVolume(volume);
             }
-            self.run.requireCommand(ImmutabilityBtrfs.sync(self.run.top));
+            self.run.require(ImmutabilityBtrfs.sync(self.run.top));
         } finally {
             self.mounts.unmountTop(self.assumeMounted);
         }

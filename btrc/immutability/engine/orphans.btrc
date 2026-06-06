@@ -35,22 +35,15 @@ class ImmutabilityOrphans {
         }
     }
 
-    public bool keyInSpec(Vector<string> validKeys, string key) {
-        for v in validKeys {
-            if (v.equals(key)) { return true; }
-        }
-        return false;
-    }
-
     public string quarantineStamp() {
         var now = DateTime.now();
         return Strings.replace(Strings.replace(now.format(), " ", "T"), ":", "");
     }
 
     public void pruneOrphans(string persistRoot, Vector<ImmutabilitySpec> specs) {
-        Vector<string> validKeys = [];
+        Vector<string> expectedPersistKeys = [];
         for spec in specs {
-            validKeys.push(ImmutabilityPaths.key(spec.absPath));
+            expectedPersistKeys.push(ImmutabilityPaths.key(spec.absPath));
         }
         var dirsPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.dirs()));
         var orphansPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.orphans()));
@@ -58,7 +51,7 @@ class ImmutabilityOrphans {
         var stamp = self.quarantineStamp();
         for child in children {
             var key = PathTools.basename(child);
-            if (!self.keyInSpec(validKeys, key)) {
+            if (!expectedPersistKeys.contains(key)) {
                 var trashPath = PathTools.join(orphansPath, f"{key}-{stamp}");
                 self.run.log(f"Quarantining orphaned persist subvolume {key} -> {trashPath} (delete manually after review)");
                 self.run.renamePath(child, trashPath);

@@ -29,7 +29,7 @@ class ImmutabilityFs {
     }
 
     public bool mounted(string path) {
-        var result = self.run.shell.run(Command(f"findmnt --mountpoint {UnixShell.quote(path)}"), logFailure=false);
+        var result = self.run.shell.run(f"findmnt --mountpoint {UnixShell.quote(path)}", logFailure=false);
         return result.ok();
     }
 
@@ -73,14 +73,14 @@ class ImmutabilityFs {
         }
         var children = self.childSubvolumes(path);
         for child in children {
-            self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(child));
+            self.run.require(ImmutabilityBtrfs.deleteSubvol(child));
         }
-        self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(path));
+        self.run.require(ImmutabilityBtrfs.deleteSubvol(path));
     }
 
     public void makeSubvolume(string path) {
         self.run.mkdirp(PathTools.dirname(path));
-        self.run.requireCommand(ImmutabilityBtrfs.createSubvol(path));
+        self.run.require(ImmutabilityBtrfs.createSubvol(path));
     }
 
     public void snapshot(string source, string destination, bool readonly) {
@@ -88,9 +88,9 @@ class ImmutabilityFs {
             self.run.fatal(f"Source missing: {source}");
         }
         self.deleteSubvolume(destination);
-        self.run.requireCommand(ImmutabilityBtrfs.snapshot(source, destination, readonly));
+        self.run.require(ImmutabilityBtrfs.snapshot(source, destination, readonly));
         if (!readonly) {
-            self.run.requireCommand(ImmutabilityBtrfs.clearReadonly(destination));
+            self.run.require(ImmutabilityBtrfs.clearReadonly(destination));
         }
     }
 
@@ -104,7 +104,7 @@ class ImmutabilityFs {
 
     public void copyPath(string source, string destination) {
         self.run.mkdirp(PathTools.dirname(destination));
-        self.run.requireCommand(Command(f"cp --reflink=always -a {UnixShell.quote(source)} {UnixShell.quote(destination)}"));
+        self.run.require(f"cp --reflink=always -a {UnixShell.quote(source)} {UnixShell.quote(destination)}");
     }
 
     public void copyDirectoryContents(string source, string destination) {
@@ -116,14 +116,14 @@ class ImmutabilityFs {
         }
         var sourceContents = UnixShell.quote(PathTools.join(source, "."));
         var quotedDestination = UnixShell.quote(destination);
-        self.run.requireRaw(f"cp --reflink=always -a {sourceContents} {quotedDestination}");
+        self.run.require(f"cp --reflink=always -a {sourceContents} {quotedDestination}");
     }
 
     public void matchOwnerAndMode(string source, string destination) {
         if (!FileSystem.exists(source) || !FileSystem.isDir(destination)) { return; }
         var quotedSource = UnixShell.quote(source);
         var quotedDestination = UnixShell.quote(destination);
-        self.run.requireRaw(f"chown --reference={quotedSource} {quotedDestination}");
-        self.run.requireRaw(f"chmod --reference={quotedSource} {quotedDestination}");
+        self.run.require(f"chown --reference={quotedSource} {quotedDestination}");
+        self.run.require(f"chmod --reference={quotedSource} {quotedDestination}");
     }
 }

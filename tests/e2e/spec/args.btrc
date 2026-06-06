@@ -2,16 +2,17 @@ import std.json;
 import std.map;
 import std.process;
 import std.strings;
+import ../../../btrc/core/log.btrc;
 
 class VmSpecArgs {
     class string hostArch() {
         var shell = UnixShell();
         var result = shell.run("uname -m");
         var machine = result.trimmed();
-        if (machine.contains("arm64") || machine.contains("aarch64")) {
-            return "aarch64";
-        }
-        return "x86_64";
+        if (machine.equals("arm64") || machine.equals("aarch64")) { return "aarch64"; }
+        if (machine.equals("x86_64") || machine.equals("amd64")) { return "x86_64"; }
+        NixosLog.fatal(f"Unsupported host architecture for e2e simulator: {machine}");
+        return "";
     }
 
     class string defaultIsoUrl(string arch) {

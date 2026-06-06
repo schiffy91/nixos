@@ -25,12 +25,12 @@ class ImmutabilityMounts {
             return;
         }
         self.run.mkdirp(self.run.top);
-        self.run.requireCommand(Command(f"mount -t btrfs -o subvolid=5,user_subvol_rm_allowed {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}"));
+        self.run.require(f"mount -t btrfs -o subvolid=5,user_subvol_rm_allowed {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}");
     }
 
     public void unmountTop(bool assumeMounted) {
         if (assumeMounted) { return; }
-        var unmounted = self.run.run(Command(f"umount -R {UnixShell.quote(self.run.top)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var unmounted = self.run.run(f"umount -R {UnixShell.quote(self.run.top)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!unmounted.ok()) {
             self.run.fatal(f"failed to unmount: {self.run.top}");
         }
@@ -55,7 +55,7 @@ class ImmutabilityMounts {
         self.run.mkdirp(target);
         if (self.fs.mounted(target)) { return; }
         var mountOptions = f"subvol={subvol},compress=zstd,noatime";
-        self.run.requireCommand(Command(f"mount -t btrfs -o {UnixShell.quote(mountOptions)} {UnixShell.quote(device)} {UnixShell.quote(target)}"));
+        self.run.require(f"mount -t btrfs -o {UnixShell.quote(mountOptions)} {UnixShell.quote(device)} {UnixShell.quote(target)}");
     }
 
     public void mountPersist(string device, string persistRoot, Vector<ImmutabilitySpec> specs, bool assumeMounted) {
@@ -64,7 +64,7 @@ class ImmutabilityMounts {
         var mountedTop = false;
         if (!assumeMounted && !self.fs.mounted(self.run.top)) {
             self.run.mkdirp(self.run.top);
-            self.run.requireCommand(Command(f"mount -t btrfs -o ro,subvolid=5 {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}"));
+            self.run.require(f"mount -t btrfs -o ro,subvolid=5 {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}");
             mountedTop = true;
         }
         try {

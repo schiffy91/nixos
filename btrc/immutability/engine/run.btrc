@@ -52,12 +52,7 @@ class ImmutabilityRun {
         return self.shell.run(command, stdout=stdout, stderr=stderr, logFailure=logFailure);
     }
 
-    public void requireCommand(Command command) {
-        var result = self.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
-        if (!result.ok()) { self.fatal(f"Failed: {command}"); }
-    }
-
-    public void requireRaw(string command) {
+    public void require(string command) {
         var result = self.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { self.fatal(f"Failed: {command}"); }
     }
@@ -83,6 +78,6 @@ class ImmutabilityRun {
     public void renamePath(string source, string destination) {
         var quotedSource = UnixShell.quote(source);
         var quotedDestination = UnixShell.quote(destination);
-        self.requireRaw(f"mv --no-copy {quotedSource} {quotedDestination}");
+        self.require(f"mv --no-copy {quotedSource} {quotedDestination}");
     }
 }

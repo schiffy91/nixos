@@ -26,6 +26,18 @@ class VmProvisioner {
         return self.spec.vmLogPath();
     }
 
+    public string textLines(Vector<string> lines) {
+        return lines.join("\n") + "\n";
+    }
+
+    public string shellCommands(Vector<string> commands) {
+        return commands.join("; ");
+    }
+
+    public string writeTextCommand(string text, string path) {
+        return f"printf %s {UnixShell.quote(text)} > {UnixShell.quote(path)}";
+    }
+
     public void configureVmHost() {
         var mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
         var enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
@@ -36,7 +48,6 @@ class VmProvisioner {
         var recoverySize = self.spec.args.getOrDefault("recoverySize", "4G");
         var luksPass = "testpass123";
         var secureBootTarget = bootTargetName.equals("Secure-Boot");
-        var otherArch = self.spec.arch.equals("aarch64") ? "x86_64" : "aarch64";
         var serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
         var initrdModules = self.spec.arch.equals("aarch64")
             ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
@@ -45,78 +56,83 @@ class VmProvisioner {
         var hostPath = hostDir + "/VM-TEST.nix";
         var pubkey = self.pubKey();
         var passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
-        var secureBootSettings = secureBootTarget
-            ? "  settings.boot.pkiBundle = \"/var/lib/sbctl\";\n"
-            : "";
         var secureBootModulePath = "/etc/nixos/nix/system/vm-test-secure-boot.nix";
-        var secureBootModule = "{ config, lib, pkgs, ... }: {\n"
-            + "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {\n"
-            + "    boot.loader.timeout = lib.mkForce 0;\n"
-            + "    boot.lanzaboote.autoGenerateKeys.enable = true;\n"
-            + "    boot.lanzaboote.autoEnrollKeys.enable = false;\n"
-            + "    boot.lanzaboote.allowUnsigned = true;\n"
-            + "    environment.systemPackages = [ pkgs.sbctl pkgs.sbsigntool ];\n"
-            + "  };\n"
-            + "}\n";
-        var secureBootModuleCommand = secureBootTarget
-            ? "printf %s " + UnixShell.quote(secureBootModule) + " > " + UnixShell.quote(secureBootModulePath) + "; "
-            : "";
-        var hostNix = "{ lib, ... }: {\n"
-            + "  networking.hostName = \"VM-TEST\";\n"
-            + "  networking.firewall.enable = lib.mkForce false;\n"
-            + "  users.users.root.openssh.authorizedKeys.keys = [ \"" + pubkey + "\" ];\n"
-            + "  boot.kernelParams = [ \"console=" + serialConsole + "\" ];\n"
-            + "  boot.initrd.availableKernelModules = " + initrdModules + ";\n"
-            + "  boot.plymouth.enable = lib.mkForce false;\n"
-            + "  services.getty.autologinUser = lib.mkForce \"root\";\n"
-            + "  services.openssh.enable = lib.mkForce true;\n"
-            + "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";\n"
-            + "  services.openssh.settings.UseDns = lib.mkForce false;\n"
-            + "  settings.users.admin.authorizedKeys = lib.mkForce [ \"" + pubkey + "\" ];\n"
-            + "  settings.users.admin.autoUnlockWallet.enabled = false;\n"
-            + "  settings.users.admin.homeManager.enable = false;\n"
-            + "  settings.users.agent.enable = lib.mkForce false;\n"
-            + "  settings.users.agent.homeManager.enable = lib.mkForce false;\n"
-            + "  settings.users.agent.packages = lib.mkForce [];\n"
-            + "  settings.networking.identityAgent = \"none\";\n"
-            + "  settings.networking.lanSubnet = \"10.0.2.0/24\";\n"
-            + "  settings.disk.device = \"/dev/vda\";\n"
-            + "  settings.disk.recovery.enable = " + recovery + ";\n"
-            + "  settings.disk.recovery.size = \"" + recoverySize + "\";\n"
-            + "  settings.disk.encryption.enable = " + encryption + ";\n"
-            + "  settings.disk.immutability.enable = " + enabled + ";\n"
-            + "  settings.disk.immutability.mode = \"" + mode + "\";\n"
-            + "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];\n"
-            + "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";\n"
-            + "  settings.disk.swap.size = \"2G\";\n"
-            + secureBootSettings
-            + "}\n";
+        var secureBootModule = self.textLines([
+            "{ config, lib, pkgs, ... }: {",
+            "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {",
+            "    boot.loader.timeout = lib.mkForce 0;",
+            "    boot.lanzaboote.autoGenerateKeys.enable = true;",
+            "    boot.lanzaboote.autoEnrollKeys.enable = false;",
+            "    boot.lanzaboote.allowUnsigned = true;",
+            "    environment.systemPackages = [ pkgs.sbctl pkgs.sbsigntool ];",
+            "  };",
+            "}"
+        ]);
+        Vector<string> hostLines = [
+            "{ lib, ... }: {",
+            "  networking.hostName = \"VM-TEST\";",
+            "  networking.firewall.enable = lib.mkForce false;",
+            f"  users.users.root.openssh.authorizedKeys.keys = [ \"{pubkey}\" ];",
+            f"  boot.kernelParams = [ \"console={serialConsole}\" ];",
+            f"  boot.initrd.availableKernelModules = {initrdModules};",
+            "  boot.plymouth.enable = lib.mkForce false;",
+            "  services.getty.autologinUser = lib.mkForce \"root\";",
+            "  services.openssh.enable = lib.mkForce true;",
+            "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";",
+            "  services.openssh.settings.UseDns = lib.mkForce false;",
+            f"  settings.users.admin.authorizedKeys = lib.mkForce [ \"{pubkey}\" ];",
+            "  settings.users.admin.autoUnlockWallet.enabled = false;",
+            "  settings.users.admin.homeManager.enable = false;",
+            "  settings.users.agent.enable = lib.mkForce false;",
+            "  settings.users.agent.homeManager.enable = lib.mkForce false;",
+            "  settings.users.agent.packages = lib.mkForce [];",
+            "  settings.networking.identityAgent = \"none\";",
+            "  settings.networking.lanSubnet = \"10.0.2.0/24\";",
+            "  settings.disk.device = \"/dev/vda\";",
+            f"  settings.disk.recovery.enable = {recovery};",
+            f"  settings.disk.recovery.size = \"{recoverySize}\";",
+            f"  settings.disk.encryption.enable = {encryption};",
+            f"  settings.disk.immutability.enable = {enabled};",
+            f"  settings.disk.immutability.mode = \"{mode}\";",
+            "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];",
+            "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";",
+            "  settings.disk.swap.size = \"2G\";",
+            "}"
+        ];
+        if (secureBootTarget) {
+            hostLines.insert(hostLines.len - 1, "  settings.boot.pkiBundle = \"/var/lib/sbctl\";");
+        }
+        var hostNix = self.textLines(hostLines);
         var local = JsonObject();
         local.setString("host_path", "nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix");
         local.setString("target", bootTargetName);
         var localConfig = local.stringify() + "\n";
-        var luksCommand = encryption.equals("true")
-            ? "printf %s " + UnixShell.quote(luksPass) + " > /tmp/plain_text_password.txt; chmod 600 /tmp/plain_text_password.txt; "
-            : "";
-        var command = "set -e; "
-            + luksCommand
-            + "rm -rf /etc/nixos/nix/hosts/" + otherArch + "; "
-            + "rm -f " + UnixShell.quote(secureBootModulePath) + "; "
-            + secureBootModuleCommand
-            + "find /etc/nixos/nix/apps -maxdepth 1 -type f -name '*.nix' ! -name 'nixosctl.nix' -delete; "
-            + "find /etc/nixos/nix/apps/home-manager -maxdepth 1 -type f -name '*.nix' -delete 2>/dev/null || true; "
-            + "mkdir -p /etc/nixos/nix/apps/home-manager; "
-            + "touch /etc/nixos/nix/apps/home-manager/.keep; "
-            + "mkdir -p /etc/nixos/secrets; "
-            + "printf %s " + UnixShell.quote(passwordHash) + " > /etc/nixos/secrets/hashed_password.txt; "
-            + "chmod 600 /etc/nixos/secrets/hashed_password.txt; "
-            + "mkdir -p " + UnixShell.quote(hostDir) + "; "
-            + "printf %s " + UnixShell.quote(hostNix) + " > " + UnixShell.quote(hostPath) + "; "
-            + "printf %s " + UnixShell.quote(localConfig) + " > /etc/nixos/config.json; "
-            + "git -C /etc/nixos init; "
-            + "git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos; "
-            + "git -C /etc/nixos add -A; "
-            + "git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty";
+        Vector<string> commands = [];
+        commands.push("set -e");
+        if (encryption.equals("true")) {
+            commands.push(self.writeTextCommand(luksPass, "/tmp/plain_text_password.txt"));
+            commands.push("chmod 600 /tmp/plain_text_password.txt");
+        }
+        commands.push("find /etc/nixos/nix/hosts -mindepth 1 -maxdepth 1 -type d ! -name " + UnixShell.quote(self.spec.arch) + " -exec rm -rf {} +");
+        commands.push(f"rm -f {UnixShell.quote(secureBootModulePath)}");
+        if (secureBootTarget) {
+            commands.push(self.writeTextCommand(secureBootModule, secureBootModulePath));
+        }
+        commands.push("find /etc/nixos/nix/apps -maxdepth 1 -type f -name '*.nix' ! -name 'nixosctl.nix' -delete");
+        commands.push("find /etc/nixos/nix/apps/home-manager -maxdepth 1 -type f -name '*.nix' -delete 2>/dev/null || true");
+        commands.push("mkdir -p /etc/nixos/nix/apps/home-manager");
+        commands.push("touch /etc/nixos/nix/apps/home-manager/.keep");
+        commands.push("mkdir -p /etc/nixos/secrets");
+        commands.push(self.writeTextCommand(passwordHash, "/etc/nixos/secrets/hashed_password.txt"));
+        commands.push("chmod 600 /etc/nixos/secrets/hashed_password.txt");
+        commands.push(f"mkdir -p {UnixShell.quote(hostDir)}");
+        commands.push(self.writeTextCommand(hostNix, hostPath));
+        commands.push(self.writeTextCommand(localConfig, "/etc/nixos/config.json"));
+        commands.push("git -C /etc/nixos init");
+        commands.push("git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos");
+        commands.push("git -C /etc/nixos add -A");
+        commands.push("git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty");
+        var command = self.shellCommands(commands);
         var result = self.remote.sshWithTimeout(command, false, 120);
         if (!result.ok()) {
             Console.error(result.stdout());
@@ -130,64 +146,74 @@ class VmProvisioner {
         var secureBootTarget = bootTargetName.equals("Secure-Boot");
         var bootTarget = "VM-TEST-" + bootTargetName;
         var nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
-        var disko = nix + " run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#"
-            + diskTarget
-            + " --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
-        var install = "mkdir -p /mnt/etc; rm -rf /mnt/etc/nixos; cp -r /etc/nixos /mnt/etc/nixos; mkdir -p /mnt/nix/tmp; TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#"
-            + bootTarget
-            + " --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0";
-        var secureBootKeys = "set -ex; "
-            + "mkdir -p /var/lib/sbctl; "
-            + "if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi; "
-            + "sbctl enroll-keys --yes-this-might-brick-my-machine";
-        var secureBootInstall = secureBootKeys
-            + "; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac; "
-            + "if ! test -e \"/target-boot/EFI/BOOT/$fallback\" && test -e \"/boot/EFI/BOOT/$fallback\"; then install -Dm0644 \"/boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/BOOT/$fallback\"; fi; "
-            + "if ! test -e \"/target-boot/EFI/systemd/$systemd\" && test -e \"/boot/EFI/systemd/$systemd\"; then install -Dm0644 \"/boot/EFI/systemd/$systemd\" \"/target-boot/EFI/systemd/$systemd\"; fi; "
-            + "test -e \"/target-boot/EFI/BOOT/$fallback\"; "
-            + "test -e \"/target-boot/EFI/systemd/$systemd\"; "
-            + "for file in \"/target-boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/systemd/$systemd\" /target-boot/EFI/Linux/*.efi; do "
-            + "test -e \"$file\" || continue; "
-            + "signed=$(mktemp); "
-            + "sbsign --key /var/lib/sbctl/keys/db/db.key --cert /var/lib/sbctl/keys/db/db.pem --output \"$signed\" \"$file\"; "
-            + "install -m 0644 \"$signed\" \"$file\"; "
-            + "rm -f \"$signed\"; "
-            + "sbverify --list \"$file\" | grep -q 'signature certificates'; "
-            + "done; sync";
+        var disko = f"{nix} run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#{diskTarget} --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
+        var install = self.shellCommands([
+            "mkdir -p /mnt/etc",
+            "rm -rf /mnt/etc/nixos",
+            "cp -r /etc/nixos /mnt/etc/nixos",
+            "mkdir -p /mnt/nix/tmp",
+            f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"
+        ]);
+        var secureBootInstall = self.shellCommands([
+            "set -ex",
+            "mkdir -p /var/lib/sbctl",
+            "if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi",
+            "sbctl enroll-keys --yes-this-might-brick-my-machine",
+            "case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac",
+            "if ! test -e \"/target-boot/EFI/BOOT/$fallback\" && test -e \"/boot/EFI/BOOT/$fallback\"; then install -Dm0644 \"/boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/BOOT/$fallback\"; fi",
+            "if ! test -e \"/target-boot/EFI/systemd/$systemd\" && test -e \"/boot/EFI/systemd/$systemd\"; then install -Dm0644 \"/boot/EFI/systemd/$systemd\" \"/target-boot/EFI/systemd/$systemd\"; fi",
+            "test -e \"/target-boot/EFI/BOOT/$fallback\"",
+            "test -e \"/target-boot/EFI/systemd/$systemd\"",
+            "for file in \"/target-boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/systemd/$systemd\" /target-boot/EFI/Linux/*.efi; do test -e \"$file\" || continue; signed=$(mktemp); sbsign --key /var/lib/sbctl/keys/db/db.key --cert /var/lib/sbctl/keys/db/db.pem --output \"$signed\" \"$file\"; install -m 0644 \"$signed\" \"$file\"; rm -f \"$signed\"; sbverify --list \"$file\" | grep -q 'signature certificates'; done",
+            "sync"
+        ]);
         var lanzabooteInstall = secureBootTarget
-            ? "mkdir -p /mnt/target-boot\n"
-                + "mount --bind /mnt/boot /mnt/target-boot\n"
-                + "nixos-enter --root /mnt --command "
-                + UnixShell.quote(secureBootInstall)
-                + "\n"
-                + "umount /mnt/target-boot\n"
-                + "rmdir /mnt/target-boot"
+            ? self.textLines([
+                "mkdir -p /mnt/target-boot",
+                "mount --bind /mnt/boot /mnt/target-boot",
+                f"nixos-enter --root /mnt --command {UnixShell.quote(secureBootInstall)}",
+                "umount /mnt/target-boot",
+                "rmdir /mnt/target-boot"
+            ])
             : "true";
         var snapshots = "nixos-enter --root /mnt --command "
             + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos");
-        var script = "set -ex\n"
-            + "printf INSTALL_START > /tmp/nixos-install.status\n"
-            + disko + "\n"
-            + install + "\n"
-            + lanzabooteInstall + "\n"
-            + snapshots + "\n"
-            + "printf INSTALL_OK > /tmp/nixos-install.status\n";
+        var script = self.textLines([
+            "set -ex",
+            "printf INSTALL_START > /tmp/nixos-install.status",
+            disko,
+            install,
+            lanzabooteInstall.trim(),
+            snapshots,
+            "printf INSTALL_OK > /tmp/nixos-install.status"
+        ]);
         var servicePath = "/run/current-system/sw/bin:/run/wrappers/bin:/nix/var/nix/profiles/default/bin:/bin:/usr/bin";
-        var runner = "PATH=" + UnixShell.quote(servicePath) + "; export PATH; HOME=/root; export HOME; "
-            + "rm -f /tmp/nixos-install.pipe; mkfifo /tmp/nixos-install.pipe; "
-            + "tee /tmp/nixos-install.log < /tmp/nixos-install.pipe > /dev/ttyS0 & teepid=$!; "
-            + "sh /tmp/nixos-install.sh > /tmp/nixos-install.pipe 2>&1 < /dev/null; "
-            + "code=$?; "
-            + "wait $teepid || true; rm -f /tmp/nixos-install.pipe; "
-            + "if [ $code -ne 0 ]; then printf 'INSTALL_FAIL:%s\\n' \"$code\" > /tmp/nixos-install.status; fi";
-        var prepare = "set -e; "
-            + "rm -f /tmp/nixos-install.status /tmp/nixos-install.log /tmp/nixos-install.sh; "
-            + "printf %s " + UnixShell.quote(script) + " > /tmp/nixos-install.sh; "
-            + "chmod +x /tmp/nixos-install.sh";
-        var launch = "set -e; "
-            + "systemctl reset-failed nixos-install-e2e.service 2>/dev/null || true; "
-            + "systemctl is-active --quiet nixos-install-e2e.service && exit 0; "
-            + "systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c " + UnixShell.quote(runner);
+        var runner = self.shellCommands([
+            f"PATH={UnixShell.quote(servicePath)}",
+            "export PATH",
+            "HOME=/root",
+            "export HOME",
+            "rm -f /tmp/nixos-install.pipe",
+            "mkfifo /tmp/nixos-install.pipe",
+            "tee /tmp/nixos-install.log < /tmp/nixos-install.pipe > /dev/ttyS0 & teepid=$!",
+            "sh /tmp/nixos-install.sh > /tmp/nixos-install.pipe 2>&1 < /dev/null",
+            "code=$?",
+            "wait $teepid || true",
+            "rm -f /tmp/nixos-install.pipe",
+            "if [ $code -ne 0 ]; then printf 'INSTALL_FAIL:%s\\n' \"$code\" > /tmp/nixos-install.status; fi"
+        ]);
+        var prepare = self.shellCommands([
+            "set -e",
+            "rm -f /tmp/nixos-install.status /tmp/nixos-install.log /tmp/nixos-install.sh",
+            self.writeTextCommand(script, "/tmp/nixos-install.sh"),
+            "chmod +x /tmp/nixos-install.sh"
+        ]);
+        var launch = self.shellCommands([
+            "set -e",
+            "systemctl reset-failed nixos-install-e2e.service 2>/dev/null || true",
+            "systemctl is-active --quiet nixos-install-e2e.service && exit 0",
+            f"systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c {UnixShell.quote(runner)}"
+        ]);
         var timeoutSeconds = secureBootTarget ? 7200 : 3600;
         var prepared = self.sshWithRetries(prepare, 60, 3);
         if (!prepared.ok()) {

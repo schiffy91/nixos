@@ -1,36 +1,36 @@
 import std.process;
 
 class ImmutabilityBtrfs {
-    class Command show(string path) {
-        return Command(f"btrfs subvolume show {UnixShell.quote(path)}");
+    class string show(string path) {
+        return f"btrfs subvolume show {UnixShell.quote(path)}";
     }
 
-    class Command getReadonly(string path) {
-        return Command(f"btrfs property get -ts {UnixShell.quote(path)} ro");
+    class string getReadonly(string path) {
+        return f"btrfs property get -ts {UnixShell.quote(path)} ro";
     }
 
-    class Command listChildren(string path) {
-        return Command(f"btrfs subvolume list -o {UnixShell.quote(path)}");
+    class string listChildren(string path) {
+        return f"btrfs subvolume list -o {UnixShell.quote(path)}";
     }
 
-    class Command deleteSubvol(string path) {
-        return Command(f"btrfs subvolume delete {UnixShell.quote(path)}");
+    class string deleteSubvol(string path) {
+        return f"btrfs subvolume delete {UnixShell.quote(path)}";
     }
 
-    class Command createSubvol(string path) {
-        return Command(f"btrfs subvolume create {UnixShell.quote(path)}");
+    class string createSubvol(string path) {
+        return f"btrfs subvolume create {UnixShell.quote(path)}";
     }
 
-    class Command snapshot(string source, string destination, bool readonly) {
+    class string snapshot(string source, string destination, bool readonly) {
         var flag = readonly ? "-r " : "";
-        return Command(f"btrfs subvolume snapshot {flag}{UnixShell.quote(source)} {UnixShell.quote(destination)}");
+        return f"btrfs subvolume snapshot {flag}{UnixShell.quote(source)} {UnixShell.quote(destination)}";
     }
 
-    class Command clearReadonly(string path) {
-        return Command(f"btrfs property set -ts {UnixShell.quote(path)} ro false");
+    class string clearReadonly(string path) {
+        return f"btrfs property set -ts {UnixShell.quote(path)} ro false";
     }
 
-    class Command sync(string top) {
-        return Command(f"btrfs filesystem sync {UnixShell.quote(top)}");
+    class string sync(string top) {
+        return f"btrfs filesystem sync {UnixShell.quote(top)}";
     }
 }

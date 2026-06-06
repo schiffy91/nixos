@@ -43,7 +43,7 @@ class ImmutabilitySlots {
         }
         var quotedLive = UnixShell.quote(live);
         var quotedNext = UnixShell.quote(next);
-        self.run.requireRaw(f"mv -T --exchange --no-copy {quotedLive} {quotedNext}");
+        self.run.require(f"mv -T --exchange --no-copy {quotedLive} {quotedNext}");
         self.fs.deleteSubvolume(next);
     }
 

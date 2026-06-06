@@ -38,11 +38,6 @@ let
             "console=tty0"
           ];
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
-          uki = {
-            name = "nixos-recovery";
-            version = null;
-            settings.UKI.Initrd = lib.mkForce "${config.system.build.netbootRamdisk}/initrd";
-          };
         };
 
         documentation.enable = lib.mkDefault false;
