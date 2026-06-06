@@ -75,6 +75,7 @@ class VmTestSpec {
         self.args.putIfAbsent("parentHash", self.parentHash);
         self.args.putIfAbsent("stateHash", self.stateHash);
         self.args.putIfAbsent("stateHashShort", self.stateHashShort);
+        self.refreshShellArgs();
     }
 
     public void refreshDerivedArgs() {
@@ -94,6 +95,16 @@ class VmTestSpec {
         self.args.put("parentHash", self.parentHash);
         self.args.put("stateHash", self.stateHash);
         self.args.put("stateHashShort", self.stateHashShort);
+        self.refreshShellArgs();
+    }
+
+    public void refreshShellArgs() {
+        Vector<string> keys = self.args.keys();
+        for key in keys {
+            if (key.endsWith("Shell")) { continue; }
+            if (key.equals("stateHash") || key.equals("stateHashShort")) { continue; }
+            self.args.put(f"{key}Shell", UnixShell.quote(self.args.get(key)));
+        }
     }
 
     public string stateDir() {
@@ -169,12 +180,24 @@ class VmTestSpec {
         return lines.join("\n");
     }
 
+    public string argsMaterial() {
+        Vector<string> keys = self.args.keys();
+        keys.sort();
+        Vector<string> lines = [];
+        for key in keys {
+            if (key.equals("stateHash") || key.equals("stateHashShort")) { continue; }
+            if (key.endsWith("Shell")) { continue; }
+            lines.push(f"{key}={self.args.get(key)}");
+        }
+        return lines.join("\n");
+    }
+
     public string hashMaterial() {
         var material = self.stateMaterial;
         if (material.isEmpty()) {
             material = f"{self.name}:{self.arch}:{self.isoUrl}:{self.diskSize}:{self.memory}:{self.cpus}:{self.sshPort}";
         }
-        return f"parent={self.parentHash}\nstate={self.state}\nmaterial={material}\noperations=\n{self.operationsMaterial()}\n";
+        return f"parent={self.parentHash}\nstate={self.state}\nmaterial={material}\nargs=\n{self.argsMaterial()}\noperations=\n{self.operationsMaterial()}\n";
     }
 
     public void computeStateHash() {

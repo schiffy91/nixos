@@ -249,6 +249,20 @@
       }
     },
     {
+      "id": "recovery-secure-boot-aarch64",
+      "spec": "recovery-secure-boot/test.json",
+      "after": [
+        "installer-ssh-aarch64"
+      ],
+      "args": {
+        "name": "recovery-secure-boot-aarch64",
+        "state": "recovery-secure-boot-aarch64",
+        "parentState": "installer-ssh-aarch64",
+        "arch": "aarch64",
+        "sshPort": "2244"
+      }
+    },
+    {
       "id": "install-disabled",
       "spec": "install-system/test.json",
       "after": [

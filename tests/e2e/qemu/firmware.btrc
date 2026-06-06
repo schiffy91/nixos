@@ -159,7 +159,8 @@ class QemuFirmware {
 
     public void makeFirmwareVarsWritable() {
         var chmod = Command(f"chmod 600 {UnixShell.quote(self.firmwareVarsPath())}");
-        self.shell.run(chmod, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(chmod, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (!result.ok()) { NixosLog.fatal("Failed to make firmware vars writable"); }
     }
 
     public void setupFirmwareVars() {
@@ -175,7 +176,8 @@ class QemuFirmware {
             self.makeFirmwareVarsWritable();
             return;
         }
-        self.shell.run(f"dd if=/dev/zero of={UnixShell.quote(self.firmwareVarsPath())} bs=1M count=64", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var created = self.shell.run(f"dd if=/dev/zero of={UnixShell.quote(self.firmwareVarsPath())} bs=1M count=64", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!created.ok()) { NixosLog.fatal("Failed to create firmware vars file"); }
         self.makeFirmwareVarsWritable();
     }
 
@@ -245,8 +247,7 @@ class QemuFirmware {
         var vars = self.firmwareVarsTemplatePath();
         var device = self.tpmQemuDevice();
         var tpmDevice = qemu && self.qemuDeviceAvailable(device);
-        var available = self.spec.arch.equals("x86_64")
-            && qemu
+        var available = qemu
             && swtpm
             && tpmDevice
             && !firmware.isEmpty()

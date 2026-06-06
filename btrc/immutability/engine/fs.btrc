@@ -64,7 +64,10 @@ class ImmutabilityFs {
     }
 
     public void deleteSubvolume(string path) {
-        if (!FileSystem.isDir(path)) { return; }
+        if (!self.exists(path)) { return; }
+        if (!self.isSubvolume(path)) {
+            self.run.fatal(f"refusing to delete non-subvolume: {path}");
+        }
         var children = self.childSubvolumes(path);
         for child in children {
             self.run.requireCommand(ImmutabilityBtrfs.deleteSubvol(child));

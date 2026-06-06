@@ -66,6 +66,30 @@ class DiffScanner {
         return result;
     }
 
+    public string transactionMarker(string output) {
+        for line in Strings.split(output, "\n") {
+            var parts = Strings.split(line.trim(), " ");
+            if (parts.len >= 4 && parts.get(0).equals("transid") && parts.get(1).equals("marker") && parts.get(2).equals("was")) {
+                var marker = parts.get(3).trim();
+                if (Strings.isDigitStr(marker)) { return marker; }
+            }
+        }
+        return "";
+    }
+
+    public Vector<string> changedPaths(string output) {
+        Vector<string> result = [];
+        for line in Strings.split(output, "\n") {
+            var marker = Strings.find(line, " path ", 0);
+            if (marker < 0) { continue; }
+            var path = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            if (!path.isEmpty()) { result.push(path); }
+        }
+        result = result.distinct();
+        result.sort();
+        return result;
+    }
+
     public Vector<string> changedFiles() {
         Vector<string> result = [];
         var volumes = self.snapshots.resetSubvolumes();
@@ -76,18 +100,26 @@ class DiffScanner {
             self.snapshots.createReadonlySnapshot(volume.mountPoint, tmp);
 
             var quotedClean = UnixShell.quote(clean);
-            var tx = self.shell.run(f"echo \"$(sudo btrfs subvolume find-new {quotedClean} 9999999)\" | cut -d' ' -f4", logFailure=false);
-            var transaction = tx.trimmed();
+            var tx = self.shell.run(Command(f"btrfs subvolume find-new {quotedClean} 9999999"), logFailure=false);
+            if (!tx.ok()) {
+                self.snapshots.deleteSubvolume(tmp);
+                NixosLog.fatal(f"Failed to read CLEAN transaction marker: {clean}");
+            }
+            var transaction = self.transactionMarker(tx.stdout());
+            if (transaction.isEmpty()) {
+                self.snapshots.deleteSubvolume(tmp);
+                NixosLog.fatal(f"Failed to parse CLEAN transaction marker: {clean}");
+            }
             var quotedTmp = UnixShell.quote(tmp);
             var quotedTransaction = UnixShell.quote(transaction);
-            var changes = self.shell.run(f"btrfs subvolume find-new {quotedTmp} {quotedTransaction} | sed '$d' | cut -f17- -d' ' | sort | uniq", logFailure=false);
-            if (changes.ok()) {
-                for line in Strings.split(changes.stdout(), "\n") {
-                    if (!line.trim().isEmpty()) {
-                        var full = f"{volume.mountPoint}/{line.trim()}";
-                        result.push(Strings.replace(full, "//", "/"));
-                    }
-                }
+            var changes = self.shell.run(Command(f"btrfs subvolume find-new {quotedTmp} {quotedTransaction}"), logFailure=false);
+            if (!changes.ok()) {
+                self.snapshots.deleteSubvolume(tmp);
+                NixosLog.fatal(f"Failed to compare CLEAN snapshot: {clean}");
+            }
+            for path in self.changedPaths(changes.stdout()) {
+                var full = f"{volume.mountPoint}/{path}";
+                result.push(Strings.replace(full, "//", "/"));
             }
 
             self.snapshots.deleteSubvolume(tmp);

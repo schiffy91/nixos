@@ -12,7 +12,7 @@
   "operations": [
     { "op": "probe-secure-boot" },
     { "op": "host", "command": "test -f \"$(dirname $(dirname $(command -v qemu-system-x86_64)))/share/qemu/edk2-x86_64-secure-code.fd\" && printf secure-firmware", "expect": "secure-firmware" },
-    { "op": "host", "command": "set -e; cd {{workspaceRoot}}; lpath=$(nix flake archive --json | jq -r '.inputs.lanzaboote.path'); grep -q autoGenerateKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q autoEnrollKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q inputs.lanzaboote nix/system/boot.nix; printf lanzaboote", "expect": "lanzaboote" },
+    { "op": "host", "command": "set -e; cd {{workspaceRootShell}}; lpath=$(nix flake archive --json | jq -r '.inputs.lanzaboote.path'); grep -q autoGenerateKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q autoEnrollKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q inputs.lanzaboote nix/system/boot.nix; printf lanzaboote", "expect": "lanzaboote" },
     { "op": "record-state" }
   ]
 }

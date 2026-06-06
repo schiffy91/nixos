@@ -22,25 +22,25 @@ class PermissionsManager {
 
     public void findChmod(string quotedRoot, string ignores, string predicate, string mode) {
         var execArg = "{}";
-        self.shell.run(f"find {quotedRoot} {ignores} -prune -o {predicate} -exec chmod {mode} {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"find {quotedRoot} {ignores} -prune -o {predicate} -exec chmod {mode} {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public void secureSecretsPath(string path) {
         if (!FileSystem.exists(path)) { return; }
         var quoted = UnixShell.quote(path);
         if (Platform.isRoot()) {
-            self.shell.run(f"chown -R root:root {quoted}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            self.shell.run(f"chown -R root:root {quoted}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
         }
         var execArg = "{}";
-        self.shell.run(f"find {quoted} -type d -exec chmod 700 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-        self.shell.run(f"find {quoted} -type f -exec chmod 600 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run(f"find {quoted} -type d -exec chmod 700 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run(f"find {quoted} -type f -exec chmod 600 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public void secureTree(string username) {
         var root = self.config.paths.root;
         var quotedRoot = UnixShell.quote(root);
         if (Platform.isRoot()) {
-            self.shell.run(Command(f"chown -R {UnixShell.quote(username)} {quotedRoot}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            self.shell.run(Command(f"chown -R {UnixShell.quote(username)} {quotedRoot}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
         }
 
         var ignores = self.ignorePredicate();
@@ -51,7 +51,7 @@ class PermissionsManager {
         if (FileSystem.exists(gitObjects)) {
             var quotedGitObjects = UnixShell.quote(gitObjects);
             var execArg = "{}";
-            self.shell.run(f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            self.shell.run(f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
         }
 
         self.shell.run(Command(f"git config --global --add safe.directory {quotedRoot}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);

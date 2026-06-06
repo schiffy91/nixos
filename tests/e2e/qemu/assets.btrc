@@ -1,13 +1,9 @@
-import std.*;
+import std.fs;
+import std.process;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ./serial.btrc;
 
-/* Host-side VM assets created before first boot: the installer ISO (downloaded
- * if missing), the SSH keypair, and the qcow2 disk; setup() also extracts the
- * serial boot kernel. Self-contained — holds the spec + its own shell, computes
- * its paths, and delegates boot-serial extraction to the serial collaborator.
- */
 class VmAssets {
     public VmTestSpec spec;
     public UnixShell shell;
@@ -39,7 +35,8 @@ class VmAssets {
         var result = self.shell.run(curl, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
         var mv = Command(f"mv {UnixShell.quote(tmp)} {UnixShell.quote(self.spec.iso)}");
-        self.shell.run(mv, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        result = self.shell.run(mv, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!result.ok()) { NixosLog.fatal("Failed to install downloaded ISO"); }
     }
 
     public void createSshKey() {

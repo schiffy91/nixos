@@ -28,7 +28,13 @@ class ImmutabilityMounts {
 
     public void unmountTop(bool assumeMounted) {
         if (assumeMounted) { return; }
-        self.run.run(Command(f"umount -R {UnixShell.quote(self.run.top)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var unmounted = self.run.run(Command(f"umount -R {UnixShell.quote(self.run.top)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (!unmounted.ok()) {
+            self.run.fatal(f"failed to unmount: {self.run.top}");
+        }
+        if (self.fs.mounted(self.run.top)) {
+            self.run.fatal(f"still mounted after unmount: {self.run.top}");
+        }
         var topPrefix = f"{ImmutabilityConstants.topBase()}.";
         if (self.run.top.startsWith(topPrefix)) {
             FileSystem.removeRecursive(self.run.top);
@@ -59,17 +65,20 @@ class ImmutabilityMounts {
             self.run.requireCommand(Command(f"mount -t btrfs -o ro,subvolid=5 {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}"));
             mountedTop = true;
         }
-        Vector<string> selected = [];
-        for spec in specs {
-            var target = spec.absPath;
-            if (self.coveredBy(selected, target)) { continue; }
-            var subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(target));
-            if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
-            self.mountTarget(device, target, subvol);
-            selected.push(target);
-        }
-        if (mountedTop) {
-            self.run.run(Command(f"umount {UnixShell.quote(self.run.top)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        try {
+            Vector<string> selected = [];
+            for spec in specs {
+                var target = spec.absPath;
+                if (self.coveredBy(selected, target)) { continue; }
+                var subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(target));
+                if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
+                self.mountTarget(device, target, subvol);
+                selected.push(target);
+            }
+        } finally {
+            if (mountedTop) {
+                self.unmountTop(false);
+            }
         }
         self.run.log("Persistent mounts complete");
     }

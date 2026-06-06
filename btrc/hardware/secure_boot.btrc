@@ -1,4 +1,7 @@
-import std.*;
+import std.fs;
+import std.json;
+import std.process;
+import std.vector;
 import ../core/log.btrc;
 import ../system/config.btrc;
 import ../system/rebuild.btrc;
@@ -15,8 +18,20 @@ class SecureBootManager {
     public void removeOldEntries() {
         FileSystem.mkdirp("/boot/EFI/Linux");
         FileSystem.mkdirp("/var/lib/sbctl");
-        self.shell.run("find /boot/EFI/Linux -type f -name 'linux-*.efi' -delete", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        self.shell.run("find /boot/EFI/Linux -type f -name 'linux-*.efi' -delete", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
         FileSystem.removeRecursive("/etc/secureboot");
+    }
+
+    public string dbPublicKey() {
+        return PathTools.join(self.config.evalRaw("config.settings.boot.pkiBundle"), "keys/db/db.pem");
+    }
+
+    public string dbPrivateKey() {
+        return PathTools.join(self.config.evalRaw("config.settings.boot.pkiBundle"), "keys/db/db.key");
+    }
+
+    public bool dbKeysExist() {
+        return FileSystem.exists(self.dbPublicKey()) && FileSystem.exists(self.dbPrivateKey());
     }
 
     public bool keysEnrolled() {
@@ -30,7 +45,11 @@ class SecureBootManager {
     }
 
     public void createKeys() {
-        self.shell.run(Command("sbctl create-keys"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (self.dbKeysExist()) { return; }
+        self.shell.run(Command("sbctl create-keys"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        if (!self.dbKeysExist()) {
+            NixosLog.fatal("sbctl did not create db keys");
+        }
     }
 
     public void enrollKeys(bool microsoft) {
@@ -40,7 +59,7 @@ class SecureBootManager {
         } else {
             command = f"{command} --yes-this-might-brick-my-machine";
         }
-        self.shell.run(Command(command), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        self.shell.run(Command(command), stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public Vector<string> unsignedFromJson(string json) {

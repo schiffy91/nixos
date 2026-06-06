@@ -1,4 +1,5 @@
 import std.*;
+import ../core/log.btrc;
 import ./engine/btrfs.btrc;
 import ./engine/config.btrc;
 import ./engine/constants.btrc;
@@ -199,15 +200,18 @@ class Immutability {
             return;
         }
         self.mounts.mountTop(self.device, self.assumeMounted);
-        self.orphans.ensureNamespaces(self.persistRoot);
-        if (self.resetMode()) {
-            self.orphans.pruneOrphans(self.persistRoot, self.specs);
+        try {
+            self.orphans.ensureNamespaces(self.persistRoot);
+            if (self.resetMode()) {
+                self.orphans.pruneOrphans(self.persistRoot, self.specs);
+            }
+            for volume in self.volumes {
+                self.runVolume(volume);
+            }
+            self.run.requireCommand(ImmutabilityBtrfs.sync(self.run.top));
+        } finally {
+            self.mounts.unmountTop(self.assumeMounted);
         }
-        for volume in self.volumes {
-            self.runVolume(volume);
-        }
-        self.run.requireCommand(ImmutabilityBtrfs.sync(self.run.top));
-        self.mounts.unmountTop(self.assumeMounted);
         self.run.log("Immutability complete");
     }
 
@@ -223,39 +227,45 @@ class Immutability {
     }
 
     class int cli(CliArgs args) {
-        var parsed = CliCommandLine.parse(args);
-        var dryRun = Immutability.envDryRun() || parsed.flag("--dry-run");
-        var assumeMounted = parsed.flag("--assume-mounted");
-        if (parsed.operand(0).equals("mount")) {
-            if (parsed.operandCount() < 4) {
-                Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
+        try {
+            var parsed = CliCommandLine.parse(args);
+            var dryRun = Immutability.envDryRun() || parsed.flag("--dry-run");
+            var assumeMounted = parsed.flag("--assume-mounted");
+            if (parsed.operand(0).equals("mount")) {
+                if (parsed.operandCount() < 4) {
+                    Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
+                    return 1;
+                }
+                var mounter = Immutability(dryRun, assumeMounted);
+                mounter.configureMount(parsed.operand(1), parsed.operand(2), parsed.operand(3));
+                mounter.mountPersist();
+                return 0;
+            }
+            if (parsed.operandCount() < 6) {
+                Console.error("Usage: immutability [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
                 return 1;
             }
-            var mounter = Immutability(dryRun, assumeMounted);
-            mounter.configureMount(parsed.operand(1), parsed.operand(2), parsed.operand(3));
-            mounter.mountPersist();
+            Vector<string> volumeArgs = [];
+            for (int i = 6; i < parsed.operandCount(); i++) {
+                volumeArgs.push(parsed.operand(i));
+            }
+            var immutability = Immutability(dryRun, assumeMounted);
+            immutability.configure(
+                parsed.operand(0),
+                parsed.operand(1),
+                parsed.operand(2),
+                parsed.operand(3),
+                parsed.operand(4),
+                parsed.operand(5),
+                volumeArgs
+            );
+            immutability.runAll();
             return 0;
+        } catch (string error) {
+            var message = f"{error}";
+            NixosLog.fatal(message);
         }
-        if (parsed.operandCount() < 6) {
-            Console.error("Usage: immutability [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
-            return 1;
-        }
-        Vector<string> volumeArgs = [];
-        for (int i = 6; i < parsed.operandCount(); i++) {
-            volumeArgs.push(parsed.operand(i));
-        }
-        var immutability = Immutability(dryRun, assumeMounted);
-        immutability.configure(
-            parsed.operand(0),
-            parsed.operand(1),
-            parsed.operand(2),
-            parsed.operand(3),
-            parsed.operand(4),
-            parsed.operand(5),
-            volumeArgs
-        );
-        immutability.runAll();
-        return 0;
+        return 1;
     }
 }
 

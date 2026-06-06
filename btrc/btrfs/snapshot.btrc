@@ -1,4 +1,8 @@
-import std.*;
+import std.fs;
+import std.platform;
+import std.process;
+import std.strings;
+import std.vector;
 import ../core/log.btrc;
 import ../system/config.btrc;
 
@@ -98,7 +102,10 @@ class SnapshotManager {
         for child in self.childSubvolumes(path) {
             self.deleteSubvolume(child);
         }
-        self.shell.run(Command(f"btrfs subvolume delete -C {UnixShell.quote(path)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var deleted = self.shell.run(Command(f"btrfs subvolume delete -C {UnixShell.quote(path)}"), stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!deleted.ok()) {
+            NixosLog.fatal(f"Failed to delete subvolume: {path}");
+        }
     }
 
     public void createReadonlySnapshot(string source, string destination) {
@@ -129,10 +136,18 @@ class SnapshotManager {
             if (!self.isSubvolume(clean)) {
                 NixosLog.fatal(f"Refusing to replace non-subvolume CLEAN: {clean}");
             }
-            self.shell.run(f"mv -T --exchange --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            var moved = self.shell.run(f"mv -T --exchange --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            if (!moved.ok()) {
+                self.deleteSubvolume(temporary);
+                NixosLog.fatal(f"Failed to replace CLEAN snapshot: {clean}");
+            }
             self.deleteSubvolume(temporary);
         } else {
-            self.shell.run(f"mv --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            var moved = self.shell.run(f"mv --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            if (!moved.ok()) {
+                self.deleteSubvolume(temporary);
+                NixosLog.fatal(f"Failed to create CLEAN snapshot: {clean}");
+            }
         }
         if (!self.isSubvolume(clean)) {
             NixosLog.fatal(f"CLEAN is not a subvolume: {clean}");

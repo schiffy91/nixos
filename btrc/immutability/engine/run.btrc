@@ -33,7 +33,7 @@ class ImmutabilityRun {
     }
 
     public void fatal(string message) {
-        NixosLog.fatal(f"{self.elapsed()} ERR {message}");
+        throw f"{self.elapsed()} ERR {message}";
     }
 
     public ExecResult run(string command,

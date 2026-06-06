@@ -336,7 +336,8 @@ class QemuE2eHarness {
         if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsPath())) {
             var cp = Command(f"cp {UnixShell.quote(self.firmware.firmwareVarsPath())} {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))}");
-            self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            if (!result.ok()) { NixosLog.fatal("Failed to save firmware vars snapshot " + name); }
         }
     }
 
@@ -351,7 +352,8 @@ class QemuE2eHarness {
         if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsSnapshotPath(name))) {
             var cp = Command(f"cp {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))} {UnixShell.quote(self.firmware.firmwareVarsPath())}");
-            self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            if (!result.ok()) { NixosLog.fatal("Failed to restore firmware vars snapshot " + name); }
             self.firmware.makeFirmwareVarsWritable();
         }
     }
