@@ -25,12 +25,12 @@
     },
     {
       "op": "nix-eval",
-      "command": "diskoConfigurations.QEMU-Disk-Operation.disk.main.device",
+      "command": "diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.device",
       "expect": "/dev/vda"
     },
     {
       "op": "nix-eval",
-      "command": "diskoConfigurations.QEMU-Disk-Operation.disk.main.content.partitions.root.content.type",
+      "command": "diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.content.partitions.root.content.type",
       "expect": "btrfs"
     },
     {

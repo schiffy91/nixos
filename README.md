@@ -27,7 +27,7 @@ Examples:
 ```bash
 nix eval .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.toplevel.drvPath
 nix eval .#nixosConfigurations.QEMU-Standard-Boot.config.networking.hostName
-nix eval .#diskoConfigurations.QEMU-Disk-Operation.disk.main.device
+nix eval .#diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.device
 ```
 
 `Disk-Operation` targets are disko entrypoints, not installed boot targets. They
@@ -378,8 +378,8 @@ nix flake check --all-systems --no-build --show-trace
 For disk-only targets, evaluate disk attributes directly:
 
 ```bash
-nix eval .#diskoConfigurations.QEMU-Disk-Operation.disk.main.device --show-trace
-nix eval .#diskoConfigurations.QEMU-Disk-Operation.disk.main.content.partitions.root.content.type --show-trace
+nix eval .#diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.device --show-trace
+nix eval .#diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.content.partitions.root.content.type --show-trace
 ```
 
 For Nix linting:

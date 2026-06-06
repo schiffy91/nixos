@@ -49,6 +49,7 @@ class PermissionsManager {
         self.findChmod(quotedRoot, ignores, "-type d", "755");
         self.findChmod(quotedRoot, ignores, "-type f", "644");
         self.findChmod(quotedRoot, ignores, "-path '*/bin/*'", "755");
+        self.findChmod(quotedRoot, ignores, "-path '*/scripts/*'", "755");
         var gitObjects = PathTools.join(root, ".git/objects");
         if (FileSystem.exists(gitObjects)) {
             var quotedGitObjects = UnixShell.quote(gitObjects);

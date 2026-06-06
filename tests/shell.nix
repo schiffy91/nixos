@@ -40,6 +40,7 @@ pkgs.mkShell {
     curl
     findutils
     gawk
+    git
     gnugrep
     gnused
     jq

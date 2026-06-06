@@ -28,7 +28,7 @@
     },
     {
       "op": "host",
-      "command": "set -e; env HOME={{workDir}}/home NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true NIXOS_CONFIG_ROOT={{workDir}}/tree USER=$(id -un) ./build/nixosctl fix-permissions; mode() { if stat -f %Lp \"$1\" >/dev/null 2>&1; then stat -f %Lp \"$1\"; else stat -c %a \"$1\"; fi; }; test \"$(mode {{workDir}}/tree/regular.txt)\" = 644; test \"$(mode {{workDir}}/tree/bin/tool)\" = 755; test \"$(mode {{workDir}}/tree/scripts/do)\" = 755; test \"$(mode {{workDir}}/tree/secrets/password)\" = 600; test \"$(mode {{workDir}}/tree/.venv/ignored)\" = 600; test \"$(mode {{workDir}}/tree/.direnv/ignored)\" = 600; printf permissions-ok",
+      "command": "set -e; env HOME={{workDir}}/home NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true NIXOS_CONFIG_ROOT={{workDir}}/tree USER=$(id -un) ./build/nixosctl fix-permissions; mode() { if stat -c %a \"$1\" >/dev/null 2>&1; then stat -c %a \"$1\"; else stat -f %Lp \"$1\"; fi; }; test \"$(mode {{workDir}}/tree/regular.txt)\" = 644; test \"$(mode {{workDir}}/tree/bin/tool)\" = 755; test \"$(mode {{workDir}}/tree/scripts/do)\" = 755; test \"$(mode {{workDir}}/tree/secrets/password)\" = 600; test \"$(mode {{workDir}}/tree/.venv/ignored)\" = 600; test \"$(mode {{workDir}}/tree/.direnv/ignored)\" = 600; printf permissions-ok",
       "expect": "permissions-ok"
     },
     { "op": "record-state" }
