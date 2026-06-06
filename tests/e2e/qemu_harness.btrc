@@ -337,12 +337,12 @@ class QemuE2eHarness {
 
     public void snapshot(string name) {
         self.stop();
-        var cmd = Command(f"qemu-img snapshot -c {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}");
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"qemu-img snapshot -c {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsPath())) {
-            var cp = Command(f"cp {UnixShell.quote(self.firmware.firmwareVarsPath())} {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))}");
-            result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            command = f"cp {UnixShell.quote(self.firmware.firmwareVarsPath())} {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))}";
+            result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
             if (!result.ok()) { NixosLog.fatal("Failed to save firmware vars snapshot " + name); }
         }
     }
@@ -353,12 +353,12 @@ class QemuE2eHarness {
             NixosLog.info("Snapshot " + name + " is inherited through qcow2 backing; restore is a no-op");
             return;
         }
-        var cmd = Command(f"qemu-img snapshot -a {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}");
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"qemu-img snapshot -a {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsSnapshotPath(name))) {
-            var cp = Command(f"cp {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))} {UnixShell.quote(self.firmware.firmwareVarsPath())}");
-            result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            command = f"cp {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))} {UnixShell.quote(self.firmware.firmwareVarsPath())}";
+            result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
             if (!result.ok()) { NixosLog.fatal("Failed to restore firmware vars snapshot " + name); }
             self.firmware.makeFirmwareVarsWritable();
         }

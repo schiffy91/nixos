@@ -147,8 +147,8 @@ class QemuFirmware {
     }
 
     public void makeFirmwareVarsWritable() {
-        var chmod = Command(f"chmod 600 {UnixShell.quote(self.firmwareVarsPath())}");
-        var result = self.shell.run(chmod, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var command = f"chmod 600 {UnixShell.quote(self.firmwareVarsPath())}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to make firmware vars writable"); }
     }
 
@@ -159,8 +159,8 @@ class QemuFirmware {
         }
         var template = self.firmwareVarsTemplatePath();
         if (!template.isEmpty()) {
-            var cp = Command(f"cp {UnixShell.quote(template)} {UnixShell.quote(self.firmwareVarsPath())}");
-            var result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            var command = f"cp {UnixShell.quote(template)} {UnixShell.quote(self.firmwareVarsPath())}";
+            var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
             if (!result.ok()) { NixosLog.fatal("Failed to copy EDK2 vars file"); }
             self.makeFirmwareVarsWritable();
             return;

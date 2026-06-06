@@ -105,8 +105,8 @@ class VmAssets {
             FileSystem.removeRecursive(source);
             NixosLog.fatal("Downloaded installer ISO checksum did not match " + self.spec.isoUrl);
         }
-        var mv = Command(f"mv {UnixShell.quote(source)} {UnixShell.quote(self.spec.iso)}");
-        var result = self.shell.run(mv, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"mv {UnixShell.quote(source)} {UnixShell.quote(self.spec.iso)}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to install downloaded ISO"); }
         self.writeIsoMetadata(expectedHash, expectedSize);
     }
@@ -123,8 +123,8 @@ class VmAssets {
         self.removeIsoCache();
         var downloadPath = f"{self.spec.iso}.tmp";
         FileSystem.removeRecursive(downloadPath);
-        var curl = Command(f"curl -L -o {UnixShell.quote(downloadPath)} {UnixShell.quote(self.spec.isoUrl)}");
-        var result = self.shell.run(curl, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"curl -L -o {UnixShell.quote(downloadPath)} {UnixShell.quote(self.spec.isoUrl)}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
         self.installIso(downloadPath, expectedHash, expectedSize);
     }
@@ -132,8 +132,8 @@ class VmAssets {
     public void createSshKey() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.sshKeyPath())) { return; }
-        var cmd = Command(f"ssh-keygen -t ed25519 -N '' -f {UnixShell.quote(self.sshKeyPath())} -q");
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"ssh-keygen -t ed25519 -N '' -f {UnixShell.quote(self.sshKeyPath())} -q";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }
     }
 
@@ -144,8 +144,8 @@ class VmAssets {
     public void createDisk() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.diskPath())) { return; }
-        var cmd = Command(f"qemu-img create -f qcow2 {UnixShell.quote(self.diskPath())} {UnixShell.quote(self.spec.diskSize)}");
-        var result = self.shell.run(cmd, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"qemu-img create -f qcow2 {UnixShell.quote(self.diskPath())} {UnixShell.quote(self.spec.diskSize)}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to create VM disk"); }
     }
 

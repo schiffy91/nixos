@@ -46,7 +46,7 @@ class QemuSerial {
         if (FileSystem.exists(self.bootAppendFile())) { return; }
         FileSystem.mkdirp(self.bootDir());
 
-        var configExtract = Command(f"bsdtar -xf {UnixShell.quote(self.spec.iso)} -C {UnixShell.quote(self.bootDir())} isolinux/isolinux.cfg");
+        var configExtract = f"bsdtar -xf {UnixShell.quote(self.spec.iso)} -C {UnixShell.quote(self.bootDir())} isolinux/isolinux.cfg";
         var configResult = self.shell.run(configExtract, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!configResult.ok()) { NixosLog.fatal("Failed to extract isolinux.cfg from ISO"); }
 
@@ -64,7 +64,7 @@ class QemuSerial {
 
         var kernelRel = self.stripLeadingSlash(kernelIso);
         var initrdRel = self.stripLeadingSlash(initrdIso);
-        var bootExtract = Command(f"bsdtar -xf {UnixShell.quote(self.spec.iso)} -C {UnixShell.quote(self.bootDir())} {UnixShell.quote(kernelRel)} {UnixShell.quote(initrdRel)}");
+        var bootExtract = f"bsdtar -xf {UnixShell.quote(self.spec.iso)} -C {UnixShell.quote(self.bootDir())} {UnixShell.quote(kernelRel)} {UnixShell.quote(initrdRel)}";
         var bootResult = self.shell.run(bootExtract, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!bootResult.ok()) { NixosLog.fatal("Failed to extract serial boot kernel/initrd from ISO"); }
 
@@ -76,11 +76,11 @@ class QemuSerial {
     public void prepareSerialPipe() {
         FileSystem.removeRecursive(self.serialInPath());
         FileSystem.removeRecursive(self.serialOutPath());
-        var inPipe = Command(f"mkfifo {UnixShell.quote(self.serialInPath())}");
-        var inResult = self.shell.run(inPipe, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var inputPipe = f"mkfifo {UnixShell.quote(self.serialInPath())}";
+        var inResult = self.shell.run(inputPipe, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!inResult.ok()) { NixosLog.fatal("Failed to create VM serial input pipe"); }
-        var outPipe = Command(f"mkfifo {UnixShell.quote(self.serialOutPath())}");
-        var outResult = self.shell.run(outPipe, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var outputPipe = f"mkfifo {UnixShell.quote(self.serialOutPath())}";
+        var outResult = self.shell.run(outputPipe, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!outResult.ok()) { NixosLog.fatal("Failed to create VM serial output pipe"); }
     }
 

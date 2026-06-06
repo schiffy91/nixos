@@ -54,7 +54,7 @@ class VmStateStore {
 
     public string absolutePath(string path) {
         var script = f"cd {UnixShell.quote(PathTools.dirname(path))} && printf '%s/%s' \"$PWD\" {UnixShell.quote(PathTools.basename(path))}";
-        var command = Command(f"sh -c {UnixShell.quote(script)}");
+        var command = f"sh -c {UnixShell.quote(script)}";
         var result = self.shell.run(command);
         if (!result.ok()) { NixosLog.fatal("Failed to resolve path " + path); }
         return result.trimmed();
@@ -73,16 +73,16 @@ class VmStateStore {
 
     public void copyIfExists(string source, string target) {
         if (!FileSystem.exists(source)) { return; }
-        var cp = Command(f"cp {UnixShell.quote(source)} {UnixShell.quote(target)}");
-        var result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"cp {UnixShell.quote(source)} {UnixShell.quote(target)}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
     }
 
     public void copyTreeIfExists(string source, string target) {
         if (!FileSystem.exists(source)) { return; }
         FileSystem.removeRecursive(target);
-        var cp = Command(f"cp -R {UnixShell.quote(source)} {UnixShell.quote(target)}");
-        var result = self.shell.run(cp, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"cp -R {UnixShell.quote(source)} {UnixShell.quote(target)}";
+        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }
     }
 
@@ -112,8 +112,8 @@ class VmStateStore {
         var parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
         if (!FileSystem.exists(self.diskPath()) && FileSystem.exists(parentDisk)) {
             var backing = self.absolutePath(parentDisk);
-            var create = Command(f"qemu-img create -f qcow2 -F qcow2 -b {UnixShell.quote(backing)} {UnixShell.quote(self.diskPath())}");
-            var result = self.shell.run(create, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            var command = f"qemu-img create -f qcow2 -F qcow2 -b {UnixShell.quote(backing)} {UnixShell.quote(self.diskPath())}";
+            var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
             if (!result.ok()) { NixosLog.fatal("Failed to create qcow2 state delta for " + self.spec.state); }
             Path.writeAll(self.backingDiskFile(), backing + "\n");
         }
@@ -178,7 +178,7 @@ class VmStateStore {
 
     public bool hasSnapshot(string name) {
         if (!FileSystem.exists(self.diskPath())) { return false; }
-        var result = self.shell.run(Command(f"qemu-img snapshot -l {UnixShell.quote(self.diskPath())}"), logFailure=false);
+        var result = self.shell.run(f"qemu-img snapshot -l {UnixShell.quote(self.diskPath())}", logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"Failed to list snapshots for {self.diskPath()}");
         }
