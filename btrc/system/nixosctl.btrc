@@ -9,7 +9,8 @@ import ./password.btrc;
 import ../btrfs/diff.btrc;
 import ../hardware/secure_boot.btrc;
 import ../hardware/tpm2.btrc;
-import ../desktop/hardware_ui_labels.btrc;
+import ../core/paths.btrc;
+import ../desktop/hardware_config.btrc;
 import ../desktop/audio.btrc;
 import ../desktop/caffeine.btrc;
 import ../desktop/displays.btrc;
@@ -24,8 +25,7 @@ class NixosCtl {
     public NixosConfig config;
 
     public NixosCtl() {
-        var root = Environment.get("NIXOS_CONFIG_ROOT", "/etc/nixos");
-        self.config = NixosConfig(root);
+        self.config = NixosConfig(NixosPaths.rootFromEnv());
     }
 
     class string env(string name, string fallback) {
@@ -33,52 +33,52 @@ class NixosCtl {
     }
 
     public void usage() {
-        var h = CliHelp();
-        h.line("Usage: nixosctl <command> [options]");
+        var help = CliHelp();
+        help.line("Usage: nixosctl <command> [options]");
 
-        h.section("System lifecycle");
-        h.item("update [--clean] [--upgrade] [--rebuild-filesystem] [--reboot]",
+        help.section("System lifecycle");
+        help.item("update [--clean] [--upgrade] [--rebuild-filesystem] [--reboot]",
                "Rebuild and switch the current system.");
-        h.continuation("--clean   nix-collect-garbage + verify --repair first.");
-        h.continuation("--upgrade Refresh flake inputs (implies --clean).");
-        h.continuation("--rebuild-filesystem  Re-enroll the bootloader.");
-        h.continuation("--reboot  Reboot after activation.");
-        h.item("upgrade [...]", "Alias for: update --upgrade --clean");
-        h.item("install [--format] [--yes] [--collect-garbage] [--debug]",
+        help.continuation("--clean   nix-collect-garbage + verify --repair first.");
+        help.continuation("--upgrade Refresh flake inputs (implies --clean).");
+        help.continuation("--rebuild-filesystem  Re-enroll the bootloader.");
+        help.continuation("--reboot  Reboot after activation.");
+        help.item("upgrade [...]", "Alias for: update --upgrade --clean");
+        help.item("install [--format] [--yes] [--collect-garbage] [--debug]",
                "Format/mount disk and run nixos-install.");
-        h.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
-        h.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
+        help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
+        help.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
 
-        h.section("Disk + immutability");
-        h.item("diff [--recent] [--pattern <p>] [--depth <n>]",
+        help.section("Disk + immutability");
+        help.item("diff [--recent] [--pattern <p>] [--depth <n>]",
                "Show files diverged from the CLEAN snapshot.");
-        h.continuation("[--show-symlinks] [--show-persist-paths] [--show-children <path>]");
-        h.continuation("[--diffignore <file>]");
+        help.continuation("[--show-symlinks] [--show-persist-paths] [--show-children <path>]");
+        help.continuation("[--diffignore <file>]");
 
-        h.section("Boot + crypto");
-        h.item("secure-boot <enable|disable|status> [--microsoft]",
+        help.section("Boot + crypto");
+        help.item("secure-boot <enable|disable|status> [--microsoft]",
                "Manage Lanzaboote / Secure Boot enrollment.");
-        h.item("tpm2 <enable|disable|status>", "Manage TPM2 LUKS keyslot.");
-        h.item("change-password [--update-tpm2]",
+        help.item("tpm2 <enable|disable|status>", "Manage TPM2 LUKS keyslot.");
+        help.item("change-password [--update-tpm2]",
                "Rotate LUKS + user account password.");
-        h.continuation("[--full-disk-encryption-only | --user-account-only]");
-        h.continuation("Prompts interactively. To script, set");
-        h.continuation("NIXOS_OLD_PASSWORD + NIXOS_NEW_PASSWORD env vars.");
+        help.continuation("[--full-disk-encryption-only | --user-account-only]");
+        help.continuation("Prompts interactively. To script, set");
+        help.continuation("NIXOS_OLD_PASSWORD + NIXOS_NEW_PASSWORD env vars.");
 
-        h.section("Hardware");
-        h.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
-        h.item("audio <list|current|set> [sink]", "");
-        h.item("caffeine <status|enable|disable|toggle>", "");
+        help.section("Hardware");
+        help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
+        help.item("audio <list|current|set> [sink]", "");
+        help.item("caffeine <status|enable|disable|toggle>", "");
 
-        h.section("Testing");
-        h.item("vm <args>", "Boot the host config in a QEMU VM.");
-        h.item("e2e <args>", "Run end-to-end test scenarios.");
-        h.item("graph <args>", "Inspect / render the test-scenario graph.");
+        help.section("Testing");
+        help.item("vm <args>", "Boot the host config in a QEMU VM.");
+        help.item("e2e <args>", "Run end-to-end test scenarios.");
+        help.item("graph <args>", "Inspect / render the test-scenario graph.");
 
-        h.blank();
-        h.line("Privileged commands auto-elevate via sudo. Set NIXOS_CONFIG_ROOT to point");
-        h.line("at a tree other than /etc/nixos.");
-        h.print();
+        help.blank();
+        help.line("Privileged commands auto-elevate via sudo. Set NIXOS_CONFIG_ROOT to point");
+        help.line("at a tree other than /etc/nixos.");
+        help.print();
     }
 
     public bool needsRoot(string command) {

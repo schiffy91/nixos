@@ -68,11 +68,11 @@ $(IMMUTABILITY_BIN): $(IMMUTABILITY_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_BIN)" $(IMMUTABILITY_LIBS)
 
 quick: $(BIN)
-	@set +e; output="$$(./$(BIN) 2>&1)"; status=$$?; \
+	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
 	printf '%s\n' "$$output"; \
 	test $$status -eq 1; \
 	printf '%s\n' "$$output" | grep -q 'Usage: nixosctl'
-	./$(BIN) e2e tests/quick/test.json
+	NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) e2e tests/quick/test.json
 
 smoke: quick
 

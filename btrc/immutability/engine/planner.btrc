@@ -13,11 +13,11 @@ class ImmutabilityPlanner {
     public int compareSpecs(ImmutabilitySpec left, ImmutabilitySpec right) {
         var volume = Strings.compare(left.volume, right.volume);
         if (volume != 0) { return volume; }
-        var leftDepth = Strings.count(left.relPath, "/");
-        var rightDepth = Strings.count(right.relPath, "/");
+        var leftDepth = Strings.count(left.relativePath, "/");
+        var rightDepth = Strings.count(right.relativePath, "/");
         if (leftDepth != rightDepth) { return leftDepth - rightDepth; }
-        if (left.relPath.len() != right.relPath.len()) { return left.relPath.len() - right.relPath.len(); }
-        return Strings.compare(left.relPath, right.relPath);
+        if (left.relativePath.len() != right.relativePath.len()) { return left.relativePath.len() - right.relativePath.len(); }
+        return Strings.compare(left.relativePath, right.relativePath);
     }
 
     public void pushSpecSorted(Vector<ImmutabilitySpec> specs, ImmutabilitySpec spec) {
@@ -37,7 +37,7 @@ class ImmutabilityPlanner {
     }
 
     public string resolveKind(string live, string clean, ImmutabilitySpec spec) {
-        var path = self.fs.sourcePath(live, clean, spec.relPath);
+        var path = self.fs.sourcePath(live, clean, spec.relativePath);
         if (path.isEmpty()) { return "file"; }
         if (FileSystem.isDir(path)) { return "dir"; }
         return "file";
@@ -45,10 +45,10 @@ class ImmutabilityPlanner {
 
     public bool planAlreadyCovers(Vector<ImmutabilityPlan> plans, ImmutabilitySpec spec) {
         for plan in plans {
-            if (plan.spec.volume.equals(spec.volume) && plan.spec.relPath.equals(spec.relPath)) {
+            if (plan.spec.volume.equals(spec.volume) && plan.spec.relativePath.equals(spec.relativePath)) {
                 return true;
             }
-            if (plan.spec.volume.equals(spec.volume) && plan.kind.equals("dir") && ImmutabilityPaths.ancestor(plan.spec.relPath, spec.relPath)) {
+            if (plan.spec.volume.equals(spec.volume) && plan.kind.equals("dir") && ImmutabilityPaths.ancestor(plan.spec.relativePath, spec.relativePath)) {
                 return true;
             }
         }

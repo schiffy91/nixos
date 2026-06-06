@@ -1,4 +1,8 @@
-import std.*;
+import std.fs;
+import std.json;
+import std.map;
+import std.process;
+import std.strings;
 import ../core/log.btrc;
 import ../core/paths.btrc;
 
@@ -81,16 +85,7 @@ class NixosConfig {
     public string inputLockedRev(string inputName) {
         var result = self.shell.run(Command(f"{self.nixCommand()} flake metadata {inputName} --json -I {UnixShell.quote(self.paths.root)}"));
         if (!result.ok()) { return "master"; }
-        var json = result.stdout();
-        var marker = "\"rev\":\"";
-        var start = Strings.find(json, marker, 0);
-        if (start < 0) { return "master"; }
-        start = start + marker.len();
-        var end = start;
-        while (json[end] != '\0' && json[end] != '"') {
-            end++;
-        }
-        return JsonObject.slice(json, start, end);
+        return JsonText.field(result.stdout(), "revision", "master");
     }
 
     public string evalRaw(string attribute) {

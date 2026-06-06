@@ -1,5 +1,8 @@
-import std.*;
-import ./hardware_ui_labels.btrc;
+import std.console;
+import std.json;
+import std.process;
+import std.vector;
+import ./hardware_config.btrc;
 
 class AudioSink {
     public string name;
@@ -13,11 +16,11 @@ class AudioSink {
 
 class AudioManager {
     public UnixShell shell;
-    public LabelsConfig labels;
+    public HardwareConfig hardware;
 
     public AudioManager() {
         self.shell = UnixShell();
-        self.labels = LabelsConfig();
+        self.hardware = HardwareConfig();
     }
 
     public string current() {
@@ -56,7 +59,7 @@ class AudioManager {
         var currentSink = self.current();
         Vector<string> entries = [];
         Vector<string> covered = [];
-        var presets = self.labels.audioPresets();
+        var presets = self.hardware.audioPresets();
         for preset in presets {
             var name = preset.sink.isEmpty() ? preset.label : preset.sink;
             var label = preset.label.isEmpty() ? name : preset.label;
@@ -75,7 +78,7 @@ class AudioManager {
     }
 
     public AudioPreset findPreset(string selector) {
-        var presets = self.labels.audioPresets();
+        var presets = self.hardware.audioPresets();
         for preset in presets {
             if (selector.equals(preset.label) || selector.equals(preset.sink)) {
                 return preset;

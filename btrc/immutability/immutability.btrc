@@ -91,7 +91,7 @@ class Immutability {
             var store = self.run.path(plan.store);
             if (!self.fs.exists(store)) {
                 self.fs.makeSubvolume(store);
-                var source = self.fs.sourcePath(live, clean, plan.spec.relPath);
+                var source = self.fs.sourcePath(live, clean, plan.spec.relativePath);
                 if (!source.isEmpty()) {
                     self.fs.copyDirectoryContents(source, store);
                     self.fs.matchOwnerAndMode(source, store);
@@ -106,7 +106,7 @@ class Immutability {
         for plan in plans {
             if (!plan.kind.equals("file")) { continue; }
             var destination = self.run.path(plan.store);
-            var source = self.fs.sourcePath(live, clean, plan.spec.relPath);
+            var source = self.fs.sourcePath(live, clean, plan.spec.relativePath);
             if (!source.isEmpty()) {
                 var temporary = f"{destination}.tmp.{Platform.pid()}";
                 self.run.removePath(temporary);
@@ -121,7 +121,7 @@ class Immutability {
 
     public void populateNext(Vector<ImmutabilityPlan> plans, string next) {
         for plan in plans {
-            var target = PathTools.join(next, plan.spec.relPath);
+            var target = PathTools.join(next, plan.spec.relativePath);
             self.run.removePath(target);
             if (plan.kind.equals("dir")) {
                 self.run.mkdirp(target);
@@ -145,6 +145,45 @@ class Immutability {
         self.volumes = ImmutabilityConfig.readVolumes(volumeArgs, self.specs);
     }
 
+    public bool modeIn(Vector<string> modes) {
+        for mode in modes {
+            if (self.mode.equals(mode)) { return true; }
+        }
+        return false;
+    }
+
+    public bool resetMode() {
+        return self.modeIn([
+            ImmutabilityConstants.converge(),
+            ImmutabilityConstants.reset(),
+            ImmutabilityConstants.prepareOnly()
+        ]);
+    }
+
+    public void runVolume(ImmutabilityVolume volume) {
+        if (self.resetMode()) {
+            self.resetVolume(volume);
+            return;
+        }
+        if (self.mode.equals(ImmutabilityConstants.snapshotOnly())) {
+            self.slots.rotate(volume.name, self.run.path(volume.name), self.snapshotsSubvolume);
+            return;
+        }
+        if (self.modeIn([ImmutabilityConstants.restoreA(), ImmutabilityConstants.restorePrevious()])) {
+            self.slots.restoreSlot(volume, ImmutabilityConstants.a(), self.snapshotsSubvolume);
+            return;
+        }
+        if (self.modeIn([ImmutabilityConstants.restoreB(), ImmutabilityConstants.restorePenultimate()])) {
+            self.slots.restoreSlot(volume, ImmutabilityConstants.b(), self.snapshotsSubvolume);
+            return;
+        }
+        if (self.mode.equals(ImmutabilityConstants.restoreC())) {
+            self.slots.restoreSlot(volume, ImmutabilityConstants.c(), self.snapshotsSubvolume);
+            return;
+        }
+        self.run.fatal(f"Unknown mode: {self.mode}");
+    }
+
     public void runAll() {
         Vector<string> names = [];
         for volume in self.volumes { names.push(volume.name); }
@@ -161,23 +200,11 @@ class Immutability {
         }
         self.mounts.mountTop(self.device, self.assumeMounted);
         self.orphans.ensureNamespaces(self.persistRoot);
-        if (self.mode.equals(ImmutabilityConstants.converge()) || self.mode.equals(ImmutabilityConstants.reset()) || self.mode.equals(ImmutabilityConstants.prepareOnly())) {
+        if (self.resetMode()) {
             self.orphans.pruneOrphans(self.persistRoot, self.specs);
         }
         for volume in self.volumes {
-            if (self.mode.equals(ImmutabilityConstants.converge()) || self.mode.equals(ImmutabilityConstants.reset()) || self.mode.equals(ImmutabilityConstants.prepareOnly())) {
-                self.resetVolume(volume);
-            } else if (self.mode.equals(ImmutabilityConstants.snapshotOnly())) {
-                self.slots.rotate(volume.name, self.run.path(volume.name), self.snapshotsSubvolume);
-            } else if (self.mode.equals(ImmutabilityConstants.restoreA()) || self.mode.equals(ImmutabilityConstants.restorePrevious())) {
-                self.slots.restoreSlot(volume, ImmutabilityConstants.a(), self.snapshotsSubvolume);
-            } else if (self.mode.equals(ImmutabilityConstants.restoreB()) || self.mode.equals(ImmutabilityConstants.restorePenultimate())) {
-                self.slots.restoreSlot(volume, ImmutabilityConstants.b(), self.snapshotsSubvolume);
-            } else if (self.mode.equals(ImmutabilityConstants.restoreC())) {
-                self.slots.restoreSlot(volume, ImmutabilityConstants.c(), self.snapshotsSubvolume);
-            } else {
-                self.run.fatal(f"Unknown mode: {self.mode}");
-            }
+            self.runVolume(volume);
         }
         self.run.requireCommand(ImmutabilityBtrfs.sync(self.run.top));
         self.mounts.unmountTop(self.assumeMounted);

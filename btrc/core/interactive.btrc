@@ -1,4 +1,8 @@
-import std.*;
+import std.console;
+import std.fs;
+import std.process;
+import std.strings;
+import std.vector;
 import ./log.btrc;
 
 class Interactive {

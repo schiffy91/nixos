@@ -1,10 +1,25 @@
-import std.*;
+import std.fs;
+import std.json;
+import std.platform;
+import std.strings;
 
 class NixosPaths {
     public string root;
 
     public NixosPaths(string root = "/etc/nixos") {
         self.root = root;
+    }
+
+    class string rootFromEnv() {
+        return Environment.get("NIXOS_CONFIG_ROOT", "/etc/nixos");
+    }
+
+    class string hardwareConfigPathFromEnv() {
+        return Environment.get("NIXOS_CONFIG", "");
+    }
+
+    class string trayIconPathFromEnv() {
+        return Environment.get("NIXOS_TRAY_ICON", "");
     }
 
     public string configPath() {

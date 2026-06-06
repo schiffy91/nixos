@@ -29,64 +29,64 @@ build:
 	$(MAKE) -C .. build
 
 quick: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) e2e tests/quick/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/quick/test.json'
 
 host-smoke: quick
 
 app-settings: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run app-settings'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run app-settings'
 
 stateful-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) e2e tests/stateful-host/test.json --arg marker=make-target'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/stateful-host/test.json --arg marker=make-target'
 
 aarch64-qemu-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run aarch64-qemu-host'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run aarch64-qemu-host'
 
 download: installer-download
 
 installer-download: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) e2e tests/installer-download/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/installer-download/test.json'
 
 install-system: installer-ssh
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) e2e tests/install-system/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/install-system/test.json'
 
 immutability-reset: install-system
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) e2e tests/immutability-reset/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/immutability-reset/test.json'
 
 installer-ssh: installer-download
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) e2e tests/installer-ssh/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/installer-ssh/test.json'
 
 installer-ssh-smoke: installer-ssh
 
 tpm2-probe: installer-download
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run tpm2-probe'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run tpm2-probe'
 
 secure-boot-capabilities: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run secure-boot-capabilities'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run secure-boot-capabilities'
 
 secure-boot-install: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run secure-boot-install'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run secure-boot-install'
 
 secure-boot-lanzaboote: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run secure-boot-lanzaboote'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run secure-boot-lanzaboote'
 
 graph-list: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json list'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json list'
 
 graph-status: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json status'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json status'
 
 graph-coverage: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json coverage'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json coverage'
 
 graph-early: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run'
 
 graph-installer-ssh: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run installer-ssh'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run installer-ssh'
 
 graph-full: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run './$(NIXOSCTL) graph tests/graph.json run cli-parity qmp-probe tpm2-probe immutability-reset install-disabled'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run cli-parity qmp-probe tpm2-probe immutability-reset install-disabled'
 
 chain: installer-download installer-ssh install-system immutability-reset
 

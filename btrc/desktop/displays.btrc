@@ -1,5 +1,10 @@
-import std.*;
-import ./hardware_ui_labels.btrc;
+import std.console;
+import std.fs;
+import std.json;
+import std.process;
+import std.strings;
+import std.vector;
+import ./hardware_config.btrc;
 
 class DisplayOutput {
     public string name;
@@ -47,11 +52,11 @@ class DisplayOutput {
 
 class DisplayManager {
     public UnixShell shell;
-    public LabelsConfig labels;
+    public HardwareConfig hardware;
 
     public DisplayManager() {
         self.shell = UnixShell();
-        self.labels = LabelsConfig();
+        self.hardware = HardwareConfig();
     }
 
     public string kscreen() {
@@ -83,7 +88,7 @@ class DisplayManager {
         var headerParts = Strings.split(header, " ");
         if (headerParts.len < 2) { return output; }
         output.name = headerParts.get(1);
-        output.label = self.labels.displayLabel(output.name);
+        output.label = self.hardware.displayLabel(output.name);
         output.enabled = block.contains("\tenabled");
         output.connected = block.contains("\tconnected") || self.drmConnected(output.name);
         var priority = self.lineValue(block, "priority ");
@@ -155,7 +160,7 @@ class DisplayManager {
     }
 
     public void layout() {
-        var rules = self.labels.layoutRules();
+        var rules = self.hardware.layoutRules();
         for rule in rules {
             self.applyLayout(rule.display);
         }
@@ -163,7 +168,7 @@ class DisplayManager {
 
     public void applyLayout(string name) {
         var selected = DisplayLayoutRule();
-        var rules = self.labels.layoutRules();
+        var rules = self.hardware.layoutRules();
         for rule in rules {
             if (rule.display.equals(name)) { selected = rule; }
         }

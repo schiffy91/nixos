@@ -1,8 +1,8 @@
-import std.*;
 import std.tray;
+import ../core/paths.btrc;
 
 int main() {
-    string iconPath = Environment.get("NIXOS_TRAY_ICON", "");
+    var iconPath = NixosPaths.trayIconPathFromEnv();
     SystemTray tray = SystemTray("NixOS");
     if (!iconPath.isEmpty()) {
         tray.icon(iconPath);

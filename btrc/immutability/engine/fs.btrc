@@ -88,10 +88,10 @@ class ImmutabilityFs {
         }
     }
 
-    public string sourcePath(string live, string clean, string relPath) {
-        var livePath = PathTools.join(live, relPath);
+    public string sourcePath(string live, string clean, string relativePath) {
+        var livePath = PathTools.join(live, relativePath);
         if (self.exists(livePath)) { return livePath; }
-        var cleanPath = PathTools.join(clean, relPath);
+        var cleanPath = PathTools.join(clean, relativePath);
         if (self.exists(cleanPath)) { return cleanPath; }
         return "";
     }

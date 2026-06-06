@@ -14,14 +14,14 @@ class ImmutabilitySpec {
     public string volume;
     public string mountPoint;
     public string absPath;
-    public string relPath;
+    public string relativePath;
     public string kind;
 
-    public ImmutabilitySpec(string volume, string mountPoint, string absPath, string relPath, string kind) {
+    public ImmutabilitySpec(string volume, string mountPoint, string absPath, string relativePath, string kind) {
         self.volume = volume;
         self.mountPoint = mountPoint;
         self.absPath = absPath;
-        self.relPath = relPath;
+        self.relativePath = relativePath;
         self.kind = kind;
     }
 }

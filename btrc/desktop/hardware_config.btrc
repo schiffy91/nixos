@@ -1,4 +1,7 @@
-import std.*;
+import std.io;
+import std.toml;
+import std.vector;
+import ../core/paths.btrc;
 
 class DisplayLayoutRule {
     public string display;
@@ -28,12 +31,12 @@ class AudioPreset {
     }
 }
 
-class LabelsConfig {
+class HardwareConfig {
     public string path;
     public string content;
 
-    public LabelsConfig() {
-        self.path = Environment.get("NIXOS_CONFIG", "");
+    public HardwareConfig() {
+        self.path = NixosPaths.hardwareConfigPathFromEnv();
         self.content = self.path.isEmpty() ? "" : Path.readAll(self.path);
     }
 
