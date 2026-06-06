@@ -112,7 +112,7 @@ lib.mkIf config.settings.disk.recovery.enable {
         config.settings.disk.boot.efiSysMountPoint
         config.settings.disk.recovery.mountPoint
       ];
-      ConditionPathIsMountPoint = [
+      AssertPathIsMountPoint = [
         config.settings.disk.boot.efiSysMountPoint
         config.settings.disk.recovery.mountPoint
       ];

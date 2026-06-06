@@ -75,20 +75,27 @@ class SecureBootManager {
         return result;
     }
 
-    public void verify() {
+    public bool verify() {
         var result = self.shell.run(Command("sbctl verify --json"), logFailure=false);
         var output = result.trimmed();
         if (output.isEmpty() || output.equals("null")) {
             NixosLog.error("No EFI binaries registered");
-            return;
+            return false;
         }
         var unsignedPaths = self.unsignedFromJson(output);
         if (unsignedPaths.isEmpty()) {
             NixosLog.info("All EFI binaries are signed");
-            return;
+            return true;
         }
         for path in unsignedPaths {
             NixosLog.error(f"NOT signed: {path}");
+        }
+        return false;
+    }
+
+    public void requireVerified() {
+        if (!self.verify()) {
+            NixosLog.fatal("Secure Boot verification found unsigned EFI binaries");
         }
     }
 
@@ -101,7 +108,7 @@ class SecureBootManager {
         options.rebuildFileSystem = true;
         options.clean = true;
         NixosRebuilder(self.config).update(options);
-        self.verify();
+        self.requireVerified();
     }
 
     public void disable() {

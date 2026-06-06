@@ -22,7 +22,8 @@ class PermissionsManager {
 
     public void chmodMatching(string quotedRoot, string ignores, string predicate, string mode) {
         var execArg = "{}";
-        self.shell.run(f"find {quotedRoot} {ignores} -prune -o {predicate} -exec chmod {mode} {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        var prune = ignores.isEmpty() ? "" : f"{ignores} -prune -o";
+        self.shell.run(f"find {quotedRoot} {prune} {predicate} -exec chmod {mode} {execArg} +", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
     }
 
     public void secureSecretsPath(string path) {
