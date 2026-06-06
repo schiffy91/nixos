@@ -223,49 +223,35 @@ class Immutability {
     }
 
     class int cli(CliArgs args) {
-        var dryRun = Immutability.envDryRun();
-        var assumeMounted = false;
-        var index = 0;
-        while (index < args.count()) {
-            var value = args.get(index);
-            if (value.equals("--dry-run")) {
-                dryRun = true;
-                index++;
-                continue;
-            }
-            if (value.equals("--assume-mounted")) {
-                assumeMounted = true;
-                index++;
-                continue;
-            }
-            break;
-        }
-        if (index < args.count() && args.get(index).equals("mount")) {
-            if (args.count() < index + 4) {
+        var parsed = CliCommandLine.parse(args);
+        var dryRun = Immutability.envDryRun() || parsed.flag("--dry-run");
+        var assumeMounted = parsed.flag("--assume-mounted");
+        if (parsed.operand(0).equals("mount")) {
+            if (parsed.operandCount() < 4) {
                 Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
                 return 1;
             }
             var mounter = Immutability(dryRun, assumeMounted);
-            mounter.configureMount(args.get(index + 1), args.get(index + 2), args.get(index + 3));
+            mounter.configureMount(parsed.operand(1), parsed.operand(2), parsed.operand(3));
             mounter.mountPersist();
             return 0;
         }
-        if (args.count() < index + 6) {
+        if (parsed.operandCount() < 6) {
             Console.error("Usage: immutability [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
             return 1;
         }
         Vector<string> volumeArgs = [];
-        for (int i = index + 6; i < args.count(); i++) {
-            volumeArgs.push(args.get(i));
+        for (int i = 6; i < parsed.operandCount(); i++) {
+            volumeArgs.push(parsed.operand(i));
         }
         var immutability = Immutability(dryRun, assumeMounted);
         immutability.configure(
-            args.get(index),
-            args.get(index + 1),
-            args.get(index + 2),
-            args.get(index + 3),
-            args.get(index + 4),
-            args.get(index + 5),
+            parsed.operand(0),
+            parsed.operand(1),
+            parsed.operand(2),
+            parsed.operand(3),
+            parsed.operand(4),
+            parsed.operand(5),
             volumeArgs
         );
         immutability.runAll();

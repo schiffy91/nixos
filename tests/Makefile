@@ -1,6 +1,20 @@
 NIX_SHELL ?= nix-shell
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
+GRAPH_FULL_TARGETS := \
+	cli-parity \
+	qmp-probe \
+	tpm2-probe \
+	install-reset \
+	install-disabled \
+	immutability-reset \
+	install-encrypted \
+	tpm2-enroll \
+	recovery-boot-x86_64 \
+	recovery-boot-aarch64 \
+	recovery-secure-boot \
+	secure-boot-lanzaboote \
+	secure-boot-aarch64
 
 .PHONY: help build quick host-smoke app-settings stateful-host aarch64-qemu-host download installer-download install-system immutability-reset installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
 
@@ -86,7 +100,7 @@ graph-installer-ssh: build
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run installer-ssh'
 
 graph-full: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run cli-parity qmp-probe tpm2-probe immutability-reset install-disabled'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run $(GRAPH_FULL_TARGETS)'
 
 chain: installer-download installer-ssh install-system immutability-reset
 

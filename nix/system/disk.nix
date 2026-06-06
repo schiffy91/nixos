@@ -48,7 +48,7 @@ in {
         ##### Recovery Partition #####
         "${config.settings.disk.label.recovery}" = {
           size = config.settings.disk.recovery.size;
-          type = "EA00";
+          type = "EF00";
           content = {
             type = "filesystem";
             format = "vfat";

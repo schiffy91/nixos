@@ -154,6 +154,8 @@ installs:
 
 Standard-Boot and Secure-Boot use the same loader entry; the secure path signs
 the kernel and fallback bootloader with the configured db keys when they exist.
+The recovery initrd is installed as a split initrd referenced by the signed
+loader entry.
 Updating the recovery image is a rebuild. Changing the recovery partition size
 on an already-installed disk is a real partition resize operation, not something
 this config does online.
@@ -163,7 +165,7 @@ environment after backup and disk inspection. If there is already free space,
 the shape is:
 
 ```bash
-sgdisk -n 0:0:+4G -t 0:EA00 -c 0:FRACTAL-NORTH-main-recovery /dev/nvme0n1
+sgdisk -n 0:0:+4G -t 0:EF00 -c 0:FRACTAL-NORTH-main-recovery /dev/nvme0n1
 mkfs.vfat -n RECOVERY /dev/disk/by-partlabel/FRACTAL-NORTH-main-recovery
 ```
 

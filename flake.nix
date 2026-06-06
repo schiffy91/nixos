@@ -15,6 +15,8 @@
       diskOperationTargets = [ "Disk-Operation" ];
       isHostEntry = path: lib.hasSuffix ".nix" path && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
       hostFiles = lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./nix/hosts);
+      hostSystem = hostFile: "${baseNameOf (dirOf (dirOf hostFile))}-linux";
+      systems = lib.unique (map hostSystem hostFiles);
       systemModuleFiles = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./nix/system);
       baseConfig = {
         nix = {
@@ -27,7 +29,7 @@
       mkNixosSystem = hostFile: target:
         let
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
-          system = "${baseNameOf (dirOf (dirOf hostFile))}-linux";
+          system = hostSystem hostFile;
           pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
         in {
           name = "${name}-${target}";
@@ -43,13 +45,18 @@
       mkDiskoConfiguration = hostFile: target:
         let
           name = lib.removeSuffix ".nix" (baseNameOf hostFile);
-          system = "${baseNameOf (dirOf (dirOf hostFile))}-linux";
+          system = hostSystem hostFile;
           pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
           nixos = lib.nixosSystem {
             inherit system;
             specialArgs = { inherit self inputs pkgs-unstable; };
             modules = [{
-              imports = [ ./nix/settings.nix hostFile ./nix/system/disk.nix ];
+              imports = [
+                ./nix/settings.nix
+                hostFile
+                { settings.boot.method = lib.mkForce target; }
+                ./nix/system/disk.nix
+              ];
               config = baseConfig;
             }];
           };
@@ -57,8 +64,32 @@
           name = "${name}-${target}";
           value.disko.devices = nixos.config.disko.devices;
         };
+      mkDiskoCheck = pkgs: hostFile:
+        let
+          disko = mkDiskoConfiguration hostFile "Disk-Operation";
+          disk = disko.value.disko.devices.disk.main;
+          partitions = disk.content.partitions;
+          contract = [
+            disk.device
+            disk.type
+            disk.content.type
+            partitions.boot.type
+            partitions.root.size
+          ] ++ lib.optional (partitions ? recovery) partitions.recovery.type;
+          checked = builtins.deepSeq contract disko.name;
+        in {
+          name = "disko-${disko.name}";
+          value = pkgs.runCommand "check-${disko.name}" { } ''
+            printf '%s\n' ${lib.escapeShellArg checked} > "$out"
+          '';
+        };
     in {
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
+      checks = lib.genAttrs systems (system:
+        let
+          pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
+          systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
+        in lib.listToAttrs (map (mkDiskoCheck pkgs) systemHosts));
     };
 }

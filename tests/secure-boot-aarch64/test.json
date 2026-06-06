@@ -1,7 +1,8 @@
 {
   "name": "secure-boot-aarch64",
   "state": "secure-boot-aarch64",
-  "parentState": "installer-ssh",
+  "parentState": "installer-ssh-aarch64",
+  "arch": "aarch64",
   "stateMaterial": "secure-boot-aarch64:lanzaboote:secboot-fw:hvf:tpm2=true:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
   "args": {
     "immutabilityVersion": "v2",

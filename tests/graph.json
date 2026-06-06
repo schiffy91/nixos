@@ -444,9 +444,13 @@
       "id": "secure-boot-aarch64",
       "spec": "secure-boot-aarch64/test.json",
       "after": [
-        "installer-ssh"
+        "installer-ssh-aarch64"
       ],
       "args": {
+        "name": "secure-boot-aarch64",
+        "state": "secure-boot-aarch64",
+        "parentState": "installer-ssh-aarch64",
+        "arch": "aarch64",
         "bootTarget": "Secure-Boot",
         "tpm2": "true",
         "immutabilityVersion": "v2",

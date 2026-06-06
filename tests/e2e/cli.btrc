@@ -44,20 +44,9 @@ class E2eCli {
     }
 
     public void applySpecArgs(VmTestSpec spec, CliArgs args, int startIndex) {
-        for (int i = startIndex; i < args.count(); i++) {
-            var value = args.get(i);
-            if (value.equals("--arg")) {
-                if (i + 1 >= args.count()) {
-                    NixosLog.fatal("Expected --arg key=value");
-                }
-                spec.setArgPair(args.get(i + 1));
-                i++;
-                continue;
-            }
-            if (value.startsWith("--arg=")) {
-                spec.setArgPair(Strings.removePrefix(value, "--arg="));
-                continue;
-            }
+        var overrides = GraphCli.args(args, startIndex);
+        for key in overrides.keys() {
+            spec.setArg(key, overrides.get(key));
         }
         self.applyStructuralOverrides(spec);
         spec.expandArgs();
