@@ -121,8 +121,13 @@ class NixosCtl {
     }
 
     public string requireArg(CliArgs args, int index, string usage) {
-        if (args.count() <= index) { NixosLog.fatal(usage); }
-        return args.get(index);
+        try {
+            return args.require(index, usage);
+        } catch (string error) {
+            var message = f"{error}";
+            NixosLog.fatal(message);
+        }
+        return "";
     }
 
     public string requireAction(CliArgs args, string usage) {
