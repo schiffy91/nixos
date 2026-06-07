@@ -7,7 +7,7 @@ operations:
   - op: require-state
   - op: reset-state
   - op: host
-    command: test "{{state}}" = "{{name}}" && test "{{workDir}}" = ".vm/e2e/{{name}}" && test "{{iso}}" = ".vm/iso/nixos-minimal-{{arch}}.iso" && test -n "{{isoUrl}}" && printf derived
+    command: test "{{state}}" = "{{name}}" && test "{{workDir}}" = ".vm/e2e/{{name}}" && test "{{iso}}" = ".vm/e2e/iso/nixos-minimal-{{arch}}.iso" && test -n "{{isoUrl}}" && printf derived
     expect: derived
   - op: host
     command: mkdir -p {{workDir}} && printf {{marker}} > {{workDir}}/format.txt

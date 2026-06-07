@@ -80,8 +80,17 @@ class DiffScanner {
         Vector<string> result = [];
         for line in Strings.split(output, "\n") {
             var marker = Strings.find(line, " path ", 0);
-            if (marker < 0) { continue; }
-            var path = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            var path = "";
+            if (marker >= 0) {
+                path = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            } else {
+                marker = Strings.find(line, " flags ", 0);
+                if (marker < 0) { continue; }
+                var rest = line.substring(marker + 7, line.len() - (marker + 7)).trim();
+                var pathStart = Strings.find(rest, " ", 0);
+                if (pathStart < 0) { continue; }
+                path = rest.substring(pathStart + 1, rest.len() - pathStart - 1).trim();
+            }
             if (!path.isEmpty()) { result.push(path); }
         }
         result = result.distinct();
