@@ -36,6 +36,9 @@ let
             "boot.shell_on_fail"
             "console=${serialConsole}"
             "console=tty0"
+            "nomodeset"
+            "systemd.show_status=1"
+            "rd.systemd.show_status=1"
           ];
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
         };
@@ -48,6 +51,7 @@ let
           enable = true;
           settings.PermitRootLogin = "prohibit-password";
         };
+        services.getty.autologinUser = lib.mkForce "root";
         users.users.root.openssh.authorizedKeys.keys =
           adminAuthorizedKeys;
 

@@ -21,6 +21,7 @@ in {
     ];
     settings.users.admin.extraGroups = mkSetting (listOf str) [ "wheel" "networkmanager" ];
     settings.users.admin.homeManager.enable = mkSetting bool true;
+    settings.users.mutable = mkSetting bool false;
     ##### Agent #####
     settings.users.agent.enable = mkSetting bool true;
     settings.users.agent.username = mkSetting str "agent";
@@ -172,7 +173,6 @@ in {
       "${adminHome}/.config/systemsettingsrc"
       "${adminHome}/.config/Trolltech.conf"
       "${adminHome}/.gtkrc-2.0"
-      "${adminHome}/.local/share/baloo/index-lock"
       "${adminHome}/.local/share/kactivitymanagerd"
       "${adminHome}/.local/share/recently-used.xbel"
       "${adminHome}/.local/state/konsolestaterc"

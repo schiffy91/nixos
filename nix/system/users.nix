@@ -19,7 +19,7 @@ in {
     inputs.home-manager.nixosModules.home-manager
   ] ++ appModules;
 
-  users.mutableUsers = false;
+  users.mutableUsers = cfg.mutable;
   users.groups = {
     ${admin.username} = {};
   } // lib.optionalAttrs agent.enable {
