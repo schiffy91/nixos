@@ -165,19 +165,29 @@ Updating the recovery image is a rebuild. Changing the recovery partition size
 on an already-installed disk is a real partition resize operation, not something
 this config does online.
 
-For an existing machine such as FRACTAL-NORTH, create the partition from a live
-environment after backup and disk inspection. If there is already free space,
-the shape is:
+For an existing machine such as FRACTAL-NORTH, do this from a live environment
+after backup and disk inspection. The desired end state is:
+
+| Partition | Size | Label | Purpose |
+|---|---:|---|---|
+| ESP | 4G | `disk-main-boot` | normal systemd-boot/Lanzaboote boot partition |
+| Root | remaining space | `disk-main-root` | existing LUKS/Btrfs root |
+| Recovery | 4G | `disk-main-recovery` | recovery boot partition |
+
+If there is already free space, creating recovery is straightforward:
 
 ```bash
-sgdisk -n 0:0:+4G -t 0:EF00 -c 0:FRACTAL-NORTH-main-recovery /dev/nvme0n1
-mkfs.vfat -n RECOVERY /dev/disk/by-partlabel/FRACTAL-NORTH-main-recovery
+sgdisk -n 0:0:+4G -t 0:EF00 -c 0:disk-main-recovery /dev/nvme0n1
+mkfs.vfat -F 32 -n RECOVERY /dev/disk/by-partlabel/disk-main-recovery
 ```
 
-If the root partition currently consumes the disk, first shrink the filesystem
-and partition offline with a machine-specific plan, then add the recovery
-partition. After `/recovery` exists and mounts, `nixos-rebuild switch` populates
-the recovery kernel, initrd, fallback bootloader, and boot entry.
+If the existing ESP is too small, do not try to grow it in place when root sits
+after it. Instead shrink Btrfs and the root partition offline, rename the old
+ESP to `disk-main-boot-legacy`, create a new 4G `disk-main-boot` ESP near the
+end of the disk, and create the 4G `disk-main-recovery` partition beside it.
+After `/boot` and `/recovery` mount, rebuild or install from the mounted system;
+the recovery service populates the recovery kernel, initrd, fallback bootloader,
+and boot entry.
 
 ### Disk
 
