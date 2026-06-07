@@ -40,6 +40,7 @@ let
             "systemd.show_status=1"
             "rd.systemd.show_status=1"
           ];
+          blacklistedKernelModules = [ "amdgpu" "nouveau" ];
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
         };
 
