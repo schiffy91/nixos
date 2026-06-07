@@ -181,8 +181,10 @@ in lib.mkIf enabled {
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
     if [ -f "${exe}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} "$(dirname ${iconPath})"
-      tmp=$(${pkgs.coreutils}/bin/mktemp --suffix=.ico)
-      png=$(${pkgs.coreutils}/bin/mktemp --suffix=.png)
+      ${pkgs.coreutils}/bin/install -d -m 1777 /tmp
+      scratch=$(${pkgs.coreutils}/bin/mktemp -d /tmp/battlenet-icon.XXXXXX)
+      tmp="$scratch/icon.ico"
+      png="$scratch/icon.png"
       if ${pkgs.icoutils}/bin/wrestool -x -t 14 -o "$tmp" "${exe}" 2>/dev/null; then
         for w in 256 128 64 48 32; do
           if ${pkgs.icoutils}/bin/icotool -x -w $w -o "$png" "$tmp" 2>/dev/null && [ -s "$png" ]; then
@@ -191,7 +193,7 @@ in lib.mkIf enabled {
           fi
         done
       fi
-      ${pkgs.coreutils}/bin/rm -f "$tmp" "$png"
+      ${pkgs.coreutils}/bin/rm -rf "$scratch"
     fi
   '';
 }

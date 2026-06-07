@@ -33,6 +33,7 @@
     ];
   };
   systemd.sleep.settings.Sleep.AllowHibernation = if config.settings.sleep.allowHibernation then "yes" else "no";
+  systemd.tmpfiles.rules = [ "d /tmp 1777 root root -" ];
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
 ##### Standard Boot Settings #####

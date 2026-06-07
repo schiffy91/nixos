@@ -16,6 +16,7 @@ let
   privateKey = "${config.settings.boot.pkiBundle}/keys/db/db.key";
   signingRequired = config.settings.boot.method == "Secure-Boot";
   systemStateVersion = config.system.stateVersion;
+  nixosMount = import ../recovery/mount.nix { inherit config lib pkgs; };
 
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
@@ -72,15 +73,17 @@ let
           sbctl
           smartmontools
           vim
+          nixosMount
         ];
       })
     ];
   };
 
+  recoveryToplevel = recoverySystem.config.system.build.toplevel;
   recoveryKernel = "${recoverySystem.config.system.build.kernel}/${recoverySystem.config.system.boot.loader.kernelFile}";
   recoveryInitrd = "${recoverySystem.config.system.build.netbootRamdisk}/initrd";
   recoverySystemdBoot = "${pkgs.systemd}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi";
-  recoveryOptions = "init=${recoverySystem.config.system.build.toplevel}/init ${toString recoverySystem.config.boot.kernelParams}";
+  recoveryOptions = "init=${recoveryToplevel}/init ${toString recoverySystem.config.boot.kernelParams}";
   recoveryEntry = pkgs.writeText "nixos-recovery.conf" ''
     title NixOS Recovery
     sort-key z_recovery
@@ -101,7 +104,7 @@ let
     The recovery partition also has its own fallback systemd-boot copy at the
     firmware fallback path for direct firmware boot.
   '';
-  recoveryArtifactTriggers = [ recoveryKernel recoveryInitrd ];
+  recoveryArtifactTriggers = [ recoveryToplevel recoveryKernel recoveryInitrd ];
   installRecoveryArtifacts =
     if signingRequired
     then ''
@@ -127,8 +130,69 @@ let
     else ''
       install_plain ${lib.escapeShellArg recoverySystemdBoot} "$recovery/${fallbackBootPath}"
     '';
+  installRecoveryScript = strict: ''
+    install_nixos_recovery_boot_artifacts() {
+      set -euo pipefail
+      umask 077
+
+      recovery=${lib.escapeShellArg config.settings.disk.recovery.mountPoint}
+      boot=${lib.escapeShellArg config.settings.disk.boot.efiSysMountPoint}
+      public_key=${lib.escapeShellArg publicKey}
+      private_key=${lib.escapeShellArg privateKey}
+      signing_required=${lib.escapeShellArg (if signingRequired then "1" else "0")}
+      strict=${lib.escapeShellArg (if strict then "1" else "0")}
+
+      if ! ${pkgs.util-linux}/bin/mountpoint -q "$boot" || ! ${pkgs.util-linux}/bin/mountpoint -q "$recovery"; then
+        echo "Skipping recovery boot artifacts because $boot or $recovery is not mounted." >&2
+        return 0
+      fi
+
+      if [ "$signing_required" = 1 ] && { [ ! -e "$public_key" ] || [ ! -e "$private_key" ]; }; then
+        if [ "$strict" = 1 ]; then
+          echo "Secure-Boot recovery artifacts require sbctl db keys at $public_key and $private_key" >&2
+          return 1
+        fi
+        echo "Skipping Secure-Boot recovery artifacts because sbctl db keys are not available yet." >&2
+        return 0
+      fi
+
+      ${pkgs.coreutils}/bin/install -d -m 1777 /tmp
+      scratch=$(${pkgs.coreutils}/bin/mktemp -d /tmp/nixos-recovery-sign.XXXXXX)
+
+      install_secure() {
+        source="$1"
+        target="$2"
+        ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$target")"
+        tmp="$scratch/signed"
+        ${pkgs.sbsigntool}/bin/sbsign --key "$private_key" --cert "$public_key" --output "$tmp" "$source"
+        ${pkgs.coreutils}/bin/install -m 0644 "$tmp" "$target"
+        ${pkgs.coreutils}/bin/rm -f "$tmp"
+      }
+
+      install_plain() {
+        source="$1"
+        target="$2"
+        ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$target")"
+        ${pkgs.coreutils}/bin/install -m 0644 "$source" "$target"
+      }
+
+      ${installRecoveryArtifacts}
+      ${installRecoveryFallback}
+      ${removeLegacyRecoveryArtifacts}
+
+      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$boot/${config.settings.disk.recovery.entryPath}"
+      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
+      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"
+      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryReadme} "$recovery/README.txt"
+      ${pkgs.coreutils}/bin/rm -rf "$scratch"
+    }
+
+    install_nixos_recovery_boot_artifacts
+  '';
 in
 lib.mkIf config.settings.disk.recovery.enable {
+  system.activationScripts.nixosRecoveryBootArtifacts = lib.stringAfter [ "etc" ] (installRecoveryScript false);
+
   systemd.services.nixos-recovery-boot-entry = {
     description = "Install NixOS recovery boot artifacts";
     wantedBy = [ "multi-user.target" ];
@@ -153,47 +217,6 @@ lib.mkIf config.settings.disk.recovery.enable {
       Type = "oneshot";
       RemainAfterExit = true;
     };
-    path = with pkgs; [ coreutils sbsigntool ];
-    script = ''
-      set -euo pipefail
-      umask 077
-
-      recovery=${lib.escapeShellArg config.settings.disk.recovery.mountPoint}
-      boot=${lib.escapeShellArg config.settings.disk.boot.efiSysMountPoint}
-      public_key=${lib.escapeShellArg publicKey}
-      private_key=${lib.escapeShellArg privateKey}
-      signing_required=${lib.escapeShellArg (if signingRequired then "1" else "0")}
-
-      if [ "$signing_required" = 1 ] && { [ ! -e "$public_key" ] || [ ! -e "$private_key" ]; }; then
-        echo "Secure-Boot recovery artifacts require sbctl db keys at $public_key and $private_key" >&2
-        exit 1
-      fi
-
-      install_secure() {
-        source="$1"
-        target="$2"
-        mkdir -p "$(dirname "$target")"
-        tmp="$(mktemp)"
-        sbsign --key "$private_key" --cert "$public_key" --output "$tmp" "$source"
-        install -m 0644 "$tmp" "$target"
-        rm -f "$tmp"
-      }
-
-      install_plain() {
-        source="$1"
-        target="$2"
-        mkdir -p "$(dirname "$target")"
-        install -m 0644 "$source" "$target"
-      }
-
-      ${installRecoveryArtifacts}
-      ${installRecoveryFallback}
-      ${removeLegacyRecoveryArtifacts}
-
-      install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$boot/${config.settings.disk.recovery.entryPath}"
-      install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
-      install -Dm0644 ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"
-      install -Dm0644 ${lib.escapeShellArg recoveryReadme} "$recovery/README.txt"
-    '';
+    script = installRecoveryScript true;
   };
 }

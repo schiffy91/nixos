@@ -58,13 +58,29 @@ class ImmutabilityMounts {
         self.run.require(f"mount -t btrfs -o {UnixShell.quote(mountOptions)} {UnixShell.quote(device)} {UnixShell.quote(target)}");
     }
 
+    public bool persistAsDirectory(ImmutabilitySpec spec) {
+        if (spec.kind.equals("dir")) { return true; }
+        if (spec.kind.equals("file")) { return false; }
+        return FileSystem.isDir(spec.absPath);
+    }
+
+    public void ensurePersistentSubvolume(ImmutabilitySpec spec, string persistentSubvolume) {
+        if (self.fs.isSubvolume(persistentSubvolume)) { return; }
+        if (!self.persistAsDirectory(spec)) { return; }
+        self.fs.makeSubvolume(persistentSubvolume);
+        if (self.fs.exists(spec.absPath)) {
+            self.fs.copyDirectoryContents(spec.absPath, persistentSubvolume);
+            self.fs.matchOwnerAndMode(spec.absPath, persistentSubvolume);
+        }
+    }
+
     public void mountPersist(string device, string persistRoot, Vector<ImmutabilitySpec> specs, bool assumeMounted) {
         var dryRun = self.run.dryRun ? "true" : "false";
         self.run.log(f"Mounting persistent subvolumes dry_run={dryRun}");
         var mountedTop = false;
         if (!assumeMounted && !self.fs.mounted(self.run.top)) {
             self.run.mkdirp(self.run.top);
-            self.run.require(f"mount -t btrfs -o ro,subvolid=5 {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}");
+            self.run.require(f"mount -t btrfs -o subvolid=5 {UnixShell.quote(device)} {UnixShell.quote(self.run.top)}");
             mountedTop = true;
         }
         try {
@@ -73,6 +89,7 @@ class ImmutabilityMounts {
                 var target = spec.absPath;
                 if (self.coveredBy(selected, target)) { continue; }
                 var subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(target));
+                self.ensurePersistentSubvolume(spec, self.run.path(subvol));
                 if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
                 self.mountTarget(device, target, subvol);
                 selected.push(target);

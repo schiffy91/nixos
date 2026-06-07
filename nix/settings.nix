@@ -122,6 +122,7 @@ in {
     settings.disk.immutability.mode = mkSetting (enum [ "converge" "reset" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-previous" "restore-penultimate" "disabled" ]) "converge";
     settings.disk.immutability.dryRun = mkSetting bool false;
     settings.disk.immutability.enforce.onReboot = mkSetting bool true;
+    settings.disk.persistence.enable = mkSetting bool true;
     settings.disk.immutability.persist.subvolumeRoot = mkSetting str "@persist";
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";
     settings.disk.immutability.persist.paths = mkSetting (listOf str) ([

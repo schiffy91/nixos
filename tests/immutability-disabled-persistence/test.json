@@ -1,0 +1,36 @@
+{
+  "name": "immutability-disabled-persistence",
+  "state": "immutability-disabled-persistence",
+  "parentState": "installed-disabled",
+  "stateMaterial": "immutability-disabled-persistence:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "disabled",
+    "immutabilityEnabled": "false"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2246,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "configure-vm-host" },
+    { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && printf switched", "expect": "switched", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; nix eval --json /etc/nixos#nixosConfigurations.VM-TEST-Standard-Boot.config.settings.disk.persistence.enable | grep -Fx true; nix eval --json /etc/nixos#nixosConfigurations.VM-TEST-Standard-Boot.config.settings.disk.immutability.enable | grep -Fx false; nix eval --json /etc/nixos#nixosConfigurations.VM-TEST-Standard-Boot.config.systemd.services --apply 'services: builtins.hasAttr \"persistence-mounts\" services' | grep -Fx true; nix eval --json /etc/nixos#nixosConfigurations.VM-TEST-Standard-Boot.config.boot.initrd.systemd.services --apply 'services: builtins.hasAttr \"immutability\" services' | grep -Fx false; printf config-ok", "expect": "config-ok", "timeout": 900 },
+    { "op": "guest", "command": "set -e; chmod 0755 /tmp; rm -rf /tmp/.X11-unix /tmp/.ICE-unix /tmp/e2e-tmp; test \"$(stat -c %a /tmp)\" = 755; printf tmp-poisoned", "expect": "tmp-poisoned" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -e; test \"$(stat -c %a /tmp)\" = 1777; test \"$(systemctl show -p Result --value systemd-tmpfiles-setup.service)\" = success; su -s /bin/sh nobody -c 'mkdir /tmp/e2e-tmp && rmdir /tmp/e2e-tmp'; printf tmp-ok", "expect": "tmp-ok" },
+    { "op": "guest", "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; test -d /etc/nixos/.git; printf persistence-mounted", "expect": "persistence-mounted" },
+    { "op": "snapshot", "name": "disabled-persistence-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

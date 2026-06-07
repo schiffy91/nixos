@@ -48,8 +48,13 @@ class VmStateStore {
     }
 
     public void ensureWorkDir() {
-        FileSystem.mkdirp(self.spec.workDir);
-        FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
+        var isoDir = PathTools.dirname(self.spec.iso);
+        if (FileSystem.mkdirp(self.spec.workDir) != 0 || !FileSystem.isDir(self.spec.workDir)) {
+            NixosLog.fatal(f"Failed to create VM work directory: {self.spec.workDir}");
+        }
+        if (FileSystem.mkdirp(isoDir) != 0 || !FileSystem.isDir(isoDir)) {
+            NixosLog.fatal(f"Failed to create VM ISO directory: {isoDir}");
+        }
     }
 
     public string absolutePath(string path) {
@@ -124,9 +129,19 @@ class VmStateStore {
     }
 
     public void recordState() {
-        FileSystem.mkdirp(self.spec.stateDir());
+        var stateDir = self.spec.stateDir();
+        if (FileSystem.mkdirp(stateDir) != 0 || !FileSystem.isDir(stateDir)) {
+            NixosLog.fatal(f"Failed to create VM state directory {stateDir}");
+        }
         Path.writeAll(self.spec.stateHashFile(), self.spec.stateHash + "\n");
-        Path.writeAll(PathTools.join(self.spec.stateDir(), "workDir"), self.spec.workDir + "\n");
+        if (!FileSystem.exists(self.spec.stateHashFile())) {
+            NixosLog.fatal(f"Failed to write VM state hash {self.spec.stateHashFile()}");
+        }
+        var workDirRecord = PathTools.join(stateDir, "workDir");
+        Path.writeAll(workDirRecord, self.spec.workDir + "\n");
+        if (!FileSystem.exists(workDirRecord)) {
+            NixosLog.fatal(f"Failed to write VM state workDir {workDirRecord}");
+        }
         var metadata = JsonObject();
         metadata.setString("state", self.spec.state);
         metadata.setString("parentState", self.spec.parentState);
@@ -146,7 +161,11 @@ class VmStateStore {
         } else {
             metadata.setString("delta", "base");
         }
-        metadata.writeFile(PathTools.join(self.spec.stateDir(), "metadata.json"));
+        var metadataPath = PathTools.join(stateDir, "metadata.json");
+        metadata.writeFile(metadataPath);
+        if (!FileSystem.exists(metadataPath)) {
+            NixosLog.fatal(f"Failed to write VM state metadata {metadataPath}");
+        }
     }
 
     public bool isRunning() {

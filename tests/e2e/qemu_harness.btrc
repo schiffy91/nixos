@@ -50,11 +50,19 @@ class QemuE2eHarness {
     public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
 
     public void ensureWorkDir() {
-        FileSystem.mkdirp(self.spec.workDir);
-        FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
+        var isoDir = PathTools.dirname(self.spec.iso);
+        if (FileSystem.mkdirp(self.spec.workDir) != 0 || !FileSystem.isDir(self.spec.workDir)) {
+            NixosLog.fatal(f"Failed to create VM work directory: {self.spec.workDir}");
+        }
+        if (FileSystem.mkdirp(isoDir) != 0 || !FileSystem.isDir(isoDir)) {
+            NixosLog.fatal(f"Failed to create VM ISO directory: {isoDir}");
+        }
     }
 
-    public void downloadIso() { self.assets.downloadIso(); }
+    public void downloadIso() {
+        self.ensureWorkDir();
+        self.assets.downloadIso();
+    }
     public void createSshKey() { self.assets.createSshKey(); }
     public string sshPubKey() { return self.assets.sshPubKey(); }
     public void createDisk() { self.assets.createDisk(); }
@@ -332,6 +340,18 @@ class QemuE2eHarness {
         if (!self.provisioner.installNixosGuest()) {
             self.stop();
             NixosLog.fatal("NixOS installation failed");
+        }
+    }
+
+    public void prepareSecureBootFirstBootFallback() {
+        if (!self.provisioner.prepareSecureBootFirstBootFallback()) {
+            NixosLog.fatal("Secure Boot first-boot fallback preparation failed");
+        }
+    }
+
+    public void enrollSecureBoot() {
+        if (!self.provisioner.enrollSecureBoot()) {
+            NixosLog.fatal("Secure Boot enrollment failed");
         }
     }
 

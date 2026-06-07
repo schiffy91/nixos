@@ -40,6 +40,8 @@ class VmOperationCatalog {
         kinds.push("copy-workspace");
         kinds.push("configure-vm-host");
         kinds.push("install-nixos");
+        kinds.push("prepare-secure-boot-first-boot");
+        kinds.push("enroll-secure-boot");
         kinds.push("copy-to");
         kinds.push("copy-from");
         kinds.push("snapshot");
@@ -223,6 +225,14 @@ class VmTestRunner {
         }
         if (op.kind.equals("install-nixos")) {
             self.vm.installNixosGuest();
+            return;
+        }
+        if (op.kind.equals("prepare-secure-boot-first-boot")) {
+            self.vm.prepareSecureBootFirstBootFallback();
+            return;
+        }
+        if (op.kind.equals("enroll-secure-boot")) {
+            self.vm.enrollSecureBoot();
             return;
         }
         if (op.kind.equals("copy-to")) {

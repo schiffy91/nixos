@@ -142,6 +142,61 @@ class VmProvisioner {
         }
     }
 
+    public string secureBootEnrollmentScript() {
+        return self.shellCommands([
+            "set -e",
+            "test -d /sys/firmware/efi/efivars",
+            "mkdir -p /var/lib/sbctl",
+            "if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi",
+            "sbctl enroll-keys --yes-this-might-brick-my-machine",
+            "case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac",
+            "systemd_boot=/run/current-system/sw/lib/systemd/boot/efi/$systemd",
+            "test -e \"$systemd_boot\"",
+            "mkdir -p /boot/EFI/BOOT /boot/EFI/systemd /boot/loader",
+            "printf 'timeout 0\\neditor no\\n' > /boot/loader/loader.conf",
+            "for target in \"/boot/EFI/BOOT/$fallback\" \"/boot/EFI/systemd/$systemd\"; do signed=$(mktemp); sbsign --key /var/lib/sbctl/keys/db/db.key --cert /var/lib/sbctl/keys/db/db.pem --output \"$signed\" \"$systemd_boot\"; install -m 0644 \"$signed\" \"$target\"; rm -f \"$signed\"; sbverify --list \"$target\" | grep -q 'signature certificates'; done",
+            "for file in /boot/EFI/Linux/*.efi; do test -e \"$file\" || continue; signed=$(mktemp); sbsign --key /var/lib/sbctl/keys/db/db.key --cert /var/lib/sbctl/keys/db/db.pem --output \"$signed\" \"$file\"; install -m 0644 \"$signed\" \"$file\"; rm -f \"$signed\"; sbverify --list \"$file\" | grep -q 'signature certificates'; done",
+            "systemctl reset-failed nixos-recovery-boot-entry.service 2>/dev/null || true",
+            "systemctl start nixos-recovery-boot-entry.service 2>/dev/null || true",
+            "sync"
+        ]);
+    }
+
+    public bool enrollSecureBoot() {
+        var result = self.remote.sshWithTimeout(self.secureBootEnrollmentScript(), false, 300);
+        if (!result.ok()) {
+            Console.error(result.stdout());
+            Console.error(result.stderr());
+            return false;
+        }
+        return true;
+    }
+
+    public string secureBootFirstBootFallbackScript() {
+        return self.shellCommands([
+            "set -e",
+            "mountpoint -q /mnt/boot",
+            "case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI ;; aarch64) fallback=BOOTAA64.EFI ;; *) fallback=BOOTUNKNOWN.EFI ;; esac",
+            "set -- /mnt/boot/EFI/Linux/nixos-generation-*.efi",
+            "test -e \"$1\"",
+            "mkdir -p /mnt/boot/EFI/BOOT",
+            "install -m 0644 \"$1\" \"/mnt/boot/EFI/BOOT/$fallback\"",
+            "test -s \"/mnt/boot/EFI/BOOT/$fallback\"",
+            "sync",
+            "sleep 1"
+        ]);
+    }
+
+    public bool prepareSecureBootFirstBootFallback() {
+        var result = self.remote.sshWithTimeout(self.secureBootFirstBootFallbackScript(), false, 60);
+        if (!result.ok()) {
+            Console.error(result.stdout());
+            Console.error(result.stderr());
+            return false;
+        }
+        return true;
+    }
+
     public bool installNixosGuest() {
         var diskTarget = "VM-TEST-Disk-Operation";
         var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
@@ -156,28 +211,6 @@ class VmProvisioner {
             "mkdir -p /mnt/nix/tmp",
             f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"
         ]);
-        var secureBootInstall = self.shellCommands([
-            "set -ex",
-            "mkdir -p /var/lib/sbctl",
-            "if ! test -e /var/lib/sbctl/keys/db/db.pem || ! test -e /var/lib/sbctl/keys/db/db.key; then sbctl create-keys; fi",
-            "sbctl enroll-keys --yes-this-might-brick-my-machine",
-            "case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac",
-            "if ! test -e \"/target-boot/EFI/BOOT/$fallback\" && test -e \"/boot/EFI/BOOT/$fallback\"; then install -Dm0644 \"/boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/BOOT/$fallback\"; fi",
-            "if ! test -e \"/target-boot/EFI/systemd/$systemd\" && test -e \"/boot/EFI/systemd/$systemd\"; then install -Dm0644 \"/boot/EFI/systemd/$systemd\" \"/target-boot/EFI/systemd/$systemd\"; fi",
-            "test -e \"/target-boot/EFI/BOOT/$fallback\"",
-            "test -e \"/target-boot/EFI/systemd/$systemd\"",
-            "for file in \"/target-boot/EFI/BOOT/$fallback\" \"/target-boot/EFI/systemd/$systemd\" /target-boot/EFI/Linux/*.efi; do test -e \"$file\" || continue; signed=$(mktemp); sbsign --key /var/lib/sbctl/keys/db/db.key --cert /var/lib/sbctl/keys/db/db.pem --output \"$signed\" \"$file\"; install -m 0644 \"$signed\" \"$file\"; rm -f \"$signed\"; sbverify --list \"$file\" | grep -q 'signature certificates'; done",
-            "sync"
-        ]);
-        var lanzabooteInstall = secureBootTarget
-            ? self.textLines([
-                "mkdir -p /mnt/target-boot",
-                "mount --bind /mnt/boot /mnt/target-boot",
-                f"nixos-enter --root /mnt --command {UnixShell.quote(secureBootInstall)}",
-                "umount /mnt/target-boot",
-                "rmdir /mnt/target-boot"
-            ])
-            : "true";
         var snapshots = "nixos-enter --root /mnt --command "
             + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN; git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos");
         var script = self.textLines([
@@ -185,7 +218,6 @@ class VmProvisioner {
             "printf INSTALL_START > /tmp/nixos-install.status",
             disko,
             install,
-            lanzabooteInstall.trim(),
             snapshots,
             "printf INSTALL_OK > /tmp/nixos-install.status"
         ]);

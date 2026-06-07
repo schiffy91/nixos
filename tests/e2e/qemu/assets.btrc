@@ -22,8 +22,13 @@ class VmAssets {
     public string isoSizePath() { return self.spec.iso + ".size"; }
 
     public void ensureWorkDir() {
-        FileSystem.mkdirp(self.spec.workDir);
-        FileSystem.mkdirp(PathTools.dirname(self.spec.iso));
+        var isoDir = PathTools.dirname(self.spec.iso);
+        if (FileSystem.mkdirp(self.spec.workDir) != 0 || !FileSystem.isDir(self.spec.workDir)) {
+            NixosLog.fatal(f"Failed to create VM work directory: {self.spec.workDir}");
+        }
+        if (FileSystem.mkdirp(isoDir) != 0 || !FileSystem.isDir(isoDir)) {
+            NixosLog.fatal(f"Failed to create VM ISO directory: {isoDir}");
+        }
     }
 
     public string expectedIsoHash() {

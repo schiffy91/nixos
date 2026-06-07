@@ -8,6 +8,7 @@ let
 	immutabilityPersistRoot = config.settings.disk.immutability.persist.subvolumeRoot;
 	immutabilityDryRun = config.settings.disk.immutability.dryRun;
 	immutabilityEnabled = config.settings.disk.immutability.enable;
+	persistenceEnabled = config.settings.disk.persistence.enable;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
 	allVolumes = config.settings.disk.subvolumes.volumes;
 	resetVolumes = lib.filter (volume: volume.resetOnBoot) allVolumes;
@@ -62,12 +63,12 @@ let
 
 in
 lib.mkMerge [
-(lib.mkIf immutabilityEnabled {
+(lib.mkIf (persistenceEnabled || immutabilityEnabled) {
 	environment.systemPackages = [ immutabilityBin ];
 	environment.etc."immutability/spec.toml".source = immutabilitySpecFile;
-	systemd.services."immutability-mounts" = {
-		description = "Mount immutability persistent BTRFS subvolumes into place";
-		wantedBy = lib.optionals config.settings.disk.immutability.enforce.onReboot [ "local-fs.target" ];
+	systemd.services."persistence-mounts" = {
+		description = "Mount persistent BTRFS subvolumes into place";
+		wantedBy = lib.optionals persistenceEnabled [ "local-fs.target" ];
 		requires = [ deviceDependency ] ++ immutabilityResetMountUnits;
 		after = [ deviceDependency ] ++ immutabilityResetMountUnits;
 		before = [ "local-fs.target" ];
@@ -86,7 +87,6 @@ lib.mkMerge [
 	fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
 	boot = {
 		nixStoreMountOpts = [ "ro" ];
-		tmp.useTmpfs = true;
 		initrd = {
 			supportedFilesystems = [ "btrfs" ];
 			systemd = {

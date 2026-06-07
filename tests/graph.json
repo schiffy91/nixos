@@ -38,6 +38,7 @@
     "secure-boot-install",
     "secure-boot-lanzaboote",
     "immutability-files",
+    "immutability-disabled-persistence",
     "nixosctl-cli",
     "nixosctl-diff",
     "install-encrypted",
@@ -349,6 +350,20 @@
         "immutabilityVersion": "v2",
         "immutabilityImplementation": "immutability",
         "immutabilityMode": "disabled"
+      }
+    },
+    {
+      "id": "immutability-disabled-persistence",
+      "spec": "immutability-disabled-persistence/test.json",
+      "after": [
+        "install-disabled"
+      ],
+      "args": {
+        "parentState": "installed-disabled",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "disabled",
+        "immutabilityEnabled": "false"
       }
     },
     {

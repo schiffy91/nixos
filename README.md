@@ -165,6 +165,14 @@ Updating the recovery image is a rebuild. Changing the recovery partition size
 on an already-installed disk is a real partition resize operation, not something
 this config does online.
 
+Recovery boots include `nixos-mount`. Run it after SSH or local console access
+to unlock the root LUKS device if needed, mount the installed system at `/mnt`,
+mount persistent subvolumes that exist, and mount `/boot` plus `/recovery`:
+
+```bash
+nixos-mount
+```
+
 For an existing machine such as FRACTAL-NORTH, do this from a live environment
 after backup and disk inspection. The desired end state is:
 
