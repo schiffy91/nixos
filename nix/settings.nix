@@ -249,12 +249,14 @@ in {
     settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
     ##### Apps #####
     settings.apps.enable = mkSetting bool true;
+    settings.apps.dev.enable = mkSetting bool true;
+    settings.apps.gaming.enable = mkSetting bool true;
+    settings.apps.utils.enable = mkSetting bool true;
     settings.apps.agents.enable = mkSetting bool true;
     settings.apps.bash.enable = mkSetting bool true;
     settings.apps.battlenet.enable = mkSetting bool true;
     settings.apps.claude.enable = mkSetting bool true;
     settings.apps.codex.enable = mkSetting bool true;
-    settings.apps.cursor.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
     settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.onePassword.enable = mkSetting bool true;

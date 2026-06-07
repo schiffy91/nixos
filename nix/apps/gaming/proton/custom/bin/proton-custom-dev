@@ -1,0 +1,1712 @@
+#!/usr/bin/env python3
+import argparse
+import fcntl
+import os
+import re
+import signal
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+
+TOOL_NAME = "proton-custom-GE-Proton10-34"
+DEV_TOOL_NAME = f"{TOOL_NAME}-dev"
+NIXOS = Path("/etc/nixos")
+PROTON_DIR = NIXOS / "nix/apps/gaming/proton/custom"
+SCREENSHOT_MODES = {
+    "full": "-f",
+    "active": "-a",
+    "current": "-m",
+    "cursor": "-u",
+}
+BATTLENET_WINDOW_QUERY = [
+    "search",
+    "--class",
+    r"battle[.]net[.]exe",
+    "--limit",
+    "1",
+]
+
+
+def home() -> Path:
+    return Path.home()
+
+
+def compat_dir() -> Path:
+    return home() / ".local/share/Steam/compatibilitytools.d"
+
+
+def tool_path() -> Path:
+    return compat_dir() / TOOL_NAME
+
+
+def dev_tool_path() -> Path:
+    return compat_dir() / DEV_TOOL_NAME
+
+
+def prefix_path() -> Path:
+    return home() / "Games/Battle.net/prefix"
+
+
+def battlenet_exe_path() -> Path:
+    return prefix_path() / "drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+
+
+def legacy_dxvk_config_path() -> Path:
+    return battlenet_exe_path().parent / "dxvk.conf"
+
+
+def wine_prefix_path() -> Path:
+    return prefix_path()
+
+
+def proton_log_path() -> Path:
+    return proton_log_dir() / "steam-battlenet.log"
+
+
+def proton_log_dir() -> Path:
+    return Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "battlenet-proton"
+
+
+def dev_root_dir() -> Path:
+    return PROTON_DIR / "src"
+
+
+def wine_src_dir() -> Path:
+    return dev_root_dir() / "wine"
+
+
+def wine64_dir() -> Path:
+    return dev_root_dir() / "wine64"
+
+
+def wine32_dir() -> Path:
+    return dev_root_dir() / "wine32"
+
+
+def dxvk_dir() -> Path:
+    return dev_root_dir() / "dxvk"
+
+
+def work_home_dir() -> Path:
+    return dev_root_dir() / ".home"
+
+
+def saved_store_target() -> Path:
+    return dev_root_dir() / ".store-target"
+
+
+def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    print("+ " + " ".join(map(str, cmd)))
+    return subprocess.run(cmd, check=True, text=True, **kwargs)
+
+
+def run_shell(script: str, **kwargs) -> subprocess.CompletedProcess:
+    print("+ " + " ".join(script.strip().splitlines()))
+    return subprocess.run(["bash", "-lc", script], check=True, text=True, **kwargs)
+
+
+def launcher_value(name: str, fallback: str) -> str:
+    wrapper = shutil.which("battlenet")
+    if not wrapper:
+        return fallback
+
+    text = Path(wrapper).read_text(errors="replace")
+    match = re.search(rf"^{re.escape(name)}=\"?([^\"\n]+)\"?", text, re.MULTILINE)
+    return match.group(1) if match else fallback
+
+
+def git_config(key: str, fallback: str) -> str:
+    result = subprocess.run(
+        ["git", "config", "--global", key],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    value = result.stdout.strip()
+    return value or fallback
+
+
+def realpath(path: Path) -> Path:
+    return Path(os.path.realpath(path))
+
+
+def same_path(left: str | Path | None, right: str | Path) -> bool:
+    if not left:
+        return False
+    return os.path.realpath(os.path.normpath(str(left))) == os.path.realpath(os.path.normpath(str(right)))
+
+
+def current_store_target() -> Path:
+    path = tool_path()
+    if not path.exists() and not path.is_symlink():
+        raise SystemExit(f"{path} does not exist; run the normal NixOS activation first")
+
+    target = realpath(path)
+    if target == dev_tool_path():
+        saved = saved_store_target()
+        if saved.exists():
+            return Path(saved.read_text().strip())
+        raise SystemExit(f"{path} already points at {DEV_TOOL_NAME}, but no saved store target exists")
+    return target
+
+
+def write_dev_vdf() -> None:
+    vdf = dev_tool_path() / "compatibilitytool.vdf"
+    if not vdf.exists():
+        return
+    text = vdf.read_text()
+    text = text.replace(
+        '"display_name" "proton-custom GE-Proton10-34 (Wayland SNI)"',
+        '"display_name" "proton-custom DEV GE-Proton10-34 (Wayland SNI)"',
+    )
+    vdf.write_text(text)
+
+
+def setup(args: argparse.Namespace) -> None:
+    src = current_store_target()
+    dst = dev_tool_path()
+    dev_root_dir().mkdir(parents=True, exist_ok=True)
+    previous = saved_store_target().read_text().strip() if saved_store_target().exists() else ""
+
+    if args.force and dst.exists():
+        shutil.rmtree(dst)
+
+    if not dst.exists() or previous != str(src):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        run(["rsync", "-a", "--delete", f"{src}/", f"{dst}/"])
+        run(["chmod", "-R", "u+rwX", str(dst)])
+    saved_store_target().write_text(str(src) + "\n")
+
+    write_dev_vdf()
+    install_wineasio_payload(dst)
+    print(f"dev tool: {dst}")
+    print(f"store base: {src}")
+
+
+def use_dev(_args: argparse.Namespace) -> None:
+    setup(argparse.Namespace(force=False))
+    path = tool_path()
+    target = realpath(path) if path.exists() or path.is_symlink() else None
+    if target != dev_tool_path():
+        if path.exists() or path.is_symlink():
+            path.unlink()
+        path.symlink_to(dev_tool_path())
+    print(f"{path} -> {realpath(path)}")
+
+
+def restore(_args: argparse.Namespace) -> None:
+    saved = saved_store_target()
+    if not saved.exists():
+        raise SystemExit("no saved store target; nothing to restore")
+    target = Path(saved.read_text().strip())
+    if not target.exists():
+        raise SystemExit(f"saved store target no longer exists: {target}")
+    path = tool_path()
+    if path.exists() or path.is_symlink():
+        path.unlink()
+    path.symlink_to(target)
+    print(f"{path} -> {realpath(path)}")
+
+
+def status(_args: argparse.Namespace) -> None:
+    path = tool_path()
+    target = realpath(path) if path.exists() or path.is_symlink() else None
+    print(f"active: {path} -> {target}")
+    print(f"dev:    {dev_tool_path()} ({'present' if dev_tool_path().exists() else 'missing'})")
+    if saved_store_target().exists():
+        print(f"store:  {saved_store_target().read_text().strip()}")
+    print(f"dev root: {dev_root_dir()}")
+    print(f"wine source: {wine_src_dir()} ({'present' if wine_src_dir().exists() else 'missing'})")
+    print(f"wine64 build: {wine64_dir()} ({'configured' if (wine64_dir() / 'Makefile').exists() else 'missing'})")
+    print(f"wine32 build: {wine32_dir()} ({'configured' if (wine32_dir() / 'Makefile').exists() else 'missing'})")
+    print(f"dxvk source: {dxvk_dir()} ({'present' if dxvk_dir().exists() else 'missing'})")
+    print(f"dxvk64 build: {dxvk_dir() / 'build.64'} ({'configured' if (dxvk_dir() / 'build.64/build.ninja').exists() else 'missing'})")
+    print(f"dxvk32 build: {dxvk_dir() / 'build.32'} ({'configured' if (dxvk_dir() / 'build.32/build.ninja').exists() else 'missing'})")
+
+
+def check_patches(_args: argparse.Namespace) -> None:
+    print(f"wine source: {nix_build_path('passthru.wineSource')}")
+    print(f"dxvk source: {nix_build_path('passthru.dxvkSource')}")
+
+
+def patch_lint(_args: argparse.Namespace) -> None:
+    problems = []
+    patch_root = PROTON_DIR / "patches"
+    signoff = "Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>"
+
+    for path in sorted(patch_root.rglob("*.patch")):
+        data = path.read_bytes()
+        text = data.decode("utf-8", errors="replace")
+
+        if any(byte > 0x7f for byte in data):
+            problems.append((path, "non-ASCII byte"))
+        if text.startswith("From 0000000000000000000000000000000000000000 "):
+            problems.append((path, "placeholder From hash"))
+        if text.count(signoff) != 1:
+            problems.append((path, "unexpected Signed-off-by count"))
+        if "\r" in text:
+            problems.append((path, "CRLF line ending"))
+        for local_name in ("proton-custom", "scwhine", "schwine"):
+            if local_name in text:
+                problems.append((path, f"local project name in patch: {local_name}"))
+
+    if problems:
+        for path, problem in problems:
+            print(f"{path.relative_to(NIXOS)}: {problem}")
+        raise SystemExit(1)
+
+    print("patch lint passed")
+
+
+def git_diff_files(src: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "-C", str(src), "diff", "--name-only"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def git_tracked_files(src: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "-C", str(src), "ls-files"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def git_untracked_files(src: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "-C", str(src), "ls-files", "--others", "--exclude-standard"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def packaged_files(root: Path) -> list[str]:
+    files = []
+    for path in root.rglob("*"):
+        if ".git" in path.relative_to(root).parts:
+            continue
+        if path.is_file():
+            files.append(path.relative_to(root).as_posix())
+    return files
+
+
+def source_compare_files(packaged: Path, source: Path) -> list[str]:
+    return sorted(set(packaged_files(packaged))
+                  | set(git_tracked_files(source))
+                  | set(git_untracked_files(source)))
+
+
+def source_file_matches(packaged_file: Path, source_file: Path) -> bool:
+    if packaged_file.exists() != source_file.exists():
+        return False
+    if not packaged_file.exists():
+        return True
+    if not packaged_file.is_file() or not source_file.is_file():
+        return False
+    return packaged_file.read_bytes() == source_file.read_bytes()
+
+
+def remove_source_untracked_files(src: Path) -> list[str]:
+    removed = []
+    for rel in git_untracked_files(src):
+        path = src / rel
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+        removed.append(rel)
+    return removed
+
+
+def refresh_source_git_baseline(src: Path, message: str) -> None:
+    ensure_source_git_repo(src, message)
+    run(["git", "-C", str(src), "add", "-A"])
+    result = subprocess.run(["git", "-C", str(src), "diff", "--cached", "--quiet"], check=False)
+    if result.returncode:
+        run(["git", "-C", str(src), "commit", "--quiet", "-m", message])
+
+
+def source_drift(_args: argparse.Namespace) -> None:
+    drift = []
+    sources = (
+        ("wine", nix_build_path("passthru.wineSource"), wine_src_dir()),
+        ("dxvk", nix_build_path("passthru.dxvkSource"), dxvk_dir()),
+    )
+
+    for label, packaged, source in sources:
+        if not source.exists() or not (source / ".git").exists():
+            continue
+        for rel in source_compare_files(packaged, source):
+            packaged_file = packaged / rel
+            source_file = source / rel
+            if not source_file_matches(packaged_file, source_file):
+                drift.append(f"{label}: {rel}")
+
+    if drift:
+        print("source differs from packaged patch source:")
+        for item in drift:
+            print(f"  {item}")
+        raise SystemExit(1)
+
+    print("source matches packaged patch source")
+
+
+def reset_source_drift(_args: argparse.Namespace) -> None:
+    sources = (
+        ("wine", nix_build_path("passthru.wineSource"), wine_src_dir()),
+        ("dxvk", nix_build_path("passthru.dxvkSource"), dxvk_dir()),
+    )
+    reset = []
+
+    for label, packaged, source in sources:
+        if not source.exists() or not (source / ".git").exists():
+            continue
+        for rel in source_compare_files(packaged, source):
+            packaged_file = packaged / rel
+            source_file = source / rel
+            if source_file_matches(packaged_file, source_file):
+                continue
+            if packaged_file.exists():
+                source_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(packaged_file, source_file)
+                source_file.chmod(source_file.stat().st_mode | 0o200)
+            elif source_file.exists():
+                source_file.unlink()
+            reset.append(f"{label}: {rel}")
+        for rel in remove_source_untracked_files(source):
+            reset.append(f"{label}: {rel}")
+        refresh_source_git_baseline(source, f"baseline: current {label} patch series")
+
+    if not reset:
+        print("source already matches packaged patch source")
+        return
+
+    print("reset source files to packaged patch source:")
+    for item in reset:
+        print(f"  {item}")
+
+
+def copy_if_exists(src: Path, dst: Path) -> bool:
+    if not src.exists():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        try:
+            if src.samefile(dst):
+                dst.chmod(dst.stat().st_mode | 0o200)
+                return True
+        except OSError:
+            pass
+        dst.chmod(dst.stat().st_mode | 0o200)
+    shutil.copy2(src, dst)
+    dst.chmod(dst.stat().st_mode | 0o200)
+    return True
+
+
+def overlay_explorer_prefix_files() -> list[str]:
+    root = dev_tool_path()
+    explorer64 = root / "files/lib/wine/x86_64-windows/explorer.exe"
+    explorer32 = root / "files/lib/wine/i386-windows/explorer.exe"
+    mappings = [
+        (explorer64, root / "files/share/default_pfx/drive_c/windows/explorer.exe"),
+        (explorer64, root / "files/share/default_pfx/drive_c/windows/system32/explorer.exe"),
+        (explorer32, root / "files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"),
+    ]
+    if prefix_path().exists():
+        mappings.extend([
+            (explorer64, prefix_path() / "drive_c/windows/explorer.exe"),
+            (explorer64, prefix_path() / "drive_c/windows/system32/explorer.exe"),
+            (explorer32, prefix_path() / "drive_c/windows/syswow64/explorer.exe"),
+        ])
+
+    copied = []
+    for src, dst in mappings:
+        if copy_if_exists(src, dst):
+            copied.append(str(dst))
+    return copied
+
+
+def overlay_wine(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    rels = wine_artifact_rels(getattr(args, "targets", None))
+    if args.wine:
+        pairs = [(rel, args.wine / "lib/wine" / rel) for rel in rels]
+    else:
+        if not args.wine64 or not args.wine32:
+            raise SystemExit("overlay-wine needs --wine or both --wine64 and --wine32")
+        all_pairs = [
+            ("x86_64-unix/winewayland.so", args.wine64 / "dlls/winewayland.drv/winewayland.so"),
+            ("i386-unix/winewayland.so", args.wine32 / "dlls/winewayland.drv/winewayland.so"),
+            ("x86_64-unix/winevulkan.so", args.wine64 / "dlls/winevulkan/winevulkan.so"),
+            ("i386-unix/winevulkan.so", args.wine32 / "dlls/winevulkan/winevulkan.so"),
+            ("x86_64-unix/ntdll.so", args.wine64 / "dlls/ntdll/ntdll.so"),
+            ("i386-unix/ntdll.so", args.wine32 / "dlls/ntdll/ntdll.so"),
+            ("x86_64-unix/win32u.so", args.wine64 / "dlls/win32u/win32u.so"),
+            ("i386-unix/win32u.so", args.wine32 / "dlls/win32u/win32u.so"),
+            ("x86_64-windows/ntdll.dll", args.wine64 / "dlls/ntdll/x86_64-windows/ntdll.dll"),
+            ("i386-windows/ntdll.dll", args.wine32 / "dlls/ntdll/i386-windows/ntdll.dll"),
+            ("x86_64-windows/winewayland.drv", args.wine64 / "dlls/winewayland.drv/x86_64-windows/winewayland.drv"),
+            ("i386-windows/winewayland.drv", args.wine32 / "dlls/winewayland.drv/i386-windows/winewayland.drv"),
+            ("x86_64-windows/dcomp.dll", args.wine64 / "dlls/dcomp/x86_64-windows/dcomp.dll"),
+            ("i386-windows/dcomp.dll", args.wine32 / "dlls/dcomp/i386-windows/dcomp.dll"),
+            ("x86_64-windows/dxgi.dll", args.wine64 / "dlls/dxgi/x86_64-windows/dxgi.dll"),
+            ("i386-windows/dxgi.dll", args.wine32 / "dlls/dxgi/i386-windows/dxgi.dll"),
+            ("x86_64-windows/winevulkan.dll", args.wine64 / "dlls/winevulkan/x86_64-windows/winevulkan.dll"),
+            ("i386-windows/winevulkan.dll", args.wine32 / "dlls/winevulkan/i386-windows/winevulkan.dll"),
+            ("x86_64-windows/win32u.dll", args.wine64 / "dlls/win32u/x86_64-windows/win32u.dll"),
+            ("i386-windows/win32u.dll", args.wine32 / "dlls/win32u/i386-windows/win32u.dll"),
+            ("x86_64-windows/explorer.exe", args.wine64 / "programs/explorer/x86_64-windows/explorer.exe"),
+            ("i386-windows/explorer.exe", args.wine32 / "programs/explorer/i386-windows/explorer.exe"),
+        ]
+        pairs = [(rel, src) for rel, src in all_pairs if rel in rels]
+    copied = []
+    for rel, src in pairs:
+        if copy_if_exists(src, dev_tool_path() / "files/lib/wine" / rel):
+            copied.append(rel)
+    if not copied:
+        raise SystemExit("no Wine artifacts copied; check --wine or --wine64/--wine32 build dirs")
+    print("copied Wine artifacts:")
+    for rel in copied:
+        print(f"  {rel}")
+    explorer_copies = overlay_explorer_prefix_files() if any(rel.endswith("explorer.exe") for rel in copied) else []
+    if explorer_copies:
+        print("updated Explorer prefix files:")
+        for dst in explorer_copies:
+            print(f"  {dst}")
+    ntdll_copies = overlay_ntdll_prefix_files() if any(rel.endswith("ntdll.dll") for rel in copied) else []
+    if ntdll_copies:
+        print("updated ntdll prefix files:")
+        for dst in ntdll_copies:
+            print(f"  {dst}")
+
+
+def overlay_ntdll_prefix_files() -> list[str]:
+    root = dev_tool_path()
+    ntdll64 = root / "files/lib/wine/x86_64-windows/ntdll.dll"
+    ntdll32 = root / "files/lib/wine/i386-windows/ntdll.dll"
+    mappings = [
+        (ntdll64, root / "files/share/default_pfx/drive_c/windows/system32/ntdll.dll"),
+        (ntdll32, root / "files/share/default_pfx/drive_c/windows/syswow64/ntdll.dll"),
+    ]
+    if prefix_path().exists():
+        mappings.extend([
+            (ntdll64, prefix_path() / "drive_c/windows/system32/ntdll.dll"),
+            (ntdll32, prefix_path() / "drive_c/windows/syswow64/ntdll.dll"),
+        ])
+
+    copied = []
+    for src, dst in mappings:
+        if copy_if_exists(src, dst):
+            copied.append(str(dst))
+    return copied
+
+
+def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
+    by_target = {
+        "dlls/winewayland.drv/all": [
+            "x86_64-unix/winewayland.so",
+            "i386-unix/winewayland.so",
+            "x86_64-windows/winewayland.drv",
+            "i386-windows/winewayland.drv",
+        ],
+        "dlls/winevulkan/all": [
+            "x86_64-unix/winevulkan.so",
+            "i386-unix/winevulkan.so",
+            "x86_64-windows/winevulkan.dll",
+            "i386-windows/winevulkan.dll",
+        ],
+        "dlls/ntdll/all": [
+            "x86_64-unix/ntdll.so",
+            "i386-unix/ntdll.so",
+            "x86_64-windows/ntdll.dll",
+            "i386-windows/ntdll.dll",
+        ],
+        "dlls/win32u/all": [
+            "x86_64-unix/win32u.so",
+            "i386-unix/win32u.so",
+            "x86_64-windows/win32u.dll",
+            "i386-windows/win32u.dll",
+        ],
+        "dlls/dcomp/all": [
+            "x86_64-windows/dcomp.dll",
+            "i386-windows/dcomp.dll",
+        ],
+        "dlls/dxgi/all": [
+            "x86_64-windows/dxgi.dll",
+            "i386-windows/dxgi.dll",
+        ],
+        "programs/explorer/all": [
+            "x86_64-windows/explorer.exe",
+            "i386-windows/explorer.exe",
+        ],
+    }
+
+    if targets is None:
+        targets = list(by_target)
+
+    rels = []
+    for target in targets:
+        if target not in by_target:
+            raise SystemExit(f"no overlay mapping for Wine target: {target}")
+        for rel in by_target[target]:
+            if rel not in rels:
+                rels.append(rel)
+    return rels
+
+
+def overlay_dxvk(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    if (args.dxvk / "files/lib/wine/dxvk").exists():
+        root = args.dxvk / "files/lib/wine/dxvk"
+        pairs = [
+            (root / "x86_64-windows/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (root / "i386-windows/dxgi.dll", "i386-windows/dxgi.dll"),
+            (root / "x86_64-windows/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (root / "i386-windows/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    elif (args.dxvk / "lib/wine/dxvk").exists():
+        pairs = [
+            (args.dxvk / "lib/wine/dxvk/x86_64-windows/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (args.dxvk / "lib/wine/dxvk/i386-windows/dxgi.dll", "i386-windows/dxgi.dll"),
+            (args.dxvk / "lib/wine/dxvk/x86_64-windows/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (args.dxvk / "lib/wine/dxvk/i386-windows/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    elif (args.dxvk / "x64").exists():
+        pairs = [
+            (args.dxvk / "x64/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (args.dxvk / "x32/dxgi.dll", "i386-windows/dxgi.dll"),
+            (args.dxvk / "x64/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (args.dxvk / "x32/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    else:
+        pairs = [
+            (args.dxvk / "build.64/src/dxgi/dxgi.dll", "x86_64-windows/dxgi.dll"),
+            (args.dxvk / "build.32/src/dxgi/dxgi.dll", "i386-windows/dxgi.dll"),
+            (args.dxvk / "build.64/src/d3d11/d3d11.dll", "x86_64-windows/d3d11.dll"),
+            (args.dxvk / "build.32/src/d3d11/d3d11.dll", "i386-windows/d3d11.dll"),
+        ]
+    copied = []
+    for src, rel in pairs:
+        if copy_if_exists(src, dev_tool_path() / "files/lib/wine/dxvk" / rel):
+            copied.append(rel)
+    if not copied:
+        raise SystemExit("no DXVK artifacts copied; check --dxvk build dir")
+    print("copied DXVK artifacts:")
+    for rel in copied:
+        print(f"  {rel}")
+
+
+def restore_dxvk(_args: argparse.Namespace) -> None:
+    saved = saved_store_target()
+    if not saved.exists():
+        raise SystemExit("no saved store target; run setup first")
+    target = Path(saved.read_text().strip())
+    if not target.exists():
+        raise SystemExit(f"saved store target no longer exists: {target}")
+    overlay_dxvk(argparse.Namespace(dxvk=target))
+
+
+def nix_expr(attr: str) -> str:
+    return (
+        'let '
+        'flake = builtins.getFlake "git+file:///etc/nixos"; '
+        'pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; '
+        f'in (pkgs.callPackage /etc/nixos/nix/apps/gaming/proton/custom/package.nix '
+        '{ inherit (pkgs) makeWrapper rsync unzip; }).'
+        f'{attr}'
+    )
+
+
+def nix_build_path(attr: str) -> Path:
+    result = run([
+        "nix", "build", "--no-link", "--print-out-paths", "--impure",
+        "--expr", nix_expr(attr),
+    ], capture_output=True)
+    return Path(result.stdout.strip().splitlines()[-1])
+
+
+def nix_build_pkgs_path(attr: str) -> Path:
+    expr = (
+        'let '
+        'flake = builtins.getFlake "git+file:///etc/nixos"; '
+        'pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; '
+        f'in pkgs.{attr}'
+    )
+    result = run([
+        "nix", "build", "--no-link", "--print-out-paths", "--impure",
+        "--expr", expr,
+    ], capture_output=True)
+    return Path(result.stdout.strip().splitlines()[-1])
+
+
+def install_wineasio_payload(dst: Path) -> None:
+    wineasio64 = nix_build_pkgs_path("wineasio")
+    wineasio32 = NIXOS / "nix/apps/gaming/rocksmith/assets"
+    for src, rel in (
+        (wineasio64 / "lib/wine/x86_64-windows/wineasio64.dll", "x86_64-windows/wineasio64.dll"),
+        (wineasio64 / "lib/wine/x86_64-unix/wineasio64.dll.so", "x86_64-unix/wineasio64.dll.so"),
+        (wineasio32 / "wineasio32.dll", "i386-windows/wineasio32.dll"),
+        (wineasio32 / "wineasio32.dll.so", "i386-unix/wineasio32.dll.so"),
+    ):
+        if not src.exists():
+            raise SystemExit(f"missing WineASIO payload: {src}")
+        dest = dst / "files/lib/wine" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            dest.chmod(0o644)
+            dest.unlink()
+        shutil.copy2(src, dest)
+        dest.chmod(0o644)
+
+
+def nix_eval_raw(attr: str) -> str:
+    expr = (
+        'let '
+        'flake = builtins.getFlake "git+file:///etc/nixos"; '
+        'pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; }; '
+        f'in pkgs.{attr}'
+    )
+    result = run(["nix", "eval", "--raw", "--impure", "--expr", expr], capture_output=True)
+    return result.stdout.strip().splitlines()[-1]
+
+
+def dev_shell(script: str, target: str = "64") -> None:
+    if target == "64" and os.environ.get("PROTON_CUSTOM_IN_DEV_SHELL") == "1":
+        run_shell(f"set -euo pipefail; {script}")
+        return
+    run([
+        "nix-shell",
+        str(PROTON_DIR / "dev-shell.nix"),
+        "--argstr",
+        "target",
+        target,
+        "--run",
+        f"set -euo pipefail; {script}",
+    ])
+
+
+def ensure_source_git_repo(src: Path, message: str) -> None:
+    if (src / ".git").exists():
+        run(["git", "-C", str(src), "config", "core.fileMode", "false"])
+        return
+
+    run(["git", "-C", str(src), "init", "-q", "-b", "main"])
+    run(["git", "-C", str(src), "config", "user.name", git_config("user.name", "Alexander Schiffhauer")])
+    run(["git", "-C", str(src), "config", "user.email", git_config("user.email", "alexander.schiffhauer@gmail.com")])
+    run(["git", "-C", str(src), "config", "core.fileMode", "false"])
+    run(["git", "-C", str(src), "add", "."])
+    run(["git", "-C", str(src), "commit", "--quiet", "-m", message])
+
+
+def replace_text(path: Path, old: str, new: str) -> None:
+    text = path.read_text()
+    if old in text:
+        path.write_text(text.replace(old, new))
+
+
+def file_contains(path: Path, text: str) -> bool:
+    if not path.exists():
+        return False
+    result = subprocess.run(["grep", "-Fq", text, str(path)], check=False)
+    return result.returncode == 0
+
+
+def ninja_file_has_missing_store_refs(path: Path) -> bool:
+    if not path.exists():
+        return True
+
+    text = path.read_text(errors="replace")
+    for match in re.finditer(r"/nix/store/[0-9a-z]+-[^/ \t\n'\";:)]+", text):
+        if not Path(match.group(0)).exists():
+            return True
+    return False
+
+
+def reset_stale_configure_output(build_dir: Path, source_dir: Path) -> None:
+    makefile = build_dir / "Makefile"
+    if makefile.exists() and not file_contains(makefile, str(source_dir)):
+        print(f"reconfiguring stale build directory: {build_dir}")
+        makefile.unlink()
+
+
+def normalize_wine_source_permissions(src: Path) -> None:
+    run(["chmod", "-R", "u+rwX", str(src)])
+    for rel in ("autogen.sh", "configure", "tools/make_requests"):
+        path = src / rel
+        if path.exists():
+            run(["chmod", "u+x", str(path)])
+
+
+def setup_wine(args: argparse.Namespace) -> None:
+    dev_root_dir().mkdir(parents=True, exist_ok=True)
+    src = wine_src_dir()
+    if args.force and src.exists():
+        shutil.rmtree(src)
+    if not src.exists():
+        seed = nix_build_path("passthru.wineSource")
+        run(["rsync", "-a", "--delete", f"{seed}/", f"{src}/"])
+    normalize_wine_source_permissions(src)
+
+    marker = src / "configure"
+    if args.force_configure and marker.exists():
+        marker.unlink()
+    if not marker.exists():
+        vulkan_headers = nix_eval_raw("vulkan-headers")
+        dev_shell(
+            f'cd "{src}" && '
+            f'HOME="{work_home_dir()}" && mkdir -p "$HOME" && '
+            f'python3 dlls/winevulkan/make_vulkan -x "{vulkan_headers}/share/vulkan/registry/vk.xml" '
+            f'-X "{vulkan_headers}/share/vulkan/registry/video.xml" && '
+            'perl ./tools/make_requests || true && '
+            'autoreconf -fi'
+        )
+
+    ensure_source_git_repo(src, "baseline: Valve Wine plus active Battle.net series")
+
+    wine64_dir().mkdir(parents=True, exist_ok=True)
+    wine32_dir().mkdir(parents=True, exist_ok=True)
+    reset_stale_configure_output(wine64_dir(), src)
+    reset_stale_configure_output(wine32_dir(), src)
+    if args.force_configure:
+        for build_dir in (wine64_dir(), wine32_dir()):
+            makefile = build_dir / "Makefile"
+            if makefile.exists():
+                makefile.unlink()
+    if not (wine64_dir() / "Makefile").exists():
+        dev_shell(f'cd "{wine64_dir()}" && HOME="{work_home_dir()}" "{src}/configure" --enable-win64 --without-x --disable-tests')
+    if not (wine32_dir() / "Makefile").exists():
+        dev_shell(
+            f'cd "{wine32_dir()}" && HOME="{work_home_dir()}" "{src}/configure" '
+            f'--with-wine64="{wine64_dir()}" --without-x --disable-tests',
+            target="32",
+        )
+
+    print(f"wine source: {src}")
+    print(f"wine64 build: {wine64_dir()}")
+    print(f"wine32 build: {wine32_dir()}")
+
+
+def setup_dxvk(args: argparse.Namespace) -> None:
+    dev_root_dir().mkdir(parents=True, exist_ok=True)
+    src = dxvk_dir()
+    if args.force and src.exists():
+        shutil.rmtree(src)
+    if not src.exists():
+        seed = nix_build_path("passthru.dxvkSource")
+        run(["rsync", "-a", "--delete", f"{seed}/", f"{src}/"])
+        run(["chmod", "-R", "u+rwX", str(src)])
+
+    replace_text(
+        src / "src/dxvk/meson.build",
+        "dxvk_extra_deps = [ dependency('threads') ]",
+        "dxvk_extra_deps = [ dependency('threads'), cpp.find_library('mcfgthread') ]",
+    )
+    replace_text(
+        src / "src/vulkan/meson.build",
+        "dependencies        : [ thread_dep ],",
+        "dependencies        : [ thread_dep, cpp.find_library('mcfgthread') ],",
+    )
+    replace_text(
+        src / "src/dxgi/meson.build",
+        "dxgi_ld_args      = []",
+        "dxgi_ld_args      = [ '-Wl,--whole-archive', '-lmcfgthread', '-Wl,--no-whole-archive' ]",
+    )
+
+    dev_shell(f'cd "{src}" && patchShebangs subprojects >/dev/null 2>&1 || true')
+    ensure_source_git_repo(src, "baseline: DXVK plus active Battle.net series")
+
+    if args.force_configure:
+        for build_dir in (src / "build.64", src / "build.32"):
+            if build_dir.exists():
+                shutil.rmtree(build_dir)
+    else:
+        for build_dir in (src / "build.64", src / "build.32"):
+            ninja_file = build_dir / "build.ninja"
+            if ninja_file.exists() and (
+                    not file_contains(ninja_file, str(src))
+                    or ninja_file_has_missing_store_refs(ninja_file)):
+                print(f"reconfiguring stale DXVK build directory: {build_dir}")
+                shutil.rmtree(build_dir)
+
+    if not (src / "build.64/build.ninja").exists():
+        mcfgthreads = nix_eval_raw("pkgsCross.mingwW64.windows.mcfgthreads")
+        pthreads = nix_eval_raw("pkgsCross.mingwW64.windows.pthreads")
+        dev_shell(
+            f'cd "{src}" && '
+            f'export LIBRARY_PATH="{mcfgthreads}/lib:{pthreads}/lib" && '
+            f'export LDFLAGS="-L{mcfgthreads}/lib -L{pthreads}/lib" && '
+            'meson setup --cross-file build-win64.txt '
+            '--buildtype release --prefix "$PWD/out.64" --bindir x64 --libdir x64 '
+            '--strip -Db_ndebug=if-release -Dbuild_id=false build.64'
+        )
+
+    if not (src / "build.32/build.ninja").exists():
+        mcfgthreads = nix_eval_raw("pkgsCross.mingw32.windows.mcfgthreads")
+        pthreads = nix_eval_raw("pkgsCross.mingw32.windows.pthreads")
+        dev_shell(
+            f'cd "{src}" && '
+            f'export LIBRARY_PATH="{mcfgthreads}/lib:{pthreads}/lib" && '
+            f'export LDFLAGS="-L{mcfgthreads}/lib -L{pthreads}/lib" && '
+            'meson setup --cross-file build-win32.txt '
+            '--buildtype release --prefix "$PWD/out.32" --bindir x32 --libdir x32 '
+            '--strip -Db_ndebug=if-release -Dbuild_id=false build.32',
+        )
+
+    print(f"dxvk source: {src}")
+    print(f"dxvk64 build: {src / 'build.64'}")
+    print(f"dxvk32 build: {src / 'build.32'}")
+
+
+def ensure_wine_build_tools_executable() -> None:
+    for build_dir in (wine64_dir(), wine32_dir()):
+        for rel in (
+            "tools/makedep",
+            "tools/widl/widl",
+            "tools/winebuild/winebuild",
+            "tools/winegcc/winegcc",
+            "tools/wrc/wrc",
+        ):
+            path = build_dir / rel
+            if path.exists():
+                path.chmod(path.stat().st_mode | 0o100)
+
+
+def build_wine(args: argparse.Namespace) -> None:
+    if (not (wine64_dir() / "Makefile").exists()
+            or not (wine32_dir() / "Makefile").exists()
+            or not file_contains(wine64_dir() / "Makefile", str(wine_src_dir()))
+            or not file_contains(wine32_dir() / "Makefile", str(wine_src_dir()))):
+        setup_wine(argparse.Namespace(force=False, force_configure=False))
+    ensure_wine_build_tools_executable()
+    targets = args.targets or [
+        "dlls/dcomp/all",
+        "dlls/dxgi/all",
+        "dlls/ntdll/all",
+        "dlls/win32u/all",
+        "dlls/winevulkan/all",
+        "dlls/winewayland.drv/all",
+        "programs/explorer/all",
+    ]
+    target_text = " ".join(targets)
+    jobs = args.jobs or os.cpu_count() or 1
+    dev_shell(f'make -C "{wine64_dir()}" -j{jobs} {target_text}')
+    dev_shell(f'make -C "{wine32_dir()}" -j{jobs} {target_text}', target="32")
+    overlay_wine(argparse.Namespace(wine=None, wine64=wine64_dir(), wine32=wine32_dir(), targets=targets))
+
+
+def build_dxvk(args: argparse.Namespace) -> None:
+    src = dxvk_dir()
+    if (not (src / "build.64/build.ninja").exists()
+            or not (src / "build.32/build.ninja").exists()
+            or not file_contains(src / "build.64/build.ninja", str(src))
+            or not file_contains(src / "build.32/build.ninja", str(src))
+            or ninja_file_has_missing_store_refs(src / "build.64/build.ninja")
+            or ninja_file_has_missing_store_refs(src / "build.32/build.ninja")):
+        setup_dxvk(argparse.Namespace(force=False, force_configure=False))
+
+    jobs = args.jobs or os.cpu_count() or 1
+    targets = "src/dxgi/dxgi.dll src/d3d11/d3d11.dll"
+    dev_shell(f'cd "{src}" && ninja -C build.64 -j{jobs} {targets}')
+    dev_shell(f'cd "{src}" && ninja -C build.32 -j{jobs} {targets}')
+    overlay_dxvk(argparse.Namespace(dxvk=src))
+
+
+def wine_loop(args: argparse.Namespace) -> None:
+    start = time.monotonic()
+    build_wine(argparse.Namespace(targets=args.targets, jobs=args.jobs))
+    mid = time.monotonic()
+    smoke(argparse.Namespace(seconds=args.seconds, log=args.log))
+    end = time.monotonic()
+    print(f"build+overlay: {mid - start:.3f}s")
+    print(f"smoke:         {end - mid:.3f}s")
+    print(f"total:         {end - start:.3f}s")
+
+
+def proc_text(path: Path) -> str:
+    try:
+        return path.read_text(errors="replace")
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return ""
+
+
+def proc_env(pid: int) -> dict[str, str]:
+    try:
+        raw = Path(f"/proc/{pid}/environ").read_bytes()
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return {}
+
+    env = {}
+    for item in raw.split(b"\0"):
+        if not item or b"=" not in item:
+            continue
+        key, value = item.split(b"=", 1)
+        env[key.decode(errors="replace")] = value.decode(errors="replace")
+    return env
+
+
+def iter_dev_pids() -> list[int]:
+    own_pids = {os.getpid(), os.getppid()}
+    pids = []
+    for path in Path("/proc").iterdir():
+        if not path.name.isdigit():
+            continue
+
+        pid = int(path.name)
+        if pid in own_pids:
+            continue
+
+        env = proc_env(pid)
+        cmdline = proc_text(path / "cmdline").replace("\0", " ")
+        comm = proc_text(path / "comm").strip()
+        text = f"{comm} {cmdline}"
+
+        if same_path(env.get("PROTONPATH"), dev_tool_path()):
+            pids.append(pid)
+        elif same_path(env.get("STEAM_COMPAT_DATA_PATH"), prefix_path()):
+            pids.append(pid)
+        elif same_path(env.get("WINEPREFIX"), wine_prefix_path()):
+            pids.append(pid)
+        elif DEV_TOOL_NAME in text or str(dev_tool_path()) in text:
+            pids.append(pid)
+        elif "Battle.net" in text or "Agent.exe" in text or "winedevice.exe" in text:
+            if same_path(env.get("WINEPREFIX"), wine_prefix_path()):
+                pids.append(pid)
+
+    return sorted(set(pids))
+
+
+def kill_dev_processes(grace_seconds: float = 0.5) -> None:
+    pids = iter_dev_pids()
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    if pids:
+        time.sleep(grace_seconds)
+    for pid in pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def stop_dev_wine(env: dict[str, str] | None = None) -> None:
+    runtime_env = os.environ.copy()
+    if env:
+        runtime_env.update(env)
+    runtime_env["WINEPREFIX"] = str(wine_prefix_path())
+    wineserver = dev_tool_path() / "files/bin-wow64/wineserver"
+    if wineserver.exists():
+        subprocess.run([str(wineserver), "-k"], env=runtime_env, check=False)
+    kill_dev_processes()
+
+
+def cleanup(_args: argparse.Namespace) -> None:
+    stop_dev_wine()
+    print("Battle.net dev processes cleaned up")
+
+
+def configure(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    if not args.keep_running:
+        stop_dev_wine()
+    prepare_battlenet_prefix()
+    print(f"prefix: {prefix_path()}")
+    print(f"proton: {tool_path()} -> {realpath(tool_path())}")
+    print(f"logs:   {proton_log_dir()}")
+
+
+def proton_log_destination(wrapper_log: Path) -> Path:
+    name = wrapper_log.name
+    if name.endswith(".wrapper.log"):
+        return wrapper_log.with_name(name[:-len(".wrapper.log")] + ".proton.log")
+    return wrapper_log.with_suffix(".proton.log")
+
+
+def reset_proton_log() -> None:
+    try:
+        proton_log_path().unlink()
+    except FileNotFoundError:
+        pass
+    try:
+        (home() / "steam-battlenet.log").unlink()
+    except FileNotFoundError:
+        pass
+
+
+def collect_proton_log(wrapper_log: Path) -> Path | None:
+    source = proton_log_path()
+    if not source.exists():
+        return None
+
+    destination = proton_log_destination(wrapper_log)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        destination.unlink()
+    shutil.move(str(source), str(destination))
+    return destination
+
+
+def parse_env(values: list[str]) -> dict[str, str]:
+    env = {}
+    for value in values:
+        if "=" not in value:
+            raise SystemExit(f"environment entry must be KEY=VALUE: {value}")
+        key, item = value.split("=", 1)
+        if not key:
+            raise SystemExit(f"environment key is empty: {value}")
+        env[key] = item
+    return env
+
+
+def set_reg_dword(path: Path, section: str, name: str, value: int) -> None:
+    if not path.exists():
+        return
+
+    header = f"[{section}]"
+    key = f'"{name}"'
+    item = f'{key}=dword:{value:08x}'
+    lines = path.read_text(errors="replace").splitlines()
+    output = []
+    in_section = False
+    saw_section = False
+    updated = False
+
+    for line in lines:
+        if line == header:
+            in_section = True
+            saw_section = True
+            updated = False
+            output.append(line)
+            continue
+        if in_section and line.startswith("["):
+            if not updated:
+                output.append(item)
+            in_section = False
+        if in_section and line.startswith(f"{key}=dword:"):
+            output.append(item)
+            updated = True
+            continue
+        output.append(line)
+
+    if in_section and not updated:
+        output.append(item)
+    if not saw_section:
+        output.extend(["", header, item])
+
+    path.write_text("\n".join(output) + "\n")
+
+
+def sync_builtin_dlls() -> None:
+    mappings = (
+        ("x86_64", "system32"),
+        ("i386", "syswow64"),
+    )
+    dlls = (
+        "dcomp.dll",
+        "dxgi.dll",
+        "ntdll.dll",
+        "secur32.dll",
+        "winevulkan.dll",
+        "win32u.dll",
+        "winewayland.drv",
+        "explorer.exe",
+    )
+    for arch, windows_dir in mappings:
+        for dll in dlls:
+            copy_if_exists(
+                dev_tool_path() / "files/lib/wine" / f"{arch}-windows" / dll,
+                prefix_path() / "drive_c/windows" / windows_dir / dll,
+            )
+
+
+def prepare_battlenet_prefix() -> None:
+    prefix_path().mkdir(parents=True, exist_ok=True)
+    sync_builtin_dlls()
+    legacy_dxvk_config_path().unlink(missing_ok=True)
+
+    log_pixels = int(float(launcher_value("LOG_PIXELS", "96")))
+    set_reg_dword(prefix_path() / "user.reg", "Control Panel\\\\Desktop", "LogPixels", log_pixels)
+    set_reg_dword(prefix_path() / "user.reg", "Software\\\\Wine\\\\Fonts", "LogPixels", log_pixels)
+    set_reg_dword(
+        prefix_path() / "system.reg",
+        "System\\\\ControlSet001\\\\Hardware Profiles\\\\Current\\\\Software\\\\Fonts",
+        "LogPixels",
+        log_pixels,
+    )
+
+
+def battlenet_args() -> list[str]:
+    args = ["--high-dpi-support=1"]
+    scale = launcher_value("CEF_SCALE", "1")
+    if scale not in ("1", "1.0", "1.000000"):
+        args.append(f"--force-device-scale-factor={scale}")
+    return args
+
+
+def launch_env(args: argparse.Namespace) -> dict[str, str]:
+    env = os.environ.copy()
+    env["PROTON_LOG"] = "1"
+    env["PROTON_LOG_DIR"] = str(proton_log_dir())
+    env["TMPDIR"] = "/tmp"
+    env["WINEPREFIX"] = str(prefix_path())
+    env["GAMEID"] = "umu-battlenet"
+    env["PROTONPATH"] = str(dev_tool_path())
+    env["PROTON_USE_WOW64"] = "1"
+    env["WINE_SIMULATE_WRITECOPY"] = "1"
+    env["WINE_WAYLAND_HACKS"] = "1"
+    env["WINE_SNI_ICON_NAME"] = "battlenet"
+    env["PROTON_ENABLE_WAYLAND"] = "1"
+    env["PROTON_ENABLE_HDR"] = "1"
+    env["DXVK_HDR"] = "1"
+    env["ENABLE_HDR_WSI"] = "1"
+    proton_log_dir().mkdir(parents=True, exist_ok=True)
+
+    if args.trace == "quiet":
+        env.setdefault("WINEDEBUG", "-all")
+        env.setdefault("DXVK_LOG_LEVEL", "none")
+    elif args.trace == "modules":
+        env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+loaddll,+module")
+        env.setdefault("DXVK_LOG_LEVEL", "info")
+    elif args.trace == "composition":
+        env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+dcomp")
+        env.setdefault("DXVK_LOG_LEVEL", "debug")
+        env.setdefault("DXVK_LOG_PATH", str(proton_log_dir() / "dxvk"))
+        env.setdefault("DXVK_TRACE_COMPOSITION_SWAPCHAINS", "1")
+    else:
+        raise SystemExit(f"unknown trace preset: {args.trace}")
+
+    if args.winedebug:
+        env["WINEDEBUG"] = args.winedebug
+    env.update(parse_env(args.env))
+
+    dxvk_log_path = env.get("DXVK_LOG_PATH")
+    if dxvk_log_path and dxvk_log_path != "none":
+        Path(dxvk_log_path).mkdir(parents=True, exist_ok=True)
+    return env
+
+
+def terminate(process: subprocess.Popen, timeout: float = 1) -> None:
+    if process.poll() is not None:
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def start_battlenet(log: Path, env: dict[str, str]) -> tuple[subprocess.Popen, object]:
+    umu_run = shutil.which("umu-run")
+    if not umu_run:
+        raise SystemExit("umu-run is missing; enter the Battle.net dev shell or run through battlenet-make")
+    if not battlenet_exe_path().exists():
+        raise SystemExit(f"Battle.net launcher is missing: {battlenet_exe_path()}")
+
+    prepare_battlenet_prefix()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    handle = log.open("w")
+    process = subprocess.Popen(
+        [umu_run, str(battlenet_exe_path()), *battlenet_args()],
+        stdout=handle,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+        cwd=home(),
+        start_new_session=True,
+    )
+    return process, handle
+
+
+def launch(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    env = launch_env(args)
+    stop_dev_wine(env)
+    reset_proton_log()
+    process, handle = start_battlenet(args.log, env)
+    handle.close()
+
+    print(f"pid: {process.pid}")
+    print(f"log: {args.log}")
+    print(f"proton log while running: {proton_log_path()}")
+    if env.get("DXVK_LOG_PATH") and env["DXVK_LOG_PATH"] != "none":
+        print(f"dxvk logs: {env['DXVK_LOG_PATH']}")
+    print(f"WINEDEBUG={env.get('WINEDEBUG', '')}")
+    print(f"DXVK_LOG_LEVEL={env.get('DXVK_LOG_LEVEL', '')}")
+
+    if not args.seconds:
+        print("left running; use `battlenet-make cleanup` when done")
+        return
+
+    try:
+        process.wait(timeout=args.seconds)
+    except subprocess.TimeoutExpired:
+        terminate(process)
+    finally:
+        stop_dev_wine(env)
+
+    proton_log = collect_proton_log(args.log)
+    if proton_log:
+        print(f"proton log: {proton_log}")
+
+
+def smoke(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    env = launch_env(argparse.Namespace(
+        trace="modules",
+        winedebug=None,
+        env=[],
+    ))
+    stop_dev_wine(env)
+    reset_proton_log()
+    started, handle = start_battlenet(args.log, env)
+    try:
+        started.wait(timeout=args.seconds)
+    except subprocess.TimeoutExpired:
+        terminate(started)
+    finally:
+        handle.close()
+        stop_dev_wine(env)
+    proton_log = collect_proton_log(args.log)
+    print(f"log: {args.log}")
+    if proton_log:
+        print(f"proton log: {proton_log}")
+    try:
+        print(args.log.read_text().splitlines()[0:8])
+    except FileNotFoundError:
+        pass
+
+
+def screenshot(output: Path, mode: str = "active") -> None:
+    if mode == "full" and os.environ.get("PROTON_CUSTOM_ALLOW_FULL_DESKTOP_CAPTURE") != "1":
+        raise SystemExit("full desktop capture is disabled; set PROTON_CUSTOM_ALLOW_FULL_DESKTOP_CAPTURE=1 to override")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    mode_arg = SCREENSHOT_MODES[mode]
+    command = ["spectacle", "-b", "-n", mode_arg, "-o", str(output)]
+    print("+ " + " ".join(command))
+    lock_path = Path("/tmp/battlenet-screenshot.lock")
+
+    with lock_path.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for _attempt in range(3):
+            output.unlink(missing_ok=True)
+            result = subprocess.run(command, check=False, capture_output=True, text=True)
+            if not result.returncode and output.exists() and output.stat().st_size > 0:
+                return
+            time.sleep(0.15)
+
+    message = (result.stderr or result.stdout or "").strip()
+    detail = f": {message}" if message else ""
+    raise SystemExit(f"screenshot failed: {output}{detail}")
+
+
+def focus(_args: argparse.Namespace) -> None:
+    if not shutil.which("kdotool"):
+        raise SystemExit("kdotool is missing; enter the Battle.net dev shell or run through battlenet-make")
+    run(["kdotool", *BATTLENET_WINDOW_QUERY, "windowactivate", "%1", "windowraise", "%1"])
+
+
+def parse_window_geometry(text: str) -> tuple[int, int, int, int]:
+    position = re.search(r"Position:\s*([^,]+),([^\n]+)", text)
+    geometry = re.search(r"Geometry:\s*([^x]+)x([^\n]+)", text)
+    if not position or not geometry:
+        raise SystemExit(f"could not parse Battle.net geometry:\n{text}")
+
+    x = int(round(float(position.group(1))))
+    y = int(round(float(position.group(2))))
+    width = int(round(float(geometry.group(1))))
+    height = int(round(float(geometry.group(2))))
+    return x, y, width, height
+
+
+def battlenet_geometry() -> tuple[int, int, int, int]:
+    result = subprocess.run(
+        ["kdotool", *BATTLENET_WINDOW_QUERY, "getwindowgeometry", "%1"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return parse_window_geometry(result.stdout)
+
+
+def mouse_location() -> tuple[int, int]:
+    for _attempt in range(5):
+        result = subprocess.run(
+            ["kdotool", "getmouselocation", "--shell"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        values = {}
+        for line in result.stdout.splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value
+        if "X" in values and "Y" in values:
+            return int(values["X"]), int(values["Y"])
+        time.sleep(0.05)
+    raise SystemExit("could not read mouse location from KWin")
+
+
+def screen_size() -> tuple[int, int]:
+    result = subprocess.run(
+        ["kscreen-doctor", "-o"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    for chunk in output.split("Output:"):
+        if "enabled" not in chunk:
+            continue
+        match = re.search(r"Geometry:\s*(-?\d+),(-?\d+)\s+(\d+)x(\d+)", chunk)
+        if match:
+            return int(match.group(3)), int(match.group(4))
+    raise SystemExit("could not determine enabled display geometry from kscreen-doctor")
+
+
+def dotool(actions: list[str]) -> None:
+    if not shutil.which("dotool"):
+        raise SystemExit("dotool is missing; enter the Battle.net dev shell or run through battlenet-make")
+    subprocess.run(["dotool"], input="\n".join(actions) + "\n", check=True, text=True)
+
+
+def move_pointer_to(x: int, y: int, screen_size: tuple[int, int]) -> None:
+    current_x, current_y = mouse_location()
+    dx = x - current_x
+    dy = y - current_y
+    steps = max(1, min(18, int(max(abs(dx), abs(dy)) / 90) + 1))
+
+    actions = []
+    for index in range(1, steps + 1):
+        next_x = round(current_x + dx * index / steps)
+        next_y = round(current_y + dy * index / steps)
+        point_x = max(0.0, min(1.0, next_x / max(1, screen_size[0] - 1)))
+        point_y = max(0.0, min(1.0, next_y / max(1, screen_size[1] - 1)))
+        actions.append(f"mouseto {point_x:.6f} {point_y:.6f}")
+    dotool(actions)
+    time.sleep(0.03)
+
+
+def hover_points(profile: str, geometry: tuple[int, int, int, int]) -> list[tuple[int, int, float]]:
+    x, y, width, height = geometry
+    profiles = {
+        "battle-net": [
+            (0.86, 0.18, 0.18),
+            (0.86, 0.26, 0.18),
+            (0.86, 0.34, 0.18),
+            (0.86, 0.45, 0.18),
+            (0.86, 0.56, 0.18),
+            (0.30, 0.30, 0.15),
+            (0.48, 0.34, 0.15),
+            (0.66, 0.38, 0.15),
+            (0.37, 0.61, 0.15),
+            (0.58, 0.67, 0.15),
+            (0.72, 0.75, 0.15),
+        ],
+        "chat": [
+            (0.86, 0.14, 0.22),
+            (0.86, 0.22, 0.22),
+            (0.86, 0.30, 0.22),
+            (0.86, 0.38, 0.22),
+            (0.86, 0.46, 0.22),
+            (0.86, 0.54, 0.22),
+            (0.86, 0.62, 0.22),
+            (0.72, 0.22, 0.22),
+        ],
+        "main": [
+            (0.24, 0.24, 0.18),
+            (0.42, 0.27, 0.18),
+            (0.62, 0.31, 0.18),
+            (0.75, 0.41, 0.18),
+            (0.35, 0.58, 0.18),
+            (0.55, 0.63, 0.18),
+            (0.70, 0.72, 0.18),
+        ],
+    }
+    if profile not in profiles:
+        raise SystemExit(f"unknown hover profile: {profile}")
+
+    return [
+        (int(x + width * point_x), int(y + height * point_y), dwell)
+        for point_x, point_y, dwell in profiles[profile]
+    ]
+
+
+def run_hover_motion(stop: threading.Event, profile: str) -> None:
+    geometry = battlenet_geometry()
+    points = hover_points(profile, geometry)
+    desktop_size = screen_size()
+    while not stop.is_set():
+        for x, y, dwell in points:
+            if stop.is_set():
+                return
+            move_pointer_to(x, y, desktop_size)
+            stop.wait(dwell)
+
+
+def capture_frames(output_dir: Path, count: int, interval: float, mode: str = "active", extension: str = "png") -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for frame in output_dir.glob("frame-*.*"):
+        frame.unlink()
+    for index in range(count):
+        screenshot(output_dir / f"frame-{index:03}.{extension}", mode)
+        if interval:
+            time.sleep(interval)
+
+
+def capture(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    env = launch_env(argparse.Namespace(
+        trace="quiet",
+        winedebug=None,
+        env=[],
+    ))
+    stop_dev_wine(env)
+    reset_proton_log()
+    started, handle = start_battlenet(args.log, env)
+    try:
+        time.sleep(args.delay)
+        focus(argparse.Namespace())
+        screenshot(args.output, args.mode)
+    finally:
+        terminate(started)
+        handle.close()
+        stop_dev_wine(env)
+    proton_log = collect_proton_log(args.log)
+    print(f"screenshot: {args.output}")
+    print(f"log: {args.log}")
+    if proton_log:
+        print(f"proton log: {proton_log}")
+
+
+def frames(args: argparse.Namespace) -> None:
+    use_dev(argparse.Namespace())
+    env = launch_env(argparse.Namespace(
+        trace="quiet",
+        winedebug=None,
+        env=[],
+    ))
+    stop_dev_wine(env)
+    reset_proton_log()
+    started, handle = start_battlenet(args.log, env)
+    try:
+        time.sleep(args.delay)
+        focus(argparse.Namespace())
+        capture_frames(args.output_dir, args.count, args.interval, args.mode, args.extension)
+    finally:
+        terminate(started)
+        handle.close()
+        stop_dev_wine(env)
+    proton_log = collect_proton_log(args.log)
+    print(f"frames: {args.output_dir}")
+    print(f"log: {args.log}")
+    if proton_log:
+        print(f"proton log: {proton_log}")
+
+
+def grab_frames(args: argparse.Namespace) -> None:
+    if args.focus:
+        focus(argparse.Namespace())
+    capture_frames(args.output_dir, args.count, args.interval, args.mode, args.extension)
+    print(f"frames: {args.output_dir}")
+
+
+def hover_frames(args: argparse.Namespace) -> None:
+    focus(argparse.Namespace())
+    geometry = battlenet_geometry()
+    print(f"Battle.net geometry: x={geometry[0]} y={geometry[1]} width={geometry[2]} height={geometry[3]}")
+
+    stop = threading.Event()
+    motion = threading.Thread(
+        target=run_hover_motion,
+        args=(stop, args.profile),
+        daemon=True,
+    )
+    motion.start()
+    try:
+        capture_frames(args.output_dir, args.count, args.interval, args.mode, args.extension)
+    finally:
+        stop.set()
+        motion.join(timeout=1)
+
+    print(f"frames: {args.output_dir}")
+
+
+def analyze_frames(args: argparse.Namespace) -> None:
+    if not shutil.which("compare"):
+        raise SystemExit("ImageMagick compare is missing; enter the Battle.net dev shell or run through battlenet-make")
+
+    frames = sorted(args.output_dir.glob("frame-*.*"))
+    if len(frames) < 2:
+        raise SystemExit(f"need at least two frames in {args.output_dir}")
+
+    for previous, current in zip(frames, frames[1:]):
+        result = subprocess.run(
+            ["compare", "-metric", "AE", str(previous), str(current), "null:"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        value = (result.stderr or result.stdout).strip() or "0"
+        if args.all or value not in ("0", "0.0"):
+            print(f"{previous.name}->{current.name}: {value}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="proton-custom development helper")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("setup")
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(func=setup)
+
+    p = sub.add_parser("use")
+    p.set_defaults(func=use_dev)
+
+    p = sub.add_parser("restore")
+    p.set_defaults(func=restore)
+
+    p = sub.add_parser("status")
+    p.set_defaults(func=status)
+
+    p = sub.add_parser("configure")
+    p.add_argument("--keep-running", action="store_true")
+    p.set_defaults(func=configure)
+
+    p = sub.add_parser("check-patches")
+    p.set_defaults(func=check_patches)
+
+    p = sub.add_parser("patch-lint")
+    p.set_defaults(func=patch_lint)
+
+    p = sub.add_parser("source-drift")
+    p.set_defaults(func=source_drift)
+
+    p = sub.add_parser("reset-source-drift")
+    p.set_defaults(func=reset_source_drift)
+
+    p = sub.add_parser("setup-wine")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--force-configure", action="store_true")
+    p.set_defaults(func=setup_wine)
+
+    p = sub.add_parser("setup-dxvk")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--force-configure", action="store_true")
+    p.set_defaults(func=setup_dxvk)
+
+    p = sub.add_parser("build-wine")
+    p.add_argument("--jobs", type=int)
+    p.add_argument("targets", nargs="*")
+    p.set_defaults(func=build_wine)
+
+    p = sub.add_parser("build-dxvk")
+    p.add_argument("--jobs", type=int)
+    p.set_defaults(func=build_dxvk)
+
+    p = sub.add_parser("wine-loop")
+    p.add_argument("--jobs", type=int)
+    p.add_argument("--seconds", type=int, default=5)
+    p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-wine-loop.log"))
+    p.add_argument("targets", nargs="*")
+    p.set_defaults(func=wine_loop)
+
+    p = sub.add_parser("overlay-wine")
+    p.add_argument("--wine", type=Path)
+    p.add_argument("--wine64", type=Path)
+    p.add_argument("--wine32", type=Path)
+    p.set_defaults(func=overlay_wine)
+
+    p = sub.add_parser("overlay-dxvk")
+    p.add_argument("--dxvk", type=Path, default=dxvk_dir())
+    p.set_defaults(func=overlay_dxvk)
+
+    p = sub.add_parser("restore-dxvk")
+    p.set_defaults(func=restore_dxvk)
+
+    p = sub.add_parser("smoke")
+    p.add_argument("--seconds", type=int, default=8)
+    p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-smoke.log"))
+    p.set_defaults(func=smoke)
+
+    p = sub.add_parser("launch")
+    p.add_argument("--seconds", type=int, default=0)
+    p.add_argument("--trace", choices=["quiet", "modules", "composition"], default="quiet")
+    p.add_argument("--winedebug")
+    p.add_argument("--env", action="append", default=[])
+    p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-launch.wrapper.log"))
+    p.set_defaults(func=launch)
+
+    p = sub.add_parser("capture")
+    p.add_argument("--delay", type=int, default=8)
+    p.add_argument("--mode", choices=SCREENSHOT_MODES, default="active")
+    p.add_argument("--output", type=Path, default=Path("/tmp/battlenet-capture.png"))
+    p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-capture.wrapper.log"))
+    p.set_defaults(func=capture)
+
+    p = sub.add_parser("focus")
+    p.set_defaults(func=focus)
+
+    p = sub.add_parser("frames")
+    p.add_argument("--delay", type=int, default=8)
+    p.add_argument("--count", type=int, default=24)
+    p.add_argument("--interval", type=float, default=0.15)
+    p.add_argument("--mode", choices=SCREENSHOT_MODES, default="active")
+    p.add_argument("--format", dest="extension", choices=["png", "jpg"], default="jpg")
+    p.add_argument("--output-dir", type=Path, default=Path("/tmp/battlenet-frames"))
+    p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-frames.wrapper.log"))
+    p.set_defaults(func=frames)
+
+    p = sub.add_parser("grab-frames")
+    p.add_argument("--count", type=int, default=24)
+    p.add_argument("--interval", type=float, default=0.15)
+    p.add_argument("--mode", choices=SCREENSHOT_MODES, default="active")
+    p.add_argument("--format", dest="extension", choices=["png", "jpg"], default="jpg")
+    p.add_argument("--output-dir", type=Path, default=Path("/tmp/battlenet-grab-frames"))
+    p.add_argument("--focus", action="store_true")
+    p.set_defaults(func=grab_frames)
+
+    p = sub.add_parser("hover-frames")
+    p.add_argument("--count", type=int, default=48)
+    p.add_argument("--interval", type=float, default=0.08)
+    p.add_argument("--mode", choices=SCREENSHOT_MODES, default="active")
+    p.add_argument("--format", dest="extension", choices=["png", "jpg"], default="jpg")
+    p.add_argument("--profile", choices=["battle-net", "chat", "main"], default="battle-net")
+    p.add_argument("--output-dir", type=Path, default=Path("/tmp/battlenet-hover-frames"))
+    p.set_defaults(func=hover_frames)
+
+    p = sub.add_parser("analyze-frames")
+    p.add_argument("--output-dir", type=Path, default=Path("/tmp/battlenet-grab-frames"))
+    p.add_argument("--all", action="store_true")
+    p.set_defaults(func=analyze_frames)
+
+    p = sub.add_parser("cleanup")
+    p.set_defaults(func=cleanup)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

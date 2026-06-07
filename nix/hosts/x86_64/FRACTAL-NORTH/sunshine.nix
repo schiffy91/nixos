@@ -1,9 +1,9 @@
 { config, pkgs, lib, host, ... }:
 let
-  edid      = pkgs.callPackage ../../../apps/pkg-overrides/sunshine/edid { };
+  edid      = pkgs.callPackage ../../../apps/gaming/sunshine/edid { };
   kd        = "${pkgs.kdePackages.libkscreen}/bin/kscreen-doctor";
   streaming = host.display.streaming;
-  enabled   = config.settings.apps.enable && config.settings.apps.sunshine.enable;
+  enabled   = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable;
 in lib.mkIf enabled {
   services.sunshine = {
     enable = true;

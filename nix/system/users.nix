@@ -3,14 +3,21 @@ let
   cfg = config.settings.users;
   admin = cfg.admin;
   agent = cfg.agent;
-  nixFiles = dir:
-    let e = builtins.readDir dir; in
-    lib.attrValues (lib.mapAttrs (n: _: dir + "/${n}")
-      (lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".nix" n) e));
+  nixModuleFiles = skippedDirs: dir:
+    let
+      ignoredNames = [ "dev-shell.nix" "flake.nix" "package.nix" ];
+      ignoredDir = path: dirName: lib.hasInfix "/${dirName}/" (toString path);
+      importable = path:
+        lib.hasSuffix ".nix" (baseNameOf path)
+        && !(lib.elem (baseNameOf path) ignoredNames)
+        && !(lib.any (ignoredDir path) skippedDirs);
+    in lib.filter importable (lib.filesystem.listFilesRecursive dir);
+  appModules = nixModuleFiles [ "assets" "custom" "edid" "home-manager" "tests" ] ../apps;
+  homeModules = nixModuleFiles [] ../apps/home-manager;
 in {
   imports = [
     inputs.home-manager.nixosModules.home-manager
-  ] ++ nixFiles ../apps;
+  ] ++ appModules;
 
   users.mutableUsers = false;
   users.groups = {
@@ -67,7 +74,7 @@ in {
             gpg.format = "openpgp";
           };
         };
-        imports = nixFiles ../apps/home-manager;
+        imports = homeModules;
       };
     } // lib.optionalAttrs (agent.enable && agent.homeManager.enable) {
       ${agent.username} = {

@@ -6,14 +6,16 @@
     "spec-yaml",
     "app-settings",
     "stateful-host",
-    "aarch64-qemu-host",
+    "qemu-host-x86_64",
+    "qemu-host-aarch64",
     "installer-download"
   ],
   "required": [
     "cli-parity",
     "spec-toml",
     "spec-yaml",
-    "aarch64-qemu-host",
+    "qemu-host-x86_64",
+    "qemu-host-aarch64",
     "qmp-probe",
     "tpm2-probe",
     "secure-boot-capabilities",
@@ -66,11 +68,24 @@
       ]
     },
     {
-      "id": "aarch64-qemu-host",
-      "spec": "aarch64-qemu-host/test.json",
+      "id": "qemu-host-x86_64",
+      "spec": "qemu-host/test.json",
       "after": [
         "quick"
-      ]
+      ],
+      "args": {
+        "arch": "x86_64"
+      }
+    },
+    {
+      "id": "qemu-host-aarch64",
+      "spec": "qemu-host/test.json",
+      "after": [
+        "quick"
+      ],
+      "args": {
+        "arch": "aarch64"
+      }
     },
     {
       "id": "cli-parity",

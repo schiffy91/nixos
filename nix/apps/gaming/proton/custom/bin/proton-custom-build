@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+proton_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+proton_custom_make="$proton_dir/bin/proton-custom-make"
+wine_src="$proton_dir/src/wine"
+dxvk_src="$proton_dir/src/dxvk"
+
+usage() {
+  cat <<EOF
+usage: proton-custom-build [changed|all|wine|dxvk|package|TARGET...]
+
+Builds the local proton-custom development tree.
+
+Modes:
+  changed   build targets implied by local src/wine and src/dxvk diffs
+  all       build all active Wine targets and DXVK
+  wine      build all active Wine targets
+  dxvk      build DXVK dxgi.dll and d3d11.dll
+  package   build the Nix proton-custom package
+
+Named Wine targets:
+  wayland dcomp dxgi ntdll win32u winevulkan explorer
+
+Any argument containing "/" is passed as an explicit Wine make target.
+EOF
+}
+
+join_words() {
+  local IFS=" "
+  echo "$*"
+}
+
+add_target() {
+  local candidate="$1"
+  local existing
+  for existing in "${targets[@]:-}"; do
+    [ "$existing" = "$candidate" ] && return 0
+  done
+  targets+=("$candidate")
+}
+
+wine_has_diff() {
+  [ -d "$wine_src/.git" ] || return 1
+  ! git -C "$wine_src" diff --quiet -- "$@"
+}
+
+dxvk_has_diff() {
+  [ -d "$dxvk_src/.git" ] || return 1
+  ! git -C "$dxvk_src" diff --quiet -- "$@"
+}
+
+target_for_name() {
+  case "$1" in
+    wayland) echo "dlls/winewayland.drv/all" ;;
+    dcomp) echo "dlls/dcomp/all" ;;
+    dxgi) echo "dlls/dxgi/all" ;;
+    ntdll) echo "dlls/ntdll/all" ;;
+    win32u) echo "dlls/win32u/all" ;;
+    winevulkan) echo "dlls/winevulkan/all" ;;
+    explorer) echo "programs/explorer/all" ;;
+    */*) echo "$1" ;;
+    *) echo "unknown build target: $1" >&2; exit 2 ;;
+  esac
+}
+
+build_targets() {
+  [ "$#" -gt 0 ] || return 0
+  "$proton_custom_make" build TARGETS="$(join_words "$@")"
+}
+
+build_package() {
+  nix build --no-link --print-out-paths --impure --expr \
+    'let flake = builtins.getFlake "git+file:///etc/nixos";
+         pkgs = import flake.inputs.nixpkgs { system = "x86_64-linux"; config.allowUnfree = true; };
+     in pkgs.callPackage /etc/nixos/nix/apps/gaming/proton/custom/package.nix {
+       inherit (pkgs) makeWrapper rsync unzip;
+     }'
+}
+
+mode="${1:-changed}"
+if [ "$mode" = "-h" ] || [ "$mode" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+case "$mode" in
+  changed)
+    targets=()
+    if wine_has_diff include; then
+      add_target "dlls/dcomp/all"
+      add_target "dlls/dxgi/all"
+      add_target "dlls/ntdll/all"
+      add_target "dlls/win32u/all"
+      add_target "dlls/winevulkan/all"
+      add_target "dlls/winewayland.drv/all"
+      add_target "programs/explorer/all"
+    else
+      wine_has_diff dlls/winewayland.drv && add_target "dlls/winewayland.drv/all"
+      wine_has_diff dlls/dcomp && add_target "dlls/dcomp/all"
+      wine_has_diff dlls/dxgi && add_target "dlls/dxgi/all"
+      wine_has_diff dlls/ntdll && add_target "dlls/ntdll/all"
+      wine_has_diff dlls/win32u && add_target "dlls/win32u/all"
+      wine_has_diff dlls/winevulkan && add_target "dlls/winevulkan/all"
+      wine_has_diff programs/explorer && add_target "programs/explorer/all"
+    fi
+
+    if [ "${#targets[@]}" -gt 0 ]; then
+      build_targets "${targets[@]}"
+    else
+      echo "no Wine source diffs detected"
+    fi
+
+    if dxvk_has_diff src; then
+      "$proton_custom_make" dxvk
+    else
+      echo "no DXVK source diffs detected"
+    fi
+    ;;
+  all)
+    "$proton_custom_make" build-all
+    "$proton_custom_make" dxvk
+    ;;
+  wine)
+    "$proton_custom_make" build-all
+    ;;
+  dxvk)
+    "$proton_custom_make" dxvk
+    ;;
+  package)
+    build_package
+    ;;
+  *)
+    targets=()
+    for arg in "$@"; do
+      add_target "$(target_for_name "$arg")"
+    done
+    build_targets "${targets[@]}"
+    ;;
+esac

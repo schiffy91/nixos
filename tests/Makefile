@@ -2,13 +2,15 @@ NIX_SHELL ?= nix-shell
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
 
-.PHONY: help build quick host-smoke app-settings stateful-host aarch64-qemu-host download installer-download install-system immutability-reset installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
+.PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
 	@printf '%s\n' 'VM test targets:'
 	@printf '%s\n' '  make -C tests quick'
 	@printf '%s\n' '  make -C tests app-settings'
 	@printf '%s\n' '  make -C tests stateful-host'
+	@printf '%s\n' '  make -C tests qemu-host'
+	@printf '%s\n' '  make -C tests x86_64-qemu-host'
 	@printf '%s\n' '  make -C tests aarch64-qemu-host'
 	@printf '%s\n' '  make -C tests installer-download'
 	@printf '%s\n' '  make -C tests install-system'
@@ -39,8 +41,14 @@ app-settings: build
 stateful-host: build
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/stateful-host/test.json --arg marker=make-target'
 
+qemu-host: build
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host'
+
+x86_64-qemu-host: build
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host-x86_64'
+
 aarch64-qemu-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run aarch64-qemu-host'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host-aarch64'
 
 download: installer-download
 

@@ -1,0 +1,42 @@
+{
+  "name": "QEMU-host-{{arch}}",
+  "state": "QEMU-host-{{arch}}",
+  "parentState": "quick",
+  "stateMaterial": "QEMU-host:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "require-state" },
+    { "op": "require-uefi" },
+    {
+      "op": "workspace-file",
+      "command": "nix/hosts/{{arch}}/QEMU/QEMU.nix",
+      "expect": "exists"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.pkgs.stdenv.hostPlatform.system",
+      "expect": "{{arch}}-linux"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.networking.hostName",
+      "expect": "QEMU"
+    },
+    {
+      "op": "nix-eval",
+      "command": "diskoConfigurations.QEMU-{{arch}}-Disk-Operation.disko.devices.disk.main.device",
+      "expect": "/dev/vda"
+    },
+    {
+      "op": "nix-eval",
+      "command": "diskoConfigurations.QEMU-{{arch}}-Disk-Operation.disko.devices.disk.main.content.partitions.root.content.type",
+      "expect": "btrfs"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.system.build.toplevel.drvPath",
+      "expect": "nixos-system-QEMU"
+    },
+    { "op": "record-state" }
+  ]
+}

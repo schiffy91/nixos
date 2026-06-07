@@ -1,12 +1,5 @@
-{ lib, mkDiskoSystem }:
-
-{
-  pkgs,
-  hostFile,
-  target,
-}:
+{ lib, mkDiskoSystem }: { pkgs, hostFile, target, name }:
 let
-  name = "${lib.removeSuffix ".nix" (baseNameOf hostFile)}-${target}";
   diskSystem = mkDiskoSystem hostFile target;
   settings = diskSystem.config.settings.disk;
   disk = builtins.getAttr settings.label.main diskSystem.config.disko.devices.disk;

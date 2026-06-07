@@ -15,7 +15,14 @@
       diskOperationTargets = [ "Disk-Operation" ];
       isHostEntry = path: lib.hasSuffix ".nix" path && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
       hostFiles = lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./nix/hosts);
+      hostName = hostFile: lib.removeSuffix ".nix" (baseNameOf hostFile);
       hostSystem = hostFile: "${baseNameOf (dirOf (dirOf hostFile))}-linux";
+      hostArchitecture = hostFile: baseNameOf (dirOf (dirOf hostFile));
+      hostNames = map hostName hostFiles;
+      duplicateHostName = name: (lib.length (lib.filter (candidate: candidate == name) hostNames)) > 1;
+      hostOutputName = hostFile:
+        let name = hostName hostFile;
+        in if duplicateHostName name then "${name}-${hostArchitecture hostFile}" else name;
       systems = lib.unique (map hostSystem hostFiles);
       systemModuleFiles = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./nix/system);
       baseConfig = {
@@ -39,8 +46,7 @@
           }];
         };
       mkNixosSystem = hostFile: target:
-        let
-          name = lib.removeSuffix ".nix" (baseNameOf hostFile);
+        let name = hostOutputName hostFile;
         in {
           name = "${name}-${target}";
           value = mkSystem hostFile target systemModuleFiles;
@@ -48,7 +54,7 @@
       mkDiskoSystem = hostFile: target: mkSystem hostFile target [ ./nix/system/disk.nix ];
       mkDiskoConfiguration = hostFile: target:
         let
-          name = lib.removeSuffix ".nix" (baseNameOf hostFile);
+          name = hostOutputName hostFile;
           nixos = mkDiskoSystem hostFile target;
         in {
           name = "${name}-${target}";
@@ -62,8 +68,6 @@
         let
           pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
           systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
-        in lib.listToAttrs (lib.concatMap
-          (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; }) diskOperationTargets)
-          systemHosts));
+        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts));
     };
 }

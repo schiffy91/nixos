@@ -2,13 +2,28 @@
   "name": "app-settings",
   "state": "app-settings",
   "parentState": "quick",
-  "stateMaterial": "app-settings:source={{sourceHash}}",
+  "stateMaterial": "app-settings:{{arch}}:source={{sourceHash}}",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     { "op": "require-state" },
     {
       "op": "nix-eval",
       "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.dev.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.gaming.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.utils.enable",
       "expect": "true"
     },
     {
@@ -68,8 +83,8 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.QEMU-Standard-Boot.config.settings.apps.enable",
-      "expect": "true"
+      "command": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.settings.apps.enable",
+      "expect": "false"
     },
     { "op": "record-state" }
   ]

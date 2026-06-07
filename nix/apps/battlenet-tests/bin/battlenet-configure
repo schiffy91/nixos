@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-nixos_dir="$(cd "$app_dir/../../../.." && pwd)"
-proton_dir="$nixos_dir/modules/apps/pkg-overrides/proton-custom"
-
-exec "$proton_dir/bin/proton-custom-dev" configure "$@"

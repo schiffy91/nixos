@@ -1,4 +1,4 @@
-{ config, pkgs, lib, host, ... }: lib.mkIf (config.settings.apps.enable && config.settings.apps.steam.enable) {
+{ config, pkgs, lib, host, ... }: lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable) {
   programs.steam = {
     enable = true;
     package = pkgs.steam.override {

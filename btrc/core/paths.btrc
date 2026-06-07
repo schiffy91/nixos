@@ -19,7 +19,7 @@ class NixosPaths {
     }
 
     class string trayIconPathFromEnv() {
-        return Environment.get("NIXOS_TRAY_ICON", "");
+        return Environment.get("NIXOSCTL_TRAY_ICON", Environment.get("NIXOS_TRAY_ICON", ""));
     }
 
     public string configPath() {

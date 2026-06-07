@@ -86,6 +86,12 @@ class VmProvisioner {
             "  settings.users.agent.enable = lib.mkForce false;",
             "  settings.users.agent.homeManager.enable = lib.mkForce false;",
             "  settings.users.agent.packages = lib.mkForce [];",
+            "  settings.apps.dev.enable = false;",
+            "  settings.apps.gaming.enable = false;",
+            "  settings.apps.utils.enable = true;",
+            "  settings.apps.onePassword.enable = false;",
+            "  settings.apps.rclone.enable = false;",
+            "  settings.apps.nixosctl.enable = true;",
             "  settings.networking.identityAgent = \"none\";",
             "  settings.networking.lanSubnet = \"10.0.2.0/24\";",
             "  settings.disk.device = \"/dev/vda\";",
@@ -118,10 +124,6 @@ class VmProvisioner {
         if (secureBootTarget) {
             commands.push(self.writeTextCommand(secureBootModule, secureBootModulePath));
         }
-        commands.push("find /etc/nixos/nix/apps -maxdepth 1 -type f -name '*.nix' ! -name 'nixosctl.nix' -delete");
-        commands.push("find /etc/nixos/nix/apps/home-manager -maxdepth 1 -type f -name '*.nix' -delete 2>/dev/null || true");
-        commands.push("mkdir -p /etc/nixos/nix/apps/home-manager");
-        commands.push("touch /etc/nixos/nix/apps/home-manager/.keep");
         commands.push("mkdir -p /etc/nixos/secrets");
         commands.push(self.writeTextCommand(passwordHash, "/etc/nixos/secrets/hashed_password.txt"));
         commands.push("chmod 600 /etc/nixos/secrets/hashed_password.txt");

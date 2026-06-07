@@ -4,7 +4,7 @@ This repository is the flake-backed NixOS configuration for the machines in
 `nix/hosts`, with local management tooling written in BTRC. System
 management is Nix plus BTRC end to end; there is no Python or Rust in the
 management layer (the only Python left is an x86-gated Sunshine EDID packaging
-helper under `nix/apps/pkg-overrides/`).
+helper under `nix/apps/gaming/`).
 
 ## Current Hosts
 
@@ -12,6 +12,7 @@ helper under `nix/apps/pkg-overrides/`).
 |---|---|---|
 | `FRACTAL-NORTH` | `x86_64-linux` | Main desktop/workstation configuration |
 | `QEMU` | `aarch64-linux` | Declarative ARM guest used for Nix evaluation and VM-oriented testing |
+| `QEMU` | `x86_64-linux` | Declarative x86 guest used for Nix evaluation and VM-oriented testing |
 
 Each host is exposed with bootable NixOS targets and disk-operation disko
 targets:
@@ -26,8 +27,9 @@ Examples:
 
 ```bash
 nix eval .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.toplevel.drvPath
-nix eval .#nixosConfigurations.QEMU-Standard-Boot.config.networking.hostName
-nix eval .#diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.device
+nix eval .#nixosConfigurations.QEMU-aarch64-Standard-Boot.config.networking.hostName
+nix eval .#nixosConfigurations.QEMU-x86_64-Standard-Boot.config.networking.hostName
+nix eval .#diskoConfigurations.QEMU-x86_64-Disk-Operation.disko.devices.disk.main.device
 ```
 
 `Disk-Operation` targets are disko entrypoints, not installed boot targets. They
@@ -43,9 +45,10 @@ matter for real NixOS profiles.
 | `nix/settings.nix` | Central typed settings interface shared across hosts and modules |
 | `nix/system/` | Shared NixOS system modules |
 | `nix/apps/` | Globally imported app and helper modules; each optional app is settings-gated |
-| `nix/apps/pkg-overrides/` | Custom package overrides for Proton, Rocksmith assets, Sunshine, and Battle.net helper tooling |
+| `nix/apps/gaming/` | Custom package overrides for Proton, Rocksmith assets, Sunshine, and Battle.net helper tooling |
 | `nix/hosts/x86_64/FRACTAL-NORTH/` | Main workstation host modules and host-specific data |
 | `nix/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
+| `nix/hosts/x86_64/QEMU/` | x86 QEMU guest host modules |
 | `btrc/system/` | BTRC management CLI entrypoint and system helpers |
 | `btrc/immutability/` | BTRC immutability entrypoint and engine modules |
 | `btrc/btrfs/`, `btrc/core/`, `btrc/desktop/`, `btrc/hardware/`, `btrc/install/` | BTRC support libraries grouped by subsystem |
@@ -91,13 +94,15 @@ Every global app module has a default-on settings switch:
 
 ```nix
 settings.apps.enable = true;
+settings.apps.dev.enable = true;
+settings.apps.gaming.enable = true;
+settings.apps.utils.enable = true;
 settings.apps.agents.enable = true;
 settings.apps.onePassword.enable = true;
 settings.apps.bash.enable = true;
 settings.apps.battlenet.enable = true;
 settings.apps.claude.enable = true;
 settings.apps.codex.enable = true;
-settings.apps.cursor.enable = true;
 settings.apps.git.enable = true;
 settings.apps.nixosctl.enable = true;
 settings.apps.rclone.enable = true;
@@ -246,25 +251,30 @@ and rebuild.
 
 ## Apps And Package Overrides
 
-The app layer is globally imported but policy-gated through `settings.apps`.
+The app layer is recursively imported but policy-gated through
+`settings.apps`. Category gates let lean profiles turn off whole groups:
+`settings.apps.dev.enable`, `settings.apps.gaming.enable`, and
+`settings.apps.utils.enable`.
 
-| Module | Behavior |
+| Path | Behavior |
 |---|---|
-| `1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
-| `bash.nix` | Adds `nix-shell-with-pkgs` helper |
-| `battlenet.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
-| `agents.nix` | Installs shared skills under `~/.agents/skills` for users with Home Manager |
-| `claude.nix` | Symlinks shared skills into Claude's `~/.claude/skills` tree |
-| `codex.nix` | Symlinks shared skills into Codex's `~/.codex/skills` tree without replacing built-in skills |
-| `cursor.nix` | Symlinks the configured cursor theme into user icon paths |
-| `git.nix` | Enables system Git; per-user identities live in Home Manager |
-| `nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
-| `rclone.nix` | Defines a user rclone mount for `~/Drive` |
-| `steam.nix` | Exports Steam tool names and configures installed Steam apps when Steam is enabled |
-| `sunshine.nix` | Overlays the custom Sunshine package on x86_64 and sets runtime library paths when Sunshine is enabled |
-| `vscode.nix` | Installs VSCode from the unstable package set |
+| `dev/agents.nix` | Installs shared skills under `~/.agents/skills` for users with Home Manager |
+| `dev/bash.nix` | Adds `nix-shell-with-pkgs` helper |
+| `dev/claude.nix` | Symlinks shared skills into Claude's `~/.claude/skills` tree |
+| `dev/codex.nix` | Symlinks shared skills into Codex's `~/.codex/skills` tree without replacing built-in skills |
+| `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
+| `dev/vscode.nix` | Installs VSCode from the unstable package set |
+| `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
+| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when Steam is enabled |
+| `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
+| `gaming/steam.nix` | Exports Steam tool names and configures installed Steam apps when Steam is enabled |
+| `gaming/sunshine/default.nix` | Overlays the custom Sunshine package on x86_64 and sets runtime library paths when Sunshine is enabled |
+| `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
+| `utils/nixosctl/nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
+| `utils/nixosctl/nixosctl-tray.nix` | Packages the BTRC tray GUI for `nixosctl` |
+| `utils/rclone.nix` | Defines a user rclone mount for `~/Drive` |
 
-The custom Proton tree under `nix/apps/pkg-overrides/proton-custom` is a
+The custom Proton tree under `nix/apps/gaming/proton/custom` is a
 large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that
 area focused and avoid broad formatting churn; its local README has the
 development loop.
@@ -306,10 +316,10 @@ sudo build/nixosctl secure-boot status
 sudo build/nixosctl tpm2 status
 ```
 
-On installed hosts the CLI is packaged as `nixosctl` (see `nix/apps/nixosctl.nix`)
+On installed hosts the CLI is packaged as `nixosctl` (see `nix/apps/utils/nixosctl/nixosctl.nix`)
 and is on `PATH`. The native system tray (macOS menu bar / Linux Wayland
 StatusNotifierItem) is implemented in the BTRC stdlib and packaged by
-`nix/apps/nixos-tray.nix`.
+`nix/apps/utils/nixosctl/nixosctl-tray.nix`.
 
 ## E2E VM Testing
 
@@ -332,7 +342,7 @@ Useful test targets:
 ```bash
 make -C tests quick
 make -C tests app-settings
-make -C tests aarch64-qemu-host
+make -C tests qemu-host
 make -C tests graph-coverage
 make -C tests installer-download
 make -C tests installer-ssh
@@ -364,11 +374,12 @@ Recommended loop:
 ```bash
 git status --short
 nix eval .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
-nix eval .#nixosConfigurations.QEMU-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
+nix eval .#nixosConfigurations.QEMU-aarch64-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
+nix eval .#nixosConfigurations.QEMU-x86_64-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
 make build
 make -C tests graph-coverage
 make -C tests app-settings
-make -C tests aarch64-qemu-host
+make -C tests qemu-host
 ```
 
 For all flake outputs:
@@ -380,8 +391,8 @@ nix flake check --all-systems --no-build --show-trace
 For disk-only targets, evaluate disk attributes directly:
 
 ```bash
-nix eval .#diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.device --show-trace
-nix eval .#diskoConfigurations.QEMU-Disk-Operation.disko.devices.disk.main.content.partitions.root.content.type --show-trace
+nix eval .#diskoConfigurations.QEMU-aarch64-Disk-Operation.disko.devices.disk.main.device --show-trace
+nix eval .#diskoConfigurations.QEMU-x86_64-Disk-Operation.disko.devices.disk.main.content.partitions.root.content.type --show-trace
 ```
 
 For Nix linting:
@@ -430,7 +441,7 @@ The migration to BTRC is complete. Current state:
 1. Prefer `settings.*` for host policy.
 2. Keep architecture-specific behavior as capability gates, not broad host-level removal.
 3. Keep app installs under `settings.apps.*`.
-4. Keep QEMU-specific aarch64 assumptions inside `nix/hosts/aarch64/QEMU`.
+4. Keep QEMU architecture assumptions inside the matching `nix/hosts/<arch>/QEMU`.
 5. Do not add tests that only assert that broken or unimplemented behavior is absent.
 6. Add positive tests for expected behavior.
 7. Run at least the BTRC build and relevant graph node after touching BTRC or VM test code.

@@ -2,6 +2,8 @@
 let
   primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
   primaryScale = if primary == null then 1.0 else primary.scaleFactor;
+  user = config.settings.users.admin.username;
+  cursorPath = config.settings.desktop.cursor.path;
 in lib.mkIf config.settings.desktop.enable {
   # Backport of KDE MR !8293 (HDR screencast support) to KWin 6.6.5.
   # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
@@ -60,6 +62,12 @@ in lib.mkIf config.settings.desktop.enable {
       print-manager
     ];
   };
+  system.activationScripts.cursorIcons = lib.stringAfter [ "users" ] ''
+    ${pkgs.coreutils}/bin/install -d -o ${user} /home/${user}/.icons /home/${user}/.local/share/icons
+    ${pkgs.coreutils}/bin/ln -sfn ${cursorPath} /home/${user}/.icons/default
+    ${pkgs.coreutils}/bin/ln -sfn ${cursorPath} /home/${user}/.local/share/icons/default
+    ${pkgs.coreutils}/bin/chown -h ${user} /home/${user}/.icons/default /home/${user}/.local/share/icons/default
+  '';
   security.pam.services.sddm.enableKwallet = config.settings.users.admin.autoUnlockWallet.enabled;
   security.pam.services.passwd.enableKwallet = config.settings.users.admin.autoUnlockWallet.enabled;  # pam_kwallet hooks chauthtok → wallet re-encrypts on passwd
 }

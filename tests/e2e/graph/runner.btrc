@@ -227,6 +227,17 @@ class VmGraphRunner {
         return result;
     }
 
+    public Vector<string> hostDefaultTargets() {
+        Vector<string> result = [];
+        for target in self.graph.defaultTargets() {
+            if (self.architectureTarget(target) && !self.hostArchitectureTarget(target)) {
+                continue;
+            }
+            result.push(target);
+        }
+        return result;
+    }
+
     public Vector<string> resolveHostTargets(Vector<string> targets) {
         Vector<string> result = [];
         for target in targets {
@@ -237,7 +248,8 @@ class VmGraphRunner {
 
     public int run(Vector<string> targets) {
         var traversal = GraphTraversal(self.graph);
-        var order = traversal.order(self.resolveHostTargets(targets));
+        var selected = targets.isEmpty() ? self.hostDefaultTargets() : self.resolveHostTargets(targets);
+        var order = traversal.order(selected);
         if (!traversal.ok()) {
             NixosLog.fatal(traversal.error);
         }
