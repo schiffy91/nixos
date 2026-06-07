@@ -38,6 +38,7 @@ let
             "console=tty0"
             "nomodeset"
             "module_blacklist=amdgpu,nouveau"
+            "usbcore.initial_descriptor_timeout=1000"
             "systemd.show_status=1"
             "rd.systemd.show_status=1"
           ];
