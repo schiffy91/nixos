@@ -297,7 +297,7 @@ pinned in `flake.lock` to `github:schiffy91/btrc`. The dev shell provides
 | `btrc/nixosctl/desktop` | Audio, display, caffeine, and hardware config commands |
 | `btrc/nixosctl/hardware` | Secure Boot and TPM2 commands |
 | `btrc/immutability/immutability.btrc` | BTRC entrypoint for the immutability runtime |
-| `btrc/immutability/engine` | Immutability runtime modules |
+| `btrc/immutability/lib` | Immutability runtime library modules |
 | `btrc/core` | Shared logging, path, and interactive helpers |
 | `tests/e2e` | Declarative VM graph and test runner |
 

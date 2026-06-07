@@ -4,17 +4,17 @@ import std.fs;
 import std.platform;
 import std.vector;
 import ../core/log.btrc;
-import ./engine/btrfs.btrc;
-import ./engine/config.btrc;
-import ./engine/constants.btrc;
-import ./engine/fs.btrc;
-import ./engine/mounts.btrc;
-import ./engine/orphans.btrc;
-import ./engine/paths.btrc;
-import ./engine/planner.btrc;
-import ./engine/run.btrc;
-import ./engine/slots.btrc;
-import ./engine/types.btrc;
+import ./lib/btrfs.btrc;
+import ./lib/config.btrc;
+import ./lib/constants.btrc;
+import ./lib/fs.btrc;
+import ./lib/mounts.btrc;
+import ./lib/orphans.btrc;
+import ./lib/paths.btrc;
+import ./lib/planner.btrc;
+import ./lib/run.btrc;
+import ./lib/slots.btrc;
+import ./lib/types.btrc;
 
 class Immutability {
     public ImmutabilityRun run;
