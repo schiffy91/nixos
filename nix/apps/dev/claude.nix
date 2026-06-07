@@ -1,10 +1,16 @@
 { config, lib, ... }:
 let
+  skillNames = [ "nixos-init" "taste" ];
+
+  mkSkillFile = homeConfig: name:
+    lib.nameValuePair ".claude/skills/${name}" {
+      source = homeConfig.lib.file.mkOutOfStoreSymlink "${homeConfig.home.homeDirectory}/.agents/skills/${name}";
+    };
+
   mkHomeFiles = user:
     lib.mkIf user.homeManager.enable {
-      home-manager.users.${user.username} = { config, ... }: {
-        home.file.".claude/skills/nixos-init".source =
-          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/skills/nixos-init";
+      home-manager.users.${user.username} = homeConfig: {
+        home.file = lib.listToAttrs (map (mkSkillFile homeConfig) skillNames);
       };
     };
 in
