@@ -37,10 +37,10 @@ let
             "console=${serialConsole}"
             "console=tty0"
             "nomodeset"
+            "module_blacklist=amdgpu,nouveau"
             "systemd.show_status=1"
             "rd.systemd.show_status=1"
           ];
-          blacklistedKernelModules = [ "amdgpu" "nouveau" ];
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
         };
 
