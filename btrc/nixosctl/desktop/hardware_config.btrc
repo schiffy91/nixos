@@ -1,7 +1,7 @@
 import std.io;
 import std.toml;
 import std.vector;
-import ../core/paths.btrc;
+import ../../core/paths.btrc;
 
 class DisplayLayoutRule {
     public string display;

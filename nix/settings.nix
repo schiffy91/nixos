@@ -261,12 +261,6 @@ in {
     settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.onePassword.enable = mkSetting bool true;
 
-    # Link the BTRC binaries (immutability, nixosctl, tray) against the stdlib
-    # compiled once into a static archive (nix/system/btrc.nix), instead of
-    # re-compiling the whole stdlib inlined into each. Static either way, so the
-    # initrd immutability stays self-contained. Off = build the stdlib into each
-    # binary (no shared archive).
-    settings.btrc.prebuiltStdlib.enable = mkSetting bool true;
     settings.apps.rclone.enable = mkSetting bool true;
     settings.apps.rocksmith.enable = mkSetting bool true;
     settings.apps.steam.enable = mkSetting bool true;

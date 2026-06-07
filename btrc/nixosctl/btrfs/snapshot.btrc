@@ -3,8 +3,8 @@ import std.platform;
 import std.process;
 import std.strings;
 import std.vector;
-import ../core/log.btrc;
-import ../system/config.btrc;
+import ../../core/log.btrc;
+import ../config.btrc;
 
 class ResetSubvolume {
     public string name;

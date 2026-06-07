@@ -1,11 +1,18 @@
-{ pkgs, config, lib, buildBtrcProgram, ... }:
+{ pkgs, config, lib, inputs, ... }:
 let
-  nixosctlBin = buildBtrcProgram {
+  btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
+  nixosctlBin = pkgs.stdenv.mkDerivation {
     name = "nixosctl";
-    entry = "btrc/system/nixosctl.btrc";
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    extraLibs = [ "-lm" "-lpthread" "-lutil" ];
-    extraInstall = ''
+    src = ../../../..;
+    nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
+    dontConfigure = true;
+    buildPhase = ''
+      btrcpy --strict-imports btrc/nixosctl/nixosctl.btrc -o nixosctl.c
+      $CC -std=c11 -O2 nixosctl.c -lm -lpthread -lutil -o nixosctl
+    '';
+    installPhase = ''
+      mkdir -p $out/bin
+      cp nixosctl $out/bin/nixosctl
       wrapProgram $out/bin/nixosctl \
         ${lib.optionalString (config.settings.nixosctl.configPath != "")
           "--set NIXOS_CONFIG ${lib.escapeShellArg config.settings.nixosctl.configPath}"} \

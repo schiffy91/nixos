@@ -5,9 +5,9 @@ import std.pattern;
 import std.process;
 import std.strings;
 import std.vector;
-import ../core/log.btrc;
+import ../../core/log.btrc;
 import ./snapshot.btrc;
-import ../system/config.btrc;
+import ../config.btrc;
 
 class DiffOptions {
     public bool recent;
@@ -250,7 +250,7 @@ class DiffScanner {
     public void print(DiffOptions options) {
         var keepList = self.keepPaths();
         var mounts = self.mountPoints();
-        var ignorePath = options.diffignore.isEmpty() ? PathTools.join(self.config.paths.root, "btrc/btrfs/.diffignore") : options.diffignore;
+        var ignorePath = options.diffignore.isEmpty() ? PathTools.join(self.config.paths.root, "btrc/nixosctl/btrfs/.diffignore") : options.diffignore;
         var ignores = self.ignorePatterns(ignorePath);
         Vector<string> ephemeral = [];
         Vector<string> persistedPaths = [];

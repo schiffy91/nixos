@@ -1,15 +1,21 @@
-{ pkgs, config, lib, inputs, buildBtrcProgram, ... }:
+{ pkgs, config, lib, inputs, ... }:
 let
+  btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
   trayDir = "${inputs.btrc}/src/stdlib/tray";
-  nixosctlTrayBin = buildBtrcProgram {
+  nixosctlTrayBin = pkgs.stdenv.mkDerivation {
     name = "nixosctl-tray";
-    entry = "btrc/desktop/nixosctl-tray.btrc";
-    nativeBuildInputs = [ pkgs.pkg-config pkgs.makeWrapper ];
+    src = ../../../..;
+    nativeBuildInputs = [ btrcpy pkgs.pkg-config pkgs.makeWrapper ];
     buildInputs = [ pkgs.dbus ];
-    extraCFlags = [ "-I${trayDir}" ];
-    extraCInputs = [ "${trayDir}/btrc_tray_linux.c" ];
-    extraLibs = [ "$(pkg-config --cflags --libs dbus-1)" "-lm" "-lpthread" ];
-    extraInstall = ''
+    dontConfigure = true;
+    buildPhase = ''
+      btrcpy --strict-imports btrc/nixosctl/tray.btrc -o nixosctl-tray.c
+      $CC -std=c11 -O2 -I${trayDir} nixosctl-tray.c ${trayDir}/btrc_tray_linux.c \
+        $(pkg-config --cflags --libs dbus-1) -lm -lpthread -o nixosctl-tray
+    '';
+    installPhase = ''
+      mkdir -p $out/bin
+      cp nixosctl-tray $out/bin/nixosctl-tray
       install -Dm644 ${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg \
         $out/share/icons/hicolor/scalable/apps/nixosctl-tray.svg
       install -Dm644 ${pkgs.nixos-icons}/share/icons/hicolor/256x256/apps/nix-snowflake.png \

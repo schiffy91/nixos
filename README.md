@@ -41,7 +41,8 @@ matter for real NixOS profiles.
 
 | Path | Purpose |
 |---|---|
-| `flake.nix` | Host discovery, `nixosConfigurations`, and the pinned BTRC compiler input |
+| `flake.nix` | Host discovery, bootable targets, disko targets, and the pinned BTRC compiler input |
+| `shell.nix` | Direnv-friendly dev shell with `btrcpy`, `btrc-lsp`, Nix tooling, Git, and a C toolchain |
 | `nix/settings.nix` | Central typed settings interface shared across hosts and modules |
 | `nix/system/` | Shared NixOS system modules |
 | `nix/apps/` | Globally imported app and helper modules; each optional app is settings-gated |
@@ -49,12 +50,11 @@ matter for real NixOS profiles.
 | `nix/hosts/x86_64/FRACTAL-NORTH/` | Main workstation host modules and host-specific data |
 | `nix/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
 | `nix/hosts/x86_64/QEMU/` | x86 QEMU guest host modules |
-| `btrc/system/` | BTRC management CLI entrypoint and system helpers |
+| `btrc/nixosctl/` | BTRC management CLI, tray entrypoint, and `nixosctl` feature modules |
 | `btrc/immutability/` | BTRC immutability entrypoint and engine modules |
-| `btrc/btrfs/`, `btrc/core/`, `btrc/desktop/`, `btrc/hardware/`, `btrc/install/` | BTRC support libraries grouped by subsystem |
+| `btrc/core/` | Shared BTRC helpers used by `nixosctl`, tests, and immutability |
 | `build/` | Gitignored local compiler intermediates and binaries |
-| `inputs.btrc` | Flake-provided BTRC compiler and precompiled stdlib archive source |
-| `tests/` | Declarative VM e2e graph and per-scenario specs |
+| `tests/` | Declarative VM e2e graph, per-scenario specs, and flake checks |
 | `Makefile` | Root build/test contract (`make build`, `make check`, `make -C tests graph-*`) |
 
 Host discovery is convention-based:
@@ -258,12 +258,12 @@ The app layer is recursively imported but policy-gated through
 
 | Path | Behavior |
 |---|---|
-| `dev/agents.nix` | Installs shared skills under `~/.agents/skills` for users with Home Manager |
+| `dev/agents.nix` | Installs shared skills from `nix/apps/dev/agents/skills` under `~/.agents/skills` |
 | `dev/bash.nix` | Adds `nix-shell-with-pkgs` helper |
 | `dev/claude.nix` | Symlinks shared skills into Claude's `~/.claude/skills` tree |
 | `dev/codex.nix` | Symlinks shared skills into Codex's `~/.codex/skills` tree without replacing built-in skills |
 | `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
-| `dev/vscode.nix` | Installs VSCode from the unstable package set |
+| `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-pinned BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when Steam is enabled |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
@@ -284,17 +284,21 @@ explicitly out of scope for the BTRC rewrite.
 
 ## BTRC Management Layer
 
-The management tooling is BTRC at the repository root. The compiler is consumed
-through the flake input `inputs.btrc`, pinned in `flake.lock` to
-`github:schiffy91/btrc`. The dev shell provides `btrcpy`; local and Nix builds
-compile with `--strict-imports` against a generated stdlib archive.
+The management tooling is BTRC at the repository root. The compiler, language
+server, and VSCode extension are consumed through the flake input `inputs.btrc`,
+pinned in `flake.lock` to `github:schiffy91/btrc`. The dev shell provides
+`btrcpy` and `btrc-lsp`; local and Nix builds compile with `--strict-imports`.
 
 | Path | Purpose |
 |---|---|
-| `btrc/system/nixosctl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
+| `btrc/nixosctl/nixosctl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
+| `btrc/nixosctl/tray.btrc` | Tray launcher for `nixosctl` |
+| `btrc/nixosctl/btrfs` | Snapshot and diff helpers for `nixosctl` |
+| `btrc/nixosctl/desktop` | Audio, display, caffeine, and hardware config commands |
+| `btrc/nixosctl/hardware` | Secure Boot and TPM2 commands |
 | `btrc/immutability/immutability.btrc` | BTRC entrypoint for the immutability runtime |
-| `btrc/btrfs` | Snapshot and diff helpers |
-| `btrc/immutability` | Immutability |
+| `btrc/immutability/engine` | Immutability runtime modules |
+| `btrc/core` | Shared logging, path, and interactive helpers |
 | `tests/e2e` | Declarative VM graph and test runner |
 
 Build from the repo root:
@@ -351,7 +355,8 @@ make -C tests graph-full
 
 Immutability/CLI scenario nodes: `immutability-reset`, `immutability-disabled`,
 `immutability-snapshot-only`, `immutability-restore`, `immutability-orphan`,
-`immutability-files`, `immutability-onupdate`, `nixosctl-cli`, `nixosctl-diff`.
+`immutability-nonexistent-persist`, `immutability-persist-owners`,
+`immutability-files`, `nixosctl-cli`, `nixosctl-diff`.
 Hardware nodes: `tpm2-probe`, `tpm2-enroll` (LUKS TPM2 enroll/wipe on an
 encrypted install), `secure-boot-aarch64` (full Lanzaboote Secure Boot on
 aarch64 under HVF — install, sign, auto-enroll keys, then `bootctl status` →
@@ -432,7 +437,7 @@ The migration to BTRC is complete. Current state:
 | Audio/display/caffeine/system helper backends | BTRC |
 | TPM2 and Secure Boot helpers | BTRC with VM capability coverage |
 | Immutability | BTRC source compiled by the flake-pinned compiler |
-| Native system tray | Implemented in BTRC stdlib (`../btrc`); helper wiring pending publish |
+| Native system tray | Implemented through the BTRC stdlib tray backend and packaged as `nixosctl-tray` |
 | VFIO | Removed for now |
 | Python / Rust | Removed (only an x86-gated Sunshine EDID packaging helper remains) |
 

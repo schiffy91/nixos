@@ -1,10 +1,10 @@
 { config, lib, ... }:
 let
-  skillNames = [ "nixos-init" "taste" ];
+  skillNames = [ "engineering-decomposition" "nixos-init" "taste" ];
 
   mkSkillFile = homeConfig: name:
     lib.nameValuePair ".codex/skills/${name}" {
-      source = homeConfig.lib.file.mkOutOfStoreSymlink "${homeConfig.home.homeDirectory}/.agents/skills/${name}";
+      source = homeConfig.config.lib.file.mkOutOfStoreSymlink "${homeConfig.config.home.homeDirectory}/.agents/skills/${name}";
     };
 
   mkHomeFiles = user:

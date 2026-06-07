@@ -14,7 +14,7 @@ in lib.mkIf config.settings.desktop.enable {
     (_final: prev: {
       kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
         kwin = kdePrev.kwin.overrideAttrs (old: {
-          patches = (old.patches or []) ++ [ ./pkg-overrides/kwin/hdr-screencast.patch ];
+          patches = (old.patches or []) ++ [ ./kwin/hdr-screencast.patch ];
         });
       });
     })

@@ -3,7 +3,7 @@ let
   lock = builtins.fromJSON (builtins.readFile ./flake.lock);
   lockedSource = name:
     let node = lock.nodes.${name}.locked;
-    in builtins.fetchTree {
+    in fetchTree {
       inherit (node) type owner repo rev narHash;
     };
   pkgs = import (lockedSource "nixpkgs") {

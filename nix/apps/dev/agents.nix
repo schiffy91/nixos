@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   skills = {
+    engineering-decomposition = ./agents/skills/engineering-decomposition;
     nixos-init = ./agents/skills/nixos-init;
     taste = ./agents/skills/taste;
   };

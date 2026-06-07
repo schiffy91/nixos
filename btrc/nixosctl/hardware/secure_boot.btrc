@@ -2,10 +2,10 @@ import std.fs;
 import std.json;
 import std.process;
 import std.vector;
-import ../core/interactive.btrc;
-import ../core/log.btrc;
-import ../system/config.btrc;
-import ../system/rebuild.btrc;
+import ../../core/interactive.btrc;
+import ../../core/log.btrc;
+import ../config.btrc;
+import ../rebuild.btrc;
 
 class SecureBootManager {
     public NixosConfig config;

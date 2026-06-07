@@ -1,14 +1,14 @@
 import std.fs;
 import std.process;
-import ../btrfs/snapshot.btrc;
+import ./btrfs/snapshot.btrc;
 import ../core/interactive.btrc;
 import ../core/log.btrc;
-import ../system/config.btrc;
-import ../system/secrets.btrc;
-import ../system/permissions.btrc;
-import ../system/rebuild.btrc;
-import ../hardware/secure_boot.btrc;
-import ../hardware/tpm2.btrc;
+import ./config.btrc;
+import ./secrets.btrc;
+import ./permissions.btrc;
+import ./rebuild.btrc;
+import ./hardware/secure_boot.btrc;
+import ./hardware/tpm2.btrc;
 
 class Installer {
     public NixosConfig config;

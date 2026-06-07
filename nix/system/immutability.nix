@@ -1,4 +1,4 @@
-{ config, lib, pkgs, utils, buildBtrcProgram, ... }:
+{ config, inputs, lib, pkgs, utils, ... }:
 let
 	device = if config.settings.disk.encryption.enable then config.settings.disk.by.mapper.root else config.settings.disk.by.partlabel.root;
 	deviceDependency = if config.settings.disk.encryption.enable then "dev-mapper-${config.settings.disk.label.root}.device" else "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
@@ -44,10 +44,20 @@ let
 		) resetVolumes;
 	};
 
-	immutabilityBin = buildBtrcProgram {
+	btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
+	immutabilityBin = pkgs.stdenv.mkDerivation {
 		name = "immutability";
-		entry = "btrc/immutability/immutability.btrc";
-		extraLibs = [ "-lm" "-lpthread" ];
+		src = ../..;
+		nativeBuildInputs = [ btrcpy ];
+		dontConfigure = true;
+		buildPhase = ''
+			btrcpy --strict-imports btrc/immutability/immutability.btrc -o immutability.c
+			$CC -std=c11 -O2 immutability.c -lm -lpthread -o immutability
+		'';
+		installPhase = ''
+			mkdir -p $out/bin
+			cp immutability $out/bin/immutability
+		'';
 	};
 
 in

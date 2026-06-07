@@ -60,7 +60,7 @@
           name = "${name}-${target}";
           value.disko.devices = nixos.config.disko.devices;
         };
-      mkDiskoCheck = import ./nix/checks/disko.nix { inherit lib mkDiskoSystem; };
+      mkDiskoCheck = import ./tests/checks/disko_contract.nix { inherit lib mkDiskoSystem; };
     in {
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
