@@ -167,7 +167,7 @@ in {
       "${adminHome}/.config/kwalletrc"
       "${adminHome}/.config/kwinoutputconfig.json"
       "${adminHome}/.config/kwinrc"
-      "${adminHome}/.config/menu"
+      "${adminHome}/.config/menus"
       "${adminHome}/.config/plasma-org.kde.plasma.desktop-appletsrc"
       "${adminHome}/.config/plasmashellrc"
       "${adminHome}/.config/QtProject.conf"
