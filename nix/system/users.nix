@@ -71,6 +71,7 @@ in {
               name = admin.publicName;
               email = admin.publicEmail;
             };
+            url."git@github.com:".insteadOf = "https://github.com/";
             gpg.format = "openpgp";
           };
         };
