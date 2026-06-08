@@ -5,6 +5,23 @@ let
   mountPoint = "${home}/Drive";
   remote = "gdrive:";
   configFile = "${home}/.config/rclone/rclone.conf";
+  fusermount3 = "/run/wrappers/bin/fusermount3";
+  prepareMount = pkgs.writeShellScript "rclone-drive-prepare" ''
+    set -eu
+
+    # A failed rclone stop can leave a stale FUSE endpoint that makes mkdir/stat
+    # report "Transport endpoint is not connected" during the next activation.
+    if ! ${pkgs.coreutils}/bin/stat ${lib.escapeShellArg mountPoint} >/dev/null 2>&1; then
+      ${fusermount3} -uz ${lib.escapeShellArg mountPoint} >/dev/null 2>&1 || true
+    fi
+
+    ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg mountPoint}
+  '';
+  cleanupMount = pkgs.writeShellScript "rclone-drive-cleanup" ''
+    set -eu
+
+    ${fusermount3} -uz ${lib.escapeShellArg mountPoint} >/dev/null 2>&1 || true
+  '';
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.rclone.enable) {
   users.users.${user}.packages = [ pkgs.rclone ];
 
@@ -18,7 +35,7 @@ in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable &&
     environment.PATH = lib.mkForce "/run/wrappers/bin"; # need setuid fusermount3
     serviceConfig = {
       Type = "notify";
-      ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p ${mountPoint}";
+      ExecStartPre = "${prepareMount}";
       ExecStart = ''
         ${pkgs.rclone}/bin/rclone mount ${remote} ${mountPoint} \
           --config ${configFile} \
@@ -27,7 +44,8 @@ in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable &&
           --dir-cache-time 1h \
           --umask 0022
       '';
-      ExecStop = "${pkgs.fuse}/bin/fusermount -u ${mountPoint}";
+      ExecStop = "${cleanupMount}";
+      ExecStopPost = "${cleanupMount}";
       Restart = "on-failure";
       RestartSec = 10;
     };
