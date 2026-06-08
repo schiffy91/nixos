@@ -72,10 +72,10 @@ in {
       inherit (disk) device;
       encryption.enable = true;
       recovery.enable = true;
-      immutability.enable = false;
+      immutability.enable = true;
       swap.size = disk.swapSize;
     };
-    users.mutable = true;
+    users.mutable = false;
     tpm.device = tpm.device;
     desktop.outputs = [{
       name        = display.primary.name;
