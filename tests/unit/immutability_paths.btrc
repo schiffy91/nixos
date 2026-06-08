@@ -1,0 +1,49 @@
+#include <assert.h>
+#include <string.h>
+
+import std.io;
+import ../../btrc/immutability/lib/config.btrc;
+import ../../btrc/immutability/lib/paths.btrc;
+
+void expectKey(string path, string key) {
+    var actual = ImmutabilityPaths.key(path);
+    assert(strcmp(actual, key) == 0);
+    assert(strcmp(ImmutabilityPaths.pathFromKey(actual), path) == 0);
+    assert(strcmp(ImmutabilityPaths.normAbs(path).path, path) == 0);
+}
+
+int main() {
+    expectKey("/etc/nixos", "etc!nixos");
+    expectKey("/etc/foo!bar", "etc!foo%21bar");
+    expectKey("/etc/foo%21bar", "etc!foo%2521bar");
+    expectKey("/etc/foo%2521bar", "etc!foo%252521bar");
+    expectKey("/etc/foo%%21bar", "etc!foo%25%2521bar");
+    expectKey("/etc/foo\"quote", "etc!foo%22quote");
+    expectKey("/etc/foo\\backslash", "etc!foo%5Cbackslash");
+    expectKey("/home/alex/name with spaces", "home!alex!name%20with%20spaces");
+    expectKey("/home/alex/tab\tname", "home!alex!tab%09name");
+    expectKey("/home/alex/new\nline", "home!alex!new%0Aline");
+
+    var specFile = "/tmp/immutability_paths_spec.toml";
+    Path.writeAll(
+        specFile,
+        "[[keep]]\n" +
+        "kind = \"auto\"\n" +
+        "mountPoint = \"/\"\n" +
+        "path = \"/opt/foo\\\"quote\"\n" +
+        "volume = \"@root\"\n" +
+        "\n" +
+        "[[keep]]\n" +
+        "kind = \"auto\"\n" +
+        "mountPoint = \"/\"\n" +
+        "path = \"/opt/foo\\\\backslash\"\n" +
+        "volume = \"@root\"\n"
+    );
+    var specs = ImmutabilityConfig.readSpecs(specFile);
+    assert(specs.len == 2);
+    assert(strcmp(specs.get(0).absPath, "/opt/foo\"quote") == 0);
+    assert(strcmp(specs.get(1).absPath, "/opt/foo\\backslash") == 0);
+
+    print("PASS: immutability_paths");
+    return 0;
+}

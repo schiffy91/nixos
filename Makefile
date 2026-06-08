@@ -23,11 +23,14 @@ NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
 IMMUTABILITY_C_OUT := $(BUILD_DIR)/immutability.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
 IMMUTABILITY_BIN := $(BUILD_DIR)/immutability
+IMMUTABILITY_PATHS_TEST_ENTRY := tests/unit/immutability_paths.btrc
+IMMUTABILITY_PATHS_TEST_C_OUT := $(BUILD_DIR)/immutability_paths_test.c
+IMMUTABILITY_PATHS_TEST_BIN := $(BUILD_DIR)/immutability_paths_test
 BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN)
-SOURCES := $(shell find btrc tests/e2e -name '*.btrc' | sort)
+SOURCES := $(shell find btrc tests/e2e tests/unit -name '*.btrc' | sort)
 
-.PHONY: all transpile build-stdlib build check quick smoke test host-smoke app-settings stateful-host aarch64-qemu-host installer-download install-system immutability-reset installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
+.PHONY: all transpile build-stdlib build unit check quick smoke test host-smoke app-settings stateful-host aarch64-qemu-host installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
 
 all: build
 
@@ -59,6 +62,9 @@ $(NIXOSCTL_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_C_OUT)"
 
+$(IMMUTABILITY_PATHS_TEST_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)"
+
 build: $(BINS)
 
 $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
@@ -67,7 +73,13 @@ $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
 $(IMMUTABILITY_BIN): $(IMMUTABILITY_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_BIN)" $(IMMUTABILITY_LIBS)
 
-quick: $(BIN)
+$(IMMUTABILITY_PATHS_TEST_BIN): $(IMMUTABILITY_PATHS_TEST_C_OUT) $(STDLIB_LIB)
+	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_BIN)" $(IMMUTABILITY_LIBS)
+
+unit: $(IMMUTABILITY_PATHS_TEST_BIN)
+	./$(IMMUTABILITY_PATHS_TEST_BIN)
+
+quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
 	printf '%s\n' "$$output"; \
 	test $$status -eq 1; \
@@ -97,6 +109,9 @@ install-system: $(BIN)
 
 immutability-reset: $(BIN)
 	$(MAKE) -C tests immutability-reset
+
+immutability-key-encoding: $(BIN)
+	$(MAKE) -C tests immutability-key-encoding
 
 installer-ssh installer-ssh-smoke: $(BIN)
 	$(MAKE) -C tests installer-ssh

@@ -23,7 +23,6 @@ class ImmutabilityPaths {
 
     class bool validRel(string path) {
         if (path.isEmpty()) { return false; }
-        if (path.contains("\t") || path.contains("!")) { return false; }
         for part in Strings.split(path, "/") {
             if (part.isEmpty() || part.equals(".") || part.equals("..")) { return false; }
         }
@@ -91,9 +90,84 @@ class ImmutabilityPaths {
         return child.startsWith(prefix);
     }
 
+    class bool keyUnreserved(char current) {
+        if (current >= 'A' && current <= 'Z') { return true; }
+        if (current >= 'a' && current <= 'z') { return true; }
+        if (current >= '0' && current <= '9') { return true; }
+        return current == '-' || current == '.' || current == '_' || current == '~';
+    }
+
+    class string keyHexDigit(int value) {
+        return "0123456789ABCDEF".substring(value, 1);
+    }
+
+    class string keyEscape(char current) {
+        var value = (int)current;
+        if (value < 0) { value += 256; }
+        return "%" + ImmutabilityPaths.keyHexDigit(value / 16) + ImmutabilityPaths.keyHexDigit(value % 16);
+    }
+
     class string key(string absPath) {
         var rel = absPath.substring(1, absPath.len() - 1);
-        return Strings.replace(rel, "/", "!");
+        var result = "";
+        for index in range(rel.len()) {
+            char current = rel[index];
+            if (current == '/') {
+                result += "!";
+            } else if (ImmutabilityPaths.keyUnreserved(current)) {
+                result += rel.substring(index, 1);
+            } else {
+                result += ImmutabilityPaths.keyEscape(current);
+            }
+        }
+        return result;
+    }
+
+    class int keyHexValue(char current) {
+        if (current >= '0' && current <= '9') { return (int)current - (int)'0'; }
+        if (current >= 'A' && current <= 'F') { return (int)current - (int)'A' + 10; }
+        if (current >= 'a' && current <= 'f') { return (int)current - (int)'a' + 10; }
+        return -1;
+    }
+
+    class string keyByte(int value) {
+        char* result = (char*)malloc(2);
+        result[0] = (char)value;
+        result[1] = '\0';
+        return result;
+    }
+
+    class string pathFromKey(string key) {
+        var result = "/";
+        var index = 0;
+        while (index < key.len()) {
+            var current = key.substring(index, 1);
+            if (current.equals("!")) {
+                result += "/";
+                index++;
+                continue;
+            }
+            if (current.equals("%")) {
+                if (index + 3 > key.len()) {
+                    NixosLog.fatal(f"bad persist key: {key}");
+                }
+                var high = ImmutabilityPaths.keyHexValue(key[index + 1]);
+                var low = ImmutabilityPaths.keyHexValue(key[index + 2]);
+                if (high < 0 || low < 0) {
+                    NixosLog.fatal(f"bad persist key: {key}");
+                }
+                var value = high * 16 + low;
+                if (value == 0 || value == (int)'/') {
+                    NixosLog.fatal(f"bad persist key: {key}");
+                }
+                result += ImmutabilityPaths.keyByte(value);
+                index += 3;
+                continue;
+            }
+            result += current;
+            index++;
+        }
+        return result;
     }
 
     class string dirStore(string persistRoot, string absPath) {

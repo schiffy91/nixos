@@ -27,7 +27,7 @@ let
         !(builtins.any (other: path == other.mountPoint || lib.hasPrefix (other.mountPoint + "/") path) otherMounts)
       else path == mountPoint || lib.hasPrefix (mountPoint + "/") path
     ) (map trimPath config.settings.disk.immutability.persist.paths);
-  persistKey = path: lib.replaceStrings [ "/" ] [ "!" ] (lib.removePrefix "/" path);
+  persistKey = import ../lib/immutability-key.nix { inherit lib; };
   persistMounts = lib.concatMap (volume:
     map (path: {
       inherit path;

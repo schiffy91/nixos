@@ -97,7 +97,7 @@ class SshClient {
     public void copyWorkspace(string localPath, string remotePath) {
         var source = localPath.isEmpty() ? ".." : localPath;
         var target = remotePath.isEmpty() ? "/etc/nixos" : remotePath;
-        var remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - -C " + UnixShell.quote(target);
+        var remote = "mkdir -p " + UnixShell.quote(target) + " && tar xzf - --no-same-owner -C " + UnixShell.quote(target);
         var tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude=.agents --exclude=.claude --exclude=.codex --exclude=.gemini --exclude='._*' -C "
             + UnixShell.quote(source)
             + " .";

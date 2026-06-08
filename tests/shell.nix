@@ -11,6 +11,19 @@
 
 let
   inherit (pkgs) lib stdenv;
+  macHvfQemuPkgs = import
+    (builtins.fetchTree {
+      type = "github";
+      owner = "NixOS";
+      repo = "nixpkgs";
+      rev = "64c08a7ca051951c8eae34e3e3cb1e202fe36786";
+      narHash = "sha256-tpyBcxPpcQb8ukyNF7DoCwfSY3VPsxHoYwj00Cayv5o=";
+    })
+    { config.allowUnfree = true; };
+  qemuPackage =
+    if stdenv.hostPlatform.system == "aarch64-darwin"
+    then macHvfQemuPkgs.qemu
+    else pkgs.qemu;
   # aarch64 Secure Boot firmware: Debian's *enforcing* AAVMF_CODE.secboot.fd plus
   # the setup-mode AAVMF_VARS.fd, fetched + extracted reproducibly. nixpkgs'
   # OVMF.override{secureBoot=true} builds an AAVMF that does NOT enforce (boots
@@ -47,7 +60,7 @@ pkgs.mkShell {
     libarchive
     openssh
     python3
-    qemu
+    qemuPackage
     socat
     swtpm
     util-linux
