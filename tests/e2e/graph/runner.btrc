@@ -41,16 +41,9 @@ class VmGraphRunner {
         if (!self.sourceHashValue.isEmpty()) { return self.sourceHashValue; }
         var root = self.graph.resolvedWorkspaceRoot();
         var hashPipeline = "cd " + UnixShell.quote(root)
-            + " && find . -type f"
-            + " ! -path './.git/*'"
-            + " ! -path '*/.vm/*'"
-            + " ! -path '*/build/*'"
-            + " ! -path '*/secrets/*'"
-            + " ! -path './.agents/*'"
-            + " ! -path './.claude/*'"
-            + " ! -path './.codex/*'"
-            + " ! -path './.gemini/*'"
-            + " ! -path './result/*'"
+            + " && find ."
+            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './secrets' -o -path './.agents' -o -path './.claude' -o -path './.codex' -o -path './.gemini' -o -path './result' \\) -prune"
+            + " -o -type f"
             + " ! -name '.DS_Store'"
             + " ! -name '._*'"
             + " \\( -name '*.btrc' -o -name '*.nix' -o -name '*.json' -o -name '*.toml' -o -name '*.yaml' -o -name '*.yml' -o -name '*.tsv' -o -name '*.c' -o -name '*.rs' -o -name 'Makefile' -o -name 'flake.lock' \\)"
