@@ -22,6 +22,7 @@
     { "op": "wait-ssh", "timeout": 180 },
     { "op": "guest", "command": "command -v nixosctl >/dev/null && printf found", "expect": "found" },
     { "op": "guest", "command": "nixosctl 2>&1 | grep -q Usage && printf ok", "expect": "ok" },
+    { "op": "guest", "command": "nixosctl 2>&1 | grep -q 'persistence materialize' && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl displays 2>&1 | grep -q layout && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl vm 2>&1 | grep -q boot-disk && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl graph 2>&1 | grep -q coverage && printf ok", "expect": "ok" },

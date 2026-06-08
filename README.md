@@ -223,18 +223,62 @@ BTRC compiler and a generated stdlib archive.
 | `reset` | Roll each `resetOnBoot` subvolume back to its read-only `CLEAN` snapshot at boot |
 | `snapshot-only` | Rotate snapshots without rolling back (ephemeral survives) |
 | `restore-previous` / `restore-penultimate` | Roll back to rotation slot A / B |
+| `restore-generation` | Roll back to `settings.disk.immutability.restoreGeneration` |
 | `disabled` | No reset |
 
 `enforce.onReboot` wires the initrd reset + mounts service. Updates do not
 rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
-the only automatic immutability reconciliation path. Orphaned
-`@persist/dirs/<key>` subvolumes (keys no longer in the spec) are pruned on a
-reconciling reset.
+the only automatic immutability reconciliation path.
 
 The v2 mode persists selected files/directories by materializing persistent
 btrfs subvolumes under `@persist` and bind-mounting selected targets after
 reset. The source-of-truth persist list is
 `settings.disk.immutability.persist.paths`.
+
+Immutability state is versioned in `@snapshots/.immutability/version`. Missing
+state means the legacy pre-0.1 layout. Version `0.1` uses numeric
+`generation-N` rollback slots and reversible persist keys. On boot, any stored
+version older than the current runtime version runs migrations before reset:
+legacy `A`/`B`/`C` rollback slots become `generation-1`/`generation-2`/
+`generation-3`, and unambiguous legacy persist keys are moved to the reversible
+encoding.
+
+`settings.disk.immutability.nonPersistedGenerations` controls how many reset
+generations are retained. The default `3` preserves the old effective behavior;
+`0` keeps no non-persisted rollback generations. Restore modes assert that the
+configured retention count is high enough for the requested generation.
+
+When a persisted path should become ordinary immutable state, edit the config
+first, but run materialization before rebuilding into that new spec:
+
+```bash
+sudo nixosctl persistence materialize --refresh-clean
+sudo nixosctl update
+```
+
+The command uses the currently installed `/etc/immutability/spec.toml`, copies
+the still-persisted data back into its reset subvolume, and refreshes `CLEAN`.
+The following rebuild then removes the path from the generated spec. Running the
+rebuild first loses the old spec and leaves no declarative way to know what
+should be copied back.
+
+Common path transitions:
+
+| User flow | Handling |
+|---|---|
+| Enable immutability with `n` paths | Rebuild; first reset creates or migrates `@persist` stores and mounts selected paths |
+| Add a persisted path | Rebuild; reset creates the store from live or `CLEAN` data when it exists |
+| Remove a persisted path | Edit config, run `nixosctl persistence materialize --refresh-clean`, rebuild; stale dir/file stores are quarantined on the next reset |
+| Rename or move a persisted path | Treat as remove old + add new; materialize/checkpoint the old path before rebuilding |
+| Disable immutability but keep persistence | Rebuild; reset stops, but `persistence-mounts` can still mount configured stores |
+| Disable persistence or clear all paths | Materialize/checkpoint before rebuilding if data should remain in place |
+| Upgrade immutability | Rebuild; version migration runs automatically during reset/materialize |
+| A configured path no longer exists | `auto` resolves to file unless a trailing slash or `kind = "dir"` declares a directory; missing stores remain absent |
+| Directory becomes file or file becomes directory | Resolved plans keep only the matching store kind; the old kind is quarantined as an orphan |
+
+Orphans are reviewable state, not silent deletion. Directory stores move under
+`@persist/.orphans/<key>-<stamp>` and file stores stay in their file-store
+subvolume under `@persist/.immutability/files/.orphans/<stamp>/<key>`.
 
 ### Desktop
 
@@ -373,8 +417,10 @@ make -C tests graph-full
 
 Immutability/CLI scenario nodes: `immutability-reset`, `immutability-disabled`,
 `immutability-snapshot-only`, `immutability-restore`, `immutability-orphan`,
-`immutability-nonexistent-persist`, `immutability-persist-owners`,
-`immutability-files`, `nixosctl-cli`, `nixosctl-diff`.
+`immutability-nonexistent-persist`, `immutability-key-encoding`,
+`immutability-materialize`, `immutability-generations`,
+`immutability-persist-owners`, `immutability-files`, `nixosctl-cli`,
+`nixosctl-diff`.
 Hardware nodes: `tpm2-probe`, `tpm2-enroll` (LUKS TPM2 enroll/wipe on an
 encrypted install), `secure-boot-aarch64` (full Lanzaboote Secure Boot on
 aarch64 under HVF — install, sign, auto-enroll keys, then `bootctl status` →

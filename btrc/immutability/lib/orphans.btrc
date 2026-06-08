@@ -40,22 +40,51 @@ class ImmutabilityOrphans {
         return Strings.replace(Strings.replace(now.format(), " ", "T"), ":", "");
     }
 
-    public void pruneOrphans(string persistRoot, Vector<ImmutabilitySpec> specs) {
-        Vector<string> expectedPersistKeys = [];
-        for spec in specs {
-            expectedPersistKeys.push(ImmutabilityPaths.key(spec.absPath));
+    public Vector<string> expectedKeys(Vector<ImmutabilityPlan> plans, string kind) {
+        Vector<string> keys = [];
+        for plan in plans {
+            if (plan.kind.equals(kind)) {
+                keys.push(ImmutabilityPaths.key(plan.spec.absPath));
+            }
         }
+        return keys;
+    }
+
+    public void pruneOrphanDirs(string persistRoot, Vector<string> expectedKeys, string stamp) {
         var dirsPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.dirs()));
         var orphansPath = self.run.path(PathTools.join(persistRoot, ImmutabilityConstants.orphans()));
         var children = self.fs.childSubvolumes(dirsPath);
-        var stamp = self.quarantineStamp();
         for child in children {
+            if (!PathTools.dirname(child).equals(dirsPath)) { continue; }
             var key = PathTools.basename(child);
-            if (!expectedPersistKeys.contains(key)) {
+            if (!expectedKeys.contains(key)) {
                 var trashPath = PathTools.join(orphansPath, f"{key}-{stamp}");
-                self.run.log(f"Quarantining orphaned persist subvolume {key} -> {trashPath} (delete manually after review)");
+                self.run.log(f"Quarantining orphaned persist dir {key} -> {trashPath}");
                 self.run.renamePath(child, trashPath);
             }
         }
+    }
+
+    public void pruneOrphanFiles(string persistRoot, Vector<string> expectedKeys, string stamp) {
+        var filesPath = self.run.path(PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.meta()), ImmutabilityConstants.files()));
+        if (!FileSystem.isDir(filesPath)) { return; }
+        var trashRoot = PathTools.join(PathTools.join(filesPath, ImmutabilityConstants.orphans()), stamp);
+        for key in FileSystem.listDir(filesPath) {
+            if (key.equals(".") || key.equals("..")) { continue; }
+            if (key.equals(ImmutabilityConstants.orphans())) { continue; }
+            if (expectedKeys.contains(key)) { continue; }
+            var source = PathTools.join(filesPath, key);
+            if (!self.fs.exists(source)) { continue; }
+            var destination = PathTools.join(trashRoot, key);
+            self.run.log(f"Quarantining orphaned persist file {key} -> {destination}");
+            self.run.mkdirp(trashRoot);
+            self.run.renamePath(source, destination);
+        }
+    }
+
+    public void pruneOrphans(string persistRoot, Vector<ImmutabilityPlan> plans) {
+        var stamp = self.quarantineStamp();
+        self.pruneOrphanDirs(persistRoot, self.expectedKeys(plans, "dir"), stamp);
+        self.pruneOrphanFiles(persistRoot, self.expectedKeys(plans, "file"), stamp);
     }
 }

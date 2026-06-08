@@ -4,10 +4,9 @@ class ImmutabilityConstants {
     class string orphans() { return ".orphans"; }
     class string meta() { return ".immutability"; }
     class string files() { return "files"; }
+    class string versionFile() { return "version"; }
+    class string currentVersion() { return "0.1"; }
     class string next() { return "NEXT"; }
-    class string a() { return "A"; }
-    class string b() { return "B"; }
-    class string c() { return "C"; }
     class string disabled() { return "disabled"; }
     class string converge() { return "converge"; }
     class string reset() { return "reset"; }
@@ -16,6 +15,7 @@ class ImmutabilityConstants {
     class string restoreA() { return "restore-a"; }
     class string restoreB() { return "restore-b"; }
     class string restoreC() { return "restore-c"; }
+    class string restoreGeneration() { return "restore-generation"; }
     class string restorePrevious() { return "restore-previous"; }
     class string restorePenultimate() { return "restore-penultimate"; }
 }

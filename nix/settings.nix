@@ -119,9 +119,11 @@ in {
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
-    settings.disk.immutability.mode = mkSetting (enum [ "converge" "reset" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-previous" "restore-penultimate" "disabled" ]) "converge";
+    settings.disk.immutability.mode = mkSetting (enum [ "converge" "reset" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-generation" "restore-previous" "restore-penultimate" "disabled" ]) "converge";
     settings.disk.immutability.dryRun = mkSetting bool false;
     settings.disk.immutability.enforce.onReboot = mkSetting bool true;
+    settings.disk.immutability.nonPersistedGenerations = mkSetting ints.unsigned 3;
+    settings.disk.immutability.restoreGeneration = mkSetting ints.positive 1;
     settings.disk.persistence.enable = mkSetting bool true;
     settings.disk.immutability.persist.subvolumeRoot = mkSetting str "@persist";
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";

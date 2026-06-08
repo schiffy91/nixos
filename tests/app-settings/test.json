@@ -83,6 +83,16 @@
     },
     {
       "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.disk.immutability.nonPersistedGenerations",
+      "expect": "3"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.disk.immutability.restoreGeneration",
+      "expect": "1"
+    },
+    {
+      "op": "nix-eval",
       "command": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.settings.apps.enable",
       "expect": "false"
     },

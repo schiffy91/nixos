@@ -1,5 +1,6 @@
 import std.fs;
 import std.process;
+import std.strings;
 import ./constants.btrc;
 import ./fs.btrc;
 import ./run.btrc;
@@ -14,21 +15,73 @@ class ImmutabilitySlots {
         self.run = run;
     }
 
-    public void rotate(string volume, string live, string snapshotsSubvolume) {
-        var root = PathTools.join(snapshotsSubvolume, volume);
-        var a = self.run.path(PathTools.join(root, ImmutabilityConstants.a()));
-        var b = self.run.path(PathTools.join(root, ImmutabilityConstants.b()));
-        var c = self.run.path(PathTools.join(root, ImmutabilityConstants.c()));
-        self.fs.deleteSubvolume(c);
-        if (self.fs.exists(b)) {
-            self.fs.snapshot(b, c, true);
-            self.fs.deleteSubvolume(b);
+    public string generationName(int generation) {
+        return f"generation-{Strings.fromInt(generation)}";
+    }
+
+    public string legacyName(int generation) {
+        if (generation == 1) { return "A"; }
+        if (generation == 2) { return "B"; }
+        if (generation == 3) { return "C"; }
+        return "";
+    }
+
+    public string generationPath(string root, int generation) {
+        return PathTools.join(root, self.generationName(generation));
+    }
+
+    public string legacyPath(string root, int generation) {
+        var name = self.legacyName(generation);
+        if (name.isEmpty()) { return ""; }
+        return PathTools.join(root, name);
+    }
+
+    public void migrateLegacy(string root, int generations) {
+        for (int generation = 1; generation <= 3; generation++) {
+            var legacy = self.legacyPath(root, generation);
+            if (legacy.isEmpty() || !self.fs.exists(legacy)) { continue; }
+            if (generation <= generations) {
+                var current = self.generationPath(root, generation);
+                if (!self.fs.exists(current)) {
+                    self.run.renamePath(legacy, current);
+                    continue;
+                }
+            }
+            self.fs.deleteSubvolume(legacy);
         }
-        if (self.fs.exists(a)) {
-            self.fs.snapshot(a, b, true);
-            self.fs.deleteSubvolume(a);
+    }
+
+    public void pruneGenerations(string root, int generations) {
+        if (!FileSystem.isDir(root)) { return; }
+        var children = self.fs.childSubvolumes(root);
+        for child in children {
+            if (!PathTools.dirname(child).equals(root)) { continue; }
+            var name = PathTools.basename(child);
+            if (!name.startsWith("generation-")) { continue; }
+            var value = name.substring(11, name.len() - 11);
+            if (!Strings.isDigitStr(value)) { continue; }
+            if (Strings.toInt(value) > generations) {
+                self.fs.deleteSubvolume(child);
+            }
         }
-        self.fs.snapshot(live, a, true);
+    }
+
+    public void rotate(string volume, string live, string snapshotsSubvolume, int generations) {
+        var root = self.run.path(PathTools.join(snapshotsSubvolume, volume));
+        self.migrateLegacy(root, generations);
+        self.pruneGenerations(root, generations);
+        if (generations <= 0) { return; }
+        self.fs.deleteSubvolume(self.generationPath(root, generations));
+        var generation = generations - 1;
+        while (generation >= 1) {
+            var current = self.generationPath(root, generation);
+            if (self.fs.exists(current)) {
+                self.fs.snapshot(current, self.generationPath(root, generation + 1), true);
+                self.fs.deleteSubvolume(current);
+            }
+            generation--;
+        }
+        self.fs.snapshot(live, self.generationPath(root, 1), true);
     }
 
     public void publish(ImmutabilityVolume volume, string live, string next) {
@@ -47,11 +100,19 @@ class ImmutabilitySlots {
         self.fs.deleteSubvolume(next);
     }
 
-    public void restoreSlot(ImmutabilityVolume volume, string slot, string snapshotsSubvolume) {
+    public string restoreSource(string root, int generation) {
+        var current = self.generationPath(root, generation);
+        if (self.fs.exists(current)) { return current; }
+        var legacy = self.legacyPath(root, generation);
+        if (!legacy.isEmpty() && self.fs.exists(legacy)) { return legacy; }
+        return current;
+    }
+
+    public void restoreGeneration(ImmutabilityVolume volume, int generation, string snapshotsSubvolume) {
         var root = PathTools.join(snapshotsSubvolume, volume.name);
         var live = self.run.path(volume.name);
         var next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
-        var source = self.run.path(PathTools.join(root, slot));
+        var source = self.restoreSource(self.run.path(root), generation);
         if (!self.fs.exists(source) || !self.fs.isSubvolume(source)) {
             self.run.fatal(f"restore source missing: {source}");
         }

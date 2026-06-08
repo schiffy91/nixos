@@ -8,6 +8,14 @@ let
 	immutabilityPersistRoot = config.settings.disk.immutability.persist.subvolumeRoot;
 	immutabilityDryRun = config.settings.disk.immutability.dryRun;
 	immutabilityEnabled = config.settings.disk.immutability.enable;
+	nonPersistedGenerations = config.settings.disk.immutability.nonPersistedGenerations;
+	restoreGeneration = config.settings.disk.immutability.restoreGeneration;
+	restoreGenerationMinimum =
+		if immutabilityMode == "restore-generation" then restoreGeneration
+		else if immutabilityMode == "restore-previous" || immutabilityMode == "restore-a" then 1
+		else if immutabilityMode == "restore-penultimate" || immutabilityMode == "restore-b" then 2
+		else if immutabilityMode == "restore-c" then 3
+		else 0;
 	persistenceEnabled = config.settings.disk.persistence.enable;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
 	allVolumes = config.settings.disk.subvolumes.volumes;
@@ -32,6 +40,7 @@ let
 	immutabilityPairArgs = lib.concatMapStringsSep " " (volume:
 		lib.escapeShellArg "${volume.name}=${volume.mountPoint}"
 	) resetVolumes;
+	immutabilityOptions = lib.escapeShellArgs [ "--keep-generations" (toString nonPersistedGenerations) "--restore-generation" (toString restoreGeneration) ];
 	immutabilityCommandArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName immutabilityMode immutabilityPersistRoot immutabilitySpecFile ];
 	immutabilityResetMountUnits = map (volume: "${utils.escapeSystemdPath volume.mountPoint}.mount") resetVolumes;
 	immutabilitySpecFile = (pkgs.formats.toml {}).generate "immutability-spec.toml" {
@@ -64,6 +73,12 @@ let
 in
 lib.mkMerge [
 (lib.mkIf (persistenceEnabled || immutabilityEnabled) {
+	assertions = [
+		{
+			assertion = !immutabilityEnabled || restoreGenerationMinimum <= nonPersistedGenerations;
+			message = "settings.disk.immutability.nonPersistedGenerations must keep enough generations for settings.disk.immutability.mode";
+		}
+	];
 	environment.systemPackages = [ immutabilityBin ];
 	environment.etc."immutability/spec.toml".source = immutabilitySpecFile;
 	systemd.services."persistence-mounts" = {
@@ -107,7 +122,7 @@ lib.mkMerge [
 					unitConfig.DefaultDependencies = "no";
 					serviceConfig.Type = "oneshot";
 					script = ''
-						${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}${immutabilityCommandArgs} ${immutabilityPairArgs}
+						${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}${immutabilityOptions} ${immutabilityCommandArgs} ${immutabilityPairArgs}
 					'';
 				};
 			};

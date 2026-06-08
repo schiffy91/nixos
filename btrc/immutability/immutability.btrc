@@ -2,12 +2,15 @@ import std.cli;
 import std.console;
 import std.fs;
 import std.platform;
+import std.strings;
 import std.vector;
 import ../core/log.btrc;
 import ./lib/btrfs.btrc;
 import ./lib/config.btrc;
 import ./lib/constants.btrc;
 import ./lib/fs.btrc;
+import ./lib/materialize.btrc;
+import ./lib/migrations.btrc;
 import ./lib/mounts.btrc;
 import ./lib/orphans.btrc;
 import ./lib/paths.btrc;
@@ -20,6 +23,8 @@ class Immutability {
     public ImmutabilityRun run;
     public ImmutabilityFs fs;
     public ImmutabilityPlanner planner;
+    public ImmutabilityMaterializer materializer;
+    public ImmutabilityMigrations migrations;
     public ImmutabilityMounts mounts;
     public ImmutabilitySlots slots;
     public ImmutabilityOrphans orphans;
@@ -32,13 +37,17 @@ class Immutability {
     public Vector<ImmutabilitySpec> specs;
     public Vector<ImmutabilityVolume> volumes;
     public bool assumeMounted;
+    public int keepGenerations;
+    public int restoreGeneration;
 
     public Immutability(bool dryRun, bool assumeMounted) {
         self.run = ImmutabilityRun(dryRun);
         self.fs = ImmutabilityFs(self.run);
         self.planner = ImmutabilityPlanner(self.fs);
         self.mounts = ImmutabilityMounts(self.run, self.fs);
+        self.materializer = ImmutabilityMaterializer(self.run, self.fs, self.mounts);
         self.slots = ImmutabilitySlots(self.fs, self.run);
+        self.migrations = ImmutabilityMigrations(self.run, self.fs, self.slots, self.mounts);
         self.orphans = ImmutabilityOrphans(self.fs, self.run);
         self.device = "";
         self.snapshotsSubvolume = "";
@@ -49,6 +58,8 @@ class Immutability {
         self.specs = [];
         self.volumes = [];
         self.assumeMounted = assumeMounted;
+        self.keepGenerations = 3;
+        self.restoreGeneration = 1;
     }
 
     class bool envDryRun() {
@@ -64,27 +75,31 @@ class Immutability {
         return result;
     }
 
+    public void requireLiveAndClean(string live, string clean) {
+        if (!self.fs.exists(clean) || !self.fs.isSubvolume(clean) || !self.fs.isReadonly(clean)) {
+            self.run.fatal(f"bad CLEAN: {clean}");
+        }
+        if (!self.fs.exists(live)) { self.run.fatal(f"live missing: {live}"); }
+        if (!self.fs.isSubvolume(live)) { self.run.fatal(f"live is not a subvolume: {live}"); }
+    }
+
     public void resetVolume(ImmutabilityVolume volume) {
         var live = self.run.path(volume.name);
         var root = PathTools.join(self.snapshotsSubvolume, volume.name);
         var clean = self.run.path(PathTools.join(root, self.cleanName));
         var next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
 
-        if (!self.fs.exists(clean) || !self.fs.isSubvolume(clean) || !self.fs.isReadonly(clean)) {
-            self.run.fatal(f"bad CLEAN: {clean}");
-        }
         if (!self.fs.exists(live)) {
             self.slots.publish(volume, live, next);
         }
-        if (!self.fs.exists(live)) { self.run.fatal(f"live missing: {live}"); }
-        if (!self.fs.isSubvolume(live)) { self.run.fatal(f"live is not a subvolume: {live}"); }
+        self.requireLiveAndClean(live, clean);
         self.fs.deleteSubvolume(next);
 
         var plans = self.planner.makePlan(self.specsForVolume(volume.name), live, clean, self.persistRoot);
         self.restorePersistentDirs(plans, live, clean);
         self.restorePersistentFiles(plans, live, clean);
 
-        self.slots.rotate(volume.name, live, self.snapshotsSubvolume);
+        self.slots.rotate(volume.name, live, self.snapshotsSubvolume, self.keepGenerations);
         self.fs.snapshot(clean, next, false);
         self.populateNext(plans, next);
         self.slots.publish(volume, live, next);
@@ -165,25 +180,44 @@ class Immutability {
         ]);
     }
 
+    public Vector<ImmutabilityPlan> plansForAllVolumes() {
+        Vector<ImmutabilityPlan> result = [];
+        for volume in self.volumes {
+            var live = self.run.path(volume.name);
+            var root = PathTools.join(self.snapshotsSubvolume, volume.name);
+            var clean = self.run.path(PathTools.join(root, self.cleanName));
+            var specs = self.mounts.selectedSpecs(self.specsForVolume(volume.name));
+            var plans = self.planner.makePlan(specs, live, clean, self.persistRoot);
+            for plan in plans {
+                result.push(plan);
+            }
+        }
+        return result;
+    }
+
     public void runVolume(ImmutabilityVolume volume) {
         if (self.resetMode()) {
             self.resetVolume(volume);
             return;
         }
         if (self.mode.equals(ImmutabilityConstants.snapshotOnly())) {
-            self.slots.rotate(volume.name, self.run.path(volume.name), self.snapshotsSubvolume);
+            self.slots.rotate(volume.name, self.run.path(volume.name), self.snapshotsSubvolume, self.keepGenerations);
             return;
         }
         if (self.modeIn([ImmutabilityConstants.restoreA(), ImmutabilityConstants.restorePrevious()])) {
-            self.slots.restoreSlot(volume, ImmutabilityConstants.a(), self.snapshotsSubvolume);
+            self.slots.restoreGeneration(volume, 1, self.snapshotsSubvolume);
             return;
         }
         if (self.modeIn([ImmutabilityConstants.restoreB(), ImmutabilityConstants.restorePenultimate()])) {
-            self.slots.restoreSlot(volume, ImmutabilityConstants.b(), self.snapshotsSubvolume);
+            self.slots.restoreGeneration(volume, 2, self.snapshotsSubvolume);
             return;
         }
         if (self.mode.equals(ImmutabilityConstants.restoreC())) {
-            self.slots.restoreSlot(volume, ImmutabilityConstants.c(), self.snapshotsSubvolume);
+            self.slots.restoreGeneration(volume, 3, self.snapshotsSubvolume);
+            return;
+        }
+        if (self.mode.equals(ImmutabilityConstants.restoreGeneration())) {
+            self.slots.restoreGeneration(volume, self.restoreGeneration, self.snapshotsSubvolume);
             return;
         }
         self.run.fatal(f"Unknown mode: {self.mode}");
@@ -206,8 +240,9 @@ class Immutability {
         self.mounts.mountTop(self.device, self.assumeMounted);
         try {
             self.orphans.ensureNamespaces(self.persistRoot);
+            self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
             if (self.resetMode()) {
-                self.orphans.pruneOrphans(self.persistRoot, self.specs);
+                self.orphans.pruneOrphans(self.persistRoot, self.plansForAllVolumes());
             }
             for volume in self.volumes {
                 self.runVolume(volume);
@@ -230,11 +265,44 @@ class Immutability {
         self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted);
     }
 
+    public Vector<string> planTargets(Vector<ImmutabilityPlan> plans) {
+        Vector<string> targets = [];
+        for plan in plans {
+            targets.push(plan.spec.absPath);
+        }
+        return targets;
+    }
+
+    public void materializePersist() {
+        self.mounts.mountTop(self.device, self.assumeMounted);
+        try {
+            self.orphans.ensureNamespaces(self.persistRoot);
+            self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
+            for volume in self.volumes {
+                var live = self.run.path(volume.name);
+                var root = PathTools.join(self.snapshotsSubvolume, volume.name);
+                var clean = self.run.path(PathTools.join(root, self.cleanName));
+                self.requireLiveAndClean(live, clean);
+                var specs = self.mounts.selectedSpecs(self.specsForVolume(volume.name));
+                var plans = self.planner.makePlan(specs, live, clean, self.persistRoot);
+                self.materializer.materialize(plans, self.persistRoot, self.planTargets(plans));
+            }
+            self.run.require(ImmutabilityBtrfs.sync(self.run.top));
+        } finally {
+            self.mounts.unmountTop(self.assumeMounted);
+        }
+        self.run.log("Persistent data materialized");
+    }
+
     class int cli(CliArgs args) {
         try {
             var parsed = CliCommandLine.parse(args);
             var dryRun = Immutability.envDryRun() || parsed.flag("--dry-run");
             var assumeMounted = parsed.flag("--assume-mounted");
+            var keepGenerations = Strings.toInt(parsed.option("--keep-generations", "3"));
+            var restoreGeneration = Strings.toInt(parsed.option("--restore-generation", "1"));
+            if (keepGenerations < 0) { NixosLog.fatal("--keep-generations must be >= 0"); }
+            if (restoreGeneration < 1) { NixosLog.fatal("--restore-generation must be >= 1"); }
             if (parsed.operand(0).equals("mount")) {
                 if (parsed.operandCount() < 4) {
                     Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
@@ -243,6 +311,30 @@ class Immutability {
                 var mounter = Immutability(dryRun, assumeMounted);
                 mounter.configureMount(parsed.operand(1), parsed.operand(2), parsed.operand(3));
                 mounter.mountPersist();
+                return 0;
+            }
+            if (parsed.operand(0).equals("materialize")) {
+                if (parsed.operandCount() < 6) {
+                    Console.error("Usage: immutability [--dry-run] [--assume-mounted] materialize <device> <snapshots> <clean> <persist_root> <spec_file> [name=mount ...]");
+                    return 1;
+                }
+                Vector<string> volumeArgs = [];
+                for (int i = 6; i < parsed.operandCount(); i++) {
+                    volumeArgs.push(parsed.operand(i));
+                }
+                var materializer = Immutability(dryRun, assumeMounted);
+                materializer.keepGenerations = keepGenerations;
+                materializer.restoreGeneration = restoreGeneration;
+                materializer.configure(
+                    parsed.operand(1),
+                    parsed.operand(2),
+                    parsed.operand(3),
+                    ImmutabilityConstants.disabled(),
+                    parsed.operand(4),
+                    parsed.operand(5),
+                    volumeArgs
+                );
+                materializer.materializePersist();
                 return 0;
             }
             if (parsed.operandCount() < 6) {
@@ -254,6 +346,8 @@ class Immutability {
                 volumeArgs.push(parsed.operand(i));
             }
             var immutability = Immutability(dryRun, assumeMounted);
+            immutability.keepGenerations = keepGenerations;
+            immutability.restoreGeneration = restoreGeneration;
             immutability.configure(
                 parsed.operand(0),
                 parsed.operand(1),

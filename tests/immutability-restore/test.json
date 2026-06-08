@@ -2,7 +2,7 @@
   "name": "immutability-restore",
   "state": "immutability-restore",
   "parentState": "installed-reset",
-  "stateMaterial": "immutability-test:restore:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}",
+  "stateMaterial": "immutability-test:restore:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",
@@ -20,6 +20,9 @@
     { "op": "restore", "name": "installed" },
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "guest", "command": "nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot && printf rebuilt", "expect": "rebuilt", "timeout": 1800 },
+    { "op": "reboot-disk" },
 
     { "op": "guest", "command": "set -e; echo ALPHA > /root/gen" },
     { "op": "reboot-disk" },
@@ -28,6 +31,7 @@
     { "op": "reboot-disk" },
     { "op": "guest", "command": "test ! -e /root/gen && printf wiped", "expect": "wiped" },
     { "op": "guest", "command": "set -e; echo GAMMA > /root/gen" },
+    { "op": "guest", "command": "set -e; btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-1'; btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-2'; ! btrfs subvolume list / | grep -E 'path @snapshots/.*/[ABC]$'; printf generation-slots-ok", "expect": "generation-slots-ok" },
 
     { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-previous\"/g' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
     { "op": "reboot-disk" },

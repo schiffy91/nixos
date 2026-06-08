@@ -1,0 +1,59 @@
+import std.process;
+import std.strings;
+import std.vector;
+import ../../core/log.btrc;
+import ../config.btrc;
+import ./snapshot.btrc;
+
+class PersistenceManager {
+    public NixosConfig config;
+    public UnixShell shell;
+
+    public PersistenceManager(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+    }
+
+    public string rootDevice() {
+        if (self.config.evalBool("config.settings.disk.encryption.enable")) {
+            return self.config.evalString("config.settings.disk.by.mapper.root");
+        }
+        return self.config.evalString("config.settings.disk.by.partlabel.root");
+    }
+
+    public string command(bool dryRun) {
+        Vector<string> parts = [];
+        if (dryRun) {
+            parts.push("--dry-run");
+        }
+        parts.push("materialize");
+        parts.push(self.rootDevice());
+        parts.push(self.config.evalString("config.settings.disk.subvolumes.snapshots.name"));
+        parts.push(self.config.evalString("config.settings.disk.immutability.persist.snapshots.cleanName"));
+        parts.push(self.config.evalString("config.settings.disk.immutability.persist.subvolumeRoot"));
+        parts.push("/etc/immutability/spec.toml");
+        for pair in Strings.split(self.config.evalString("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot"), " ") {
+            if (!pair.isEmpty()) { parts.push(pair); }
+        }
+
+        var command = "immutability";
+        for part in parts {
+            command = f"{command} {UnixShell.quote(part)}";
+        }
+        return command;
+    }
+
+    public void materialize(bool dryRun, bool refreshClean) {
+        var result = self.shell.run(
+            self.command(dryRun),
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream()
+        );
+        if (!result.ok()) {
+            NixosLog.fatal("Persistent data materialization failed");
+        }
+        if (refreshClean && !dryRun) {
+            SnapshotManager(self.config).createInitialSnapshots();
+        }
+    }
+}

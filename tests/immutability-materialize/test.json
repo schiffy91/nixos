@@ -1,0 +1,38 @@
+{
+  "name": "immutability-materialize",
+  "state": "immutability-materialize",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-materialize:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2247,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "guest", "command": "set -e; mkdir -p /opt/materialized-dir; printf 'dir-before\\n' > /opt/materialized-dir/token; printf 'file-before\\n' > /opt/materialized-file; host=/etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; sed -i 's|\"/var/log\" ];|\"/var/log\" \"/opt/materialized-dir\" \"/opt/materialized-file\" ];|' \"$host\"; grep -F '\"/opt/materialized-dir\"' \"$host\"; grep -F '\"/opt/materialized-file\"' \"$host\"; printf materialize-paths-configured", "expect": "materialize-paths-configured" },
+    { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && systemctl restart persistence-mounts.service && printf persistence-enabled", "expect": "persistence-enabled", "timeout": 1800 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -e; findmnt -rn --target /opt/materialized-dir | grep -F '@persist/dirs/opt!materialized-dir'; cat /opt/materialized-dir/token | grep -F 'dir-before'; cat /opt/materialized-file | grep -F 'file-before'; printf persisted-before", "expect": "persisted-before" },
+    { "op": "guest", "command": "set -e; printf 'dir-after\\n' > /opt/materialized-dir/token; printf 'file-after\\n' > /opt/materialized-file; host=/etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; sed -i 's| \"/opt/materialized-dir\" \"/opt/materialized-file\"||' \"$host\"; nixosctl persistence materialize --refresh-clean; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf materialized-and-removed", "expect": "materialized-and-removed", "timeout": 1800 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -e; cat /opt/materialized-dir/token | grep -F 'dir-after'; cat /opt/materialized-file | grep -F 'file-after'; test -d /etc/nixos/.git; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; ! findmnt -rn --target /opt/materialized-dir | grep -F '@persist/dirs/opt!materialized-dir'; printf materialized-after", "expect": "materialized-after" },
+    { "op": "guest", "command": "set -e; printf 'dir-transient\\n' > /opt/materialized-dir/token; printf 'file-transient\\n' > /opt/materialized-file; sync; printf transient-written", "expect": "transient-written" },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -e; cat /opt/materialized-dir/token | grep -F 'dir-after'; cat /opt/materialized-file | grep -F 'file-after'; ! cat /opt/materialized-dir/token | grep -F 'dir-transient'; ! cat /opt/materialized-file | grep -F 'file-transient'; printf materialized-reset", "expect": "materialized-reset" },
+    { "op": "snapshot", "name": "materialize-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

@@ -35,6 +35,8 @@
     "immutability-orphan",
     "immutability-nonexistent-persist",
     "immutability-key-encoding",
+    "immutability-materialize",
+    "immutability-generations",
     "immutability-persist-owners",
     "secure-boot-install",
     "secure-boot-lanzaboote",
@@ -422,6 +424,32 @@
     {
       "id": "immutability-key-encoding",
       "spec": "immutability-key-encoding/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "immutability-materialize",
+      "spec": "immutability-materialize/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "immutability-generations",
+      "spec": "immutability-generations/test.json",
       "after": [
         "install-reset"
       ],
