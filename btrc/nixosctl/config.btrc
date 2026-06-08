@@ -102,7 +102,7 @@ class NixosConfig {
             return self.cache.get(key);
         }
         var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(f"{self.nixCommand()} eval {flake}", stderr=CommandOutput.stream());
+        var result = self.shell.run(f"{self.nixCommand()} eval {flake}");
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval failed for {attribute}");
         }
@@ -117,7 +117,7 @@ class NixosConfig {
             return self.cache.get(key);
         }
         var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(f"{self.nixCommand()} eval --raw {flake}", stderr=CommandOutput.stream());
+        var result = self.shell.run(f"{self.nixCommand()} eval --raw {flake}");
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval --raw failed for {attribute}");
         }
@@ -132,7 +132,7 @@ class NixosConfig {
             return self.cache.get(key);
         }
         var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(f"{self.nixCommand()} eval --json {flake}", stderr=CommandOutput.stream());
+        var result = self.shell.run(f"{self.nixCommand()} eval --json {flake}");
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval --json failed for {attribute}");
         }

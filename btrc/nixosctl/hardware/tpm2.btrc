@@ -1,7 +1,6 @@
 import std.console;
 import std.fs;
 import std.process;
-import std.strings;
 import ../config.btrc;
 
 class Tpm2Manager {
@@ -13,52 +12,10 @@ class Tpm2Manager {
         self.shell = UnixShell();
     }
 
-    public string listedDevice() {
-        var result = self.shell.run(
-            "systemd-cryptenroll --tpm2-device=list",
-            stderr=CommandOutput.suppress(),
-            logFailure=false);
-        if (!result.ok()) { return ""; }
-        for line in Strings.split(result.stdout(), "\n") {
-            var trimmed = line.trim();
-            if (trimmed.startsWith("/dev/tpm")) {
-                return Strings.split(trimmed, " ").get(0);
-            }
-        }
-        return "";
-    }
-
-    public bool configuredDeviceExists() {
-        var device = UnixShell.quote(self.config.tpmDevice());
-        return FileSystem.exists(self.config.tpmDevice())
-            || self.shell.run(f"test -e {device}", stderr=CommandOutput.suppress(), logFailure=false).ok();
-    }
-
-    public bool configuredVersionIsTpm2() {
+    public bool exists() {
+        if (!FileSystem.exists(self.config.tpmDevice())) { return false; }
         var version = Path.readAll(self.config.tpmVersionPath()).trim();
         return version.equals("2");
-    }
-
-    public bool sysfsVersionIsTpm2() {
-        if (!FileSystem.isDir("/sys/class/tpm")) { return false; }
-        for device in FileSystem.listDir("/sys/class/tpm") {
-            var versionPath = PathTools.join(PathTools.join("/sys/class/tpm", device), "tpm_version_major");
-            if (Path.readAll(versionPath).trim().equals("2")) { return true; }
-        }
-        return false;
-    }
-
-    public bool exists() {
-        if (!self.listedDevice().isEmpty()) { return true; }
-        if (self.configuredDeviceExists() && self.configuredVersionIsTpm2()) { return true; }
-        return self.sysfsVersionIsTpm2();
-    }
-
-    public string enrollmentDevice() {
-        if (self.configuredDeviceExists()) { return self.config.tpmDevice(); }
-        var listed = self.listedDevice();
-        if (!listed.isEmpty()) { return listed; }
-        return "auto";
     }
 
     public bool diskEncrypted() {
@@ -68,7 +25,7 @@ class Tpm2Manager {
 
     public bool enroll() {
         var command = f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())}";
-        command = f"{command} --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.enrollmentDevice())} --tpm2-pcrs=7+12";
+        command = f"{command} --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.config.tpmDevice())} --tpm2-pcrs=7+12";
         return self.shell.run(
             command,
             stdout=CommandOutput.stream(),
@@ -86,11 +43,7 @@ class Tpm2Manager {
     }
 
     public void status() {
-        Console.log(f"TPM2 configured device: {self.config.tpmDevice()}");
-        var listed = self.listedDevice();
-        if (!listed.isEmpty()) {
-            Console.log(f"TPM2 detected device: {listed}");
-        }
+        Console.log(f"TPM2 device: {self.config.tpmDevice()}");
         self.shell.run(
             f"systemd-cryptenroll --tpm2-device=list {UnixShell.quote(self.config.rootPartLabelPath())}",
             stdout=CommandOutput.stream(),
