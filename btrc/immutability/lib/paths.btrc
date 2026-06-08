@@ -123,6 +123,11 @@ class ImmutabilityPaths {
         return result;
     }
 
+    class string legacyKey(string absPath) {
+        var rel = absPath.substring(1, absPath.len() - 1);
+        return Strings.replace(rel, "/", "!");
+    }
+
     class int keyHexValue(char current) {
         if (current >= '0' && current <= '9') { return (int)current - (int)'0'; }
         if (current >= 'A' && current <= 'F') { return (int)current - (int)'A' + 10; }
