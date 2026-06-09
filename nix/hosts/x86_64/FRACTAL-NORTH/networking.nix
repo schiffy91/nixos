@@ -1,4 +1,4 @@
-{ pkgs, host, ... }: {
+{ lib, pkgs, host, ... }: {
   networking = {
     interfaces.${host.network.primaryInterface}.wakeOnLan.enable = true;
     networkmanager.unmanaged = map (mac: "mac:${mac}") host.network.unmanagedMacs;
@@ -32,5 +32,9 @@
       RemainAfterExit = true;
       ExecStart = "${pkgs.ethtool}/bin/ethtool -K ${host.network.primaryInterface} tx-udp-segmentation off";
     };
+  };
+  systemd.services.mullvad-daemon = {
+    wants = lib.mkForce [ "network.target" ];
+    after = lib.mkForce [ "NetworkManager.service" "systemd-resolved.service" ];
   };
 }

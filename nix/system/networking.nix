@@ -59,12 +59,18 @@ in {
   systemd.services = lib.optionalAttrs (config.settings.networking.primaryInterface != "") {
     disable-non-primary-eth = {
       wantedBy = [ "multi-user.target" ];
-      after = [ "NetworkManager-wait-online.service" ];
+      wants = [ "NetworkManager.service" ];
+      after = [ "NetworkManager.service" ];
       serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
       path = [ pkgs.networkmanager ];
       script = ''
-        for i in $(nmcli -t -f DEVICE,TYPE dev | awk -F: '$2=="ethernet" && $1!="${config.settings.networking.primaryInterface}" {print $1}'); do
-          nmcli device disconnect "$i" || true
+        nmcli -t -f DEVICE,TYPE,STATE dev | while IFS=: read -r device type state; do
+          case "$state" in
+            disconnected|unavailable|unmanaged) continue ;;
+          esac
+          if [ "$type" = "ethernet" ] && [ "$device" != "${config.settings.networking.primaryInterface}" ]; then
+            nmcli device disconnect "$device" || true
+          fi
         done
       '';
     };

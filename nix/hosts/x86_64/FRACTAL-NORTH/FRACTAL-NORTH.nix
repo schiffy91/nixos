@@ -68,6 +68,7 @@ in {
   };
   networking.hostName = "FRACTAL-NORTH";
   settings = {
+    boot.timeout = 1;
     disk = {
       inherit (disk) device;
       encryption.enable = true;

@@ -158,6 +158,46 @@ let
 
       ${pkgs.coreutils}/bin/install -d -m 1777 /tmp
       scratch=$(${pkgs.coreutils}/bin/mktemp -d /tmp/nixos-recovery-sign.XXXXXX)
+      manifest="$scratch/manifest"
+      installed_manifest="$recovery/.nixos-recovery-artifacts.manifest"
+
+      write_manifest() {
+        {
+          printf 'signing_required=%s\n' "$signing_required"
+          printf 'kernel=%s\n' ${lib.escapeShellArg recoveryKernel}
+          printf 'initrd=%s\n' ${lib.escapeShellArg recoveryInitrd}
+          printf 'systemd_boot=%s\n' ${lib.escapeShellArg recoverySystemdBoot}
+          printf 'entry=%s\n' ${lib.escapeShellArg recoveryEntry}
+          printf 'loader_conf=%s\n' ${lib.escapeShellArg recoveryLoaderConf}
+          printf 'readme=%s\n' ${lib.escapeShellArg recoveryReadme}
+          printf 'kernel_path=%s\n' ${lib.escapeShellArg config.settings.disk.recovery.kernelPath}
+          printf 'initrd_path=%s\n' ${lib.escapeShellArg config.settings.disk.recovery.initrdPath}
+          printf 'entry_path=%s\n' ${lib.escapeShellArg config.settings.disk.recovery.entryPath}
+          printf 'fallback_path=%s\n' ${lib.escapeShellArg fallbackBootPath}
+          if [ "$signing_required" = 1 ]; then
+            ${pkgs.coreutils}/bin/sha256sum "$public_key"
+          fi
+        } > "$manifest"
+      }
+
+      artifacts_exist() {
+        [ -f "$boot/${config.settings.disk.recovery.kernelPath}" ] &&
+        [ -f "$boot/${config.settings.disk.recovery.initrdPath}" ] &&
+        [ -f "$recovery/${config.settings.disk.recovery.kernelPath}" ] &&
+        [ -f "$recovery/${config.settings.disk.recovery.initrdPath}" ] &&
+        [ -f "$recovery/${fallbackBootPath}" ] &&
+        [ -f "$boot/${config.settings.disk.recovery.entryPath}" ] &&
+        [ -f "$recovery/${config.settings.disk.recovery.entryPath}" ] &&
+        [ -f "$recovery/loader/loader.conf" ] &&
+        [ -f "$recovery/README.txt" ]
+      }
+
+      write_manifest
+      if artifacts_exist && [ -f "$installed_manifest" ] && ${pkgs.diffutils}/bin/cmp -s "$manifest" "$installed_manifest"; then
+        echo "Recovery boot artifacts already current."
+        ${pkgs.coreutils}/bin/rm -rf "$scratch"
+        return 0
+      fi
 
       install_secure() {
         source="$1"
@@ -184,6 +224,7 @@ let
       ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
       ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"
       ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryReadme} "$recovery/README.txt"
+      ${pkgs.coreutils}/bin/install -Dm0644 "$manifest" "$installed_manifest"
       ${pkgs.coreutils}/bin/rm -rf "$scratch"
     }
 
