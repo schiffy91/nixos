@@ -24,6 +24,7 @@
     { "op": "guest", "command": "nixosctl 2>&1 | grep -q Usage && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl 2>&1 | grep -q 'persistence materialize' && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl 2>&1 | grep -q 'immutability <plan|prepare>' && printf ok", "expect": "ok" },
+    { "op": "guest", "command": "set -e; mkdir -p /tmp/nixosctl-fake-sudo; cat > /tmp/nixosctl-fake-sudo/sudo <<'EOF'\n#!/bin/sh\nprintf '%s\\n' \"$@\" > /tmp/nixosctl-sudo-args\nexit 0\nEOF\nchmod +x /tmp/nixosctl-fake-sudo/sudo; rm -f /tmp/nixosctl-sudo-args; su -s /bin/sh nobody -c 'PATH=/tmp/nixosctl-fake-sudo:$PATH nixosctl immutability plan'; grep -F nixosctl /tmp/nixosctl-sudo-args; grep -Fx immutability /tmp/nixosctl-sudo-args; grep -Fx plan /tmp/nixosctl-sudo-args; printf auto-sudo-ok", "expect": "auto-sudo-ok" },
     { "op": "guest", "command": "nixosctl displays 2>&1 | grep -q layout && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl vm 2>&1 | grep -q boot-disk && printf ok", "expect": "ok" },
     { "op": "guest", "command": "nixosctl graph 2>&1 | grep -q coverage && printf ok", "expect": "ok" },

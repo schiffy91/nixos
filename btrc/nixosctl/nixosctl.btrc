@@ -101,6 +101,7 @@ class NixosCtl {
             || command.equals("install")
             || command.equals("diff")
             || command.equals("persistence")
+            || command.equals("immutability")
             || command.equals("fix-permissions")
             || command.equals("change-password")
             || command.equals("secure-boot")
