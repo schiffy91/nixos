@@ -12,6 +12,7 @@ import ./permissions.btrc;
 import ./rebuild.btrc;
 import ./password.btrc;
 import ./btrfs/diff.btrc;
+import ./btrfs/immutability.btrc;
 import ./btrfs/persistence.btrc;
 import ./hardware/secure_boot.btrc;
 import ./hardware/tpm2.btrc;
@@ -62,6 +63,8 @@ class NixosCtl {
         help.continuation("[--diffignore <file>]");
         help.item("persistence materialize [--dry-run] [--refresh-clean]",
                "Copy persisted paths back into their reset subvolumes.");
+        help.item("immutability <plan|prepare> [--dry-run]",
+               "Inspect or prepare the next boot reset while running.");
 
         help.section("Boot + crypto");
         help.item("secure-boot <enable|disable|status> [--microsoft]",
@@ -230,6 +233,15 @@ class NixosCtl {
                 return 0;
             }
             NixosLog.fatal("Usage: nixosctl persistence <materialize>");
+        }
+
+        if (command.equals("immutability")) {
+            var action = self.requireAction(args, "Usage: nixosctl immutability <plan|prepare>");
+            if (action.equals("plan") || action.equals("prepare")) {
+                BtrfsImmutabilityManager(self.config).require(action, args.has("--dry-run"));
+                return 0;
+            }
+            NixosLog.fatal("Usage: nixosctl immutability <plan|prepare>");
         }
 
         if (command.equals("fix-permissions")) {

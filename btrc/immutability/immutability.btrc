@@ -83,11 +83,22 @@ class Immutability {
         if (!self.fs.isSubvolume(live)) { self.run.fatal(f"live is not a subvolume: {live}"); }
     }
 
-    public void resetVolume(ImmutabilityVolume volume) {
+    public string volumeRoot(ImmutabilityVolume volume) {
+        return PathTools.join(self.snapshotsSubvolume, volume.name);
+    }
+
+    public string cleanPath(ImmutabilityVolume volume) {
+        return self.run.path(PathTools.join(self.volumeRoot(volume), self.cleanName));
+    }
+
+    public string nextPath(ImmutabilityVolume volume) {
+        return self.run.path(PathTools.join(self.volumeRoot(volume), ImmutabilityConstants.next()));
+    }
+
+    public void prepareVolume(ImmutabilityVolume volume) {
         var live = self.run.path(volume.name);
-        var root = PathTools.join(self.snapshotsSubvolume, volume.name);
-        var clean = self.run.path(PathTools.join(root, self.cleanName));
-        var next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
+        var clean = self.cleanPath(volume);
+        var next = self.nextPath(volume);
 
         if (!self.fs.exists(live)) {
             self.slots.publish(volume, live, next);
@@ -102,7 +113,28 @@ class Immutability {
         self.slots.rotate(volume.name, live, self.snapshotsSubvolume, self.keepGenerations);
         self.fs.snapshot(clean, next, false);
         self.populateNext(plans, next);
+        if (!self.fs.exists(next) || !self.fs.isSubvolume(next)) {
+            self.run.fatal(f"prepared NEXT missing: {next}");
+        }
+        self.run.log(f"Prepared {volume.name} NEXT");
+    }
+
+    public void publishPreparedVolume(ImmutabilityVolume volume) {
+        var live = self.run.path(volume.name);
+        var next = self.nextPath(volume);
+        if (!self.fs.exists(next) || !self.fs.isSubvolume(next)) {
+            self.run.fatal(f"prepared NEXT missing: {next}");
+        }
+        if (self.fs.exists(live) && !self.fs.isSubvolume(live)) {
+            self.run.fatal(f"live is not a subvolume: {live}");
+        }
+        self.run.log(f"Publishing prepared NEXT for {volume.name}");
         self.slots.publish(volume, live, next);
+    }
+
+    public void resetVolume(ImmutabilityVolume volume) {
+        self.prepareVolume(volume);
+        self.publishPreparedVolume(volume);
     }
 
     public void restorePersistentDirs(Vector<ImmutabilityPlan> plans, string live, string clean) {
@@ -175,17 +207,24 @@ class Immutability {
     public bool resetMode() {
         return self.modeIn([
             ImmutabilityConstants.converge(),
-            ImmutabilityConstants.reset(),
-            ImmutabilityConstants.prepareOnly()
+            ImmutabilityConstants.reset()
         ]);
+    }
+
+    public bool prepareMode() {
+        return self.resetMode() || self.mode.equals(ImmutabilityConstants.prepareOnly());
+    }
+
+    public string logPath() {
+        var logs = PathTools.join(PathTools.join(self.snapshotsSubvolume, ImmutabilityConstants.meta()), "logs");
+        return self.run.path(PathTools.join(logs, f"immutability-{Platform.pid()}.log"));
     }
 
     public Vector<ImmutabilityPlan> plansForAllVolumes() {
         Vector<ImmutabilityPlan> result = [];
         for volume in self.volumes {
             var live = self.run.path(volume.name);
-            var root = PathTools.join(self.snapshotsSubvolume, volume.name);
-            var clean = self.run.path(PathTools.join(root, self.cleanName));
+            var clean = self.cleanPath(volume);
             var specs = self.mounts.selectedSpecs(self.specsForVolume(volume.name));
             var plans = self.planner.makePlan(specs, live, clean, self.persistRoot);
             for plan in plans {
@@ -198,6 +237,14 @@ class Immutability {
     public void runVolume(ImmutabilityVolume volume) {
         if (self.resetMode()) {
             self.resetVolume(volume);
+            return;
+        }
+        if (self.mode.equals(ImmutabilityConstants.prepareOnly())) {
+            self.prepareVolume(volume);
+            return;
+        }
+        if (self.mode.equals(ImmutabilityConstants.publishPrepared())) {
+            self.publishPreparedVolume(volume);
             return;
         }
         if (self.mode.equals(ImmutabilityConstants.snapshotOnly())) {
@@ -239,9 +286,12 @@ class Immutability {
         }
         self.mounts.mountTop(self.device, self.assumeMounted);
         try {
-            self.orphans.ensureNamespaces(self.persistRoot);
-            self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
-            if (self.resetMode()) {
+            self.run.enableFileLog(self.logPath());
+            if (!self.mode.equals(ImmutabilityConstants.publishPrepared())) {
+                self.orphans.ensureNamespaces(self.persistRoot);
+                self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
+            }
+            if (self.prepareMode()) {
                 self.orphans.pruneOrphans(self.persistRoot, self.plansForAllVolumes());
             }
             for volume in self.volumes {
@@ -252,6 +302,29 @@ class Immutability {
             self.mounts.unmountTop(self.assumeMounted);
         }
         self.run.log("Immutability complete");
+    }
+
+    public void printPlan() {
+        self.mounts.mountTop(self.device, self.assumeMounted);
+        try {
+            for volume in self.volumes {
+                var live = self.run.path(volume.name);
+                var clean = self.cleanPath(volume);
+                var next = self.nextPath(volume);
+                self.requireLiveAndClean(live, clean);
+                var plans = self.planner.makePlan(self.mounts.selectedSpecs(self.specsForVolume(volume.name)), live, clean, self.persistRoot);
+                var nextExists = self.fs.exists(next) ? "true" : "false";
+                Console.log(f"volume {volume.name} {volume.mountPoint}");
+                Console.log(f"  live {live}");
+                Console.log(f"  clean {clean}");
+                Console.log(f"  next {next} exists={nextExists}");
+                for plan in plans {
+                    Console.log(f"  keep {plan.kind} {plan.spec.absPath} -> {plan.store}");
+                }
+            }
+        } finally {
+            self.mounts.unmountTop(self.assumeMounted);
+        }
     }
 
     public void configureMount(string device, string persistRoot, string specFile) {
@@ -280,8 +353,7 @@ class Immutability {
             self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
             for volume in self.volumes {
                 var live = self.run.path(volume.name);
-                var root = PathTools.join(self.snapshotsSubvolume, volume.name);
-                var clean = self.run.path(PathTools.join(root, self.cleanName));
+                var clean = self.cleanPath(volume);
                 self.requireLiveAndClean(live, clean);
                 var specs = self.mounts.selectedSpecs(self.specsForVolume(volume.name));
                 var plans = self.planner.makePlan(specs, live, clean, self.persistRoot);
@@ -335,6 +407,34 @@ class Immutability {
                     volumeArgs
                 );
                 materializer.materializePersist();
+                return 0;
+            }
+            if (parsed.operand(0).equals("plan") || parsed.operand(0).equals("prepare")) {
+                if (parsed.operandCount() < 6) {
+                    Console.error("Usage: immutability [--dry-run] [--assume-mounted] <plan|prepare> <device> <snapshots> <clean> <persist_root> <spec_file> [name=mount ...]");
+                    return 1;
+                }
+                Vector<string> volumeArgs = [];
+                for (int i = 6; i < parsed.operandCount(); i++) {
+                    volumeArgs.push(parsed.operand(i));
+                }
+                var immutability = Immutability(dryRun, assumeMounted);
+                immutability.keepGenerations = keepGenerations;
+                immutability.restoreGeneration = restoreGeneration;
+                immutability.configure(
+                    parsed.operand(1),
+                    parsed.operand(2),
+                    parsed.operand(3),
+                    ImmutabilityConstants.prepareOnly(),
+                    parsed.operand(4),
+                    parsed.operand(5),
+                    volumeArgs
+                );
+                if (parsed.operand(0).equals("plan")) {
+                    immutability.printPlan();
+                } else {
+                    immutability.runAll();
+                }
                 return 0;
             }
             if (parsed.operandCount() < 6) {

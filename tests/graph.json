@@ -36,6 +36,7 @@
     "immutability-nonexistent-persist",
     "immutability-key-encoding",
     "immutability-materialize",
+    "immutability-prepare",
     "immutability-generations",
     "immutability-persist-owners",
     "secure-boot-install",
@@ -437,6 +438,19 @@
     {
       "id": "immutability-materialize",
       "spec": "immutability-materialize/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "immutability-prepare",
+      "spec": "immutability-prepare/test.json",
       "after": [
         "install-reset"
       ],

@@ -11,6 +11,7 @@ class ImmutabilityRun {
     public UnixShell shell;
     public Timer timer;
     public string top;
+    public string logFile;
     public bool dryRun;
 
     public ImmutabilityRun(bool dryRun) {
@@ -18,6 +19,7 @@ class ImmutabilityRun {
         self.timer = Timer();
         self.timer.start();
         self.top = Environment.get("IMMUTABILITY_MOUNT_PATH", f"{ImmutabilityConstants.topBase()}.{Platform.pid()}");
+        self.logFile = "";
         self.dryRun = dryRun;
     }
 
@@ -33,7 +35,18 @@ class ImmutabilityRun {
     }
 
     public void log(string message) {
-        Console.error(f"{self.elapsed()} {message}");
+        var line = f"{self.elapsed()} {message}";
+        Console.error(line);
+        if (!self.logFile.isEmpty()) {
+            self.shell.run(f"printf '%s\\n' {UnixShell.quote(line)} >> {UnixShell.quote(self.logFile)}", logFailure=false);
+        }
+    }
+
+    public void enableFileLog(string path) {
+        if (self.dryRun) { return; }
+        self.logFile = path;
+        FileSystem.mkdirp(PathTools.dirname(path));
+        FileSystem.writeText(path, "");
     }
 
     public void fatal(string message) {

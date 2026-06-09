@@ -1,0 +1,63 @@
+import std.process;
+import std.strings;
+import std.vector;
+import ../../core/log.btrc;
+import ../config.btrc;
+
+class BtrfsImmutabilityManager {
+    public NixosConfig config;
+    public UnixShell shell;
+
+    public BtrfsImmutabilityManager(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+    }
+
+    public string rootDevice() {
+        if (self.config.evalBool("config.settings.disk.encryption.enable")) {
+            return self.config.evalString("config.settings.disk.by.mapper.root");
+        }
+        return self.config.evalString("config.settings.disk.by.partlabel.root");
+    }
+
+    public string command(string action, bool dryRun) {
+        Vector<string> parts = [];
+        if (dryRun) {
+            parts.push("--dry-run");
+        }
+        parts.push("--keep-generations");
+        parts.push(self.config.evalRaw("config.settings.disk.immutability.nonPersistedGenerations"));
+        parts.push("--restore-generation");
+        parts.push(self.config.evalRaw("config.settings.disk.immutability.restoreGeneration"));
+        parts.push(action);
+        parts.push(self.rootDevice());
+        parts.push(self.config.evalString("config.settings.disk.subvolumes.snapshots.name"));
+        parts.push(self.config.evalString("config.settings.disk.immutability.persist.snapshots.cleanName"));
+        parts.push(self.config.evalString("config.settings.disk.immutability.persist.subvolumeRoot"));
+        parts.push("/etc/immutability/spec.toml");
+        for pair in Strings.split(self.config.evalString("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot"), " ") {
+            if (!pair.isEmpty()) { parts.push(pair); }
+        }
+
+        var command = "immutability";
+        for part in parts {
+            command = f"{command} {UnixShell.quote(part)}";
+        }
+        return command;
+    }
+
+    public ExecResult run(string action, bool dryRun) {
+        return self.shell.run(
+            self.command(action, dryRun),
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream()
+        );
+    }
+
+    public void require(string action, bool dryRun) {
+        var result = self.run(action, dryRun);
+        if (!result.ok()) {
+            NixosLog.fatal(f"immutability {action} failed");
+        }
+    }
+}

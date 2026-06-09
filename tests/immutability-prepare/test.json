@@ -1,0 +1,34 @@
+{
+  "name": "immutability-prepare",
+  "state": "immutability-prepare",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-prepare:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2248,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "guest", "command": "set -e; nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && printf switched", "expect": "switched", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; nixosctl immutability plan > /tmp/immutability-plan; grep -F 'volume @root /' /tmp/immutability-plan; grep -F 'keep dir /etc/nixos -> @persist/dirs/etc!nixos' /tmp/immutability-plan; grep -F 'next /run/immutability-top' /tmp/immutability-plan; printf planned", "expect": "planned", "timeout": 300 },
+    { "op": "guest", "command": "set -e; printf prepared-transient > /root/e2e-prepared-transient; nixosctl immutability prepare; test -e /root/e2e-prepared-transient; dev=$(findmnt -no SOURCE / | sed 's/\\[.*//'); top=/run/e2e-prepared-top; mkdir -p \"$top\"; mount -t btrfs -o subvolid=5 \"$dev\" \"$top\"; btrfs subvolume show \"$top/@snapshots/@root/NEXT\" >/dev/null; test ! -e \"$top/@snapshots/@root/NEXT/root/e2e-prepared-transient\"; ls \"$top/@snapshots/.immutability/logs\"/immutability-*.log >/dev/null; umount \"$top\"; printf prepared", "expect": "prepared", "timeout": 900 },
+    { "op": "guest", "command": "set -e; host=/etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"publish-prepared\"/g' \"$host\"; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf publish-prepared-configured", "expect": "publish-prepared-configured", "timeout": 1800 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -e; test ! -e /root/e2e-prepared-transient; test -d /etc/nixos/.git; dev=$(findmnt -no SOURCE / | sed 's/\\[.*//'); top=/run/e2e-published-top; mkdir -p \"$top\"; mount -t btrfs -o subvolid=5 \"$dev\" \"$top\"; test ! -e \"$top/@snapshots/@root/NEXT\"; grep -R 'Publishing prepared NEXT for @root' \"$top/@snapshots/.immutability/logs\"; umount \"$top\"; printf published", "expect": "published", "timeout": 300 },
+    { "op": "snapshot", "name": "prepare-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

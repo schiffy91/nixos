@@ -11,6 +11,7 @@ class ImmutabilityConstants {
     class string converge() { return "converge"; }
     class string reset() { return "reset"; }
     class string prepareOnly() { return "prepare-only"; }
+    class string publishPrepared() { return "publish-prepared"; }
     class string snapshotOnly() { return "snapshot-only"; }
     class string restoreA() { return "restore-a"; }
     class string restoreB() { return "restore-b"; }

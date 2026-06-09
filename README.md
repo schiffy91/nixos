@@ -221,6 +221,8 @@ BTRC compiler and a generated stdlib archive.
 | Mode | Behavior |
 |---|---|
 | `reset` | Roll each `resetOnBoot` subvolume back to its read-only `CLEAN` snapshot at boot |
+| `prepare-only` | Build `NEXT` from `CLEAN` and persisted state without publishing it |
+| `publish-prepared` | Publish an existing prepared `NEXT` at boot without running migrations or rebuilding it |
 | `snapshot-only` | Rotate snapshots without rolling back (ephemeral survives) |
 | `restore-previous` / `restore-penultimate` | Roll back to rotation slot A / B |
 | `restore-generation` | Roll back to `settings.disk.immutability.restoreGeneration` |
@@ -229,6 +231,21 @@ BTRC compiler and a generated stdlib archive.
 `enforce.onReboot` wires the initrd reset + mounts service. Updates do not
 rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
 the only automatic immutability reconciliation path.
+
+For a more inspectable reset, run the live preparation path before switching the
+boot mode:
+
+```bash
+sudo nixosctl immutability plan
+sudo nixosctl immutability prepare
+```
+
+`plan` prints the resolved keep plan from the installed config. `prepare` mounts
+the btrfs top level, runs migrations, rotates generations, and builds `NEXT`
+while the current system keeps running. Setting
+`settings.disk.immutability.mode = "publish-prepared"` then makes initrd only
+verify and publish that prepared snapshot. Runtime logs are also written under
+`@snapshots/.immutability/logs/`.
 
 The v2 mode persists selected files/directories by materializing persistent
 btrfs subvolumes under `@persist` and bind-mounting selected targets after

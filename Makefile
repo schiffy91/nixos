@@ -30,7 +30,7 @@ BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN)
 SOURCES := $(shell find btrc tests/e2e tests/unit -name '*.btrc' | sort)
 
-.PHONY: all transpile build-stdlib build unit check quick smoke test host-smoke app-settings stateful-host aarch64-qemu-host installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
+.PHONY: all transpile build-stdlib build unit check quick smoke test host-smoke app-settings stateful-host x86_64-qemu-host aarch64-qemu-host installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
 
 all: build
 
@@ -100,6 +100,9 @@ stateful-host: $(BIN)
 
 aarch64-qemu-host: $(BIN)
 	$(MAKE) -C tests aarch64-qemu-host
+
+x86_64-qemu-host: $(BIN)
+	$(MAKE) -C tests x86_64-qemu-host
 
 installer-download: $(BIN)
 	$(MAKE) -C tests installer-download
