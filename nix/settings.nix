@@ -314,7 +314,7 @@ in {
       "mkfs.btrfs"  = true;
       btrfs         = true;
       python3       = true;
-      nixos         = true;
+      nixosctl      = true;
       systemctl     = true;
       immutability  = true;
     };

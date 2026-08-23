@@ -24,6 +24,7 @@ let
         --set NIXOSCTL_TRAY_ICON "$out/share/icons/hicolor/256x256/apps/nixosctl-tray.png" \
         --prefix PATH : ${lib.makeBinPath (with pkgs; [
           kdePackages.konsole
+          libnotify
           xdg-utils
         ])}
     '';

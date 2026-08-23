@@ -39,6 +39,11 @@ let
   toolVersion = "GE-Proton11-5";
   toolName    = "proton-custom-${toolVersion}";
 
+  # false ships the pristine GE tarball (plus WineASIO) under the same tool
+  # name, skipping the Wine/DXVK rebuilds entirely — for A/B verification of
+  # whether the patch series is still needed on this GE base.
+  overlayPatchedBinaries = false;
+
   # The exact Valve wine commit GE-Proton11-5 uses (from proton-ge-custom
   # git submodule `wine` at tag GE-Proton11-5).
   valveWineRev  = "36078f5f947532885a596dabbc7893c048133660";
@@ -454,6 +459,7 @@ in stdenv.mkDerivation {
     mkdir -p "$out"
     cp -r . "$out/"
 
+'' + pkgs.lib.optionalString overlayPatchedBinaries ''
     # Overlay our patched binaries on top of the GE-Proton tarball.
     copy_patched() {
       local rel="$1"
@@ -521,6 +527,7 @@ in stdenv.mkDerivation {
     copy_dxvk "${dxvk-proton-custom}/x32/d3d11.dll" i386-windows/d3d11.dll
     cp "${dxvk-proton-custom}/version" "$out/files/lib/wine/dxvk/version"
 
+'' + ''
     # WineASIO is not part of GE-Proton. Nixpkgs currently packages WineASIO
     # 1.3.0 for 64-bit Wine; Rocksmith still needs the 32-bit driver, so keep
     # the existing known-working 32-bit pair as a packaged compat-tool payload

@@ -11,6 +11,7 @@ int main() {
         .item("Rebuild (switch)", "konsole -e sudo nixosctl update")
         .item("Upgrade & rebuild", "konsole -e sudo nixosctl update --upgrade")
         .item("Show changed files", "konsole -e nixosctl diff")
+        .item("Toggle caffeine", "nixosctl caffeine toggle; nixosctl caffeine status && notify-send -a nixosctl 'Caffeine enabled' || notify-send -a nixosctl 'Caffeine disabled'")
         .item("Open /etc/nixos", "xdg-open /etc/nixos")
         .item("Quit tray", TraySignal.quit());
 

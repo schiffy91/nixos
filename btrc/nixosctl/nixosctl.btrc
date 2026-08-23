@@ -113,7 +113,7 @@ class NixosCtl {
         for value in args.values {
             command = f"{command} {UnixShell.quote(value)}";
         }
-        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), foreground=true);  /* child owns the tty so sudo can prompt */
         return result.code;
     }
 
