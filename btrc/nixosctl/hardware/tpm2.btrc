@@ -73,7 +73,8 @@ class Tpm2Manager {
             command,
             stdout=CommandOutput.stream(),
             stderr=CommandOutput.stream(),
-            logFailure=false).ok();
+            logFailure=false,
+            foreground=true).ok();  /* ask-password must own the tty to disable echo */
     }
 
     public bool wipe() {
