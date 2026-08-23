@@ -22,9 +22,8 @@ let
         $out/share/icons/hicolor/256x256/apps/nixosctl-tray.png
       wrapProgram $out/bin/nixosctl-tray \
         --set NIXOSCTL_TRAY_ICON "$out/share/icons/hicolor/256x256/apps/nixosctl-tray.png" \
-        --prefix PATH : ${lib.makeBinPath (with pkgs; [
+        --prefix PATH : /run/wrappers/bin:/run/current-system/sw/bin:${lib.makeBinPath (with pkgs; [
           kdePackages.konsole
-          libnotify
           xdg-utils
         ])}
     '';
@@ -35,6 +34,18 @@ lib.mkIf (config.settings.apps.enable
           && config.settings.apps.nixosctl.enable
           && config.settings.desktop.enable) {
   users.users.${config.settings.users.admin.username}.packages = [ nixosctlTrayBin ];
+  systemd.user.services.nixos-caffeine = {
+    description = "Keep the session idle-inhibited by default";
+    wantedBy = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    unitConfig.ConditionUser = config.settings.users.admin.username;
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "/run/current-system/sw/bin/nixosctl caffeine enable";
+      ExecStop = "/run/current-system/sw/bin/nixosctl caffeine disable";
+    };
+  };
   systemd.user.services.nixosctl-tray = {
     description = "NixOS management system tray";
     wantedBy = [ "graphical-session.target" ];

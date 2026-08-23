@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787512371,
-        "narHash": "sha256-ziwa40rAtXOSYqbRWOaXD4ug3z0o6YG25hUW5HZ69AY=",
+        "lastModified": 1787516214,
+        "narHash": "sha256-k+gVBYODWs8vuA8yUt7j/6UoPWMIKFyDHYAlfBYSU6A=",
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "1713d7a0aecf418d0d09451502ebe6e508eaab50",
+        "rev": "14aa70ec4aa57a8b4b8ad63017580e8fc1ce44d6",
         "type": "github"
       },
       "original": {
