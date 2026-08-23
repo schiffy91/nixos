@@ -28,7 +28,7 @@ let
     runtimeInputs = [ btrcPython ];
     text = ''
       export PYTHONPATH="${btrcSource}''${PYTHONPATH:+:$PYTHONPATH}"
-      exec ${btrcPython}/bin/python3 -m src.devex.lsp.server "$@"
+      exec ${btrcPython}/bin/python3 -m src.devex.lsp "$@"
     '';
   };
 in
