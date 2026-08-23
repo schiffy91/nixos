@@ -150,7 +150,7 @@ class NixosCtl {
         }
         NixosLog.info(f"nixosctl {args.command()}: entering tests/shell.nix (qemu/swtpm/socat). First entry can take a minute.");
         var command = f"nix-shell {UnixShell.quote(shellPath)} --run {UnixShell.quote(runCmd)}";
-        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), foreground=true);  /* inner nixosctl prompts on the tty */
         return result.code;
     }
 
