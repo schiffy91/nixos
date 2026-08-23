@@ -1,4 +1,5 @@
 import std.fs;
+import std.bytes;
 import std.strings;
 import ../../core/log.btrc;
 import ./constants.btrc;
@@ -123,11 +124,6 @@ class ImmutabilityPaths {
         return result;
     }
 
-    class string legacyKey(string absPath) {
-        var rel = absPath.substring(1, absPath.len() - 1);
-        return Strings.replace(rel, "/", "!");
-    }
-
     class int keyHexValue(char current) {
         if (current >= '0' && current <= '9') { return (int)current - (int)'0'; }
         if (current >= 'A' && current <= 'F') { return (int)current - (int)'A' + 10; }
@@ -136,10 +132,9 @@ class ImmutabilityPaths {
     }
 
     class string keyByte(int value) {
-        char* result = (char*)malloc(2);
-        result[0] = (char)value;
-        result[1] = '\0';
-        return result;
+        Bytes result = Bytes();
+        result.append(value);
+        return result.toStringLossy();
     }
 
     class string pathFromKey(string key) {

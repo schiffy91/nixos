@@ -19,10 +19,12 @@ The active path intentionally does not use `--disable-gpu-compositing`,
 `--use-angle=desktop`, or a CPU `wl_shm` readback. Those remain useful
 diagnostics, not acceptable defaults.
 
-Swap-chain visuals stay on child host HWNDs for now. Directly binding a root
-composition swap chain to the target HWND reduces one host window, but causes
-visible compositor ordering flicker in Battle.net while child content is
-present at the same time.
+Unplaced first-level swap-chain wrappers bind directly to the target HWND. Those
+visuals are often just CEF's identity wrapper around the real page content, and
+hosting them in a Win32 child HWND leaves native Wayland with an unmanaged child
+surface that can present successfully without becoming visible. Placed, clipped,
+nested, and surface-backed visuals still use child host HWNDs so their geometry
+and stacking stay independent from the target window.
 
 Composition host geometry and clip regions are cached after each successful
 Win32 update. Commits that do not change the visual tree avoid restacking or
@@ -38,6 +40,11 @@ Composition host HWNDs are created hidden. Surface hosts are shown after Wine
 has presented their backing content; swap-chain hosts stay hidden until DXVK
 receives the first present for that composition swap chain. This prevents an
 empty host window from being mapped during the CEF login-to-launcher handoff.
+
+When a visual is backed by a child host HWND, the target parent is marked with
+`WS_CLIPCHILDREN`. The host HWND is our stand-in for a DComp compositor layer;
+parent Qt/CEF background repaints must not cover that child after DXVK has
+presented Chromium content.
 
 ## Review Notes
 Wine's `dcomp.dll` records the visual tree and asks DXVK to retarget each

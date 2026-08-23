@@ -5,23 +5,23 @@
 }:
 
 let
-  desktopIconRevision = "f4c71354585f506a3df936f952620190b3005c63";
-  iconSvg = pkgs.fetchurl {
-    url = "https://raw.githubusercontent.com/byrongamatos/slopsmith-desktop/${desktopIconRevision}/resources/icons/icon.svg";
-    hash = "sha256-bBcd0Gxqbmk2UKD5k2giuiqVLXqFNdvNgWPrizYRz68=";
-  };
-  iconPng = pkgs.fetchurl {
-    url = "https://raw.githubusercontent.com/byrongamatos/slopsmith-desktop/${desktopIconRevision}/resources/icons/512x512.png";
-    hash = "sha256-GQsl7MMrFoL3o/t3vv9AKPi3tyyLWfrnGJD7bIiBwvI=";
-  };
+  iconSvg = pkgs.writeText "slopsmith.svg" ''
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="24" fill="#202326"/>
+      <path d="M30 70c18-33 48-33 68 0" fill="none" stroke="#f4c95d" stroke-width="12" stroke-linecap="round"/>
+      <path d="M37 83h54" stroke="#6ed3cf" stroke-width="10" stroke-linecap="round"/>
+      <circle cx="41" cy="63" r="7" fill="#f7f7f7"/>
+      <circle cx="64" cy="53" r="7" fill="#f7f7f7"/>
+      <circle cx="87" cy="63" r="7" fill="#f7f7f7"/>
+    </svg>
+  '';
   icons = pkgs.runCommand "slopsmith-icons" { } ''
     install -Dm644 ${iconSvg} $out/share/icons/hicolor/scalable/apps/slopsmith.svg
-    install -Dm644 ${iconPng} $out/share/icons/hicolor/512x512/apps/slopsmith.png
   '';
   src = pkgs.fetchFromGitHub {
-    owner = "byrongamatos";
+    owner = "schiffy91";
     repo = "slopsmith";
-    rev = "84acc2f345dbf8117f4c06fc36a4b69d8b888bb6";
+    rev = "846d5e08c85b3ad53c1fa42a0ad53e89431cec8f";
     hash = "sha256-Rf2aFCxcfqV97JFLQ1A+LNe/rHw+Ypl2c8iV31o2Okc=";
   };
   launcher = pkgs.writeShellApplication {

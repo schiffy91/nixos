@@ -1,0 +1,35 @@
+From b33a3b79a6fa9253d03052f826f7e96cbcb5079f Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 11 Jun 2026 18:26:00 -0700
+Subject: [PATCH] dcomp: Avoid hosts for unplaced child swapchains
+
+Battle.net's login tree wraps the real swap-chain content in a first-level
+child visual with identity placement, no clip, and no transform. Hosting that
+visual in a Win32 child HWND is not useful, and on native Wayland the child
+HWND is not a managed surface. DXVK can present to it successfully while KWin
+and the user still see the black parent window.
+
+Keep child host HWNDs for actual placed, clipped, surface-backed, or nested
+composition layers, but bind unplaced first-level swap-chain wrappers directly
+to the DComp target HWND.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index 7cdd5c5..5063ddb 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -1269,7 +1269,7 @@ static BOOL dcomp_visual_needs_host(const struct dcomp_visual *v, BOOL has_surfa
+              v->transform.m11 != 1.0f || v->transform.m22 != 1.0f;
+     if (placed) return TRUE;
+
+-    if (v->parent) return TRUE;
++    if (v->parent && v->parent->parent) return TRUE;
+
+     return FALSE;
+ }
+--
+2.54.0

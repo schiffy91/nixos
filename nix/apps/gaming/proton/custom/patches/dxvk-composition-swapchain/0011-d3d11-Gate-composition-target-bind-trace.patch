@@ -1,0 +1,40 @@
+From 9dc0f0f711a34c5d9df1c5a622945e8915cb3b04 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 11 Jun 2026 20:05:00 -0700
+Subject: [PATCH] d3d11: Gate composition target bind trace
+
+Keep the target-bind breadcrumb behind the same opt-in composition trace flag
+as the present, show, and acquire logs. The bind line is useful while proving
+Battle.net's DComp route, but it should not make ordinary debug logs noisy.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 19 ++++++++++---------
+ 1 file changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 8482e67..20d0d3f 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -493,9 +493,10 @@ namespace dxvk {
+-    Logger::debug(str::format(
+-      "D3D11SwapChain::SetCompositionTarget: swapchain=0x", std::hex,
+-      reinterpret_cast<uintptr_t>(this), " target=0x",
+-      reinterpret_cast<uintptr_t>(hTarget), " dispatch=0x",
+-      reinterpret_cast<uintptr_t>(hDispatch), " previous=0x",
+-      reinterpret_cast<uintptr_t>(previousTarget), std::dec,
+-      " child=", childTarget,
+-      " size=", m_desc.Width, "x", m_desc.Height,
+-      " format=", m_desc.Format, " alpha=", m_desc.AlphaMode));
++    if (TraceCompositionSwapChains())
++      Logger::debug(str::format(
++        "D3D11SwapChain::SetCompositionTarget: swapchain=0x", std::hex,
++        reinterpret_cast<uintptr_t>(this), " target=0x",
++        reinterpret_cast<uintptr_t>(hTarget), " dispatch=0x",
++        reinterpret_cast<uintptr_t>(hDispatch), " previous=0x",
++        reinterpret_cast<uintptr_t>(previousTarget), std::dec,
++        " child=", childTarget,
++        " size=", m_desc.Width, "x", m_desc.Height,
++        " format=", m_desc.Format, " alpha=", m_desc.AlphaMode));
+--
+2.54.0

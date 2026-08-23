@@ -1,0 +1,64 @@
+From 5d9b9d919339a15b820d2b42d193691c7d785f04 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 11 Jun 2026 10:34:00 -0700
+Subject: [PATCH] dcomp: Clip target parents around composition hosts
+
+Wine's DComp bridge represents swap-chain visuals with real child HWNDs. The
+target window still belongs to Battle.net's Qt/CEF host, and without
+WS_CLIPCHILDREN that parent can repaint its black loading/background surface
+over the child composition host. That leaves Chromium-rendered frames hidden
+even though DXVK has a valid presenter and CEF reports the page loaded.
+
+Set WS_CLIPCHILDREN on DComp target HWNDs when a visual is bound through a
+composition host. This matches the child-window emulation model: once DComp
+content is hosted by a child, parent repaints must leave that rectangle to the
+child surface.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/dcomp/device.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
+index accc4a0..7cdd5c5 100644
+--- a/dlls/dcomp/device.c
++++ b/dlls/dcomp/device.c
+@@ -1273,6 +1273,27 @@ static BOOL dcomp_visual_needs_host(const struct dcomp_visual *v, BOOL has_surfa
+     return FALSE;
+ }
+
++static void dcomp_target_enable_child_clipping(HWND hwnd)
++{
++    LONG_PTR style;
++
++    if (!hwnd) return;
++
++    style = GetWindowLongPtrW(hwnd, GWL_STYLE);
++    if (style & WS_CLIPCHILDREN) return;
++
++    TRACE("enabling WS_CLIPCHILDREN on composition target hwnd=%p\n", hwnd);
++    if (!SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_CLIPCHILDREN))
++    {
++        WARN("failed to set WS_CLIPCHILDREN on composition target hwnd=%p\n", hwnd);
++        return;
++    }
++
++    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
++                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
++                 SWP_NOACTIVATE | SWP_FRAMECHANGED);
++}
++
+ static void dcomp_surface_reset_swapchain(struct dcomp_surface *s)
+ {
+     dcomp_surface_unbind_swapchain(s);
+@@ -1475,6 +1496,8 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
+         if (width && height && dcomp_visual_host_clip(t->hwnd, x, y, v, width, height, &host_clip) &&
+             dcomp_register_host_class())
+         {
++            dcomp_target_enable_child_clipping(t->hwnd);
++
+             if (!v->host_hwnd || v->host_parent != t->hwnd)
+             {
+                 if (v->host_hwnd)
+--
+2.54.0

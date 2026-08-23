@@ -31,10 +31,10 @@ let
   # Boot enforcement is a firmware signature check — it needs this firmware but
   # NOT QEMU's secure world (no -machine virt,secure=on / TrustZone).
   aavmfSecboot = stdenv.mkDerivation {
-    name = "aavmf-secboot-debian-2025.11-5";
+    name = "aavmf-secboot-debian-2026.05-2";
     src = pkgs.fetchurl {
-      url = "https://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2025.11-5_all.deb";
-      hash = "sha256-lTiLdgboId2K8d2FJ2cJTVaf94yy6PHcIYtglZpS7oE=";
+      url = "https://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2026.05-2_all.deb";
+      hash = "sha256-7AqSK8dY/PS1ewC4GHBHXZfgfvFm1BYNRlGTGVi7vcM=";
     };
     nativeBuildInputs = [ pkgs.dpkg ];
     dontUnpack = true;

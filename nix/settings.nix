@@ -268,6 +268,16 @@ in {
     settings.apps.rocksmith.enable = mkSetting bool true;
     settings.apps.steam.enable = mkSetting bool true;
     settings.apps.sunshine.enable = mkSetting bool true;
+    settings.apps.sunshine.virtualDisplay.name = mkSetting str "sunshine-vmon";
+    settings.apps.sunshine.virtualDisplay.disablePrimaryOnStream = mkSetting bool false;
+    settings.apps.sunshine.virtualDisplay.primaryOutput = mkSetting str "";
+    settings.apps.sunshine.virtualDisplay.position = mkSetting str "0,0";
+    settings.apps.sunshine.virtualDisplay.scale = mkSetting str "1";
+    settings.apps.sunshine.virtualDisplay.port = mkSetting port 5905;
+    settings.apps.sunshine.virtualDisplay.defaultWidth = mkSetting ints.positive 1920;
+    settings.apps.sunshine.virtualDisplay.defaultHeight = mkSetting ints.positive 1080;
+    settings.apps.sunshine.virtualDisplay.defaultFps = mkSetting ints.positive 60;
+    settings.apps.sunshine.virtualDisplay.settleSeconds = mkSetting ints.positive 3;
     settings.apps.vscode.enable = mkSetting bool true;
     ##### Networking #####
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; # ip -o -f inet addr show | awk '/scope global/ {print $4}';

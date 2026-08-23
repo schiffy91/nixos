@@ -1,7 +1,6 @@
 ##### Display connectors #####
 [displays]
 "DP-1" = "ProXDR"
-"DP-3" = "Streaming"
 "HDMI-A-2" = "S89C"
 
 ##### Display layout #####

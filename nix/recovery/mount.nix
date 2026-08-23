@@ -1,4 +1,4 @@
-{ config, lib, pkgs }:
+{ config, immutabilityPersistKey, lib, pkgs }:
 let
   allVolumes = config.settings.disk.subvolumes.volumes;
   resetVolumes = lib.filter (volume: volume.resetOnBoot) allVolumes;
@@ -27,13 +27,10 @@ let
         !(builtins.any (other: path == other.mountPoint || lib.hasPrefix (other.mountPoint + "/") path) otherMounts)
       else path == mountPoint || lib.hasPrefix (mountPoint + "/") path
   ) (map trimPath config.settings.disk.immutability.persist.paths);
-  persistKey = import ../lib/immutability-key.nix { inherit lib; };
-  legacyPersistKey = import ../lib/immutability-legacy-key.nix { inherit lib; };
+  persistKey = immutabilityPersistKey;
   rawPersistMounts = lib.concatMap (volume:
     map (path: {
       inherit path;
-      key = persistKey path;
-      legacyKey = legacyPersistKey path;
       subvolume = "${config.settings.disk.immutability.persist.subvolumeRoot}/dirs/${persistKey path}";
     }) (sortPaths (pathsForVolume volume))
   ) resetVolumes;
@@ -43,16 +40,7 @@ let
   selectedPersistMounts = lib.foldl' (selected: mount:
     if coveredBy selected mount.path then selected else selected ++ [ mount ]
   ) [] rawPersistMounts;
-  legacyUnambiguous = mount: !(builtins.any (other:
-    other.path != mount.path && (other.key == mount.legacyKey || other.legacyKey == mount.legacyKey)
-  ) selectedPersistMounts);
-  persistMounts = map (mount: {
-    inherit (mount) path subvolume;
-    legacySubvolume =
-      if mount.key != mount.legacyKey && legacyUnambiguous mount
-      then "${config.settings.disk.immutability.persist.subvolumeRoot}/dirs/${mount.legacyKey}"
-      else "";
-  }) selectedPersistMounts;
+  persistMounts = selectedPersistMounts;
   mountVolumeCommands = lib.concatMapStringsSep "\n" (volume: ''
     mount_volume ${lib.escapeShellArgs [
       volume.mountPoint
@@ -61,7 +49,7 @@ let
     ]}
   '') mountVolumes;
   mountPersistCommands = lib.concatMapStringsSep "\n" (mount: ''
-    mount_persist_abs ${lib.escapeShellArgs [ mount.path mount.subvolume mount.legacySubvolume ]}
+    mount_persist_abs ${lib.escapeShellArgs [ mount.path mount.subvolume ]}
   '') persistMounts;
   rootDevice =
     if config.settings.disk.encryption.enable
@@ -232,21 +220,16 @@ pkgs.writeShellApplication {
     mount_persist_abs() {
       local path="$1"
       local subvolume="$2"
-      local legacy_subvolume="$3"
       local mount_target
-      local actual_subvolume="$subvolume"
 
       mount_target="$(target_path "$path")"
       if covered_by_selected "$mount_target"; then
         return 0
       fi
-      if [ -n "$legacy_subvolume" ] && ! btrfs subvolume show "$top/$actual_subvolume" >/dev/null 2>&1; then
-        actual_subvolume="$legacy_subvolume"
-      fi
-      if ! btrfs subvolume show "$top/$actual_subvolume" >/dev/null 2>&1; then
+      if ! btrfs subvolume show "$top/$subvolume" >/dev/null 2>&1; then
         return 0
       fi
-      mount_btrfs "$mount_target" "$actual_subvolume" "compress=zstd,noatime"
+      mount_btrfs "$mount_target" "$subvolume" "compress=zstd,noatime"
       selected_targets+=("$mount_target")
     }
 

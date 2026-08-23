@@ -28,11 +28,6 @@ let
       scaleFactor = 2.5;
     };
     driCards  = "/dev/dri/nvidia-card:/dev/dri/amd-card";  # KWIN_DRM_DEVICES; symlinks from gpu.nix udev
-    streaming = {
-      connector = "DP-3";
-      mode      = "1280x800@90";
-      position  = "7016,0";  # just right of primary (Pro Display XDR is 6016 wide)
-    };
   };
   network = {
     primaryInterface = "eno2";  # onboard NIC; TB ethernet (eth0) deprioritized
@@ -83,6 +78,10 @@ in {
       scaleFactor = display.primary.scaleFactor;
       primary     = true;
     }];
+    apps.sunshine.virtualDisplay = {
+      disablePrimaryOnStream = true;
+      primaryOutput = display.primary.name;
+    };
     nixosctl.configPath = "${./nixosctl.toml}";
     sudolessAllowlist.enable = true;
   };

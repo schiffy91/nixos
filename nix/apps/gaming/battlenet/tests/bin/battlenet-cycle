@@ -2,7 +2,7 @@
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-nixos_dir="$(cd "$app_dir/../../../.." && pwd)"
+nixos_dir="$(cd "$app_dir/../../../../.." && pwd)"
 proton_dir="$nixos_dir/nix/apps/gaming/proton/custom"
 
 usage() {

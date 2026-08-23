@@ -1,9 +1,7 @@
 import std.fs;
 import std.platform;
 import std.vector;
-import ./constants.btrc;
 import ./fs.btrc;
-import ./mounts.btrc;
 import ./paths.btrc;
 import ./run.btrc;
 import ./types.btrc;
@@ -11,39 +9,25 @@ import ./types.btrc;
 class ImmutabilityMaterializer {
     public ImmutabilityRun run;
     public ImmutabilityFs fs;
-    public ImmutabilityMounts mounts;
 
-    public ImmutabilityMaterializer(ImmutabilityRun run, ImmutabilityFs fs, ImmutabilityMounts mounts) {
+    public ImmutabilityMaterializer(ImmutabilityRun run, ImmutabilityFs fs) {
         self.run = run;
         self.fs = fs;
-        self.mounts = mounts;
     }
 
     public string pathInVolume(ImmutabilitySpec spec) {
         return self.run.path(PathTools.join(spec.volume, spec.relativePath));
     }
 
-    public string dirStore(string persistRoot, ImmutabilitySpec spec, Vector<string> targets) {
+    public string dirStore(string persistRoot, ImmutabilitySpec spec) {
         var canonical = self.run.path(ImmutabilityPaths.dirStore(persistRoot, spec.absPath));
         if (self.fs.isSubvolume(canonical)) { return canonical; }
-        var legacy = self.mounts.legacySubvolume(persistRoot, spec.absPath, targets);
-        if (!legacy.isEmpty() && self.fs.isSubvolume(legacy)) { return legacy; }
         return "";
     }
 
-    public string fileStore(string persistRoot, ImmutabilitySpec spec, Vector<string> targets) {
+    public string fileStore(string persistRoot, ImmutabilitySpec spec) {
         var canonical = self.run.path(ImmutabilityPaths.fileStore(persistRoot, spec.absPath));
         if (self.fs.exists(canonical)) { return canonical; }
-        var legacyKey = ImmutabilityPaths.legacyKey(spec.absPath);
-        if (legacyKey.equals(ImmutabilityPaths.key(spec.absPath))) { return ""; }
-        for target in targets {
-            if (target.equals(spec.absPath)) { continue; }
-            if (ImmutabilityPaths.key(target).equals(legacyKey)) { return ""; }
-            if (ImmutabilityPaths.legacyKey(target).equals(legacyKey)) { return ""; }
-        }
-        var root = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.meta()), ImmutabilityConstants.files());
-        var legacy = self.run.path(PathTools.join(root, legacyKey));
-        if (self.fs.exists(legacy)) { return legacy; }
         return "";
     }
 
@@ -81,12 +65,12 @@ class ImmutabilityMaterializer {
         self.run.renamePath(temporary, target);
     }
 
-    public void materialize(Vector<ImmutabilityPlan> plans, string persistRoot, Vector<string> targets) {
+    public void materialize(Vector<ImmutabilityPlan> plans, string persistRoot) {
         for plan in plans {
             if (plan.kind.equals("dir")) {
-                self.materializeDirectory(plan.spec, self.dirStore(persistRoot, plan.spec, targets));
+                self.materializeDirectory(plan.spec, self.dirStore(persistRoot, plan.spec));
             } else {
-                self.materializeFile(plan.spec, self.fileStore(persistRoot, plan.spec, targets));
+                self.materializeFile(plan.spec, self.fileStore(persistRoot, plan.spec));
             }
         }
     }

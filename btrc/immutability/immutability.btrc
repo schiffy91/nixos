@@ -10,7 +10,6 @@ import ./lib/config.btrc;
 import ./lib/constants.btrc;
 import ./lib/fs.btrc;
 import ./lib/materialize.btrc;
-import ./lib/migrations.btrc;
 import ./lib/mounts.btrc;
 import ./lib/orphans.btrc;
 import ./lib/paths.btrc;
@@ -24,7 +23,6 @@ class Immutability {
     public ImmutabilityFs fs;
     public ImmutabilityPlanner planner;
     public ImmutabilityMaterializer materializer;
-    public ImmutabilityMigrations migrations;
     public ImmutabilityMounts mounts;
     public ImmutabilitySlots slots;
     public ImmutabilityOrphans orphans;
@@ -45,9 +43,8 @@ class Immutability {
         self.fs = ImmutabilityFs(self.run);
         self.planner = ImmutabilityPlanner(self.fs);
         self.mounts = ImmutabilityMounts(self.run, self.fs);
-        self.materializer = ImmutabilityMaterializer(self.run, self.fs, self.mounts);
+        self.materializer = ImmutabilityMaterializer(self.run, self.fs);
         self.slots = ImmutabilitySlots(self.fs, self.run);
-        self.migrations = ImmutabilityMigrations(self.run, self.fs, self.slots, self.mounts);
         self.orphans = ImmutabilityOrphans(self.fs, self.run);
         self.device = "";
         self.snapshotsSubvolume = "";
@@ -289,7 +286,6 @@ class Immutability {
             self.run.enableFileLog(self.logPath());
             if (!self.mode.equals(ImmutabilityConstants.publishPrepared())) {
                 self.orphans.ensureNamespaces(self.persistRoot);
-                self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
             }
             if (self.prepareMode()) {
                 self.orphans.pruneOrphans(self.persistRoot, self.plansForAllVolumes());
@@ -338,26 +334,17 @@ class Immutability {
         self.mounts.mountPersist(self.device, self.persistRoot, self.specs, self.assumeMounted);
     }
 
-    public Vector<string> planTargets(Vector<ImmutabilityPlan> plans) {
-        Vector<string> targets = [];
-        for plan in plans {
-            targets.push(plan.spec.absPath);
-        }
-        return targets;
-    }
-
     public void materializePersist() {
         self.mounts.mountTop(self.device, self.assumeMounted);
         try {
             self.orphans.ensureNamespaces(self.persistRoot);
-            self.migrations.migrate(self.snapshotsSubvolume, self.persistRoot, self.volumes, self.specs, self.keepGenerations);
             for volume in self.volumes {
                 var live = self.run.path(volume.name);
                 var clean = self.cleanPath(volume);
                 self.requireLiveAndClean(live, clean);
                 var specs = self.mounts.selectedSpecs(self.specsForVolume(volume.name));
                 var plans = self.planner.makePlan(specs, live, clean, self.persistRoot);
-                self.materializer.materialize(plans, self.persistRoot, self.planTargets(plans));
+                self.materializer.materialize(plans, self.persistRoot);
             }
             self.run.require(ImmutabilityBtrfs.sync(self.run.top));
         } finally {

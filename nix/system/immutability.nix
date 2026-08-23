@@ -1,5 +1,7 @@
 { config, inputs, lib, pkgs, utils, ... }:
 let
+	persistKey = path: lib.replaceStrings [ "%2F" ] [ "!" ] (lib.strings.escapeURL (lib.removePrefix "/" path));
+	immutabilityVersion = "2026.08.22";
 	device = if config.settings.disk.encryption.enable then config.settings.disk.by.mapper.root else config.settings.disk.by.partlabel.root;
 	deviceDependency = if config.settings.disk.encryption.enable then "dev-mapper-${config.settings.disk.label.root}.device" else "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
@@ -43,6 +45,44 @@ let
 	immutabilityOptions = lib.escapeShellArgs [ "--keep-generations" (toString nonPersistedGenerations) "--restore-generation" (toString restoreGeneration) ];
 	immutabilityCommandArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName immutabilityMode immutabilityPersistRoot immutabilitySpecFile ];
 	immutabilityResetMountUnits = map (volume: "${utils.escapeSystemdPath volume.mountPoint}.mount") resetVolumes;
+	immutabilityVersionDir = "${snapshotsSubvolumeName}/.immutability";
+	immutabilityVersionFile = "${immutabilityVersionDir}/version";
+	immutabilityVersionPreflight = ''
+		immutability_version_top="/run/immutability-version-top"
+		immutability_version_dir="$immutability_version_top/${immutabilityVersionDir}"
+		immutability_version_file="$immutability_version_top/${immutabilityVersionFile}"
+		immutability_version_cleanup() {
+			umount "$immutability_version_top" 2>/dev/null || true
+			rmdir "$immutability_version_top" 2>/dev/null || true
+		}
+		trap immutability_version_cleanup EXIT
+		mkdir -p "$immutability_version_top"
+		mount -t btrfs -o subvolid=5 ${lib.escapeShellArg device} "$immutability_version_top"
+
+		immutability_previous_version=""
+		if [ -f "$immutability_version_file" ]; then
+			IFS= read -r immutability_previous_version < "$immutability_version_file" || true
+		fi
+		case "$immutability_previous_version" in
+			""|"0.1"|${lib.escapeShellArg immutabilityVersion})
+				;;
+			*)
+				echo "Unsupported immutability version transition: $immutability_previous_version -> ${immutabilityVersion}" >&2
+				exit 1
+				;;
+		esac
+	'';
+	immutabilityVersionCommit = ''
+		mkdir -p "$immutability_version_dir"
+		printf '%s\n' ${lib.escapeShellArg immutabilityVersion} > "$immutability_version_file"
+		sync "$immutability_version_file" || sync
+		immutability_version_cleanup
+		trap - EXIT
+	'';
+	immutabilityVersionFinish = if immutabilityDryRun then ''
+		immutability_version_cleanup
+		trap - EXIT
+	'' else immutabilityVersionCommit;
 	immutabilitySpecFile = (pkgs.formats.toml {}).generate "immutability-spec.toml" {
 		keep = lib.concatMap (volume:
 			map (path: {
@@ -71,62 +111,73 @@ let
 	};
 
 in
-lib.mkMerge [
-(lib.mkIf (persistenceEnabled || immutabilityEnabled) {
-	assertions = [
+{
+	config = lib.mkMerge [
 		{
-			assertion = !immutabilityEnabled || restoreGenerationMinimum <= nonPersistedGenerations;
-			message = "settings.disk.immutability.nonPersistedGenerations must keep enough generations for settings.disk.immutability.mode";
+			_module.args.immutabilityPersistKey = persistKey;
 		}
-	];
-	environment.systemPackages = [ immutabilityBin ];
-	environment.etc."immutability/spec.toml".source = immutabilitySpecFile;
-	systemd.services."persistence-mounts" = {
-		description = "Mount persistent BTRFS subvolumes into place";
-		wantedBy = lib.optionals persistenceEnabled [ "local-fs.target" ];
-		requires = [ deviceDependency ] ++ immutabilityResetMountUnits;
-		after = [ deviceDependency ] ++ immutabilityResetMountUnits;
-		before = [ "local-fs.target" ];
-		unitConfig.DefaultDependencies = "no";
-		serviceConfig = {
-			Type = "oneshot";
-			RemainAfterExit = true;
-		};
-		path = with pkgs; [ btrfs-progs coreutils util-linux ];
-		script = ''
-			${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}mount ${lib.escapeShellArg device} ${lib.escapeShellArg immutabilityPersistRoot} ${immutabilitySpecFile}
-		'';
-	};
-})
-(lib.mkIf (immutabilityEnabled && config.settings.disk.immutability.enforce.onReboot) {
-	fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
-	boot = {
-		nixStoreMountOpts = [ "ro" ];
-		initrd = {
-			supportedFilesystems = [ "btrfs" ];
-			systemd = {
-				storePaths = [ "${immutabilityBin}" immutabilitySpecFile ];
-				extraBin = {
-					btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
-					cp = "${pkgs.coreutils}/bin/cp";
-					mv = "${pkgs.coreutils}/bin/mv";
-					findmnt = "${pkgs.util-linux}/bin/findmnt";
-					umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
+		(lib.mkIf (persistenceEnabled || immutabilityEnabled) {
+			assertions = [
+				{
+					assertion = !immutabilityEnabled || restoreGenerationMinimum <= nonPersistedGenerations;
+					message = "settings.disk.immutability.nonPersistedGenerations must keep enough generations for settings.disk.immutability.mode";
+				}
+			];
+			environment.systemPackages = [ immutabilityBin ];
+			environment.etc."immutability/spec.toml".source = immutabilitySpecFile;
+			systemd.services."persistence-mounts" = {
+				description = "Mount persistent BTRFS subvolumes into place";
+				wantedBy = lib.optionals persistenceEnabled [ "local-fs.target" ];
+				requires = [ deviceDependency ] ++ immutabilityResetMountUnits;
+				after = [ deviceDependency ] ++ immutabilityResetMountUnits;
+				before = [ "local-fs.target" ];
+				unitConfig.DefaultDependencies = "no";
+				serviceConfig = {
+					Type = "oneshot";
+					RemainAfterExit = true;
 				};
-				services."immutability" = {
-					description = "Factory resets BTRFS subvolumes using persistent keep subvolumes";
-					wantedBy = [ "initrd.target" ];
-					requires = [ deviceDependency ];
-					after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
-					before = [ "sysroot.mount" ];
-					unitConfig.DefaultDependencies = "no";
-					serviceConfig.Type = "oneshot";
-					script = ''
-						${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}${immutabilityOptions} ${immutabilityCommandArgs} ${immutabilityPairArgs}
-					'';
+				path = with pkgs; [ btrfs-progs coreutils util-linux ];
+				script = ''
+					${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}mount ${lib.escapeShellArg device} ${lib.escapeShellArg immutabilityPersistRoot} ${immutabilitySpecFile}
+				'';
+			};
+		})
+		(lib.mkIf (immutabilityEnabled && config.settings.disk.immutability.enforce.onReboot) {
+			fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
+			boot = {
+				nixStoreMountOpts = [ "ro" ];
+				initrd = {
+					supportedFilesystems = [ "btrfs" ];
+					systemd = {
+						storePaths = [ "${immutabilityBin}" immutabilitySpecFile ];
+							extraBin = {
+								btrfs = "${pkgs.btrfs-progs}/bin/btrfs";
+								cp = "${pkgs.coreutils}/bin/cp";
+								mkdir = "${pkgs.coreutils}/bin/mkdir";
+								mv = "${pkgs.coreutils}/bin/mv";
+								rmdir = "${pkgs.coreutils}/bin/rmdir";
+								sync = "${pkgs.coreutils}/bin/sync";
+								findmnt = "${pkgs.util-linux}/bin/findmnt";
+								mount = lib.mkDefault "${pkgs.util-linux}/bin/mount";
+								umount = lib.mkDefault "${pkgs.util-linux}/bin/umount";
+							};
+						services."immutability" = {
+							description = "Factory resets BTRFS subvolumes using persistent keep subvolumes";
+							wantedBy = [ "initrd.target" ];
+							requires = [ deviceDependency ];
+							after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
+							before = [ "sysroot.mount" ];
+								unitConfig.DefaultDependencies = "no";
+								serviceConfig.Type = "oneshot";
+								script = ''
+									${immutabilityVersionPreflight}
+									${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}${immutabilityOptions} ${immutabilityCommandArgs} ${immutabilityPairArgs}
+									${immutabilityVersionFinish}
+								'';
+							};
+					};
 				};
 			};
-		};
-	};
-	})
-]
+			})
+	];
+}

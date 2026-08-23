@@ -85,6 +85,8 @@ let
     ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-.patch
     ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent-not.patch
     ./patches/dcomp-wayland-gpu-present/0017-dcomp-Show-composition-hosts-after-content-binding.patch
+    ./patches/dcomp-wayland-gpu-present/0018-dcomp-Clip-target-parents-around-composition-hosts.patch
+    ./patches/dcomp-wayland-gpu-present/0019-dcomp-Avoid-hosts-for-unplaced-child-swapchains.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
     ./patches/win32u-shared-gpu-resource/0001-win32u-Open-D3DKMT-shared-GPU-resources.patch
   ];
@@ -97,6 +99,10 @@ let
     ./patches/dxvk-composition-swapchain/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
     ./patches/dxvk-composition-swapchain/0006-d3d11-Preserve-composition-swap-chain-contents.patch
     ./patches/dxvk-composition-swapchain/0007-d3d11-Show-composition-targets-on-first-present.patch
+    ./patches/dxvk-composition-swapchain/0008-d3d11-Replay-composition-content-after-target-binds.patch
+    ./patches/dxvk-composition-swapchain/0009-d3d11-Use-opaque-WSI-alpha-for-composition-hosts.patch
+    ./patches/dxvk-composition-swapchain/0010-d3d11-Trace-composition-present-paths.patch
+    ./patches/dxvk-composition-swapchain/0011-d3d11-Gate-composition-target-bind-trace.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''

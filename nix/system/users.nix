@@ -12,7 +12,7 @@ let
         && !(lib.elem (baseNameOf path) ignoredNames)
         && !(lib.any (ignoredDir path) skippedDirs);
     in lib.filter importable (lib.filesystem.listFilesRecursive dir);
-  appModules = nixModuleFiles [ "assets" "custom" "edid" "home-manager" "tests" ] ../apps;
+  appModules = nixModuleFiles [ "assets" "custom" "home-manager" "tests" ] ../apps;
   homeModules = nixModuleFiles [] ../apps/home-manager;
 in {
   imports = [

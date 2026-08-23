@@ -12,10 +12,6 @@ void expectKey(string path, string key) {
     assert(strcmp(ImmutabilityPaths.normAbs(path).path, path) == 0);
 }
 
-void expectLegacyKey(string path, string key) {
-    assert(strcmp(ImmutabilityPaths.legacyKey(path), key) == 0);
-}
-
 int main() {
     expectKey("/etc/nixos", "etc!nixos");
     expectKey("/etc/foo!bar", "etc!foo%21bar");
@@ -27,9 +23,6 @@ int main() {
     expectKey("/home/alex/name with spaces", "home!alex!name%20with%20spaces");
     expectKey("/home/alex/tab\tname", "home!alex!tab%09name");
     expectKey("/home/alex/new\nline", "home!alex!new%0Aline");
-    expectLegacyKey("/etc/nixos", "etc!nixos");
-    expectLegacyKey("/home/alex/name with spaces", "home!alex!name with spaces");
-
     var specFile = "/tmp/immutability_paths_spec.toml";
     Path.writeAll(
         specFile,

@@ -3,8 +3,7 @@
 This repository is the flake-backed NixOS configuration for the machines in
 `nix/hosts`, with local management tooling written in BTRC. System
 management is Nix plus BTRC end to end; there is no Python or Rust in the
-management layer (the only Python left is an x86-gated Sunshine EDID packaging
-helper under `nix/apps/gaming/`).
+management layer.
 
 ## Current Hosts
 
@@ -222,9 +221,9 @@ BTRC compiler and a generated stdlib archive.
 |---|---|
 | `reset` | Roll each `resetOnBoot` subvolume back to its read-only `CLEAN` snapshot at boot |
 | `prepare-only` | Build `NEXT` from `CLEAN` and persisted state without publishing it |
-| `publish-prepared` | Publish an existing prepared `NEXT` at boot without running migrations or rebuilding it |
+| `publish-prepared` | Publish an existing prepared `NEXT` at boot without rebuilding it |
 | `snapshot-only` | Rotate snapshots without rolling back (ephemeral survives) |
-| `restore-previous` / `restore-penultimate` | Roll back to rotation slot A / B |
+| `restore-previous` / `restore-penultimate` | Roll back to generation 1 / 2 |
 | `restore-generation` | Roll back to `settings.disk.immutability.restoreGeneration` |
 | `disabled` | No reset |
 
@@ -241,8 +240,8 @@ sudo nixosctl immutability prepare
 ```
 
 `plan` prints the resolved keep plan from the installed config. `prepare` mounts
-the btrfs top level, runs migrations, rotates generations, and builds `NEXT`
-while the current system keeps running. Setting
+the btrfs top level, rotates generations, and builds `NEXT` while the current
+system keeps running. Setting
 `settings.disk.immutability.mode = "publish-prepared"` then makes initrd only
 verify and publish that prepared snapshot. Runtime logs are also written under
 `@snapshots/.immutability/logs/`.
@@ -252,13 +251,17 @@ btrfs subvolumes under `@persist` and bind-mounting selected targets after
 reset. The source-of-truth persist list is
 `settings.disk.immutability.persist.paths`.
 
-Immutability state is versioned in `@snapshots/.immutability/version`. Missing
-state means the legacy pre-0.1 layout. Version `0.1` uses numeric
-`generation-N` rollback slots and reversible persist keys. On boot, any stored
-version older than the current runtime version runs migrations before reset:
-legacy `A`/`B`/`C` rollback slots become `generation-1`/`generation-2`/
-`generation-3`, and unambiguous legacy persist keys are moved to the reversible
-encoding.
+Persist stores use reversible keys: the absolute path without its leading slash
+is URL-escaped, then encoded path separators are written as `!`. For example,
+`/home/alex/name with spaces` becomes `home!alex!name%20with%20spaces`.
+Persisted directories live under `@persist/dirs`; persisted files live under
+`@persist/.immutability/files`.
+
+The reset path records the active immutability state version in
+`@snapshots/.immutability/version`, mounted at
+`/.snapshots/.immutability/version` after boot. The current version is
+`2026.08.22`; any future version-specific transition belongs in
+`nix/system/immutability.nix`.
 
 `settings.disk.immutability.nonPersistedGenerations` controls how many reset
 generations are retained. The default `3` preserves the old effective behavior;
@@ -283,13 +286,13 @@ Common path transitions:
 
 | User flow | Handling |
 |---|---|
-| Enable immutability with `n` paths | Rebuild; first reset creates or migrates `@persist` stores and mounts selected paths |
+| Enable immutability with `n` paths | Rebuild; first reset creates canonical `@persist` stores and mounts selected paths |
 | Add a persisted path | Rebuild; reset creates the store from live or `CLEAN` data when it exists |
 | Remove a persisted path | Edit config, run `nixosctl persistence materialize --refresh-clean`, rebuild; stale dir/file stores are quarantined on the next reset |
 | Rename or move a persisted path | Treat as remove old + add new; materialize/checkpoint the old path before rebuilding |
 | Disable immutability but keep persistence | Rebuild; reset stops, but `persistence-mounts` can still mount configured stores |
 | Disable persistence or clear all paths | Materialize/checkpoint before rebuilding if data should remain in place |
-| Upgrade immutability | Rebuild; version migration runs automatically during reset/materialize |
+| Upgrade immutability | Rebuild; persist keys are canonical-only in this tree |
 | A configured path no longer exists | `auto` resolves to file unless a trailing slash or `kind = "dir"` declares a directory; missing stores remain absent |
 | Directory becomes file or file becomes directory | Resolved plans keep only the matching store kind; the old kind is quarantined as an orphan |
 
@@ -520,7 +523,7 @@ The migration to BTRC is complete. Current state:
 | Immutability | BTRC source compiled by the flake-pinned compiler |
 | Native system tray | Implemented through the BTRC stdlib tray backend and packaged as `nixosctl-tray` |
 | VFIO | Removed for now |
-| Python / Rust | Removed (only an x86-gated Sunshine EDID packaging helper remains) |
+| Python / Rust | Removed from the management layer |
 
 ## Maintenance Rules
 

@@ -37,20 +37,25 @@ the `git format-patch -s` commit order for that topic.
 | `wine-wayland-roundtrip` | `0001-winewayland.drv-Avoid-second-init-roundtrip.patch` | Active. Avoids a blocking second Wayland init roundtrip. |
 | `wine-wayland-layered-windows` | `0001-winewayland.drv-Hook-UpdateLayeredWindow.patch` | Active. Hooks `pUpdateLayeredWindow` only. |
 | `wine-wayland-status-notifier` | `0001..0004` | Active. Adds SNI tray support, callback polish, explorer-to-driver icon snapshots, and self-contained item lifetime handling. |
-| `dcomp-wayland-gpu-present` | `0001..0017` | Active. Implements the minimal DComp object model Battle.net uses and binds composition swap chains/surfaces to Wayland-backed host HWNDs. |
+| `dcomp-wayland-gpu-present` | `0001..0019` | Active. Implements the minimal DComp object model Battle.net uses, binds identity swap-chain wrappers directly to the target HWND, keeps placed/clipped/surface visuals on host HWNDs, and clips target parents around hosted composition children. |
 | `win32u-load-driver-deadlock` | `0001` | Active. Bounds desktop-driver readiness waits. |
 | `win32u-shared-gpu-resource` | `0001` | Active. Opens D3DKMT shared GPU resources used by composition paths. |
-| `dxvk-composition-swapchain` | `0001..0007` | Active. Enables DXGI composition swap chains in DXVK, compositor pacing, resize tracking, preserved contents across partial updates, and first-present host visibility. |
+| `dxvk-composition-swapchain` | `0001..0011` | Active. Enables DXGI composition swap chains in DXVK, compositor pacing, resize tracking, preserved contents across partial updates, first-present host visibility, retained-content replay after DComp target rebinds, opaque native WSI alpha for Wayland child hosts, and opt-in debug traces for composition presents and target binds. |
 
 ## Runtime Scope
 
 The current series starts Battle.net under native Wayland, keeps Chromium/CEF on
-the D3D11/DXGI/DComp path, and registers a Plasma StatusNotifierItem.
+the D3D11/DXGI/DComp path, and registers a Plasma StatusNotifierItem. DComp
+identity first-level swap-chain wrappers bind directly to the target HWND, while
+placed, clipped, nested, or surface-backed visuals keep native host HWNDs.
+Target windows get child clipping when visuals are backed by host HWNDs, so
+parent Qt/CEF repaints do not cover hosted composition content.
 
 DXVK preserves composition swap-chain contents across buffer rotation, paces
-composition presents with the compositor, and keeps private composition child
-windows sized to the swap-chain extent. Wine owns the DComp object model,
-Win32 lifetime, popup placement, and tray icon bridge.
+composition presents with the compositor, keeps private composition child
+windows sized to the swap-chain extent when a host is required, and exposes
+those child surfaces to Wayland as opaque WSI targets. Wine owns the DComp
+object model, Win32 lifetime, popup placement, and tray icon bridge.
 
 The installed `battlenet` wrapper has no CPU-compositing fallback or ANGLE
 backend override. App-specific diagnostics live in `nix/apps/gaming/battlenet/tests`,

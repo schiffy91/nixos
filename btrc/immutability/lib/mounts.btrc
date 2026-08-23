@@ -64,18 +64,7 @@ class ImmutabilityMounts {
         return FileSystem.isDir(spec.absPath);
     }
 
-    public void migratePersistentSubvolume(string persistentSubvolume, string legacySubvolume) {
-        if (legacySubvolume.isEmpty()) { return; }
-        if (persistentSubvolume.equals(legacySubvolume)) { return; }
-        if (!self.fs.isSubvolume(legacySubvolume)) { return; }
-        self.run.log(f"Migrating legacy persistent subvolume {legacySubvolume} -> {persistentSubvolume}");
-        self.run.mkdirp(PathTools.dirname(persistentSubvolume));
-        self.run.renamePath(legacySubvolume, persistentSubvolume);
-    }
-
-    public void ensurePersistentSubvolume(ImmutabilitySpec spec, string persistentSubvolume, string legacySubvolume) {
-        if (self.fs.isSubvolume(persistentSubvolume)) { return; }
-        self.migratePersistentSubvolume(persistentSubvolume, legacySubvolume);
+    public void ensurePersistentSubvolume(ImmutabilitySpec spec, string persistentSubvolume) {
         if (self.fs.isSubvolume(persistentSubvolume)) { return; }
         if (!self.persistAsDirectory(spec)) { return; }
         self.fs.makeSubvolume(persistentSubvolume);
@@ -83,29 +72,6 @@ class ImmutabilityMounts {
             self.fs.copyDirectoryContents(spec.absPath, persistentSubvolume);
             self.fs.matchOwnerAndMode(spec.absPath, persistentSubvolume);
         }
-    }
-
-    public bool ambiguousLegacyKey(string target, Vector<string> targets) {
-        var legacy = ImmutabilityPaths.legacyKey(target);
-        for other in targets {
-            if (other.equals(target)) { continue; }
-            if (ImmutabilityPaths.key(other).equals(legacy)) { return true; }
-            if (ImmutabilityPaths.legacyKey(other).equals(legacy)) { return true; }
-        }
-        return false;
-    }
-
-    public string legacySubvolume(string persistRoot, string target, Vector<string> targets) {
-        var key = ImmutabilityPaths.key(target);
-        var legacy = ImmutabilityPaths.legacyKey(target);
-        if (key.equals(legacy)) { return self.run.path(PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), legacy)); }
-        var subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), legacy);
-        var path = self.run.path(subvol);
-        if (!self.ambiguousLegacyKey(target, targets)) { return path; }
-        if (self.fs.isSubvolume(path)) {
-            self.run.log(f"Skipping ambiguous legacy persistent subvolume {path} for {target}");
-        }
-        return "";
     }
 
     public Vector<ImmutabilitySpec> selectedSpecs(Vector<ImmutabilitySpec> specs) {
@@ -131,15 +97,10 @@ class ImmutabilityMounts {
         }
         try {
             var selected = self.selectedSpecs(specs);
-            Vector<string> selectedTargets = [];
-            for spec in selected {
-                selectedTargets.push(spec.absPath);
-            }
             for spec in selected {
                 var target = spec.absPath;
                 var subvol = PathTools.join(PathTools.join(persistRoot, ImmutabilityConstants.dirs()), ImmutabilityPaths.key(target));
-                var legacySubvol = self.legacySubvolume(persistRoot, target, selectedTargets);
-                self.ensurePersistentSubvolume(spec, self.run.path(subvol), legacySubvol);
+                self.ensurePersistentSubvolume(spec, self.run.path(subvol));
                 if (!self.fs.isSubvolume(self.run.path(subvol))) { continue; }
                 self.mountTarget(device, target, subvol);
             }

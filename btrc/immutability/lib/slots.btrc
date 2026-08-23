@@ -19,36 +19,8 @@ class ImmutabilitySlots {
         return f"generation-{Strings.fromInt(generation)}";
     }
 
-    public string legacyName(int generation) {
-        if (generation == 1) { return "A"; }
-        if (generation == 2) { return "B"; }
-        if (generation == 3) { return "C"; }
-        return "";
-    }
-
     public string generationPath(string root, int generation) {
         return PathTools.join(root, self.generationName(generation));
-    }
-
-    public string legacyPath(string root, int generation) {
-        var name = self.legacyName(generation);
-        if (name.isEmpty()) { return ""; }
-        return PathTools.join(root, name);
-    }
-
-    public void migrateLegacy(string root, int generations) {
-        for (int generation = 1; generation <= 3; generation++) {
-            var legacy = self.legacyPath(root, generation);
-            if (legacy.isEmpty() || !self.fs.exists(legacy)) { continue; }
-            if (generation <= generations) {
-                var current = self.generationPath(root, generation);
-                if (!self.fs.exists(current)) {
-                    self.run.renamePath(legacy, current);
-                    continue;
-                }
-            }
-            self.fs.deleteSubvolume(legacy);
-        }
     }
 
     public void pruneGenerations(string root, int generations) {
@@ -68,7 +40,6 @@ class ImmutabilitySlots {
 
     public void rotate(string volume, string live, string snapshotsSubvolume, int generations) {
         var root = self.run.path(PathTools.join(snapshotsSubvolume, volume));
-        self.migrateLegacy(root, generations);
         self.pruneGenerations(root, generations);
         if (generations <= 0) { return; }
         self.fs.deleteSubvolume(self.generationPath(root, generations));
@@ -101,11 +72,7 @@ class ImmutabilitySlots {
     }
 
     public string restoreSource(string root, int generation) {
-        var current = self.generationPath(root, generation);
-        if (self.fs.exists(current)) { return current; }
-        var legacy = self.legacyPath(root, generation);
-        if (!legacy.isEmpty() && self.fs.exists(legacy)) { return legacy; }
-        return current;
+        return self.generationPath(root, generation);
     }
 
     public void restoreGeneration(ImmutabilityVolume volume, int generation, string snapshotsSubvolume) {

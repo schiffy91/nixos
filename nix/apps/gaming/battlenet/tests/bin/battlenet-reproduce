@@ -2,7 +2,7 @@
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-proton_dir="$(cd "$app_dir/../proton-custom" && pwd)"
+proton_dir="$(cd "$app_dir/../../proton/custom" && pwd)"
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
 desktop_entry="/run/current-system/sw/share/applications/battlenet.desktop"
 

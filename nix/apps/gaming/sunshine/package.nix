@@ -53,6 +53,7 @@
   libnotify,
   miniupnpc,
   nlohmann_json,
+  qt6Packages,
   config,
   coreutils,
   udevCheckHook,
@@ -77,20 +78,20 @@ let
 in
 stdenv'.mkDerivation (finalAttrs: {
   pname = "sunshine";
-  version = "2026.516.143833";
+  version = "2026.608.233907";
 
   src = fetchFromGitHub {
     owner = "LizardByte";
     repo = "Sunshine";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-3yuhOyW1Rqz4ddZ40z2ZzpAReZQFva0SL595XrnFB60=";
+    hash = "sha256-xfyaE6vaKxzQfup+BiFzjByTw3XDzJANvobbW7Cxf00=";
     fetchSubmodules = true;
   };
 
   ui = buildNpmPackage {
     inherit (finalAttrs) src version;
     pname = "sunshine-ui";
-    npmDepsHash = "sha256-YnNnuAdj/S5LGNytqIsmCApIec8DTWKF6VIJ7AXUctU=";
+    npmDepsHash = "sha256-RTizf+SAo2A1dM40pHShPViqI42Zc+hc8gy7UNL9LYk=";
 
     postPatch = ''
       cp ${./package-lock.json} ./package-lock.json
@@ -114,6 +115,12 @@ stdenv'.mkDerivation (finalAttrs: {
     substituteInPlace cmake/dependencies/Boost_Sunshine.cmake \
       --replace-fail 'set(BOOST_VERSION "1.89.0")' 'set(BOOST_VERSION "${boost.version}")'
     echo 'set(FETCH_CONTENT_BOOST_USED TRUE)' >> cmake/dependencies/Boost_Sunshine.cmake
+
+    substituteInPlace cmake/compile_definitions/common.cmake \
+      --replace-fail 'list(APPEND SUNSHINE_DEFINITIONS SUNSHINE_TRAY=''${SUNSHINE_TRAY})' 'if(NOT SUNSHINE_ENABLE_TRAY)
+    set(SUNSHINE_TRAY 0)
+endif()
+list(APPEND SUNSHINE_DEFINITIONS SUNSHINE_TRAY=''${SUNSHINE_TRAY})'
   ''
   + lib.optionalString isLinux ''
     substituteInPlace cmake/packaging/linux.cmake \
@@ -145,6 +152,7 @@ stdenv'.mkDerivation (finalAttrs: {
   ++ lib.optionals isLinux [
     wayland-scanner
     autoPatchelfHook
+    qt6Packages.wrapQtAppsHook
   ]
   ++ lib.optionals cudaSupport [
     autoAddDriverRunpath
@@ -195,6 +203,8 @@ stdenv'.mkDerivation (finalAttrs: {
     svt-av1
     libappindicator
     libnotify
+    qt6Packages.qtbase
+    qt6Packages.qtsvg
     vulkan-loader
   ]
   ++ lib.optionals cudaSupport [

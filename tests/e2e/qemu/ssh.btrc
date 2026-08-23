@@ -101,7 +101,7 @@ class SshClient {
         var remote = "mkdir -p " + quotedTarget
             + " && tar xzf - --no-same-owner -C " + quotedTarget
             + " && if [ -d " + quotedTarget + "/.git ] && command -v git >/dev/null 2>&1; then git -C " + quotedTarget + " add -A; fi";
-        var tar = "tar czf - --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude=.agents --exclude=.claude --exclude=.codex --exclude=.gemini --exclude='._*' -C "
+        var tar = "tar czf - --exclude=./config.json --exclude=.vm --exclude=build --exclude=secrets --exclude=.git --exclude=result --exclude=.agents --exclude=.claude --exclude=.codex --exclude=.gemini --exclude='._*' -C "
             + UnixShell.quote(source)
             + " .";
         var ssh = "ssh -p "

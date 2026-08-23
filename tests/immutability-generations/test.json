@@ -23,7 +23,7 @@
     { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
     { "op": "guest", "command": "set -e; host=/etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; sed -i '/settings.disk.immutability.mode =/a\\  settings.disk.immutability.nonPersistedGenerations = 4;' \"$host\"; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf retention-four-configured", "expect": "retention-four-configured", "timeout": 1800 },
     { "op": "reboot-disk" },
-    { "op": "guest", "command": "cat /.snapshots/.immutability/version", "expect": "0.1" },
+    { "op": "guest", "command": "cat /.snapshots/.immutability/version", "expect": "2026.08.22" },
     { "op": "guest", "command": "set -e; echo ALPHA > /root/gen; sync; printf alpha-written", "expect": "alpha-written" },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "set -e; echo BETA > /root/gen; sync; printf beta-written", "expect": "beta-written" },

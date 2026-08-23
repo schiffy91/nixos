@@ -1,0 +1,46 @@
+From 8c1d9e6cafe0b28afc8f566f77e01b37ef6ef4ab Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 11 Jun 2026 10:18:00 -0700
+Subject: [PATCH] d3d11: Use opaque WSI alpha for composition hosts
+
+Battle.net's Chromium login and launcher surfaces use premultiplied-alpha DXGI
+composition swap chains. Wine's DComp bridge binds those visuals to native
+Wayland child HWNDs instead of compositing the full DComp tree itself, so
+passing the DXGI alpha mode through to the Vulkan WSI surface lets KWin blend
+the child against the black Qt parent. On first opens and during launcher
+rebinding this can leave a black or white native child window even though CEF
+has rendered successfully.
+
+Keep the DXGI alpha mode in the swap-chain descriptor for DComp host placement,
+but expose the native WSI surface as opaque. The host child owns the visual's
+pixels; DComp alpha semantics are not implemented by the Wayland compositor.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 11 +----------
+ 1 file changed, 1 insertion(+), 10 deletions(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 04e9e67..d290076 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -25,16 +25,7 @@ namespace dxvk {
+     }
+   }
+
+-  static VkCompositeAlphaFlagBitsKHR ConvertCompositeAlpha(DXGI_ALPHA_MODE mode) {
+-    switch (mode) {
+-      case DXGI_ALPHA_MODE_PREMULTIPLIED:
+-        return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+-      case DXGI_ALPHA_MODE_STRAIGHT:
+-        return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+-      default:
+-        return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+-    }
+-  }
++  static VkCompositeAlphaFlagBitsKHR ConvertCompositeAlpha(DXGI_ALPHA_MODE) { return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; }
+
+   static VkXYColorEXT ConvertXYColor(const UINT16 (&dxgiColor)[2]) {
+     return VkXYColorEXT{ float(dxgiColor[0]) / 50000.0f, float(dxgiColor[1]) / 50000.0f };
+--
+2.54.0

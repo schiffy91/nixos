@@ -4,8 +4,6 @@ class ImmutabilityConstants {
     class string orphans() { return ".orphans"; }
     class string meta() { return ".immutability"; }
     class string files() { return "files"; }
-    class string versionFile() { return "version"; }
-    class string currentVersion() { return "0.1"; }
     class string next() { return "NEXT"; }
     class string disabled() { return "disabled"; }
     class string converge() { return "converge"; }

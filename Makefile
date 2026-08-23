@@ -1,5 +1,6 @@
-# btrcpy and cc come from the dev shell (`nix develop`, `nix-shell`, or direnv).
-BTRC ?= btrcpy
+# Use the compiler pinned in flake.lock by default. Override BTRC=... when
+# intentionally testing a local btrcpy checkout.
+BTRC ?= nix run --no-warn-dirty --inputs-from . btrc\#btrcpy --
 PYTHON ?= python3
 CC ?= cc
 CFLAGS ?= -std=c11 -pedantic
@@ -38,9 +39,8 @@ dirs:
 	mkdir -p $(BUILD_DIR)
 
 $(BTRC_STAMP): | dirs
-	@tool="$$(command -v $(BTRC) 2>/dev/null || printf '%s' "$(BTRC)")"; \
-	tmp="$@.tmp"; \
-	printf '%s\n' "$$tool" > "$$tmp"; \
+	@tmp="$@.tmp"; \
+	printf '%s\n' "$(BTRC)" > "$$tmp"; \
 	if test -f "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
 
 # Compile the stdlib once into a reusable archive (header + impl + manifest),

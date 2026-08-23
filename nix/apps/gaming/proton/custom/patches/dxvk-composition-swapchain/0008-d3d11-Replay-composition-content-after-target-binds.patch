@@ -1,0 +1,95 @@
+From 6a5ce41014017357fdbc87923d33e8f194f11b44 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 11 Jun 2026 09:38:01 -0700
+Subject: [PATCH] d3d11: Replay composition content after target binds
+
+Battle.net can present a DirectComposition swap chain before Wine's DComp
+Commit() binds it to the Wayland child HWND. The app then goes quiet on static
+login/loading surfaces, leaving DXVK with a new WSI target but no later Present()
+to populate it. Rebinding hosts during launcher downloads can hit the same
+retained-content gap and expose black or white child windows.
+
+Remember that the application has made a real present attempt, and when DComp
+binds a new composition target, replay the current back buffer into that target
+immediately.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 27 +++++++++++++++++++++++----
+ src/d3d11/d3d11_swapchain.h   |  1 +
+ 2 files changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index cf8b8f4..24cd705 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -301,6 +301,11 @@ namespace dxvk {
+       return hr;
+     }
+
++    {
++      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++      m_compositionHasPresentAttempt = true;
++    }
++
+     try {
+       hr = PresentImage(SyncInterval);
+     } catch (const DxvkError& e) {
+@@ -435,6 +440,7 @@ namespace dxvk {
+           HWND                      hTarget,
+           HWND                      hDispatch) {
+     HWND previousTarget = nullptr;
++    bool replayTarget = false;
+     bool childTarget = false;
+
+     {
+@@ -442,8 +448,10 @@ namespace dxvk {
+       previousTarget = m_compositionTarget;
+       m_compositionTarget = hTarget;
+       m_compositionChildTarget = hTarget && hTarget != hDispatch;
+-      if (hTarget != previousTarget)
++      if (hTarget != previousTarget) {
+         m_compositionTargetShown = false;
++        replayTarget = hTarget && m_compositionHasPresentAttempt;
++      }
+       childTarget = m_compositionChildTarget;
+     }
+
+@@ -455,6 +463,23 @@ namespace dxvk {
+     if (childTarget)
+       UpdateCompositionTargetWindow(hTarget, m_desc.Width, m_desc.Height);
+
++    if (replayTarget) {
++      HRESULT hr = S_OK;
++
++      try {
++        hr = PresentImage(1);
++      } catch (const DxvkError& e) {
++        Logger::err(e.message());
++        hr = E_FAIL;
++      }
++
++      SyncFrameLatency();
++
++      if (FAILED(hr))
++        Logger::warn(str::format(
++          "D3D11SwapChain::SetCompositionTarget: retained present failed, hr = ", hr));
++    }
++
+     Logger::debug(str::format(
+       "D3D11SwapChain::SetCompositionTarget: swapchain=0x", std::hex,
+       reinterpret_cast<uintptr_t>(this), " target=0x",
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 0a56c65..b2fc957 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -160,6 +160,7 @@ namespace dxvk {
+     HWND                      m_compositionTarget = nullptr;
+     bool                      m_compositionChildTarget = false;
+     bool                      m_compositionTargetShown = false;
++    bool                      m_compositionHasPresentAttempt = false;
+
+     Rc<hud::HudLatencyItem>   m_latencyHud;
+
+--
+2.54.0

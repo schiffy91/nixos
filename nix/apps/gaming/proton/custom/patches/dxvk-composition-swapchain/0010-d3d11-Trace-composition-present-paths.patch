@@ -1,0 +1,100 @@
+From 61bdaec595b6498c0f26739db8647b46d7d4eefd Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 11 Jun 2026 10:58:00 -0700
+Subject: [PATCH] d3d11: Trace composition present paths
+
+Battle.net can load Chromium content while the native DComp host remains black.
+Keep opt-in debug breadcrumbs around composition presents so runtime logs show
+whether the app calls Present after DComp binds the child host, whether DXVK
+shows that host, and whether WSI image acquisition succeeds.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 54deaf0..8482e67 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -4,6 +4,7 @@
+ #include "../dxvk/dxvk_latency_builtin.h"
+
+ #include "../util/util_win32_compat.h"
++#include "../util/util_env.h"
+
+ namespace dxvk {
+
+@@ -28,6 +29,11 @@ namespace dxvk {
+
+   static VkCompositeAlphaFlagBitsKHR ConvertCompositeAlpha(DXGI_ALPHA_MODE) { return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; }
+
++  static bool TraceCompositionSwapChains() {
++    static const bool enabled = env::getEnvVar("DXVK_TRACE_COMPOSITION_SWAPCHAINS") == "1";
++    return enabled;
++  }
++
+   static VkXYColorEXT ConvertXYColor(const UINT16 (&dxgiColor)[2]) {
+     return VkXYColorEXT{ float(dxgiColor[0]) / 50000.0f, float(dxgiColor[1]) / 50000.0f };
+   }
+@@ -292,11 +298,24 @@ namespace dxvk {
+       return hr;
+     }
+
++    HWND compositionTarget = nullptr;
++    bool compositionChildTarget = false;
++
+     {
+       std::lock_guard<dxvk::mutex> lock(m_compositionLock);
+       m_compositionHasPresentAttempt = true;
++      compositionTarget = m_compositionTarget;
++      compositionChildTarget = m_compositionChildTarget;
+     }
+
++    if (compositionTarget && TraceCompositionSwapChains())
++      Logger::debug(str::format(
++        "D3D11SwapChain::Present: composition target=0x", std::hex,
++        reinterpret_cast<uintptr_t>(compositionTarget), std::dec,
++        " child=", compositionChildTarget,
++        " sync=", SyncInterval,
++        " flags=", PresentFlags));
++
+     try {
+       hr = PresentImage(SyncInterval);
+     } catch (const DxvkError& e) {
+@@ -521,8 +540,13 @@ namespace dxvk {
+       }
+     }
+
+-    if (showCompositionTarget)
++    if (showCompositionTarget) {
++      if (TraceCompositionSwapChains())
++        Logger::debug(str::format(
++          "D3D11SwapChain::PresentImage: showing composition target=0x", std::hex,
++          reinterpret_cast<uintptr_t>(showCompositionTarget)));
+       ::ShowWindow(showCompositionTarget, SW_SHOWNOACTIVATE);
++    }
+
+     // Flush pending rendering commands before
+     auto immediateContext = m_parent->GetContext();
+@@ -542,6 +566,18 @@ namespace dxvk {
+
+     VkResult status = m_presenter->acquireNextImage(sync, backBuffer);
+
++    HWND acquireCompositionTarget = nullptr;
++    {
++      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++      acquireCompositionTarget = m_compositionTarget;
++    }
++
++    if (acquireCompositionTarget && TraceCompositionSwapChains())
++      Logger::debug(str::format(
++        "D3D11SwapChain::PresentImage: acquire status=", status,
++        " target=0x", std::hex,
++        reinterpret_cast<uintptr_t>(acquireCompositionTarget)));
++
+     if (status != VK_SUCCESS && m_latency)
+       m_latency->discardTimings();
+
+--
+2.54.0

@@ -21,4 +21,13 @@ in {
   };
   ##### Firmware #####
   services.fwupd.enable = true;
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if ((action.id == "org.freedesktop.fwupd.refresh-remote" ||
+           action.id == "org.freedesktop.fwupd.get-remotes") &&
+          subject.user == "fwupd-refresh") {
+        return polkit.Result.YES;
+      }
+    });
+  '';
 }
