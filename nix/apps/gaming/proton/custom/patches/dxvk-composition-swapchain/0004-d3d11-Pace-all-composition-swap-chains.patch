@@ -1,25 +1,24 @@
-From 3a115e3ccf6f2f370271bca8410f0d6e96711978 Mon Sep 17 00:00:00 2001
+From db2721234de238dc93ee4774ba2182f972de936f Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 14:22:56 -0700
-Subject: [PATCH] d3d11: Pace all composition swap chains
+Subject: [PATCH 04/11] d3d11: Pace all composition swap chains
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 1260533..0d5d1fa 100644
+index d8056e4..2b71010 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -429,7 +429,7 @@ namespace dxvk {
    UINT D3D11SwapChain::GetCompositionSyncInterval(UINT SyncInterval) {
      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
-
+ 
 -    if (m_compositionChildTarget && !SyncInterval)
 +    if (m_compositionTarget && !SyncInterval)
        return 1;
-
+ 
      return SyncInterval;
---
-2.53.0

@@ -19,18 +19,21 @@ non-zero alpha at all; in that case the dirty region is treated as opaque so
 black text and controls are not dropped.
 
 ## Root cause
-`WAYLAND_UpdateLayeredWindow` is missing from the driver's `user_driver_funcs`
-table, so `UpdateLayeredWindow` / `SetLayeredWindowAttributes` silently no-op
-for any wayland window.
+The ARGB SHM upload trusts whatever GDI left in the DIB alpha bytes, which is
+meaningless for constant-alpha layered surfaces and zero for many per-pixel
+text and control pixels.
+
+GE-Proton11 ships the `pUpdateLayeredWindow` hook itself (wine-wayland patch
+0014), so only the alpha handling below is still carried here. Before that it
+was missing from `user_driver_funcs` entirely and `UpdateLayeredWindow` /
+`SetLayeredWindowAttributes` silently no-opped for every wayland window.
 
 ## Fix
-Hook `pUpdateLayeredWindow` to `ensure_window_surface_contents`, and set
-constant alpha bits when copying non-per-pixel-alpha layered surface content
-to Wayland ARGB SHM buffers. For per-pixel layered surfaces, preserve the
-application-provided alpha channel except for non-black RGB pixels whose alpha
-byte is zero, unless the updated region has no non-zero alpha, in which case
-the region is uploaded as opaque.
+Set constant alpha bits when copying non-per-pixel-alpha layered surface
+content to Wayland ARGB SHM buffers. For per-pixel layered surfaces, preserve
+the application-provided alpha channel except for non-black RGB pixels whose
+alpha byte is zero, unless the updated region has no non-zero alpha, in which
+case the region is uploaded as opaque.
 
 ## Affected upstream
-`dlls/winewayland.drv/{waylanddrv.h, waylanddrv_main.c, window.c,
-window_surface.c}`.
+`dlls/winewayland.drv/window_surface.c`.

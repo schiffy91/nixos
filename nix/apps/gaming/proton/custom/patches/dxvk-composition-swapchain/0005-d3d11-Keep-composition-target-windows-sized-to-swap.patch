@@ -1,17 +1,18 @@
-From 394d1baa72244d4b91f035d2bf06662abece3925 Mon Sep 17 00:00:00 2001
+From 9ba13e78aab8d5ea2ea735e8148ad876eb4f4acc Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 17:45:25 -0700
-Subject: [PATCH] d3d11: Keep composition target windows sized to swap
+Subject: [PATCH 05/11] d3d11: Keep composition target windows sized to swap 
  chains
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp | 44 ++++++++++++++++++++++++++++++++---
  src/d3d11/d3d11_swapchain.h   |  4 ++++
  2 files changed, 45 insertions(+), 3 deletions(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 0d5d1fa..f715cf3 100644
+index 2b71010..8fe5a88 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -193,11 +193,24 @@ namespace dxvk {
@@ -23,7 +24,7 @@ index 0d5d1fa..f715cf3 100644
 +
      if (m_desc.Format != pDesc->Format)
        m_presenter->setSurfaceFormat(GetSurfaceFormat(pDesc->Format));
-
+ 
 -    if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height)
 -      m_presenter->setSurfaceExtent({ m_desc.Width, m_desc.Height });
 +    if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height) {
@@ -38,13 +39,13 @@ index 0d5d1fa..f715cf3 100644
 +      if (compositionChildTarget)
 +        UpdateCompositionTargetWindow(compositionTarget, pDesc->Width, pDesc->Height);
 +    }
-
+ 
      m_desc = *pDesc;
      CreateBackBuffers();
 @@ -406,16 +419,30 @@ namespace dxvk {
    }
-
-
+ 
+ 
 +  void D3D11SwapChain::UpdateCompositionTargetWindow(
 +          HWND                      hTarget,
 +          UINT                      Width,
@@ -62,7 +63,7 @@ index 0d5d1fa..f715cf3 100644
            HWND                      hDispatch) {
      HWND previousTarget = nullptr;
 +    bool childTarget = false;
-
+ 
      {
        std::lock_guard<dxvk::mutex> lock(m_compositionLock);
        previousTarget = m_compositionTarget;
@@ -70,12 +71,12 @@ index 0d5d1fa..f715cf3 100644
        m_compositionChildTarget = hTarget && hTarget != hDispatch;
 +      childTarget = m_compositionChildTarget;
      }
-
+ 
      if (hTarget != previousTarget) {
 @@ -423,7 +450,18 @@ namespace dxvk {
        m_surfaceFactory->SetWindow(hTarget);
      }
-
+ 
 -    Logger::debug("D3D11SwapChain::SetCompositionTarget: bound composition target");
 +    if (childTarget)
 +      UpdateCompositionTargetWindow(hTarget, m_desc.Width, m_desc.Height);
@@ -90,22 +91,20 @@ index 0d5d1fa..f715cf3 100644
 +      " size=", m_desc.Width, "x", m_desc.Height,
 +      " format=", m_desc.Format, " alpha=", m_desc.AlphaMode));
    }
-
+ 
    UINT D3D11SwapChain::GetCompositionSyncInterval(UINT SyncInterval) {
 diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
-index d522bcd..8d7571c 100644
+index c3e1bad..ce1215f 100644
 --- a/src/d3d11/d3d11_swapchain.h
 +++ b/src/d3d11/d3d11_swapchain.h
 @@ -117,6 +117,10 @@ namespace dxvk {
              HWND                      hDispatch);
-
+ 
    private:
 +    void UpdateCompositionTargetWindow(
 +            HWND                      hTarget,
 +            UINT                      Width,
 +            UINT                      Height);
-
+ 
      enum BindingIds : uint32_t {
        Image = 0,
---
-2.53.0

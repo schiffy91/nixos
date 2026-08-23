@@ -1,6 +1,6 @@
-# proton-custom - GE-Proton10-34 with winewayland.drv cleanup patches.
+# proton-custom - GE-Proton11-5 with winewayland.drv cleanup patches.
 #
-# Builds the exact Wine and DXVK revisions GE-Proton10-34 uses, then layers
+# Builds the exact Wine and DXVK revisions GE-Proton11-5 uses, then layers
 # our active patch series on top. Replaces the changed binaries touched by the
 # active series plus the matching 32/64-bit Unix-side Wine modules. The PE and
 # Unix halves must stay ABI-matched when D3D11/CEF exercises generated Unix
@@ -13,13 +13,18 @@
 #
 # Active series:
 #   Wayland startup deadlock (non-blocking second init roundtrip)
-#   Blank layered windows (pUpdateLayeredWindow only)
+#   Bounded WM_CANCELMODE on keyboard leave
+#   Layered surface alpha uploads (GE-Proton11 ships the pUpdateLayeredWindow hook)
 #   SNI StatusNotifierItem systray via libdbus (winewayland dock bridge)
-#   Wayland transient popups through xdg_popup
 #   Delay-load IAT protection for PE modules with read-only thunk pages
 #   DComp/DXGI/winewayland GPU presentation path
 #   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
 #   DXVK composition swap-chain support
+#
+# Dropped at the GE-Proton11-5 rebase, now covered upstream:
+#   xdg_popup for transient windows (GE wine-wayland 0031)
+#   pUpdateLayeredWindow hook (GE wine-wayland 0014)
+#   D3DKMT shared GPU resources (win32u implements OpenResource/QueryResourceInfo)
 { stdenv
 , stdenv_32bit
 , pkgs
@@ -31,20 +36,20 @@
 }:
 
 let
-  toolVersion = "GE-Proton10-34";
+  toolVersion = "GE-Proton11-5";
   toolName    = "proton-custom-${toolVersion}";
 
-  # The exact Valve wine commit GE-Proton10-34 uses (from proton-ge-custom
-  # git submodule `wine` at tag GE-Proton10-34).
-  valveWineRev  = "1729f00e17e879f98f9df1f2bca86bc5d21a65df";
-  valveWineHash = "sha256-fml7rvOve6xpqDMzMCcA6JJ4P6pOhAGOnHCn9eVM67E=";
+  # The exact Valve wine commit GE-Proton11-5 uses (from proton-ge-custom
+  # git submodule `wine` at tag GE-Proton11-5).
+  valveWineRev  = "36078f5f947532885a596dabbc7893c048133660";
+  valveWineHash = "sha256-US/ts2HLhKr+xHMCUWIFlpmQdJ3CDkYeMUB2EAzOblU=";
 
-  geProtonRev  = "GE-Proton10-34";
-  geProtonHash = "sha256-vHwVEJGGzb9vRPu2XNu2pjuovcZRqfLyLRLe3IT2UoQ=";
+  geProtonRev  = "GE-Proton11-5";
+  geProtonHash = "sha256-v1uwzVNzneBBRbaWRz2NTBNeTkqOjdwyEfBhDHJAeMc=";
 
-  dxvkVersion = "v2.7.1-509-g1676dcaf";
-  dxvkRev     = "1676dcaf342a9b13af86c0464ad46235687727a6";
-  dxvkHash    = "sha256-wnxOLWRcXJyCsQ1xaFgnrmQrfpq+O1vgJh+f7sa0qZg=";
+  dxvkVersion = "v3.0.2-21-g3a4c6fa3";
+  dxvkRev     = "3a4c6fa3cb1548d56a90a38dd8f526b6c13e63fd";
+  dxvkHash    = "sha256-KWPOc+wA3zivLEYXBEHOJgVzCWU0X7joK+PuSFoDplE=";
   wineasio64 = pkgs.wineasio;
   wineasio32Files = ../../rocksmith/assets;
 
@@ -52,27 +57,25 @@ let
   # Keep this pinned to the exact tool whose Wine tree is patched below; using
   # pkgs.proton-ge-bin.src here would silently follow nixpkgs updates.
   ge-proton-src = pkgs.fetchurl {
-    url = "https://github.com/GloriousEggRoll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}.tar.gz";
-    hash = "sha256-UcWAtmqDPHOZj+APBxfurFcZdlQECi8u1RiePuaNdz0=";
+    url = "https://github.com/GloriousEggRoll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}-x86_64.tar.gz";
+    hash = "sha256-3kPEsl88BH20m5bETYR1mVLFoBMypogFoJ5p+V3DinU=";
   };
 
   activePatchSeries = [
     ./patches/wine-wayland-roundtrip/0001-winewayland.drv-Avoid-second-init-roundtrip.patch
     ./patches/wine-wayland-focus/0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch
-    ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Hook-UpdateLayeredWindow.patch
-    ./patches/wine-wayland-layered-windows/0002-winewayland.drv-Set-layered-surface-alpha-bits.patch
-    ./patches/wine-wayland-layered-windows/0003-winewayland.drv-Handle-fully-zero-alpha-layered-surf.patch
+    ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Fix-layered-surface-alpha-uploads.patch
+    ./patches/wine-wayland-layered-windows/0002-winewayland.drv-Handle-fully-zero-alpha-layered-surf.patch
     ./patches/wine-wayland-status-notifier/0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
     ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Polish-SNI-context-menu-callbacks.patch
     ./patches/wine-wayland-status-notifier/0003-explorer-Forward-docked-tray-icon-updates.patch
     ./patches/wine-wayland-status-notifier/0004-winewayland.drv-Keep-SNI-items-self-contained.patch
-    ./patches/wine-wayland-popups/0001-winewayland.drv-Use-xdg_popup-for-transient-popups.patch
     ./patches/ntdll-delay-load/0001-ntdll-Make-delay-load-IAT-writable-before-patching.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
     ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
     ./patches/dcomp-wayland-gpu-present/0004-dcomp-Make-composition-host-windows-presentation-onl.patch
-    ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-above-target.patch
+    ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-above-target-backing.patch
     ./patches/dcomp-wayland-gpu-present/0006-dxgi-Create-a-hidden-swap-chain-for-composition.patch
     ./patches/dcomp-wayland-gpu-present/0007-dcomp-Present-IDCompositionSurface-content.patch
     ./patches/dcomp-wayland-gpu-present/0008-dcomp-Handle-incremental-surface-draws.patch
@@ -82,21 +85,20 @@ let
     ./patches/dcomp-wayland-gpu-present/0012-dcomp-Implement-GPU-backed-surface-factories.patch
     ./patches/dcomp-wayland-gpu-present/0013-dcomp-Unbind-removed-composition-hosts.patch
     ./patches/dcomp-wayland-gpu-present/0014-dcomp-Implement-virtual-surfaces-and-scrolling.patch
-    ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-.patch
-    ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent-not.patch
-    ./patches/dcomp-wayland-gpu-present/0017-dcomp-Show-composition-hosts-after-content-binding.patch
+    ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-h.patch
+    ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent.patch
+    ./patches/dcomp-wayland-gpu-present/0017-dcomp-Show-surface-hosts-after-content-binding.patch
     ./patches/dcomp-wayland-gpu-present/0018-dcomp-Clip-target-parents-around-composition-hosts.patch
     ./patches/dcomp-wayland-gpu-present/0019-dcomp-Avoid-hosts-for-unplaced-child-swapchains.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
-    ./patches/win32u-shared-gpu-resource/0001-win32u-Open-D3DKMT-shared-GPU-resources.patch
   ];
 
   dxvkPatchSeries = [
     ./patches/dxvk-composition-swapchain/0001-dxgi-Bind-composition-swap-chains-to-DComp-windows.patch
-    ./patches/dxvk-composition-swapchain/0002-d3d11-Pace-composition-swap-chains-with-the-composi.patch
+    ./patches/dxvk-composition-swapchain/0002-d3d11-Pace-composition-swap-chains-with-the-composit.patch
     ./patches/dxvk-composition-swapchain/0003-d3d11-Allow-limiting-shared-resource-tier.patch
     ./patches/dxvk-composition-swapchain/0004-d3d11-Pace-all-composition-swap-chains.patch
-    ./patches/dxvk-composition-swapchain/0005-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
+    ./patches/dxvk-composition-swapchain/0005-d3d11-Keep-composition-target-windows-sized-to-swap.patch
     ./patches/dxvk-composition-swapchain/0006-d3d11-Preserve-composition-swap-chain-contents.patch
     ./patches/dxvk-composition-swapchain/0007-d3d11-Show-composition-targets-on-first-present.patch
     ./patches/dxvk-composition-swapchain/0008-d3d11-Replay-composition-content-after-target-binds.patch
@@ -181,13 +183,23 @@ let
     postPatch = ''
       # make_vulkan writes a cache under HOME; the nix builder's /homeless-shelter
       # is read-only, so point HOME at $TMPDIR before running it.
+      # Feed make_vulkan the registry this Wine tree ships, not pkgs.vulkan-headers:
+      # a newer vk.xml emits structs (VkDeviceAddressRangeEXT and friends) whose
+      # 32-bit conversions this generator cannot write, and the thunks stop compiling.
       HOME=$TMPDIR python3 dlls/winevulkan/make_vulkan \
-        -x ${pkgs.vulkan-headers}/share/vulkan/registry/vk.xml \
-        -X ${pkgs.vulkan-headers}/share/vulkan/registry/video.xml
+        -x "$PWD/dlls/winevulkan/vk.xml" \
+        -X "$PWD/dlls/winevulkan/video.xml"
+
+      # Proton 11 stopped committing the generated request and syscall tables,
+      # so regenerate them here. Both tools carry /usr/bin/perl shebangs, hence
+      # patchShebangs first; failures must be fatal or configure dies later on a
+      # missing ntsyscalls.h.
+      patchShebangs tools
+      ./tools/make_requests
+      ./tools/make_specfiles
 
       # Wine source ships with autogen.sh, not a pre-generated ./configure -
       # run it to produce ./configure from configure.ac.
-      ./tools/make_requests || true
       HOME=$TMPDIR autoreconf -fi
     '';
 
@@ -328,7 +340,7 @@ let
     version = dxvkVersion;
 
     src = fetchgit {
-      url = "https://github.com/ValveSoftware/dxvk";
+      url = "https://github.com/doitsujin/dxvk";
       rev = dxvkRev;
       hash = dxvkHash;
       fetchSubmodules = true;
@@ -530,7 +542,7 @@ in stdenv.mkDerivation {
     "${toolName}"
     {
       "install_path" "."
-      "display_name" "proton-custom GE-Proton10-34 (Wayland SNI)"
+      "display_name" "proton-custom ${toolVersion} (Wayland SNI)"
       "from_oslist"  "windows"
       "to_oslist"    "linux"
     }
@@ -542,7 +554,7 @@ EOF
   '';
 
   meta = {
-    description = "GE-Proton10-34 with Wine Wayland, DComp, DXVK, SNI, and WineASIO patches";
+    description = "${toolVersion} with Wine Wayland, DComp, DXVK, SNI, and WineASIO patches";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
   };

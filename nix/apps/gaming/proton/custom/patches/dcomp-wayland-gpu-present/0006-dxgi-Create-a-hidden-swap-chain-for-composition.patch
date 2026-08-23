@@ -1,9 +1,10 @@
-From b5260dd994d6806047d720f6bceab9a1732a7dcf Mon Sep 17 00:00:00 2001
+From 419289323ff6ad77a201001cf758005cd28e84d2 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 20 May 2026 06:03:54 -0700
 Subject: [PATCH] dxgi: Create a hidden swap chain for composition
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dxgi/factory.c | 24 +++++++++++++++++++++---
  1 file changed, 21 insertions(+), 3 deletions(-)
@@ -44,6 +45,3 @@ index ebdb42a..c7155e5 100644
  }
  
  static UINT STDMETHODCALLTYPE dxgi_factory_GetCreationFlags(IWineDXGIFactory *iface)
--- 
-2.54.0
-

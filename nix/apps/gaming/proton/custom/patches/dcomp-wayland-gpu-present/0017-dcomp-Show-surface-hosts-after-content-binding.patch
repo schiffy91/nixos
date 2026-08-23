@@ -1,4 +1,4 @@
-From af29c7ccba026c647c412f7b2115e7c37b76b5d1 Mon Sep 17 00:00:00 2001
+From 03f96eda5d36e627e402b549134126fafc384e1c Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 25 May 2026 17:41:00 -0700
 Subject: [PATCH] dcomp: Show surface hosts after content binding
@@ -12,12 +12,13 @@ hosts after their backing content has been presented. Swap chain hosts remain
 hidden until their first DXGI present.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 6 ++++--
  1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 35578fd..accc4a0 100644
+index 3ad1cbf..ce85dc1 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1487,7 +1487,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
@@ -47,6 +48,3 @@ index 35578fd..accc4a0 100644
      }
      else if (v->content &&
          SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGIVkCompositionSwapChain,
--- 
-2.54.0
-

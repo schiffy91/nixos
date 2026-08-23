@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, protonCustom, ... }:
 let
   user = config.settings.users.admin.username;
   home = "/home/${user}";
@@ -8,8 +8,7 @@ let
   chromiumDpi = "--force-device-scale-factor=${toString scale} --high-dpi-support=1";
   rsSampleSize = config.settings.rocksmith.sampleSize;
   rsSampleRate = config.settings.rocksmith.sampleRate;
-  protonName = "GE-Proton10-34";       # upstream binary (fallback / X11)
-  protonCustomName = "proton-custom-GE-Proton10-34";  # patched Wayland+SNI build
+  protonCustomName = protonCustom.name;  # patched Wayland+SNI build
   defaultLaunchPrefix = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1";
   appConfig = pkgs.writeText "steam-apps.json" (builtins.toJSON apps);
   configureSteamApps = pkgs.writers.writePython3Bin "configure-steam-apps" {
@@ -188,7 +187,6 @@ in {
     {
       _module.args.steam = {
         inherit configureSteamApps;
-        proton.name = protonName;
         proton.customName = protonCustomName;
       };
     }

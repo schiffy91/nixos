@@ -1,15 +1,16 @@
-From 5cde2bc1760f2d82f9120f85d2da94089c000d46 Mon Sep 17 00:00:00 2001
+From 4ab266554e637e26a124732c2f08eb1b8f50d3fb Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 14:22:56 -0700
 Subject: [PATCH] winewayland.drv: Handle fully zero-alpha layered surfaces
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/window_surface.c | 94 ++++++++++++++++++++++-----
  1 file changed, 79 insertions(+), 15 deletions(-)
 
 diff --git a/dlls/winewayland.drv/window_surface.c b/dlls/winewayland.drv/window_surface.c
-index fc5fef3..9287fb6 100644
+index ea94d0f..75c01c3 100644
 --- a/dlls/winewayland.drv/window_surface.c
 +++ b/dlls/winewayland.drv/window_surface.c
 @@ -48,6 +48,13 @@ struct wayland_window_surface
@@ -26,7 +27,7 @@ index fc5fef3..9287fb6 100644
  static struct wayland_window_surface *wayland_window_surface_cast(
      struct window_surface *window_surface)
  {
-@@ -240,20 +247,74 @@ RGNDATA *get_region_data(HRGN region)
+@@ -250,20 +257,74 @@ RGNDATA *get_region_data(HRGN region)
      return data;
  }
  
@@ -105,7 +106,7 @@ index fc5fef3..9287fb6 100644
  {
      static const int bpp = WINEWAYLAND_BYTES_PER_PIXEL;
      RGNDATA *rgndata = get_region_data(region);
-@@ -289,21 +350,21 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
+@@ -299,21 +360,21 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
          /* Fast path for full width rectangles. */
          if (width * bpp == src_stride && src_stride == dst_stride)
          {
@@ -131,7 +132,7 @@ index fc5fef3..9287fb6 100644
                  src += src_stride;
                  dst += dst_stride;
              }
-@@ -328,11 +389,11 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
+@@ -338,11 +399,11 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
  static void wayland_shm_buffer_copy_data(struct wayland_shm_buffer *buffer,
                                           const char *bits, RECT *rect,
                                           HRGN region, UINT alpha_bits,
@@ -145,7 +146,7 @@ index fc5fef3..9287fb6 100644
  }
  
  static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
-@@ -344,7 +405,8 @@ static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
+@@ -354,7 +415,8 @@ static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
      UINT alpha_bits = src->format == WL_SHM_FORMAT_XRGB8888 &&
                        dst->format == WL_SHM_FORMAT_ARGB8888 ? 0xff000000 : (UINT)-1;
      TRACE("src=%p dst=%p\n", src, dst);
@@ -155,7 +156,7 @@ index fc5fef3..9287fb6 100644
  }
  
  /**********************************************************************
-@@ -389,7 +451,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -399,7 +461,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
      HRGN surface_damage_region = NULL;
      HRGN copy_from_window_region;
      UINT alpha_bits = (UINT)-1;
@@ -164,7 +165,7 @@ index fc5fef3..9287fb6 100644
      uint32_t buffer_format;
  
      surface_damage_region = NtGdiCreateRectRgn(rect->left + dirty->left, rect->top + dirty->top,
-@@ -414,7 +476,6 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -424,7 +486,6 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
                  alpha_bits = ~(colors[0] | colors[1] | colors[2]);
              }
          }
@@ -172,7 +173,7 @@ index fc5fef3..9287fb6 100644
      }
  
      buffer_format = (shape_bits || wws->layered) ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888;
-@@ -468,8 +529,11 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -478,8 +539,11 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
          copy_from_window_region = shm_buffer->damage_region;
      }
  
@@ -186,6 +187,3 @@ index fc5fef3..9287fb6 100644
      if (shape_bits) wayland_shm_buffer_copy_shape(shm_buffer, rect, shape_info, shape_bits);
  
      NtGdiSetRectRgn(shm_buffer->damage_region, 0, 0, 0, 0);
--- 
-2.54.0
-

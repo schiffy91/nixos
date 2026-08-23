@@ -1,4 +1,4 @@
-From 1bb4cbdd89c56bb20e648db6cba60d85fc9d3d7a Mon Sep 17 00:00:00 2001
+From ed3d7c4441245427c51bfb1a3db1159ac55cacbd Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 01:15:06 -0700
 Subject: [PATCH] winewayland.drv: Add StatusNotifierItem tray support
@@ -18,6 +18,7 @@ This keeps tray item lifetime in explorer, which already owns Wine tray
 hosting across short-lived launcher processes.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/Makefile.in       |   5 +-
  dlls/winewayland.drv/dllmain.c         |   8 +
@@ -30,7 +31,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  create mode 100644 dlls/winewayland.drv/wayland_systray.c
 
 diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
-index 3c7da7d..69e0a19 100644
+index 177eded..396b14a 100644
 --- a/dlls/winewayland.drv/Makefile.in
 +++ b/dlls/winewayland.drv/Makefile.in
 @@ -1,7 +1,7 @@
@@ -43,14 +44,14 @@ index 3c7da7d..69e0a19 100644
  IMPORTS = user32 win32u
  
  SOURCES = \
-@@ -27,6 +27,7 @@ SOURCES = \
+@@ -29,6 +29,7 @@ SOURCES = \
  	wayland_output.c \
  	wayland_pointer.c \
  	wayland_surface.c \
 +	wayland_systray.c \
  	wayland_text_input.c \
+ 	wayland_touch.c \
  	waylanddrv_main.c \
- 	window.c \
 diff --git a/dlls/winewayland.drv/dllmain.c b/dlls/winewayland.drv/dllmain.c
 index 8055d88..c61587b 100644
 --- a/dlls/winewayland.drv/dllmain.c
@@ -997,35 +998,35 @@ index 0000000..8cb01f3
 +
 +#endif /* SONAME_LIBDBUS_1 */
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index 83b2fe2..f2cb31e 100644
+index f768ee7..7a9dd21 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -82,6 +82,7 @@ enum wayland_window_message
+@@ -82,6 +82,7 @@ extern struct wayland process_wayland;
+ enum wayland_window_message
+ {
      WM_WAYLAND_INIT_DISPLAY_DEVICES = WM_WINE_FIRST_DRIVER_MSG,
-     WM_WAYLAND_CONFIGURE,
-     WM_WAYLAND_SET_FOREGROUND,
 +    WM_WAYLAND_SNI_CALLBACK,
+     WM_WAYLAND_CONFIGURE,
  };
  
- enum wayland_surface_config_state
-@@ -613,6 +614,12 @@ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
- void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
- LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
- void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
+@@ -613,6 +614,12 @@ RGNDATA *get_region_data(HRGN region);
+  */
+ 
+ void WAYLAND_ActivateWindow(HWND hwnd, HWND previous);
 +void WAYLAND_SystrayDockInit(HWND hwnd);
 +BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon);
 +void WAYLAND_SystrayDockClear(HWND hwnd);
 +BOOL WAYLAND_SystrayDockRemove(HWND hwnd);
 +void WAYLAND_SystrayDispatch(void);
 +void WAYLAND_SystrayProcessCallback(void *data);
- UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
- LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
- void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,
+ LRESULT WAYLAND_ClipboardWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+ BOOL WAYLAND_ClipCursor(const RECT *clip, BOOL reset);
+ LRESULT WAYLAND_DesktopWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
-index a4e6633..6ea9ed7 100644
+index 3c56601..79a9cf7 100644
 --- a/dlls/winewayland.drv/waylanddrv_main.c
 +++ b/dlls/winewayland.drv/waylanddrv_main.c
-@@ -52,6 +52,10 @@ static const struct user_driver_funcs waylanddrv_funcs =
+@@ -56,6 +56,10 @@ static const struct user_driver_funcs waylanddrv_funcs =
      .pSetWindowStyle = WAYLAND_SetWindowStyle,
      .pSetWindowText = WAYLAND_SetWindowText,
      .pSysCommand = WAYLAND_SysCommand,
@@ -1036,7 +1037,7 @@ index a4e6633..6ea9ed7 100644
      .pUpdateLayeredWindow = WAYLAND_UpdateLayeredWindow,
      .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
      .pWindowMessage = WAYLAND_WindowMessage,
-@@ -129,11 +133,18 @@ static NTSTATUS waylanddrv_unix_init_clipboard(void *arg)
+@@ -166,11 +170,18 @@ static NTSTATUS waylanddrv_unix_init_clipboard(void *arg)
      return STATUS_SUCCESS;
  }
  
@@ -1055,7 +1056,7 @@ index a4e6633..6ea9ed7 100644
  };
  
  C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == waylanddrv_unix_func_count);
-@@ -145,6 +156,7 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
+@@ -182,6 +193,7 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
      waylanddrv_unix_init,
      waylanddrv_unix_read_events,
      waylanddrv_unix_init_clipboard,
@@ -1064,12 +1065,12 @@ index a4e6633..6ea9ed7 100644
  
  C_ASSERT(ARRAYSIZE(__wine_unix_call_wow64_funcs) == waylanddrv_unix_func_count);
 diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
-index 8e1a530..14fc810 100644
+index 887ee49..b995665 100644
 --- a/dlls/winewayland.drv/window.c
 +++ b/dlls/winewayland.drv/window.c
-@@ -741,6 +741,9 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
-     case WM_WAYLAND_SET_FOREGROUND:
-         NtUserSetForegroundWindow(hwnd);
+@@ -659,6 +659,9 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+     case WM_WAYLAND_CONFIGURE:
+         wayland_configure_window(hwnd);
          return 0;
 +    case WM_WAYLAND_SNI_CALLBACK:
 +        WAYLAND_SystrayProcessCallback((void *)lp);
@@ -1077,6 +1078,3 @@ index 8e1a530..14fc810 100644
      default:
          FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, (long)wp, lp);
          return 0;
--- 
-2.54.0
-

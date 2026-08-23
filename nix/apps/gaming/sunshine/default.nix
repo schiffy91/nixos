@@ -5,7 +5,15 @@ in {
   nixpkgs.overlays = lib.optional enabled
     (final: prev: {
       sunshine = if final.stdenv.hostPlatform.isx86_64
-        then final.callPackage ./package.nix { cudaSupport = true; }
+        then (prev.sunshine.override { cudaSupport = true; }).overrideAttrs (old: {
+          # cudaSupport wraps $out/bin/sunshine in a shell script that exec's
+          # .sunshine-wrapped. KWin's screencast permission gate matches Exec=
+          # against /proc/self/exe, which is the inner ELF after exec.
+          postFixup = (old.postFixup or "") + ''
+            substituteInPlace $out/share/applications/dev.lizardbyte.app.Sunshine.kwin.desktop \
+              --replace-fail "Exec=$out/bin/sunshine" "Exec=$out/bin/.sunshine-wrapped"
+          '';
+        })
         else prev.sunshine;
     });
 

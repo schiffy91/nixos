@@ -1,4 +1,4 @@
-From 7150fbc3732c23a63a659d6944a1d50f3c9c8b04 Mon Sep 17 00:00:00 2001
+From 6bb483deef9645c1894d458305886a7f193a063a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 25 May 2026 16:45:00 -0700
 Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave
@@ -12,32 +12,33 @@ Use SendMessageTimeout semantics for the notification so a temporarily
 hung target window cannot wedge the driver event loop permanently.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/wayland_keyboard.c |  2 +-
  dlls/winewayland.drv/waylanddrv.h       | 11 +++++++++++
  2 files changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/winewayland.drv/wayland_keyboard.c b/dlls/winewayland.drv/wayland_keyboard.c
-index 790d2c5..abb6fff 100644
+index 251919c..0efcef7 100644
 --- a/dlls/winewayland.drv/wayland_keyboard.c
 +++ b/dlls/winewayland.drv/wayland_keyboard.c
-@@ -1004,7 +1004,7 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *wl_keyboard,
+@@ -972,7 +972,7 @@ static void keyboard_handle_leave(void *private, struct wl_keyboard *wl_keyboard
      if (hwnd == NtUserGetForegroundWindow())
      {
          if (!(NtUserGetWindowLongW(hwnd, GWL_STYLE) & WS_MINIMIZE))
 -            send_message(hwnd, WM_CANCELMODE, 0, 0);
 +            send_message_timeout(hwnd, WM_CANCELMODE, 0, 0, SMTO_ABORTIFHUNG, 200, NULL);
-     }
  
-     /* FIXME: update foreground window as well */
+         if (hwnd != NtUserGetForegroundWindow()) return;
+ 
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index cba1ee6..4112aa8 100644
+index 4b5d8ab..f768ee7 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -558,6 +558,17 @@ static inline LRESULT send_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
-     return NtUserMessageCall(hwnd, msg, wparam, lparam, NULL, NtUserSendMessage, FALSE);
- }
+@@ -558,6 +558,17 @@ void wayland_touch_deinit(void);
+  */
  
+ void wayland_text_input_init(void);
 +static inline LRESULT send_message_timeout(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
 +                                           UINT flags, UINT timeout, PDWORD_PTR res_ptr)
 +{
@@ -49,9 +50,6 @@ index cba1ee6..4112aa8 100644
 +    return res;
 +}
 +
- static inline void ascii_to_unicode(WCHAR *dst, const char *src, size_t len)
- {
-     while (len--) *dst++ = (unsigned char)*src++;
--- 
-2.54.0
-
+ void wayland_text_input_deinit(void);
+ 
+ /**********************************************************************

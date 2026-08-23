@@ -1,4 +1,4 @@
-From 7d7f1c6395250407e4ff6776a0471d88ceabc080 Mon Sep 17 00:00:00 2001
+From 59344b8da3ae06d93d22d2ad3a24298e73fd3466 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:07:42 -0700
 Subject: [PATCH] dcomp: Unbind removed composition hosts
@@ -15,12 +15,13 @@ same target HWND. Avoid restacking unchanged host HWNDs on every commit to
 reduce Wayland child-surface churn during CEF animations.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 69 +++++++++++++++++++++++++++++++++++++++------
  1 file changed, 61 insertions(+), 8 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 16f9d13..18b040b 100644
+index 11ea2a7..f2511ea 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -171,6 +171,8 @@ static const IDCompositionSurfaceVtbl       dcomp_surface_vtbl;
@@ -168,6 +169,3 @@ index 16f9d13..18b040b 100644
  
                  if (SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height, swp_flags) && changed)
                  {
--- 
-2.54.0
-

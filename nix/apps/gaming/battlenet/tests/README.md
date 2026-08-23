@@ -24,7 +24,7 @@ repeatable:
 The cycle:
 
 1. Builds only changed `proton-custom` Wine/DXVK targets.
-2. Points Steam's `proton-custom-GE-Proton10-34` compat-tool symlink at the writable
+2. Points Steam's `proton-custom-GE-Proton11-5` compat-tool symlink at the writable
    dev copy.
 3. Configures the Battle.net prefix for that compat tool.
 4. Runs `battlenet`.
@@ -54,7 +54,7 @@ with `CAPTURE_FALLBACK=foreground` only during attended debugging.
 
 Expected runtime signals:
 
-- Wrapper log says `proton-custom DEV GE-Proton10-34 (Wayland SNI)` in dev mode.
+- Wrapper log says `proton-custom DEV GE-Proton11-5 (Wayland SNI)` in dev mode.
 - Proton log options include `wayland` and `hdr`.
 - Battle.net command line does not include `--use-angle=desktop` or
   `--disable-gpu-compositing`.

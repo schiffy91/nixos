@@ -1,4 +1,4 @@
-From 2315c232abeb5ca2a489c412f977700a99ff1281 Mon Sep 17 00:00:00 2001
+From 18431289b0764035376d9d5627dbb545c0b8a49a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 03:54:10 -0700
 Subject: [PATCH] dcomp: Make composition host windows presentation-only
@@ -13,12 +13,13 @@ host-window contents from briefly showing through while the GPU-backed
 composition surface is being resized, moved, or rebound.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 15 ++++++++++++++-
  1 file changed, 14 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index a80b5ec..28ba0a6 100644
+index b1c3c8e..ff9a795 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -153,6 +153,18 @@ static const WCHAR dcomp_host_class_name[] =
@@ -50,6 +51,3 @@ index a80b5ec..28ba0a6 100644
                                                 dcomp_host_class_name, NULL,
                                                 WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
                                                 x, y, width, height, t->hwnd, NULL,
--- 
-2.54.0
-

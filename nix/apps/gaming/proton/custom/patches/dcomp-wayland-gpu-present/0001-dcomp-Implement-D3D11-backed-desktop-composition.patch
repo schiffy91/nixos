@@ -1,9 +1,10 @@
-From 46d12f76928436d325f672af9e5d459b9b6117a6 Mon Sep 17 00:00:00 2001
+From 75935500cfc426c1a0167fdcce4dc8a22ca706d8 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 20 May 2026 06:03:54 -0700
 Subject: [PATCH] dcomp: Implement D3D11-backed desktop composition
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/Makefile.in |   2 +
  dlls/dcomp/device.c    | 960 ++++++++++++++++++++++++++++++++++++++++-
@@ -21,7 +22,7 @@ index d48b901..4db5387 100644
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index d0eb920..3d9b7b5 100644
+index d0eb920..3512ced 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1,5 +1,8 @@
@@ -480,11 +481,11 @@ index d0eb920..3d9b7b5 100644
 +static const IDCompositionVisual2Vtbl dcomp_visual_vtbl =
 +{
 +    visual_QueryInterface, visual_AddRef, visual_Release,
-+    visual_SetOffsetX, visual_SetOffsetXAnimation,
-+    visual_SetOffsetY, visual_SetOffsetYAnimation,
-+    visual_SetTransform, visual_SetTransformObject, visual_SetTransformParent,
++    visual_SetOffsetXAnimation, visual_SetOffsetX,
++    visual_SetOffsetYAnimation, visual_SetOffsetY,
++    visual_SetTransformObject, visual_SetTransform, visual_SetTransformParent,
 +    visual_SetEffect, visual_SetBitmapInterpolationMode, visual_SetBorderMode,
-+    visual_SetClip, visual_SetClipObject, visual_SetContent,
++    visual_SetClipObject, visual_SetClip, visual_SetContent,
 +    visual_AddVisual, visual_RemoveVisual, visual_RemoveAllVisuals,
 +    visual_SetCompositeMode,
 +    /* Visual2 */
@@ -1015,6 +1016,3 @@ index d0eb920..3d9b7b5 100644
 +    TRACE("%p %s %p\n", rendering_device, debugstr_guid(iid), out);
 +    return dcomp_create_device(rendering_device, iid, out);
 +}
--- 
-2.54.0
-

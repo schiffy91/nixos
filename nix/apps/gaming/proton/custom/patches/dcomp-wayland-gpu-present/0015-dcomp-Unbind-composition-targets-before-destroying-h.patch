@@ -1,4 +1,4 @@
-From aece5fad4a9936c0484b564e2cf097bf56860465 Mon Sep 17 00:00:00 2001
+From 7c9b70e1debd5bb767d412708135efbca00c2f0f Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:41:17 -0700
 Subject: [PATCH] dcomp: Unbind composition targets before destroying hosts
@@ -15,12 +15,13 @@ created. Leaving the content unbound is preferable to presenting it at the
 wrong location or with the wrong clipping.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 73 +++++++++++++++++++++++++++++++++++++++++++--
  1 file changed, 70 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 0c6befa..f779d21 100644
+index a7c4888..3b893d7 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -177,6 +177,7 @@ static const IDCompositionSurfaceFactoryVtbl dcomp_surface_factory_vtbl;
@@ -174,6 +175,3 @@ index 0c6befa..f779d21 100644
      {
          if (FAILED(dcomp_surface_present(surface, v->host_hwnd, t->hwnd)))
              WARN("surface=%p present failed\n", surface);
--- 
-2.54.0
-

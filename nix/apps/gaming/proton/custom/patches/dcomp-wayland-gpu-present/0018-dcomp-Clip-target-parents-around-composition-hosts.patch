@@ -1,4 +1,4 @@
-From 5d9b9d919339a15b820d2b42d193691c7d785f04 Mon Sep 17 00:00:00 2001
+From 94c2fb23e60e33e78083af6ccd0d12e397f3aa04 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 11 Jun 2026 10:34:00 -0700
 Subject: [PATCH] dcomp: Clip target parents around composition hosts
@@ -15,18 +15,19 @@ content is hosted by a child, parent repaints must leave that rectangle to the
 child surface.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 23 +++++++++++++++++++++++
  1 file changed, 23 insertions(+)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index accc4a0..7cdd5c5 100644
+index ce85dc1..c8f2deb 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1273,6 +1273,27 @@ static BOOL dcomp_visual_needs_host(const struct dcomp_visual *v, BOOL has_surfa
      return FALSE;
  }
-
+ 
 +static void dcomp_target_enable_child_clipping(HWND hwnd)
 +{
 +    LONG_PTR style;
@@ -60,5 +61,3 @@ index accc4a0..7cdd5c5 100644
              if (!v->host_hwnd || v->host_parent != t->hwnd)
              {
                  if (v->host_hwnd)
---
-2.54.0

@@ -11,7 +11,7 @@ in lib.mkMerge [
   {
     # Export the tool name so other modules can reference it.
     _module.args.protonCustom = {
-      name = "proton-custom-GE-Proton10-34";
+      name = protonCustom.pname;
       package = protonCustom;
     };
   }

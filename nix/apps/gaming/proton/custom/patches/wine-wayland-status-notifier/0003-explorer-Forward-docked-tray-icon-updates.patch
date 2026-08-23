@@ -1,4 +1,4 @@
-From 5c3901b45492bbf549f677b7b3a3c623bb7f2f5a Mon Sep 17 00:00:00 2001
+From 48fc5940c9d08deda604dd0519843e1fe2b13609 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:20:49 -0700
 Subject: [PATCH] explorer: Forward docked tray icon updates
@@ -15,6 +15,7 @@ driver. Send a fresh snapshot when visible docked icons are modified
 so panels can keep tooltips, icons, and callback routing in sync.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/win32u/driver.c                   |  6 +++--
  dlls/winewayland.drv/wayland_systray.c | 31 ++++------------------
@@ -27,10 +28,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  8 files changed, 60 insertions(+), 35 deletions(-)
 
 diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
-index 5eaddc7..8e5a6ce 100644
+index 793de3f..def6f7c 100644
 --- a/dlls/win32u/driver.c
 +++ b/dlls/win32u/driver.c
-@@ -737,7 +737,8 @@ static void nulldrv_SystrayDockInit( HWND hwnd )
+@@ -728,7 +728,8 @@ static void nulldrv_SystrayDockInit( HWND hwnd )
  {
  }
  
@@ -40,7 +41,7 @@ index 5eaddc7..8e5a6ce 100644
  {
      return FALSE;
  }
-@@ -1170,7 +1171,8 @@ static void loaderdrv_SystrayDockInit( HWND hwnd )
+@@ -1166,7 +1167,8 @@ static void loaderdrv_SystrayDockInit( HWND hwnd )
      load_driver()->pSystrayDockInit( hwnd );
  }
  
@@ -115,12 +116,12 @@ index ef383e5..179db30 100644
      FIXME("D-Bus support is not available; systray icon not registered\n");
      return FALSE;
 diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index f2cb31e..64f7166 100644
+index 7a9dd21..4e35f47 100644
 --- a/dlls/winewayland.drv/waylanddrv.h
 +++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -615,7 +615,8 @@ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
- LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
- void WAYLAND_UpdateLayeredWindow(HWND hwnd, UINT flags);
+@@ -615,7 +615,8 @@ RGNDATA *get_region_data(HRGN region);
+ 
+ void WAYLAND_ActivateWindow(HWND hwnd, HWND previous);
  void WAYLAND_SystrayDockInit(HWND hwnd);
 -BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, void *icon);
 +BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy,
@@ -129,10 +130,10 @@ index f2cb31e..64f7166 100644
  BOOL WAYLAND_SystrayDockRemove(HWND hwnd);
  void WAYLAND_SystrayDispatch(void);
 diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
-index e6edb17..cc6ae0d 100644
+index 10a6359..4ca0ea7 100644
 --- a/dlls/winex11.drv/window.c
 +++ b/dlls/winex11.drv/window.c
-@@ -3150,7 +3150,8 @@ static void get_systray_visual_info( Display *display, Window systray_window, XV
+@@ -3337,7 +3337,8 @@ static void get_systray_visual_info( Display *display, Window systray_window, XV
  /***********************************************************************
   *              SystrayDockInsert   (X11DRV.@)
   */
@@ -143,10 +144,10 @@ index e6edb17..cc6ae0d 100644
      Display *display = thread_init_display();
      Window systray_window, window;
 diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
-index 2e79e89..5337a04 100644
+index 41fc515..f5b6bcf 100644
 --- a/dlls/winex11.drv/x11drv.h
 +++ b/dlls/winex11.drv/x11drv.h
-@@ -214,7 +214,8 @@ extern void X11DRV_SetCursor( HWND hwnd, HCURSOR handle );
+@@ -218,7 +218,8 @@ extern void X11DRV_SetCursor( HWND hwnd, HCURSOR handle );
  extern BOOL X11DRV_SetCursorPos( INT x, INT y );
  extern BOOL X11DRV_ClipCursor( const RECT *clip, BOOL reset );
  extern void X11DRV_SystrayDockInit( HWND systray );
@@ -157,10 +158,10 @@ index 2e79e89..5337a04 100644
  extern BOOL X11DRV_SystrayDockRemove( HWND hwnd );
  extern LONG X11DRV_ChangeDisplaySettings( LPDEVMODEW displays, LPCWSTR primary_name, HWND hwnd, DWORD flags, LPVOID lpvoid );
 diff --git a/include/ntuser.h b/include/ntuser.h
-index 315fb77..f7d2a87 100644
+index 0011fa0..e2b0e62 100644
 --- a/include/ntuser.h
 +++ b/include/ntuser.h
-@@ -662,6 +662,17 @@ enum wine_systray_call
+@@ -699,6 +699,17 @@ enum wine_systray_call
      WINE_SYSTRAY_DOCK_REMOVE,
  };
  
@@ -179,10 +180,10 @@ index 315fb77..f7d2a87 100644
  enum wine_drag_drop_call
  {
 diff --git a/include/wine/gdi_driver.h b/include/wine/gdi_driver.h
-index 8902346..862550f 100644
+index d52f6ec..29051c4 100644
 --- a/include/wine/gdi_driver.h
 +++ b/include/wine/gdi_driver.h
-@@ -356,7 +356,7 @@ struct user_driver_funcs
+@@ -394,7 +394,7 @@ struct user_driver_funcs
      LRESULT (*pNotifyIcon)(HWND,UINT,NOTIFYICONDATAW *);
      void    (*pCleanupIcons)(HWND);
      void    (*pSystrayDockInit)(HWND);
@@ -259,6 +260,3 @@ index 02fe507..e613dd1 100644
              ret = TRUE;
          }
          break;
--- 
-2.54.0
-

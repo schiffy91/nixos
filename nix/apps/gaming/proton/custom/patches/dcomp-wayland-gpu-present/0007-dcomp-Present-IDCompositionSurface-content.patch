@@ -1,4 +1,4 @@
-From 0d3c1bc1fb37aa3f22983daf1fdb8023691b0eaa Mon Sep 17 00:00:00 2001
+From a749f213fe4aa0504aa7cf0c9221d1f48e2fbf76 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 06:31:53 -0700
 Subject: [PATCH] dcomp: Present IDCompositionSurface content
@@ -14,12 +14,13 @@ to the visual host window through the same DXVK composition target
 interface used for swap-chain visuals.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 203 ++++++++++++++++++++++++++++++++++++++++++--
  1 file changed, 198 insertions(+), 5 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index b3388a3..7fc8c0f 100644
+index a5479ef..04d7a84 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -112,7 +112,13 @@ struct dcomp_surface
@@ -285,6 +286,3 @@ index b3388a3..7fc8c0f 100644
          SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGIVkCompositionSwapChain,
                                            (void **)&composition_sc)) &&
          composition_sc)
--- 
-2.54.0
-

@@ -1,4 +1,4 @@
-From f2216580a3222f6a05d58bf722ec32073b5d31c7 Mon Sep 17 00:00:00 2001
+From e75387e7f67c798aae3e807bfb7882ec9903b813 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 18:18:53 -0700
 Subject: [PATCH] winewayland.drv: Keep SNI items self-contained
@@ -13,6 +13,7 @@ eager initialization can leave explorer with a stale connection after launcher
 process churn.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/wayland_systray.c | 5 +----
  programs/explorer/systray.c            | 1 -
@@ -57,6 +58,3 @@ index e613dd1..a235a5a 100644
      }
  
      if (!tray_window)
--- 
-2.54.0
-

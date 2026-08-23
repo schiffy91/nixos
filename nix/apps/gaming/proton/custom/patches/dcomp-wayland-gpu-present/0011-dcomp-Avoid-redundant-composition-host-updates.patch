@@ -1,4 +1,4 @@
-From 2ca0382e813715ec0d30f618656ca52756446278 Mon Sep 17 00:00:00 2001
+From e0a57224591422ce4ac4171f462c35adfb6fd7c0 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 09:55:00 -0700
 Subject: [PATCH] dcomp: Avoid redundant composition host updates
@@ -15,12 +15,13 @@ SWP_NOMOVE and SWP_NOSIZE so they do not resize or reconfigure the Wayland
 child surface.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 77 ++++++++++++++++++++++++++++++++++-----------
  1 file changed, 58 insertions(+), 19 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index a331157..92a5005 100644
+index 761c37a..500f009 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -95,6 +95,9 @@ struct dcomp_visual
@@ -161,6 +162,3 @@ index a331157..92a5005 100644
      }
  
      if (surface && v->host_hwnd)
--- 
-2.54.0
-

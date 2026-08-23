@@ -2,6 +2,7 @@
 set -euo pipefail
 
 proton_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tool_name="proton-custom-$(sed -n 's/.*toolVersion *= *"\([^"]*\)".*/\1/p' "$proton_dir/package.nix")"
 
 usage() {
   cat <<EOF
@@ -38,9 +39,9 @@ case "$mode" in
     saved_store="$proton_dir/src/.store-target"
     mkdir -p "$compat_dir"
     mkdir -p "$(dirname "$saved_store")"
-    ln -sfn "$store_path" "$compat_dir/proton-custom-GE-Proton10-34"
+    ln -sfn "$store_path" "$compat_dir/$tool_name"
     printf '%s\n' "$store_path" > "$saved_store"
-    echo "$compat_dir/proton-custom-GE-Proton10-34 -> $(realpath "$compat_dir/proton-custom-GE-Proton10-34")"
+    echo "$compat_dir/$tool_name -> $(realpath "$compat_dir/$tool_name")"
     ;;
   production|system)
     nixos update

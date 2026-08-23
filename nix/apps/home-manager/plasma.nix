@@ -112,6 +112,7 @@ in {
     defaultProfile = settings.users.admin.username;
     profiles.${settings.users.admin.username} = {
       name = settings.users.admin.username;
+      font.name = "Hack";
       extraConfig = {
         "Cursor Options".CursorShape = 2;
         "Keyboard".KeyBindings = "macos";

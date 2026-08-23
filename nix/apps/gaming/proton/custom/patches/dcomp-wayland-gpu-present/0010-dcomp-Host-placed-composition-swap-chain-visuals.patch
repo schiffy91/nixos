@@ -1,4 +1,4 @@
-From b801a446f6ee22ed4e7ffceb6d881315e9c73c1b Mon Sep 17 00:00:00 2001
+From 2e6033de4abe4ade957a6773f7a33adfe9ef1a5a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 18:15:00 -0700
 Subject: [PATCH] dcomp: Host placed composition swap-chain visuals
@@ -12,12 +12,13 @@ the main window with a child presentation surface, while still giving CEF
 dialog, popup, and form-control layers their own positioned host windows.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 22 ++++++++++++++++++++--
  1 file changed, 20 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index f58320e..a331157 100644
+index 34c9940..761c37a 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -833,6 +833,25 @@ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
@@ -56,6 +57,3 @@ index f58320e..a331157 100644
      {
          RECT host_clip;
          int x = placement.x;
--- 
-2.54.0
-

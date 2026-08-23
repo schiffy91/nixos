@@ -1,26 +1,27 @@
-From a5444157ecc52468a79fadd9c76355b460b599e2 Mon Sep 17 00:00:00 2001
+From 18db8b43097cb4b3964f6be4c3de050d578ce557 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 20 May 2026 03:04:21 -0700
-Subject: [PATCH] dxgi: Bind composition swap chains to DComp windows
+Subject: [PATCH 01/11] dxgi: Bind composition swap chains to DComp windows
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- src/d3d11/d3d11_swapchain.cpp        | 70 ++++++++++++++++++++++++++++
- src/d3d11/d3d11_swapchain.h          | 32 ++++++++++++-
+ src/d3d11/d3d11_swapchain.cpp        | 71 ++++++++++++++++++++++++++++
+ src/d3d11/d3d11_swapchain.h          | 33 ++++++++++++-
  src/dxgi/dxgi_factory.cpp            |  4 +-
+ src/dxgi/dxgi_interfaces.h           | 18 +++++++
  src/dxgi/dxgi_options.cpp            |  3 +-
  src/dxgi/dxgi_options.h              |  2 +-
- src/dxgi/dxgi_interfaces.h           | 18 +++++++
  src/dxgi/dxgi_surface.cpp            | 20 ++++++++
  src/dxgi/dxgi_surface.h              |  6 +++
  src/dxgi/dxgi_swapchain.cpp          |  3 ++
  src/dxgi/dxgi_swapchain_dispatcher.h |  3 ++
  src/dxvk/dxvk_presenter.cpp          | 11 ++++-
  src/dxvk/dxvk_presenter.h            |  2 +
- 12 files changed, 169 insertions(+), 5 deletions(-)
+ 12 files changed, 169 insertions(+), 7 deletions(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index cbcc3c6c0..c0943a94c 100644
+index cbcc3c6..e0ec3cb 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -25,6 +25,17 @@ namespace dxvk {
@@ -128,7 +129,7 @@ index cbcc3c6c0..c0943a94c 100644
    Rc<DxvkImageView> D3D11SwapChain::GetBackBufferView() {
      Rc<DxvkImage> image = GetCommonTexture(m_backBuffers[0].ptr())->GetImage();
  
-@@ -505,6 +574,7 @@ namespace dxvk {
+@@ -505,6 +575,7 @@ namespace dxvk {
    void D3D11SwapChain::CreatePresenter() {
      PresenterDesc presenterDesc = { };
      presenterDesc.deferSurfaceCreation = m_parent->GetOptions()->deferSurfaceCreation;
@@ -137,7 +138,7 @@ index cbcc3c6c0..c0943a94c 100644
      m_presenter = new Presenter(m_device, m_frameLatencySignal, presenterDesc, [
        cAdapter  = m_device->adapter(),
 diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
-index 99f09450c..6f68b1bc4 100644
+index 99f0945..715c286 100644
 --- a/src/d3d11/d3d11_swapchain.h
 +++ b/src/d3d11/d3d11_swapchain.h
 @@ -13,6 +13,28 @@ namespace dxvk {
@@ -199,7 +200,7 @@ index 99f09450c..6f68b1bc4 100644
      Rc<hud::HudLatencyItem>   m_latencyHud;
  
      Rc<DxvkImageView> GetBackBufferView();
-@@ -157,4 +187,4 @@ namespace dxvk {
+@@ -157,4 +188,4 @@ namespace dxvk {
  
    };
  
@@ -207,13 +208,13 @@ index 99f09450c..6f68b1bc4 100644
 \ No newline at end of file
 +}
 diff --git a/src/dxgi/dxgi_factory.cpp b/src/dxgi/dxgi_factory.cpp
-index b5d467a94..60536e130 100644
+index d89409e..f534673 100644
 --- a/src/dxgi/dxgi_factory.cpp
 +++ b/src/dxgi/dxgi_factory.cpp
-@@ -283,11 +283,11 @@ namespace dxvk {
+@@ -287,11 +287,11 @@ namespace dxvk {
      InitReturnPtr(ppSwapChain);
  
-     if (!m_options.enableDummyCompositionSwapchain) {
+     if (!m_options->enableDummyCompositionSwapchain) {
 -      Logger::err("DxgiFactory::CreateSwapChainForComposition: Not implemented");
 +      Logger::err("DxgiFactory::CreateSwapChainForComposition: Disabled by configuration");
        return E_NOTIMPL;
@@ -224,34 +225,8 @@ index b5d467a94..60536e130 100644
  
      return CreateSwapChainBase(pDevice,
        nullptr, pDesc, nullptr, pRestrictToOutput, ppSwapChain);
-diff --git a/src/dxgi/dxgi_options.cpp b/src/dxgi/dxgi_options.cpp
-index 2b7906c6e..0d3bfbec4 100644
---- a/src/dxgi/dxgi_options.cpp
-+++ b/src/dxgi/dxgi_options.cpp
-@@ -94,7 +94,6 @@ namespace dxvk {
-     this->forceRefreshRate = config.getOption<int32_t>("dxgi.forceRefreshRate", 0u);
- 
--    // We don't support dcomp swapchains and some games may rely on them failing on creation
--    this->enableDummyCompositionSwapchain = config.getOption<bool>("dxgi.enableDummyCompositionSwapchain", false);
-+    this->enableDummyCompositionSwapchain = config.getOption<bool>("dxgi.enableDummyCompositionSwapchain", true);
-
-     // Expose Nvidia GPUs properly if NvAPI is enabled in environment
-     this->hideNvidiaGpu = !isNvapiEnabled();
-diff --git a/src/dxgi/dxgi_options.h b/src/dxgi/dxgi_options.h
-index 8d0e9ce9e..e5be8e6d3 100644
---- a/src/dxgi/dxgi_options.h
-+++ b/src/dxgi/dxgi_options.h
-@@ -46,7 +46,7 @@ namespace dxvk {
-     /// Enable HDR
-     bool enableHDR;
- 
--    /// Enable support for dummy composition swapchains
-+    /// Enable support for composition swap chains
-     bool enableDummyCompositionSwapchain;
- 
-     /// Limit frame rate
 diff --git a/src/dxgi/dxgi_interfaces.h b/src/dxgi/dxgi_interfaces.h
-index 390eee55a..f7cfd9abf 100644
+index 390eee5..f7cfd9a 100644
 --- a/src/dxgi/dxgi_interfaces.h
 +++ b/src/dxgi/dxgi_interfaces.h
 @@ -62,6 +62,9 @@ IDXGIVkSurfaceFactory : public IUnknown {
@@ -292,8 +267,35 @@ index 390eee55a..f7cfd9abf 100644
 +__CRT_UUID_DECL(IDXGIVkCompositionSwapChain, 0x4765d18a,0xeba0,0x40bd,0xa7,0x30,0x7f,0x5f,0x3d,0x91,0x5c,0x1f);
  __CRT_UUID_DECL(IDXGIVkSwapChainFactory,   0xe7d6c3ca,0x23a0,0x4e08,0x9f,0x2f,0xea,0x52,0x31,0xdf,0x66,0x33);
  #endif
+diff --git a/src/dxgi/dxgi_options.cpp b/src/dxgi/dxgi_options.cpp
+index d83342e..429ed89 100644
+--- a/src/dxgi/dxgi_options.cpp
++++ b/src/dxgi/dxgi_options.cpp
+@@ -174,8 +174,7 @@ namespace dxvk {
+     this->syncInterval     = config.getOption<int32_t>("dxgi.syncInterval", -1);
+     this->forceRefreshRate = config.getOption<int32_t>("dxgi.forceRefreshRate", 0u);
+ 
+-    // We don't support dcomp swapchains and some games may rely on them failing on creation
+-    this->enableDummyCompositionSwapchain = config.getOption<bool>("dxgi.enableDummyCompositionSwapchain", false);
++    this->enableDummyCompositionSwapchain = config.getOption<bool>("dxgi.enableDummyCompositionSwapchain", true);
+ 
+     // Expose Nvidia GPUs properly if NvAPI is enabled in environment
+     this->hideNvidiaGpu = !isNvapiEnabled();
+diff --git a/src/dxgi/dxgi_options.h b/src/dxgi/dxgi_options.h
+index c61c574..3cdbcfb 100644
+--- a/src/dxgi/dxgi_options.h
++++ b/src/dxgi/dxgi_options.h
+@@ -55,7 +55,7 @@ namespace dxvk {
+     /// Enable HDR
+     bool enableHDR;
+ 
+-    /// Enable support for dummy composition swapchains
++    /// Enable support for composition swap chains
+     bool enableDummyCompositionSwapchain;
+ 
+     /// Limit frame rate
 diff --git a/src/dxgi/dxgi_surface.cpp b/src/dxgi/dxgi_surface.cpp
-index 0c11b0c28..664e060f2 100644
+index 69398c0..4cb7402 100644
 --- a/src/dxgi/dxgi_surface.cpp
 +++ b/src/dxgi/dxgi_surface.cpp
 @@ -44,10 +44,30 @@ namespace dxvk {
@@ -328,7 +330,7 @@ index 0c11b0c28..664e060f2 100644
  #ifdef _WIN32
      static std::atomic<bool> s_wndClassRegistered = { false };
 diff --git a/src/dxgi/dxgi_surface.h b/src/dxgi/dxgi_surface.h
-index 4a5c36f6d..1388dd1f6 100644
+index 4a5c36f..1388dd1 100644
 --- a/src/dxgi/dxgi_surface.h
 +++ b/src/dxgi/dxgi_surface.h
 @@ -1,5 +1,7 @@
@@ -354,10 +356,10 @@ index 4a5c36f6d..1388dd1f6 100644
      bool                      m_ownsWindow = false;
  
 diff --git a/src/dxgi/dxgi_swapchain.cpp b/src/dxgi/dxgi_swapchain.cpp
-index 0aa3fc701..90e9b410d 100644
+index 0ab89f8..e77dab0 100644
 --- a/src/dxgi/dxgi_swapchain.cpp
 +++ b/src/dxgi/dxgi_swapchain.cpp
-@@ -89,6 +89,9 @@ namespace dxvk {
+@@ -92,6 +92,9 @@ namespace dxvk {
        return S_OK;
      }
  
@@ -368,7 +370,7 @@ index 0aa3fc701..90e9b410d 100644
        *ppvObject = ref(&m_destructionNotifier);
        return S_OK;
 diff --git a/src/dxgi/dxgi_swapchain_dispatcher.h b/src/dxgi/dxgi_swapchain_dispatcher.h
-index d5c00caef..d3d4a29ad 100644
+index d5c00ca..d3d4a29 100644
 --- a/src/dxgi/dxgi_swapchain_dispatcher.h
 +++ b/src/dxgi/dxgi_swapchain_dispatcher.h
 @@ -61,6 +61,9 @@ namespace dxvk {
@@ -382,7 +384,7 @@ index d5c00caef..d3d4a29ad 100644
          Logger::warn("DxgiSwapChainDispatcher::QueryInterface: Unknown interface query");
          Logger::warn(str::format(riid));
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
-index f0d26515e..6b03782a7 100644
+index f0d2651..6b03782 100644
 --- a/src/dxvk/dxvk_presenter.cpp
 +++ b/src/dxvk/dxvk_presenter.cpp
 @@ -22,6 +22,7 @@ namespace dxvk {
@@ -421,7 +423,7 @@ index f0d26515e..6b03782a7 100644
        "\n  Image count:  ", swapInfo.minImageCount));
      
 diff --git a/src/dxvk/dxvk_presenter.h b/src/dxvk/dxvk_presenter.h
-index 48fa2928e..72bce2808 100644
+index 48fa292..72bce28 100644
 --- a/src/dxvk/dxvk_presenter.h
 +++ b/src/dxvk/dxvk_presenter.h
 @@ -35,6 +35,7 @@ namespace dxvk {
@@ -440,5 +442,3 @@ index 48fa2928e..72bce2808 100644
  
      std::vector<Rc<DxvkImage>>  m_images;
      std::vector<PresenterSync>  m_semaphores;
--- 
-2.53.0

@@ -1,4 +1,4 @@
-From b25dc51ae35c718ad6d3f5851b5326730f8a8dca Mon Sep 17 00:00:00 2001
+From ae9a6ac768353165a1a102a77dc8afc3c0960adf Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 18:18:53 -0700
 Subject: [PATCH] ntdll: Make delay-load IAT writable before patching
@@ -11,15 +11,16 @@ Temporarily make the target thunk writable while updating it, then restore
 the previous page protection.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/ntdll/loader.c | 13 ++++++++++++-
  1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
-index a1e7b60..db7c868 100644
+index bbb448c..01aea6e 100644
 --- a/dlls/ntdll/loader.c
 +++ b/dlls/ntdll/loader.c
-@@ -3993,6 +3993,9 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
+@@ -4040,6 +4040,9 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
      NTSTATUS nts;
      FARPROC fp;
      INT_PTR id;
@@ -29,7 +30,7 @@ index a1e7b60..db7c868 100644
  
      TRACE( "(%p, %p, %p, %p, %p, 0x%08lx)\n", base, desc, dllhook, syshook, addr, flags );
  
-@@ -4026,7 +4029,15 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
+@@ -4073,7 +4076,15 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
      }
      if (!nts)
      {
@@ -46,6 +47,3 @@ index a1e7b60..db7c868 100644
          return fp;
      }
  
--- 
-2.54.0
-

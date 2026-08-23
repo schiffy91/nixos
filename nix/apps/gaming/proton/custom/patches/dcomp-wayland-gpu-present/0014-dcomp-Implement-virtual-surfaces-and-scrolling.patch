@@ -1,4 +1,4 @@
-From 30872f51faee281929364bfa21de67bee2c5603b Mon Sep 17 00:00:00 2001
+From 47fcbb73533e1947022d089af482a3fb2acfeee0 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 11:10:59 -0700
 Subject: [PATCH] dcomp: Implement virtual surfaces and scrolling
@@ -10,12 +10,13 @@ copying through a temporary D3D11 texture so overlapping source and
 destination rectangles preserve existing pixels.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 234 ++++++++++++++++++++++++++++++++++++++++++--
  1 file changed, 224 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 18b040b..0c6befa 100644
+index f2511ea..a7c4888 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -109,6 +109,7 @@ struct dcomp_visual
@@ -359,6 +360,3 @@ index 18b040b..0c6befa 100644
  
  #define DEV_STUB_OK(name, ret_type, out_name) \
      static HRESULT WINAPI device_##name(IDCompositionDesktopDevice *iface, ret_type **out_name) \
--- 
-2.54.0
-

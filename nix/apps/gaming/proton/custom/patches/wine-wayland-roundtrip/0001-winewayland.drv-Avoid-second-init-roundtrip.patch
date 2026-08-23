@@ -1,4 +1,4 @@
-From e9f3733b4d29cd75f81abf82ddc5072814921d36 Mon Sep 17 00:00:00 2001
+From a14804c294a679abb6e324ff507f5a46148d8adb Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 19 May 2026 14:30:39 -0700
 Subject: [PATCH] winewayland.drv: Avoid second init roundtrip
@@ -12,15 +12,16 @@ the driver init path while the child is waiting on parent IPC. Drain any
 already queued events and flush the display instead.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/wayland.c | 8 +++++---
  1 file changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/dlls/winewayland.drv/wayland.c b/dlls/winewayland.drv/wayland.c
-index 7571363..c512fe0 100644
+index ad36bd2..f1773b0 100644
 --- a/dlls/winewayland.drv/wayland.c
 +++ b/dlls/winewayland.drv/wayland.c
-@@ -372,10 +372,12 @@ BOOL wayland_process_init(void)
+@@ -435,10 +435,12 @@ BOOL wayland_process_init(void)
      /* Populate registry */
      wl_registry_add_listener(process_wayland.wl_registry, &registry_listener, NULL);
  
@@ -34,8 +35,5 @@ index 7571363..c512fe0 100644
 +    wl_display_dispatch_queue_pending(process_wayland.wl_display,
 +                                      process_wayland.wl_event_queue);
  
-     /* initialize steam overlay event */
-     init_overlay_event();
--- 
-2.54.0
-
+     /* A third roundtrip to help avoid race conditions for zxdg output and color management extensions. */
+     wl_display_roundtrip_queue(process_wayland.wl_display, process_wayland.wl_event_queue);

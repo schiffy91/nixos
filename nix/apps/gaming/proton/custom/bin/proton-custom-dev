@@ -12,10 +12,11 @@ import time
 from pathlib import Path
 
 
-TOOL_NAME = "proton-custom-GE-Proton10-34"
-DEV_TOOL_NAME = f"{TOOL_NAME}-dev"
 NIXOS = Path("/etc/nixos")
 PROTON_DIR = NIXOS / "nix/apps/gaming/proton/custom"
+TOOL_VERSION = re.search(r'toolVersion\s*=\s*"([^"]+)"', (PROTON_DIR / "package.nix").read_text())[1]
+TOOL_NAME = f"proton-custom-{TOOL_VERSION}"
+DEV_TOOL_NAME = f"{TOOL_NAME}-dev"
 SCREENSHOT_MODES = {
     "full": "-f",
     "active": "-a",
@@ -160,8 +161,8 @@ def write_dev_vdf() -> None:
         return
     text = vdf.read_text()
     text = text.replace(
-        '"display_name" "proton-custom GE-Proton10-34 (Wayland SNI)"',
-        '"display_name" "proton-custom DEV GE-Proton10-34 (Wayland SNI)"',
+        f'"display_name" "proton-custom {TOOL_VERSION} (Wayland SNI)"',
+        f'"display_name" "proton-custom DEV {TOOL_VERSION} (Wayland SNI)"',
     )
     vdf.write_text(text)
 

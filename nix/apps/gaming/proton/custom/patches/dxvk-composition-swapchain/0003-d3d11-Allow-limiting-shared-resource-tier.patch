@@ -1,23 +1,24 @@
-From 77444e8920efc283497afab0c8140d433755fee8 Mon Sep 17 00:00:00 2001
+From 475ba5cc9ec37168c02b5cc48ebc95066bfc938d Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 06:10:30 -0700
-Subject: [PATCH] d3d11: Allow limiting shared resource tier
+Subject: [PATCH 03/11] d3d11: Allow limiting shared resource tier
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_features.cpp | 22 +++++++++++++++++++++-
  src/d3d11/d3d11_options.cpp  |  1 +
  src/d3d11/d3d11_options.h    |  3 +++
- 3 files changed, 26 insertions(+), 1 deletion(-)
+ 3 files changed, 25 insertions(+), 1 deletion(-)
 
 diff --git a/src/d3d11/d3d11_features.cpp b/src/d3d11/d3d11_features.cpp
-index 504145b..567ae92 100644
+index 7fb0cfa..75781fe 100644
 --- a/src/d3d11/d3d11_features.cpp
 +++ b/src/d3d11/d3d11_features.cpp
 @@ -4,6 +4,24 @@
-
+ 
  namespace dxvk {
-
+ 
 +  static D3D11_SHARED_RESOURCE_TIER CapSharedResourceTier(
 +          D3D11_SHARED_RESOURCE_TIER tier,
 +          int32_t                   cap) {
@@ -37,24 +38,25 @@ index 504145b..567ae92 100644
 +  }
 +
    D3D11DeviceFeatures::D3D11DeviceFeatures() {
-
+ 
    }
-@@ -36,7 +54,9 @@ namespace dxvk {
+@@ -35,7 +53,9 @@ namespace dxvk {
      m_d3d10Options.ComputeShaders_Plus_RawAndStructuredBuffers_Via_Shader_4_x = TRUE;
-
+ 
      // D3D11.1 options. All of these are required for Feature Level 11_1.
--    auto sharedResourceTier = DetermineSharedResourceTier(Adapter, FeatureLevel);
+-    auto sharedResourceTier = DetermineSharedResourceTier(Device, FeatureLevel);
 +    auto sharedResourceTier = CapSharedResourceTier(
-+      DetermineSharedResourceTier(Adapter, FeatureLevel),
++      DetermineSharedResourceTier(Device, FeatureLevel),
 +      Options.maxSharedResourceTier);
-
-     bool hasDoublePrecisionSupport = m_features.core.features.shaderFloat64
-                                   && m_features.core.features.shaderInt64;
+ 
+     bool hasDoublePrecisionSupport = features.core.features.shaderFloat64
+                                   && features.core.features.shaderInt64;
 diff --git a/src/d3d11/d3d11_options.cpp b/src/d3d11/d3d11_options.cpp
-index adf426d..0567451 100644
+index adf426d..5ed091b 100644
 --- a/src/d3d11/d3d11_options.cpp
 +++ b/src/d3d11/d3d11_options.cpp
-@@ -27,5 +27,6 @@ namespace dxvk {
+@@ -26,6 +26,7 @@ namespace dxvk {
+     this->enableContextLock     = config.getOption<bool>("d3d11.enableContextLock", false);
      this->deferSurfaceCreation  = config.getOption<bool>("dxgi.deferSurfaceCreation", false);
      this->maxFrameLatency       = config.getOption<int32_t>("dxgi.maxFrameLatency", 0);
 +    this->maxSharedResourceTier = config.getOption<int32_t>("d3d11.maxSharedResourceTier", -1);
@@ -62,16 +64,16 @@ index adf426d..0567451 100644
      this->reproducibleCommandStream = config.getOption<bool>("d3d11.reproducibleCommandStream", false);
      this->disableDirectImageMapping = config.getOption<bool>("d3d11.disableDirectImageMapping", false);
 diff --git a/src/d3d11/d3d11_options.h b/src/d3d11/d3d11_options.h
-index 3bf1e5e..ea4ac66 100644
+index 3bf1e5e..bec2a13 100644
 --- a/src/d3d11/d3d11_options.h
 +++ b/src/d3d11/d3d11_options.h
-@@ -66,4 +66,7 @@ namespace dxvk {
-
+@@ -64,6 +64,9 @@ namespace dxvk {
+     /// a higher value. May help with frame timing issues.
+     int32_t maxFrameLatency = 0;
+ 
 +    /// Highest D3D11 shared resource tier reported to applications.
 +    int32_t maxSharedResourceTier = -1;
 +
      /// Defer surface creation until first present call. This
      /// fixes issues with games that create multiple swap chains
      /// for a single window that may interfere with each other.
---
-2.53.0

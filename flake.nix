@@ -24,7 +24,8 @@
         let name = hostName hostFile;
         in if duplicateHostName name then "${name}-${hostArchitecture hostFile}" else name;
       systems = lib.unique (map hostSystem hostFiles);
-      systemModuleFiles = lib.filter (path: lib.hasSuffix ".nix" path) (lib.filesystem.listFilesRecursive ./nix/system);
+      systemModuleFiles = lib.mapAttrsToList (name: _: ./nix/system + "/${name}")  # subdirectories hold module assets, not modules
+        (lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".nix" name) (builtins.readDir ./nix/system));
       baseConfig = {
         nix = {
           channel.enable = false;

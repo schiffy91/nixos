@@ -1,7 +1,7 @@
-From 6a5ce41014017357fdbc87923d33e8f194f11b44 Mon Sep 17 00:00:00 2001
+From c0322048eee425391c3c291bcf2b43d22785b3cb Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 11 Jun 2026 09:38:01 -0700
-Subject: [PATCH] d3d11: Replay composition content after target binds
+Subject: [PATCH 08/11] d3d11: Replay composition content after target binds
 
 Battle.net can present a DirectComposition swap chain before Wine's DComp
 Commit() binds it to the Wayland child HWND. The app then goes quiet on static
@@ -14,19 +14,20 @@ binds a new composition target, replay the current back buffer into that target
 immediately.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- src/d3d11/d3d11_swapchain.cpp | 27 +++++++++++++++++++++++----
+ src/d3d11/d3d11_swapchain.cpp | 27 ++++++++++++++++++++++++++-
  src/d3d11/d3d11_swapchain.h   |  1 +
- 2 files changed, 24 insertions(+), 4 deletions(-)
+ 2 files changed, 27 insertions(+), 1 deletion(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index cf8b8f4..24cd705 100644
+index cf8b8f4..d5504cf 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -301,6 +301,11 @@ namespace dxvk {
        return hr;
      }
-
+ 
 +    {
 +      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
 +      m_compositionHasPresentAttempt = true;
@@ -41,7 +42,7 @@ index cf8b8f4..24cd705 100644
      HWND previousTarget = nullptr;
 +    bool replayTarget = false;
      bool childTarget = false;
-
+ 
      {
 @@ -442,8 +448,10 @@ namespace dxvk {
        previousTarget = m_compositionTarget;
@@ -54,11 +55,11 @@ index cf8b8f4..24cd705 100644
 +      }
        childTarget = m_compositionChildTarget;
      }
-
+ 
 @@ -455,6 +463,23 @@ namespace dxvk {
      if (childTarget)
        UpdateCompositionTargetWindow(hTarget, m_desc.Width, m_desc.Height);
-
+ 
 +    if (replayTarget) {
 +      HRESULT hr = S_OK;
 +
@@ -88,8 +89,6 @@ index 0a56c65..b2fc957 100644
      bool                      m_compositionChildTarget = false;
      bool                      m_compositionTargetShown = false;
 +    bool                      m_compositionHasPresentAttempt = false;
-
+ 
      Rc<hud::HudLatencyItem>   m_latencyHud;
-
---
-2.54.0
+ 

@@ -1,7 +1,7 @@
-From 6a8bca6acbc55c8efda9b9e010b0eb03c7e0d2a4 Mon Sep 17 00:00:00 2001
+From 463355fa38833e6899976ec921cd309e29038e69 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 12:06:31 -0700
-Subject: [PATCH] d3d11: Pace composition swap chains with the compositor
+Subject: [PATCH 02/11] d3d11: Pace composition swap chains with the compositor
 
 DirectComposition child-host swap chains are desktop-compositor content, not
 direct game surfaces. Chromium/CEF often presents those transient surfaces
@@ -15,19 +15,20 @@ interval, but make swap chains bound to child presentation hosts through the
 private composition interface use compositor-paced presentation.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp | 11 ++++++++++-
  src/d3d11/d3d11_swapchain.h   |  2 ++
  2 files changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index c0943a94c..105b6cf4f 100644
+index e0ec3cb..d8056e4 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -426 +426,10 @@ namespace dxvk {
--  }
-+  }
-+
+@@ -426,6 +426,15 @@ namespace dxvk {
+     Logger::debug("D3D11SwapChain::SetCompositionTarget: bound composition target");
+   }
+ 
 +  UINT D3D11SwapChain::GetCompositionSyncInterval(UINT SyncInterval) {
 +    std::lock_guard<dxvk::mutex> lock(m_compositionLock);
 +
@@ -36,15 +37,29 @@ index c0943a94c..105b6cf4f 100644
 +
 +    return SyncInterval;
 +  }
-@@ -454 +463 @@ namespace dxvk {
++
+ 
+   Rc<DxvkImageView> D3D11SwapChain::GetBackBufferView() {
+     Rc<DxvkImage> image = GetCommonTexture(m_backBuffers[0].ptr())->GetImage();
+@@ -452,7 +461,7 @@ namespace dxvk {
+     immediateContext->EndFrame(m_latency);
+     immediateContext->ExecuteFlush(GpuFlushType::ExplicitFlush, nullptr, true);
+ 
 -    m_presenter->setSyncInterval(SyncInterval);
 +    m_presenter->setSyncInterval(GetCompositionSyncInterval(SyncInterval));
+ 
+     // Presentation semaphores and WSI swap chain image
+     if (m_latency)
 diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
-index 6f68b1bc4..126a09d55 100644
+index 715c286..c3e1bad 100644
 --- a/src/d3d11/d3d11_swapchain.h
 +++ b/src/d3d11/d3d11_swapchain.h
-@@ -160 +160,3 @@ namespace dxvk {
--    Rc<DxvkImageView> GetBackBufferView();
-+    Rc<DxvkImageView> GetBackBufferView();
-+
+@@ -160,6 +160,8 @@ namespace dxvk {
+ 
+     Rc<DxvkImageView> GetBackBufferView();
+ 
 +    UINT GetCompositionSyncInterval(UINT SyncInterval);
++
+     HRESULT PresentImage(UINT SyncInterval);
+ 
+     void RotateBackBuffers(D3D11ImmediateContext* ctx);

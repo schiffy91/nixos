@@ -1,4 +1,4 @@
-From 3e8fc4545dc0a821938cf6418b199752c5bc2497 Mon Sep 17 00:00:00 2001
+From 206eddea48912613f54362f0c0a3d2bdb2408671 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Fri, 22 May 2026 10:48:00 -0700
 Subject: [PATCH] dcomp: Implement GPU-backed surface factories
@@ -15,12 +15,13 @@ rendering device they were created for, and accept IDXGISurface1 BeginDraw
 requests in addition to IDXGISurface.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 161 ++++++++++++++++++++++++++++++++++++++++----
  1 file changed, 149 insertions(+), 12 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 92a5005..16f9d13 100644
+index 500f009..11ea2a7 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -57,6 +57,7 @@ struct IDXGIVkCompositionSwapChain { const IDXGIVkCompositionSwapChainVtbl *lpVt
@@ -325,6 +326,3 @@ index 92a5005..16f9d13 100644
      if (!s) { *out = NULL; return E_OUTOFMEMORY; }
      *out = &s->IDCompositionSurface_iface;
      return S_OK;
--- 
-2.54.0
-

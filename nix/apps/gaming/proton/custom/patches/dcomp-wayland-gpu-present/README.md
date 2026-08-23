@@ -53,8 +53,11 @@ when placement, clipping, or surface content requires one. That keeps Win32 COM
 behavior in Wine and native presentation in DXVK's existing WSI code.
 
 ## Test Focus
-* Patch application against Valve Wine `1729f00` plus GE-Proton10-34
-  wine-wayland hotfixes.
+* Patch application against Valve Wine `36078f5` plus GE-Proton11-5
+  wine-wayland hotfixes. `IDCompositionVisual2Vtbl` is initialized
+  positionally, so re-check the slot order in `include/dcomp.idl` on every
+  base bump — Proton 11 swapped the `Set*`/`Set*Object` and
+  `Set*`/`Set*Animation` pairs.
 * Build artifacts for `dcomp.dll`, `dxgi.dll`, `explorer.exe`,
   `winewayland.drv`, `winevulkan`, and `win32u` are overlaid into the Proton
   tool for both x86_64 and i386 where GE-Proton ships them.

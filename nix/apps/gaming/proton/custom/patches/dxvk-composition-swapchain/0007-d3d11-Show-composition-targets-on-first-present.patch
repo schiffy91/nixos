@@ -1,7 +1,7 @@
-From 2d0bba614d0cd0c57b2ae95eb0e42b9f9b7d3aef Mon Sep 17 00:00:00 2001
+From 586a09567d62207c87f9b2a3b3a441fdce36708c Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Mon, 25 May 2026 17:49:00 -0700
-Subject: [PATCH] d3d11: Show composition targets on first present
+Subject: [PATCH 07/11] d3d11: Show composition targets on first present
 
 Wine's DComp bridge keeps child host windows hidden until a swap chain is
 bound. Showing the host during DComp commit can expose an empty child window
@@ -12,13 +12,14 @@ This keeps host lifetime separate from DComp tree commits while still making
 the window visible before DXVK creates or acquires the WSI swap chain.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp | 16 ++++++++++++++++
  src/d3d11/d3d11_swapchain.h   |  1 +
  2 files changed, 17 insertions(+)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 0766c8d..834c9cf 100644
+index b1fc493..cf8b8f4 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -442,6 +442,8 @@ namespace dxvk {
@@ -30,7 +31,7 @@ index 0766c8d..834c9cf 100644
        childTarget = m_compositionChildTarget;
      }
  
-@@ -499,6 +501,20 @@ namespace dxvk {
+@@ -492,6 +494,20 @@ namespace dxvk {
  
  
    HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
@@ -52,7 +53,7 @@ index 0766c8d..834c9cf 100644
      auto immediateContext = m_parent->GetContext();
      auto immediateContextLock = immediateContext->LockContext();
 diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
-index 18f9868..9eb7740 100644
+index 94171d4..0a56c65 100644
 --- a/src/d3d11/d3d11_swapchain.h
 +++ b/src/d3d11/d3d11_swapchain.h
 @@ -159,6 +159,7 @@ namespace dxvk {
@@ -63,6 +64,3 @@ index 18f9868..9eb7740 100644
  
      Rc<hud::HudLatencyItem>   m_latencyHud;
  
--- 
-2.53.0
-

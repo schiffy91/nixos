@@ -16,7 +16,7 @@ let
   privateKey = "${config.settings.boot.pkiBundle}/keys/db/db.key";
   signingRequired = config.settings.boot.method == "Secure-Boot";
   systemStateVersion = config.system.stateVersion;
-  nixosMount = import ../recovery/mount.nix { inherit config immutabilityPersistKey lib pkgs; };
+  nixosMount = import ./recovery/mount.nix { inherit config immutabilityPersistKey lib pkgs; };
 
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;

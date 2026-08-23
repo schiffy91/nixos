@@ -1,7 +1,7 @@
-From 8c1d9e6cafe0b28afc8f566f77e01b37ef6ef4ab Mon Sep 17 00:00:00 2001
+From 73445c132cdeea79d8b04339a518a6d3b91474de Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 11 Jun 2026 10:18:00 -0700
-Subject: [PATCH] d3d11: Use opaque WSI alpha for composition hosts
+Subject: [PATCH 09/11] d3d11: Use opaque WSI alpha for composition hosts
 
 Battle.net's Chromium login and launcher surfaces use premultiplied-alpha DXGI
 composition swap chains. Wine's DComp bridge binds those visuals to native
@@ -16,18 +16,19 @@ but expose the native WSI surface as opaque. The host child owns the visual's
 pixels; DComp alpha semantics are not implemented by the Wayland compositor.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  src/d3d11/d3d11_swapchain.cpp | 11 +----------
  1 file changed, 1 insertion(+), 10 deletions(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 04e9e67..d290076 100644
+index d5504cf..54deaf0 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
 @@ -25,16 +25,7 @@ namespace dxvk {
      }
    }
-
+ 
 -  static VkCompositeAlphaFlagBitsKHR ConvertCompositeAlpha(DXGI_ALPHA_MODE mode) {
 -    switch (mode) {
 -      case DXGI_ALPHA_MODE_PREMULTIPLIED:
@@ -39,8 +40,6 @@ index 04e9e67..d290076 100644
 -    }
 -  }
 +  static VkCompositeAlphaFlagBitsKHR ConvertCompositeAlpha(DXGI_ALPHA_MODE) { return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; }
-
+ 
    static VkXYColorEXT ConvertXYColor(const UINT16 (&dxgiColor)[2]) {
      return VkXYColorEXT{ float(dxgiColor[0]) / 50000.0f, float(dxgiColor[1]) / 50000.0f };
---
-2.54.0

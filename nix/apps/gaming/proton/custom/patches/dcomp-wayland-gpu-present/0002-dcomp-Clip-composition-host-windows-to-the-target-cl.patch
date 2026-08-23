@@ -1,16 +1,17 @@
-From d657d9b7f745aefc6bcef8b5dce4aa40b0a64ee6 Mon Sep 17 00:00:00 2001
+From 30b58a363fd3870f72fc02984a97e9a3f2bed97a Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 02:51:51 -0700
-Subject: [PATCH] dcomp: Clip composition host windows to the target client
+Subject: [PATCH] dcomp: Clip composition host windows to the target client 
  area
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 32 ++++++++++++++++++++++++++++++++
  1 file changed, 32 insertions(+)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 3d9b7b5..c3bcbc1 100644
+index 3512ced..1ff3182 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -705,6 +705,36 @@ static BOOL dcomp_refresh_swapchain_desc(struct dcomp_visual *v)
@@ -59,6 +60,3 @@ index 3d9b7b5..c3bcbc1 100644
          if (width && height && dcomp_register_host_class())
          {
              if (!v->host_hwnd || v->host_parent != t->hwnd)
--- 
-2.54.0
-

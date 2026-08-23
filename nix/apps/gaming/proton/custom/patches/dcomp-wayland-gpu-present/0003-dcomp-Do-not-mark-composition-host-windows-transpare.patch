@@ -1,4 +1,4 @@
-From 242c5d8f58630a83174a6f11f94c809815343a6e Mon Sep 17 00:00:00 2001
+From db6eb1fe19809398a6cff52dfbc59bd2a1dfee81 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 03:03:18 -0700
 Subject: [PATCH] dcomp: Do not mark composition host windows transparent
@@ -11,12 +11,13 @@ Wayland, which shows up as intermittent black rectangles in Battle.net's CEF
 composition surfaces.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index c3bcbc1..a80b5ec 100644
+index 1ff3182..b1c3c8e 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -784,7 +784,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
@@ -28,6 +29,3 @@ index c3bcbc1..a80b5ec 100644
                                                 dcomp_host_class_name, NULL,
                                                 WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
                                                 x, y, width, height, t->hwnd, NULL,
--- 
-2.54.0
-

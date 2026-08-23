@@ -1,4 +1,4 @@
-From ca8291af2c27b2f8581d03c1791e3ce0c137189c Mon Sep 17 00:00:00 2001
+From 59cc05c14bfb63b580a7e8cb4c0069b2df12c3e4 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Thu, 21 May 2026 10:23:41 -0700
 Subject: [PATCH] winewayland.drv: Polish SNI context menu callbacks
@@ -19,6 +19,7 @@ callback. This lets the panel finish its own grab/interaction before the
 application creates a popup menu.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/winewayland.drv/wayland_systray.c | 29 +++++++++++++++++++-------
  1 file changed, 21 insertions(+), 8 deletions(-)
@@ -96,6 +97,3 @@ index 8cb01f3..ef383e5 100644
          return DBUS_HANDLER_RESULT_HANDLED;
      }
  
--- 
-2.54.0
-
