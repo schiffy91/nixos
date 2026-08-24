@@ -24,6 +24,7 @@
     { "op": "reboot-disk" },
     { "op": "guest", "command": "cat /etc/nixos/e2e-persist-marker", "expect": "persist-root" },
     { "op": "guest", "command": "test ! -e /root/e2e-ephemeral-marker && printf wiped", "expect": "wiped" },
+    { "op": "guest", "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; if journalctl -b -q | grep -F 'does not exist' | grep -Fq hashed_password.txt; then exit 1; fi; printf activation-secrets-ok", "expect": "activation-secrets-ok" },
     { "op": "snapshot", "name": "reset-tested" },
     { "op": "record-state" },
     { "op": "stop" }

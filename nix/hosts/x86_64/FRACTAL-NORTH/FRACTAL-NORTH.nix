@@ -71,7 +71,6 @@ in {
       immutability.enable = true;
       swap.size = disk.swapSize;
     };
-    users.mutable = true;
     tpm.device = tpm.device;
     desktop.outputs = [{
       name        = display.primary.name;

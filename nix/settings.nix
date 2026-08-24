@@ -127,6 +127,7 @@ in {
     settings.disk.persistence.enable = mkSetting bool true;
     settings.disk.immutability.persist.subvolumeRoot = mkSetting str "@persist";
     settings.disk.immutability.persist.snapshots.cleanName = mkSetting str "CLEAN";
+    settings.disk.immutability.persist.neededForBoot = mkSetting (listOf str) [ "/etc/nixos" ];  # mounted in initrd so activation reads secrets
     settings.disk.immutability.persist.paths = mkSetting (listOf str) ([
       ##### Core System Files #####
       "/etc/machine-id"

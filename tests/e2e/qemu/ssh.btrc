@@ -25,6 +25,7 @@ class SshClient {
         opts.push("-o"); opts.push("LogLevel=ERROR");
         opts.push("-o"); opts.push("BatchMode=yes");
         opts.push("-o"); opts.push("IdentitiesOnly=yes");
+        opts.push("-o"); opts.push("IdentityAgent=none");  /* never block on the host's 1Password agent */
         opts.push("-o"); opts.push("ConnectTimeout=3");
         opts.push("-o"); opts.push("ConnectionAttempts=1");
         opts.push("-i"); opts.push(self.sshKeyPath());

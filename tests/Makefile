@@ -2,7 +2,7 @@ NIX_SHELL ?= nix-shell
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
 
-.PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
+.PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
 	@printf '%s\n' 'VM test targets:'
@@ -61,6 +61,9 @@ install-system: installer-ssh
 
 immutability-reset: install-system
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/immutability-reset/test.json'
+
+password-change: install-system
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/password-change/test.json --arg parentState=installed-reset'
 
 immutability-key-encoding: install-system
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/immutability-key-encoding/test.json'

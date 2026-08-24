@@ -1,0 +1,160 @@
+{
+  "name": "password-change-encrypted",
+  "state": "password-change-encrypted",
+  "parentState": "installed-encrypted",
+  "stateMaterial": "password-change-encrypted:encryption=true:tpm2=true:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "encryption": "true",
+    "tpm2": "true",
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2248,
+  "operations": [
+    {
+      "op": "require-state"
+    },
+    {
+      "op": "reset-state"
+    },
+    {
+      "op": "inherit-state"
+    },
+    {
+      "op": "validate-immutability-v2"
+    },
+    {
+      "op": "restore",
+      "name": "installed"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 15
+    },
+    {
+      "op": "serial-send",
+      "command": "testpass123"
+    },
+    {
+      "op": "sleep",
+      "timeout": 7
+    },
+    {
+      "op": "serial-send",
+      "command": "testpass123"
+    },
+    {
+      "op": "sleep",
+      "timeout": 7
+    },
+    {
+      "op": "serial-send",
+      "command": "testpass123"
+    },
+    {
+      "op": "sleep",
+      "timeout": 7
+    },
+    {
+      "op": "serial-send",
+      "command": "testpass123"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": "nixosctl eval config.settings.users.admin.username | tr -d '\"' > /var/tmp/e2e-user && nixosctl eval config.settings.disk.by.partlabel.root | tr -d '\"' > /var/tmp/e2e-root && test -s /var/tmp/e2e-user && getent shadow \"$(cat /var/tmp/e2e-user)\" > /dev/null && cat > /var/tmp/e2e-crypt.sh <<'EOF'\ncrypt() { perl -e 'chomp(my $p = <STDIN>); print crypt($p, $ENV{HASH})'; }\naccepts() { HASH=$(getent shadow \"$(cat /var/tmp/e2e-user)\" | cut -d: -f2); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nEOF\n. /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && cryptsetup isLuks \"$root\" && printf %s testpass123 | cryptsetup open --test-passphrase \"$root\" && accepts testpass123 && printf boot-ok || { cryptsetup luksDump \"$root\"; getent shadow \"$(cat /var/tmp/e2e-user)\"; exit 1; }",
+      "expect": "boot-ok",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --full-disk-encryption-only > /tmp/e2e-luks.log 2>&1 && printf %s newpass456 | cryptsetup open --test-passphrase \"$root\" && ! printf %s testpass123 | cryptsetup open --test-passphrase \"$root\" && accepts testpass123 && printf luks-changed || { cat /tmp/e2e-luks.log; exit 1; }",
+      "expect": "luks-changed",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": "(sync; systemctl reboot) >/dev/null 2>&1 &",
+      "expect": "",
+      "timeout": 15
+    },
+    {
+      "op": "sleep",
+      "timeout": 30
+    },
+    {
+      "op": "sleep",
+      "timeout": 15
+    },
+    {
+      "op": "serial-send",
+      "command": "newpass456"
+    },
+    {
+      "op": "sleep",
+      "timeout": 7
+    },
+    {
+      "op": "serial-send",
+      "command": "newpass456"
+    },
+    {
+      "op": "sleep",
+      "timeout": 7
+    },
+    {
+      "op": "serial-send",
+      "command": "newpass456"
+    },
+    {
+      "op": "sleep",
+      "timeout": 7
+    },
+    {
+      "op": "serial-send",
+      "command": "newpass456"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && printf %s newpass456 | cryptsetup open --test-passphrase \"$root\" && accepts testpass123 && printf luks-survived-reboot || { cryptsetup luksDump \"$root\"; exit 1; }",
+      "expect": "luks-survived-reboot",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-both.log 2>&1 && grep -F 'LUKS already unlocks' /tmp/e2e-both.log && accepts newpass456 && test \"$(printf %s newpass456 | crypt)\" = \"$(cat /etc/nixos/secrets/hashed_password.txt)\" && printf converged-both || { cat /tmp/e2e-both.log; exit 1; }",
+      "expect": "converged-both",
+      "timeout": 600
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-idempotent.log 2>&1 && grep -F 'LUKS already unlocks' /tmp/e2e-idempotent.log && grep -F 'already uses the new password' /tmp/e2e-idempotent.log && printf idempotent || { cat /tmp/e2e-idempotent.log; exit 1; }",
+      "expect": "idempotent",
+      "timeout": 600
+    },
+    {
+      "op": "snapshot",
+      "name": "password-change-encrypted-tested"
+    },
+    {
+      "op": "record-state"
+    },
+    {
+      "op": "stop"
+    }
+  ]
+}

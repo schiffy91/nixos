@@ -71,10 +71,11 @@ class NixosCtl {
                "Manage Lanzaboote / Secure Boot enrollment.");
         help.item("tpm2 <enable|disable|status>", "Manage TPM2 LUKS keyslot.");
         help.item("change-password [--update-tpm2]",
-               "Rotate LUKS + user account password.");
+               "Converge LUKS, account and hashed file to one new password.");
         help.continuation("[--full-disk-encryption-only | --user-account-only]");
-        help.continuation("Prompts interactively. To script, set");
-        help.continuation("NIXOS_OLD_PASSWORD + NIXOS_NEW_PASSWORD env vars.");
+        help.continuation("Parts already using the new password are skipped; the");
+        help.continuation("current password is asked only for parts that change.");
+        help.continuation("As root, NIXOS_OLD_PASSWORD + NIXOS_NEW_PASSWORD script it.");
 
         help.section("Hardware");
         help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
@@ -261,18 +262,13 @@ class NixosCtl {
             if (args.has("--old") || args.has("--new")) {
                 NixosLog.fatal("--old/--new are unsupported: passwords on argv leak via /proc/<pid>/cmdline and survive the sudo re-exec. Set NIXOS_OLD_PASSWORD / NIXOS_NEW_PASSWORD in the environment, or run change-password interactively.");
             }
-            var changeFde = !args.has("--user-account-only");
-            var changeUser = !args.has("--full-disk-encryption-only");
-            var oldPassword = NixosCtl.env("NIXOS_OLD_PASSWORD", "");
+            var manager = PasswordManager(self.config);
+            manager.suppliedCurrentPassword = NixosCtl.env("NIXOS_OLD_PASSWORD", "");
             var newPassword = NixosCtl.env("NIXOS_NEW_PASSWORD", "");
-            var interactive = Interactive();
-            if ((changeFde || changeUser) && oldPassword.isEmpty()) {
-                oldPassword = interactive.askPassword("Enter current password (LUKS + account)");
-            }
             if (newPassword.isEmpty()) {
-                newPassword = interactive.askPasswordConfirmed("Enter new password");
+                newPassword = Interactive().askPasswordConfirmed("Enter new password");
             }
-            PasswordManager(self.config).change(oldPassword, newPassword, changeFde, changeUser, args.has("--update-tpm2"));
+            manager.change(newPassword, !args.has("--user-account-only"), !args.has("--full-disk-encryption-only"), args.has("--update-tpm2"));
             return 0;
         }
 

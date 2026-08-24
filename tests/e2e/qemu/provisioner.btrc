@@ -55,7 +55,7 @@ class VmProvisioner {
         var hostDir = "/etc/nixos/nix/hosts/" + self.spec.arch + "/VM-TEST";
         var hostPath = hostDir + "/VM-TEST.nix";
         var pubkey = self.pubKey();
-        var passwordHash = "$6$vmtest$zfOOVFBtEpiYVE486Cybmppi9zXd0QKYfRZ5FRLsMV26K7vK6QHIpZpUo1sxVt7liGoR9C/W1I5ih4VCt34n3.";
+        var passwordHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";  /* testpass123 */
         var secureBootModulePath = "/etc/nixos/nix/system/vm-test-secure-boot.nix";
         var secureBootModule = self.textLines([
             "{ config, lib, pkgs, ... }: {",

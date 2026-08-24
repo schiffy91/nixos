@@ -81,6 +81,7 @@ class VmTestRunner {
     public void assertResult(string label, ExecResult result, string expect) {
         if (!result.ok()) {
             Console.error(result.trimmed());
+            Console.error(result.stderr().trim());  /* set -e failures only speak on stderr */
             self.fail(label + " failed with exit code " + Strings.fromInt(result.code));
             return;
         }

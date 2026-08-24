@@ -1,0 +1,93 @@
+{
+  "name": "password-change",
+  "state": "password-change",
+  "parentState": "installed-system",
+  "stateMaterial": "password-change:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2247,
+  "operations": [
+    {
+      "op": "require-state"
+    },
+    {
+      "op": "reset-state"
+    },
+    {
+      "op": "inherit-state"
+    },
+    {
+      "op": "validate-immutability-v2"
+    },
+    {
+      "op": "restore",
+      "name": "installed"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": "nixosctl eval config.settings.users.admin.username | tr -d '\"' > /var/tmp/e2e-user && nixosctl eval config.settings.disk.by.partlabel.root | tr -d '\"' > /var/tmp/e2e-root && test -s /var/tmp/e2e-user && getent shadow \"$(cat /var/tmp/e2e-user)\" > /dev/null && cat > /var/tmp/e2e-crypt.sh <<'EOF'\ncrypt() { perl -e 'chomp(my $p = <STDIN>); print crypt($p, $ENV{HASH})'; }\naccepts() { HASH=$(getent shadow \"$(cat /var/tmp/e2e-user)\" | cut -d: -f2); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nfileaccepts() { HASH=$(cat /etc/nixos/secrets/hashed_password.txt); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nnowarning() { ! journalctl -b -q | grep -F 'does not exist' | grep -Fq hashed_password.txt; }\ndiag() { { u=$(cat /var/tmp/e2e-user); echo \"user=[$u]\"; getent passwd \"$u\" | cut -d: -f1-4; echo \"shadow-entry=$(getent shadow \"$u\" | cut -d: -f2 | cut -c1-16)\"; echo \"shadow-users: $(cut -d: -f1 /etc/shadow | tr '\\n' ' ')\"; ls -la /etc/shadow; echo \"file=$(cut -c1-16 /etc/nixos/secrets/hashed_password.txt)\"; findmnt -rn --target /etc/nixos; findmnt -rn --target /var/lib/nixos; readlink /run/current-system; journalctl -b -q --no-pager | grep -iE \"update-users|nixos-activation|activate|perl|warning\" | tail -12; systemctl --failed --no-pager | head -6; for f in /tmp/e2e-*.log; do [ -f \"$f\" ] && { echo \"== $f\"; tail -15 \"$f\"; }; done; } 2>&1 | sed \"s/^/DIAG /\"; }\nEOF\n. /var/tmp/e2e-crypt.sh && accepts testpass123 && fileaccepts testpass123 && nowarning && findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos' && printf boot-hash-ok || { diag; exit 1; }",
+      "expect": "boot-hash-ok",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && ! NIXOS_OLD_PASSWORD=wrongpass NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-wrong.log 2>&1 && grep -F 'not the current account password' /tmp/e2e-wrong.log && accepts testpass123 && printf wrong-rejected || { diag; exit 1; }",
+      "expect": "wrong-rejected",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /etc/nixos/secrets/hashed_password.txt)\" = 600 && printf account-changed || { diag; exit 1; }",
+      "expect": "account-changed",
+      "timeout": 1800
+    },
+    {
+      "op": "reboot-disk"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && accepts newpass456 && ! accepts testpass123 && nowarning && printf survived-reboot || { diag; exit 1; }",
+      "expect": "survived-reboot",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-both.log 2>&1 && grep -F 'already uses the new password' /tmp/e2e-both.log && grep -F 'already matches' /tmp/e2e-both.log && { if cryptsetup isLuks \"$root\" 2>/dev/null; then grep -F 'LUKS password changed' /tmp/e2e-both.log && printf %s newpass456 | cryptsetup open --test-passphrase \"$root\" && ! printf %s testpass123 | cryptsetup open --test-passphrase \"$root\"; else grep -F 'skipping LUKS' /tmp/e2e-both.log; fi; } && printf converged-both || { diag; exit 1; }",
+      "expect": "converged-both",
+      "timeout": 600
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-idempotent.log 2>&1 && grep -F 'already uses the new password' /tmp/e2e-idempotent.log && grep -F 'already matches' /tmp/e2e-idempotent.log && { if cryptsetup isLuks \"$root\" 2>/dev/null; then grep -F 'LUKS already unlocks' /tmp/e2e-idempotent.log; else true; fi; } && printf idempotent || { diag; exit 1; }",
+      "expect": "idempotent",
+      "timeout": 600
+    },
+    {
+      "op": "snapshot",
+      "name": "password-change-tested"
+    },
+    {
+      "op": "record-state"
+    },
+    {
+      "op": "stop"
+    }
+  ]
+}

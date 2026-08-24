@@ -47,7 +47,9 @@
     "nixosctl-diff",
     "install-encrypted",
     "tpm2-enroll",
-    "secure-boot-aarch64"
+    "secure-boot-aarch64",
+    "password-change",
+    "password-change-encrypted"
   ],
   "nodes": [
     {
@@ -586,6 +588,37 @@
         "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset",
         "immutabilityEnabled": "true"
+      }
+    },
+    {
+      "id": "password-change",
+      "spec": "password-change/test.json",
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "parentState": "installed-reset",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "password-change-encrypted",
+      "spec": "password-change/encrypted.json",
+      "after": [
+        "install-encrypted"
+      ],
+      "args": {
+        "name": "password-change-encrypted",
+        "state": "password-change-encrypted",
+        "parentState": "installed-encrypted",
+        "encryption": "true",
+        "tpm2": "true",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "sshPort": "2248"
       }
     }
   ]

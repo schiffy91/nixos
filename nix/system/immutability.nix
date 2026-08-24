@@ -39,6 +39,18 @@ let
 			else path == mountPoint || lib.hasPrefix (mountPoint + "/") path
 		) pathsToKeep;
 
+	bootPersistPaths = config.settings.disk.immutability.persist.neededForBoot;
+	bootPersistCandidates = lib.concatMap pathsForVolume resetVolumes;
+	bootPersistNested = path: lib.any (other: other != path && lib.hasPrefix (other + "/") path) bootPersistCandidates;
+	bootPersistValid = path: lib.elem path bootPersistCandidates && !lib.hasSuffix "/" path && !bootPersistNested path;
+	bootPersistFileSystems = lib.genAttrs bootPersistPaths (path: {
+		inherit device;
+		fsType = "btrfs";
+		options = [ "subvol=${immutabilityPersistRoot}/dirs/${persistKey path}" "compress=zstd" "noatime" "nofail" "x-systemd.after=persistence-mounts.service" ];
+		neededForBoot = true;  # initrd activation reads hashedPasswordFile from here
+	});
+	bootPersistInitrdMountUnits = map (path: "${utils.escapeSystemdPath "/sysroot${path}"}.mount") bootPersistPaths;
+
 	immutabilityPairArgs = lib.concatMapStringsSep " " (volume:
 		lib.escapeShellArg "${volume.name}=${volume.mountPoint}"
 	) resetVolumes;
@@ -141,6 +153,16 @@ in
 					${immutabilityBin}/bin/immutability ${lib.optionalString immutabilityDryRun "--dry-run "}mount ${lib.escapeShellArg device} ${lib.escapeShellArg immutabilityPersistRoot} ${immutabilitySpecFile}
 				'';
 			};
+		})
+		(lib.mkIf persistenceEnabled {
+			assertions = [
+				{
+					assertion = lib.all bootPersistValid bootPersistPaths;
+					message = "settings.disk.immutability.persist.neededForBoot entries must be top-level persisted directories (no trailing slash) on a resetOnBoot volume";
+				}
+			];
+			fileSystems = bootPersistFileSystems;
+			boot.initrd.systemd.services.initrd-nixos-activation.after = bootPersistInitrdMountUnits;
 		})
 		(lib.mkIf (immutabilityEnabled && config.settings.disk.immutability.enforce.onReboot) {
 			fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));
