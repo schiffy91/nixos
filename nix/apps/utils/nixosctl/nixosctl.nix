@@ -28,7 +28,6 @@ let
           coreutils
           git
           mkpasswd
-          perl
           nix
         ])}
     '';

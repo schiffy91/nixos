@@ -92,6 +92,7 @@ class VmProvisioner {
             "  settings.apps.onePassword.enable = false;",
             "  settings.apps.rclone.enable = false;",
             "  settings.apps.nixosctl.enable = true;",
+            "  settings.sudolessAllowlist.enable = true;",
             "  settings.networking.identityAgent = \"none\";",
             "  settings.networking.lanSubnet = \"10.0.2.0/24\";",
             "  settings.disk.device = \"/dev/vda\";",

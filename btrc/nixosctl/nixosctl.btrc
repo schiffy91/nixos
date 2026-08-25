@@ -104,7 +104,6 @@ class NixosCtl {
             || command.equals("persistence")
             || command.equals("immutability")
             || command.equals("fix-permissions")
-            || command.equals("change-password")
             || command.equals("secure-boot")
             || command.equals("tpm2");
     }
@@ -260,16 +259,26 @@ class NixosCtl {
                 NixosLog.fatal("Cannot use both --full-disk-encryption-only and --user-account-only");
             }
             if (args.has("--old") || args.has("--new")) {
-                NixosLog.fatal("--old/--new are unsupported: passwords on argv leak via /proc/<pid>/cmdline and survive the sudo re-exec. Set NIXOS_OLD_PASSWORD / NIXOS_NEW_PASSWORD in the environment, or run change-password interactively.");
+                NixosLog.fatal("--old/--new are unsupported: passwords on argv leak via /proc/<pid>/cmdline. Set NIXOS_OLD_PASSWORD / NIXOS_NEW_PASSWORD in the environment, or run change-password interactively.");
             }
             var manager = PasswordManager(self.config);
-            manager.suppliedCurrentPassword = NixosCtl.env("NIXOS_OLD_PASSWORD", "");
-            var newPassword = NixosCtl.env("NIXOS_NEW_PASSWORD", "");
-            if (newPassword.isEmpty()) {
-                newPassword = Interactive().askPasswordConfirmed("Enter new password");
+            var newPassword = "";
+            var reexecSecretsPath = args.valueAfter("--reexec-secrets", "");
+            if (!reexecSecretsPath.isEmpty()) {
+                /* Re-exec'd as root by PasswordManager.reexecAsRoot: the unprivileged
+                   parent already resolved these; env vars don't survive sudo's reset. */
+                var lines = Strings.split(Path.readAll(reexecSecretsPath), "\n");
+                newPassword = lines.get(0);
+                manager.suppliedCurrentPassword = lines.len > 1 ? lines.get(1) : "";
+                FileSystem.removeRecursive(reexecSecretsPath);
+            } else {
+                manager.suppliedCurrentPassword = NixosCtl.env("NIXOS_OLD_PASSWORD", "");
+                newPassword = NixosCtl.env("NIXOS_NEW_PASSWORD", "");
+                if (newPassword.isEmpty()) {
+                    newPassword = Interactive().askPasswordConfirmed("Enter new password");
+                }
             }
-            manager.change(newPassword, !args.has("--user-account-only"), !args.has("--full-disk-encryption-only"), args.has("--update-tpm2"));
-            return 0;
+            return manager.change(args, newPassword, !args.has("--user-account-only"), !args.has("--full-disk-encryption-only"), args.has("--update-tpm2"));
         }
 
         if (command.equals("secure-boot")) {

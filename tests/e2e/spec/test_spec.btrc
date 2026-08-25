@@ -213,6 +213,10 @@ class VmTestSpec {
         return lines.join("\n");
     }
 
+    public bool declaresArg(string key) {
+        return Strings.find(self.stateMaterial, f"{{{{{key}}}}}", 0) >= 0;
+    }
+
     public string argsMaterial() {
         Vector<string> keys = self.args.keys();
         keys.sort();
@@ -220,6 +224,13 @@ class VmTestSpec {
         for key in keys {
             if (key.equals("stateHash") || key.equals("stateHashShort")) { continue; }
             if (key.endsWith("Shell")) { continue; }
+            /* graph plumbing, not state: never affects what a node actually produces */
+            if (key.equals("graphName") || key.equals("nodeId") || key.equals("workspaceRoot")) { continue; }
+            /* sourceHash covers the whole repo tree; only fold it in when a node's own
+               material opts in, so unrelated nodes (e.g. installer-download) aren't
+               invalidated by edits to code they never touch. Nodes that build from this
+               source inherit sourceHash sensitivity transitively via parent= anyway. */
+            if (key.equals("sourceHash") && !self.declaresArg("sourceHash")) { continue; }
             lines.push(f"{key}={self.args.get(key)}");
         }
         return lines.join("\n");
