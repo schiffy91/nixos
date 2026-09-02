@@ -23,6 +23,11 @@
     },
     {
       "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.btrsmith.enable",
+      "expect": "false"
+    },
+    {
+      "op": "nix-eval",
       "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.utils.enable",
       "expect": "true"
     },

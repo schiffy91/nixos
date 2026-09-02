@@ -259,6 +259,7 @@ in {
     settings.apps.agents.enable = mkSetting bool true;
     settings.apps.bash.enable = mkSetting bool true;
     settings.apps.battlenet.enable = mkSetting bool true;
+    settings.apps.btrsmith.enable = mkSetting bool false;
     settings.apps.claude.enable = mkSetting bool true;
     settings.apps.codex.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
