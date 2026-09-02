@@ -212,6 +212,7 @@ in {
       "${adminHome}/.steam"
       ##### Games #####
       "${adminHome}/Games"
+      "${adminHome}/.local/state/com.schiffy91.btrsmith"
       "${adminHome}/.local/share/containers"
       "${adminHome}/.local/share/umu"
       ##### Apple Music #####
