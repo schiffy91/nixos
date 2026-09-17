@@ -5,7 +5,7 @@ let
     name = "nixosctl-tray";
     src = ../../../..;
     nativeBuildInputs = [ btrcpy pkgs.pkg-config pkgs.makeWrapper ];
-    buildInputs = [ pkgs.dbus ];  # btrc/tray/btrc.toml binds libdbus-1 for the Linux provider
+    buildInputs = [ pkgs.dbus ];  # Library.Tray binds libdbus-1 for its Linux provider
     dontConfigure = true;
     buildPhase = ''
       btrcpy --strict-imports btrc/nixosctl/tray.btrc -o nixosctl-tray.c

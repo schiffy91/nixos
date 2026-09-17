@@ -66,9 +66,9 @@ $(NIXOSCTL_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_C_OUT)"
 
-# The tray package binds libdbus through btrc/tray/btrc.toml, so its typed
-# header import needs pkg-config at transpile time and dbus-1 at link time.
-$(TRAY_C_OUT): $(SOURCES) btrc/btrc.toml btrc/tray/btrc.toml btrc/tray/Linux/DBus.h $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+# Library.Tray's Linux provider binds libdbus, so its typed header import
+# needs pkg-config at transpile time and dbus-1 at link time.
+$(TRAY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
 
 $(IMMUTABILITY_PATHS_TEST_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs

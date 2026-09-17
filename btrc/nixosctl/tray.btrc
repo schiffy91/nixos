@@ -1,4 +1,4 @@
-import tray.Tray;
+import Library.Tray;
 import ../core/paths.btrc;
 
 int main() {
@@ -15,8 +15,10 @@ int main() {
         .item("Open /etc/nixos", "xdg-open /etc/nixos")
         .item("Quit tray", TraySignal.quit());
 
-    if (!tray.show()) {
-        print("nixosctl-tray: no native tray available (" + tray.failure + ").");
+    try {
+        tray.show();
+    } catch (string error) {  // headless session or no StatusNotifierWatcher
+        print("nixosctl-tray: no native tray available (" + error + ").");
         return 0;
     }
     tray.run();

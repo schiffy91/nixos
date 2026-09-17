@@ -1,7 +1,0 @@
-manifest-version = 1
-
-[package]
-name = "nixosctl"
-
-[dependencies]
-tray = { path = "tray" }

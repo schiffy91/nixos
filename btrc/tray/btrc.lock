@@ -1,1 +1,0 @@
-{"manifest-hash":"4cc213d7465fd391006067a7518c6bbaa5d308462c25e4c1e7276cc65892deb9","packages":[{"dependencies":{},"manifest-hash":"dd2c4a7b101807dd64ea59bb1a7067a70077a96547aa468e095cb3a0f1a34906","name":"nixosctl_tray","source":{"path":"."}}],"root":"nixosctl_tray","schema":3}

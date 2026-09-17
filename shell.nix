@@ -11,7 +11,7 @@ let
     config.allowUnfree = true;
   };
   # The packaged compiler carries the native header reader, sysroot and target
-  # that typed native bindings (btrc/tray/btrc.toml) need; the raw source does not.
+  # that typed native bindings (Library.Tray on libdbus) need; the raw source does not.
   btrcNode = lock.nodes.btrc.locked;
   btrcFlake = builtins.getFlake "github:${btrcNode.owner}/${btrcNode.repo}/${btrcNode.rev}";
   btrcpy = btrcFlake.packages.${system}.btrcpy;
