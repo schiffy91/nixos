@@ -1,7 +1,7 @@
-import std.fs;
-import std.strings;
-import std.toml;
-import std.vector;
+import Library.FileSystem;
+import Library.Strings;
+import Library.TOML;
+import Library.Vector;
 import ../../core/log.btrc;
 import ./paths.btrc;
 import ./types.btrc;
@@ -9,7 +9,7 @@ import ./types.btrc;
 class ImmutabilityConfig {
     class Vector<ImmutabilitySpec> readSpecs(string specFile) {
         Vector<ImmutabilitySpec> result = [];
-        var rows = Toml.tableArrayBlocks(FileSystem.readText(specFile), "keep");
+        var rows = TOML.tableArrayBlocks(FileSystem.readText(specFile), "keep");
         for row in rows {
             var rawVolume = row.getOrDefault("volume", "");
             var rawMountPoint = row.getOrDefault("mountPoint", "");

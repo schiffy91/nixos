@@ -1,7 +1,7 @@
-import std.fs;
-import std.json;
-import std.platform;
-import std.strings;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Strings;
 
 class NixosPaths {
     public string root;
@@ -54,14 +54,14 @@ class LocalConfigFile {
         return FileSystem.exists(self.path);
     }
 
-    public JsonObject read() {
+    public JSONObject read() {
         if (!self.exists()) {
-            return JsonObject();
+            return JSONObject();
         }
-        return JsonObject.readFile(self.path);
+        return JSONObject.readFile(self.path);
     }
 
-    public void overwrite(JsonObject data) {
+    public void overwrite(JSONObject data) {
         var dir = PathTools.dirname(self.path);
         FileSystem.mkdirp(dir);
         data.writeFile(self.path);

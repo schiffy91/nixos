@@ -468,6 +468,7 @@ def overlay_wine(args: argparse.Namespace) -> None:
             ("i386-windows/winevulkan.dll", args.wine32 / "dlls/winevulkan/i386-windows/winevulkan.dll"),
             ("x86_64-windows/win32u.dll", args.wine64 / "dlls/win32u/x86_64-windows/win32u.dll"),
             ("i386-windows/win32u.dll", args.wine32 / "dlls/win32u/i386-windows/win32u.dll"),
+            ("x86_64-windows/wow64win.dll", args.wine64 / "dlls/wow64win/x86_64-windows/wow64win.dll"),
             ("x86_64-windows/explorer.exe", args.wine64 / "programs/explorer/x86_64-windows/explorer.exe"),
             ("i386-windows/explorer.exe", args.wine32 / "programs/explorer/i386-windows/explorer.exe"),
         ]
@@ -547,6 +548,9 @@ def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
         "dlls/dxgi/all": [
             "x86_64-windows/dxgi.dll",
             "i386-windows/dxgi.dll",
+        ],
+        "dlls/wow64win/all": [
+            "x86_64-windows/wow64win.dll",
         ],
         "programs/explorer/all": [
             "x86_64-windows/explorer.exe",
@@ -1128,6 +1132,7 @@ def sync_builtin_dlls() -> None:
         "winevulkan.dll",
         "win32u.dll",
         "winewayland.drv",
+        "wow64win.dll",
         "explorer.exe",
     )
     for arch, windows_dir in mappings:
@@ -1188,9 +1193,8 @@ def launch_env(args: argparse.Namespace) -> dict[str, str]:
         env.setdefault("DXVK_LOG_LEVEL", "info")
     elif args.trace == "composition":
         env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+dcomp")
-        env.setdefault("DXVK_LOG_LEVEL", "debug")
+        env.setdefault("DXVK_LOG_LEVEL", "trace")  # composition traces live at trace level
         env.setdefault("DXVK_LOG_PATH", str(proton_log_dir() / "dxvk"))
-        env.setdefault("DXVK_TRACE_COMPOSITION_SWAPCHAINS", "1")
     else:
         raise SystemExit(f"unknown trace preset: {args.trace}")
 

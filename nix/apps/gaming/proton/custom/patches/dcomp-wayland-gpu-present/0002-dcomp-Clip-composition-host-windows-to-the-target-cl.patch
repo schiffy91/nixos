@@ -1,62 +1,50 @@
-From 30b58a363fd3870f72fc02984a97e9a3f2bed97a Mon Sep 17 00:00:00 2001
+From 8c6e0f956ca7feb0d126dacb1992a02aa6c03b10 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Thu, 21 May 2026 02:51:51 -0700
-Subject: [PATCH] dcomp: Clip composition host windows to the target client 
- area
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 02/19] dcomp: Clip composition host windows to the target
+ client area.
+
+A host window outside the client area of its target is never visible.
+Shrink hosts to the part of the visual that intersects the client area and
+do not create hosts for visuals that fall entirely outside of it.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/dcomp/device.c | 32 ++++++++++++++++++++++++++++++++
- 1 file changed, 32 insertions(+)
+ dlls/dcomp/device.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 3512ced..1ff3182 100644
+index d08909d..a122483 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
-@@ -705,6 +705,36 @@ static BOOL dcomp_refresh_swapchain_desc(struct dcomp_visual *v)
+@@ -966,7 +966,7 @@ static BOOL dcomp_visual_swapchain_desc(const struct dcomp_visual *visual, DXGI_
+     return visual->swapchain && SUCCEEDED(IDXGISwapChain1_GetDesc1(visual->swapchain, desc));
+ }
+ 
+-static BOOL dcomp_visual_host_rect(const struct dcomp_placement *placement,
++static BOOL dcomp_visual_host_rect(HWND hwnd, const struct dcomp_placement *placement,
+         const struct dcomp_visual *visual, UINT width, UINT height, RECT *rect)
+ {
+     RECT clip;
+@@ -982,6 +982,9 @@ static BOOL dcomp_visual_host_rect(const struct dcomp_placement *placement,
+             return FALSE;
+     }
+ 
++    if (GetClientRect(hwnd, &clip) && !IntersectRect(rect, rect, &clip))
++        return FALSE;
++
      return TRUE;
  }
  
-+static void dcomp_clip_rect_to_client(HWND hwnd, int x, int y, UINT *width, UINT *height)
-+{
-+    RECT client;
-+    int max_width, max_height;
-+
-+    if (!GetClientRect(hwnd, &client)) return;
-+
-+    max_width = client.right - x;
-+    max_height = client.bottom - y;
-+    if (max_width <= 0 || max_height <= 0)
-+    {
-+        TRACE("composition host outside target client rect hwnd=%p pos=(%d,%d) client=%ldx%ld\n",
-+              hwnd, x, y, client.right - client.left, client.bottom - client.top);
-+        *width = 0;
-+        *height = 0;
-+        return;
-+    }
-+
-+    if (*width > (UINT)max_width || *height > (UINT)max_height)
-+    {
-+        UINT old_width = *width, old_height = *height;
-+
-+        if (*width > (UINT)max_width) *width = max_width;
-+        if (*height > (UINT)max_height) *height = max_height;
-+        TRACE("clipped composition host from %ux%u to %ux%u for hwnd %p client=%ldx%ld pos=(%d,%d)\n",
-+              old_width, old_height, *width, *height, hwnd,
-+              client.right - client.left, client.bottom - client.top, x, y);
-+    }
-+}
-+
- static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-                               const struct dcomp_placement *parent_placement)
- {
-@@ -747,6 +777,8 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-             height = bottom > y ? bottom - y : 0;
-         }
+@@ -991,7 +994,7 @@ static BOOL dcomp_visual_update_host(struct dcomp_target *target, struct dcomp_v
+     HWND target_hwnd = target->hwnd;
+     RECT rect;
  
-+        dcomp_clip_rect_to_client(t->hwnd, x, y, &width, &height);
-+
-         if (width && height && dcomp_register_host_class())
-         {
-             if (!v->host_hwnd || v->host_parent != t->hwnd)
+-    if (!width || !height || !dcomp_visual_host_rect(placement, visual, width, height, &rect))
++    if (!width || !height || !dcomp_visual_host_rect(target_hwnd, placement, visual, width, height, &rect))
+     {
+         TRACE("Visual %p has no visible area on target %p.\n", visual, target_hwnd);
+         dcomp_visual_teardown_host(visual);
+-- 
+2.55.0
+

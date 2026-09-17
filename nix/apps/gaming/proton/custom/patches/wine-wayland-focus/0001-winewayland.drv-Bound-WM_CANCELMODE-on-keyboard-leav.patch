@@ -1,25 +1,30 @@
-From 6bb483deef9645c1894d458305886a7f193a063a Mon Sep 17 00:00:00 2001
+From 95125e32bb2221d881911b27f2b2a32d73e90077 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Mon, 25 May 2026 16:45:00 -0700
-Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave
+Date: Tue, 25 Aug 2026 23:45:30 -0700
+Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave.
 
-The Wayland keyboard leave handler runs while dispatching compositor
-events. Sending WM_CANCELMODE synchronously from that path can block the
-Wayland dispatch thread if the foreground window's owner thread is busy
-destroying a window tree.
+keyboard_handle_leave() runs on the Wayland event reader thread. When
+keyboard focus leaves the foreground window it sends WM_CANCELMODE to
+that window with send_message(), which waits for the window's thread to
+reply. A target that is busy, for instance tearing down a window tree,
+therefore stalls Wayland event dispatch for the whole process until it
+returns to its message loop. The send itself is not upstream behavior;
+it comes from the wayland hotfix series this tree is built on.
 
-Use SendMessageTimeout semantics for the notification so a temporarily
-hung target window cannot wedge the driver event loop permanently.
+Send the message with SendNotifyMessage semantics instead. The reader
+thread never owns the target window, so the call queues the message and
+returns at once, and the target still receives WM_CANCELMODE the next
+time it processes sent messages. A timeout is not an option here: win32u
+cancels sends that time out, which would drop WM_CANCELMODE for exactly
+the busy targets that need it.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/wayland_keyboard.c |  2 +-
- dlls/winewayland.drv/waylanddrv.h       | 11 +++++++++++
- 2 files changed, 12 insertions(+), 1 deletion(-)
+ dlls/winewayland.drv/wayland_keyboard.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/winewayland.drv/wayland_keyboard.c b/dlls/winewayland.drv/wayland_keyboard.c
-index 251919c..0efcef7 100644
+index 251919c..e8d93ea 100644
 --- a/dlls/winewayland.drv/wayland_keyboard.c
 +++ b/dlls/winewayland.drv/wayland_keyboard.c
 @@ -972,7 +972,7 @@ static void keyboard_handle_leave(void *private, struct wl_keyboard *wl_keyboard
@@ -27,29 +32,10 @@ index 251919c..0efcef7 100644
      {
          if (!(NtUserGetWindowLongW(hwnd, GWL_STYLE) & WS_MINIMIZE))
 -            send_message(hwnd, WM_CANCELMODE, 0, 0);
-+            send_message_timeout(hwnd, WM_CANCELMODE, 0, 0, SMTO_ABORTIFHUNG, 200, NULL);
++            NtUserMessageCall(hwnd, WM_CANCELMODE, 0, 0, NULL, NtUserSendNotifyMessage, FALSE);
  
          if (hwnd != NtUserGetForegroundWindow()) return;
  
-diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
-index 4b5d8ab..f768ee7 100644
---- a/dlls/winewayland.drv/waylanddrv.h
-+++ b/dlls/winewayland.drv/waylanddrv.h
-@@ -558,6 +558,17 @@ void wayland_touch_deinit(void);
-  */
- 
- void wayland_text_input_init(void);
-+static inline LRESULT send_message_timeout(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
-+                                           UINT flags, UINT timeout, PDWORD_PTR res_ptr)
-+{
-+    struct send_message_timeout_params params = { .flags = flags, .timeout = timeout };
-+    LRESULT res = NtUserMessageCall(hwnd, msg, wparam, lparam, &params,
-+                                    NtUserSendMessageTimeout, FALSE);
-+
-+    if (res_ptr) *res_ptr = params.result;
-+    return res;
-+}
-+
- void wayland_text_input_deinit(void);
- 
- /**********************************************************************
+-- 
+2.55.0
+

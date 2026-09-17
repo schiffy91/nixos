@@ -6,45 +6,56 @@ composition swap chains through `CreateSwapChainForComposition`; DXVK should
 service that API through its normal presenter path instead of relying on an
 application profile.
 
-## Fix
-Enable DXVK's composition swap-chain path by default and expose a small private
-interface that Wine's `dcomp.dll` can use to bind the swap chain to the real
-DComp target window. After that bind, presentation goes through DXVK's normal
-Wayland WSI presenter instead of a Wine-side image copy.
-
-Composition swap chains are paced with the compositor when the application
-requests immediate presentation. They also preserve the previous frame in the
-newly exposed back buffer after rotation, which keeps damaged-only paints from
-showing stale hover remnants or video/banner flicker.
-
-When a bound composition swap chain changes size, DXVK resizes the private
-composition child HWND to the new swap-chain extent. That keeps KDE snap, tile,
-and maximize transitions from leaving the Wayland child surface at the previous
-size.
-
-DXVK also shows private child composition targets on the first present instead
-of during the DComp commit that binds the swap chain. This keeps hidden host
-windows from becoming visible before CEF has submitted a frame, which was the
-reproducible post-login white-window failure.
-
-If a composition swap chain presented before DComp bound it to a target, or if
-DComp later rebinds it to a freshly created host window, DXVK replays the
-current back buffer into the new target immediately. Battle.net has static
-login/loading surfaces that may not submit another frame after the bind; the
-replay keeps those first opens and download-time host churn from staying black
-or white until unrelated UI activity happens.
-
-The native Wayland WSI surface for those private child HWNDs is advertised as
-opaque even when the DXGI composition swap chain uses premultiplied alpha. The
-Wine DComp bridge keeps the original DXGI alpha metadata for visual placement,
-but it does not composite the full DComp tree itself; letting KWin blend the
-child surface by that alpha can erase otherwise rendered Chromium frames against
-Battle.net's black parent window.
-
-The tail of the series adds opt-in debug trace points around composition
-`Present`, target binding, target showing, and WSI image acquire. Set
-`DXVK_TRACE_COMPOSITION_SWAPCHAINS=1` with `DXVK_LOG_LEVEL=debug` to distinguish
-"no present after bind" from "present succeeded but the target stayed black".
+## Series
+1. `[d3d11] Use new extent when resizing swap chain surface` fixes a pristine
+   bug: `ChangeProperties` handed the presenter the old swap chain extent, so
+   the preferred extent always lagged one resize behind. Win32 surfaces mask
+   this because Wine pins the surface's current extent to the client rect;
+   surfaces that leave the extent to the application do not.
+2. `[dxgi] Bind composition swap chains to DComp windows` enables the
+   composition swap-chain path by default (which subsumes the per-game
+   profiles that only turned it on) and adds the private
+   `IDXGIVkCompositionSwapChain` interface. Wine's `dcomp.dll` binds a swap
+   chain to the window hosting its visual through
+   `SetCompositionTarget(HWND target, HWND dispatch)`; a null target returns
+   the swap chain to its dummy window. The IID
+   `4765d18a-eba0-40bd-a730-7f5f3d915c1f` and the vtable layout
+   (`QueryInterface`, `AddRef`, `Release`, `SetCompositionTarget`) are the
+   ABI shared with Wine. Only swap chains created without a window expose
+   the interface. Binding retargets the surface factory before destroying
+   the presenter's resources, and the factory keeps one dummy window alive
+   for the lifetime of the swap chain instead of destroying and recreating
+   it around binds from a foreign thread. The WSI surface stays opaque; the
+   DXGI alpha mode is kept only for the compositor's placement logic.
+3. `[d3d11] Pace composition swap chains with the compositor` clamps the sync
+   interval of any bound composition swap chain to at least one, so
+   immediate presents from UI toolkits do not flicker under the desktop
+   compositor.
+4. `[d3d11] Keep composition target windows sized to swap chains` resizes a
+   child host window to the swap chain extent on bind and on
+   `ResizeBuffers`, using `SWP_ASYNCWINDOWPOS` because the host belongs to
+   the dcomp commit thread and a synchronous cross-thread `SetWindowPos`
+   from the render thread is a hang hazard.
+5. `[d3d11] Preserve composition swap chain contents` copies the presented
+   frame into the newly exposed back buffer after rotation while bound, so
+   clients that only repaint damaged regions do not show stale content.
+6. `[d3d11] Show composition targets on first present` shows a child host
+   with `ShowWindowAsync` on the first present after it is bound, instead of
+   during the commit, so hidden hosts do not become visible before the
+   client has submitted a frame.
+7. `[d3d11] Replay composition content after target binds` re-presents the
+   last presented frame into a newly bound target if the application has
+   presented before. The replay reads the last back buffer (where rotation
+   leaves the presented frame) without rotating again. It runs on the
+   commit thread through the regular present path, flushing the immediate
+   context mid-frame and bumping the frame id; swap chains with a frame
+   latency waitable object are skipped.
+8. `[d3d11] Trace composition present paths` logs binds, presents of bound
+   swap chains, host shows, replays and acquire results at DXVK's trace log
+   level. Run with `DXVK_LOG_LEVEL=trace` to distinguish "no present after
+   bind" from "present succeeded but the target stayed black". The state is
+   snapshotted once per present under a single lock, and the level is
+   checked before any message is built.
 
 ## Upstream
 This belongs in DXVK, separate from the Wine `dcomp-wayland-gpu-present`

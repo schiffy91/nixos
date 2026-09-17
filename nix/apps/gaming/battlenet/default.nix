@@ -6,6 +6,7 @@ let
     && config.settings.apps.steam.enable
     && pkgs.stdenv.hostPlatform.isx86_64;
   user = config.settings.users.admin.username;
+  group = config.users.users.${user}.group;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
   proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.customName}";
@@ -50,7 +51,7 @@ let
             install -Dm644 "$SRC" "$DST"
           fi
         }
-        for DLL in dcomp.dll dxgi.dll ntdll.dll secur32.dll winevulkan.dll win32u.dll winewayland.drv explorer.exe; do
+        for DLL in dcomp.dll dxgi.dll ntdll.dll secur32.dll winevulkan.dll win32u.dll winewayland.drv wow64win.dll explorer.exe; do
           sync_builtin x86_64 system32 "$DLL"
           sync_builtin i386 syswow64 "$DLL"
         done
@@ -122,11 +123,8 @@ let
           WINE_WAYLAND_HACKS=1 \
           WINE_SNI_ICON_NAME=battlenet \
           PROTON_ENABLE_WAYLAND=1 \
-          PROTON_ENABLE_HDR=1 \
-          DXVK_HDR=1 \
           DXVK_LOG_LEVEL="''${DXVK_LOG_LEVEL:-none}" \
-          ENABLE_HDR_WSI=1 \
-          umu-run "$EXE" "''${EXTRA_ARGS[@]}"
+          umu-run "$EXE" "''${EXTRA_ARGS[@]}"  # SDR launcher: an HDR WSI surface made the XDR drop its Thunderbolt link
     '';
   };
   desktop = pkgs.writeTextFile {
@@ -180,7 +178,7 @@ in lib.mkIf enabled {
   users.users.${user}.packages = [ launcher desktop captureHelper ];
   system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
     if [ -f "${exe}" ]; then
-      ${pkgs.coreutils}/bin/install -d -o ${user} "$(dirname ${iconPath})"
+      ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} "$(dirname ${iconPath})"
       ${pkgs.coreutils}/bin/install -d -m 1777 /tmp
       scratch=$(${pkgs.coreutils}/bin/mktemp -d /tmp/battlenet-icon.XXXXXX)
       tmp="$scratch/icon.ico"
@@ -188,7 +186,7 @@ in lib.mkIf enabled {
       if ${pkgs.icoutils}/bin/wrestool -x -t 14 -o "$tmp" "${exe}" 2>/dev/null; then
         for w in 256 128 64 48 32; do
           if ${pkgs.icoutils}/bin/icotool -x -w $w -o "$png" "$tmp" 2>/dev/null && [ -s "$png" ]; then
-            ${pkgs.coreutils}/bin/install -m644 -o ${user} "$png" "${iconPath}"
+            ${pkgs.coreutils}/bin/install -m644 -o ${user} -g ${group} "$png" "${iconPath}"
             break
           fi
         done

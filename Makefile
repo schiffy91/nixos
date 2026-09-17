@@ -10,6 +10,7 @@ CFLAGS ?= -std=c11 -pedantic
 TRANSPILER_FLAGS ?= --no-stdlib --strict-imports --stdlib "$(CURDIR)/$(STDLIB_DIR)"
 NIXOSCTL_LIBS ?= -lm -lpthread -lutil
 IMMUTABILITY_LIBS ?= -lm -lpthread
+TRAY_LIBS ?= $(shell pkg-config --cflags --libs dbus-1) -lm -lpthread
 
 BUILD_DIR := build
 STDLIB_DIR := $(BUILD_DIR)/stdlib
@@ -24,11 +25,14 @@ NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
 IMMUTABILITY_C_OUT := $(BUILD_DIR)/immutability.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
 IMMUTABILITY_BIN := $(BUILD_DIR)/immutability
+TRAY_ENTRY := btrc/nixosctl/tray.btrc
+TRAY_C_OUT := $(BUILD_DIR)/nixosctl-tray.c
+TRAY_BIN := $(BUILD_DIR)/nixosctl-tray
 IMMUTABILITY_PATHS_TEST_ENTRY := tests/unit/immutability_paths.btrc
 IMMUTABILITY_PATHS_TEST_C_OUT := $(BUILD_DIR)/immutability_paths_test.c
 IMMUTABILITY_PATHS_TEST_BIN := $(BUILD_DIR)/immutability_paths_test
 BIN := $(NIXOSCTL_BIN)
-BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN)
+BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN)
 SOURCES := $(shell find btrc tests/e2e tests/unit -name '*.btrc' | sort)
 
 .PHONY: all transpile build-stdlib build unit check quick smoke test host-smoke app-settings stateful-host x86_64-qemu-host aarch64-qemu-host installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
@@ -54,13 +58,18 @@ $(STDLIB_LIB): $(STDLIB_MANIFEST)
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -c "$(CURDIR)/$(STDLIB_IMPL)" -o "$(CURDIR)/$(BUILD_DIR)/btrc_stdlib.o"
 	ar rcs "$(CURDIR)/$(STDLIB_LIB)" "$(CURDIR)/$(BUILD_DIR)/btrc_stdlib.o"
 
-transpile: $(NIXOSCTL_C_OUT) $(IMMUTABILITY_C_OUT)
+transpile: $(NIXOSCTL_C_OUT) $(IMMUTABILITY_C_OUT) $(TRAY_C_OUT)
 
 $(NIXOSCTL_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(NIXOSCTL_ENTRY)" -o "$(CURDIR)/$(NIXOSCTL_C_OUT)"
 
 $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_C_OUT)"
+
+# The tray package binds libdbus through btrc/tray/btrc.toml, so its typed
+# header import needs pkg-config at transpile time and dbus-1 at link time.
+$(TRAY_C_OUT): $(SOURCES) btrc/btrc.toml btrc/tray/btrc.toml btrc/tray/Linux/DBus.h $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
 
 $(IMMUTABILITY_PATHS_TEST_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)"
@@ -72,6 +81,9 @@ $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
 
 $(IMMUTABILITY_BIN): $(IMMUTABILITY_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_BIN)" $(IMMUTABILITY_LIBS)
+
+$(TRAY_BIN): $(TRAY_C_OUT) $(STDLIB_LIB)
+	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(TRAY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(TRAY_BIN)" $(TRAY_LIBS)
 
 $(IMMUTABILITY_PATHS_TEST_BIN): $(IMMUTABILITY_PATHS_TEST_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_BIN)" $(IMMUTABILITY_LIBS)

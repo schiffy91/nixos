@@ -10,27 +10,12 @@ let
     inherit system;
     config.allowUnfree = true;
   };
-  btrcSource = lockedSource "btrc";
-  btrcPython = pkgs.python314.withPackages (ps: [
-    ps.pygls
-    ps.lsprotocol
-  ]);
-  btrcpy = pkgs.writeShellApplication {
-    name = "btrcpy";
-    runtimeInputs = [ btrcPython ];
-    text = ''
-      export PYTHONPATH="${btrcSource}''${PYTHONPATH:+:$PYTHONPATH}"
-      exec ${btrcPython}/bin/python3 -m src.compiler.python.main "$@"
-    '';
-  };
-  btrc-lsp = pkgs.writeShellApplication {
-    name = "btrc-lsp";
-    runtimeInputs = [ btrcPython ];
-    text = ''
-      export PYTHONPATH="${btrcSource}''${PYTHONPATH:+:$PYTHONPATH}"
-      exec ${btrcPython}/bin/python3 -m src.devex.lsp "$@"
-    '';
-  };
+  # The packaged compiler carries the native header reader, sysroot and target
+  # that typed native bindings (btrc/tray/btrc.toml) need; the raw source does not.
+  btrcNode = lock.nodes.btrc.locked;
+  btrcFlake = builtins.getFlake "github:${btrcNode.owner}/${btrcNode.repo}/${btrcNode.rev}";
+  btrcpy = btrcFlake.packages.${system}.btrcpy;
+  btrc-lsp = btrcFlake.packages.${system}.btrc-lsp;
 in
 pkgs.mkShell {
   packages = [
@@ -41,5 +26,7 @@ pkgs.mkShell {
     pkgs.git
     pkgs.coreutils
     pkgs.stdenv.cc
+    pkgs.pkg-config
+    pkgs.dbus
   ];
 }

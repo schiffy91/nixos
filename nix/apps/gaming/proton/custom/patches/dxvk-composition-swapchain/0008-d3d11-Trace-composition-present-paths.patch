@@ -1,0 +1,64 @@
+From c36312f96afd23fbc326f67799105d8e1cf73f6c Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:51:21 -0700
+Subject: [PATCH 8/8] [d3d11] Trace composition present paths
+
+Diagnosing a black composition host requires knowing whether the
+application presented after the bind, whether DXVK showed the host,
+and whether image acquisition on the new surface succeeded. Log those
+events at trace level: every bind with its target, dispatch and
+previous window, every present of a bound swap chain with its sync
+interval and whether it shows the host or replays a frame, and the
+acquire result.
+
+The composition state is snapshotted once per present under a single
+lock acquisition, and the log level is checked before any message is
+built, so the regular present path does not pay for the tracing.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 77a006c..ef1c6cb 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -413,6 +413,12 @@ namespace dxvk {
+       }
+     }
+ 
++    if (Logger::logLevel() <= LogLevel::Trace) {
++      Logger::trace(str::format("D3D11SwapChain::SetCompositionTarget: target=", hTarget,
++        " dispatch=", hDispatch, " previous=", previousTarget, " replay=", replay,
++        " size=", m_desc.Width, "x", m_desc.Height, " alpha=", m_desc.AlphaMode));
++    }
++
+     if (hTarget == previousTarget)
+       return;
+ 
+@@ -474,6 +480,11 @@ namespace dxvk {
+       m_compositionTargetShown |= showCompositionTarget;
+     }
+ 
++    if (compositionTarget && Logger::logLevel() <= LogLevel::Trace) {
++      Logger::trace(str::format("D3D11SwapChain::PresentImage: target=", compositionTarget,
++        " sync=", SyncInterval, " replay=", Replay, " show=", showCompositionTarget));
++    }
++
+     // Replays re-present the last presented frame, which the
+     // rotation below moves to the last back buffer, and leave
+     // the buffer the application draws into alone
+@@ -510,6 +521,9 @@ namespace dxvk {
+ 
+     VkResult status = m_presenter->acquireNextImage(sync, backBuffer);
+ 
++    if (compositionTarget && Logger::logLevel() <= LogLevel::Trace)
++      Logger::trace(str::format("D3D11SwapChain::PresentImage: acquire status=", status));
++
+     if (status != VK_SUCCESS && m_latency)
+       m_latency->discardTimings();
+ 
+-- 
+2.55.0
+

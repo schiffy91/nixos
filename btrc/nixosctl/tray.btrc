@@ -1,4 +1,4 @@
-import std.tray;
+import tray.Tray;
 import ../core/paths.btrc;
 
 int main() {
@@ -16,7 +16,7 @@ int main() {
         .item("Quit tray", TraySignal.quit());
 
     if (!tray.show()) {
-        print("nixosctl-tray: no native tray available (headless / no GUI session).");
+        print("nixosctl-tray: no native tray available (" + tray.failure + ").");
         return 0;
     }
     tray.run();

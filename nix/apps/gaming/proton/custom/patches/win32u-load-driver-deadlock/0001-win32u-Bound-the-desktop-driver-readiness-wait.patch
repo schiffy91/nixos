@@ -1,0 +1,44 @@
+From 45ad863525f3ef35f2e9730d530c8e928e11d6df Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:45:30 -0700
+Subject: [PATCH] win32u: Bound the desktop driver readiness wait.
+
+load_desktop_driver() sends WM_NULL to the desktop window as a barrier,
+so that the display device GUID property is only read once the desktop
+thread has finished initializing its driver. The send is unbounded: if
+the desktop thread stalls, for example because it is itself blocked
+inside driver initialization, every process that goes on to load the
+display driver hangs in that barrier forever, without any diagnostic.
+
+Use send_message_timeout() with SMTO_ABORTIFHUNG and a five second
+timeout instead, and warn when it expires. The barrier only orders the
+property lookup after driver initialization; when it times out the
+existing lookup still decides whether a driver is available, and the
+caller falls back to the null driver as it already does when the
+property is missing.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/win32u/driver.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
+index 793de3f..0191266 100644
+--- a/dlls/win32u/driver.c
++++ b/dlls/win32u/driver.c
+@@ -957,8 +957,10 @@ static BOOL load_desktop_driver( HWND hwnd )
+     user_check_not_lock();
+ 
+     asciiz_to_unicode( driver_load_error, "The explorer process failed to start." );  /* default error */
+-    /* wait for graphics driver to be ready */
+-    send_message( hwnd, WM_NULL, 0, 0 );
++    /* wait for graphics driver to be ready, without hanging forever on a stalled desktop thread */
++    send_message_timeout( hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 5000, FALSE );
++    if (RtlGetLastWin32Error() == ERROR_TIMEOUT)
++        WARN( "desktop driver readiness wait timed out for %p\n", hwnd );
+ 
+     guid_atom = HandleToULong( NtUserGetProp( hwnd, prop_nameW ));
+     memcpy( key, guid_key_prefixW, sizeof(guid_key_prefixW) );
+-- 
+2.55.0
+

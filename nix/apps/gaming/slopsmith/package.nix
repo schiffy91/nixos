@@ -44,8 +44,8 @@ let
         exit 1
       fi
 
-      if ! podman info >/dev/null 2>&1; then
-        echo "Podman is not ready. Run nixos update so the Rocksmith module can enable it." >&2
+      if ! podman_error="$(podman info 2>&1 >/dev/null)"; then
+        echo "Podman is not ready: $podman_error" >&2
         exit 1
       fi
 

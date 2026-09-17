@@ -1,148 +1,161 @@
-From ae8198a0829b53dd5265ed4753f70c7504ae5580 Mon Sep 17 00:00:00 2001
+From e06496f28638e24d058b3eee848924b1795cf543 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Thu, 21 May 2026 20:34:15 -0700
-Subject: [PATCH] winewayland.drv: Fix layered surface alpha uploads
+Date: Tue, 25 Aug 2026 23:45:30 -0700
+Subject: [PATCH] winewayland.drv: Fix layered surface alpha uploads.
 
-Layered windows created through SetLayeredWindowAttributes do not have a
-per-pixel alpha mask. Their backing DIB contents should therefore be treated
-as XRGB plus the window's constant alpha when they are uploaded to a Wayland
-ARGB SHM buffer.
+Layered windows set up through SetLayeredWindowAttributes have no
+per-pixel alpha mask, so the alpha bytes GDI leaves in their DIB are
+meaningless. The window surface flush copied them verbatim into the
+ARGB8888 SHM buffer, and since GDI leaves them at zero, otherwise valid
+RGB content such as menu and popup text came out fully transparent.
 
-Leaving the alpha channel exactly as GDI left it makes otherwise valid RGB
-content disappear on Wayland compositors. This shows up as blank text in
-layered menus and popups when applications draw the pixels but leave the DIB
-alpha channel at zero.
+Derive the upload alpha from the window surface metadata instead, as
+winex11.drv does. Surfaces without a per-pixel alpha mask are uploaded
+opaque, except that the constant LWA_ALPHA value is baked into the
+pixels when the compositor does not offer wp_alpha_modifier_v1; when it
+does, the driver already applies that alpha through the surface
+multiplier, and doing both would apply it twice. ARGB8888 SHM buffers
+are premultiplied, so the color channels are scaled by the baked alpha.
 
-Match the X11 driver behavior by deriving alpha bits from the window surface
-metadata, by setting opaque alpha when copying XRGB data into ARGB SHM
-buffers, and by promoting non-empty RGB pixels on 32-bit per-pixel layered
-surfaces when the application left their alpha byte at zero.
+Surfaces with a per-pixel alpha mask keep the alpha the application
+provided.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/winewayland.drv/window_surface.c | 49 +++++++++++++++++++++------
- 1 file changed, 39 insertions(+), 10 deletions(-)
+ dlls/winewayland.drv/window_surface.c | 58 ++++++++++++++++++++++-----
+ 1 file changed, 48 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/winewayland.drv/window_surface.c b/dlls/winewayland.drv/window_surface.c
-index 98cf812..ea94d0f 100644
+index 98cf812..e46449b 100644
 --- a/dlls/winewayland.drv/window_surface.c
 +++ b/dlls/winewayland.drv/window_surface.c
-@@ -250,12 +250,20 @@ RGNDATA *get_region_data(HRGN region)
+@@ -250,12 +250,34 @@ RGNDATA *get_region_data(HRGN region)
      return data;
  }
  
-+static UINT32 apply_alpha_bits(UINT32 pixel, UINT alpha_bits, BOOL fixup_zero_alpha)
++/**********************************************************************
++ *          apply_alpha_bits
++ *
++ * Replace the alpha byte of a pixel with a constant alpha, premultiplying
++ * the color channels as ARGB8888 SHM buffers expect.
++ */
++static UINT32 apply_alpha_bits(UINT32 pixel, UINT alpha_bits)
 +{
-+    if (alpha_bits != (UINT)-1) return (pixel & 0x00ffffff) | alpha_bits;
-+    if (fixup_zero_alpha && !(pixel & 0xff000000) && (pixel & 0x00ffffff))
-+        return pixel | 0xff000000;
-+    return pixel;
++    UINT32 alpha = alpha_bits >> 24;
++    UINT32 r, g, b;
++
++    if (alpha == 0xff) return (pixel & 0x00ffffff) | 0xff000000;
++
++    r = ((pixel >> 16) & 0xff) * alpha / 0xff;
++    g = ((pixel >> 8) & 0xff) * alpha / 0xff;
++    b = (pixel & 0xff) * alpha / 0xff;
++    return (alpha << 24) | (r << 16) | (g << 8) | b;
 +}
 +
  /**********************************************************************
   *          copy_pixel_region
++ *
++ * Copy pixels between buffers, replacing the alpha byte with alpha_bits
++ * unless it is (UINT)-1.
   */
  static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
                                char *dst_pixels, RECT *dst_rect,
 -                              HRGN region, BOOL force_opaque)
-+                              HRGN region, UINT alpha_bits, BOOL fixup_zero_alpha)
++                              HRGN region, UINT alpha_bits)
  {
      static const int bpp = WINEWAYLAND_BYTES_PER_PIXEL;
      RGNDATA *rgndata = get_region_data(region);
-@@ -291,21 +299,21 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
+@@ -291,21 +313,21 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
          /* Fast path for full width rectangles. */
          if (width * bpp == src_stride && src_stride == dst_stride)
          {
 -            if (force_opaque)
-+            if (alpha_bits != (UINT)-1 || fixup_zero_alpha)
++            if (alpha_bits != (UINT)-1)
              {
                  for (x = 0; x < height * width; ++x)
 -                    ((UINT32 *)dst)[x] = ((UINT32 *)src)[x] | 0xff000000;
-+                    ((UINT32 *)dst)[x] = apply_alpha_bits(((UINT32 *)src)[x], alpha_bits, fixup_zero_alpha);
++                    ((UINT32 *)dst)[x] = apply_alpha_bits(((UINT32 *)src)[x], alpha_bits);
              }
              else memcpy(dst, src, height * width * 4);
              continue;
          }
  
 -        if (force_opaque)
-+        if (alpha_bits != (UINT)-1 || fixup_zero_alpha)
++        if (alpha_bits != (UINT)-1)
          {
              for (y = 0; y < height; y++)
              {
                  for (x = 0; x < width; ++x)
 -                    ((UINT32 *)dst)[x] = ((UINT32 *)src)[x] | 0xff000000;
-+                    ((UINT32 *)dst)[x] = apply_alpha_bits(((UINT32 *)src)[x], alpha_bits, fixup_zero_alpha);
++                    ((UINT32 *)dst)[x] = apply_alpha_bits(((UINT32 *)src)[x], alpha_bits);
                  src += src_stride;
                  dst += dst_stride;
              }
-@@ -329,11 +337,12 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
+@@ -329,11 +351,11 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
   */
  static void wayland_shm_buffer_copy_data(struct wayland_shm_buffer *buffer,
                                           const char *bits, RECT *rect,
 -                                         HRGN region, BOOL force_opaque)
-+                                         HRGN region, UINT alpha_bits,
-+                                         BOOL fixup_zero_alpha)
++                                         HRGN region, UINT alpha_bits)
  {
      RECT buffer_rect = {0, 0, buffer->width, buffer->height};
      TRACE("buffer=%p bits=%p rect=%s\n", buffer, bits, wine_dbgstr_rect(rect));
 -    copy_pixel_region(bits, rect, buffer->map_data, &buffer_rect, region, force_opaque);
-+    copy_pixel_region(bits, rect, buffer->map_data, &buffer_rect, region, alpha_bits, fixup_zero_alpha);
++    copy_pixel_region(bits, rect, buffer->map_data, &buffer_rect, region, alpha_bits);
  }
  
  static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
-@@ -342,9 +351,10 @@ static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
+@@ -342,9 +364,11 @@ static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
  {
      RECT src_rect = {0, 0, src->width, src->height};
      RECT dst_rect = {0, 0, dst->width, dst->height};
-+    UINT alpha_bits = src->format == WL_SHM_FORMAT_XRGB8888 &&
-+                      dst->format == WL_SHM_FORMAT_ARGB8888 ? 0xff000000 : (UINT)-1;
++    UINT alpha_bits = (UINT)-1;
      TRACE("src=%p dst=%p\n", src, dst);
 -    copy_pixel_region(src->map_data, &src_rect, dst->map_data, &dst_rect, region,
 -                      src->format == WL_SHM_FORMAT_XRGB8888 && dst->format == WL_SHM_FORMAT_ARGB8888);
-+    copy_pixel_region(src->map_data, &src_rect, dst->map_data, &dst_rect, region, alpha_bits, FALSE);
++    if (src->format == WL_SHM_FORMAT_XRGB8888 && dst->format == WL_SHM_FORMAT_ARGB8888)
++        alpha_bits = 0xff000000;
++    copy_pixel_region(src->map_data, &src_rect, dst->map_data, &dst_rect, region, alpha_bits);
  }
  
  /**********************************************************************
-@@ -388,6 +398,8 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -388,6 +412,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
      BOOL flushed = FALSE;
      HRGN surface_damage_region = NULL;
      HRGN copy_from_window_region;
 +    UINT alpha_bits = (UINT)-1;
-+    BOOL fixup_zero_alpha = FALSE;
      uint32_t buffer_format;
  
      surface_damage_region = NtGdiCreateRectRgn(rect->left + dirty->left, rect->top + dirty->top,
-@@ -398,6 +410,23 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -398,6 +423,19 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
          goto done;
      }
  
++    /* Layered windows without a per-pixel alpha mask carry meaningless DIB
++     * alpha bytes, so derive the upload alpha from the surface metadata. The
++     * constant LWA_ALPHA value is only baked into the pixels when the
++     * compositor cannot apply it through wp_alpha_modifier_v1. */
 +    if (shape_bits && !wws->layered) alpha_bits = 0xff000000;
-+    else if (wws->layered)
++    else if (wws->layered && !window_surface->alpha_mask)
 +    {
-+        if (!window_surface->alpha_mask)
-+        {
-+            if (window_surface->alpha_bits != (UINT)-1) alpha_bits = window_surface->alpha_bits;
-+            else if (color_info->bmiHeader.biBitCount != 32) alpha_bits = 0xff000000;
-+            else if (color_info->bmiHeader.biCompression == BI_RGB) alpha_bits = 0xff000000;
-+            else
-+            {
-+                DWORD *colors = (DWORD *)color_info->bmiColors;
-+                alpha_bits = ~(colors[0] | colors[1] | colors[2]);
-+            }
-+        }
-+        else if (color_info->bmiHeader.biBitCount == 32) fixup_zero_alpha = TRUE;
++        if (window_surface->alpha_bits != (UINT)-1 && !process_wayland.wp_alpha_modifier_v1)
++            alpha_bits = window_surface->alpha_bits;
++        else
++            alpha_bits = 0xff000000;
 +    }
 +
      buffer_format = (shape_bits || wws->layered) ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888;
      if (wws->wayland_buffer_queue->format != buffer_format)
      {
-@@ -450,7 +479,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -450,7 +488,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
      }
  
      wayland_shm_buffer_copy_data(shm_buffer, color_bits, &surface_rect, copy_from_window_region,
 -                                 shape_bits && !wws->layered);
-+                                 alpha_bits, fixup_zero_alpha);
++                                 alpha_bits);
      if (shape_bits) wayland_shm_buffer_copy_shape(shm_buffer, rect, shape_info, shape_bits);
  
      NtGdiSetRectRgn(shm_buffer->damage_region, 0, 0, 0, 0);
+-- 
+2.55.0
+

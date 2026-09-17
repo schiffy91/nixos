@@ -1,9 +1,9 @@
-import std.cli;
-import std.console;
-import std.fs;
-import std.platform;
-import std.strings;
-import std.vector;
+import Library.CLI;
+import Library.Console;
+import Library.FileSystem;
+import Library.Platform;
+import Library.Strings;
+import Library.Vector;
 import ../core/log.btrc;
 import ./lib/btrfs.btrc;
 import ./lib/config.btrc;
@@ -353,9 +353,9 @@ class Immutability {
         self.run.log("Persistent data materialized");
     }
 
-    class int cli(CliArgs args) {
+    class int cli(CLIArgs args) {
         try {
-            var parsed = CliCommandLine.parse(args);
+            var parsed = CLICommandLine.parse(args);
             var dryRun = Immutability.envDryRun() || parsed.flag("--dry-run");
             var assumeMounted = parsed.flag("--assume-mounted");
             var keepGenerations = Strings.toInt(parsed.option("--keep-generations", "3"));
@@ -455,6 +455,6 @@ class Immutability {
 }
 
 int main(int argc, char** argv) {
-    var args = CliArgs(argc, argv);
+    var args = CLIArgs(argc, argv);
     return Immutability.cli(args);
 }

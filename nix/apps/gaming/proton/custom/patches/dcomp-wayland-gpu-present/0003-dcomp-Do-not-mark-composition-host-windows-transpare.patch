@@ -1,31 +1,34 @@
-From db6eb1fe19809398a6cff52dfbc59bd2a1dfee81 Mon Sep 17 00:00:00 2001
+From dbf8616c0bc065b00ad4fd7d4767bcd93ec4db21 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Thu, 21 May 2026 03:03:18 -0700
-Subject: [PATCH] dcomp: Do not mark composition host windows transparent
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 03/19] dcomp: Do not mark composition host windows
+ transparent.
 
-The host HWND only gives DXVK a native presentation target for a
+The host window only gives DXVK a native presentation target for a
 DirectComposition visual. Transparency comes from the swap chain alpha mode,
-not from Win32 sibling paint ordering. WS_EX_TRANSPARENT can delay native child
-window updates behind sibling paints and causes unstable overlay ordering under
-Wayland, which shows up as intermittent black rectangles in Battle.net's CEF
-composition surfaces.
+not from Win32 sibling paint ordering. WS_EX_TRANSPARENT can delay native
+child window updates behind sibling paints and causes unstable overlay
+ordering under Wayland, which shows up as intermittent black rectangles in
+Battle.net's CEF composition surfaces.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/device.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 1ff3182..b1c3c8e 100644
+index a122483..2414997 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
-@@ -784,7 +784,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-             if (!v->host_hwnd || v->host_parent != t->hwnd)
-             {
-                 if (v->host_hwnd) DestroyWindow(v->host_hwnd);
--                v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
-+                v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE,
-                                                dcomp_host_class_name, NULL,
-                                                WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
-                                                x, y, width, height, t->hwnd, NULL,
+@@ -1008,7 +1008,7 @@ static BOOL dcomp_visual_update_host(struct dcomp_target *target, struct dcomp_v
+ 
+     if (!visual->host_hwnd)
+     {
+-        if (!(visual->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
++        if (!(visual->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE,
+                 dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
+                 rect.left, rect.top, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
+         {
+-- 
+2.55.0
+

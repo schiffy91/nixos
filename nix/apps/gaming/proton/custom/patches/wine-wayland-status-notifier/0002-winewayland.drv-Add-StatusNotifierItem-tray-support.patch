@@ -1,0 +1,1318 @@
+From b307ecda0934863bfa1e88c56131df64d6836ce8 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:59:17 -0700
+Subject: [PATCH 2/3] winewayland.drv: Add StatusNotifierItem tray support.
+
+Wayland has no XEmbed system tray selection, so the icons explorer docks
+are invisible when winewayland.drv is the desktop driver. Publish every
+docked icon as a StatusNotifierItem on the session bus instead.
+
+The driver dlopens libdbus and keeps one private session bus connection
+in the desktop process. Every docked icon claims an
+org.kde.StatusNotifierItem-<pid>-<serial> name, all of them share one
+object path, and the name a host addresses selects the item.
+
+The connection is dispatched from a Wine thread which the first dock
+insert starts through a user mode callback, so other processes never
+create it. Activation methods only post a private driver window message
+to the icon's adaptor window, and the Win32 tray callbacks then run on
+Wine's message path from the explorer thread.
+
+Explorer keeps owning the item lifetime: dock insert creates an item or
+updates it in place, and dock remove releases it. When the
+StatusNotifierWatcher changes owner, e.g. because the shell restarted,
+the driver registers its items again and asks explorer to re-dock, like
+the X11 driver does when a tray manager appears. Losing the bus
+connection unpublishes the items and asks explorer to re-dock as well,
+which reconnects.
+
+WINE_SNI_ICON_NAME, read once at driver init, sets the IconName
+property so that hosts can show a themed icon instead of the pixmap.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ configure.ac                           |    2 +-
+ dlls/winewayland.drv/Makefile.in       |    3 +-
+ dlls/winewayland.drv/dllmain.c         |   22 +-
+ dlls/winewayland.drv/unixlib.h         |    7 +
+ dlls/winewayland.drv/wayland_systray.c | 1031 ++++++++++++++++++++++++
+ dlls/winewayland.drv/waylanddrv.h      |   24 +
+ dlls/winewayland.drv/waylanddrv_main.c |   15 +
+ dlls/winewayland.drv/window.c          |    3 +
+ 8 files changed, 1104 insertions(+), 3 deletions(-)
+ create mode 100644 dlls/winewayland.drv/wayland_systray.c
+
+diff --git a/configure.ac b/configure.ac
+index e54b6cd..7c202ef 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1504,7 +1504,7 @@ fi
+ case $host_os in
+   darwin*) ;;
+   *) WINE_NOTICE_WITH(dbus,[test "x$ac_cv_lib_soname_dbus_1" = "x"],
+-                      [libdbus ${notice_platform}development files not found, no dynamic device support.]) ;;
++                      [libdbus ${notice_platform}development files not found, no dynamic device support or Wayland systray.]) ;;
+ esac
+ 
+ dnl **** Check for libgnutls ****
+diff --git a/dlls/winewayland.drv/Makefile.in b/dlls/winewayland.drv/Makefile.in
+index 177eded..6ec25bc 100644
+--- a/dlls/winewayland.drv/Makefile.in
++++ b/dlls/winewayland.drv/Makefile.in
+@@ -1,6 +1,6 @@
+ MODULE = winewayland.drv
+ UNIXLIB = winewayland.so
+-UNIX_CFLAGS = $(EGL_CFLAGS) $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_EGL_CFLAGS) $(XKBCOMMON_CFLAGS) $(XKBREGISTRY_CFLAGS)
++UNIX_CFLAGS = $(EGL_CFLAGS) $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_EGL_CFLAGS) $(XKBCOMMON_CFLAGS) $(XKBREGISTRY_CFLAGS) $(DBUS_CFLAGS)
+ UNIX_LIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(WAYLAND_EGL_LIBS) $(XKBCOMMON_LIBS) $(XKBREGISTRY_LIBS) $(PTHREAD_LIBS) -lm
+ IMPORTS = user32 win32u
+ 
+@@ -29,6 +29,7 @@ SOURCES = \
+ 	wayland_output.c \
+ 	wayland_pointer.c \
+ 	wayland_surface.c \
++	wayland_systray.c \
+ 	wayland_text_input.c \
+ 	wayland_touch.c \
+ 	waylanddrv_main.c \
+diff --git a/dlls/winewayland.drv/dllmain.c b/dlls/winewayland.drv/dllmain.c
+index 8055d88..a6bc07d 100644
+--- a/dlls/winewayland.drv/dllmain.c
++++ b/dlls/winewayland.drv/dllmain.c
+@@ -18,6 +18,8 @@
+  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+  */
+ 
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
+ #include "waylanddrv_dll.h"
+ 
+ #include "ntuser.h"
+@@ -38,6 +40,23 @@ static DWORD WINAPI wayland_read_events_thread(void *arg)
+     return 0;
+ }
+ 
++static DWORD WINAPI systray_thread(void *arg)
++{
++    WAYLANDDRV_UNIX_CALL(dispatch_systray, NULL);
++    return 0;
++}
++
++/* Called from the unix side when the first tray icon is docked. */
++static NTSTATUS WINAPI start_systray_thread(void *param, ULONG size)
++{
++    HANDLE thread;
++
++    if (!(thread = CreateThread(NULL, 0, systray_thread, NULL, 0, NULL)))
++        return STATUS_UNSUCCESSFUL;
++    CloseHandle(thread);
++    return STATUS_SUCCESS;
++}
++
+ static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+ {
+     switch (msg)
+@@ -95,6 +114,7 @@ static DWORD WINAPI clipboard_thread(void *arg)
+ 
+ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
+ {
++    struct init_params params = {.start_systray_thread = (UINT_PTR)start_systray_thread};
+     DWORD tid;
+ 
+     if (reason != DLL_PROCESS_ATTACH) return TRUE;
+@@ -102,7 +122,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
+     DisableThreadLibraryCalls(instance);
+     if (__wine_init_unix_call()) return FALSE;
+ 
+-    if (WAYLANDDRV_UNIX_CALL(init, NULL))
++    if (WAYLANDDRV_UNIX_CALL(init, &params))
+         return FALSE;
+ 
+     /* Read wayland events from a dedicated thread. */
+diff --git a/dlls/winewayland.drv/unixlib.h b/dlls/winewayland.drv/unixlib.h
+index d9378fe..57899ea 100644
+--- a/dlls/winewayland.drv/unixlib.h
++++ b/dlls/winewayland.drv/unixlib.h
+@@ -28,7 +28,14 @@ enum waylanddrv_unix_func
+     waylanddrv_unix_func_init,
+     waylanddrv_unix_func_read_events,
+     waylanddrv_unix_func_init_clipboard,
++    waylanddrv_unix_func_dispatch_systray,
+     waylanddrv_unix_func_count,
+ };
+ 
++/* waylanddrv_unix_init params */
++struct init_params
++{
++    UINT64 start_systray_thread;
++};
++
+ #endif /* __WINE_WAYLANDDRV_UNIXLIB_H */
+diff --git a/dlls/winewayland.drv/wayland_systray.c b/dlls/winewayland.drv/wayland_systray.c
+new file mode 100644
+index 0000000..8f46015
+--- /dev/null
++++ b/dlls/winewayland.drv/wayland_systray.c
+@@ -0,0 +1,1031 @@
++/*
++ * Wayland systray support through StatusNotifierItem
++ *
++ * Copyright 2026 Alexander Schiffhauer
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#if 0
++#pragma makedep unix
++#endif
++
++#include "config.h"
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#ifdef SONAME_LIBDBUS_1
++#include <dlfcn.h>
++#include <dbus/dbus.h>
++#endif
++
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "waylanddrv.h"
++#include "shellapi.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(systray);
++
++#ifdef SONAME_LIBDBUS_1
++
++#define DBUS_FUNCS \
++    DO_FUNC(dbus_bus_add_match); \
++    DO_FUNC(dbus_bus_get_private); \
++    DO_FUNC(dbus_bus_name_has_owner); \
++    DO_FUNC(dbus_bus_release_name); \
++    DO_FUNC(dbus_bus_request_name); \
++    DO_FUNC(dbus_connection_add_filter); \
++    DO_FUNC(dbus_connection_close); \
++    DO_FUNC(dbus_connection_flush); \
++    DO_FUNC(dbus_connection_read_write_dispatch); \
++    DO_FUNC(dbus_connection_ref); \
++    DO_FUNC(dbus_connection_register_object_path); \
++    DO_FUNC(dbus_connection_send); \
++    DO_FUNC(dbus_connection_send_with_reply_and_block); \
++    DO_FUNC(dbus_connection_set_exit_on_disconnect); \
++    DO_FUNC(dbus_connection_unref); \
++    DO_FUNC(dbus_error_free); \
++    DO_FUNC(dbus_error_init); \
++    DO_FUNC(dbus_message_append_args); \
++    DO_FUNC(dbus_message_get_args); \
++    DO_FUNC(dbus_message_get_destination); \
++    DO_FUNC(dbus_message_is_method_call); \
++    DO_FUNC(dbus_message_is_signal); \
++    DO_FUNC(dbus_message_iter_append_basic); \
++    DO_FUNC(dbus_message_iter_append_fixed_array); \
++    DO_FUNC(dbus_message_iter_close_container); \
++    DO_FUNC(dbus_message_iter_init_append); \
++    DO_FUNC(dbus_message_iter_open_container); \
++    DO_FUNC(dbus_message_new_error); \
++    DO_FUNC(dbus_message_new_method_call); \
++    DO_FUNC(dbus_message_new_method_return); \
++    DO_FUNC(dbus_message_new_signal); \
++    DO_FUNC(dbus_message_unref); \
++    DO_FUNC(dbus_threads_init_default)
++
++#define DO_FUNC(f) static typeof(f) * p_##f
++DBUS_FUNCS;
++#undef DO_FUNC
++
++#define SNI_WATCHER_NAME "org.kde.StatusNotifierWatcher"
++#define SNI_WATCHER_PATH "/StatusNotifierWatcher"
++#define SNI_ITEM_INTERFACE "org.kde.StatusNotifierItem"
++#define SNI_ITEM_PATH "/StatusNotifierItem"
++
++#define SNI_CHANGED_ICON    0x01
++#define SNI_CHANGED_TOOLTIP 0x02
++
++/* A docked explorer tray icon published on the session bus. Every item claims
++ * its own well-known name but all of them share one object path on one
++ * connection; the name a host addresses selects the item. A host addressing
++ * our unique name instead cannot be matched to an item, and the NewIcon and
++ * NewToolTip signals of one item refresh every item on hosts that match
++ * signals by sender name. */
++struct sni_item
++{
++    struct list entry;
++    int serial;
++    char service[64];
++    BOOL published;
++    HWND owner_hwnd;
++    HWND window_hwnd;
++    UINT id;
++    UINT callback_message;
++    UINT version;
++    int icon_width;
++    int icon_height;
++    unsigned char *icon_argb;
++    WCHAR tiptext[128];
++};
++
++/* An activation request relayed to the icon's adaptor window. */
++struct sni_callback
++{
++    HWND owner_hwnd;
++    HWND window_hwnd;
++    UINT id;
++    UINT callback_message;
++    UINT version;
++    UINT down_msg;
++    UINT up_msg;
++    int x;
++    int y;
++    BOOL context_menu;
++};
++
++static pthread_mutex_t sni_mutex = PTHREAD_MUTEX_INITIALIZER;
++static pthread_cond_t sni_cond = PTHREAD_COND_INITIALIZER;
++/* The item list and the bus connection are protected by sni_mutex. */
++static struct list sni_items = LIST_INIT(sni_items);
++static DBusConnection *sni_conn;
++static int sni_serial;
++static BOOL sni_dispatch_started;
++static HWND systray_hwnd;
++static UINT64 start_systray_thread_callback;
++static char *sni_icon_name;
++
++static const char sni_introspection_xml[] =
++    "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\" "
++    "\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
++    "<node>\n"
++    " <interface name=\"org.kde.StatusNotifierItem\">\n"
++    "  <property name=\"Id\" type=\"s\" access=\"read\"/>\n"
++    "  <property name=\"Category\" type=\"s\" access=\"read\"/>\n"
++    "  <property name=\"Status\" type=\"s\" access=\"read\"/>\n"
++    "  <property name=\"Title\" type=\"s\" access=\"read\"/>\n"
++    "  <property name=\"WindowId\" type=\"u\" access=\"read\"/>\n"
++    "  <property name=\"ItemIsMenu\" type=\"b\" access=\"read\"/>\n"
++    "  <property name=\"IconName\" type=\"s\" access=\"read\"/>\n"
++    "  <property name=\"IconPixmap\" type=\"a(iiay)\" access=\"read\"/>\n"
++    "  <property name=\"ToolTip\" type=\"(sa(iiay)ss)\" access=\"read\"/>\n"
++    "  <method name=\"Activate\"><arg name=\"x\" type=\"i\"/><arg name=\"y\" type=\"i\"/></method>\n"
++    "  <method name=\"SecondaryActivate\"><arg name=\"x\" type=\"i\"/><arg name=\"y\" type=\"i\"/></method>\n"
++    "  <method name=\"ContextMenu\"><arg name=\"x\" type=\"i\"/><arg name=\"y\" type=\"i\"/></method>\n"
++    "  <method name=\"Scroll\"><arg name=\"delta\" type=\"i\"/><arg name=\"orientation\" type=\"s\"/></method>\n"
++    "  <signal name=\"NewIcon\"/>\n"
++    "  <signal name=\"NewToolTip\"/>\n"
++    "  <signal name=\"NewTitle\"/>\n"
++    " </interface>\n"
++    " <interface name=\"org.freedesktop.DBus.Introspectable\">\n"
++    "  <method name=\"Introspect\"><arg name=\"xml\" type=\"s\" direction=\"out\"/></method>\n"
++    " </interface>\n"
++    " <interface name=\"org.freedesktop.DBus.Properties\">\n"
++    "  <method name=\"Get\">\n"
++    "   <arg name=\"interface\" type=\"s\" direction=\"in\"/>\n"
++    "   <arg name=\"name\" type=\"s\" direction=\"in\"/>\n"
++    "   <arg name=\"value\" type=\"v\" direction=\"out\"/>\n"
++    "  </method>\n"
++    "  <method name=\"GetAll\">\n"
++    "   <arg name=\"interface\" type=\"s\" direction=\"in\"/>\n"
++    "   <arg name=\"props\" type=\"a{sv}\" direction=\"out\"/>\n"
++    "  </method>\n"
++    " </interface>\n"
++    "</node>\n";
++
++static const char * const sni_property_names[] =
++{
++    "Id", "Category", "Status", "Title", "WindowId", "ItemIsMenu",
++    "IconName", "IconPixmap", "ToolTip"
++};
++
++static BOOL load_dbus_functions(void)
++{
++    void *handle;
++
++    if (!(handle = dlopen(SONAME_LIBDBUS_1, RTLD_NOW))) goto failed;
++
++#define DO_FUNC(f) if (!(p_##f = dlsym(handle, #f))) goto failed
++    DBUS_FUNCS;
++#undef DO_FUNC
++
++    return TRUE;
++
++failed:
++    WARN("failed to load %s: %s\n", SONAME_LIBDBUS_1, dlerror());
++    return FALSE;
++}
++
++static void utf8_from_wchar(const WCHAR *src, char *dst, size_t dst_size)
++{
++    NTSTATUS status;
++    ULONG len;
++
++    status = RtlUnicodeToUTF8N(dst, dst_size - 1, &len, src, lstrlenW(src) * sizeof(WCHAR));
++    if (status && status != STATUS_SOME_NOT_MAPPED) len = 0;
++    dst[len] = 0;
++}
++
++/* Convert an icon to the ARGB32 network byte order pixmap format of the spec. */
++static unsigned char *icon_to_argb32(HICON hicon, int *width, int *height)
++{
++    char buffer[FIELD_OFFSET(BITMAPINFO, bmiColors[256])];
++    BITMAPINFO *info = (BITMAPINFO *)buffer;
++    unsigned char *mask_bits = NULL, *argb = NULL;
++    unsigned int *bits = NULL, *ptr;
++    ICONINFO icon_info;
++    BITMAP bm;
++    HDC hdc = 0;
++    BOOL has_alpha = FALSE;
++    int i, j;
++
++    if (!NtUserGetIconInfo(hicon, &icon_info, NULL, NULL, NULL, 0)) return NULL;
++    if (!icon_info.hbmColor)
++    {
++        TRACE("icon %p is monochrome, not published\n", hicon);
++        goto done;
++    }
++    if (!NtGdiExtGetObjectW(icon_info.hbmColor, sizeof(bm), &bm)) goto done;
++    if (!(hdc = NtGdiCreateCompatibleDC(0))) goto done;
++
++    memset(info, 0, sizeof(info->bmiHeader));
++    info->bmiHeader.biSize = sizeof(info->bmiHeader);
++    info->bmiHeader.biWidth = bm.bmWidth;
++    info->bmiHeader.biHeight = -bm.bmHeight;
++    info->bmiHeader.biPlanes = 1;
++    info->bmiHeader.biBitCount = 32;
++    info->bmiHeader.biCompression = BI_RGB;
++    info->bmiHeader.biSizeImage = bm.bmWidth * bm.bmHeight * 4;
++
++    if (!(bits = malloc(info->bmiHeader.biSizeImage))) goto done;
++    if (!NtGdiGetDIBitsInternal(hdc, icon_info.hbmColor, 0, bm.bmHeight, bits, info,
++                                DIB_RGB_COLORS, 0, 0))
++        goto done;
++
++    for (i = 0; i < bm.bmWidth * bm.bmHeight; i++)
++        if ((has_alpha = (bits[i] & 0xff000000) != 0)) break;
++
++    if (!has_alpha)
++    {
++        unsigned int width_bytes = (bm.bmWidth + 31) / 32 * 4;
++
++        /* generate the alpha channel from the mask */
++        info->bmiHeader.biBitCount = 1;
++        info->bmiHeader.biSizeImage = width_bytes * bm.bmHeight;
++        if (!(mask_bits = malloc(info->bmiHeader.biSizeImage))) goto done;
++        if (!NtGdiGetDIBitsInternal(hdc, icon_info.hbmMask, 0, bm.bmHeight, mask_bits, info,
++                                    DIB_RGB_COLORS, 0, 0))
++            goto done;
++        ptr = bits;
++        for (i = 0; i < bm.bmHeight; i++)
++        {
++            for (j = 0; j < bm.bmWidth; j++, ptr++)
++            {
++                if (!((mask_bits[i * width_bytes + j / 8] << (j % 8)) & 0x80))
++                    *ptr |= 0xff000000;
++            }
++        }
++    }
++
++    if (!(argb = malloc(bm.bmWidth * bm.bmHeight * 4))) goto done;
++    for (i = 0; i < bm.bmWidth * bm.bmHeight; i++)
++    {
++        argb[i * 4 + 0] = bits[i] >> 24;
++        argb[i * 4 + 1] = bits[i] >> 16;
++        argb[i * 4 + 2] = bits[i] >> 8;
++        argb[i * 4 + 3] = bits[i];
++    }
++    *width = bm.bmWidth;
++    *height = bm.bmHeight;
++
++done:
++    free(mask_bits);
++    free(bits);
++    if (hdc) NtGdiDeleteObjectApp(hdc);
++    if (icon_info.hbmColor) NtGdiDeleteObjectApp(icon_info.hbmColor);
++    if (icon_info.hbmMask) NtGdiDeleteObjectApp(icon_info.hbmMask);
++    return argb;
++}
++
++static struct sni_item *sni_find_by_service(const char *service)
++{
++    struct sni_item *item;
++
++    if (!service) return NULL;
++    LIST_FOR_EACH_ENTRY(item, &sni_items, struct sni_item, entry)
++        if (item->published && !strcmp(item->service, service)) return item;
++    return NULL;
++}
++
++static struct sni_item *sni_find_by_window(HWND hwnd)
++{
++    struct sni_item *item;
++
++    LIST_FOR_EACH_ENTRY(item, &sni_items, struct sni_item, entry)
++        if (item->window_hwnd == hwnd) return item;
++    return NULL;
++}
++
++static void sni_free_item(struct sni_item *item)
++{
++    free(item->icon_argb);
++    free(item);
++}
++
++/* Returns a reference to the bus connection, or NULL if there is none. */
++static DBusConnection *sni_get_connection(void)
++{
++    DBusConnection *conn;
++
++    pthread_mutex_lock(&sni_mutex);
++    if ((conn = sni_conn)) p_dbus_connection_ref(conn);
++    pthread_mutex_unlock(&sni_mutex);
++    return conn;
++}
++
++static void append_variant_string(DBusMessageIter *iter, const char *str)
++{
++    DBusMessageIter variant;
++
++    p_dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT, "s", &variant);
++    p_dbus_message_iter_append_basic(&variant, DBUS_TYPE_STRING, &str);
++    p_dbus_message_iter_close_container(iter, &variant);
++}
++
++static void append_pixmap_array(DBusMessageIter *iter, const struct sni_item *item)
++{
++    DBusMessageIter array, pixmap, bytes;
++    dbus_int32_t width = item->icon_width, height = item->icon_height;
++
++    p_dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "(iiay)", &array);
++    if (item->icon_argb)
++    {
++        p_dbus_message_iter_open_container(&array, DBUS_TYPE_STRUCT, NULL, &pixmap);
++        p_dbus_message_iter_append_basic(&pixmap, DBUS_TYPE_INT32, &width);
++        p_dbus_message_iter_append_basic(&pixmap, DBUS_TYPE_INT32, &height);
++        p_dbus_message_iter_open_container(&pixmap, DBUS_TYPE_ARRAY, "y", &bytes);
++        p_dbus_message_iter_append_fixed_array(&bytes, DBUS_TYPE_BYTE, &item->icon_argb,
++                                               width * height * 4);
++        p_dbus_message_iter_close_container(&pixmap, &bytes);
++        p_dbus_message_iter_close_container(&array, &pixmap);
++    }
++    p_dbus_message_iter_close_container(iter, &array);
++}
++
++static BOOL append_property(DBusMessageIter *iter, const struct sni_item *item, const char *name)
++{
++    DBusMessageIter variant, tooltip;
++    char text[512];
++
++    if (!strcmp(name, "Id"))
++    {
++        snprintf(text, sizeof(text), "wine-tray-%d", item->serial);
++        append_variant_string(iter, text);
++    }
++    else if (!strcmp(name, "Category")) append_variant_string(iter, "ApplicationStatus");
++    else if (!strcmp(name, "Status")) append_variant_string(iter, "Active");
++    else if (!strcmp(name, "IconName")) append_variant_string(iter, sni_icon_name ? sni_icon_name : "");
++    else if (!strcmp(name, "Title"))
++    {
++        utf8_from_wchar(item->tiptext, text, sizeof(text));
++        append_variant_string(iter, text);
++    }
++    else if (!strcmp(name, "WindowId"))
++    {
++        dbus_uint32_t window_id = 0;
++
++        p_dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT, "u", &variant);
++        p_dbus_message_iter_append_basic(&variant, DBUS_TYPE_UINT32, &window_id);
++        p_dbus_message_iter_close_container(iter, &variant);
++    }
++    else if (!strcmp(name, "ItemIsMenu"))
++    {
++        dbus_bool_t is_menu = FALSE;
++
++        p_dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT, "b", &variant);
++        p_dbus_message_iter_append_basic(&variant, DBUS_TYPE_BOOLEAN, &is_menu);
++        p_dbus_message_iter_close_container(iter, &variant);
++    }
++    else if (!strcmp(name, "IconPixmap"))
++    {
++        p_dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT, "a(iiay)", &variant);
++        append_pixmap_array(&variant, item);
++        p_dbus_message_iter_close_container(iter, &variant);
++    }
++    else if (!strcmp(name, "ToolTip"))
++    {
++        const char *empty = "", *title = text;
++
++        utf8_from_wchar(item->tiptext, text, sizeof(text));
++        p_dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT, "(sa(iiay)ss)", &variant);
++        p_dbus_message_iter_open_container(&variant, DBUS_TYPE_STRUCT, NULL, &tooltip);
++        p_dbus_message_iter_append_basic(&tooltip, DBUS_TYPE_STRING, &empty);
++        append_pixmap_array(&tooltip, item);
++        p_dbus_message_iter_append_basic(&tooltip, DBUS_TYPE_STRING, &title);
++        p_dbus_message_iter_append_basic(&tooltip, DBUS_TYPE_STRING, &empty);
++        p_dbus_message_iter_close_container(&variant, &tooltip);
++        p_dbus_message_iter_close_container(iter, &variant);
++    }
++    else return FALSE;
++
++    return TRUE;
++}
++
++static DBusMessage *introspect_reply(DBusMessage *msg)
++{
++    const char *xml = sni_introspection_xml;
++    DBusMessage *reply;
++
++    if (!(reply = p_dbus_message_new_method_return(msg))) return NULL;
++    p_dbus_message_append_args(reply, DBUS_TYPE_STRING, &xml, DBUS_TYPE_INVALID);
++    return reply;
++}
++
++static DBusMessage *get_property_reply(DBusMessage *msg, const struct sni_item *item)
++{
++    const char *iface, *name;
++    DBusMessageIter iter;
++    DBusMessage *reply;
++
++    if (!p_dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &iface, DBUS_TYPE_STRING, &name,
++                                 DBUS_TYPE_INVALID))
++        return p_dbus_message_new_error(msg, DBUS_ERROR_INVALID_ARGS, "expected interface and property name");
++    if (strcmp(iface, SNI_ITEM_INTERFACE))
++        return p_dbus_message_new_error(msg, DBUS_ERROR_UNKNOWN_INTERFACE, iface);
++    if (!(reply = p_dbus_message_new_method_return(msg))) return NULL;
++    p_dbus_message_iter_init_append(reply, &iter);
++    if (!append_property(&iter, item, name))
++    {
++        p_dbus_message_unref(reply);
++        return p_dbus_message_new_error(msg, DBUS_ERROR_UNKNOWN_PROPERTY, name);
++    }
++    return reply;
++}
++
++static DBusMessage *get_all_properties_reply(DBusMessage *msg, const struct sni_item *item)
++{
++    DBusMessageIter iter, dict, entry;
++    DBusMessage *reply;
++    const char *iface;
++    unsigned int i;
++
++    if (!p_dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &iface, DBUS_TYPE_INVALID))
++        return p_dbus_message_new_error(msg, DBUS_ERROR_INVALID_ARGS, "expected interface name");
++    if (strcmp(iface, SNI_ITEM_INTERFACE))
++        return p_dbus_message_new_error(msg, DBUS_ERROR_UNKNOWN_INTERFACE, iface);
++    if (!(reply = p_dbus_message_new_method_return(msg))) return NULL;
++    p_dbus_message_iter_init_append(reply, &iter);
++    p_dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "{sv}", &dict);
++    for (i = 0; i < ARRAY_SIZE(sni_property_names); i++)
++    {
++        p_dbus_message_iter_open_container(&dict, DBUS_TYPE_DICT_ENTRY, NULL, &entry);
++        p_dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &sni_property_names[i]);
++        append_property(&entry, item, sni_property_names[i]);
++        p_dbus_message_iter_close_container(&dict, &entry);
++    }
++    p_dbus_message_iter_close_container(&iter, &dict);
++    return reply;
++}
++
++static struct sni_callback *alloc_tray_callback(const struct sni_item *item, DBusMessage *msg,
++                                                UINT down_msg, UINT up_msg, BOOL context_menu)
++{
++    struct sni_callback *callback;
++    dbus_int32_t x = 0, y = 0;
++
++    if (!(callback = calloc(1, sizeof(*callback)))) return NULL;
++    p_dbus_message_get_args(msg, NULL, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y, DBUS_TYPE_INVALID);
++    callback->owner_hwnd = item->owner_hwnd;
++    callback->window_hwnd = item->window_hwnd;
++    callback->id = item->id;
++    callback->callback_message = item->callback_message;
++    callback->version = item->version;
++    callback->down_msg = down_msg;
++    callback->up_msg = up_msg;
++    callback->x = x;
++    callback->y = y;
++    callback->context_menu = context_menu;
++    return callback;
++}
++
++/* Relay the activation to the adaptor window, so that the Win32 tray callbacks
++ * run on Wine's message path instead of the bus dispatch thread. The callback
++ * is freed by wayland_systray_process_callback. It leaks if the adaptor window
++ * is destroyed before the message is processed, which explorer only does when
++ * the icon itself goes away. */
++static void queue_tray_callback(struct sni_callback *callback)
++{
++    if (!NtUserPostMessage(callback->window_hwnd, WM_WAYLAND_SNI_CALLBACK, 0, (LPARAM)callback))
++        free(callback);
++}
++
++static DBusHandlerResult sni_handler(DBusConnection *conn, DBusMessage *msg, void *user_data)
++{
++    struct sni_callback *callback = NULL;
++    DBusMessage *reply = NULL;
++    struct sni_item *item;
++
++    pthread_mutex_lock(&sni_mutex);
++    if (!(item = sni_find_by_service(p_dbus_message_get_destination(msg))))
++    {
++        pthread_mutex_unlock(&sni_mutex);
++        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++    }
++
++    if (p_dbus_message_is_method_call(msg, DBUS_INTERFACE_INTROSPECTABLE, "Introspect"))
++        reply = introspect_reply(msg);
++    else if (p_dbus_message_is_method_call(msg, DBUS_INTERFACE_PROPERTIES, "Get"))
++        reply = get_property_reply(msg, item);
++    else if (p_dbus_message_is_method_call(msg, DBUS_INTERFACE_PROPERTIES, "GetAll"))
++        reply = get_all_properties_reply(msg, item);
++    else if (p_dbus_message_is_method_call(msg, SNI_ITEM_INTERFACE, "Activate"))
++    {
++        callback = alloc_tray_callback(item, msg, WM_LBUTTONDOWN, WM_LBUTTONUP, FALSE);
++        reply = p_dbus_message_new_method_return(msg);
++    }
++    else if (p_dbus_message_is_method_call(msg, SNI_ITEM_INTERFACE, "SecondaryActivate"))
++    {
++        callback = alloc_tray_callback(item, msg, WM_MBUTTONDOWN, WM_MBUTTONUP, FALSE);
++        reply = p_dbus_message_new_method_return(msg);
++    }
++    else if (p_dbus_message_is_method_call(msg, SNI_ITEM_INTERFACE, "ContextMenu"))
++    {
++        callback = alloc_tray_callback(item, msg, WM_RBUTTONDOWN, WM_RBUTTONUP, TRUE);
++        reply = p_dbus_message_new_method_return(msg);
++    }
++    else if (p_dbus_message_is_method_call(msg, SNI_ITEM_INTERFACE, "Scroll"))
++    {
++        /* Windows never delivers wheel events to tray icons. */
++        reply = p_dbus_message_new_method_return(msg);
++    }
++    pthread_mutex_unlock(&sni_mutex);
++
++    if (!reply)
++    {
++        free(callback);
++        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++    }
++
++    p_dbus_connection_send(conn, reply, NULL);
++    p_dbus_message_unref(reply);
++    if (callback)
++    {
++        /* Let the host finish its own interaction before the application
++         * opens a popup menu. */
++        p_dbus_connection_flush(conn);
++        queue_tray_callback(callback);
++    }
++    return DBUS_HANDLER_RESULT_HANDLED;
++}
++
++static const DBusObjectPathVTable sni_vtable = { NULL, sni_handler };
++
++static DBusMessage *new_register_item_call(const struct sni_item *item)
++{
++    const char *service = item->service;
++    DBusMessage *msg;
++
++    if (!(msg = p_dbus_message_new_method_call(SNI_WATCHER_NAME, SNI_WATCHER_PATH, SNI_WATCHER_NAME,
++                                               "RegisterStatusNotifierItem")))
++        return NULL;
++    if (!p_dbus_message_append_args(msg, DBUS_TYPE_STRING, &service, DBUS_TYPE_INVALID))
++    {
++        p_dbus_message_unref(msg);
++        return NULL;
++    }
++    return msg;
++}
++
++/* Register an item with the watcher, waiting for the answer. */
++static void sni_register_item(DBusConnection *conn, const struct sni_item *item)
++{
++    DBusMessage *msg, *reply;
++    DBusError error;
++
++    if (!p_dbus_bus_name_has_owner(conn, SNI_WATCHER_NAME, NULL))
++    {
++        TRACE("no " SNI_WATCHER_NAME " on the bus, %s registers once one appears\n", item->service);
++        return;
++    }
++    if (!(msg = new_register_item_call(item))) return;
++
++    p_dbus_error_init(&error);
++    if ((reply = p_dbus_connection_send_with_reply_and_block(conn, msg, 1000, &error)))
++    {
++        TRACE("registered %s\n", item->service);
++        p_dbus_message_unref(reply);
++    }
++    else
++    {
++        WARN("failed to register %s: %s\n", item->service, debugstr_a(error.message));
++        p_dbus_error_free(&error);
++    }
++    p_dbus_message_unref(msg);
++}
++
++/* Register every item again after the watcher changed owner, e.g. when the
++ * shell restarted. Runs on the dispatch thread, so it must not wait for the
++ * replies. */
++static DBusHandlerResult sni_bus_filter(DBusConnection *conn, DBusMessage *msg, void *user_data)
++{
++    const char *name, *old_owner, *new_owner;
++    struct sni_item *item;
++    DBusMessage *call;
++
++    if (!p_dbus_message_is_signal(msg, DBUS_INTERFACE_DBUS, "NameOwnerChanged") ||
++        !p_dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &name, DBUS_TYPE_STRING, &old_owner,
++                                 DBUS_TYPE_STRING, &new_owner, DBUS_TYPE_INVALID) ||
++        strcmp(name, SNI_WATCHER_NAME) || !new_owner[0])
++        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++
++    TRACE(SNI_WATCHER_NAME " owner changed from %s to %s\n", debugstr_a(old_owner), debugstr_a(new_owner));
++
++    pthread_mutex_lock(&sni_mutex);
++    LIST_FOR_EACH_ENTRY(item, &sni_items, struct sni_item, entry)
++    {
++        if (!item->published || !(call = new_register_item_call(item))) continue;
++        p_dbus_connection_send(conn, call, NULL);
++        p_dbus_message_unref(call);
++    }
++    pthread_mutex_unlock(&sni_mutex);
++
++    /* Explorer re-docks every icon, like it does when an X11 tray appears. */
++    if (systray_hwnd) NtUserPostMessage(systray_hwnd, WM_USER + 1, 0, 0);
++    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
++}
++
++static BOOL sni_start_dispatch_thread(void)
++{
++    struct dispatch_callback_params params = {.callback = start_systray_thread_callback};
++    void *ret_ptr;
++    ULONG ret_len;
++    NTSTATUS status;
++
++    if (sni_dispatch_started) return TRUE;
++    if ((status = KeUserDispatchCallback(&params, sizeof(params), &ret_ptr, &ret_len)))
++    {
++        WARN("failed to start the dispatch thread, status %#x\n", (int)status);
++        return FALSE;
++    }
++    sni_dispatch_started = TRUE;
++    return TRUE;
++}
++
++/* Returns a reference to the bus connection, connecting if needed. Only ever
++ * called from the thread docking the icons. */
++static DBusConnection *sni_connect(void)
++{
++    static const char watcher_match[] =
++        "type='signal',sender='" DBUS_SERVICE_DBUS "',interface='" DBUS_INTERFACE_DBUS "',"
++        "member='NameOwnerChanged',arg0='" SNI_WATCHER_NAME "'";
++    static BOOL dbus_loaded, dbus_load_tried;
++    DBusConnection *conn;
++    DBusError error;
++
++    if ((conn = sni_get_connection())) return conn;
++
++    if (!dbus_load_tried)
++    {
++        dbus_load_tried = TRUE;
++        dbus_loaded = load_dbus_functions();
++    }
++    if (!dbus_loaded) return NULL;
++
++    p_dbus_threads_init_default();
++    p_dbus_error_init(&error);
++    if (!(conn = p_dbus_bus_get_private(DBUS_BUS_SESSION, &error)))
++    {
++        WARN("failed to connect to the session bus: %s\n", debugstr_a(error.message));
++        p_dbus_error_free(&error);
++        return NULL;
++    }
++    p_dbus_connection_set_exit_on_disconnect(conn, FALSE);
++
++    if (!p_dbus_connection_register_object_path(conn, SNI_ITEM_PATH, &sni_vtable, NULL) ||
++        !p_dbus_connection_add_filter(conn, sni_bus_filter, NULL, NULL))
++    {
++        WARN("failed to register the item object path\n");
++        goto failed;
++    }
++    p_dbus_bus_add_match(conn, watcher_match, NULL);
++
++    if (!sni_start_dispatch_thread()) goto failed;
++
++    /* The dispatch thread owns this reference and drops it on disconnect. */
++    pthread_mutex_lock(&sni_mutex);
++    sni_conn = conn;
++    p_dbus_connection_ref(conn);
++    pthread_cond_signal(&sni_cond);
++    pthread_mutex_unlock(&sni_mutex);
++
++    TRACE("connected to the session bus\n");
++    return conn;
++
++failed:
++    p_dbus_connection_close(conn);
++    p_dbus_connection_unref(conn);
++    return NULL;
++}
++
++void wayland_systray_dispatch(void)
++{
++    struct sni_item *item;
++    DBusConnection *conn;
++
++    for (;;)
++    {
++        pthread_mutex_lock(&sni_mutex);
++        while (!sni_conn) pthread_cond_wait(&sni_cond, &sni_mutex);
++        conn = sni_conn;
++        pthread_mutex_unlock(&sni_mutex);
++
++        /* The finite timeout bounds how long the threads sending from outside
++         * this loop wait for the I/O path of the connection. */
++        while (p_dbus_connection_read_write_dispatch(conn, 200)) continue;
++
++        WARN("lost the session bus connection\n");
++        pthread_mutex_lock(&sni_mutex);
++        sni_conn = NULL;
++        LIST_FOR_EACH_ENTRY(item, &sni_items, struct sni_item, entry) item->published = FALSE;
++        pthread_mutex_unlock(&sni_mutex);
++        p_dbus_connection_close(conn);
++        p_dbus_connection_unref(conn);
++
++        /* Explorer re-docks every icon, which publishes them again on a new
++         * connection. */
++        if (systray_hwnd) NtUserPostMessage(systray_hwnd, WM_USER + 1, 0, 0);
++    }
++}
++
++static void sni_signal_item(DBusConnection *conn, const char *name)
++{
++    DBusMessage *msg;
++
++    if (!(msg = p_dbus_message_new_signal(SNI_ITEM_PATH, SNI_ITEM_INTERFACE, name))) return;
++    p_dbus_connection_send(conn, msg, NULL);
++    p_dbus_message_unref(msg);
++}
++
++static void sni_signal_changes(unsigned int changed)
++{
++    DBusConnection *conn;
++
++    if (!changed || !(conn = sni_get_connection())) return;
++    if (changed & SNI_CHANGED_ICON) sni_signal_item(conn, "NewIcon");
++    if (changed & SNI_CHANGED_TOOLTIP)
++    {
++        sni_signal_item(conn, "NewToolTip");
++        sni_signal_item(conn, "NewTitle");
++    }
++    p_dbus_connection_unref(conn);
++}
++
++/* Update an item from a snapshot, taking ownership of the pixmap. */
++static unsigned int sni_update_item(struct sni_item *item, const struct systray_icon_snapshot *icon,
++                                    unsigned char *argb, int width, int height)
++{
++    unsigned int changed = 0;
++
++    item->owner_hwnd = icon->owner;
++    item->id = icon->id;
++    item->callback_message = icon->callback_message;
++    item->version = icon->version;
++
++    if (memcmp(item->tiptext, icon->tiptext, sizeof(item->tiptext)))
++    {
++        memcpy(item->tiptext, icon->tiptext, sizeof(item->tiptext));
++        changed |= SNI_CHANGED_TOOLTIP;
++    }
++
++    if (!argb != !item->icon_argb || width != item->icon_width || height != item->icon_height ||
++        (argb && memcmp(argb, item->icon_argb, width * height * 4)))
++    {
++        free(item->icon_argb);
++        item->icon_argb = argb;
++        item->icon_width = width;
++        item->icon_height = height;
++        changed |= SNI_CHANGED_ICON;
++    }
++    else free(argb);
++
++    return changed;
++}
++
++/* Claim a bus name for the item and register it with the watcher. */
++static BOOL sni_publish_item(struct sni_item *item)
++{
++    DBusConnection *conn;
++    DBusError error;
++    int ret;
++
++    if (!(conn = sni_connect())) return FALSE;
++
++    pthread_mutex_lock(&sni_mutex);
++    item->serial = ++sni_serial;
++    snprintf(item->service, sizeof(item->service), SNI_ITEM_INTERFACE "-%u-%d",
++             (unsigned int)getpid(), item->serial);
++    pthread_mutex_unlock(&sni_mutex);
++
++    p_dbus_error_init(&error);
++    ret = p_dbus_bus_request_name(conn, item->service, DBUS_NAME_FLAG_DO_NOT_QUEUE, &error);
++    if (ret != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER)
++    {
++        WARN("failed to own %s: %s\n", item->service, debugstr_a(error.message));
++        p_dbus_error_free(&error);
++        p_dbus_connection_unref(conn);
++        return FALSE;
++    }
++
++    pthread_mutex_lock(&sni_mutex);
++    item->published = TRUE;
++    pthread_mutex_unlock(&sni_mutex);
++
++    sni_register_item(conn, item);
++    p_dbus_connection_unref(conn);
++    return TRUE;
++}
++
++static void send_tray_callback(const struct sni_callback *callback, UINT msg, BOOL wait)
++{
++    WPARAM wparam = callback->id;
++    LPARAM lparam = msg;
++
++    if (callback->version >= NOTIFYICON_VERSION_4)
++    {
++        wparam = MAKEWPARAM(callback->x, callback->y);
++        lparam = MAKELPARAM(msg, callback->id);
++    }
++
++    TRACE("sending msg %#x to hwnd %p id %u wait=%d\n", msg, callback->owner_hwnd, callback->id, wait);
++    if (wait)
++        send_message_timeout(callback->owner_hwnd, callback->callback_message, wparam, lparam,
++                             SMTO_ABORTIFHUNG, 2000, NULL);
++    else
++        NtUserMessageCall(callback->owner_hwnd, callback->callback_message, wparam, lparam, NULL,
++                          NtUserSendNotifyMessage, FALSE);
++}
++
++void wayland_systray_process_callback(void *data)
++{
++    struct sni_callback *callback = data;
++    RECT virtual_rect = NtUserGetVirtualScreenRect(MDT_DEFAULT);
++
++    TRACE("hwnd=%p owner=%p id=%u version=%u down=%#x up=%#x pos=%d,%d\n",
++          callback->window_hwnd, callback->owner_hwnd, callback->id, callback->version,
++          callback->down_msg, callback->up_msg, callback->x, callback->y);
++
++    /* Hosts report compositor coordinates. Applications that build their menu
++     * at GetCursorPos() need them, but they only map onto Wine's screen when
++     * the position is inside it. */
++    if (callback->x >= virtual_rect.left && callback->x < virtual_rect.right &&
++        callback->y >= virtual_rect.top && callback->y < virtual_rect.bottom)
++        NtUserSetCursorPos(callback->x, callback->y);
++
++    if (callback->context_menu) NtUserSetForegroundWindow(callback->owner_hwnd);
++
++    send_tray_callback(callback, callback->down_msg, FALSE);
++    /* Applications opening a menu from the button up notification need it to
++     * complete before the foreground handoff below. */
++    send_tray_callback(callback, callback->up_msg, callback->context_menu && !callback->version);
++    if (callback->version)
++    {
++        if (callback->up_msg == WM_LBUTTONUP) send_tray_callback(callback, NIN_SELECT, FALSE);
++        else if (callback->up_msg == WM_RBUTTONUP) send_tray_callback(callback, WM_CONTEXTMENU, TRUE);
++    }
++    if (callback->context_menu)
++    {
++        NtUserPostMessage(callback->window_hwnd, WM_NULL, 0, 0);
++        if (callback->owner_hwnd != callback->window_hwnd)
++            NtUserPostMessage(callback->owner_hwnd, WM_NULL, 0, 0);
++    }
++
++    free(callback);
++}
++
++void wayland_systray_init(UINT64 start_thread_callback)
++{
++    const char *env;
++
++    start_systray_thread_callback = start_thread_callback;
++    if ((env = getenv("WINE_SNI_ICON_NAME")) && env[0]) sni_icon_name = strdup(env);
++}
++
++/***********************************************************************
++ *           WAYLAND_SystrayDockInit
++ */
++void WAYLAND_SystrayDockInit(HWND hwnd)
++{
++    TRACE("hwnd=%p\n", hwnd);
++    /* The bus is only needed once an icon is docked. */
++    systray_hwnd = hwnd;
++}
++
++/***********************************************************************
++ *           WAYLAND_SystrayDockInsert
++ *
++ * Explorer repeats the insert with the same window to update a docked icon.
++ */
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, const struct systray_icon_snapshot *icon)
++{
++    unsigned char *argb = NULL;
++    int width = 0, height = 0;
++    struct sni_item *item;
++    unsigned int changed;
++    BOOL added = FALSE, published;
++
++    TRACE("hwnd=%p owner=%p id=%u version=%u\n", hwnd, icon->owner, icon->id, icon->version);
++
++    if (icon->image) argb = icon_to_argb32(icon->image, &width, &height);
++
++    pthread_mutex_lock(&sni_mutex);
++    if (!(item = sni_find_by_window(hwnd)))
++    {
++        if (!(item = calloc(1, sizeof(*item))))
++        {
++            pthread_mutex_unlock(&sni_mutex);
++            free(argb);
++            return FALSE;
++        }
++        item->window_hwnd = hwnd;
++        list_add_tail(&sni_items, &item->entry);
++        added = TRUE;
++    }
++    changed = sni_update_item(item, icon, argb, width, height);
++    published = item->published;
++    pthread_mutex_unlock(&sni_mutex);
++
++    if (published)
++    {
++        TRACE("updated %s changed=%#x\n", item->service, changed);
++        sni_signal_changes(changed);
++        return TRUE;
++    }
++    if (sni_publish_item(item)) return TRUE;
++    /* An item explorer already docked stays in the list, so that removing it
++     * keeps working. */
++    if (!added) return FALSE;
++
++    pthread_mutex_lock(&sni_mutex);
++    list_remove(&item->entry);
++    pthread_mutex_unlock(&sni_mutex);
++    sni_free_item(item);
++    return FALSE;
++}
++
++/***********************************************************************
++ *           WAYLAND_SystrayDockClear
++ */
++void WAYLAND_SystrayDockClear(HWND hwnd)
++{
++    /* Icon changes reach us through a new snapshot on dock insert. */
++    TRACE("hwnd=%p\n", hwnd);
++}
++
++/***********************************************************************
++ *           WAYLAND_SystrayDockRemove
++ */
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd)
++{
++    struct sni_item *item;
++    DBusConnection *conn;
++
++    TRACE("hwnd=%p\n", hwnd);
++
++    pthread_mutex_lock(&sni_mutex);
++    if (!(item = sni_find_by_window(hwnd)))
++    {
++        pthread_mutex_unlock(&sni_mutex);
++        return FALSE;
++    }
++    list_remove(&item->entry);
++    pthread_mutex_unlock(&sni_mutex);
++
++    if (item->published && (conn = sni_get_connection()))
++    {
++        p_dbus_bus_release_name(conn, item->service, NULL);
++        p_dbus_connection_unref(conn);
++    }
++    sni_free_item(item);
++    return TRUE;
++}
++
++#else /* SONAME_LIBDBUS_1 */
++
++void wayland_systray_init(UINT64 start_thread_callback)
++{
++}
++
++void wayland_systray_dispatch(void)
++{
++}
++
++void wayland_systray_process_callback(void *data)
++{
++}
++
++void WAYLAND_SystrayDockInit(HWND hwnd)
++{
++}
++
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy, const struct systray_icon_snapshot *icon)
++{
++    static BOOL once;
++
++    if (!once++) FIXME("built without libdbus, tray icons are not published\n");
++    return FALSE;
++}
++
++void WAYLAND_SystrayDockClear(HWND hwnd)
++{
++}
++
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd)
++{
++    return FALSE;
++}
++
++#endif /* SONAME_LIBDBUS_1 */
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index 4b5d8ab..f383342 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -83,6 +83,7 @@ enum wayland_window_message
+ {
+     WM_WAYLAND_INIT_DISPLAY_DEVICES = WM_WINE_FIRST_DRIVER_MSG,
+     WM_WAYLAND_CONFIGURE,
++    WM_WAYLAND_SNI_CALLBACK,
+ };
+ 
+ enum wayland_surface_config_state
+@@ -566,6 +567,14 @@ void wayland_text_input_deinit(void);
+ 
+ void wayland_data_device_init(void);
+ 
++/**********************************************************************
++ *          Wayland systray
++ */
++
++void wayland_systray_init(UINT64 start_thread_callback);
++void wayland_systray_dispatch(void);
++void wayland_systray_process_callback(void *data);
++
+ /**********************************************************************
+  *          Helpers
+  */
+@@ -584,6 +593,16 @@ static inline LRESULT send_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
+     return NtUserMessageCall(hwnd, msg, wparam, lparam, NULL, NtUserSendMessage, FALSE);
+ }
+ 
++static inline LRESULT send_message_timeout(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
++                                           UINT flags, UINT timeout, DWORD_PTR *result)
++{
++    struct send_message_timeout_params params = {.flags = flags, .timeout = timeout};
++    LRESULT ret = NtUserMessageCall(hwnd, msg, wparam, lparam, &params,
++                                    NtUserSendMessageTimeout, FALSE);
++    if (result) *result = params.result;
++    return ret;
++}
++
+ static inline BOOL is_decoration_enabled(DWORD style, DWORD ex_style)
+ {
+     if (ex_style & WS_EX_TOOLWINDOW) return FALSE;
+@@ -615,6 +634,11 @@ void WAYLAND_SetLayeredWindowAttributes(HWND hwnd, COLORREF key, BYTE alpha, DWO
+ void WAYLAND_SetWindowIcons(HWND hwnd, HICON icon, const ICONINFO *ii, HICON icon_small, const ICONINFO *ii_small);
+ void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
+ void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
++void WAYLAND_SystrayDockInit(HWND hwnd);
++BOOL WAYLAND_SystrayDockInsert(HWND hwnd, UINT cx, UINT cy,
++                               const struct systray_icon_snapshot *icon);
++void WAYLAND_SystrayDockClear(HWND hwnd);
++BOOL WAYLAND_SystrayDockRemove(HWND hwnd);
+ LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
+ void WAYLAND_UpdateLayeredWindow(HWND hwnd, BYTE alpha, UINT flags);
+ UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
+diff --git a/dlls/winewayland.drv/waylanddrv_main.c b/dlls/winewayland.drv/waylanddrv_main.c
+index 3c56601..18864ee 100644
+--- a/dlls/winewayland.drv/waylanddrv_main.c
++++ b/dlls/winewayland.drv/waylanddrv_main.c
+@@ -56,6 +56,10 @@ static const struct user_driver_funcs waylanddrv_funcs =
+     .pSetWindowStyle = WAYLAND_SetWindowStyle,
+     .pSetWindowText = WAYLAND_SetWindowText,
+     .pSysCommand = WAYLAND_SysCommand,
++    .pSystrayDockInit = WAYLAND_SystrayDockInit,
++    .pSystrayDockInsert = WAYLAND_SystrayDockInsert,
++    .pSystrayDockClear = WAYLAND_SystrayDockClear,
++    .pSystrayDockRemove = WAYLAND_SystrayDockRemove,
+     .pUpdateLayeredWindow = WAYLAND_UpdateLayeredWindow,
+     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
+     .pWindowMessage = WAYLAND_WindowMessage,
+@@ -114,12 +118,15 @@ static void wayland_init_activation_token(void)
+ 
+ static NTSTATUS waylanddrv_unix_init(void *arg)
+ {
++    const struct init_params *params = arg;
++
+     /* Set the user driver functions now so that they are available during
+      * our initialization. We clear them on error. */
+     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
+ 
+     wayland_init_process_name();
+     wayland_init_activation_token();
++    wayland_systray_init(params->start_systray_thread);
+ 
+     if (!wayland_process_init()) goto err;
+ 
+@@ -166,11 +173,18 @@ static NTSTATUS waylanddrv_unix_init_clipboard(void *arg)
+     return STATUS_SUCCESS;
+ }
+ 
++static NTSTATUS waylanddrv_unix_dispatch_systray(void *arg)
++{
++    wayland_systray_dispatch();
++    return STATUS_SUCCESS;
++}
++
+ const unixlib_entry_t __wine_unix_call_funcs[] =
+ {
+     waylanddrv_unix_init,
+     waylanddrv_unix_read_events,
+     waylanddrv_unix_init_clipboard,
++    waylanddrv_unix_dispatch_systray,
+ };
+ 
+ C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == waylanddrv_unix_func_count);
+@@ -182,6 +196,7 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
+     waylanddrv_unix_init,
+     waylanddrv_unix_read_events,
+     waylanddrv_unix_init_clipboard,
++    waylanddrv_unix_dispatch_systray,
+ };
+ 
+ C_ASSERT(ARRAYSIZE(__wine_unix_call_wow64_funcs) == waylanddrv_unix_func_count);
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index 887ee49..186a721 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -659,6 +659,9 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+     case WM_WAYLAND_CONFIGURE:
+         wayland_configure_window(hwnd);
+         return 0;
++    case WM_WAYLAND_SNI_CALLBACK:
++        wayland_systray_process_callback((void *)lp);
++        return 0;
+     default:
+         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, (long)wp, lp);
+         return 0;
+-- 
+2.55.0
+

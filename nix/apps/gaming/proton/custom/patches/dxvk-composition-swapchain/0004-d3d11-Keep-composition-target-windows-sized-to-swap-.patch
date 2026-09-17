@@ -1,0 +1,123 @@
+From d423d582107e5ebaf3f477000755b26a445efab1 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:49:39 -0700
+Subject: [PATCH 4/8] [d3d11] Keep composition target windows sized to swap
+ chains
+
+Wine's dcomp sizes the host window of a composition swap chain from the
+swap chain description when it commits the visual tree, but it only
+does so on commit. Between a ResizeBuffers call and the next commit the
+host keeps its old client size, so the presenter recreates its swap
+chain at that size and the compositor scales the new frames until the
+next commit catches up. Snap, tile and maximize transitions of the
+parent window make this visible.
+
+Track whether the bound target is a child host, i.e. differs from the
+dispatch window, and resize it to the swap chain extent both when the
+target is bound and when the buffers are resized. Top-level targets
+belong to the application and are left alone.
+
+The host window belongs to the dcomp commit thread. A synchronous
+SetWindowPos from the render thread would wait for that thread's
+message loop while DXGI swap chain locks are held, which is a hang
+hazard whenever the commit thread itself touches a swap chain. Use
+SWP_ASYNCWINDOWPOS instead and let the host thread apply the size on
+its own; the presenter picks the new client size up on the following
+present.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 31 ++++++++++++++++++++++++++++++-
+ src/d3d11/d3d11_swapchain.h   |  5 +++++
+ 2 files changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 1d6949c..a59df54 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -215,8 +215,10 @@ namespace dxvk {
+     if (m_desc.Format != pDesc->Format)
+       m_presenter->setSurfaceFormat(GetSurfaceFormat(pDesc->Format));
+ 
+-    if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height)
++    if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height) {
+       m_presenter->setSurfaceExtent({ pDesc->Width, pDesc->Height });
++      ResizeCompositionTarget(pDesc->Width, pDesc->Height);
++    }
+ 
+     m_desc = *pDesc;
+     CreateBackBuffers();
+@@ -402,6 +404,7 @@ namespace dxvk {
+     {
+       std::lock_guard<dxvk::mutex> lock(m_compositionLock);
+       previousTarget = std::exchange(m_compositionTarget, hTarget);
++      m_compositionChildTarget = hTarget && hTarget != hDispatch;
+     }
+ 
+     if (hTarget == previousTarget)
+@@ -413,6 +416,8 @@ namespace dxvk {
+     // the new window during the next present.
+     m_surfaceFactory->SetWindow(hTarget);
+     m_presenter->destroyResources();
++
++    ResizeCompositionTarget(m_desc.Width, m_desc.Height);
+   }
+ 
+ 
+@@ -565,6 +570,30 @@ namespace dxvk {
+   }
+ 
+ 
++  void D3D11SwapChain::ResizeCompositionTarget(
++          UINT                      Width,
++          UINT                      Height) {
++    HWND target = nullptr;
++
++    {
++      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
++
++      if (m_compositionChildTarget)
++        target = m_compositionTarget;
++    }
++
++    if (!target || !Width || !Height)
++      return;
++
++#ifdef _WIN32
++    // The host window belongs to the compositor's thread,
++    // so never wait for that thread to process the change
++    ::SetWindowPos(target, nullptr, 0, 0, Width, Height, SWP_NOMOVE
++      | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
++#endif
++  }
++
++
+   void D3D11SwapChain::CreateFrameLatencyEvent() {
+     m_frameLatencySignal = new sync::CallbackFence(m_frameId);
+ 
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 6d39e96..151bbbb 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -165,6 +165,7 @@ namespace dxvk {
+ 
+     dxvk::mutex               m_compositionLock;
+     HWND                      m_compositionTarget = nullptr;
++    bool                      m_compositionChildTarget = false;
+ 
+     Rc<hud::HudLatencyItem>   m_latencyHud;
+ 
+@@ -174,6 +175,10 @@ namespace dxvk {
+ 
+     void RotateBackBuffers(D3D11ImmediateContext* ctx);
+ 
++    void ResizeCompositionTarget(
++            UINT                      Width,
++            UINT                      Height);
++
+     void CreateFrameLatencyEvent();
+ 
+     void CreatePresenter();
+-- 
+2.55.0
+

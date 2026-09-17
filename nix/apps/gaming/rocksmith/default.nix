@@ -6,6 +6,7 @@ let
     && config.settings.apps.steam.enable
     && pkgs.stdenv.hostPlatform.isx86_64;
   user = config.settings.users.admin.username;
+  group = config.users.users.${user}.group;
   home = "/home/${user}";
   sampleSize = config.settings.rocksmith.sampleSize;
   cdlcPath = config.settings.rocksmith.cdlcPath;
@@ -80,10 +81,15 @@ in lib.mkIf enabled {
 
   system.activationScripts.rocksmith = lib.stringAfter [ "users" "protonCustomCompatTool" ] ''
     export PATH="${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnused}/bin:${pkgs.gnugrep}/bin:${pkgs.util-linux}/bin:$PATH"
-    install -d -o ${user} -g users "${cdlcPath}" "${slopsmithConfigPath}"
+    owned_dir() {  # install -d only owns the leaf; walk parents below $HOME
+      case "$1" in "${home}"/*/*) owned_dir "$(dirname "$1")";; esac
+      install -d -o ${user} -g ${group} "$1"
+    }
+    owned_dir "${cdlcPath}"
+    owned_dir "${slopsmithConfigPath}"
 
     if [ -d "${gamePath}" ]; then
-      install -d -o ${user} -g users "${dlcPath}"
+      install -d -o ${user} -g ${group} "${dlcPath}"
       cp -f ${mods}/RS_ASIO.dll "${gamePath}/"
       cp -f ${mods}/avrt.dll "${gamePath}/"
       cp -f ${mods}/RS_ASIO.ini "${gamePath}/"

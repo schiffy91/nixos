@@ -1,9 +1,9 @@
-import std.fs;
-import std.json;
-import std.map;
-import std.strings;
-import std.toml;
-import std.vector;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Map;
+import Library.Strings;
+import Library.TOML;
+import Library.Vector;
 import ../../../btrc/core/log.btrc;
 import ./args.btrc;
 import ./operation.btrc;
@@ -12,19 +12,19 @@ import ./test_spec.btrc;
 class VmSpecParser {
     class VmOperation operation(string objectText) {
         var op = VmOperation();
-        op.kind = JsonText.field(objectText, "op", "");
-        op.command = JsonText.field(objectText, "command", "");
-        op.expect = JsonText.field(objectText, "expect", "");
-        op.name = JsonText.field(objectText, "name", "");
-        op.localPath = JsonText.field(objectText, "local", "");
-        op.remotePath = JsonText.field(objectText, "remote", "");
-        op.timeout = JsonText.intField(objectText, "timeout", 120);
+        op.kind = JSONText.field(objectText, "op", "");
+        op.command = JSONText.field(objectText, "command", "");
+        op.expect = JSONText.field(objectText, "expect", "");
+        op.name = JSONText.field(objectText, "name", "");
+        op.localPath = JSONText.field(objectText, "local", "");
+        op.remotePath = JSONText.field(objectText, "remote", "");
+        op.timeout = JSONText.intField(objectText, "timeout", 120);
         return op;
     }
 
     class Vector<VmOperation> operations(string text) {
         Vector<VmOperation> result = [];
-        for objectText in JsonText.objectArray(text, "operations") {
+        for objectText in JSONText.objectArray(text, "operations") {
             result.push(VmSpecParser.operation(objectText));
         }
         return result;
@@ -39,24 +39,24 @@ class VmSpecParser {
 
     class VmTestSpec parse(string text) {
         var spec = VmTestSpec();
-        var hasState = JsonText.keyPosition(text, "state") >= 0;
-        var hasWorkDir = JsonText.keyPosition(text, "workDir") >= 0;
-        var hasIso = JsonText.keyPosition(text, "iso") >= 0;
-        var hasIsoUrl = JsonText.keyPosition(text, "isoUrl") >= 0;
-        spec.name = JsonText.field(text, "name", spec.name);
-        spec.arch = JsonText.field(text, "arch", spec.arch);
-        spec.state = JsonText.field(text, "state", spec.state);
-        spec.parentState = JsonText.field(text, "parentState", spec.parentState);
-        spec.stateRoot = JsonText.field(text, "stateRoot", spec.stateRoot);
-        spec.stateMaterial = JsonText.field(text, "stateMaterial", spec.stateMaterial);
-        spec.workDir = JsonText.field(text, "workDir", spec.workDir);
-        spec.iso = JsonText.field(text, "iso", spec.iso);
-        spec.isoUrl = JsonText.field(text, "isoUrl", spec.isoUrl);
-        spec.diskSize = JsonText.field(text, "diskSize", spec.diskSize);
-        spec.memory = JsonText.field(text, "memory", spec.memory);
-        spec.cpus = JsonText.intField(text, "cpus", spec.cpus);
-        spec.sshPort = JsonText.intField(text, "sshPort", spec.sshPort);
-        spec.args = JsonText.argsObject(text);
+        var hasState = JSONText.keyPosition(text, "state") >= 0;
+        var hasWorkDir = JSONText.keyPosition(text, "workDir") >= 0;
+        var hasIso = JSONText.keyPosition(text, "iso") >= 0;
+        var hasIsoUrl = JSONText.keyPosition(text, "isoUrl") >= 0;
+        spec.name = JSONText.field(text, "name", spec.name);
+        spec.arch = JSONText.field(text, "arch", spec.arch);
+        spec.state = JSONText.field(text, "state", spec.state);
+        spec.parentState = JSONText.field(text, "parentState", spec.parentState);
+        spec.stateRoot = JSONText.field(text, "stateRoot", spec.stateRoot);
+        spec.stateMaterial = JSONText.field(text, "stateMaterial", spec.stateMaterial);
+        spec.workDir = JSONText.field(text, "workDir", spec.workDir);
+        spec.iso = JSONText.field(text, "iso", spec.iso);
+        spec.isoUrl = JSONText.field(text, "isoUrl", spec.isoUrl);
+        spec.diskSize = JSONText.field(text, "diskSize", spec.diskSize);
+        spec.memory = JSONText.field(text, "memory", spec.memory);
+        spec.cpus = JSONText.intField(text, "cpus", spec.cpus);
+        spec.sshPort = JSONText.intField(text, "sshPort", spec.sshPort);
+        spec.args = JSONText.argsObject(text);
         spec.operations = VmSpecParser.operations(text);
         VmSpecParser.normalize(spec, hasState, hasWorkDir, hasIso, hasIsoUrl);
         return spec;
@@ -96,14 +96,14 @@ class VmSpecParser {
     class Map<string, string> tomlRootMap(string text) {
         Map<string, string> result = {};
         for line in Strings.split(text, "\n") {
-            var cleaned = Toml.stripInlineComment(line);
+            var cleaned = TOML.stripInlineComment(line);
             if (cleaned.isEmpty()) { continue; }
-            if (!Toml.sectionName(cleaned).isEmpty() || !Toml.tableArrayName(cleaned).isEmpty()) {
+            if (!TOML.sectionName(cleaned).isEmpty() || !TOML.tableArrayName(cleaned).isEmpty()) {
                 break;
             }
-            var key = Toml.key(cleaned);
+            var key = TOML.key(cleaned);
             if (!key.isEmpty()) {
-                result.put(key, Toml.value(cleaned));
+                result.put(key, TOML.value(cleaned));
             }
         }
         return result;
@@ -112,13 +112,13 @@ class VmSpecParser {
     class string yamlKey(string line) {
         var pos = Strings.find(line, ":", 0);
         if (pos < 0) { return ""; }
-        return Toml.unquote(line.substring(0, pos).trim());
+        return TOML.unquote(line.substring(0, pos).trim());
     }
 
     class string yamlValue(string line) {
         var pos = Strings.find(line, ":", 0);
         if (pos < 0) { return ""; }
-        return Toml.unquote(Toml.stripInlineComment(line.substring(pos + 1, line.len() - pos - 1)).trim());
+        return TOML.unquote(TOML.stripInlineComment(line.substring(pos + 1, line.len() - pos - 1)).trim());
     }
 
     class VmTestSpec parseToml(string text) {
@@ -127,10 +127,10 @@ class VmSpecParser {
         for key, value in root {
             VmSpecParser.applySpecField(spec, key, value);
         }
-        for key, value in Toml.sectionMap(text, "args") {
+        for key, value in TOML.sectionMap(text, "args") {
             spec.args.put(key, value);
         }
-        for fields in Toml.tableArrayBlocks(text, "operations") {
+        for fields in TOML.tableArrayBlocks(text, "operations") {
             var op = VmOperation();
             for key, value in fields {
                 VmSpecParser.applyOperationField(op, key, value);
@@ -151,7 +151,7 @@ class VmSpecParser {
         var op = VmOperation();
         var lines = Strings.split(text, "\n");
         for raw in lines {
-            var line = Toml.stripInlineComment(raw);
+            var line = TOML.stripInlineComment(raw);
             if (line.trim().isEmpty()) { continue; }
             var trimmed = line.trim();
             if (trimmed.equals("args:")) {

@@ -1,47 +1,130 @@
-From 419289323ff6ad77a201001cf758005cd28e84d2 Mon Sep 17 00:00:00 2001
+From 847ae9e0462c408df45ac262084afef3e2932a6b Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Wed, 20 May 2026 06:03:54 -0700
-Subject: [PATCH] dxgi: Create a hidden swap chain for composition
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 06/19] dxgi: Create a hidden swap chain for composition.
+
+CreateSwapChainForComposition() creates a swap chain without an output
+window; whoever composes it presents it. Give the swap chain a message-only
+window to stand in for the output window, and keep that window alive exactly
+as long as the swap chain by attaching it to the swap chain's private data.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/dxgi/factory.c | 24 +++++++++++++++++++++---
- 1 file changed, 21 insertions(+), 3 deletions(-)
+ dlls/dxgi/factory.c | 96 ++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 94 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dxgi/factory.c b/dlls/dxgi/factory.c
-index ebdb42a..c7155e5 100644
+index ebdb42a..461845c 100644
 --- a/dlls/dxgi/factory.c
 +++ b/dlls/dxgi/factory.c
-@@ -381,10 +381,28 @@ static void STDMETHODCALLTYPE dxgi_factory_UnregisterOcclusionStatus(IWineDXGIFa
+@@ -378,13 +378,105 @@ static void STDMETHODCALLTYPE dxgi_factory_UnregisterOcclusionStatus(IWineDXGIFa
+     FIXME("iface %p, cookie %#lx stub!\n", iface, cookie);
+ }
+ 
++/* Composition swap chains have no window of their own; they present through
++ * whatever composes them. A message-only window stands in for the output
++ * window and lives as long as the swap chain. */
++struct dxgi_composition_window
++{
++    IUnknown IUnknown_iface;
++    LONG refcount;
++    HWND window;
++};
++
++static const GUID GUID_dxgi_composition_window =
++        {0x8cf311ee, 0xf401, 0x4647, {0x86, 0x6c, 0x13, 0xa0, 0x3e, 0x08, 0x86, 0x09}};
++
++static inline struct dxgi_composition_window *impl_from_composition_window_IUnknown(IUnknown *iface)
++{
++    return CONTAINING_RECORD(iface, struct dxgi_composition_window, IUnknown_iface);
++}
++
++static HRESULT STDMETHODCALLTYPE dxgi_composition_window_QueryInterface(IUnknown *iface, REFIID iid, void **out)
++{
++    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
++
++    if (IsEqualGUID(iid, &IID_IUnknown))
++    {
++        IUnknown_AddRef(iface);
++        *out = iface;
++        return S_OK;
++    }
++
++    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG STDMETHODCALLTYPE dxgi_composition_window_AddRef(IUnknown *iface)
++{
++    struct dxgi_composition_window *window = impl_from_composition_window_IUnknown(iface);
++    ULONG refcount = InterlockedIncrement(&window->refcount);
++
++    TRACE("%p increasing refcount to %lu.\n", window, refcount);
++
++    return refcount;
++}
++
++static ULONG STDMETHODCALLTYPE dxgi_composition_window_Release(IUnknown *iface)
++{
++    struct dxgi_composition_window *window = impl_from_composition_window_IUnknown(iface);
++    ULONG refcount = InterlockedDecrement(&window->refcount);
++
++    TRACE("%p decreasing refcount to %lu.\n", window, refcount);
++
++    if (!refcount)
++    {
++        /* The swap chain may be released on any thread; only the creating
++         * thread can destroy the window. */
++        if (GetWindowThreadProcessId(window->window, NULL) == GetCurrentThreadId())
++            DestroyWindow(window->window);
++        else
++            PostMessageW(window->window, WM_CLOSE, 0, 0);
++        free(window);
++    }
++
++    return refcount;
++}
++
++static const struct IUnknownVtbl dxgi_composition_window_vtbl =
++{
++    dxgi_composition_window_QueryInterface,
++    dxgi_composition_window_AddRef,
++    dxgi_composition_window_Release,
++};
++
  static HRESULT STDMETHODCALLTYPE dxgi_factory_CreateSwapChainForComposition(IWineDXGIFactory *iface,
          IUnknown *device, const DXGI_SWAP_CHAIN_DESC1 *desc, IDXGIOutput *output, IDXGISwapChain1 **swapchain)
  {
 -    FIXME("iface %p, device %p, desc %p, output %p, swapchain %p stub!\n",
--            iface, device, desc, output, swapchain);
-+    /* Route through CreateSwapChainForHwnd with an HWND_MESSAGE hidden window.
-+     * DirectComposition clients bind this swap chain to a visual; dcomp.dll
-+     * then drives the actual presentation path from Commit(). */
-+    DXGI_SWAP_CHAIN_FULLSCREEN_DESC fs = {0};
-+    HWND hidden;
++    DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc = {0};
++    struct dxgi_composition_window *window;
 +    HRESULT hr;
++
++    TRACE("iface %p, device %p, desc %p, output %p, swapchain %p.\n",
+             iface, device, desc, output, swapchain);
  
 -    return E_NOTIMPL;
-+    TRACE("iface %p, device %p, desc %p, output %p.\n",
-+          iface, device, desc, output);
-+
-+    if (!device || !desc || !swapchain) return DXGI_ERROR_INVALID_CALL;
-+
-+    fs.Windowed = TRUE;
-+    hidden = CreateWindowExW(0, L"Message", NULL, 0, 0, 0, 1, 1, HWND_MESSAGE, NULL, NULL, NULL);
-+    if (!hidden)
++    if (!(window = calloc(1, sizeof(*window))))
++        return E_OUTOFMEMORY;
++    window->IUnknown_iface.lpVtbl = &dxgi_composition_window_vtbl;
++    window->refcount = 1;
++    if (!(window->window = CreateWindowExW(0, L"Message", NULL, 0, 0, 0, 1, 1, HWND_MESSAGE, NULL, NULL, NULL)))
 +    {
-+        ERR("hidden HWND alloc failed\n");
++        ERR("Failed to create window.\n");
++        free(window);
 +        return E_FAIL;
 +    }
-+    hr = dxgi_factory_CreateSwapChainForHwnd(iface, device, hidden, desc, &fs, output, swapchain);
-+    if (FAILED(hr)) DestroyWindow(hidden);
++
++    fullscreen_desc.Windowed = TRUE;
++    if (SUCCEEDED(hr = dxgi_factory_CreateSwapChainForHwnd(iface, device, window->window,
++            desc, &fullscreen_desc, output, swapchain)))
++        IDXGISwapChain1_SetPrivateDataInterface(*swapchain, &GUID_dxgi_composition_window, &window->IUnknown_iface);
++    IUnknown_Release(&window->IUnknown_iface);
 +    return hr;
  }
  
  static UINT STDMETHODCALLTYPE dxgi_factory_GetCreationFlags(IWineDXGIFactory *iface)
+-- 
+2.55.0
+

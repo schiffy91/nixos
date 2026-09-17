@@ -1,59 +1,102 @@
-From 2e6033de4abe4ade957a6773f7a33adfe9ef1a5a Mon Sep 17 00:00:00 2001
+From 08e9b0865cf149864a8fb6d9fad684cac8b0ce04 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Thu, 21 May 2026 18:15:00 -0700
-Subject: [PATCH] dcomp: Host placed composition swap-chain visuals
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 10/19] dcomp: Host placed composition swap-chain visuals.
 
 DirectComposition visual placement and stacking are independent from the
 swap-chain alpha mode. Opaque child visuals still need their own
-presentation target so their offset, clip, and z-order are preserved.
+presentation target so their offset, clip and z-order are preserved.
 
-Keep the root identity swap chain on the target HWND. That avoids replacing
-the main window with a child presentation surface, while still giving CEF
-dialog, popup, and form-control layers their own positioned host windows.
+Keep swap chains at the origin of the target on the target window itself.
+That avoids replacing the main window with a child presentation surface,
+while still giving CEF dialog, popup and form-control layers their own
+positioned host windows.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/dcomp/device.c | 22 ++++++++++++++++++++--
- 1 file changed, 20 insertions(+), 2 deletions(-)
+ dlls/dcomp/device.c | 51 ++++++++++++++++++++++++++++-----------------
+ 1 file changed, 32 insertions(+), 19 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 34c9940..761c37a 100644
+index d335e73..54f8c27 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
-@@ -833,6 +833,25 @@ static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
-     return surface;
+@@ -1163,9 +1163,36 @@ static struct dcomp_placement dcomp_visual_placement(const struct dcomp_placemen
+     return placement;
  }
  
-+static BOOL dcomp_visual_needs_host(const struct dcomp_visual *v, BOOL has_surface)
-+{
-+    BOOL placed;
+-static BOOL dcomp_visual_swapchain_desc(const struct dcomp_visual *visual, DXGI_SWAP_CHAIN_DESC1 *desc)
++static void dcomp_visual_content_size(const struct dcomp_visual *visual, UINT *width, UINT *height)
+ {
+-    return visual->swapchain && SUCCEEDED(IDXGISwapChain1_GetDesc1(visual->swapchain, desc));
++    DXGI_SWAP_CHAIN_DESC1 desc;
 +
-+    if (has_surface) return TRUE;
-+    if (!v->has_swapchain_desc) return FALSE;
++    *width = 0;
++    *height = 0;
 +
-+    if (v->has_clip) return TRUE;
-+    placed = round_float(v->offset_x + v->transform.dx) ||
-+             round_float(v->offset_y + v->transform.dy) ||
-+             v->transform.m12 != 0.0f || v->transform.m21 != 0.0f ||
-+             v->transform.m11 != 1.0f || v->transform.m22 != 1.0f;
-+    if (placed) return TRUE;
-+
-+    if (v->parent && v->parent->parent) return TRUE;
-+
-+    return FALSE;
++    if (visual->surface)
++    {
++        *width = visual->surface->width;
++        *height = visual->surface->height;
++    }
++    else if (visual->swapchain && SUCCEEDED(IDXGISwapChain1_GetDesc1(visual->swapchain, &desc)))
++    {
++        *width = desc.Width;
++        *height = desc.Height;
++    }
 +}
 +
- static void dcomp_surface_reset_swapchain(struct dcomp_surface *s)
++/* Content at the origin of a target may be presented to the target window
++ * itself; everything else needs a child window positioned and clipped for it. */
++static BOOL dcomp_visual_needs_host(const struct dcomp_visual *visual, const struct dcomp_placement *placement)
++{
++    if (visual->surface)
++        return TRUE;
++    if (placement->x || placement->y || placement->has_clip)
++        return TRUE;
++    if (!dcomp_matrix_is_translation(&visual->transform))
++        return TRUE;
++    return visual->parent && visual->parent->parent;
+ }
+ 
+ static BOOL dcomp_visual_host_clip(HWND hwnd, const struct dcomp_placement *placement,
+@@ -1287,25 +1314,11 @@ static void dcomp_visual_bind(struct dcomp_commit *commit, struct dcomp_visual *
  {
-     if (s->swapchain)
-@@ -999,8 +1018,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-     target_hwnd = t->hwnd;
-     surface = dcomp_visual_surface(v);
-     dcomp_refresh_swapchain_desc(v);
--    if (v->content && (surface || (v->has_swapchain_desc &&
--        v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)))
-+    if (v->content && dcomp_visual_needs_host(v, !!surface))
+     struct dcomp_target *target = commit->target;
+     struct dcomp_placement placement;
+-    DXGI_SWAP_CHAIN_DESC1 desc = {0};
+     struct dcomp_visual *child;
+-    UINT width = 0, height = 0;
+-    BOOL needs_host = FALSE;
++    UINT width, height;
+ 
+     placement = dcomp_visual_placement(parent_placement, visual);
+-    if (visual->surface)
+-    {
+-        width = visual->surface->width;
+-        height = visual->surface->height;
+-        needs_host = TRUE;
+-    }
+-    else if (dcomp_visual_swapchain_desc(visual, &desc))
+-    {
+-        width = desc.Width;
+-        height = desc.Height;
+-        /* Opaque content may be presented to the target window itself. */
+-        needs_host = desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE;
+-    }
++    dcomp_visual_content_size(visual, &width, &height);
+ 
+     TRACE("visual %p, content %p, placement (%d, %d), size %ux%u, clip %s, target %p.\n",
+             visual, visual->content, placement.x, placement.y, width, height,
+@@ -1316,7 +1329,7 @@ static void dcomp_visual_bind(struct dcomp_commit *commit, struct dcomp_visual *
+         if (visual->host_hwnd)
+             dcomp_visual_teardown_host(visual);
+     }
+-    else if (needs_host)
++    else if (dcomp_visual_needs_host(visual, &placement))
      {
-         RECT host_clip;
-         int x = placement.x;
+         if (!dcomp_visual_update_host(commit, visual, &placement, width, height))
+         {
+-- 
+2.55.0
+

@@ -1,10 +1,10 @@
-import std.console;
-import std.fs;
-import std.graph;
-import std.map;
-import std.process;
-import std.strings;
-import std.vector;
+import Library.Console;
+import Library.FileSystem;
+import Library.Graph;
+import Library.Map;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ../runner.btrc;

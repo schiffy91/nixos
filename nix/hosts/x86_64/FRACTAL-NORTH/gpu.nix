@@ -3,6 +3,8 @@
   services.udev.extraRules = ''
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.nvidiaGpu}", SYMLINK+="dri/nvidia-card"
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.amdGpu}", SYMLINK+="dri/amd-card"
+    # Pro Display XDR diagnostic port, not a modem
+    SUBSYSTEM=="tty", ATTRS{idVendor}=="05ac", ATTRS{idProduct}=="9243", ENV{ID_MM_DEVICE_IGNORE}="1"
   '';
   boot = {
     kernelParams = [

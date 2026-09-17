@@ -1,44 +1,44 @@
-From 2181a3cbe29ef8398f338da0398a62d1ee48fa03 Mon Sep 17 00:00:00 2001
+From bdea281e394d891d69c4ab875c1a6457f2a0842d Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Fri, 22 May 2026 17:46:23 -0700
-Subject: [PATCH 06/11] d3d11: Preserve composition swap chain contents
+Date: Tue, 25 Aug 2026 23:50:00 -0700
+Subject: [PATCH 5/8] [d3d11] Preserve composition swap chain contents
 
-Composition swap chains still need to rotate back buffers so GetBuffer(0)
-continues to expose the writable buffer expected by flip-model clients. Some
-CEF clients repaint only damaged areas though, so the newly exposed buffer must
-start with the previous frame contents or stale regions can flicker.
+Composition swap chains still rotate their back buffers so that
+GetBuffer(0) keeps returning the writable buffer that flip-model
+clients expect. Some composition clients only repaint the damaged
+regions of a frame, though, so the buffer that becomes writable after a
+present has to start out with the contents of the frame just presented,
+or stale regions from older frames flicker through.
 
-Copy the presented composition image into the new back buffer after rotation to
-preserve the existing content without pinning the swap chain to a stale buffer.
+Copy the presented image into the newly exposed back buffer after the
+rotation whenever the swap chain is bound to a composition target. This
+keeps the previous frame without pinning the swap chain to a single
+buffer. Unbound composition swap chains and regular swap chains are not
+affected.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- src/d3d11/d3d11_swapchain.cpp | 22 +++++++++++++++++++---
+ src/d3d11/d3d11_swapchain.cpp | 19 ++++++++++++++++---
  src/d3d11/d3d11_swapchain.h   |  2 +-
- 2 files changed, 20 insertions(+), 4 deletions(-)
+ 2 files changed, 17 insertions(+), 4 deletions(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 8fe5a88..b1fc493 100644
+index a59df54..3253c25 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -567,8 +567,14 @@ namespace dxvk {
+@@ -526,8 +526,10 @@ namespace dxvk {
        cDevice->presentImage(cPresenter, cLatency, cFrameId, nullptr);
      });
  
-+    bool compositionTarget = false;
-+    {
-+      std::lock_guard<dxvk::mutex> lock(m_compositionLock);
-+      compositionTarget = m_compositionTarget;
-+    }
-+
++    // Composition clients may only repaint damaged regions
++    // of the next frame, so it has to start out as this one
      if (m_backBuffers.size() > 1u)
 -      RotateBackBuffers(immediateContext);
-+      RotateBackBuffers(immediateContext, compositionTarget);
++      RotateBackBuffers(immediateContext, compositionTarget != nullptr);
  
      immediateContext->FlushCsChunk();
  
-@@ -589,14 +595,15 @@ namespace dxvk {
+@@ -548,14 +550,15 @@ namespace dxvk {
    }
  
  
@@ -56,11 +56,12 @@ index 8fe5a88..b1fc493 100644
      ] (DxvkContext* ctx) {
        auto allocation = cImages[0]->storage();
  
-@@ -607,6 +614,15 @@ namespace dxvk {
+@@ -566,6 +569,16 @@ namespace dxvk {
  
        ctx->invalidateImage(cImages[cImages.size() - 1u],
          std::move(allocation), cImages[0]->info().layout);
 +
++      // The presented frame now lives in the last image
 +      if (cPreserveContents) {
 +        VkImageSubresourceLayers layers = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
 +
@@ -73,15 +74,18 @@ index 8fe5a88..b1fc493 100644
    }
  
 diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
-index ce1215f..94171d4 100644
+index 151bbbb..9219d4a 100644
 --- a/src/d3d11/d3d11_swapchain.h
 +++ b/src/d3d11/d3d11_swapchain.h
-@@ -168,7 +168,7 @@ namespace dxvk {
+@@ -173,7 +173,7 @@ namespace dxvk {
  
      HRESULT PresentImage(UINT SyncInterval);
  
 -    void RotateBackBuffers(D3D11ImmediateContext* ctx);
 +    void RotateBackBuffers(D3D11ImmediateContext* ctx, bool preserveContents);
  
-     void CreateFrameLatencyEvent();
- 
+     void ResizeCompositionTarget(
+             UINT                      Width,
+-- 
+2.55.0
+

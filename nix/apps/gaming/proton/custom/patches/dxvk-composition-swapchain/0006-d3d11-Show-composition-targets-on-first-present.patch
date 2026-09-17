@@ -1,0 +1,82 @@
+From 06b2e4f9bafac121103dee89fc7bfa8df96148b2 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:50:24 -0700
+Subject: [PATCH 6/8] [d3d11] Show composition targets on first present
+
+Wine's dcomp creates the host window of a composition swap chain hidden
+and leaves showing it to the swap chain owner. Showing it during the
+commit that binds the swap chain would expose an empty child window
+before the application has submitted a frame.
+
+Show child targets on the first present after they are bound, before
+the presenter creates or acquires its swap chain, so that the window
+becomes visible together with its first frame. Top-level targets belong
+to the application and are not touched. The show is armed again
+whenever a different target is bound.
+
+The host window belongs to the dcomp commit thread. A synchronous
+ShowWindow from the render thread would wait for that thread's message
+loop while DXGI swap chain locks are held, which is a hang hazard
+whenever the commit thread itself touches a swap chain. Use
+ShowWindowAsync instead and let the host thread show the window on
+its own.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 14 ++++++++++++++
+ src/d3d11/d3d11_swapchain.h   |  1 +
+ 2 files changed, 15 insertions(+)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 3253c25..d017c72 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -405,6 +405,9 @@ namespace dxvk {
+       std::lock_guard<dxvk::mutex> lock(m_compositionLock);
+       previousTarget = std::exchange(m_compositionTarget, hTarget);
+       m_compositionChildTarget = hTarget && hTarget != hDispatch;
++
++      if (hTarget != previousTarget)
++        m_compositionTargetShown = false;
+     }
+ 
+     if (hTarget == previousTarget)
+@@ -440,12 +443,23 @@ namespace dxvk {
+ 
+   HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
+     HWND compositionTarget = nullptr;
++    bool showCompositionTarget = false;
+ 
+     {
+       std::lock_guard<dxvk::mutex> lock(m_compositionLock);
+       compositionTarget = m_compositionTarget;
++      showCompositionTarget = m_compositionChildTarget && !m_compositionTargetShown;
++      m_compositionTargetShown |= showCompositionTarget;
+     }
+ 
++#ifdef _WIN32
++    // Child hosts are created hidden and shown once there is a frame
++    // to present. The host window belongs to the compositor's thread,
++    // so never wait for that thread to process the request.
++    if (showCompositionTarget)
++      ::ShowWindowAsync(compositionTarget, SW_SHOWNOACTIVATE);
++#endif
++
+     // Composition targets are compositor content and
+     // must not bypass the compositor's own pacing
+     if (compositionTarget)
+diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
+index 9219d4a..2e5fac2 100644
+--- a/src/d3d11/d3d11_swapchain.h
++++ b/src/d3d11/d3d11_swapchain.h
+@@ -166,6 +166,7 @@ namespace dxvk {
+     dxvk::mutex               m_compositionLock;
+     HWND                      m_compositionTarget = nullptr;
+     bool                      m_compositionChildTarget = false;
++    bool                      m_compositionTargetShown = false;
+ 
+     Rc<hud::HudLatencyItem>   m_latencyHud;
+ 
+-- 
+2.55.0
+

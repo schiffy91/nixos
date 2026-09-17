@@ -1,9 +1,9 @@
-import std.console;
-import std.fs;
-import std.json;
-import std.process;
-import std.strings;
-import std.vector;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
 import ../../core/log.btrc;
 import ./hardware_config.btrc;
 
@@ -33,14 +33,14 @@ class DisplayOutput {
     }
 
     public string toJson() {
-        var json = JsonObject();
+        var json = JSONObject();
         json.setString("name", self.name);
         json.setString("label", self.label);
         json.setString("type", self.kind);
         json.setBool("enabled", self.enabled);
         json.setBool("connected", self.connected);
         json.setInt("priority", self.priority);
-        var geometry = JsonObject();
+        var geometry = JSONObject();
         geometry.setInt("x", self.x);
         geometry.setInt("y", self.y);
         geometry.setInt("w", self.width);

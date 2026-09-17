@@ -1,7 +1,7 @@
-import std.json;
-import std.map;
-import std.process;
-import std.strings;
+import Library.JSON;
+import Library.Map;
+import Library.Process;
+import Library.Strings;
 import ../../../btrc/core/log.btrc;
 
 class VmSpecArgs {
@@ -24,6 +24,6 @@ class VmSpecArgs {
     }
 
     class string expand(string text, Map<string, string> args) {
-        return JsonText.expand(text, args);
+        return JSONText.expand(text, args);
     }
 }

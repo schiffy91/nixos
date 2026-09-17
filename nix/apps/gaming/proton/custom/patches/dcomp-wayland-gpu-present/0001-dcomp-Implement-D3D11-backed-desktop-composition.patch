@@ -1,28 +1,43 @@
-From 75935500cfc426c1a0167fdcce4dc8a22ca706d8 Mon Sep 17 00:00:00 2001
+From 2b9c46ed5be99b7d938388f1f0ac183b186eb884 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Wed, 20 May 2026 06:03:54 -0700
-Subject: [PATCH] dcomp: Implement D3D11-backed desktop composition
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 01/19] dcomp: Implement D3D11-backed desktop composition.
+
+Chromium's DirectComposition path creates a desktop device on its D3D11
+device, builds a tree of visuals carrying composition swap chains and
+surfaces, and commits it to a target window. Implement enough of
+IDCompositionDesktopDevice, IDCompositionVisual2, IDCompositionTarget and
+IDCompositionSurface for that.
+
+Commit walks the visual tree of every target and asks DXVK, through its
+private composition swap chain interface, to present each swap chain to the
+target window. Swap chains that are not opaque get a child host window at
+the visual's placement instead, so that they can be layered over the target.
+The host window class is registered with the module's own instance.
+
+Visuals, surfaces and targets hold a reference on the device, a target keeps
+its root alive and a visual keeps its linked children alive, so nothing is
+torn down behind the application's back. Content is unbound from DXVK before
+it is released or replaced.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/dcomp/Makefile.in |   2 +
- dlls/dcomp/device.c    | 960 ++++++++++++++++++++++++++++++++++++++++-
- 2 files changed, 951 insertions(+), 11 deletions(-)
+ dlls/dcomp/Makefile.in |    1 +
+ dlls/dcomp/device.c    | 1471 +++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 1462 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
-index d48b901..4db5387 100644
+index d48b901..049b046 100644
 --- a/dlls/dcomp/Makefile.in
 +++ b/dlls/dcomp/Makefile.in
-@@ -1,4 +1,6 @@
+@@ -1,4 +1,5 @@
  MODULE    = dcomp.dll
-+IMPORTLIB = dcomp
 +IMPORTS   = dxguid uuid d3d11 dxgi user32
  
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index d0eb920..3512ced 100644
+index d0eb920..d08909d 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1,5 +1,8 @@
@@ -34,21 +49,24 @@ index d0eb920..3512ced 100644
   *
   * This library is free software; you can redistribute it and/or
   * modify it under the terms of the GNU Lesser General Public
-@@ -16,35 +19,970 @@
+@@ -15,36 +18,1484 @@
+  * License along with this library; if not, write to the Free Software
   * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
   */
++
++#include <limits.h>
  #include <stdarg.h>
 +#include <stdlib.h>
-+#include <string.h>
  
 +#define COBJMACROS
 +#define INITGUID
  #include "windef.h"
  #include "winbase.h"
 -#include "objidl.h"
+-#include "dxgi.h"
 +#include "winuser.h"
 +#include "objbase.h"
- #include "dxgi.h"
++#include "dxgi1_2.h"
 +#include "d3d11.h"
 +#include "dcomp.h"
  #include "wine/debug.h"
@@ -57,962 +75,1475 @@ index d0eb920..3512ced 100644
  WINE_DEFAULT_DEBUG_CHANNEL(dcomp);
  
 -HRESULT WINAPI DCompositionCreateDevice(IDXGIDevice *dxgi_device, REFIID iid, void **device)
-+/* Private DXVK interface used to bind DirectComposition swap chains to HWNDs. */
-+DEFINE_GUID(IID_IDXGIVkCompositionSwapChain,
-+    0x4765d18a, 0xeba0, 0x40bd, 0xa7, 0x30, 0x7f, 0x5f, 0x3d, 0x91, 0x5c, 0x1f);
-+
++/* Private DXVK interface binding a composition swap chain to a window. The
++ * dispatch window is the composition target; a target window different from
++ * it is a child host window that DXVK shows on the first present. */
 +typedef struct IDXGIVkCompositionSwapChain IDXGIVkCompositionSwapChain;
 +
-+typedef struct IDXGIVkCompositionSwapChainVtbl
- {
--    FIXME("%p, %s, %p.\n", dxgi_device, debugstr_guid(iid), device);
-+    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkCompositionSwapChain *, REFIID, void **);
-+    ULONG   (STDMETHODCALLTYPE *AddRef)(IDXGIVkCompositionSwapChain *);
-+    ULONG   (STDMETHODCALLTYPE *Release)(IDXGIVkCompositionSwapChain *);
-+    void    (STDMETHODCALLTYPE *SetCompositionTarget)(IDXGIVkCompositionSwapChain *, HWND, HWND);
-+} IDXGIVkCompositionSwapChainVtbl;
-+struct IDXGIVkCompositionSwapChain { const IDXGIVkCompositionSwapChainVtbl *lpVtbl; };
- 
--    return E_NOTIMPL;
-+/* Object types. */
++struct IDXGIVkCompositionSwapChainVtbl
++{
++    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDXGIVkCompositionSwapChain *iface, REFIID iid, void **out);
++    ULONG (STDMETHODCALLTYPE *AddRef)(IDXGIVkCompositionSwapChain *iface);
++    ULONG (STDMETHODCALLTYPE *Release)(IDXGIVkCompositionSwapChain *iface);
++    void (STDMETHODCALLTYPE *SetCompositionTarget)(IDXGIVkCompositionSwapChain *iface, HWND target, HWND dispatch);
++};
 +
-+struct dcomp_device;
-+struct dcomp_visual;
-+struct dcomp_surface;
-+struct dcomp_target;
++struct IDXGIVkCompositionSwapChain
++{
++    const struct IDXGIVkCompositionSwapChainVtbl *lpVtbl;
++};
++
++DEFINE_GUID(IID_IDXGIVkCompositionSwapChain,
++        0x4765d18a, 0xeba0, 0x40bd, 0xa7, 0x30, 0x7f, 0x5f, 0x3d, 0x91, 0x5c, 0x1f);
++
++static const WCHAR dcomp_host_class_name[] = L"WineDCompositionHost";
++static HINSTANCE dcomp_instance;
++
++/* Visuals, surfaces, surface factories and targets hold a reference on the
++ * device. Targets are listed by the device while they exist. */
 +
 +struct dcomp_device
 +{
 +    IDCompositionDesktopDevice IDCompositionDesktopDevice_iface;
-+    LONG ref;
-+
-+    IUnknown        *rendering_device;     /* AddRef'd; usually an ID3D11Device */
-+    ID3D11Device    *d3d11_device;         /* QI'd from rendering_device; NULL if not D3D11 */
-+    struct list      targets;              /* live IDCompositionTarget list */
-+    struct list      visuals;              /* live IDCompositionVisual list */
-+    struct list      surfaces;             /* live IDCompositionSurface list */
-+    BOOL             pending_commit;
-+
++    LONG refcount;
 +    CRITICAL_SECTION cs;
-+    BOOL             cs_init;
-+};
 +
-+struct dcomp_visual
-+{
-+    IDCompositionVisual2 IDCompositionVisual2_iface;
-+    LONG ref;
-+    struct list entry;
-+    struct dcomp_device *device;
-+
-+    IUnknown *content;                     /* AddRef'd; usually a swap chain or dcomp_surface */
-+    BOOL has_swapchain_desc;
-+    DXGI_SWAP_CHAIN_DESC1 swapchain_desc;
-+    float offset_x, offset_y;
-+    BOOL has_clip;
-+    D2D_RECT_F clip;
-+    D2D_MATRIX_3X2_F transform;
-+    enum DCOMPOSITION_COMPOSITE_MODE composite_mode;
-+    enum DCOMPOSITION_OPACITY_MODE opacity_mode;
-+    HWND host_hwnd;
-+    HWND host_parent;
-+    UINT host_width, host_height;
-+    int host_x, host_y;
-+    struct list children;
-+    struct list child_entry;               /* link in parent->children */
-+    struct dcomp_visual *parent;
-+    BOOL dirty;
-+
++    IUnknown *rendering_device;
++    ID3D11Device *d3d11_device;
++    struct list targets;
++    LARGE_INTEGER last_frame_time;
 +};
 +
 +struct dcomp_surface
 +{
 +    IDCompositionSurface IDCompositionSurface_iface;
-+    LONG ref;
-+    struct list entry;
++    LONG refcount;
 +    struct dcomp_device *device;
 +
 +    UINT width, height;
 +    DXGI_FORMAT format;
 +    DXGI_ALPHA_MODE alpha_mode;
-+    ID3D11Texture2D *draw_texture;         /* allocated lazily in BeginDraw */
++
++    ID3D11Texture2D *texture;
 +    BOOL in_draw;
++    BOOL suspended;
++    BOOL dirty;
++};
++
++struct dcomp_visual
++{
++    IDCompositionVisual2 IDCompositionVisual2_iface;
++    LONG refcount;
++    struct dcomp_device *device;
++
++    IUnknown *content;
++    IDXGISwapChain1 *swapchain;
++    float offset_x, offset_y;
++    D2D_MATRIX_3X2_F transform;
++    BOOL has_clip;
++    D2D_RECT_F clip;
++    enum DCOMPOSITION_COMPOSITE_MODE composite_mode;
++    enum DCOMPOSITION_OPACITY_MODE opacity_mode;
++
++    struct dcomp_visual *parent;
++    struct list children;
++    struct list child_entry;
++
++    HWND host_hwnd;
++    HWND host_parent;
++    int host_x, host_y;
++    UINT host_width, host_height;
 +};
 +
 +struct dcomp_target
 +{
 +    IDCompositionTarget IDCompositionTarget_iface;
-+    LONG ref;
-+    struct list entry;
++    LONG refcount;
 +    struct dcomp_device *device;
++    struct list entry;
 +
 +    HWND hwnd;
 +    BOOL topmost;
-+    struct dcomp_visual *root;             /* AddRef'd; may be NULL */
++    struct dcomp_visual *root;
 +};
 +
++/* Accumulated state of the ancestors of a visual, in target coordinates. */
 +struct dcomp_placement
 +{
 +    int x, y;
 +};
 +
-+/* impl_from_X helpers */
++static const IDCompositionVisual2Vtbl dcomp_visual_vtbl;
++
 +static inline struct dcomp_device *impl_from_IDCompositionDesktopDevice(IDCompositionDesktopDevice *iface)
-+    { return CONTAINING_RECORD(iface, struct dcomp_device, IDCompositionDesktopDevice_iface); }
++{
++    return CONTAINING_RECORD(iface, struct dcomp_device, IDCompositionDesktopDevice_iface);
++}
++
 +static inline struct dcomp_visual *impl_from_IDCompositionVisual2(IDCompositionVisual2 *iface)
-+    { return CONTAINING_RECORD(iface, struct dcomp_visual, IDCompositionVisual2_iface); }
+ {
+-    FIXME("%p, %s, %p.\n", dxgi_device, debugstr_guid(iid), device);
++    return CONTAINING_RECORD(iface, struct dcomp_visual, IDCompositionVisual2_iface);
++}
++
 +static inline struct dcomp_surface *impl_from_IDCompositionSurface(IDCompositionSurface *iface)
-+    { return CONTAINING_RECORD(iface, struct dcomp_surface, IDCompositionSurface_iface); }
++{
++    return CONTAINING_RECORD(iface, struct dcomp_surface, IDCompositionSurface_iface);
++}
++
 +static inline struct dcomp_target *impl_from_IDCompositionTarget(IDCompositionTarget *iface)
-+    { return CONTAINING_RECORD(iface, struct dcomp_target, IDCompositionTarget_iface); }
++{
++    return CONTAINING_RECORD(iface, struct dcomp_target, IDCompositionTarget_iface);
++}
 +
-+/* forward vtable declarations */
-+static const IDCompositionDesktopDeviceVtbl dcomp_device_vtbl;
-+static const IDCompositionVisual2Vtbl       dcomp_visual_vtbl;
-+static const IDCompositionSurfaceVtbl       dcomp_surface_vtbl;
-+static const IDCompositionTargetVtbl        dcomp_target_vtbl;
++static struct dcomp_visual *unsafe_impl_from_IDCompositionVisual(IDCompositionVisual *iface)
++{
++    if (!iface || iface->lpVtbl != (const IDCompositionVisualVtbl *)&dcomp_visual_vtbl)
++        return NULL;
++    return CONTAINING_RECORD(iface, struct dcomp_visual, IDCompositionVisual2_iface);
++}
 +
-+static const WCHAR dcomp_host_class_name[] =
-+    {'W','i','n','e','D','C','o','m','p','S','w','a','p','C','h','a','i','n','H','o','s','t',0};
++static const char *debug_d2d_rect_f(const D2D_RECT_F *rect)
++{
++    if (!rect)
++        return "(null)";
++    return wine_dbg_sprintf("{%.8e, %.8e, %.8e, %.8e}", rect->left, rect->top, rect->right, rect->bottom);
++}
++
++static const char *debug_d2d_matrix_3x2_f(const D2D_MATRIX_3X2_F *matrix)
++{
++    if (!matrix)
++        return "(null)";
++    return wine_dbg_sprintf("{%.8e, %.8e, %.8e, %.8e, %.8e, %.8e}",
++            matrix->m11, matrix->m12, matrix->m21, matrix->m22, matrix->dx, matrix->dy);
++}
++
++static int round_float(float value)
++{
++    if (!(value > INT_MIN / 2))
++        return INT_MIN / 2;
++    if (value > INT_MAX / 2)
++        return INT_MAX / 2;
++    return (int)(value + (value >= 0.0f ? 0.5f : -0.5f));
++}
++
++static BOOL dcomp_matrix_is_translation(const D2D_MATRIX_3X2_F *matrix)
++{
++    return matrix->m11 == 1.0f && matrix->m12 == 0.0f && matrix->m21 == 0.0f && matrix->m22 == 1.0f;
++}
 +
 +static LRESULT CALLBACK dcomp_host_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 +{
 +    return DefWindowProcW(hwnd, msg, wparam, lparam);
- }
- 
--HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **device)
-+static BOOL dcomp_register_host_class(void)
- {
--    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
-+    static ATOM class_atom;
-+    WNDCLASSW class = {0};
- 
--    /* Try to workaround Chromium race fixed by Chromium commit 1c13c9105b40e83f87ebcad104fab57fcef43eb9. */
--    Sleep(50);
-+    if (class_atom) return TRUE;
- 
--    return E_NOTIMPL;
-+    class.lpfnWndProc = dcomp_host_wndproc;
-+    class.hInstance = GetModuleHandleW(NULL);
-+    class.lpszClassName = dcomp_host_class_name;
-+
-+    class_atom = RegisterClassW(&class);
-+    if (!class_atom && GetLastError() == ERROR_CLASS_ALREADY_EXISTS)
-+        class_atom = 1;
-+    return !!class_atom;
 +}
 +
-+/* ----------------------- object constructors ----------------------- */
-+
-+static struct dcomp_visual *dcomp_visual_create(struct dcomp_device *device)
++static HRESULT dcomp_swapchain_set_target(IDXGISwapChain1 *swapchain, HWND target, HWND dispatch)
 +{
-+    struct dcomp_visual *v = calloc(1, sizeof(*v));
-+    if (!v) return NULL;
-+    v->IDCompositionVisual2_iface.lpVtbl = &dcomp_visual_vtbl;
-+    v->ref = 1;
-+    v->device = device;
-+    v->transform.m11 = v->transform.m22 = 1.0f;
-+    list_init(&v->children);
-+    list_add_tail(&device->visuals, &v->entry);
-+    TRACE("created visual %p\n", v);
-+    return v;
-+}
++    IDXGIVkCompositionSwapChain *composition;
++    HRESULT hr;
 +
-+static struct dcomp_surface *dcomp_surface_create(struct dcomp_device *device,
-+                                                  UINT width, UINT height,
-+                                                  DXGI_FORMAT format, DXGI_ALPHA_MODE alpha)
-+{
-+    struct dcomp_surface *s = calloc(1, sizeof(*s));
-+    if (!s) return NULL;
-+    s->IDCompositionSurface_iface.lpVtbl = &dcomp_surface_vtbl;
-+    s->ref = 1;
-+    s->device = device;
-+    s->width = width;
-+    s->height = height;
-+    s->format = format;
-+    s->alpha_mode = alpha;
-+    list_add_tail(&device->surfaces, &s->entry);
-+    TRACE("created surface %p (%ux%u fmt=%u alpha=%u)\n", s, width, height, format, alpha);
-+    return s;
-+}
-+
-+static struct dcomp_target *dcomp_target_create(struct dcomp_device *device,
-+                                                HWND hwnd, BOOL topmost)
-+{
-+    struct dcomp_target *t = calloc(1, sizeof(*t));
-+    if (!t) return NULL;
-+    t->IDCompositionTarget_iface.lpVtbl = &dcomp_target_vtbl;
-+    t->ref = 2;     /* one for caller, one retained by device->targets list */
-+    t->device = device;
-+    t->hwnd = hwnd;
-+    t->topmost = topmost;
-+    list_add_tail(&device->targets, &t->entry);
-+    TRACE("created target %p (hwnd=%p topmost=%d) device=%p\n", t, hwnd, topmost, device);
-+    return t;
-+}
-+
-+/* ----------------------- IDCompositionVisual2 ----------------------- */
-+
-+static HRESULT WINAPI visual_QueryInterface(IDCompositionVisual2 *iface, REFIID iid, void **out)
-+{
-+    if (IsEqualGUID(iid, &IID_IUnknown) ||
-+        IsEqualGUID(iid, &IID_IDCompositionVisual) ||
-+        IsEqualGUID(iid, &IID_IDCompositionVisual2))
++    if (FAILED(hr = IDXGISwapChain1_QueryInterface(swapchain, &IID_IDXGIVkCompositionSwapChain, (void **)&composition)))
 +    {
-+        IDCompositionVisual2_AddRef(iface);
-+        *out = iface;
-+        return S_OK;
++        WARN("Swap chain %p has no composition interface, hr %#lx.\n", swapchain, hr);
++        return hr;
 +    }
-+    TRACE("visual QI %s - not supported\n", debugstr_guid(iid));
-+    *out = NULL;
-+    return E_NOINTERFACE;
- }
- 
--HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **device)
-+static ULONG WINAPI visual_AddRef(IDCompositionVisual2 *iface)
- {
--    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    return InterlockedIncrement(&v->ref);
-+}
 +
-+static ULONG WINAPI visual_Release(IDCompositionVisual2 *iface)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    ULONG r = InterlockedDecrement(&v->ref);
-+    if (!r)
-+    {
-+        struct dcomp_visual *c, *cn;
-+        LIST_FOR_EACH_ENTRY_SAFE(c, cn, &v->children, struct dcomp_visual, child_entry)
-+        { list_remove(&c->child_entry); c->parent = NULL; }
-+        if (v->host_hwnd) DestroyWindow(v->host_hwnd);
-+        if (v->parent) list_remove(&v->child_entry);
-+        if (v->content) IUnknown_Release(v->content);
-+        list_remove(&v->entry);
-+        free(v);
-+    }
-+    return r;
-+}
++    TRACE("swapchain %p, target %p, dispatch %p.\n", swapchain, target, dispatch);
 +
-+#define VISUAL_STUB_OK(name, ...) \
-+    static HRESULT WINAPI visual_##name(IDCompositionVisual2 *iface, ##__VA_ARGS__) \
-+    { struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface); v->dirty = TRUE; return S_OK; }
- 
-+static HRESULT WINAPI visual_SetOffsetX(IDCompositionVisual2 *iface, float x)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p x=%.8e\n", v, x);
-+    v->offset_x = x;
-+    v->dirty = TRUE;
-+    return S_OK;
-+}
-+static HRESULT WINAPI visual_SetOffsetY(IDCompositionVisual2 *iface, float y)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p y=%.8e\n", v, y);
-+    v->offset_y = y;
-+    v->dirty = TRUE;
-+    return S_OK;
-+}
-+VISUAL_STUB_OK(SetOffsetXAnimation, IDCompositionAnimation *a)
-+VISUAL_STUB_OK(SetOffsetYAnimation, IDCompositionAnimation *a)
-+static HRESULT WINAPI visual_SetTransform(IDCompositionVisual2 *iface, const D2D_MATRIX_3X2_F *m)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p matrix=%p\n", v, m);
-+    if (m) v->transform = *m;
-+    v->dirty = TRUE;
-+    return S_OK;
-+}
-+VISUAL_STUB_OK(SetTransformObject, IDCompositionTransform *t)
-+VISUAL_STUB_OK(SetTransformParent, IDCompositionVisual *p)
-+VISUAL_STUB_OK(SetEffect, IDCompositionEffect *e)
-+VISUAL_STUB_OK(SetBitmapInterpolationMode, enum DCOMPOSITION_BITMAP_INTERPOLATION_MODE m)
-+VISUAL_STUB_OK(SetBorderMode, enum DCOMPOSITION_BORDER_MODE m)
-+static HRESULT WINAPI visual_SetClip(IDCompositionVisual2 *iface, const D2D_RECT_F *r)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p clip=%p\n", v, r);
-+    v->has_clip = !!r;
-+    if (r) v->clip = *r;
-+    v->dirty = TRUE;
-+    return S_OK;
-+}
-+VISUAL_STUB_OK(SetClipObject, IDCompositionClip *c)
-+
-+static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *content)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p content=%p\n", v, content);
-+
-+    if (v->device && v->device->cs_init) EnterCriticalSection(&v->device->cs);
-+    if (v->content) IUnknown_Release(v->content);
-+    v->has_swapchain_desc = FALSE;
-+    memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
-+    v->content = content;
-+    if (content)
-+    {
-+        IDXGISwapChain1   *sc1 = NULL;
-+        IDCompositionSurface *sif = NULL;
-+        IUnknown_AddRef(content);
-+        /* Probe the visual content type. */
-+        if (SUCCEEDED(IUnknown_QueryInterface(content, &IID_IDXGISwapChain1, (void **)&sc1)) && sc1)
-+        {
-+            DXGI_SWAP_CHAIN_DESC1 desc = {0};
-+            ID3D11Texture2D *bb = NULL;
-+            HRESULT desc_hr = IDXGISwapChain1_GetDesc1(sc1, &desc);
-+            HRESULT hr = IDXGISwapChain1_GetBuffer(sc1, 0, &IID_ID3D11Texture2D, (void **)&bb);
-+            if (SUCCEEDED(desc_hr))
-+            {
-+                v->has_swapchain_desc = TRUE;
-+                v->swapchain_desc = desc;
-+            }
-+            TRACE("visual=%p content is IDXGISwapChain1=%p (%ux%u fmt=%u alpha=%u usage=%#x buffers=%u scaling=%u swap_effect=%u flags=%#x); GetDesc1 hr=%#lx GetBuffer hr=%#lx bb=%p\n",
-+                  v, sc1, desc.Width, desc.Height, desc.Format, desc.AlphaMode,
-+                  desc.BufferUsage, desc.BufferCount, desc.Scaling, desc.SwapEffect,
-+                  desc.Flags, desc_hr, hr, bb);
-+            if (bb) ID3D11Texture2D_Release(bb);
-+            IDXGISwapChain1_Release(sc1);
-+        }
-+        else if (SUCCEEDED(IUnknown_QueryInterface(content, &IID_IDCompositionSurface, (void **)&sif)) && sif)
-+        {
-+            struct dcomp_surface *s = impl_from_IDCompositionSurface(sif);
-+            TRACE("visual=%p content is IDCompositionSurface=%p (%ux%u fmt=%u draw_texture=%p)\n",
-+                  v, s, s->width, s->height, s->format, s->draw_texture);
-+            IDCompositionSurface_Release(sif);
-+        }
-+        else
-+        {
-+            TRACE("visual=%p content=%p - unknown type (neither swap chain nor dcomp surface)\n", v, content);
-+        }
-+    }
-+    v->dirty = TRUE;
-+    if (v->device) v->device->pending_commit = TRUE;
-+    if (v->device && v->device->cs_init) LeaveCriticalSection(&v->device->cs);
++    composition->lpVtbl->SetCompositionTarget(composition, target, dispatch);
++    composition->lpVtbl->Release(composition);
 +    return S_OK;
 +}
 +
-+static HRESULT WINAPI visual_AddVisual(IDCompositionVisual2 *iface, IDCompositionVisual *visual,
-+                                       BOOL insert_above, IDCompositionVisual *ref_visual)
++static HRESULT dcomp_surface_create_texture(struct dcomp_surface *surface, UINT width, UINT height,
++        ID3D11Texture2D **texture)
 +{
-+    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
-+    struct dcomp_visual *c = NULL, *ref = NULL;
-+    IDCompositionVisual2 *v2 = NULL, *ref_v2 = NULL;
-+    if (!visual) return S_OK;
-+    if (SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
-+    {
-+        c = impl_from_IDCompositionVisual2(v2);
-+        /* QueryInterface added a reference; the parent retains it through the children list. */
-+    }
-+    if (!c) return S_OK;
-+    if (ref_visual &&
-+        SUCCEEDED(IDCompositionVisual_QueryInterface(ref_visual, &IID_IDCompositionVisual2, (void **)&ref_v2)) &&
-+        ref_v2)
-+    {
-+        ref = impl_from_IDCompositionVisual2(ref_v2);
-+        IDCompositionVisual2_Release(ref_v2);
-+    }
-+    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
-+    if (c->parent)                       /* already in some parent's children - remove first */
-+        list_remove(&c->child_entry);
-+    c->parent = p;
-+    if (ref && ref->parent == p)
-+    {
-+        if (insert_above) list_add_after(&ref->child_entry, &c->child_entry);
-+        else list_add_before(&ref->child_entry, &c->child_entry);
-+    }
-+    else if (insert_above) list_add_tail(&p->children, &c->child_entry);
-+    else list_add_head(&p->children, &c->child_entry);
-+    p->dirty = TRUE;
-+    if (p->device) p->device->pending_commit = TRUE;
-+    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
-+    TRACE("parent=%p added child=%p insert_above=%u ref=%p\n", p, c, insert_above, ref);
-+    return S_OK;
-+}
-+
-+static HRESULT WINAPI visual_RemoveVisual(IDCompositionVisual2 *iface, IDCompositionVisual *visual)
-+{
-+    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
-+    IDCompositionVisual2 *v2 = NULL;
-+    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
-+    if (visual && SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
-+    {
-+        struct dcomp_visual *c = impl_from_IDCompositionVisual2(v2);
-+        if (c->parent == p) { list_remove(&c->child_entry); c->parent = NULL; }
-+        IDCompositionVisual2_Release(v2);
-+    }
-+    p->dirty = TRUE;
-+    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
-+    return S_OK;
-+}
-+
-+static HRESULT WINAPI visual_RemoveAllVisuals(IDCompositionVisual2 *iface)
-+{
-+    struct dcomp_visual *p = impl_from_IDCompositionVisual2(iface);
-+    struct dcomp_visual *c, *cn;
-+    if (p->device && p->device->cs_init) EnterCriticalSection(&p->device->cs);
-+    LIST_FOR_EACH_ENTRY_SAFE(c, cn, &p->children, struct dcomp_visual, child_entry)
-+    {
-+        list_remove(&c->child_entry); c->parent = NULL;
-+    }
-+    p->dirty = TRUE;
-+    if (p->device && p->device->cs_init) LeaveCriticalSection(&p->device->cs);
-+    return S_OK;
-+}
-+static HRESULT WINAPI visual_SetCompositeMode(IDCompositionVisual2 *iface,
-+                                              enum DCOMPOSITION_COMPOSITE_MODE m)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p mode=%u\n", v, m);
-+    v->composite_mode = m;
-+    v->dirty = TRUE;
-+    return S_OK;
-+}
-+static HRESULT WINAPI visual_SetOpacityMode(IDCompositionVisual2 *iface,
-+                                            enum DCOMPOSITION_OPACITY_MODE m)
-+{
-+    struct dcomp_visual *v = impl_from_IDCompositionVisual2(iface);
-+    TRACE("visual=%p mode=%u\n", v, m);
-+    v->opacity_mode = m;
-+    v->dirty = TRUE;
-+    return S_OK;
-+}
-+VISUAL_STUB_OK(SetBackFaceVisibility, enum DCOMPOSITION_BACKFACE_VISIBILITY v_)
-+
-+static const IDCompositionVisual2Vtbl dcomp_visual_vtbl =
-+{
-+    visual_QueryInterface, visual_AddRef, visual_Release,
-+    visual_SetOffsetXAnimation, visual_SetOffsetX,
-+    visual_SetOffsetYAnimation, visual_SetOffsetY,
-+    visual_SetTransformObject, visual_SetTransform, visual_SetTransformParent,
-+    visual_SetEffect, visual_SetBitmapInterpolationMode, visual_SetBorderMode,
-+    visual_SetClipObject, visual_SetClip, visual_SetContent,
-+    visual_AddVisual, visual_RemoveVisual, visual_RemoveAllVisuals,
-+    visual_SetCompositeMode,
-+    /* Visual2 */
-+    visual_SetOpacityMode, visual_SetBackFaceVisibility,
-+};
-+
-+/* ----------------------- IDCompositionSurface ----------------------- */
-+
-+static HRESULT WINAPI surface_QueryInterface(IDCompositionSurface *iface, REFIID iid, void **out)
-+{
-+    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IDCompositionSurface))
-+    { IDCompositionSurface_AddRef(iface); *out = iface; return S_OK; }
-+    TRACE("surface QI %s - not supported\n", debugstr_guid(iid));
-+    *out = NULL;
-+    return E_NOINTERFACE;
-+}
-+
-+static ULONG WINAPI surface_AddRef(IDCompositionSurface *iface)
-+{ struct dcomp_surface *s = impl_from_IDCompositionSurface(iface); return InterlockedIncrement(&s->ref); }
-+
-+static ULONG WINAPI surface_Release(IDCompositionSurface *iface)
-+{
-+    struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
-+    ULONG r = InterlockedDecrement(&s->ref);
-+    if (!r)
-+    {
-+        if (s->draw_texture) ID3D11Texture2D_Release(s->draw_texture);
-+        list_remove(&s->entry);
-+        free(s);
-+    }
-+    return r;
-+}
-+
-+static HRESULT WINAPI surface_BeginDraw(IDCompositionSurface *iface, const RECT *rect,
-+                                         REFIID iid, void **object, POINT *offset)
-+{
-+    struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
 +    D3D11_TEXTURE2D_DESC desc = {0};
 +    HRESULT hr;
 +
-+    TRACE("surface=%p rect=%p iid=%s\n", s, rect, debugstr_guid(iid));
++    desc.Width = width;
++    desc.Height = height;
++    desc.MipLevels = 1;
++    desc.ArraySize = 1;
++    desc.Format = surface->format;
++    desc.SampleDesc.Count = 1;
++    desc.Usage = D3D11_USAGE_DEFAULT;
++    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 +
-+    if (!s->device || !s->device->d3d11_device)
++    if (FAILED(hr = ID3D11Device_CreateTexture2D(surface->device->d3d11_device, &desc, NULL, texture)))
 +    {
-+        FIXME("no D3D11 device available for BeginDraw\n");
-+        *object = NULL;
++        WARN("Failed to create %ux%u texture for surface %p, hr %#lx.\n", width, height, surface, hr);
++        return hr;
++    }
++
++    return S_OK;
++}
++
++static HRESULT dcomp_surface_query_interface(struct dcomp_surface *surface, REFIID iid, void **out)
++{
++    if (IsEqualGUID(iid, &IID_IDCompositionSurface)
++            || IsEqualGUID(iid, &IID_IUnknown))
++    {
++        IDCompositionSurface_AddRef(&surface->IDCompositionSurface_iface);
++        *out = &surface->IDCompositionSurface_iface;
++        return S_OK;
++    }
++
++    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static HRESULT WINAPI surface_QueryInterface(IDCompositionSurface *iface, REFIID iid, void **out)
++{
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++
++    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
++
++    return dcomp_surface_query_interface(surface, iid, out);
++}
++
++static ULONG WINAPI surface_AddRef(IDCompositionSurface *iface)
++{
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++    ULONG refcount = InterlockedIncrement(&surface->refcount);
++
++    TRACE("%p increasing refcount to %lu.\n", surface, refcount);
++
++    return refcount;
++}
++
++static ULONG WINAPI surface_Release(IDCompositionSurface *iface)
++{
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++    ULONG refcount = InterlockedDecrement(&surface->refcount);
++
++    TRACE("%p decreasing refcount to %lu.\n", surface, refcount);
++
++    if (!refcount)
++    {
++        struct dcomp_device *device = surface->device;
++
++        if (surface->texture)
++            ID3D11Texture2D_Release(surface->texture);
++        free(surface);
++        IDCompositionDesktopDevice_Release(&device->IDCompositionDesktopDevice_iface);
++    }
++
++    return refcount;
++}
++
++static HRESULT WINAPI surface_BeginDraw(IDCompositionSurface *iface, const RECT *rect,
++        REFIID iid, void **object, POINT *offset)
++{
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++    HRESULT hr;
++
++    TRACE("iface %p, rect %s, iid %s, object %p, offset %p.\n",
++            iface, wine_dbgstr_rect(rect), debugstr_guid(iid), object, offset);
++
++    if (!object)
++        return E_POINTER;
++    *object = NULL;
++
++    if (rect)
++        FIXME("Ignoring update rect %s.\n", wine_dbgstr_rect(rect));
++
++    if (surface->in_draw || surface->suspended)
++        return DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED;
++
++    if (!surface->device->d3d11_device)
++    {
++        WARN("No D3D11 device available.\n");
 +        return E_FAIL;
 +    }
++
 +    if (!IsEqualGUID(iid, &IID_ID3D11Texture2D))
 +    {
-+        FIXME("BeginDraw with non-D3D11 iid %s - not supported\n", debugstr_guid(iid));
-+        *object = NULL;
++        FIXME("Unsupported iid %s.\n", debugstr_guid(iid));
 +        return E_NOINTERFACE;
 +    }
-+    if (s->in_draw)
-+    {
-+        WARN("surface=%p already in BeginDraw\n", s);
-+        return DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED;
-+    }
 +
-+    if (!s->draw_texture)
-+    {
-+        desc.Width = s->width;
-+        desc.Height = s->height;
-+        desc.MipLevels = 1;
-+        desc.ArraySize = 1;
-+        desc.Format = s->format ? s->format : DXGI_FORMAT_B8G8R8A8_UNORM;
-+        desc.SampleDesc.Count = 1;
-+        desc.Usage = D3D11_USAGE_DEFAULT;
-+        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-+        desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;       /* enable dmabuf export via DXVK interop */
-+        hr = ID3D11Device_CreateTexture2D(s->device->d3d11_device, &desc, NULL, &s->draw_texture);
-+        if (FAILED(hr))
-+        {
-+            ERR("CreateTexture2D %ux%u failed hr=%#lx\n", s->width, s->height, hr);
-+            *object = NULL;
-+            return hr;
-+        }
-+    }
++    if (!surface->texture && FAILED(hr = dcomp_surface_create_texture(surface,
++            surface->width, surface->height, &surface->texture)))
++        return hr;
 +
-+    s->in_draw = TRUE;
-+    ID3D11Texture2D_AddRef(s->draw_texture);
-+    *object = s->draw_texture;
-+    if (offset) { offset->x = 0; offset->y = 0; }
++    ID3D11Texture2D_AddRef(surface->texture);
++    *object = surface->texture;
++
++    surface->in_draw = TRUE;
++    if (offset)
++    {
++        offset->x = 0;
++        offset->y = 0;
++    }
 +    return S_OK;
 +}
 +
 +static HRESULT WINAPI surface_EndDraw(IDCompositionSurface *iface)
 +{
-+    struct dcomp_surface *s = impl_from_IDCompositionSurface(iface);
-+    TRACE("surface=%p\n", s);
-+    s->in_draw = FALSE;
-+    if (s->device) s->device->pending_commit = TRUE;
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++
++    TRACE("iface %p.\n", iface);
++
++    if (!surface->in_draw)
++        return DCOMPOSITION_ERROR_SURFACE_NOT_BEING_RENDERED;
++
++    surface->in_draw = FALSE;
++    surface->dirty = TRUE;
 +    return S_OK;
 +}
 +
 +static HRESULT WINAPI surface_SuspendDraw(IDCompositionSurface *iface)
-+{ TRACE("\n"); return S_OK; }
++{
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++
++    TRACE("iface %p.\n", iface);
++
++    if (!surface->in_draw)
++        return DCOMPOSITION_ERROR_SURFACE_NOT_BEING_RENDERED;
++
++    surface->in_draw = FALSE;
++    surface->suspended = TRUE;
++    return S_OK;
++}
++
 +static HRESULT WINAPI surface_ResumeDraw(IDCompositionSurface *iface)
-+{ TRACE("\n"); return S_OK; }
++{
++    struct dcomp_surface *surface = impl_from_IDCompositionSurface(iface);
++
++    TRACE("iface %p.\n", iface);
++
++    if (!surface->suspended)
++        return DCOMPOSITION_ERROR_SURFACE_NOT_BEING_RENDERED;
++
++    surface->suspended = FALSE;
++    surface->in_draw = TRUE;
++    return S_OK;
++}
++
 +static HRESULT WINAPI surface_Scroll(IDCompositionSurface *iface, const RECT *scroll,
-+                                      const RECT *clip, int ox, int oy)
-+{ TRACE("\n"); return S_OK; }
++        const RECT *clip, int offset_x, int offset_y)
++{
++    FIXME("iface %p, scroll %s, clip %s, offset_x %d, offset_y %d stub!\n",
++            iface, wine_dbgstr_rect(scroll), wine_dbgstr_rect(clip), offset_x, offset_y);
++
++    return S_OK;
++}
 +
 +static const IDCompositionSurfaceVtbl dcomp_surface_vtbl =
 +{
-+    surface_QueryInterface, surface_AddRef, surface_Release,
-+    surface_BeginDraw, surface_EndDraw,
-+    surface_SuspendDraw, surface_ResumeDraw, surface_Scroll,
++    surface_QueryInterface,
++    surface_AddRef,
++    surface_Release,
++    surface_BeginDraw,
++    surface_EndDraw,
++    surface_SuspendDraw,
++    surface_ResumeDraw,
++    surface_Scroll,
 +};
 +
-+/* ----------------------- IDCompositionTarget ----------------------- */
++static HRESULT dcomp_surface_create(struct dcomp_device *device, UINT width, UINT height,
++        DXGI_FORMAT format, DXGI_ALPHA_MODE alpha_mode, struct dcomp_surface **surface)
++{
++    struct dcomp_surface *object;
++
++    if (!(object = calloc(1, sizeof(*object))))
++        return E_OUTOFMEMORY;
++
++    object->IDCompositionSurface_iface.lpVtbl = &dcomp_surface_vtbl;
++    object->refcount = 1;
++    object->device = device;
++    IDCompositionDesktopDevice_AddRef(&device->IDCompositionDesktopDevice_iface);
++    object->width = width;
++    object->height = height;
++    object->format = format == DXGI_FORMAT_UNKNOWN ? DXGI_FORMAT_B8G8R8A8_UNORM : format;
++    object->alpha_mode = alpha_mode == DXGI_ALPHA_MODE_UNSPECIFIED ? DXGI_ALPHA_MODE_PREMULTIPLIED : alpha_mode;
++
++    TRACE("Created surface %p.\n", object);
++    *surface = object;
++    return S_OK;
++}
++
++static void dcomp_visual_unbind_content(struct dcomp_visual *visual)
++{
++    if (visual->swapchain)
++        dcomp_swapchain_set_target(visual->swapchain, NULL, NULL);
++}
++
++static void dcomp_visual_bind_swapchain(struct dcomp_visual *visual, HWND target, HWND dispatch)
++{
++    dcomp_swapchain_set_target(visual->swapchain, target, dispatch);
++}
++
++static void dcomp_visual_reset_host_state(struct dcomp_visual *visual)
++{
++    visual->host_parent = NULL;
++    visual->host_x = 0;
++    visual->host_y = 0;
++    visual->host_width = 0;
++    visual->host_height = 0;
++}
++
++static void dcomp_visual_teardown_host(struct dcomp_visual *visual)
++{
++    if (visual->host_hwnd)
++    {
++        TRACE("Destroying host window %p of visual %p.\n", visual->host_hwnd, visual);
++        if (!DestroyWindow(visual->host_hwnd))
++            WARN("Failed to destroy host window %p, error %lu.\n", visual->host_hwnd, GetLastError());
++        visual->host_hwnd = NULL;
++    }
++    dcomp_visual_reset_host_state(visual);
++}
++
++static void dcomp_visual_unlink(struct dcomp_visual *visual)
++{
++    list_remove(&visual->child_entry);
++    visual->parent = NULL;
++}
++
++static HRESULT WINAPI visual_QueryInterface(IDCompositionVisual2 *iface, REFIID iid, void **out)
++{
++    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
++
++    if (IsEqualGUID(iid, &IID_IDCompositionVisual2)
++            || IsEqualGUID(iid, &IID_IDCompositionVisual)
++            || IsEqualGUID(iid, &IID_IUnknown))
++    {
++        IDCompositionVisual2_AddRef(iface);
++        *out = iface;
++        return S_OK;
++    }
++
++    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI visual_AddRef(IDCompositionVisual2 *iface)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++    ULONG refcount = InterlockedIncrement(&visual->refcount);
++
++    TRACE("%p increasing refcount to %lu.\n", visual, refcount);
++
++    return refcount;
++}
++
++static ULONG WINAPI visual_Release(IDCompositionVisual2 *iface)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++    ULONG refcount = InterlockedDecrement(&visual->refcount);
++
++    TRACE("%p decreasing refcount to %lu.\n", visual, refcount);
++
++    if (!refcount)
++    {
++        struct dcomp_device *device = visual->device;
++        struct dcomp_visual *child, *next;
++
++        EnterCriticalSection(&device->cs);
++        LIST_FOR_EACH_ENTRY_SAFE(child, next, &visual->children, struct dcomp_visual, child_entry)
++        {
++            dcomp_visual_unlink(child);
++            IDCompositionVisual2_Release(&child->IDCompositionVisual2_iface);
++        }
++        dcomp_visual_unbind_content(visual);
++        dcomp_visual_teardown_host(visual);
++        LeaveCriticalSection(&device->cs);
++
++        if (visual->swapchain)
++            IDXGISwapChain1_Release(visual->swapchain);
++        if (visual->content)
++            IUnknown_Release(visual->content);
++        free(visual);
++        IDCompositionDesktopDevice_Release(&device->IDCompositionDesktopDevice_iface);
++    }
++
++    return refcount;
++}
++
++static HRESULT WINAPI visual_SetOffsetXAnimation(IDCompositionVisual2 *iface, IDCompositionAnimation *animation)
++{
++    FIXME("iface %p, animation %p stub!\n", iface, animation);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetOffsetX(IDCompositionVisual2 *iface, float offset_x)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++
++    TRACE("iface %p, offset_x %.8e.\n", iface, offset_x);
++
++    visual->offset_x = offset_x;
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetOffsetYAnimation(IDCompositionVisual2 *iface, IDCompositionAnimation *animation)
++{
++    FIXME("iface %p, animation %p stub!\n", iface, animation);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetOffsetY(IDCompositionVisual2 *iface, float offset_y)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++
++    TRACE("iface %p, offset_y %.8e.\n", iface, offset_y);
++
++    visual->offset_y = offset_y;
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetTransformObject(IDCompositionVisual2 *iface, IDCompositionTransform *transform)
++{
++    FIXME("iface %p, transform %p stub!\n", iface, transform);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetTransform(IDCompositionVisual2 *iface, const D2D_MATRIX_3X2_F *matrix)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++
++    TRACE("iface %p, matrix %s.\n", iface, debug_d2d_matrix_3x2_f(matrix));
++
++    if (!matrix)
++        return E_INVALIDARG;
++
++    if (!dcomp_matrix_is_translation(matrix))
++    {
++        static unsigned int once;
++
++        if (!once++)
++            FIXME("Only translations are supported, ignoring the linear part of %s.\n",
++                    debug_d2d_matrix_3x2_f(matrix));
++    }
++
++    visual->transform = *matrix;
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetTransformParent(IDCompositionVisual2 *iface, IDCompositionVisual *visual)
++{
++    FIXME("iface %p, visual %p stub!\n", iface, visual);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetEffect(IDCompositionVisual2 *iface, IDCompositionEffect *effect)
++{
++    FIXME("iface %p, effect %p stub!\n", iface, effect);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetBitmapInterpolationMode(IDCompositionVisual2 *iface,
++        enum DCOMPOSITION_BITMAP_INTERPOLATION_MODE interpolation_mode)
++{
++    FIXME("iface %p, interpolation_mode %#x stub!\n", iface, interpolation_mode);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetBorderMode(IDCompositionVisual2 *iface, enum DCOMPOSITION_BORDER_MODE border_mode)
++{
++    FIXME("iface %p, border_mode %#x stub!\n", iface, border_mode);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetClipObject(IDCompositionVisual2 *iface, IDCompositionClip *clip)
++{
++    FIXME("iface %p, clip %p stub!\n", iface, clip);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetClip(IDCompositionVisual2 *iface, const D2D_RECT_F *rect)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++
++    TRACE("iface %p, rect %s.\n", iface, debug_d2d_rect_f(rect));
++
++    if ((visual->has_clip = !!rect))
++        visual->clip = *rect;
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetContent(IDCompositionVisual2 *iface, IUnknown *content)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++    struct dcomp_device *device = visual->device;
++    DXGI_SWAP_CHAIN_DESC1 desc;
++
++    TRACE("iface %p, content %p.\n", iface, content);
++
++    EnterCriticalSection(&device->cs);
++
++    dcomp_visual_unbind_content(visual);
++    if (visual->swapchain)
++        IDXGISwapChain1_Release(visual->swapchain);
++    if (visual->content)
++        IUnknown_Release(visual->content);
++    visual->swapchain = NULL;
++
++    if ((visual->content = content))
++    {
++        IUnknown_AddRef(content);
++        if (SUCCEEDED(IUnknown_QueryInterface(content, &IID_IDXGISwapChain1, (void **)&visual->swapchain)))
++        {
++            if (TRACE_ON(dcomp) && SUCCEEDED(IDXGISwapChain1_GetDesc1(visual->swapchain, &desc)))
++                TRACE("Content of visual %p is swap chain %p, %ux%u, format %#x, alpha mode %#x.\n",
++                        visual, visual->swapchain, desc.Width, desc.Height, desc.Format, desc.AlphaMode);
++        }
++        else
++        {
++            FIXME("Unsupported content %p.\n", content);
++        }
++    }
++
++    LeaveCriticalSection(&device->cs);
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_AddVisual(IDCompositionVisual2 *iface, IDCompositionVisual *visual_iface,
++        BOOL insert_above, IDCompositionVisual *reference_iface)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++    struct dcomp_visual *child = unsafe_impl_from_IDCompositionVisual(visual_iface);
++    struct dcomp_visual *reference = unsafe_impl_from_IDCompositionVisual(reference_iface);
++    struct dcomp_visual *ancestor;
++    HRESULT hr = S_OK;
++
++    TRACE("iface %p, visual %p, insert_above %#x, reference_visual %p.\n",
++            iface, visual_iface, insert_above, reference_iface);
++
++    if (!child || (reference_iface && !reference) || reference == child)
++        return E_INVALIDARG;
++
++    EnterCriticalSection(&visual->device->cs);
++
++    for (ancestor = visual; ancestor; ancestor = ancestor->parent)
++    {
++        if (ancestor == child)
++            hr = E_INVALIDARG;
++    }
++    if (reference && reference->parent != visual)
++        hr = E_INVALIDARG;
++
++    if (SUCCEEDED(hr))
++    {
++        /* A parent keeps a reference on its children. */
++        if (child->parent)
++            dcomp_visual_unlink(child);
++        else
++            IDCompositionVisual2_AddRef(&child->IDCompositionVisual2_iface);
++        child->parent = visual;
++
++        if (!reference)
++        {
++            if (insert_above)
++                list_add_tail(&visual->children, &child->child_entry);
++            else
++                list_add_head(&visual->children, &child->child_entry);
++        }
++        else if (insert_above)
++        {
++            list_add_after(&reference->child_entry, &child->child_entry);
++        }
++        else
++        {
++            list_add_before(&reference->child_entry, &child->child_entry);
++        }
++    }
++
++    LeaveCriticalSection(&visual->device->cs);
++    return hr;
++}
++
++static HRESULT WINAPI visual_RemoveVisual(IDCompositionVisual2 *iface, IDCompositionVisual *visual_iface)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++    struct dcomp_visual *child = unsafe_impl_from_IDCompositionVisual(visual_iface);
++    HRESULT hr = S_OK;
++
++    TRACE("iface %p, visual %p.\n", iface, visual_iface);
++
++    if (!child)
++        return E_INVALIDARG;
++
++    EnterCriticalSection(&visual->device->cs);
++
++    if (child->parent != visual)
++    {
++        hr = E_INVALIDARG;
++    }
++    else
++    {
++        dcomp_visual_unlink(child);
++        IDCompositionVisual2_Release(&child->IDCompositionVisual2_iface);
++    }
++
++    LeaveCriticalSection(&visual->device->cs);
++    return hr;
++}
++
++static HRESULT WINAPI visual_RemoveAllVisuals(IDCompositionVisual2 *iface)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++    struct dcomp_visual *child, *next;
++
++    TRACE("iface %p.\n", iface);
++
++    EnterCriticalSection(&visual->device->cs);
++
++    LIST_FOR_EACH_ENTRY_SAFE(child, next, &visual->children, struct dcomp_visual, child_entry)
++    {
++        dcomp_visual_unlink(child);
++        IDCompositionVisual2_Release(&child->IDCompositionVisual2_iface);
++    }
++
++    LeaveCriticalSection(&visual->device->cs);
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetCompositeMode(IDCompositionVisual2 *iface,
++        enum DCOMPOSITION_COMPOSITE_MODE composite_mode)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++
++    TRACE("iface %p, composite_mode %#x.\n", iface, composite_mode);
++
++    visual->composite_mode = composite_mode;
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetOpacityMode(IDCompositionVisual2 *iface, enum DCOMPOSITION_OPACITY_MODE opacity_mode)
++{
++    struct dcomp_visual *visual = impl_from_IDCompositionVisual2(iface);
++
++    TRACE("iface %p, opacity_mode %#x.\n", iface, opacity_mode);
++
++    visual->opacity_mode = opacity_mode;
++    return S_OK;
++}
++
++static HRESULT WINAPI visual_SetBackFaceVisibility(IDCompositionVisual2 *iface,
++        enum DCOMPOSITION_BACKFACE_VISIBILITY visibility)
++{
++    FIXME("iface %p, visibility %#x stub!\n", iface, visibility);
++
++    return S_OK;
++}
++
++static const IDCompositionVisual2Vtbl dcomp_visual_vtbl =
++{
++    visual_QueryInterface,
++    visual_AddRef,
++    visual_Release,
++    visual_SetOffsetXAnimation,
++    visual_SetOffsetX,
++    visual_SetOffsetYAnimation,
++    visual_SetOffsetY,
++    visual_SetTransformObject,
++    visual_SetTransform,
++    visual_SetTransformParent,
++    visual_SetEffect,
++    visual_SetBitmapInterpolationMode,
++    visual_SetBorderMode,
++    visual_SetClipObject,
++    visual_SetClip,
++    visual_SetContent,
++    visual_AddVisual,
++    visual_RemoveVisual,
++    visual_RemoveAllVisuals,
++    visual_SetCompositeMode,
++    visual_SetOpacityMode,
++    visual_SetBackFaceVisibility,
++};
++
++static HRESULT dcomp_visual_create(struct dcomp_device *device, struct dcomp_visual **visual)
++{
++    struct dcomp_visual *object;
++
++    if (!(object = calloc(1, sizeof(*object))))
++        return E_OUTOFMEMORY;
++
++    object->IDCompositionVisual2_iface.lpVtbl = &dcomp_visual_vtbl;
++    object->refcount = 1;
++    object->device = device;
++    IDCompositionDesktopDevice_AddRef(&device->IDCompositionDesktopDevice_iface);
++    object->transform.m11 = 1.0f;
++    object->transform.m22 = 1.0f;
++    list_init(&object->children);
++
++    TRACE("Created visual %p.\n", object);
++    *visual = object;
++    return S_OK;
++}
 +
 +static HRESULT WINAPI target_QueryInterface(IDCompositionTarget *iface, REFIID iid, void **out)
 +{
-+    if (IsEqualGUID(iid, &IID_IUnknown) || IsEqualGUID(iid, &IID_IDCompositionTarget))
-+    { IDCompositionTarget_AddRef(iface); *out = iface; return S_OK; }
++    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
++
++    if (IsEqualGUID(iid, &IID_IDCompositionTarget)
++            || IsEqualGUID(iid, &IID_IUnknown))
++    {
++        IDCompositionTarget_AddRef(iface);
++        *out = iface;
++        return S_OK;
++    }
++
++    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
 +    *out = NULL;
 +    return E_NOINTERFACE;
 +}
 +
 +static ULONG WINAPI target_AddRef(IDCompositionTarget *iface)
-+{ struct dcomp_target *t = impl_from_IDCompositionTarget(iface); return InterlockedIncrement(&t->ref); }
++{
++    struct dcomp_target *target = impl_from_IDCompositionTarget(iface);
++    ULONG refcount = InterlockedIncrement(&target->refcount);
++
++    TRACE("%p increasing refcount to %lu.\n", target, refcount);
++
++    return refcount;
++}
 +
 +static ULONG WINAPI target_Release(IDCompositionTarget *iface)
 +{
-+    struct dcomp_target *t = impl_from_IDCompositionTarget(iface);
-+    ULONG r = InterlockedDecrement(&t->ref);
-+    if (!r)
++    struct dcomp_target *target = impl_from_IDCompositionTarget(iface);
++    ULONG refcount = InterlockedDecrement(&target->refcount);
++
++    TRACE("%p decreasing refcount to %lu.\n", target, refcount);
++
++    if (!refcount)
 +    {
-+        struct dcomp_device *d = t->device;
-+        if (d && d->cs_init) EnterCriticalSection(&d->cs);
-+        if (t->root) IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
-+        list_remove(&t->entry);
-+        if (d && d->cs_init) LeaveCriticalSection(&d->cs);
-+        free(t);
++        struct dcomp_device *device = target->device;
++
++        EnterCriticalSection(&device->cs);
++        list_remove(&target->entry);
++        if (target->root)
++            IDCompositionVisual2_Release(&target->root->IDCompositionVisual2_iface);
++        LeaveCriticalSection(&device->cs);
++
++        free(target);
++        IDCompositionDesktopDevice_Release(&device->IDCompositionDesktopDevice_iface);
 +    }
-+    return r;
++
++    return refcount;
 +}
 +
-+static HRESULT WINAPI target_SetRoot(IDCompositionTarget *iface, IDCompositionVisual *visual)
++static HRESULT WINAPI target_SetRoot(IDCompositionTarget *iface, IDCompositionVisual *visual_iface)
 +{
-+    struct dcomp_target *t = impl_from_IDCompositionTarget(iface);
-+    TRACE("target=%p visual=%p (hwnd=%p)\n", t, visual, t->hwnd);
-+    if (t->device && t->device->cs_init) EnterCriticalSection(&t->device->cs);
-+    if (t->root) IDCompositionVisual2_Release(&t->root->IDCompositionVisual2_iface);
-+    t->root = NULL;
-+    if (visual)
-+    {
-+        IDCompositionVisual2 *v2 = NULL;
-+        if (SUCCEEDED(IDCompositionVisual_QueryInterface(visual, &IID_IDCompositionVisual2, (void **)&v2)) && v2)
-+            t->root = impl_from_IDCompositionVisual2(v2);
-+    }
-+    if (t->device) t->device->pending_commit = TRUE;
-+    if (t->device && t->device->cs_init) LeaveCriticalSection(&t->device->cs);
++    struct dcomp_target *target = impl_from_IDCompositionTarget(iface);
++    struct dcomp_visual *root = unsafe_impl_from_IDCompositionVisual(visual_iface);
++
++    TRACE("iface %p, visual %p.\n", iface, visual_iface);
++
++    if (visual_iface && !root)
++        return E_INVALIDARG;
++
++    EnterCriticalSection(&target->device->cs);
++
++    if (root)
++        IDCompositionVisual2_AddRef(&root->IDCompositionVisual2_iface);
++    if (target->root)
++        IDCompositionVisual2_Release(&target->root->IDCompositionVisual2_iface);
++    target->root = root;
++
++    LeaveCriticalSection(&target->device->cs);
 +    return S_OK;
 +}
 +
 +static const IDCompositionTargetVtbl dcomp_target_vtbl =
 +{
-+    target_QueryInterface, target_AddRef, target_Release,
++    target_QueryInterface,
++    target_AddRef,
++    target_Release,
 +    target_SetRoot,
 +};
 +
-+/* ------------------- IDCompositionDesktopDevice ------------------- */
++static HRESULT dcomp_target_create(struct dcomp_device *device, HWND hwnd, BOOL topmost, struct dcomp_target **target)
++{
++    struct dcomp_target *object;
++
++    if (!(object = calloc(1, sizeof(*object))))
++        return E_OUTOFMEMORY;
++
++    object->IDCompositionTarget_iface.lpVtbl = &dcomp_target_vtbl;
++    object->refcount = 1;
++    object->device = device;
++    IDCompositionDesktopDevice_AddRef(&device->IDCompositionDesktopDevice_iface);
++    object->hwnd = hwnd;
++    object->topmost = topmost;
++
++    EnterCriticalSection(&device->cs);
++    list_add_tail(&device->targets, &object->entry);
++    LeaveCriticalSection(&device->cs);
++
++    TRACE("Created target %p for window %p.\n", object, hwnd);
++    *target = object;
++    return S_OK;
++}
++
++static struct dcomp_placement dcomp_visual_placement(const struct dcomp_placement *parent,
++        const struct dcomp_visual *visual)
++{
++    struct dcomp_placement placement = *parent;
++
++    placement.x += round_float(visual->offset_x + visual->transform.dx);
++    placement.y += round_float(visual->offset_y + visual->transform.dy);
++    return placement;
++}
++
++static BOOL dcomp_visual_swapchain_desc(const struct dcomp_visual *visual, DXGI_SWAP_CHAIN_DESC1 *desc)
++{
++    return visual->swapchain && SUCCEEDED(IDXGISwapChain1_GetDesc1(visual->swapchain, desc));
++}
++
++static BOOL dcomp_visual_host_rect(const struct dcomp_placement *placement,
++        const struct dcomp_visual *visual, UINT width, UINT height, RECT *rect)
++{
++    RECT clip;
++
++    SetRect(rect, placement->x, placement->y, placement->x + width, placement->y + height);
++
++    if (visual->has_clip)
++    {
++        SetRect(&clip, round_float(visual->clip.left), round_float(visual->clip.top),
++                round_float(visual->clip.right), round_float(visual->clip.bottom));
++        OffsetRect(&clip, placement->x, placement->y);
++        if (!IntersectRect(rect, rect, &clip))
++            return FALSE;
++    }
++
++    return TRUE;
++}
++
++static BOOL dcomp_visual_update_host(struct dcomp_target *target, struct dcomp_visual *visual,
++        const struct dcomp_placement *placement, UINT width, UINT height)
++{
++    HWND target_hwnd = target->hwnd;
++    RECT rect;
++
++    if (!width || !height || !dcomp_visual_host_rect(placement, visual, width, height, &rect))
++    {
++        TRACE("Visual %p has no visible area on target %p.\n", visual, target_hwnd);
++        dcomp_visual_teardown_host(visual);
++        return FALSE;
++    }
++    width = rect.right - rect.left;
++    height = rect.bottom - rect.top;
++
++    if (visual->host_hwnd && visual->host_parent != target_hwnd)
++        dcomp_visual_teardown_host(visual);
++
++    if (!visual->host_hwnd)
++    {
++        if (!(visual->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
++                dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
++                rect.left, rect.top, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
++        {
++            WARN("Failed to create host window for visual %p, error %lu.\n", visual, GetLastError());
++            return FALSE;
++        }
++        TRACE("Created host window %p for visual %p on target %p.\n", visual->host_hwnd, visual, target_hwnd);
++        visual->host_parent = target_hwnd;
++        visual->host_x = rect.left;
++        visual->host_y = rect.top;
++        visual->host_width = width;
++        visual->host_height = height;
++    }
++    else if (visual->host_x != rect.left || visual->host_y != rect.top
++            || visual->host_width != width || visual->host_height != height)
++    {
++        if (!SetWindowPos(visual->host_hwnd, HWND_TOP, rect.left, rect.top, width, height,
++                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW))
++        {
++            WARN("Failed to position host window %p, error %lu.\n", visual->host_hwnd, GetLastError());
++        }
++        else
++        {
++            visual->host_x = rect.left;
++            visual->host_y = rect.top;
++            visual->host_width = width;
++            visual->host_height = height;
++        }
++    }
++
++    return TRUE;
++}
++
++static void dcomp_visual_bind(struct dcomp_target *target, struct dcomp_visual *visual,
++        const struct dcomp_placement *parent_placement)
++{
++    struct dcomp_placement placement;
++    DXGI_SWAP_CHAIN_DESC1 desc = {0};
++    struct dcomp_visual *child;
++    UINT width = 0, height = 0;
++    BOOL needs_host = FALSE;
++
++    placement = dcomp_visual_placement(parent_placement, visual);
++    if (dcomp_visual_swapchain_desc(visual, &desc))
++    {
++        width = desc.Width;
++        height = desc.Height;
++        /* Opaque content may be presented to the target window itself. */
++        needs_host = desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE;
++    }
++
++    TRACE("visual %p, content %p, placement (%d, %d), size %ux%u, target %p.\n",
++            visual, visual->content, placement.x, placement.y, width, height, target->hwnd);
++
++    if (!visual->swapchain)
++    {
++        if (visual->host_hwnd)
++            dcomp_visual_teardown_host(visual);
++    }
++    else if (needs_host)
++    {
++        if (!dcomp_visual_update_host(target, visual, &placement, width, height))
++            dcomp_visual_bind_swapchain(visual, target->hwnd, target->hwnd);
++        else
++            dcomp_visual_bind_swapchain(visual, visual->host_hwnd, target->hwnd);
++    }
++    else
++    {
++        if (visual->host_hwnd)
++            dcomp_visual_teardown_host(visual);
++        dcomp_visual_bind_swapchain(visual, target->hwnd, target->hwnd);
++    }
++
++    LIST_FOR_EACH_ENTRY(child, &visual->children, struct dcomp_visual, child_entry)
++        dcomp_visual_bind(target, child, &placement);
++}
 +
 +static HRESULT WINAPI device_QueryInterface(IDCompositionDesktopDevice *iface, REFIID iid, void **out)
 +{
-+    if (IsEqualGUID(iid, &IID_IUnknown) ||
-+        IsEqualGUID(iid, &IID_IDCompositionDevice2) ||
-+        IsEqualGUID(iid, &IID_IDCompositionDesktopDevice))
-+    { IDCompositionDesktopDevice_AddRef(iface); *out = iface; return S_OK; }
-+    TRACE("device QI %s - not supported\n", debugstr_guid(iid));
++    TRACE("iface %p, iid %s, out %p.\n", iface, debugstr_guid(iid), out);
++
++    if (IsEqualGUID(iid, &IID_IDCompositionDesktopDevice)
++            || IsEqualGUID(iid, &IID_IDCompositionDevice2)
++            || IsEqualGUID(iid, &IID_IUnknown))
++    {
++        IDCompositionDesktopDevice_AddRef(iface);
++        *out = iface;
++        return S_OK;
++    }
++
++    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
 +    *out = NULL;
 +    return E_NOINTERFACE;
 +}
 +
 +static ULONG WINAPI device_AddRef(IDCompositionDesktopDevice *iface)
-+{ struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface); return InterlockedIncrement(&d->ref); }
++{
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    ULONG refcount = InterlockedIncrement(&device->refcount);
++
++    TRACE("%p increasing refcount to %lu.\n", device, refcount);
++
++    return refcount;
++}
 +
 +static ULONG WINAPI device_Release(IDCompositionDesktopDevice *iface)
 +{
-+    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
-+    ULONG r = InterlockedDecrement(&d->ref);
-+    if (!r)
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    ULONG refcount = InterlockedDecrement(&device->refcount);
++
++    TRACE("%p decreasing refcount to %lu.\n", device, refcount);
++
++    if (!refcount)
 +    {
-+        struct dcomp_target *t, *t_next;
-+        LIST_FOR_EACH_ENTRY_SAFE(t, t_next, &d->targets, struct dcomp_target, entry)
-+            IDCompositionTarget_Release(&t->IDCompositionTarget_iface);
-+        if (d->cs_init) DeleteCriticalSection(&d->cs);
-+        if (d->d3d11_device) ID3D11Device_Release(d->d3d11_device);
-+        if (d->rendering_device) IUnknown_Release(d->rendering_device);
-+        free(d);
-+    }
-+    return r;
-+}
-+
-+static int round_float(float value)
-+{
-+    return (int)(value + (value >= 0.0f ? 0.5f : -0.5f));
-+}
-+
-+static struct dcomp_placement dcomp_visual_placement(const struct dcomp_placement *parent,
-+                                                     const struct dcomp_visual *v)
-+{
-+    struct dcomp_placement placement = *parent;
-+
-+    placement.x += round_float(v->offset_x + v->transform.dx);
-+    placement.y += round_float(v->offset_y + v->transform.dy);
-+    if (v->transform.m12 != 0.0f || v->transform.m21 != 0.0f ||
-+        v->transform.m11 != 1.0f || v->transform.m22 != 1.0f)
-+    {
-+        FIXME("visual=%p non-translation transform not fully supported: "
-+              "[%.8e %.8e %.8e %.8e %.8e %.8e]\n",
-+              v, v->transform.m11, v->transform.m12, v->transform.m21,
-+              v->transform.m22, v->transform.dx, v->transform.dy);
-+    }
-+    return placement;
-+}
-+
-+static BOOL dcomp_refresh_swapchain_desc(struct dcomp_visual *v)
-+{
-+    IDXGISwapChain1 *sc1 = NULL;
-+    DXGI_SWAP_CHAIN_DESC1 desc = {0};
-+    HRESULT hr;
-+
-+    if (!v->content ||
-+        FAILED(IUnknown_QueryInterface(v->content, &IID_IDXGISwapChain1, (void **)&sc1)) ||
-+        !sc1)
-+    {
-+        v->has_swapchain_desc = FALSE;
-+        memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
-+        return FALSE;
++        DeleteCriticalSection(&device->cs);
++        if (device->d3d11_device)
++            ID3D11Device_Release(device->d3d11_device);
++        if (device->rendering_device)
++            IUnknown_Release(device->rendering_device);
++        free(device);
 +    }
 +
-+    hr = IDXGISwapChain1_GetDesc1(sc1, &desc);
-+    IDXGISwapChain1_Release(sc1);
-+    if (FAILED(hr))
-+    {
-+        v->has_swapchain_desc = FALSE;
-+        memset(&v->swapchain_desc, 0, sizeof(v->swapchain_desc));
-+        return FALSE;
-+    }
-+
-+    v->has_swapchain_desc = TRUE;
-+    v->swapchain_desc = desc;
-+    return TRUE;
-+}
-+
-+static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-+                              const struct dcomp_placement *parent_placement)
-+{
-+    struct dcomp_visual *c;
-+    IDXGIVkCompositionSwapChain *composition_sc = NULL;
-+    struct dcomp_placement placement;
-+    HWND target_hwnd;
-+
-+    if (!v) return;
-+    placement = dcomp_visual_placement(parent_placement, v);
-+
-+    TRACE("target=%p hwnd=%p visual=%p content=%p pos=(%d,%d) offset=(%.8e,%.8e) clip=%d composite=%u opacity=%u\n",
-+          t, t->hwnd, v, v->content, placement.x, placement.y, v->offset_x,
-+          v->offset_y, v->has_clip, v->composite_mode, v->opacity_mode);
-+
-+    target_hwnd = t->hwnd;
-+    dcomp_refresh_swapchain_desc(v);
-+    if (v->content && v->has_swapchain_desc &&
-+        v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)
-+    {
-+        int x = placement.x;
-+        int y = placement.y;
-+        UINT width = v->swapchain_desc.Width;
-+        UINT height = v->swapchain_desc.Height;
-+
-+        if (v->has_clip)
-+        {
-+            int clip_left = placement.x + round_float(v->clip.left);
-+            int clip_top = placement.y + round_float(v->clip.top);
-+            int clip_right = placement.x + round_float(v->clip.right);
-+            int clip_bottom = placement.y + round_float(v->clip.bottom);
-+            int right = x + width;
-+            int bottom = y + height;
-+
-+            if (clip_left > x) x = clip_left;
-+            if (clip_top > y) y = clip_top;
-+            if (clip_right < right) right = clip_right;
-+            if (clip_bottom < bottom) bottom = clip_bottom;
-+            width = right > x ? right - x : 0;
-+            height = bottom > y ? bottom - y : 0;
-+        }
-+
-+        if (width && height && dcomp_register_host_class())
-+        {
-+            if (!v->host_hwnd || v->host_parent != t->hwnd)
-+            {
-+                if (v->host_hwnd) DestroyWindow(v->host_hwnd);
-+                v->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
-+                                               dcomp_host_class_name, NULL,
-+                                               WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
-+                                               x, y, width, height, t->hwnd, NULL,
-+                                               GetModuleHandleW(NULL), NULL);
-+                v->host_parent = t->hwnd;
-+                v->host_width = v->host_height = 0;
-+            }
-+
-+            if (v->host_hwnd &&
-+                (v->host_x != x || v->host_y != y ||
-+                 v->host_width != width || v->host_height != height))
-+            {
-+                SetWindowPos(v->host_hwnd, HWND_TOP, x, y, width, height,
-+                             SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
-+                v->host_x = x;
-+                v->host_y = y;
-+                v->host_width = width;
-+                v->host_height = height;
-+            }
-+
-+            if (v->host_hwnd) target_hwnd = v->host_hwnd;
-+        }
-+    }
-+
-+    if (v->content &&
-+        SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGIVkCompositionSwapChain,
-+                                          (void **)&composition_sc)) &&
-+        composition_sc)
-+    {
-+        TRACE("binding composition swap chain content=%p hwnd=%p parent=%p alpha=%u\n",
-+              v->content, target_hwnd, t->hwnd,
-+              v->has_swapchain_desc ? v->swapchain_desc.AlphaMode : 0);
-+        composition_sc->lpVtbl->SetCompositionTarget(composition_sc, target_hwnd, t->hwnd);
-+        composition_sc->lpVtbl->Release(composition_sc);
-+    }
-+
-+    LIST_FOR_EACH_ENTRY(c, &v->children, struct dcomp_visual, child_entry)
-+        dcomp_bind_visual(t, c, &placement);
++    return refcount;
 +}
 +
 +static HRESULT WINAPI device_Commit(IDCompositionDesktopDevice *iface)
 +{
-+    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
-+    struct dcomp_target *t;
-+    int target_count = 0;
-+    TRACE("device=%p\n", d);
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_target *target;
 +
-+    if (d->cs_init) EnterCriticalSection(&d->cs);
-+    LIST_FOR_EACH_ENTRY(t, &d->targets, struct dcomp_target, entry)
++    TRACE("iface %p.\n", iface);
++
++    EnterCriticalSection(&device->cs);
++
++    LIST_FOR_EACH_ENTRY(target, &device->targets, struct dcomp_target, entry)
 +    {
-+        const struct dcomp_placement placement = {0, 0};
++        struct dcomp_placement placement = {0};
 +
-+        target_count++;
-+        TRACE("  target=%p hwnd=%p root=%p\n", t, t->hwnd, t->root);
-+        if (t->root) dcomp_bind_visual(t, t->root, &placement);
++        if (target->root)
++            dcomp_visual_bind(target, target->root, &placement);
 +    }
-+    d->pending_commit = FALSE;
-+    if (d->cs_init) LeaveCriticalSection(&d->cs);
-+    if (!target_count) TRACE("Commit with no targets registered\n");
++
++    QueryPerformanceCounter(&device->last_frame_time);
++
++    LeaveCriticalSection(&device->cs);
 +    return S_OK;
 +}
 +
 +static HRESULT WINAPI device_WaitForCommitCompletion(IDCompositionDesktopDevice *iface)
-+{ TRACE("\n"); return S_OK; }
++{
++    TRACE("iface %p.\n", iface);
++
++    return S_OK;
++}
 +
 +static HRESULT WINAPI device_GetFrameStatistics(IDCompositionDesktopDevice *iface,
-+                                                 DCOMPOSITION_FRAME_STATISTICS *s)
++        DCOMPOSITION_FRAME_STATISTICS *statistics)
 +{
-+    if (s) memset(s, 0, sizeof(*s));
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    LARGE_INTEGER frequency, now;
++
++    TRACE("iface %p, statistics %p.\n", iface, statistics);
++
++    if (!statistics)
++        return E_POINTER;
++
++    QueryPerformanceFrequency(&frequency);
++    QueryPerformanceCounter(&now);
++
++    statistics->lastFrameTime = device->last_frame_time.QuadPart ? device->last_frame_time : now;
++    statistics->currentCompositionRate.Numerator = 60;
++    statistics->currentCompositionRate.Denominator = 1;
++    statistics->currentTime = now;
++    statistics->timeFrequency = frequency;
++    statistics->nextEstimatedFrameTime.QuadPart = now.QuadPart + frequency.QuadPart / 60;
 +    return S_OK;
 +}
 +
-+static HRESULT WINAPI device_CreateVisual(IDCompositionDesktopDevice *iface, IDCompositionVisual2 **out)
++static HRESULT WINAPI device_CreateVisual(IDCompositionDesktopDevice *iface, IDCompositionVisual2 **visual)
 +{
-+    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
-+    struct dcomp_visual *v = dcomp_visual_create(d);
-+    if (!v) { *out = NULL; return E_OUTOFMEMORY; }
-+    *out = &v->IDCompositionVisual2_iface;
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_visual *object;
++    HRESULT hr;
++
++    TRACE("iface %p, visual %p.\n", iface, visual);
++
++    if (!visual)
++        return E_POINTER;
++
++    if (FAILED(hr = dcomp_visual_create(device, &object)))
++        return hr;
++
++    *visual = &object->IDCompositionVisual2_iface;
 +    return S_OK;
 +}
 +
-+static HRESULT WINAPI device_CreateSurfaceFactory(IDCompositionDesktopDevice *iface,
-+                                                   IUnknown *rendering_device,
-+                                                   IDCompositionSurfaceFactory **out)
++static HRESULT WINAPI device_CreateSurfaceFactory(IDCompositionDesktopDevice *iface, IUnknown *rendering_device,
++        IDCompositionSurfaceFactory **surface_factory)
 +{
-+    FIXME("not implemented\n");
-+    *out = NULL;
++    FIXME("iface %p, rendering_device %p, surface_factory %p stub!\n", iface, rendering_device, surface_factory);
+ 
+     return E_NOTIMPL;
+ }
+ 
+-HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **device)
++static HRESULT WINAPI device_CreateSurface(IDCompositionDesktopDevice *iface, UINT width, UINT height,
++        DXGI_FORMAT format, DXGI_ALPHA_MODE alpha_mode, IDCompositionSurface **surface)
++{
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_surface *object;
++    HRESULT hr;
++
++    TRACE("iface %p, width %u, height %u, format %#x, alpha_mode %#x, surface %p.\n",
++            iface, width, height, format, alpha_mode, surface);
++
++    if (!surface)
++        return E_POINTER;
++
++    if (FAILED(hr = dcomp_surface_create(device, width, height, format, alpha_mode, &object)))
++        return hr;
++
++    *surface = &object->IDCompositionSurface_iface;
++    return S_OK;
++}
++
++static HRESULT WINAPI device_CreateVirtualSurface(IDCompositionDesktopDevice *iface, UINT width, UINT height,
++        DXGI_FORMAT format, DXGI_ALPHA_MODE alpha_mode, IDCompositionVirtualSurface **surface)
+ {
+-    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++    FIXME("iface %p, width %u, height %u, format %#x, alpha_mode %#x, surface %p stub!\n",
++            iface, width, height, format, alpha_mode, surface);
++
++    return E_NOTIMPL;
++}
+ 
+-    /* Try to workaround Chromium race fixed by Chromium commit 1c13c9105b40e83f87ebcad104fab57fcef43eb9. */
+-    Sleep(50);
++static HRESULT WINAPI device_CreateTranslateTransform(IDCompositionDesktopDevice *iface,
++        IDCompositionTranslateTransform **transform)
++{
++    FIXME("iface %p, transform %p stub!\n", iface, transform);
+ 
+     return E_NOTIMPL;
+ }
+ 
+-HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **device)
++static HRESULT WINAPI device_CreateScaleTransform(IDCompositionDesktopDevice *iface,
++        IDCompositionScaleTransform **transform)
++{
++    FIXME("iface %p, transform %p stub!\n", iface, transform);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateRotateTransform(IDCompositionDesktopDevice *iface,
++        IDCompositionRotateTransform **transform)
++{
++    FIXME("iface %p, transform %p stub!\n", iface, transform);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateSkewTransform(IDCompositionDesktopDevice *iface,
++        IDCompositionSkewTransform **transform)
++{
++    FIXME("iface %p, transform %p stub!\n", iface, transform);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateMatrixTransform(IDCompositionDesktopDevice *iface,
++        IDCompositionMatrixTransform **transform)
++{
++    FIXME("iface %p, transform %p stub!\n", iface, transform);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateTransformGroup(IDCompositionDesktopDevice *iface,
++        IDCompositionTransform **transforms, UINT elements, IDCompositionTransform **transform_group)
++{
++    FIXME("iface %p, transforms %p, elements %u, transform_group %p stub!\n",
++            iface, transforms, elements, transform_group);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateTranslateTransform3D(IDCompositionDesktopDevice *iface,
++        IDCompositionTranslateTransform3D **transform_3d)
++{
++    FIXME("iface %p, transform_3d %p stub!\n", iface, transform_3d);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateScaleTransform3D(IDCompositionDesktopDevice *iface,
++        IDCompositionScaleTransform3D **transform_3d)
++{
++    FIXME("iface %p, transform_3d %p stub!\n", iface, transform_3d);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateRotateTransform3D(IDCompositionDesktopDevice *iface,
++        IDCompositionRotateTransform3D **transform_3d)
++{
++    FIXME("iface %p, transform_3d %p stub!\n", iface, transform_3d);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateMatrixTransform3D(IDCompositionDesktopDevice *iface,
++        IDCompositionMatrixTransform3D **transform_3d)
++{
++    FIXME("iface %p, transform_3d %p stub!\n", iface, transform_3d);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateTransform3DGroup(IDCompositionDesktopDevice *iface,
++        IDCompositionTransform3D **transforms_3d, UINT elements, IDCompositionTransform3D **transform_3d_group)
++{
++    FIXME("iface %p, transforms_3d %p, elements %u, transform_3d_group %p stub!\n",
++            iface, transforms_3d, elements, transform_3d_group);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateEffectGroup(IDCompositionDesktopDevice *iface,
++        IDCompositionEffectGroup **effect_group)
++{
++    FIXME("iface %p, effect_group %p stub!\n", iface, effect_group);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateRectangleClip(IDCompositionDesktopDevice *iface,
++        IDCompositionRectangleClip **clip)
++{
++    FIXME("iface %p, clip %p stub!\n", iface, clip);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateAnimation(IDCompositionDesktopDevice *iface, IDCompositionAnimation **animation)
++{
++    FIXME("iface %p, animation %p stub!\n", iface, animation);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateTargetForHwnd(IDCompositionDesktopDevice *iface, HWND hwnd, BOOL topmost,
++        IDCompositionTarget **target)
++{
++    struct dcomp_device *device = impl_from_IDCompositionDesktopDevice(iface);
++    struct dcomp_target *object;
++    HRESULT hr;
++
++    TRACE("iface %p, hwnd %p, topmost %#x, target %p.\n", iface, hwnd, topmost, target);
++
++    if (!target)
++        return E_POINTER;
++
++    if (FAILED(hr = dcomp_target_create(device, hwnd, topmost, &object)))
++        return hr;
++
++    *target = &object->IDCompositionTarget_iface;
++    return S_OK;
++}
++
++static HRESULT WINAPI device_CreateSurfaceFromHandle(IDCompositionDesktopDevice *iface, HANDLE handle,
++        IUnknown **surface)
++{
++    FIXME("iface %p, handle %p, surface %p stub!\n", iface, handle, surface);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI device_CreateSurfaceFromHwnd(IDCompositionDesktopDevice *iface, HWND hwnd, IUnknown **surface)
+ {
+-    FIXME("%p, %s, %p.\n", rendering_device, debugstr_guid(iid), device);
++    FIXME("iface %p, hwnd %p, surface %p stub!\n", iface, hwnd, surface);
+ 
      return E_NOTIMPL;
  }
 +
-+static HRESULT WINAPI device_CreateSurface(IDCompositionDesktopDevice *iface,
-+                                            UINT w, UINT h, DXGI_FORMAT fmt, DXGI_ALPHA_MODE am,
-+                                            IDCompositionSurface **out)
-+{
-+    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
-+    struct dcomp_surface *s = dcomp_surface_create(d, w, h, fmt, am);
-+    if (!s) { *out = NULL; return E_OUTOFMEMORY; }
-+    *out = &s->IDCompositionSurface_iface;
-+    return S_OK;
-+}
-+
-+static HRESULT WINAPI device_CreateVirtualSurface(IDCompositionDesktopDevice *iface,
-+                                                   UINT w, UINT h, DXGI_FORMAT fmt, DXGI_ALPHA_MODE am,
-+                                                   IDCompositionVirtualSurface **out)
-+{ FIXME("not implemented\n"); *out = NULL; return E_NOTIMPL; }
-+
-+#define DEV_STUB_OK(name, ret_type, out_name) \
-+    static HRESULT WINAPI device_##name(IDCompositionDesktopDevice *iface, ret_type **out_name) \
-+    { FIXME("stub: " #name "\n"); *out_name = NULL; return E_NOTIMPL; }
-+
-+DEV_STUB_OK(CreateTranslateTransform,    IDCompositionTranslateTransform,    out)
-+DEV_STUB_OK(CreateScaleTransform,        IDCompositionScaleTransform,        out)
-+DEV_STUB_OK(CreateRotateTransform,       IDCompositionRotateTransform,       out)
-+DEV_STUB_OK(CreateSkewTransform,         IDCompositionSkewTransform,         out)
-+DEV_STUB_OK(CreateMatrixTransform,       IDCompositionMatrixTransform,       out)
-+DEV_STUB_OK(CreateTranslateTransform3D,  IDCompositionTranslateTransform3D,  out)
-+DEV_STUB_OK(CreateScaleTransform3D,      IDCompositionScaleTransform3D,      out)
-+DEV_STUB_OK(CreateRotateTransform3D,     IDCompositionRotateTransform3D,     out)
-+DEV_STUB_OK(CreateMatrixTransform3D,     IDCompositionMatrixTransform3D,     out)
-+DEV_STUB_OK(CreateEffectGroup,           IDCompositionEffectGroup,           out)
-+DEV_STUB_OK(CreateRectangleClip,         IDCompositionRectangleClip,         out)
-+DEV_STUB_OK(CreateAnimation,             IDCompositionAnimation,             out)
-+
-+static HRESULT WINAPI device_CreateTransformGroup(IDCompositionDesktopDevice *iface,
-+                                                   IDCompositionTransform **transforms,
-+                                                   UINT elements, IDCompositionTransform **out)
-+{ FIXME("stub\n"); *out = NULL; return E_NOTIMPL; }
-+
-+static HRESULT WINAPI device_CreateTransform3DGroup(IDCompositionDesktopDevice *iface,
-+                                                     IDCompositionTransform3D **transforms,
-+                                                     UINT elements, IDCompositionTransform3D **out)
-+{ FIXME("stub\n"); *out = NULL; return E_NOTIMPL; }
-+
-+static HRESULT WINAPI device_CreateTargetForHwnd(IDCompositionDesktopDevice *iface,
-+                                                  HWND hwnd, BOOL topmost,
-+                                                  IDCompositionTarget **out)
-+{
-+    struct dcomp_device *d = impl_from_IDCompositionDesktopDevice(iface);
-+    struct dcomp_target *t = dcomp_target_create(d, hwnd, topmost);
-+    if (!t) { *out = NULL; return E_OUTOFMEMORY; }
-+    *out = &t->IDCompositionTarget_iface;
-+    return S_OK;
-+}
-+
-+static HRESULT WINAPI device_CreateSurfaceFromHandle(IDCompositionDesktopDevice *iface,
-+                                                      HANDLE handle, IUnknown **out)
-+{ FIXME("stub handle=%p\n", handle); *out = NULL; return E_NOTIMPL; }
-+
-+static HRESULT WINAPI device_CreateSurfaceFromHwnd(IDCompositionDesktopDevice *iface,
-+                                                    HWND hwnd, IUnknown **out)
-+{ FIXME("stub hwnd=%p\n", hwnd); *out = NULL; return E_NOTIMPL; }
-+
 +static const IDCompositionDesktopDeviceVtbl dcomp_device_vtbl =
 +{
-+    /* IUnknown */
-+    device_QueryInterface, device_AddRef, device_Release,
-+    /* IDCompositionDevice2 */
-+    device_Commit, device_WaitForCommitCompletion, device_GetFrameStatistics,
-+    device_CreateVisual, device_CreateSurfaceFactory,
-+    device_CreateSurface, device_CreateVirtualSurface,
-+    device_CreateTranslateTransform, device_CreateScaleTransform,
-+    device_CreateRotateTransform, device_CreateSkewTransform, device_CreateMatrixTransform,
++    device_QueryInterface,
++    device_AddRef,
++    device_Release,
++    device_Commit,
++    device_WaitForCommitCompletion,
++    device_GetFrameStatistics,
++    device_CreateVisual,
++    device_CreateSurfaceFactory,
++    device_CreateSurface,
++    device_CreateVirtualSurface,
++    device_CreateTranslateTransform,
++    device_CreateScaleTransform,
++    device_CreateRotateTransform,
++    device_CreateSkewTransform,
++    device_CreateMatrixTransform,
 +    device_CreateTransformGroup,
-+    device_CreateTranslateTransform3D, device_CreateScaleTransform3D,
-+    device_CreateRotateTransform3D, device_CreateMatrixTransform3D,
++    device_CreateTranslateTransform3D,
++    device_CreateScaleTransform3D,
++    device_CreateRotateTransform3D,
++    device_CreateMatrixTransform3D,
 +    device_CreateTransform3DGroup,
-+    device_CreateEffectGroup, device_CreateRectangleClip, device_CreateAnimation,
-+    /* IDCompositionDesktopDevice */
-+    device_CreateTargetForHwnd, device_CreateSurfaceFromHandle, device_CreateSurfaceFromHwnd,
++    device_CreateEffectGroup,
++    device_CreateRectangleClip,
++    device_CreateAnimation,
++    device_CreateTargetForHwnd,
++    device_CreateSurfaceFromHandle,
++    device_CreateSurfaceFromHwnd,
 +};
 +
-+/* ----------------------- dll entry points ----------------------- */
-+
-+static HRESULT dcomp_create_device(IUnknown *rendering_device, REFIID iid, void **out)
++static HRESULT dcomp_device_create(IUnknown *rendering_device, REFIID iid, void **out)
 +{
-+    struct dcomp_device *d;
++    struct dcomp_device *device;
 +    HRESULT hr;
 +
-+    if (!out) return E_POINTER;
++    if (!out)
++        return E_POINTER;
 +    *out = NULL;
 +
-+    if (!IsEqualGUID(iid, &IID_IDCompositionDevice2) &&
-+        !IsEqualGUID(iid, &IID_IDCompositionDesktopDevice) &&
-+        !IsEqualGUID(iid, &IID_IUnknown))
-+    {
-+        FIXME("unsupported iid %s\n", debugstr_guid(iid));
-+        return E_NOINTERFACE;
-+    }
++    if (!(device = calloc(1, sizeof(*device))))
++        return E_OUTOFMEMORY;
 +
-+    d = calloc(1, sizeof(*d));
-+    if (!d) return E_OUTOFMEMORY;
-+    d->IDCompositionDesktopDevice_iface.lpVtbl = &dcomp_device_vtbl;
-+    d->ref = 1;
-+    list_init(&d->targets);
-+    list_init(&d->visuals);
-+    list_init(&d->surfaces);
-+    InitializeCriticalSection(&d->cs);
-+    d->cs_init = TRUE;
++    device->IDCompositionDesktopDevice_iface.lpVtbl = &dcomp_device_vtbl;
++    device->refcount = 1;
++    InitializeCriticalSection(&device->cs);
++    list_init(&device->targets);
 +
 +    if (rendering_device)
 +    {
-+        d->rendering_device = rendering_device;
++        device->rendering_device = rendering_device;
 +        IUnknown_AddRef(rendering_device);
-+        hr = IUnknown_QueryInterface(rendering_device, &IID_ID3D11Device, (void **)&d->d3d11_device);
-+        if (FAILED(hr))
++        if (FAILED(hr = IUnknown_QueryInterface(rendering_device, &IID_ID3D11Device, (void **)&device->d3d11_device)))
 +        {
-+            WARN("rendering_device is not ID3D11Device hr=%#lx (BeginDraw will fail)\n", hr);
-+            d->d3d11_device = NULL;
++            FIXME("Rendering device %p is not a D3D11 device, hr %#lx.\n", rendering_device, hr);
++            device->d3d11_device = NULL;
 +        }
 +    }
 +
-+    *out = &d->IDCompositionDesktopDevice_iface;
-+    TRACE("created device=%p (d3d11=%p)\n", d, d->d3d11_device);
-+    return S_OK;
++    TRACE("Created device %p.\n", device);
++
++    hr = IDCompositionDesktopDevice_QueryInterface(&device->IDCompositionDesktopDevice_iface, iid, out);
++    IDCompositionDesktopDevice_Release(&device->IDCompositionDesktopDevice_iface);
++    return hr;
 +}
 +
-+HRESULT WINAPI DCompositionCreateDevice(IDXGIDevice *dxgi_device, REFIID iid, void **out)
++HRESULT WINAPI DCompositionCreateDevice(IDXGIDevice *dxgi_device, REFIID iid, void **device)
 +{
-+    TRACE("%p %s %p\n", dxgi_device, debugstr_guid(iid), out);
-+    return dcomp_create_device((IUnknown *)dxgi_device, iid, out);
++    TRACE("dxgi_device %p, iid %s, device %p.\n", dxgi_device, debugstr_guid(iid), device);
++
++    return dcomp_device_create((IUnknown *)dxgi_device, iid, device);
 +}
 +
-+HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **out)
++HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid, void **device)
 +{
-+    TRACE("%p %s %p\n", rendering_device, debugstr_guid(iid), out);
-+    return dcomp_create_device(rendering_device, iid, out);
++    TRACE("rendering_device %p, iid %s, device %p.\n", rendering_device, debugstr_guid(iid), device);
++
++    return dcomp_device_create(rendering_device, iid, device);
 +}
 +
-+HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **out)
++HRESULT WINAPI DCompositionCreateDevice3(IUnknown *rendering_device, REFIID iid, void **device)
 +{
-+    TRACE("%p %s %p\n", rendering_device, debugstr_guid(iid), out);
-+    return dcomp_create_device(rendering_device, iid, out);
++    TRACE("rendering_device %p, iid %s, device %p.\n", rendering_device, debugstr_guid(iid), device);
++
++    return dcomp_device_create(rendering_device, iid, device);
 +}
++
++BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
++{
++    WNDCLASSW wc = {0};
++
++    TRACE("instance %p, reason %lu, reserved %p.\n", instance, reason, reserved);
++
++    switch (reason)
++    {
++        case DLL_PROCESS_ATTACH:
++            dcomp_instance = instance;
++            DisableThreadLibraryCalls(instance);
++            wc.lpfnWndProc = dcomp_host_wndproc;
++            wc.hInstance = instance;
++            wc.lpszClassName = dcomp_host_class_name;
++            if (!RegisterClassW(&wc))
++                ERR("Failed to register host window class, error %lu.\n", GetLastError());
++            break;
++
++        case DLL_PROCESS_DETACH:
++            if (!reserved)
++                UnregisterClassW(dcomp_host_class_name, instance);
++            break;
++    }
++
++    return TRUE;
++}
+-- 
+2.55.0
+

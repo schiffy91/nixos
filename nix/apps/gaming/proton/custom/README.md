@@ -16,7 +16,8 @@ generic enough to be the one custom Proton build used by Steam games too.
 3. Applies only the explicit `activePatchSeries` list, in Nix list order.
 4. Builds the patched Wine artifacts touched by the active series:
    `dcomp.dll`, `dxgi.dll`, `explorer.exe`, `winewayland.drv`,
-   `winevulkan`, and `win32u`, including the matching PE/Unix halves.
+   `winevulkan`, `win32u`, `ntdll`, and `wow64win`, including the matching
+   PE/Unix halves.
 5. Builds the patched DXVK `dxgi.dll` and `d3d11.dll` artifacts.
 6. Overlays only those artifacts on top of the GE-Proton binary tarball.
 
@@ -34,14 +35,13 @@ the `git format-patch -s` commit order for that topic.
 
 | Topic | Patch | Status |
 |---|---|---|
-| `wine-wayland-roundtrip` | `0001-winewayland.drv-Avoid-second-init-roundtrip.patch` | Active. Avoids a blocking second Wayland init roundtrip. |
-| `wine-wayland-focus` | `0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch` | Active. Bounds the synchronous `WM_CANCELMODE` sent from the compositor dispatch thread. |
-| `wine-wayland-layered-windows` | `0001..0002` | Active. Fixes layered-surface alpha uploads; GE-Proton11 ships the `pUpdateLayeredWindow` hook itself. |
-| `wine-wayland-status-notifier` | `0001..0004` | Active. Adds SNI tray support, callback polish, explorer-to-driver icon snapshots, and self-contained item lifetime handling. |
-| `ntdll-delay-load` | `0001` | Active. Makes the delay-load IAT writable before patching. |
-| `dcomp-wayland-gpu-present` | `0001..0019` | Active. Implements the minimal DComp object model Battle.net uses, binds identity swap-chain wrappers directly to the target HWND, keeps placed/clipped/surface visuals on host HWNDs, and clips target parents around hosted composition children. |
-| `win32u-load-driver-deadlock` | `0001` | Active. Bounds desktop-driver readiness waits. |
-| `dxvk-composition-swapchain` | `0001..0011` | Active. Enables DXGI composition swap chains in DXVK, compositor pacing, resize tracking, preserved contents across partial updates, first-present host visibility, retained-content replay after DComp target rebinds, opaque native WSI alpha for Wayland child hosts, and opt-in debug traces for composition presents and target binds. |
+| `wine-wayland-focus` | `0001` | Active. Sends GE's `WM_CANCELMODE` on keyboard leave as a notify message so the Wayland reader thread never blocks and the message is never dropped. |
+| `wine-wayland-layered-windows` | `0001` | Active. Bakes premultiplied constant alpha into layered SHM uploads only when the compositor lacks `wp_alpha_modifier_v1`; GE-Proton11 ships the `pUpdateLayeredWindow` hook itself. |
+| `wine-wayland-status-notifier` | `0001..0003` | Active. win32u passes an icon snapshot to `SystrayDockInsert` (incl. the wow64win thunk); winewayland publishes StatusNotifierItems over dlopen'd libdbus from explorer, re-registering when the watcher restarts; explorer forwards `NIM_MODIFY`/`NIM_SETVERSION`. The winex11 re-dock guard only takes effect if `winex11.drv` is rebuilt (the package ships GE's). |
+| `ntdll-delay-load` | `0001` | Active. Makes a read-only delay-load IAT (`/guard:cf` `.didat`) writable before patching, serialized on the loader lock. |
+| `dcomp-wayland-gpu-present` | `0001..0019` | Active. Implements the minimal DComp object model Battle.net uses with a sound COM lifetime (children hold the device, targets ref 1), direct-binds the first unplaced first-level swap chain to the target HWND, keeps placed/clipped/surface visuals on hidden host HWNDs torn down per commit, accumulates ancestor clips, and preserves virtual-surface content across resizes. |
+| `win32u-load-driver-deadlock` | `0001` | Active. Bounds the `WM_NULL` desktop-driver readiness barrier so a stalled explorer desktop thread cannot hang every client. |
+| `dxvk-composition-swapchain` | `0001..0008` | Active. Fixes the resize extent bug, enables DXGI composition swap chains with a private DComp bind interface, compositor pacing, async host show/resize, preserved contents across buffer rotation, first-present host visibility, retained-content replay after target rebinds, and trace-level composition logging (`DXVK_LOG_LEVEL=trace`). |
 
 Dropped at the GE-Proton11-5 rebase, now covered by the base tree:
 
@@ -50,6 +50,14 @@ Dropped at the GE-Proton11-5 rebase, now covered by the base tree:
 | `wine-wayland-popups` | GE-Proton wine-wayland `0031-winewayland-Implement-xdg-popup-for-unmanaged-window` |
 | `wine-wayland-layered-windows` `Hook-UpdateLayeredWindow` | GE-Proton wine-wayland `0014-winewayland.drv-Add-WAYLAND_UpdateLayeredWindow` |
 | `win32u-shared-gpu-resource` | Proton 11 `win32u` implements `NtGdiDdDDIOpenResource`/`OpenResource2`/`QueryResourceInfo` |
+
+Dropped in the 2026-08 series review as functional no-ops:
+
+| Topic | Why |
+|---|---|
+| `wine-wayland-roundtrip` | `wl_display_roundtrip_queue` already flushes and dispatches; the patch only reverted GE wine-wayland `0142`'s third roundtrip |
+| `wine-wayland-layered-windows` `Handle-fully-zero-alpha` | never returned its opaque case, and win32u's shape copy zeroes those pixels after upload anyway |
+| `dxvk-composition-swapchain` `Allow-limiting-shared-resource-tier` | option had no consumer |
 
 ## Runtime Scope
 
@@ -219,6 +227,27 @@ Expected Wayland result:
   DXVK presenter creation.
 - A StatusNotifierItem appears in the session bus.
 - Tray Activate and ContextMenu D-Bus calls return promptly.
+
+## Editing A Series
+
+Patch files are the source of truth, so edit them as git history, not by hand.
+Materialize a base tree once (Valve Wine plus the GE wine-wayland hotfixes, and
+a throwaway commit with the `make_vulkan`/`make_requests`/`make_specfiles`/
+`autoreconf` output), then give every topic its own worktree seeded with
+`git am`:
+
+```bash
+git -C src/rework/wine worktree add ../wine-sni -b sni base
+git -C src/rework/wine-sni am patches/wine-wayland-status-notifier/*.patch
+```
+
+Fix commits in place (`git commit --fixup` + `GIT_SEQUENCE_EDITOR=true git
+rebase -i --autosquash base`), compile the touched modules from a configured
+`build64/` inside the worktree, then regenerate the topic with
+`git format-patch -o patches/<topic> base..HEAD` and update `package.nix`.
+Worktrees checked out with `core.fileMode=false` lose exec bits: `chmod +x
+configure` before configuring. `src/` is git-ignored; `src/rework` is
+disposable.
 
 ## Patch Hygiene
 

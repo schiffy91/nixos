@@ -1,0 +1,38 @@
+From 43adb876bb93d8903bcce9dfc599e420faa6f52d Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:42:53 -0700
+Subject: [PATCH 1/8] [d3d11] Use new extent when resizing swap chain surface
+
+ChangeProperties hands the presenter the extent from the old swap chain
+description, since m_desc is only updated afterwards. The presenter's
+preferred extent therefore always lags one resize behind, and the first
+resize after creation does not mark the swap chain dirty at all.
+
+Surfaces that report a fixed current extent, such as Win32 surfaces, are
+unaffected because the presenter takes the window size from the surface
+capabilities in that case. Surfaces that leave the extent up to the
+application end up with a swap chain of the wrong size.
+
+Pass the new extent instead.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ src/d3d11/d3d11_swapchain.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index cbcc3c6..b761c9c 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -179,7 +179,7 @@ namespace dxvk {
+       m_presenter->setSurfaceFormat(GetSurfaceFormat(pDesc->Format));
+ 
+     if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height)
+-      m_presenter->setSurfaceExtent({ m_desc.Width, m_desc.Height });
++      m_presenter->setSurfaceExtent({ pDesc->Width, pDesc->Height });
+ 
+     m_desc = *pDesc;
+     CreateBackBuffers();
+-- 
+2.55.0
+

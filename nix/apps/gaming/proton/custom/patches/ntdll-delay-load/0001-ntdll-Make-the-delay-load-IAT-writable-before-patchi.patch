@@ -1,0 +1,57 @@
+From 6f84dbb1606865dd1c4a87bdee9a368ba26de5e5 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Tue, 25 Aug 2026 23:45:30 -0700
+Subject: [PATCH] ntdll: Make the delay-load IAT writable before patching it.
+
+LdrResolveDelayLoadedAPI() stores the resolved function pointer straight
+into the delay-load import address table. Modules built by winebuild
+keep that table in .data, so the store always succeeds for them, but
+MSVC builds using /guard:cf with IMAGE_GUARD_PROTECT_DELAYLOAD_IAT set
+in their load configuration put the delay IAT in a read-only .didat
+section and rely on the loader to make it writable for the duration of
+the patch, which is what LdrResolveDelayLoadedAPI() does on Windows.
+In Wine the store faults instead.
+
+Temporarily reprotect the thunk as PAGE_EXECUTE_READWRITE around the
+store and restore the previous protection afterwards, keeping execute
+permission in case the table shares a page with code. Serialize the
+protect/store/restore sequence with the loader lock so that two threads
+resolving imports on the same page cannot restore it to read-only
+underneath each other.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/ntdll/loader.c | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index bbb448c..a0721f2 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -4073,7 +4073,22 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
+     }
+     if (!nts)
+     {
+-        pIAT[id].u1.Function = (ULONG_PTR)fp;
++        void *protect_addr = &pIAT[id];
++        SIZE_T protect_size = sizeof(pIAT[id]);
++        ULONG protect_old;
++
++        /* the delay IAT may be read-only (IMAGE_GUARD_PROTECT_DELAYLOAD_IAT) */
++        RtlEnterCriticalSection( &loader_section );
++        if (NtProtectVirtualMemory( NtCurrentProcess(), &protect_addr, &protect_size,
++                                    PAGE_EXECUTE_READWRITE, &protect_old ))
++            WARN( "failed to unprotect delay-load IAT %p\n", &pIAT[id] );
++        else
++        {
++            pIAT[id].u1.Function = (ULONG_PTR)fp;
++            NtProtectVirtualMemory( NtCurrentProcess(), &protect_addr, &protect_size,
++                                    protect_old, &protect_old );
++        }
++        RtlLeaveCriticalSection( &loader_section );
+         return fp;
+     }
+ 
+-- 
+2.55.0
+

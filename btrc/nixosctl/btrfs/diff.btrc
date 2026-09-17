@@ -1,10 +1,10 @@
-import std.console;
-import std.fs;
-import std.json;
-import std.pattern;
-import std.process;
-import std.strings;
-import std.vector;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Pattern;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
 import ../../core/log.btrc;
 import ./snapshot.btrc;
 import ../config.btrc;
@@ -240,7 +240,7 @@ class DiffScanner {
     public Vector<string> previousCache(string cachePath) {
         Vector<string> result = [];
         if (!FileSystem.exists(cachePath)) { return result; }
-        var data = JsonObject.readFile(cachePath);
+        var data = JSONObject.readFile(cachePath);
         for key in data.values.keys() {
             result.push(key);
         }
@@ -248,7 +248,7 @@ class DiffScanner {
     }
 
     public void writeCache(string cachePath, Vector<string> paths) {
-        var data = JsonObject();
+        var data = JSONObject();
         for path in paths {
             data.setBool(path, true);
         }

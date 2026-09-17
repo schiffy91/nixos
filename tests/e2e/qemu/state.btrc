@@ -1,9 +1,9 @@
-import std.console;
-import std.fs;
-import std.json;
-import std.process;
-import std.strings;
-import std.vector;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ./firmware.btrc;
@@ -93,7 +93,7 @@ class VmStateStore {
 
     public void inheritParentFirmwareArgs() {
         if (!FileSystem.exists(self.parentMetadataPath())) { return; }
-        var metadata = JsonObject.readFile(self.parentMetadataPath());
+        var metadata = JSONObject.readFile(self.parentMetadataPath());
         if (metadata.getString("uefi", "false").equals("true") && !self.spec.args.has("uefi") && !self.spec.args.has("uefiDisk")) {
             self.spec.setArg("uefiDisk", "true");
         }
@@ -142,7 +142,7 @@ class VmStateStore {
         if (!FileSystem.exists(workDirRecord)) {
             NixosLog.fatal(f"Failed to write VM state workDir {workDirRecord}");
         }
-        var metadata = JsonObject();
+        var metadata = JSONObject();
         metadata.setString("state", self.spec.state);
         metadata.setString("parentState", self.spec.parentState);
         metadata.setString("parentHash", self.spec.parentHash);

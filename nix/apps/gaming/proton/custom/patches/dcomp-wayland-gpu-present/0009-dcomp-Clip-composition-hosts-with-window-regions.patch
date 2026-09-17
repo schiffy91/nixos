@@ -1,178 +1,218 @@
-From a764497d81fea653da90bb17955a046d27ddde7d Mon Sep 17 00:00:00 2001
+From cab6ceeaf2a66cca50e696bb1708f536b8a40607 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Thu, 21 May 2026 10:02:38 -0700
-Subject: [PATCH] dcomp: Clip composition hosts with window regions
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 09/19] dcomp: Clip composition hosts with window regions.
 
 DirectComposition clips a visual without changing the content origin. The
 Wayland presentation bridge used the clip rectangle to move and shrink the
-host HWND, which effectively displayed the wrong source rectangle from the
+host window, which effectively displayed the wrong source rectangle from the
 swap chain or IDCompositionSurface.
 
 Keep the host at the visual's full content bounds and apply the target and
-visual clips with SetWindowRgn() instead. This preserves content coordinates
-while still letting child-window clipping limit the presented area.
+visual clips with SetWindowRgn() instead. Clips accumulate down the tree, so
+a clip set on an ancestor visual limits its descendants as well.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
  dlls/dcomp/Makefile.in |  2 +-
- dlls/dcomp/device.c    | 99 +++++++++++++++++++++++++-----------------
- 2 files changed, 61 insertions(+), 40 deletions(-)
+ dlls/dcomp/device.c    | 82 +++++++++++++++++++++++++++++-------------
+ 2 files changed, 58 insertions(+), 26 deletions(-)
 
 diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
-index 4db5387..9904e9d 100644
+index 049b046..b63cd1a 100644
 --- a/dlls/dcomp/Makefile.in
 +++ b/dlls/dcomp/Makefile.in
-@@ -1,6 +1,6 @@
+@@ -1,5 +1,5 @@
  MODULE    = dcomp.dll
- IMPORTLIB = dcomp
 -IMPORTS   = dxguid uuid d3d11 dxgi user32
 +IMPORTS   = dxguid uuid d3d11 dxgi user32 gdi32
  
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 24274e4..34c9940 100644
+index 0a8ac7a..d335e73 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
-@@ -27,6 +27,7 @@
+@@ -28,6 +28,7 @@
  #include "windef.h"
  #include "winbase.h"
  #include "winuser.h"
 +#include "wingdi.h"
  #include "objbase.h"
- #include "dxgi.h"
+ #include "dxgi1_2.h"
  #include "d3d11.h"
-@@ -778,34 +779,42 @@ static BOOL dcomp_refresh_swapchain_desc(struct dcomp_visual *v)
+@@ -140,6 +141,8 @@ struct dcomp_target
+ struct dcomp_placement
+ {
+     int x, y;
++    BOOL has_clip;
++    RECT clip;
+ };
+ 
+ /* State of the walk over one target during a commit. */
+@@ -1140,9 +1143,23 @@ static struct dcomp_placement dcomp_visual_placement(const struct dcomp_placemen
+         const struct dcomp_visual *visual)
+ {
+     struct dcomp_placement placement = *parent;
++    RECT clip;
+ 
+     placement.x += round_float(visual->offset_x + visual->transform.dx);
+     placement.y += round_float(visual->offset_y + visual->transform.dy);
++
++    if (visual->has_clip)
++    {
++        SetRect(&clip, round_float(visual->clip.left), round_float(visual->clip.top),
++                round_float(visual->clip.right), round_float(visual->clip.bottom));
++        OffsetRect(&clip, placement.x, placement.y);
++        if (placement.has_clip)
++            IntersectRect(&placement.clip, &placement.clip, &clip);
++        else
++            placement.clip = clip;
++        placement.has_clip = TRUE;
++    }
++
+     return placement;
+ }
+ 
+@@ -1151,24 +1168,27 @@ static BOOL dcomp_visual_swapchain_desc(const struct dcomp_visual *visual, DXGI_
+     return visual->swapchain && SUCCEEDED(IDXGISwapChain1_GetDesc1(visual->swapchain, desc));
+ }
+ 
+-static BOOL dcomp_visual_host_rect(HWND hwnd, const struct dcomp_placement *placement,
+-        const struct dcomp_visual *visual, UINT width, UINT height, RECT *rect)
++static BOOL dcomp_visual_host_clip(HWND hwnd, const struct dcomp_placement *placement,
++        UINT width, UINT height, RECT *clip)
+ {
+-    RECT clip;
++    RECT rect;
+ 
+-    SetRect(rect, placement->x, placement->y, placement->x + width, placement->y + height);
++    SetRect(clip, 0, 0, width, height);
+ 
+-    if (visual->has_clip)
++    if (GetClientRect(hwnd, &rect))
+     {
+-        SetRect(&clip, round_float(visual->clip.left), round_float(visual->clip.top),
+-                round_float(visual->clip.right), round_float(visual->clip.bottom));
+-        OffsetRect(&clip, placement->x, placement->y);
+-        if (!IntersectRect(rect, rect, &clip))
++        OffsetRect(&rect, -placement->x, -placement->y);
++        if (!IntersectRect(clip, clip, &rect))
+             return FALSE;
+     }
+ 
+-    if (GetClientRect(hwnd, &clip) && !IntersectRect(rect, rect, &clip))
+-        return FALSE;
++    if (placement->has_clip)
++    {
++        rect = placement->clip;
++        OffsetRect(&rect, -placement->x, -placement->y);
++        if (!IntersectRect(clip, clip, &rect))
++            return FALSE;
++    }
+ 
+     return TRUE;
+ }
+@@ -1177,18 +1197,17 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+         const struct dcomp_placement *placement, UINT width, UINT height)
+ {
+     HWND target_hwnd = commit->target->hwnd;
+-    BOOL created = FALSE, moved, restack;
++    BOOL created = FALSE, moved, restack, need_region;
++    HRGN region = NULL;
+     UINT flags;
+-    RECT rect;
++    RECT clip;
+ 
+-    if (!width || !height || !dcomp_visual_host_rect(target_hwnd, placement, visual, width, height, &rect))
++    if (!width || !height || !dcomp_visual_host_clip(target_hwnd, placement, width, height, &clip))
+     {
+         TRACE("Visual %p has no visible area on target %p.\n", visual, target_hwnd);
+         dcomp_visual_teardown_host(visual);
+         return FALSE;
+     }
+-    width = rect.right - rect.left;
+-    height = rect.bottom - rect.top;
+ 
+     if (visual->host_hwnd && visual->host_parent != target_hwnd)
+         dcomp_visual_teardown_host(visual);
+@@ -1197,15 +1216,15 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+     {
+         if (!(visual->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
+                 dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
+-                rect.left, rect.top, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
++                placement->x, placement->y, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
+         {
+             WARN("Failed to create host window for visual %p, error %lu.\n", visual, GetLastError());
+             return FALSE;
+         }
+         TRACE("Created host window %p for visual %p on target %p.\n", visual->host_hwnd, visual, target_hwnd);
+         visual->host_parent = target_hwnd;
+-        visual->host_x = rect.left;
+-        visual->host_y = rect.top;
++        visual->host_x = placement->x;
++        visual->host_y = placement->y;
+         visual->host_width = width;
+         visual->host_height = height;
+         created = TRUE;
+@@ -1213,7 +1232,7 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+ 
+     /* Hosts are stacked in tree order. Once one of them moves in the z-order,
+      * every host after it has to be placed on top again. */
+-    moved = visual->host_x != rect.left || visual->host_y != rect.top
++    moved = visual->host_x != placement->x || visual->host_y != placement->y
+             || visual->host_width != width || visual->host_height != height;
+     restack = created || commit->restack || visual->host_below != commit->host_below;
+     if (moved || restack)
+@@ -1223,14 +1242,14 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+             flags |= SWP_NOMOVE | SWP_NOSIZE;
+         if (!restack)
+             flags |= SWP_NOZORDER;
+-        if (!SetWindowPos(visual->host_hwnd, HWND_TOP, rect.left, rect.top, width, height, flags))
++        if (!SetWindowPos(visual->host_hwnd, HWND_TOP, placement->x, placement->y, width, height, flags))
+         {
+             WARN("Failed to position host window %p, error %lu.\n", visual->host_hwnd, GetLastError());
+         }
+         else
+         {
+-            visual->host_x = rect.left;
+-            visual->host_y = rect.top;
++            visual->host_x = placement->x;
++            visual->host_y = placement->y;
+             visual->host_width = width;
+             visual->host_height = height;
+             visual->host_below = commit->host_below;
+@@ -1240,6 +1259,18 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+     }
+     commit->host_below = visual->host_hwnd;
+ 
++    need_region = clip.left || clip.top || clip.right != (LONG)width || clip.bottom != (LONG)height;
++    if (need_region && !(region = CreateRectRgnIndirect(&clip)))
++    {
++        WARN("Failed to create clip region %s.\n", wine_dbgstr_rect(&clip));
++    }
++    else if (!SetWindowRgn(visual->host_hwnd, region, TRUE))
++    {
++        WARN("Failed to set clip region %s on host window %p.\n", wine_dbgstr_rect(&clip), visual->host_hwnd);
++        if (region)
++            DeleteObject(region);
++    }
++
      return TRUE;
  }
  
--static void dcomp_clip_rect_to_client(HWND hwnd, int x, int y, UINT *width, UINT *height)
-+static BOOL dcomp_visual_host_clip(HWND hwnd, int x, int y, const struct dcomp_visual *v,
-+                                   UINT width, UINT height, RECT *clip)
- {
-     RECT client;
--    int max_width, max_height;
- 
--    if (!GetClientRect(hwnd, &client)) return;
-+    SetRect(clip, 0, 0, width, height);
- 
--    max_width = client.right - x;
--    max_height = client.bottom - y;
--    if (max_width <= 0 || max_height <= 0)
-+    if (GetClientRect(hwnd, &client))
-     {
--        TRACE("composition host outside target client rect hwnd=%p pos=(%d,%d) client=%ldx%ld\n",
--              hwnd, x, y, client.right - client.left, client.bottom - client.top);
--        *width = 0;
--        *height = 0;
--        return;
-+        RECT client_clip;
-+
-+        SetRect(&client_clip, client.left - x, client.top - y,
-+                client.right - x, client.bottom - y);
-+        if (client_clip.left > clip->left) clip->left = client_clip.left;
-+        if (client_clip.top > clip->top) clip->top = client_clip.top;
-+        if (client_clip.right < clip->right) clip->right = client_clip.right;
-+        if (client_clip.bottom < clip->bottom) clip->bottom = client_clip.bottom;
+@@ -1276,8 +1307,9 @@ static void dcomp_visual_bind(struct dcomp_commit *commit, struct dcomp_visual *
+         needs_host = desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE;
      }
  
--    if (*width > (UINT)max_width || *height > (UINT)max_height)
-+    if (v->has_clip)
+-    TRACE("visual %p, content %p, placement (%d, %d), size %ux%u, target %p.\n",
+-            visual, visual->content, placement.x, placement.y, width, height, target->hwnd);
++    TRACE("visual %p, content %p, placement (%d, %d), size %ux%u, clip %s, target %p.\n",
++            visual, visual->content, placement.x, placement.y, width, height,
++            placement.has_clip ? wine_dbgstr_rect(&placement.clip) : "none", target->hwnd);
+ 
+     if (!visual->surface && !visual->swapchain)
      {
--        UINT old_width = *width, old_height = *height;
--
--        if (*width > (UINT)max_width) *width = max_width;
--        if (*height > (UINT)max_height) *height = max_height;
--        TRACE("clipped composition host from %ux%u to %ux%u for hwnd %p client=%ldx%ld pos=(%d,%d)\n",
--              old_width, old_height, *width, *height, hwnd,
--              client.right - client.left, client.bottom - client.top, x, y);
-+        RECT visual_clip;
-+
-+        SetRect(&visual_clip, round_float(v->clip.left), round_float(v->clip.top),
-+                round_float(v->clip.right), round_float(v->clip.bottom));
-+        if (visual_clip.left > clip->left) clip->left = visual_clip.left;
-+        if (visual_clip.top > clip->top) clip->top = visual_clip.top;
-+        if (visual_clip.right < clip->right) clip->right = visual_clip.right;
-+        if (visual_clip.bottom < clip->bottom) clip->bottom = visual_clip.bottom;
-     }
-+
-+    if (clip->left < 0) clip->left = 0;
-+    if (clip->top < 0) clip->top = 0;
-+    if (clip->right > (LONG)width) clip->right = width;
-+    if (clip->bottom > (LONG)height) clip->bottom = height;
-+    return clip->right > clip->left && clip->bottom > clip->top;
- }
- 
- static struct dcomp_surface *dcomp_visual_surface(struct dcomp_visual *v)
-@@ -993,31 +1002,14 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-     if (v->content && (surface || (v->has_swapchain_desc &&
-         v->swapchain_desc.AlphaMode != DXGI_ALPHA_MODE_IGNORE)))
-     {
-+        RECT host_clip;
-         int x = placement.x;
-         int y = placement.y;
-         UINT width = surface ? surface->width : v->swapchain_desc.Width;
-         UINT height = surface ? surface->height : v->swapchain_desc.Height;
- 
--        if (v->has_clip)
--        {
--            int clip_left = placement.x + round_float(v->clip.left);
--            int clip_top = placement.y + round_float(v->clip.top);
--            int clip_right = placement.x + round_float(v->clip.right);
--            int clip_bottom = placement.y + round_float(v->clip.bottom);
--            int right = x + width;
--            int bottom = y + height;
--
--            if (clip_left > x) x = clip_left;
--            if (clip_top > y) y = clip_top;
--            if (clip_right < right) right = clip_right;
--            if (clip_bottom < bottom) bottom = clip_bottom;
--            width = right > x ? right - x : 0;
--            height = bottom > y ? bottom - y : 0;
--        }
--
--        dcomp_clip_rect_to_client(t->hwnd, x, y, &width, &height);
--
--        if (width && height && dcomp_register_host_class())
-+        if (width && height && dcomp_visual_host_clip(t->hwnd, x, y, v, width, height, &host_clip) &&
-+            dcomp_register_host_class())
-         {
-             if (!v->host_hwnd || v->host_parent != t->hwnd)
-             {
-@@ -1048,6 +1040,35 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-                 v->host_height = height;
-             }
- 
-+            if (v->host_hwnd)
-+            {
-+                if (host_clip.left || host_clip.top ||
-+                    host_clip.right != (LONG)width || host_clip.bottom != (LONG)height)
-+                {
-+                    HRGN region;
-+
-+                    if ((region = CreateRectRgn(host_clip.left, host_clip.top,
-+                                                host_clip.right, host_clip.bottom)))
-+                    {
-+                        if (!SetWindowRgn(v->host_hwnd, region, TRUE))
-+                        {
-+                            WARN("failed to set composition host clip %s on hwnd=%p\n",
-+                                 wine_dbgstr_rect(&host_clip), v->host_hwnd);
-+                            DeleteObject(region);
-+                        }
-+                    }
-+                    else
-+                    {
-+                        WARN("failed to create composition host clip %s\n",
-+                             wine_dbgstr_rect(&host_clip));
-+                    }
-+                }
-+                else
-+                {
-+                    SetWindowRgn(v->host_hwnd, NULL, TRUE);
-+                }
-+            }
-+
-             if (v->host_hwnd) target_hwnd = v->host_hwnd;
-         }
-         else if (v->host_hwnd)
+-- 
+2.55.0
+

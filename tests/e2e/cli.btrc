@@ -1,9 +1,9 @@
-import std.cli;
-import std.console;
-import std.graph;
-import std.map;
-import std.strings;
-import std.vector;
+import Library.CLI;
+import Library.Console;
+import Library.Graph;
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
 import ../../btrc/core/log.btrc;
 import ./spec.btrc;
 import ./qemu_harness.btrc;
@@ -25,7 +25,7 @@ class E2eCli {
         return "Usage: nixosctl vm <spec.json> <" + self.vmActions().join("|") + ">";
     }
 
-    public string tail(CliArgs args, int startIndex) {
+    public string tail(CLIArgs args, int startIndex) {
         Vector<string> parts = [];
         for (int i = startIndex; i < args.count(); i++) {
             parts.push(args.get(i));
@@ -33,13 +33,13 @@ class E2eCli {
         return parts.join(" ");
     }
 
-    public void applySpecArgs(VmTestSpec spec, CliArgs args, int startIndex) {
-        var overrides = GraphCli.args(args, startIndex);
+    public void applySpecArgs(VmTestSpec spec, CLIArgs args, int startIndex) {
+        var overrides = GraphCLI.args(args, startIndex);
         spec.applyArgOverrides(overrides);
         spec.expandArgs();
     }
 
-    public int runVm(CliArgs args) {
+    public int runVm(CLIArgs args) {
         if (args.count() < 3) {
             NixosLog.fatal(self.vmUsage());
         }
@@ -96,15 +96,15 @@ class E2eCli {
         return 1;
     }
 
-    public Map<string, string> graphArgs(CliArgs args, int startIndex) {
-        return GraphCli.args(args, startIndex);
+    public Map<string, string> graphArgs(CLIArgs args, int startIndex) {
+        return GraphCLI.args(args, startIndex);
     }
 
-    public Vector<string> graphTargets(CliArgs args, int startIndex) {
-        return GraphCli.targets(args, startIndex);
+    public Vector<string> graphTargets(CLIArgs args, int startIndex) {
+        return GraphCLI.targets(args, startIndex);
     }
 
-    public int runGraph(CliArgs args) {
+    public int runGraph(CLIArgs args) {
         if (args.count() < 3) {
             NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required> [node ...] [--arg key=value]");
         }
@@ -140,7 +140,7 @@ class E2eCli {
         return 1;
     }
 
-    public int runE2e(CliArgs args) {
+    public int runE2e(CLIArgs args) {
         if (args.count() < 2) { NixosLog.fatal("Usage: nixosctl e2e <spec.json>"); }
         var spec = VmSpecParser.readFile(args.get(1));
         self.applySpecArgs(spec, args, 2);

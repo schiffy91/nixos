@@ -1,17 +1,15 @@
 { pkgs, config, lib, inputs, ... }:
 let
   btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
-  trayDir = "${inputs.btrc}/src/stdlib/tray";
   nixosctlTrayBin = pkgs.stdenv.mkDerivation {
     name = "nixosctl-tray";
     src = ../../../..;
     nativeBuildInputs = [ btrcpy pkgs.pkg-config pkgs.makeWrapper ];
-    buildInputs = [ pkgs.dbus ];
+    buildInputs = [ pkgs.dbus ];  # btrc/tray/btrc.toml binds libdbus-1 for the Linux provider
     dontConfigure = true;
     buildPhase = ''
       btrcpy --strict-imports btrc/nixosctl/tray.btrc -o nixosctl-tray.c
-      $CC -std=c11 -O2 -I${trayDir} nixosctl-tray.c ${trayDir}/btrc_tray_linux.c \
-        $(pkg-config --cflags --libs dbus-1) -lm -lpthread -o nixosctl-tray
+      $CC -std=c11 -O2 nixosctl-tray.c $(pkg-config --cflags --libs dbus-1) -lm -lpthread -o nixosctl-tray
     '';
     installPhase = ''
       mkdir -p $out/bin

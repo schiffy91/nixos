@@ -20,7 +20,7 @@ Modes:
   package   build the Nix proton-custom package
 
 Named Wine targets:
-  wayland dcomp dxgi ntdll win32u winevulkan explorer
+  wayland dcomp dxgi ntdll win32u winevulkan wow64win explorer
 
 Any argument containing "/" is passed as an explicit Wine make target.
 EOF
@@ -58,6 +58,7 @@ target_for_name() {
     ntdll) echo "dlls/ntdll/all" ;;
     win32u) echo "dlls/win32u/all" ;;
     winevulkan) echo "dlls/winevulkan/all" ;;
+    wow64win) echo "dlls/wow64win/all" ;;
     explorer) echo "programs/explorer/all" ;;
     */*) echo "$1" ;;
     *) echo "unknown build target: $1" >&2; exit 2 ;;
@@ -94,6 +95,7 @@ case "$mode" in
       add_target "dlls/win32u/all"
       add_target "dlls/winevulkan/all"
       add_target "dlls/winewayland.drv/all"
+      add_target "dlls/wow64win/all"
       add_target "programs/explorer/all"
     else
       wine_has_diff dlls/winewayland.drv && add_target "dlls/winewayland.drv/all"
@@ -102,6 +104,7 @@ case "$mode" in
       wine_has_diff dlls/ntdll && add_target "dlls/ntdll/all"
       wine_has_diff dlls/win32u && add_target "dlls/win32u/all"
       wine_has_diff dlls/winevulkan && add_target "dlls/winevulkan/all"
+      wine_has_diff dlls/wow64win && add_target "dlls/wow64win/all"
       wine_has_diff programs/explorer && add_target "programs/explorer/all"
     fi
 

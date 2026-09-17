@@ -32,13 +32,14 @@ let
 
     skip_names = {"Steamworks Common Redistributables"}
     skip_prefixes = ("Proton ", "Steam Linux Runtime")
+    wildcard_priority = "75"  # 250 would hijack native tools like SLR 4.0
 
     with open(args.app_config) as f:
         app_config = json.load(f)
 
 
-    def desired_entry(tool):
-        return {"name": tool, "config": "", "priority": "250"}
+    def desired_entry(tool, priority="250"):
+        return {"name": tool, "config": "", "priority": priority}
 
 
     def words(*parts):
@@ -129,7 +130,7 @@ let
         mapping = valve.setdefault("CompatToolMapping", {})
         changed = False
 
-        desired = desired_entry(args.default_tool)
+        desired = desired_entry(args.default_tool, wildcard_priority)
         if mapping.get("0") != desired:
             mapping["0"] = desired
             changed = True

@@ -128,7 +128,7 @@ run_once() {
 
   case "$trace" in
     quiet)
-      unset WINEDEBUG DXVK_LOG_LEVEL DXVK_LOG_PATH DXVK_TRACE_COMPOSITION_SWAPCHAINS
+      unset WINEDEBUG DXVK_LOG_LEVEL DXVK_LOG_PATH
       ;;
     modules)
       export WINEDEBUG="+timestamp,+pid,+tid,+loaddll,+module"
@@ -137,9 +137,8 @@ run_once() {
       ;;
     composition)
       export WINEDEBUG="+timestamp,+pid,+tid,+dcomp,+loaddll,+module"
-      export DXVK_LOG_LEVEL="debug"
+      export DXVK_LOG_LEVEL="trace"  # composition present/bind traces live at trace level
       export DXVK_LOG_PATH="$run_dir/dxvk"
-      export DXVK_TRACE_COMPOSITION_SWAPCHAINS=1
       ;;
   esac
   {
@@ -147,7 +146,6 @@ run_once() {
     echo "WINEDEBUG=${WINEDEBUG:-}"
     echo "DXVK_LOG_LEVEL=${DXVK_LOG_LEVEL:-}"
     echo "DXVK_LOG_PATH=${DXVK_LOG_PATH:-}"
-    echo "DXVK_TRACE_COMPOSITION_SWAPCHAINS=${DXVK_TRACE_COMPOSITION_SWAPCHAINS:-}"
   } > "$run_dir/trace-env.txt"
 
   if [ -e "$desktop_entry" ]; then

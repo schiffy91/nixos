@@ -1,7 +1,7 @@
-import std.console;
-import std.fs;
-import std.json;
-import std.process;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
 import ../../../btrc/core/log.btrc;
 import ../spec.btrc;
 import ./ssh.btrc;
@@ -110,7 +110,7 @@ class VmProvisioner {
             hostLines.insert(hostLines.len - 1, "  settings.boot.pkiBundle = \"/var/lib/sbctl\";");
         }
         var hostNix = self.textLines(hostLines);
-        var local = JsonObject();
+        var local = JSONObject();
         local.setString("host_path", "nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix");
         local.setString("target", bootTargetName);
         var localConfig = local.stringify() + "\n";

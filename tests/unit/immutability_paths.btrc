@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <string.h>
 
-import std.io;
+import Library.IO;
 import ../../btrc/immutability/lib/config.btrc;
 import ../../btrc/immutability/lib/paths.btrc;
 

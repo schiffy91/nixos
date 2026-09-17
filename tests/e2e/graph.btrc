@@ -1,2 +1,2 @@
-import std.graph;
+import Library.Graph;
 import ./graph/runner.btrc;

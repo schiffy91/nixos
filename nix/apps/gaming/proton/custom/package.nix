@@ -12,19 +12,22 @@
 # convention), so their 0001/0002 names are series-local commit order only.
 #
 # Active series:
-#   Wayland startup deadlock (non-blocking second init roundtrip)
 #   Bounded WM_CANCELMODE on keyboard leave
 #   Layered surface alpha uploads (GE-Proton11 ships the pUpdateLayeredWindow hook)
-#   SNI StatusNotifierItem systray via libdbus (winewayland dock bridge)
+#   SNI StatusNotifierItem systray via dlopen'd libdbus (winewayland dock bridge,
+#   win32u icon snapshot ABI incl. the wow64win thunk)
 #   Delay-load IAT protection for PE modules with read-only thunk pages
 #   DComp/DXGI/winewayland GPU presentation path
-#   winevulkan, winewayland, and win32u PE/Unix pairs rebuilt from the same Wine source
+#   winevulkan, winewayland, win32u PE/Unix pairs and wow64win rebuilt from the same Wine source
 #   DXVK composition swap-chain support
 #
 # Dropped at the GE-Proton11-5 rebase, now covered upstream:
 #   xdg_popup for transient windows (GE wine-wayland 0031)
 #   pUpdateLayeredWindow hook (GE wine-wayland 0014)
 #   D3DKMT shared GPU resources (win32u implements OpenResource/QueryResourceInfo)
+# Dropped in the 2026-08 review as functional no-ops:
+#   second init roundtrip rework (reverted GE wine-wayland 0142 without effect)
+#   fully-zero-alpha layered surface fixup (win32u shape copy zeroes those pixels)
 { stdenv
 , stdenv_32bit
 , pkgs
@@ -42,7 +45,7 @@ let
   # false ships the pristine GE tarball (plus WineASIO) under the same tool
   # name, skipping the Wine/DXVK rebuilds entirely — for A/B verification of
   # whether the patch series is still needed on this GE base.
-  overlayPatchedBinaries = false;
+  overlayPatchedBinaries = true;
 
   # The exact Valve wine commit GE-Proton11-5 uses (from proton-ge-custom
   # git submodule `wine` at tag GE-Proton11-5).
@@ -67,20 +70,17 @@ let
   };
 
   activePatchSeries = [
-    ./patches/wine-wayland-roundtrip/0001-winewayland.drv-Avoid-second-init-roundtrip.patch
     ./patches/wine-wayland-focus/0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Fix-layered-surface-alpha-uploads.patch
-    ./patches/wine-wayland-layered-windows/0002-winewayland.drv-Handle-fully-zero-alpha-layered-surf.patch
-    ./patches/wine-wayland-status-notifier/0001-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
-    ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Polish-SNI-context-menu-callbacks.patch
+    ./patches/wine-wayland-status-notifier/0001-win32u-Pass-a-systray-icon-snapshot-to-SystrayDockIn.patch
+    ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
     ./patches/wine-wayland-status-notifier/0003-explorer-Forward-docked-tray-icon-updates.patch
-    ./patches/wine-wayland-status-notifier/0004-winewayland.drv-Keep-SNI-items-self-contained.patch
-    ./patches/ntdll-delay-load/0001-ntdll-Make-delay-load-IAT-writable-before-patching.patch
+    ./patches/ntdll-delay-load/0001-ntdll-Make-the-delay-load-IAT-writable-before-patchi.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
     ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
     ./patches/dcomp-wayland-gpu-present/0004-dcomp-Make-composition-host-windows-presentation-onl.patch
-    ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-above-target-backing.patch
+    ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-stacked-in-visual-order.patch
     ./patches/dcomp-wayland-gpu-present/0006-dxgi-Create-a-hidden-swap-chain-for-composition.patch
     ./patches/dcomp-wayland-gpu-present/0007-dcomp-Present-IDCompositionSurface-content.patch
     ./patches/dcomp-wayland-gpu-present/0008-dcomp-Handle-incremental-surface-draws.patch
@@ -91,25 +91,22 @@ let
     ./patches/dcomp-wayland-gpu-present/0013-dcomp-Unbind-removed-composition-hosts.patch
     ./patches/dcomp-wayland-gpu-present/0014-dcomp-Implement-virtual-surfaces-and-scrolling.patch
     ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-h.patch
-    ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent.patch
+    ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent-noti.patch
     ./patches/dcomp-wayland-gpu-present/0017-dcomp-Show-surface-hosts-after-content-binding.patch
     ./patches/dcomp-wayland-gpu-present/0018-dcomp-Clip-target-parents-around-composition-hosts.patch
     ./patches/dcomp-wayland-gpu-present/0019-dcomp-Avoid-hosts-for-unplaced-child-swapchains.patch
-    ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-desktop-driver-readiness-wait.patch
+    ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-the-desktop-driver-readiness-wait.patch
   ];
 
   dxvkPatchSeries = [
-    ./patches/dxvk-composition-swapchain/0001-dxgi-Bind-composition-swap-chains-to-DComp-windows.patch
-    ./patches/dxvk-composition-swapchain/0002-d3d11-Pace-composition-swap-chains-with-the-composit.patch
-    ./patches/dxvk-composition-swapchain/0003-d3d11-Allow-limiting-shared-resource-tier.patch
-    ./patches/dxvk-composition-swapchain/0004-d3d11-Pace-all-composition-swap-chains.patch
-    ./patches/dxvk-composition-swapchain/0005-d3d11-Keep-composition-target-windows-sized-to-swap.patch
-    ./patches/dxvk-composition-swapchain/0006-d3d11-Preserve-composition-swap-chain-contents.patch
-    ./patches/dxvk-composition-swapchain/0007-d3d11-Show-composition-targets-on-first-present.patch
-    ./patches/dxvk-composition-swapchain/0008-d3d11-Replay-composition-content-after-target-binds.patch
-    ./patches/dxvk-composition-swapchain/0009-d3d11-Use-opaque-WSI-alpha-for-composition-hosts.patch
-    ./patches/dxvk-composition-swapchain/0010-d3d11-Trace-composition-present-paths.patch
-    ./patches/dxvk-composition-swapchain/0011-d3d11-Gate-composition-target-bind-trace.patch
+    ./patches/dxvk-composition-swapchain/0001-d3d11-Use-new-extent-when-resizing-swap-chain-surfac.patch
+    ./patches/dxvk-composition-swapchain/0002-dxgi-Bind-composition-swap-chains-to-DComp-windows.patch
+    ./patches/dxvk-composition-swapchain/0003-d3d11-Pace-composition-swap-chains-with-the-composit.patch
+    ./patches/dxvk-composition-swapchain/0004-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
+    ./patches/dxvk-composition-swapchain/0005-d3d11-Preserve-composition-swap-chain-contents.patch
+    ./patches/dxvk-composition-swapchain/0006-d3d11-Show-composition-targets-on-first-present.patch
+    ./patches/dxvk-composition-swapchain/0007-d3d11-Replay-composition-content-after-target-binds.patch
+    ./patches/dxvk-composition-swapchain/0008-d3d11-Trace-composition-present-paths.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
@@ -231,6 +228,7 @@ let
         dlls/win32u/all \
         dlls/winevulkan/all \
         dlls/winewayland.drv/all \
+        dlls/wow64win/all \
         programs/explorer/all
 
       cd "$TMPDIR/wine32"
@@ -329,6 +327,9 @@ let
       copy_required i386-windows/ntdll.dll \
         "$wine32_build/dlls/ntdll/i386-windows/ntdll.dll" \
         "$wine32_build/dlls/ntdll/ntdll.dll"
+      copy_required x86_64-windows/wow64win.dll \
+        "$wine64_build/dlls/wow64win/x86_64-windows/wow64win.dll" \
+        "$wine64_build/dlls/wow64win/wow64win.dll"
       copy_required x86_64-windows/explorer.exe \
         "$wine64_build/programs/explorer/x86_64-windows/explorer.exe" \
         "$wine64_build/programs/explorer/explorer.exe"
@@ -494,6 +495,7 @@ in stdenv.mkDerivation {
     copy_patched i386-windows/win32u.dll
     copy_patched x86_64-windows/ntdll.dll
     copy_patched i386-windows/ntdll.dll
+    copy_patched x86_64-windows/wow64win.dll
     copy_patched x86_64-windows/explorer.exe
     copy_patched i386-windows/explorer.exe
 

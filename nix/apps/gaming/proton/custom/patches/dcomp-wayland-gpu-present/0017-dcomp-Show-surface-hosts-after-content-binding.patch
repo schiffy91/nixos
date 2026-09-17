@@ -1,50 +1,99 @@
-From 03f96eda5d36e627e402b549134126fafc384e1c Mon Sep 17 00:00:00 2001
+From ead93a740c29211304a7faadda7b48e593b37a51 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Date: Mon, 25 May 2026 17:41:00 -0700
-Subject: [PATCH] dcomp: Show surface hosts after content binding
+Date: Wed, 26 Aug 2026 00:18:52 -0700
+Subject: [PATCH 17/19] dcomp: Show surface hosts after content binding.
 
-Composition host HWNDs are implementation details for placed or clipped
+Composition host windows are implementation details for placed or clipped
 visuals. Creating or moving them while visible can expose an uninitialized
 child window before the DComp content has been bound.
 
 Keep the host hidden while it is positioned, then show IDCompositionSurface
-hosts after their backing content has been presented. Swap chain hosts remain
+hosts once their backing content has actually been presented; a surface the
+application never drew into does not show its host. Swap chain hosts remain
 hidden until their first DXGI present.
 
 Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
-Signed-off-by: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
 ---
- dlls/dcomp/device.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ dlls/dcomp/device.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 3ad1cbf..ce85dc1 100644
+index c987f08..4727671 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
-@@ -1487,7 +1487,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-                                                WS_EX_NOPARENTNOTIFY |
-                                                WS_EX_NOREDIRECTIONBITMAP,
-                                                dcomp_host_class_name, NULL,
--                                               WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
-+                                               WS_CHILD | WS_DISABLED | WS_CLIPSIBLINGS,
-                                                x, y, width, height, t->hwnd, NULL,
-                                                GetModuleHandleW(NULL), NULL);
-                 dcomp_visual_reset_host_state(v);
-@@ -1498,7 +1498,7 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-             {
-                 BOOL changed = v->host_x != x || v->host_y != y ||
-                                v->host_width != width || v->host_height != height;
--                UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
-+                UINT swp_flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+@@ -105,6 +105,7 @@ struct dcomp_surface
+     UINT swapchain_width, swapchain_height;
+     HWND target_hwnd;
+     HWND dispatch_hwnd;
++    BOOL presented;
+ };
  
-                 if (!changed) swp_flags |= SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER;
+ struct dcomp_surface_factory
+@@ -146,6 +147,7 @@ struct dcomp_visual
+     BOOL host_clip_valid;
+     BOOL host_has_region;
+     RECT host_clip;
++    BOOL host_shown;
+     HWND bound_target;
+     HWND bound_dispatch;
+ };
+@@ -346,6 +348,7 @@ static void dcomp_surface_reset_swapchain(struct dcomp_surface *surface)
+     surface->swapchain = NULL;
+     surface->swapchain_width = 0;
+     surface->swapchain_height = 0;
++    surface->presented = FALSE;
+     surface->dirty = TRUE;
+ }
  
-@@ -1600,6 +1600,8 @@ static void dcomp_bind_visual(struct dcomp_target *t, struct dcomp_visual *v,
-     {
-         if (FAILED(dcomp_surface_present(surface, v->host_hwnd, t->hwnd)))
-             WARN("surface=%p present failed\n", surface);
-+        else
-+            ShowWindow(v->host_hwnd, SW_SHOWNOACTIVATE);
+@@ -436,6 +439,7 @@ static HRESULT dcomp_surface_present(struct dcomp_surface *surface, HWND target,
      }
-     else if (v->content &&
-         SUCCEEDED(IUnknown_QueryInterface(v->content, &IID_IDXGIVkCompositionSwapChain,
+ 
+     surface->dirty = FALSE;
++    surface->presented = TRUE;
+     return S_OK;
+ }
+ 
+@@ -1031,6 +1035,7 @@ static void dcomp_visual_reset_host_state(struct dcomp_visual *visual)
+     visual->host_clip_valid = FALSE;
+     visual->host_has_region = FALSE;
+     SetRectEmpty(&visual->host_clip);
++    visual->host_shown = FALSE;
+ }
+ 
+ /* Only the committing thread owns host windows; releasing a visual on another
+@@ -1671,8 +1676,9 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+ 
+     if (!visual->host_hwnd)
+     {
++        /* Created hidden; the host is shown once it has content to present. */
+         if (!(visual->host_hwnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_NOPARENTNOTIFY | WS_EX_NOREDIRECTIONBITMAP,
+-                dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
++                dcomp_host_class_name, NULL, WS_CHILD | WS_DISABLED | WS_CLIPSIBLINGS,
+                 placement->x, placement->y, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
+         {
+             WARN("Failed to create host window for visual %p, error %lu.\n", visual, GetLastError());
+@@ -1694,7 +1700,7 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
+     restack = created || commit->restack || visual->host_below != commit->host_below;
+     if (moved || restack)
+     {
+-        flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
++        flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+         if (!moved)
+             flags |= SWP_NOMOVE | SWP_NOSIZE;
+         if (!restack)
+@@ -1749,6 +1755,12 @@ static void dcomp_visual_present_surface(struct dcomp_visual *visual, HWND dispa
+ 
+     if (FAILED(dcomp_surface_present(surface, visual->host_hwnd, dispatch)))
+         WARN("Failed to present surface %p of visual %p.\n", surface, visual);
++
++    if (surface->presented && !visual->host_shown)
++    {
++        ShowWindow(visual->host_hwnd, SW_SHOWNOACTIVATE);
++        visual->host_shown = TRUE;
++    }
+ }
+ 
+ static void dcomp_visual_mark(struct dcomp_visual *visual, unsigned int generation)
+-- 
+2.55.0
+

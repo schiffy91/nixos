@@ -1,7 +1,7 @@
-import std.fs;
-import std.json;
-import std.process;
-import std.vector;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Vector;
 import ../../core/interactive.btrc;
 import ../../core/log.btrc;
 import ../config.btrc;
@@ -55,11 +55,11 @@ class SecureBootManager {
 
     public Vector<string> unsignedFromJson(string json) {
         Vector<string> result = [];
-        var top = JsonObject.parse(json);
+        var top = JSONObject.parse(json);
         for key, _ in top.values {
-            var body = JsonText.objectField(json, key);
+            var body = JSONText.objectField(json, key);
             if (body.isEmpty()) { continue; }
-            var signature = JsonObject.parse(body);
+            var signature = JSONObject.parse(body);
             if (!signature.getBool("is_signed", true)) {
                 result.push(key);
             }

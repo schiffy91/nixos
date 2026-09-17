@@ -1,6 +1,7 @@
 { config, pkgs, lib, ... }:
 let
   user = config.settings.users.admin.username;
+  group = config.users.users.${user}.group;
   home = "/home/${user}";
   compatDir = "${home}/.local/share/Steam/compatibilitytools.d";
   enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable;
@@ -25,7 +26,7 @@ in lib.mkMerge [
     system.activationScripts.protonCustomCompatTool = lib.stringAfter [ "users" ] ''
       compat_dir="${compatDir}"
       tool_path="$compat_dir/${protonCustom.pname}"
-      ${pkgs.coreutils}/bin/install -d -o ${user} -g users "$compat_dir"
+      ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} "$compat_dir"
 
       if [ -L "$tool_path" ]; then
         ${pkgs.coreutils}/bin/ln -sfn "${protonCustom}" "$tool_path"
@@ -40,7 +41,7 @@ in lib.mkMerge [
         ${pkgs.coreutils}/bin/ln -s "${protonCustom}" "$tool_path"
       fi
 
-      ${pkgs.coreutils}/bin/chown -h ${user}:users "$tool_path"
+      ${pkgs.coreutils}/bin/chown -h ${user}:${group} "$tool_path"
     '';
   })
 ]

@@ -1,6 +1,6 @@
-import std.fs;
-import std.strings;
-import std.vector;
+import Library.FileSystem;
+import Library.Strings;
+import Library.Vector;
 import ./fs.btrc;
 import ./paths.btrc;
 import ./types.btrc;

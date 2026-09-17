@@ -21,6 +21,7 @@ ALL_WINE_TARGETS := \
 	dlls/win32u/all \
 	dlls/winevulkan/all \
 	dlls/winewayland.drv/all \
+	dlls/wow64win/all \
 	programs/explorer/all
 
 ifdef PROTON_CUSTOM_IN_DEV_SHELL
@@ -37,7 +38,7 @@ endif
 	help shell setup use restore status cleanup \
 	reset-dev install-store \
 	package setup-wine setup-dxvk build build-dxvk build-all \
-	dcomp dxgi wayland explorer win32u winevulkan ntdll dxvk \
+	dcomp dxgi wayland explorer win32u winevulkan ntdll wow64win dxvk \
 	overlay-wine overlay-dxvk restore-dxvk check-patches patch-lint source-drift reset-source-drift \
 	wine-status wine-diff wine-format-patch \
 	dxvk-status dxvk-diff dxvk-format-patch
@@ -71,6 +72,7 @@ help:
 		'  make ntdll                    build/overlay dlls/ntdll/all' \
 		'  make win32u                   build/overlay dlls/win32u/all' \
 		'  make dxgi                     build/overlay dlls/dxgi/all' \
+		'  make wow64win                 build/overlay dlls/wow64win/all' \
 		'  make build TARGETS="..."      build/overlay arbitrary Wine targets' \
 		'  make dxvk                     build/overlay DXVK dxgi.dll and d3d11.dll' \
 		'' \
@@ -163,6 +165,9 @@ ntdll:
 
 winevulkan:
 	$(MAKE) build TARGETS='dlls/winevulkan/all'
+
+wow64win:
+	$(MAKE) build TARGETS='dlls/wow64win/all'
 
 dxvk:
 	$(MAKE) build-dxvk

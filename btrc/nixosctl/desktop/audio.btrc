@@ -1,7 +1,7 @@
-import std.console;
-import std.json;
-import std.process;
-import std.vector;
+import Library.Console;
+import Library.JSON;
+import Library.Process;
+import Library.Vector;
 import ../../core/log.btrc;
 import ./hardware_config.btrc;
 
@@ -33,19 +33,19 @@ class AudioManager {
         Vector<AudioSink> result = [];
         var listed = self.shell.run("pactl -f json list sinks", logFailure=false);
         var sinksJson = "{\"sinks\":" + listed.stdout() + "}";
-        for sinkJson in JsonText.objectArray(sinksJson, "sinks") {
-            var name = JsonText.field(sinkJson, "name", "");
+        for sinkJson in JSONText.objectArray(sinksJson, "sinks") {
+            var name = JSONText.field(sinkJson, "name", "");
             if (name.isEmpty()) { continue; }
             var sink = AudioSink();
             sink.name = name;
-            sink.description = JsonText.field(sinkJson, "description", "");
+            sink.description = JSONText.field(sinkJson, "description", "");
             result.push(sink);
         }
         return result;
     }
 
     public string entryJson(string name, string label, string description, bool isDefault) {
-        var json = JsonObject();
+        var json = JSONObject();
         json.setString("name", name);
         json.setString("label", label);
         if (!description.isEmpty()) {

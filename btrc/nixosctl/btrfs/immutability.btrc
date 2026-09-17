@@ -1,6 +1,6 @@
-import std.process;
-import std.strings;
-import std.vector;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
 import ../../core/log.btrc;
 import ../config.btrc;
 

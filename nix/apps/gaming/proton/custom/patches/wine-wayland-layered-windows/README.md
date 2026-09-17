@@ -1,39 +1,36 @@
 # Layered windows render blank under winewayland.drv
 
 ## Symptom
-Win32 layered toplevels (tooltips, splash screens, Battle.net's login
-splash) display as transparent / empty rectangles. Bringing the layered
-window back into focus or moving the parent does not refresh it.
-
-Some layered menus render their background and icons but lose text. Those
-windows use constant layered-window alpha, not per-pixel alpha, so the
-Wayland ARGB SHM upload needs to set the alpha channel from the window
-surface metadata instead of trusting whatever GDI left in the DIB alpha
-bytes.
-
-Other Chromium/CEF popups and dialogs use 32-bit per-pixel layered surfaces,
-but still draw some text/control pixels with RGB data and a zero alpha byte.
-Those non-empty pixels need to be promoted to opaque during the upload while
-leaving transparent black pixels untouched. Some popup snapshots have no
-non-zero alpha at all; in that case the dirty region is treated as opaque so
-black text and controls are not dropped.
+Layered toplevels that use constant alpha or a color key
+(`SetLayeredWindowAttributes`) come out as transparent rectangles or lose
+their text: tooltips, splash screens and menus draw their pixels, but the
+alpha byte GDI leaves in the DIB is zero, so the compositor shows nothing.
 
 ## Root cause
-The ARGB SHM upload trusts whatever GDI left in the DIB alpha bytes, which is
-meaningless for constant-alpha layered surfaces and zero for many per-pixel
-text and control pixels.
+`wayland_window_surface_flush()` copies the window surface DIB into an
+ARGB8888 `wl_shm` buffer verbatim. That is right for per-pixel alpha
+surfaces (`UpdateLayeredWindow` with `ULW_ALPHA`), whose alpha channel the
+application filled in, but wrong for constant-alpha layered surfaces, where
+GDI never writes the alpha byte. winex11.drv derives the alpha from the
+window surface metadata (`alpha_bits` / `alpha_mask`) in that case;
+winewayland.drv did not.
 
-GE-Proton11 ships the `pUpdateLayeredWindow` hook itself (wine-wayland patch
-0014), so only the alpha handling below is still carried here. Before that it
-was missing from `user_driver_funcs` entirely and `UpdateLayeredWindow` /
-`SetLayeredWindowAttributes` silently no-opped for every wayland window.
+GE-Proton11 ships the `pUpdateLayeredWindow` hook and the
+`wp_alpha_modifier_v1` support (wine-wayland 0013/0014), so only the SHM
+upload fix is carried here.
 
 ## Fix
-Set constant alpha bits when copying non-per-pixel-alpha layered surface
-content to Wayland ARGB SHM buffers. For per-pixel layered surfaces, preserve
-the application-provided alpha channel except for non-black RGB pixels whose
-alpha byte is zero, unless the updated region has no non-zero alpha, in which
-case the region is uploaded as opaque.
+Derive the upload alpha from the window surface metadata:
+
+* Surfaces without a per-pixel alpha mask are uploaded opaque.
+* If the window has a constant `LWA_ALPHA` value and the compositor does
+  not offer `wp_alpha_modifier_v1`, that value is baked into the pixels,
+  premultiplied as ARGB8888 `wl_shm` buffers require. When the compositor
+  does offer the protocol the driver already applies the alpha through the
+  surface multiplier, and baking it as well would apply it twice.
+* Surfaces with a per-pixel alpha mask keep the application-provided alpha.
+  Fully transparent pixels are already zeroed by the shape pass win32u runs
+  on those surfaces, so no per-pixel fixup is needed or possible here.
 
 ## Affected upstream
 `dlls/winewayland.drv/window_surface.c`.
