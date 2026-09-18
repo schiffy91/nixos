@@ -1,7 +1,7 @@
-From c74152b6a4e8c0933850dc9fc8088e8db4a0b84e Mon Sep 17 00:00:00 2001
+From 0ea526064c2df7031573ea8f15749a333196c715 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 07/19] dcomp: Present IDCompositionSurface content.
+Subject: [PATCH] dcomp: Present IDCompositionSurface content.
 
 Chromium DirectComposition clients draw popup, tooltip and form-control
 content into IDCompositionSurface objects. The Wayland GPU path already
@@ -19,7 +19,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 160 insertions(+), 4 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index da92877..a8d6e9f 100644
+index da928775576..a8d6e9f200d 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -90,6 +90,11 @@ struct dcomp_surface
@@ -278,6 +278,3 @@ index da92877..a8d6e9f 100644
          else
              dcomp_visual_bind_swapchain(visual, visual->host_hwnd, target->hwnd);
      }
--- 
-2.55.0
-

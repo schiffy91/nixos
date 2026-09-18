@@ -1,4 +1,4 @@
-From e06496f28638e24d058b3eee848924b1795cf543 Mon Sep 17 00:00:00 2001
+From 0c48696335137210fe2cae5fee0b69ee80ee3579 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:45:30 -0700
 Subject: [PATCH] winewayland.drv: Fix layered surface alpha uploads.
@@ -26,11 +26,11 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 48 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/winewayland.drv/window_surface.c b/dlls/winewayland.drv/window_surface.c
-index 98cf812..e46449b 100644
+index 62866478edd..1603f5ece2c 100644
 --- a/dlls/winewayland.drv/window_surface.c
 +++ b/dlls/winewayland.drv/window_surface.c
-@@ -250,12 +250,34 @@ RGNDATA *get_region_data(HRGN region)
-     return data;
+@@ -941,12 +941,34 @@ static void wayland_window_surface_sync_regions(struct window_surface *window_su
+     wayland_win_data_release(data);
  }
  
 +/**********************************************************************
@@ -65,7 +65,7 @@ index 98cf812..e46449b 100644
  {
      static const int bpp = WINEWAYLAND_BYTES_PER_PIXEL;
      RGNDATA *rgndata = get_region_data(region);
-@@ -291,21 +313,21 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
+@@ -982,21 +1004,21 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
          /* Fast path for full width rectangles. */
          if (width * bpp == src_stride && src_stride == dst_stride)
          {
@@ -91,7 +91,7 @@ index 98cf812..e46449b 100644
                  src += src_stride;
                  dst += dst_stride;
              }
-@@ -329,11 +351,11 @@ static void copy_pixel_region(const char *src_pixels, RECT *src_rect,
+@@ -1109,11 +1131,11 @@ static HRGN union_regions(HRGN a, HRGN b)
   */
  static void wayland_shm_buffer_copy_data(struct wayland_shm_buffer *buffer,
                                           const char *bits, RECT *rect,
@@ -105,7 +105,7 @@ index 98cf812..e46449b 100644
  }
  
  static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
-@@ -342,9 +364,11 @@ static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
+@@ -1122,9 +1144,11 @@ static void wayland_shm_buffer_copy(struct wayland_shm_buffer *src,
  {
      RECT src_rect = {0, 0, src->width, src->height};
      RECT dst_rect = {0, 0, dst->width, dst->height};
@@ -119,23 +119,23 @@ index 98cf812..e46449b 100644
  }
  
  /**********************************************************************
-@@ -388,6 +412,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
-     BOOL flushed = FALSE;
-     HRGN surface_damage_region = NULL;
-     HRGN copy_from_window_region;
+@@ -1174,6 +1198,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+     HRGN gdi_over_region, gdi_over_paint_region;
+     HRGN copy_from_window_region = NULL;
+     HRGN self_paint_clip = NULL, clip_region = window_surface->clip_region;
 +    UINT alpha_bits = (UINT)-1;
      uint32_t buffer_format;
  
-     surface_damage_region = NtGdiCreateRectRgn(rect->left + dirty->left, rect->top + dirty->top,
-@@ -398,6 +423,19 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
-         goto done;
+     if (!window_surface->app_painted_full && !window_surface->app_painted_region)
+@@ -1213,6 +1238,19 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+         clip_region = self_paint_clip;
      }
  
 +    /* Layered windows without a per-pixel alpha mask carry meaningless DIB
 +     * alpha bytes, so derive the upload alpha from the surface metadata. The
 +     * constant LWA_ALPHA value is only baked into the pixels when the
 +     * compositor cannot apply it through wp_alpha_modifier_v1. */
-+    if (shape_bits && !wws->layered) alpha_bits = 0xff000000;
++    if ((shape_bits || wws->occlusion_clipped) && !wws->layered) alpha_bits = 0xff000000;
 +    else if (wws->layered && !window_surface->alpha_mask)
 +    {
 +        if (window_surface->alpha_bits != (UINT)-1 && !process_wayland.wp_alpha_modifier_v1)
@@ -144,18 +144,15 @@ index 98cf812..e46449b 100644
 +            alpha_bits = 0xff000000;
 +    }
 +
-     buffer_format = (shape_bits || wws->layered) ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888;
+     buffer_format = (shape_bits || wws->occlusion_clipped || wws->layered) ?
+                     WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888;
      if (wws->wayland_buffer_queue->format != buffer_format)
-     {
-@@ -450,7 +488,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+@@ -1269,7 +1307,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
      }
  
      wayland_shm_buffer_copy_data(shm_buffer, color_bits, &surface_rect, copy_from_window_region,
--                                 shape_bits && !wws->layered);
+-                                 (shape_bits || wws->occlusion_clipped) && !wws->layered);
 +                                 alpha_bits);
      if (shape_bits) wayland_shm_buffer_copy_shape(shm_buffer, rect, shape_info, shape_bits);
  
-     NtGdiSetRectRgn(shm_buffer->damage_region, 0, 0, 0, 0);
--- 
-2.55.0
-
+     gdi_over_region = window_surface->gdi_over_producer_region;

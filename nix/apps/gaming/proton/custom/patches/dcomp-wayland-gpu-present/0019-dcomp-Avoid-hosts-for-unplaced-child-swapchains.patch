@@ -1,7 +1,7 @@
-From efb6a66313c8c080d277c0039f18adafe38758e5 Mon Sep 17 00:00:00 2001
+From 14b0ab53341e3a5c76d726b73595c8ad3dc800fc Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 19/19] dcomp: Avoid hosts for unplaced child swapchains.
+Subject: [PATCH] dcomp: Avoid hosts for unplaced child swapchains.
 
 Battle.net's login tree wraps the real swap-chain content in a first-level
 child visual with identity placement, no clip and no transform. Hosting that
@@ -21,7 +21,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index e26ff7a..f11b3b6 100644
+index e26ff7a6b7c..f11b3b60163 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -184,6 +184,7 @@ struct dcomp_commit
@@ -63,6 +63,3 @@ index e26ff7a..f11b3b6 100644
      }
  
      LIST_FOR_EACH_ENTRY(child, &visual->children, struct dcomp_visual, child_entry)
--- 
-2.55.0
-

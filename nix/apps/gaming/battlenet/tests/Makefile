@@ -18,6 +18,9 @@ CAPTURE_FALLBACK ?= none
 ARTIFACT_DIR ?=
 CAPTURE_SIZE ?= 6015x3385
 STOP_ON_WHITE ?= 0
+KEEP_AGENT ?= 0
+CYCLES ?= 3
+BATTLENET_BIN ?=
 TRACE ?= quiet
 RESET_CACHE ?= 0
 COUNT ?= 24
@@ -67,6 +70,9 @@ help:
 		'  make context-menu                 call the tray ContextMenu method without capture' \
 		'  make window-info                  print Battle.net and Plasma window geometry' \
 		'  make cache-state                  print Battle.net browser/GPU cache state' \
+		'  make stacks                       dump thread states + native stacks of every Battle.net process' \
+		'  make stop-launcher                kill only Battle.net.exe; a busy Agent survives the relaunch' \
+		'  make hide-cycle CYCLES=3          minimize/re-activate the main window via KWin, classify each restore' \
 		'  make reset-browser-cache          move browser/GPU caches to a timestamped backup' \
 		'  make install-capture-helper       install local KWin screenshot-authorized helper' \
 		'  make probe-window                 classify Battle.net window pixels, delete temp capture' \
@@ -86,6 +92,8 @@ help:
 		'  ARTIFACT_DIR=$(ARTIFACT_DIR)' \
 		'  CAPTURE_SIZE=$(CAPTURE_SIZE)' \
 		'  STOP_ON_WHITE=$(STOP_ON_WHITE)' \
+		'  KEEP_AGENT=$(KEEP_AGENT)          reproduce: relaunch against a running Agent (the white-window recipe)' \
+		'  BATTLENET_BIN=$(BATTLENET_BIN)    reproduce: launch this wrapper instead of the activated desktop entry' \
 		'  TRACE=$(TRACE)' \
 		'  RESET_CACHE=$(RESET_CACHE)' \
 		'  OUTPUT=$(OUTPUT)' \
@@ -144,6 +152,15 @@ context-menu:
 window-info:
 	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug window-info)
 
+stacks:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug stacks $(OUTPUT))
+
+stop-launcher:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug stop-launcher)
+
+hide-cycle:
+	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-debug hide-cycle $(CYCLES))
+
 cache-state:
 	$(BATTLENET_DIR)/bin/battlenet-debug cache-state
 
@@ -157,7 +174,7 @@ probe-window:
 	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" $(BATTLENET_DIR)/bin/battlenet-debug probe-window)
 
 reproduce:
-	$(call battlenet_run,$(BATTLENET_DIR)/bin/battlenet-reproduce --repeat "$(REPEAT)" --delay "$(DELAY)" --log-lines "$(LOG_LINES)" --frames "$(FRAMES)" --frame-interval "$(FRAME_INTERVAL)" --capture-fallback "$(CAPTURE_FALLBACK)" --artifact-dir "$(ARTIFACT_DIR)" --stop-on-white "$(STOP_ON_WHITE)" --trace "$(TRACE)" --reset-cache "$(RESET_CACHE)")
+	$(call battlenet_run,BATTLENET_BIN="$(BATTLENET_BIN)" $(BATTLENET_DIR)/bin/battlenet-reproduce --repeat "$(REPEAT)" --delay "$(DELAY)" --log-lines "$(LOG_LINES)" --frames "$(FRAMES)" --frame-interval "$(FRAME_INTERVAL)" --capture-fallback "$(CAPTURE_FALLBACK)" --artifact-dir "$(ARTIFACT_DIR)" --stop-on-white "$(STOP_ON_WHITE)" --trace "$(TRACE)" --reset-cache "$(RESET_CACHE)" --keep-agent "$(KEEP_AGENT)")
 
 capture-window:
 	$(call battlenet_run,BATTLENET_CAPTURE_FALLBACK="$(CAPTURE_FALLBACK)" $(BATTLENET_DIR)/bin/battlenet-debug capture-window "$(OUTPUT)")

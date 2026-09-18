@@ -1,7 +1,7 @@
 # proton-custom
 
 This directory packages the custom Proton compat tool. It starts from
-`GE-Proton11-5`, applies an explicit Wine/DXVK patch series, and overlays
+`GE-Proton11-7`, applies an explicit Wine/DXVK patch series, and overlays
 only the rebuilt artifacts on top of the GE binary release. The primary current
 consumer is Battle.net on native Wayland, but the package is intentionally kept
 generic enough to be the one custom Proton build used by Steam games too.
@@ -10,9 +10,12 @@ generic enough to be the one custom Proton build used by Steam games too.
 
 `package.nix`:
 
-1. Fetches Valve Wine at `36078f5f947532885a596dabbc7893c048133660`, matching
-   the Wine tree used by `GE-Proton11-5`.
-2. Applies the GE-Proton wine-wayland hotfix series.
+1. Fetches Valve Wine at `46b29104e3741fe23bf5e2547196a253aab88c89`, matching
+   the Wine tree used by `GE-Proton11-7`.
+2. Applies GE-Proton's complete `wine-hotfixes` set in `protonprep` order
+   (wine-wayland, the SNI patch, the child-rendering series, the remaining
+   em-fixups). Those series change the wineserver protocol and wined3d, which
+   the overlaid DLLs must match; every patch has to apply or the build fails.
 3. Applies only the explicit `activePatchSeries` list, in Nix list order.
 4. Builds the patched Wine artifacts touched by the active series:
    `dcomp.dll`, `dxgi.dll`, `explorer.exe`, `winewayland.drv`,
@@ -23,7 +26,7 @@ generic enough to be the one custom Proton build used by Steam games too.
 
 `default.nix` installs the package through `programs.steam.extraCompatPackages`
 and also keeps
-`~/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton11-5` as a symlink
+`~/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton11-7` as a symlink
 to the exact Nix store build, because the standalone `battlenet` wrapper uses
 that path as `PROTONPATH`.
 
@@ -37,11 +40,17 @@ the `git format-patch -s` commit order for that topic.
 |---|---|---|
 | `wine-wayland-focus` | `0001` | Active. Sends GE's `WM_CANCELMODE` on keyboard leave as a notify message so the Wayland reader thread never blocks and the message is never dropped. |
 | `wine-wayland-layered-windows` | `0001` | Active. Bakes premultiplied constant alpha into layered SHM uploads only when the compositor lacks `wp_alpha_modifier_v1`; GE-Proton11 ships the `pUpdateLayeredWindow` hook itself. |
-| `wine-wayland-status-notifier` | `0001..0003` | Active. win32u passes an icon snapshot to `SystrayDockInsert` (incl. the wow64win thunk); winewayland publishes StatusNotifierItems over dlopen'd libdbus from explorer, re-registering when the watcher restarts; explorer forwards `NIM_MODIFY`/`NIM_SETVERSION`. The winex11 re-dock guard only takes effect if `winex11.drv` is rebuilt (the package ships GE's). |
 | `ntdll-delay-load` | `0001` | Active. Makes a read-only delay-load IAT (`/guard:cf` `.didat`) writable before patching, serialized on the loader lock. |
 | `dcomp-wayland-gpu-present` | `0001..0019` | Active. Implements the minimal DComp object model Battle.net uses with a sound COM lifetime (children hold the device, targets ref 1), direct-binds the first unplaced first-level swap chain to the target HWND, keeps placed/clipped/surface visuals on hidden host HWNDs torn down per commit, accumulates ancestor clips, and preserves virtual-surface content across resizes. |
 | `win32u-load-driver-deadlock` | `0001` | Active. Bounds the `WM_NULL` desktop-driver readiness barrier so a stalled explorer desktop thread cannot hang every client. |
 | `dxvk-composition-swapchain` | `0001..0008` | Active. Fixes the resize extent bug, enables DXGI composition swap chains with a private DComp bind interface, compositor pacing, async host show/resize, preserved contents across buffer rotation, first-present host visibility, retained-content replay after target rebinds, and trace-level composition logging (`DXVK_LOG_LEVEL=trace`). |
+
+Dropped at the GE-Proton11-7 rebase, now covered by the base tree:
+
+| Topic | Covered by |
+|---|---|
+| `wine-wayland-status-notifier` | GE em-fixups `0001-winewayland-add-SNI-tray-icons-and-native-context-me` (win32u `sni.c`, incl. the wow64win thunk); icons come from the app's pixmap, so `WINE_SNI_ICON_NAME` is gone |
+| unbounded `vkWaitForPresentKHR` on hidden windows | GE child-rendering `0066-winevulkan-Skip-present-waits-when-the-window-is-not` plus the 3 s stall recovery in win32u; this was the Battle.net white-window deadlock (login window hidden for destruction while DXVK's frame thread waited on its FIFO present, GPU and viz threads queued behind the presenter lock, UI thread blocked in `DestroyWindow`) |
 
 Dropped at the GE-Proton11-5 rebase, now covered by the base tree:
 
@@ -126,7 +135,7 @@ make status
 The dev copy lives at:
 
 ```text
-~/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton11-5-dev
+~/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton11-7-dev
 ```
 
 Once local Wine or DXVK build directories are configured, copy fresh artifacts
@@ -225,20 +234,31 @@ Expected Wayland result:
   `--disable-gpu-compositing`.
 - DComp/DXGI logs show composition swap-chain creation, target binding, and
   DXVK presenter creation.
-- A StatusNotifierItem appears in the session bus.
+- A StatusNotifierItem appears in the session bus (GE's SNI implementation).
+- Restarting the launcher while the Agent is busy (an update in progress)
+  paints the main window; the login-to-main switch must not deadlock.
+- `make test-hidden-present TOOL=...` passes. `tests/dcomp-hidden-present`
+  binds a D3D11 composition swap chain to a window through
+  `DCompositionCreateDevice2`, presents FIFO frames, hides the window with a
+  present in flight and releases the swap chain. GE-Proton11-5 hangs there
+  (DXVK's frame thread never leaves `vkWaitForPresentKHR` for an unmapped
+  surface, which is the Battle.net white-window deadlock); GE-Proton11-7's
+  bounded present wait returns and the test prints `PASS`.
 - Tray Activate and ContextMenu D-Bus calls return promptly.
 
 ## Editing A Series
 
 Patch files are the source of truth, so edit them as git history, not by hand.
-Materialize a base tree once (Valve Wine plus the GE wine-wayland hotfixes, and
-a throwaway commit with the `make_vulkan`/`make_requests`/`make_specfiles`/
-`autoreconf` output), then give every topic its own worktree seeded with
-`git am`:
+Materialize a base tree once (Valve Wine plus GE's complete wine-hotfixes set
+in `protonprep` order, and a throwaway commit with the `make_vulkan`/
+`make_requests`/`make_specfiles`/`autoreconf` output), then give every topic
+its own worktree seeded with `git am`. The GE-Proton11-7 base lives on
+`base-117` in `src/rework/wine` (tag `valve-117` is the pristine Valve commit)
+and on `dxvk-117` in `src/rework/dxvk`; the topic branches are `small-117`,
+`dcomp-117` and `composition-117`:
 
 ```bash
-git -C src/rework/wine worktree add ../wine-sni -b sni base
-git -C src/rework/wine-sni am patches/wine-wayland-status-notifier/*.patch
+git -C src/rework/wine worktree add ../wine-dcomp-117 -b dcomp-117 base-117
 ```
 
 Fix commits in place (`git commit --fixup` + `GIT_SEQUENCE_EDITOR=true git

@@ -1,7 +1,7 @@
-From 88b169c86deeac0e11547d2f415ad39c15dec763 Mon Sep 17 00:00:00 2001
+From 6d5567eb34d9a526e100f4eb609f8a0a35063b89 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 12/19] dcomp: Implement GPU-backed surface factories.
+Subject: [PATCH] dcomp: Implement GPU-backed surface factories.
 
 Chromium creates DirectComposition surface factories for popup and control
 content. Returning E_NOTIMPL there leaves callers without a drawable
@@ -20,7 +20,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 161 insertions(+), 13 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index b912a3c..f1f03e3 100644
+index b912a3ce1f8..f1f03e3486c 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -82,6 +82,7 @@ struct dcomp_surface
@@ -308,6 +308,3 @@ index b912a3c..f1f03e3 100644
          return hr;
  
      *surface = &object->IDCompositionSurface_iface;
--- 
-2.55.0
-

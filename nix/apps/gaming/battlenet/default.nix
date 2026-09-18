@@ -121,7 +121,6 @@ let
           PROTON_USE_WOW64=1 \
           WINE_SIMULATE_WRITECOPY=1 \
           WINE_WAYLAND_HACKS=1 \
-          WINE_SNI_ICON_NAME=battlenet \
           PROTON_ENABLE_WAYLAND=1 \
           DXVK_LOG_LEVEL="''${DXVK_LOG_LEVEL:-none}" \
           umu-run "$EXE" "''${EXTRA_ARGS[@]}"  # SDR launcher: an HDR WSI surface made the XDR drop its Thunderbolt link

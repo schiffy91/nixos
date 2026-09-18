@@ -1,7 +1,7 @@
-From 43adb876bb93d8903bcce9dfc599e420faa6f52d Mon Sep 17 00:00:00 2001
+From f6cde2b9eb45d6dacad45da67d2aa4616469672b Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:42:53 -0700
-Subject: [PATCH 1/8] [d3d11] Use new extent when resizing swap chain surface
+Subject: [PATCH] [d3d11] Use new extent when resizing swap chain surface
 
 ChangeProperties hands the presenter the extent from the old swap chain
 description, since m_desc is only updated afterwards. The presenter's
@@ -21,10 +21,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index cbcc3c6..b761c9c 100644
+index 49bf2f6b..40d264d8 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -179,7 +179,7 @@ namespace dxvk {
+@@ -184,7 +184,7 @@ namespace dxvk {
        m_presenter->setSurfaceFormat(GetSurfaceFormat(pDesc->Format));
  
      if (m_desc.Width != pDesc->Width || m_desc.Height != pDesc->Height)
@@ -33,6 +33,3 @@ index cbcc3c6..b761c9c 100644
  
      m_desc = *pDesc;
      CreateBackBuffers();
--- 
-2.55.0
-

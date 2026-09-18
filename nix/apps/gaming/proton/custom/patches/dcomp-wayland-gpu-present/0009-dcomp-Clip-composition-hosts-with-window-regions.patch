@@ -1,7 +1,7 @@
-From cab6ceeaf2a66cca50e696bb1708f536b8a40607 Mon Sep 17 00:00:00 2001
+From c70dcba8ef0bf8a9477805b5469fc2b416262758 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 09/19] dcomp: Clip composition hosts with window regions.
+Subject: [PATCH] dcomp: Clip composition hosts with window regions.
 
 DirectComposition clips a visual without changing the content origin. The
 Wayland presentation bridge used the clip rectangle to move and shrink the
@@ -19,7 +19,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  2 files changed, 58 insertions(+), 26 deletions(-)
 
 diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
-index 049b046..b63cd1a 100644
+index 049b0462f17..b63cd1a3ef8 100644
 --- a/dlls/dcomp/Makefile.in
 +++ b/dlls/dcomp/Makefile.in
 @@ -1,5 +1,5 @@
@@ -30,7 +30,7 @@ index 049b046..b63cd1a 100644
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 0a8ac7a..d335e73 100644
+index 0a8ac7a86f0..d335e730ad1 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -28,6 +28,7 @@
@@ -213,6 +213,3 @@ index 0a8ac7a..d335e73 100644
  
      if (!visual->surface && !visual->swapchain)
      {
--- 
-2.55.0
-

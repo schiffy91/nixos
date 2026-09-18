@@ -1,7 +1,7 @@
-From 2b9c46ed5be99b7d938388f1f0ac183b186eb884 Mon Sep 17 00:00:00 2001
+From e71c84dbdc4adfdfd0676f90b0c40138676664b5 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 01/19] dcomp: Implement D3D11-backed desktop composition.
+Subject: [PATCH] dcomp: Implement D3D11-backed desktop composition.
 
 Chromium's DirectComposition path creates a desktop device on its D3D11
 device, builds a tree of visuals carrying composition swap chains and
@@ -27,7 +27,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  2 files changed, 1462 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/Makefile.in b/dlls/dcomp/Makefile.in
-index d48b901..049b046 100644
+index d48b901a4fb..049b0462f17 100644
 --- a/dlls/dcomp/Makefile.in
 +++ b/dlls/dcomp/Makefile.in
 @@ -1,4 +1,5 @@
@@ -37,7 +37,7 @@ index d48b901..049b046 100644
  EXTRADLLFLAGS = -Wb,--prefer-native
  
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index d0eb920..d08909d 100644
+index d0eb920968a..d08909d6292 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1,5 +1,8 @@
@@ -1544,6 +1544,3 @@ index d0eb920..d08909d 100644
 +
 +    return TRUE;
 +}
--- 
-2.55.0
-

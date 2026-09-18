@@ -1,4 +1,4 @@
-From 6f84dbb1606865dd1c4a87bdee9a368ba26de5e5 Mon Sep 17 00:00:00 2001
+From 027d9fdaef5bb101186799bb69752382792a946f Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:45:30 -0700
 Subject: [PATCH] ntdll: Make the delay-load IAT writable before patching it.
@@ -25,10 +25,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
-index bbb448c..a0721f2 100644
+index 282333e6296..3cf5090c1fa 100644
 --- a/dlls/ntdll/loader.c
 +++ b/dlls/ntdll/loader.c
-@@ -4073,7 +4073,22 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
+@@ -4076,7 +4076,22 @@ void* WINAPI LdrResolveDelayLoadedAPI( void* base, const IMAGE_DELAYLOAD_DESCRIP
      }
      if (!nts)
      {
@@ -52,6 +52,3 @@ index bbb448c..a0721f2 100644
          return fp;
      }
  
--- 
-2.55.0
-

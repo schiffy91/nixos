@@ -1,7 +1,7 @@
-From 907fe4f8ae62c901f24e838acc0c414fa766fa0e Mon Sep 17 00:00:00 2001
+From 8b33a1b269373e29e3aa300ad9f24526d22778f1 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 16/19] dcomp: Hide composition host windows from parent
+Subject: [PATCH] dcomp: Hide composition host windows from parent
  notifications.
 
 Wine's DirectComposition implementation uses internal child windows to host
@@ -15,7 +15,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 03b80ad..c987f08 100644
+index 03b80adc517..c987f081535 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1671,7 +1671,7 @@ static BOOL dcomp_visual_update_host(struct dcomp_commit *commit, struct dcomp_v
@@ -27,6 +27,3 @@ index 03b80ad..c987f08 100644
                  dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
                  placement->x, placement->y, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
          {
--- 
-2.55.0
-

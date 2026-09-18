@@ -1,7 +1,7 @@
-From f20630fbd2996e2a291793162f71bef49edd5b00 Mon Sep 17 00:00:00 2001
+From fb1e45d3d6cb0c69072be70b6c8380f202d67478 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 14/19] dcomp: Implement virtual surfaces and scrolling.
+Subject: [PATCH] dcomp: Implement virtual surfaces and scrolling.
 
 Chromium uses DirectComposition virtual surfaces and surface scrolling for
 retained popup and control content. Treat virtual surfaces as GPU-backed
@@ -16,7 +16,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 237 insertions(+), 8 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index a0dda55..0f7454d 100644
+index a0dda553319..0f7454dd1e1 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -86,6 +86,7 @@ struct dcomp_device
@@ -366,6 +366,3 @@ index a0dda55..0f7454d 100644
  }
  
  static HRESULT WINAPI device_CreateTranslateTransform(IDCompositionDesktopDevice *iface,
--- 
-2.55.0
-

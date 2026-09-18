@@ -1,7 +1,7 @@
-From b8ca998b9cc9adae635a4193b3b710085946eb4b Mon Sep 17 00:00:00 2001
+From c65078192f8fbb3e90ef1c1d439b3641785da418 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 08/19] dcomp: Handle incremental surface draws.
+Subject: [PATCH] dcomp: Handle incremental surface draws.
 
 Chromium uses IDCompositionSurface for popups, tooltips and form controls,
 and it may redraw only a sub-rectangle of the surface. Return the requested
@@ -15,7 +15,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 30 insertions(+), 6 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index a8d6e9f..0a8ac7a 100644
+index a8d6e9f200d..0a8ac7a86f0 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -361,7 +361,10 @@ static HRESULT dcomp_surface_present(struct dcomp_surface *surface, HWND target,
@@ -102,6 +102,3 @@ index a8d6e9f..0a8ac7a 100644
      }
      return S_OK;
  }
--- 
-2.55.0
-

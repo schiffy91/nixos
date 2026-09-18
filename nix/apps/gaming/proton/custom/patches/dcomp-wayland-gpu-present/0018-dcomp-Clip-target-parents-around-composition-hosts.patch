@@ -1,7 +1,7 @@
-From fd4aacb24b15634c19be55fe267f4b50d6836824 Mon Sep 17 00:00:00 2001
+From cea6cf7d906700935cc957da71a0847cbdfd4163 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 18/19] dcomp: Clip target parents around composition hosts.
+Subject: [PATCH] dcomp: Clip target parents around composition hosts.
 
 Wine's DComp bridge represents swap-chain visuals with real child windows.
 The target window still belongs to Battle.net's Qt/CEF host, and without
@@ -21,7 +21,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 6 insertions(+)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 4727671..e26ff7a 100644
+index 4727671133d..e26ff7a6b7c 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1554,6 +1554,7 @@ static const IDCompositionTargetVtbl dcomp_target_vtbl =
@@ -44,6 +44,3 @@ index 4727671..e26ff7a 100644
      EnterCriticalSection(&device->cs);
      list_add_tail(&device->targets, &object->entry);
      LeaveCriticalSection(&device->cs);
--- 
-2.55.0
-

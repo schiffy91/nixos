@@ -10,6 +10,7 @@ pkgs.mkShell {
   packages = with pkgs; [
     coreutils
     dotool
+    elfutils  # eu-stack for battlenet-debug stacks
     findutils
     gawk
     gcc

@@ -1,7 +1,7 @@
-From c36312f96afd23fbc326f67799105d8e1cf73f6c Mon Sep 17 00:00:00 2001
+From 6ef9325171cfff139e70a5e0e00b09158cfa7830 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:51:21 -0700
-Subject: [PATCH 8/8] [d3d11] Trace composition present paths
+Subject: [PATCH] [d3d11] Trace composition present paths
 
 Diagnosing a black composition host requires knowing whether the
 application presented after the bind, whether DXVK showed the host,
@@ -21,10 +21,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 14 insertions(+)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 77a006c..ef1c6cb 100644
+index a48cc8f3..d268cf0a 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -413,6 +413,12 @@ namespace dxvk {
+@@ -439,6 +439,12 @@ namespace dxvk {
        }
      }
  
@@ -37,7 +37,7 @@ index 77a006c..ef1c6cb 100644
      if (hTarget == previousTarget)
        return;
  
-@@ -474,6 +480,11 @@ namespace dxvk {
+@@ -506,6 +512,11 @@ namespace dxvk {
        m_compositionTargetShown |= showCompositionTarget;
      }
  
@@ -49,7 +49,7 @@ index 77a006c..ef1c6cb 100644
      // Replays re-present the last presented frame, which the
      // rotation below moves to the last back buffer, and leave
      // the buffer the application draws into alone
-@@ -510,6 +521,9 @@ namespace dxvk {
+@@ -542,6 +553,9 @@ namespace dxvk {
  
      VkResult status = m_presenter->acquireNextImage(sync, backBuffer);
  
@@ -59,6 +59,3 @@ index 77a006c..ef1c6cb 100644
      if (status != VK_SUCCESS && m_latency)
        m_latency->discardTimings();
  
--- 
-2.55.0
-

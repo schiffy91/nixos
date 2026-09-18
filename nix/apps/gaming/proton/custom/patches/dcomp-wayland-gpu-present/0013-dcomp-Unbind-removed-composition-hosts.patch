@@ -1,7 +1,7 @@
-From ee5a94442989271f9af84971ee9b7295a0eb3a9d Mon Sep 17 00:00:00 2001
+From ac1afc7fd9994f5aa91c315487abc89a49c91f6f Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 13/19] dcomp: Unbind removed composition hosts.
+Subject: [PATCH] dcomp: Unbind removed composition hosts.
 
 Visuals removed from the tree kept their host windows and their DXVK
 binding, so stale host windows remained visible after Chromium removed popup
@@ -24,7 +24,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 102 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index f1f03e3..a0dda55 100644
+index f1f03e3486c..a0dda553319 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -63,7 +63,10 @@ static const WCHAR dcomp_host_class_name[] = L"WineDCompositionHost";
@@ -270,6 +270,3 @@ index f1f03e3..a0dda55 100644
  
      if (rendering_device)
      {
--- 
-2.55.0
-

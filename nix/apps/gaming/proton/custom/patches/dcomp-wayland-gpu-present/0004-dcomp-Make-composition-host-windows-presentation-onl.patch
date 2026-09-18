@@ -1,7 +1,7 @@
-From 4077c1f9087e0905acfca0b00da81e55967e0a85 Mon Sep 17 00:00:00 2001
+From 5e46d12f863c45a629871d67c2849a5fc9ea91a3 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 04/19] dcomp: Make composition host windows presentation-only.
+Subject: [PATCH] dcomp: Make composition host windows presentation-only.
 
 The host window exists only to give DXVK a native target for a composition
 swap chain. It should not have its own Win32 backing contents competing with
@@ -18,7 +18,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 15 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 2414997..1eb5958 100644
+index 2414997ec1f..1eb59583d3d 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -195,6 +195,20 @@ static BOOL dcomp_matrix_is_translation(const D2D_MATRIX_3X2_F *matrix)
@@ -51,6 +51,3 @@ index 2414997..1eb5958 100644
                  dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
                  rect.left, rect.top, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
          {
--- 
-2.55.0
-

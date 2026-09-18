@@ -1,7 +1,7 @@
-From 06b2e4f9bafac121103dee89fc7bfa8df96148b2 Mon Sep 17 00:00:00 2001
+From 4118d7f254bbfc51837d14c93c7c7433094aebb1 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:50:24 -0700
-Subject: [PATCH 6/8] [d3d11] Show composition targets on first present
+Subject: [PATCH] [d3d11] Show composition targets on first present
 
 Wine's dcomp creates the host window of a composition swap chain hidden
 and leaves showing it to the swap chain owner. Showing it during the
@@ -28,10 +28,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  2 files changed, 15 insertions(+)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index 3253c25..d017c72 100644
+index 2a15ae98..fbaeb156 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -405,6 +405,9 @@ namespace dxvk {
+@@ -431,6 +431,9 @@ namespace dxvk {
        std::lock_guard<dxvk::mutex> lock(m_compositionLock);
        previousTarget = std::exchange(m_compositionTarget, hTarget);
        m_compositionChildTarget = hTarget && hTarget != hDispatch;
@@ -41,9 +41,9 @@ index 3253c25..d017c72 100644
      }
  
      if (hTarget == previousTarget)
-@@ -440,12 +443,23 @@ namespace dxvk {
- 
-   HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
+@@ -471,12 +474,23 @@ namespace dxvk {
+             UINT                      SyncInterval,
+       const DXGI_PRESENT_PARAMETERS*  pPresentParameters) {
      HWND compositionTarget = nullptr;
 +    bool showCompositionTarget = false;
  
@@ -66,10 +66,10 @@ index 3253c25..d017c72 100644
      // must not bypass the compositor's own pacing
      if (compositionTarget)
 diff --git a/src/d3d11/d3d11_swapchain.h b/src/d3d11/d3d11_swapchain.h
-index 9219d4a..2e5fac2 100644
+index 70cee444..537db016 100644
 --- a/src/d3d11/d3d11_swapchain.h
 +++ b/src/d3d11/d3d11_swapchain.h
-@@ -166,6 +166,7 @@ namespace dxvk {
+@@ -188,6 +188,7 @@ namespace dxvk {
      dxvk::mutex               m_compositionLock;
      HWND                      m_compositionTarget = nullptr;
      bool                      m_compositionChildTarget = false;
@@ -77,6 +77,3 @@ index 9219d4a..2e5fac2 100644
  
      Rc<hud::HudLatencyItem>   m_latencyHud;
  
--- 
-2.55.0
-

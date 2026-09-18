@@ -1,8 +1,8 @@
-From 8c6e0f956ca7feb0d126dacb1992a02aa6c03b10 Mon Sep 17 00:00:00 2001
+From 3903b457a25d8e39f397328911f99de48b74640c Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 02/19] dcomp: Clip composition host windows to the target
- client area.
+Subject: [PATCH] dcomp: Clip composition host windows to the target client
+ area.
 
 A host window outside the client area of its target is never visible.
 Shrink hosts to the part of the visual that intersects the client area and
@@ -14,7 +14,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index d08909d..a122483 100644
+index d08909d6292..a122483bda5 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -966,7 +966,7 @@ static BOOL dcomp_visual_swapchain_desc(const struct dcomp_visual *visual, DXGI_
@@ -45,6 +45,3 @@ index d08909d..a122483 100644
      {
          TRACE("Visual %p has no visible area on target %p.\n", visual, target_hwnd);
          dcomp_visual_teardown_host(visual);
--- 
-2.55.0
-

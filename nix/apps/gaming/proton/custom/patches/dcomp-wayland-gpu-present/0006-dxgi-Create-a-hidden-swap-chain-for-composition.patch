@@ -1,7 +1,7 @@
-From 847ae9e0462c408df45ac262084afef3e2932a6b Mon Sep 17 00:00:00 2001
+From 12948ba8645752da0da24cfc36a7efb8c5ac03fd Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 06/19] dxgi: Create a hidden swap chain for composition.
+Subject: [PATCH] dxgi: Create a hidden swap chain for composition.
 
 CreateSwapChainForComposition() creates a swap chain without an output
 window; whoever composes it presents it. Give the swap chain a message-only
@@ -14,7 +14,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 94 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/dxgi/factory.c b/dlls/dxgi/factory.c
-index ebdb42a..461845c 100644
+index ebdb42a3806..461845cb226 100644
 --- a/dlls/dxgi/factory.c
 +++ b/dlls/dxgi/factory.c
 @@ -378,13 +378,105 @@ static void STDMETHODCALLTYPE dxgi_factory_UnregisterOcclusionStatus(IWineDXGIFa
@@ -125,6 +125,3 @@ index ebdb42a..461845c 100644
  }
  
  static UINT STDMETHODCALLTYPE dxgi_factory_GetCreationFlags(IWineDXGIFactory *iface)
--- 
-2.55.0
-

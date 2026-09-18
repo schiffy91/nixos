@@ -1,7 +1,7 @@
-From 25833059b965c080b9deedfc89394f6d1d4cd58a Mon Sep 17 00:00:00 2001
+From 5cc7d02db185c29d57402edc4a8fc37b54b1aaf2 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 11/19] dcomp: Avoid redundant composition host updates.
+Subject: [PATCH] dcomp: Avoid redundant composition host updates.
 
 The Wayland presentation host window only needs a Win32 region update when
 the corresponding DirectComposition clip changes, and a swap chain only needs
@@ -19,7 +19,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 36 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 54f8c27..b912a3c 100644
+index 54f8c270d0e..b912a3ce1f8 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -123,6 +123,11 @@ struct dcomp_visual
@@ -112,6 +112,3 @@ index 54f8c27..b912a3c 100644
      }
  
      return TRUE;
--- 
-2.55.0
-

@@ -1,7 +1,7 @@
-From 08e9b0865cf149864a8fb6d9fad684cac8b0ce04 Mon Sep 17 00:00:00 2001
+From bb74e55476adaf27de469fa60ff7fd3ec688bf00 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 10/19] dcomp: Host placed composition swap-chain visuals.
+Subject: [PATCH] dcomp: Host placed composition swap-chain visuals.
 
 DirectComposition visual placement and stacking are independent from the
 swap-chain alpha mode. Opaque child visuals still need their own
@@ -18,7 +18,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 32 insertions(+), 19 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index d335e73..54f8c27 100644
+index d335e730ad1..54f8c270d0e 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1163,9 +1163,36 @@ static struct dcomp_placement dcomp_visual_placement(const struct dcomp_placemen
@@ -97,6 +97,3 @@ index d335e73..54f8c27 100644
      {
          if (!dcomp_visual_update_host(commit, visual, &placement, width, height))
          {
--- 
-2.55.0
-

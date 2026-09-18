@@ -1,7 +1,9 @@
-# proton-custom - GE-Proton11-5 with winewayland.drv cleanup patches.
+# proton-custom - GE-Proton11-7 with winewayland.drv cleanup patches.
 #
-# Builds the exact Wine and DXVK revisions GE-Proton11-5 uses, then layers
-# our active patch series on top. Replaces the changed binaries touched by the
+# Builds the exact Wine and DXVK revisions GE-Proton11-7 uses, applies GE's
+# complete wine-hotfixes set in protonprep order (the shipped tarball's
+# wineserver protocol and wined3d/opengl32 are built from that tree, so the
+# overlaid DLLs must be too), then layers our active patch series on top. Replaces the changed binaries touched by the
 # active series plus the matching 32/64-bit Unix-side Wine modules. The PE and
 # Unix halves must stay ABI-matched when D3D11/CEF exercises generated Unix
 # thunk tables.
@@ -14,12 +16,16 @@
 # Active series:
 #   Bounded WM_CANCELMODE on keyboard leave
 #   Layered surface alpha uploads (GE-Proton11 ships the pUpdateLayeredWindow hook)
-#   SNI StatusNotifierItem systray via dlopen'd libdbus (winewayland dock bridge,
-#   win32u icon snapshot ABI incl. the wow64win thunk)
 #   Delay-load IAT protection for PE modules with read-only thunk pages
 #   DComp/DXGI/winewayland GPU presentation path
 #   winevulkan, winewayland, win32u PE/Unix pairs and wow64win rebuilt from the same Wine source
 #   DXVK composition swap-chain support
+#
+# Dropped at the GE-Proton11-7 rebase, now covered upstream:
+#   StatusNotifierItem systray (GE em-fixups 0001, incl. the wow64win thunk)
+#   present waits on hidden windows (GE child-rendering 0066 bounds
+#   vkWaitForPresentKHR; unbounded waits deadlocked the Battle.net launcher's
+#   login-to-main window switch under Agent load)
 #
 # Dropped at the GE-Proton11-5 rebase, now covered upstream:
 #   xdg_popup for transient windows (GE wine-wayland 0031)
@@ -39,7 +45,7 @@
 }:
 
 let
-  toolVersion = "GE-Proton11-5";
+  toolVersion = "GE-Proton11-7";
   toolName    = "proton-custom-${toolVersion}";
 
   # false ships the pristine GE tarball (plus WineASIO) under the same tool
@@ -47,17 +53,17 @@ let
   # whether the patch series is still needed on this GE base.
   overlayPatchedBinaries = true;
 
-  # The exact Valve wine commit GE-Proton11-5 uses (from proton-ge-custom
-  # git submodule `wine` at tag GE-Proton11-5).
-  valveWineRev  = "36078f5f947532885a596dabbc7893c048133660";
-  valveWineHash = "sha256-US/ts2HLhKr+xHMCUWIFlpmQdJ3CDkYeMUB2EAzOblU=";
+  # The exact Valve wine commit GE-Proton11-7 uses (from proton-ge-custom
+  # git submodule `wine` at tag GE-Proton11-7).
+  valveWineRev  = "46b29104e3741fe23bf5e2547196a253aab88c89";
+  valveWineHash = "sha256-cXJaXVAO05SSedIodq5fkvv+OEnr9z4tldqDDqFAWyY=";
 
-  geProtonRev  = "GE-Proton11-5";
-  geProtonHash = "sha256-v1uwzVNzneBBRbaWRz2NTBNeTkqOjdwyEfBhDHJAeMc=";
+  geProtonRev  = "GE-Proton11-7";
+  geProtonHash = "sha256-HEFoB0tQOnCo6Tz9WZ6SnhoZepFFZ+JWIVjYgP/i8gI=";
 
-  dxvkVersion = "v3.0.2-21-g3a4c6fa3";
-  dxvkRev     = "3a4c6fa3cb1548d56a90a38dd8f526b6c13e63fd";
-  dxvkHash    = "sha256-KWPOc+wA3zivLEYXBEHOJgVzCWU0X7joK+PuSFoDplE=";
+  dxvkVersion = "v3.1-601930949";
+  dxvkRev     = "601930949d111edbbcf9dd463948426d9f8f6ddd";
+  dxvkHash    = "sha256-N7Y38coOIJDMR+OLJLHH7I8+8yZW09G639vuTFo0/Es=";
   wineasio64 = pkgs.wineasio;
   wineasio32Files = ../../rocksmith/assets;
 
@@ -66,15 +72,12 @@ let
   # pkgs.proton-ge-bin.src here would silently follow nixpkgs updates.
   ge-proton-src = pkgs.fetchurl {
     url = "https://github.com/GloriousEggRoll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}-x86_64.tar.gz";
-    hash = "sha256-3kPEsl88BH20m5bETYR1mVLFoBMypogFoJ5p+V3DinU=";
+    hash = "sha256-xUSLdqIwOE4te8a+tcy5e6+34sO2xSfLA6GlRrvLAKA=";
   };
 
   activePatchSeries = [
     ./patches/wine-wayland-focus/0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Fix-layered-surface-alpha-uploads.patch
-    ./patches/wine-wayland-status-notifier/0001-win32u-Pass-a-systray-icon-snapshot-to-SystrayDockIn.patch
-    ./patches/wine-wayland-status-notifier/0002-winewayland.drv-Add-StatusNotifierItem-tray-support.patch
-    ./patches/wine-wayland-status-notifier/0003-explorer-Forward-docked-tray-icon-updates.patch
     ./patches/ntdll-delay-load/0001-ntdll-Make-the-delay-load-IAT-writable-before-patchi.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
@@ -143,12 +146,80 @@ let
       chmod -R u+w "$out"
       cd "$out"
 
-      # Apply 504 GE-Proton wine-wayland patches in order
-      for p in $(ls "$geProtonSrc"/patches/wine-hotfixes/wine-wayland/*.patch | sort); do
-        if patch -p1 --dry-run < "$p" >/dev/null 2>&1; then
-          patch -p1 < "$p" >/dev/null
+      # GE's Wine patch sequence from patches/protonprep-valve-staging.sh, in
+      # its order. The shipped tarball's wineserver, wined3d, user32 and the
+      # rest are built from this tree, and several series here change the
+      # wineserver protocol, ntuser.h and struct vulkan_funcs, so the DLLs we
+      # overlay must come from the same sequence.
+      #
+      # The wine-staging `patchinstall.py` run is unavailable (its submodule
+      # is not in the source archive) and the wineopenxr copy is skipped, so a
+      # few later patches lose hunks in files we never build. A rejected hunk
+      # is fatal only when it lands in an overlaid module or a shared header;
+      # everything else is reported and tolerated.
+      ge="$geProtonSrc/patches"
+      relevant='^\+\+\+ b/(dlls/ntdll/|dlls/win32u/|dlls/winevulkan/|dlls/winewayland\.drv/|dlls/wow64win/|dlls/dcomp/|dlls/dxgi/|programs/explorer/|server/|include/)'
+      apply_ge() {
+        local rej; rej="$(mktemp)"
+        patch -p1 -s --no-backup-if-mismatch -r "$rej" < "$1" >/dev/null 2>&1 || true  # protonprep applies with default fuzz
+        if [ -s "$rej" ]; then
+          if grep -qE "$relevant" "$rej"; then
+            echo "GE patch hunk touching an overlaid module failed: ''${1#$ge/}" >&2
+            cat "$rej" >&2
+            exit 1
+          fi
+          echo "GE patch partially applied (rejects only outside overlaid modules): ''${1#$ge/}"
         fi
+        rm -f "$rej"
+      }
+      apply_ge_dir() { for p in $(ls "$1"/*.patch | sort); do apply_ge "$p"; done; }
+      sni="$ge/wine-hotfixes/em-fixups/0001-winewayland-add-SNI-tray-icons-and-native-context-me.patch"
+      apply_ge_dir "$ge/wine-hotfixes/wine-wayland"
+      apply_ge "$sni"
+      apply_ge_dir "$ge/wine-hotfixes/wineland-child-rendering"
+      for p in $(ls "$ge"/wine-hotfixes/em-fixups/*.patch | sort); do [ "$p" = "$sni" ] || apply_ge "$p"; done
+      for d in ntdll-Hide_Wine_Exports kernel32-Debugger ntdll-ext4-case-folder winex11-Window_Style \
+               winex11-ime-check-thread-data winex11-Fixed-scancodes comctl32_animate_avi d3drm-starwars \
+               windowscodecs-TIFF_Support mmsystem.dll16-MIDIHDR_Refcount; do
+        apply_ge_dir "$ge/wine-hotfixes/wine-staging/$d"
       done
+      for f in assettocorsa-hud pso2_hack vgsoh silence-starcitizen-unsupported-os eac_60101_timeout \
+               layered-overlay-wine 0001-win32u-Avoid-zero-WM_ACTIVATEAPP-lparam-on-first-for \
+               black-desert-keep-fullscreen-on-focus-loss maplestory-kernelbase-charprev-null \
+               maplestory-spi-stickykeys-filterkeys ai-limit-dx12-compute-shader-fallback \
+               max-payne-cpu-detection return-to-krondor-text-bitmap-readback nascar25-protector; do
+        apply_ge "$ge/game-patches/$f.patch"
+      done
+      apply_ge_dir "$ge/wine-hotfixes/qcap-dshow-fixes"
+      for f in urlmon-pump-thread-user-messages-during-synchronous-bind wineboot-create-sqm-machine-id \
+               crypt32-pfx-record-machine-keyset-in-prov-info crypt32-pfx-use-the-container-key-spec \
+               crypt32-reject-ncrypt-only-private-keys crypt32-wc3-modern-chain-engine-config \
+               crypt32-wc3-trace-chain-engine-config crypt32-wc3-check-exclusive-flags-size \
+               crypt32-wc3-accept-legacy-chain-engine-config crypt32-wc3-preserve-exclusive-root-and-test-layouts \
+               version-GetFileVersionInfoByHandle-stub ws2_32-validate-connect-address \
+               kernel32-refresh-power-status-asynchronously secur32-fallback-without-no-shuffle-extensions \
+               wined3d-preserve-runtime-opengl-gpu-description winex11-use-x11-drawables-for-steam-opengl-overlay \
+               winex11-keep-forza-background-windows-unmapped-on-wlroots win32u-share-selected-cursors-across-processes \
+               win32u-limit-extra-swapchain-image-to-doom win32u-use-three-image-present-modes-for-hades-wayland \
+               win32u-use-three-image-present-modes-for-path-of-exile ntdll-retry-native-view-allocation-with-effective-range \
+               ntdll-reserve-top-down-space-for-large-address-aware-wow64 ntdll-remove-redundant-packed-split-lock \
+               ntdll-prefer-native-version-resource-heuristics ntdll-keep-builtin-amd-ags-ahead-of-version-heuristic \
+               ole32-clipboard-stale-handle-1-tests ole32-clipboard-stale-handle-2-fix unity_crash_hotfix \
+               registry_RRF_RT_REG_SZ-RRF_RT_REG_EXPAND_SZ NCryptDecrypt_implementation \
+               0009-HACK-kernel32-Spoof-GetProcAddress-of-KiUserApcDispa icuuc-icuin-forwarder-dlls \
+               0001-server-Dynamically-relocate-.exes-by-default-too 0002-ntdll-allow-disabling-executable-ASLR; do
+        apply_ge "$ge/wine-hotfixes/pending/$f.patch"
+      done
+      for f in winealsa-override-channel-count 0001-fshack-Implement-AMD-FSR-upscaler-for-fullscreen-hac \
+               0001-win32u-Implement-NtGdiDdDDIQueryAdapterInfo-cases 83-nv_low_latency_wine \
+               build_failure_prevention-add-nls 0001-win32u-add-env-switch-to-disable-wm-decorations \
+               wine_host_block_envvar winex11-mutter-cinnamon 0001-HACK-kernelbase-allow-overriding-dlls-for-DLSS-XeSS- \
+               0002-HACK-ntdll-add-optiscaler-inection-hack 0001-ntdll-Read-QueryPerformanceCounter-from-the-TSC-in-us \
+               0001-ntdll-Implement-IOCTL_SERIAL_GET_DTRRTS-for-serial-dev; do
+        apply_ge "$ge/proton/$f.patch"
+      done
+      apply_ge_dir "$ge/ge-video-rework"
+      apply_ge_dir "$ge/proton-ds5-haptic"
 
       # Apply only the explicit active series in the order listed above.
       ${applyActivePatchSeries}
@@ -551,7 +622,7 @@ in stdenv.mkDerivation {
     "${toolName}"
     {
       "install_path" "."
-      "display_name" "proton-custom ${toolVersion} (Wayland SNI)"
+      "display_name" "proton-custom ${toolVersion} (Wayland)"
       "from_oslist"  "windows"
       "to_oslist"    "linux"
     }
@@ -563,7 +634,7 @@ EOF
   '';
 
   meta = {
-    description = "${toolVersion} with Wine Wayland, DComp, DXVK, SNI, and WineASIO patches";
+    description = "${toolVersion} with Wine Wayland, DComp, DXVK, and WineASIO patches";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
   };

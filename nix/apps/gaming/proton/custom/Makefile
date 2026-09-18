@@ -40,6 +40,7 @@ endif
 	package setup-wine setup-dxvk build build-dxvk build-all \
 	dcomp dxgi wayland explorer win32u winevulkan ntdll wow64win dxvk \
 	overlay-wine overlay-dxvk restore-dxvk check-patches patch-lint source-drift reset-source-drift \
+	test-hidden-present \
 	wine-status wine-diff wine-format-patch \
 	dxvk-status dxvk-diff dxvk-format-patch
 
@@ -59,6 +60,8 @@ help:
 		'  make install-store STORE=...  point compat symlink at a built store path' \
 		'  make status                   show active compat tool and source dirs' \
 		'  make check-patches            verify Wine/DXVK patch application only' \
+		'  make test-hidden-present TOOL=<compat tool dir>' \
+		'                                release a DComp swap chain on a hidden window; hangs on GE-Proton11-5' \
 		'  make patch-lint               check patch mailbox metadata hygiene' \
 		'  make source-drift             compare dev source with patched package source' \
 		'  make reset-source-drift       restore dev source to patched package source' \
@@ -114,6 +117,11 @@ status:
 
 check-patches:
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) check-patches)
+
+TOOL ?= $(HOME)/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton11-7
+test-hidden-present:
+	$(call proton_custom_run,$(MAKE) -C tests/dcomp-hidden-present)
+	nix-shell $(CURDIR)/../../battlenet/tests/dev-shell.nix --run '$(MAKE) -C tests/dcomp-hidden-present run TOOL="$(TOOL)"'
 
 patch-lint:
 	$(call proton_custom_run,$(PROTON_CUSTOM_DEV) patch-lint)

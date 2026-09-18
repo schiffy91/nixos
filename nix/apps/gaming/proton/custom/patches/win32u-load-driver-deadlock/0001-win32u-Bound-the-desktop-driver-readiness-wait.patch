@@ -1,4 +1,4 @@
-From 45ad863525f3ef35f2e9730d530c8e928e11d6df Mon Sep 17 00:00:00 2001
+From 2bc25e3f444d3079576c34dcc396d7e6042ff23b Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:45:30 -0700
 Subject: [PATCH] win32u: Bound the desktop driver readiness wait.
@@ -23,10 +23,10 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/win32u/driver.c b/dlls/win32u/driver.c
-index 793de3f..0191266 100644
+index a1493750dfa..b3c6c13dba5 100644
 --- a/dlls/win32u/driver.c
 +++ b/dlls/win32u/driver.c
-@@ -957,8 +957,10 @@ static BOOL load_desktop_driver( HWND hwnd )
+@@ -968,8 +968,10 @@ static BOOL load_desktop_driver( HWND hwnd )
      user_check_not_lock();
  
      asciiz_to_unicode( driver_load_error, "The explorer process failed to start." );  /* default error */
@@ -39,6 +39,3 @@ index 793de3f..0191266 100644
  
      guid_atom = HandleToULong( NtUserGetProp( hwnd, prop_nameW ));
      memcpy( key, guid_key_prefixW, sizeof(guid_key_prefixW) );
--- 
-2.55.0
-

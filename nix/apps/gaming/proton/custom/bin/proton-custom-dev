@@ -1374,6 +1374,8 @@ def mouse_location() -> tuple[int, int]:
 
 
 def screen_size() -> tuple[int, int]:
+    """Size of the output at the origin: dotool maps absolute pointer coordinates
+    onto that output, and a Sunshine virtual display can be listed before it."""
     result = subprocess.run(
         ["kscreen-doctor", "-o"],
         check=True,
@@ -1381,12 +1383,18 @@ def screen_size() -> tuple[int, int]:
         text=True,
     )
     output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    enabled = []
     for chunk in output.split("Output:"):
         if "enabled" not in chunk:
             continue
         match = re.search(r"Geometry:\s*(-?\d+),(-?\d+)\s+(\d+)x(\d+)", chunk)
         if match:
-            return int(match.group(3)), int(match.group(4))
+            enabled.append(tuple(int(match.group(index)) for index in range(1, 5)))
+    for x, y, width, height in enabled:
+        if x == 0 and y == 0:
+            return width, height
+    if enabled:
+        return enabled[0][2], enabled[0][3]
     raise SystemExit("could not determine enabled display geometry from kscreen-doctor")
 
 

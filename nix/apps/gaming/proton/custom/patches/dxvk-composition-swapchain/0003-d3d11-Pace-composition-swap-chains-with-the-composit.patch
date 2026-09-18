@@ -1,7 +1,7 @@
-From 4a1ebb980a355f0a4cbe0fac23752aa6f3889590 Mon Sep 17 00:00:00 2001
+From 2aef2d6360c4225ba7a4c6381a6db673217c5861 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:49:17 -0700
-Subject: [PATCH 3/8] [d3d11] Pace composition swap chains with the compositor
+Subject: [PATCH] [d3d11] Pace composition swap chains with the compositor
 
 Composition swap chains are compositor content rather than direct game
 output. Applications tend to present such surfaces with a sync interval
@@ -22,13 +22,13 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 12 insertions(+)
 
 diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
-index c05a23e..1d6949c 100644
+index 43da54c9..27cb1c95 100644
 --- a/src/d3d11/d3d11_swapchain.cpp
 +++ b/src/d3d11/d3d11_swapchain.cpp
-@@ -434,6 +434,18 @@ namespace dxvk {
- 
- 
-   HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
+@@ -465,6 +465,18 @@ namespace dxvk {
+   HRESULT D3D11SwapChain::PresentImage(
+             UINT                      SyncInterval,
+       const DXGI_PRESENT_PARAMETERS*  pPresentParameters) {
 +    HWND compositionTarget = nullptr;
 +
 +    {
@@ -44,6 +44,3 @@ index c05a23e..1d6949c 100644
      // Flush pending rendering commands before
      auto immediateContext = m_parent->GetContext();
      auto immediateContextLock = immediateContext->LockContext();
--- 
-2.55.0
-

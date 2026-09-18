@@ -1,8 +1,7 @@
-From dbf8616c0bc065b00ad4fd7d4767bcd93ec4db21 Mon Sep 17 00:00:00 2001
+From 71cffcdca4023bbb3ea090934aca9487002fd23d Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 03/19] dcomp: Do not mark composition host windows
- transparent.
+Subject: [PATCH] dcomp: Do not mark composition host windows transparent.
 
 The host window only gives DXVK a native presentation target for a
 DirectComposition visual. Transparency comes from the swap chain alpha mode,
@@ -17,7 +16,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index a122483..2414997 100644
+index a122483bda5..2414997ec1f 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -1008,7 +1008,7 @@ static BOOL dcomp_visual_update_host(struct dcomp_target *target, struct dcomp_v
@@ -29,6 +28,3 @@ index a122483..2414997 100644
                  dcomp_host_class_name, NULL, WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_CLIPSIBLINGS,
                  rect.left, rect.top, width, height, target_hwnd, NULL, dcomp_instance, NULL)))
          {
--- 
-2.55.0
-

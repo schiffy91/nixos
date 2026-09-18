@@ -1,7 +1,7 @@
-From 9f5d6c1e1b36b6299d04bb1346939ac66c749ec3 Mon Sep 17 00:00:00 2001
+From ebe41a162ecaf700904af77dccab6c651d6518d0 Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Wed, 26 Aug 2026 00:18:52 -0700
-Subject: [PATCH 05/19] dcomp: Keep composition hosts stacked in visual order.
+Subject: [PATCH] dcomp: Keep composition hosts stacked in visual order.
 
 Host windows are created on top of their siblings and were only restacked
 when their geometry changed, so reordering the visual tree left hosts in the
@@ -18,7 +18,7 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 39 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/dcomp/device.c b/dlls/dcomp/device.c
-index 1eb5958..da92877 100644
+index 1eb59583d3d..da928775576 100644
 --- a/dlls/dcomp/device.c
 +++ b/dlls/dcomp/device.c
 @@ -113,6 +113,7 @@ struct dcomp_visual
@@ -147,6 +147,3 @@ index 1eb5958..da92877 100644
      }
  
      QueryPerformanceCounter(&device->last_frame_time);
--- 
-2.55.0
-

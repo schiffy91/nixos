@@ -6,10 +6,11 @@ nixos_dir="$(cd "$app_dir/../../../../.." && pwd)"
 proton_dir="$nixos_dir/nix/apps/gaming/proton/custom"
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
 prefix="${HOME}/Games/Battle.net/prefix"
+desktop_entry="/etc/profiles/per-user/${USER}/share/applications/battlenet.desktop"  # users.users.<user>.packages, not systemPackages
 
 usage() {
   cat <<EOF
-usage: battlenet-debug [status|logs|sni|context-menu|window-info|cache-state|reset-browser-cache|probe-window|capture-window|frames-window|classify-image|classify-artifacts|diagnose]
+usage: battlenet-debug [status|logs|sni|context-menu|window-info|cache-state|reset-browser-cache|probe-window|capture-window|frames-window|classify-image|classify-artifacts|stacks|stop-launcher|diagnose]
 
 Commands:
   status          print process, compat tool, desktop entry, and log locations
@@ -26,6 +27,13 @@ Commands:
   classify-image  classify an existing capture by aggregate pixels
   classify-artifacts
                   classify window captures in a reproduce artifact directory
+  stacks [DIR]    dump thread states and native stacks of every Battle.net/Wine
+                  process (eu-stack; PE frames are opaque, Unix frames are not)
+  stop-launcher   kill only Battle.net.exe so a busy Agent survives a relaunch
+  hide-cycle [N]  minimize and re-activate the main window N times through KWin
+                  (no pointer input) and classify a capture after each restore;
+                  a hidden target with a FIFO present in flight is the
+                  vkWaitForPresentKHR deadlock class
   diagnose        run status, sni, and logs
 
 Full-desktop capture is intentionally unavailable here.
@@ -72,10 +80,10 @@ status() {
   "$proton_dir/bin/proton-custom-dev" status
   echo
   echo "desktop entry:"
-  if [ -e /run/current-system/sw/share/applications/battlenet.desktop ]; then
-    sed -n '1,40p' /run/current-system/sw/share/applications/battlenet.desktop
+  if [ -e "$desktop_entry" ]; then
+    sed -n '1,40p' "$desktop_entry"
   else
-    echo "missing /run/current-system/sw/share/applications/battlenet.desktop"
+    echo "missing $desktop_entry"
   fi
   echo
   echo "processes:"
@@ -86,6 +94,55 @@ status() {
   echo
   echo "logs:"
   find "$runtime_dir" -maxdepth 1 -type f -print 2>/dev/null | sort || true
+}
+
+# Every Battle.net/Wine process: per-thread state + wait channel, then eu-stack.
+# Unix-side frames (ntdll.so, winewayland, winevulkan thunks, libc) resolve;
+# PE frames do not, so the interesting signal is the innermost Unix wait.
+stacks() {
+  run_in_devshell stacks "$@"
+  local out="${1:-$runtime_dir/stacks-$(date +%Y%m%dT%H%M%S)}"
+  local pid task name
+  mkdir -p "$out"
+  mapfile -t pids < <(pgrep -f 'Battle.net|Agent.exe|explorer.exe|wineserver|winedevice' || true)
+  printf '%s\n' "${pids[@]}" > "$out/pids.txt"
+  for pid in "${pids[@]}"; do
+    name="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | cut -c1-80)" || continue
+    [ -n "$name" ] || continue
+    {
+      echo "### pid=$pid $name"
+      for task in /proc/"$pid"/task/*; do
+        printf 'tid=%s name=%s state=%s wchan=%s\n' "${task##*/}" "$(cat "$task/comm" 2>/dev/null)" \
+          "$(awk '{print $3}' "$task/stat" 2>/dev/null)" "$(cat "$task/wchan" 2>/dev/null)"
+      done
+    } > "$out/threads-$pid.txt" 2>&1
+    timeout 60 eu-stack -p "$pid" > "$out/stack-$pid.txt" 2>&1 || true
+  done
+  echo "stacks=$out"
+}
+
+# Unmapping the main window while it presents is the hazard that deadlocked
+# the launcher on GE-Proton11-5; drive it through KWin so no pointer input can
+# land on another application.
+hide_cycle() {
+  run_in_devshell hide-cycle "$@"
+  local count="${1:-3}" i id
+  for i in $(seq 1 "$count"); do
+    id="$(kdotool search --class 'battle[.]net[.]exe' --limit 1 getwindowid %1 2>/dev/null | head -n1)"
+    [ -n "$id" ] || { echo "cycle $i: no Battle.net window"; return 1; }
+    kdotool windowminimize "$id" >/dev/null 2>&1
+    sleep 3
+    kdotool windowactivate "$id" >/dev/null 2>&1
+    sleep 5
+    printf 'cycle %s: %s\n' "$i" "$(probe_window "$runtime_dir/hide-cycle-$i.png" 2>&1 | grep -o 'classification=[a-z]*' || echo capture-failed)"
+  done
+}
+
+stop_launcher() {
+  local pid
+  for pid in $(pgrep -f 'Battle\.net\.exe' || true); do kill "$pid" 2>/dev/null || true; done
+  sleep 2
+  echo "launcher stopped; agent: $(pgrep -f 'Agent\.exe' | tr '\n' ' ')"
 }
 
 sni_items() {
@@ -521,6 +578,9 @@ case "$command" in
   frames-window) frames_window "$@" ;;
   classify-image) classify_image "$@" ;;
   classify-artifacts) classify_artifacts "$@" ;;
+  stacks) stacks "$@" ;;
+  stop-launcher) stop_launcher ;;
+  hide-cycle) hide_cycle "$@" ;;
   diagnose)
     status
     sni

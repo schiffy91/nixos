@@ -1,4 +1,4 @@
-From 95125e32bb2221d881911b27f2b2a32d73e90077 Mon Sep 17 00:00:00 2001
+From c8d3e78f18c4afb7f3dc06920600770914657afe Mon Sep 17 00:00:00 2001
 From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
 Date: Tue, 25 Aug 2026 23:45:30 -0700
 Subject: [PATCH] winewayland.drv: Bound WM_CANCELMODE on keyboard leave.
@@ -24,18 +24,15 @@ Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dlls/winewayland.drv/wayland_keyboard.c b/dlls/winewayland.drv/wayland_keyboard.c
-index 251919c..e8d93ea 100644
+index 413977177e5..6a55e4d562d 100644
 --- a/dlls/winewayland.drv/wayland_keyboard.c
 +++ b/dlls/winewayland.drv/wayland_keyboard.c
-@@ -972,7 +972,7 @@ static void keyboard_handle_leave(void *private, struct wl_keyboard *wl_keyboard
-     if (hwnd == NtUserGetForegroundWindow())
+@@ -1047,7 +1047,7 @@ static void keyboard_handle_leave(void *private, struct wl_keyboard *wl_keyboard
+     else if (hwnd == foreground || wayland_is_menu_popup(hwnd))
      {
          if (!(NtUserGetWindowLongW(hwnd, GWL_STYLE) & WS_MINIMIZE))
 -            send_message(hwnd, WM_CANCELMODE, 0, 0);
 +            NtUserMessageCall(hwnd, WM_CANCELMODE, 0, 0, NULL, NtUserSendNotifyMessage, FALSE);
+     }
  
-         if (hwnd != NtUserGetForegroundWindow()) return;
- 
--- 
-2.55.0
-
+     if (hwnd == foreground)
