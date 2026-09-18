@@ -1,0 +1,74 @@
+#!/usr/bin/env nix-shell
+#!nix-shell -i bash ../dev-shell.nix
+# Drives the launcher to Enter World and reports whether Xid 109 recurs.
+set -u
+prefix="$HOME/Games/Battle.net/prefix"
+wow="$prefix/drive_c/Program Files (x86)/World of Warcraft/_classic_beta_"
+launcher="$prefix/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+proton=${PROTONPATH:-$(readlink -f "$HOME/.local/share/Steam/compatibilitytools.d/proton-custom-GE-Proton11-7")}
+since=$(date '+%Y-%m-%d %H:%M:%S')
+
+screen_size() {
+  kscreen-doctor -o | sed -e 's/\x1b\[[0-9;]*m//g' \
+    | grep -oE 'Geometry: 0,0 [0-9]+x[0-9]+' | head -1 | sed -E 's/.* ([0-9]+)x([0-9]+)/\1 \2/'
+}
+
+click_window() {                                   # class fx fy, verified before pressing
+  local cls=$1 fx=$2 fy=$3 w g pos geo X Y W H ax ay ok nx ny
+  w=$(kdotool search --class "$cls" | head -1)
+  [ -n "$w" ] || w=$(kdotool search --name "World of Warcraft" | head -1)
+  [ -n "$w" ] || { echo "no window for $cls"; return 1; }
+  kdotool windowactivate "$w"; sleep 1.5
+  [ "$(kdotool getactivewindow)" = "$w" ] || { echo "$cls not active"; return 1; }
+  g=$(kdotool getwindowgeometry "$w" | tr '\n' ' ')
+  pos=$(echo "$g" | grep -oE 'Position: [0-9.]+,[0-9.]+' | cut -d' ' -f2)
+  geo=$(echo "$g" | grep -oE 'Geometry: [0-9.]+x[0-9.]+' | cut -d' ' -f2)
+  X=${pos%,*}; Y=${pos#*,}; W=${geo%x*}; H=${geo#*x}
+  read -r ax ay ok <<<"$(python3 -c "
+x=float('$X');y=float('$Y');w=float('$W');h=float('$H')
+cx=x+w*$fx; cy=y+h*$fy
+print(cx, cy, 1 if (x+8<cx<x+w-8 and y+8<cy<y+h-8) else 0)")"
+  [ "$ok" = 1 ] || { echo "point outside $cls"; return 1; }
+  read -r lw lh <<<"$(screen_size)"
+  nx=$(python3 -c "print($ax/$lw)"); ny=$(python3 -c "print($ay/$lh)")
+  { echo "mouseto $nx $ny"; sleep 1.2; echo "buttondown left"; sleep 0.12; echo "buttonup left"; sleep 0.3; } | dotool
+}
+
+pkill -f 'WowB\.exe'; pkill -f 'Battle\.net\.exe'; pkill -f 'Agent\.exe'
+sleep 6; pkill -f 'files/bin/wineserver'; sleep 4
+: > "$wow/Logs/gx.log"
+
+echo "launching Battle.net from $proton"
+WINEPREFIX="$prefix" TMPDIR=/tmp GAMEID=umu-battlenet PROTONPATH="$proton" \
+  PROTON_USE_WOW64=1 WINE_SIMULATE_WRITECOPY=1 WINE_WAYLAND_HACKS=1 WINEDEBUG=-all \
+  PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1 \
+  setsid umu-run "$launcher" --high-dpi-support=1 --force-device-scale-factor=2.500000 >/dev/null 2>&1 &
+
+for _ in $(seq 1 90); do kdotool search --class 'battle[.]net[.]exe' | grep -q . && break; sleep 2; done
+sleep 35
+click_window 'battle[.]net[.]exe' 0.0948 0.0849 || exit 1   # WoW Forever tile
+sleep 10
+for try in 1 2 3; do
+  click_window 'battle[.]net[.]exe' 0.0645 0.9205 || exit 1  # Play
+  for _ in $(seq 1 20); do sleep 3; pgrep -f 'WowB\.exe' >/dev/null && break 2; done
+done
+pgrep -f 'WowB\.exe' >/dev/null || { echo "FAIL: Play never launched the game"; exit 1; }
+
+for _ in $(seq 1 90); do kdotool search --class wowb | grep -q . && break; sleep 2; done
+sleep 60
+echo "entering world"
+for _ in 1 2 3; do
+  click_window wowb 0.4988 0.9343 || exit 1
+  sleep 20
+  grep -q 'Device Removed Reason' "$wow/Logs/gx.log" && break
+done
+
+for i in $(seq 1 40); do
+  sleep 5
+  if journalctl --since "$since" -k | grep -q 'Xid.*109'; then
+    echo "FAIL: Xid 109 recurred after $((i*5))s"; exit 2
+  fi
+  grep -q 'Device Removed Reason' "$wow/Logs/gx.log" && { echo "FAIL: device lost after $((i*5))s"; exit 2; }
+  pgrep -f 'WowB\.exe' >/dev/null || { echo "FAIL: game exited after $((i*5))s"; exit 3; }
+done
+echo "PASS: 200s in world, no Xid 109 and no device loss"
