@@ -79,6 +79,7 @@ let
     ./patches/wine-wayland-focus/0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Fix-layered-surface-alpha-uploads.patch
     ./patches/ntdll-delay-load/0001-ntdll-Make-the-delay-load-IAT-writable-before-patchi.patch
+    ./patches/ntdll-system-thread-signals/0001-ntdll-Record-the-libc-thread-pointer-for-system-thre.patch
     ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
     ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
     ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
@@ -99,6 +100,7 @@ let
     ./patches/dcomp-wayland-gpu-present/0018-dcomp-Clip-target-parents-around-composition-hosts.patch
     ./patches/dcomp-wayland-gpu-present/0019-dcomp-Avoid-hosts-for-unplaced-child-swapchains.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-the-desktop-driver-readiness-wait.patch
+    ./patches/win32u-managed-swapchain-clip/0001-win32u-Clip-a-managed-swapchain-s-client-area-out-of.patch
   ];
 
   dxvkPatchSeries = [

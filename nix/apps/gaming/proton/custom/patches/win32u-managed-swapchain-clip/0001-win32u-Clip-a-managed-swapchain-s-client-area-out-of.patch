@@ -1,0 +1,52 @@
+From d962e83502cc9b1b40891d42cc6a659b2b0a805e Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Fri, 18 Sep 2026 00:38:51 -0700
+Subject: [PATCH] win32u: Clip a managed swapchain's client area out of
+ ancestor surfaces.
+
+A window presenting through a managed dmabuf swapchain is self-presenting,
+but nothing told the window system so.  The server only learns about it
+through the producer refcount, which no code path turns into a surface
+region update, so an ancestor's SHM surface kept covering the whole client
+area as opaque XRGB and the dmabuf subsurface stacked below it never
+showed.  Battle.net's login window (a composition swap chain bound to a
+child HWND, presented from the CEF GPU process) rendered solid black.
+
+Mark the window clipped-from-parent for the lifetime of the swapchain,
+which is what SET_WINPOS_CLIP_CLIENT exists for: it re-runs the ancestor's
+surface region, punches the client area out and lets winewayland upload
+ARGB with a transparent hole.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/win32u/vulkan.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/dlls/win32u/vulkan.c b/dlls/win32u/vulkan.c
+index 82f0b3081bd..31cb0f8e8f5 100644
+--- a/dlls/win32u/vulkan.c
++++ b/dlls/win32u/vulkan.c
+@@ -3997,7 +3997,10 @@ static void managed_free( struct vulkan_device *device, struct wine_managed_swap
+     if (managed->present_fence) device->p_vkDestroyFence( device->host.device, managed->present_fence, NULL );
+     if (managed->channel_fd >= 0) close( managed->channel_fd );
+     if (managed->channel_registered)
++    {
+         hwnd_dmabuf_release_channel( managed->hwnd );
++        set_window_surface_clip( managed->hwnd, FALSE );
++    }
+     if (managed->pending_registered)
+         hwnd_dmabuf_set_pending( managed->hwnd, FALSE );
+     managed_consumer_put( managed->consumer );
+@@ -4500,6 +4503,9 @@ static VkResult managed_swapchain_create( struct vulkan_device *device, struct s
+     }
+     managed->channel_registered = TRUE;
+     managed->pending_registered = FALSE;
++    /* The window now presents its client area itself, so ancestor surfaces must
++     * clip it out; otherwise an opaque parent buffer hides the dmabuf below it. */
++    set_window_surface_clip( surface->hwnd, TRUE );
+     managed_consumer_request_state( managed );
+     TRACE( "managed swapchain %p hwnd %p socket channel fd %d\n", managed, surface->hwnd, managed->channel_fd );
+ 
+-- 
+2.55.0
+

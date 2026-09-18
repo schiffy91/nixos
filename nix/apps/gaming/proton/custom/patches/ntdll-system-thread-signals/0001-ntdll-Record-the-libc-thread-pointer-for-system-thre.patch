@@ -1,0 +1,140 @@
+From 00053e2f934c2c591b5447755535d411a050ab01 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+Date: Thu, 17 Sep 2026 23:31:09 -0700
+Subject: [PATCH] ntdll: Record the libc thread pointer for system threads.
+
+PsCreateSystemThread starts a thread that never runs PE code and so
+never reaches init_syscall_frame, which is where a normal thread stores
+its libc thread pointer in amd64_thread_data.pthread_teb.  In a WoW64
+process init_handler reloads %fs from that field on every signal, so a
+system thread took SIGQUIT (process exit) or SIGUSR1 (suspend) with
+%fs = 0 and faulted in pthread_getspecific.  Every Battle.net.exe
+renderer (32-bit CEF) died this way at exit, leaving a core dump and a
+DrKonqi crash notification per process.
+
+Capture the thread pointer in start_system_thread through a new
+per-architecture signal_init_system_thread hook.
+
+Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>
+---
+ dlls/ntdll/unix/signal_arm.c    |  7 +++++++
+ dlls/ntdll/unix/signal_arm64.c  |  7 +++++++
+ dlls/ntdll/unix/signal_i386.c   |  7 +++++++
+ dlls/ntdll/unix/signal_x86_64.c | 21 +++++++++++++++++++++
+ dlls/ntdll/unix/thread.c        |  1 +
+ dlls/ntdll/unix/unix_private.h  |  1 +
+ 6 files changed, 44 insertions(+)
+
+diff --git a/dlls/ntdll/unix/signal_arm.c b/dlls/ntdll/unix/signal_arm.c
+index a5de319a6d5..068070e7b11 100644
+--- a/dlls/ntdll/unix/signal_arm.c
++++ b/dlls/ntdll/unix/signal_arm.c
+@@ -1072,6 +1072,13 @@ void signal_free_thread( TEB *teb )
+ {
+ }
+ 
++/**********************************************************************
++ *             signal_init_system_thread
++ */
++void signal_init_system_thread( TEB *teb )
++{
++}
++
+ 
+ /**********************************************************************
+  *		signal_init_process
+diff --git a/dlls/ntdll/unix/signal_arm64.c b/dlls/ntdll/unix/signal_arm64.c
+index b27e795c16b..f9b1982288d 100644
+--- a/dlls/ntdll/unix/signal_arm64.c
++++ b/dlls/ntdll/unix/signal_arm64.c
+@@ -1541,6 +1541,13 @@ void signal_free_thread( TEB *teb )
+ {
+ }
+ 
++/**********************************************************************
++ *             signal_init_system_thread
++ */
++void signal_init_system_thread( TEB *teb )
++{
++}
++
+ 
+ /**********************************************************************
+  *		signal_init_process
+diff --git a/dlls/ntdll/unix/signal_i386.c b/dlls/ntdll/unix/signal_i386.c
+index b8ada12063e..2e939bbd655 100644
+--- a/dlls/ntdll/unix/signal_i386.c
++++ b/dlls/ntdll/unix/signal_i386.c
+@@ -2393,6 +2393,13 @@ void set_thread_teb( TEB *teb )
+     ldt_set_fs( thread_data->fs, teb );
+ }
+ 
++/***********************************************************************
++ *           signal_init_system_thread
++ */
++void signal_init_system_thread( TEB *teb )
++{
++}
++
+ /**********************************************************************
+  *		signal_alloc_thread
+  */
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index d84a890997c..dc48cd11397 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -3163,6 +3163,27 @@ void set_thread_teb( TEB *teb )
+     arch_prctl( ARCH_SET_GS, teb );
+ }
+ 
++/***********************************************************************
++ *           signal_init_system_thread
++ *
++ * Per-thread signal state for a thread that only ever runs Unix code.
++ * Such a thread never reaches init_syscall_frame, so record the libc
++ * thread pointer here; init_handler reloads %fs from it in a WoW64
++ * process, where PE code runs with the 32-bit selector.
++ */
++void signal_init_system_thread( TEB *teb )
++{
++#ifdef __linux__
++    struct amd64_thread_data *thread_data = (struct amd64_thread_data *)&teb->GdiTebBatch;
++
++    if (fs32_sel) arch_prctl( ARCH_GET_FS, &thread_data->pthread_teb );
++#elif defined(__APPLE__)
++    struct amd64_thread_data *thread_data = (struct amd64_thread_data *)&teb->GdiTebBatch;
++
++    thread_data->pthread_teb = mac_thread_gsbase();
++#endif
++}
++
+ /***********************************************************************
+  *           init_syscall_frame
+  */
+diff --git a/dlls/ntdll/unix/thread.c b/dlls/ntdll/unix/thread.c
+index ebc74e58116..e0fbf72d730 100644
+--- a/dlls/ntdll/unix/thread.c
++++ b/dlls/ntdll/unix/thread.c
+@@ -1497,6 +1497,7 @@ static void start_system_thread( TEB *teb )
+     thread_data->pthread_id = pthread_self();
+     thread_data->system_thread = TRUE;
+     pthread_setspecific( teb_key, teb );
++    signal_init_system_thread( teb );
+     server_init_thread( NULL, &suspend );
+     pthread_sigmask( SIG_UNBLOCK, &server_block_set, NULL );
+     thread_data->start( thread_data->param );
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index b9dee3cd4db..aa581fd0539 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -345,6 +345,7 @@ extern BOOL get_thread_times( int unix_pid, int unix_tid, LARGE_INTEGER *kernel_
+ extern void signal_init_threading(void);
+ extern NTSTATUS signal_alloc_thread( TEB *teb );
+ extern void set_thread_teb( TEB *teb );
++extern void signal_init_system_thread( TEB *teb );
+ extern void signal_free_thread( TEB *teb );
+ extern void signal_disable_syscall_dispatch(void);
+ extern void signal_init_process(void);
+-- 
+2.55.0
+
