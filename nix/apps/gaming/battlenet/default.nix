@@ -122,8 +122,11 @@ let
           WINE_SIMULATE_WRITECOPY=1 \
           WINE_WAYLAND_HACKS=1 \
           PROTON_ENABLE_WAYLAND=1 \
+          PROTON_ENABLE_HDR=1 \
+          DXVK_HDR=1 \
+          ENABLE_HDR_WSI=1 \
           DXVK_LOG_LEVEL="''${DXVK_LOG_LEVEL:-none}" \
-          umu-run "$EXE" "''${EXTRA_ARGS[@]}"  # SDR launcher: an HDR WSI surface made the XDR drop its Thunderbolt link
+          umu-run "$EXE" "''${EXTRA_ARGS[@]}"  # games inherit this env, so HDR stays on for Diablo IV
     '';
   };
   desktop = pkgs.writeTextFile {
