@@ -251,11 +251,11 @@
         "nixpkgsEsDe": "nixpkgsEsDe"
       },
       "locked": {
-        "lastModified": 1789807336,
-        "narHash": "sha256-ekIBY06Hy2g5aFEmMEhCwIMmfZSHFyvQPhmIeP94HVw=",
+        "lastModified": 1789809002,
+        "narHash": "sha256-E3Gok6F8lqWufSxcvviXk8aOpWgv2n4D1uIQ8l/uclA=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "2c5e41c4a99688373b109f49955cc54f7972d7d0",
+        "rev": "52d60cffa289273dd3f599baaac13bce6b71e470",
         "type": "github"
       },
       "original": {
