@@ -18,10 +18,7 @@
     amdgpu.initrd.enable = true;
     i2c.enable = true;
     nvidia = {
-      # Xid 109 CTX SWITCH TIMEOUT kills WoW on zone load; a known driver bug whose
-      # root cause is a GSP firmware heartbeat timeout. GSP is mandatory in the open
-      # module, so the proprietary one is the only place the fault can be avoided.
-      open = false;
+      open = true;
       modesetting.enable = true;
       package = config.boot.kernelPackages.nvidiaPackages.latest;
       nvidiaSettings = true;
