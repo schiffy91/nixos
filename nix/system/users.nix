@@ -5,7 +5,7 @@ let
   agent = cfg.agent;
   nixModuleFiles = skippedDirs: dir:
     let
-      ignoredNames = [ "dev-shell.nix" "flake.nix" "package.nix" ];
+      ignoredNames = [ "dev-shell.nix" "flake.nix" "package.nix" "lib.nix" "games.nix" ];
       ignoredDir = path: dirName: lib.hasInfix "/${dirName}/" (toString path);
       importable = path:
         lib.hasSuffix ".nix" (baseNameOf path)

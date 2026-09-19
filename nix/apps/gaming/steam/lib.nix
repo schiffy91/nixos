@@ -1,16 +1,6 @@
-{ config, pkgs, lib, protonCustom, ... }:
-let
-  user = config.settings.users.admin.username;
-  home = "/home/${user}";
-  steamPath = "${home}/.local/share/Steam";
-  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
-  scale = if primary == null then 1.0 else primary.scaleFactor;
-  chromiumDpi = "--force-device-scale-factor=${toString scale} --high-dpi-support=1";
-  rsSampleSize = config.settings.rocksmith.sampleSize;
-  rsSampleRate = config.settings.rocksmith.sampleRate;
-  protonCustomName = protonCustom.name;  # patched Wayland+SNI build
-  defaultLaunchPrefix = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1";
-  appConfig = pkgs.writeText "steam-apps.json" (builtins.toJSON apps);
+# Reconciles Steam's own VDFs with the declared per-app config.
+{ pkgs }:
+{
   configureSteamApps = pkgs.writers.writePython3Bin "configure-steam-apps" {
     libraries = [ pkgs.python3Packages.vdf ];
   } ''
@@ -162,43 +152,4 @@ let
         if changed:
             write_text_vdf(path, cfg)
   '';
-  # Per-app Steam config. Travels with the app — true wherever it's installed.
-  # Installed apps not listed here inherit proton-custom + the default Steam Play env.
-  apps = {
-    "221680" = {  # Rocksmith 2014 — ASIO + low-latency pipewire
-      compatTool = protonCustomName;
-      launchOptions = "LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=${toString rsSampleSize}/${toString rsSampleRate} %command%";
-    };
-    "3240220" = {  # GTA V Enhanced
-      # GE-Proton10-34 hangs the loader; 10-30 reaches Social Club then white-screens.
-      # Proton Experimental + SteamDeck=1 is Valve's targeted fix for the launcher.
-      compatTool = "proton_experimental";
-      launchPrefix = "SteamDeck=1";
-      launchSuffix = chromiumDpi;
-    };
-    "1174180" = {  # Red Dead Redemption 2 — Rockstar launcher is Chromium
-      launchSuffix = chromiumDpi;
-    };
-    "1091500" = {  # Cyberpunk 2077 — REDlauncher is Chromium
-      launchSuffix = chromiumDpi;
-    };
-  };
-in {
-  config = lib.mkMerge [
-    {
-      _module.args.steam = { inherit configureSteamApps; };
-    }
-    (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.programs.steam.enable) {
-      system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
-        if [ -d "${steamPath}/config" ]; then
-          runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"
-          $runuser ${configureSteamApps}/bin/configure-steam-apps \
-            --steam-path "${steamPath}" \
-            --default-tool "${protonCustomName}" \
-            --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
-            --app-config ${appConfig}
-        fi
-      '';
-    })
-  ];
 }
