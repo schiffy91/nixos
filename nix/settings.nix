@@ -212,6 +212,10 @@ in {
       "${adminHome}/.steam"
       ##### Games #####
       "${adminHome}/Games"
+      ##### Semu #####
+      "${adminHome}/ES-DE"
+      "${adminHome}/.local/share/semu"
+      "${adminHome}/.config/semu"
       "${adminHome}/.local/state/com.schiffy91.btrsmith"
       "${adminHome}/.local/share/containers"
       "${adminHome}/.local/share/umu"
@@ -269,6 +273,7 @@ in {
 
     settings.apps.rclone.enable = mkSetting bool true;
     settings.apps.rocksmith.enable = mkSetting bool true;
+    settings.apps.semu.enable = mkSetting bool true;
     settings.apps.steam.enable = mkSetting bool true;
     settings.apps.sunshine.enable = mkSetting bool true;
     settings.apps.sunshine.virtualDisplay.name = mkSetting str "sunshine-vmon";
@@ -297,6 +302,8 @@ in {
         accelProfile = mkSetting (enum [ "flat" "adaptive" ]) "flat";
       };
     })) [];
+    ##### Semu #####
+    settings.semu.target = mkSetting str "linux-desktop";
     ##### Rocksmith #####
     settings.rocksmith.sampleSize = mkSetting int 64;
     settings.rocksmith.sampleRate = mkSetting int 48000;
