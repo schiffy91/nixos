@@ -1,4 +1,4 @@
-{ config, pkgs, lib, steam, ... }:
+{ config, pkgs, lib, protonCustom, ... }:
 let
   enabled = config.settings.apps.enable
     && config.settings.apps.gaming.enable
@@ -68,7 +68,7 @@ let
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
   dlcPath = "${gamePath}/dlc";
-  protonPath = "${steamPath}/compatibilitytools.d/${steam.proton.customName}/files";
+  protonPath = "${protonCustom.path}/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
   slopsmith = pkgs.callPackage ../slopsmith/package.nix {
     rocksmithDlc = dlcPath;

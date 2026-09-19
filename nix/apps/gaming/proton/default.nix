@@ -3,45 +3,45 @@ let
   user = config.settings.users.admin.username;
   group = config.users.users.${user}.group;
   home = "/home/${user}";
+  protonDir = "${home}/Games/proton";
   compatDir = "${home}/.local/share/Steam/compatibilitytools.d";
   enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable;
   protonCustom = pkgs.callPackage ./custom/package.nix {
     inherit (pkgs) makeWrapper rsync unzip;
   };
+  path = "${protonDir}/${protonCustom.pname}";  # canonical, persisted with ~/Games
+  steamPath = "${compatDir}/${protonCustom.pname}";
 in lib.mkMerge [
   {
-    # Export the tool name so other modules can reference it.
+    # Export both locations so anything in the OS can launch this build.
     _module.args.protonCustom = {
       name = protonCustom.pname;
       package = protonCustom;
+      inherit path steamPath;
     };
   }
   (lib.mkIf enabled {
-    # Install the compat tool into Steam's compatibilitytools.d via the
-    # programs.steam.extraCompatPackages option so Steam discovers it.
+    # Steam still needs it discoverable under its own tools directory.
     programs.steam.extraCompatPackages = [ protonCustom ];
 
-    # The standalone Battle.net wrapper launches Proton through PROTONPATH, so
-    # keep the user-visible compat-tool name pinned to this exact Nix build.
     system.activationScripts.protonCustomCompatTool = lib.stringAfter [ "users" ] ''
-      compat_dir="${compatDir}"
-      tool_path="$compat_dir/${protonCustom.pname}"
-      ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} "$compat_dir"
-
-      if [ -L "$tool_path" ]; then
-        ${pkgs.coreutils}/bin/ln -sfn "${protonCustom}" "$tool_path"
-      elif [ -e "$tool_path" ]; then
-        backup="$tool_path.manual-backup"
-        if [ -e "$backup" ]; then
-          backup="$tool_path.manual-backup.$(${pkgs.coreutils}/bin/date +%s)"
+      export PATH="${pkgs.coreutils}/bin:$PATH"
+      link_tool() {  # replace our symlink, preserve anything installed by hand
+        target="$1"
+        if [ -L "$target" ] || [ ! -e "$target" ]; then
+          ln -sfn "${protonCustom}" "$target"
+        else
+          backup="$target.manual-backup"
+          [ -e "$backup" ] && backup="$backup.$(date +%s)"
+          mv "$target" "$backup"
+          ln -s "${protonCustom}" "$target"
         fi
-        ${pkgs.coreutils}/bin/mv "$tool_path" "$backup"
-        ${pkgs.coreutils}/bin/ln -s "${protonCustom}" "$tool_path"
-      else
-        ${pkgs.coreutils}/bin/ln -s "${protonCustom}" "$tool_path"
-      fi
+        chown -h ${user}:${group} "$target"
+      }
 
-      ${pkgs.coreutils}/bin/chown -h ${user}:${group} "$tool_path"
+      install -d -o ${user} -g ${group} "${protonDir}" "${compatDir}"
+      link_tool "${path}"
+      link_tool "${steamPath}"
     '';
   })
 ]

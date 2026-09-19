@@ -186,10 +186,7 @@ let
 in {
   config = lib.mkMerge [
     {
-      _module.args.steam = {
-        inherit configureSteamApps;
-        proton.customName = protonCustomName;
-      };
+      _module.args.steam = { inherit configureSteamApps; };
     }
     (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.programs.steam.enable) {
       system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''

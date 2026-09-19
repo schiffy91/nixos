@@ -1,4 +1,4 @@
-{ config, pkgs, lib, steam, ... }:
+{ config, pkgs, lib, protonCustom, ... }:
 let
   enabled = config.settings.apps.enable
     && config.settings.apps.gaming.enable
@@ -9,7 +9,7 @@ let
   group = config.users.users.${user}.group;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
-  proton = "${home}/.local/share/Steam/compatibilitytools.d/${steam.proton.customName}";
+  proton = protonCustom.path;
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   legacyDxvkConfig = "${prefix}/drive_c/Program Files (x86)/Battle.net/dxvk.conf";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
