@@ -77,6 +77,7 @@ in {
                 "applications:cider-2.desktop"
                 "applications:code.desktop"
                 "applications:org.kde.konsole.desktop"
+                "applications:battlenet.desktop"
                 "applications:steam.desktop"
               ];
             };
