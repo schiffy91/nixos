@@ -331,6 +331,24 @@ and rebuild.
 `nix/system/sudolessAllowlist.nix` is opt-in through
 `settings.sudolessAllowlist.enable`.
 
+### Firmware Security Posture
+
+`fwupdmgr security` is the health check for the platform side of security.
+`FRACTAL-NORTH` sits at **HSI:1**, which is the ceiling for a consumer AM5
+board: HSI-2 needs AMD Platform Secure Boot, an OEM fuse ASUS does not burn.
+The required BIOS settings, the expected report, and the re-check routine after
+every firmware flash live in
+[`nix/hosts/x86_64/FRACTAL-NORTH/BIOS.md`](nix/hosts/x86_64/FRACTAL-NORTH/BIOS.md).
+
+Two facts are easy to forget:
+
+1. ASUS resets AMD CBS settings on every BIOS flash. Secure Boot and TSME both
+   dropped silently on 2026-05-18 that way. Re-run the checklist after flashing.
+2. The board's ACPI never marks the Thunderbolt 4 root port `ExternalFacingPort`,
+   so the kernel cannot flag tunneled devices as untrusted. `cpu.nix` therefore
+   leaves the IOMMU in translated mode (no `iommu=pt`); that is the only DMA
+   protection Thunderbolt gets on this hardware.
+
 ## Apps And Package Overrides
 
 The app layer is recursively imported but policy-gated through
