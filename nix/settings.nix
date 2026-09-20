@@ -267,6 +267,7 @@ in {
     settings.apps.btrsmith.enable = mkSetting bool false;
     settings.apps.claude.enable = mkSetting bool true;
     settings.apps.codex.enable = mkSetting bool true;
+    settings.apps.dlss5.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
     settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.onePassword.enable = mkSetting bool true;

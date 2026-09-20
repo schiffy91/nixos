@@ -1,4 +1,4 @@
-{ config, pkgs, lib, protonCustom, ... }:
+{ config, pkgs, lib, protonCustom, dlss5, ... }:
 let
   user = config.settings.users.admin.username;
   home = "/home/${user}";
@@ -10,6 +10,7 @@ let
   defaultLaunchPrefix = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1";
   games = import ./games.nix {
     inherit protonCustomName chromiumDpi;
+    dlss5LaunchEnv = dlss5.launchEnv;
     rsSampleSize = config.settings.rocksmith.sampleSize;
     rsSampleRate = config.settings.rocksmith.sampleRate;
   };
