@@ -56,8 +56,6 @@ def battlenet_exe_path() -> Path:
     return prefix_path() / "drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
 
 
-def legacy_dxvk_config_path() -> Path:
-    return battlenet_exe_path().parent / "dxvk.conf"
 
 
 def wine_prefix_path() -> Path:
@@ -88,8 +86,6 @@ def wine32_dir() -> Path:
     return dev_root_dir() / "wine32"
 
 
-def dxvk_dir() -> Path:
-    return dev_root_dir() / "dxvk"
 
 
 def work_home_dir() -> Path:
@@ -224,14 +220,10 @@ def status(_args: argparse.Namespace) -> None:
     print(f"wine source: {wine_src_dir()} ({'present' if wine_src_dir().exists() else 'missing'})")
     print(f"wine64 build: {wine64_dir()} ({'configured' if (wine64_dir() / 'Makefile').exists() else 'missing'})")
     print(f"wine32 build: {wine32_dir()} ({'configured' if (wine32_dir() / 'Makefile').exists() else 'missing'})")
-    print(f"dxvk source: {dxvk_dir()} ({'present' if dxvk_dir().exists() else 'missing'})")
-    print(f"dxvk64 build: {dxvk_dir() / 'build.64'} ({'configured' if (dxvk_dir() / 'build.64/build.ninja').exists() else 'missing'})")
-    print(f"dxvk32 build: {dxvk_dir() / 'build.32'} ({'configured' if (dxvk_dir() / 'build.32/build.ninja').exists() else 'missing'})")
 
 
 def check_patches(_args: argparse.Namespace) -> None:
     print(f"wine source: {nix_build_path('passthru.wineSource')}")
-    print(f"dxvk source: {nix_build_path('passthru.dxvkSource')}")
 
 
 def patch_lint(_args: argparse.Namespace) -> None:
@@ -343,7 +335,6 @@ def source_drift(_args: argparse.Namespace) -> None:
     drift = []
     sources = (
         ("wine", nix_build_path("passthru.wineSource"), wine_src_dir()),
-        ("dxvk", nix_build_path("passthru.dxvkSource"), dxvk_dir()),
     )
 
     for label, packaged, source in sources:
@@ -367,7 +358,6 @@ def source_drift(_args: argparse.Namespace) -> None:
 def reset_source_drift(_args: argparse.Namespace) -> None:
     sources = (
         ("wine", nix_build_path("passthru.wineSource"), wine_src_dir()),
-        ("dxvk", nix_build_path("passthru.dxvkSource"), dxvk_dir()),
     )
     reset = []
 
@@ -416,27 +406,6 @@ def copy_if_exists(src: Path, dst: Path) -> bool:
     return True
 
 
-def overlay_explorer_prefix_files() -> list[str]:
-    root = dev_tool_path()
-    explorer64 = root / "files/lib/wine/x86_64-windows/explorer.exe"
-    explorer32 = root / "files/lib/wine/i386-windows/explorer.exe"
-    mappings = [
-        (explorer64, root / "files/share/default_pfx/drive_c/windows/explorer.exe"),
-        (explorer64, root / "files/share/default_pfx/drive_c/windows/system32/explorer.exe"),
-        (explorer32, root / "files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"),
-    ]
-    if prefix_path().exists():
-        mappings.extend([
-            (explorer64, prefix_path() / "drive_c/windows/explorer.exe"),
-            (explorer64, prefix_path() / "drive_c/windows/system32/explorer.exe"),
-            (explorer32, prefix_path() / "drive_c/windows/syswow64/explorer.exe"),
-        ])
-
-    copied = []
-    for src, dst in mappings:
-        if copy_if_exists(src, dst):
-            copied.append(str(dst))
-    return copied
 
 
 def overlay_wine(args: argparse.Namespace) -> None:
@@ -450,8 +419,6 @@ def overlay_wine(args: argparse.Namespace) -> None:
         all_pairs = [
             ("x86_64-unix/winewayland.so", args.wine64 / "dlls/winewayland.drv/winewayland.so"),
             ("i386-unix/winewayland.so", args.wine32 / "dlls/winewayland.drv/winewayland.so"),
-            ("x86_64-unix/winevulkan.so", args.wine64 / "dlls/winevulkan/winevulkan.so"),
-            ("i386-unix/winevulkan.so", args.wine32 / "dlls/winevulkan/winevulkan.so"),
             ("x86_64-unix/ntdll.so", args.wine64 / "dlls/ntdll/ntdll.so"),
             ("i386-unix/ntdll.so", args.wine32 / "dlls/ntdll/ntdll.so"),
             ("x86_64-unix/win32u.so", args.wine64 / "dlls/win32u/win32u.so"),
@@ -460,17 +427,8 @@ def overlay_wine(args: argparse.Namespace) -> None:
             ("i386-windows/ntdll.dll", args.wine32 / "dlls/ntdll/i386-windows/ntdll.dll"),
             ("x86_64-windows/winewayland.drv", args.wine64 / "dlls/winewayland.drv/x86_64-windows/winewayland.drv"),
             ("i386-windows/winewayland.drv", args.wine32 / "dlls/winewayland.drv/i386-windows/winewayland.drv"),
-            ("x86_64-windows/dcomp.dll", args.wine64 / "dlls/dcomp/x86_64-windows/dcomp.dll"),
-            ("i386-windows/dcomp.dll", args.wine32 / "dlls/dcomp/i386-windows/dcomp.dll"),
-            ("x86_64-windows/dxgi.dll", args.wine64 / "dlls/dxgi/x86_64-windows/dxgi.dll"),
-            ("i386-windows/dxgi.dll", args.wine32 / "dlls/dxgi/i386-windows/dxgi.dll"),
-            ("x86_64-windows/winevulkan.dll", args.wine64 / "dlls/winevulkan/x86_64-windows/winevulkan.dll"),
-            ("i386-windows/winevulkan.dll", args.wine32 / "dlls/winevulkan/i386-windows/winevulkan.dll"),
             ("x86_64-windows/win32u.dll", args.wine64 / "dlls/win32u/x86_64-windows/win32u.dll"),
             ("i386-windows/win32u.dll", args.wine32 / "dlls/win32u/i386-windows/win32u.dll"),
-            ("x86_64-windows/wow64win.dll", args.wine64 / "dlls/wow64win/x86_64-windows/wow64win.dll"),
-            ("x86_64-windows/explorer.exe", args.wine64 / "programs/explorer/x86_64-windows/explorer.exe"),
-            ("i386-windows/explorer.exe", args.wine32 / "programs/explorer/i386-windows/explorer.exe"),
         ]
         pairs = [(rel, src) for rel, src in all_pairs if rel in rels]
     copied = []
@@ -482,37 +440,8 @@ def overlay_wine(args: argparse.Namespace) -> None:
     print("copied Wine artifacts:")
     for rel in copied:
         print(f"  {rel}")
-    explorer_copies = overlay_explorer_prefix_files() if any(rel.endswith("explorer.exe") for rel in copied) else []
-    if explorer_copies:
-        print("updated Explorer prefix files:")
-        for dst in explorer_copies:
-            print(f"  {dst}")
-    ntdll_copies = overlay_ntdll_prefix_files() if any(rel.endswith("ntdll.dll") for rel in copied) else []
-    if ntdll_copies:
-        print("updated ntdll prefix files:")
-        for dst in ntdll_copies:
-            print(f"  {dst}")
 
 
-def overlay_ntdll_prefix_files() -> list[str]:
-    root = dev_tool_path()
-    ntdll64 = root / "files/lib/wine/x86_64-windows/ntdll.dll"
-    ntdll32 = root / "files/lib/wine/i386-windows/ntdll.dll"
-    mappings = [
-        (ntdll64, root / "files/share/default_pfx/drive_c/windows/system32/ntdll.dll"),
-        (ntdll32, root / "files/share/default_pfx/drive_c/windows/syswow64/ntdll.dll"),
-    ]
-    if prefix_path().exists():
-        mappings.extend([
-            (ntdll64, prefix_path() / "drive_c/windows/system32/ntdll.dll"),
-            (ntdll32, prefix_path() / "drive_c/windows/syswow64/ntdll.dll"),
-        ])
-
-    copied = []
-    for src, dst in mappings:
-        if copy_if_exists(src, dst):
-            copied.append(str(dst))
-    return copied
 
 
 def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
@@ -522,12 +451,6 @@ def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
             "i386-unix/winewayland.so",
             "x86_64-windows/winewayland.drv",
             "i386-windows/winewayland.drv",
-        ],
-        "dlls/winevulkan/all": [
-            "x86_64-unix/winevulkan.so",
-            "i386-unix/winevulkan.so",
-            "x86_64-windows/winevulkan.dll",
-            "i386-windows/winevulkan.dll",
         ],
         "dlls/ntdll/all": [
             "x86_64-unix/ntdll.so",
@@ -540,21 +463,6 @@ def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
             "i386-unix/win32u.so",
             "x86_64-windows/win32u.dll",
             "i386-windows/win32u.dll",
-        ],
-        "dlls/dcomp/all": [
-            "x86_64-windows/dcomp.dll",
-            "i386-windows/dcomp.dll",
-        ],
-        "dlls/dxgi/all": [
-            "x86_64-windows/dxgi.dll",
-            "i386-windows/dxgi.dll",
-        ],
-        "dlls/wow64win/all": [
-            "x86_64-windows/wow64win.dll",
-        ],
-        "programs/explorer/all": [
-            "x86_64-windows/explorer.exe",
-            "i386-windows/explorer.exe",
         ],
     }
 
@@ -571,56 +479,8 @@ def wine_artifact_rels(targets: list[str] | None = None) -> list[str]:
     return rels
 
 
-def overlay_dxvk(args: argparse.Namespace) -> None:
-    use_dev(argparse.Namespace())
-    if (args.dxvk / "files/lib/wine/dxvk").exists():
-        root = args.dxvk / "files/lib/wine/dxvk"
-        pairs = [
-            (root / "x86_64-windows/dxgi.dll", "x86_64-windows/dxgi.dll"),
-            (root / "i386-windows/dxgi.dll", "i386-windows/dxgi.dll"),
-            (root / "x86_64-windows/d3d11.dll", "x86_64-windows/d3d11.dll"),
-            (root / "i386-windows/d3d11.dll", "i386-windows/d3d11.dll"),
-        ]
-    elif (args.dxvk / "lib/wine/dxvk").exists():
-        pairs = [
-            (args.dxvk / "lib/wine/dxvk/x86_64-windows/dxgi.dll", "x86_64-windows/dxgi.dll"),
-            (args.dxvk / "lib/wine/dxvk/i386-windows/dxgi.dll", "i386-windows/dxgi.dll"),
-            (args.dxvk / "lib/wine/dxvk/x86_64-windows/d3d11.dll", "x86_64-windows/d3d11.dll"),
-            (args.dxvk / "lib/wine/dxvk/i386-windows/d3d11.dll", "i386-windows/d3d11.dll"),
-        ]
-    elif (args.dxvk / "x64").exists():
-        pairs = [
-            (args.dxvk / "x64/dxgi.dll", "x86_64-windows/dxgi.dll"),
-            (args.dxvk / "x32/dxgi.dll", "i386-windows/dxgi.dll"),
-            (args.dxvk / "x64/d3d11.dll", "x86_64-windows/d3d11.dll"),
-            (args.dxvk / "x32/d3d11.dll", "i386-windows/d3d11.dll"),
-        ]
-    else:
-        pairs = [
-            (args.dxvk / "build.64/src/dxgi/dxgi.dll", "x86_64-windows/dxgi.dll"),
-            (args.dxvk / "build.32/src/dxgi/dxgi.dll", "i386-windows/dxgi.dll"),
-            (args.dxvk / "build.64/src/d3d11/d3d11.dll", "x86_64-windows/d3d11.dll"),
-            (args.dxvk / "build.32/src/d3d11/d3d11.dll", "i386-windows/d3d11.dll"),
-        ]
-    copied = []
-    for src, rel in pairs:
-        if copy_if_exists(src, dev_tool_path() / "files/lib/wine/dxvk" / rel):
-            copied.append(rel)
-    if not copied:
-        raise SystemExit("no DXVK artifacts copied; check --dxvk build dir")
-    print("copied DXVK artifacts:")
-    for rel in copied:
-        print(f"  {rel}")
 
 
-def restore_dxvk(_args: argparse.Namespace) -> None:
-    saved = saved_store_target()
-    if not saved.exists():
-        raise SystemExit("no saved store target; run setup first")
-    target = Path(saved.read_text().strip())
-    if not target.exists():
-        raise SystemExit(f"saved store target no longer exists: {target}")
-    overlay_dxvk(argparse.Namespace(dxvk=target))
 
 
 def nix_expr(attr: str) -> str:
@@ -803,75 +663,6 @@ def setup_wine(args: argparse.Namespace) -> None:
     print(f"wine32 build: {wine32_dir()}")
 
 
-def setup_dxvk(args: argparse.Namespace) -> None:
-    dev_root_dir().mkdir(parents=True, exist_ok=True)
-    src = dxvk_dir()
-    if args.force and src.exists():
-        shutil.rmtree(src)
-    if not src.exists():
-        seed = nix_build_path("passthru.dxvkSource")
-        run(["rsync", "-a", "--delete", f"{seed}/", f"{src}/"])
-        run(["chmod", "-R", "u+rwX", str(src)])
-
-    replace_text(
-        src / "src/dxvk/meson.build",
-        "dxvk_extra_deps = [ dependency('threads') ]",
-        "dxvk_extra_deps = [ dependency('threads'), cpp.find_library('mcfgthread') ]",
-    )
-    replace_text(
-        src / "src/vulkan/meson.build",
-        "dependencies        : [ thread_dep ],",
-        "dependencies        : [ thread_dep, cpp.find_library('mcfgthread') ],",
-    )
-    replace_text(
-        src / "src/dxgi/meson.build",
-        "dxgi_ld_args      = []",
-        "dxgi_ld_args      = [ '-Wl,--whole-archive', '-lmcfgthread', '-Wl,--no-whole-archive' ]",
-    )
-
-    dev_shell(f'cd "{src}" && patchShebangs subprojects >/dev/null 2>&1 || true')
-    ensure_source_git_repo(src, "baseline: DXVK plus active Battle.net series")
-
-    if args.force_configure:
-        for build_dir in (src / "build.64", src / "build.32"):
-            if build_dir.exists():
-                shutil.rmtree(build_dir)
-    else:
-        for build_dir in (src / "build.64", src / "build.32"):
-            ninja_file = build_dir / "build.ninja"
-            if ninja_file.exists() and (
-                    not file_contains(ninja_file, str(src))
-                    or ninja_file_has_missing_store_refs(ninja_file)):
-                print(f"reconfiguring stale DXVK build directory: {build_dir}")
-                shutil.rmtree(build_dir)
-
-    if not (src / "build.64/build.ninja").exists():
-        mcfgthreads = nix_eval_raw("pkgsCross.mingwW64.windows.mcfgthreads")
-        pthreads = nix_eval_raw("pkgsCross.mingwW64.windows.pthreads")
-        dev_shell(
-            f'cd "{src}" && '
-            f'export LIBRARY_PATH="{mcfgthreads}/lib:{pthreads}/lib" && '
-            f'export LDFLAGS="-L{mcfgthreads}/lib -L{pthreads}/lib" && '
-            'meson setup --cross-file build-win64.txt '
-            '--buildtype release --prefix "$PWD/out.64" --bindir x64 --libdir x64 '
-            '--strip -Db_ndebug=if-release -Dbuild_id=false build.64'
-        )
-
-    if not (src / "build.32/build.ninja").exists():
-        mcfgthreads = nix_eval_raw("pkgsCross.mingw32.windows.mcfgthreads")
-        pthreads = nix_eval_raw("pkgsCross.mingw32.windows.pthreads")
-        dev_shell(
-            f'cd "{src}" && '
-            f'export LIBRARY_PATH="{mcfgthreads}/lib:{pthreads}/lib" && '
-            f'export LDFLAGS="-L{mcfgthreads}/lib -L{pthreads}/lib" && '
-            'meson setup --cross-file build-win32.txt '
-            '--buildtype release --prefix "$PWD/out.32" --bindir x32 --libdir x32 '
-            '--strip -Db_ndebug=if-release -Dbuild_id=false build.32',
-        )
-
-    print(f"dxvk source: {src}")
-    print(f"dxvk64 build: {src / 'build.64'}")
-    print(f"dxvk32 build: {src / 'build.32'}")
 
 
 def ensure_wine_build_tools_executable() -> None:
@@ -896,13 +687,9 @@ def build_wine(args: argparse.Namespace) -> None:
         setup_wine(argparse.Namespace(force=False, force_configure=False))
     ensure_wine_build_tools_executable()
     targets = args.targets or [
-        "dlls/dcomp/all",
-        "dlls/dxgi/all",
         "dlls/ntdll/all",
         "dlls/win32u/all",
-        "dlls/winevulkan/all",
         "dlls/winewayland.drv/all",
-        "programs/explorer/all",
     ]
     target_text = " ".join(targets)
     jobs = args.jobs or os.cpu_count() or 1
@@ -911,21 +698,6 @@ def build_wine(args: argparse.Namespace) -> None:
     overlay_wine(argparse.Namespace(wine=None, wine64=wine64_dir(), wine32=wine32_dir(), targets=targets))
 
 
-def build_dxvk(args: argparse.Namespace) -> None:
-    src = dxvk_dir()
-    if (not (src / "build.64/build.ninja").exists()
-            or not (src / "build.32/build.ninja").exists()
-            or not file_contains(src / "build.64/build.ninja", str(src))
-            or not file_contains(src / "build.32/build.ninja", str(src))
-            or ninja_file_has_missing_store_refs(src / "build.64/build.ninja")
-            or ninja_file_has_missing_store_refs(src / "build.32/build.ninja")):
-        setup_dxvk(argparse.Namespace(force=False, force_configure=False))
-
-    jobs = args.jobs or os.cpu_count() or 1
-    targets = "src/dxgi/dxgi.dll src/d3d11/d3d11.dll"
-    dev_shell(f'cd "{src}" && ninja -C build.64 -j{jobs} {targets}')
-    dev_shell(f'cd "{src}" && ninja -C build.32 -j{jobs} {targets}')
-    overlay_dxvk(argparse.Namespace(dxvk=src))
 
 
 def wine_loop(args: argparse.Namespace) -> None:
@@ -1081,90 +853,20 @@ def parse_env(values: list[str]) -> dict[str, str]:
     return env
 
 
-def set_reg_dword(path: Path, section: str, name: str, value: int) -> None:
-    if not path.exists():
-        return
-
-    header = f"[{section}]"
-    key = f'"{name}"'
-    item = f'{key}=dword:{value:08x}'
-    lines = path.read_text(errors="replace").splitlines()
-    output = []
-    in_section = False
-    saw_section = False
-    updated = False
-
-    for line in lines:
-        if line == header:
-            in_section = True
-            saw_section = True
-            updated = False
-            output.append(line)
-            continue
-        if in_section and line.startswith("["):
-            if not updated:
-                output.append(item)
-            in_section = False
-        if in_section and line.startswith(f"{key}=dword:"):
-            output.append(item)
-            updated = True
-            continue
-        output.append(line)
-
-    if in_section and not updated:
-        output.append(item)
-    if not saw_section:
-        output.extend(["", header, item])
-
-    path.write_text("\n".join(output) + "\n")
 
 
-def sync_builtin_dlls() -> None:
-    mappings = (
-        ("x86_64", "system32"),
-        ("i386", "syswow64"),
-    )
-    dlls = (
-        "dcomp.dll",
-        "dxgi.dll",
-        "ntdll.dll",
-        "secur32.dll",
-        "winevulkan.dll",
-        "win32u.dll",
-        "winewayland.drv",
-        "wow64win.dll",
-        "explorer.exe",
-    )
-    for arch, windows_dir in mappings:
-        for dll in dlls:
-            copy_if_exists(
-                dev_tool_path() / "files/lib/wine" / f"{arch}-windows" / dll,
-                prefix_path() / "drive_c/windows" / windows_dir / dll,
-            )
 
 
 def prepare_battlenet_prefix() -> None:
     prefix_path().mkdir(parents=True, exist_ok=True)
-    sync_builtin_dlls()
-    legacy_dxvk_config_path().unlink(missing_ok=True)
-
-    log_pixels = int(float(launcher_value("LOG_PIXELS", "96")))
-    set_reg_dword(prefix_path() / "user.reg", "Control Panel\\\\Desktop", "LogPixels", log_pixels)
-    set_reg_dword(prefix_path() / "user.reg", "Software\\\\Wine\\\\Fonts", "LogPixels", log_pixels)
-    set_reg_dword(
-        prefix_path() / "system.reg",
-        "System\\\\ControlSet001\\\\Hardware Profiles\\\\Current\\\\Software\\\\Fonts",
-        "LogPixels",
-        log_pixels,
-    )
+    wrapper = shutil.which("battlenet")
+    match = re.search(r"wine-prefix-dpi set --dpi (\d+)", Path(wrapper).read_text(errors="replace")) if wrapper else None
+    if match:
+        run(["wine-prefix-dpi", "set", "--dpi", match.group(1), str(prefix_path())])
 
 
 def battlenet_args() -> list[str]:
-    args = ["--high-dpi-support=1"]
-    scale = launcher_value("CEF_SCALE", "1")
-    if scale not in ("1", "1.0", "1.000000"):
-        args.append(f"--force-device-scale-factor={scale}")
-    return args
+    return []
 
 
 def launch_env(args: argparse.Namespace) -> dict[str, str]:
@@ -1178,11 +880,9 @@ def launch_env(args: argparse.Namespace) -> dict[str, str]:
     env["PROTON_USE_WOW64"] = "1"
     env["WINE_SIMULATE_WRITECOPY"] = "1"
     env["WINE_WAYLAND_HACKS"] = "1"
-    env["WINE_SNI_ICON_NAME"] = "battlenet"
     env["PROTON_ENABLE_WAYLAND"] = "1"
     env["PROTON_ENABLE_HDR"] = "1"
     env["DXVK_HDR"] = "1"
-    env["ENABLE_HDR_WSI"] = "1"
     proton_log_dir().mkdir(parents=True, exist_ok=True)
 
     if args.trace == "quiet":
@@ -1191,10 +891,6 @@ def launch_env(args: argparse.Namespace) -> dict[str, str]:
     elif args.trace == "modules":
         env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+loaddll,+module")
         env.setdefault("DXVK_LOG_LEVEL", "info")
-    elif args.trace == "composition":
-        env.setdefault("WINEDEBUG", "+timestamp,+pid,+tid,+dcomp")
-        env.setdefault("DXVK_LOG_LEVEL", "trace")  # composition traces live at trace level
-        env.setdefault("DXVK_LOG_PATH", str(proton_log_dir() / "dxvk"))
     else:
         raise SystemExit(f"unknown trace preset: {args.trace}")
 
@@ -1624,19 +1320,10 @@ def main() -> None:
     p.add_argument("--force-configure", action="store_true")
     p.set_defaults(func=setup_wine)
 
-    p = sub.add_parser("setup-dxvk")
-    p.add_argument("--force", action="store_true")
-    p.add_argument("--force-configure", action="store_true")
-    p.set_defaults(func=setup_dxvk)
-
     p = sub.add_parser("build-wine")
     p.add_argument("--jobs", type=int)
     p.add_argument("targets", nargs="*")
     p.set_defaults(func=build_wine)
-
-    p = sub.add_parser("build-dxvk")
-    p.add_argument("--jobs", type=int)
-    p.set_defaults(func=build_dxvk)
 
     p = sub.add_parser("wine-loop")
     p.add_argument("--jobs", type=int)
@@ -1651,13 +1338,6 @@ def main() -> None:
     p.add_argument("--wine32", type=Path)
     p.set_defaults(func=overlay_wine)
 
-    p = sub.add_parser("overlay-dxvk")
-    p.add_argument("--dxvk", type=Path, default=dxvk_dir())
-    p.set_defaults(func=overlay_dxvk)
-
-    p = sub.add_parser("restore-dxvk")
-    p.set_defaults(func=restore_dxvk)
-
     p = sub.add_parser("smoke")
     p.add_argument("--seconds", type=int, default=8)
     p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-smoke.log"))
@@ -1665,7 +1345,7 @@ def main() -> None:
 
     p = sub.add_parser("launch")
     p.add_argument("--seconds", type=int, default=0)
-    p.add_argument("--trace", choices=["quiet", "modules", "composition"], default="quiet")
+    p.add_argument("--trace", choices=["quiet", "modules"], default="quiet")
     p.add_argument("--winedebug")
     p.add_argument("--env", action="append", default=[])
     p.add_argument("--log", type=Path, default=Path("/tmp/battlenet-launch.wrapper.log"))

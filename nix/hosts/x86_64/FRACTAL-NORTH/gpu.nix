@@ -39,7 +39,6 @@
         vulkan-loader
         vulkan-validation-layers
         vulkan-tools
-        vulkan-hdr-layer-kwin6  # ENABLE_HDR_WSI=1 → Vulkan HDR via Wayland color-management
       ];
       extraPackages32 = with pkgs.pkgsi686Linux; [
         nvidia-vaapi-driver

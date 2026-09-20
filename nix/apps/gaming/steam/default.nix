@@ -1,15 +1,12 @@
-{ config, pkgs, lib, protonCustom, ... }:
+{ config, pkgs, lib, protonCustom, winePrefixDpi, ... }:
 let
   user = config.settings.users.admin.username;
   home = "/home/${user}";
   steamPath = "${home}/.local/share/Steam";
-  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
-  scale = if primary == null then 1.0 else primary.scaleFactor;
-  chromiumDpi = "--force-device-scale-factor=${toString scale} --high-dpi-support=1";
   protonCustomName = protonCustom.name;  # patched Wayland+SNI build
-  defaultLaunchPrefix = "PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1";
+  defaultLaunchPrefix = "${winePrefixDpi.launchPrefix} PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1";  # DPI into the prefix registry; no hdr_wsi layer (driver does HDR natively)
   games = import ./games.nix {
-    inherit protonCustomName chromiumDpi;
+    inherit protonCustomName;
     rsSampleSize = config.settings.rocksmith.sampleSize;
     rsSampleRate = config.settings.rocksmith.sampleRate;
   };

@@ -1,12 +1,11 @@
-# proton-custom - GE-Proton11-7 with winewayland.drv cleanup patches.
+# proton-custom - GE-Proton11-7 plus five small Wine bug fixes.
 #
-# Builds the exact Wine and DXVK revisions GE-Proton11-7 uses, applies GE's
-# complete wine-hotfixes set in protonprep order (the shipped tarball's
-# wineserver protocol and wined3d/opengl32 are built from that tree, so the
-# overlaid DLLs must be too), then layers our active patch series on top. Replaces the changed binaries touched by the
-# active series plus the matching 32/64-bit Unix-side Wine modules. The PE and
-# Unix halves must stay ABI-matched when D3D11/CEF exercises generated Unix
-# thunk tables.
+# Builds the exact Wine revision GE-Proton11-7 uses, applies GE's complete
+# wine-hotfixes set in protonprep order (the shipped tarball's wineserver
+# protocol is built from that tree, so the overlaid DLLs must be too), then
+# layers our active patch series on top. Only the modules those patches touch
+# are rebuilt and overlaid, each as its matched PE/Unix pair: ntdll, win32u and
+# winewayland.drv. Everything else, DXVK included, is GE's own binary.
 #
 # Patches live under ./patches/<topic>/, one subfolder per upstreamable topic.
 # The default package applies the explicit activePatchSeries list below, not a
@@ -17,9 +16,15 @@
 #   Bounded WM_CANCELMODE on keyboard leave
 #   Layered surface alpha uploads (GE-Proton11 ships the pUpdateLayeredWindow hook)
 #   Delay-load IAT protection for PE modules with read-only thunk pages
-#   DComp/DXGI/winewayland GPU presentation path
-#   winevulkan, winewayland, win32u PE/Unix pairs and wow64win rebuilt from the same Wine source
-#   DXVK composition swap-chain support
+#   libc thread pointer for PsCreateSystemThread threads (no core dump per CEF renderer at exit)
+#   Bounded desktop-driver readiness wait in win32u
+#
+# Dropped 2026-09-20 (the fallback GE already takes renders Battle.net correctly):
+#   DComp/DXGI/winewayland GPU presentation path and the DXVK composition
+#   swap-chain series. They emulated DirectComposition for CEF; stock GE fails
+#   CreateSwapChainForComposition, CEF falls back to a window swap chain, and
+#   that path works. Ours depended on window creation order and went black once
+#   a game hid and re-showed the launcher.
 #
 # Dropped at the GE-Proton11-7 rebase, now covered upstream:
 #   StatusNotifierItem systray (GE em-fixups 0001, incl. the wow64win thunk)
@@ -61,9 +66,6 @@ let
   geProtonRev  = "GE-Proton11-7";
   geProtonHash = "sha256-HEFoB0tQOnCo6Tz9WZ6SnhoZepFFZ+JWIVjYgP/i8gI=";
 
-  dxvkVersion = "v3.1-601930949";
-  dxvkRev     = "601930949d111edbbcf9dd463948426d9f8f6ddd";
-  dxvkHash    = "sha256-N7Y38coOIJDMR+OLJLHH7I8+8yZW09G639vuTFo0/Es=";
   wineasio64 = pkgs.wineasio;
   wineasio32Files = ../../rocksmith/assets;
 
@@ -80,38 +82,7 @@ let
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Fix-layered-surface-alpha-uploads.patch
     ./patches/ntdll-delay-load/0001-ntdll-Make-the-delay-load-IAT-writable-before-patchi.patch
     ./patches/ntdll-system-thread-signals/0001-ntdll-Record-the-libc-thread-pointer-for-system-thre.patch
-    ./patches/dcomp-wayland-gpu-present/0001-dcomp-Implement-D3D11-backed-desktop-composition.patch
-    ./patches/dcomp-wayland-gpu-present/0002-dcomp-Clip-composition-host-windows-to-the-target-cl.patch
-    ./patches/dcomp-wayland-gpu-present/0003-dcomp-Do-not-mark-composition-host-windows-transpare.patch
-    ./patches/dcomp-wayland-gpu-present/0004-dcomp-Make-composition-host-windows-presentation-onl.patch
-    ./patches/dcomp-wayland-gpu-present/0005-dcomp-Keep-composition-hosts-stacked-in-visual-order.patch
-    ./patches/dcomp-wayland-gpu-present/0006-dxgi-Create-a-hidden-swap-chain-for-composition.patch
-    ./patches/dcomp-wayland-gpu-present/0007-dcomp-Present-IDCompositionSurface-content.patch
-    ./patches/dcomp-wayland-gpu-present/0008-dcomp-Handle-incremental-surface-draws.patch
-    ./patches/dcomp-wayland-gpu-present/0009-dcomp-Clip-composition-hosts-with-window-regions.patch
-    ./patches/dcomp-wayland-gpu-present/0010-dcomp-Host-placed-composition-swap-chain-visuals.patch
-    ./patches/dcomp-wayland-gpu-present/0011-dcomp-Avoid-redundant-composition-host-updates.patch
-    ./patches/dcomp-wayland-gpu-present/0012-dcomp-Implement-GPU-backed-surface-factories.patch
-    ./patches/dcomp-wayland-gpu-present/0013-dcomp-Unbind-removed-composition-hosts.patch
-    ./patches/dcomp-wayland-gpu-present/0014-dcomp-Implement-virtual-surfaces-and-scrolling.patch
-    ./patches/dcomp-wayland-gpu-present/0015-dcomp-Unbind-composition-targets-before-destroying-h.patch
-    ./patches/dcomp-wayland-gpu-present/0016-dcomp-Hide-composition-host-windows-from-parent-noti.patch
-    ./patches/dcomp-wayland-gpu-present/0017-dcomp-Show-surface-hosts-after-content-binding.patch
-    ./patches/dcomp-wayland-gpu-present/0018-dcomp-Clip-target-parents-around-composition-hosts.patch
-    ./patches/dcomp-wayland-gpu-present/0019-dcomp-Avoid-hosts-for-unplaced-child-swapchains.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-the-desktop-driver-readiness-wait.patch
-    ./patches/win32u-managed-swapchain-clip/0001-win32u-Clip-a-managed-swapchain-s-client-area-out-of.patch
-  ];
-
-  dxvkPatchSeries = [
-    ./patches/dxvk-composition-swapchain/0001-d3d11-Use-new-extent-when-resizing-swap-chain-surfac.patch
-    ./patches/dxvk-composition-swapchain/0002-dxgi-Bind-composition-swap-chains-to-DComp-windows.patch
-    ./patches/dxvk-composition-swapchain/0003-d3d11-Pace-composition-swap-chains-with-the-composit.patch
-    ./patches/dxvk-composition-swapchain/0004-d3d11-Keep-composition-target-windows-sized-to-swap-.patch
-    ./patches/dxvk-composition-swapchain/0005-d3d11-Preserve-composition-swap-chain-contents.patch
-    ./patches/dxvk-composition-swapchain/0006-d3d11-Show-composition-targets-on-first-present.patch
-    ./patches/dxvk-composition-swapchain/0007-d3d11-Replay-composition-content-after-target-binds.patch
-    ./patches/dxvk-composition-swapchain/0008-d3d11-Trace-composition-present-paths.patch
   ];
 
   applyActivePatchSeries = pkgs.lib.concatMapStringsSep "\n" (patchFile: ''
@@ -160,7 +131,7 @@ let
       # is fatal only when it lands in an overlaid module or a shared header;
       # everything else is reported and tolerated.
       ge="$geProtonSrc/patches"
-      relevant='^\+\+\+ b/(dlls/ntdll/|dlls/win32u/|dlls/winevulkan/|dlls/winewayland\.drv/|dlls/wow64win/|dlls/dcomp/|dlls/dxgi/|programs/explorer/|server/|include/)'
+      relevant='^\+\+\+ b/(dlls/ntdll/|dlls/win32u/|dlls/winewayland\.drv/|server/|include/)'
       apply_ge() {
         local rej; rej="$(mktemp)"
         patch -p1 -s --no-backup-if-mismatch -r "$rej" < "$1" >/dev/null 2>&1 || true  # protonprep applies with default fuzz
@@ -295,14 +266,9 @@ let
         --without-x \
         --disable-tests
       make -j"$NIX_BUILD_CORES" \
-        dlls/dcomp/all \
-        dlls/dxgi/all \
         dlls/ntdll/all \
         dlls/win32u/all \
-        dlls/winevulkan/all \
-        dlls/winewayland.drv/all \
-        dlls/wow64win/all \
-        programs/explorer/all
+        dlls/winewayland.drv/all
 
       cd "$TMPDIR/wine32"
       HOME=$TMPDIR "$source_dir/configure" \
@@ -310,13 +276,9 @@ let
         --without-x \
         --disable-tests
       make -j"$NIX_BUILD_CORES" \
-        dlls/dcomp/all \
-        dlls/dxgi/all \
         dlls/ntdll/all \
         dlls/win32u/all \
-        dlls/winevulkan/all \
-        dlls/winewayland.drv/all \
-        programs/explorer/all
+        dlls/winewayland.drv/all
 
       runHook postBuild
     '';
@@ -346,12 +308,6 @@ let
       copy_required i386-unix/winewayland.so \
         "$wine32_build/dlls/winewayland.drv/winewayland.so" \
         "$wine32_build/dlls/winewayland.drv/i386-unix/winewayland.so"
-      copy_required x86_64-unix/winevulkan.so \
-        "$wine64_build/dlls/winevulkan/winevulkan.so" \
-        "$wine64_build/dlls/winevulkan/x86_64-unix/winevulkan.so"
-      copy_required i386-unix/winevulkan.so \
-        "$wine32_build/dlls/winevulkan/winevulkan.so" \
-        "$wine32_build/dlls/winevulkan/i386-unix/winevulkan.so"
       copy_required x86_64-unix/win32u.so \
         "$wine64_build/dlls/win32u/win32u.so" \
         "$wine64_build/dlls/win32u/x86_64-unix/win32u.so"
@@ -370,24 +326,6 @@ let
       copy_required i386-windows/winewayland.drv \
         "$wine32_build/dlls/winewayland.drv/i386-windows/winewayland.drv" \
         "$wine32_build/dlls/winewayland.drv/winewayland.drv"
-      copy_required x86_64-windows/dcomp.dll \
-        "$wine64_build/dlls/dcomp/x86_64-windows/dcomp.dll" \
-        "$wine64_build/dlls/dcomp/dcomp.dll"
-      copy_required i386-windows/dcomp.dll \
-        "$wine32_build/dlls/dcomp/i386-windows/dcomp.dll" \
-        "$wine32_build/dlls/dcomp/dcomp.dll"
-      copy_required x86_64-windows/dxgi.dll \
-        "$wine64_build/dlls/dxgi/x86_64-windows/dxgi.dll" \
-        "$wine64_build/dlls/dxgi/dxgi.dll"
-      copy_required i386-windows/dxgi.dll \
-        "$wine32_build/dlls/dxgi/i386-windows/dxgi.dll" \
-        "$wine32_build/dlls/dxgi/dxgi.dll"
-      copy_required x86_64-windows/winevulkan.dll \
-        "$wine64_build/dlls/winevulkan/x86_64-windows/winevulkan.dll" \
-        "$wine64_build/dlls/winevulkan/winevulkan.dll"
-      copy_required i386-windows/winevulkan.dll \
-        "$wine32_build/dlls/winevulkan/i386-windows/winevulkan.dll" \
-        "$wine32_build/dlls/winevulkan/winevulkan.dll"
       copy_required x86_64-windows/win32u.dll \
         "$wine64_build/dlls/win32u/x86_64-windows/win32u.dll" \
         "$wine64_build/dlls/win32u/win32u.dll"
@@ -400,115 +338,6 @@ let
       copy_required i386-windows/ntdll.dll \
         "$wine32_build/dlls/ntdll/i386-windows/ntdll.dll" \
         "$wine32_build/dlls/ntdll/ntdll.dll"
-      copy_required x86_64-windows/wow64win.dll \
-        "$wine64_build/dlls/wow64win/x86_64-windows/wow64win.dll" \
-        "$wine64_build/dlls/wow64win/wow64win.dll"
-      copy_required x86_64-windows/explorer.exe \
-        "$wine64_build/programs/explorer/x86_64-windows/explorer.exe" \
-        "$wine64_build/programs/explorer/explorer.exe"
-      copy_required i386-windows/explorer.exe \
-        "$wine32_build/programs/explorer/i386-windows/explorer.exe" \
-        "$wine32_build/programs/explorer/explorer.exe"
-    '';
-
-    meta.platforms = [ "x86_64-linux" ];
-  };
-
-  dxvk-proton-custom-src = stdenv.mkDerivation {
-    pname = "dxvk-proton-custom-src";
-    version = dxvkVersion;
-
-    src = fetchgit {
-      url = "https://github.com/doitsujin/dxvk";
-      rev = dxvkRev;
-      hash = dxvkHash;
-      fetchSubmodules = true;
-    };
-
-    patches = dxvkPatchSeries;
-    patchFlags = [ "-p1" "--fuzz=0" ];
-
-    postPatch = ''
-      find . -name '*.orig' -delete
-    '';
-
-    dontConfigure = true;
-    dontBuild = true;
-
-    installPhase = ''
-      cp -r . "$out"
-      chmod -R u+w "$out"
-    '';
-  };
-
-  dxvk-proton-custom = stdenv.mkDerivation {
-    pname = "dxvk-proton-custom";
-    version = dxvkVersion;
-    src = dxvk-proton-custom-src;
-
-    nativeBuildInputs = with pkgs; [
-      glslang
-      meson
-      ninja
-      pkg-config
-      python3
-      pkgsCross.mingwW64.buildPackages.gcc
-      pkgsCross.mingw32.buildPackages.gcc
-    ];
-
-    dontConfigure = true;
-
-    buildPhase = ''
-      runHook preBuild
-
-      patchShebangs subprojects
-      substituteInPlace src/dxvk/meson.build \
-        --replace-fail "dxvk_extra_deps = [ dependency('threads') ]" \
-                       "dxvk_extra_deps = [ dependency('threads'), cpp.find_library('mcfgthread') ]"
-      substituteInPlace src/vulkan/meson.build \
-        --replace-fail "dependencies        : [ thread_dep ]," \
-                       "dependencies        : [ thread_dep, cpp.find_library('mcfgthread') ],"
-      substituteInPlace src/dxgi/meson.build \
-        --replace-fail "dxgi_ld_args      = []" \
-                       "dxgi_ld_args      = [ '-Wl,--whole-archive', '-lmcfgthread', '-Wl,--no-whole-archive' ]"
-
-      export LIBRARY_PATH="${pkgs.pkgsCross.mingwW64.windows.mcfgthreads}/lib:${pkgs.pkgsCross.mingwW64.windows.pthreads}/lib"
-      export LDFLAGS="-L${pkgs.pkgsCross.mingwW64.windows.mcfgthreads}/lib -L${pkgs.pkgsCross.mingwW64.windows.pthreads}/lib"
-      meson setup --cross-file build-win64.txt \
-        --buildtype release \
-        --prefix "$out" \
-        --bindir x64 \
-        --libdir x64 \
-        --strip \
-        -Db_ndebug=if-release \
-        -Dbuild_id=false \
-        build.64
-      ninja -C build.64 src/dxgi/dxgi.dll src/d3d11/d3d11.dll
-
-      export LIBRARY_PATH="${pkgs.pkgsCross.mingw32.windows.mcfgthreads}/lib:${pkgs.pkgsCross.mingw32.windows.pthreads}/lib"
-      export LDFLAGS="-L${pkgs.pkgsCross.mingw32.windows.mcfgthreads}/lib -L${pkgs.pkgsCross.mingw32.windows.pthreads}/lib"
-      meson setup --cross-file build-win32.txt \
-        --buildtype release \
-        --prefix "$out" \
-        --bindir x32 \
-        --libdir x32 \
-        --strip \
-        -Db_ndebug=if-release \
-        -Dbuild_id=false \
-        build.32
-      ninja -C build.32 src/dxgi/dxgi.dll src/d3d11/d3d11.dll
-
-      runHook postBuild
-    '';
-
-    installPhase = ''
-      runHook preInstall
-      install -Dm755 build.64/src/dxgi/dxgi.dll "$out/x64/dxgi.dll"
-      install -Dm755 build.64/src/d3d11/d3d11.dll "$out/x64/d3d11.dll"
-      install -Dm755 build.32/src/dxgi/dxgi.dll "$out/x32/dxgi.dll"
-      install -Dm755 build.32/src/d3d11/d3d11.dll "$out/x32/d3d11.dll"
-      printf '%s dxvk (%s)\n' '${dxvkRev}' '${dxvkVersion}' > "$out/version"
-      runHook postInstall
     '';
 
     meta.platforms = [ "x86_64-linux" ];
@@ -550,57 +379,17 @@ in stdenv.mkDerivation {
 
     copy_patched x86_64-unix/winewayland.so
     copy_patched i386-unix/winewayland.so
-    copy_patched x86_64-unix/winevulkan.so
-    copy_patched i386-unix/winevulkan.so
     copy_patched x86_64-unix/win32u.so
     copy_patched i386-unix/win32u.so
     copy_patched x86_64-unix/ntdll.so
     copy_patched i386-unix/ntdll.so
     copy_patched x86_64-windows/winewayland.drv
     copy_patched i386-windows/winewayland.drv
-    copy_patched x86_64-windows/dcomp.dll
-    copy_patched i386-windows/dcomp.dll
-    copy_patched x86_64-windows/dxgi.dll
-    copy_patched i386-windows/dxgi.dll
-    copy_patched x86_64-windows/winevulkan.dll
-    copy_patched i386-windows/winevulkan.dll
     copy_patched x86_64-windows/win32u.dll
     copy_patched i386-windows/win32u.dll
     copy_patched x86_64-windows/ntdll.dll
     copy_patched i386-windows/ntdll.dll
-    copy_patched x86_64-windows/wow64win.dll
-    copy_patched x86_64-windows/explorer.exe
-    copy_patched i386-windows/explorer.exe
 
-    cp "${wine-proton-custom}/lib/wine/x86_64-windows/explorer.exe" \
-      "$out/files/share/default_pfx/drive_c/windows/explorer.exe"
-    cp "${wine-proton-custom}/lib/wine/x86_64-windows/explorer.exe" \
-      "$out/files/share/default_pfx/drive_c/windows/system32/explorer.exe"
-    cp "${wine-proton-custom}/lib/wine/i386-windows/explorer.exe" \
-      "$out/files/share/default_pfx/drive_c/windows/syswow64/explorer.exe"
-    cp "${wine-proton-custom}/lib/wine/x86_64-windows/ntdll.dll" \
-      "$out/files/share/default_pfx/drive_c/windows/system32/ntdll.dll"
-    cp "${wine-proton-custom}/lib/wine/i386-windows/ntdll.dll" \
-      "$out/files/share/default_pfx/drive_c/windows/syswow64/ntdll.dll"
-    copy_dxvk() {
-      local src="$1"
-      local rel="$2"
-      if [ ! -e "$src" ]; then
-        echo "missing patched DXVK artifact: $src" >&2
-        return 1
-      fi
-      if [ ! -e "$out/files/lib/wine/dxvk/$rel" ]; then
-        echo "GE-Proton tarball does not contain expected DXVK artifact: $rel" >&2
-        return 1
-      fi
-      cp "$src" "$out/files/lib/wine/dxvk/$rel"
-    }
-
-    copy_dxvk "${dxvk-proton-custom}/x64/dxgi.dll" x86_64-windows/dxgi.dll
-    copy_dxvk "${dxvk-proton-custom}/x32/dxgi.dll" i386-windows/dxgi.dll
-    copy_dxvk "${dxvk-proton-custom}/x64/d3d11.dll" x86_64-windows/d3d11.dll
-    copy_dxvk "${dxvk-proton-custom}/x32/d3d11.dll" i386-windows/d3d11.dll
-    cp "${dxvk-proton-custom}/version" "$out/files/lib/wine/dxvk/version"
 
 '' + ''
     # WineASIO is not part of GE-Proton. Nixpkgs currently packages WineASIO
@@ -636,7 +425,7 @@ EOF
   '';
 
   meta = {
-    description = "${toolVersion} with Wine Wayland, DComp, DXVK, and WineASIO patches";
+    description = "${toolVersion} with five Wine Wayland/ntdll/win32u fixes and WineASIO";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
   };
@@ -644,7 +433,5 @@ EOF
   passthru = {
     wineSource = wine-proton-custom-src;
     wineArtifacts = wine-proton-custom;
-    dxvkSource = dxvk-proton-custom-src;
-    dxvkArtifacts = dxvk-proton-custom;
   };
 }

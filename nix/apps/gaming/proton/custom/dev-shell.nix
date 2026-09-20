@@ -13,7 +13,6 @@ let
     export PROTON_CUSTOM_WINE_SRC="$PROTON_CUSTOM_DEV_ROOT/wine"
     export PROTON_CUSTOM_WINE64_BUILD="$PROTON_CUSTOM_DEV_ROOT/wine64"
     export PROTON_CUSTOM_WINE32_BUILD="$PROTON_CUSTOM_DEV_ROOT/wine32"
-    export PROTON_CUSTOM_DXVK_SRC="$PROTON_CUSTOM_DEV_ROOT/dxvk"
     export PROTON_CUSTOM_JOBS="''${PROTON_CUSTOM_JOBS:-$(nproc)}"
     export PATH="${protonRoot}/bin:$PATH"
     mkdir -p "$PROTON_CUSTOM_DEV_ROOT"
@@ -28,7 +27,7 @@ let
     cat <<EOF
 proton-custom dev shell
   sources: $PROTON_CUSTOM_DEV_ROOT
-  loop:    make setup | make dcomp | make dxvk
+  loop:    make setup | make wayland | make win32u | make ntdll
   helper:  proton-custom-make <target> works from any directory
 EOF
   '';

@@ -39,7 +39,7 @@ Environment:
   --artifact-dir PATH
   --capture-fallback none|foreground
   --stop-on-white 0|1
-  --trace quiet|modules|composition
+  --trace quiet|modules
   --reset-cache 0|1
   --keep-agent 0|1     kill only Battle.net.exe, leave Agent.exe running
 
@@ -114,7 +114,7 @@ mkdir -p "$artifact_dir"
 echo "artifact-dir=$artifact_dir"
 
 case "$trace" in
-  quiet|modules|composition) ;;
+  quiet|modules) ;;
   *)
     echo "invalid trace mode: $trace" >&2
     exit 2
@@ -148,11 +148,6 @@ run_once() {
     modules)
       export WINEDEBUG="+timestamp,+pid,+tid,+loaddll,+module"
       export DXVK_LOG_LEVEL="info"
-      export DXVK_LOG_PATH="$run_dir/dxvk"
-      ;;
-    composition)
-      export WINEDEBUG="+timestamp,+pid,+tid,+dcomp,+loaddll,+module"
-      export DXVK_LOG_LEVEL="trace"  # composition present/bind traces live at trace level
       export DXVK_LOG_PATH="$run_dir/dxvk"
       ;;
   esac

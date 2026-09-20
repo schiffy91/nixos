@@ -23,7 +23,7 @@ repeatable:
 
 The cycle:
 
-1. Builds only changed `proton-custom` Wine/DXVK targets.
+1. Builds only changed `proton-custom` Wine targets.
 2. Points Steam's `proton-custom-GE-Proton11-5` compat-tool symlink at the writable
    dev copy.
 3. Configures the Battle.net prefix for that compat tool.
@@ -58,7 +58,7 @@ Expected runtime signals:
 - Proton log options include `wayland` and `hdr`.
 - Battle.net command line does not include `--use-angle=desktop` or
   `--disable-gpu-compositing`.
-- CEF renderer receives `--force-device-scale-factor=<display scale>`.
+- CEF scales from the prefix registry DPI (`LogPixels`, written by `wine-prefix-dpi`); no scale flags.
 - StatusNotifierItem metadata contains title `Battle.net` and icon name
   `battlenet`.
 - `context-menu` returns promptly.

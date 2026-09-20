@@ -1,4 +1,4 @@
-{ config, pkgs, lib, protonCustom, ... }:
+{ config, pkgs, lib, protonCustom, winePrefixDpi, ... }:
 let
   enabled = config.settings.apps.enable
     && config.settings.apps.gaming.enable
@@ -11,18 +11,13 @@ let
   prefix = "${home}/Games/Battle.net/prefix";
   proton = protonCustom.path;
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
-  legacyDxvkConfig = "${prefix}/drive_c/Program Files (x86)/Battle.net/dxvk.conf";
   iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
-  primary = lib.findFirst (o: o.primary) null config.settings.desktop.outputs;
-  scaleFactor = if primary == null then 1.0 else primary.scaleFactor;
-  logPixels = builtins.floor (96.0 * scaleFactor + 0.5);
   launcher = pkgs.writeShellApplication {
     name = "battlenet";
-    runtimeInputs = [ pkgs.coreutils pkgs.gawk pkgs.umu-launcher ];
+    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.umu-launcher winePrefixDpi.package ];
     text = ''
         mkdir -p "${prefix}"
         EXE="''${1:-${exe}}"
-        LOG_PIXELS="${toString logPixels}"
         PROTON_RUNTIME_LOG_DIR="''${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
         mkdir -p "$PROTON_RUNTIME_LOG_DIR"
         rm -f "$PROTON_RUNTIME_LOG_DIR"/steam-battlenet.log "$PROTON_RUNTIME_LOG_DIR"/battlenet-wrapper.log
@@ -34,82 +29,20 @@ let
           exec >> "$PROTON_RUNTIME_LOG_DIR/battlenet-wrapper.log" 2>&1
         fi
 
-        # Stop a stale prefix wineserver before editing user.reg; otherwise Wine
-        # may keep the previous DPI in its registry cache and rewrite the file.
-        WINE_SERVER="${proton}/files/bin-wow64/wineserver"
-        if [ -x "$WINE_SERVER" ]; then
-          WINEPREFIX="${prefix}" "$WINE_SERVER" -k >/dev/null 2>&1 || true
-        fi
-
-        sync_builtin() {
-          ARCH="$1"
-          WINDOWS_DIR="$2"
-          DLL="$3"
-          SRC="${proton}/files/lib/wine/$ARCH-windows/$DLL"
-          DST="${prefix}/drive_c/windows/$WINDOWS_DIR/$DLL"
-          if [ -e "$SRC" ]; then
-            install -Dm644 "$SRC" "$DST"
+        # One session per prefix: a previous launch's Agent keeps a wineserver
+        # alive inside its own runtime container, where no host socket reaches
+        # it, and a second server on the same prefix clobbers the registry.
+        for pid in $(pgrep -u "$(id -u)"); do  # umu appends /pfx to the prefix it is given
+          if tr '\0' '\n' 2>/dev/null < "/proc/$pid/environ" | grep -qE "^(WINEPREFIX|STEAM_COMPAT_DATA_PATH)=${prefix}(/pfx/?)?$"; then
+            kill "$pid" 2>/dev/null || true
           fi
-        }
-        for DLL in dcomp.dll dxgi.dll ntdll.dll secur32.dll winevulkan.dll win32u.dll winewayland.drv wow64win.dll explorer.exe; do
-          sync_builtin x86_64 system32 "$DLL"
-          sync_builtin i386 syswow64 "$DLL"
         done
 
-        rm -f "${legacyDxvkConfig}"
+        wine-prefix-dpi set --dpi ${toString winePrefixDpi.dpi} "${prefix}"
         cd "$HOME"
-        set_reg_dword() {
-          REG_FILE="$1"
-          REG_SECTION="$2"
-          REG_VALUE="$3"
-          REG_HEX="$4"
-          [ -f "$REG_FILE" ] || return 0
-          REG_TMP=$(mktemp)
-          REG_SECTION="$REG_SECTION" REG_VALUE="$REG_VALUE" REG_HEX="$REG_HEX" \
-          awk '
-            BEGIN {
-              section = "[" ENVIRON["REG_SECTION"] "]"
-              name = "\"" ENVIRON["REG_VALUE"] "\""
-              line = name "=dword:" ENVIRON["REG_HEX"]
-            }
-            $0 == section {
-              in_section = 1
-              updated = 0
-              saw_section = 1
-              print
-              next
-            }
-            in_section && /^\[/ {
-              if (!updated) print line
-              in_section = 0
-            }
-            in_section && index($0, name "=dword:") == 1 {
-              print line
-              updated = 1
-              next
-            }
-            { print }
-            END {
-              if (in_section && !updated) print line
-              if (!saw_section) {
-                print ""
-                print section
-                print line
-              }
-            }
-          ' "$REG_FILE" > "$REG_TMP" && mv "$REG_TMP" "$REG_FILE"
-        }
-        DPI_HEX=$(printf '%08x' "$LOG_PIXELS")
-        set_reg_dword "${prefix}/user.reg" "Control Panel\\\\Desktop" LogPixels "$DPI_HEX"
-        set_reg_dword "${prefix}/user.reg" "Software\\\\Wine\\\\Fonts" LogPixels "$DPI_HEX"
-        set_reg_dword "${prefix}/system.reg" "System\\\\ControlSet001\\\\Hardware Profiles\\\\Current\\\\Software\\\\Fonts" LogPixels "$DPI_HEX"
-        EXTRA_ARGS=(
-          --high-dpi-support=1
-        )
-        CEF_SCALE="${toString scaleFactor}"
-        if [ "$CEF_SCALE" != "1" ] && [ "$CEF_SCALE" != "1.0" ]; then
-          EXTRA_ARGS+=(--force-device-scale-factor="$CEF_SCALE")
-        fi
+        EXTRA_ARGS=()  # CEF reads the prefix DPI like any Windows app; no scale flags
+        # ENABLE_HDR_WSI=1 (vk_hdr_layer) intentionally absent: nvidia 610 does HDR natively and the
+        # layer mis-tags winewayland's scRGB (D2R/WoW DX12 too dark). Re-add next to DXVK_HDR to undo.
         exec env \
           WINEPREFIX="${prefix}" \
           TMPDIR=/tmp \
@@ -124,7 +57,6 @@ let
           PROTON_ENABLE_WAYLAND=1 \
           PROTON_ENABLE_HDR=1 \
           DXVK_HDR=1 \
-          ENABLE_HDR_WSI=1 \
           DXVK_LOG_LEVEL="''${DXVK_LOG_LEVEL:-none}" \
           umu-run "$EXE" "''${EXTRA_ARGS[@]}"  # games inherit this env, so HDR stays on for Diablo IV
     '';

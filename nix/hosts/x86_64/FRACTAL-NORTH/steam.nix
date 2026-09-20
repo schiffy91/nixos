@@ -6,7 +6,7 @@
       extraEnv = host.nvidiaOffloadEnv // {  # Steam doesn't inherit env vars
         PROTON_ENABLE_WAYLAND = "1";
         PROTON_ENABLE_HDR = "1";
-        ENABLE_HDR_WSI = "1";
+        # ENABLE_HDR_WSI = "1";  # dropped 2026-09-20: vk_hdr_layer mis-tags scRGB; re-enable to undo
       };
     };
   };
