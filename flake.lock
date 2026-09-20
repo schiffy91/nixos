@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789801340,
-        "narHash": "sha256-1q6c1vh1sWz1ohcxxPrKcykGwapPRC1tgnI25GaHXQI=",
+        "lastModified": 1789923067,
+        "narHash": "sha256-NaXjGrgXrgCMWIjuAy/t8LgBA0UI6UTy9TbvFoVDytM=",
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "7ffdacfe08063059e816f8aa4ea4fe1b41368e7a",
+        "rev": "4e5c98239868e805586524b4ee06424bf4556130",
         "type": "github"
       },
       "original": {
@@ -19,6 +19,289 @@
         "repo": "btrc",
         "type": "github"
       }
+    },
+    "btrc_2": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "emulator-pcsx2",
+          "renderer",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789806178,
+        "narHash": "sha256-JFQ1uEmZlR7W+Q9qx/kHCC/jZ5VKm2G5om2WWX4tsJE=",
+        "owner": "schiffy91",
+        "repo": "btrc",
+        "rev": "fad4b470817f73f551ebb20ff3ecbb6d7f895a73",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "btrc",
+        "type": "github"
+      }
+    },
+    "core-azahar": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/azahar",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/azahar",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-citra": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_2"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/citra",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/citra",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-desmume": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_3"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/desmume",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/desmume",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-flycast": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_4"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/flycast",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/flycast",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-gambatte": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_5"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/gambatte",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/gambatte",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-genesis_plus_gx": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_6"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/genesis_plus_gx",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/genesis_plus_gx",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-mednafen_psx": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_7"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/mednafen_psx",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/mednafen_psx",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-melonds": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_8"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/melonds",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/melonds",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-mesen": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_9"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/mesen",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/mesen",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-mgba": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_10"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/mgba",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/mgba",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-mupen64plus_next": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_11"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/mupen64plus_next",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/mupen64plus_next",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-ppsspp": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_12"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/ppsspp",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/ppsspp",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "core-snes9x": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_13"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch/cores/snes9x",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch/cores/snes9x",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
     },
     "crane": {
       "locked": {
@@ -55,6 +338,184 @@
         "type": "github"
       }
     },
+    "emulator-azahar": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_14"
+      },
+      "locked": {
+        "path": "./config/emulators/azahar",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/azahar",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-cemu": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_15"
+      },
+      "locked": {
+        "path": "./config/emulators/cemu",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/cemu",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-dolphin": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_16"
+      },
+      "locked": {
+        "path": "./config/emulators/dolphin",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/dolphin",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-flycast": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_17"
+      },
+      "locked": {
+        "path": "./config/emulators/flycast",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/flycast",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-melonds": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_18"
+      },
+      "locked": {
+        "path": "./config/emulators/melonds",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/melonds",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-pcsx2": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "renderer": "renderer",
+        "source": "source_19"
+      },
+      "locked": {
+        "path": "./config/emulators/pcsx2",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/pcsx2",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-ppsspp": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_20"
+      },
+      "locked": {
+        "path": "./config/emulators/ppsspp",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/ppsspp",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "emulator-ryujinx": {
+      "inputs": {
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "source": "source_21"
+      },
+      "locked": {
+        "path": "./config/emulators/ryujinx",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/ryujinx",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "esde": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2",
+        "source": "source_22"
+      },
+      "locked": {
+        "path": "./packaging/esde",
+        "type": "path"
+      },
+      "original": {
+        "path": "./packaging/esde",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -78,11 +539,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789765459,
-        "narHash": "sha256-voJJ5IZR4w2149u2Jm/j2zifeWROlpZQ+JzmCQwjgn8=",
+        "lastModified": 1789915421,
+        "narHash": "sha256-sLY2PSiu5EGJXgTDAQjHKzzezdpPk0lre9MD2VLpqew=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "17903129f47656fa4d07e78ad87f6592ff4f2527",
+        "rev": "1944398834e2b9677ee6081e11e42c32d7c1eb5d",
         "type": "github"
       },
       "original": {
@@ -116,11 +577,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1789684949,
-        "narHash": "sha256-ZKhUe/2IJUq1JhKxKMu8rbkgSGmPP2ZCqlIPn40aGCM=",
+        "lastModified": 1789785513,
+        "narHash": "sha256-B44WL6h0XoLjJ41bUPJk0X5SDinLCII//6EcBLXKiJ0=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "e554fab72f81915600f3f449b786fd9af40439a5",
+        "rev": "20b1ddd1aa5ace70c9468305030aa4f9ef79671b",
         "type": "github"
       },
       "original": {
@@ -132,11 +593,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1789684949,
-        "narHash": "sha256-ZKhUe/2IJUq1JhKxKMu8rbkgSGmPP2ZCqlIPn40aGCM=",
+        "lastModified": 1789785513,
+        "narHash": "sha256-B44WL6h0XoLjJ41bUPJk0X5SDinLCII//6EcBLXKiJ0=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "e554fab72f81915600f3f449b786fd9af40439a5",
+        "rev": "20b1ddd1aa5ace70c9468305030aa4f9ef79671b",
         "type": "github"
       },
       "original": {
@@ -146,7 +607,7 @@
         "type": "github"
       }
     },
-    "nixpkgsEsDe": {
+    "nixpkgs_2": {
       "locked": {
         "lastModified": 1767313136,
         "narHash": "sha256-16KkgfdYqjaeRGBaYsNrhPRRENs0qzkQVUooNHtoy2w=",
@@ -207,6 +668,79 @@
         "type": "github"
       }
     },
+    "renderer": {
+      "inputs": {
+        "btrc": "btrc_2",
+        "nixpkgs": [
+          "semu",
+          "emulator-pcsx2",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "../../../src/renderer",
+        "type": "path"
+      },
+      "original": {
+        "path": "../../../src/renderer",
+        "type": "path"
+      },
+      "parent": [
+        "semu",
+        "emulator-pcsx2"
+      ]
+    },
+    "renderer_2": {
+      "inputs": {
+        "btrc": [
+          "semu",
+          "btrc"
+        ],
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./src/renderer",
+        "type": "path"
+      },
+      "original": {
+        "path": "./src/renderer",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
+    "retroarch": {
+      "inputs": {
+        "btrc": [
+          "semu",
+          "btrc"
+        ],
+        "nixpkgs": [
+          "semu",
+          "nixpkgs"
+        ],
+        "renderer": [
+          "semu",
+          "renderer"
+        ],
+        "source": "source_23"
+      },
+      "locked": {
+        "path": "./config/emulators/retroarch",
+        "type": "path"
+      },
+      "original": {
+        "path": "./config/emulators/retroarch",
+        "type": "path"
+      },
+      "parent": [
+        "semu"
+      ]
+    },
     "root": {
       "inputs": {
         "btrc": "btrc",
@@ -245,22 +779,452 @@
         "btrc": [
           "btrc"
         ],
+        "core-azahar": "core-azahar",
+        "core-citra": "core-citra",
+        "core-desmume": "core-desmume",
+        "core-flycast": "core-flycast",
+        "core-gambatte": "core-gambatte",
+        "core-genesis_plus_gx": "core-genesis_plus_gx",
+        "core-mednafen_psx": "core-mednafen_psx",
+        "core-melonds": "core-melonds",
+        "core-mesen": "core-mesen",
+        "core-mgba": "core-mgba",
+        "core-mupen64plus_next": "core-mupen64plus_next",
+        "core-ppsspp": "core-ppsspp",
+        "core-snes9x": "core-snes9x",
+        "emulator-azahar": "emulator-azahar",
+        "emulator-cemu": "emulator-cemu",
+        "emulator-dolphin": "emulator-dolphin",
+        "emulator-flycast": "emulator-flycast",
+        "emulator-melonds": "emulator-melonds",
+        "emulator-pcsx2": "emulator-pcsx2",
+        "emulator-ppsspp": "emulator-ppsspp",
+        "emulator-ryujinx": "emulator-ryujinx",
+        "esde": "esde",
         "nixpkgs": [
           "nixpkgs-unstable"
         ],
-        "nixpkgsEsDe": "nixpkgsEsDe"
+        "renderer": "renderer_2",
+        "retroarch": "retroarch"
       },
       "locked": {
-        "lastModified": 1789809002,
-        "narHash": "sha256-E3Gok6F8lqWufSxcvviXk8aOpWgv2n4D1uIQ8l/uclA=",
+        "lastModified": 1789922455,
+        "narHash": "sha256-pnGjpmMD9I58Pb4ZF/0yIKlqSG7UFnx2NY3Fqelz77s=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "52d60cffa289273dd3f599baaac13bce6b71e470",
+        "rev": "62e6bce8345c9fa4a448710cbae75fa1183e16a4",
         "type": "github"
       },
       "original": {
         "owner": "schiffy91",
         "repo": "semu",
+        "type": "github"
+      }
+    },
+    "source": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786373588,
+        "narHash": "sha256-dcGHHkkosmjQ/6QIWwMZOZ79bxb1RMAP/BSwWAsaj80=",
+        "ref": "refs/tags/2126.0",
+        "rev": "fbd3fb02f71e5f9ed5134037fd59bad96c7d2b8a",
+        "revCount": 11082,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/azahar-emu/azahar"
+      },
+      "original": {
+        "ref": "refs/tags/2126.0",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/azahar-emu/azahar"
+      }
+    },
+    "source_10": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785201686,
+        "narHash": "sha256-Wz2qr657sF7D9R2jkHJLLs1BHkoKxYXd2rUAbroY5Rw=",
+        "owner": "libretro",
+        "repo": "mgba",
+        "rev": "32de792178a3662cd0402c8568fccfaad4a764a1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "mgba",
+        "rev": "32de792178a3662cd0402c8568fccfaad4a764a1",
+        "type": "github"
+      }
+    },
+    "source_11": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786022851,
+        "narHash": "sha256-lnX/W6tIOJY7bA7a5KFN3FUYS+o24bsyGSeTCOwubCs=",
+        "owner": "libretro",
+        "repo": "mupen64plus-libretro-nx",
+        "rev": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "mupen64plus-libretro-nx",
+        "rev": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+        "type": "github"
+      }
+    },
+    "source_12": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788258691,
+        "narHash": "sha256-8elut81665oeAkEZwwU8r8hoTHGdeq1oP9L9AwowLKs=",
+        "ref": "refs/heads/master",
+        "rev": "a39983225d061697bfd4efae4ea1d43b65dc95b8",
+        "revCount": 47363,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/hrydgard/ppsspp"
+      },
+      "original": {
+        "rev": "a39983225d061697bfd4efae4ea1d43b65dc95b8",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/hrydgard/ppsspp"
+      }
+    },
+    "source_13": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787859289,
+        "narHash": "sha256-2Ps/NM94/WkN5QuxXr85YCldoa7nrQMTG4+laCrGkqc=",
+        "owner": "snes9xgit",
+        "repo": "snes9x",
+        "rev": "a0420aef6a5df627c1ddd00495f3eb32b6ef8aa3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "snes9xgit",
+        "repo": "snes9x",
+        "rev": "a0420aef6a5df627c1ddd00495f3eb32b6ef8aa3",
+        "type": "github"
+      }
+    },
+    "source_14": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786373588,
+        "narHash": "sha256-dcGHHkkosmjQ/6QIWwMZOZ79bxb1RMAP/BSwWAsaj80=",
+        "ref": "refs/tags/2126.0",
+        "rev": "fbd3fb02f71e5f9ed5134037fd59bad96c7d2b8a",
+        "revCount": 11082,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/azahar-emu/azahar"
+      },
+      "original": {
+        "ref": "refs/tags/2126.0",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/azahar-emu/azahar"
+      }
+    },
+    "source_15": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1738662993,
+        "narHash": "sha256-YO3rMhlBZ5fGu0ceAFB0R3owFuSobx39faWL9EUFwAM=",
+        "owner": "cemu-project",
+        "repo": "Cemu",
+        "rev": "a6fb0a48eb437a8a41c13b782ac8ae0433bf8f98",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cemu-project",
+        "ref": "v2.6",
+        "repo": "Cemu",
+        "type": "github"
+      }
+    },
+    "source_16": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786416872,
+        "narHash": "sha256-SJ4Y6ou8ztauj/rVcIAb1FKI1+yar0vTuMRX0y8dke4=",
+        "ref": "refs/tags/2606a",
+        "rev": "c77bbaa0f372c3f72281602a8b087206706542cb",
+        "revCount": 45735,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/dolphin-emu/dolphin"
+      },
+      "original": {
+        "ref": "refs/tags/2606a",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/dolphin-emu/dolphin"
+      }
+    },
+    "source_17": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786747058,
+        "narHash": "sha256-ERxqfjDQrODnHXIDnU+hY68YPvzfhq5r5iTQkiNz+5M=",
+        "ref": "refs/tags/v2.7",
+        "rev": "5aa091fde632fb332c8d8c34e280d62dc951954c",
+        "revCount": 7300,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/flyinghead/flycast"
+      },
+      "original": {
+        "ref": "refs/tags/v2.7",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/flyinghead/flycast"
+      }
+    },
+    "source_18": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787524141,
+        "narHash": "sha256-hJFzH7qPk2NIXl9OQQyqSId6uofJ//FoslmbyX5ZjUk=",
+        "owner": "melonDS-emu",
+        "repo": "melonDS",
+        "rev": "906e9ebb27da8c6a715cd7abab4abfe8a8d29427",
+        "type": "github"
+      },
+      "original": {
+        "owner": "melonDS-emu",
+        "repo": "melonDS",
+        "rev": "906e9ebb27da8c6a715cd7abab4abfe8a8d29427",
+        "type": "github"
+      }
+    },
+    "source_19": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1769618187,
+        "narHash": "sha256-85PZ7ZDoannmwoFeKM7hm7fQS1X2MPxAwm6k+Sa+bGc=",
+        "owner": "PCSX2",
+        "repo": "pcsx2",
+        "rev": "bc8151d2a46d4aba039ea5580afbfc7bfcf6d730",
+        "type": "github"
+      },
+      "original": {
+        "owner": "PCSX2",
+        "ref": "v2.6.3",
+        "repo": "pcsx2",
+        "type": "github"
+      }
+    },
+    "source_2": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788554174,
+        "narHash": "sha256-ZoaGFvUuWBMMt3fEMQMWWsCz+jEyjm7zC+TreCndQ7I=",
+        "ref": "refs/heads/master",
+        "rev": "e4cbe379bfa8990af706977d699e16a618523778",
+        "revCount": 10181,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/libretro/citra"
+      },
+      "original": {
+        "rev": "e4cbe379bfa8990af706977d699e16a618523778",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/libretro/citra"
+      }
+    },
+    "source_20": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1778934711,
+        "narHash": "sha256-F3MKth+eb/Ehoa2jcS0DIDt5LSRgznR+J00y1TEVBl4=",
+        "ref": "refs/tags/v1.20.4",
+        "rev": "fa50bb1976065c4f8b1b47af227d367fe9771555",
+        "revCount": 45868,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/hrydgard/ppsspp"
+      },
+      "original": {
+        "ref": "refs/tags/v1.20.4",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/hrydgard/ppsspp"
+      }
+    },
+    "source_21": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1760166699,
+        "narHash": "sha256-LhQaXxmj5HIgfmrsDN8GhhVXlXHpDO2Q8JtNLaCq0mk=",
+        "ref": "refs/tags/1.3.3",
+        "rev": "e2143d43bcb6762340d8a01f20e7b5fdf104f02f",
+        "revCount": 4542,
+        "type": "git",
+        "url": "https://git.ryujinx.app/projects/Ryubing"
+      },
+      "original": {
+        "ref": "refs/tags/1.3.3",
+        "type": "git",
+        "url": "https://git.ryujinx.app/projects/Ryubing"
+      }
+    },
+    "source_22": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1762528822,
+        "narHash": "sha256-poegMKtPtUbdUbAwVj6O+rh7bxou+Wc+IDS3TBHh2LU=",
+        "owner": "es-de",
+        "repo": "emulationstation-de",
+        "rev": "4f2830048ee002fee337cd7affea3d5333f8faf5",
+        "type": "gitlab"
+      },
+      "original": {
+        "owner": "es-de",
+        "repo": "emulationstation-de",
+        "rev": "4f2830048ee002fee337cd7affea3d5333f8faf5",
+        "type": "gitlab"
+      }
+    },
+    "source_23": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1763597828,
+        "narHash": "sha256-+3jgoh6OVbPzW5/nCvpB1CRgkMTBxLkYMm6UV16/cfU=",
+        "owner": "libretro",
+        "repo": "RetroArch",
+        "rev": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "ref": "v1.22.2",
+        "repo": "RetroArch",
+        "type": "github"
+      }
+    },
+    "source_3": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787470077,
+        "narHash": "sha256-u1YTW7thPzmcse0XDs7WOu3foL7kf+urplOufQqawW8=",
+        "owner": "libretro",
+        "repo": "desmume",
+        "rev": "8f6b32cb9a5e310bd38520e7087ce7fa14765f15",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "desmume",
+        "rev": "8f6b32cb9a5e310bd38520e7087ce7fa14765f15",
+        "type": "github"
+      }
+    },
+    "source_4": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788508127,
+        "narHash": "sha256-QqlC+4DQK2E2rQYG3cMNdwK1zyQTN6TG4dVh8mbYttc=",
+        "ref": "refs/heads/master",
+        "rev": "d8a76809e57027da36d88bafb670983541de5ba1",
+        "revCount": 7317,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/flyinghead/flycast"
+      },
+      "original": {
+        "rev": "d8a76809e57027da36d88bafb670983541de5ba1",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/flyinghead/flycast"
+      }
+    },
+    "source_5": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787309948,
+        "narHash": "sha256-9+llRkHhmaIeExUigY7/Ed+/hBshU+Qda5ykxoXLT+w=",
+        "owner": "libretro",
+        "repo": "gambatte-libretro",
+        "rev": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "gambatte-libretro",
+        "rev": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+        "type": "github"
+      }
+    },
+    "source_6": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789172715,
+        "narHash": "sha256-sqic7mFeuhmW8fPB2WaEE1CJxSxB0pgFzoWX+DPirqM=",
+        "owner": "libretro",
+        "repo": "Genesis-Plus-GX",
+        "rev": "c2838c7dc4236fc2fe94e5dbd08b41486067918e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "Genesis-Plus-GX",
+        "rev": "c2838c7dc4236fc2fe94e5dbd08b41486067918e",
+        "type": "github"
+      }
+    },
+    "source_7": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788753721,
+        "narHash": "sha256-CtYOhTHnG5l5Pl67p2T5JDO7oV9qHYgBrnUBMYsh5Eo=",
+        "owner": "libretro",
+        "repo": "beetle-psx-libretro",
+        "rev": "82d8e051d1c7741a18d930be90e458b48abaa9a1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "beetle-psx-libretro",
+        "rev": "82d8e051d1c7741a18d930be90e458b48abaa9a1",
+        "type": "github"
+      }
+    },
+    "source_8": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784487518,
+        "narHash": "sha256-nQvnXoB8UeaSr6QfYwn18Y18KyLyWvcv/Q3L3SHvaNU=",
+        "owner": "libretro",
+        "repo": "melonds",
+        "rev": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "melonds",
+        "rev": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+        "type": "github"
+      }
+    },
+    "source_9": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776706287,
+        "narHash": "sha256-fDGG6U+yhpbcvKuSN30F0dM+NCXlPTPULNEqTZTL/Vc=",
+        "owner": "libretro",
+        "repo": "mesen",
+        "rev": "0102910c39ad1a62bc3f784466f3f67ca9eae335",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libretro",
+        "repo": "mesen",
+        "rev": "0102910c39ad1a62bc3f784466f3f67ca9eae335",
         "type": "github"
       }
     }

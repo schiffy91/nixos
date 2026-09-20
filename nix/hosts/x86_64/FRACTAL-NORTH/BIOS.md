@@ -30,12 +30,13 @@ ASUS resets AMD CBS (and sometimes Secure Boot) to defaults on flash. On
 3. `sudo nixosctl tpm2 status` — re-enroll (`sudo nixosctl tpm2 enable`) if the
    keyslot no longer unlocks.
 4. `fwupdmgr security` — compare with the expected report below.
-5. `cat /sys/bus/pci/drivers/ccp/0000:6b:00.2/tsme_status` — expect `1`.
+5. `cat /sys/bus/pci/drivers/ccp/*/tsme_status` — expect `1`.
 
 ## Expected `fwupdmgr security` Report
 
-Target is **HSI:1** with the runtime suffix. These are the only acceptable ✘
-rows; anything else that turns red is a regression.
+Target is **HSI:1** with the runtime suffix. Every row below shows its expected
+mark; any other row that turns red, or a ✔ row here that turns red, is a
+regression.
 
 | Row | Expected | Reason |
 |---|---|---|
