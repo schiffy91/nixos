@@ -1,0 +1,16 @@
+manifest-version = 1
+
+[package]
+name = "nixos_assettocorsa"
+exports = ["launcher", "mods", "content_manager"]
+
+[[native.pkg-config]]
+name = "zlib"
+modules = ["content_manager"]
+
+[[native.bindings]]
+module = "content_manager"
+header = "compression.h"
+language = "c"
+standard = "c11"
+symbols = ["z_stream", "inflateInit2_", "inflate", "inflateEnd", "zlibVersion", "compress2", "cmZlibOk", "cmZlibFinish", "cmZlibStreamEnd"]

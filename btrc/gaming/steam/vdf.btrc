@@ -1,0 +1,117 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Strings;
+import Library.Vector;
+import ../files.btrc;
+
+// Steam's text KeyValues format. Binary shortcuts.vdf is a different format.
+class SteamVdf {
+    private string source;
+    private int offset;
+
+    public SteamVdf(string source) { self.source = source; self.offset = 0; }
+
+    private void whitespace() {
+        while (self.offset < self.source.len()) {
+            var c = self.source[self.offset];
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { self.offset++; }
+            else if (c == '/' && self.offset + 1 < self.source.len() && self.source[self.offset + 1] == '/') {
+                while (self.offset < self.source.len() && self.source[self.offset] != '\n') { self.offset++; }
+            } else { return; }
+        }
+    }
+
+    private string token() {
+        self.whitespace();
+        if (self.offset >= self.source.len()) { throw "Unexpected end of Steam VDF"; }
+        var quoted = self.source[self.offset] == '"';
+        if (quoted) { self.offset++; }
+        var value = "";
+        while (self.offset < self.source.len()) {
+            var c = self.source[self.offset];
+            if (quoted && c == '"') { self.offset++; return value; }
+            if (!quoted && (c == '{' || c == '}' || c == ' ' || c == '\t' || c == '\r' || c == '\n')) {
+                if (value.isEmpty()) { throw "Expected Steam VDF token"; }
+                return value;
+            }
+            if (quoted && c == '\\' && self.offset + 1 < self.source.len()) {
+                self.offset++;
+                c = self.source[self.offset];
+                if (c == 'n') { value = value + "\n"; }
+                else if (c == 't') { value = value + "\t"; }
+                else if (c == 'r') { value = value + "\r"; }
+                else if (c == '\\' || c == '"') { value = value + self.source.substring(self.offset, 1); }
+                else { value = value + "\\" + self.source.substring(self.offset, 1); }
+            } else { value = value + self.source.substring(self.offset, 1); }
+            self.offset++;
+        }
+        if (quoted) { throw "Unterminated Steam VDF string"; }
+        return value;
+    }
+
+    public JSONValue object(bool nested = false, int depth = 0) {
+        if (depth > 128) { throw "Steam VDF nesting exceeds 128"; }
+        var result = JSONValue.makeObject();
+        while (true) {
+            self.whitespace();
+            if (self.offset == self.source.len()) {
+                if (nested) { throw "Unclosed Steam VDF object"; }
+                return result;
+            }
+            if (self.source[self.offset] == '}') {
+                if (!nested) { throw "Unexpected Steam VDF closing brace"; }
+                self.offset++;
+                return result;
+            }
+            var key = self.token();
+            self.whitespace();
+            if (result.has(key)) { throw f"Duplicate Steam VDF key: {key}"; }
+            if (self.offset < self.source.len() && self.source[self.offset] == '{') {
+                self.offset++;
+                result.set(key, self.object(true, depth + 1));
+            } else { result.set(key, JSONValue.makeString(self.token())); }
+        }
+        return result;
+    }
+
+    class JSONValue read(string path) { return SteamVdf(Path.readAll(path)).object(); }
+
+    class string quote(string text) {
+        return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\"";
+    }
+
+    class string render(JSONValue object, string indent = "") {
+        var text = "";
+        for key in object.keys() {
+            var value = object.get(key);
+            if (value.isObject()) {
+                text = text + indent + SteamVdf.quote(key) + "\n" + indent + "{\n" + SteamVdf.render(value, indent + "\t") + indent + "}\n";
+            } else if (value.isString()) { text = text + indent + SteamVdf.quote(key) + "\t\t" + SteamVdf.quote(value.asString()) + "\n"; }
+            else { throw f"Invalid Steam VDF value: {key}"; }
+        }
+        return text;
+    }
+
+    class JSONValue section(JSONValue parent, string name) {
+        for key in parent.keys() {
+            if (key.toLower().equals(name.toLower())) {
+                var child = parent.get(key);
+                if (!child.isObject()) { throw f"Expected Steam VDF object: {name}"; }
+                return child;
+            }
+        }
+        var child = JSONValue.makeObject();
+        parent.set(name, child);
+        return child;
+    }
+
+    class JSONValue at(JSONValue parent, Vector<string> names) {
+        var current = parent;
+        for name in names { current = SteamVdf.section(current, name); }
+        return current;
+    }
+
+    class void saveChanged(string path, JSONValue document, string before) {
+        if (!document.stringify().equals(before)) { GamingFiles.write(path, SteamVdf.render(document)); }
+    }
+}

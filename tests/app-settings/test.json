@@ -58,7 +58,7 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.nixosctl.configPath",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.nixosctl.configPath",
       "expect": "nixosctl.toml"
     },
     {

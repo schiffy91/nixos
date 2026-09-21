@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "nixos_unit_tests"
+
+[dependencies]
+assetto = { path = "../../btrc/gaming/assettocorsa" }

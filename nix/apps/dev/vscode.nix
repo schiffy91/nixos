@@ -11,23 +11,7 @@ let
     buildPhase = ''
       runHook preBuild
       bundle_root="$TMPDIR/btrc-vscode"
-      python3 - "$PWD/../../.." "$bundle_root" <<'PY'
-      import importlib.util
-      import sys
-      from pathlib import Path
-
-      spec = importlib.util.spec_from_file_location(
-          "btrc_vscode_bundle",
-          Path("packaging/bundle.py"),
-      )
-      module = importlib.util.module_from_spec(spec)
-      assert spec.loader is not None
-      spec.loader.exec_module(module)
-      module.ExtensionBundler(
-          Path(sys.argv[1]),
-          output_root=Path(sys.argv[2]),
-      ).bundle()
-      PY
+      python3 packaging/bundle.py --repository-root "$PWD/../../.." --output-root "$bundle_root"
       cp -R node_modules "$bundle_root/node_modules"
       cd "$bundle_root"
       npm run typecheck

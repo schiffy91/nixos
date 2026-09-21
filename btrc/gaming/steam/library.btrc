@@ -1,0 +1,68 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Vector;
+import ./vdf.btrc;
+
+class SteamGame {
+    public string id;
+    public string library;
+    public JSONValue manifest;
+
+    public SteamGame(string id, string library, JSONValue manifest) {
+        self.id = id; self.library = library; self.manifest = manifest;
+    }
+
+    public string directory() {
+        return GamingFiles.inside(f"{self.library}/steamapps/common", self.manifest.get("installdir").asString());
+    }
+
+    public string prefix() { return f"{self.library}/steamapps/compatdata/{self.id}/pfx"; }
+    public bool ready() { return self.manifest.get("StateFlags").asString().equals("4"); }
+}
+
+class SteamLibrary {
+    public string root;
+    public SteamLibrary(string root) { self.root = root; }
+
+    public Vector<string> paths() {
+        Vector<string> paths = [self.root];
+        var file = f"{self.root}/steamapps/libraryfolders.vdf";
+        if (FileSystem.exists(file)) {
+            var folders = SteamVdf.read(file).get("libraryfolders");
+            for key in folders.keys() {
+                var path = folders.get(key).get("path").asString();
+                if (!path.isEmpty() && !paths.contains(path)) { paths.push(path); }
+            }
+        }
+        return paths;
+    }
+
+    public Vector<SteamGame> games() {
+        Vector<SteamGame> games = [];
+        Vector<string> seen = [];
+        for library in self.paths() {
+            for name in FileSystem.listDir(f"{library}/steamapps").sorted() {
+                if (!name.startsWith("appmanifest_") || !name.endsWith(".acf")) { continue; }
+                var id = name.substring(12, name.len() - 16);
+                if (seen.contains(id)) { continue; }
+                seen.push(id);
+                games.push(SteamGame(id, library, SteamVdf.read(f"{library}/steamapps/{name}").get("AppState")));
+            }
+        }
+        return games;
+    }
+
+    public SteamGame game(string id) {
+        for game in self.games() { if (game.id.equals(id)) { return game; } }
+        throw f"Steam has not installed app {id} yet";
+    }
+
+    public Vector<string> userConfigs() {
+        Vector<string> result = [];
+        for user in FileSystem.listDir(f"{self.root}/userdata") {
+            var path = f"{self.root}/userdata/{user}/config/localconfig.vdf";
+            if (FileSystem.isFile(path)) { result.push(path); }
+        }
+        return result;
+    }
+}

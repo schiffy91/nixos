@@ -1,0 +1,72 @@
+import Library.FileSystem;
+import Library.Platform;
+import Library.Strings;
+import Library.Vector;
+import ../files.btrc;
+
+class WineRegistry {
+    class string dword(int value) {
+        var digits = "0123456789abcdef";
+        var result = "";
+        for (int shift = 28; shift >= 0; shift = shift - 4) {
+            result = result + digits.substring((value >> shift) & 15, 1);
+        }
+        return result;
+    }
+
+    class void setDword(string path, string section, string name, int value) {
+        if (!FileSystem.isFile(path)) { return; }
+        var original = Path.readAll(path);
+        var header = "[" + section.replace("\\", "\\\\") + "]";
+        var key = "\"" + name + "\"=";
+        var desired = key + "dword:" + WineRegistry.dword(value);
+        Vector<string> result = [];
+        var inSection = false;
+        var foundSection = false;
+        var written = false;
+        for line in Strings.split(original, "\n") {
+            if (line.startsWith("[")) {
+                if (inSection && !written) { result.push(desired); written = true; }
+                inSection = line.equals(header) || line.startsWith(header + " ");
+                if (inSection) { foundSection = true; }
+            }
+            if (inSection && line.startsWith(key)) {
+                if (!written) { result.push(desired); written = true; }
+            } else { result.push(line); }
+        }
+        if (!foundSection) { result.push(header + " 0"); }
+        if (!written) { result.push(desired); result.push(""); }
+        var updated = result.join("\n");
+        if (!updated.equals(original)) { GamingFiles.write(path, updated); }
+    }
+}
+
+class WinePrefix {
+    public string path;
+    public WinePrefix(string path) { self.path = path; }
+
+    class WinePrefix fromEnvironment() {
+        var compat = Environment.get("STEAM_COMPAT_DATA_PATH", "");
+        return WinePrefix(compat.isEmpty() ? Environment.get("WINEPREFIX", "") : f"{compat}/pfx");
+    }
+
+    public bool exists() { return !self.path.isEmpty() && FileSystem.isFile(f"{self.path}/user.reg"); }
+
+    public void setDpi(int dpi) {
+        if (dpi < 48 || dpi > 768) { throw "DPI must be between 48 and 768"; }
+        if (!self.exists()) { return; }
+        WineRegistry.setDword(f"{self.path}/user.reg", "Control Panel\\Desktop", "LogPixels", dpi);
+        WineRegistry.setDword(f"{self.path}/user.reg", "Software\\Wine\\Fonts", "LogPixels", dpi);
+        WineRegistry.setDword(f"{self.path}/system.reg", "System\\ControlSet001\\Hardware Profiles\\Current\\Software\\Fonts", "LogPixels", dpi);
+    }
+
+    public int dpi() {
+        for line in Strings.split(Path.readAll(f"{self.path}/user.reg"), "\n") {
+            if (line.startsWith("\"LogPixels\"=dword:")) {
+                var digits = line.substring(18, line.len() - 18);
+                return (int)strtol(digits, NULL, 16);
+            }
+        }
+        return 0;
+    }
+}

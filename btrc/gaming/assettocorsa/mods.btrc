@@ -1,0 +1,115 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+import ../files.btrc;
+
+class AssettoMods {
+    class string digest(string path) {
+        return UnixShell().run(f"sha256sum --zero -- {UnixShell.quote(path)}", throwOnFailure=true).stdout().substring(0, 64);
+    }
+
+    class JSONValue digests(Vector<string> paths) {
+        var result = JSONValue.makeObject();
+        // Bound argv size and avoid spawning a process for every mod file.
+        for (int start = 0; start < paths.len; start = start + 64) {
+            var end = start + 64 < paths.len ? start + 64 : paths.len;
+            var batch = paths.slice(start, end);
+            var command = Command("sha256sum").arg("--").args(batch);
+            var lines = Strings.split(UnixShell().run(command.render(), throwOnFailure=true).stdout().trim(), "\n");
+            if (lines.len != batch.len) { throw "Unexpected SHA-256 output"; }
+            for (int index = 0; index < batch.len; index++) {
+                // Coreutils escapes filenames containing newlines/backslashes
+                // and prefixes that line with a backslash; each file stays one line.
+                var line = lines.get(index);
+                var offset = line.startsWith("\\") ? 1 : 0;
+                if (line.len() < offset + 66) { throw "Incomplete SHA-256 output"; }
+                result.set(batch.get(index), JSONValue.makeString(line.substring(offset, 64)));
+            }
+        }
+        return result;
+    }
+
+    class void merge(string destination, Vector<string> sources) {
+        Vector<string> names = [];
+        for source in sources {
+            for name in GamingFiles.files(source) {
+                var key = name.toLower();
+                if (names.contains(key) || key.startsWith(".nix-assettocorsa") || key.endsWith(".nix-new")) {
+                    throw f"Mods overlap or use a reserved name: {name}";
+                }
+                names.push(key);
+                GamingFiles.copy(GamingFiles.inside(source, name), GamingFiles.inside(destination, name));
+            }
+        }
+    }
+
+    class void reconcile(string game, string payload) {
+        var state = GamingFiles.inside(game, ".nix-assettocorsa");
+        var stateFile = GamingFiles.inside(state, "files.json");
+        var previous = FileSystem.exists(stateFile) ? JSONValue.parse(Path.readAll(stateFile)) : JSONValue.makeObject();
+        if (!previous.isObject()) { throw f"Invalid mod manifest: {stateFile}"; }
+        var desired = JSONValue.makeObject();
+        if (!payload.isEmpty()) {
+            var files = GamingFiles.files(payload);
+            Vector<string> paths = [];
+            for name in files {
+                if (name.toLower().startsWith(".nix-assettocorsa") || name.endsWith(".nix-new")) { throw f"Reserved mod path: {name}"; }
+                paths.push(GamingFiles.inside(payload, name));
+            }
+            var hashes = AssettoMods.digests(paths);
+            for name in files { desired.set(name, hashes.get(GamingFiles.inside(payload, name))); }
+        }
+        var names = previous.keys();
+        for name in desired.keys() { if (!names.contains(name)) { names.push(name); } }
+        names.sort();
+        Vector<string> existing = [];
+        for name in names {
+            var target = GamingFiles.inside(game, name);
+            if (FileSystem.isFile(target)) { existing.push(target); }
+        }
+        var actual = AssettoMods.digests(existing);
+        // Validate the whole plan before touching a managed game file.
+        for name in names {
+            var target = GamingFiles.inside(game, name);
+            GamingFiles.inside(game, f"{name}.nix-new");
+            var old = previous.get(name);
+            if (previous.has(name) && (!old.get("hash").isString() || !old.get("original").isBool())) {
+                throw f"Invalid mod record: {name}";
+            }
+            var backup = GamingFiles.inside(state, f"originals/{name}");
+            if (old.get("original").asBool() && !FileSystem.isFile(backup)) { throw f"Missing original backup: {name}"; }
+            if (FileSystem.exists(target) && !FileSystem.isFile(target)) { throw f"Expected a file: {target}"; }
+            if (previous.has(name) && FileSystem.exists(target)) {
+                var hash = actual.get(target).asString();
+                if (!hash.equals(old.get("hash").asString()) && !hash.equals(desired.get(name).asString())) {
+                    throw f"Managed file changed outside Nix: {target}. Move it aside before applying.";
+                }
+            }
+        }
+        var records = JSONValue.makeObject();
+        for name in names {
+            var target = GamingFiles.inside(game, name);
+            var backup = GamingFiles.inside(state, f"originals/{name}");
+            var original = previous.get(name).get("original").asBool();
+            if (!previous.has(name) && FileSystem.exists(target)) {
+                GamingFiles.copy(target, backup);
+                original = true;
+            }
+            if (desired.has(name)) {
+                if (!actual.has(target) || !actual.get(target).asString().equals(desired.get(name).asString())) {
+                    GamingFiles.copy(GamingFiles.inside(payload, name), target);
+                }
+                var record = JSONValue.makeObject();
+                record.set("hash", desired.get(name));
+                record.set("original", JSONValue.makeBool(original));
+                records.set(name, record);
+            } else if (original) {
+                GamingFiles.copy(backup, target);
+                GamingFiles.remove(backup);
+            } else if (FileSystem.exists(target)) { GamingFiles.remove(target); }
+        }
+        GamingFiles.write(stateFile, records.stringify() + "\n");
+    }
+}

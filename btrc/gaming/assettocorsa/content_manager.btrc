@@ -1,0 +1,81 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Strings;
+import ./mods.btrc;
+
+#include <lzf.h>
+#include <zlib.h>
+
+// Hosted declarations until the pinned header importer supports liblzf's
+// top-level const pointer parameters (the C function type is unchanged).
+extern unsigned int lzf_decompress(const void* input, unsigned int inputLength, void* output, unsigned int outputLength);
+extern unsigned int lzf_compress(const void* input, unsigned int inputLength, void* output, unsigned int outputLength);
+
+class ContentManager {
+    // Values.data v2 is plain UTF-8, LZF (0x0b), or raw DEFLATE (0x00).
+    class string decode(Bytes bytes) {
+        if (bytes.length() == 0) { throw "Empty Content Manager settings"; }
+        if (bytes.get(0) != 0 && bytes.get(0) != 11) { return bytes.toString(); }
+        var maximum = 16 * 1024 * 1024;
+        char* output = (char*)malloc((size_t)maximum);
+        if (output == NULL) { throw "Cannot allocate Content Manager settings buffer"; }
+        var length = 0;
+        if (bytes.get(0) == 11) {
+            length = (int)lzf_decompress(bytes.data + 1, (unsigned int)(bytes.length() - 1), output, (unsigned int)maximum);
+        } else {
+            z_stream stream;
+            memset(&stream, 0, sizeof(stream));
+            stream.next_in = (unsigned char*)(bytes.data + 1);
+            stream.avail_in = (unsigned int)(bytes.length() - 1);
+            stream.next_out = (unsigned char*)output;
+            stream.avail_out = (unsigned int)maximum;
+            if (inflateInit2_(&stream, -15, zlibVersion(), (int)sizeof(stream)) == cmZlibOk) {
+                if (inflate(&stream, cmZlibFinish) == cmZlibStreamEnd) { length = (int)stream.total_out; }
+                inflateEnd(&stream);
+            }
+        }
+        var decoded = Bytes.fromRaw(output, length);
+        free(output);
+        if (length == 0) { throw "Invalid or oversized compressed Content Manager settings"; }
+        return decoded.toString();
+    }
+
+    class JSONValue entries(string text) {
+        if (!text.startsWith("version: 2\n") && !text.equals("version: 2")) { throw "Unsupported Content Manager settings format"; }
+        var result = JSONValue.makeObject();
+        for line in Strings.split(text, "\n") {
+            var tab = Strings.find(line, "\t", 0);
+            if (tab < 0) { continue; }
+            result.set(line.substring(0, tab), JSONValue.makeString(line.substring(tab + 1, line.len() - tab - 1)));
+        }
+        return result;
+    }
+
+    class string escape(string value) { return value.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t"); }
+
+    class void configure(string steam, string game, string prefix) {
+        var folder = f"{prefix}/drive_c/users/steamuser/AppData/Local/AcTools Content Manager";
+        var path = f"{folder}/Values.data";
+        var values = ContentManager.entries(FileSystem.exists(path) ? ContentManager.decode(FileSystem.readBytes(path)) : "version: 2");
+        values.set("_ac_root", JSONValue.makeString(ContentManager.escape("Z:" + game.replace("/", "\\"))));
+        values.set("Settings.CommonSettings.UpdatePeriod", JSONValue.makeString("00:00:00"));
+        values.set("PatchUpdater.AutoUpdateMode", JSONValue.makeString("disabled"));
+        var backup = f"{folder}/Values.before-nix";
+        if (FileSystem.exists(path) && !FileSystem.exists(backup)) { GamingFiles.copy(path, backup); }
+        var text = "version: 2\n";
+        for key in values.keys() { text = text + key + "\t" + values.get(key).asString() + "\n"; }
+        GamingFiles.write(path, text);
+        var login = f"{prefix}/drive_c/Program Files (x86)/Steam/config/loginusers.vdf";
+        if (!FileSystem.exists(login) && !FileSystem.isSymlink(login) && FileSystem.exists(f"{steam}/config/loginusers.vdf")) {
+            GamingFiles.directory(PathTools.dirname(login));
+            if (FileSystem.symlink(f"{steam}/config/loginusers.vdf", login) != 0) { throw "Cannot link Steam account discovery"; }
+        }
+        var pending = f"{game}/Content Manager.update.exe";
+        if (FileSystem.isFile(pending)) {
+            var saved = GamingFiles.inside(game, f".nix-assettocorsa/disabled-updates/{AssettoMods.digest(pending)}.exe");
+            GamingFiles.directory(PathTools.dirname(saved));
+            if (rename(pending, saved) != 0) { throw "Cannot preserve pending Content Manager update"; }
+        }
+    }
+}

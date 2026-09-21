@@ -1,0 +1,75 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+#include <unistd.h>
+
+class GamingFiles {
+    class void directory(string path) {
+        if (FileSystem.mkdirp(path) != 0) { throw f"Cannot create directory: {path}"; }
+    }
+
+    class void write(string path, string content) {
+        GamingFiles.directory(PathTools.dirname(path));
+        var temporary = f"{path}.nix-new";
+        if (FileSystem.isSymlink(temporary)) { throw f"Refusing symlink: {temporary}"; }
+        if (!Path.writeAll(temporary, content) || rename(temporary, path) != 0) {
+            throw f"Cannot write: {path}";
+        }
+    }
+
+    class void copy(string source, string target) {
+        GamingFiles.directory(PathTools.dirname(target));
+        var temporary = f"{target}.nix-new";
+        if (FileSystem.isSymlink(temporary)) { throw f"Refusing symlink: {temporary}"; }
+        UnixShell().run(f"cp -- {UnixShell.quote(source)} {UnixShell.quote(temporary)}", throwOnFailure=true);
+        FileSystem.chmod(temporary, 0644);
+        if (rename(temporary, target) != 0) { throw f"Cannot replace: {target}"; }
+    }
+
+    class void remove(string path) {
+        if (unlink(path) != 0) { throw f"Cannot remove: {path}"; }
+    }
+
+    class string inside(string root, string relative) {
+        if (relative.isEmpty() || PathTools.isAbsolute(relative)) { throw f"Invalid relative path: {relative}"; }
+        var path = root;
+        if (FileSystem.isSymlink(path)) { throw f"Refusing symlink: {path}"; }
+        for part in Strings.split(relative, "/") {
+            if (part.equals("..") || part.equals(".") || part.isEmpty()) { throw f"Invalid relative path: {relative}"; }
+            path = PathTools.join(path, part);
+            if (FileSystem.isSymlink(path)) { throw f"Refusing symlink: {path}"; }
+        }
+        return path;
+    }
+
+    class void walk(string root, string relative, Vector<string> files) {
+        var folder = relative.isEmpty() ? root : GamingFiles.inside(root, relative);
+        for name in FileSystem.listDir(folder).sorted() {
+            var child = relative.isEmpty() ? name : f"{relative}/{name}";
+            var path = GamingFiles.inside(root, child);
+            if (FileSystem.isDir(path)) { GamingFiles.walk(root, child, files); }
+            else if (FileSystem.isFile(path)) { files.push(child); }
+            else { throw f"Unsupported mod file: {path}"; }
+        }
+    }
+
+    class Vector<string> files(string root) {
+        Vector<string> files = [];
+        if (!FileSystem.isDir(root)) { throw f"Missing directory: {root}"; }
+        GamingFiles.walk(root, "", files);
+        return files;
+    }
+}
+
+class GamingProcess {
+    class void exec(Vector<string> command) {
+        if (command.len == 0) { throw "Missing command"; }
+        var arguments = ChildProcessArguments.build(command.get(0), command.slice(1, command.len));
+        execvp(arguments[0], arguments);
+        ChildProcessArguments.freeEntries(arguments);
+        throw f"Cannot execute: {command.get(0)}";
+    }
+}

@@ -1,0 +1,26 @@
+import Library.CLI;
+import Library.Console;
+import ./prefix.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var options = CLICommandLine.parseFrom(args, 1);
+        var dpi = Strings.toInt(options.option("--dpi", "96"));
+        if (args.commandIs("exec")) {
+            WinePrefix.fromEnvironment().setDpi(dpi);
+            // Existing callers can put environment assignments before the command.
+            Vector<string> command = ["env"];
+            for value in options.operands { command.push(value); }
+            GamingProcess.exec(command);
+        } else if (args.commandIs("set") || args.commandIs("get")) {
+            if (options.operandCount() == 0) { throw "Supply at least one Wine prefix"; }
+            for path in options.operands {
+                var prefix = WinePrefix(path);
+                if (args.commandIs("set")) { prefix.setDpi(dpi); }
+                print(f"{path}: {prefix.dpi()}");
+            }
+        } else { throw "Usage: wine-prefix-dpi <get|set|exec> [--dpi N] [--] PREFIX/COMMAND..."; }
+    } catch (string error) { Console.error(f"wine-prefix-dpi: {error}"); return 1; }
+    return 0;
+}

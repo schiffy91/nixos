@@ -81,7 +81,8 @@ in {
       disablePrimaryOnStream = true;
       primaryOutput = display.primary.name;
     };
-    nixosctl.configPath = "${./nixosctl.toml}";
+    apps.nixosctl.configPath = "${./nixosctl.toml}";
+    apps.simracing.enable = true;
     sudolessAllowlist.enable = true;
   };
 }

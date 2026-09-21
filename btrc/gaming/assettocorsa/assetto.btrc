@@ -1,0 +1,9 @@
+import Library.CLI;
+import Library.Console;
+import ./launcher.btrc;
+
+int main(int argc, char** argv) {
+    try { Assetto.run(CLIArgs(argc, argv)); }
+    catch (string error) { Console.error(f"assetto: {error}"); return 1; }
+    return 0;
+}

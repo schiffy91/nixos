@@ -1,0 +1,85 @@
+import Library.CLI;
+import Library.Console;
+import Library.Platform;
+import Library.Process;
+import ../steam/library.btrc;
+import ./content_manager.btrc;
+
+#include <sys/file.h>
+#include <fcntl.h>
+
+class Assetto {
+    class void idle() {
+        for name in ["acs.exe", "acs_x86.exe", "Content Manager", "AssettoCorsa.ex"] {
+            if (UnixShell().run(f"pgrep -x {UnixShell.quote(name)}", logFailure=false).ok()) {
+                throw "Close Assetto Corsa and Content Manager first";
+            }
+        }
+    }
+
+    class Vector<string> launchCommand(Vector<string> original, string game) {
+        Vector<string> command = [];
+        var replaced = 0;
+        for value in original {
+            if (PathTools.basename(value).toLower().equals("assettocorsa.exe")) {
+                command.push(f"{game}/Content Manager.exe"); replaced++;
+            } else { command.push(value); }
+        }
+        if (replaced != 1) { throw "Expected Steam's %command% containing AssettoCorsa.exe"; }
+        return command;
+    }
+
+    class bool prerequisitesReady(string prefix) {
+        var log = f"{prefix}/winetricks.log";
+        if (!FileSystem.isFile(log)) { return false; }
+        var verbs = Strings.split(Path.readAll(log), "\n");
+        for verb in ["dotnet48", "d3dx11_43", "d3dcompiler_47", "win10"] {
+            if (!verbs.contains(verb)) { return false; }
+        }
+        return true;
+    }
+
+    class void run(CLIArgs args) {
+        var options = CLICommandLine.parseFrom(args, 1);
+        var action = args.command();
+        if (action.equals("merge")) {
+            if (options.operandCount() < 2) { throw "Usage: assetto merge DESTINATION SOURCE..."; }
+            AssettoMods.merge(options.operand(0), options.operands.slice(1, options.operandCount()));
+            return;
+        }
+        if (!action.equals("status") && !action.equals("apply") && !action.equals("restore") && !action.equals("launch")) {
+            throw "Usage: assetto <status|apply|restore|launch -- STEAM-COMMAND...>";
+        }
+        var steam = Environment.get("STEAM_DIR", Environment.get("HOME", "") + "/.local/share/Steam");
+        var installation = SteamLibrary(steam).game("244210");
+        var game = installation.directory();
+        var prefix = installation.prefix();
+        if (!installation.ready() || !FileSystem.isFile(f"{game}/acs.exe")) { throw "Assetto Corsa is still downloading/updating. Let Steam finish first."; }
+        var payload = Environment.get("ASSETTO_MODS", "");
+        if (action.equals("status")) { print(f"Game: {game}\nPrefix: {prefix}\nMod pack: {payload}"); return; }
+        var command = action.equals("launch") ? Assetto.launchCommand(options.operands, game) : options.operands;
+        Assetto.idle();
+        var lockPath = GamingFiles.inside(game, ".nix-assettocorsa.lock");
+        int lock = open(lockPath, (int)O_WRONLY | (int)O_CREAT | (int)O_CLOEXEC | (int)O_NOFOLLOW, 0600);
+        if (lock < 0 || (int)flock(lock, (int)LOCK_EX | (int)LOCK_NB) != 0) { if (lock >= 0) { close(lock); } throw "Assetto deployment is already running, or its lock cannot be opened"; }
+        try {
+            AssettoMods.reconcile(game, action.equals("restore") ? "" : payload);
+            if (!action.equals("restore")) { ContentManager.configure(steam, game, prefix); }
+        } catch (string error) { close(lock); throw error; }
+        close(lock);
+        if (!action.equals("launch")) { print(f"Assetto Corsa mods: {action} complete."); return; }
+        setenv("PROTON_ENABLE_WAYLAND", "0", 1);
+        setenv("PROTON_ENABLE_HDR", "0", 1);
+        setenv("DXVK_HDR", "0", 1);
+        setenv("WINEDLLOVERRIDES", "dwrite=n,b", 1);
+        var wrapper = Environment.get("ASSETTO_WHEEL_LAUNCHER", "");
+        // Starting the relay during GE's prerequisite installers keeps Wine alive
+        // and deadlocks their wineserver wait. The guard applies to any GE build.
+        if (!wrapper.isEmpty() && Assetto.prerequisitesReady(prefix)) {
+            Vector<string> wrapped = [wrapper];
+            for argument in command { wrapped.push(argument); }
+            command = wrapped;
+        }
+        GamingProcess.exec(command);
+    }
+}

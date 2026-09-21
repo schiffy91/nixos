@@ -532,6 +532,24 @@
         "type": "github"
       }
     },
+    "flake-utils": {
+      "inputs": {
+        "systems": "systems"
+      },
+      "locked": {
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -572,6 +590,28 @@
       "original": {
         "owner": "nix-community",
         "repo": "lanzaboote",
+        "type": "github"
+      }
+    },
+    "logitech-trueforce": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789894113,
+        "narHash": "sha256-Gy64rbe3v4O3p6PWrdYrirMaK5vkAZ7mLsPWRiOrfWk=",
+        "owner": "mescon",
+        "repo": "logitech-trueforce-linux-driver",
+        "rev": "c84e5133d72faebbea3b74f63afefe04d376547f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "mescon",
+        "repo": "logitech-trueforce-linux-driver",
+        "rev": "c84e5133d72faebbea3b74f63afefe04d376547f",
         "type": "github"
       }
     },
@@ -747,6 +787,7 @@
         "disko": "disko",
         "home-manager": "home-manager",
         "lanzaboote": "lanzaboote",
+        "logitech-trueforce": "logitech-trueforce",
         "nixpkgs": "nixpkgs",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "plasma-manager": "plasma-manager",
@@ -1225,6 +1266,21 @@
         "owner": "libretro",
         "repo": "mesen",
         "rev": "0102910c39ad1a62bc3f784466f3f67ca9eae335",
+        "type": "github"
+      }
+    },
+    "systems": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
         "type": "github"
       }
     }

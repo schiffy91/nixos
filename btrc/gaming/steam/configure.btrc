@@ -1,0 +1,9 @@
+import Library.CLI;
+import Library.Console;
+import ./configuration.btrc;
+
+int main(int argc, char** argv) {
+    try { SteamConfiguration(CLICommandLine.parse(CLIArgs(argc, argv))).apply(); }
+    catch (string error) { Console.error(f"configure-steam-apps: {error}"); return 1; }
+    return 0;
+}

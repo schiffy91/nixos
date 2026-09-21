@@ -212,6 +212,9 @@ in {
       "${adminHome}/.steam"
       ##### Games #####
       "${adminHome}/Games"
+      ##### Native Logitech wheel tools #####
+      "${adminHome}/.config/logi-wheel"
+      "${adminHome}/.local/share/logitech-trueforce"
       ##### Semu #####
       "${adminHome}/ES-DE"
       "${adminHome}/.local/share/semu"
@@ -264,16 +267,27 @@ in {
     settings.apps.agents.enable = mkSetting bool true;
     settings.apps.bash.enable = mkSetting bool true;
     settings.apps.battlenet.enable = mkSetting bool true;
+    settings.apps.assettocorsa.enable = mkSetting bool true;
+    settings.apps.assettocorsa.mods = mkSetting (listOf package) [];
+    settings.apps.assettocorsa.csp = mkSetting (nullOr package) null;
+    settings.apps.assettocorsa.steamInput = mkSetting (enum [ "disabled" "default" "enabled" ]) "disabled";
     settings.apps.btrsmith.enable = mkSetting bool false;
     settings.apps.claude.enable = mkSetting bool true;
     settings.apps.codex.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
     settings.apps.nixosctl.enable = mkSetting bool true;
+    settings.apps.nixosctl.configPath = mkSetting str "";
     settings.apps.onePassword.enable = mkSetting bool true;
-
     settings.apps.rclone.enable = mkSetting bool true;
     settings.apps.rocksmith.enable = mkSetting bool true;
+    settings.apps.rocksmith.sampleSize = mkSetting int 64;
+    settings.apps.rocksmith.sampleRate = mkSetting int 48000;
+    settings.apps.rocksmith.cdlcPath = mkSetting str "${adminHome}/Games/Rocksmith/cdlc";
+    settings.apps.rocksmith.slopsmith.configPath = mkSetting str "${adminHome}/Games/Rocksmith/slopsmith/config";
+    settings.apps.rocksmith.slopsmith.port = mkSetting port 8000;
     settings.apps.semu.enable = mkSetting bool true;
+    settings.apps.semu.target = mkSetting str "linux-desktop";
+    settings.apps.simracing.enable = mkSetting bool false;
     settings.apps.steam.enable = mkSetting bool true;
     settings.apps.sunshine.enable = mkSetting bool true;
     settings.apps.sunshine.virtualDisplay.name = mkSetting str "sunshine-vmon";
@@ -302,16 +316,6 @@ in {
         accelProfile = mkSetting (enum [ "flat" "adaptive" ]) "flat";
       };
     })) [];
-    ##### Semu #####
-    settings.semu.target = mkSetting str "linux-desktop";
-    ##### Rocksmith #####
-    settings.rocksmith.sampleSize = mkSetting int 64;
-    settings.rocksmith.sampleRate = mkSetting int 48000;
-    settings.rocksmith.cdlcPath = mkSetting str "${adminHome}/Games/Rocksmith/cdlc";
-    settings.rocksmith.slopsmith.configPath = mkSetting str "${adminHome}/Games/Rocksmith/slopsmith/config";
-    settings.rocksmith.slopsmith.port = mkSetting port 8000;
-    ##### nixosctl #####
-    settings.nixosctl.configPath = mkSetting str "";
     ##### Sudoless Allowlist #####
     settings.sudolessAllowlist.enable   = mkSetting bool false;
     settings.sudolessAllowlist.nopasswd = mkSetting (attrsOf bool) {

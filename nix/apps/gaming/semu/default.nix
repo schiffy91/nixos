@@ -7,7 +7,7 @@ let
   user = config.settings.users.admin.username;
   group = config.users.users.${user}.group;
   home = "/home/${user}";
-  target = config.settings.semu.target;
+  target = config.settings.apps.semu.target;
   semu = inputs.semu.packages.${pkgs.stdenv.hostPlatform.system}.semu;
 in lib.mkIf enabled {
   environment.systemPackages = [ semu ];

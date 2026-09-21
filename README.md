@@ -83,8 +83,8 @@ Important setting groups:
 | `settings.apps.*` | Optional app policy flags |
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
-| `settings.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
-| `settings.nixosctl.*` | `nixosctl` config path |
+| `settings.apps.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
+| `settings.apps.nixosctl.*` | `nixosctl` config path |
 | `settings.sudolessAllowlist.*` | Optional sudo NOPASSWD command/package allowlist |
 
 ### App Flags

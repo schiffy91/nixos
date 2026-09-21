@@ -14,8 +14,8 @@ let
       mkdir -p $out/bin
       cp nixosctl $out/bin/nixosctl
       wrapProgram $out/bin/nixosctl \
-        ${lib.optionalString (config.settings.nixosctl.configPath != "")
-          "--set NIXOS_CONFIG ${lib.escapeShellArg config.settings.nixosctl.configPath}"} \
+        ${lib.optionalString (config.settings.apps.nixosctl.configPath != "")
+          "--set NIXOS_CONFIG ${lib.escapeShellArg config.settings.apps.nixosctl.configPath}"} \
         --prefix PATH : ${lib.makeBinPath (with pkgs; [
           kdePackages.libkscreen
           kdePackages.konsole

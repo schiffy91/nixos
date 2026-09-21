@@ -1,0 +1,100 @@
+import Library.CLI;
+import Library.JSON;
+import Library.Strings;
+import Library.Vector;
+import ./library.btrc;
+
+class SteamConfiguration {
+    public SteamLibrary library;
+    public JSONValue declared;
+    public string defaultTool;
+    public string prefix;
+    public string suffix;
+    public Vector<string> selected;
+
+    public SteamConfiguration(CLICommandLine args) {
+        self.library = SteamLibrary(args.option("--steam-path"));
+        self.defaultTool = args.option("--default-tool");
+        self.prefix = args.option("--default-launch-prefix");
+        self.suffix = args.option("--default-launch-suffix");
+        self.selected = args.values("--app-id");
+        self.declared = JSONValue.parse(Path.readAll(args.option("--app-config")));
+        if (self.library.root.isEmpty() || self.defaultTool.isEmpty() || !self.declared.isObject()) {
+            throw "Required: --steam-path PATH --default-tool NAME --app-config JSON [--app-id ID]";
+        }
+        for id in self.declared.keys() {
+            var entry = self.declared.get(id);
+            if (entry.has("steamInput")) { SteamConfiguration.inputValue(entry.get("steamInput").asString()); }
+        }
+    }
+
+    class string inputValue(string mode) {
+        if (mode.equals("disabled")) { return "0"; }
+        if (mode.equals("default")) { return "1"; }
+        if (mode.equals("enabled")) { return "2"; }
+        throw f"Invalid Steam Input mode: {mode}";
+    }
+
+    class JSONValue compatibility(string tool, string priority) {
+        var entry = JSONValue.makeObject();
+        entry.set("name", JSONValue.makeString(tool));
+        entry.set("config", JSONValue.makeString(""));
+        entry.set("priority", JSONValue.makeString(priority));
+        return entry;
+    }
+
+    public string launchOptions(JSONValue app) {
+        if (app.has("launchOptions")) { return app.get("launchOptions").asString(); }
+        var inheritDefault = !app.has("inheritDefaultLaunchOptions") || app.get("inheritDefaultLaunchOptions").asBool();
+        Vector<string> parts = [app.get("launchPrefix").asString(), inheritDefault ? self.prefix : "", "%command%",
+                                inheritDefault ? self.suffix : "", app.get("launchSuffix").asString()];
+        Vector<string> words = [];
+        for part in parts { if (!part.trim().isEmpty()) { words.push(part.trim()); } }
+        return words.join(" ");
+    }
+
+    public Vector<string> appIds() {
+        Vector<string> ids = [];
+        for game in self.library.games() {
+            var name = game.manifest.get("name").asString();
+            if (name.equals("Steamworks Common Redistributables") || name.startsWith("Proton ") || name.startsWith("Steam Linux Runtime")) { continue; }
+            if (self.selected.len == 0 || self.selected.contains(game.id)) { ids.push(game.id); }
+        }
+        return ids;
+    }
+
+    public void apply() {
+        var ids = self.appIds();
+        var path = f"{self.library.root}/config/config.vdf";
+        if (FileSystem.isFile(path)) {
+            var document = SteamVdf.read(path);
+            var before = document.stringify();
+            var mapping = SteamVdf.at(document, ["InstallConfigStore", "Software", "Valve", "Steam", "CompatToolMapping"]);
+            // A wildcard priority of 250 also hijacks native Steam runtimes.
+            if (self.selected.len == 0) { mapping.set("0", SteamConfiguration.compatibility(self.defaultTool, "75")); }
+            for id in ids {
+                var app = self.declared.get(id);
+                if (app.has("compatTool") && app.get("compatTool").isNull()) { continue; }
+                var tool = app.has("compatTool") ? app.get("compatTool").asString() : self.defaultTool;
+                mapping.set(id, SteamConfiguration.compatibility(tool, "250"));
+            }
+            SteamVdf.saveChanged(path, document, before);
+        }
+        for path in self.library.userConfigs() {
+            var document = SteamVdf.read(path);
+            var before = document.stringify();
+            var root = SteamVdf.section(document, "UserLocalConfigStore");
+            var apps = SteamVdf.at(root, ["Software", "Valve", "Steam", "apps"]);
+            for id in ids {
+                var app = self.declared.get(id);
+                SteamVdf.section(apps, id).set("LaunchOptions", JSONValue.makeString(self.launchOptions(app)));
+                if (app.has("steamInput")) {
+                    // Controller overrides live outside Software/Valve/Steam/apps.
+                    var controller = SteamVdf.at(root, ["apps", id]);
+                    controller.set("UseSteamControllerConfig", JSONValue.makeString(SteamConfiguration.inputValue(app.get("steamInput").asString())));
+                }
+            }
+            SteamVdf.saveChanged(path, document, before);
+        }
+    }
+}

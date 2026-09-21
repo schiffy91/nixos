@@ -8,9 +8,9 @@ let
   user = config.settings.users.admin.username;
   group = config.users.users.${user}.group;
   home = "/home/${user}";
-  sampleSize = config.settings.rocksmith.sampleSize;
-  cdlcPath = config.settings.rocksmith.cdlcPath;
-  slopsmithConfigPath = config.settings.rocksmith.slopsmith.configPath;
+  sampleSize = config.settings.apps.rocksmith.sampleSize;
+  cdlcPath = config.settings.apps.rocksmith.cdlcPath;
+  slopsmithConfigPath = config.settings.apps.rocksmith.slopsmith.configPath;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
     [Config]
     EnableWasapiOutputs=0
@@ -73,7 +73,7 @@ let
   slopsmith = pkgs.callPackage ../slopsmith/package.nix {
     rocksmithDlc = dlcPath;
     configDir = slopsmithConfigPath;
-    port = config.settings.rocksmith.slopsmith.port;
+    port = config.settings.apps.rocksmith.slopsmith.port;
   };
 in lib.mkIf enabled {
   virtualisation.podman.enable = true;
