@@ -7,7 +7,7 @@ import ../files.btrc;
 
 class AssettoMods {
     class string digest(string path) {
-        return UnixShell().run(f"sha256sum --zero -- {UnixShell.quote(path)}", throwOnFailure=true).stdout().substring(0, 64);
+        return UnixShell().run(f"sha256sum --zero -- {UnixShell.quote(path)}", stderr=CommandOutput.collect(), throwOnFailure=true).stdout().substring(0, 64);
     }
 
     class JSONValue digests(Vector<string> paths) {
@@ -17,7 +17,7 @@ class AssettoMods {
             var end = start + 64 < paths.len ? start + 64 : paths.len;
             var batch = paths.slice(start, end);
             var command = Command("sha256sum").arg("--").args(batch);
-            var lines = Strings.split(UnixShell().run(command.render(), throwOnFailure=true).stdout().trim(), "\n");
+            var lines = Strings.split(UnixShell().run(command.render(), stderr=CommandOutput.collect(), throwOnFailure=true).stdout().trim(), "\n");
             if (lines.len != batch.len) { throw "Unexpected SHA-256 output"; }
             for (int index = 0; index < batch.len; index++) {
                 // Coreutils escapes filenames containing newlines/backslashes

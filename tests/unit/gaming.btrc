@@ -202,16 +202,17 @@ class GamingTests {
         GamingFiles.write(capture, "#!/bin/sh\nprintf '%s\\n' \"$@\" \"$PROTON_ENABLE_WAYLAND\" \"$PROTON_ENABLE_HDR\" \"$WINEDLLOVERRIDES\"\n");
         FileSystem.chmod(capture, 0755);
         var environment = f"STEAM_DIR={UnixShell.quote(self.root + "/Steam")} ASSETTO_MODS={UnixShell.quote(pack)} ASSETTO_WHEEL_LAUNCHER={UnixShell.quote(self.root + "/relay")} STEAM_COMPAT_DATA_PATH={UnixShell.quote(PathTools.dirname(prefix))}";
-        var command = Command(f"{environment} {UnixShell.quote(self.tools)}/wine-prefix-dpi exec --dpi 240 -- {UnixShell.quote(self.tools)}/assetto launch --");
+        // Steam's mixed-architecture overlay can print loader warnings on stderr.
+        var command = Command(f"LD_PRELOAD=/nonexistent/nixos-gaming-test.so {environment} {UnixShell.quote(self.tools)}/wine-prefix-dpi exec --dpi 240 -- {UnixShell.quote(self.tools)}/assetto launch --");
         command.arg(capture).arg("waitforexitandrun").arg(f"{game}/AssettoCorsa.exe").arg("argument with spaces");
-        var result = UnixShell().run(command.render(), throwOnFailure=true);
+        var result = UnixShell().run(command.render(), stderr=CommandOutput.collect(), throwOnFailure=true);
         assert(result.stdout().equals(f"waitforexitandrun\n{game}/Content Manager.exe\nargument with spaces\n0\n0\ndwrite=n,b\n"));
         assert(WinePrefix(prefix).dpi() == 240);
         assert(Path.readAll(f"{game}/AssettoCorsa.exe").equals("stock-launcher"));
         GamingFiles.write(f"{prefix}/winetricks.log", "dotnet48\nd3dx11_43\nd3dcompiler_47\nwin10\n");
         GamingFiles.write(f"{self.root}/relay", "#!/bin/sh\nprintf 'relay-started\\n'\nexec \"$@\"\n");
         FileSystem.chmod(f"{self.root}/relay", 0755);
-        assert(UnixShell().run(command.render(), throwOnFailure=true).stdout().startsWith("relay-started\n"));
+        assert(UnixShell().run(command.render(), stderr=CommandOutput.collect(), throwOnFailure=true).stdout().startsWith("relay-started\n"));
         GamingFiles.write(f"{library}/steamapps/appmanifest_244210.acf", "AppState { StateFlags 1042 installdir assettocorsa }");
         assert(!UnixShell().run(command.render(), logFailure=false).ok());
         print("PASS: real DPI → Assetto CLI → Steam command, relay launch, unfinished download refusal");
