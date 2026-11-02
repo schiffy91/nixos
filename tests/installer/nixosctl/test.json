@@ -6,6 +6,7 @@
   "args": {
     "encryption": "true",
     "tpm2": "false",
+    "bootloader": "systemd-boot",
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",
     "immutabilityMode": "reset",
