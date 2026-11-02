@@ -51,7 +51,7 @@ class NixosRebuilder {
 
     public ExecResult updateFlake() {
         return self.shell.run(
-            f"nix flake update --flake {UnixShell.quote(self.config.paths.root)}",
+            f"nix flake update {self.config.linuxInputs().join(" ")} --flake {UnixShell.quote(self.config.paths.root)}",
             stdout=CommandOutput.stream(),
             stderr=CommandOutput.stream());
     }
