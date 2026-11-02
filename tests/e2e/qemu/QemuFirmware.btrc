@@ -262,7 +262,10 @@ class QemuFirmware {
             VmFiles.remove(self.tpmPidPath());
         }
 
-        var command = Command("swtpm socket --tpm2").args([
+        // Command quotes argv[0], so the executable stands alone.
+        var command = Command("swtpm").args([
+            "socket",
+            "--tpm2",
             "--tpmstate",
             "dir=" + self.tpmStateDir(),
             "--ctrl",
