@@ -1,0 +1,74 @@
+{
+   "args" : {
+      "secureBoot" : "true",
+      "tpm2" : "true",
+      "uefiDisk" : "true"
+   },
+   "cpus" : 4,
+   "memory" : "8G",
+   "name" : "secure-boot-lanzaboote",
+   "operations" : [
+      {
+         "op" : "require-state"
+      },
+      {
+         "op" : "reset-state"
+      },
+      {
+         "op" : "inherit-state"
+      },
+      {
+         "op" : "require-secure-boot"
+      },
+      {
+         "name" : "installed-secure-boot",
+         "op" : "restore"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 240
+      },
+      {
+         "command" : "bootctl status",
+         "expect" : "Secure Boot: enabled",
+         "op" : "guest"
+      },
+      {
+         "command" : "set -e; for unit in generate-sb-keys.service; do for i in $(seq 1 240); do result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; done; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI; systemd=systemd-bootx64.efi ;; aarch64) fallback=BOOTAA64.EFI; systemd=systemd-bootaa64.efi ;; *) fallback=BOOTUNKNOWN.EFI; systemd=systemd-bootunknown.efi ;; esac; verify=$(sbctl verify); printf '%s\n' \"$verify\"; printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/BOOT/$fallback is signed\"; printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/systemd/$systemd is signed\"; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is signed'; if printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/BOOT/$fallback is not signed\"; then exit 1; fi; if printf '%s\n' \"$verify\" | grep -q \"/boot/EFI/systemd/$systemd is not signed\"; then exit 1; fi; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is not signed'",
+         "expect" : "signed",
+         "op" : "guest"
+      },
+      {
+         "op" : "reboot-disk"
+      },
+      {
+         "command" : "bootctl status",
+         "expect" : "Secure Boot: enabled",
+         "op" : "guest"
+      },
+      {
+         "command" : "bash /etc/nixos/tests/secure-boot/downgrade.sh",
+         "expect" : "secure-boot-downgrade-blocked",
+         "op" : "guest",
+         "timeout" : 7200
+      },
+      {
+         "name" : "secure-boot-enabled",
+         "op" : "snapshot"
+      },
+      {
+         "op" : "record-state"
+      },
+      {
+         "op" : "stop"
+      }
+   ],
+   "parentState" : "installed-secure-boot",
+   "sshPort" : 2228,
+   "state" : "secure-boot-lanzaboote",
+   "stateMaterial" : "secure-boot-lanzaboote:{{arch}}:secureBoot={{secureBoot}}:tpm2={{tpm2}}:source={{sourceHash}}",
+   "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
+}

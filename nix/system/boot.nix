@@ -1,5 +1,5 @@
 { inputs, config, pkgs, lib, ... }: {
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ];
   config = lib.mkMerge [
 {
   ##### Shared Boot Settings #####
@@ -51,6 +51,7 @@
     loader.systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
     lanzaboote = {
       enable = true;
+      settings.default = "nixos-generation-*.efi";
       pkiBundle = config.settings.boot.pkiBundle;
       configurationLimit = config.settings.boot.previousGenerationLimit;
     };

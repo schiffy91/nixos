@@ -1,625 +1,633 @@
 {
-  "name": "nixos-btrc-e2e",
-  "workspaceRoot": "..",
-  "default": [
-    "cli-parity",
-    "spec-yaml",
-    "app-settings",
-    "stateful-host",
-    "qemu-host-x86_64",
-    "qemu-host-aarch64",
-    "installer-download"
-  ],
-  "required": [
-    "cli-parity",
-    "spec-toml",
-    "spec-yaml",
-    "qemu-host-x86_64",
-    "qemu-host-aarch64",
-    "qmp-probe",
-    "tpm2-probe",
-    "secure-boot-capabilities",
-    "installer-ssh-x86_64",
-    "installer-ssh-aarch64",
-    "install-reset-x86_64",
-    "install-reset-aarch64",
-    "recovery-boot-x86_64",
-    "recovery-boot-aarch64",
-    "recovery-secure-boot-x86_64",
-    "recovery-secure-boot-aarch64",
-    "install-disabled",
-    "immutability-reset",
-    "immutability-disabled",
-    "immutability-snapshot-only",
-    "immutability-restore",
-    "immutability-orphan",
-    "immutability-nonexistent-persist",
-    "immutability-key-encoding",
-    "immutability-materialize",
-    "immutability-prepare",
-    "immutability-generations",
-    "immutability-persist-owners",
-    "secure-boot-install",
-    "secure-boot-lanzaboote",
-    "immutability-files",
-    "immutability-disabled-persistence",
-    "nixosctl-cli",
-    "nixosctl-diff",
-    "install-encrypted",
-    "tpm2-enroll",
-    "secure-boot-aarch64",
-    "password-change",
-    "password-change-encrypted"
-  ],
-  "nodes": [
-    {
-      "id": "quick",
-      "spec": "quick/test.json",
-      "after": []
-    },
-    {
-      "id": "stateful-host",
-      "spec": "stateful-host/test.json",
-      "after": [
-        "quick"
-      ],
-      "args": {
-        "marker": "graph-default"
+   "default" : [
+      "cli-parity",
+      "spec-yaml",
+      "app-settings",
+      "stateful-host",
+      "qemu-host-x86_64",
+      "qemu-host-aarch64",
+      "installer-download"
+   ],
+   "name" : "nixos-btrc-e2e",
+   "nodes" : [
+      {
+         "after" : [],
+         "id" : "quick",
+         "spec" : "harness/quick/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "args" : {
+            "marker" : "graph-default"
+         },
+         "id" : "stateful-host",
+         "spec" : "harness/stateful/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "id" : "app-settings",
+         "spec" : "nixosctl/app-settings/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "args" : {
+            "arch" : "x86_64"
+         },
+         "id" : "qemu-host-x86_64",
+         "spec" : "qemu/host/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "args" : {
+            "arch" : "aarch64"
+         },
+         "id" : "qemu-host-aarch64",
+         "spec" : "qemu/host/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "id" : "cli-parity",
+         "spec" : "nixosctl/cli-parity/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "id" : "spec-toml",
+         "spec" : "harness/formats/toml.toml"
+      },
+      {
+         "after" : [
+            "spec-toml"
+         ],
+         "id" : "spec-yaml",
+         "spec" : "harness/formats/yaml.yaml"
+      },
+      {
+         "after" : [],
+         "id" : "installer-download",
+         "spec" : "installer/download/test.json"
+      },
+      {
+         "after" : [],
+         "args" : {
+            "arch" : "x86_64",
+            "name" : "installer-download-x86_64",
+            "state" : "base-iso-x86_64"
+         },
+         "id" : "installer-download-x86_64",
+         "spec" : "installer/download/test.json"
+      },
+      {
+         "after" : [],
+         "args" : {
+            "arch" : "aarch64",
+            "name" : "installer-download-aarch64",
+            "state" : "base-iso-aarch64"
+         },
+         "id" : "installer-download-aarch64",
+         "spec" : "installer/download/test.json"
+      },
+      {
+         "after" : [
+            "installer-download"
+         ],
+         "id" : "installer-ssh",
+         "spec" : "installer/ssh/test.json"
+      },
+      {
+         "after" : [
+            "installer-download"
+         ],
+         "id" : "installer-setup",
+         "spec" : "installer/setup/test.json"
+      },
+      {
+         "after" : [
+            "installer-download"
+         ],
+         "id" : "installer-up-iso",
+         "spec" : "installer/up-iso/test.json"
+      },
+      {
+         "after" : [
+            "installer-download-x86_64"
+         ],
+         "args" : {
+            "arch" : "x86_64",
+            "name" : "installer-ssh-x86_64",
+            "parentState" : "base-iso-x86_64",
+            "sshPort" : "2230",
+            "state" : "installer-ssh-x86_64"
+         },
+         "id" : "installer-ssh-x86_64",
+         "spec" : "installer/ssh/test.json"
+      },
+      {
+         "after" : [
+            "installer-download-aarch64"
+         ],
+         "args" : {
+            "arch" : "aarch64",
+            "name" : "installer-ssh-aarch64",
+            "parentState" : "base-iso-aarch64",
+            "sshPort" : "2231",
+            "state" : "installer-ssh-aarch64"
+         },
+         "id" : "installer-ssh-aarch64",
+         "spec" : "installer/ssh/test.json"
+      },
+      {
+         "after" : [
+            "installer-download"
+         ],
+         "id" : "qmp-probe",
+         "spec" : "qemu/qmp/test.json"
+      },
+      {
+         "after" : [
+            "installer-download"
+         ],
+         "id" : "tpm2-probe",
+         "spec" : "tpm2/probe/test.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "id" : "secure-boot-capabilities",
+         "spec" : "secure-boot/capabilities/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh"
+         ],
+         "args" : {
+            "immutabilityEnabled" : "true",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "name" : "install-reset",
+            "state" : "installed-reset"
+         },
+         "id" : "install-reset",
+         "spec" : "installer/system/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-x86_64"
+         ],
+         "args" : {
+            "arch" : "x86_64",
+            "immutabilityEnabled" : "true",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "name" : "install-reset-x86_64",
+            "parentState" : "installer-ssh-x86_64",
+            "sshPort" : "2239",
+            "state" : "installed-reset-x86_64"
+         },
+         "id" : "install-reset-x86_64",
+         "spec" : "installer/system/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-aarch64"
+         ],
+         "args" : {
+            "arch" : "aarch64",
+            "immutabilityEnabled" : "true",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "name" : "install-reset-aarch64",
+            "parentState" : "installer-ssh-aarch64",
+            "sshPort" : "2240",
+            "state" : "installed-reset-aarch64"
+         },
+         "id" : "install-reset-aarch64",
+         "spec" : "installer/system/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-x86_64"
+         ],
+         "args" : {
+            "arch" : "x86_64",
+            "name" : "recovery-boot-x86_64",
+            "parentState" : "installer-ssh-x86_64",
+            "sshPort" : "2241",
+            "state" : "recovery-boot-x86_64"
+         },
+         "id" : "recovery-boot-x86_64",
+         "spec" : "recovery/boot/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-aarch64"
+         ],
+         "args" : {
+            "arch" : "aarch64",
+            "name" : "recovery-boot-aarch64",
+            "parentState" : "installer-ssh-aarch64",
+            "sshPort" : "2242",
+            "state" : "recovery-boot-aarch64"
+         },
+         "id" : "recovery-boot-aarch64",
+         "spec" : "recovery/boot/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-x86_64"
+         ],
+         "args" : {
+            "arch" : "x86_64",
+            "name" : "recovery-secure-boot-x86_64",
+            "parentState" : "installer-ssh-x86_64",
+            "sshPort" : "2243",
+            "state" : "recovery-secure-boot-x86_64"
+         },
+         "id" : "recovery-secure-boot-x86_64",
+         "spec" : "recovery/secure-boot/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-aarch64"
+         ],
+         "args" : {
+            "arch" : "aarch64",
+            "name" : "recovery-secure-boot-aarch64",
+            "parentState" : "installer-ssh-aarch64",
+            "sshPort" : "2244",
+            "state" : "recovery-secure-boot-aarch64"
+         },
+         "id" : "recovery-secure-boot-aarch64",
+         "spec" : "recovery/secure-boot/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh"
+         ],
+         "args" : {
+            "immutabilityEnabled" : "false",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "disabled",
+            "immutabilityVersion" : "v2",
+            "name" : "install-disabled",
+            "state" : "installed-disabled"
+         },
+         "id" : "install-disabled",
+         "spec" : "installer/system/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-reset",
+         "spec" : "immutability/reset/test.json"
+      },
+      {
+         "after" : [
+            "install-disabled"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "disabled",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-disabled"
+         },
+         "id" : "immutability-disabled",
+         "spec" : "immutability/disabled/test.json"
+      },
+      {
+         "after" : [
+            "install-disabled"
+         ],
+         "args" : {
+            "immutabilityEnabled" : "false",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "disabled",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-disabled"
+         },
+         "id" : "immutability-disabled-persistence",
+         "spec" : "immutability/disabled-persistence/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-snapshot-only",
+         "spec" : "immutability/snapshot-only/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-restore",
+         "spec" : "immutability/restore/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-orphan",
+         "spec" : "immutability/orphan/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-nonexistent-persist",
+         "spec" : "immutability/nonexistent-persist/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-key-encoding",
+         "spec" : "immutability/key-encoding/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-materialize",
+         "spec" : "immutability/materialize/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-prepare",
+         "spec" : "immutability/prepare/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-generations",
+         "spec" : "immutability/generations/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-persist-owners",
+         "spec" : "immutability/persist-owners/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh"
+         ],
+         "id" : "secure-boot-install",
+         "spec" : "secure-boot/install/test.json"
+      },
+      {
+         "after" : [
+            "secure-boot-install"
+         ],
+         "id" : "secure-boot-lanzaboote",
+         "spec" : "secure-boot/lanzaboote/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "immutability-files",
+         "spec" : "immutability/files/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "nixosctl-cli",
+         "spec" : "nixosctl/cli/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "nixosctl-diff",
+         "spec" : "nixosctl/diff/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh"
+         ],
+         "args" : {
+            "encryption" : "true",
+            "immutabilityEnabled" : "true",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "name" : "install-encrypted",
+            "state" : "installed-encrypted",
+            "tpm2" : "true"
+         },
+         "id" : "install-encrypted",
+         "spec" : "installer/encrypted/test.json"
+      },
+      {
+         "after" : [
+            "install-encrypted"
+         ],
+         "args" : {
+            "encryption" : "true",
+            "immutabilityMode" : "reset",
+            "tpm2" : "true"
+         },
+         "id" : "tpm2-enroll",
+         "spec" : "tpm2/enroll/test.json"
+      },
+      {
+         "after" : [
+            "installer-ssh-aarch64"
+         ],
+         "args" : {
+            "arch" : "aarch64",
+            "bootTarget" : "Secure-Boot",
+            "immutabilityEnabled" : "true",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "name" : "secure-boot-aarch64",
+            "parentState" : "installer-ssh-aarch64",
+            "state" : "secure-boot-aarch64",
+            "tpm2" : "true"
+         },
+         "id" : "secure-boot-aarch64",
+         "spec" : "secure-boot/aarch64/test.json"
+      },
+      {
+         "after" : [
+            "install-reset"
+         ],
+         "args" : {
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "parentState" : "installed-reset"
+         },
+         "id" : "password-change",
+         "spec" : "nixosctl/password-change/test.json"
+      },
+      {
+         "after" : [
+            "install-encrypted"
+         ],
+         "args" : {
+            "encryption" : "true",
+            "immutabilityImplementation" : "immutability",
+            "immutabilityMode" : "reset",
+            "immutabilityVersion" : "v2",
+            "name" : "password-change-encrypted",
+            "parentState" : "installed-encrypted",
+            "sshPort" : "2248",
+            "state" : "password-change-encrypted",
+            "tpm2" : "true"
+         },
+         "id" : "password-change-encrypted",
+         "spec" : "nixosctl/password-change/encrypted.json"
+      },
+      {
+         "after" : [
+            "quick"
+         ],
+         "id" : "secure-boot-cli",
+         "spec" : "secure-boot/cli/test.json"
       }
-    },
-    {
-      "id": "app-settings",
-      "spec": "app-settings/test.json",
-      "after": [
-        "quick"
-      ]
-    },
-    {
-      "id": "qemu-host-x86_64",
-      "spec": "qemu-host/test.json",
-      "after": [
-        "quick"
-      ],
-      "args": {
-        "arch": "x86_64"
-      }
-    },
-    {
-      "id": "qemu-host-aarch64",
-      "spec": "qemu-host/test.json",
-      "after": [
-        "quick"
-      ],
-      "args": {
-        "arch": "aarch64"
-      }
-    },
-    {
-      "id": "cli-parity",
-      "spec": "cli-parity/test.json",
-      "after": [
-        "quick"
-      ]
-    },
-    {
-      "id": "spec-toml",
-      "spec": "spec-formats/toml.toml",
-      "after": [
-        "quick"
-      ]
-    },
-    {
-      "id": "spec-yaml",
-      "spec": "spec-formats/yaml.yaml",
-      "after": [
-        "spec-toml"
-      ]
-    },
-    {
-      "id": "installer-download",
-      "spec": "installer-download/test.json",
-      "after": []
-    },
-    {
-      "id": "installer-download-x86_64",
-      "spec": "installer-download/test.json",
-      "after": [],
-      "args": {
-        "name": "installer-download-x86_64",
-        "state": "base-iso-x86_64",
-        "arch": "x86_64"
-      }
-    },
-    {
-      "id": "installer-download-aarch64",
-      "spec": "installer-download/test.json",
-      "after": [],
-      "args": {
-        "name": "installer-download-aarch64",
-        "state": "base-iso-aarch64",
-        "arch": "aarch64"
-      }
-    },
-    {
-      "id": "installer-ssh",
-      "spec": "installer-ssh/test.json",
-      "after": [
-        "installer-download"
-      ]
-    },
-    {
-      "id": "installer-setup",
-      "spec": "installer-setup/test.json",
-      "after": [
-        "installer-download"
-      ]
-    },
-    {
-      "id": "installer-up-iso",
-      "spec": "installer-up-iso/test.json",
-      "after": [
-        "installer-download"
-      ]
-    },
-    {
-      "id": "installer-ssh-x86_64",
-      "spec": "installer-ssh/test.json",
-      "after": [
-        "installer-download-x86_64"
-      ],
-      "args": {
-        "name": "installer-ssh-x86_64",
-        "state": "installer-ssh-x86_64",
-        "parentState": "base-iso-x86_64",
-        "arch": "x86_64",
-        "sshPort": "2230"
-      }
-    },
-    {
-      "id": "installer-ssh-aarch64",
-      "spec": "installer-ssh/test.json",
-      "after": [
-        "installer-download-aarch64"
-      ],
-      "args": {
-        "name": "installer-ssh-aarch64",
-        "state": "installer-ssh-aarch64",
-        "parentState": "base-iso-aarch64",
-        "arch": "aarch64",
-        "sshPort": "2231"
-      }
-    },
-    {
-      "id": "qmp-probe",
-      "spec": "qmp-probe/test.json",
-      "after": [
-        "installer-download"
-      ]
-    },
-    {
-      "id": "tpm2-probe",
-      "spec": "tpm2-probe/test.json",
-      "after": [
-        "installer-download"
-      ]
-    },
-    {
-      "id": "secure-boot-capabilities",
-      "spec": "secure-boot-capabilities/test.json",
-      "after": [
-        "quick"
-      ]
-    },
-    {
-      "id": "install-reset",
-      "spec": "install-system/test.json",
-      "after": [
-        "installer-ssh"
-      ],
-      "args": {
-        "name": "install-reset",
-        "state": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "immutabilityEnabled": "true"
-      }
-    },
-    {
-      "id": "install-reset-x86_64",
-      "spec": "install-system/test.json",
-      "after": [
-        "installer-ssh-x86_64"
-      ],
-      "args": {
-        "name": "install-reset-x86_64",
-        "state": "installed-reset-x86_64",
-        "parentState": "installer-ssh-x86_64",
-        "arch": "x86_64",
-        "sshPort": "2239",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "immutabilityEnabled": "true"
-      }
-    },
-    {
-      "id": "install-reset-aarch64",
-      "spec": "install-system/test.json",
-      "after": [
-        "installer-ssh-aarch64"
-      ],
-      "args": {
-        "name": "install-reset-aarch64",
-        "state": "installed-reset-aarch64",
-        "parentState": "installer-ssh-aarch64",
-        "arch": "aarch64",
-        "sshPort": "2240",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "immutabilityEnabled": "true"
-      }
-    },
-    {
-      "id": "recovery-boot-x86_64",
-      "spec": "recovery-boot/test.json",
-      "after": [
-        "installer-ssh-x86_64"
-      ],
-      "args": {
-        "name": "recovery-boot-x86_64",
-        "state": "recovery-boot-x86_64",
-        "parentState": "installer-ssh-x86_64",
-        "arch": "x86_64",
-        "sshPort": "2241"
-      }
-    },
-    {
-      "id": "recovery-boot-aarch64",
-      "spec": "recovery-boot/test.json",
-      "after": [
-        "installer-ssh-aarch64"
-      ],
-      "args": {
-        "name": "recovery-boot-aarch64",
-        "state": "recovery-boot-aarch64",
-        "parentState": "installer-ssh-aarch64",
-        "arch": "aarch64",
-        "sshPort": "2242"
-      }
-    },
-    {
-      "id": "recovery-secure-boot-x86_64",
-      "spec": "recovery-secure-boot/test.json",
-      "after": [
-        "installer-ssh-x86_64"
-      ],
-      "args": {
-        "name": "recovery-secure-boot-x86_64",
-        "state": "recovery-secure-boot-x86_64",
-        "parentState": "installer-ssh-x86_64",
-        "arch": "x86_64",
-        "sshPort": "2243"
-      }
-    },
-    {
-      "id": "recovery-secure-boot-aarch64",
-      "spec": "recovery-secure-boot/test.json",
-      "after": [
-        "installer-ssh-aarch64"
-      ],
-      "args": {
-        "name": "recovery-secure-boot-aarch64",
-        "state": "recovery-secure-boot-aarch64",
-        "parentState": "installer-ssh-aarch64",
-        "arch": "aarch64",
-        "sshPort": "2244"
-      }
-    },
-    {
-      "id": "install-disabled",
-      "spec": "install-system/test.json",
-      "after": [
-        "installer-ssh"
-      ],
-      "args": {
-        "name": "install-disabled",
-        "state": "installed-disabled",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "disabled",
-        "immutabilityEnabled": "false"
-      }
-    },
-    {
-      "id": "immutability-reset",
-      "spec": "immutability-reset/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-disabled",
-      "spec": "immutability-disabled/test.json",
-      "after": [
-        "install-disabled"
-      ],
-      "args": {
-        "parentState": "installed-disabled",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "disabled"
-      }
-    },
-    {
-      "id": "immutability-disabled-persistence",
-      "spec": "immutability-disabled-persistence/test.json",
-      "after": [
-        "install-disabled"
-      ],
-      "args": {
-        "parentState": "installed-disabled",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "disabled",
-        "immutabilityEnabled": "false"
-      }
-    },
-    {
-      "id": "immutability-snapshot-only",
-      "spec": "immutability-snapshot-only/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-restore",
-      "spec": "immutability-restore/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-orphan",
-      "spec": "immutability-orphan/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-nonexistent-persist",
-      "spec": "immutability-nonexistent-persist/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-key-encoding",
-      "spec": "immutability-key-encoding/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-materialize",
-      "spec": "immutability-materialize/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-prepare",
-      "spec": "immutability-prepare/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-generations",
-      "spec": "immutability-generations/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "immutability-persist-owners",
-      "spec": "immutability-persist-owners/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "secure-boot-install",
-      "spec": "secure-boot-install/test.json",
-      "after": [
-        "installer-ssh"
-      ]
-    },
-    {
-      "id": "secure-boot-lanzaboote",
-      "spec": "secure-boot-lanzaboote/test.json",
-      "after": [
-        "secure-boot-install"
-      ]
-    },
-    {
-      "id": "immutability-files",
-      "spec": "immutability-files/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "nixosctl-cli",
-      "spec": "nixosctl-cli/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "nixosctl-diff",
-      "spec": "nixosctl-diff/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "install-encrypted",
-      "spec": "install-encrypted/test.json",
-      "after": [
-        "installer-ssh"
-      ],
-      "args": {
-        "name": "install-encrypted",
-        "state": "installed-encrypted",
-        "encryption": "true",
-        "tpm2": "true",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "immutabilityEnabled": "true"
-      }
-    },
-    {
-      "id": "tpm2-enroll",
-      "spec": "tpm2-enroll/test.json",
-      "after": [
-        "install-encrypted"
-      ],
-      "args": {
-        "encryption": "true",
-        "tpm2": "true",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "secure-boot-aarch64",
-      "spec": "secure-boot-aarch64/test.json",
-      "after": [
-        "installer-ssh-aarch64"
-      ],
-      "args": {
-        "name": "secure-boot-aarch64",
-        "state": "secure-boot-aarch64",
-        "parentState": "installer-ssh-aarch64",
-        "arch": "aarch64",
-        "bootTarget": "Secure-Boot",
-        "tpm2": "true",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "immutabilityEnabled": "true"
-      }
-    },
-    {
-      "id": "password-change",
-      "spec": "password-change/test.json",
-      "after": [
-        "install-reset"
-      ],
-      "args": {
-        "parentState": "installed-reset",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset"
-      }
-    },
-    {
-      "id": "password-change-encrypted",
-      "spec": "password-change/encrypted.json",
-      "after": [
-        "install-encrypted"
-      ],
-      "args": {
-        "name": "password-change-encrypted",
-        "state": "password-change-encrypted",
-        "parentState": "installed-encrypted",
-        "encryption": "true",
-        "tpm2": "true",
-        "immutabilityVersion": "v2",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "sshPort": "2248"
-      }
-    }
-  ]
+   ],
+   "required" : [
+      "cli-parity",
+      "spec-toml",
+      "spec-yaml",
+      "qemu-host-x86_64",
+      "qemu-host-aarch64",
+      "qmp-probe",
+      "tpm2-probe",
+      "secure-boot-capabilities",
+      "installer-ssh-x86_64",
+      "installer-ssh-aarch64",
+      "install-reset-x86_64",
+      "install-reset-aarch64",
+      "recovery-boot-x86_64",
+      "recovery-boot-aarch64",
+      "recovery-secure-boot-x86_64",
+      "recovery-secure-boot-aarch64",
+      "install-disabled",
+      "immutability-reset",
+      "immutability-disabled",
+      "immutability-snapshot-only",
+      "immutability-restore",
+      "immutability-orphan",
+      "immutability-nonexistent-persist",
+      "immutability-key-encoding",
+      "immutability-materialize",
+      "immutability-prepare",
+      "immutability-generations",
+      "immutability-persist-owners",
+      "secure-boot-install",
+      "secure-boot-lanzaboote",
+      "immutability-files",
+      "immutability-disabled-persistence",
+      "nixosctl-cli",
+      "nixosctl-diff",
+      "install-encrypted",
+      "tpm2-enroll",
+      "secure-boot-aarch64",
+      "password-change",
+      "password-change-encrypted",
+      "secure-boot-cli"
+   ],
+   "workspaceRoot" : ".."
 }

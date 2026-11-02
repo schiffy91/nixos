@@ -113,7 +113,7 @@ let
 		nativeBuildInputs = [ btrcpy ];
 		dontConfigure = true;
 		buildPhase = ''
-			btrcpy --strict-imports btrc/immutability/immutability.btrc -o immutability.c
+			btrcpy --strict-imports btrc/immutability/Immutability.btrc -o immutability.c
 			$CC -std=c11 -O2 immutability.c -lm -lpthread -o immutability
 		'';
 		installPhase = ''

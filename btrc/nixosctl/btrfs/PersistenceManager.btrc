@@ -1,0 +1,22 @@
+import ../../core/NixosLog.btrc;
+import ../NixosConfig.btrc;
+import ./BtrfsImmutabilityManager.btrc;
+import ./SnapshotManager.btrc;
+
+class PersistenceManager {
+    public NixosConfig config;
+
+    public PersistenceManager(NixosConfig config) {
+        self.config = config;
+    }
+
+    public void materialize(bool dryRun, bool refreshClean) {
+        var result = BtrfsImmutabilityManager(self.config).run("materialize", dryRun);
+        if (!result.ok()) {
+            NixosLog.fatal("Persistent data materialization failed");
+        }
+        if (refreshClean && !dryRun) {
+            SnapshotManager(self.config).createInitialSnapshots();
+        }
+    }
+}

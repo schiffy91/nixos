@@ -1,4 +1,4 @@
-{ inputs, config, immutabilityPersistKey, lib, pkgs, ... }:
+{ inputs, config, immutabilityPersistKey, bootSafety, lib, pkgs, ... }:
 let
   efiArch = pkgs.stdenv.hostPlatform.efiArch;
   serialConsole =
@@ -11,7 +11,7 @@ let
     else [ "virtio_pci" "virtio_blk" "virtio_net" "virtio_rng" ];
   adminAuthorizedKeys = config.settings.users.admin.authorizedKeys;
   fallbackBootPath = "EFI/BOOT/BOOT${lib.toUpper efiArch}.EFI";
-  legacySecureRecoveryUkiPath = "EFI/recovery/nixos-recovery.efi";
+  recoveryUkiPath = "EFI/recovery/nixos-recovery.efi";
   publicKey = "${config.settings.boot.pkiBundle}/keys/db/db.pem";
   privateKey = "${config.settings.boot.pkiBundle}/keys/db/db.key";
   signingRequired = config.settings.boot.method == "Secure-Boot";
@@ -29,6 +29,11 @@ let
         system.stateVersion = systemStateVersion;
 
         boot = {
+          uki = {
+            name = "nixos-recovery";
+            version = null;
+            settings.UKI.Initrd = lib.mkForce "${config.system.build.netbootRamdisk}/initrd";
+          };
           initrd = {
             systemd.enable = true;
             availableKernelModules = virtioInitrdModules;
@@ -50,6 +55,11 @@ let
         netboot.squashfsCompression = "zstd -Xcompression-level 15";
 
         nix.settings.experimental-features = [ "nix-command" "flakes" ];
+        # nixos-mount exposes the admin-owned flake here for root's nixos-install.
+        programs.git = {
+          enable = true;
+          config.safe.directory = [ "/mnt/etc/nixos" ];
+        };
         services.openssh = {
           enable = true;
           settings.PermitRootLogin = "prohibit-password";
@@ -63,7 +73,6 @@ let
           cryptsetup
           curl
           efibootmgr
-          git
           gptfdisk
           jq
           kexec-tools
@@ -83,13 +92,18 @@ let
   recoveryKernel = "${recoverySystem.config.system.build.kernel}/${recoverySystem.config.system.boot.loader.kernelFile}";
   recoveryInitrd = "${recoverySystem.config.system.build.netbootRamdisk}/initrd";
   recoverySystemdBoot = "${pkgs.systemd}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi";
+  recoveryUki = "${recoverySystem.config.system.build.uki}/${recoverySystem.config.system.boot.loader.ukiFile}";
   recoveryOptions = "init=${recoveryToplevel}/init ${toString recoverySystem.config.boot.kernelParams}";
   recoveryEntry = pkgs.writeText "nixos-recovery.conf" ''
     title NixOS Recovery
     sort-key z_recovery
+    ${if signingRequired then ''
+    efi /${recoveryUkiPath}
+    '' else ''
     linux /${config.settings.disk.recovery.kernelPath}
     initrd /${config.settings.disk.recovery.initrdPath}
     options ${recoveryOptions}
+    ''}
   '';
   recoveryLoaderConf = pkgs.writeText "loader.conf" ''
     default nixos-recovery.conf
@@ -100,18 +114,17 @@ let
     NixOS recovery partition
 
     Standard-Boot installs a split NixOS recovery kernel and initrd.
-    Secure-Boot signs the recovery kernel and recovery fallback loader.
+    Secure-Boot signs a unified recovery image, authenticating its kernel,
+    initrd and command line, and signs the recovery fallback loader.
     The recovery partition also has its own fallback systemd-boot copy at the
     firmware fallback path for direct firmware boot.
   '';
-  recoveryArtifactTriggers = [ recoveryToplevel recoveryKernel recoveryInitrd ];
+  recoveryArtifactTriggers = [ recoveryToplevel recoveryKernel recoveryInitrd ] ++ lib.optional signingRequired recoveryUki;
   installRecoveryArtifacts =
     if signingRequired
     then ''
-      install_secure ${lib.escapeShellArg recoveryKernel} "$boot/${config.settings.disk.recovery.kernelPath}"
-      install_secure ${lib.escapeShellArg recoveryKernel} "$recovery/${config.settings.disk.recovery.kernelPath}"
-      install_plain ${lib.escapeShellArg recoveryInitrd} "$boot/${config.settings.disk.recovery.initrdPath}"
-      install_plain ${lib.escapeShellArg recoveryInitrd} "$recovery/${config.settings.disk.recovery.initrdPath}"
+      install_secure ${lib.escapeShellArg recoveryUki} "$boot/${recoveryUkiPath}"
+      install_secure ${lib.escapeShellArg recoveryUki} "$recovery/${recoveryUkiPath}"
     ''
     else ''
       install_plain ${lib.escapeShellArg recoveryKernel} "$boot/${config.settings.disk.recovery.kernelPath}"
@@ -119,8 +132,12 @@ let
       install_plain ${lib.escapeShellArg recoveryKernel} "$recovery/${config.settings.disk.recovery.kernelPath}"
       install_plain ${lib.escapeShellArg recoveryInitrd} "$recovery/${config.settings.disk.recovery.initrdPath}"
     '';
-  removeLegacyRecoveryArtifacts = ''
-    rm -f "$boot/${legacySecureRecoveryUkiPath}" "$recovery/${legacySecureRecoveryUkiPath}"
+  removeLegacyRecoveryArtifacts = if signingRequired then ''
+    for root in "$boot" "$recovery"; do
+      rm -f "$root/${config.settings.disk.recovery.kernelPath}" "$root/${config.settings.disk.recovery.initrdPath}"
+    done
+  '' else ''
+    rm -f "$boot/${recoveryUkiPath}" "$recovery/${recoveryUkiPath}"
   '';
   installRecoveryFallback =
     if signingRequired
@@ -131,7 +148,7 @@ let
       install_plain ${lib.escapeShellArg recoverySystemdBoot} "$recovery/${fallbackBootPath}"
     '';
   installRecoveryScript = strict: ''
-    install_nixos_recovery_boot_artifacts() {
+    install_nixos_recovery_boot_artifacts() (
       set -euo pipefail
       umask 077
 
@@ -141,10 +158,14 @@ let
       private_key=${lib.escapeShellArg privateKey}
       signing_required=${lib.escapeShellArg (if signingRequired then "1" else "0")}
       strict=${lib.escapeShellArg (if strict then "1" else "0")}
+      ${lib.optionalString (!signingRequired) "${bootSafety}"}
+      ${pkgs.coreutils}/bin/mkdir -p /run/lock
+      exec 9>/run/lock/nixos-recovery.lock
+      ${pkgs.util-linux}/bin/flock 9
 
       if ! ${pkgs.util-linux}/bin/mountpoint -q "$boot" || ! ${pkgs.util-linux}/bin/mountpoint -q "$recovery"; then
         echo "Skipping recovery boot artifacts because $boot or $recovery is not mounted." >&2
-        return 0
+        return "$strict"
       fi
 
       if [ "$signing_required" = 1 ] && { [ ! -e "$public_key" ] || [ ! -e "$private_key" ]; }; then
@@ -158,12 +179,16 @@ let
 
       ${pkgs.coreutils}/bin/install -d -m 1777 /tmp
       scratch=$(${pkgs.coreutils}/bin/mktemp -d /tmp/nixos-recovery-sign.XXXXXX)
+      staged=()
+      targets=()
+      trap '${pkgs.coreutils}/bin/rm -f "''${staged[@]}"; ${pkgs.coreutils}/bin/rm -rf "$scratch"' EXIT
       manifest="$scratch/manifest"
       installed_manifest="$recovery/.nixos-recovery-artifacts.manifest"
 
       write_manifest() {
         {
           printf 'signing_required=%s\n' "$signing_required"
+          ${lib.optionalString signingRequired "printf 'uki=%s\\n' ${lib.escapeShellArg recoveryUki}"}
           printf 'kernel=%s\n' ${lib.escapeShellArg recoveryKernel}
           printf 'initrd=%s\n' ${lib.escapeShellArg recoveryInitrd}
           printf 'systemd_boot=%s\n' ${lib.escapeShellArg recoverySystemdBoot}
@@ -181,10 +206,15 @@ let
       }
 
       artifacts_exist() {
+        ${if signingRequired then ''
+        [ -f "$boot/${recoveryUkiPath}" ] &&
+        [ -f "$recovery/${recoveryUkiPath}" ] &&
+        '' else ''
         [ -f "$boot/${config.settings.disk.recovery.kernelPath}" ] &&
         [ -f "$boot/${config.settings.disk.recovery.initrdPath}" ] &&
         [ -f "$recovery/${config.settings.disk.recovery.kernelPath}" ] &&
         [ -f "$recovery/${config.settings.disk.recovery.initrdPath}" ] &&
+        ''}
         [ -f "$recovery/${fallbackBootPath}" ] &&
         [ -f "$boot/${config.settings.disk.recovery.entryPath}" ] &&
         [ -f "$recovery/${config.settings.disk.recovery.entryPath}" ] &&
@@ -192,10 +222,21 @@ let
         [ -f "$recovery/README.txt" ]
       }
 
+      signatures_valid() {
+        ${if signingRequired then ''
+        ${pkgs.sbsigntool}/bin/sbverify --cert "$public_key" "$boot/${recoveryUkiPath}" >/dev/null &&
+        ${pkgs.sbsigntool}/bin/sbverify --cert "$public_key" "$recovery/${recoveryUkiPath}" >/dev/null &&
+        ${pkgs.sbsigntool}/bin/sbverify --cert "$public_key" "$recovery/${fallbackBootPath}" >/dev/null
+        '' else "return 0"}
+      }
+
       write_manifest
-      if artifacts_exist && [ -f "$installed_manifest" ] && ${pkgs.diffutils}/bin/cmp -s "$manifest" "$installed_manifest"; then
+      if artifacts_exist && [ -f "$installed_manifest" ] && ${pkgs.diffutils}/bin/cmp -s "$manifest" "$installed_manifest" &&
+        [ -f "$recovery/.nixos-recovery-checksums" ] &&
+        ${pkgs.coreutils}/bin/sha256sum --check --status "$recovery/.nixos-recovery-checksums" && signatures_valid; then
         echo "Recovery boot artifacts already current."
         ${pkgs.coreutils}/bin/rm -rf "$scratch"
+        trap - EXIT
         return 0
       fi
 
@@ -205,7 +246,8 @@ let
         ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$target")"
         tmp="$scratch/signed"
         ${pkgs.sbsigntool}/bin/sbsign --key "$private_key" --cert "$public_key" --output "$tmp" "$source"
-        ${pkgs.coreutils}/bin/install -m 0644 "$tmp" "$target"
+        ${pkgs.sbsigntool}/bin/sbverify --cert "$public_key" "$tmp"
+        install_plain "$tmp" "$target"
         ${pkgs.coreutils}/bin/rm -f "$tmp"
       }
 
@@ -213,20 +255,33 @@ let
         source="$1"
         target="$2"
         ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$target")"
-        ${pkgs.coreutils}/bin/install -m 0644 "$source" "$target"
+        staged_file=$(${pkgs.coreutils}/bin/mktemp "$target.XXXXXX")
+        staged+=("$staged_file")
+        targets+=("$target")
+        ${pkgs.coreutils}/bin/install -m 0644 "$source" "$staged_file"
+        ${pkgs.coreutils}/bin/sync -f "$staged_file"
       }
 
       ${installRecoveryArtifacts}
       ${installRecoveryFallback}
+      install_plain ${lib.escapeShellArg recoveryEntry} "$boot/${config.settings.disk.recovery.entryPath}"
+      install_plain ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
+      install_plain ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"
+      install_plain ${lib.escapeShellArg recoveryReadme} "$recovery/README.txt"
+      # Stage and verify everything before replacing bootable files. Each UKI
+      # contains the complete boot payload, so replacement is a single rename.
+      for index in "''${!staged[@]}"; do
+        ${pkgs.coreutils}/bin/mv -f "''${staged[$index]}" "''${targets[$index]}"
+      done
+      ${pkgs.coreutils}/bin/sync -f "$boot"
+      ${pkgs.coreutils}/bin/sync -f "$recovery"
       ${removeLegacyRecoveryArtifacts}
-
-      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$boot/${config.settings.disk.recovery.entryPath}"
-      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryEntry} "$recovery/${config.settings.disk.recovery.entryPath}"
-      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryLoaderConf} "$recovery/loader/loader.conf"
-      ${pkgs.coreutils}/bin/install -Dm0644 ${lib.escapeShellArg recoveryReadme} "$recovery/README.txt"
-      ${pkgs.coreutils}/bin/install -Dm0644 "$manifest" "$installed_manifest"
+      ${pkgs.coreutils}/bin/sha256sum "''${targets[@]}" > "$scratch/checksums"
+      ${pkgs.coreutils}/bin/install -m 0600 "$scratch/checksums" "$recovery/.nixos-recovery-checksums"
+      ${pkgs.coreutils}/bin/install -m 0600 "$manifest" "$installed_manifest"
       ${pkgs.coreutils}/bin/rm -rf "$scratch"
-    }
+      trap - EXIT
+    )
 
     install_nixos_recovery_boot_artifacts
   '';

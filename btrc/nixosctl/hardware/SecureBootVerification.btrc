@@ -1,0 +1,71 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Vector;
+
+class SecureBootVerification {
+    class JSONValue signatures(string text) {
+        var entries = JSONValue.parse(text);
+        if (!entries.isArray() || entries.size() == 0) { throw "sbctl returned no verification records"; }
+        var result = JSONValue.makeObject();
+        for entry in entries.arr {
+            var path = entry.get("file_name");
+            var state = entry.get("is_signed");
+            if (!entry.isObject() || !path.isString() || !path.asString().startsWith("/")
+                || !state.isInt() || state.asInt() < -1 || state.asInt() > 1
+                || result.has(path.asString())) {
+                throw "Invalid or duplicate sbctl verification record";
+            }
+            result.set(path.asString(), state);
+        }
+        return result;
+    }
+
+    class Vector<string> failures(string text, Vector<string> required) {
+        if (required.isEmpty()) { throw "No boot images selected for verification"; }
+        var signatures = SecureBootVerification.signatures(text);
+        Vector<string> failures = [];
+        for path in required {
+            if (!signatures.has(path) || signatures.get(path).asInt() != 1) { failures.push(path); }
+        }
+        return failures;
+    }
+
+    class string defaultImage(string text, string boot) {
+        var entries = JSONValue.parse(text);
+        if (!entries.isArray()) { throw "Invalid bootctl entry list"; }
+        var result = "";
+        for entry in entries.arr {
+            if (!entry.isObject() || !entry.get("isDefault").isBool()) { throw "Invalid bootctl entry"; }
+            if (!entry.get("isDefault").asBool()) { continue; }
+            var path = entry.get("path").asString();
+            if (!result.isEmpty() || !entry.get("type").asString().equals("type2")
+                || !path.startsWith(f"{boot}/EFI/Linux/") || !path.endsWith(".efi")
+                || path.contains("/../")) {
+                throw "The default boot entry is not a Lanzaboote image";
+            }
+            result = path;
+        }
+        if (result.isEmpty()) { throw "No default boot image found"; }
+        return result;
+    }
+
+    class bool variable(string name) {
+        var path = f"/sys/firmware/efi/efivars/{name}-8be4df61-93ca-11d2-aa0d-00e098032b8c";
+        // Match Linux's EFI_NOT_FOUND behavior, but reject unavailable efivarfs.
+        if (name.equals("SecureBoot") && !FileSystem.exists(path)) {
+            var filesystem = UnixShell().run("stat -f -c %T /sys/firmware/efi/efivars", logFailure=false);
+            if (filesystem.ok() && filesystem.trimmed().equals("efivarfs")) { return false; }
+        }
+        var bytes = FileSystem.readBytes(path);
+        if (bytes.len != 5 || bytes.get(4) > 1) { throw f"Cannot read firmware {name} state"; }
+        return bytes.get(4) == 1;
+    }
+
+    class void requireDisabled() {
+        if (FileSystem.isDir("/sys/firmware/efi") && SecureBootVerification.variable("SecureBoot")) {
+            throw "Disable Secure Boot in firmware before installing Standard-Boot";
+        }
+    }
+}

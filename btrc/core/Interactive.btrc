@@ -1,0 +1,83 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.Process;
+import Library.Strings;
+import Library.Terminal;
+import Library.Vector;
+import ./NixosLog.btrc;
+
+class Interactive {
+    public UnixShell shell;
+
+    public Interactive() {
+        self.shell = UnixShell();
+    }
+
+    public string ask(string prompt) {
+        return Terminal.prompt(f"{prompt} ");
+    }
+
+    public bool confirm(string prompt) {
+        while (true) {
+            var response = self.ask(f"{prompt} (y/n):").toLower().trim();
+            if (response.equals("y") || response.equals("yes")) { return true; }
+            if (response.equals("n") || response.equals("no")) { return false; }
+            Console.error("Invalid input. Enter 'y' or 'n'.");
+        }
+        return false;
+    }
+
+    public string askPassword(string prompt) {
+        return Terminal.promptPassword(f"{prompt}: ");
+    }
+
+    public string askPasswordConfirmed(string prompt) {
+        while (true) {
+            var first = self.askPassword(prompt);
+            var second = self.askPassword("Confirm password");
+            if (first.equals(second)) { return first; }
+            NixosLog.error("Passwords do not match.");
+        }
+        return "";
+    }
+
+    public string askHostPath(string hostsPath) {
+        var found = self.shell.run(f"find {UnixShell.quote(hostsPath)} -type f -name '*.nix' | sort");
+        if (!found.ok()) {
+            NixosLog.fatal(f"Failed to search host files under {hostsPath}");
+        }
+        Vector<string> candidates = [];
+        for line in Strings.split(found.stdout(), "\n") {
+            var path = line.trim();
+            if (path.isEmpty()) { continue; }
+            var hostName = Strings.replace(PathTools.basename(path), ".nix", "");
+            var hostDir = PathTools.basename(PathTools.dirname(path));
+            if (hostName.equals(hostDir)) {
+                candidates.push(path);
+            }
+        }
+        if (candidates.len == 0) {
+            NixosLog.fatal(f"No host files found under {hostsPath}");
+        }
+        while (true) {
+            for (int i = 0; i < candidates.len; i++) {
+                var path = candidates.get(i);
+                var hostName = Strings.replace(PathTools.basename(path), ".nix", "");
+                var arch = PathTools.basename(PathTools.dirname(PathTools.dirname(path)));
+                Console.error(f"{i + 1}) {hostName} ({arch})");
+            }
+            var selected = Strings.toInt(self.ask(">").trim()) - 1;
+            if (selected >= 0 && selected < candidates.len) {
+                return candidates.get(selected);
+            }
+            NixosLog.error("Invalid choice.");
+        }
+        return candidates.get(0);
+    }
+
+    public void askToReboot() {
+        if (self.confirm("Restart now?")) {
+            self.shell.run("shutdown -r now", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        }
+    }
+}

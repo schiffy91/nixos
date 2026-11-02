@@ -1,0 +1,186 @@
+{
+   "args" : {
+      "bootTarget" : "Secure-Boot",
+      "encryption" : "true",
+      "immutabilityEnabled" : "true",
+      "immutabilityImplementation" : "immutability",
+      "immutabilityMode" : "reset",
+      "immutabilityVersion" : "v2",
+      "recovery" : "true",
+      "recoverySize" : "4G",
+      "secureBoot" : "true",
+      "tpm2" : "true"
+   },
+   "cpus" : 4,
+   "diskSize" : "30G",
+   "memory" : "16G",
+   "name" : "recovery-secure-boot",
+   "operations" : [
+      {
+         "op" : "require-state"
+      },
+      {
+         "op" : "reset-state"
+      },
+      {
+         "op" : "inherit-state"
+      },
+      {
+         "op" : "validate-immutability-v2"
+      },
+      {
+         "op" : "require-tpm2"
+      },
+      {
+         "op" : "require-secure-boot"
+      },
+      {
+         "name" : "live-ssh",
+         "op" : "restore"
+      },
+      {
+         "op" : "boot-iso"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "local" : ".",
+         "op" : "copy-workspace",
+         "remote" : "/etc/nixos"
+      },
+      {
+         "op" : "configure-vm-host"
+      },
+      {
+         "op" : "install-nixos"
+      },
+      {
+         "op" : "prepare-secure-boot-first-boot"
+      },
+      {
+         "op" : "stop"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "sleep",
+         "timeout" : 15
+      },
+      {
+         "command" : "testpass123",
+         "op" : "serial-send"
+      },
+      {
+         "op" : "sleep",
+         "timeout" : 7
+      },
+      {
+         "command" : "testpass123",
+         "op" : "serial-send"
+      },
+      {
+         "op" : "sleep",
+         "timeout" : 7
+      },
+      {
+         "command" : "testpass123",
+         "op" : "serial-send"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "op" : "enroll-secure-boot"
+      },
+      {
+         "op" : "stop"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "sleep",
+         "timeout" : 15
+      },
+      {
+         "command" : "testpass123",
+         "op" : "serial-send"
+      },
+      {
+         "op" : "sleep",
+         "timeout" : 7
+      },
+      {
+         "command" : "testpass123",
+         "op" : "serial-send"
+      },
+      {
+         "op" : "sleep",
+         "timeout" : 7
+      },
+      {
+         "command" : "testpass123",
+         "op" : "serial-send"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "command" : "bootctl status",
+         "expect" : "Secure Boot: enabled",
+         "op" : "guest"
+      },
+      {
+         "command" : "bash /etc/nixos/tests/recovery/secure-boot/verify.sh",
+         "expect" : "recovery-secure-entry-ok",
+         "op" : "guest",
+         "timeout" : 600
+      },
+      {
+         "op" : "reboot-recovery"
+      },
+      {
+         "command" : "set -e; target=/mnt; test \"$(hostname)\" = nixos-recovery; bootctl status | grep -F 'Secure Boot: enabled'; test -x /run/current-system/sw/bin/btrfs; test -x /run/current-system/sw/bin/cryptsetup; test -x /run/current-system/sw/bin/nixos-mount; nixos-mount --help | grep -F 'Usage: nixos-mount'; printf 'testpass123\n' | nixos-mount \"$target\"; findmnt -rn --target \"$target/etc/nixos\" | grep -F '@persist/dirs/etc!nixos'; findmnt -rn --target \"$target/var\" | grep -F '@var'; findmnt -rn --target \"$target/home\" | grep -F '@home'; test \"$(findmnt -no FSTYPE \"$target/boot\")\" = vfat; test \"$(findmnt -no FSTYPE \"$target/recovery\")\" = vfat; nixos-mount \"$target\" >/tmp/nixos-mount-second.log; test -d \"$target/nix/store\"; test -d \"$target/etc/nixos/.git\"; printf recovery-secure-boot-ok",
+         "expect" : "recovery-secure-boot-ok",
+         "op" : "guest"
+      },
+      {
+         "command" : "set -e; target=/mnt; test \"$(hostname)\" = nixos-recovery; mountpoint -q \"$target/boot\"; mountpoint -q \"$target/recovery\"; cd \"$target/etc/nixos\"; TMPDIR=/tmp nixos-install --root \"$target\" --flake \"$target/etc/nixos#VM-TEST-Secure-Boot\" --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0; sbverify=$(find \"$target/nix/store\" -path '*/bin/sbverify' -type f | head -1); sbverify=${sbverify#$target}; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI ;; aarch64) fallback=BOOTAA64.EFI ;; *) fallback=BOOTUNKNOWN.EFI ;; esac; for file in /boot/EFI/recovery/nixos-recovery.efi /recovery/EFI/recovery/nixos-recovery.efi /recovery/EFI/BOOT/$fallback; do chroot \"$target\" \"$sbverify\" --cert /var/lib/sbctl/keys/db/db.pem \"$file\"; done; printf recovery-mounted-reinstall-ok",
+         "expect" : "recovery-mounted-reinstall-ok",
+         "op" : "guest",
+         "timeout" : 7200
+      },
+      {
+         "command" : "bash /mnt/etc/nixos/tests/recovery/secure-boot/firmware-entry.sh",
+         "op" : "guest"
+      },
+      {
+         "op" : "stop"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "command" : "set -e; test \"$(hostname)\" = nixos-recovery; bootctl status | grep -F \"Secure Boot: enabled\"; echo recovery-firmware-fallback-ok",
+         "expect" : "recovery-firmware-fallback-ok",
+         "op" : "guest"
+      },
+      {
+         "op" : "stop"
+      }
+   ],
+   "parentState" : "installer-ssh",
+   "sshPort" : 2243,
+   "state" : "recovery-secure-boot",
+   "stateMaterial" : "recovery-secure-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:secure={{secureBoot}}:tpm2={{tpm2}}:encryption={{encryption}}:recovery={{recovery}}:size={{recoverySize}}:source={{sourceHash}}",
+   "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
+}

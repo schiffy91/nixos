@@ -1,0 +1,22 @@
+import ../e2e/spec/VmSpecParser.btrc;
+
+#include <assert.h>
+
+int main() {
+    var spec = VmSpecParser.parse("{\"name\":\"nested\",\"args\":{\"enabled\":true},\"operations\":[{\"op\":\"host\",\"command\":\"printf state\",\"expect\":\"state\"}]}");
+    assert(spec.name.equals("nested") && spec.state.equals("nested"));
+    assert(spec.args.get("enabled").equals("true"));
+    assert(spec.operations.len == 1 && spec.operations.get(0).timeout == 120);
+    for invalid in ["", "{", "null", "[]", "{}", "{\"operations\":[]}",
+        "{\"operations\":[{}]}", "{\"operations\":[\"host\"]}",
+        "{\"operations\":[{\"op\":\"host\",\"timeout\":0}]}",
+        "{\"operations\":[{\"op\":\"host\",\"command\":true}]}",
+        "{\"args\":[],\"operations\":[{\"op\":\"host\"}]}"
+    ] {
+        var rejected = false;
+        try { VmSpecParser.parse(invalid); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    print("PASS: structured scenario parser rejects malformed/empty operations and invalid field types");
+    return 0;
+}

@@ -140,26 +140,27 @@ parameters, EFI mount point, and generation limits.
 `settings.disk.recovery.enable = true` adds a `RECOVERY` vfat partition to the
 destructive disko layout and enables the `nixos-recovery-boot-entry` service on
 installed systems. The recovery image is not a downloaded ISO; it is a
-self-contained NixOS netboot initrd and signed EFI-stub kernel built from
-`nix/system/recovery.nix`.
+self-contained NixOS netboot environment built from `nix/system/recovery.nix`.
+Secure-Boot embeds it in a signed unified kernel image.
 
 On switch, the service requires `/boot` and `/recovery` to be mounted, then
 installs:
 
 | Path | Purpose |
 |---|---|
-| `/boot/EFI/recovery/kernel.efi` | signed recovery kernel loaded by the installed boot menu |
-| `/boot/EFI/recovery/initrd` | self-contained recovery netboot initrd |
+| `/boot/EFI/recovery/nixos-recovery.efi` | signed unified recovery image in Secure-Boot |
+| `/boot/EFI/recovery/kernel.efi`, `initrd` | split recovery payload in Standard-Boot |
 | `/boot/loader/entries/nixos-recovery.conf` | systemd-boot/Lanzaboote menu entry |
-| `/recovery/EFI/recovery/kernel.efi` | signed recovery kernel copy on the recovery partition |
-| `/recovery/EFI/recovery/initrd` | recovery netboot initrd copy on the recovery partition |
+| `/recovery/EFI/recovery/nixos-recovery.efi` | independently bootable signed recovery image |
+| `/recovery/EFI/recovery/kernel.efi`, `initrd` | split recovery payload in Standard-Boot |
 | `/recovery/EFI/BOOT/BOOT*.EFI` | recovery partition systemd-boot fallback |
 | `/recovery/loader/entries/nixos-recovery.conf` | direct-firmware fallback menu entry |
 
-Standard-Boot and Secure-Boot use the same loader entry; the secure path signs
-the kernel and fallback bootloader with the configured db keys when they exist.
-The recovery initrd is installed as a split initrd referenced by the signed
-loader entry.
+Standard-Boot uses a split kernel/initrd. Secure-Boot uses a signed unified
+image that authenticates the kernel, initrd and command line together. It also
+signs the fallback loader with the configured db key. Installed checksums and
+signatures are checked before skipping an update; files are staged before
+replacement. Missing mounts fail the recovery service.
 Updating the recovery image is a rebuild. Changing the recovery partition size
 on an already-installed disk is a real partition resize operation, not something
 this config does online.
@@ -214,7 +215,7 @@ the immutability reset workflow, and sets a small swap size suitable for VM use.
 
 `nix/system/immutability.nix` drives the BTRC **immutability**, the
 sole immutability implementation. Its source entrypoint is
-`btrc/immutability/immutability.btrc`; Nix builds it with the flake-pinned
+`btrc/immutability/Immutability.btrc`; Nix builds it with the flake-pinned
 BTRC compiler and a generated stdlib archive.
 
 | Mode | Behavior |
@@ -391,12 +392,12 @@ pinned in `flake.lock` to `github:schiffy91/btrc`. The dev shell provides
 
 | Path | Purpose |
 |---|---|
-| `btrc/nixosctl/nixosctl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
-| `btrc/nixosctl/tray.btrc` | Tray launcher for `nixosctl` |
+| `btrc/nixosctl/NixosCtl.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
+| `btrc/nixosctl/NixosTray.btrc` | Tray launcher for `nixosctl` |
 | `btrc/nixosctl/btrfs` | Snapshot and diff helpers for `nixosctl` |
 | `btrc/nixosctl/desktop` | Audio, display, caffeine, and hardware config commands |
 | `btrc/nixosctl/hardware` | Secure Boot and TPM2 commands |
-| `btrc/immutability/immutability.btrc` | BTRC entrypoint for the immutability runtime |
+| `btrc/immutability/Immutability.btrc` | BTRC entrypoint for the immutability runtime |
 | `btrc/immutability/lib` | Immutability runtime library modules |
 | `btrc/core` | Shared logging, path, and interactive helpers |
 | `tests/e2e` | Declarative VM graph and test runner |

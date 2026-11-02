@@ -9,6 +9,15 @@ let
     inherit pkgs inputs wheelLauncher;
     mods = config.settings.apps.assettocorsa.mods;
     csp = config.settings.apps.assettocorsa.csp;
+    contentDirectory = config.settings.apps.assettocorsa.contentDirectory;
+    presets = config.settings.apps.assettocorsa.presets;
+    controlBindings = config.settings.apps.assettocorsa.controlBindings;
+    brakeGamma = config.settings.apps.assettocorsa.brakeGamma;
+    gameSettings = config.settings.apps.assettocorsa.gameSettings;
+    wheelMenu = config.settings.apps.assettocorsa.wheelMenu.enable;
+    uiScale = if config.settings.apps.assettocorsa.uiScale == null
+      then lib.min 2.0 (lib.max 1.0 (winePrefixDpi.dpi / 96.0))
+      else config.settings.apps.assettocorsa.uiScale;
   };
   steamConfig = {
     compatTool = protonCustom.name;
@@ -26,6 +35,12 @@ let
         echo "Let the downloads finish, then exit Steam before running assetto-setup." >&2
         exit 1
       fi
+      ${lib.optionalString (config.settings.apps.assettocorsa.contentDirectory != null) ''
+      directory=${let directory = config.settings.apps.assettocorsa.contentDirectory; in
+        if lib.hasPrefix "~/" directory then ''"$HOME"/${lib.escapeShellArg (lib.removePrefix "~/" directory)}''
+        else lib.escapeShellArg directory}
+      mkdir -p -- "$directory"
+      ''}
       assetto apply
       ${steam.configureSteamApps}/bin/configure-steam-apps \
         --steam-path "$HOME/.local/share/Steam" --app-id 244210 \
@@ -42,5 +57,10 @@ in lib.mkMerge [ {
     fonts.packages = [ pkgs.corefonts ];
     system.build.assetto = package;
     system.build.assetto-setup = setup;
+  }) (lib.mkIf (enabled && config.settings.users.admin.homeManager.enable && config.settings.apps.assettocorsa.followLauncher) {
+    home-manager.users.${config.settings.users.admin.username} = {
+      xdg.dataFile."kwin/scripts/assetto-follow-cm".source = import ./kwin/package.nix { inherit pkgs; };
+      programs.plasma.configFile.kwinrc.Plugins."assetto-follow-cmEnabled" = true;
+    };
   })
 ]

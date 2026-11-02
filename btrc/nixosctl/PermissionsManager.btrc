@@ -1,0 +1,105 @@
+import Library.FileSystem;
+import Library.Platform;
+import Library.Process;
+import ./NixosConfig.btrc;
+import ./SecretsManager.btrc;
+
+class PermissionsManager {
+    public NixosConfig config;
+    public UnixShell shell;
+
+    public PermissionsManager(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+    }
+
+    public string ignorePredicate() {
+        var secrets = UnixShell.quote("*/secrets*");
+        var venv = UnixShell.quote("*/.venv*");
+        var direnv = UnixShell.quote("*/.direnv*");
+        return f"\\( -path {secrets} -o -path {venv} -o -path {direnv} \\)";
+    }
+
+    public void chmodMatching(string quotedRoot, string ignores, string predicate, string mode) {
+        var execArg = "{}";
+        var prune = ignores.isEmpty() ? "" : f"{ignores} -prune -o";
+        var command = f"find {quotedRoot} {prune} {predicate} -exec chmod {mode} {execArg} +";
+        self.shell.run(
+            command,
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            throwOnFailure=true);
+    }
+
+    public void secureSecretsPath(string path) {
+        if (!FileSystem.exists(path)) { return; }
+        var quoted = UnixShell.quote(path);
+        if (Platform.isRoot()) {
+            self.shell.run(
+                f"chown -R root:root {quoted}",
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
+        }
+        var execArg = "{}";
+        self.shell.run(
+            f"find {quoted} -type d -exec chmod 700 {execArg} +",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            throwOnFailure=true);
+        self.shell.run(
+            f"find {quoted} -type f -exec chmod 600 {execArg} +",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            throwOnFailure=true);
+    }
+
+    public void trustGitDirectory(string path) {
+        var quoted = UnixShell.quote(path);
+        var exists = self.shell.run(f"git config --global --get-all safe.directory | grep -Fx -- {quoted} >/dev/null", logFailure=false);
+        if (exists.ok()) { return; }
+        self.shell.run(
+            f"git config --global --add safe.directory {quoted}",
+            stdout=CommandOutput.stream(),
+            stderr=CommandOutput.stream(),
+            logFailure=false);
+    }
+
+    public void secureTree(string username) {
+        var root = self.config.paths.root;
+        var quotedRoot = UnixShell.quote(root);
+        if (Platform.isRoot()) {
+            self.shell.run(
+                f"chown -R {UnixShell.quote(username)} {quotedRoot}",
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
+        }
+
+        var ignores = self.ignorePredicate();
+        self.chmodMatching(quotedRoot, ignores, "-type d", "755");
+        self.chmodMatching(quotedRoot, ignores, "-type f", "644");
+        var bin = PathTools.join(root, "bin");
+        if (FileSystem.exists(bin)) {
+            self.chmodMatching(UnixShell.quote(bin), "", "-type f", "755");
+        }
+        var gitObjects = PathTools.join(root, ".git/objects");
+        if (FileSystem.exists(gitObjects)) {
+            var quotedGitObjects = UnixShell.quote(gitObjects);
+            var execArg = "{}";
+            self.shell.run(
+                f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +",
+                stdout=CommandOutput.stream(),
+                stderr=CommandOutput.stream(),
+                throwOnFailure=true);
+        }
+
+        self.trustGitDirectory(root);
+
+        if (self.config.exists()) {
+            SecretsManager(self.config).secure();
+        } else {
+            self.secureSecretsPath(self.config.paths.secretsPathFallback());
+        }
+    }
+}

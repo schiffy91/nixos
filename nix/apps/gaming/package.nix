@@ -5,8 +5,8 @@ pkgs.stdenv.mkDerivation {
     root = ../../..;
     fileset = pkgs.lib.fileset.unions [
       ../../../btrc/gaming
-      ../../../tests/unit/gaming.btrc
-      ../../../tests/unit/btrc.toml
+      ../../../tests/gaming/GamingTests.btrc
+      ../../../tests/gaming/btrc.toml
     ];
   };
   nativeBuildInputs = [ inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy pkgs.makeWrapper pkgs.pkg-config ];
@@ -20,14 +20,14 @@ pkgs.stdenv.mkDerivation {
       btrcpy --strict-imports "$1" -o "$2.c"
       $CC -std=c11 -O2 "$2.c" -lm -lpthread -llzf -lz -o "$2"
     }
-    build_tool btrc/gaming/steam/configure.btrc configure-steam-apps
-    build_tool btrc/gaming/wine/dpi.btrc wine-prefix-dpi
-    build_tool btrc/gaming/assettocorsa/assetto.btrc assetto
-    build_tool tests/unit/gaming.btrc gaming-tests
+    build_tool btrc/gaming/steam/Configure.btrc configure-steam-apps
+    build_tool btrc/gaming/wine/Dpi.btrc wine-prefix-dpi
+    build_tool btrc/gaming/assettocorsa/Main.btrc assetto
+    build_tool tests/gaming/GamingTests.btrc gaming-tests
     runHook postBuild
   '';
   doCheck = true;
-  nativeCheckInputs = [ pkgs.coreutils pkgs.procps ];
+  nativeCheckInputs = [ pkgs.coreutils pkgs.procps pkgs.libarchive ];
   checkPhase = ''
     runHook preCheck
     export GAMING_TOOLS="$PWD"
@@ -38,7 +38,7 @@ pkgs.stdenv.mkDerivation {
     mkdir -p "$out/bin"
     for tool in configure-steam-apps wine-prefix-dpi assetto; do
       install -m755 "$tool" "$out/bin/$tool"
-      wrapProgram "$out/bin/$tool" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.coreutils pkgs.procps ]}
+      wrapProgram "$out/bin/$tool" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.coreutils pkgs.procps pkgs.libarchive ]}
     done
   '';
 }

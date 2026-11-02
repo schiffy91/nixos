@@ -1,0 +1,101 @@
+import Library.Platform;
+import ./AssettoMods.btrc;
+
+// Local downloads remain outside the Nix store. Only recognized AC content is
+// normalized; deployment still uses the same ownership and backup manifest.
+class ContentDirectory {
+    class string expand(string directory) {
+        if (directory.startsWith("~/")) { return Environment.get("HOME", "") + directory.substring(1, directory.len() - 1); }
+        if (!directory.isEmpty() && !PathTools.isAbsolute(directory)) { throw "Assetto contentDirectory must be absolute or start with ~/"; }
+        return directory;
+    }
+
+    class void copyTree(string source, string destination) {
+        for name in GamingFiles.files(source) {
+            var from = GamingFiles.inside(source, name);
+            var to = GamingFiles.inside(destination, name);
+            if (FileSystem.exists(to)) {
+                if (!AssettoMods.digest(from).equals(AssettoMods.digest(to))) { throw f"Conflicting content inside mod: {name}"; }
+            } else { GamingFiles.copy(from, to); }
+        }
+    }
+
+    class bool normalize(string directory, string destination) {
+        var found = false;
+        var kind = "";
+        if (FileSystem.isFile(GamingFiles.inside(directory, "ui/ui_car.json"))) { kind = "cars"; }
+        else {
+            var ui = GamingFiles.inside(directory, "ui");
+            if (FileSystem.isDir(ui)) {
+                for name in GamingFiles.files(ui) {
+                    if (PathTools.basename(name).equals("ui_track.json")) { kind = "tracks"; }
+                }
+            }
+        }
+        if (!kind.isEmpty()) {
+            ContentDirectory.copyTree(directory, GamingFiles.inside(destination, f"content/{kind}/{PathTools.basename(directory)}"));
+            return true;
+        }
+        for name in ["content", "extension", "apps", "system"] {
+            var source = GamingFiles.inside(directory, name);
+            if (FileSystem.isDir(source)) {
+                ContentDirectory.copyTree(source, GamingFiles.inside(destination, name));
+                found = true;
+            }
+        }
+        if (found) { return true; }
+        for name in FileSystem.listDir(directory).sorted() {
+            var child = GamingFiles.inside(directory, name);
+            if (FileSystem.isDir(child) && ContentDirectory.normalize(child, destination)) { found = true; }
+        }
+        return found;
+    }
+
+    class string archive(string path, string cache) {
+        var hash = AssettoMods.digest(path);
+        var entry = GamingFiles.inside(cache, hash);
+        var payload = GamingFiles.inside(entry, "payload");
+        if (FileSystem.isFile(GamingFiles.inside(entry, "complete"))) { return payload; }
+        GamingFiles.directory(cache);
+        var temporary = UnixShell().run(Command("mktemp").args(["-d", f"{cache}/unpack.XXXXXX"]).render(), throwOnFailure=true).trimmed();
+        if (temporary.isEmpty()) { throw "Cannot create mod extraction directory"; }
+        try {
+            GamingFiles.directory(f"{temporary}/unpacked");
+            // bsdtar's default security checks reject traversal and writes through
+            // symlinks. Never use -P, --insecure, or extract over the live game.
+            UnixShell().run(Command("bsdtar").args(["-xf", path, "-C", f"{temporary}/unpacked", "--no-same-owner", "--no-same-permissions"]).render(), stderr=CommandOutput.collect(), throwOnFailure=true);
+            GamingFiles.files(f"{temporary}/unpacked"); // Reject links and special files.
+            GamingFiles.directory(f"{temporary}/payload");
+            if (!ContentDirectory.normalize(f"{temporary}/unpacked", f"{temporary}/payload")) {
+                throw f"No recognizable Assetto Corsa content in {path}";
+            }
+            FileSystem.removeRecursive(f"{temporary}/unpacked");
+            GamingFiles.write(f"{temporary}/complete", "1\n");
+            if (FileSystem.exists(entry)) { FileSystem.removeRecursive(entry); }
+            if (rename(temporary, entry) != 0) { throw f"Cannot cache mod: {path}"; }
+        } catch (string error) { FileSystem.removeRecursive(temporary); throw error; }
+        return payload;
+    }
+
+    class Vector<string> sources(string directory, string cache) {
+        Vector<string> result = [];
+        if (directory.isEmpty()) { return result; }
+        var root = ContentDirectory.expand(directory);
+        if (!FileSystem.isDir(root)) { throw f"Create your Assetto Corsa content directory first: {root}"; }
+        if (FileSystem.isSymlink(root)) { throw f"Refusing symlink: {root}"; }
+        for name in GamingFiles.files(root) {
+            var lower = name.toLower();
+            if (lower.endsWith(".zip") || lower.endsWith(".7z") || lower.endsWith(".rar")) {
+                var source = ContentDirectory.archive(GamingFiles.inside(root, name), cache);
+                if (!result.contains(source)) { result.push(source); }
+            }
+        }
+        // Normalize loose content separately so downloads and readmes never
+        // become installed game files. This cache is rebuilt on every apply.
+        var loose = GamingFiles.inside(cache, "loose");
+        FileSystem.removeRecursive(loose);
+        GamingFiles.directory(loose);
+        if (ContentDirectory.normalize(root, loose)) { result.push(loose); }
+        return result;
+    }
+}

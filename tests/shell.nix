@@ -59,12 +59,11 @@ pkgs.mkShell {
     jq
     libarchive
     openssh
-    python3
     qemuPackage
     socat
     swtpm
     util-linux
-  ]) ++ [ aavmfSecboot ] ++ lib.optionals stdenv.isLinux [
+  ]) ++ [ aavmfSecboot ] ++ lib.optionals stdenv.hostPlatform.isLinux [
     pkgs.OVMF
   ];
 

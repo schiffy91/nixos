@@ -94,9 +94,9 @@ in {
               shown = [
                 "org.kde.plasma.networkmanagement"
                 "org.kde.plasma.brightness"
+                "org.kde.plasma.volume"
               ];
               hidden = [
-                "org.kde.plasma.volume"
                 "org.kde.plasma.battery"
                 "org.kde.plasma.bluetooth"
                 "org.kde.plasma.clipboard"

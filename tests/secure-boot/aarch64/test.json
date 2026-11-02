@@ -1,0 +1,127 @@
+{
+   "arch" : "aarch64",
+   "args" : {
+      "bootTarget" : "Secure-Boot",
+      "immutabilityEnabled" : "true",
+      "immutabilityImplementation" : "immutability",
+      "immutabilityMode" : "reset",
+      "immutabilityVersion" : "v2",
+      "secureBoot" : "true",
+      "tpm2" : "true"
+   },
+   "cpus" : 4,
+   "diskSize" : "30G",
+   "memory" : "8G",
+   "name" : "secure-boot-aarch64",
+   "operations" : [
+      {
+         "op" : "require-state"
+      },
+      {
+         "op" : "reset-state"
+      },
+      {
+         "op" : "inherit-state"
+      },
+      {
+         "op" : "validate-immutability-v2"
+      },
+      {
+         "op" : "require-tpm2"
+      },
+      {
+         "op" : "require-secure-boot"
+      },
+      {
+         "name" : "live-ssh",
+         "op" : "restore"
+      },
+      {
+         "op" : "boot-iso"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "local" : ".",
+         "op" : "copy-workspace",
+         "remote" : "/etc/nixos"
+      },
+      {
+         "op" : "configure-vm-host"
+      },
+      {
+         "op" : "install-nixos"
+      },
+      {
+         "op" : "prepare-secure-boot-first-boot"
+      },
+      {
+         "op" : "stop"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "op" : "enroll-secure-boot"
+      },
+      {
+         "op" : "stop"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "command" : "bootctl status",
+         "expect" : "Secure Boot: enabled",
+         "op" : "guest"
+      },
+      {
+         "command" : "set -e; for unit in generate-sb-keys.service; do for i in $(seq 1 240); do result=$(systemctl show -p Result --value \"$unit\" 2>/dev/null || true); if [ \"$result\" = success ]; then break; fi; if [ \"$result\" = exit-code ]; then systemctl status \"$unit\"; exit 1; fi; sleep 1; done; test \"$(systemctl show -p Result --value \"$unit\")\" = success; done; verify=$(sbctl verify); printf '%s\n' \"$verify\"; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/BOOT/.* is signed'; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/systemd/.* is signed'; printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is signed'; if printf '%s\n' \"$verify\" | grep -q '/boot/EFI/BOOT/.* is not signed'; then exit 1; fi; if printf '%s\n' \"$verify\" | grep -q '/boot/EFI/systemd/.* is not signed'; then exit 1; fi; ! printf '%s\n' \"$verify\" | grep -q '/boot/EFI/Linux/.* is not signed'",
+         "expect" : "signed",
+         "op" : "guest"
+      },
+      {
+         "op" : "reboot-disk"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "command" : "bootctl status",
+         "expect" : "Secure Boot: enabled",
+         "op" : "guest"
+      },
+      {
+         "command" : "bash /etc/nixos/tests/secure-boot/downgrade.sh",
+         "expect" : "secure-boot-downgrade-blocked",
+         "op" : "guest",
+         "timeout" : 7200
+      },
+      {
+         "name" : "sb-verified",
+         "op" : "snapshot"
+      },
+      {
+         "op" : "record-state"
+      },
+      {
+         "op" : "stop"
+      }
+   ],
+   "parentState" : "installer-ssh-aarch64",
+   "sshPort" : 2238,
+   "state" : "secure-boot-aarch64",
+   "stateMaterial" : "secure-boot-aarch64:lanzaboote:secboot-fw:hvf:tpm2=true:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+   "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
+}

@@ -15,6 +15,8 @@
       {
         matches = [{ "node.name" = host.audio.quadCortexInputPattern; }];
         actions.update-props = {
+          "node.description" = host.audio.quadCortexName;
+          "node.nick" = host.audio.quadCortexName;
           "session.suspend-timeout-seconds" = 0;
           "priority.session" = 2500;
           "priority.driver" = 2500;
@@ -23,8 +25,20 @@
       {
         matches = [{ "node.name" = host.audio.quadCortexOutputPattern; }];
         actions.update-props = {
+          "node.description" = host.audio.quadCortexName;
+          "node.nick" = host.audio.quadCortexName;
           "session.suspend-timeout-seconds" = 0;
           "node.driver" = false;
+        };
+      }
+      {
+        matches = [{
+          "node.name" = host.audio.samsungTvOutputPattern;
+          "alsa.name" = host.audio.samsungTvAlsaName;
+        }];
+        actions.update-props = {
+          "node.description" = host.audio.samsungTvName;
+          "node.nick" = host.audio.samsungTvName;
         };
       }
       {

@@ -1,0 +1,118 @@
+import Library.Console;
+import Library.JSON;
+import Library.Process;
+import Library.Vector;
+import ../../core/NixosLog.btrc;
+import ./HardwareConfig.btrc;
+
+class AudioSink {
+    public string name;
+    public string description;
+
+    public AudioSink() {
+        self.name = "";
+        self.description = "";
+    }
+}
+
+class AudioManager {
+    public UnixShell shell;
+    public HardwareConfig hardware;
+
+    public AudioManager() {
+        self.shell = UnixShell();
+        self.hardware = HardwareConfig();
+    }
+
+    public string current() {
+        var result = self.shell.run("pactl get-default-sink", logFailure=false);
+        return result.trimmed();
+    }
+
+    public Vector<AudioSink> sinks() {
+        Vector<AudioSink> result = [];
+        var listed = self.shell.run("pactl -f json list sinks", logFailure=false);
+        var sinksJson = "{\"sinks\":" + listed.stdout() + "}";
+        for sinkJson in JSONText.objectArray(sinksJson, "sinks") {
+            var name = JSONText.field(sinkJson, "name", "");
+            if (name.isEmpty()) { continue; }
+            var sink = AudioSink();
+            sink.name = name;
+            sink.description = JSONText.field(sinkJson, "description", "");
+            result.push(sink);
+        }
+        return result;
+    }
+
+    public string entryJson(string name, string label, string description, bool isDefault) {
+        var json = JSONObject();
+        json.setString("name", name);
+        json.setString("label", label);
+        if (!description.isEmpty()) {
+            json.setString("description", description);
+        }
+        json.setBool("default", isDefault);
+        var encoded = json.stringify();
+        return encoded;
+    }
+
+    public void list() {
+        var currentSink = self.current();
+        Vector<string> entries = [];
+        Vector<string> covered = [];
+        var presets = self.hardware.audioPresets();
+        for preset in presets {
+            var name = preset.sink.isEmpty() ? preset.label : preset.sink;
+            var label = preset.label.isEmpty() ? name : preset.label;
+            entries.push(self.entryJson(name, label, "", !preset.sink.isEmpty() && preset.sink.equals(currentSink)));
+            if (!preset.sink.isEmpty()) { covered.push(preset.sink); }
+        }
+        var allSinks = self.sinks();
+        for sink in allSinks {
+            if (!covered.contains(sink.name)) {
+                var label = sink.description.isEmpty() ? sink.name : sink.description;
+                entries.push(self.entryJson(sink.name, label, sink.description, sink.name.equals(currentSink)));
+            }
+        }
+        var json = entries.join(",");
+        Console.log(f"[{json}]");
+    }
+
+    public AudioPreset findPreset(string selector) {
+        var presets = self.hardware.audioPresets();
+        for preset in presets {
+            if (selector.equals(preset.label) || selector.equals(preset.sink)) {
+                return preset;
+            }
+        }
+        return AudioPreset();
+    }
+
+    public void runPactl(string action, string arguments) {
+        var result = self.shell.run(f"pactl {action} {arguments}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        if (!result.ok()) {
+            NixosLog.fatal(f"pactl {action} failed");
+        }
+    }
+
+    public void applyPreset(AudioPreset preset) {
+        if (!preset.card.isEmpty() && !preset.profile.isEmpty()) {
+            self.runPactl("set-card-profile", f"{UnixShell.quote(preset.card)} {UnixShell.quote(preset.profile)}");
+        }
+        if (!preset.sink.isEmpty()) {
+            self.runPactl("set-default-sink", UnixShell.quote(preset.sink));
+        }
+        if (!preset.sink.isEmpty() && !preset.volume.isEmpty()) {
+            self.runPactl("set-sink-volume", f"{UnixShell.quote(preset.sink)} {UnixShell.quote(preset.volume)}");
+        }
+    }
+
+    public void set(string selector) {
+        var preset = self.findPreset(selector);
+        if (!preset.sink.isEmpty() || !preset.label.isEmpty()) {
+            self.applyPreset(preset);
+            return;
+        }
+        self.runPactl("set-default-sink", UnixShell.quote(selector));
+    }
+}

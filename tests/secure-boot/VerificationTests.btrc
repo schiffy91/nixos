@@ -1,0 +1,34 @@
+import Library.JSON;
+import ../../btrc/nixosctl/hardware/SecureBootVerification.btrc;
+
+#include <assert.h>
+
+int main() {
+    Vector<string> required = ["/boot/good.efi", "/boot/bad.efi", "/boot/missing.efi"];
+    var output = "[{\"file_name\":\"/boot/good.efi\",\"is_signed\":1},{\"file_name\":\"/boot/bad.efi\",\"is_signed\":0},{\"file_name\":\"/boot/missing.efi\",\"is_signed\":-1}]";
+    var failures = SecureBootVerification.failures(output, required);
+    assert(failures.len == 2 && failures.contains("/boot/bad.efi") && failures.contains("/boot/missing.efi"));
+    assert(SecureBootVerification.failures(output, ["/boot/good.efi"]).isEmpty());
+    assert(SecureBootVerification.failures(output, ["/boot/not-reported.efi"]).len == 1);
+    for invalid in ["", "null", "[]", "{}", "[", "[{\"file_name\":\"/boot/a\"}]",
+        "[{\"file_name\":\"/boot/a\",\"is_signed\":true}]",
+        "[{\"file_name\":\"/boot/a\",\"is_signed\":2}]",
+        "[{\"file_name\":\"/boot/a\",\"is_signed\":1},{\"file_name\":\"/boot/a\",\"is_signed\":0}]",
+        "{\"/boot/a\":{\"is_signed\":true}}"] {
+        var rejected = false;
+        try { SecureBootVerification.failures(invalid, required); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    var boot = "[{\"type\":\"type2\",\"path\":\"/boot/EFI/Linux/generation.efi\",\"isDefault\":true}]";
+    assert(SecureBootVerification.defaultImage(boot, "/boot").equals("/boot/EFI/Linux/generation.efi"));
+    for invalid in ["null", "[]", "[{}]",
+        "[{\"type\":\"type1\",\"path\":\"/boot/EFI/Linux/generation.efi\",\"isDefault\":true}]",
+        "[{\"type\":\"type2\",\"path\":\"/boot/EFI/Linux/generation.efi\",\"isDefault\":false}]",
+        "[{\"type\":\"type2\",\"path\":\"/other/EFI/Linux/generation.efi\",\"isDefault\":true}]"] {
+        var rejected = false;
+        try { SecureBootVerification.defaultImage(invalid, "/boot"); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    print("PASS: real sbctl schema, unsigned/missing/omitted records, malformed output, default boot selection");
+    return 0;
+}

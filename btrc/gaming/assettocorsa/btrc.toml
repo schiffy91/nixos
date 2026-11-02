@@ -2,14 +2,14 @@ manifest-version = 1
 
 [package]
 name = "nixos_assettocorsa"
-exports = ["launcher", "mods", "content_manager"]
+exports = ["Assetto", "AssettoMods", "ContentManager", "ContentDirectory", "PresetLinks", "GameSettings", "ControlBindings"]
 
 [[native.pkg-config]]
 name = "zlib"
-modules = ["content_manager"]
+modules = ["ContentManager"]
 
 [[native.bindings]]
-module = "content_manager"
+module = "ContentManager"
 header = "compression.h"
 language = "c"
 standard = "c11"

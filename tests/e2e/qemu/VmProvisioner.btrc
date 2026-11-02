@@ -1,0 +1,340 @@
+import Library.Console;
+import Library.Datetime;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import ../../../btrc/core/NixosLog.btrc;
+import ../Spec.btrc;
+import ./SshClient.btrc;
+import ./VmStateStore.btrc;
+
+class VmProvisioner {
+    public VmTestSpec spec;
+    public SshClient remote;
+    public VmStateStore state;
+
+    public VmProvisioner(VmTestSpec spec, SshClient remote, VmStateStore state) {
+        self.spec = spec;
+        self.remote = remote;
+        self.state = state;
+    }
+
+    public string pubKey() {
+        return Path.readAll(PathTools.join(self.spec.workDir, "id_ed25519.pub")).trim();
+    }
+
+    public string qemuLogPath() {
+        return self.spec.vmLogPath();
+    }
+
+    public string textLines(Vector<string> lines) {
+        return lines.join("\n") + "\n";
+    }
+
+    public string shellCommands(Vector<string> commands) {
+        return commands.join("; ");
+    }
+
+    public string writeTextCommand(string text, string path) {
+        return f"printf %s {UnixShell.quote(text)} > {UnixShell.quote(path)}";
+    }
+
+    public void configureVmHost() {
+        var mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
+        var enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
+        var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        var desktop = self.spec.args.getOrDefault("desktop", "none");
+        var encryption = self.spec.args.getOrDefault("encryption", "false");
+        var recovery = self.spec.args.getOrDefault("recovery", "false");
+        var recoverySize = self.spec.args.getOrDefault("recoverySize", "4G");
+        var luksPass = "testpass123";
+        var secureBootTarget = bootTargetName.equals("Secure-Boot");
+        var serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
+        var initrdModules = self.spec.arch.equals("aarch64")
+            ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
+            : "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"tpm_tis\" ]";
+        var hostDir = "/etc/nixos/nix/hosts/" + self.spec.arch + "/VM-TEST";
+        var hostPath = hostDir + "/VM-TEST.nix";
+        var pubkey = self.pubKey();
+        var passwordHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";  /* testpass123 */
+        var secureBootModulePath = "/etc/nixos/nix/system/vm-test-secure-boot.nix";
+        var secureBootModule = self.textLines([
+            "{ config, lib, pkgs, ... }: {",
+            "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {",
+            "    boot.loader.timeout = lib.mkForce 0;",
+            "    boot.lanzaboote.autoGenerateKeys.enable = true;",
+            "    boot.lanzaboote.autoEnrollKeys.enable = false;",
+            "    boot.lanzaboote.allowUnsigned = true;",
+            "    environment.systemPackages = [ pkgs.sbctl pkgs.sbsigntool pkgs.binutils ];",
+            "  };",
+            "}"
+        ]);
+        Vector<string> hostLines = [
+            "{ lib, ... }: {",
+            "  networking.hostName = \"VM-TEST\";",
+            "  networking.firewall.enable = lib.mkForce false;",
+            f"  users.users.root.openssh.authorizedKeys.keys = [ \"{pubkey}\" ];",
+            f"  boot.kernelParams = [ \"console={serialConsole}\" ];",
+            f"  boot.initrd.availableKernelModules = {initrdModules};",
+            "  boot.plymouth.enable = lib.mkForce false;",
+            "  services.getty.autologinUser = lib.mkForce \"root\";",
+            "  services.openssh.enable = lib.mkForce true;",
+            "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";",
+            "  services.openssh.settings.UseDns = lib.mkForce false;",
+            f"  settings.users.admin.authorizedKeys = lib.mkForce [ \"{pubkey}\" ];",
+            "  settings.users.admin.autoUnlockWallet.enabled = false;",
+            "  settings.users.admin.homeManager.enable = false;",
+            "  settings.users.agent.enable = lib.mkForce false;",
+            "  settings.users.agent.homeManager.enable = lib.mkForce false;",
+            "  settings.users.agent.packages = lib.mkForce [];",
+            "  settings.apps.dev.enable = false;",
+            "  settings.apps.gaming.enable = false;",
+            "  settings.apps.utils.enable = true;",
+            "  settings.apps.onePassword.enable = false;",
+            "  settings.apps.rclone.enable = false;",
+            "  settings.apps.nixosctl.enable = true;",
+            "  settings.sudolessAllowlist.enable = true;",
+            "  settings.networking.identityAgent = \"none\";",
+            "  settings.networking.lanSubnet = \"10.0.2.0/24\";",
+            "  settings.disk.device = \"/dev/vda\";",
+            f"  settings.disk.recovery.enable = {recovery};",
+            f"  settings.disk.recovery.size = \"{recoverySize}\";",
+            f"  settings.disk.encryption.enable = {encryption};",
+            f"  settings.disk.immutability.enable = {enabled};",
+            f"  settings.disk.immutability.mode = \"{mode}\";",
+            "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];",
+            "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";",
+            "  settings.disk.swap.size = \"2G\";",
+            "}"
+        ];
+        if (secureBootTarget) {
+            hostLines.insert(hostLines.len - 1, "  settings.boot.pkiBundle = \"/var/lib/sbctl\";");
+        }
+        var hostNix = self.textLines(hostLines);
+        var local = JSONObject();
+        local.setString("host_path", "nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix");
+        local.setString("target", bootTargetName);
+        var localConfig = local.stringify() + "\n";
+        Vector<string> commands = [];
+        commands.push("set -e");
+        if (encryption.equals("true")) {
+            commands.push(self.writeTextCommand(luksPass, "/tmp/plain_text_password.txt"));
+            commands.push("chmod 600 /tmp/plain_text_password.txt");
+        }
+        commands.push("find /etc/nixos/nix/hosts -mindepth 1 -maxdepth 1 -type d ! -name " + UnixShell.quote(self.spec.arch) + " -exec rm -rf {} +");
+        commands.push(f"rm -f {UnixShell.quote(secureBootModulePath)}");
+        if (secureBootTarget) {
+            commands.push(self.writeTextCommand(secureBootModule, secureBootModulePath));
+        }
+        commands.push("mkdir -p /etc/nixos/secrets");
+        commands.push(self.writeTextCommand(passwordHash, "/etc/nixos/secrets/hashed_password.txt"));
+        commands.push("chmod 600 /etc/nixos/secrets/hashed_password.txt");
+        commands.push(f"mkdir -p {UnixShell.quote(hostDir)}");
+        commands.push(self.writeTextCommand(hostNix, hostPath));
+        commands.push(self.writeTextCommand(localConfig, "/etc/nixos/config.json"));
+        commands.push("git -C /etc/nixos init");
+        commands.push("git config --global --get-all safe.directory | grep -Fx -- /etc/nixos >/dev/null || git config --global --add safe.directory /etc/nixos");
+        commands.push("git -C /etc/nixos add -A");
+        commands.push("git -C /etc/nixos -c user.name=test -c user.email=test@test commit -m init --allow-empty");
+        var command = self.shellCommands(commands);
+        var result = self.remote.sshWithTimeout(command, false, 120);
+        if (!result.ok()) {
+            Console.error(result.stdout());
+            NixosLog.fatal("Failed to configure VM host");
+        }
+    }
+
+    public string secureBootEnrollmentScript() {
+        return "set -e; nixosctl secure-boot enable --no-reboot; sync";
+    }
+
+    public bool enrollSecureBoot() {
+        var result = self.remote.sshWithTimeout(self.secureBootEnrollmentScript(), false, 7200);
+        if (!result.ok()) {
+            Console.error(result.stdout());
+            Console.error(result.stderr());
+            return false;
+        }
+        return true;
+    }
+
+    public string secureBootFirstBootFallbackScript() {
+        return self.shellCommands([
+            "set -e",
+            "mountpoint -q /mnt/boot",
+            "case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI ;; aarch64) fallback=BOOTAA64.EFI ;; *) fallback=BOOTUNKNOWN.EFI ;; esac",
+            "set -- /mnt/boot/EFI/Linux/nixos-generation-*.efi",
+            "test -e \"$1\"",
+            "mkdir -p /mnt/boot/EFI/BOOT",
+            "install -m 0644 \"$1\" \"/mnt/boot/EFI/BOOT/$fallback\"",
+            "test -s \"/mnt/boot/EFI/BOOT/$fallback\"",
+            "sync",
+            "sleep 1"
+        ]);
+    }
+
+    public bool prepareSecureBootFirstBootFallback() {
+        var result = self.remote.sshWithTimeout(self.secureBootFirstBootFallbackScript(), false, 60);
+        if (!result.ok()) {
+            Console.error(result.stdout());
+            Console.error(result.stderr());
+            return false;
+        }
+        return true;
+    }
+
+    public bool installNixosGuest() {
+        var diskTarget = "VM-TEST-Disk-Operation";
+        var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        var secureBootTarget = bootTargetName.equals("Secure-Boot");
+        var bootTarget = "VM-TEST-" + bootTargetName;
+        var nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
+        var disko = f"{nix} run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#{diskTarget} --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
+        var install = self.shellCommands([
+            "mkdir -p /mnt/etc",
+            "rm -rf /mnt/etc/nixos",
+            "cp -r /etc/nixos /mnt/etc/nixos",
+            "mkdir -p /mnt/nix/tmp",
+            f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"
+        ]);
+        var snapshots = "nixos-enter --root /mnt --command "
+            + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN");
+        var script = self.textLines([
+            "set -ex",
+            "printf INSTALL_START > /tmp/nixos-install.status",
+            disko,
+            install,
+            snapshots,
+            "printf INSTALL_OK > /tmp/nixos-install.status"
+        ]);
+        var servicePath = "/run/current-system/sw/bin:/run/wrappers/bin:/nix/var/nix/profiles/default/bin:/bin:/usr/bin";
+        var runner = self.shellCommands([
+            f"PATH={UnixShell.quote(servicePath)}",
+            "export PATH",
+            "HOME=/root",
+            "export HOME",
+            "rm -f /tmp/nixos-install.pipe",
+            "mkfifo /tmp/nixos-install.pipe",
+            "tee /tmp/nixos-install.log < /tmp/nixos-install.pipe > /dev/" + (self.spec.arch.equals("aarch64") ? "ttyAMA0" : "ttyS0") + " & teepid=$!",
+            "sh /tmp/nixos-install.sh > /tmp/nixos-install.pipe 2>&1 < /dev/null",
+            "code=$?",
+            "wait $teepid || true",
+            "rm -f /tmp/nixos-install.pipe",
+            "if [ $code -ne 0 ]; then printf 'INSTALL_FAIL:%s\\n' \"$code\" > /tmp/nixos-install.status; fi"
+        ]);
+        var prepare = self.shellCommands([
+            "set -e",
+            "rm -f /tmp/nixos-install.status /tmp/nixos-install.log /tmp/nixos-install.sh",
+            self.writeTextCommand(script, "/tmp/nixos-install.sh"),
+            "chmod +x /tmp/nixos-install.sh"
+        ]);
+        var launch = self.shellCommands([
+            "set -e",
+            "systemctl reset-failed nixos-install-e2e.service 2>/dev/null || true",
+            "systemctl is-active --quiet nixos-install-e2e.service && exit 0",
+            f"systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c {UnixShell.quote(runner)}"
+        ]);
+        var timeoutSeconds = secureBootTarget ? 7200 : 3600;
+        var prepared = self.sshWithRetries(prepare, 60, 3);
+        if (!prepared.ok()) {
+            Console.error(prepared.stdout());
+            return false;
+        }
+        if (!self.launchInstall(launch)) {
+            return false;
+        }
+        return self.waitForInstallStatus(timeoutSeconds);
+    }
+
+    public ExecResult sshWithRetries(string command, int timeoutSeconds, int attempts) {
+        var attempt = 0;
+        var last = ExecResult(1, "", "", "");
+        while (attempt < attempts) {
+            last = self.remote.sshWithTimeout(command, false, timeoutSeconds);
+            if (last.ok()) { return last; }
+            attempt = attempt + 1;
+            if (attempt < attempts) { Timer.sleep(3); }
+        }
+        return last;
+    }
+
+    public string installStatusText() {
+        var status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi", false, 10);
+        if (!status.ok()) { return ""; }
+        return status.stdout();
+    }
+
+    public bool installWasLaunched() {
+        var text = self.installStatusText();
+        if (text.contains("INSTALL_START")) { return true; }
+        if (text.contains("INSTALL_OK")) { return true; }
+        if (text.contains("INSTALL_FAIL")) { return true; }
+        var active = self.remote.sshWithTimeout("systemctl is-active --quiet nixos-install-e2e.service", false, 10);
+        return active.ok();
+    }
+
+    public bool waitForInstallLaunch(int timeoutSeconds) {
+        var timer = Timer();
+        timer.start();
+        while (timer.elapsed() < timeoutSeconds) {
+            if (!self.state.isRunning()) {
+                NixosLog.error("QEMU exited while launching NixOS installation; " + self.state.runningDetail() + "; QEMU log: " + self.qemuLogPath());
+                return false;
+            }
+            if (self.installWasLaunched()) { return true; }
+            Timer.sleep(3);
+        }
+        return false;
+    }
+
+    public bool launchInstall(string launch) {
+        var attempts = 0;
+        while (attempts < 3) {
+            var launched = self.remote.sshWithTimeout(launch, false, 30);
+            if (launched.ok()) { return true; }
+            Console.error(launched.stdout());
+            if (self.waitForInstallLaunch(15)) { return true; }
+            attempts = attempts + 1;
+        }
+        return self.waitForInstallLaunch(30);
+    }
+
+    public void printInstallLog() {
+        var command = "if test -f /tmp/nixos-install.log; then tail -n 240 /tmp/nixos-install.log; fi; "
+            + "if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi";
+        var log = self.remote.sshWithTimeout(command, false, 30);
+        if (log.ok()) { Console.error(log.stdout()); }
+    }
+
+    public bool waitForInstallStatus(int timeoutSeconds) {
+        var timer = Timer();
+        timer.start();
+        var unavailable = 0;
+        while (timer.elapsed() < timeoutSeconds) {
+            if (!self.state.isRunning()) {
+                NixosLog.error("QEMU exited while NixOS installation was running; " + self.state.runningDetail() + "; QEMU log: " + self.qemuLogPath());
+                self.printInstallLog();
+                return false;
+            }
+            var status = self.remote.sshWithTimeout("if test -f /tmp/nixos-install.status; then cat /tmp/nixos-install.status; fi; if ! systemctl is-active --quiet nixos-install-e2e.service; then printf '\\nINSTALL_STOPPED\\n'; fi", false, 10);
+            if (status.ok()) {
+                unavailable = 0;
+                var text = status.stdout();
+                if (text.contains("INSTALL_OK")) { return true; }
+                if (text.contains("INSTALL_FAIL") || text.contains("INSTALL_STOPPED")) {
+                    self.printInstallLog();
+                    return false;
+                }
+            } else {
+                unavailable++;
+                if (unavailable >= 20) {
+                    self.printInstallLog();
+                    return false;
+                }
+            }
+            Timer.sleep(15);
+        }
+        self.printInstallLog();
+        return false;
+    }
+}

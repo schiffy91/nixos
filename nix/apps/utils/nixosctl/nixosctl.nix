@@ -7,7 +7,7 @@ let
     nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
     dontConfigure = true;
     buildPhase = ''
-      btrcpy --strict-imports btrc/nixosctl/nixosctl.btrc -o nixosctl.c
+      btrcpy --strict-imports btrc/nixosctl/NixosCtl.btrc -o nixosctl.c
       $CC -std=c11 -O2 nixosctl.c -lm -lpthread -lutil -o nixosctl
     '';
     installPhase = ''
@@ -22,6 +22,7 @@ let
           systemd
           pulseaudio
           sbctl
+          sbsigntool
           btrfs-progs
           cryptsetup
           util-linux
@@ -34,4 +35,10 @@ let
   };
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.nixosctl.enable) {
   environment.systemPackages = [ nixosctlBin ];
+  # Rebuilds run as root, but fix-permissions gives this repository to the admin.
+  # Root's mutable Git config disappears when the immutable root is reset.
+  programs.git = {
+    enable = true;
+    config.safe.directory = [ "/etc/nixos" ];
+  };
 }

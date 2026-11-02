@@ -1,11 +1,13 @@
 NIX_SHELL ?= nix-shell
+NIX_BUILD ?= nix-build
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
 
 .PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
-	@printf '%s\n' 'VM test targets:'
+	@printf '%s\n' 'Test targets:'
+	@printf '%s\n' '  make -C tests gaming'
 	@printf '%s\n' '  make -C tests quick'
 	@printf '%s\n' '  make -C tests app-settings'
 	@printf '%s\n' '  make -C tests stateful-host'
@@ -31,8 +33,12 @@ help:
 build:
 	$(MAKE) -C .. build
 
+.PHONY: gaming
+gaming:
+	$(NIX_BUILD) gaming --no-out-link
+
 quick: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/quick/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run quick'
 
 host-smoke: quick
 
@@ -40,7 +46,7 @@ app-settings: build
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run app-settings'
 
 stateful-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/stateful-host/test.json --arg marker=make-target'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run stateful-host --arg marker=make-target'
 
 qemu-host: build
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host'
@@ -54,22 +60,22 @@ aarch64-qemu-host: build
 download: installer-download
 
 installer-download: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/installer-download/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run installer-download'
 
 install-system: installer-ssh
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/install-system/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run install-reset'
 
 immutability-reset: install-system
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/immutability-reset/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run immutability-reset'
 
 password-change: install-system
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/password-change/test.json --arg parentState=installed-reset'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run password-change'
 
 immutability-key-encoding: install-system
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/immutability-key-encoding/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run immutability-key-encoding'
 
 installer-ssh: installer-download
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) e2e tests/installer-ssh/test.json'
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run installer-ssh'
 
 installer-ssh-smoke: installer-ssh
 

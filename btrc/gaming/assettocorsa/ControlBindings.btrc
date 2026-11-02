@@ -1,0 +1,87 @@
+import ./GameSettings.btrc;
+import ./ContentDirectory.btrc;
+
+class ControlBindings {
+    class string update(string original, JSONValue bindings) {
+        if (!bindings.isArray()) { throw "Control bindings must be a list"; }
+        var updated = original;
+        Vector<string> actions = [];
+        Vector<string> chords = [];
+        for binding in bindings.arr {
+            if (!binding.isObject() || !binding.get("action").isString() || (!binding.get("button").isNull() && !binding.get("button").isInt())
+                || !binding.get("joystick").isInt() || (!binding.get("modifier").isNull() && !binding.get("modifier").isInt())) {
+                throw "Invalid control binding fields";
+            }
+            var action = binding.get("action").asString();
+            if (action.isEmpty()) { throw "A control binding needs an action"; }
+            for (int i = 0; i < action.len(); i++) {
+                if (!"ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789".contains(action.substring(i, 1))) { throw f"Invalid control action: {action}"; }
+            }
+            var button = binding.get("button").isNull() ? -1 : binding.get("button").asInt();
+            var joystick = binding.get("joystick").asInt();
+            var modifier = binding.get("modifier").isNull() ? -1 : binding.get("modifier").asInt();
+            var chord = f"{joystick}:{button}:{modifier}";
+            if ((!binding.get("button").isNull() && button < 0) || joystick < 0 || modifier < -1
+                || (modifier >= 0 && (button < 0 || button == modifier
+                    || !(action.startsWith("__") || action.equals("ABS") || action.equals("TRACTION_CONTROL"))))
+                || actions.contains(action) || (button >= 0 && chords.contains(chord))) { throw f"Invalid or duplicate control binding: {action}"; }
+            actions.push(action);
+            if (button >= 0) { chords.push(chord); }
+            updated = GameSettings.set(updated, action, "JOY", button < 0 ? "-1" : f"{joystick}");
+            updated = GameSettings.set(updated, action, "BUTTON", f"{button}");
+            updated = GameSettings.set(updated, action, "JOY_MODIFICATOR", modifier < 0 ? "-1" : f"{joystick}");
+            updated = GameSettings.set(updated, action, "BUTTON_MODIFICATOR", f"{modifier}");
+            updated = GameSettings.set(updated, action, "__CM_POV", "-1");
+        }
+        for binding in bindings.arr {
+            if (!binding.get("modifier").isNull() && binding.get("modifier").asInt() >= 0) {
+                var joystick = binding.get("joystick").asInt();
+                var modifier = binding.get("modifier").asInt();
+                if (chords.contains(f"{joystick}:{modifier}:-1")) { throw "A modifier button must not have its own unmodified action"; }
+            }
+        }
+        return updated;
+    }
+
+    class void configure(string prefix, JSONValue bindings, JSONValue presets, string brakeGamma = "") {
+        if (bindings.isArray() && bindings.size() == 0 && brakeGamma.isEmpty()) { return; }
+        if (!brakeGamma.isEmpty()) {
+            var gamma = Strings.toFloat(brakeGamma);
+            if (!(gamma >= 1 && gamma <= 5) || brakeGamma.contains("\n") || brakeGamma.contains("\r")) { throw "Brake gamma must be between 1 and 5"; }
+        }
+        Vector<string> paths = [f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controls.ini"];
+        for name in presets.keys() {
+            if (PathTools.dirname(name).equals("Controls") && name.endsWith(".ini")) {
+                paths.push(ContentDirectory.expand(presets.get(name).asString()));
+            }
+        }
+        // Prepare every update before writing, including the external presets.
+        Vector<string> updates = [];
+        for path in paths {
+            if (!FileSystem.isFile(path)) { throw f"Save a controls profile in CM first: {path}"; }
+            var updated = ControlBindings.update(Path.readAll(path), bindings);
+            if (!brakeGamma.isEmpty()) { updated = GameSettings.set(updated, "BRAKES", "GAMMA", brakeGamma); }
+            updates.push(updated);
+        }
+        // CSP filters base bindings when a modifier chord is held, including
+        // original AC controls. Without this, changing wipers could change TC.
+        if (bindings.size() > 0) {
+            var directory = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension";
+            var general = f"{directory}/general.ini";
+            paths.push(general);
+            updates.push(GameSettings.set(FileSystem.isFile(general) ? Path.readAll(general) : "", "CONTROL", "BINARY_MODIFIERS_FILTERING2", "1"));
+            var gui = f"{directory}/gui.ini";
+            var updated = FileSystem.isFile(gui) ? Path.readAll(gui) : "";
+            for key in ["CONTROLLER_INTEGRATION", "CONTROLLER_INTEGRATION_PITS", "CONTROLLER_INTEGRATION_REPLAY"] {
+                updated = GameSettings.set(updated, "BASIC", key, "1");
+            }
+            paths.push(gui); updates.push(updated);
+        }
+        for (int i = 0; i < paths.len; i++) {
+            var path = paths[i];
+            if (FileSystem.isFile(path) && updates[i].equals(Path.readAll(path))) { continue; }
+            if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix-bindings")) { GamingFiles.copy(path, f"{path}.before-nix-bindings"); }
+            GamingFiles.write(path, updates[i]);
+        }
+    }
+}

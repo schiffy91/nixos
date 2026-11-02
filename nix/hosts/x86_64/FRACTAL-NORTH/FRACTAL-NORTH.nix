@@ -35,8 +35,12 @@ let
     unmanagedMacs    = [ "24:f5:a2:f1:4d:9b" ];  # Linksys USB3GIGV1 dongle (breaks WoL routing)
   };
   audio = {
+    quadCortexName             = "Quad Cortex";
     quadCortexInputPattern     = "~alsa_input.*Neural_DSP_Quad_Cortex.*";
     quadCortexOutputPattern    = "~alsa_output.*Neural_DSP_Quad_Cortex.*";
+    samsungTvName             = "Samsung TV";
+    samsungTvAlsaName         = "QCQ90S";
+    samsungTvOutputPattern    = "~alsa_output.pci-${builtins.replaceStrings [ ":" ] [ "_" ] pci.nvidiaAudio}.*";
     logitechCameraInputPattern = "~alsa_input.*Logi_4K_Pro.*";
   };
   nvidiaOffloadEnv = {
@@ -49,6 +53,7 @@ let
   };
 in {
   imports = [
+    ./assettocorsa.nix
     ./audio.nix
     ./cpu.nix
     ./gpu.nix

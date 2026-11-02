@@ -1,0 +1,83 @@
+{
+   "args" : {
+      "bootTarget" : "Standard-Boot",
+      "bootloader" : "systemd-boot",
+      "immutabilityEnabled" : "true",
+      "immutabilityImplementation" : "immutability",
+      "immutabilityMode" : "reset",
+      "immutabilityVersion" : "v2",
+      "recovery" : "true",
+      "recoverySize" : "4G"
+   },
+   "cpus" : 4,
+   "diskSize" : "30G",
+   "memory" : "16G",
+   "name" : "recovery-boot",
+   "operations" : [
+      {
+         "op" : "require-state"
+      },
+      {
+         "op" : "reset-state"
+      },
+      {
+         "op" : "inherit-state"
+      },
+      {
+         "op" : "validate-immutability-v2"
+      },
+      {
+         "name" : "live-ssh",
+         "op" : "restore"
+      },
+      {
+         "op" : "boot-iso"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 180
+      },
+      {
+         "local" : ".",
+         "op" : "copy-workspace",
+         "remote" : "/etc/nixos"
+      },
+      {
+         "op" : "configure-vm-host"
+      },
+      {
+         "op" : "install-nixos"
+      },
+      {
+         "op" : "stop"
+      },
+      {
+         "op" : "boot-disk"
+      },
+      {
+         "op" : "wait-ssh",
+         "timeout" : 300
+      },
+      {
+         "command" : "set -e; for i in $(seq 1 300); do state=$(systemctl show -p ActiveState --value nixos-recovery-boot-entry.service 2>/dev/null || true); result=$(systemctl show -p Result --value nixos-recovery-boot-entry.service 2>/dev/null || true); if [ \"$state\" = failed ] || [ \"$result\" = exit-code ]; then systemctl status nixos-recovery-boot-entry.service; exit 1; fi; if [ \"$result\" = success ] && [ \"$state\" != activating ]; then break; fi; sleep 1; done; test \"$(systemctl show -p Result --value nixos-recovery-boot-entry.service)\" = success; test \"$(systemctl show -p ActiveState --value nixos-recovery-boot-entry.service)\" != activating; case \"$(uname -m)\" in x86_64) fallback=BOOTX64.EFI ;; aarch64) fallback=BOOTAA64.EFI ;; *) fallback=BOOTUNKNOWN.EFI ;; esac; test -f /boot/loader/entries/nixos-recovery.conf; test -f /boot/EFI/recovery/kernel.efi; test -f /boot/EFI/recovery/initrd; test -f /recovery/EFI/recovery/kernel.efi; test -f /recovery/EFI/recovery/initrd; test -f \"/recovery/EFI/BOOT/$fallback\"; test -f /recovery/loader/entries/nixos-recovery.conf; test -f /recovery/loader/loader.conf; if test -e /boot/EFI/recovery/nixos-recovery.efi; then exit 1; fi; if test -e /recovery/EFI/recovery/nixos-recovery.efi; then exit 1; fi; bootctl list | grep -F nixos-recovery.conf; bootctl list | grep -F 'linux:'; bootctl list | grep -F 'initrd:'; printf recovery-entry-ok",
+         "expect" : "recovery-entry-ok",
+         "op" : "guest"
+      },
+      {
+         "op" : "reboot-recovery"
+      },
+      {
+         "command" : "set -e; target=/mnt; test \"$(hostname)\" = nixos-recovery; test -x /run/current-system/sw/bin/btrfs; test -x /run/current-system/sw/bin/cryptsetup; test -x /run/current-system/sw/bin/nixos-mount; nixos-mount --help | grep -F 'Usage: nixos-mount'; nixos-mount \"$target\"; findmnt -rn --target \"$target/etc/nixos\" | grep -F '@persist/dirs/etc!nixos'; findmnt -rn --target \"$target/var\" | grep -F '@var'; findmnt -rn --target \"$target/home\" | grep -F '@home'; test \"$(findmnt -no FSTYPE \"$target/boot\")\" = vfat; test \"$(findmnt -no FSTYPE \"$target/recovery\")\" = vfat; nixos-mount \"$target\" >/tmp/nixos-mount-second.log; printf recovery-boot-ok",
+         "expect" : "recovery-boot-ok",
+         "op" : "guest"
+      },
+      {
+         "op" : "stop"
+      }
+   ],
+   "parentState" : "installer-ssh",
+   "sshPort" : 2241,
+   "state" : "recovery-boot",
+   "stateMaterial" : "recovery-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:recovery={{recovery}}:size={{recoverySize}}:source={{sourceHash}}",
+   "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
+}

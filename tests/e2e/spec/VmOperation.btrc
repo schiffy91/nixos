@@ -1,0 +1,31 @@
+import Library.Map;
+import ./VmSpecArgs.btrc;
+
+class VmOperation {
+    public string kind;
+    public string command;
+    public string expect;
+    public string name;
+    public string localPath;
+    public string remotePath;
+    public int timeout;
+
+    public VmOperation() {
+        self.kind = "";
+        self.command = "";
+        self.expect = "";
+        self.name = "";
+        self.localPath = "";
+        self.remotePath = "";
+        self.timeout = 120;
+    }
+
+    public void expandArgs(Map<string, string> args) {
+        self.kind = VmSpecArgs.expand(self.kind, args);
+        self.command = VmSpecArgs.expand(self.command, args);
+        self.expect = VmSpecArgs.expand(self.expect, args);
+        self.name = VmSpecArgs.expand(self.name, args);
+        self.localPath = VmSpecArgs.expand(self.localPath, args);
+        self.remotePath = VmSpecArgs.expand(self.remotePath, args);
+    }
+}

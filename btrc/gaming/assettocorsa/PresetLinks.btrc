@@ -1,0 +1,66 @@
+import ./ContentDirectory.btrc;
+
+class PresetLinks {
+    class string path(string prefix, string name) {
+        var parent = PathTools.dirname(name);
+        var leaf = PathTools.basename(name);
+        if (parent.equals("Controls") && leaf.endsWith(".ini")) {
+            return PathTools.join(GamingFiles.inside(prefix, "drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controllers/savedsetups"), leaf);
+        }
+        if (!name.endsWith(".cmpreset") || parent.equals(".") || leaf.isEmpty()) { throw f"Expected a CM category and .cmpreset filename: {name}"; }
+        var folder = f"{prefix}/drive_c/users/steamuser/AppData/Local/AcTools Content Manager/Presets";
+        return PathTools.join(GamingFiles.inside(folder, parent), leaf);
+    }
+
+    class void apply(string prefix, JSONValue declared) {
+        if (!declared.isObject()) { throw "Invalid Content Manager preset declaration"; }
+        var manifest = f"{prefix}/.nix-assettocorsa-presets.json";
+        var previous = FileSystem.exists(manifest) ? JSONValue.parse(Path.readAll(manifest)) : JSONValue.makeObject();
+        if (!previous.isObject()) { throw "Invalid Content Manager preset manifest"; }
+        var desired = JSONValue.makeObject();
+        Vector<string> targets = [];
+        for name in declared.keys() {
+            if (!declared.get(name).isString()) { throw f"Invalid preset source: {name}"; }
+            var target = ContentDirectory.expand(declared.get(name).asString());
+            if (target.isEmpty() || target.startsWith(prefix + "/") || FileSystem.isSymlink(target)) { throw f"Preset must live outside the Wine prefix: {target}"; }
+            if (targets.contains(target)) { throw f"Two presets use the same source: {target}"; }
+            targets.push(target);
+            desired.set(name, JSONValue.makeString(target));
+        }
+        var names = previous.keys();
+        for name in desired.keys() { if (!names.contains(name)) { names.push(name); } }
+        // Check conflicts across the entire declaration before moving any file.
+        for name in names {
+            var local = PresetLinks.path(prefix, name);
+            var temporary = f"{local}.nix-link";
+            if (FileSystem.exists(temporary) || FileSystem.isSymlink(temporary)) { throw f"Preset migration temporary file already exists: {temporary}"; }
+            if (previous.has(name) && (!previous.get(name).isString() || !PathTools.isAbsolute(previous.get(name).asString()))) { throw f"Invalid preset manifest entry: {name}"; }
+            if (FileSystem.isSymlink(local)) {
+                var target = FileSystem.readLink(local);
+                if ((!previous.has(name) || !target.equals(previous.get(name).asString()))
+                    && (!desired.has(name) || !target.equals(desired.get(name).asString()))) { throw f"Unexpected preset symlink: {local}"; }
+                if (!FileSystem.isFile(local)) { throw f"Preset symlink target is missing: {local}"; }
+            } else if (FileSystem.exists(local) && !FileSystem.isFile(local)) { throw f"Expected a preset file: {local}"; }
+            if (!desired.has(name)) { continue; }
+            var target = desired.get(name).asString();
+            if (FileSystem.exists(target) && !FileSystem.isFile(target)) { throw f"Expected a preset file: {target}"; }
+            if (!FileSystem.isFile(local) && !FileSystem.isFile(target)) { throw f"Saved preset is missing from both {local} and {target}"; }
+            if (FileSystem.isFile(local) && FileSystem.isFile(target)
+                && !AssettoMods.digest(local).equals(AssettoMods.digest(target))) { throw f"Preset copies differ; both are preserved: {local} and {target}"; }
+        }
+        for name in names {
+            var local = PresetLinks.path(prefix, name);
+            if (!desired.has(name)) {
+                if (FileSystem.isSymlink(local)) { GamingFiles.copy(local, local); }
+                continue;
+            }
+            var target = desired.get(name).asString();
+            if (!FileSystem.isFile(target)) { GamingFiles.copy(local, target); }
+            if (FileSystem.isSymlink(local) && FileSystem.readLink(local).equals(target)) { continue; }
+            GamingFiles.directory(PathTools.dirname(local));
+            var temporary = f"{local}.nix-link";
+            if (FileSystem.symlink(target, temporary) != 0 || rename(temporary, local) != 0) { throw f"Cannot link preset: {local}"; }
+        }
+        GamingFiles.write(manifest, desired.stringify() + "\n");
+    }
+}

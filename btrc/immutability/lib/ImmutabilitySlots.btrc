@@ -1,0 +1,89 @@
+import Library.FileSystem;
+import Library.Process;
+import Library.Strings;
+import ./ImmutabilityConstants.btrc;
+import ./ImmutabilityFs.btrc;
+import ./ImmutabilityRun.btrc;
+import ./Types.btrc;
+
+class ImmutabilitySlots {
+    public ImmutabilityFs fs;
+    public ImmutabilityRun run;
+
+    public ImmutabilitySlots(ImmutabilityFs fs, ImmutabilityRun run) {
+        self.fs = fs;
+        self.run = run;
+    }
+
+    public string generationName(int generation) {
+        return f"generation-{Strings.fromInt(generation)}";
+    }
+
+    public string generationPath(string root, int generation) {
+        return PathTools.join(root, self.generationName(generation));
+    }
+
+    public void pruneGenerations(string root, int generations) {
+        if (!FileSystem.isDir(root)) { return; }
+        var children = self.fs.childSubvolumes(root);
+        for child in children {
+            if (!PathTools.dirname(child).equals(root)) { continue; }
+            var name = PathTools.basename(child);
+            if (!name.startsWith("generation-")) { continue; }
+            var value = name.substring(11, name.len() - 11);
+            if (!Strings.isDigitStr(value)) { continue; }
+            if (Strings.toInt(value) > generations) {
+                self.fs.deleteSubvolume(child);
+            }
+        }
+    }
+
+    public void rotate(string volume, string live, string snapshotsSubvolume, int generations) {
+        var root = self.run.path(PathTools.join(snapshotsSubvolume, volume));
+        self.pruneGenerations(root, generations);
+        if (generations <= 0) { return; }
+        self.fs.deleteSubvolume(self.generationPath(root, generations));
+        var generation = generations - 1;
+        while (generation >= 1) {
+            var current = self.generationPath(root, generation);
+            if (self.fs.exists(current)) {
+                self.fs.snapshot(current, self.generationPath(root, generation + 1), true);
+                self.fs.deleteSubvolume(current);
+            }
+            generation--;
+        }
+        self.fs.snapshot(live, self.generationPath(root, 1), true);
+    }
+
+    public void publish(ImmutabilityVolume volume, string live, string next) {
+        if (!self.fs.exists(next)) { return; }
+        if (!self.run.dryRun && !volume.mountPoint.equals("/") && self.fs.mounted(volume.mountPoint)) {
+            self.run.log(f"WRN {volume.mountPoint} mounted; leaving NEXT for boot");
+            return;
+        }
+        if (!self.fs.exists(live)) {
+            self.run.renamePath(next, live);
+            return;
+        }
+        var quotedLive = UnixShell.quote(live);
+        var quotedNext = UnixShell.quote(next);
+        self.run.require(f"mv -T --exchange --no-copy {quotedLive} {quotedNext}");
+        self.fs.deleteSubvolume(next);
+    }
+
+    public string restoreSource(string root, int generation) {
+        return self.generationPath(root, generation);
+    }
+
+    public void restoreGeneration(ImmutabilityVolume volume, int generation, string snapshotsSubvolume) {
+        var root = PathTools.join(snapshotsSubvolume, volume.name);
+        var live = self.run.path(volume.name);
+        var next = self.run.path(PathTools.join(root, ImmutabilityConstants.next()));
+        var source = self.restoreSource(self.run.path(root), generation);
+        if (!self.fs.exists(source) || !self.fs.isSubvolume(source)) {
+            self.run.fatal(f"restore source missing: {source}");
+        }
+        self.fs.snapshot(source, next, false);
+        self.publish(volume, live, next);
+    }
+}

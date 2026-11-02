@@ -1,7 +1,6 @@
 # Use the compiler pinned in flake.lock by default. Override BTRC=... when
 # intentionally testing a local btrcpy checkout.
 BTRC ?= nix run --no-warn-dirty --inputs-from . btrc\#btrcpy --
-PYTHON ?= python3
 CC ?= cc
 CFLAGS ?= -std=c11 -pedantic
 # Programs are transpiled program-only with strict imports and reference the
@@ -19,21 +18,21 @@ STDLIB_IMPL := $(STDLIB_DIR)/btrc_stdlib.c
 STDLIB_MANIFEST := $(STDLIB_DIR)/btrc_stdlib.manifest
 STDLIB_LIB := $(BUILD_DIR)/libbtrc.a
 BTRC_STAMP := $(BUILD_DIR)/.btrc-tool
-NIXOSCTL_ENTRY := btrc/nixosctl/nixosctl.btrc
-IMMUTABILITY_ENTRY := btrc/immutability/immutability.btrc
+NIXOSCTL_ENTRY := btrc/nixosctl/NixosCtl.btrc
+IMMUTABILITY_ENTRY := btrc/immutability/Immutability.btrc
 NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
 IMMUTABILITY_C_OUT := $(BUILD_DIR)/immutability.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
 IMMUTABILITY_BIN := $(BUILD_DIR)/immutability
-TRAY_ENTRY := btrc/nixosctl/tray.btrc
+TRAY_ENTRY := btrc/nixosctl/NixosTray.btrc
 TRAY_C_OUT := $(BUILD_DIR)/nixosctl-tray.c
 TRAY_BIN := $(BUILD_DIR)/nixosctl-tray
-IMMUTABILITY_PATHS_TEST_ENTRY := tests/unit/immutability_paths.btrc
+IMMUTABILITY_PATHS_TEST_ENTRY := tests/immutability/PathsTests.btrc
 IMMUTABILITY_PATHS_TEST_C_OUT := $(BUILD_DIR)/immutability_paths_test.c
 IMMUTABILITY_PATHS_TEST_BIN := $(BUILD_DIR)/immutability_paths_test
 BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN)
-SOURCES := $(shell find btrc tests/e2e tests/unit -name '*.btrc' | sort)
+SOURCES := $(shell find btrc tests -name '*.btrc' | sort)
 
 .PHONY: all transpile build-stdlib build unit check quick smoke test host-smoke app-settings stateful-host x86_64-qemu-host aarch64-qemu-host installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
 
@@ -88,19 +87,37 @@ $(TRAY_BIN): $(TRAY_C_OUT) $(STDLIB_LIB)
 $(IMMUTABILITY_PATHS_TEST_BIN): $(IMMUTABILITY_PATHS_TEST_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_BIN)" $(IMMUTABILITY_LIBS)
 
-unit: $(IMMUTABILITY_PATHS_TEST_BIN)
+$(BUILD_DIR)/secure_boot_test.c: $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/tests/secure-boot/VerificationTests.btrc" -o "$@"
+
+$(BUILD_DIR)/secure_boot_test: $(BUILD_DIR)/secure_boot_test.c $(STDLIB_LIB)
+	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$<" "$(CURDIR)/$(STDLIB_LIB)" -o "$@" $(NIXOSCTL_LIBS)
+
+$(BUILD_DIR)/spec_test.c: $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/tests/harness/SpecTests.btrc" -o "$@"
+
+$(BUILD_DIR)/spec_test: $(BUILD_DIR)/spec_test.c $(STDLIB_LIB)
+	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$<" "$(CURDIR)/$(STDLIB_LIB)" -o "$@" $(NIXOSCTL_LIBS)
+
+unit: $(IMMUTABILITY_PATHS_TEST_BIN) $(BUILD_DIR)/secure_boot_test $(BUILD_DIR)/spec_test
 	./$(IMMUTABILITY_PATHS_TEST_BIN)
+	./$(BUILD_DIR)/secure_boot_test
+	./$(BUILD_DIR)/spec_test
 
 quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
 	printf '%s\n' "$$output"; \
 	test $$status -eq 1; \
 	printf '%s\n' "$$output" | grep -q 'Usage: nixosctl'
-	NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) e2e tests/quick/test.json
+	NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) graph tests/graph.json run quick
 
 smoke: quick
 
-check test: quick stateful-host
+check test: quick stateful-host gaming
+
+.PHONY: gaming
+gaming:
+	$(MAKE) -C tests gaming
 
 host-smoke: quick
 

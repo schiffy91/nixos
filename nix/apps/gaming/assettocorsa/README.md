@@ -12,13 +12,21 @@ d3dx11_43, and d3dcompiler_47 on first launch. That first prefix creation
 still needs network access and can take several minutes; the installer
 recipe is pinned with Proton. Microsoft core fonts are supplied by Nix.
 
+AC's wrapper sets `WINE_DBGHELP_OLD_PDB=1`. The new PDB reader in this Wine
+revision loses folded function aliases and public symbols when enumerating
+AC's debug symbols, so CSP reports that it cannot find game functions.
+Wine's existing compatible reader resolves them. This is scoped to AC/CM;
+the shared Proton version and other games remain unchanged. See
+[Wine's reader selection](https://github.com/ValveSoftware/wine/blob/46b29104e3741fe23bf5e2547196a253aab88c89/dlls/dbghelp/msc.c#L4010)
+and the regression fixture in `tests/gaming/proton/pdb`.
+
 ## First use
 
 ```sh
 cd /etc/nixos
-sudo nixos-rebuild switch --flake .#FRACTAL-NORTH-Standard-Boot
+sudo nixosctl update
 # Once Steam downloads finish, exit Steam:
-nix run .#assetto-setup
+assetto-setup
 ```
 
 Open Steam again. AC uses the same `proton-custom` compatibility tool as the other games.
@@ -43,9 +51,9 @@ CM's unrelated settings and license data are preserved. Its original
 `Values.data` is backed up as `Values.before-nix` before the first edit.
 
 ```sh
-nix run .#assetto -- status
-nix run .#assetto -- apply    # also happens automatically before each launch
-nix run .#assetto -- restore  # restore overwritten originals; remove managed additions
+assetto status
+assetto apply    # also happens automatically before each launch
+assetto restore  # restore overwritten originals; remove managed additions
 ```
 
 `restore` leaves Steam's launch options alone. To return completely to the
@@ -54,58 +62,175 @@ exit Steam, and rebuild. While enabled, the next Play reapplies the pack.
 
 Mod deployment records its files in the game's `.nix-assettocorsa/` directory.
 It backs up preexisting files, removes retired managed files, preserves
-unrelated mods, and refuses to overwrite locally edited managed files. Move
-such an edited file aside, then apply again to return to the declaration.
+unrelated mods, and preserves runtime edits while the declared file is unchanged.
+When upgrading or removing a mod, edited files are archived under
+`.nix-assettocorsa/edits/<sha256>/<relative-path>` before replacement.
 It refuses an incomplete Steam download and symlinks in destination paths.
 Changing the pack does not reset a Wine prefix, controls, saves or replays.
 
 ## Add cars, tracks, apps, or weather
 
-Set `settings.apps.assettocorsa.mods` in a host module. Each package contributes
-a directory tree relative to the AC root. ZIP, 7z and RAR can be unpacked
-using the helper; inspect the archive to select the correct directory.
-File collisions, including Windows case collisions, fail the Nix build.
+Drop downloaded ZIP, 7z or RAR mods into `~/Games/Assetto Corsa`. The next
+launch (or `assetto apply` with CM closed) detects cars, tracks and game-root
+content automatically. An extracted `content/cars` or `content/tracks` tree
+also works. Archives stay in this directory; extraction is cached by SHA-256.
+Identical downloads and identical overlapping files are skipped. Different
+versions that claim the same file stop deployment before changing the game;
+keep only the version you want. Remove a download to uninstall its managed
+content on the next apply. Runtime edits are archived before removal.
+
+The directory is configured with a string, not a Nix path:
 
 ```nix
-{ pkgs, ... }:
-let
-  inherit (import ../../../apps/gaming/assettocorsa/lib.nix { inherit pkgs; }) archive;
-in {
-  settings.apps.assettocorsa.mods = [
-    (archive {
-      name = "my-track-1.0";
-      src = pkgs.fetchurl {
-        url = "https://AUTHOR/RELEASE/my-track-1.0.zip";
-        hash = "sha256-REPLACE_WITH_PREFETCH_HASH";
-      };
-      # If the ZIP already contains content/tracks/..., omit both fields.
-      subdirectory = "my_track";
-      target = "content/tracks/my_track";
-      # format = "7z"; # also supports RAR through 7z
-    })
-  ];
-}
+settings.apps.assettocorsa.contentDirectory = "~/Games/Assetto Corsa";
 ```
 
-Get a URL's hash with `nix store prefetch-file --json 'URL'`.
-For an authenticated or purchased download (Pure, preview CSP, paid cars),
-download it from the author and use a fixed local source instead:
+Use `null` to disable local content imports. The flake still pins CM, CSP,
+fonts and Proton; local downloads remain outside the Nix store. Back up
+this directory to reproduce your collection on another machine.
+
+The in-game CSP UI follows the same display-derived DPI as the shared Wine
+launcher, capped to CSP's documented 100–200% range. For example, FRACTAL-NORTH's
+250% desktop scale produces a 200% game UI. Override it with
+`settings.apps.assettocorsa.uiScale = 1.5;` for 150%, or use `null` to follow DPI.
+Setup updates only the relevant keys in Documents/Assetto Corsa/cfg/extension/gui.ini
+and saves the original as `gui.ini.before-nix` when that file already exists.
+It enables CSP's replacement race and pause menus because the original menus
+ignore that scale setting. CSP marks the replacement main menu experimental; legacy or third-party
+apps can still have their own independent sizing. Game rendering resolution is
+unchanged.
+
+On Plasma, `settings.apps.assettocorsa.followLauncher = true;` (the default)
+starts each race on Content Manager's current monitor. Move CM to the TV
+before starting a race to use that screen. A small KWin script waits for Wine's
+startup geometry requests to settle, places the game once, then leaves manual
+window moves alone. It does not change the desktop's primary monitor or AC's resolution.
+Set this option to `false` to leave placement entirely to the game.
+
+Saved CM presets can live beside the downloads and remain writable:
 
 ```nix
-src = pkgs.requireFile {
-  name = "Exact-Downloaded-Filename.zip";
-  sha256 = "REPLACE_WITH_HASH";
-  message = "Download this version from the author, then nix-store --add-fixed sha256 FILE";
-};
+settings.apps.assettocorsa.presets = [{
+  name = "Video Settings/FRACTAL-NORTH.cmpreset";
+  source = "~/Games/Assetto Corsa/FRACTAL-NORTH.cmpreset";
+}];
 ```
 
-Run `nix hash file --type sha256 --base32 FILE` for that hash and
-`nix-store --add-fixed sha256 FILE` to supply it. Keep your own backup:
-another machine needs the same archive. A licensed archive and configuration
-are reproducible; an account entitlement is not something Nix can provision.
-Do not commit paid archives to Git. CSP previews replace the base CSP package
-through `settings.apps.assettocorsa.csp = archive { ... };`; adding one alongside
-the public CSP in `mods` deliberately fails the collision check.
+The name is relative to CM's `Presets` directory. Setup moves an existing
+preset to the configured location and replaces it with a symlink; CM's saves
+then update that file. Conflicting copies are preserved and reported.
+The setting accepts CM presets from any category. `Video Settings` above is
+the category where CM saved this particular file, not a restriction of the
+setting. A saved preset contains that category's data, not all CM preferences.
+Remove an entry (or set `presets = [];`) to copy the latest contents back
+into Wine and stop linking. The external copy is retained. These files are
+ignored by the mod importer. Keep a backup of `~/Games/Assetto Corsa` too.
+
+Control presets use `.ini` files in AC's Documents directory rather than CM's
+`.cmpreset` directory. Declare them using `name = "Controls/FRACTAL-NORTH.ini";`
+and an external source such as `~/Games/Assetto Corsa/Controls/FRACTAL-NORTH.ini`.
+The same migration, conflict detection and unlink behavior applies. Audio and
+other CM presets keep their actual category, for example `Audio Settings/...`.
+
+Additional wheel bindings are ordinary records in
+`settings.apps.assettocorsa.controlBindings`:
+
+```nix
+[
+  { action = "__CM_START_SESSION"; button = 0; }
+  { action = "__CM_TO_PITS"; button = 2; modifier = 7; }
+]
+```
+
+`joystick` defaults to 0, and `modifier` defaults to null. A null `button`
+clears that action's wheel binding. Setup writes these
+bindings to the active controls and declared control presets, preserving axes,
+device GUIDs, force feedback, keyboard bindings and other actions. It records
+both joystick and button IDs for modifiers. The first originals are backed up
+as `.before-nix-bindings`; later setup never overwrites those backups. Declared
+actions are reapplied on launch, so change their records in Nix to customize
+them. Removing a declaration stops enforcing it; it does not reset controls.
+`brakeGamma = null` preserves the saved brake curve; FRACTAL declares 1.0 for
+a linear response from its load-cell brake. Other pedal calibration stays saved
+in the external control preset. Adjust the physical brake force on the wheel.
+
+The complete host binding declaration is in
+`nix/hosts/x86_64/FRACTAL-NORTH/assettocorsa.nix`. The current profile uses
+direct buttons and a dial-operated Wheel Menu, enabled with
+`settings.apps.assettocorsa.wheelMenu.enable`. It replaces the earlier
+L2/Share modifier layout; those buttons now have ordinary actions.
+
+| Control | Action |
+|---|---|
+| Paddles | Shift up/down |
+| Cross | Select in CSP menus |
+| Square | Camera |
+| Circle | Handbrake while driving; resume from pause or exit instant replay on release |
+| Triangle | Headlights |
+| R2 / L2 | DRS / KERS |
+| Options | Pause/resume |
+| Share | Save replay clip |
+| R3 / L3 | Pit limiter / flash headlights |
+| Left dial | Select Wheel Menu item |
+| Right dial | Adjust selected value |
+| Right dial press | Activate a labelled menu command; otherwise show/hide Wheel Menu |
+| Left dial press | Horn |
+| D-pad | Saved look bindings while driving; CSP navigation in race/pit menus |
+
+The left-select/right-adjust interaction follows GT7's documented MFD pattern
+for supported replacement wheels, not a claim to reproduce Logitech's entire
+factory GT7 mapping. See [GT7's MFD mapping](https://www.gran-turismo.com/hk/gt7/news/00_5412323.html).
+Wheel Menu uses CSP's Lua app API; its small runtime adapter lives beside this
+package in `wheel-menu/`. Deployment and preset management remain BTRC.
+
+Wheel Menu exposes supported TC/TC2, ABS, brake bias, turbo, engine map cycling, H-shifter mode, engine braking,
+hybrid recovery/delivery/MGU-H, wipers, beam selection, indicators/hazards,
+pit strategy and game-provided pit options. It shows acknowledged car values,
+respects locked pit options and does not adjust values in pause, replay or
+pre-race menus. Fuel remaining is read-only. Neutral is an explicit press
+command; FFB and seat/FOV adjustments use CSP's native commands. Cockpit/mirror
+entries appear only while stationary, and a disappearing entry cannot cause
+that frame's input to adjust a different setting. Mirror changes preserve the
+other parameters and respect mirrors controlled by car scripts.
+
+The starter and cutoff are held commands, available only when CSP's existing
+engine-stalling option is enabled. This setup does not enable experimental
+stalling implicitly. Release, selection changes and entering pause cancel a
+held command; returning with the button still down does not restart it.
+Circle cancellation covers pause and instant replay; it is not universal
+Back in every menu. CSP's controller integration is enabled for replay too.
+
+The software tests pass, and the earlier app version loaded in the real CSP
+session and rendered in the actual race. Physical wheel input, the expanded
+controls and complete pit/session flows still require acceptance testing.
+See [control coverage](CONTROLS.md) for the
+remaining work; this table is a binding reference, not a hardware test result.
+
+Setup explicitly enables CSP controller navigation, pit-menu navigation and
+`CONTROL/BINARY_MODIFIERS_FILTERING2`. The latter prevents a modified button
+from also firing its normal action (for example wipers and TC together).
+Declarations reject duplicate chords and assigning a standalone action to a
+modifier. Native AC actions cannot use modifier fields; the modified commands
+use CM/CSP's supported system bindings instead.
+
+The driver documents the [DirectInput button indices](https://github.com/mescon/logitech-trueforce-linux-driver/blob/master/docs/BUTTON_MAPPING.md).
+See also [CSP modifier filtering](https://github.com/ac-custom-shaders-patch/acc-extension-config/blob/master/config/general.ini)
+and the installed `extension/config/data_manifest.ini` for action availability.
+Wipers, indicators, starter, engine maps and hybrid systems depend on the car
+and enabled CSP features. Binding a starter does not enable engine-stalling
+physics; binding wipers does not install paid RainFX. Cars without ABS/TC/DRS
+cannot acquire those features from a binding. Online races cannot be paused
+for other participants.
+
+Replay operation and extra car-specific animations still need acceptance
+testing or further wheel access. The physical pedal
+axes, H-shifter gears and FFB need an in-car check. CM's desktop settings
+pages do not yet have a wheel-operated interface.
+
+`settings.apps.assettocorsa.mods` remains available for optional pinned Nix
+packages containing game-root trees. `settings.apps.assettocorsa.csp` can
+replace the public CSP package with a licensed preview. Conflicting content
+is rejected instead of silently choosing a version.
 
 The starting pack provides CM and CSP's lighting, weather framework, graphics
 extensions and bundled Lua apps. Choose further cars/tracks for the servers
@@ -174,12 +299,14 @@ automatically when absent, and the primary monitor is not disabled.
 ## Verification and sources
 
 ```sh
-nix build .#checks.x86_64-linux.gaming-tools
-nix build .#assetto .#assetto-setup
+make -C tests gaming
+nix build --no-link .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.assetto .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.assetto-setup
 ```
 
-All repo-owned gaming programs and tests are BTRC under `btrc/gaming` and
-`tests/unit/gaming.btrc`. Steam configuration and AC share library discovery
+Gaming deployment programs and their tests are BTRC under `btrc/gaming` and
+`tests/gaming/GamingTests.btrc`. The CSP app uses Lua and the KWin adapter uses
+JavaScript, as required by their host APIs; their tests live under
+`tests/gaming/assettocorsa`. Steam configuration and AC share library discovery
 and VDF handling. All Wine callers share `wine-prefix-dpi`. The Nix modules
 only build, package, and compose those tools. Upstream Proton and the BTRC
 compiler may use Python internally; no Python application code is embedded

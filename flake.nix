@@ -67,24 +67,10 @@
     in {
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
-      packages.x86_64-linux = {
-        gaming-tools = import ./nix/apps/gaming/package.nix {
-          pkgs = self.nixosConfigurations.FRACTAL-NORTH-Standard-Boot.pkgs;
-          inherit inputs;
-        };
-        assetto = self.nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.assetto;
-        assetto-setup = self.nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.assetto-setup;
-      };
-      apps.x86_64-linux = {
-        assetto = { type = "app"; program = "${self.packages.x86_64-linux.assetto}/bin/assetto"; };
-        assetto-setup = { type = "app"; program = "${self.packages.x86_64-linux.assetto-setup}/bin/assetto-setup"; };
-      };
       checks = lib.genAttrs systems (system:
         let
           pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
           systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
-        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts) // {
-          gaming-tools = import ./nix/apps/gaming/package.nix { inherit pkgs inputs; };
-        });
+        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts));
     };
 }

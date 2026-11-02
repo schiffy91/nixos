@@ -1,0 +1,96 @@
+import Library.Console;
+import Library.Datetime;
+import Library.FileSystem;
+import Library.Platform;
+import Library.Process;
+import ../../core/NixosLog.btrc;
+import ./ImmutabilityConstants.btrc;
+import ./ImmutabilityPaths.btrc;
+
+class ImmutabilityRun {
+    public UnixShell shell;
+    public Timer timer;
+    public string top;
+    public string logFile;
+    public bool dryRun;
+
+    public ImmutabilityRun(bool dryRun) {
+        self.shell = UnixShell();
+        self.timer = Timer();
+        self.timer.start();
+        self.top = Environment.get("IMMUTABILITY_MOUNT_PATH", f"{ImmutabilityConstants.topBase()}.{Platform.pid()}");
+        self.logFile = "";
+        self.dryRun = dryRun;
+    }
+
+    public string elapsed() {
+        return f"[{self.timer.elapsed()}s]";
+    }
+
+    public string path(string rel) {
+        var base = ImmutabilityPaths.trimTrailingSlashes(self.top);
+        var child = ImmutabilityPaths.trimSlashes(rel);
+        if (child.isEmpty()) { return base; }
+        return PathTools.join(base, child);
+    }
+
+    public void log(string message) {
+        var line = f"{self.elapsed()} {message}";
+        Console.error(line);
+        if (!self.logFile.isEmpty()) {
+            self.shell.run(f"printf '%s\\n' {UnixShell.quote(line)} >> {UnixShell.quote(self.logFile)}", logFailure=false);
+        }
+    }
+
+    public void enableFileLog(string path) {
+        if (self.dryRun) { return; }
+        self.logFile = path;
+        FileSystem.mkdirp(PathTools.dirname(path));
+        FileSystem.writeText(path, "");
+    }
+
+    public void fatal(string message) {
+        throw f"{self.elapsed()} ERR {message}";
+    }
+
+    public ExecResult run(string command,
+                          string stdout = "collect",
+                          string stderr = "combine",
+                          bool logFailure = true) {
+        if (self.dryRun) {
+            self.log(f"DRY {command}");
+            return ExecResult(0, "", "", command);
+        }
+        self.log(command);
+        return self.shell.run(command, stdout=stdout, stderr=stderr, logFailure=logFailure);
+    }
+
+    public void require(string command) {
+        var result = self.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!result.ok()) { self.fatal(f"Failed: {command}"); }
+    }
+
+    public void mkdirp(string path) {
+        if (self.dryRun) {
+            self.log(f"DRY mkdir -p {UnixShell.quote(path)}");
+            return;
+        }
+        FileSystem.mkdirp(path);
+    }
+
+    public void removePath(string path) {
+        if (self.dryRun) {
+            self.log(f"DRY rm -rf {UnixShell.quote(path)}");
+            return;
+        }
+        if (FileSystem.exists(path) || FileSystem.isSymlink(path)) {
+            FileSystem.removeRecursive(path);
+        }
+    }
+
+    public void renamePath(string source, string destination) {
+        var quotedSource = UnixShell.quote(source);
+        var quotedDestination = UnixShell.quote(destination);
+        self.require(f"mv --no-copy {quotedSource} {quotedDestination}");
+    }
+}

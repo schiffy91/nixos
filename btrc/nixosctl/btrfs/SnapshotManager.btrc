@@ -1,0 +1,165 @@
+import Library.FileSystem;
+import Library.Platform;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+import ../../core/NixosLog.btrc;
+import ../NixosConfig.btrc;
+
+class ResetSubvolume {
+    public string name;
+    public string mountPoint;
+
+    public ResetSubvolume(string name, string mountPoint) {
+        self.name = name;
+        self.mountPoint = mountPoint;
+    }
+}
+
+class SnapshotManager {
+    public NixosConfig config;
+    public UnixShell shell;
+    public string rootPrefix;
+
+    public SnapshotManager(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+        self.rootPrefix = "";
+    }
+
+    public string hostPath(string path) {
+        if (self.rootPrefix.isEmpty()) { return path; }
+        if (path.equals("/")) { return self.rootPrefix; }
+        if (path.startsWith("/")) { return f"{self.rootPrefix}{path}"; }
+        return PathTools.join(self.rootPrefix, path);
+    }
+
+    public string snapshotsPath() {
+        return self.config.evalString("config.settings.disk.subvolumes.snapshots.mountPoint");
+    }
+
+    public string cleanName() {
+        return self.config.evalString("config.settings.disk.immutability.persist.snapshots.cleanName");
+    }
+
+    public Vector<ResetSubvolume> resetSubvolumes() {
+        Vector<ResetSubvolume> result = [];
+        var pairs = Strings.split(self.config.evalString("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot"), " ");
+        for pair in pairs {
+            if (pair.isEmpty()) { continue; }
+            var parts = Strings.split(pair, "=");
+            if (parts.len >= 2) {
+                result.push(ResetSubvolume(parts.get(0), parts.get(1)));
+            }
+        }
+        return result;
+    }
+
+    public string cleanSnapshotPath(string subvolumeName) {
+        return PathTools.join(PathTools.join(self.snapshotsPath(), subvolumeName), self.cleanName());
+    }
+
+    public bool isSubvolume(string path) {
+        if (!FileSystem.exists(path)) { return false; }
+        return self.shell.run(f"btrfs subvolume show {UnixShell.quote(path)}", logFailure=false).ok();
+    }
+
+    public bool isReadonly(string path) {
+        var result = self.shell.run(f"btrfs property get -ts {UnixShell.quote(path)} ro", logFailure=false);
+        return result.ok() && result.stdout().contains("ro=true");
+    }
+
+    public Vector<string> childSubvolumes(string path) {
+        Vector<string> result = [];
+        var listed = self.shell.run(f"btrfs subvolume list -o {UnixShell.quote(path)}", logFailure=false);
+        if (!listed.ok()) {
+            NixosLog.fatal(f"Failed to list child subvolumes under {path}");
+        }
+        var snapshotsName = self.config.evalString("config.settings.disk.subvolumes.snapshots.name");
+        var snapshotsMount = self.snapshotsPath();
+        var snapshotsPrefix = f"{snapshotsName}/";
+        for line in Strings.split(listed.stdout(), "\n") {
+            var marker = Strings.find(line, " path ", 0);
+            if (marker < 0) { continue; }
+            var child = line.substring(marker + 6, line.len() - (marker + 6)).trim();
+            if (child.equals(snapshotsName)) {
+                result.push(self.hostPath(snapshotsMount));
+            } else if (child.startsWith(snapshotsPrefix)) {
+                result.push(self.hostPath(PathTools.join(snapshotsMount, child.substring(snapshotsName.len() + 1, child.len() - snapshotsName.len() - 1))));
+            } else {
+                result.push(self.hostPath(f"/{child}"));
+            }
+        }
+        return result;
+    }
+
+    public void deleteSubvolume(string path) {
+        if (!FileSystem.exists(path)) { return; }
+        if (!self.isSubvolume(path)) {
+            NixosLog.fatal(f"Refusing to delete non-subvolume: {path}");
+        }
+        for child in self.childSubvolumes(path) {
+            self.deleteSubvolume(child);
+        }
+        var deleted = self.shell.run(f"btrfs subvolume delete -C {UnixShell.quote(path)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!deleted.ok()) {
+            NixosLog.fatal(f"Failed to delete subvolume: {path}");
+        }
+    }
+
+    public void createReadonlySnapshot(string source, string destination) {
+        self.deleteSubvolume(destination);
+        FileSystem.mkdirp(PathTools.dirname(destination));
+        var result = self.shell.run(f"btrfs subvolume snapshot -r {UnixShell.quote(source)} {UnixShell.quote(destination)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        if (!result.ok()) {
+            NixosLog.fatal(f"Failed to create readonly snapshot {destination}");
+        }
+    }
+
+    public void createCleanSnapshot(ResetSubvolume volume) {
+        var clean = self.hostPath(self.cleanSnapshotPath(volume.name));
+        var source = self.hostPath(volume.mountPoint);
+        var temporary = f"{clean}.tmp.{Platform.pid()}";
+        self.deleteSubvolume(temporary);
+        self.createReadonlySnapshot(source, temporary);
+        if (!self.isSubvolume(temporary)) {
+            NixosLog.fatal(f"CLEAN temporary is not a subvolume: {temporary}");
+        }
+        if (!self.isReadonly(temporary)) {
+            NixosLog.fatal(f"CLEAN temporary is not readonly: {temporary}");
+        }
+        var parent = PathTools.dirname(clean);
+        self.deleteSubvolume(PathTools.join(parent, "READY"));
+        self.deleteSubvolume(PathTools.join(parent, "NEXT"));
+        if (FileSystem.exists(clean)) {
+            if (!self.isSubvolume(clean)) {
+                NixosLog.fatal(f"Refusing to replace non-subvolume CLEAN: {clean}");
+            }
+            var moved = self.shell.run(f"mv -T --exchange --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            if (!moved.ok()) {
+                self.deleteSubvolume(temporary);
+                NixosLog.fatal(f"Failed to replace CLEAN snapshot: {clean}");
+            }
+            self.deleteSubvolume(temporary);
+        } else {
+            var moved = self.shell.run(f"mv --no-copy {UnixShell.quote(temporary)} {UnixShell.quote(clean)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            if (!moved.ok()) {
+                self.deleteSubvolume(temporary);
+                NixosLog.fatal(f"Failed to create CLEAN snapshot: {clean}");
+            }
+        }
+        if (!self.isSubvolume(clean)) {
+            NixosLog.fatal(f"CLEAN is not a subvolume: {clean}");
+        }
+        if (!self.isReadonly(clean)) {
+            NixosLog.fatal(f"CLEAN is not readonly: {clean}");
+        }
+    }
+
+    public void createInitialSnapshots() {
+        var volumes = self.resetSubvolumes();
+        for volume in volumes {
+            self.createCleanSnapshot(volume);
+        }
+    }
+}

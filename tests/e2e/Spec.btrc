@@ -1,0 +1,4 @@
+import ./spec/VmSpecArgs.btrc;
+import ./spec/VmOperation.btrc;
+import ./spec/VmTestSpec.btrc;
+import ./spec/VmSpecParser.btrc;
