@@ -1,0 +1,13 @@
+import Library.CLI;
+import Library.Console;
+import Library.JSON;
+import ./SteamShortcuts.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLICommandLine.parse(CLIArgs(argc, argv));
+        SteamShortcuts.install(SteamLibrary(args.option("--steam-path")), JSONValue.parse(Path.readAll(args.option("--shortcuts"))));
+    }
+    catch (string error) { Console.error(f"install-steam-shortcuts: {error}"); return 1; }
+    return 0;
+}

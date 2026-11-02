@@ -83,7 +83,7 @@ class QemuFirmware {
     public string prepareFirmwareDataAlias() {
         var dataDir = self.qemuShareDir();
         if (dataDir.isEmpty()) { NixosLog.fatal("Could not find QEMU firmware data directory for " + self.spec.arch); }
-        FileSystem.removeRecursive(self.firmwareDataAliasPath());
+        VmFiles.remove(self.firmwareDataAliasPath());
         var command = "ln -s " + UnixShell.quote(dataDir) + " " + UnixShell.quote(self.firmwareDataAliasPath());
         var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to prepare firmware data alias"); }
@@ -171,7 +171,7 @@ class QemuFirmware {
     }
 
     public string prepareFirmwareCodeAlias(string codePath) {
-        FileSystem.removeRecursive(self.firmwareCodeAliasPath());
+        VmFiles.remove(self.firmwareCodeAliasPath());
         var command = "ln -s " + UnixShell.quote(codePath) + " " + UnixShell.quote(self.firmwareCodeAliasPath());
         var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to prepare firmware code alias"); }
@@ -255,11 +255,11 @@ class QemuFirmware {
         if (!self.tpm2Enabled()) { return; }
         self.requireTpm2Capability();
         FileSystem.mkdirp(self.tpmStateDir());
-        FileSystem.removeRecursive(self.tpmSocketPath());
+        VmFiles.remove(self.tpmSocketPath());
         if (FileSystem.exists(self.tpmPidPath())) {
             var running = self.shell.run("pid=$(cat " + UnixShell.quote(self.tpmPidPath()) + "); kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + UnixShell.quote(self.tpmSocketPath()) + " >/dev/null", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
             if (running.ok()) { return; }
-            FileSystem.removeRecursive(self.tpmPidPath());
+            VmFiles.remove(self.tpmPidPath());
         }
 
         var command = Command("swtpm socket --tpm2").args([
@@ -287,9 +287,9 @@ class QemuFirmware {
             var quotedPid = UnixShell.quote(self.tpmPidPath());
             var quotedSocket = UnixShell.quote(self.tpmSocketPath());
             self.shell.run("pid=$(cat " + quotedPid + "); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedSocket + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-            FileSystem.removeRecursive(self.tpmPidPath());
+            VmFiles.remove(self.tpmPidPath());
         }
-        FileSystem.removeRecursive(self.tpmSocketPath());
+        VmFiles.remove(self.tpmSocketPath());
     }
 
     public void addFirmware(Command command, bool fromIso) {

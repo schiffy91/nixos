@@ -71,7 +71,7 @@ class QemuE2eHarness {
 
     public void resetState() {
         self.stop();
-        FileSystem.removeRecursive(self.spec.workDir);
+        VmFiles.remove(self.spec.workDir);
         self.ensureWorkDir();
     }
 
@@ -90,17 +90,17 @@ class QemuE2eHarness {
             return;
         }
         if (FileSystem.exists(self.pidPath())) {
-            FileSystem.removeRecursive(self.pidPath());
+            VmFiles.remove(self.pidPath());
         }
         if (FileSystem.exists(self.legacyPidPath())) {
-            FileSystem.removeRecursive(self.legacyPidPath());
+            VmFiles.remove(self.legacyPidPath());
         }
         var qemuCommand = self.qemuCmd.build(fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
-        FileSystem.removeRecursive(self.qemuLogPath());
-        FileSystem.removeRecursive(self.qemuSupervisorLogPath());
-        FileSystem.removeRecursive(self.qemuExitPath());
+        VmFiles.remove(self.qemuLogPath());
+        VmFiles.remove(self.qemuSupervisorLogPath());
+        VmFiles.remove(self.qemuExitPath());
         var qemuExec = "exec " + qemuCommand.render();
         var qemuLaunch = "setsid sh -c " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 &";
         var supervisor = "log=" + UnixShell.quote(self.qemuSupervisorLogPath())
@@ -168,14 +168,14 @@ class QemuE2eHarness {
             if (!stop.ok()) {
                 NixosLog.fatal("Failed to stop QEMU pid " + pid + "; stop log: " + self.qemuStopLogPath());
             }
-            FileSystem.removeRecursive(self.pidPath());
-            FileSystem.removeRecursive(self.legacyPidPath());
+            VmFiles.remove(self.pidPath());
+            VmFiles.remove(self.legacyPidPath());
         }
         self.state.clearPid();
-        FileSystem.removeRecursive(self.monitorPath());
-        FileSystem.removeRecursive(self.qmpPath());
-        FileSystem.removeRecursive(self.serial.serialInPath());
-        FileSystem.removeRecursive(self.serial.serialOutPath());
+        VmFiles.remove(self.monitorPath());
+        VmFiles.remove(self.qmpPath());
+        VmFiles.remove(self.serial.serialInPath());
+        VmFiles.remove(self.serial.serialOutPath());
         self.firmware.stopSwtpm();
     }
 
@@ -287,6 +287,25 @@ class QemuE2eHarness {
                 nextBootstrap = timer.elapsed() + 24.0;
             }
         }
+        return false;
+    }
+
+    public bool unlockLuks(string passphrase, int timeout) {
+        var offset = self.serial.serialLogSize();
+        var elapsed = 0;
+        while (elapsed < timeout) {
+            if (!self.state.isRunning()) {
+                NixosLog.error(f"QEMU exited while waiting for the LUKS prompt; {self.state.runningDetail()}; serial log: {self.serialLogPath()}");
+                return false;
+            }
+            if (self.serial.serialLogShows("Please enter passphrase", offset)) {
+                self.serial.serialSend(passphrase);
+                return self.waitForSsh(timeout - elapsed);
+            }
+            self.sleepSeconds(1);
+            elapsed = elapsed + 1;
+        }
+        NixosLog.error(f"No LUKS prompt within {timeout} seconds; serial log: {self.serialLogPath()}");
         return false;
     }
 

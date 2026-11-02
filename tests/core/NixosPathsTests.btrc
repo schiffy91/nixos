@@ -1,0 +1,19 @@
+#include <assert.h>
+#include <string.h>
+
+import ../../btrc/core/NixosPaths.btrc;
+
+void expectJoin(string root, string path, string expected) {
+    assert(strcmp(NixosPaths.join(root, path), expected) == 0);
+}
+
+int main() {
+    expectJoin("/mnt", "/etc/nixos", "/mnt/etc/nixos");
+    expectJoin("/mnt", "/nix/tmp", "/mnt/nix/tmp");
+    expectJoin("/mnt", "/", "/mnt");
+    expectJoin("/mnt", "etc/nixos", "/mnt/etc/nixos");
+    expectJoin("", "/etc/nixos", "/etc/nixos");
+
+    print("PASS: nixos paths join under an install root");
+    return 0;
+}

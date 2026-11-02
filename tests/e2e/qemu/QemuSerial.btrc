@@ -74,8 +74,8 @@ class QemuSerial {
     }
 
     public void prepareSerialPipe() {
-        FileSystem.removeRecursive(self.serialInPath());
-        FileSystem.removeRecursive(self.serialOutPath());
+        VmFiles.remove(self.serialInPath());
+        VmFiles.remove(self.serialOutPath());
         var inputPipe = f"mkfifo {UnixShell.quote(self.serialInPath())}";
         var inResult = self.shell.run(inputPipe, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!inResult.ok()) { NixosLog.fatal("Failed to create VM serial input pipe"); }
@@ -85,8 +85,8 @@ class QemuSerial {
     }
 
     public void startSerialReader() {
-        FileSystem.removeRecursive(self.serialReaderPidPath());
-        FileSystem.removeRecursive(self.serialLogPath());
+        VmFiles.remove(self.serialReaderPidPath());
+        VmFiles.remove(self.serialLogPath());
         var outPath = UnixShell.quote(self.serialOutPath());
         var logPath = UnixShell.quote(self.serialLogPath());
         var pidPath = UnixShell.quote(self.serialReaderPidPath());
@@ -111,7 +111,7 @@ class QemuSerial {
         var pidPath = UnixShell.quote(self.serialReaderPidPath());
         var outPath = UnixShell.quote(self.serialOutPath());
         self.shell.run(f"pid=$(cat {pidPath}); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F {outPath} >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
-        FileSystem.removeRecursive(self.serialReaderPidPath());
+        VmFiles.remove(self.serialReaderPidPath());
     }
 
     public void serialSend(string command) {
@@ -124,5 +124,15 @@ class QemuSerial {
             self.shell.run("sleep 2", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
         }
         NixosLog.fatal(f"Failed to send command to VM serial console: {self.serialInPath()}");
+    }
+
+    public int serialLogSize() {
+        var size = self.shell.run(f"wc -c < {UnixShell.quote(self.serialLogPath())}", logFailure=false);
+        return size.ok() ? Strings.toInt(size.trimmed()) : 0;
+    }
+
+    public bool serialLogShows(string text, int offset) {
+        var command = f"tail -c +{offset + 1} {UnixShell.quote(self.serialLogPath())} | grep -a -F -q {UnixShell.quote(text)}";
+        return self.shell.run(command, logFailure=false).ok();
     }
 }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Structure Taste"
+  short_description: "Apply ownership-first repository layout judgment."
+  default_prompt: "Use this skill when reorganizing or reviewing a project tree. Keep top-level folders scarce, separate source/config/tests/packaging/docs/generated/runtime state, and propose a migration map before broad file moves."

@@ -66,31 +66,8 @@
          "op" : "boot-disk"
       },
       {
-         "op" : "sleep",
-         "timeout" : 15
-      },
-      {
          "command" : "testpass123",
-         "op" : "serial-send"
-      },
-      {
-         "op" : "sleep",
-         "timeout" : 7
-      },
-      {
-         "command" : "testpass123",
-         "op" : "serial-send"
-      },
-      {
-         "op" : "sleep",
-         "timeout" : 7
-      },
-      {
-         "command" : "testpass123",
-         "op" : "serial-send"
-      },
-      {
-         "op" : "wait-ssh",
+         "op" : "unlock-luks",
          "timeout" : 300
       },
       {
@@ -103,31 +80,8 @@
          "op" : "boot-disk"
       },
       {
-         "op" : "sleep",
-         "timeout" : 15
-      },
-      {
          "command" : "testpass123",
-         "op" : "serial-send"
-      },
-      {
-         "op" : "sleep",
-         "timeout" : 7
-      },
-      {
-         "command" : "testpass123",
-         "op" : "serial-send"
-      },
-      {
-         "op" : "sleep",
-         "timeout" : 7
-      },
-      {
-         "command" : "testpass123",
-         "op" : "serial-send"
-      },
-      {
-         "op" : "wait-ssh",
+         "op" : "unlock-luks",
          "timeout" : 300
       },
       {

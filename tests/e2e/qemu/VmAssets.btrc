@@ -86,9 +86,9 @@ class VmAssets {
     }
 
     public void removeIsoCache() {
-        FileSystem.removeRecursive(self.spec.iso);
-        FileSystem.removeRecursive(self.isoHashPath());
-        FileSystem.removeRecursive(self.isoSizePath());
+        VmFiles.remove(self.spec.iso);
+        VmFiles.remove(self.isoHashPath());
+        VmFiles.remove(self.isoSizePath());
     }
 
     public bool isoValid(string expectedHash, string expectedSize) {
@@ -103,11 +103,11 @@ class VmAssets {
 
     public void installIso(string source, string expectedHash, string expectedSize) {
         if (!expectedSize.isEmpty() && !self.fileSize(source).equals(expectedSize)) {
-            FileSystem.removeRecursive(source);
+            VmFiles.remove(source);
             NixosLog.fatal("Downloaded installer ISO size did not match " + self.spec.isoUrl);
         }
         if (!expectedHash.isEmpty() && !self.fileHash(source).equals(expectedHash)) {
-            FileSystem.removeRecursive(source);
+            VmFiles.remove(source);
             NixosLog.fatal("Downloaded installer ISO checksum did not match " + self.spec.isoUrl);
         }
         var command = f"mv {UnixShell.quote(source)} {UnixShell.quote(self.spec.iso)}";
@@ -127,7 +127,7 @@ class VmAssets {
         if (self.isoValid(expectedHash, expectedSize)) { return; }
         self.removeIsoCache();
         var downloadPath = f"{self.spec.iso}.tmp";
-        FileSystem.removeRecursive(downloadPath);
+        VmFiles.remove(downloadPath);
         var command = f"curl -L -o {UnixShell.quote(downloadPath)} {UnixShell.quote(self.spec.isoUrl)}";
         var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }

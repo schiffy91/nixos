@@ -65,4 +65,10 @@ class SteamLibrary {
         }
         return result;
     }
+
+    public Vector<string> userShortcuts() {
+        Vector<string> result = [];
+        for path in self.userConfigs() { result.push(f"{PathTools.dirname(path)}/shortcuts.vdf"); }
+        return result;
+    }
 }

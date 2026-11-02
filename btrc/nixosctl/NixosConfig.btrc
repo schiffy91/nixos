@@ -96,6 +96,16 @@ class NixosConfig {
         return rev;
     }
 
+    public Vector<string> linuxInputs() {
+        var lock = Path.readAll(PathTools.join(self.paths.root, "flake.lock"));
+        var inputs = JSONValue.parse(lock).get("nodes").get("root").get("inputs");
+        Vector<string> names = [];
+        for name in inputs.keys() {
+            if (!name.contains("darwin")) { names.push(name); }
+        }
+        return names;
+    }
+
     public string evalRaw(string attribute) {
         var key = f"{self.flakeRef()}:{attribute}";
         if (self.cache.has(key)) {

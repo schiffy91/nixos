@@ -4,9 +4,10 @@
 {
   ##### Shared Boot Settings #####
   boot = {
-    kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
+    kernelPackages = config.settings.boot.kernelPackages;
     loader = {
       timeout = config.settings.boot.timeout;
+      systemd-boot.editor = false;  # lanzaboote's loader.conf reads this too
       efi = {
         canTouchEfiVariables = true;
         efiSysMountPoint = config.settings.disk.boot.efiSysMountPoint;
@@ -18,7 +19,7 @@
       verbose = false;
     };
     plymouth = {
-      enable = true;
+      enable = config.settings.boot.plymouth.enable;
       theme = "bgrt";
     };
     kernelParams = [
@@ -32,7 +33,11 @@
       "mem_sleep_default=s2idle"        # Use s2idle instead of S3 suspend
     ];
   };
-  systemd.sleep.settings.Sleep.AllowHibernation = if config.settings.sleep.allowHibernation then "yes" else "no";
+  systemd.sleep.settings.Sleep.AllowHibernation = if config.settings.sleep.allowHibernation || config.settings.sleep.hibernateOnSuspend then "yes" else "no";
+  # Steam and Plasma only ever ask logind to suspend, so the suspend unit itself hibernates.
+  systemd.services.systemd-suspend = lib.mkIf config.settings.sleep.hibernateOnSuspend {
+    serviceConfig.ExecStart = [ "" "${config.systemd.package}/lib/systemd/systemd-sleep hibernate" ];
+  };
   systemd.tmpfiles.rules = [ "d /tmp 1777 root root -" ];
   environment.systemPackages = with pkgs; [ efibootmgr ];
 }
@@ -42,7 +47,6 @@
     enable = true;
     configurationLimit = config.settings.boot.previousGenerationLimit;
     consoleMode = "max";
-    editor = false;
   };
 })
 ##### Secure Boot Settings #####
@@ -54,6 +58,7 @@
       settings.default = "nixos-generation-*.efi";
       pkiBundle = config.settings.boot.pkiBundle;
       configurationLimit = config.settings.boot.previousGenerationLimit;
+      autoEnrollKeys.enable = config.settings.boot.autoEnrollKeys;
     };
   };
 })];

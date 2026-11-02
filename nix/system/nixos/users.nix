@@ -12,8 +12,7 @@ let
         && !(lib.elem (baseNameOf path) ignoredNames)
         && !(lib.any (ignoredDir path) skippedDirs);
     in lib.filter importable (lib.filesystem.listFilesRecursive dir);
-  appModules = nixModuleFiles [ "assets" "custom" "home-manager" "tests" ] ../apps;
-  homeModules = nixModuleFiles [] ../apps/home-manager;
+  appModules = nixModuleFiles [ "assets" "custom" "tests" ] ../../apps;
 in {
   imports = [
     inputs.home-manager.nixosModules.home-manager
@@ -77,19 +76,7 @@ in {
           homeDirectory = "/home/${settings.users.admin.username}";
           stateVersion = "24.11";
         };
-        programs.home-manager.enable = true;
-        programs.git = {
-          enable = config.settings.apps.git.enable;
-          settings = {
-            user = {
-              name = admin.publicName;
-              email = admin.publicEmail;
-            };
-            url."git@github.com:".insteadOf = "https://github.com/";
-            gpg.format = "openpgp";
-          };
-        };
-        imports = homeModules;
+        imports = [ ../../home ../../home/plasma.nix ];
       };
     } // lib.optionalAttrs (agent.enable && agent.homeManager.enable) {
       ${agent.username} = {
@@ -100,6 +87,7 @@ in {
           packages = agent.packages;
           file."work/.keep".text = "";
         };
+        imports = [ ../../home/agents ];
         programs = {
           home-manager.enable = true;
           bash = {

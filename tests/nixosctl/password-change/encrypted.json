@@ -35,39 +35,8 @@
       "op": "boot-disk"
     },
     {
-      "op": "sleep",
-      "timeout": 15
-    },
-    {
-      "op": "serial-send",
-      "command": "testpass123"
-    },
-    {
-      "op": "sleep",
-      "timeout": 7
-    },
-    {
-      "op": "serial-send",
-      "command": "testpass123"
-    },
-    {
-      "op": "sleep",
-      "timeout": 7
-    },
-    {
-      "op": "serial-send",
-      "command": "testpass123"
-    },
-    {
-      "op": "sleep",
-      "timeout": 7
-    },
-    {
-      "op": "serial-send",
-      "command": "testpass123"
-    },
-    {
-      "op": "wait-ssh",
+      "op": "unlock-luks",
+      "command": "testpass123",
       "timeout": 300
     },
     {
@@ -89,43 +58,8 @@
       "timeout": 15
     },
     {
-      "op": "sleep",
-      "timeout": 30
-    },
-    {
-      "op": "sleep",
-      "timeout": 15
-    },
-    {
-      "op": "serial-send",
-      "command": "newpass456"
-    },
-    {
-      "op": "sleep",
-      "timeout": 7
-    },
-    {
-      "op": "serial-send",
-      "command": "newpass456"
-    },
-    {
-      "op": "sleep",
-      "timeout": 7
-    },
-    {
-      "op": "serial-send",
-      "command": "newpass456"
-    },
-    {
-      "op": "sleep",
-      "timeout": 7
-    },
-    {
-      "op": "serial-send",
-      "command": "newpass456"
-    },
-    {
-      "op": "wait-ssh",
+      "op": "unlock-luks",
+      "command": "newpass456",
       "timeout": 300
     },
     {

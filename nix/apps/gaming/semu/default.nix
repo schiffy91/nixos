@@ -8,6 +8,8 @@ let
   group = config.users.users.${user}.group;
   home = "/home/${user}";
   target = config.settings.apps.semu.target;
+  # semu deep-merges $SEMU_HOME/overrides over the target, so empty paths change nothing
+  pathsOverride = pkgs.writeText "semu-nixos.json" (builtins.toJSON { inherit (config.settings.apps.semu) paths; });
   semu = inputs.semu.packages.${pkgs.stdenv.hostPlatform.system}.semu;
 in lib.mkIf enabled {
   environment.systemPackages = [ semu ];
@@ -27,7 +29,8 @@ in lib.mkIf enabled {
   };
 
   system.activationScripts.semu = lib.stringAfter [ "users" ] ''
-    install -d -o ${user} -g ${group} "${home}/ES-DE" "${home}/.local/share/semu" "${home}/.config/semu"
+    install -d -o ${user} -g ${group} "${home}/ES-DE" "${home}/.local/share/semu" "${home}/.config/semu/overrides"
+    install -o ${user} -g ${group} -m 0644 ${pathsOverride} "${home}/.config/semu/overrides/nixos.json"
     ${pkgs.util-linux}/bin/runuser -u ${user} -- env HOME="${home}" SEMU_TARGET="${target}" \
       ${semu}/bin/semu prepare --target "${target}" || true
   '';

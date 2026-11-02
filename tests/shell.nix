@@ -33,7 +33,8 @@ let
   aavmfSecboot = stdenv.mkDerivation {
     name = "aavmf-secboot-debian-2026.05-2";
     src = pkgs.fetchurl {
-      url = "https://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2026.05-2_all.deb";
+      # snapshot.debian.org keeps superseded versions; the live pool drops them.
+      url = "https://snapshot.debian.org/archive/debian/20260806T202652Z/pool/main/e/edk2/qemu-efi-aarch64_2026.05-2_all.deb";
       hash = "sha256-7AqSK8dY/PS1ewC4GHBHXZfgfvFm1BYNRlGTGVi7vcM=";
     };
     nativeBuildInputs = [ pkgs.dpkg ];

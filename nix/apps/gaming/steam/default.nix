@@ -12,13 +12,14 @@ let
     rsSampleRate = config.settings.apps.rocksmith.sampleRate;
   };
   appConfig = pkgs.writeText "steam-apps.json" (builtins.toJSON games);
+  shortcuts = pkgs.writeText "steam-shortcuts.json" (builtins.toJSON config.settings.apps.steam.shortcuts);
   inherit (import ./lib.nix { inherit pkgs inputs; }) configureSteamApps;
 in {
   config = lib.mkMerge [
     {
       _module.args.steam = { inherit configureSteamApps; };
     }
-    (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.programs.steam.enable) {
+    (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.settings.apps.steam.protonCustom.enable && config.programs.steam.enable) {
       system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
         if ${pkgs.procps}/bin/pgrep -u ${user} -x steam >/dev/null; then
           echo "Steam is running; close it and rebuild to apply Steam settings."
@@ -31,6 +32,20 @@ in {
             --app-config ${appConfig}
         fi
       '';
+    })
+    (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.settings.apps.steam.shortcuts != {}) {
+      systemd.services.steam-shortcuts = {
+        description = "Declared non-Steam shortcuts";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "display-manager.service" ];
+        unitConfig.RequiresMountsFor = steamPath;
+        serviceConfig = {
+          Type = "oneshot";
+          User = user;
+          ExecCondition = "${pkgs.bash}/bin/sh -c '! ${pkgs.procps}/bin/pgrep -u ${user} -x steam'";  # Steam rewrites shortcuts.vdf when it exits
+          ExecStart = "${configureSteamApps}/bin/install-steam-shortcuts --steam-path ${steamPath} --shortcuts ${shortcuts}";
+        };
+      };
     })
   ];
 }
