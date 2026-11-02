@@ -33,7 +33,7 @@ in {
 
   users.users.${user}.uid = 1000;  # Jovian's SD card automount mounts as UID 1000
 
-  environment.systemPackages = with pkgs; [ moonlight-qt chiaki-ng firefox protonup-qt ];
+  environment.systemPackages = with pkgs; [ google-chrome moonlight-qt chiaki-ng protonup-qt ];
 
   ##### Touchscreen LUKS passphrase #####
   boot.initrd.unl0kr = {
@@ -63,7 +63,15 @@ in {
     };
     apps = {
       nixosctl.caffeine.enable = false;
-      steam.protonCustom.enable = false;  # Steam's own Proton under gamescope
+      steam = {
+        protonCustom.enable = false;  # Steam's own Proton under gamescope
+        shortcuts = {
+          Semu      = "/run/current-system/sw/bin/semu-es-de";
+          Moonlight = "/run/current-system/sw/bin/moonlight";
+          chiaki-ng = "/run/current-system/sw/bin/chiaki";
+          Chrome    = "/run/current-system/sw/bin/google-chrome-stable";
+        };
+      };
       battlenet.enable = true;
       rocksmith.enable = false;
       assettocorsa.enable = false;

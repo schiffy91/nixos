@@ -5,6 +5,10 @@ touchscreen LUKS prompt (unl0kr), hibernation on every sleep, Secure Boot key
 re-enrollment and Sunshine with KMS capture. Its `let` block holds the device
 data: disk, SD card label and LAN.
 
+Decky Loader runs from Jovian; install plugins from its store. The non-Steam
+shortcuts in `settings.apps.steam.shortcuts` are written to every Steam profile
+at boot, before Steam starts. Other shortcuts in Steam are left alone.
+
 The disk layout is the shared one: LUKS over btrfs, immutability, the recovery
 partition and a swapfile large enough to hibernate. The disk is unlocked only
 by the passphrase. Do not enroll a TPM2 keyslot on a Deck.

@@ -21,6 +21,7 @@ pkgs.stdenv.mkDerivation {
       $CC -std=c11 -O2 "$2.c" -lm -lpthread -llzf -lz -o "$2"
     }
     build_tool btrc/gaming/steam/configure.btrc configure-steam-apps
+    build_tool btrc/gaming/steam/install.btrc install-steam-shortcuts
     build_tool btrc/gaming/wine/dpi.btrc wine-prefix-dpi
     build_tool btrc/gaming/assettocorsa/assetto.btrc assetto
     build_tool tests/unit/gaming.btrc gaming-tests
@@ -36,7 +37,7 @@ pkgs.stdenv.mkDerivation {
   '';
   installPhase = ''
     mkdir -p "$out/bin"
-    for tool in configure-steam-apps wine-prefix-dpi assetto; do
+    for tool in configure-steam-apps install-steam-shortcuts wine-prefix-dpi assetto; do
       install -m755 "$tool" "$out/bin/$tool"
       wrapProgram "$out/bin/$tool" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.coreutils pkgs.procps ]}
     done

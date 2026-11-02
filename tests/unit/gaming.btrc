@@ -6,6 +6,7 @@ import Library.JSON;
 import Library.Platform;
 import Library.Process;
 import ../../btrc/gaming/steam/configuration.btrc;
+import ../../btrc/gaming/steam/shortcuts.btrc;
 import ../../btrc/gaming/wine/prefix.btrc;
 import assetto.launcher;
 
@@ -81,6 +82,44 @@ class GamingTests {
         }
         assert(SteamLibrary(steam).game("244210").prefix().equals(f"{library}/steamapps/compatdata/244210/pfx"));
         print("PASS: Steam CLI, separate library, account casing, controller modes, ACC isolation, idempotence");
+    }
+
+    public void shortcuts() {
+        assert(SteamShortcuts.crc32("123456789") == 0xCBF43926L);
+        var steam = f"{self.root}/Shortcuts Steam";
+        GamingFiles.write(f"{steam}/userdata/1/config/localconfig.vdf", "UserLocalConfigStore { }");
+        var foreign = SteamShortcut();
+        SteamShortcuts.field(foreign.body, "appname", "Keep");
+        SteamShortcuts.field(foreign.body, "exe", "\"/opt/keep\"");
+        foreign.body.append(0);
+        SteamShortcuts.cstring(foreign.body, "tags");
+        SteamShortcuts.field(foreign.body, "0", "favorite");
+        foreign.body.append(8);
+        foreign.body.append(8);
+        var stale = SteamShortcuts.create("Moonlight", "/usr/bin/flatpak");
+        var played = SteamShortcuts.create("Chrome", "/run/current-system/sw/bin/google-chrome-stable");
+        played.body.set(played.body.length() - 27, 123);
+        var path = f"{steam}/userdata/1/config/shortcuts.vdf";
+        GamingFiles.writeBytes(path, SteamShortcuts.render([foreign, stale, played]));
+        var declaration = f"{self.root}/shortcuts.json";
+        GamingFiles.write(declaration, "{\"Moonlight\":\"/run/current-system/sw/bin/moonlight\",\"Chrome\":\"/run/current-system/sw/bin/google-chrome-stable\",\"Semu\":\"/run/current-system/sw/bin/semu-es-de\"}");
+        var command = Command(f"{UnixShell.quote(self.tools)}/install-steam-shortcuts");
+        command.flag("--steam-path", steam).flag("--shortcuts", declaration);
+        UnixShell().run(command.render(), throwOnFailure=true);
+        var entries = SteamShortcuts(GamingFiles.read(path)).entries();
+        assert(entries.len == 4);
+        assert(entries.get(0).body.equals(foreign.body));
+        assert(entries.get(1).body.equals(played.body));
+        assert(entries.get(2).name.equals("Moonlight") && entries.get(2).exe.equals("\"/run/current-system/sw/bin/moonlight\""));
+        assert(entries.get(3).body.equals(SteamShortcuts.create("Semu", "/run/current-system/sw/bin/semu-es-de").body));
+        var before = GamingFiles.read(path);
+        UnixShell().run(command.render(), throwOnFailure=true);
+        assert(GamingFiles.read(path).equals(before));
+        var unknown = Bytes.fromString("not a shortcuts file");
+        GamingFiles.writeBytes(path, unknown);
+        assert(!UnixShell().run(command.render(), stderr=CommandOutput.collect(), logFailure=false).ok());
+        assert(GamingFiles.read(path).equals(unknown));
+        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, playtime kept, idempotence, unknown format refusal");
     }
 
     public void dpi() {
@@ -221,7 +260,7 @@ class GamingTests {
 
 int main() {
     var tests = GamingTests();
-    tests.vdf(); tests.steam(); tests.dpi(); tests.mods(); tests.contentManager(); tests.launch();
+    tests.vdf(); tests.steam(); tests.shortcuts(); tests.dpi(); tests.mods(); tests.contentManager(); tests.launch();
     FileSystem.removeRecursive(tests.root);
     return 0;
 }

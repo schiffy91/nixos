@@ -20,6 +20,24 @@ class GamingFiles {
         }
     }
 
+    class Bytes read(string path) {
+        var file = File(path, "rb");
+        if (!file.ok()) { throw f"Cannot read: {path}"; }
+        var content = file.readBytes();
+        file.close();
+        return content;
+    }
+
+    class void writeBytes(string path, Bytes content) {
+        GamingFiles.directory(PathTools.dirname(path));
+        var temporary = f"{path}.nix-new";
+        if (FileSystem.isSymlink(temporary)) { throw f"Refusing symlink: {temporary}"; }
+        var file = File(temporary, "wb");
+        if (!file.ok() || !file.writeBytes(content) || !file.close() || rename(temporary, path) != 0) {
+            throw f"Cannot write: {path}";
+        }
+    }
+
     class void copy(string source, string target) {
         GamingFiles.directory(PathTools.dirname(target));
         var temporary = f"{target}.nix-new";

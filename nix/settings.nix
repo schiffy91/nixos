@@ -220,8 +220,6 @@ in {
       ##### Remote Play #####
       "${adminHome}/.config/Moonlight Game Streaming Project"
       "${adminHome}/.config/Chiaki"
-      ##### Firefox #####
-      "${adminHome}/.config/mozilla"
       ##### Native Logitech wheel tools #####
       "${adminHome}/.config/logi-wheel"
       "${adminHome}/.local/share/logitech-trueforce"
@@ -328,6 +326,7 @@ in {
     settings.apps.simracing.enable = mkSetting bool false;
     settings.apps.steam.enable = mkSetting bool true;
     settings.apps.steam.protonCustom.enable = mkSetting bool true;
+    settings.apps.steam.shortcuts = mkSetting (attrsOf str) {}; # non-Steam shortcut name -> exe; Steam derives the app id from the exe, so use a stable path
     settings.apps.sunshine.enable = mkSetting bool true;
     settings.apps.sunshine.capture = mkSetting (enum [ "kms" "kwin" ]) "kms";
     settings.apps.sunshine.cuda.enable = mkSetting bool false;
