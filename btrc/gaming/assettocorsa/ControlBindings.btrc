@@ -7,7 +7,7 @@ class ControlBindings {
         var updated = original;
         Vector<string> actions = [];
         Vector<string> chords = [];
-        for binding in bindings.arr {
+        for binding in bindings.elements() {
             if (!binding.isObject() || !binding.get("action").isString() || (!binding.get("button").isNull() && !binding.get("button").isInt())
                 || !binding.get("joystick").isInt() || (!binding.get("modifier").isNull() && !binding.get("modifier").isInt())) {
                 throw "Invalid control binding fields";
@@ -33,7 +33,7 @@ class ControlBindings {
             updated = GameSettings.set(updated, action, "BUTTON_MODIFICATOR", f"{modifier}");
             updated = GameSettings.set(updated, action, "__CM_POV", "-1");
         }
-        for binding in bindings.arr {
+        for binding in bindings.elements() {
             if (!binding.get("modifier").isNull() && binding.get("modifier").asInt() >= 0) {
                 var joystick = binding.get("joystick").asInt();
                 var modifier = binding.get("modifier").asInt();
@@ -46,7 +46,7 @@ class ControlBindings {
     class void configure(string prefix, JSONValue bindings, JSONValue presets, string brakeGamma = "") {
         if (bindings.isArray() && bindings.size() == 0 && brakeGamma.isEmpty()) { return; }
         if (!brakeGamma.isEmpty()) {
-            var gamma = Strings.toFloat(brakeGamma);
+            var gamma = brakeGamma.toFloat();
             if (!(gamma >= 1 && gamma <= 5) || brakeGamma.contains("\n") || brakeGamma.contains("\r")) { throw "Brake gamma must be between 1 and 5"; }
         }
         Vector<string> paths = [f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controls.ini"];

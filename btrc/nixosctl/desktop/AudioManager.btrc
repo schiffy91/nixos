@@ -32,26 +32,28 @@ class AudioManager {
     public Vector<AudioSink> sinks() {
         Vector<AudioSink> result = [];
         var listed = self.shell.run("pactl -f json list sinks", logFailure=false);
-        var sinksJson = "{\"sinks\":" + listed.stdout() + "}";
-        for sinkJson in JSONText.objectArray(sinksJson, "sinks") {
-            var name = JSONText.field(sinkJson, "name", "");
+        var sinks = JSONValue.parse(listed.stdout());
+        if (!sinks.isArray()) { return result; }
+        for sinkJson in sinks.elements() {
+            if (!sinkJson.has("name")) { continue; }
+            var name = sinkJson.get("name").asString();
             if (name.isEmpty()) { continue; }
             var sink = AudioSink();
             sink.name = name;
-            sink.description = JSONText.field(sinkJson, "description", "");
+            sink.description = sinkJson.has("description") ? sinkJson.get("description").asString() : "";
             result.push(sink);
         }
         return result;
     }
 
     public string entryJson(string name, string label, string description, bool isDefault) {
-        var json = JSONObject();
-        json.setString("name", name);
-        json.setString("label", label);
+        var json = JSONValue.makeObject();
+        json.set("name", JSONValue.makeString(name));
+        json.set("label", JSONValue.makeString(label));
         if (!description.isEmpty()) {
-            json.setString("description", description);
+            json.set("description", JSONValue.makeString(description));
         }
-        json.setBool("default", isDefault);
+        json.set("default", JSONValue.makeBool(isDefault));
         var encoded = json.stringify();
         return encoded;
     }
@@ -89,7 +91,7 @@ class AudioManager {
     }
 
     public void runPactl(string action, string arguments) {
-        var result = self.shell.run(f"pactl {action} {arguments}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(f"pactl {action} {arguments}", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"pactl {action} failed");
         }
@@ -97,13 +99,13 @@ class AudioManager {
 
     public void applyPreset(AudioPreset preset) {
         if (!preset.card.isEmpty() && !preset.profile.isEmpty()) {
-            self.runPactl("set-card-profile", f"{UnixShell.quote(preset.card)} {UnixShell.quote(preset.profile)}");
+            self.runPactl("set-card-profile", f"{ShellWords.quote(preset.card)} {ShellWords.quote(preset.profile)}");
         }
         if (!preset.sink.isEmpty()) {
-            self.runPactl("set-default-sink", UnixShell.quote(preset.sink));
+            self.runPactl("set-default-sink", ShellWords.quote(preset.sink));
         }
         if (!preset.sink.isEmpty() && !preset.volume.isEmpty()) {
-            self.runPactl("set-sink-volume", f"{UnixShell.quote(preset.sink)} {UnixShell.quote(preset.volume)}");
+            self.runPactl("set-sink-volume", f"{ShellWords.quote(preset.sink)} {ShellWords.quote(preset.volume)}");
         }
     }
 
@@ -113,6 +115,6 @@ class AudioManager {
             self.applyPreset(preset);
             return;
         }
-        self.runPactl("set-default-sink", UnixShell.quote(selector));
+        self.runPactl("set-default-sink", ShellWords.quote(selector));
     }
 }

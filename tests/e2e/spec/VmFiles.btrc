@@ -2,7 +2,7 @@ import Library.FileSystem;
 
 class VmFiles {
     class int remove(string path) {
-        var parent = UnixFileSystem.realPath(PathTools.dirname(path));
+        var parent = FileSystem.realPath(PathTools.dirname(path));
         return FileSystem.removeRecursive(parent.isEmpty() ? path : PathTools.join(parent, PathTools.basename(path)));
     }
 }

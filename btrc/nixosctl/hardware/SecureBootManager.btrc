@@ -36,7 +36,7 @@ class SecureBootManager {
         if (FileSystem.exists(f"{bundle}/GUID") || FileSystem.exists(f"{bundle}/keys")) {
             throw "Incomplete existing Secure Boot keys; restore the missing files instead of rotating keys";
         }
-        self.shell.run("sbctl create-keys", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run("sbctl create-keys", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
         if (!self.keysExist()) {
             NixosLog.fatal("sbctl did not create a complete PK/KEK/db key bundle");
         }
@@ -49,7 +49,7 @@ class SecureBootManager {
         } else {
             command = f"{command} --yes-this-might-brick-my-machine";
         }
-        self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), throwOnFailure=true);
+        self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
     }
 
     public bool verify() {
@@ -58,12 +58,12 @@ class SecureBootManager {
             var arch = self.config.evalString("pkgs.stdenv.hostPlatform.efiArch");
             var fallback = f"EFI/BOOT/BOOT{arch.toUpper()}.EFI";
             Vector<string> required = [f"{boot}/{fallback}", f"{boot}/EFI/systemd/systemd-boot{arch}.efi"];
-            var entries = self.shell.run(f"bootctl --esp-path={UnixShell.quote(boot)} --json=short list", stderr=CommandOutput.collect(), throwOnFailure=true);
+            var entries = self.shell.run(f"bootctl --esp-path={ShellWords.quote(boot)} --json=short list", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
             required.push(SecureBootVerification.defaultImage(entries.stdout(), boot));
             for name in FileSystem.listDir(f"{boot}/EFI/Linux") {
                 if (name.endsWith(".efi")) { required.push(f"{boot}/EFI/Linux/{name}"); }
             }
-            var result = self.shell.run("sbctl verify --json", stderr=CommandOutput.collect(), throwOnFailure=true);
+            var result = self.shell.run("sbctl verify --json", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
             var unsignedPaths = SecureBootVerification.failures(result.stdout(), required);
             if (!unsignedPaths.isEmpty()) {
                 for path in unsignedPaths { NixosLog.error(f"NOT signed or missing: {path}"); }
@@ -72,7 +72,7 @@ class SecureBootManager {
             if (self.config.evalBool("config.settings.disk.recovery.enable")) {
                 var recovery = self.config.evalString("config.settings.disk.recovery.mountPoint");
                 for path in [f"{boot}/EFI/recovery/nixos-recovery.efi", f"{recovery}/EFI/recovery/nixos-recovery.efi", f"{recovery}/{fallback}"] {
-                    self.shell.run(f"sbverify --cert {UnixShell.quote(self.dbPublicKey())} {UnixShell.quote(path)}", stderr=CommandOutput.collect(), throwOnFailure=true);
+                    self.shell.run(f"sbverify --cert {ShellWords.quote(self.dbPublicKey())} {ShellWords.quote(path)}", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
                 }
             }
             NixosLog.info("Required system and recovery boot images are signed with our key");
@@ -113,7 +113,7 @@ class SecureBootManager {
     }
 
     public bool status() {
-        var result = self.shell.run("sbctl status", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run("sbctl status", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         return result.ok() && self.verify();
     }
 }

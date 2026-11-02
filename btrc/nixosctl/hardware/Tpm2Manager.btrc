@@ -16,7 +16,7 @@ class Tpm2Manager {
     public string listedDevice() {
         var result = self.shell.run(
             "systemd-cryptenroll --tpm2-device=list",
-            stderr=CommandOutput.suppress(),
+            stderr=COMMAND_OUTPUT_SUPPRESS,
             logFailure=false);
         if (!result.ok()) { return ""; }
         for line in Strings.split(result.stdout(), "\n") {
@@ -29,9 +29,9 @@ class Tpm2Manager {
     }
 
     public bool configuredDeviceExists() {
-        var device = UnixShell.quote(self.config.tpmDevice());
+        var device = ShellWords.quote(self.config.tpmDevice());
         return FileSystem.exists(self.config.tpmDevice())
-            || self.shell.run(f"test -e {device}", stderr=CommandOutput.suppress(), logFailure=false).ok();
+            || self.shell.run(f"test -e {device}", stderr=COMMAND_OUTPUT_SUPPRESS, logFailure=false).ok();
     }
 
     public bool configuredVersionIsTpm2() {
@@ -62,27 +62,27 @@ class Tpm2Manager {
     }
 
     public bool diskEncrypted() {
-        var result = self.shell.run(f"cryptsetup isLuks {UnixShell.quote(self.config.rootPartLabelPath())}", logFailure=false);
+        var result = self.shell.run(f"cryptsetup isLuks {ShellWords.quote(self.config.rootPartLabelPath())}", logFailure=false);
         return result.ok();
     }
 
     public bool enroll() {
-        var command = f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())}";
-        command = f"{command} --wipe-slot=tpm2 --tpm2-device={UnixShell.quote(self.enrollmentDevice())} --tpm2-pcrs=7+12";
+        var command = f"systemd-cryptenroll {ShellWords.quote(self.config.rootPartLabelPath())}";
+        command = f"{command} --wipe-slot=tpm2 --tpm2-device={ShellWords.quote(self.enrollmentDevice())} --tpm2-pcrs=7+12";
         return self.shell.run(
             command,
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream(),
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
             logFailure=false,
             foreground=true).ok();  /* ask-password must own the tty to disable echo */
     }
 
     public bool wipe() {
-        var command = f"systemd-cryptenroll {UnixShell.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2";
+        var command = f"systemd-cryptenroll {ShellWords.quote(self.config.rootPartLabelPath())} --wipe-slot=tpm2";
         return self.shell.run(
             command,
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream(),
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
             logFailure=false).ok();
     }
 
@@ -93,14 +93,14 @@ class Tpm2Manager {
             Console.log(f"TPM2 detected device: {listed}");
         }
         self.shell.run(
-            f"systemd-cryptenroll --tpm2-device=list {UnixShell.quote(self.config.rootPartLabelPath())}",
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream(),
+            f"systemd-cryptenroll --tpm2-device=list {ShellWords.quote(self.config.rootPartLabelPath())}",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
             logFailure=false);
         self.shell.run(
-            f"cryptsetup luksDump {UnixShell.quote(self.config.rootPartLabelPath())}",
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream(),
+            f"cryptsetup luksDump {ShellWords.quote(self.config.rootPartLabelPath())}",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
             logFailure=false);
     }
 }

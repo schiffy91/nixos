@@ -31,7 +31,7 @@ class ImmutabilitySlots {
             var name = PathTools.basename(child);
             if (!name.startsWith("generation-")) { continue; }
             var value = name.substring(11, name.len() - 11);
-            if (!Strings.isDigitStr(value)) { continue; }
+            if (!value.isDigit()) { continue; }
             if (Strings.toInt(value) > generations) {
                 self.fs.deleteSubvolume(child);
             }
@@ -65,8 +65,8 @@ class ImmutabilitySlots {
             self.run.renamePath(next, live);
             return;
         }
-        var quotedLive = UnixShell.quote(live);
-        var quotedNext = UnixShell.quote(next);
+        var quotedLive = ShellWords.quote(live);
+        var quotedNext = ShellWords.quote(next);
         self.run.require(f"mv -T --exchange --no-copy {quotedLive} {quotedNext}");
         self.fs.deleteSubvolume(next);
     }

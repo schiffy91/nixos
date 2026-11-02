@@ -29,7 +29,7 @@ class ImmutabilityFs {
     }
 
     public bool mounted(string path) {
-        var result = self.run.shell.run(f"findmnt --mountpoint {UnixShell.quote(path)}", logFailure=false);
+        var result = self.run.shell.run(f"findmnt --mountpoint {ShellWords.quote(path)}", logFailure=false);
         return result.ok();
     }
 
@@ -104,7 +104,7 @@ class ImmutabilityFs {
 
     public void copyPath(string source, string destination) {
         self.run.mkdirp(PathTools.dirname(destination));
-        self.run.require(f"cp --reflink=always -a {UnixShell.quote(source)} {UnixShell.quote(destination)}");
+        self.run.require(f"cp --reflink=always -a {ShellWords.quote(source)} {ShellWords.quote(destination)}");
     }
 
     public void copyDirectoryContents(string source, string destination) {
@@ -114,15 +114,15 @@ class ImmutabilityFs {
             var paths = nested.join(" ");
             self.run.fatal(f"nested subvolumes in persisted dir: {paths}");
         }
-        var sourceContents = UnixShell.quote(PathTools.join(source, "."));
-        var quotedDestination = UnixShell.quote(destination);
+        var sourceContents = ShellWords.quote(PathTools.join(source, "."));
+        var quotedDestination = ShellWords.quote(destination);
         self.run.require(f"cp --reflink=always -a {sourceContents} {quotedDestination}");
     }
 
     public void matchOwnerAndMode(string source, string destination) {
         if (!FileSystem.exists(source) || !FileSystem.isDir(destination)) { return; }
-        var quotedSource = UnixShell.quote(source);
-        var quotedDestination = UnixShell.quote(destination);
+        var quotedSource = ShellWords.quote(source);
+        var quotedDestination = ShellWords.quote(destination);
         self.run.require(f"chown --reference={quotedSource} {quotedDestination}");
         self.run.require(f"chmod --reference={quotedSource} {quotedDestination}");
     }

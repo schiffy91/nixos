@@ -1,5 +1,5 @@
 import Library.Console;
-import Library.Datetime;
+import Library.Timer;
 import Library.FileSystem;
 import Library.Process;
 import ../../btrc/core/NixosLog.btrc;
@@ -102,10 +102,10 @@ class QemuE2eHarness {
         VmFiles.remove(self.qemuSupervisorLogPath());
         VmFiles.remove(self.qemuExitPath());
         var qemuExec = "exec " + qemuCommand.render();
-        var qemuLaunch = "setsid sh -c " + UnixShell.quote(qemuExec) + " >> " + UnixShell.quote(self.qemuLogPath()) + " 2>&1 &";
-        var supervisor = "log=" + UnixShell.quote(self.qemuSupervisorLogPath())
-            + "; pid_path=" + UnixShell.quote(self.pidPath())
-            + "; exit_path=" + UnixShell.quote(self.qemuExitPath())
+        var qemuLaunch = "setsid sh -c " + ShellWords.quote(qemuExec) + " >> " + ShellWords.quote(self.qemuLogPath()) + " 2>&1 &";
+        var supervisor = "log=" + ShellWords.quote(self.qemuSupervisorLogPath())
+            + "; pid_path=" + ShellWords.quote(self.pidPath())
+            + "; exit_path=" + ShellWords.quote(self.qemuExitPath())
             + "; rm -f \"$pid_path\" \"$exit_path\"; qpid=; "
             + "supervisor_signal() { signum=\"$1\"; printf 'signal=%s supervisor=%s qpid=%s time=%s\\n' \"$signum\" \"$$\" \"$qpid\" \"$(date -u +%FT%TZ)\" >> \"$log\"; if [ -n \"$qpid\" ]; then kill \"$qpid\" 2>/dev/null || true; fi; exit $((128 + signum)); }; "
             + "trap 'supervisor_signal 1' HUP; trap 'supervisor_signal 2' INT; trap 'supervisor_signal 15' TERM; "
@@ -115,10 +115,10 @@ class QemuE2eHarness {
             + "wait \"$qpid\"; rc=$?; "
             + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" > \"$exit_path\"; "
             + "printf 'exit=%s time=%s\\n' \"$rc\" \"$(date -u +%FT%TZ)\" >> \"$log\"; exit \"$rc\"";
-        var writeSupervisor = "printf %s " + UnixShell.quote(supervisor)
-            + " > " + UnixShell.quote(self.qemuSupervisorScriptPath())
-            + "; chmod 700 " + UnixShell.quote(self.qemuSupervisorScriptPath());
-        var wroteSupervisor = self.shell.run(writeSupervisor, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var writeSupervisor = "printf %s " + ShellWords.quote(supervisor)
+            + " > " + ShellWords.quote(self.qemuSupervisorScriptPath())
+            + "; chmod 700 " + ShellWords.quote(self.qemuSupervisorScriptPath());
+        var wroteSupervisor = self.shell.run(writeSupervisor, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!wroteSupervisor.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
@@ -126,18 +126,18 @@ class QemuE2eHarness {
         }
         // util-linux in tests/shell.nix supplies setsid on supported hosts.
         var launch = "command -v setsid >/dev/null || exit 1; nohup setsid sh "
-            + UnixShell.quote(self.qemuSupervisorScriptPath()) + " >/dev/null 2>&1 &";
-        var result = self.shell.run(launch, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            + ShellWords.quote(self.qemuSupervisorScriptPath()) + " >/dev/null 2>&1 &";
+        var result = self.shell.run(launch, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
             NixosLog.fatal("Failed to start QEMU; QEMU log: " + self.qemuLogPath());
         }
         var readyCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do "
-            + "test -s " + UnixShell.quote(self.pidPath())
-            + " && kill -0 $(cat " + UnixShell.quote(self.pidPath()) + ") 2>/dev/null && exit 0; "
+            + "test -s " + ShellWords.quote(self.pidPath())
+            + " && kill -0 $(cat " + ShellWords.quote(self.pidPath()) + ") 2>/dev/null && exit 0; "
             + "sleep 1; done; exit 1";
-        var ready = self.shell.run(readyCommand, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var ready = self.shell.run(readyCommand, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!ready.ok()) {
             self.serial.stopSerialReader();
             self.firmware.stopSwtpm();
@@ -155,16 +155,16 @@ class QemuE2eHarness {
         self.serial.stopSerialReader();
         var pid = self.state.currentPid();
         if (!pid.isEmpty()) {
-            var quotedPid = UnixShell.quote(pid);
-            var quotedStopLog = UnixShell.quote(self.qemuStopLogPath());
-            var quotedProcessName = UnixShell.quote(self.spec.vmProcessName());
+            var quotedPid = ShellWords.quote(pid);
+            var quotedStopLog = ShellWords.quote(self.qemuStopLogPath());
+            var quotedProcessName = ShellWords.quote(self.spec.vmProcessName());
             var dumpState = f"{{ printf 'stopper=%s target=%s time=%s\\n' \"$$\" \"$pid\" \"$(date -u +%FT%TZ)\"; ps -p \"$$\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; }} >> {quotedStopLog} 2>&1";
             var matchesVm = f"kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F {quotedProcessName} >/dev/null";
             var waitGone = "for i in $(seq 1 20); do kill -0 \"$pid\" 2>/dev/null || exit 0; sleep 0.2; done";
             var failed = f"printf 'failed to stop pid=%s expected=%s time=%s\\n' \"$pid\" {quotedProcessName} \"$(date -u +%FT%TZ)\" >> {quotedStopLog}; exit 1";
             var stale = f"printf 'skip stale pid=%s expected=%s time=%s\\n' \"$pid\" {quotedProcessName} \"$(date -u +%FT%TZ)\" >> {quotedStopLog}";
             var command = f"pid={quotedPid}; {dumpState}; if {matchesVm}; then kill \"$pid\" 2>/dev/null || true; {waitGone}; kill -9 \"$pid\" 2>/dev/null || true; {waitGone}; {failed}; else {stale}; fi";
-            var stop = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            var stop = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
             if (!stop.ok()) {
                 NixosLog.fatal("Failed to stop QEMU pid " + pid + "; stop log: " + self.qemuStopLogPath());
             }
@@ -190,7 +190,7 @@ class QemuE2eHarness {
         self.createSshKey();
         var key = self.sshPubKey();
         self.serial.serialSend("");
-        self.serial.serialSend("sudo install -d -m 700 /root/.ssh; echo " + UnixShell.quote(key) + " | sudo tee /root/.ssh/authorized_keys > /dev/null; sudo chmod 600 /root/.ssh/authorized_keys; sudo systemctl restart sshd");
+        self.serial.serialSend("sudo install -d -m 700 /root/.ssh; echo " + ShellWords.quote(key) + " | sudo tee /root/.ssh/authorized_keys > /dev/null; sudo chmod 600 /root/.ssh/authorized_keys; sudo systemctl restart sshd");
         self.sleepSeconds(5);
     }
 
@@ -371,12 +371,12 @@ class QemuE2eHarness {
 
     public void snapshot(string name) {
         self.stop();
-        var command = f"qemu-img snapshot -c {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"qemu-img snapshot -c {ShellWords.quote(name)} {ShellWords.quote(self.diskPath())}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to create VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsPath())) {
-            command = f"cp {UnixShell.quote(self.firmware.firmwareVarsPath())} {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))}";
-            result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            command = f"cp {ShellWords.quote(self.firmware.firmwareVarsPath())} {ShellWords.quote(self.firmware.firmwareVarsSnapshotPath(name))}";
+            result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
             if (!result.ok()) { NixosLog.fatal("Failed to save firmware vars snapshot " + name); }
         }
     }
@@ -387,12 +387,12 @@ class QemuE2eHarness {
             NixosLog.info("Snapshot " + name + " is inherited through qcow2 backing; restore is a no-op");
             return;
         }
-        var command = f"qemu-img snapshot -a {UnixShell.quote(name)} {UnixShell.quote(self.diskPath())}";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"qemu-img snapshot -a {ShellWords.quote(name)} {ShellWords.quote(self.diskPath())}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to restore VM snapshot " + name); }
         if (FileSystem.exists(self.firmware.firmwareVarsSnapshotPath(name))) {
-            command = f"cp {UnixShell.quote(self.firmware.firmwareVarsSnapshotPath(name))} {UnixShell.quote(self.firmware.firmwareVarsPath())}";
-            result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            command = f"cp {ShellWords.quote(self.firmware.firmwareVarsSnapshotPath(name))} {ShellWords.quote(self.firmware.firmwareVarsPath())}";
+            result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
             if (!result.ok()) { NixosLog.fatal("Failed to restore firmware vars snapshot " + name); }
             self.firmware.makeFirmwareVarsWritable();
         }

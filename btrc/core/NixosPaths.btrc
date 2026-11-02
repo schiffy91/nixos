@@ -61,28 +61,28 @@ class LocalConfigFile {
         return FileSystem.exists(self.path);
     }
 
-    public JSONObject read() {
+    public JSONValue read() {
         if (!self.exists()) {
-            return JSONObject();
+            return JSONValue.makeObject();
         }
-        return JSONObject.readFile(self.path);
+        return JSONValue.readFile(self.path);
     }
 
-    public void overwrite(JSONObject data) {
+    public void overwrite(JSONValue data) {
         var dir = PathTools.dirname(self.path);
         FileSystem.mkdirp(dir);
-        data.writeFile(self.path);
+        Path.writeAll(self.path, data.document());
     }
 
     public string getString(string key, string fallback) {
         var data = self.read();
-        var value = data.getString(key, fallback);
-        return Strings.copy(value);
+        if (!data.has(key)) { return Strings.copy(fallback); }
+        return Strings.copy(data.get(key).asString());
     }
 
     public void setString(string key, string value) {
         var data = self.read();
-        data.setString(key, value);
+        data.set(key, JSONValue.makeString(value));
         self.overwrite(data);
     }
 }

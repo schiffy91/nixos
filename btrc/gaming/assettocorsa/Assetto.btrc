@@ -16,7 +16,7 @@ class Assetto {
     class void idle() {
         // CSP renames the running game's main thread (and Linux comm).
         for name in ["acs.exe", "acs_x86.exe", "AC: main thread", "Content Manager", "AssettoCorsa.ex"] {
-            if (UnixShell().run(f"pgrep -x {UnixShell.quote(name)}", logFailure=false).ok()) {
+            if (UnixShell().run(f"pgrep -x {ShellWords.quote(name)}", logFailure=false).ok()) {
                 throw "Close Assetto Corsa and Content Manager first";
             }
         }

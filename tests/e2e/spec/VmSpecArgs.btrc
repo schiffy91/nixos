@@ -25,6 +25,13 @@ class VmSpecArgs {
     }
 
     class string expand(string text, Map<string, string> args) {
-        return JSONText.expand(text, args);
+        string result = Strings.copy(text);
+        for key, value in args {
+            result = Strings.replace(result, "{{" + key + "}}", value);
+        }
+        for key, value in args {
+            result = Strings.replace(result, "${" + key + "}", value);
+        }
+        return result;
     }
 }

@@ -1,5 +1,5 @@
 import Library.Console;
-import Library.Datetime;
+import Library.Timer;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Process;
@@ -36,7 +36,7 @@ class VmProvisioner {
     }
 
     public string writeTextCommand(string text, string path) {
-        return f"printf %s {UnixShell.quote(text)} > {UnixShell.quote(path)}";
+        return f"printf %s {ShellWords.quote(text)} > {ShellWords.quote(path)}";
     }
 
     public void configureVmHost() {
@@ -111,9 +111,9 @@ class VmProvisioner {
             hostLines.insert(hostLines.len - 1, "  settings.boot.pkiBundle = \"/var/lib/sbctl\";");
         }
         var hostNix = self.textLines(hostLines);
-        var local = JSONObject();
-        local.setString("host_path", "nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix");
-        local.setString("target", bootTargetName);
+        var local = JSONValue.makeObject();
+        local.set("host_path", JSONValue.makeString("nix/hosts/" + self.spec.arch + "/VM-TEST/VM-TEST.nix"));
+        local.set("target", JSONValue.makeString(bootTargetName));
         var localConfig = local.stringify() + "\n";
         Vector<string> commands = [];
         commands.push("set -e");
@@ -121,15 +121,15 @@ class VmProvisioner {
             commands.push(self.writeTextCommand(luksPass, "/tmp/plain_text_password.txt"));
             commands.push("chmod 600 /tmp/plain_text_password.txt");
         }
-        commands.push("find /etc/nixos/nix/hosts -mindepth 1 -maxdepth 1 -type d ! -name " + UnixShell.quote(self.spec.arch) + " -exec rm -rf {} +");
-        commands.push(f"rm -f {UnixShell.quote(secureBootModulePath)}");
+        commands.push("find /etc/nixos/nix/hosts -mindepth 1 -maxdepth 1 -type d ! -name " + ShellWords.quote(self.spec.arch) + " -exec rm -rf {} +");
+        commands.push(f"rm -f {ShellWords.quote(secureBootModulePath)}");
         if (secureBootTarget) {
             commands.push(self.writeTextCommand(secureBootModule, secureBootModulePath));
         }
         commands.push("mkdir -p /etc/nixos/secrets");
         commands.push(self.writeTextCommand(passwordHash, "/etc/nixos/secrets/hashed_password.txt"));
         commands.push("chmod 600 /etc/nixos/secrets/hashed_password.txt");
-        commands.push(f"mkdir -p {UnixShell.quote(hostDir)}");
+        commands.push(f"mkdir -p {ShellWords.quote(hostDir)}");
         commands.push(self.writeTextCommand(hostNix, hostPath));
         commands.push(self.writeTextCommand(localConfig, "/etc/nixos/config.json"));
         commands.push("git -C /etc/nixos init");
@@ -198,7 +198,7 @@ class VmProvisioner {
             f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"
         ]);
         var snapshots = "nixos-enter --root /mnt --command "
-            + UnixShell.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN");
+            + ShellWords.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN");
         var script = self.textLines([
             "set -ex",
             "printf INSTALL_START > /tmp/nixos-install.status",
@@ -209,7 +209,7 @@ class VmProvisioner {
         ]);
         var servicePath = "/run/current-system/sw/bin:/run/wrappers/bin:/nix/var/nix/profiles/default/bin:/bin:/usr/bin";
         var runner = self.shellCommands([
-            f"PATH={UnixShell.quote(servicePath)}",
+            f"PATH={ShellWords.quote(servicePath)}",
             "export PATH",
             "HOME=/root",
             "export HOME",
@@ -232,7 +232,7 @@ class VmProvisioner {
             "set -e",
             "systemctl reset-failed nixos-install-e2e.service 2>/dev/null || true",
             "systemctl is-active --quiet nixos-install-e2e.service && exit 0",
-            f"systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c {UnixShell.quote(runner)}"
+            f"systemd-run --unit=nixos-install-e2e --collect --property=Type=exec /bin/sh -c {ShellWords.quote(runner)}"
         ]);
         var timeoutSeconds = secureBootTarget ? 7200 : 3600;
         var prepared = self.sshWithRetries(prepare, 60, 3);

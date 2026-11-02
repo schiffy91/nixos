@@ -39,22 +39,22 @@ class NixosRebuilder {
     public ExecResult runNixCollectGarbage() {
         return self.shell.run(
             "nix-collect-garbage -d",
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream());
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM);
     }
 
     public ExecResult verifyStore() {
         return self.shell.run(
             "nix-store --verify --repair",
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream());
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM);
     }
 
     public ExecResult updateFlake() {
         return self.shell.run(
-            f"nix flake update {self.config.linuxInputs().join(" ")} --flake {UnixShell.quote(self.config.paths.root)}",
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream());
+            f"nix flake update {self.config.linuxInputs().join(" ")} --flake {ShellWords.quote(self.config.paths.root)}",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM);
     }
 
     public ExecResult switchSystem(RebuildOptions options) {
@@ -63,9 +63,9 @@ class NixosRebuilder {
             env.push("NIXOS_INSTALL_BOOTLOADER=1");
         }
         return self.shell.run(
-            f"nixos-rebuild switch --flake {UnixShell.quote(self.config.flakeRef())}",
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream(),
+            f"nixos-rebuild switch --flake {ShellWords.quote(self.config.flakeRef())}",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
             env=env);
     }
 
@@ -136,8 +136,8 @@ class NixosRebuilder {
         if (options.reboot) {
             self.shell.run(
                 "shutdown -r now",
-                stdout=CommandOutput.stream(),
-                stderr=CommandOutput.stream(),
+                stdout=COMMAND_OUTPUT_STREAM,
+                stderr=COMMAND_OUTPUT_STREAM,
                 throwOnFailure=true);
         } else if (options.promptReboot) {
             self.interactive.askToReboot();

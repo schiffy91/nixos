@@ -41,7 +41,7 @@ class BtrfsImmutabilityManager {
 
         var command = "immutability";
         for part in parts {
-            command = f"{command} {UnixShell.quote(part)}";
+            command = f"{command} {ShellWords.quote(part)}";
         }
         return command;
     }
@@ -49,8 +49,8 @@ class BtrfsImmutabilityManager {
     public ExecResult run(string action, bool dryRun) {
         return self.shell.run(
             self.command(action, dryRun),
-            stdout=CommandOutput.stream(),
-            stderr=CommandOutput.stream()
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM
         );
     }
 

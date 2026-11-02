@@ -33,19 +33,19 @@ class DisplayOutput {
     }
 
     public string toJson() {
-        var json = JSONObject();
-        json.setString("name", self.name);
-        json.setString("label", self.label);
-        json.setString("type", self.kind);
-        json.setBool("enabled", self.enabled);
-        json.setBool("connected", self.connected);
-        json.setInt("priority", self.priority);
-        var geometry = JSONObject();
-        geometry.setInt("x", self.x);
-        geometry.setInt("y", self.y);
-        geometry.setInt("w", self.width);
-        geometry.setInt("h", self.height);
-        json.setRaw("geometry", geometry.stringify());
+        var json = JSONValue.makeObject();
+        json.set("name", JSONValue.makeString(self.name));
+        json.set("label", JSONValue.makeString(self.label));
+        json.set("type", JSONValue.makeString(self.kind));
+        json.set("enabled", JSONValue.makeBool(self.enabled));
+        json.set("connected", JSONValue.makeBool(self.connected));
+        json.set("priority", JSONValue.makeInt(self.priority));
+        var geometry = JSONValue.makeObject();
+        geometry.set("x", JSONValue.makeInt(self.x));
+        geometry.set("y", JSONValue.makeInt(self.y));
+        geometry.set("w", JSONValue.makeInt(self.width));
+        geometry.set("h", JSONValue.makeInt(self.height));
+        json.set("geometry", geometry);
         var encoded = json.stringify();
         return encoded;
     }
@@ -140,7 +140,7 @@ class DisplayManager {
     }
 
     public void run(string argument) {
-        var result = self.shell.run(f"kscreen-doctor {UnixShell.quote(argument)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(f"kscreen-doctor {ShellWords.quote(argument)}", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"kscreen-doctor {argument} failed");
         }
@@ -160,7 +160,7 @@ class DisplayManager {
     }
 
     public void dpms(string state) {
-        var result = self.shell.run(f"kscreen-doctor --dpms {UnixShell.quote(state)}", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run(f"kscreen-doctor --dpms {ShellWords.quote(state)}", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"kscreen-doctor --dpms {state} failed");
         }

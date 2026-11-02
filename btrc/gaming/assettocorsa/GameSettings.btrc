@@ -56,7 +56,7 @@ class GameSettings {
 
     class void configure(string prefix, string scale) {
         if (scale.isEmpty()) { return; }
-        var number = Strings.toFloat(scale);
+        var number = scale.toFloat();
         if (!(number >= 1 && number <= 2) || scale.contains("\n") || scale.contains("\r")) {
             throw "CSP UI scale must be between 1 and 2";
         }

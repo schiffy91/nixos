@@ -10,13 +10,9 @@
     disko = { url = "github:nix-community/disko"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     jovian = { url = "github:Jovian-Experiments/Jovian-NixOS"; inputs.nixpkgs.follows = "nixpkgs"; };
-    # Pinned: btrc after 4e5c9823 renames Library.Datetime, drops UnixShell.quote,
-    # CLIArgs.has/valueAfter, JSONObject/JSONText, UnixFileSystem and
-    # UnixPamPassword. Migrating the management layer is its own change (188
-    # UnixShell.quote call sites alone), so do not move this with a bulk update.
-    btrc = { url = "github:schiffy91/btrc/4e5c98239868e805586524b4ee06424bf4556130"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
+    btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
-    logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver/c84e5133d72faebbea3b74f63afefe04d376547f"; inputs.nixpkgs.follows = "nixpkgs"; };
+    logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver/b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36"; inputs.nixpkgs.follows = "nixpkgs"; };
   };
   outputs = inputs@{ self, ... }:
     let

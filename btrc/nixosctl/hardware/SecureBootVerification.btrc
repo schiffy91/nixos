@@ -9,7 +9,7 @@ class SecureBootVerification {
         var entries = JSONValue.parse(text);
         if (!entries.isArray() || entries.size() == 0) { throw "sbctl returned no verification records"; }
         var result = JSONValue.makeObject();
-        for entry in entries.arr {
+        for entry in entries.elements() {
             var path = entry.get("file_name");
             var state = entry.get("is_signed");
             if (!entry.isObject() || !path.isString() || !path.asString().startsWith("/")
@@ -36,7 +36,7 @@ class SecureBootVerification {
         var entries = JSONValue.parse(text);
         if (!entries.isArray()) { throw "Invalid bootctl entry list"; }
         var result = "";
-        for entry in entries.arr {
+        for entry in entries.elements() {
             if (!entry.isObject() || !entry.get("isDefault").isBool()) { throw "Invalid bootctl entry"; }
             if (!entry.get("isDefault").asBool()) { continue; }
             var path = entry.get("path").asString();

@@ -60,7 +60,7 @@ class GamingTests {
         for mode in ["disabled", "enabled", "default"] {
             app.set("steamInput", JSONValue.makeString(mode));
             GamingFiles.write(declaration, desired.stringify());
-            var command = Command(f"{UnixShell.quote(self.tools)}/configure-steam-apps");
+            var command = Command(f"{ShellWords.quote(self.tools)}/configure-steam-apps");
             command.flag("--steam-path", steam).flag("--default-tool", "unused").flag("--app-config", declaration).flag("--app-id", "244210");
             UnixShell().run(command.render(), throwOnFailure=true);
             var mapping = SteamVdf.at(SteamVdf.read(globalPath), ["InstallConfigStore", "Software", "Valve", "Steam", "CompatToolMapping"]);
@@ -105,7 +105,7 @@ class GamingTests {
         GamingFiles.writeBytes(path, SteamShortcuts.render([foreign, stale, played]));
         var declaration = f"{self.root}/shortcuts.json";
         GamingFiles.write(declaration, "{\"Moonlight\":\"/run/current-system/sw/bin/moonlight\",\"Chrome\":\"/run/current-system/sw/bin/google-chrome-stable\",\"Semu\":\"/run/current-system/sw/bin/semu-es-de\"}");
-        var command = Command(f"{UnixShell.quote(self.tools)}/install-steam-shortcuts");
+        var command = Command(f"{ShellWords.quote(self.tools)}/install-steam-shortcuts");
         command.flag("--steam-path", steam).flag("--shortcuts", declaration);
         UnixShell().run(command.render(), throwOnFailure=true);
         var entries = SteamShortcuts(GamingFiles.read(path)).entries();
@@ -119,7 +119,7 @@ class GamingTests {
         assert(GamingFiles.read(path).equals(before));
         var unknown = Bytes.fromString("not a shortcuts file");
         GamingFiles.writeBytes(path, unknown);
-        assert(!UnixShell().run(command.render(), stderr=CommandOutput.collect(), logFailure=false).ok());
+        assert(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
         assert(GamingFiles.read(path).equals(unknown));
         print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, playtime kept, idempotence, unknown format refusal");
     }
@@ -217,7 +217,7 @@ class GamingTests {
         WinePrefix(prefix).setDpi(240);
         assert(Path.readAll(f"{prefix}/user.reg").equals(before));
         var shell = UnixShell();
-        var result = shell.run(f"WINEPREFIX={UnixShell.quote(prefix)} {UnixShell.quote(self.tools)}/wine-prefix-dpi exec --dpi 192 -- sh -c 'printf %s \"$1\"' sh 'argument with spaces'", throwOnFailure=true);
+        var result = shell.run(f"WINEPREFIX={ShellWords.quote(prefix)} {ShellWords.quote(self.tools)}/wine-prefix-dpi exec --dpi 192 -- sh -c 'printf %s \"$1\"' sh 'argument with spaces'", throwOnFailure=true);
         assert(result.stdout().equals("argument with spaces"));
         assert(WinePrefix(prefix).dpi() == 192);
         print("PASS: shared DPI CLI, registry preservation, exec arguments");
@@ -338,11 +338,16 @@ class GamingTests {
         GamingFiles.write(bindingFile, "[{\"action\":\"__CM_START_SESSION\",\"joystick\":0,\"button\":0,\"modifier\":null}]");
         var controls = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controls.ini";
         GamingFiles.write(controls, "[STEER]\nAXLE=0\n[BRAKES]\nAXLE=3\nGAMMA=2.4\n");
-        var environment = f"STEAM_DIR={UnixShell.quote(self.root + "/Steam")} ASSETTO_UI_SCALE=2 ASSETTO_BRAKE_GAMMA=1 ASSETTO_CONTROL_BINDINGS={UnixShell.quote(bindingFile)} STEAM_COMPAT_DATA_PATH={UnixShell.quote(PathTools.dirname(prefix))} ASSETTO_MODS={UnixShell.quote(pack)} ASSETTO_WHEEL_LAUNCHER={UnixShell.quote(self.root + "/relay")}";
+        var environment = f"STEAM_DIR={ShellWords.quote(self.root + "/Steam")} ASSETTO_UI_SCALE=2 ASSETTO_BRAKE_GAMMA=1 ASSETTO_CONTROL_BINDINGS={ShellWords.quote(bindingFile)} STEAM_COMPAT_DATA_PATH={ShellWords.quote(PathTools.dirname(prefix))} ASSETTO_MODS={ShellWords.quote(pack)} ASSETTO_WHEEL_LAUNCHER={ShellWords.quote(self.root + "/relay")}";
         // Steam's mixed-architecture overlay can print loader warnings on stderr.
-        var command = Command(f"LD_PRELOAD=/nonexistent/nixos-gaming-test.so {environment} {UnixShell.quote(self.tools)}/wine-prefix-dpi exec --dpi 240 -- {UnixShell.quote(self.tools)}/assetto launch --");
-        command.arg(capture).arg("waitforexitandrun").arg(f"{game}/AssettoCorsa.exe").arg("argument with spaces");
-        var result = UnixShell().run(command.render(), stderr=CommandOutput.collect(), throwOnFailure=true);
+        // Command now quotes argv[0], so an env-assignment prefix cannot go through
+        // it; UnixShell.run already evaluates the string with /bin/sh -c.
+        var launchPrefix = f"LD_PRELOAD=/nonexistent/nixos-gaming-test.so {environment} {ShellWords.quote(self.tools)}/wine-prefix-dpi exec --dpi 240 -- {ShellWords.quote(self.tools)}/assetto launch --";
+        Vector<string> tail = [capture, "waitforexitandrun", f"{game}/AssettoCorsa.exe", "argument with spaces"];
+        Vector<string> quotedTail = [];
+        for value in tail { quotedTail.push(ShellWords.quote(value)); }
+        var launch = launchPrefix + " " + quotedTail.join(" ");
+        var result = UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
         assert(result.stdout().equals(f"waitforexitandrun\n{game}/Content Manager.exe\nargument with spaces\n0\n0\ndwrite=n,b\n1\n"));
         assert(WinePrefix(prefix).dpi() == 240);
         assert(Path.readAll(controls).contains("[__CM_START_SESSION]\n") && Path.readAll(controls).contains("BUTTON=0\n"));
@@ -350,14 +355,14 @@ class GamingTests {
         assert(Path.readAll(f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension/gui.ini").contains("UI_SCALE=2"));
         assert(Path.readAll(f"{game}/AssettoCorsa.exe").equals("stock-launcher"));
         GamingFiles.write(f"{game}/Content Manager.exe", "runtime-edit");
-        assert(UnixShell().run(command.render(), stderr=CommandOutput.collect(), throwOnFailure=true).ok());
+        assert(UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true).ok());
         assert(Path.readAll(f"{game}/Content Manager.exe").equals("runtime-edit"));
         GamingFiles.write(f"{prefix}/winetricks.log", "dotnet48\nd3dx11_43\nd3dcompiler_47\nwin10\n");
         GamingFiles.write(f"{self.root}/relay", "#!/bin/sh\nprintf 'relay-started\\n'\nexec \"$@\"\n");
         FileSystem.chmod(f"{self.root}/relay", 0755);
-        assert(UnixShell().run(command.render(), stderr=CommandOutput.collect(), throwOnFailure=true).stdout().startsWith("relay-started\n"));
+        assert(UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true).stdout().startsWith("relay-started\n"));
         GamingFiles.write(f"{library}/steamapps/appmanifest_244210.acf", "AppState { StateFlags 1042 installdir assettocorsa }");
-        assert(!UnixShell().run(command.render(), logFailure=false).ok());
+        assert(!UnixShell().run(launch, logFailure=false).ok());
         print("PASS: real DPI → Assetto CLI → Steam command, relay launch, unfinished download refusal");
     }
 

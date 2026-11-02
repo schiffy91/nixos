@@ -109,11 +109,11 @@ class NixosCtl {
     }
 
     public int sudoSelf(CLIArgs args) {
-        var command = f"sudo {UnixShell.quote(args.program)}";
+        var command = f"sudo {ShellWords.quote(args.program)}";
         for value in args.values {
-            command = f"{command} {UnixShell.quote(value)}";
+            command = f"{command} {ShellWords.quote(value)}";
         }
-        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), foreground=true);  /* child owns the tty so sudo can prompt */
+        var result = UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true);  /* child owns the tty so sudo can prompt */
         return result.code;
     }
 
@@ -144,17 +144,18 @@ class NixosCtl {
 
     public int nixShellSelf(CLIArgs args) {
         var shellPath = PathTools.join(self.config.paths.root, "tests/shell.nix");
-        var runCmd = f"export NIXOS_BTRC_TEST_SHELL=1 && exec {UnixShell.quote(args.program)}";
+        var runCmd = f"export NIXOS_BTRC_TEST_SHELL=1 && exec {ShellWords.quote(args.program)}";
         for value in args.values {
-            runCmd = f"{runCmd} {UnixShell.quote(value)}";
+            runCmd = f"{runCmd} {ShellWords.quote(value)}";
         }
         NixosLog.info(f"nixosctl {args.command()}: entering tests/shell.nix (qemu/swtpm/socat). First entry can take a minute.");
-        var command = f"nix-shell {UnixShell.quote(shellPath)} --run {UnixShell.quote(runCmd)}";
-        var result = UnixShell().run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), foreground=true);  /* inner nixosctl prompts on the tty */
+        var command = f"nix-shell {ShellWords.quote(shellPath)} --run {ShellWords.quote(runCmd)}";
+        var result = UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true);  /* inner nixosctl prompts on the tty */
         return result.code;
     }
 
     public int run(CLIArgs args) {
+        var line = CLICommandLine.parse(args);  // options moved off CLIArgs
         if (args.count() == 0) {
             self.usage();
             return 1;
@@ -180,27 +181,27 @@ class NixosCtl {
 
         if (command.equals("update") || command.equals("upgrade")) {
             var options = RebuildOptions();
-            options.rebuildFileSystem = args.has("--rebuild-filesystem");
-            options.reboot = args.has("--reboot");
-            options.clean = args.has("--clean") || args.has("--upgrade") || command.equals("upgrade");
-            options.upgrade = args.has("--upgrade") || command.equals("upgrade");
+            options.rebuildFileSystem = line.has("--rebuild-filesystem");
+            options.reboot = line.has("--reboot");
+            options.clean = line.has("--clean") || line.has("--upgrade") || command.equals("upgrade");
+            options.upgrade = line.has("--upgrade") || command.equals("upgrade");
             NixosRebuilder(self.config).update(options);
             return 0;
         }
 
         if (command.equals("install")) {
             var installer = Installer(self.config);
-            if (args.has("--collect-garbage")) {
+            if (line.has("--collect-garbage")) {
                 installer.collectGarbage();
             }
-            if (args.has("--debug")) {
+            if (line.has("--debug")) {
                 installer.debugShell();
             }
             installer.bootstrapConfigIfMissing();
             SecretsManager(self.config).createIfMissing(installer.plainTextPasswordPath());
-            var confirmed = args.has("--yes");
+            var confirmed = line.has("--yes");
             var formatPrompt = f"Format {self.config.diskDevice()}?";
-            var format = args.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
+            var format = line.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
             var prepared = installer.prepareDisk(format);
             if (!prepared.ok()) { return prepared.code; }
             if (confirmed || installer.interactive.confirm("Install NixOS?")) {
@@ -215,14 +216,14 @@ class NixosCtl {
 
         if (command.equals("diff")) {
             var options = DiffOptions();
-            options.recent = args.has("--recent");
-            options.showSymlinks = args.has("--show-symlinks");
-            options.showPersistPaths = args.has("--show-persist-paths");
-            options.showChildren = args.valueAfter("--show-children", "");
-            var depth = args.valueAfter("--depth", "");
+            options.recent = line.has("--recent");
+            options.showSymlinks = line.has("--show-symlinks");
+            options.showPersistPaths = line.has("--show-persist-paths");
+            options.showChildren = line.option("--show-children", "");
+            var depth = line.option("--depth", "");
             if (!depth.isEmpty()) { options.depth = Strings.toInt(depth); }
-            options.pattern = args.valueAfter("--pattern", "");
-            options.diffignore = args.valueAfter("--diffignore", "");
+            options.pattern = line.option("--pattern", "");
+            options.diffignore = line.option("--diffignore", "");
             DiffScanner(self.config).print(options);
             return 0;
         }
@@ -230,7 +231,7 @@ class NixosCtl {
         if (command.equals("persistence")) {
             var action = self.requireAction(args, "Usage: nixosctl persistence <materialize>");
             if (action.equals("materialize")) {
-                PersistenceManager(self.config).materialize(args.has("--dry-run"), args.has("--refresh-clean"));
+                PersistenceManager(self.config).materialize(line.has("--dry-run"), line.has("--refresh-clean"));
                 return 0;
             }
             NixosLog.fatal("Usage: nixosctl persistence <materialize>");
@@ -239,7 +240,7 @@ class NixosCtl {
         if (command.equals("immutability")) {
             var action = self.requireAction(args, "Usage: nixosctl immutability <plan|prepare>");
             if (action.equals("plan") || action.equals("prepare")) {
-                BtrfsImmutabilityManager(self.config).require(action, args.has("--dry-run"));
+                BtrfsImmutabilityManager(self.config).require(action, line.has("--dry-run"));
                 return 0;
             }
             NixosLog.fatal("Usage: nixosctl immutability <plan|prepare>");
@@ -255,15 +256,15 @@ class NixosCtl {
         }
 
         if (command.equals("change-password")) {
-            if (args.has("--full-disk-encryption-only") && args.has("--user-account-only")) {
+            if (line.has("--full-disk-encryption-only") && line.has("--user-account-only")) {
                 NixosLog.fatal("Cannot use both --full-disk-encryption-only and --user-account-only");
             }
-            if (args.has("--old") || args.has("--new")) {
+            if (line.has("--old") || line.has("--new")) {
                 NixosLog.fatal("--old/--new are unsupported: passwords on argv leak via /proc/<pid>/cmdline. Set NIXOS_OLD_PASSWORD / NIXOS_NEW_PASSWORD in the environment, or run change-password interactively.");
             }
             var manager = PasswordManager(self.config);
             var newPassword = "";
-            var reexecSecretsPath = args.valueAfter("--reexec-secrets", "");
+            var reexecSecretsPath = line.option("--reexec-secrets", "");
             if (!reexecSecretsPath.isEmpty()) {
                 /* Re-exec'd as root by PasswordManager.reexecAsRoot: the unprivileged
                    parent already resolved these; env vars don't survive sudo's reset. */
@@ -278,13 +279,13 @@ class NixosCtl {
                     newPassword = Interactive().askPasswordConfirmed("Enter new password");
                 }
             }
-            return manager.change(args, newPassword, !args.has("--user-account-only"), !args.has("--full-disk-encryption-only"), args.has("--update-tpm2"));
+            return manager.change(args, newPassword, !line.has("--user-account-only"), !line.has("--full-disk-encryption-only"), line.has("--update-tpm2"));
         }
 
         if (command.equals("secure-boot")) {
             var action = self.requireAction(args, "Usage: nixosctl secure-boot <enable|disable|status>");
             var manager = SecureBootManager(self.config);
-            if (action.equals("enable")) { manager.enable(args.has("--microsoft"), !args.has("--no-reboot")); return 0; }
+            if (action.equals("enable")) { manager.enable(line.has("--microsoft"), !line.has("--no-reboot")); return 0; }
             if (action.equals("disable")) { manager.disable(); return 0; }
             if (action.equals("status")) { return manager.status() ? 0 : 1; }
             NixosLog.fatal("Usage: nixosctl secure-boot <enable|disable|status>");

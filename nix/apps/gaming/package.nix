@@ -16,6 +16,7 @@ pkgs.stdenv.mkDerivation {
   dontConfigure = true;
   buildPhase = ''
     runHook preBuild
+    export HOME="$TMPDIR"  # btrcpy writes its cache under $HOME
     build_tool() {
       btrcpy --strict-imports "$1" -o "$2.c"
       $CC -std=c11 -O2 "$2.c" -lm -lpthread -llzf -lz -o "$2"

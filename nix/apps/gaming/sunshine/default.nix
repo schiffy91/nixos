@@ -14,20 +14,18 @@ in {
             --replace-fail "Exec=$out/bin/sunshine" "Exec=$out/bin/.sunshine-wrapped"
         '';
       });
-    })
-  # Backport of KDE MR !8293 (HDR screencast support), still unmerged upstream.
-  # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
-  # screencast stream so Sunshine can capture genuine HDR pixels from the
-  # compositor instead of 8-bit-truncated SDR.
-  # https://invent.kde.org/plasma/kwin/-/merge_requests/8293
-  ++ lib.optional (enabled && capture == "kwin")
-    (_final: prev: {
-      kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
-        kwin = kdePrev.kwin.overrideAttrs (old: {
-          patches = (old.patches or []) ++ [ ./hdr-screencast.patch ];
-        });
-      });
     });
+  # PARKED on 2026-11-02: ./hdr-screencast.patch is our backport of KDE
+  # MR !8293 (10-bit DRM formats plus BT.2020/SMPTE2084 negotiation in the
+  # PipeWire screencast stream, so Sunshine captures real HDR pixels instead of
+  # 8-bit-truncated SDR). It applied to Plasma 6.7.5; Plasma 6.8.2 refactored
+  # the screencast plugin (RenderDevice/EglContext, setNextPresentationTimestamp,
+  # no ScreenCastSource::clock) and seven hunks across four files now reject.
+  # MR !8293 is still unmerged and untouched since 2026-09-04, so its current
+  # diff does not apply to 6.8.2 either, and 6.8.2 has no HDR screencast support
+  # of its own. Re-enable this overlay once the patch is ported and HDR capture
+  # is verified against a real Sunshine session; until then KWin capture works
+  # in SDR. https://invent.kde.org/plasma/kwin/-/merge_requests/8293
 
   services.sunshine = lib.mkIf enabled {
     enable = true;

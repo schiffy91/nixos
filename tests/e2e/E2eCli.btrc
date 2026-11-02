@@ -45,6 +45,7 @@ class E2eCli {
         }
         var spec = VmSpecParser.readFile(args.get(1));
         self.applySpecArgs(spec, args, 3);
+        var line = CLICommandLine.parse(args);  // options moved off CLIArgs
         var vm = QemuE2eHarness(spec);
         var action = args.get(2);
 
@@ -59,7 +60,7 @@ class E2eCli {
         if (action.equals("boot-disk")) { vm.start(false); return 0; }
         if (action.equals("bootstrap-ssh")) { vm.bootstrapSsh(); return 0; }
         if (action.equals("wait-ssh")) {
-            var timeout = Strings.toInt(args.valueAfter("--timeout", "180"));
+            var timeout = Strings.toInt(line.option("--timeout", "180"));
             if (!vm.waitForSsh(timeout)) { return 1; }
             return 0;
         }
@@ -78,15 +79,15 @@ class E2eCli {
             return result.code;
         }
         if (action.equals("copy-workspace")) {
-            vm.copyWorkspace(args.valueAfter("--local", ".."), args.valueAfter("--remote", "/etc/nixos"));
+            vm.copyWorkspace(line.option("--local", ".."), line.option("--remote", "/etc/nixos"));
             return 0;
         }
         if (action.equals("configure-vm-host")) { vm.configureVmHost(); return 0; }
         if (action.equals("install-nixos")) { vm.installNixosGuest(); return 0; }
         if (action.equals("reboot-disk")) { vm.rebootDisk(); return 0; }
         if (action.equals("reboot-recovery")) { vm.rebootRecovery(); return 0; }
-        if (action.equals("snapshot")) { vm.snapshot(args.valueAfter("--name", "manual")); return 0; }
-        if (action.equals("restore")) { vm.restore(args.valueAfter("--name", "manual")); return 0; }
+        if (action.equals("snapshot")) { vm.snapshot(line.option("--name", "manual")); return 0; }
+        if (action.equals("restore")) { vm.restore(line.option("--name", "manual")); return 0; }
         if (action.equals("record-state")) { vm.recordState(); return 0; }
         if (action.equals("stop")) { vm.stop(); return 0; }
         if (action.equals("reset-state")) { vm.resetState(); return 0; }

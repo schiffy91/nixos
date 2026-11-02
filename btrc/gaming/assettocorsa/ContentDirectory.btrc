@@ -63,7 +63,7 @@ class ContentDirectory {
             GamingFiles.directory(f"{temporary}/unpacked");
             // bsdtar's default security checks reject traversal and writes through
             // symlinks. Never use -P, --insecure, or extract over the live game.
-            UnixShell().run(Command("bsdtar").args(["-xf", path, "-C", f"{temporary}/unpacked", "--no-same-owner", "--no-same-permissions"]).render(), stderr=CommandOutput.collect(), throwOnFailure=true);
+            UnixShell().run(Command("bsdtar").args(["-xf", path, "-C", f"{temporary}/unpacked", "--no-same-owner", "--no-same-permissions"]).render(), stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
             GamingFiles.files(f"{temporary}/unpacked"); // Reject links and special files.
             GamingFiles.directory(f"{temporary}/payload");
             if (!ContentDirectory.normalize(f"{temporary}/unpacked", f"{temporary}/payload")) {

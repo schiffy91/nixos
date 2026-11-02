@@ -41,7 +41,7 @@ class VmSpecParser {
     class Vector<VmOperation> operations(JSONValue array) {
         if (!array.isArray() || array.size() == 0) { throw "Spec needs a nonempty operations array"; }
         Vector<VmOperation> result = [];
-        for object in array.arr {
+        for object in array.elements() {
             result.push(VmSpecParser.operation(object));
         }
         return result;

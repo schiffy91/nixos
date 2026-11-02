@@ -70,7 +70,7 @@ class DiffScanner {
             var parts = Strings.split(line.trim(), " ");
             if (parts.len >= 4 && parts.get(0).equals("transid") && parts.get(1).equals("marker") && parts.get(2).equals("was")) {
                 var marker = parts.get(3).trim();
-                if (Strings.isDigitStr(marker)) { return marker; }
+                if (marker.isDigit()) { return marker; }
             }
         }
         return "";
@@ -107,7 +107,7 @@ class DiffScanner {
             self.snapshots.deleteSubvolume(temporarySnapshot);
             self.snapshots.createReadonlySnapshot(volume.mountPoint, temporarySnapshot);
 
-            var quotedClean = UnixShell.quote(clean);
+            var quotedClean = ShellWords.quote(clean);
             var tx = self.shell.run(f"btrfs subvolume find-new {quotedClean} 9999999", logFailure=false);
             if (!tx.ok()) {
                 self.snapshots.deleteSubvolume(temporarySnapshot);
@@ -118,8 +118,8 @@ class DiffScanner {
                 self.snapshots.deleteSubvolume(temporarySnapshot);
                 NixosLog.fatal(f"Failed to parse CLEAN transaction marker: {clean}");
             }
-            var quotedTemporary = UnixShell.quote(temporarySnapshot);
-            var quotedTransaction = UnixShell.quote(transaction);
+            var quotedTemporary = ShellWords.quote(temporarySnapshot);
+            var quotedTransaction = ShellWords.quote(transaction);
             var changes = self.shell.run(f"btrfs subvolume find-new {quotedTemporary} {quotedTransaction}", logFailure=false);
             if (!changes.ok()) {
                 self.snapshots.deleteSubvolume(temporarySnapshot);
@@ -240,20 +240,20 @@ class DiffScanner {
     public Vector<string> previousCache(string cachePath) {
         Vector<string> result = [];
         if (!FileSystem.exists(cachePath)) { return result; }
-        var data = JSONObject.readFile(cachePath);
-        for key in data.values.keys() {
+        var data = JSONValue.readFile(cachePath);
+        for key in data.keys() {
             result.push(key);
         }
         return result;
     }
 
     public void writeCache(string cachePath, Vector<string> paths) {
-        var data = JSONObject();
+        var data = JSONValue.makeObject();
         for path in paths {
-            data.setBool(path, true);
+            data.set(path, JSONValue.makeBool(true));
         }
         FileSystem.mkdirp(PathTools.dirname(cachePath));
-        data.writeFile(cachePath);
+        Path.writeAll(cachePath, data.document());
     }
 
     public void print(DiffOptions options) {

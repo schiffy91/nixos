@@ -23,8 +23,8 @@ class QemuCommandBuilder {
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
 
     public void ensureVmLaunchBinary() {
-        var command = f"set -e; bin=$(command -v {UnixShell.quote(self.firmware.qemuBinary())}); target={UnixShell.quote(self.spec.vmLaunchBinary())}; rm -f \"$target\"; cp \"$bin\" \"$target\"; chmod 755 \"$target\"";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var command = f"set -e; bin=$(command -v {ShellWords.quote(self.firmware.qemuBinary())}); target={ShellWords.quote(self.spec.vmLaunchBinary())}; rm -f \"$target\"; cp \"$bin\" \"$target\"; chmod 755 \"$target\"";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) {
             NixosLog.fatal(f"Failed to create isolated VM launcher {self.spec.vmLaunchBinary()}");
         }

@@ -53,9 +53,9 @@ class NixosConfig {
     }
 
     public void reset(string hostPath, string target) {
-        var data = JSONObject();
-        data.setString("host_path", hostPath);
-        data.setString("target", target);
+        var data = JSONValue.makeObject();
+        data.set("host_path", JSONValue.makeString(hostPath));
+        data.set("target", JSONValue.makeString(target));
         self.local.overwrite(data);
     }
 
@@ -88,8 +88,8 @@ class NixosConfig {
         if (!FileSystem.exists(lockPath)) {
             NixosLog.fatal(f"Missing flake lock: {lockPath}");
         }
-        var lock = Path.readAll(lockPath);
-        var rev = JSONText.fieldPath(lock, ["nodes", inputName, "locked", "rev"], "");
+        var node = JSONValue.readFile(lockPath).get("nodes").get(inputName).get("locked");
+        var rev = node.has("rev") ? node.get("rev").asString() : "";
         if (rev.isEmpty()) {
             NixosLog.fatal(f"flake.lock is missing locked rev for input: {inputName}");
         }
@@ -111,8 +111,8 @@ class NixosConfig {
         if (self.cache.has(key)) {
             return self.cache.get(key);
         }
-        var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(f"{self.nixCommand()} eval {flake}", stderr=CommandOutput.stream());
+        var flake = ShellWords.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(f"{self.nixCommand()} eval {flake}", stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval failed for {attribute}");
         }
@@ -126,8 +126,8 @@ class NixosConfig {
         if (self.cache.has(key)) {
             return self.cache.get(key);
         }
-        var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(f"{self.nixCommand()} eval --raw {flake}", stderr=CommandOutput.stream());
+        var flake = ShellWords.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(f"{self.nixCommand()} eval --raw {flake}", stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval --raw failed for {attribute}");
         }
@@ -141,8 +141,8 @@ class NixosConfig {
         if (self.cache.has(key)) {
             return self.cache.get(key);
         }
-        var flake = UnixShell.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
-        var result = self.shell.run(f"{self.nixCommand()} eval --json {flake}", stderr=CommandOutput.stream());
+        var flake = ShellWords.quote(f"{self.paths.root}#nixosConfigurations.{self.host()}-{self.target()}.{attribute}");
+        var result = self.shell.run(f"{self.nixCommand()} eval --json {flake}", stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) {
             NixosLog.fatal(f"nix eval --json failed for {attribute}");
         }
@@ -152,8 +152,13 @@ class NixosConfig {
     }
 
     public Vector<string> evalStringList(string attribute) {
-        var wrapped = "{\"values\":" + self.evalJson(attribute) + "}";
-        return JSONText.stringArray(wrapped, "values");
+        Vector<string> values = [];
+        var parsed = JSONValue.parse(self.evalJson(attribute));
+        if (!parsed.isArray()) { return values; }
+        for element in parsed.elements() {
+            if (element.isString()) { values.push(Strings.copy(element.asString())); }
+        }
+        return values;
     }
 
     public bool evalBool(string attribute) {

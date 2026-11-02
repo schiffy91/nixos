@@ -42,7 +42,7 @@ class GamingFiles {
         GamingFiles.directory(PathTools.dirname(target));
         var temporary = f"{target}.nix-new";
         if (FileSystem.isSymlink(temporary)) { throw f"Refusing symlink: {temporary}"; }
-        UnixShell().run(f"cp -- {UnixShell.quote(source)} {UnixShell.quote(temporary)}", throwOnFailure=true);
+        UnixShell().run(f"cp -- {ShellWords.quote(source)} {ShellWords.quote(temporary)}", throwOnFailure=true);
         FileSystem.chmod(temporary, 0644);
         if (rename(temporary, target) != 0) { throw f"Cannot replace: {target}"; }
     }
@@ -87,7 +87,7 @@ class GamingProcess {
         if (command.len == 0) { throw "Missing command"; }
         var arguments = ChildProcessArguments.build(command.get(0), command.slice(1, command.len));
         execvp(arguments[0], arguments);
-        ChildProcessArguments.freeEntries(arguments);
+        CStringArray.freeAll(arguments);
         throw f"Cannot execute: {command.get(0)}";
     }
 }

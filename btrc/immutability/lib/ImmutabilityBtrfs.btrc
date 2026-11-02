@@ -2,35 +2,35 @@ import Library.Process;
 
 class ImmutabilityBtrfs {
     class string show(string path) {
-        return f"btrfs subvolume show {UnixShell.quote(path)}";
+        return f"btrfs subvolume show {ShellWords.quote(path)}";
     }
 
     class string getReadonly(string path) {
-        return f"btrfs property get -ts {UnixShell.quote(path)} ro";
+        return f"btrfs property get -ts {ShellWords.quote(path)} ro";
     }
 
     class string listChildren(string path) {
-        return f"btrfs subvolume list -o {UnixShell.quote(path)}";
+        return f"btrfs subvolume list -o {ShellWords.quote(path)}";
     }
 
     class string deleteSubvol(string path) {
-        return f"btrfs subvolume delete {UnixShell.quote(path)}";
+        return f"btrfs subvolume delete {ShellWords.quote(path)}";
     }
 
     class string createSubvol(string path) {
-        return f"btrfs subvolume create {UnixShell.quote(path)}";
+        return f"btrfs subvolume create {ShellWords.quote(path)}";
     }
 
     class string snapshot(string source, string destination, bool readonly) {
         var flag = readonly ? "-r " : "";
-        return f"btrfs subvolume snapshot {flag}{UnixShell.quote(source)} {UnixShell.quote(destination)}";
+        return f"btrfs subvolume snapshot {flag}{ShellWords.quote(source)} {ShellWords.quote(destination)}";
     }
 
     class string clearReadonly(string path) {
-        return f"btrfs property set -ts {UnixShell.quote(path)} ro false";
+        return f"btrfs property set -ts {ShellWords.quote(path)} ro false";
     }
 
     class string sync(string top) {
-        return f"btrfs filesystem sync {UnixShell.quote(top)}";
+        return f"btrfs filesystem sync {ShellWords.quote(top)}";
     }
 }

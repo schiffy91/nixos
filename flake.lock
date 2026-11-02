@@ -7,17 +7,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1789923067,
-        "narHash": "sha256-NaXjGrgXrgCMWIjuAy/t8LgBA0UI6UTy9TbvFoVDytM=",
+        "lastModified": 1793571581,
+        "narHash": "sha256-kywUsfYKIQKa3snvMZWKuFW9ufVXky9yRfIoJrk3SN8=",
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "4e5c98239868e805586524b4ee06424bf4556130",
+        "rev": "b64a45d972a568b7b9d38799000de1b236194435",
         "type": "github"
       },
       "original": {
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "4e5c98239868e805586524b4ee06424bf4556130",
         "type": "github"
       }
     },
@@ -627,17 +626,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1789894113,
-        "narHash": "sha256-Gy64rbe3v4O3p6PWrdYrirMaK5vkAZ7mLsPWRiOrfWk=",
+        "lastModified": 1792695032,
+        "narHash": "sha256-Kl8u+SFT4Kt55rppwrFyhTosrXvb6cX9kFV98J7oEDc=",
         "owner": "mescon",
         "repo": "logitech-trueforce-linux-driver",
-        "rev": "c84e5133d72faebbea3b74f63afefe04d376547f",
+        "rev": "b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36",
         "type": "github"
       },
       "original": {
         "owner": "mescon",
         "repo": "logitech-trueforce-linux-driver",
-        "rev": "c84e5133d72faebbea3b74f63afefe04d376547f",
+        "rev": "b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36",
         "type": "github"
       }
     },
@@ -701,11 +700,11 @@
     },
     "nixpkgs-darwin": {
       "locked": {
-        "lastModified": 1793494649,
-        "narHash": "sha256-Thn0OE71NF80ZfOMGCgJvKtbCcnnz0fToT/qsvb/Gtc=",
+        "lastModified": 1793582901,
+        "narHash": "sha256-WDValiY9se78X2Wh7aWWaq/c7HN29U555+OKbHEzYrw=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d357a2b54f0b6dc4aeb4e993190a52cf151b6f24",
+        "rev": "5c9de89ec55bff981cb8da1a4ee92b10f1438ffc",
         "type": "github"
       },
       "original": {

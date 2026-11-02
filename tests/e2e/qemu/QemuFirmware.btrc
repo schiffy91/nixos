@@ -59,9 +59,9 @@ class QemuFirmware {
     }
 
     public string qemuSharePath(string fileName) {
-        var script = "bin=$(command -v " + UnixShell.quote(self.qemuBinary()) + ") || exit 1; "
+        var script = "bin=$(command -v " + ShellWords.quote(self.qemuBinary()) + ") || exit 1; "
             + "prefix=$(dirname \"$(dirname \"$bin\")\") || exit 1; "
-            + "file=" + UnixShell.quote(fileName) + "; "
+            + "file=" + ShellWords.quote(fileName) + "; "
             + "path=\"$prefix/share/qemu/$file\"; "
             + "test -f \"$path\" || exit 1; printf %s \"$path\"";
         var result = self.shell.run(script, logFailure=false);
@@ -70,7 +70,7 @@ class QemuFirmware {
     }
 
     public string qemuShareDir() {
-        var script = "bin=$(command -v " + UnixShell.quote(self.qemuBinary()) + ") || exit 1; "
+        var script = "bin=$(command -v " + ShellWords.quote(self.qemuBinary()) + ") || exit 1; "
             + "prefix=$(dirname \"$(dirname \"$bin\")\") || exit 1; "
             + "path=\"$prefix/share/qemu\"; "
             + "test -d \"$path\" || exit 1; printf %s \"$path\"";
@@ -84,8 +84,8 @@ class QemuFirmware {
         var dataDir = self.qemuShareDir();
         if (dataDir.isEmpty()) { NixosLog.fatal("Could not find QEMU firmware data directory for " + self.spec.arch); }
         VmFiles.remove(self.firmwareDataAliasPath());
-        var command = "ln -s " + UnixShell.quote(dataDir) + " " + UnixShell.quote(self.firmwareDataAliasPath());
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var command = "ln -s " + ShellWords.quote(dataDir) + " " + ShellWords.quote(self.firmwareDataAliasPath());
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to prepare firmware data alias"); }
         return self.firmwareDataAliasPath();
     }
@@ -147,8 +147,8 @@ class QemuFirmware {
     }
 
     public void makeFirmwareVarsWritable() {
-        var command = f"chmod 600 {UnixShell.quote(self.firmwareVarsPath())}";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var command = f"chmod 600 {ShellWords.quote(self.firmwareVarsPath())}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to make firmware vars writable"); }
     }
 
@@ -159,27 +159,27 @@ class QemuFirmware {
         }
         var template = self.firmwareVarsTemplatePath();
         if (!template.isEmpty()) {
-            var command = f"cp {UnixShell.quote(template)} {UnixShell.quote(self.firmwareVarsPath())}";
-            var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+            var command = f"cp {ShellWords.quote(template)} {ShellWords.quote(self.firmwareVarsPath())}";
+            var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
             if (!result.ok()) { NixosLog.fatal("Failed to copy EDK2 vars file"); }
             self.makeFirmwareVarsWritable();
             return;
         }
-        var created = self.shell.run(f"dd if=/dev/zero of={UnixShell.quote(self.firmwareVarsPath())} bs=1M count=64", stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var created = self.shell.run(f"dd if=/dev/zero of={ShellWords.quote(self.firmwareVarsPath())} bs=1M count=64", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!created.ok()) { NixosLog.fatal("Failed to create firmware vars file"); }
         self.makeFirmwareVarsWritable();
     }
 
     public string prepareFirmwareCodeAlias(string codePath) {
         VmFiles.remove(self.firmwareCodeAliasPath());
-        var command = "ln -s " + UnixShell.quote(codePath) + " " + UnixShell.quote(self.firmwareCodeAliasPath());
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var command = "ln -s " + ShellWords.quote(codePath) + " " + ShellWords.quote(self.firmwareCodeAliasPath());
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to prepare firmware code alias"); }
         return self.firmwareCodeAliasPath();
     }
 
     public bool commandExists(string name) {
-        var result = self.shell.run("command -v " + UnixShell.quote(name) + " >/dev/null 2>&1", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var result = self.shell.run("command -v " + ShellWords.quote(name) + " >/dev/null 2>&1", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         return result.ok();
     }
 
@@ -190,8 +190,8 @@ class QemuFirmware {
     }
 
     public bool qemuDeviceAvailable(string deviceName) {
-        var command = self.qemuBinary() + " -device help 2>/dev/null | grep -q " + UnixShell.quote("name \"" + deviceName + "\"");
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var command = self.qemuBinary() + " -device help 2>/dev/null | grep -q " + ShellWords.quote("name \"" + deviceName + "\"");
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         return result.ok();
     }
 
@@ -257,7 +257,7 @@ class QemuFirmware {
         FileSystem.mkdirp(self.tpmStateDir());
         VmFiles.remove(self.tpmSocketPath());
         if (FileSystem.exists(self.tpmPidPath())) {
-            var running = self.shell.run("pid=$(cat " + UnixShell.quote(self.tpmPidPath()) + "); kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + UnixShell.quote(self.tpmSocketPath()) + " >/dev/null", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            var running = self.shell.run("pid=$(cat " + ShellWords.quote(self.tpmPidPath()) + "); kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + ShellWords.quote(self.tpmSocketPath()) + " >/dev/null", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
             if (running.ok()) { return; }
             VmFiles.remove(self.tpmPidPath());
         }
@@ -273,20 +273,20 @@ class QemuFirmware {
             "--log",
             "file=" + self.tpmLogPath() + ",level=20"
         ]);
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to start swtpm"); }
         var waitCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do test -S "
-            + UnixShell.quote(self.tpmSocketPath())
+            + ShellWords.quote(self.tpmSocketPath())
             + " && exit 0; sleep 1; done; exit 1";
-        var ready = self.shell.run(waitCommand, stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+        var ready = self.shell.run(waitCommand, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
         if (!ready.ok()) { NixosLog.fatal("swtpm socket did not become ready"); }
     }
 
     public void stopSwtpm() {
         if (FileSystem.exists(self.tpmPidPath())) {
-            var quotedPid = UnixShell.quote(self.tpmPidPath());
-            var quotedSocket = UnixShell.quote(self.tpmSocketPath());
-            self.shell.run("pid=$(cat " + quotedPid + "); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedSocket + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", stdout=CommandOutput.stream(), stderr=CommandOutput.stream(), logFailure=false);
+            var quotedPid = ShellWords.quote(self.tpmPidPath());
+            var quotedSocket = ShellWords.quote(self.tpmSocketPath());
+            self.shell.run("pid=$(cat " + quotedPid + "); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedSocket + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
             VmFiles.remove(self.tpmPidPath());
         }
         VmFiles.remove(self.tpmSocketPath());

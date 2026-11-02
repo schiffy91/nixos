@@ -34,7 +34,7 @@ class VmAssets {
     public string expectedIsoHash() {
         if (self.spec.isoUrl.isEmpty()) { return ""; }
         var command = "curl -L --fail --silent --show-error "
-            + UnixShell.quote(self.spec.isoUrl + ".sha256")
+            + ShellWords.quote(self.spec.isoUrl + ".sha256")
             + " | awk '{print $1}'";
         var result = self.shell.run(command, logFailure=false);
         if (!result.ok()) { NixosLog.fatal("Failed to fetch installer ISO checksum for " + self.spec.isoUrl); }
@@ -44,7 +44,7 @@ class VmAssets {
     public string expectedIsoSize() {
         if (self.spec.isoUrl.isEmpty()) { return ""; }
         var command = "curl -L --fail --silent --show-error --head "
-            + UnixShell.quote(self.spec.isoUrl)
+            + ShellWords.quote(self.spec.isoUrl)
             + " | awk 'tolower($1) == \"content-length:\" { value = $2 } END { gsub(\"\\r\", \"\", value); print value }'";
         var result = self.shell.run(command, logFailure=false);
         if (!result.ok() || result.trimmed().isEmpty()) { NixosLog.fatal("Failed to fetch installer ISO size for " + self.spec.isoUrl); }
@@ -52,14 +52,14 @@ class VmAssets {
     }
 
     public string fileSize(string path) {
-        var command = "wc -c < " + UnixShell.quote(path) + " | awk '{print $1}'";
+        var command = "wc -c < " + ShellWords.quote(path) + " | awk '{print $1}'";
         var result = self.shell.run(command, logFailure=false);
         if (!result.ok()) { return ""; }
         return result.trimmed();
     }
 
     public string fileHash(string path) {
-        var quotedPath = UnixShell.quote(path);
+        var quotedPath = ShellWords.quote(path);
         var command = "(if command -v sha256sum >/dev/null 2>&1; then sha256sum "
             + quotedPath
             + "; else shasum -a 256 "
@@ -110,8 +110,8 @@ class VmAssets {
             VmFiles.remove(source);
             NixosLog.fatal("Downloaded installer ISO checksum did not match " + self.spec.isoUrl);
         }
-        var command = f"mv {UnixShell.quote(source)} {UnixShell.quote(self.spec.iso)}";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"mv {ShellWords.quote(source)} {ShellWords.quote(self.spec.iso)}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to install downloaded ISO"); }
         self.writeIsoMetadata(expectedHash, expectedSize);
     }
@@ -128,8 +128,8 @@ class VmAssets {
         self.removeIsoCache();
         var downloadPath = f"{self.spec.iso}.tmp";
         VmFiles.remove(downloadPath);
-        var command = f"curl -L -o {UnixShell.quote(downloadPath)} {UnixShell.quote(self.spec.isoUrl)}";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"curl -L -o {ShellWords.quote(downloadPath)} {ShellWords.quote(self.spec.isoUrl)}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to download installer ISO"); }
         self.installIso(downloadPath, expectedHash, expectedSize);
     }
@@ -137,8 +137,8 @@ class VmAssets {
     public void createSshKey() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.sshKeyPath())) { return; }
-        var command = f"ssh-keygen -t ed25519 -N '' -f {UnixShell.quote(self.sshKeyPath())} -q";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"ssh-keygen -t ed25519 -N '' -f {ShellWords.quote(self.sshKeyPath())} -q";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }
     }
 
@@ -149,8 +149,8 @@ class VmAssets {
     public void createDisk() {
         self.ensureWorkDir();
         if (FileSystem.exists(self.diskPath())) { return; }
-        var command = f"qemu-img create -f qcow2 {UnixShell.quote(self.diskPath())} {UnixShell.quote(self.spec.diskSize)}";
-        var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
+        var command = f"qemu-img create -f qcow2 {ShellWords.quote(self.diskPath())} {ShellWords.quote(self.spec.diskSize)}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to create VM disk"); }
     }
 
