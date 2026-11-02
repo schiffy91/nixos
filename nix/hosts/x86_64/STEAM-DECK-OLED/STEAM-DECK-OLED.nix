@@ -27,9 +27,13 @@ in {
       inherit user;
       desktopSession = "plasma";
     };
+    decky-loader.enable = true;
   };
+  systemd.tmpfiles.rules = [ "f /home/${user}/.local/share/Steam/.cef-enable-remote-debugging 0644 ${user} ${user} -" ];  # Decky needs Steam's CEF debugging, which Jovian leaves to the user
 
   users.users.${user}.uid = 1000;  # Jovian's SD card automount mounts as UID 1000
+
+  environment.systemPackages = with pkgs; [ moonlight-qt chiaki-ng firefox protonup-qt ];
 
   ##### Touchscreen LUKS passphrase #####
   boot.initrd.unl0kr = {
@@ -72,6 +76,7 @@ in {
           bios           = "${emulationRoot}/RetroArch/config/system";
           mods           = "${emulationRoot}/mods";
           content_root   = "${emulationRoot}/Semu";
+          state_root     = "${emulationRoot}/Semu/emulators";
           esde_home      = "${emulationRoot}/ES-DE";
         };
       };

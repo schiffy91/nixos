@@ -213,6 +213,15 @@ in {
       "${adminHome}/.steam"
       ##### Games #####
       "${adminHome}/Games"
+      "${adminHome}/My Games"
+      "${adminHome}/.local/share/Larian Studios"
+      ##### Decky Loader #####
+      "/var/lib/decky-loader"
+      ##### Remote Play #####
+      "${adminHome}/.config/Moonlight Game Streaming Project"
+      "${adminHome}/.config/Chiaki"
+      ##### Firefox #####
+      "${adminHome}/.config/mozilla"
       ##### Native Logitech wheel tools #####
       "${adminHome}/.config/logi-wheel"
       "${adminHome}/.local/share/logitech-trueforce"

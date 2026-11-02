@@ -65,7 +65,7 @@ pkgs.mkShell {
     socat
     swtpm
     util-linux
-  ]) ++ [ aavmfSecboot ] ++ lib.optionals stdenv.isLinux [
+  ]) ++ [ aavmfSecboot ] ++ lib.optionals stdenv.hostPlatform.isLinux [
     pkgs.OVMF
   ];
 
