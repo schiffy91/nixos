@@ -8,6 +8,7 @@ let
     buildInputs = [ pkgs.dbus ];  # Library.Tray binds libdbus-1 for its Linux provider
     dontConfigure = true;
     buildPhase = ''
+      export HOME="$TMPDIR"  # btrcpy writes its cache under $HOME
       btrcpy --strict-imports btrc/nixosctl/NixosTray.btrc -o nixosctl-tray.c
       $CC -std=c11 -O2 nixosctl-tray.c $(pkg-config --cflags --libs dbus-1) -lm -lpthread -o nixosctl-tray
     '';

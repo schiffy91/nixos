@@ -11,7 +11,17 @@
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     jovian = { url = "github:Jovian-Experiments/Jovian-NixOS"; inputs.nixpkgs.follows = "nixpkgs"; };
     btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
-    semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
+    # semu's sources are written against btrc c959dd0e and have not been
+    # migrated to main, which tightened import checking and dropped the RTLD_*
+    # constants. Flakes re-lock transitive inputs, so semu's own flake.lock does
+    # not apply here and the revision has to be pinned explicitly; a plain
+    # btrc.follows would hand it our main and fail the renderer build.
+    semu = {
+      url = "github:schiffy91/semu";
+      inputs.nixpkgs.follows = "nixpkgs-unstable";
+      inputs.btrc.url = "github:schiffy91/btrc/c959dd0e5d122d7019266536d571d20fb7c5cc9d";
+      inputs.btrc.inputs.nixpkgs.follows = "nixpkgs-unstable";
+    };
     logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver/b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36"; inputs.nixpkgs.follows = "nixpkgs"; };
   };
   outputs = inputs@{ self, ... }:

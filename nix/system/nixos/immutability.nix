@@ -113,6 +113,7 @@ let
 		nativeBuildInputs = [ btrcpy ];
 		dontConfigure = true;
 		buildPhase = ''
+			export HOME="$TMPDIR"  # btrcpy writes its cache under $HOME
 			btrcpy --strict-imports btrc/immutability/Immutability.btrc -o immutability.c
 			$CC -std=c11 -O2 immutability.c -lm -lpthread -o immutability
 		'';

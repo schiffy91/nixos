@@ -20,6 +20,27 @@
         "type": "github"
       }
     },
+    "btrc_2": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789880700,
+        "narHash": "sha256-Or17d/Z6IJjSKwvEihMSD+TxIzWhiV9hX68d8ivCSeQ=",
+        "owner": "schiffy91",
+        "repo": "btrc",
+        "rev": "c959dd0e5d122d7019266536d571d20fb7c5cc9d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "btrc",
+        "rev": "c959dd0e5d122d7019266536d571d20fb7c5cc9d",
+        "type": "github"
+      }
+    },
     "core-azahar": {
       "inputs": {
         "nixpkgs": [
@@ -882,9 +903,7 @@
     },
     "semu": {
       "inputs": {
-        "btrc": [
-          "btrc"
-        ],
+        "btrc": "btrc_2",
         "core-azahar": "core-azahar",
         "core-citra": "core-citra",
         "core-desmume": "core-desmume",

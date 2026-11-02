@@ -7,6 +7,7 @@ let
     nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
     dontConfigure = true;
     buildPhase = ''
+      export HOME="$TMPDIR"  # btrcpy writes its cache under $HOME
       btrcpy --strict-imports btrc/nixosctl/NixosCtl.btrc -o nixosctl.c
       $CC -std=c11 -O2 nixosctl.c -lm -lpthread -lutil -o nixosctl
     '';
