@@ -1,0 +1,179 @@
+#! /usr/bin/env nix-shell
+#! nix-shell -i python3 -p python3 gcc pkg-config dbus wayland wayland-scanner wayland-protocols kdePackages.plasma-wayland-protocols pipewire libdrm
+
+"""Verify KWin's HDR screencast patch by capturing real frames.
+
+Starts a throwaway headless KWin, casts its output over
+zkde_screencast_unstable_v1, consumes the stream from PipeWire with a chosen
+format and colorimetry, and checks the negotiated format plus a sampled pixel.
+
+A solid white window is reference white (255). KWin maps SDR reference white to
+203 nits, and PQ-encoding 203/10000 gives ~0.583, so a stream that asks for
+SMPTE2084 and still reports ~255 for white was labelled HDR without being
+converted. That is the difference this catches.
+"""
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+BGRX, XBGR_210LE = 8, 81
+BT709, BT2020 = 1, 7
+GAMMA22, SMPTE2084 = 4, 14
+
+MODES = {
+    "shm-sdr": dict(format=BGRX, primaries=BT709, transfer=GAMMA22, white=(245, 255), dmabuf=0),
+    "shm-pq": dict(format=BGRX, primaries=BT2020, transfer=SMPTE2084, white=(120, 190), dmabuf=0),
+    "hdr10": dict(format=XBGR_210LE, primaries=BT2020, transfer=SMPTE2084, white=None, dmabuf=1),
+}
+
+
+class Probe:
+    @classmethod
+    def xml(cls, name):
+        for root in os.environ.get("XDG_DATA_DIRS", "").split(":"):
+            candidate = Path(root) / "plasma-wayland-protocols" / name
+            if candidate.exists():
+                return candidate
+        sys.exit(f"cannot find {name} in XDG_DATA_DIRS")
+
+    @classmethod
+    def scan(cls, out, xml, kind, name):
+        subprocess.run(["wayland-scanner", kind, str(xml), str(out / name)], check=True)
+
+    @classmethod
+    def build(cls, source, out):
+        out.mkdir(parents=True, exist_ok=True)
+        kde = cls.xml("zkde-screencast-unstable-v1.xml")
+        share = subprocess.run(["pkg-config", "--variable=pkgdatadir", "wayland-protocols"],
+                               capture_output=True, text=True, check=True).stdout.strip()
+        shell = Path(share) / "stable/xdg-shell/xdg-shell.xml"
+        cls.scan(out, kde, "client-header", "zkde-screencast-unstable-v1-client-protocol.h")
+        cls.scan(out, kde, "private-code", "zkde-screencast-unstable-v1-protocol.c")
+        cls.scan(out, shell, "client-header", "xdg-shell-client-protocol.h")
+        cls.scan(out, shell, "private-code", "xdg-shell-protocol.c")
+        flags = subprocess.run(["pkg-config", "--cflags", "--libs", "wayland-client",
+                                "libpipewire-0.3", "libdrm"],
+                               capture_output=True, text=True, check=True).stdout.split()
+        binary = out / "probe"
+        subprocess.run(["gcc", "-O1", "-g", "-Wall", "-Wno-unused-function", "-I", str(out),
+                        "-o", str(binary), str(source),
+                        str(out / "zkde-screencast-unstable-v1-protocol.c"),
+                        str(out / "xdg-shell-protocol.c")] + flags, check=True)
+        return binary
+
+
+class Session:
+    @classmethod
+    def patched(cls, kwin):
+        plugin = Path(kwin) / "lib/qt-6/plugins/kwin/plugins/screencast.so"
+        if not plugin.exists():
+            return None
+        return b"negotiated stream color" in plugin.read_bytes()
+
+    @classmethod
+    def run(cls, kwin, binary, mode, timeout):
+        jail = Path(tempfile.mkdtemp(prefix="kwin-hdr-test."))
+        inner = jail / "inner.sh"
+        inner.write_text(f'#!/bin/sh\nexec "{binary}" "{mode}"\n')
+        inner.chmod(0o755)
+        env = dict(os.environ)
+        for key, value in {
+            "XDG_CONFIG_HOME": jail / "config",
+            "XDG_DATA_HOME": jail / "data",
+            "XDG_CACHE_HOME": jail / "cache",
+            "XDG_STATE_HOME": jail / "state",
+        }.items():
+            Path(value).mkdir(parents=True, exist_ok=True)
+            env[key] = str(value)
+        env.pop("WAYLAND_DISPLAY", None)
+        env.pop("DISPLAY", None)
+        env.pop("KWIN_DRM_DEVICES", None)  # the host's list may not be renderable here
+        env["QT_FORCE_STDERR_LOGGING"] = "1"  # KDE otherwise routes logs to journald
+        env["QT_LOGGING_RULES"] = "kwin_screencast.debug=true;kwin_screencast.info=true"
+        env["LD_LIBRARY_PATH"] = "/run/opengl-driver/lib"  # EGL fails without the GPU driver
+        env["__EGL_VENDOR_LIBRARY_DIRS"] = "/run/opengl-driver/share/glvnd/egl_vendor.d"
+        for name in ("PROBE_FORMAT", "PROBE_NO_SIZE", "PROBE_NO_RATE", "PROBE_NO_COLOR"):
+            env.pop(name, None)
+        command = ["dbus-run-session", "--", f"{kwin}/bin/kwin_wayland",  # private bus, own config
+                   "--virtual", "--width", "1024", "--height", "768",
+                   f"--socket=kwin-hdr-test-{os.getpid()}",
+                   "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
+                   f"--exit-with-session={inner}"]
+        try:
+            done = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout)
+            return done.stdout + done.stderr
+        except subprocess.TimeoutExpired as expired:
+            return (expired.stdout or b"").decode() + (expired.stderr or b"").decode()
+        finally:
+            shutil.rmtree(jail, ignore_errors=True)
+
+
+class Checks:
+    @classmethod
+    def value(cls, log, key):
+        found = re.findall(rf"RESULT: {key}=(\S+)", log)
+        return found[-1] if found else None
+
+    @classmethod
+    def verify(cls, mode, log, expected):
+        results = []
+        for key, want in (("negotiated_format", expected["format"]),
+                          ("negotiated_primaries", expected["primaries"]),
+                          ("negotiated_transfer", expected["transfer"]),
+                          ("dmabuf", expected["dmabuf"])):
+            got = cls.value(log, key)
+            results.append((f"{mode} {key}", got, str(want), got == str(want)))
+        frames = cls.value(log, "frames")
+        results.append((f"{mode} frames", frames, ">=1", bool(frames) and int(frames) >= 1))
+        if expected["white"]:
+            low, high = expected["white"]
+            rgb = cls.value(log, "center_rgb")
+            white = int(rgb.split(",")[0]) if rgb else None
+            results.append((f"{mode} white", white, f"{low}..{high}",
+                            white is not None and low <= white <= high))
+        return results
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--kwin", help="kwin store path (default: the running system's)")
+    parser.add_argument("--mode", choices=sorted(MODES), action="append")
+    parser.add_argument("--timeout", type=int, default=240)
+    parser.add_argument("--keep-going", action="store_true")
+    args = parser.parse_args()
+
+    kwin = args.kwin
+    if not kwin:
+        found = shutil.which("kwin_wayland") or "/run/current-system/sw/bin/kwin_wayland"
+        kwin = str(Path(os.path.realpath(found)).parent.parent)
+    state = Session.patched(kwin)
+    print(f"kwin: {kwin}")
+    print(f"patch: {'present' if state else 'MISSING' if state is False else 'unknown'}")
+
+    here = Path(__file__).resolve().parent
+    work = Path(tempfile.mkdtemp(prefix="kwin-hdr-build."))
+    binary = Probe.build(here / "probe.c", work)
+    print(f"logs: {work}")
+
+    failures = 0
+    for mode in args.mode or sorted(MODES):
+        log = Session.run(kwin, binary, mode, args.timeout)
+        (work / f"{mode}.log").write_text(log)
+        for name, got, want, ok in Checks.verify(mode, log, MODES[mode]):
+            print(f"  {'ok  ' if ok else 'FAIL'} {name} = {got} (want {want})")
+            failures += 0 if ok else 1
+        if failures and not args.keep_going:
+            break
+    print("ALL CHECKS PASSED" if not failures else f"{failures} CHECKS FAILED")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

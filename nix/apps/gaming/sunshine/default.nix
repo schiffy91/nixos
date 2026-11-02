@@ -14,18 +14,30 @@ in {
             --replace-fail "Exec=$out/bin/sunshine" "Exec=$out/bin/.sunshine-wrapped"
         '';
       });
+    })
+  # Backport of KDE MR !8293, rebased onto Plasma 6.8.2 and fixed up, so the
+  # stream can negotiate BT.2020 + SMPTE2084 and Sunshine captures real HDR.
+  # Without it KWin lets a client negotiate PQ and then hands it SDR pixels.
+  # Upstream is unmerged: https://invent.kde.org/plasma/kwin/-/merge_requests/8293
+  # Deviations from the MR, each verified by ./hdr-screencast-test:
+  #   - apply the negotiated colour description on the memfd path too, not only
+  #     on dmabuf, otherwise a PQ memfd stream carries unconverted sRGB pixels
+  #   - announce every allocatable dmabuf format rather than only the preferred
+  #     one, so 8-bit dmabuf clients keep zero-copy and HDR clients can pick
+  #   - adopt whichever offered format the client chose
+  #   - announce the alpha-less 10-bit twin and allocate the alpha-carrying one;
+  #     drivers refuse to render into XBGR2101010 but accept ABGR2101010, and
+  #     Sunshine only requests BT.2020 + PQ for xBGR_210LE
+  #   - fall back to memfd when no dmabuf format can be allocated, instead of
+  #     failing the stream outright
+  ++ lib.optional (enabled && capture == "kwin")
+    (_final: prev: {
+      kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
+        kwin = kdePrev.kwin.overrideAttrs (old: {
+          patches = (old.patches or []) ++ [ ./hdr-screencast.patch ];
+        });
+      });
     });
-  # PARKED on 2026-11-02: ./hdr-screencast.patch is our backport of KDE
-  # MR !8293 (10-bit DRM formats plus BT.2020/SMPTE2084 negotiation in the
-  # PipeWire screencast stream, so Sunshine captures real HDR pixels instead of
-  # 8-bit-truncated SDR). It applied to Plasma 6.7.5; Plasma 6.8.2 refactored
-  # the screencast plugin (RenderDevice/EglContext, setNextPresentationTimestamp,
-  # no ScreenCastSource::clock) and seven hunks across four files now reject.
-  # MR !8293 is still unmerged and untouched since 2026-09-04, so its current
-  # diff does not apply to 6.8.2 either, and 6.8.2 has no HDR screencast support
-  # of its own. Re-enable this overlay once the patch is ported and HDR capture
-  # is verified against a real Sunshine session; until then KWin capture works
-  # in SDR. https://invent.kde.org/plasma/kwin/-/merge_requests/8293
 
   services.sunshine = lib.mkIf enabled {
     enable = true;

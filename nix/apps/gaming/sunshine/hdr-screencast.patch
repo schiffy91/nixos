@@ -1,10 +1,8 @@
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 460fb29..6008496 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -372,6 +372,11 @@ add_feature_info(libdisplayinfo libdisplayinfo_FOUND "EDID and DisplayID library
+@@ -381,6 +381,11 @@
  
- pkg_check_modules(PipeWire IMPORTED_TARGET libpipewire-0.3>=1.0.9)
+ pkg_check_modules(PipeWire IMPORTED_TARGET libpipewire-0.3>=1.4.0)
  add_feature_info(PipeWire PipeWire_FOUND "Required for Wayland screencasting")
 +if (PipeWire_FOUND AND ${PipeWire_VERSION} VERSION_GREATER_EQUAL 1.5.81)
 +    set(HAVE_PIPEWIRE_ST2084 1)
@@ -14,23 +12,19 @@ index 460fb29..6008496 100644
  
  if (KWIN_BUILD_NOTIFICATIONS)
      find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS Notifications)
-diff --git a/src/config-kwin.h.cmake b/src/config-kwin.h.cmake
-index 58188c0..66c9361 100644
 --- a/src/config-kwin.h.cmake
 +++ b/src/config-kwin.h.cmake
-@@ -28,6 +28,7 @@ constexpr QLatin1StringView LIBEXEC_DIR("${CMAKE_INSTALL_FULL_LIBEXECDIR}");
+@@ -28,6 +28,7 @@
  #cmakedefine01 HAVE_MEMFD
  #cmakedefine01 HAVE_SCHED_RESET_ON_FORK
  #cmakedefine01 HAVE_XKBCOMMON_NO_SECURE_GETENV
 +#cmakedefine01 HAVE_PIPEWIRE_ST2084
  #cmakedefine01 HAVE_DL_LIBRARY
- #cmakedefine01 HAVE_LIBDRM_FAUX
  #cmakedefine01 HAVE_LIBINPUT_PLUGINS
-diff --git a/src/plugins/screencast/outputscreencastsource.cpp b/src/plugins/screencast/outputscreencastsource.cpp
-index 5a44c3f..338a9d5 100644
+ #cmakedefine01 HAVE_SYSTEMD
 --- a/src/plugins/screencast/outputscreencastsource.cpp
 +++ b/src/plugins/screencast/outputscreencastsource.cpp
-@@ -43,11 +43,6 @@ OutputScreenCastSource::~OutputScreenCastSource()
+@@ -42,11 +42,6 @@
      pause();
  }
  
@@ -42,7 +36,7 @@ index 5a44c3f..338a9d5 100644
  QSize OutputScreenCastSource::textureSize() const
  {
      return m_output->pixelSize();
-@@ -58,6 +53,11 @@ qreal OutputScreenCastSource::devicePixelRatio() const
+@@ -57,6 +52,11 @@
      return m_output->scale();
  }
  
@@ -54,8 +48,8 @@ index 5a44c3f..338a9d5 100644
  void OutputScreenCastSource::setRenderCursor(bool enable)
  {
      m_renderCursor = enable;
-@@ -66,6 +66,12 @@ void OutputScreenCastSource::setRenderCursor(bool enable)
-     }
+@@ -70,6 +70,12 @@
+     m_sceneView->setNextPresentationTimestamp(timestamp, refreshRate, nullptr);
  }
  
 +void OutputScreenCastSource::setColorDescription(const std::shared_ptr<ColorDescription> &color)
@@ -67,11 +61,9 @@ index 5a44c3f..338a9d5 100644
  Region OutputScreenCastSource::render(QImage *target, const Region &bufferRepair)
  {
      auto texture = GLTexture::allocate(GL_RGBA8, target->size());
-diff --git a/src/plugins/screencast/outputscreencastsource.h b/src/plugins/screencast/outputscreencastsource.h
-index 7c3142b..6c2e2c9 100644
 --- a/src/plugins/screencast/outputscreencastsource.h
 +++ b/src/plugins/screencast/outputscreencastsource.h
-@@ -29,9 +29,10 @@ public:
+@@ -29,9 +29,10 @@
      uint refreshRate() const override;
      QSize textureSize() const override;
      qreal devicePixelRatio() const override;
@@ -80,34 +72,25 @@ index 7c3142b..6c2e2c9 100644
  
      void setRenderCursor(bool enable) override;
 +    void setColorDescription(const std::shared_ptr<ColorDescription> &color) override;
+     void setNextPresentationTimestamp(std::chrono::nanoseconds timestamp, uint32_t refreshRate) override;
      Region render(GLFramebuffer *target, const Region &bufferRepair) override;
      Region render(QImage *target, const Region &bufferRepair) override;
-     std::chrono::nanoseconds clock() const override;
-diff --git a/src/plugins/screencast/regionscreencastsource.cpp b/src/plugins/screencast/regionscreencastsource.cpp
-index a9fefd9..0297490 100644
 --- a/src/plugins/screencast/regionscreencastsource.cpp
 +++ b/src/plugins/screencast/regionscreencastsource.cpp
-@@ -58,14 +58,14 @@ qreal RegionScreenCastSource::devicePixelRatio() const
+@@ -59,9 +59,9 @@
      return m_scale;
  }
  
 -quint32 RegionScreenCastSource::drmFormat() const
-+std::chrono::nanoseconds RegionScreenCastSource::clock() const
- {
--    return DRM_FORMAT_ARGB8888;
-+    return m_last;
- }
- 
--std::chrono::nanoseconds RegionScreenCastSource::clock() const
 +bool RegionScreenCastSource::needsAlpha() const
  {
--    return m_last;
+-    return DRM_FORMAT_ARGB8888;
 +    return false;
  }
  
  void RegionScreenCastSource::setRenderCursor(bool enable)
-@@ -76,6 +76,12 @@ void RegionScreenCastSource::setRenderCursor(bool enable)
-     }
+@@ -77,6 +77,12 @@
+     m_sceneView->setNextPresentationTimestamp(timestamp, refreshRate, nullptr);
  }
  
 +void RegionScreenCastSource::setColorDescription(const std::shared_ptr<ColorDescription> &color)
@@ -118,12 +101,10 @@ index a9fefd9..0297490 100644
 +
  Region RegionScreenCastSource::render(GLFramebuffer *target, const Region &bufferRepair)
  {
-     m_last = std::chrono::steady_clock::now().time_since_epoch();
-diff --git a/src/plugins/screencast/regionscreencastsource.h b/src/plugins/screencast/regionscreencastsource.h
-index b9fd361..625276a 100644
+     m_sceneView->prePaint();
 --- a/src/plugins/screencast/regionscreencastsource.h
 +++ b/src/plugins/screencast/regionscreencastsource.h
-@@ -25,12 +25,13 @@ public:
+@@ -25,12 +25,13 @@
      explicit RegionScreenCastSource(const Rect &region, qreal scale, std::optional<pid_t> pidToHide);
      ~RegionScreenCastSource() override;
  
@@ -135,14 +116,12 @@ index b9fd361..625276a 100644
  
      void setRenderCursor(bool enable) override;
 +    void setColorDescription(const std::shared_ptr<ColorDescription> &color) override;
+     void setNextPresentationTimestamp(std::chrono::nanoseconds timestamp, uint32_t refreshRate) override;
      Region render(GLFramebuffer *target, const Region &bufferRepair) override;
      Region render(QImage *target, const Region &bufferRepair) override;
-     std::chrono::nanoseconds clock() const override;
-diff --git a/src/plugins/screencast/screencastlayer.cpp b/src/plugins/screencast/screencastlayer.cpp
-index 2260ee6..75c9b11 100644
 --- a/src/plugins/screencast/screencastlayer.cpp
 +++ b/src/plugins/screencast/screencastlayer.cpp
-@@ -16,6 +16,15 @@ ScreencastLayer::ScreencastLayer(LogicalOutput *output, const FormatModifierMap
+@@ -18,6 +18,15 @@
      setRenderLoop(nullptr);
  }
  
@@ -158,17 +137,15 @@ index 2260ee6..75c9b11 100644
  void ScreencastLayer::setFramebuffer(GLFramebuffer *buffer, const Region &bufferDamage)
  {
      // TODO is there a better way to deal with this?
-@@ -36,7 +45,7 @@ FormatModifierMap ScreencastLayer::supportedDrmFormats() const
- std::optional<OutputLayerBeginFrameInfo> ScreencastLayer::doBeginFrame()
- {
+@@ -39,7 +48,7 @@
+     }
+ 
      return OutputLayerBeginFrameInfo{
 -        .renderTarget = RenderTarget(m_buffer),
 +        .renderTarget = RenderTarget(m_buffer, m_color),
          .repaint = m_bufferDamage,
      };
  }
-diff --git a/src/plugins/screencast/screencastlayer.h b/src/plugins/screencast/screencastlayer.h
-index e8696d8..cd608d6 100644
 --- a/src/plugins/screencast/screencastlayer.h
 +++ b/src/plugins/screencast/screencastlayer.h
 @@ -4,6 +4,7 @@
@@ -179,15 +156,15 @@ index e8696d8..cd608d6 100644
  #include "core/outputlayer.h"
  
  namespace KWin
-@@ -14,6 +15,7 @@ class ScreencastLayer : public OutputLayer
+@@ -14,6 +15,7 @@
  public:
      explicit ScreencastLayer(LogicalOutput *output, const FormatModifierMap &formats);
  
 +    void setColorDescription(const std::shared_ptr<ColorDescription> &color);
      void setFramebuffer(GLFramebuffer *buffer, const Region &bufferDamage);
  
-     DrmDevice *scanoutDevice() const override;
-@@ -27,6 +29,7 @@ private:
+     FormatModifierMap supportedDrmFormats() const override;
+@@ -26,6 +28,7 @@
      const FormatModifierMap m_formats;
      GLFramebuffer *m_buffer = nullptr;
      Region m_bufferDamage;
@@ -195,8 +172,6 @@ index e8696d8..cd608d6 100644
  };
  
  }
-diff --git a/src/plugins/screencast/screencastsource.h b/src/plugins/screencast/screencastsource.h
-index c15f812..4173ce7 100644
 --- a/src/plugins/screencast/screencastsource.h
 +++ b/src/plugins/screencast/screencastsource.h
 @@ -7,6 +7,7 @@
@@ -207,16 +182,16 @@ index c15f812..4173ce7 100644
  
  class QImage;
  
-@@ -18,6 +19,7 @@ class GLFramebuffer;
+@@ -18,6 +19,7 @@
  class GLTexture;
  class RectF;
  class Region;
 +class ColorDescription;
+ class RenderDevice;
+ class EglContext;
  
- class ScreenCastSource : public QObject
- {
-@@ -27,11 +29,12 @@ public:
-     explicit ScreenCastSource();
+@@ -30,11 +32,12 @@
+     ~ScreenCastSource() override;
  
      virtual uint refreshRate() const = 0;
 -    virtual quint32 drmFormat() const = 0;
@@ -226,11 +201,9 @@ index c15f812..4173ce7 100644
  
      virtual void setRenderCursor(bool enable) = 0;
 +    virtual void setColorDescription(const std::shared_ptr<ColorDescription> &color) = 0;
+     virtual void setNextPresentationTimestamp(std::chrono::nanoseconds timestamp, uint32_t refreshRate) = 0;
      virtual Region render(GLFramebuffer *target, const Region &bufferRepair) = 0;
      virtual Region render(QImage *target, const Region &bufferRepair) = 0;
-     virtual std::chrono::nanoseconds clock() const = 0;
-diff --git a/src/plugins/screencast/screencaststream.cpp b/src/plugins/screencast/screencaststream.cpp
-index cb51ca2..e73733d 100644
 --- a/src/plugins/screencast/screencaststream.cpp
 +++ b/src/plugins/screencast/screencaststream.cpp
 @@ -8,6 +8,7 @@
@@ -240,29 +213,28 @@ index cb51ca2..e73733d 100644
 +#include "config-kwin.h"
  #include "core/drm_formats.h"
  #include "core/drmdevice.h"
- #include "core/graphicsbufferallocator.h"
-@@ -25,6 +26,9 @@
+ #include "core/gpumanager.h"
+@@ -27,6 +28,8 @@
  #include "screencastbuffer.h"
  #include "screencastsource.h"
  
 +#include <algorithm>
-+#include <span>
 +
  #include <KLocalizedString>
  
  #include <QLoggingCategory>
-@@ -75,10 +79,6 @@ static const struct
-         .drmFormat = DRM_FORMAT_BGRX8888,
+@@ -78,10 +81,6 @@
          .spaFormat = SPA_VIDEO_FORMAT_xRGB,
      },
--    {
+     {
 -        .drmFormat = DRM_FORMAT_NV12,
 -        .spaFormat = SPA_VIDEO_FORMAT_NV12,
 -    },
-     {
+-    {
          .drmFormat = DRM_FORMAT_RGB888,
          .spaFormat = SPA_VIDEO_FORMAT_BGR,
-@@ -87,6 +87,43 @@ static const struct
+     },
+@@ -89,8 +88,101 @@
          .drmFormat = DRM_FORMAT_BGR888,
          .spaFormat = SPA_VIDEO_FORMAT_RGB,
      },
@@ -305,8 +277,66 @@ index cb51ca2..e73733d 100644
 +    },
  };
  
++// XBGR2101010 and ABGR2101010 (and their RGB/RGBX twins) have the same memory
++// layout; the only difference is whether the top two bits are alpha or ignored.
++// Drivers in practice let us render into the alpha-carrying one but not the
++// alpha-less one, which fails the framebuffer completeness check.
++static uint32_t renderableTwin(uint32_t drmFormat)
++{
++    switch (drmFormat) {
++    case DRM_FORMAT_XBGR2101010:
++        return DRM_FORMAT_ABGR2101010;
++    case DRM_FORMAT_XRGB2101010:
++        return DRM_FORMAT_ARGB2101010;
++    case DRM_FORMAT_RGBX1010102:
++        return DRM_FORMAT_RGBA1010102;
++    case DRM_FORMAT_BGRX1010102:
++        return DRM_FORMAT_BGRA1010102;
++    default:
++        return drmFormat;
++    }
++}
++
++// A two-bit alpha channel is useless for a capture, and clients disagree on how
++// the alpha variants map onto PipeWire's format names, so only ever announce
++// the alpha-less twin and allocate the one we can actually render into.
++static uint32_t announcedTwin(uint32_t drmFormat)
++{
++    switch (drmFormat) {
++    case DRM_FORMAT_ABGR2101010:
++        return DRM_FORMAT_XBGR2101010;
++    case DRM_FORMAT_ARGB2101010:
++        return DRM_FORMAT_XRGB2101010;
++    case DRM_FORMAT_RGBA1010102:
++        return DRM_FORMAT_RGBX1010102;
++    case DRM_FORMAT_BGRA1010102:
++        return DRM_FORMAT_BGRX1010102;
++    default:
++        return drmFormat;
++    }
++}
++
++static bool isTenBitPerColorFormat(uint32_t spaFormat)
++{
++    switch (spaFormat) {
++    case SPA_VIDEO_FORMAT_ARGB_210LE:
++    case SPA_VIDEO_FORMAT_ABGR_210LE:
++    case SPA_VIDEO_FORMAT_RGBA_102LE:
++    case SPA_VIDEO_FORMAT_BGRA_102LE:
++    case SPA_VIDEO_FORMAT_xRGB_210LE:
++    case SPA_VIDEO_FORMAT_xBGR_210LE:
++    case SPA_VIDEO_FORMAT_RGBx_102LE:
++    case SPA_VIDEO_FORMAT_BGRx_102LE:
++        return true;
++    default:
++        return false;
++    }
++}
++
  static spa_video_format drmFormatToSpaVideoFormat(quint32 drmFormat)
-@@ -153,8 +182,56 @@ void ScreenCastStream::newStreamParams()
+ {
+     for (const auto &info : supportedFormats) {
+@@ -154,8 +246,58 @@
  {
      qCDebug(KWIN_SCREENCAST) << objectName() << "announcing stream params. with dmabuf:" << m_dmabufParams.has_value();
      const int buffertypes = m_dmabufParams ? (1 << SPA_DATA_DmaBuf) : (1 << SPA_DATA_MemFd);
@@ -361,11 +391,13 @@ index cb51ca2..e73733d 100644
 +    }
 +    m_videoColor = std::make_shared<ColorDescription>(primaries, TransferFunction{transfer});
 +
-+    qCDebug(KWIN_SCREENCAST) << "chose color description for the stream";
++    qCInfo(KWIN_SCREENCAST) << objectName() << "negotiated stream color: format" << m_videoFormat.format
++                            << "primaries" << m_videoFormat.color_primaries
++                            << "transfer" << m_videoFormat.transfer_function;
  
      struct spa_pod_dynamic_builder pod_builder;
      struct spa_pod_frame f;
-@@ -184,6 +261,8 @@ void ScreenCastStream::newStreamParams()
+@@ -185,6 +327,8 @@
                          SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(3, 2, 4),
                          SPA_PARAM_BUFFERS_dataType, SPA_POD_CHOICE_FLAGS_Int(buffertypes), 0);
      if (!m_dmabufParams) {
@@ -374,10 +406,29 @@ index cb51ca2..e73733d 100644
          spa_pod_builder_add(&pod_builder.b,
                              SPA_PARAM_BUFFERS_blocks, SPA_POD_Int(1),
                              SPA_PARAM_BUFFERS_size, SPA_POD_Int(stride * m_resolution.height()),
-@@ -234,8 +313,8 @@ void ScreenCastStream::onStreamParamChanged(uint32_t id, const struct spa_pod *f
-     }
- 
+@@ -237,6 +381,18 @@
      spa_format_video_raw_parse(format, &m_videoFormat);
+     const QSize negotiatedSize(m_videoFormat.size.width, m_videoFormat.size.height);
+ 
++    // Now that several dmabuf formats are offered, the client's choice decides
++    // which modifiers and buffer layout apply.
++    if (m_hasDmaBuf) {
++        const uint32_t negotiatedDrmFormat = spaVideoFormatToDrmFormat(m_videoFormat.format);
++        if (negotiatedDrmFormat != DRM_FORMAT_INVALID && negotiatedDrmFormat != m_drmFormat
++            && m_possibleDmabufFormats.contains(negotiatedDrmFormat)) {
++            m_drmFormat = negotiatedDrmFormat;
++            m_modifiers = Compositor::self()->backend()->supportedFormats().value(renderableTwin(negotiatedDrmFormat));
++            m_dmabufParams.reset();
++        }
++    }
++
+     qCDebug(KWIN_SCREENCAST) << objectName() << "negotiated stream size to" << negotiatedSize;
+     m_resolution = negotiatedSize;
+ 
+@@ -246,8 +402,8 @@
+ 
+     m_vsync->setRefreshRate(framerate());
+ 
 -    auto modifierProperty = spa_pod_find_prop(format, nullptr, SPA_FORMAT_VIDEO_modifier);
 -    if (modifierProperty) {
 +    const bool reallocationRequired = !m_dmabufParams || m_dmabufParams->width != m_resolution.width() || m_dmabufParams->height != m_resolution.height();
@@ -385,7 +436,7 @@ index cb51ca2..e73733d 100644
          const uint32_t valueCount = SPA_POD_CHOICE_N_VALUES(&modifierProperty->value);
          const uint64_t *values = (uint64_t *)SPA_POD_CHOICE_VALUES(&modifierProperty->value); // values[0] is the preferred choice
  
-@@ -246,7 +325,7 @@ void ScreenCastStream::onStreamParamChanged(uint32_t id, const struct spa_pod *f
+@@ -258,7 +414,7 @@
              receivedModifiers.insert(values[i]);
          }
  
@@ -394,69 +445,37 @@ index cb51ca2..e73733d 100644
              // DRM_MOD_INVALID should be used as a last option. Do not just remove it it's the only
              // item on the list
              if (receivedModifiers.size() > 1) {
-@@ -263,12 +342,51 @@ void ScreenCastStream::onStreamParamChanged(uint32_t id, const struct spa_pod *f
-                 }
+@@ -276,7 +432,7 @@
              }
  
--            qCDebug(KWIN_SCREENCAST) << objectName() << "Stream dmabuf modifiers received, offering our best suited modifier" << m_dmabufParams.has_value();
-+            qCWarning(KWIN_SCREENCAST) << objectName() << "Stream dmabuf modifiers received, offering our best suited modifier" << m_dmabufParams.has_value();
-             char buffer[2048];
+             qCDebug(KWIN_SCREENCAST) << objectName() << "Stream dmabuf modifiers received, offering our best suited modifier" << m_dmabufParams.has_value();
+-            char buffer[2048];
++            char buffer[16384];
              auto params = buildFormats(m_dmabufParams.has_value(), buffer);
              pw_stream_update_params(m_pwStream, params.data(), params.count());
              return;
-         }
-+    } else if (auto formatProperty = spa_pod_find_prop(format, nullptr, SPA_FORMAT_VIDEO_format)) {
-+        const uint32_t valueCount = SPA_POD_CHOICE_N_VALUES(&formatProperty->value);
-+        const spa_video_format *values = (spa_video_format *)SPA_POD_CHOICE_VALUES(&formatProperty->value);
-+        bool currentFormatOffered = false;
-+        for (uint32_t i = 0; i < valueCount; ++i) {
-+            if (static_cast<uint32_t>(values[i]) == m_videoFormat.format) {
-+                currentFormatOffered = true;
-+                break;
-+            }
-+        }
-+        if (reallocationRequired || !currentFormatOffered) {
-+            // attempt to change the format to something the client supports
-+            const auto supported = Compositor::self()->backend()->supportedFormats();
-+            for (uint32_t i = 0; i < valueCount; ++i) {
-+                const uint32_t drmFormat = spaVideoFormatToDrmFormat(values[i]);
-+                if (drmFormat == DRM_FORMAT_INVALID) {
-+                    continue;
-+                }
-+                if (!m_possibleDmabufFormats.contains(drmFormat)) {
-+                    continue;
-+                }
-+                const auto mods = supported.value(drmFormat);
-+                const auto opt = testCreateDmaBuf(m_resolution, drmFormat, mods);
-+                if (opt.has_value()) {
-+                    m_dmabufParams = opt;
-+                    m_drmFormat = drmFormat;
-+                    m_modifiers = mods;
-+
-+                    qCDebug(KWIN_SCREENCAST) << objectName() << "Changing stream format to" << FormatInfo::drmFormatName(m_drmFormat);
-+                    char buffer[2048];
-+                    auto params = buildFormats(m_dmabufParams.has_value(), buffer);
-+                    pw_stream_update_params(m_pwStream, params.data(), params.count());
-+                    return;
-+                } else {
-+                    // avoid trying this again later on
-+                    m_possibleDmabufFormats.removeOne(drmFormat);
-+                }
-+            }
-+        }
-     } else {
-         m_dmabufParams.reset();
-     }
-@@ -408,29 +526,66 @@ uint64_t ScreenCastStream::objectSerial() const
+@@ -299,7 +455,7 @@
+     if (spa_data[0].type & (1 << SPA_DATA_DmaBuf)) {
+         GraphicsBufferOptions options{
+             .size = QSize(m_videoFormat.size.width, m_videoFormat.size.height),
+-            .format = spaVideoFormatToDrmFormat(m_videoFormat.format),
++            .format = renderableTwin(spaVideoFormatToDrmFormat(m_videoFormat.format)),
+             .modifiers = {m_videoFormat.modifier},
+             .scanout = false,
+         };
+@@ -428,32 +584,92 @@
      return pw_properties_get_uint64(pw_stream_get_properties(m_pwStream), PW_KEY_OBJECT_SERIAL, 0);
  }
  
--bool ScreenCastStream::createStream()
 +static QList<uint32_t> filterAndSort(const FormatModifierMap &supported, bool needsAlpha)
- {
--    const QByteArray objname = "kwin-screencast-" + objectName().toUtf8();
--    m_pwStream = pw_stream_new(m_pwCore->pwCore, objname, nullptr);
-+    QList<uint32_t> ret = supported.keys();
++{
++    QList<uint32_t> ret;
++    for (const uint32_t format : supported.keys()) {
++        const uint32_t announced = announcedTwin(format);
++        if (!ret.contains(announced)) {
++            ret.append(announced);
++        }
++    }
 +    // remove all formats we don't want or can't support
 +    ret.erase(std::remove_if(ret.begin(), ret.end(), [needsAlpha](uint32_t format) {
 +                  bool inList = false;
@@ -500,48 +519,108 @@ index cb51ca2..e73733d 100644
 +    });
 +    return ret;
 +}
++
+ bool ScreenCastStream::createStream()
+ {
++    const auto supported = Compositor::self()->backend()->supportedFormats();
++    m_possibleDmabufFormats = filterAndSort(supported, m_source->needsAlpha());
++
+     const QByteArray objname = "kwin-screencast-" + objectName().toUtf8();
+     m_pwStream = pw_stream_new(m_pwCore->pwCore, objname, nullptr);
  
-+bool ScreenCastStream::createStream()
-+{
-     const auto supported = Compositor::self()->backend()->supportedFormats();
+-    const auto supported = Compositor::self()->backend()->supportedFormats();
 -    auto itModifiers = supported.constFind(m_source->drmFormat());
--
++    // A format the backend imports is not necessarily one we can allocate, and
++    // announcing one we cannot would leave the stream with dmabuf parameters it
++    // is unable to honour, dropping every frame.
++    m_possibleDmabufFormats.removeIf([this, &supported](uint32_t format) {
++        return !testCreateDmaBuf(m_source->renderDevice(), m_resolution, format, supported.value(renderableTwin(format))).has_value();
++    });
+ 
 -    // If the offered format is not available for dmabuf, prefer converting to another one than resorting to memfd
 -    if (itModifiers == supported.constEnd() && !supported.isEmpty()) {
 -        itModifiers = supported.constFind(DRM_FORMAT_ARGB8888);
 -        if (itModifiers != supported.constEnd()) {
 -            m_drmFormat = itModifiers.key();
 -        }
-+    m_possibleDmabufFormats = filterAndSort(supported, m_source->needsAlpha());
-+    if (m_possibleDmabufFormats.isEmpty()) {
-+        return false;
++    QStringList formatNames;
++    for (const uint32_t format : m_possibleDmabufFormats) {
++        formatNames.append(FormatInfo::drmFormatName(format));
      }
++    qCDebug(KWIN_SCREENCAST) << objectName() << "dmabuf formats:" << formatNames.join(QLatin1String(", "));
  
 -    if (itModifiers == supported.constEnd()) {
 -        m_drmFormat = m_source->drmFormat();
 -        m_modifiers = {DRM_FORMAT_MOD_INVALID};
--    } else {
++    m_hasDmaBuf = !m_possibleDmabufFormats.isEmpty();
++    if (m_hasDmaBuf) {
++        m_drmFormat = m_possibleDmabufFormats.front();
++        m_modifiers = supported.value(renderableTwin(m_drmFormat));
+     } else {
 -        m_drmFormat = itModifiers.key();
 -        m_modifiers = *itModifiers;
--    }
-+    const QByteArray objname = "kwin-screencast-" + objectName().toUtf8();
-+    m_pwStream = pw_stream_new(m_pwCore->pwCore, objname, nullptr);
-+
-+    m_drmFormat = m_possibleDmabufFormats.front();
-+    m_modifiers = supported.value(m_drmFormat);
-     m_hasDmaBuf = testCreateDmaBuf(m_resolution, m_drmFormat, m_modifiers).has_value();
- 
-     char buffer[2048];
-@@ -608,6 +763,8 @@ void ScreenCastStream::record(Contents contents)
-         break;
++        // Nothing can be allocated as a dmabuf; buildFormats() still offers
++        // memfd as ARGB8888, which every client can consume.
++        m_drmFormat = DRM_FORMAT_ARGB8888;
++        m_modifiers = {DRM_FORMAT_MOD_INVALID};
      }
+-    m_hasDmaBuf = testCreateDmaBuf(m_source->renderDevice(), m_resolution, m_drmFormat, m_modifiers).has_value();
  
-+    m_source->setColorDescription(m_videoColor);
-+
-     EglContext *context = backend->openglContext();
-     context->makeCurrent();
+-    char buffer[2048];
++    char buffer[16384];
+     QList<const spa_pod *> params = buildFormats(false, buffer);
  
-@@ -785,6 +942,56 @@ spa_pod *ScreenCastStream::buildFormat(struct spa_pod_builder *b, enum spa_video
+     pw_stream_add_listener(m_pwStream, &m_streamListener, &m_pwStreamEvents, this);
+@@ -624,6 +840,9 @@
+     spa_meta_sync_timeline *synctmeta = nullptr;
+     Region damage;
+     if (effectiveContents & Content::Video) {
++        // Both buffer types render through the source's layer, so the negotiated
++        // color description has to be applied before either branch renders.
++        m_source->setColorDescription(m_videoColor);
+         if (auto memfd = dynamic_cast<MemFdScreenCastBuffer *>(buffer)) {
+             damage = m_source->render(memfd->view.image(), m_damageJournal.accumulate(memfd->m_age, Region::infinite()));
+             bumpBufferAge(memfd);
+@@ -699,7 +918,7 @@
+     }
+     m_resolution = resolution;
+ 
+-    char buffer[2048];
++    char buffer[16384];
+     auto params = buildFormats(false, buffer);
+     pw_stream_update_params(m_pwStream, params.data(), params.count());
+ }
+@@ -755,12 +974,12 @@
+     m_cursor.invalid = true;
+ }
+ 
+-QList<const spa_pod *> ScreenCastStream::buildFormats(bool fixate, char buffer[2048])
++QList<const spa_pod *> ScreenCastStream::buildFormats(bool fixate, char buffer[16384])
+ {
+     const auto dmabufFormat = drmFormatToSpaVideoFormat(m_drmFormat);
+     const auto shmFormat = drmFormatToSpaVideoFormat(DRM_FORMAT_ARGB8888);
+ 
+-    spa_pod_builder podBuilder = SPA_POD_BUILDER_INIT(buffer, 2048);
++    spa_pod_builder podBuilder = SPA_POD_BUILDER_INIT(buffer, 16384);
+     spa_fraction defFramerate = SPA_FRACTION(0, 1);
+     spa_fraction minFramerate = SPA_FRACTION(0, 1);
+     spa_fraction maxFramerate = SPA_FRACTION(m_source->refreshRate(), 1000);
+@@ -777,7 +996,13 @@
+         if (fixate) {
+             params.append(buildFormat(&podBuilder, dmabufFormat, defaultSize, minSize, maxSize, &defFramerate, &minFramerate, &maxFramerate, {m_dmabufParams->modifier}, SPA_POD_PROP_FLAG_MANDATORY));
+         }
+-        params.append(buildFormat(&podBuilder, dmabufFormat, defaultSize, minSize, maxSize, &defFramerate, &minFramerate, &maxFramerate, m_modifiers, SPA_POD_PROP_FLAG_MANDATORY | SPA_POD_PROP_FLAG_DONT_FIXATE));
++        // Offer every format we can allocate, best first. Announcing only the
++        // preferred one pushes clients that need a different format onto memfd,
++        // and hides the format an HDR-aware client may be looking for.
++        const auto supported = Compositor::self()->backend()->supportedFormats();
++        for (const uint32_t drmFormat : m_possibleDmabufFormats) {
++            params.append(buildFormat(&podBuilder, drmFormatToSpaVideoFormat(drmFormat), defaultSize, minSize, maxSize, &defFramerate, &minFramerate, &maxFramerate, supported.value(renderableTwin(drmFormat)), SPA_POD_PROP_FLAG_MANDATORY | SPA_POD_PROP_FLAG_DONT_FIXATE));
++        }
+     }
+     params.append(buildFormat(&podBuilder, shmFormat, defaultSize, minSize, maxSize, &defFramerate, &minFramerate, &maxFramerate, {}, 0));
+     return params;
+@@ -803,6 +1028,50 @@
                              SPA_POD_Fraction(maxFramerate)),
                          0);
  
@@ -550,10 +629,7 @@ index cb51ca2..e73733d 100644
 +    struct spa_pod_frame primariesFrame;
 +    spa_pod_builder_prop(b, SPA_FORMAT_VIDEO_colorPrimaries, 0);
 +    spa_pod_builder_push_choice(b, &primariesFrame, SPA_CHOICE_Enum, 0);
-+    if (format == SPA_VIDEO_FORMAT_ARGB_210LE ||
-+        format == SPA_VIDEO_FORMAT_ABGR_210LE ||
-+        format == SPA_VIDEO_FORMAT_RGBA_102LE ||
-+        format == SPA_VIDEO_FORMAT_BGRA_102LE) {
++    if (isTenBitPerColorFormat(format)) {
 +        spa_pod_builder_id(b, SPA_VIDEO_COLOR_PRIMARIES_BT2020); // default
 +        spa_pod_builder_id(b, SPA_VIDEO_COLOR_PRIMARIES_BT2020);
 +    } else {
@@ -575,10 +651,7 @@ index cb51ca2..e73733d 100644
 +    spa_pod_builder_prop(b, SPA_FORMAT_VIDEO_transferFunction, 0);
 +    spa_pod_builder_push_choice(b, &transferFrame, SPA_CHOICE_Enum, 0);
 +#if HAVE_PIPEWIRE_ST2084
-+    if (format == SPA_VIDEO_FORMAT_ARGB_210LE ||
-+        format == SPA_VIDEO_FORMAT_ABGR_210LE ||
-+        format == SPA_VIDEO_FORMAT_RGBA_102LE ||
-+        format == SPA_VIDEO_FORMAT_BGRA_102LE) {
++    if (isTenBitPerColorFormat(format)) {
 +        spa_pod_builder_id(b, SPA_VIDEO_TRANSFER_SMPTE2084); // default
 +        spa_pod_builder_id(b, SPA_VIDEO_TRANSFER_SMPTE2084);
 +    } else
@@ -598,8 +671,15 @@ index cb51ca2..e73733d 100644
      if (format == SPA_VIDEO_FORMAT_BGRA) {
          /* announce equivalent format without alpha */
          spa_pod_builder_add(b, SPA_FORMAT_VIDEO_format, SPA_POD_CHOICE_ENUM_Id(3, format, format, SPA_VIDEO_FORMAT_BGRx), 0);
-diff --git a/src/plugins/screencast/screencaststream.h b/src/plugins/screencast/screencaststream.h
-index d0af11d..09bbe41 100644
+@@ -899,7 +1168,7 @@
+ {
+     GraphicsBuffer *buffer = device->allocator()->allocate(GraphicsBufferOptions{
+         .size = size,
+-        .format = format,
++        .format = renderableTwin(format),
+         .modifiers = modifiers,
+         .scanout = false,
+     });
 --- a/src/plugins/screencast/screencaststream.h
 +++ b/src/plugins/screencast/screencaststream.h
 @@ -8,6 +8,7 @@
@@ -609,8 +689,17 @@ index d0af11d..09bbe41 100644
 +#include "core/colorspace.h"
  #include "core/drm_formats.h"
  #include "utils/damagejournal.h"
- #include "wayland/screencast_v1.h"
-@@ -118,9 +119,11 @@ private:
+ #include "utils/vsyncsource.h"
+@@ -89,7 +90,7 @@
+     void onStreamRemoveBuffer(pw_buffer *buffer);
+ 
+     bool createStream();
+-    QList<const spa_pod *> buildFormats(bool fixate, char buffer[2048]);
++    QList<const spa_pod *> buildFormats(bool fixate, char buffer[16384]);
+     void updateParams();
+     void updateStreamSize(const QSize &resolution);
+     void coreFailed(const QString &errorMessage);
+@@ -124,9 +125,11 @@
      bool m_closed = false;
  
      spa_video_info_raw m_videoFormat;
@@ -622,11 +711,9 @@ index d0af11d..09bbe41 100644
  
      struct
      {
-diff --git a/src/plugins/screencast/windowscreencastsource.cpp b/src/plugins/screencast/windowscreencastsource.cpp
-index f1ec191..0307509 100644
 --- a/src/plugins/screencast/windowscreencastsource.cpp
 +++ b/src/plugins/screencast/windowscreencastsource.cpp
-@@ -86,11 +86,6 @@ void WindowScreenCastSource::unwatch(Window *window)
+@@ -84,11 +84,6 @@
      disconnect(window, &Window::damaged, this, &WindowScreenCastSource::frame);
  }
  
@@ -638,7 +725,7 @@ index f1ec191..0307509 100644
  QSize WindowScreenCastSource::textureSize() const
  {
      return (boundingRect().size() * m_windows[0]->targetScale()).toSize();
-@@ -101,11 +96,21 @@ qreal WindowScreenCastSource::devicePixelRatio() const
+@@ -99,11 +94,21 @@
      return m_windows[0]->targetScale();
  }
  
@@ -657,10 +744,10 @@ index f1ec191..0307509 100644
 +    m_color = color;
 +}
 +
- Region WindowScreenCastSource::render(QImage *target, const Region &bufferDamage)
+ void WindowScreenCastSource::setNextPresentationTimestamp(std::chrono::nanoseconds timestamp, uint32_t refreshRate)
  {
-     const auto offscreenTexture = GLTexture::allocate(GL_RGBA8, target->size());
-@@ -122,7 +127,7 @@ Region WindowScreenCastSource::render(QImage *target, const Region &bufferDamage
+     // TODO use the timestamp for rendering, once we have a SceneView to do that with
+@@ -125,7 +130,7 @@
  
  Region WindowScreenCastSource::render(GLFramebuffer *target, const Region &bufferDamage)
  {
@@ -669,8 +756,6 @@ index f1ec191..0307509 100644
      RenderViewport viewport(boundingRect(), devicePixelRatio(), renderTarget, QPoint());
  
      WorkspaceScene *scene = kwinApp()->scene();
-diff --git a/src/plugins/screencast/windowscreencastsource.h b/src/plugins/screencast/windowscreencastsource.h
-index 80edd86..f301188 100644
 --- a/src/plugins/screencast/windowscreencastsource.h
 +++ b/src/plugins/screencast/windowscreencastsource.h
 @@ -6,6 +6,7 @@
@@ -681,7 +766,7 @@ index 80edd86..f301188 100644
  #include "screencastsource.h"
  #include "window.h"
  
-@@ -23,12 +24,13 @@ public:
+@@ -23,12 +24,13 @@
      explicit WindowScreenCastSource(Window *window);
      ~WindowScreenCastSource() override;
  
@@ -693,10 +778,10 @@ index 80edd86..f301188 100644
  
      void setRenderCursor(bool enable) override;
 +    void setColorDescription(const std::shared_ptr<ColorDescription> &color) override;
+     void setNextPresentationTimestamp(std::chrono::nanoseconds timestamp, uint32_t refreshRate) override;
      Region render(GLFramebuffer *target, const Region &bufferDamage) override;
      Region render(QImage *target, const Region &bufferDamage) override;
-     std::chrono::nanoseconds clock() const override;
-@@ -50,6 +52,7 @@ private:
+@@ -50,6 +52,7 @@
      QList<Window *> m_windows;
      bool m_active = false;
      bool m_renderCursor = false;
