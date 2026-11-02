@@ -1,0 +1,17 @@
+{ config, inputs, ... }:
+{
+  imports = [ ./security.nix inputs.home-manager-darwin.darwinModules.home-manager ];
+  nix.enable = config.settings.macos.nix.enable;
+  nixpkgs.config.allowUnfree = true;
+  environment.systemPackages = config.settings.apps.packages;
+  programs.zsh.enable = config.settings.apps.zsh.enable;
+  system.primaryUser = config.settings.users.admin.username;
+  users.users.${config.settings.users.admin.username}.home = config.settings.users.admin.homeDirectory;
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = false;
+    backupFileExtension = "before-macos-nix";
+    extraSpecialArgs = { inherit (config) settings; };
+  };
+  system.stateVersion = 6;
+}

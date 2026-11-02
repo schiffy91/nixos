@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }:
 let
-  enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable;
   virtualDisplay = config.settings.apps.sunshine.virtualDisplay;
+  enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable && virtualDisplay.enable;
   primary = lib.findFirst (output: output.primary) null config.settings.desktop.outputs;
   primaryOutput =
     if virtualDisplay.primaryOutput != ""
@@ -200,14 +200,7 @@ let
   };
 in lib.mkIf enabled {
   services.sunshine = {
-    enable = true;
-    openFirewall = false;
-    autoStart = true;
-    capSysAdmin = false;
-    settings = {
-      capture = "kwin";
-      output_name = virtualOutput;
-    };
+    settings.output_name = virtualOutput;
     applications = {
       env.PATH = lib.makeBinPath (with pkgs; [
         coreutils
@@ -235,8 +228,6 @@ in lib.mkIf enabled {
       ];
     };
   };
-  settings.networking.ports.tcp = [ 47984 47989 47990 48010 ];
-  settings.networking.ports.udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
 
   environment.systemPackages = [
     pkgs.kdePackages.krfb

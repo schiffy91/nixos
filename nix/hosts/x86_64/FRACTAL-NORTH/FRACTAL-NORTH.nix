@@ -56,7 +56,6 @@ in {
     ./networking.nix
     ./packages.nix
     ./steam.nix
-    ./sunshine.nix
   ];
   _module.args.host = {
     inherit pci disk tpm input display network audio nvidiaOffloadEnv;
@@ -77,9 +76,14 @@ in {
       scaleFactor = display.primary.scaleFactor;
       primary     = true;
     }];
-    apps.sunshine.virtualDisplay = {
-      disablePrimaryOnStream = true;
-      primaryOutput = display.primary.name;
+    apps.sunshine = {
+      capture = "kwin";
+      cuda.enable = true;
+      virtualDisplay = {
+        enable = true;
+        disablePrimaryOnStream = true;
+        primaryOutput = display.primary.name;
+      };
     };
     apps.nixosctl.configPath = "${./nixosctl.toml}";
     apps.simracing.enable = true;

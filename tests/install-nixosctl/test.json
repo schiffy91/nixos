@@ -1,0 +1,41 @@
+{
+  "name": "install-nixosctl",
+  "state": "installed-nixosctl",
+  "parentState": "installer-ssh",
+  "stateMaterial": "nixosctl-install:encryption=true:immutability={{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "encryption": "true",
+    "tpm2": "false",
+    "immutabilityVersion": "v2",
+    "immutabilityImplementation": "immutability",
+    "immutabilityMode": "reset",
+    "immutabilityEnabled": "true"
+  },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "16G",
+  "cpus": 4,
+  "sshPort": 2251,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "live-ssh" },
+    { "op": "boot-iso" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
+    { "op": "configure-vm-host" },
+    { "op": "guest", "command": "cd /etc/nixos && NIX_CONFIG='experimental-features = nix-command flakes' nix-shell shell.nix --run 'make build' >/tmp/nixosctl-build.log 2>&1 && printf built || { tail -40 /tmp/nixosctl-build.log; exit 1; }", "expect": "built", "timeout": 3600 },
+    { "op": "guest", "command": "cd /etc/nixos && printf 'n\\n' | NIX_CONFIG='experimental-features = nix-command flakes' ./build/nixosctl install --format --yes >/tmp/nixosctl-install.log 2>&1 && printf installed || { tail -60 /tmp/nixosctl-install.log; exit 1; }", "expect": "installed", "timeout": 3600 },
+    { "op": "guest", "command": "set -e; test -f /mnt/etc/nixos/flake.nix; btrfs subvolume list /mnt | grep -F '@snapshots/@root/CLEAN' >/dev/null; btrfs subvolume list /mnt | grep -F '@snapshots/@home/CLEAN' >/dev/null; printf clean-snapshots", "expect": "clean-snapshots" },
+    { "op": "stop" },
+    { "op": "boot-disk" },
+    { "op": "unlock-luks", "command": "testpass123", "timeout": 300 },
+    { "op": "guest", "command": "hostname", "expect": "VM-TEST" },
+    { "op": "guest", "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos' >/dev/null; test -f /etc/nixos/flake.nix; printf persisted-config", "expect": "persisted-config" },
+    { "op": "snapshot", "name": "installed" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

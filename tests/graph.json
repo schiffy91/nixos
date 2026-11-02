@@ -46,7 +46,9 @@
     "nixosctl-cli",
     "nixosctl-diff",
     "install-encrypted",
+    "install-nixosctl",
     "tpm2-enroll",
+    "immutability-hibernate",
     "secure-boot-aarch64",
     "password-change",
     "password-change-encrypted"
@@ -568,6 +570,28 @@
       "args": {
         "encryption": "true",
         "tpm2": "true",
+        "immutabilityMode": "reset"
+      }
+    },
+    {
+      "id": "install-nixosctl",
+      "spec": "install-nixosctl/test.json",
+      "after": [
+        "installer-ssh"
+      ]
+    },
+    {
+      "id": "immutability-hibernate",
+      "spec": "immutability-hibernate/test.json",
+      "after": [
+        "install-encrypted"
+      ],
+      "args": {
+        "parentState": "installed-encrypted",
+        "encryption": "true",
+        "tpm2": "false",
+        "immutabilityVersion": "v2",
+        "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset"
       }
     },

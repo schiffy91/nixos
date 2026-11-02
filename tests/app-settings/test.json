@@ -101,6 +101,76 @@
       "command": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.settings.apps.enable",
       "expect": "false"
     },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.services.sunshine.settings.capture",
+      "expect": "\"kwin\""
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.services.sunshine.settings.output_name",
+      "expect": "Virtual-sunshine-vmon"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.boot.initrd.systemd.services.immutability.after",
+      "expect": "systemd-hibernate-resume.service"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Secure-Boot.config.boot.lanzaboote.settings.editor",
+      "expect": "false"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.system.build.toplevel.drvPath",
+      "expect": ".drv"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Secure-Boot.config.boot.lanzaboote.autoEnrollKeys.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.services.displayManager.defaultSession",
+      "expect": "\"gamescope-wayland\""
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.boot.kernelPackages.kernel.version",
+      "expect": "valve"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.boot.initrd.unl0kr.enable",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.systemd.services.systemd-suspend.serviceConfig.ExecStart",
+      "expect": "systemd-sleep hibernate"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.systemd.sleep.settings.Sleep.AllowHibernation",
+      "expect": "\"yes\""
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.systemd.sleep.settings.Sleep.AllowHibernation",
+      "expect": "\"no\""
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.services.sunshine.capSysAdmin",
+      "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.users.users.alexanderschiffhauer.uid",
+      "expect": "1000"
+    },
     { "op": "record-state" }
   ]
 }

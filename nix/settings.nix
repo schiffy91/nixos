@@ -10,6 +10,7 @@ in {
     settings.secrets.path = mkSetting str "/etc/nixos/secrets";
     settings.secrets.hashedPasswordFile = mkSetting str "hashed_password.txt";
     ##### Admin ##### 
+    settings.users.admin.homeDirectory = mkSetting str (if pkgs.stdenv.isDarwin then "/Users/${config.settings.users.admin.username}" else adminHome);
     settings.users.admin.username = mkSetting str "alexanderschiffhauer";
     settings.users.admin.publicName = mkSetting str "Alexander Schiffhauer";
     settings.users.admin.publicEmail = mkSetting str "Alexander.Schiffhauer@gmail.com";
@@ -229,9 +230,13 @@ in {
     ] ++ lib.optionals config.settings.users.agent.enable config.settings.users.agent.persist.paths);
     ##### Sleep #####
     settings.sleep.allowHibernation = mkSetting bool false;
+    settings.sleep.hibernateOnSuspend = mkSetting bool false; # implies allowHibernation; every wake goes back through the LUKS prompt
     ##### Boot #####
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
+    settings.boot.kernelPackages = mkSetting raw pkgs.linuxPackages_latest;
+    settings.boot.plymouth.enable = mkSetting bool true;
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";
+    settings.boot.autoEnrollKeys = mkSetting bool false; # systemd-boot re-enrolls the keys whenever the firmware is back in Setup Mode
     settings.boot.previousGenerationLimit = mkSetting int 3;
     settings.boot.timeout = mkSetting int 3;
     ##### TPM ##### 
@@ -239,6 +244,7 @@ in {
     settings.tpm.versionPath = mkSetting str "/sys/class/tpm/tpm0/tpm_version_major";
     ##### Desktop #####
     settings.desktop.enable = mkSetting bool true;
+    settings.desktop.defaultSession = mkSetting str "plasma";
     settings.desktop.outputs = mkSetting (listOf (submodule {
       options = {
         name = mkSetting str null;
@@ -259,12 +265,27 @@ in {
     settings.desktop.plasma.iconThemePackage = mkSetting package pkgs.papirus-icon-theme;
     settings.desktop.plasma.accentColor = mkSetting str "40,40,40";
     settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
+    ##### macOS #####
+    settings.macos.nix.enable = mkSetting bool false; # Determinate owns the daemon.
+    settings.macos.firewall.enable = mkSetting bool true;
+    settings.macos.firewall.blockAllIncoming = mkSetting bool false;
+    settings.macos.firewall.allowSigned = mkSetting bool true;
+    settings.macos.firewall.allowSignedApp = mkSetting bool true;
+    settings.macos.firewall.enableStealthMode = mkSetting bool false;
+    settings.macos.guest.enable = mkSetting bool false;
+    settings.macos.screenLock.requirePassword = mkSetting bool true;
+    settings.macos.screenLock.delay = mkSetting int 0;
+    settings.macos.updates.automaticallyInstall = mkSetting bool true;
+    settings.macos.permissions = mkSetting attrs {};
     ##### Apps #####
+    settings.apps.packages = mkSetting (listOf package) [];
     settings.apps.enable = mkSetting bool true;
     settings.apps.dev.enable = mkSetting bool true;
     settings.apps.gaming.enable = mkSetting bool true;
     settings.apps.utils.enable = mkSetting bool true;
     settings.apps.agents.enable = mkSetting bool true;
+    settings.apps.agents.skills = mkSetting (listOf str) [ "engineering-decomposition" "nixos-init" "taste" ];
+    settings.apps.agents.rules = mkSetting bool false;
     settings.apps.bash.enable = mkSetting bool true;
     settings.apps.battlenet.enable = mkSetting bool true;
     settings.apps.assettocorsa.enable = mkSetting bool true;
@@ -275,8 +296,15 @@ in {
     settings.apps.claude.enable = mkSetting bool true;
     settings.apps.codex.enable = mkSetting bool true;
     settings.apps.git.enable = mkSetting bool true;
+    settings.apps.git.includes = mkSetting (listOf str) [];
+    settings.apps.gemini.enable = mkSetting bool false;
+    settings.apps.zsh.enable = mkSetting bool false;
+    settings.apps.zsh.shellAliases = mkSetting (attrsOf str) {};
+    settings.apps.zsh.initContent = mkSetting lines "";
+    settings.apps.zsh.profileExtra = mkSetting lines "";
     settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.nixosctl.configPath = mkSetting str "";
+    settings.apps.nixosctl.caffeine.enable = mkSetting bool true;
     settings.apps.onePassword.enable = mkSetting bool true;
     settings.apps.rclone.enable = mkSetting bool true;
     settings.apps.rocksmith.enable = mkSetting bool true;
@@ -287,9 +315,14 @@ in {
     settings.apps.rocksmith.slopsmith.port = mkSetting port 8000;
     settings.apps.semu.enable = mkSetting bool true;
     settings.apps.semu.target = mkSetting str "linux-desktop";
+    settings.apps.semu.paths = mkSetting (attrsOf str) {}; # overrides the target's settings.paths
     settings.apps.simracing.enable = mkSetting bool false;
     settings.apps.steam.enable = mkSetting bool true;
+    settings.apps.steam.protonCustom.enable = mkSetting bool true;
     settings.apps.sunshine.enable = mkSetting bool true;
+    settings.apps.sunshine.capture = mkSetting (enum [ "kms" "kwin" ]) "kms";
+    settings.apps.sunshine.cuda.enable = mkSetting bool false;
+    settings.apps.sunshine.virtualDisplay.enable = mkSetting bool false;
     settings.apps.sunshine.virtualDisplay.name = mkSetting str "sunshine-vmon";
     settings.apps.sunshine.virtualDisplay.disablePrimaryOnStream = mkSetting bool false;
     settings.apps.sunshine.virtualDisplay.primaryOutput = mkSetting str "";

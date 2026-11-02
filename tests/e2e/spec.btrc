@@ -1,4 +1,5 @@
 import ./spec/args.btrc;
+import ./spec/files.btrc;
 import ./spec/operation.btrc;
 import ./spec/test_spec.btrc;
 import ./spec/parser.btrc;

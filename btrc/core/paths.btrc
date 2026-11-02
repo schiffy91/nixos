@@ -22,6 +22,13 @@ class NixosPaths {
         return Environment.get("NIXOSCTL_TRAY_ICON", Environment.get("NIXOS_TRAY_ICON", ""));
     }
 
+    class string join(string root, string path) {
+        if (root.isEmpty()) { return path; }
+        if (path.equals("/")) { return root; }
+        if (path.startsWith("/")) { return f"{root}{path}"; }
+        return PathTools.join(root, path);
+    }
+
     public string configPath() {
         return PathTools.join(self.root, "config.json");
     }

@@ -18,7 +18,7 @@ in {
     {
       _module.args.steam = { inherit configureSteamApps; };
     }
-    (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.programs.steam.enable) {
+    (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.settings.apps.steam.protonCustom.enable && config.programs.steam.enable) {
       system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
         if ${pkgs.procps}/bin/pgrep -u ${user} -x steam >/dev/null; then
           echo "Steam is running; close it and rebuild to apply Steam settings."

@@ -66,7 +66,7 @@ class VmStateStore {
     }
 
     public void cleanStateRecord() {
-        FileSystem.removeRecursive(self.spec.stateDir());
+        VmFiles.remove(self.spec.stateDir());
     }
 
     public void requireParentState() {
@@ -85,7 +85,7 @@ class VmStateStore {
 
     public void copyTreeIfExists(string source, string target) {
         if (!FileSystem.exists(source)) { return; }
-        FileSystem.removeRecursive(target);
+        VmFiles.remove(target);
         var command = f"cp -R {UnixShell.quote(source)} {UnixShell.quote(target)}";
         var result = self.shell.run(command, stdout=CommandOutput.stream(), stderr=CommandOutput.stream());
         if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }

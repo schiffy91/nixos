@@ -109,7 +109,7 @@ let
 	btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
 	immutabilityBin = pkgs.stdenv.mkDerivation {
 		name = "immutability";
-		src = ../..;
+		src = ../../..;
 		nativeBuildInputs = [ btrcpy ];
 		dontConfigure = true;
 		buildPhase = ''
@@ -202,7 +202,7 @@ in
 							description = "Factory resets BTRFS subvolumes using persistent keep subvolumes";
 							wantedBy = [ "initrd.target" ];
 							requires = [ deviceDependency ];
-							after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency ];
+							after = [ "systemd-cryptsetup@${config.settings.disk.partlabel.root}.service" deviceDependency "systemd-hibernate-resume.service" ];  # never reset under a hibernated kernel
 							before = [ "sysroot.mount" ];
 								unitConfig.DefaultDependencies = "no";
 								serviceConfig.Type = "oneshot";

@@ -5,21 +5,6 @@ let
   user = config.settings.users.admin.username;
   cursorPath = config.settings.desktop.cursor.path;
 in lib.mkIf config.settings.desktop.enable {
-  # Backport of KDE MR !8293 (HDR screencast support) to KWin 6.6.5.
-  # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
-  # screencast stream so Sunshine can capture genuine HDR pixels from the
-  # compositor instead of 8-bit-truncated SDR.
-  # https://invent.kde.org/plasma/kwin/-/merge_requests/8293
-  nixpkgs.overlays = [
-    (_final: prev: {
-      kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
-        kwin = kdePrev.kwin.overrideAttrs (old: {
-          patches = (old.patches or []) ++ [ ./kwin/hdr-screencast.patch ];
-        });
-      });
-    })
-  ];
-
   hardware.graphics.enable = true;
   programs.dconf.enable = true;
   services = {
@@ -31,7 +16,7 @@ in lib.mkIf config.settings.desktop.enable {
         wayland.enable = true;
         theme = "breeze";  # Plasma 6 Breeze SDDM theme; autofocuses password on single-user systems
       };
-      defaultSession = "plasma";
+      defaultSession = config.settings.desktop.defaultSession;
     };
     desktopManager.plasma6 = {
       enable = true;

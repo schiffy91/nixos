@@ -1,6 +1,6 @@
-# NixOS Configuration
+# Machine configuration
 
-This repository is the flake-backed NixOS configuration for the machines in
+This repository configures NixOS and macOS machines in
 `nix/hosts`, with local management tooling written in BTRC. System
 management is Nix plus BTRC end to end; there is no Python or Rust in the
 management layer.
@@ -10,10 +10,12 @@ management layer.
 | Host | System | Purpose |
 |---|---|---|
 | `FRACTAL-NORTH` | `x86_64-linux` | Main desktop/workstation configuration |
+| `STEAM-DECK-OLED` | `x86_64-linux` | Steam Deck OLED on [Jovian-NixOS](https://github.com/Jovian-Experiments/Jovian-NixOS) |
 | `QEMU` | `aarch64-linux` | Declarative ARM guest used for Nix evaluation and VM-oriented testing |
 | `QEMU` | `x86_64-linux` | Declarative x86 guest used for Nix evaluation and VM-oriented testing |
+| `mbp21` | `aarch64-darwin` | MacBook Pro |
 
-Each host is exposed with bootable NixOS targets and disk-operation disko
+Each Linux host is exposed with bootable NixOS targets and disk-operation disko
 targets:
 
 | Target suffix | Purpose |
@@ -32,7 +34,7 @@ nix eval .#diskoConfigurations.QEMU-x86_64-Disk-Operation.disko.devices.disk.mai
 ```
 
 `Disk-Operation` targets are disko entrypoints, not installed boot targets. They
-import `nix/system/disk.nix` directly from `flake.nix` and do not appear under
+import `nix/system/nixos/disk.nix` directly from `flake.nix` and do not appear under
 `nixosConfigurations`, so they avoid bootloader and user assertions that only
 matter for real NixOS profiles.
 
@@ -43,10 +45,13 @@ matter for real NixOS profiles.
 | `flake.nix` | Host discovery, bootable targets, disko targets, and the pinned BTRC compiler input |
 | `shell.nix` | Direnv-friendly dev shell with `btrcpy`, `btrc-lsp`, Nix tooling, Git, and a C toolchain |
 | `nix/settings.nix` | Central typed settings interface shared across hosts and modules |
-| `nix/system/` | Shared NixOS system modules |
+| `nix/system/nixos/` | NixOS system modules |
+| `nix/system/darwin/` | nix-darwin modules applying Mac settings |
+| `nix/home/` | Home Manager modules shared by Linux and the Mac; `plasma.nix` is Linux-only |
 | `nix/apps/` | Globally imported app and helper modules; each optional app is settings-gated |
 | `nix/apps/gaming/` | Custom package overrides for Proton, Rocksmith assets, Sunshine, and Battle.net helper tooling |
 | `nix/hosts/x86_64/FRACTAL-NORTH/` | Main workstation host modules and host-specific data |
+| `nix/hosts/x86_64/STEAM-DECK-OLED/` | Steam Deck OLED host on Jovian |
 | `nix/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
 | `nix/hosts/x86_64/QEMU/` | x86 QEMU guest host modules |
 | `btrc/nixosctl/` | BTRC management CLI, tray entrypoint, and `nixosctl` feature modules |
@@ -56,7 +61,7 @@ matter for real NixOS profiles.
 | `tests/` | Declarative VM e2e graph, per-scenario specs, and flake checks |
 | `Makefile` | Root build/test contract (`make build`, `make check`, `make -C tests graph-*`) |
 
-Host discovery is convention-based:
+Linux host discovery is convention-based:
 
 ```text
 nix/hosts/<architecture>/<HOST>/<HOST>.nix
@@ -77,14 +82,16 @@ Important setting groups:
 | `settings.users.admin.*` | Admin username, public identity, authorized keys, autologin, lock behavior, Home Manager enablement |
 | `settings.users.agent.*` | Isolated agent user, packages, SSH keys, and persisted workspace/cache paths |
 | `settings.disk.*` | Disk device, partition labels, btrfs subvolumes, swap, encryption, immutability |
-| `settings.boot.*` | Boot method, secure-boot PKI bundle, generation limit, timeout |
+| `settings.boot.*` | Boot method, kernel, Plymouth, secure-boot PKI bundle and key re-enrollment, generation limit, timeout |
+| `settings.sleep.*` | Hibernation, and whether suspend requests hibernate instead (implies hibernation) |
 | `settings.tpm.*` | TPM2 device and version paths |
-| `settings.desktop.*` | Display outputs, cursor theme/package/path, Plasma theme values |
+| `settings.desktop.*` | Default session, display outputs, cursor theme/package/path, Plasma theme values |
 | `settings.apps.*` | Optional app policy flags |
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
 | `settings.apps.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
-| `settings.apps.nixosctl.*` | `nixosctl` config path |
+| `settings.apps.nixosctl.*` | `nixosctl` config path, default-on idle inhibit |
+| `settings.apps.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
 | `settings.sudolessAllowlist.*` | Optional sudo NOPASSWD command/package allowlist |
 
 ### App Flags
@@ -113,9 +120,9 @@ settings.apps.vscode.enable = true;
 
 Use these for per-host or per-profile policy. Architecture checks are still
 capability guards. Battle.net and Rocksmith require their own flag,
-`settings.apps.steam.enable`, and an x86_64 host platform. Sunshine's custom
-package overlay is x86_64-gated; non-x86 systems keep upstream `pkgs.sunshine`
-when referenced.
+`settings.apps.steam.enable`, and an x86_64 host platform. Sunshine's CUDA
+build is opt-in through `settings.apps.sunshine.cuda.enable`; other hosts keep
+upstream `pkgs.sunshine`.
 
 Plasma desktop state is intentionally not treated as an optional app flag. It is
 part of the shared desktop surface, not an app install.
@@ -124,13 +131,13 @@ part of the shared desktop surface, not an app install.
 
 ### Boot
 
-`nix/system/boot.nix` selects behavior from `settings.boot.method`.
+`nix/system/nixos/boot.nix` selects behavior from `settings.boot.method`.
 
 | Method | Behavior |
 |---|---|
 | `Standard-Boot` | Enables systemd-boot |
 | `Secure-Boot` | Disables systemd-boot directly and enables Lanzaboote |
-| `Disk-Operation` | Not handled by this module; the flake exposes `nix/system/disk.nix` through `diskoConfigurations` |
+| `Disk-Operation` | Not handled by this module; the flake exposes `nix/system/nixos/disk.nix` through `diskoConfigurations` |
 
 The shared boot module sets current kernel packages, Plymouth, quiet boot
 parameters, EFI mount point, and generation limits.
@@ -141,7 +148,7 @@ parameters, EFI mount point, and generation limits.
 destructive disko layout and enables the `nixos-recovery-boot-entry` service on
 installed systems. The recovery image is not a downloaded ISO; it is a
 self-contained NixOS netboot initrd and signed EFI-stub kernel built from
-`nix/system/recovery.nix`.
+`nix/system/nixos/recovery.nix`.
 
 On switch, the service requires `/boot` and `/recovery` to be mounted, then
 installs:
@@ -198,7 +205,7 @@ and boot entry.
 
 ### Disk
 
-`nix/system/disk.nix` owns the `disko` layout. The default model is:
+`nix/system/nixos/disk.nix` owns the `disko` layout. The default model is:
 
 | Layer | Default |
 |---|---|
@@ -212,10 +219,14 @@ the immutability reset workflow, and sets a small swap size suitable for VM use.
 
 ### Immutability
 
-`nix/system/immutability.nix` drives the BTRC **immutability**, the
+`nix/system/nixos/immutability.nix` drives the BTRC **immutability**, the
 sole immutability implementation. Its source entrypoint is
 `btrc/immutability/immutability.btrc`; Nix builds it with the flake-pinned
 BTRC compiler and a generated stdlib archive.
+
+The initrd reset runs after `systemd-hibernate-resume.service`. A successful
+resume never returns to the initrd, so the reset only runs on a fresh boot and
+never rewrites the filesystem underneath a hibernated kernel.
 
 | Mode | Behavior |
 |---|---|
@@ -261,7 +272,7 @@ The reset path records the active immutability state version in
 `@snapshots/.immutability/version`, mounted at
 `/.snapshots/.immutability/version` after boot. The current version is
 `2026.08.22`; any future version-specific transition belongs in
-`nix/system/immutability.nix`.
+`nix/system/nixos/immutability.nix`.
 
 `settings.disk.immutability.nonPersistedGenerations` controls how many reset
 generations are retained. The default `3` preserves the old effective behavior;
@@ -302,9 +313,9 @@ subvolume under `@persist/.immutability/files/.orphans/<stamp>/<key>`.
 
 ### Desktop
 
-`nix/system/desktop.nix` enables the Plasma 6 Wayland desktop, SDDM, dconf,
-graphics, cursor packages, and selected KDE integrations. It also overlays a
-KWin HDR screencast patch used by the Sunshine workflow.
+`nix/system/nixos/desktop.nix` enables the Plasma 6 Wayland desktop, SDDM, dconf,
+graphics, cursor packages, and selected KDE integrations. The display manager
+starts `settings.desktop.defaultSession`.
 
 Host-specific desktop state lives in the host modules:
 
@@ -313,22 +324,21 @@ Host-specific desktop state lives in the host modules:
 | `nix/hosts/x86_64/FRACTAL-NORTH/gpu.nix` | NVIDIA/AMD graphics setup, device symlinks, KWin DRM devices |
 | `nix/hosts/x86_64/FRACTAL-NORTH/audio.nix` | Low-latency PipeWire and device-specific audio rules |
 | `nix/hosts/x86_64/FRACTAL-NORTH/input.nix` | Controller and mouse receiver support |
-| `nix/hosts/x86_64/FRACTAL-NORTH/sunshine.nix` | Sunshine service, streaming display EDID, streaming display setup |
 
 ### Networking And Security
 
-`nix/system/networking.nix` owns NetworkManager, firewall rules, mDNS,
+`nix/system/nixos/networking.nix` owns NetworkManager, firewall rules, mDNS,
 OpenSSH, SSH agent forwarding, and optional primary-interface enforcement.
 Firewall LAN allow rules are derived from shared service flags and
 `settings.networking.ports.{tcp,udp}`.
 
-`nix/system/users.nix` imports Home Manager and every top-level app module
+`nix/system/nixos/users.nix` imports Home Manager and every top-level app module
 under `nix/apps`. It defines immutable users: the interactive admin account and
 an isolated agent account with its own Home Manager profile and tool set. User
 mutability is disabled, so password changes must update the hashed password file
 and rebuild.
 
-`nix/system/sudolessAllowlist.nix` is opt-in through
+`nix/system/nixos/sudolessAllowlist.nix` is opt-in through
 `settings.sudolessAllowlist.enable`.
 
 ### Firmware Security Posture
@@ -358,17 +368,15 @@ The app layer is recursively imported but policy-gated through
 
 | Path | Behavior |
 |---|---|
-| `dev/agents.nix` | Installs shared skills from `nix/apps/dev/agents/skills` under `~/.agents/skills` |
 | `dev/bash.nix` | Adds `nix-shell-with-pkgs` helper |
-| `dev/claude.nix` | Symlinks shared skills into Claude's `~/.claude/skills` tree |
-| `dev/codex.nix` | Symlinks shared skills into Codex's `~/.codex/skills` tree without replacing built-in skills |
 | `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
 | `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-pinned BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
-| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when Steam is enabled |
+| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.steam.protonCustom.enable` is set |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
 | `gaming/steam.nix` | Exports Steam tool names and configures installed Steam apps when Steam is enabled |
-| `gaming/sunshine/default.nix` | Overlays the custom Sunshine package on x86_64 and sets runtime library paths when Sunshine is enabled |
+| `gaming/sunshine/default.nix` | Sunshine service and ports; the CUDA overlay, and the KWin HDR screencast patch when capture is `kwin` |
+| `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |
 | `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `utils/nixosctl/nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `utils/nixosctl/nixosctl-tray.nix` | Packages the BTRC tray GUI for `nixosctl` |
@@ -465,6 +473,14 @@ aarch64 under HVF — install, sign, auto-enroll keys, then `bootctl status` →
 `Secure Boot: enabled`; uses Debian's enforcing `AAVMF_CODE.secboot.fd` via a
 reproducible nix derivation in `tests/shell.nix`), and the x86_64
 `secure-boot-*` nodes.
+Install and sleep nodes: `install-nixosctl` runs the documented `make build`
+and `nixosctl install --format` inside the installer ISO. The live ISO keeps its
+Nix store in RAM, so the node uses 16G, the Deck's memory.
+`immutability-hibernate` hibernates and suspends-to-disk an encrypted install
+and checks that the initrd reset never runs before a resume. Its guest has one
+vCPU because QEMU's HVF backend crashes when hibernation offlines secondary CPUs.
+Encrypted boots use the `unlock-luks` op: it waits for the LUKS prompt on the
+serial console, types the passphrase, then waits for SSH.
 
 Targets that boot QEMU or install NixOS can take time. The early graph is the
 right default for normal development. The full graph should be used before
@@ -554,3 +570,16 @@ The migration to BTRC is complete. Current state:
 7. Run at least the BTRC build and relevant graph node after touching BTRC or VM test code.
 8. Do not reintroduce VFIO until there is a clean design and expected-behavior test path.
 9. Do not remove desktop packages or host customizations while making cross-platform changes unless they are concretely unsupported on that platform.
+
+## macOS
+
+The Mac configuration is in [mbp21](nix/hosts/aarch64/mbp21/README.md).
+Its `darwin.nix` is wired explicitly in `flake.nix`; Linux host discovery and
+`nixosctl` retain their existing convention. `nix/settings.nix` declares the
+package, shell, Git, agent and security policy. The Mac host supplies its
+existing packages and shell configuration.
+
+```sh
+nix build .#darwinConfigurations.mbp21.system --no-link
+sudo darwin-rebuild switch --flake .#mbp21
+```

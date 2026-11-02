@@ -28,6 +28,7 @@ class VmOperationCatalog {
         kinds.push("up-iso");
         kinds.push("bootstrap-ssh");
         kinds.push("wait-ssh");
+        kinds.push("unlock-luks");
         kinds.push("serial-send");
         kinds.push("sleep");
         kinds.push("guest");
@@ -172,6 +173,12 @@ class VmTestRunner {
         if (op.kind.equals("wait-ssh")) {
             if (!self.vm.waitForSsh(op.timeout)) {
                 self.fail("SSH was not ready after " + Strings.fromInt(op.timeout) + " seconds; serial log: " + self.vm.serialLogPath());
+            }
+            return;
+        }
+        if (op.kind.equals("unlock-luks")) {
+            if (!self.vm.unlockLuks(op.command, op.timeout)) {
+                self.fail(f"LUKS unlock did not reach SSH within {op.timeout} seconds; serial log: {self.vm.serialLogPath()}");
             }
             return;
         }

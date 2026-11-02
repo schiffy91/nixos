@@ -262,7 +262,7 @@ index cb51ca2..e73733d 100644
      {
          .drmFormat = DRM_FORMAT_RGB888,
          .spaFormat = SPA_VIDEO_FORMAT_BGR,
-@@ -87,6 +87,35 @@ static const struct
+@@ -87,6 +87,43 @@ static const struct
          .drmFormat = DRM_FORMAT_BGR888,
          .spaFormat = SPA_VIDEO_FORMAT_RGB,
      },
@@ -276,20 +276,28 @@ index cb51ca2..e73733d 100644
 +        .spaFormat = SPA_VIDEO_FORMAT_xRGB_210LE,
 +    },
 +    {
++        .drmFormat = DRM_FORMAT_RGBX1010102,
++        .spaFormat = SPA_VIDEO_FORMAT_RGBx_102LE,
++    },
++    {
++        .drmFormat = DRM_FORMAT_BGRX1010102,
++        .spaFormat = SPA_VIDEO_FORMAT_BGRx_102LE,
++    },
++    {
 +        .drmFormat = DRM_FORMAT_BGRA1010102,
-+        .spaFormat = SPA_VIDEO_FORMAT_ARGB_210LE,
++        .spaFormat = SPA_VIDEO_FORMAT_BGRA_102LE,
 +    },
 +    {
 +        .drmFormat = DRM_FORMAT_RGBA1010102,
-+        .spaFormat = SPA_VIDEO_FORMAT_ABGR_210LE,
-+    },
-+    {
-+        .drmFormat = DRM_FORMAT_ABGR2101010,
 +        .spaFormat = SPA_VIDEO_FORMAT_RGBA_102LE,
 +    },
 +    {
++        .drmFormat = DRM_FORMAT_ABGR2101010,
++        .spaFormat = SPA_VIDEO_FORMAT_ABGR_210LE,
++    },
++    {
 +        .drmFormat = DRM_FORMAT_ARGB2101010,
-+        .spaFormat = SPA_VIDEO_FORMAT_BGRA_102LE,
++        .spaFormat = SPA_VIDEO_FORMAT_ARGB_210LE,
 +    },
 +    {
 +        .drmFormat = DRM_FORMAT_ABGR16161616F,

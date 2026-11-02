@@ -32,7 +32,7 @@ lib.mkIf (config.settings.apps.enable
           && config.settings.apps.nixosctl.enable
           && config.settings.desktop.enable) {
   users.users.${config.settings.users.admin.username}.packages = [ nixosctlTrayBin ];
-  systemd.user.services.nixos-caffeine = {
+  systemd.user.services.nixos-caffeine = lib.mkIf config.settings.apps.nixosctl.caffeine.enable {
     description = "Keep the session idle-inhibited by default";
     wantedBy = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];

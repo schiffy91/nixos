@@ -1,11 +1,15 @@
 {
   inputs = {
+    nixpkgs-darwin = { url = "github:NixOS/nixpkgs/nixpkgs-unstable"; };
+    home-manager-darwin = { url = "github:nix-community/home-manager"; inputs.nixpkgs.follows = "nixpkgs-darwin"; };
+    nix-darwin = { url = "github:nix-darwin/nix-darwin/master"; inputs.nixpkgs.follows = "nixpkgs-darwin"; };
     nixpkgs = { url = "github:NixOS/nixpkgs/nixos-unstable"; };
     nixpkgs-unstable = { url = "github:nixos/nixpkgs/nixos-unstable"; };
     home-manager = { url = "github:nix-community/home-manager"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     plasma-manager = { url = "github:nix-community/plasma-manager"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.home-manager.follows = "home-manager"; };
     disko = { url = "github:nix-community/disko"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
+    jovian = { url = "github:Jovian-Experiments/Jovian-NixOS"; inputs.nixpkgs.follows = "nixpkgs"; };
     btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver/c84e5133d72faebbea3b74f63afefe04d376547f"; inputs.nixpkgs.follows = "nixpkgs"; };
@@ -26,8 +30,8 @@
         let name = hostName hostFile;
         in if duplicateHostName name then "${name}-${hostArchitecture hostFile}" else name;
       systems = lib.unique (map hostSystem hostFiles);
-      systemModuleFiles = lib.mapAttrsToList (name: _: ./nix/system + "/${name}")  # subdirectories hold module assets, not modules
-        (lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".nix" name) (builtins.readDir ./nix/system));
+      systemModuleFiles = lib.mapAttrsToList (name: _: ./nix/system/nixos + "/${name}")  # subdirectories hold module assets, not modules
+        (lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".nix" name) (builtins.readDir ./nix/system/nixos));
       baseConfig = {
         nix = {
           channel.enable = false;
@@ -54,7 +58,7 @@
           name = "${name}-${target}";
           value = mkSystem hostFile target systemModuleFiles;
         };
-      mkDiskoSystem = hostFile: target: mkSystem hostFile target [ ./nix/system/disk.nix ];
+      mkDiskoSystem = hostFile: target: mkSystem hostFile target [ ./nix/system/nixos/disk.nix ];
       mkDiskoConfiguration = hostFile: target:
         let
           name = hostOutputName hostFile;
@@ -65,6 +69,16 @@
         };
       mkDiskoCheck = import ./tests/checks/disko_contract.nix { inherit lib mkDiskoSystem; };
     in {
+      darwinConfigurations.mbp21 = inputs.nix-darwin.lib.darwinSystem {
+        system = "aarch64-darwin";
+        specialArgs = { inherit inputs; };
+        modules = [ ./nix/settings.nix ./nix/system/darwin ./nix/hosts/aarch64/mbp21/darwin.nix ];
+      };
+      homeConfigurations."alexanderschiffhauer@mbp21" = inputs.home-manager-darwin.lib.homeManagerConfiguration {
+        inherit (self.darwinConfigurations.mbp21) pkgs;
+        extraSpecialArgs = { inherit (self.darwinConfigurations.mbp21.config) settings; };
+        modules = [ ./nix/hosts/aarch64/mbp21/home.nix ];
+      };
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
       packages.x86_64-linux = {
@@ -79,12 +93,14 @@
         assetto = { type = "app"; program = "${self.packages.x86_64-linux.assetto}/bin/assetto"; };
         assetto-setup = { type = "app"; program = "${self.packages.x86_64-linux.assetto-setup}/bin/assetto-setup"; };
       };
-      checks = lib.genAttrs systems (system:
+      checks = (lib.genAttrs systems (system:
         let
           pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
           systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
         in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts) // {
           gaming-tools = import ./nix/apps/gaming/package.nix { inherit pkgs inputs; };
-        });
+        })) // {
+          aarch64-darwin.mbp21-home = self.homeConfigurations."alexanderschiffhauer@mbp21".activationPackage;
+        };
     };
 }

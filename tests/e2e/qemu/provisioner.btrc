@@ -56,7 +56,7 @@ class VmProvisioner {
         var hostPath = hostDir + "/VM-TEST.nix";
         var pubkey = self.pubKey();
         var passwordHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";  /* testpass123 */
-        var secureBootModulePath = "/etc/nixos/nix/system/vm-test-secure-boot.nix";
+        var secureBootModulePath = "/etc/nixos/nix/system/nixos/vm-test-secure-boot.nix";
         var secureBootModule = self.textLines([
             "{ config, lib, pkgs, ... }: {",
             "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {",
