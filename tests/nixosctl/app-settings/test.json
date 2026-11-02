@@ -158,6 +158,21 @@
     },
     {
       "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.boot.initrd.systemd.services.immutability.after",
+      "expect": "systemd-hibernate-resume.service"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.settings.disk.swap.size",
+      "expect": "20G"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.boot.resumeDevice",
+      "expect": "\"\""
+    },
+    {
+      "op": "nix-eval",
       "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.systemd.sleep.settings.Sleep.AllowHibernation",
       "expect": "\"no\""
     },

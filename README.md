@@ -140,7 +140,30 @@ part of the shared desktop surface, not an app install.
 | `Disk-Operation` | Not handled by this module; the flake exposes `nix/system/nixos/disk.nix` through `diskoConfigurations` |
 
 The shared boot module sets current kernel packages, Plymouth, quiet boot
-parameters, EFI mount point, and generation limits.
+parameters, the EFI mount point, and `settings.boot.previousGenerationLimit` as
+the loader's `configurationLimit`. The initrd is systemd's — scripted stage 1
+no longer exists in nixpkgs — and the module only orders
+`plymouth-start.service` after `systemd-modules-load.service` inside it.
+
+#### Standard-Boot Safety Guard
+
+`nix/system/nixos/boot/safety.nix` refuses to write unsigned boot files while
+the firmware has Secure Boot enabled. It reads
+`SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c` from `efivarfs` and fails
+activation when the byte says enabled, and equally when the state cannot be
+determined — an unmounted `efivarfs` is not treated as "no Secure Boot". The
+guard runs in two places, because they are two different bypasses:
+
+| Hook | Covers |
+|---|---|
+| `system.preSwitchChecks.secureBoot` | `nixos-rebuild switch` on a running system |
+| `system.build.installBootLoader` wrapper | `nixos-install` and `NIXOS_NO_CHECK`, before the first ESP write |
+
+It is active only when `settings.boot.method == "Standard-Boot"`; the guard
+itself is also exposed as the `bootSafety` module argument. Switching a
+Secure-Boot machine back to Standard-Boot therefore requires disabling Secure
+Boot in firmware first, which is deliberate: the alternative is an ESP full of
+unsigned files that the firmware will not boot.
 
 ### Recovery
 
@@ -227,17 +250,31 @@ BTRC compiler and a generated stdlib archive.
 
 The initrd reset runs after `systemd-hibernate-resume.service`. A successful
 resume never returns to the initrd, so the reset only runs on a fresh boot and
-never rewrites the filesystem underneath a hibernated kernel.
+never rewrites the filesystem underneath a hibernated kernel. That ordering is
+the whole reason hibernation is safe on an immutable root, so it is asserted in
+`app-settings` for every host that hibernates.
+
+Resume itself needs no kernel command line, even with the swap file on btrfs:
+`systemd-hibernate` writes the device and offset into the `HibernateLocation`
+EFI variable and the initrd generator reads it back, so `boot.resumeDevice`
+stays empty. See the Steam Deck README for why adding `resume=` by hand makes
+this worse rather than better.
 
 | Mode | Behavior |
 |---|---|
+| `converge` | **Default.** Same rollback as `reset`; the two names are interchangeable in `Immutability.resetMode()` |
 | `reset` | Roll each `resetOnBoot` subvolume back to its read-only `CLEAN` snapshot at boot |
 | `prepare-only` | Build `NEXT` from `CLEAN` and persisted state without publishing it |
 | `publish-prepared` | Publish an existing prepared `NEXT` at boot without rebuilding it |
 | `snapshot-only` | Rotate snapshots without rolling back (ephemeral survives) |
-| `restore-previous` / `restore-penultimate` | Roll back to generation 1 / 2 |
+| `restore-previous` / `restore-a` | Roll back to generation 1 |
+| `restore-penultimate` / `restore-b` | Roll back to generation 2 |
+| `restore-c` | Roll back to generation 3 |
 | `restore-generation` | Roll back to `settings.disk.immutability.restoreGeneration` |
 | `disabled` | No reset |
+
+Any other value is fatal in the initrd (`Unknown mode:`), so the enum in
+`nix/settings.nix` and `ImmutabilityConstants` must stay in step.
 
 `enforce.onReboot` wires the initrd reset + mounts service. Updates do not
 rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
@@ -342,6 +379,50 @@ and rebuild.
 `nix/system/nixos/sudolessAllowlist.nix` is opt-in through
 `settings.sudolessAllowlist.enable`.
 
+### Secure Boot
+
+`settings.boot.method = "Secure-Boot"` disables systemd-boot and hands the ESP
+to Lanzaboote, which signs the unified kernel images with the PKI bundle at
+`boot.lanzaboote.pkiBundle` (`/var/lib/sbctl`). `boot.lanzaboote.settings.editor`
+is false, so the loader offers no interactive command line to edit.
+
+Enrollment and teardown go through `nixosctl`, never through raw `sbctl`:
+
+```bash
+sudo nixosctl secure-boot status           # sbctl status + verify our own images
+sudo nixosctl secure-boot enable           # our keys only
+sudo nixosctl secure-boot disable
+```
+
+| Step in `secure-boot enable` | Why it is in that order |
+|---|---|
+| Require firmware Setup Mode | Enrollment cannot replace keys on an already-enrolled machine; use `nixosctl update` there |
+| `sbctl create-keys` and assert a complete PK/KEK/db bundle | A partial bundle would enroll a machine we cannot sign for |
+| Switch the recorded target and rebuild | The ESP must hold signed files *before* the firmware starts enforcing |
+| Verify, then enroll | `requireVerified` is fatal on any unsigned image, so enrollment never runs against an ESP we have not proven |
+| Prompt for reboot | Enforcement only begins on the next boot |
+
+Verification covers the fallback loader, `systemd-boot<arch>.efi`, the default
+boot entry resolved from `bootctl --json=short list`, and every
+`EFI/Linux/*.efi`. When `settings.disk.recovery.enable` is set it additionally
+checks the recovery UKI on both the ESP and the recovery partition, plus the
+recovery partition's fallback loader, with `sbverify --cert` against our db
+certificate.
+
+**Never enroll Microsoft's keys.** `secure-boot enable` takes a `--microsoft`
+flag, and it is not used on any host. Without it, enrollment passes
+`--yes-this-might-brick-my-machine` and trusts our keys alone. The cost is
+real: option ROMs and vendor firmware updaters that ship Microsoft-signed
+binaries are not trusted, including the Steam Deck's `jupiter-biosupdate`. The
+answer there is to disable Secure Boot in firmware for that one operation, not
+to widen the trust store. Do not reach for `--microsoft` to unblock something
+else.
+
+`secure-boot disable` is the mirror image: it refuses while the firmware still
+enforces Secure Boot (`Disable Secure Boot in firmware before installing
+Standard-Boot`), which is the same invariant the Standard-Boot safety guard
+enforces at activation time.
+
 ### Firmware Security Posture
 
 `fwupdmgr security` is the health check for the platform side of security.
@@ -375,9 +456,14 @@ The app layer is recursively imported but policy-gated through
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.steam.protonCustom.enable` is set |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
-| `gaming/steam.nix` | Exports Steam tool names and configures installed Steam apps when Steam is enabled |
+| `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.steam.shortcuts` as non-Steam shortcuts when Steam is enabled |
 | `gaming/sunshine/default.nix` | Sunshine service and ports; the CUDA overlay, and the KWin HDR screencast patch when capture is `kwin` |
 | `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |
+| `gaming/assettocorsa/default.nix` | Assetto Corsa content import, CM presets, control bindings, UI scale, and the CSP wheel menu |
+| `gaming/simracing/default.nix` | Enables the `logitech-trueforce` kernel module on x86_64 for wheel force feedback |
+| `gaming/semu/default.nix` | Installs `semu` from its flake input, sets `SEMU_TARGET`, writes the paths override, and runs the save-sync user service |
+| `gaming/btrsmith.nix` | Installs BTRSmith when an exact flake input provides it |
+| `gaming/proton/dpi.nix` | `wine-prefix-dpi`, which writes `LogPixels` into a prefix registry |
 | `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `utils/nixosctl/nixosctl.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `utils/nixosctl/nixosctl-tray.nix` | Packages the BTRC tray GUI for `nixosctl` |
@@ -394,9 +480,17 @@ explicitly out of scope for the BTRC rewrite.
 ## BTRC Management Layer
 
 The management tooling is BTRC at the repository root. The compiler, language
-server, and VSCode extension are consumed through the flake input `inputs.btrc`,
-pinned in `flake.lock` to `github:schiffy91/btrc`. The dev shell provides
-`btrcpy` and `btrc-lsp`; local and Nix builds compile with `--strict-imports`.
+server, and VSCode extension are consumed through the flake input `inputs.btrc`.
+The dev shell provides `btrcpy` and `btrc-lsp`; local and Nix builds compile
+with `--strict-imports`.
+
+That input is pinned to an explicit revision in `flake.nix`, not tracking the
+branch. Upstream BTRC after `4e5c9823` renames `Library.Datetime` to
+`Library.DateTime`/`Library.Timer` and removes `UnixShell.quote`,
+`CLIArgs.has`/`valueAfter`, `JSONObject`/`JSONText`, `UnixFileSystem` and
+`UnixPamPassword`. Moving the pin therefore requires migrating the whole
+management layer — 188 `UnixShell.quote` call sites across 44 files — so it is
+its own change with its own graph run, not part of an input bump.
 
 | Path | Purpose |
 |---|---|
@@ -404,11 +498,16 @@ pinned in `flake.lock` to `github:schiffy91/btrc`. The dev shell provides
 | `btrc/nixosctl/NixosTray.btrc` | Tray launcher for `nixosctl` |
 | `btrc/nixosctl/btrfs` | Snapshot and diff helpers for `nixosctl` |
 | `btrc/nixosctl/desktop` | Audio, display, caffeine, and hardware config commands |
-| `btrc/nixosctl/hardware` | Secure Boot and TPM2 commands |
+| `btrc/nixosctl/hardware` | Secure Boot (`SecureBootManager` + the `SecureBootVerification` parsers) and TPM2 commands |
 | `btrc/immutability/Immutability.btrc` | BTRC entrypoint for the immutability runtime |
 | `btrc/immutability/lib` | Immutability runtime library modules |
 | `btrc/core` | Shared logging, path, and interactive helpers |
+| `btrc/gaming` | Steam, Wine prefix and Assetto Corsa tools built by `nix/apps/gaming/package.nix` |
 | `tests/e2e` | Declarative VM graph and test runner |
+
+Every module filename is PascalCase and matches its primary class, and the
+`btrc/` tree is the `SOURCES` set the Makefile hashes, so renaming a module
+invalidates every recorded VM state.
 
 Build from the repo root:
 
@@ -462,26 +561,37 @@ make -C tests installer-ssh
 make -C tests graph-full
 ```
 
-Immutability/CLI scenario nodes: `immutability-reset`, `immutability-disabled`,
-`immutability-snapshot-only`, `immutability-restore`, `immutability-orphan`,
-`immutability-nonexistent-persist`, `immutability-key-encoding`,
-`immutability-materialize`, `immutability-generations`,
-`immutability-persist-owners`, `immutability-files`, `nixosctl-cli`,
-`nixosctl-diff`.
-Hardware nodes: `tpm2-probe`, `tpm2-enroll` (LUKS TPM2 enroll/wipe on an
-encrypted install), `secure-boot-aarch64` (full Lanzaboote Secure Boot on
-aarch64 under HVF — install, sign, auto-enroll keys, then `bootctl status` →
-`Secure Boot: enabled`; uses Debian's enforcing `AAVMF_CODE.secboot.fd` via a
-reproducible nix derivation in `tests/shell.nix`), and the x86_64
-`secure-boot-*` nodes.
-Install and sleep nodes: `install-nixosctl` runs the documented `make build`
-and `nixosctl install --format` inside the installer ISO. The live ISO keeps its
-Nix store in RAM, so the node uses 16G, the Deck's memory.
-`immutability-hibernate` hibernates and suspends-to-disk an encrypted install
-and checks that the initrd reset never runs before a resume. Its guest has one
-vCPU because QEMU's HVF backend crashes when hibernation offlines secondary CPUs.
+`tests/graph.json` is the authoritative node list: its `required` set names
+every node that guards a contract, and `make -C tests graph-status` prints each
+one with its state (`ready`, `stale`, `missing`) rather than repeating the list
+here. The families are `installer-*`, `install-*`, `immutability-*`,
+`recovery-*`, `secure-boot-*`, `tpm2-*`, `nixosctl-*`, `password-change*`,
+`qemu-host-*`, `qmp-probe` and the `spec-toml`/`spec-yaml` format checks.
+
+The nodes with constraints worth knowing before you run them:
+
+- `tpm2-enroll` enrolls and wipes a TPM2 LUKS keyslot on an encrypted install.
+- `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
+  auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
+  enforcing firmware, so `tests/shell.nix` builds Debian's
+  `AAVMF_CODE.secboot.fd` in a reproducible derivation. `addAccelerator` picks
+  HVF on a same-arch Mac, KVM on same-arch Linux, and `tcg,thread=multi`
+  otherwise — so this node is accelerated on the Mac and emulated (slow) on
+  the x86_64 workstation.
+- `install-nixosctl` runs the documented `make build` and
+  `nixosctl install --format` inside the installer ISO. The live ISO keeps its
+  Nix store in RAM, so the node uses 16G, the Deck's memory.
+- `immutability-hibernate` hibernates and suspends-to-disk an encrypted install
+  and checks that the initrd reset never runs before a resume. It declares no
+  `arch`, so it runs on the host's architecture. Its guest has one vCPU because
+  QEMU's HVF backend crashes when hibernation offlines secondary CPUs.
+- `recovery-secure-boot-*` boots the signed recovery UKI, repairs a damaged
+  fallback loader, and reinstalls from recovery.
+
 Encrypted boots use the `unlock-luks` op: it waits for the LUKS prompt on the
-serial console, types the passphrase, then waits for SSH.
+serial console, types the passphrase, then waits for SSH. Write negative guest
+checks as `if cmd; then exit 1; fi`, because a bare `! pipeline` never trips
+`set -e`.
 
 Targets that boot QEMU or install NixOS can take time. The early graph is the
 right default for normal development. The full graph should be used before
@@ -497,14 +607,23 @@ Recommended loop:
 
 ```bash
 git status --short
-nix eval .#nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
-nix eval .#nixosConfigurations.QEMU-aarch64-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
-nix eval .#nixosConfigurations.QEMU-x86_64-Standard-Boot.config.system.build.toplevel.drvPath --show-trace
-make build
+for host in FRACTAL-NORTH-Standard-Boot FRACTAL-NORTH-Secure-Boot \
+            STEAM-DECK-OLED-Standard-Boot STEAM-DECK-OLED-Secure-Boot \
+            QEMU-x86_64-Standard-Boot QEMU-aarch64-Standard-Boot; do
+  nix eval ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" --show-trace
+done
+nix eval .#darwinConfigurations.mbp21.config.system.build.toplevel.drvPath --show-trace
+nix eval '.#homeConfigurations."alexanderschiffhauer@mbp21".activationPackage.drvPath' --show-trace
+make build unit
+make -C tests gaming
 make -C tests graph-coverage
 make -C tests app-settings
 make -C tests qemu-host
 ```
+
+Evaluating every bootable target matters after an input bump: a removed NixOS
+option fails only on the hosts that set it, and the darwin and Home Manager
+outputs do not share the Linux `nixpkgs`.
 
 For all flake outputs:
 
@@ -540,6 +659,8 @@ Ignored local paths:
 | `config.json` | Local selected host/target for helper tooling |
 | `.vm/` | QEMU disks, ISO downloads, state graph data |
 | `.direnv/`, `.btrc-cache/`, `build/` | Development caches and build outputs |
+| `nix/apps/gaming/proton/custom/src/` | Working Wine tree for the proton-custom dev loop (`make shell` / `make setup`) |
+| `nix/apps/gaming/battlenet/tests/.build/` | Battle.net test scratch output |
 | `result` | Nix build symlink |
 
 Do not commit secret material, VM disk images, installer ISOs, or local build
@@ -579,6 +700,13 @@ Its `darwin.nix` is wired explicitly in `flake.nix`; Linux host discovery and
 `nixosctl` retain their existing convention. `nix/settings.nix` declares the
 package, shell, Git, agent and security policy. The Mac host supplies its
 existing packages and shell configuration.
+
+The two platforms pin separately on purpose. `nixosctl update --upgrade` passes
+only the inputs whose names do not contain `darwin` (`NixosConfig.linuxInputs`
+reads them out of `flake.lock`), and the Mac's `nix-upgrade` alias updates only
+`nixpkgs-darwin`, `home-manager-darwin` and `nix-darwin`. A bare
+`nix flake update` ignores that split and moves both sides at once, so use the
+scoped commands unless you mean to bump everything.
 
 ```sh
 nix build .#darwinConfigurations.mbp21.system --no-link

@@ -1,6 +1,6 @@
-# proton-custom - GE-Proton11-7 plus five small Wine bug fixes.
+# proton-custom - GE-Proton11-11 plus five small Wine bug fixes.
 #
-# Builds the exact Wine revision GE-Proton11-7 uses, applies GE's complete
+# Builds the exact Wine revision GE-Proton11-11 uses, applies GE's complete
 # wine-hotfixes set in protonprep order (the shipped tarball's wineserver
 # protocol is built from that tree, so the overlaid DLLs must be too), then
 # layers our active patch series on top. Only the modules those patches touch
@@ -18,6 +18,11 @@
 #   Delay-load IAT protection for PE modules with read-only thunk pages
 #   libc thread pointer for PsCreateSystemThread threads (no core dump per CEF renderer at exit)
 #   Bounded desktop-driver readiness wait in win32u
+#
+# All five were re-verified against GE-Proton11-11 at the 11-11 rebase: the
+# upstream files they patch are byte-identical to the 11-7 tree, and the GE
+# patches their context comes from (wine-wayland 0196, em-fixups 0030) are
+# unchanged, so none of them is covered upstream yet.
 #
 # Dropped 2026-09-20 (the fallback GE already takes renders Battle.net correctly):
 #   DComp/DXGI/winewayland GPU presentation path and the DXVK composition
@@ -50,7 +55,7 @@
 }:
 
 let
-  toolVersion = "GE-Proton11-7";
+  toolVersion = "GE-Proton11-11";
   toolName    = "proton-custom-${toolVersion}";
 
   # false ships the pristine GE tarball (plus WineASIO) under the same tool
@@ -58,13 +63,13 @@ let
   # whether the patch series is still needed on this GE base.
   overlayPatchedBinaries = true;
 
-  # The exact Valve wine commit GE-Proton11-7 uses (from proton-ge-custom
-  # git submodule `wine` at tag GE-Proton11-7).
-  valveWineRev  = "46b29104e3741fe23bf5e2547196a253aab88c89";
-  valveWineHash = "sha256-cXJaXVAO05SSedIodq5fkvv+OEnr9z4tldqDDqFAWyY=";
+  # The exact Valve wine commit GE-Proton11-11 uses (from proton-ge-custom
+  # git submodule `wine` at tag GE-Proton11-11).
+  valveWineRev  = "c53678ab22a85f0fad3588dd34f0452a463bd015";
+  valveWineHash = "sha256-cEwxBXbWMwwq4mHzNK2hDDVSbkAnowJJmpf2JyW2pyk=";
 
-  geProtonRev  = "GE-Proton11-7";
-  geProtonHash = "sha256-HEFoB0tQOnCo6Tz9WZ6SnhoZepFFZ+JWIVjYgP/i8gI=";
+  geProtonRev  = "GE-Proton11-11";
+  geProtonHash = "sha256-AGHh141+Z6pa/Ed2PQzB6n09qoZhKY6XDb7hjm5doDA=";
 
   wineasio64 = pkgs.wineasio;
   wineasio32Files = ../../rocksmith/assets;
@@ -74,7 +79,7 @@ let
   # pkgs.proton-ge-bin.src here would silently follow nixpkgs updates.
   ge-proton-src = pkgs.fetchurl {
     url = "https://github.com/GloriousEggRoll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}-x86_64.tar.gz";
-    hash = "sha256-xUSLdqIwOE4te8a+tcy5e6+34sO2xSfLA6GlRrvLAKA=";
+    hash = "sha256-qoWYbK2lcJqou/qK3X87+5JcvhVxDJiZWJjTCP8so8E=";
   };
 
   activePatchSeries = [
@@ -151,38 +156,50 @@ let
       apply_ge "$sni"
       apply_ge_dir "$ge/wine-hotfixes/wineland-child-rendering"
       for p in $(ls "$ge"/wine-hotfixes/em-fixups/*.patch | sort); do [ "$p" = "$sni" ] || apply_ge "$p"; done
-      for d in ntdll-Hide_Wine_Exports kernel32-Debugger ntdll-ext4-case-folder winex11-Window_Style \
-               winex11-ime-check-thread-data winex11-Fixed-scancodes comctl32_animate_avi d3drm-starwars \
-               windowscodecs-TIFF_Support mmsystem.dll16-MIDIHDR_Refcount; do
+      for d in winedevice-Default_Drivers ntdll-Hide_Wine_Exports kernel32-Debugger ntdll-ext4-case-folder \
+               winex11-Window_Style winex11-ime-check-thread-data winex11-Fixed-scancodes comctl32_animate_avi \
+               d3drm-starwars windowscodecs-TIFF_Support mmsystem.dll16-MIDIHDR_Refcount; do
         apply_ge_dir "$ge/wine-hotfixes/wine-staging/$d"
       done
       for f in assettocorsa-hud pso2_hack vgsoh silence-starcitizen-unsupported-os eac_60101_timeout \
                layered-overlay-wine 0001-win32u-Avoid-zero-WM_ACTIVATEAPP-lparam-on-first-for \
                black-desert-keep-fullscreen-on-focus-loss maplestory-kernelbase-charprev-null \
                maplestory-spi-stickykeys-filterkeys ai-limit-dx12-compute-shader-fallback \
-               max-payne-cpu-detection return-to-krondor-text-bitmap-readback nascar25-protector; do
+               max-payne-cpu-detection return-to-krondor-text-bitmap-readback nascar25-protector \
+               ace-driverentry-kernel-return-address ace-ntoskrnl-mmcopymemory-stub \
+               ace-ntoskrnl-service-key-name ace-ntoskrnl-keep-mdl-section-views-mapped \
+               ace-ntoskrnl-psgetcontextthread-thunk ace-lsass-samss-service-stub \
+               ace-wineboot-start-samss-service; do
         apply_ge "$ge/game-patches/$f.patch"
       done
       apply_ge_dir "$ge/wine-hotfixes/qcap-dshow-fixes"
-      for f in urlmon-pump-thread-user-messages-during-synchronous-bind wineboot-create-sqm-machine-id \
+      apply_ge_pending() { for f in "$@"; do apply_ge "$ge/wine-hotfixes/pending/$f.patch"; done; }
+      apply_ge_pending urlmon-pump-thread-user-messages-during-synchronous-bind wineboot-create-sqm-machine-id \
                crypt32-pfx-record-machine-keyset-in-prov-info crypt32-pfx-use-the-container-key-spec \
                crypt32-reject-ncrypt-only-private-keys crypt32-wc3-modern-chain-engine-config \
                crypt32-wc3-trace-chain-engine-config crypt32-wc3-check-exclusive-flags-size \
-               crypt32-wc3-accept-legacy-chain-engine-config crypt32-wc3-preserve-exclusive-root-and-test-layouts \
+               crypt32-wc3-accept-legacy-chain-engine-config crypt32-wc3-preserve-exclusive-root-and-test-layouts
+      apply_ge "$ge/wine-hotfixes/mta-certificate/0001-crypt32-support-sha256-certificate-properties.patch"
+      apply_ge_pending d2d1-register-tint-effect d2d1-render-bitmap-sprites-tint-and-layers \
+               d2d1-isolate-target-clip-stacks \
                version-GetFileVersionInfoByHandle-stub ws2_32-validate-connect-address \
                kernel32-refresh-power-status-asynchronously secur32-fallback-without-no-shuffle-extensions \
+               secur32-schannel-fix-incomplete-message-missing-size \
                wined3d-preserve-runtime-opengl-gpu-description winex11-use-x11-drawables-for-steam-opengl-overlay \
-               winex11-keep-forza-background-windows-unmapped-on-wlroots win32u-share-selected-cursors-across-processes \
+               winex11-keep-forza-background-windows-unmapped-on-wlroots \
+               winex11-handle-unsupported-minimization-on-satellite \
+               server-clip-off-desktop-minimized-window-paint win32u-share-selected-cursors-across-processes \
                win32u-limit-extra-swapchain-image-to-doom win32u-use-three-image-present-modes-for-hades-wayland \
                win32u-use-three-image-present-modes-for-path-of-exile ntdll-retry-native-view-allocation-with-effective-range \
                ntdll-reserve-top-down-space-for-large-address-aware-wow64 ntdll-remove-redundant-packed-split-lock \
+               ntdll-block-apcs-until-process-exit-state-is-set \
+               server-dont-touch-freed-handle-table-in-close-handle \
                ntdll-prefer-native-version-resource-heuristics ntdll-keep-builtin-amd-ags-ahead-of-version-heuristic \
-               ole32-clipboard-stale-handle-1-tests ole32-clipboard-stale-handle-2-fix unity_crash_hotfix \
-               registry_RRF_RT_REG_SZ-RRF_RT_REG_EXPAND_SZ NCryptDecrypt_implementation \
+               ole32-clipboard-stale-handle-1-tests ole32-clipboard-stale-handle-2-fix unity_crash_hotfix
+      apply_ge_dir "$ge/wine-hotfixes/llvm-libc"
+      apply_ge_pending registry_RRF_RT_REG_SZ-RRF_RT_REG_EXPAND_SZ NCryptDecrypt_implementation \
                0009-HACK-kernel32-Spoof-GetProcAddress-of-KiUserApcDispa icuuc-icuin-forwarder-dlls \
-               0001-server-Dynamically-relocate-.exes-by-default-too 0002-ntdll-allow-disabling-executable-ASLR; do
-        apply_ge "$ge/wine-hotfixes/pending/$f.patch"
-      done
+               0001-server-Dynamically-relocate-.exes-by-default-too 0002-ntdll-allow-disabling-executable-ASLR
       for f in winealsa-override-channel-count 0001-fshack-Implement-AMD-FSR-upscaler-for-fullscreen-hac \
                0001-win32u-Implement-NtGdiDdDDIQueryAdapterInfo-cases 83-nv_low_latency_wine \
                build_failure_prevention-add-nls 0001-win32u-add-env-switch-to-disable-wm-decorations \
@@ -193,6 +210,9 @@ let
       done
       apply_ge_dir "$ge/ge-video-rework"
       apply_ge_dir "$ge/proton-ds5-haptic"
+      apply_ge_pending winebus-switch-pro-xinput-identity winebus-diablo-iv-dualsense-edge-identity \
+               ntdll-srwlock-skip-needless-shared-release-wake
+      apply_ge_dir "$ge/wine-hotfixes/bluetooth-le"
 
       # Apply only the explicit active series in the order listed above.
       ${applyActivePatchSeries}

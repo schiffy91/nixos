@@ -27,10 +27,10 @@ in {
       enable = true;
       nssmdns4 = true;
       openFirewall = false;
-      publish = {
-        enable = true;
-        userServices = true;
-        addresses = true;
+      settings.publish = {  # nixpkgs replaced publish.* with avahi-daemon.conf keys
+        "disable-publishing" = false;
+        disable-user-service-publishing = false;
+        publish-addresses = true;
       };
     };
     ##### SSH Server ##### 

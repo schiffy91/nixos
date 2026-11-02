@@ -1,6 +1,6 @@
 # proton-custom
 
-`GE-Proton11-7` plus five small Wine bug fixes. The package fetches the exact
+`GE-Proton11-11` plus five small Wine bug fixes. The package fetches the exact
 Wine tree GE built from, applies GE's own `wine-hotfixes` sequence in
 `protonprep` order (their series change the wineserver protocol, so anything we
 overlay must come from the same tree), applies the patches below, rebuilds only
@@ -10,7 +10,7 @@ vkd3d-proton and everything else are GE's binaries. WineASIO is added for
 Rocksmith.
 
 `default.nix` exposes the tool to Steam through `programs.steam.extraCompatPackages`
-and links it at `~/Games/proton/proton-custom-GE-Proton11-7`, the path the
+and links it at `~/Games/proton/proton-custom-GE-Proton11-11`, the path the
 Battle.net launcher uses as `PROTONPATH`.
 
 ## Patches
@@ -26,6 +26,30 @@ Battle.net launcher uses as `PROTONPATH`.
 Each patch is `git format-patch -s` output against the GE base and is meant to
 go upstream to GE or Wine; the folder README explains symptom, root cause and
 fix.
+
+## Rebased onto GE-Proton11-11 on 2026-11-02
+
+All five patches survived unchanged. The upstream files they touch
+(`win32u/driver.c`, `ntdll/loader.c`, `winewayland.drv/wayland_keyboard.c`,
+`winewayland.drv/window_surface.c`) are byte-identical between the 11-7 and
+11-11 Wine trees, and the GE patches the other two take their context from are
+unchanged — `wine-wayland/0088` introduces the synchronous `WM_CANCELMODE` and
+`0196` produces its final surroundings; `em-fixups/0030` adds
+`start_system_thread` — so each one applies at a line offset with no fuzz and
+no rejects. Nothing in 11-11 covers them: no GE
+patch touches `load_desktop_driver`, `LdrResolveDelayLoadedAPI` or the system
+thread's libc thread pointer.
+
+The protonprep replay below gained GE's new Wine work: the
+`winedevice-Default_Drivers` staging set, the seven ACE anti-cheat game
+patches, the `mta-certificate`, `llvm-libc` and `bluetooth-le` hotfix
+directories, and the new `pending` patches (Direct2D Tint, schannel
+`SECBUFFER_MISSING`, xwayland-satellite minimization, off-desktop minimized
+paint, APC/exit-state ordering, the freed handle table in `close_handle`, the
+SRW lock wake, and the Switch Pro/DualSense Edge identities).
+
+Watch 11-11's winewayland HDR work (`em-fixups` 0066, 0069, 0070, 0071) if
+HDR output behavior changes on this host.
 
 ## Dropped on 2026-09-20
 

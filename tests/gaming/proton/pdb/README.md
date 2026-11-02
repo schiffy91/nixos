@@ -24,8 +24,14 @@ WINEPREFIX="$test_prefix/pfx" WINEARCH=win64 WINEDEBUG=-all \
   "$fixture/PdbSymbols.exe" "Z:$fixture/Folded.dll"
 ```
 
-Expected: `PASS` and exit 0. With GE-Proton11-7, omitting
-`WINE_DBGHELP_OLD_PDB` reproduces missing symbols and exit 5. The compatible
-reader passes, as does live CSP 0.2.11 initialization on the same Proton.
-Recheck this when updating Proton; do not replace the shared tool with an
-older release merely to recover its previous PDB reader.
+Expected: `PASS` and exit 0.
+
+The recorded evidence is from **GE-Proton11-7**: omitting
+`WINE_DBGHELP_OLD_PDB` reproduced missing symbols and exit 5, the compatible
+reader passed, and live CSP 0.2.11 initialization worked on the same Proton.
+
+**Outstanding:** the shared tool moved to GE-Proton11-11 on 2026-11-02 and this
+fixture has not been rerun against it, so the exit-5 reproduction and the
+`WINE_DBGHELP_OLD_PDB` requirement are unverified on the current Proton. Rerun
+the commands above before relying on either. Do not replace the shared tool
+with an older release merely to recover its previous PDB reader.

@@ -32,7 +32,16 @@ a USB drive. Hold Volume Down and press Power for the boot menu.
    passphrase.
 4. Reboot and type the passphrase on the touchscreen. unl0kr has no rotation, so
    its keyboard follows the panel's native portrait orientation.
-5. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable --microsoft`.
+5. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
+
+   Our keys only — no `--microsoft`, the same rule as every other host. The
+   open question this leaves is the Deck's own firmware path:
+   `jupiter-biosupdate` and the `jovian.devices.steamdeck.autoUpdate`
+   BIOS/controller updates are Microsoft-signed and run with Secure Boot
+   enforcing, so verify a BIOS update still applies before trusting it. If one
+   is refused, disable Secure Boot in firmware for that update rather than
+   enrolling Microsoft's keys. `settings.boot.autoEnrollKeys` re-enrolls our
+   keys after a flash clears them.
 
 ## Sleep and firmware
 
@@ -42,6 +51,27 @@ disabled hibernation on the Deck in the SteamOS 3.9.4 beta (October 2026),
 citing driver bugs. If resume misbehaves, set `settings.sleep.hibernateOnSuspend
 = false;` in the host file to go back to suspend.
 
+Resume needs no kernel command line. The image lands in the btrfs swapfile, and
+`systemd-hibernate` records its device and offset in the `HibernateLocation`
+EFI variable, which `systemd-hibernate-resume-generator` reads in the initrd
+and clears after a successful resume. That is why `boot.resumeDevice` is empty
+everywhere in this repo, and app-settings asserts it stays empty.
+
+**Do not "fix" resume by adding `resume=`.** For a swapfile it needs a matching
+`resume_offset=`, which is the file's physical block offset and only knowable
+after the filesystem exists. systemd refuses `resume_offset=` without `resume=`,
+and a bare `resume=` points at the start of the filesystem rather than the swap
+header, so a half-wired pair is worse than none. The swapfile is sized in
+`STEAM-DECK-OLED.nix` (`swapSize = "20G"` for 16 GB of RAM) because the image
+has to fit, and the initrd reset is ordered after
+`systemd-hibernate-resume.service` so it can never roll the filesystem back
+under a hibernated kernel. `CONFIG_HIBERNATION=y` in the Valve kernel
+(`7.2.7-valve2`).
+
+The `immutability-hibernate` graph node is what proves this end to end: it
+hibernates, boots, and asserts the `boot_id` is unchanged and no reset ran.
+It has never been run, so treat resume as designed-but-unproven until it has.
+
 BIOS and controller firmware update at boot through
 `jovian.devices.steamdeck.autoUpdate`. A BIOS flash can clear the Secure Boot
 keys. `settings.boot.autoEnrollKeys` leaves signed key files on the ESP, and
@@ -49,8 +79,9 @@ systemd-boot enrolls them again the next time the firmware is in Setup Mode.
 
 ## Check on the device
 
-The VM tests cover the LUKS, swapfile, hibernate and immutability path on
-aarch64. These still need the hardware:
+The VM tests cover the LUKS, swapfile, hibernate and immutability path, but on
+the architecture of whichever machine ran the graph — `immutability-hibernate`
+declares no `arch` — not on Deck hardware. These still need the device:
 
 - unl0kr with the DRM backend on the Valve kernel
 - hibernate and resume on the Deck's drivers

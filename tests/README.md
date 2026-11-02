@@ -3,6 +3,7 @@
 Scenario specs live under their domain: `installer/`, `immutability/`,
 `nixosctl/`, `recovery/`, `secure-boot/`, `tpm2/`, and `qemu/`.
 `harness/` tests the runner; `e2e/` contains its BTRC implementation.
+`core/`, `gaming/` and the `*Tests.btrc` files hold the native unit suites.
 BTRC modules use PascalCase filenames matching their primary class.
 
 Run scenarios through the graph so parents and source hashes are checked:
@@ -14,7 +15,11 @@ make -C tests graph-full
 make -C tests gaming
 ```
 
-`make unit` exercises immutability paths and strict Secure Boot parsing.
+`make unit` builds and runs four native suites: immutability persist-key
+encoding (`immutability/PathsTests.btrc`), install-root path joining
+(`core/NixosPathsTests.btrc`), strict `sbctl`/`bootctl` parsing
+(`secure-boot/VerificationTests.btrc`), and the scenario parser
+(`harness/SpecTests.btrc`).
 `make gaming` (also included in `make check` and `make test`) runs the gaming
 package check using the flake's pinned inputs. It builds the real executables
 and tests their composed launch path, mod deployment, Steam configuration,

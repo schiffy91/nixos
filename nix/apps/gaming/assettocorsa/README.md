@@ -5,7 +5,7 @@ does not get these mods. Steam owns the game download and DLC.
 
 The flake pins Content Manager 0.8.2895.40668, public CSP 0.2.11, CM fonts,
 and Logitech TrueForce driver/tools 0.42.1. AC uses the repo's shared
-custom GE-Proton (currently GE-Proton11-7) and the shared DPI launcher,
+custom GE-Proton (currently GE-Proton11-11) and the shared DPI launcher,
 which derives scaling from the declared primary display (240 DPI on FRACTAL).
 AC keeps an XWayland/SDR environment for CM. GE's bundled AC fix installs .NET 4.8,
 d3dx11_43, and d3dcompiler_47 on first launch. That first prefix creation

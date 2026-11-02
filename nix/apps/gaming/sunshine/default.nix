@@ -15,7 +15,7 @@ in {
         '';
       });
     })
-  # Backport of KDE MR !8293 (HDR screencast support) to KWin 6.6.5.
+  # Backport of KDE MR !8293 (HDR screencast support), still unmerged upstream.
   # Adds 10-bit DRM formats + BT.2020/SMPTE2084 negotiation in the PipeWire
   # screencast stream so Sunshine can capture genuine HDR pixels from the
   # compositor instead of 8-bit-truncated SDR.

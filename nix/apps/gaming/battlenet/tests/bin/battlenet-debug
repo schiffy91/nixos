@@ -122,7 +122,7 @@ stacks() {
 }
 
 # Unmapping the main window while it presents is the hazard that deadlocked
-# the launcher on GE-Proton11-5; drive it through KWin so no pointer input can
+# the launcher on the GE-Proton11 series; drive it through KWin so no pointer input can
 # land on another application.
 hide_cycle() {
   run_in_devshell hide-cycle "$@"

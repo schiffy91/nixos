@@ -13,11 +13,7 @@
         efiSysMountPoint = config.settings.disk.boot.efiSysMountPoint;
       };
     };
-    initrd = {
-      systemd.enable = true;
-      systemd.services.plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
-      verbose = false;
-    };
+    initrd.systemd.services.plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
     plymouth = {
       enable = config.settings.boot.plymouth.enable;
       theme = "bgrt";

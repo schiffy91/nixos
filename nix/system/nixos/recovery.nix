@@ -34,10 +34,7 @@ let
             version = null;
             settings.UKI.Initrd = lib.mkForce "${config.system.build.netbootRamdisk}/initrd";
           };
-          initrd = {
-            systemd.enable = true;
-            availableKernelModules = virtioInitrdModules;
-          };
+          initrd.availableKernelModules = virtioInitrdModules;
           kernelParams = [
             "boot.shell_on_fail"
             "console=${serialConsole}"
