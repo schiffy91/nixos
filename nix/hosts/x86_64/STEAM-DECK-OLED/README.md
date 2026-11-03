@@ -18,16 +18,17 @@ by the passphrase. Do not enroll a TPM2 keyslot on a Deck.
 You need a USB-C hub with a keyboard and Ethernet, and the NixOS minimal ISO on
 a USB drive. Hold Volume Down and press Power for the boot menu.
 
-1. Boot the ISO and run one command. git ships on the ISO, and `install.sh`
-   builds the CLI and starts the installer, so the ISO's own `/etc/nixos` goes
-   first:
+1. Boot the ISO. git ships on it, and `make install` builds the CLI and starts
+   the installer, so the ISO's own `/etc/nixos` goes first. `make` comes from
+   `shell.nix`, which reads the flake lock and so needs the flake features:
 
    ```sh
    sudo -i
-   rm -rf /etc/nixos && git clone https://github.com/schiffy91/nixos /etc/nixos && /etc/nixos/install.sh
+   rm -rf /etc/nixos && git clone https://github.com/schiffy91/nixos /etc/nixos && cd /etc/nixos
+   NIX_CONFIG='experimental-features = nix-command flakes' nix-shell --run 'make install'
    ```
 
-   Pass `--format --yes` through to skip the prompts.
+   `ARGS='--format --yes'` skips the prompts.
 
 2. Choose `STEAM-DECK-OLED` and set the password. It becomes both the LUKS
    passphrase and the account password; `nixosctl change-password

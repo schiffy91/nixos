@@ -51,8 +51,8 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 	graph-list graph-status graph-coverage graph-installer-ssh chain clean-vms
 
 .PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
-	check test gaming hdr-screencast graph-required graph-default graph-full \
-	graph-early installer-ssh-smoke clean $(TESTS_TARGETS)
+	check test gaming hdr-screencast install graph-required graph-default \
+	graph-full graph-early installer-ssh-smoke clean $(TESTS_TARGETS)
 
 all: build
 
@@ -68,6 +68,9 @@ help:
 	@printf '%s\n' '  graph-default     the graph default set (alias: graph-early)'
 	@printf '%s\n' '  graph-required    the graph required set, i.e. every guarded contract (alias: graph-full)'
 	@printf '%s\n' '  hdr-screencast    KWin HDR capture; needs a real GPU, so not in check'
+	@printf '%s\n' ''
+	@printf '%s\n' 'Install:'
+	@printf '%s\n' '  install           build the CLI and install this host from an ISO'
 	@printf '%s\n' ''
 	@printf '%s\n' 'One scenario at a time: make <node>, e.g. make immutability-reset'
 	@printf '%s\n' '  make -C tests help   lists them; several run a real QEMU install'
@@ -149,6 +152,10 @@ gaming:
 .PHONY: hdr-screencast
 hdr-screencast:
 	nix/apps/gaming/sunshine/hdr-screencast-test/hdr-screencast-test $(ARGS)
+
+# Installs this host from an installer ISO; nixosctl elevates and prompts itself
+install: $(BIN)
+	./$(BIN) install $(ARGS)
 
 $(TESTS_TARGETS): $(BIN)
 	$(MAKE) -C tests $@
