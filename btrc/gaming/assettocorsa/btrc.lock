@@ -1,0 +1,1 @@
+{"manifest-hash":"a8a78f01fbfe8080a46c6ead434b6d061262860e8b2afb96a1f4b53fc37c3bfd","packages":[{"dependencies":{},"manifest-hash":"c601ddd38259cb96054896ccacd915a1fcac65b40dd97636c45315aa355c5a59","name":"nixos_assettocorsa","source":{"path":"."}}],"root":"nixos_assettocorsa","schema":3}
