@@ -18,21 +18,23 @@ by the passphrase. Do not enroll a TPM2 keyslot on a Deck.
 You need a USB-C hub with a keyboard and Ethernet, and the NixOS minimal ISO on
 a USB drive. Hold Volume Down and press Power for the boot menu.
 
-1. Boot the ISO and clone this repository to `/etc/nixos`.
-2. Build the CLI:
+1. Boot the ISO and run one command. git ships on the ISO, and `install.sh`
+   builds the CLI and starts the installer, so the ISO's own `/etc/nixos` goes
+   first:
 
    ```sh
-   cd /etc/nixos
-   NIX_CONFIG='experimental-features = nix-command flakes' nix-shell --run 'make build'
+   sudo -i
+   rm -rf /etc/nixos && git clone https://github.com/schiffy91/nixos /etc/nixos && /etc/nixos/install.sh
    ```
 
-3. Run `sudo build/nixosctl install --format`, choose `STEAM-DECK-OLED` and set
-   the password. It becomes both the LUKS passphrase and the account password;
-   `nixosctl change-password --full-disk-encryption-only` later changes only the
-   passphrase.
-4. Reboot and type the passphrase on the touchscreen. unl0kr has no rotation, so
+   Pass `--format --yes` through to skip the prompts.
+
+2. Choose `STEAM-DECK-OLED` and set the password. It becomes both the LUKS
+   passphrase and the account password; `nixosctl change-password
+   --full-disk-encryption-only` later changes only the passphrase.
+3. Reboot and type the passphrase on the touchscreen. unl0kr has no rotation, so
    its keyboard follows the panel's native portrait orientation.
-5. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
+4. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
 
    Our keys only — no `--microsoft`, the same rule as every other host. The
    open question this leaves is the Deck's own firmware path:
