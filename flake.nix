@@ -68,6 +68,30 @@
           value.disko.devices = nixos.config.disko.devices;
         };
       mkDiskoCheck = import ./tests/checks/disko_contract.nix { inherit lib mkDiskoSystem; };
+      # One installer ISO per architecture, taking the admin keys from the host
+      # config of that architecture so nothing is written down twice.
+      # The ISO's whole promise is no typing: keys already authorized, this
+      # repository already at a writable /etc/nixos, nixosctl already built.
+      mkInstallerCheck = system:
+        let
+          cfg = (mkInstaller system).config;
+          pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
+          repositoryScript = cfg.systemd.services.installer-repository.script or "";
+          failures = lib.optional (cfg.users.users.root.openssh.authorizedKeys.keys == []) "root has no authorized keys"
+            ++ lib.optional (!(cfg.systemd.services ? installer-repository)) "no service places /etc/nixos"
+            ++ lib.optional (!(lib.hasInfix "--chmod=u+w" repositoryScript)) "/etc/nixos would not be writable"
+            ++ lib.optional (!(lib.any (p: (p.name or "") == "nixosctl") cfg.environment.systemPackages)) "nixosctl is not installed";
+        in pkgs.runCommand "installer-contract-${system}" { } (
+          if failures == [] then "touch $out"
+          else "echo ${lib.escapeShellArg (lib.concatStringsSep "; " failures)} >&2; exit 1");
+      mkInstaller = system:
+        let hostFile = lib.findFirst (candidate: hostSystem candidate == system) (lib.head hostFiles) hostFiles;
+            host = mkSystem hostFile (lib.head bootableTargets) systemModuleFiles;
+        in import ./nix/system/nixos/images/installer.nix {
+          inherit inputs self system;
+          authorizedKeys = host.config.settings.users.admin.authorizedKeys;
+          stateVersion = host.config.system.stateVersion;
+        };
       darwinFiles = lib.filter (path: baseNameOf path == "darwin.nix") (lib.filesystem.listFilesRecursive ./nix/hosts);
       darwinName = darwinFile: baseNameOf (dirOf darwinFile);
       darwinConfigurationOf = darwinFile: self.darwinConfigurations.${darwinName darwinFile};
@@ -87,13 +111,15 @@
     in {
       darwinConfigurations = lib.listToAttrs (map (darwinFile: { name = darwinName darwinFile; value = mkDarwinSystem darwinFile; }) darwinFiles);
       homeConfigurations = lib.listToAttrs (map (darwinFile: { name = darwinHomeName darwinFile; value = mkDarwinHome darwinFile; }) darwinHomeFiles);
+      packages = lib.genAttrs systems (system: { installer = (mkInstaller system).config.system.build.isoImage; });
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
       checks = (lib.genAttrs systems (system:
         let
           pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
           systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
-        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts)))
+        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts)
+          // { installer-contract = mkInstallerCheck system; }))
         // lib.genAttrs (lib.unique (map darwinSystemOf darwinHomeFiles)) (system: lib.listToAttrs
           (map (darwinFile: { name = "${darwinName darwinFile}-home"; value = self.homeConfigurations.${darwinHomeName darwinFile}.activationPackage; })
             (lib.filter (darwinFile: darwinSystemOf darwinFile == system) darwinHomeFiles)));

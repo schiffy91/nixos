@@ -1,0 +1,47 @@
+{
+  "name": "installer-image-{{arch}}",
+  "state": "installer-image-{{arch}}",
+  "stateMaterial": "installer-image:{{arch}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "arch": "x86_64"
+  },
+  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux.iso",
+  "isoUrl": "",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "8G",
+  "memory": "4G",
+  "cpus": 4,
+  "sshPort": 2253,
+  "operations": [
+    {
+      "op": "host",
+      "command": "make iso ISO_SYSTEM={{arch}}-linux",
+      "timeout": 7200
+    },
+    {
+      "op": "up-iso",
+      "timeout": 900
+    },
+    {
+      "op": "guest",
+      "command": "set -e; grep -q AAAAC3NzaC1lZDI1NTE5AAAAINJsoluI1m5T4iwuCbpSdHvLVdemN3v7wMrqk4e+XJA0 /etc/ssh/authorized_keys.d/root && printf keys-ok",
+      "expect": "keys-ok",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; test -f /etc/nixos/flake.nix; test -d /etc/nixos/btrc; systemctl is-active --quiet installer-repository; touch /etc/nixos/.w && rm /etc/nixos/.w && printf repo-ok",
+      "expect": "repo-ok",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; command -v nixosctl > /dev/null; nixosctl eval config.networking.hostName > /dev/null 2>&1 || true; nixosctl 2>&1 | grep -q 'Usage: nixosctl' && printf cli-ok",
+      "expect": "cli-ok",
+      "timeout": 300
+    },
+    {
+      "op": "stop"
+    }
+  ]
+}

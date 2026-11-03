@@ -26,7 +26,6 @@ let
       "${inputs.nixpkgs}/nixos/modules/installer/netboot/netboot.nix"
       ({ config, lib, pkgs, ... }: {
         networking.hostName = "nixos-recovery";
-        system.stateVersion = systemStateVersion;
 
         boot = {
           uki = {
@@ -48,39 +47,14 @@ let
           supportedFilesystems = [ "btrfs" "vfat" "exfat" "ntfs" ];
         };
 
-        documentation.enable = lib.mkDefault false;
         netboot.squashfsCompression = "zstd -Xcompression-level 15";
-
-        nix.settings.experimental-features = [ "nix-command" "flakes" ];
-        # nixos-mount exposes the admin-owned flake here for root's nixos-install.
-        programs.git = {
-          enable = true;
-          config.safe.directory = [ "/mnt/etc/nixos" ];
-        };
-        services.openssh = {
-          enable = true;
-          settings.PermitRootLogin = "prohibit-password";
-        };
-        services.getty.autologinUser = lib.mkForce "root";
-        users.users.root.openssh.authorizedKeys.keys =
-          adminAuthorizedKeys;
-
-        environment.systemPackages = with pkgs; [
-          btrfs-progs
-          cryptsetup
-          curl
-          efibootmgr
-          gptfdisk
-          jq
-          kexec-tools
-          parted
-          pciutils
-          rsync
-          sbctl
-          smartmontools
-          vim
-          nixosMount
-        ];
+        environment.systemPackages = [ nixosMount ];
+      })
+      # nixos-mount exposes the admin-owned flake at /mnt for root's nixos-install.
+      (import ./images/environment.nix {
+        authorizedKeys = adminAuthorizedKeys;
+        stateVersion = systemStateVersion;
+        safeGitDirectories = [ "/mnt/etc/nixos" ];
       })
     ];
   };

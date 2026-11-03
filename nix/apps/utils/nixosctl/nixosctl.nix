@@ -1,38 +1,9 @@
 { pkgs, config, lib, inputs, ... }:
 let
   btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
-  nixosctlBin = pkgs.stdenv.mkDerivation {
-    name = "nixosctl";
-    src = ../../../..;
-    nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
-    dontConfigure = true;
-    buildPhase = ''
-      export HOME="$TMPDIR"  # btrcpy writes its cache under $HOME
-      btrcpy --strict-imports btrc/nixosctl/NixosCtl.btrc -o nixosctl.c
-      $CC -std=c11 -O2 nixosctl.c -lm -lpthread -lutil -o nixosctl
-    '';
-    installPhase = ''
-      mkdir -p $out/bin
-      cp nixosctl $out/bin/nixosctl
-      wrapProgram $out/bin/nixosctl \
-        ${lib.optionalString (config.settings.apps.nixosctl.configPath != "")
-          "--set NIXOS_CONFIG ${lib.escapeShellArg config.settings.apps.nixosctl.configPath}"} \
-        --prefix PATH : ${lib.makeBinPath (with pkgs; [
-          kdePackages.libkscreen
-          kdePackages.konsole
-          systemd
-          pulseaudio
-          sbctl
-          sbsigntool
-          btrfs-progs
-          cryptsetup
-          util-linux
-          coreutils
-          git
-          mkpasswd
-          nix
-        ])}
-    '';
+  nixosctlBin = import ./package.nix {
+    inherit pkgs lib btrcpy;
+    inherit (config.settings.apps.nixosctl) configPath;
   };
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.nixosctl.enable) {
   environment.systemPackages = [ nixosctlBin ];

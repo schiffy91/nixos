@@ -51,8 +51,8 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 	graph-list graph-status graph-coverage graph-installer-ssh chain clean-vms
 
 .PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
-	check test gaming hdr-screencast install graph-required graph-default \
-	graph-full graph-early installer-ssh-smoke clean $(TESTS_TARGETS)
+	check test gaming hdr-screencast install iso iso-write graph-required \
+	graph-default graph-full graph-early installer-ssh-smoke clean $(TESTS_TARGETS)
 
 all: build
 
@@ -71,6 +71,8 @@ help:
 	@printf '%s\n' ''
 	@printf '%s\n' 'Install:'
 	@printf '%s\n' '  install           build the CLI and install this host from an ISO'
+	@printf '%s\n' '  iso               build the installer ISO (ISO_SYSTEM=aarch64-linux for the Deck)'
+	@printf '%s\n' '  iso-write         write it to DEVICE=/dev/sdX'
 	@printf '%s\n' ''
 	@printf '%s\n' 'One scenario at a time: make <node>, e.g. make immutability-reset'
 	@printf '%s\n' '  make -C tests help   lists them; several run a real QEMU install'
@@ -156,6 +158,21 @@ hdr-screencast:
 # Installs this host from an installer ISO; nixosctl elevates and prompts itself
 install: $(BIN)
 	./$(BIN) install $(ARGS)
+
+# ISO_SYSTEM builds for another architecture, e.g. make iso ISO_SYSTEM=aarch64-linux
+ISO_SYSTEM ?= $(shell nix eval --raw --impure --expr builtins.currentSystem)
+ISO_LINK := $(BUILD_DIR)/iso
+
+iso: | dirs ## Build the installer ISO for ISO_SYSTEM -> build/iso
+	nix build --no-warn-dirty ".#packages.$(ISO_SYSTEM).installer" -o "$(ISO_LINK)"
+	@printf '%s\n' "$$(ls $(ISO_LINK)/iso/*.iso)"
+
+iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
+	@test -n "$(DEVICE)" || { printf '%s\n' 'set DEVICE, e.g. make iso-write DEVICE=/dev/sdX' >&2; exit 1; }
+	@test -b "$(DEVICE)" || { printf '%s\n' '$(DEVICE) is not a block device' >&2; exit 1; }
+	@lsblk -no NAME,SIZE,MODEL,TRAN,RM "$(DEVICE)"
+	@printf '%s' 'erase this device? [y/N] ' && read answer && test "$$answer" = y
+	sudo dd if="$$(ls $(ISO_LINK)/iso/*.iso)" of="$(DEVICE)" bs=4M status=progress oflag=sync
 
 $(TESTS_TARGETS): $(BIN)
 	$(MAKE) -C tests $@
