@@ -1,0 +1,29 @@
+#include <assert.h>
+
+import ../e2e/spec/VmSpecParser.btrc;
+
+string materialFor(string stateMaterial) {
+    var spec = VmSpecParser.parse("{\"name\":\"node\",\"stateMaterial\":\"" + stateMaterial + "\",\"args\":{"
+        + "\"memory\":\"8G\",\"immutabilityMode\":\"reset\","
+        + "\"sourceHash\":\"abc123\",\"stateHash\":\"deadbeef\",\"stateHashShort\":\"dead\","
+        + "\"graphName\":\"g\",\"nodeId\":\"n\",\"workspaceRoot\":\"/w\",\"adminShell\":\"/bin/sh\""
+        + "},\"operations\":[{\"op\":\"host\",\"command\":\"true\"}]}");
+    return spec.argsMaterial();
+}
+
+int main() {
+    /* plumbing, derived hashes and *Shell keys never describe what a node produces */
+    assert(materialFor("node:v2").equals("immutabilityMode=reset\nmemory=8G"));
+
+    /* sourceHash only folds in when the node's own material opts into it */
+    assert(materialFor("node:{{sourceHash}}").equals("immutabilityMode=reset\nmemory=8G\nsourceHash=abc123"));
+
+    var optedOut = VmSpecParser.parse("{\"name\":\"n\",\"stateMaterial\":\"n:{{memory}}\",\"operations\":[{\"op\":\"host\",\"command\":\"true\"}]}");
+    assert(optedOut.declaresArg("memory") && !optedOut.declaresArg("sourceHash"));
+
+    var optedIn = VmSpecParser.parse("{\"name\":\"n\",\"stateMaterial\":\"n:source={{sourceHash}}\",\"operations\":[{\"op\":\"host\",\"command\":\"true\"}]}");
+    assert(optedIn.declaresArg("sourceHash"));
+
+    print("PASS: state hash material excludes plumbing and folds sourceHash only when declared");
+    return 0;
+}

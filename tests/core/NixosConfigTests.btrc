@@ -1,0 +1,32 @@
+#include <assert.h>
+
+import ../../btrc/nixosctl/NixosConfig.btrc;
+import ../../btrc/nixosctl/PasswordManager.btrc;
+
+void expectHost(string hostPath, string host, string architecture) {
+    assert(NixosConfig.hostOf(hostPath).equals(host));
+    assert(NixosConfig.architectureOf(hostPath).equals(architecture));
+}
+
+int main() {
+    expectHost("nix/hosts/x86_64/FRACTAL-NORTH.nix", "FRACTAL-NORTH", "x86_64");
+    expectHost("nix/hosts/aarch64/VM-TEST.nix", "VM-TEST", "aarch64");
+    expectHost("/etc/nixos/nix/hosts/x86_64/VM-TEST.nix", "VM-TEST", "x86_64");
+
+    /* a host may own a directory named after itself */
+    expectHost("nix/hosts/x86_64/VM-TEST/VM-TEST.nix", "VM-TEST", "x86_64");
+    expectHost("nix/hosts/aarch64/VM-TEST/VM-TEST.nix", "VM-TEST", "aarch64");
+
+    /* a directory that merely resembles the host name is still the arch */
+    expectHost("nix/hosts/x86_64/VM-TEST-2/VM-TEST.nix", "VM-TEST", "VM-TEST-2");
+
+    /* locked and malformed shadow entries must never match a password */
+    assert(PasswordManager.hashUsable("$6$salt$hash"));
+    assert(PasswordManager.hashUsable("$y$j9T$salt$hash"));
+    for locked in ["!", "*", "", "!!", "!$6$salt$hash", "x", "6$salt$hash"] {
+        assert(!PasswordManager.hashUsable(locked));
+    }
+
+    print("PASS: host/arch derivation from host paths, locked shadow entries rejected");
+    return 0;
+}

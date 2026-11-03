@@ -59,20 +59,26 @@ class NixosConfig {
         self.local.overwrite(data);
     }
 
-    public string host() {
-        var base = PathTools.basename(self.hostPath());
-        return Strings.replace(base, ".nix", "");
+    class string hostOf(string hostPath) {
+        return Strings.replace(PathTools.basename(hostPath), ".nix", "");
     }
 
-    public string architecture() {
-        var parent = PathTools.dirname(self.hostPath());
+    /* hosts live at <arch>/<host>.nix or at <arch>/<host>/<host>.nix */
+    class string architectureOf(string hostPath) {
+        var parent = PathTools.dirname(hostPath);
         var hostDir = PathTools.basename(parent);
-        var hostFile = PathTools.basename(self.hostPath());
-        var hostName = Strings.replace(hostFile, ".nix", "");
-        if (hostDir.equals(hostName)) {
+        if (hostDir.equals(NixosConfig.hostOf(hostPath))) {
             return PathTools.basename(PathTools.dirname(parent));
         }
         return hostDir;
+    }
+
+    public string host() {
+        return NixosConfig.hostOf(self.hostPath());
+    }
+
+    public string architecture() {
+        return NixosConfig.architectureOf(self.hostPath());
     }
 
     public string flakeRef() {

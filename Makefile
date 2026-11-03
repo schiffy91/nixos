@@ -27,19 +27,52 @@ IMMUTABILITY_BIN := $(BUILD_DIR)/immutability
 TRAY_ENTRY := btrc/nixosctl/NixosTray.btrc
 TRAY_C_OUT := $(BUILD_DIR)/nixosctl-tray.c
 TRAY_BIN := $(BUILD_DIR)/nixosctl-tray
-IMMUTABILITY_PATHS_TEST_ENTRY := tests/immutability/PathsTests.btrc
-IMMUTABILITY_PATHS_TEST_C_OUT := $(BUILD_DIR)/immutability_paths_test.c
-IMMUTABILITY_PATHS_TEST_BIN := $(BUILD_DIR)/immutability_paths_test
-NIXOS_PATHS_TEST_ENTRY := tests/core/NixosPathsTests.btrc
-NIXOS_PATHS_TEST_C_OUT := $(BUILD_DIR)/nixos_paths_test.c
-NIXOS_PATHS_TEST_BIN := $(BUILD_DIR)/nixos_paths_test
+# <binary name>:<entry point>, one per unit suite
+UNIT_TESTS := \
+	immutability_paths:tests/immutability/PathsTests.btrc \
+	nixos_paths:tests/core/NixosPathsTests.btrc \
+	nixos_config:tests/core/NixosConfigTests.btrc \
+	secure_boot:tests/secure-boot/VerificationTests.btrc \
+	spec:tests/harness/SpecTests.btrc \
+	state_hash:tests/harness/StateHashTests.btrc
+unit_name = $(firstword $(subst :, ,$(1)))
+unit_entry = $(lastword $(subst :, ,$(1)))
+UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
 BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN)
 SOURCES := $(shell find btrc tests -name '*.btrc' | sort)
 
-.PHONY: all transpile build-stdlib build unit check quick smoke test host-smoke app-settings stateful-host x86_64-qemu-host aarch64-qemu-host installer-download install-system immutability-reset immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean dirs
+# Every one of these just forwards to tests/Makefile under the same name
+TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
+	aarch64-qemu-host installer-download download install-system \
+	immutability-reset immutability-key-encoding installer-ssh password-change \
+	tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote \
+	graph-list graph-status graph-coverage graph-installer-ssh chain clean-vms
+
+.PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
+	check test gaming hdr-screencast graph-required graph-default graph-full \
+	graph-early installer-ssh-smoke clean $(TESTS_TARGETS)
 
 all: build
+
+help:
+	@printf '%s\n' 'Build:'
+	@printf '%s\n' '  build             nixosctl, immutability and the tray binary'
+	@printf '%s\n' '  clean             remove build/'
+	@printf '%s\n' ''
+	@printf '%s\n' 'Tests, fastest first:'
+	@printf '%s\n' '  unit              in-process suites, no VM (seconds)'
+	@printf '%s\n' '  quick             unit + a CLI smoke + the graph node named "quick"'
+	@printf '%s\n' '  check             quick + stateful-host + gaming; what to run before committing'
+	@printf '%s\n' '  graph-default     the graph default set (alias: graph-early)'
+	@printf '%s\n' '  graph-required    the graph required set, i.e. every guarded contract (alias: graph-full)'
+	@printf '%s\n' '  hdr-screencast    KWin HDR capture; needs a real GPU, so not in check'
+	@printf '%s\n' ''
+	@printf '%s\n' 'One scenario at a time: make <node>, e.g. make immutability-reset'
+	@printf '%s\n' '  make -C tests help   lists them; several run a real QEMU install'
+	@printf '%s\n' ''
+	@printf '%s\n' 'Neither graph-required nor graph-full runs every node: both mean the'
+	@printf '%s\n' 'required set. Name a node explicitly for anything outside it.'
 
 dirs:
 	mkdir -p $(BUILD_DIR)
@@ -73,12 +106,6 @@ $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 $(TRAY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
 
-$(IMMUTABILITY_PATHS_TEST_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
-	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)"
-
-$(NIXOS_PATHS_TEST_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
-	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(NIXOS_PATHS_TEST_ENTRY)" -o "$(CURDIR)/$(NIXOS_PATHS_TEST_C_OUT)"
-
 build: $(BINS)
 
 $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
@@ -90,29 +117,17 @@ $(IMMUTABILITY_BIN): $(IMMUTABILITY_C_OUT) $(STDLIB_LIB)
 $(TRAY_BIN): $(TRAY_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(TRAY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(TRAY_BIN)" $(TRAY_LIBS)
 
-$(IMMUTABILITY_PATHS_TEST_BIN): $(IMMUTABILITY_PATHS_TEST_C_OUT) $(STDLIB_LIB)
-	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_PATHS_TEST_BIN)" $(IMMUTABILITY_LIBS)
+define UNIT_TEST_RULES
+$$(BUILD_DIR)/$(1)_test.c: $$(SOURCES) $$(STDLIB_MANIFEST) $$(BTRC_STAMP) | dirs
+	$$(BTRC) $$(TRANSPILER_FLAGS) "$$(CURDIR)/$(2)" -o "$$@"
 
-$(NIXOS_PATHS_TEST_BIN): $(NIXOS_PATHS_TEST_C_OUT) $(STDLIB_LIB)
-	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(NIXOS_PATHS_TEST_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(NIXOS_PATHS_TEST_BIN)" $(NIXOSCTL_LIBS)
+$$(BUILD_DIR)/$(1)_test: $$(BUILD_DIR)/$(1)_test.c $$(STDLIB_LIB)
+	$$(CC) $$(CFLAGS) -I"$$(CURDIR)/$$(STDLIB_DIR)" "$$<" "$$(CURDIR)/$$(STDLIB_LIB)" -o "$$@" $$(NIXOSCTL_LIBS)
+endef
+$(foreach t,$(UNIT_TESTS),$(eval $(call UNIT_TEST_RULES,$(call unit_name,$(t)),$(call unit_entry,$(t)))))
 
-$(BUILD_DIR)/secure_boot_test.c: $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
-	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/tests/secure-boot/VerificationTests.btrc" -o "$@"
-
-$(BUILD_DIR)/secure_boot_test: $(BUILD_DIR)/secure_boot_test.c $(STDLIB_LIB)
-	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$<" "$(CURDIR)/$(STDLIB_LIB)" -o "$@" $(NIXOSCTL_LIBS)
-
-$(BUILD_DIR)/spec_test.c: $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
-	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/tests/harness/SpecTests.btrc" -o "$@"
-
-$(BUILD_DIR)/spec_test: $(BUILD_DIR)/spec_test.c $(STDLIB_LIB)
-	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$<" "$(CURDIR)/$(STDLIB_LIB)" -o "$@" $(NIXOSCTL_LIBS)
-
-unit: $(IMMUTABILITY_PATHS_TEST_BIN) $(NIXOS_PATHS_TEST_BIN) $(BUILD_DIR)/secure_boot_test $(BUILD_DIR)/spec_test
-	./$(IMMUTABILITY_PATHS_TEST_BIN)
-	./$(NIXOS_PATHS_TEST_BIN)
-	./$(BUILD_DIR)/secure_boot_test
-	./$(BUILD_DIR)/spec_test
+unit: $(UNIT_BINS)
+	@for test in $(UNIT_BINS); do ./$$test || exit 1; done
 
 quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
@@ -134,67 +149,21 @@ gaming:
 hdr-screencast:
 	nix/apps/gaming/sunshine/hdr-screencast-test/hdr-screencast-test $(ARGS)
 
-host-smoke: quick
+$(TESTS_TARGETS): $(BIN)
+	$(MAKE) -C tests $@
 
-app-settings: $(BIN)
-	$(MAKE) -C tests app-settings
-
-stateful-host: $(BIN)
-	$(MAKE) -C tests stateful-host
-
-aarch64-qemu-host: $(BIN)
-	$(MAKE) -C tests aarch64-qemu-host
-
-x86_64-qemu-host: $(BIN)
-	$(MAKE) -C tests x86_64-qemu-host
-
-installer-download: $(BIN)
-	$(MAKE) -C tests installer-download
-
-install-system: $(BIN)
-	$(MAKE) -C tests install-system
-
-immutability-reset: $(BIN)
-	$(MAKE) -C tests immutability-reset
-
-immutability-key-encoding: $(BIN)
-	$(MAKE) -C tests immutability-key-encoding
-
-installer-ssh installer-ssh-smoke: $(BIN)
-	$(MAKE) -C tests installer-ssh
-
-tpm2-probe: $(BIN)
-	$(MAKE) -C tests tpm2-probe
-
-secure-boot-capabilities: $(BIN)
-	$(MAKE) -C tests secure-boot-capabilities
-
-secure-boot-install: $(BIN)
-	$(MAKE) -C tests secure-boot-install
-
-secure-boot-lanzaboote: $(BIN)
-	$(MAKE) -C tests secure-boot-lanzaboote
-
-graph-list: $(BIN)
-	$(MAKE) -C tests graph-list
-
-graph-status: $(BIN)
-	$(MAKE) -C tests graph-status
-
-graph-coverage: $(BIN)
-	$(MAKE) -C tests graph-coverage
-
-graph-early: $(BIN)
-	$(MAKE) -C tests graph-early
-
-graph-installer-ssh: $(BIN)
-	$(MAKE) -C tests graph-installer-ssh
-
-graph-full: $(BIN)
+# run-required covers the graph's required set, run with no targets covers default
+graph-required: $(BIN)
 	$(MAKE) -C tests graph-full
 
-chain: $(BIN)
-	$(MAKE) -C tests chain
+graph-default: $(BIN)
+	$(MAKE) -C tests graph-early
+
+# kept so existing invocations and muscle memory keep working
+smoke host-smoke: quick
+installer-ssh-smoke: installer-ssh
+graph-full: graph-required
+graph-early: graph-default
 
 clean:
 	rm -rf $(BUILD_DIR)
