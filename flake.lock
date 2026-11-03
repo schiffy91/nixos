@@ -20,27 +20,6 @@
         "type": "github"
       }
     },
-    "btrc_2": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs-unstable"
-        ]
-      },
-      "locked": {
-        "lastModified": 1789880700,
-        "narHash": "sha256-Or17d/Z6IJjSKwvEihMSD+TxIzWhiV9hX68d8ivCSeQ=",
-        "owner": "schiffy91",
-        "repo": "btrc",
-        "rev": "c959dd0e5d122d7019266536d571d20fb7c5cc9d",
-        "type": "github"
-      },
-      "original": {
-        "owner": "schiffy91",
-        "repo": "btrc",
-        "rev": "c959dd0e5d122d7019266536d571d20fb7c5cc9d",
-        "type": "github"
-      }
-    },
     "core-azahar": {
       "inputs": {
         "nixpkgs": [
@@ -647,17 +626,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1792695032,
-        "narHash": "sha256-Kl8u+SFT4Kt55rppwrFyhTosrXvb6cX9kFV98J7oEDc=",
+        "lastModified": 1793702400,
+        "narHash": "sha256-C/zm8AITImubyYSUhbDoPGf37cg0tB9BGlwxC0V8fTw=",
         "owner": "mescon",
         "repo": "logitech-trueforce-linux-driver",
-        "rev": "b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36",
+        "rev": "1af9b3335db86200eca67c81beb3ccb090394840",
         "type": "github"
       },
       "original": {
         "owner": "mescon",
         "repo": "logitech-trueforce-linux-driver",
-        "rev": "b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36",
         "type": "github"
       }
     },
@@ -903,7 +881,9 @@
     },
     "semu": {
       "inputs": {
-        "btrc": "btrc_2",
+        "btrc": [
+          "btrc"
+        ],
         "core-azahar": "core-azahar",
         "core-citra": "core-citra",
         "core-desmume": "core-desmume",
@@ -933,11 +913,11 @@
         "retroarch": "retroarch"
       },
       "locked": {
-        "lastModified": 1791370802,
-        "narHash": "sha256-PAa/QGjAdy+BAhsgd4dMG8qBekMpgAXAfdEscIZEFhA=",
+        "lastModified": 1793721294,
+        "narHash": "sha256-MApZ42BwNVjSXKucph3n9Iaj9AIpZeFvwr3tBv/HJDg=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "7ca67a5e19ff77e5ab998fe3df56c06765da4be5",
+        "rev": "d50795101b33f75590a026f78db4f56bc4887b60",
         "type": "github"
       },
       "original": {

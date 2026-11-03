@@ -11,18 +11,8 @@
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     jovian = { url = "github:Jovian-Experiments/Jovian-NixOS"; inputs.nixpkgs.follows = "nixpkgs"; };
     btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
-    # semu's sources are written against btrc c959dd0e and have not been
-    # migrated to main, which tightened import checking and dropped the RTLD_*
-    # constants. Flakes re-lock transitive inputs, so semu's own flake.lock does
-    # not apply here and the revision has to be pinned explicitly; a plain
-    # btrc.follows would hand it our main and fail the renderer build.
-    semu = {
-      url = "github:schiffy91/semu";
-      inputs.nixpkgs.follows = "nixpkgs-unstable";
-      inputs.btrc.url = "github:schiffy91/btrc/c959dd0e5d122d7019266536d571d20fb7c5cc9d";
-      inputs.btrc.inputs.nixpkgs.follows = "nixpkgs-unstable";
-    };
-    logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver/b2ebb6bf4eae0c1e96bbe3ed6228420b8a7c2d36"; inputs.nixpkgs.follows = "nixpkgs"; };
+    semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
+    logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver"; inputs.nixpkgs.follows = "nixpkgs"; };
   };
   outputs = inputs@{ self, ... }:
     let
@@ -78,25 +68,34 @@
           value.disko.devices = nixos.config.disko.devices;
         };
       mkDiskoCheck = import ./tests/checks/disko_contract.nix { inherit lib mkDiskoSystem; };
-    in {
-      darwinConfigurations.mbp21 = inputs.nix-darwin.lib.darwinSystem {
-        system = "aarch64-darwin";
+      darwinFiles = lib.filter (path: baseNameOf path == "darwin.nix") (lib.filesystem.listFilesRecursive ./nix/hosts);
+      darwinName = darwinFile: baseNameOf (dirOf darwinFile);
+      darwinConfigurationOf = darwinFile: self.darwinConfigurations.${darwinName darwinFile};
+      darwinSystemOf = darwinFile: "${baseNameOf (dirOf (dirOf darwinFile))}-darwin";
+      darwinHomeFiles = lib.filter (darwinFile: builtins.pathExists ((dirOf darwinFile) + "/home.nix")) darwinFiles;
+      darwinHomeName = darwinFile: "${(darwinConfigurationOf darwinFile).config.settings.users.admin.username}@${darwinName darwinFile}";
+      mkDarwinSystem = darwinFile: inputs.nix-darwin.lib.darwinSystem {
+        system = darwinSystemOf darwinFile;
         specialArgs = { inherit inputs; };
-        modules = [ ./nix/settings.nix ./nix/system/darwin ./nix/hosts/aarch64/mbp21/darwin.nix ];
+        modules = [ ./nix/settings.nix ./nix/system/darwin darwinFile ];
       };
-      homeConfigurations."alexanderschiffhauer@mbp21" = inputs.home-manager-darwin.lib.homeManagerConfiguration {
-        inherit (self.darwinConfigurations.mbp21) pkgs;
-        extraSpecialArgs = { inherit (self.darwinConfigurations.mbp21.config) settings; };
-        modules = [ ./nix/hosts/aarch64/mbp21/home.nix ];
+      mkDarwinHome = darwinFile: inputs.home-manager-darwin.lib.homeManagerConfiguration {
+        inherit (darwinConfigurationOf darwinFile) pkgs;
+        extraSpecialArgs = { inherit ((darwinConfigurationOf darwinFile).config) settings; };
+        modules = [ ((dirOf darwinFile) + "/home.nix") ];
       };
+    in {
+      darwinConfigurations = lib.listToAttrs (map (darwinFile: { name = darwinName darwinFile; value = mkDarwinSystem darwinFile; }) darwinFiles);
+      homeConfigurations = lib.listToAttrs (map (darwinFile: { name = darwinHomeName darwinFile; value = mkDarwinHome darwinFile; }) darwinHomeFiles);
       diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
       nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
       checks = (lib.genAttrs systems (system:
         let
           pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
           systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
-        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts))) // {
-          aarch64-darwin.mbp21-home = self.homeConfigurations."alexanderschiffhauer@mbp21".activationPackage;
-        };
+        in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts)))
+        // lib.genAttrs (lib.unique (map darwinSystemOf darwinHomeFiles)) (system: lib.listToAttrs
+          (map (darwinFile: { name = "${darwinName darwinFile}-home"; value = self.homeConfigurations.${darwinHomeName darwinFile}.activationPackage; })
+            (lib.filter (darwinFile: darwinSystemOf darwinFile == system) darwinHomeFiles)));
     };
 }
