@@ -129,6 +129,11 @@ check test: quick stateful-host gaming
 gaming:
 	$(MAKE) -C tests gaming
 
+# Needs a real GPU, so deliberately not part of check/test
+.PHONY: hdr-screencast
+hdr-screencast:
+	nix/apps/gaming/sunshine/hdr-screencast-test/hdr-screencast-test $(ARGS)
+
 host-smoke: quick
 
 app-settings: $(BIN)
