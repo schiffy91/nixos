@@ -1,0 +1,67 @@
+import Library.Strings;
+import Library.Vector;
+import ../core/PtyChild.btrc;
+import ./PasswdPromptClassifier.btrc;
+
+#include <pwd.h>
+#include <poll.h>
+#include <unistd.h>
+
+class PasswdDriver {
+    class string executable() {
+        Vector<string> candidates = ["/run/wrappers/bin/passwd", "/run/current-system/sw/bin/passwd", "/usr/bin/passwd", "/bin/passwd"];
+        for (int i = 0; i < candidates.len; i++) {
+            if (access(candidates.get(i), X_OK) == 0) { return candidates.get(i); }
+        }
+        return "";
+    }
+
+    class bool answer(PtyChild child, Vector<string> responses, long long deadline) {
+        var classifier = PasswdPromptClassifier(responses.len);
+        int sent = 0;
+        char buffer[4096];
+        while (PtyChild.now() < deadline && sent < responses.len) {
+            int ready = child.pollUntil(POLLIN, deadline, 1000);
+            if (ready < 0 || (ready != 0 && (ready & POLLIN) == 0)) { return false; }
+            if (ready == 0) { continue; }
+            int count = child.readSome(buffer, 4096);
+            if (count < 0) { return false; }
+            if (count == 0) { continue; }
+            bool complete = classifier.feedRaw(buffer, count);
+            if (!complete && !classifier.incompleteCandidate()) { continue; }
+            int trailing = child.pollUntil(POLLIN, deadline, 250);
+            if (trailing != 0) {
+                if (trailing < 0 || (trailing & POLLIN) == 0) { return false; }
+                continue;
+            }
+            if (!complete || !child.echoDisabled() || !classifier.acceptPending()) { return false; }
+            if (!child.writeUntil(responses.get(sent), true, deadline)) { return false; }
+            sent++;
+        }
+        return sent == responses.len && classifier.complete();
+    }
+
+    class bool change(string user, string oldPassword, string newPassword) {
+        if (user.isEmpty() || user[0] == '-') { return false; }
+        struct passwd account;
+        struct passwd* found = NULL;
+        char accountBuffer[16384];
+        if (getpwnam_r(user, &account, accountBuffer, sizeof(accountBuffer), &found) != 0 || found == NULL) { return false; }
+        string path = PasswdDriver.executable();
+        bool root = geteuid() == (uid_t)0;
+        if (path.isEmpty() || (!root && geteuid() != found->pw_uid)) { return false; }
+        string name = Strings.copy(found->pw_name);
+        Vector<string> args = [path];
+        if (root) { args.push(name); }
+        Vector<string> env = ["PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin", "LC_ALL=C", "LANG=C", "HOME=" + Strings.copy(found->pw_dir), "USER=" + name, "LOGNAME=" + name];
+        Vector<string> responses = root ? [newPassword, newPassword] : [oldPassword, newPassword, newPassword];
+        var child = PtyChild();
+        if (!child.start(path, args, env)) { return false; }
+        long long deadline = PtyChild.deadlineAfter(30000);
+        if (!PasswdDriver.answer(child, responses, deadline)) {
+            child.terminate();
+            return false;
+        }
+        return child.waitExitUntil(deadline) == 0;
+    }
+}

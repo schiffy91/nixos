@@ -136,7 +136,10 @@ class VmAssets {
 
     public void createSshKey() {
         self.ensureWorkDir();
-        if (FileSystem.exists(self.sshKeyPath())) { return; }
+        if (FileSystem.exists(self.sshKeyPath())) {
+            self.shell.run(f"chmod 600 {ShellWords.quote(self.sshKeyPath())}");  /* inherited copies follow the umask */
+            return;
+        }
         var command = f"ssh-keygen -t ed25519 -N '' -f {ShellWords.quote(self.sshKeyPath())} -q";
         var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { NixosLog.fatal("Failed to create VM SSH key"); }

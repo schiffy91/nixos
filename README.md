@@ -245,7 +245,7 @@ the immutability reset workflow, and sets a small swap size suitable for VM use.
 
 `nix/system/nixos/immutability.nix` drives the BTRC **immutability**, the
 sole immutability implementation. Its source entrypoint is
-`btrc/immutability/Immutability.btrc`; Nix builds it with the flake-pinned
+`btrc/immutability/Immutability.btrc`; Nix builds it with the flake-locked
 BTRC compiler and a generated stdlib archive.
 
 The initrd reset runs after `systemd-hibernate-resume.service`. A successful
@@ -452,7 +452,7 @@ The app layer is recursively imported but policy-gated through
 |---|---|
 | `dev/bash.nix` | Adds `nix-shell-with-pkgs` helper |
 | `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
-| `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-pinned BTRC package set |
+| `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-locked BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.steam.protonCustom.enable` is set |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
@@ -484,13 +484,8 @@ server, and VSCode extension are consumed through the flake input `inputs.btrc`.
 The dev shell provides `btrcpy` and `btrc-lsp`; local and Nix builds compile
 with `--strict-imports`.
 
-That input is pinned to an explicit revision in `flake.nix`, not tracking the
-branch. Upstream BTRC after `4e5c9823` renames `Library.Datetime` to
-`Library.DateTime`/`Library.Timer` and removes `UnixShell.quote`,
-`CLIArgs.has`/`valueAfter`, `JSONObject`/`JSONText`, `UnixFileSystem` and
-`UnixPamPassword`. Moving the pin therefore requires migrating the whole
-management layer — 188 `UnixShell.quote` call sites across 44 files — so it is
-its own change with its own graph run, not part of an input bump.
+That input tracks upstream's default branch; `flake.lock` records the revision
+in use and `nix flake update btrc` moves it.
 
 | Path | Purpose |
 |---|---|
