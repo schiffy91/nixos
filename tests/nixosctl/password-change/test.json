@@ -50,7 +50,7 @@
     },
     {
       "op": "guest",
-      "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /etc/nixos/secrets/hashed_password.txt)\" = 600 && printf account-changed || { diag; exit 1; }",
+      "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && ! grep -F 'PAM password change failed' /tmp/e2e-change.log && journalctl -b -q --no-pager | grep -F \"pam_unix(passwd:chauthtok): password changed for $(cat /var/tmp/e2e-user)\" && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /etc/nixos/secrets/hashed_password.txt)\" = 600 && printf account-changed || { diag; exit 1; }",
       "expect": "account-changed",
       "timeout": 1800
     },

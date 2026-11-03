@@ -32,6 +32,7 @@ UNIT_TESTS := \
 	immutability_paths:tests/immutability/PathsTests.btrc \
 	nixos_paths:tests/core/NixosPathsTests.btrc \
 	nixos_config:tests/core/NixosConfigTests.btrc \
+	passwd_driver:tests/core/PasswdDriverTests.btrc \
 	secure_boot:tests/secure-boot/VerificationTests.btrc \
 	spec:tests/harness/SpecTests.btrc \
 	state_hash:tests/harness/StateHashTests.btrc
