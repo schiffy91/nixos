@@ -167,6 +167,7 @@ in {
       "${adminHome}/.config/kcminputrc"
       "${adminHome}/.config/kdedefaults"
       "${adminHome}/.config/kdeglobals"
+      "${adminHome}/.config/kglobalshortcutsrc"  # apps re-prompt to register shortcuts without it
       "${adminHome}/.config/konsolesshconfig"
       "${adminHome}/.config/kwalletrc"
       "${adminHome}/.config/kwinoutputconfig.json"
