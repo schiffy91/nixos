@@ -17,6 +17,7 @@ let
     done
     printf 'E2E-HOMEMANAGER %s\n' "$(${pkgs.systemd}/bin/systemctl is-active home-manager-${config.settings.users.admin.username}.service 2>/dev/null || true)"
     printf 'E2E-UNLOCKAGENT %s %s\n' "${unlockAgent}" "$(${pkgs.systemd}/bin/journalctl -b --no-pager 2>/dev/null | grep -ci "${unlockAgent}" || true)"
+    printf 'E2E-UNLOCKUNIT %s\n' "$(${pkgs.systemd}/bin/systemctl show -p Result --value '${unlockAgent}-start.service' 2>/dev/null || echo unknown)"
     signable="/boot/EFI/BOOT/|/boot/EFI/systemd/|/boot/EFI/Linux/"
     printf 'E2E-SBCTL %s\n' "$(sbctl verify 2>&1 | grep -E "$signable" | grep -c 'is not signed' || echo unavailable)"
     sbctl verify 2>&1 | grep -E "$signable" | grep 'is not signed' | while read -r unsigned; do
@@ -44,7 +45,7 @@ let
   '';
 in
 {
-  boot.kernelParams = [ "console=ttyS0,115200n8" ];
+  boot.kernelParams = [ "console=tty0" "console=ttyS0,115200n8" ];
   boot.initrd.availableKernelModules = [
     "virtio_pci" "virtio_blk" "virtio_net" "nvme" "tpm_tis"
     "virtio_gpu" "bochs" "simpledrm"          # unl0kr needs a DRM device to draw on

@@ -46,14 +46,18 @@ on hardware:
   the kernel console to `ttyS0` so the harness can read it, so serial carries
   the log by design. Quietness is asserted from the kernel command line and the
   panel capture.
-- **Secure Boot enforcement on FRACTAL-NORTH** — that host sets
+- **Secure Boot enforcement on FRACTAL-NORTH.** That host sets
   `autoEnrollKeys = false` on purpose, so enrolment is the documented manual
-  `nixosctl secure-boot enable`, which performs a full rebuild. Driving that
-  from the fixture makes a run take hours, and it is already covered end to end
-  by `secure-boot-install` and `secure-boot-lanzaboote`, which enrol keys and
-  assert `bootctl status` and `sbctl verify`. This node therefore asserts a
-  clean boot and that no vendor keys are enrolled, not firmware enforcement.
-  The Deck does enrol automatically, so its node asserts enforcement in full.
+  `nixosctl secure-boot enable`. That command generates fresh keys, which
+  changes the UKI and therefore the system derivation, so it is a real rebuild:
+  driven from the fixture it failed fetching `binutils-2.46.0.tar.xz`, because
+  these VMs install with no network by design. Enrolment is already covered end
+  to end by `secure-boot-install` and `secure-boot-lanzaboote`, which enrol keys
+  and then assert `bootctl status` and `sbctl verify`. This node therefore
+  asserts a clean boot, a signed-or-not report and the absence of vendor keys.
+  The Deck enrols automatically, so its node asserts enforcement in full:
+  `Secure Boot: enabled (user)`, three signed binaries, zero unsigned, zero
+  Microsoft keys.
 - **Firmware updates under Secure Boot** — `jupiter-biosupdate` and the Jovian
   BIOS/controller updates are Microsoft-signed and cannot be exercised here.
 - **TPM2** — the Deck deliberately has no TPM2 keyslot.

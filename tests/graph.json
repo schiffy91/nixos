@@ -671,14 +671,14 @@
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "assertPanel": "true",
         "requireEnforced": "false",
         "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
         "isoUrl": "",
         "name": "host-install-STEAM-DECK-OLED-VM-standard",
         "state": "host-installed-STEAM-DECK-OLED-VM-standard",
-        "sshPort": "2256"
+        "sshPort": "2256",
+        "unlockAgent": "unl0kr"
       }
     },
     {
@@ -694,7 +694,6 @@
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "assertPanel": "true",
         "requireEnforced": "false",
         "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
@@ -702,7 +701,8 @@
         "name": "host-boot-STEAM-DECK-OLED-VM-standard",
         "state": "host-booted-STEAM-DECK-OLED-VM-standard",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
-        "sshPort": "2256"
+        "sshPort": "2256",
+        "unlockAgent": "unl0kr"
       }
     },
     {
@@ -718,7 +718,6 @@
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "assertPanel": "true",
         "requireEnforced": "false",
         "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
@@ -726,7 +725,8 @@
         "name": "host-hibernate-STEAM-DECK-OLED-VM-standard",
         "state": "host-hibernateed-STEAM-DECK-OLED-VM-standard",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
-        "sshPort": "2266"
+        "sshPort": "2266",
+        "unlockAgent": "unl0kr"
       }
     },
     {
@@ -740,14 +740,14 @@
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "assertPanel": "true",
         "requireEnforced": "true",
         "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
         "isoUrl": "",
         "name": "host-install-STEAM-DECK-OLED-VM-secure",
         "state": "host-installed-STEAM-DECK-OLED-VM-secure",
-        "sshPort": "2258"
+        "sshPort": "2258",
+        "unlockAgent": "unl0kr"
       }
     },
     {
@@ -763,7 +763,6 @@
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "assertPanel": "true",
         "requireEnforced": "true",
         "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
@@ -771,7 +770,8 @@
         "name": "host-boot-STEAM-DECK-OLED-VM-secure",
         "state": "host-booted-STEAM-DECK-OLED-VM-secure",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
-        "sshPort": "2258"
+        "sshPort": "2258",
+        "unlockAgent": "unl0kr"
       }
     },
     {
@@ -787,7 +787,6 @@
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "assertPanel": "true",
         "requireEnforced": "true",
         "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
@@ -795,7 +794,8 @@
         "name": "host-hibernate-STEAM-DECK-OLED-VM-secure",
         "state": "host-hibernateed-STEAM-DECK-OLED-VM-secure",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
-        "sshPort": "2268"
+        "sshPort": "2268",
+        "unlockAgent": "unl0kr"
       }
     },
     {
@@ -809,14 +809,14 @@
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "assertPanel": "false",
         "requireEnforced": "false",
         "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
         "isoUrl": "",
         "name": "host-install-FRACTAL-NORTH-VM-standard",
         "state": "host-installed-FRACTAL-NORTH-VM-standard",
-        "sshPort": "2257"
+        "sshPort": "2257",
+        "unlockAgent": "plymouth"
       }
     },
     {
@@ -832,7 +832,6 @@
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "assertPanel": "false",
         "requireEnforced": "false",
         "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
@@ -840,7 +839,8 @@
         "name": "host-boot-FRACTAL-NORTH-VM-standard",
         "state": "host-booted-FRACTAL-NORTH-VM-standard",
         "parentState": "host-installed-FRACTAL-NORTH-VM-standard",
-        "sshPort": "2257"
+        "sshPort": "2257",
+        "unlockAgent": "plymouth"
       }
     },
     {
@@ -856,7 +856,6 @@
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "assertPanel": "false",
         "requireEnforced": "false",
         "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
@@ -864,7 +863,8 @@
         "name": "host-hibernate-FRACTAL-NORTH-VM-standard",
         "state": "host-hibernateed-FRACTAL-NORTH-VM-standard",
         "parentState": "host-installed-FRACTAL-NORTH-VM-standard",
-        "sshPort": "2267"
+        "sshPort": "2267",
+        "unlockAgent": "plymouth"
       }
     },
     {
@@ -878,14 +878,14 @@
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "assertPanel": "false",
         "requireEnforced": "false",
         "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
         "isoUrl": "",
         "name": "host-install-FRACTAL-NORTH-VM-secure",
         "state": "host-installed-FRACTAL-NORTH-VM-secure",
-        "sshPort": "2259"
+        "sshPort": "2259",
+        "unlockAgent": "plymouth"
       }
     },
     {
@@ -901,7 +901,6 @@
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "assertPanel": "false",
         "requireEnforced": "false",
         "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
@@ -909,7 +908,8 @@
         "name": "host-boot-FRACTAL-NORTH-VM-secure",
         "state": "host-booted-FRACTAL-NORTH-VM-secure",
         "parentState": "host-installed-FRACTAL-NORTH-VM-secure",
-        "sshPort": "2259"
+        "sshPort": "2259",
+        "unlockAgent": "plymouth"
       }
     },
     {
@@ -925,7 +925,6 @@
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "assertPanel": "false",
         "requireEnforced": "false",
         "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
@@ -933,7 +932,8 @@
         "name": "host-hibernate-FRACTAL-NORTH-VM-secure",
         "state": "host-hibernateed-FRACTAL-NORTH-VM-secure",
         "parentState": "host-installed-FRACTAL-NORTH-VM-secure",
-        "sshPort": "2269"
+        "sshPort": "2269",
+        "unlockAgent": "plymouth"
       }
     }
   ],

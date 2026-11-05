@@ -32,6 +32,11 @@ if value("HOMEMANAGER") != "active":
     failures.append(f"home-manager is {value('HOMEMANAGER') or 'missing'}, not active")
 if value("TEXTPROMPT", "0") != "0":
     failures.append("the passphrase was asked on a text console, so nothing owned the screen")
+# a blank panel and plymouth's splash look alike, so the unit's own result is
+# what shows the agent actually ran
+unit_result = value("UNLOCKUNIT", "unknown")
+if unit_result == "failed":
+    failures.append(f"the unlock agent's unit failed: {value('UNLOCKAGENT')}")
 agent = value("UNLOCKAGENT").split()
 if len(agent) < 2 or int(agent[1] or 0) < 1:
     failures.append(f"no graphical unlock agent ran: {value('UNLOCKAGENT') or 'nothing reported'}")
@@ -54,7 +59,7 @@ if require_enforced and value("SBCTL") not in ("0", "unavailable"):
     failures.append(f"sbctl reports {value('SBCTL')} unsigned: {'; '.join(unsigned) or 'unknown'}")
 
 print(f"log={log_path.rsplit('/', 1)[-1]} " + " | ".join(
-    f"{tag}={value(tag)}" for tag in ("STATE", "HOMEMANAGER", "UNLOCKAGENT", "SNAPSHOTS", "SBCTL", "SIGNED", "VENDORKEYS", "SECUREBOOT")))
+    f"{tag}={value(tag)}" for tag in ("STATE", "HOMEMANAGER", "UNLOCKAGENT", "SNAPSHOTS", "UNLOCKUNIT", "SBCTL", "SIGNED", "VENDORKEYS", "SECUREBOOT")))
 if failures:
     sys.exit("FAIL: " + "; ".join(failures))
 print("host-healthy")

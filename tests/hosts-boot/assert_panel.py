@@ -1,26 +1,59 @@
 #!/usr/bin/env python3
-"""Assert the panel shows a graphical unlock screen, not a text console.
+"""Assert the right agent owns the panel, and that no kernel log is on it.
 
-A Linux text console is a near-pure-black field with sparse glyph pixels; a
-graphical agent (unl0kr or plymouth) paints a palette. The Deck's whole unlock
-story is that a thumb can type the passphrase, so a text prompt is a failure.
+The fixture gives the panel the same console real hardware has, so an
+unquiet boot paints the kernel ring buffer across it.
+
+unl0kr covers the screen with an on-screen keyboard, so almost no pixel is
+left at the console's pure black: that is what proves it owns the panel.
+Because it covers the screen it also hides anything printed earlier, so for
+unl0kr the log check is not meaningful and is not claimed.
+
+plymouth's splash is nearly black, which a text console also is, so instead
+the top band is measured: kernel log lines fill it with bright glyph rows,
+and a quiet boot leaves it empty.
 """
 import sys
 
 path = sys.argv[1]
+agent = sys.argv[2] if len(sys.argv) > 2 else "unknown"
+
 with open(path, "rb") as handle:
     if handle.readline().strip() != b"P6":
         sys.exit(f"FAIL: {path} is not a binary PPM")
-    dimensions = handle.readline().split()
+    width, height = (int(value) for value in handle.readline().split())
     handle.readline()
-    width, height = int(dimensions[0]), int(dimensions[1])
     pixels = handle.read()
 
-total = width * height
-black = sum(1 for i in range(0, min(len(pixels), total * 3) - 2, 3)
-            if pixels[i] < 16 and pixels[i + 1] < 16 and pixels[i + 2] < 16)
-fraction = black / total
-print(f"panel {width}x{height} near-black={fraction:.3f}")
-if fraction > 0.9:
-    sys.exit("FAIL: the panel is a text console, so no graphical agent owns the unlock screen")
+
+def scan(first_row, last_row):
+    black = bright = counted = 0
+    for y in range(first_row, last_row):
+        row = y * width * 3
+        for x in range(0, width, 2):
+            offset = row + x * 3
+            if offset + 2 >= len(pixels):
+                break
+            counted += 1
+            red, green, blue = pixels[offset], pixels[offset + 1], pixels[offset + 2]
+            if red < 16 and green < 16 and blue < 16:
+                black += 1
+            if red > 90 or green > 90 or blue > 90:
+                bright += 1
+    return black / max(1, counted), bright / max(1, counted)
+
+whole_black, _ = scan(0, height)
+_, top_bright = scan(0, max(1, height // 5))
+print(f"panel {width}x{height} agent={agent} near_black={whole_black:.4f} top_band_bright={top_bright:.4f}")
+
+if agent == "unl0kr":
+    if whole_black > 0.5:
+        sys.exit(f"FAIL: {whole_black:.0%} of the panel is console black; unl0kr is not drawing its keyboard")
+elif agent == "plymouth":
+    if whole_black < 0.5:
+        sys.exit(f"FAIL: only {whole_black:.0%} of the panel is dark; this is not plymouth's splash")
+    if top_bright > 0.02:
+        sys.exit(f"FAIL: the panel's top band is {top_bright:.1%} lit, which is kernel log text, not a quiet boot")
+else:
+    sys.exit(f"FAIL: no panel expectation defined for agent {agent}")
 print("panel-graphical")

@@ -56,7 +56,7 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 
 .PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
 	check test gaming hdr-screencast install iso iso-write graph-required \
-	graph-default graph-full graph-early installer-ssh-smoke cache cache-all \
+	graph-default graph-full graph-early run-required installer-ssh-smoke cache cache-all \
 	cache-serve clean $(TESTS_TARGETS)
 
 all: build
@@ -71,7 +71,7 @@ help:
 	@printf '%s\n' '  quick             unit + a CLI smoke + the graph node named "quick"'
 	@printf '%s\n' '  check             quick + stateful-host + gaming; what to run before committing'
 	@printf '%s\n' '  graph-default     the graph default set (alias: graph-early)'
-	@printf '%s\n' '  graph-required    the graph required set, i.e. every guarded contract (alias: graph-full)'
+	@printf '%s\n' '  graph-required    the graph required set, i.e. every guarded contract (aliases: graph-full, run-required)'
 	@printf '%s\n' '  hdr-screencast    KWin HDR capture; needs a real GPU, so not in check'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Install:'
@@ -207,7 +207,7 @@ graph-default: $(BIN)
 # kept so existing invocations and muscle memory keep working
 smoke host-smoke: quick
 installer-ssh-smoke: installer-ssh
-graph-full: graph-required
+graph-full run-required: graph-required
 graph-early: graph-default
 
 clean:

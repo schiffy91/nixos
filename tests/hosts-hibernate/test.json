@@ -9,7 +9,8 @@
     "password": "testpass123",
     "secureBoot": "false",
     "requireEnforced": "false",
-    "assertPanel": "true"
+    "assertPanel": "true",
+    "unlockAgent": "unl0kr"
   },
   "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
   "isoUrl": "",
@@ -48,7 +49,7 @@
     },
     {
       "op": "host",
-      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm'; fi",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -81,7 +82,7 @@
     },
     {
       "op": "host",
-      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm'; fi",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
