@@ -661,87 +661,279 @@
       }
     },
     {
-      "id": "host-boot-STEAM-DECK-OLED-VM-standard",
-      "spec": "hosts-boot/test.json",
+      "id": "host-install-STEAM-DECK-OLED-VM-standard",
+      "spec": "hosts-install/test.json",
       "after": [],
       "args": {
-        "name": "host-boot-STEAM-DECK-OLED-VM-standard",
         "arch": "x86_64",
         "hostName": "STEAM-DECK-OLED-VM",
         "target": "Standard-Boot",
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "state": "host-boot-STEAM-DECK-OLED-VM-standard",
-        "sshPort": "2256",
+        "assertPanel": "true",
+        "requireEnforced": "false",
+        "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
         "isoUrl": "",
-        "requireEnforced": "false",
+        "name": "host-install-STEAM-DECK-OLED-VM-standard",
+        "state": "host-installed-STEAM-DECK-OLED-VM-standard",
+        "sshPort": "2256"
+      }
+    },
+    {
+      "id": "host-boot-STEAM-DECK-OLED-VM-standard",
+      "spec": "hosts-boot/test.json",
+      "after": [
+        "host-install-STEAM-DECK-OLED-VM-standard"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "STEAM-DECK-OLED-VM",
+        "target": "Standard-Boot",
+        "password": "testpass123",
+        "secureBoot": "false",
+        "uefi": "true",
         "assertPanel": "true",
-        "diskSize": "64G"
+        "requireEnforced": "false",
+        "diskSize": "64G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "isoUrl": "",
+        "name": "host-boot-STEAM-DECK-OLED-VM-standard",
+        "state": "host-booted-STEAM-DECK-OLED-VM-standard",
+        "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
+        "sshPort": "2256"
+      }
+    },
+    {
+      "id": "host-hibernate-STEAM-DECK-OLED-VM-standard",
+      "spec": "hosts-hibernate/test.json",
+      "after": [
+        "host-install-STEAM-DECK-OLED-VM-standard"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "STEAM-DECK-OLED-VM",
+        "target": "Standard-Boot",
+        "password": "testpass123",
+        "secureBoot": "false",
+        "uefi": "true",
+        "assertPanel": "true",
+        "requireEnforced": "false",
+        "diskSize": "64G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "isoUrl": "",
+        "name": "host-hibernate-STEAM-DECK-OLED-VM-standard",
+        "state": "host-hibernateed-STEAM-DECK-OLED-VM-standard",
+        "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
+        "sshPort": "2266"
+      }
+    },
+    {
+      "id": "host-install-STEAM-DECK-OLED-VM-secure",
+      "spec": "hosts-install/test.json",
+      "after": [],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "STEAM-DECK-OLED-VM",
+        "target": "Secure-Boot",
+        "password": "testpass123",
+        "secureBoot": "true",
+        "uefi": "true",
+        "assertPanel": "true",
+        "requireEnforced": "true",
+        "diskSize": "64G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "isoUrl": "",
+        "name": "host-install-STEAM-DECK-OLED-VM-secure",
+        "state": "host-installed-STEAM-DECK-OLED-VM-secure",
+        "sshPort": "2258"
       }
     },
     {
       "id": "host-boot-STEAM-DECK-OLED-VM-secure",
       "spec": "hosts-boot/test.json",
-      "after": [],
+      "after": [
+        "host-install-STEAM-DECK-OLED-VM-secure"
+      ],
       "args": {
-        "name": "host-boot-STEAM-DECK-OLED-VM-secure",
         "arch": "x86_64",
         "hostName": "STEAM-DECK-OLED-VM",
         "target": "Secure-Boot",
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "state": "host-boot-STEAM-DECK-OLED-VM-secure",
-        "sshPort": "2258",
+        "assertPanel": "true",
+        "requireEnforced": "true",
+        "diskSize": "64G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
         "isoUrl": "",
-        "requireEnforced": "true",
-        "assertPanel": "true",
-        "diskSize": "64G"
+        "name": "host-boot-STEAM-DECK-OLED-VM-secure",
+        "state": "host-booted-STEAM-DECK-OLED-VM-secure",
+        "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
+        "sshPort": "2258"
       }
     },
     {
-      "id": "host-boot-FRACTAL-NORTH-VM-standard",
-      "spec": "hosts-boot/test.json",
+      "id": "host-hibernate-STEAM-DECK-OLED-VM-secure",
+      "spec": "hosts-hibernate/test.json",
+      "after": [
+        "host-install-STEAM-DECK-OLED-VM-secure"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "STEAM-DECK-OLED-VM",
+        "target": "Secure-Boot",
+        "password": "testpass123",
+        "secureBoot": "true",
+        "uefi": "true",
+        "assertPanel": "true",
+        "requireEnforced": "true",
+        "diskSize": "64G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "isoUrl": "",
+        "name": "host-hibernate-STEAM-DECK-OLED-VM-secure",
+        "state": "host-hibernateed-STEAM-DECK-OLED-VM-secure",
+        "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
+        "sshPort": "2268"
+      }
+    },
+    {
+      "id": "host-install-FRACTAL-NORTH-VM-standard",
+      "spec": "hosts-install/test.json",
       "after": [],
       "args": {
-        "name": "host-boot-FRACTAL-NORTH-VM-standard",
         "arch": "x86_64",
         "hostName": "FRACTAL-NORTH-VM",
         "target": "Standard-Boot",
         "password": "testpass123",
         "secureBoot": "false",
         "uefi": "true",
-        "state": "host-boot-FRACTAL-NORTH-VM-standard",
-        "sshPort": "2257",
+        "assertPanel": "false",
+        "requireEnforced": "false",
+        "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
         "isoUrl": "",
-        "requireEnforced": "false",
-        "assertPanel": "false",
-        "diskSize": "110G"
+        "name": "host-install-FRACTAL-NORTH-VM-standard",
+        "state": "host-installed-FRACTAL-NORTH-VM-standard",
+        "sshPort": "2257"
       }
     },
     {
-      "id": "host-boot-FRACTAL-NORTH-VM-secure",
+      "id": "host-boot-FRACTAL-NORTH-VM-standard",
       "spec": "hosts-boot/test.json",
+      "after": [
+        "host-install-FRACTAL-NORTH-VM-standard"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "FRACTAL-NORTH-VM",
+        "target": "Standard-Boot",
+        "password": "testpass123",
+        "secureBoot": "false",
+        "uefi": "true",
+        "assertPanel": "false",
+        "requireEnforced": "false",
+        "diskSize": "110G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "isoUrl": "",
+        "name": "host-boot-FRACTAL-NORTH-VM-standard",
+        "state": "host-booted-FRACTAL-NORTH-VM-standard",
+        "parentState": "host-installed-FRACTAL-NORTH-VM-standard",
+        "sshPort": "2257"
+      }
+    },
+    {
+      "id": "host-hibernate-FRACTAL-NORTH-VM-standard",
+      "spec": "hosts-hibernate/test.json",
+      "after": [
+        "host-install-FRACTAL-NORTH-VM-standard"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "FRACTAL-NORTH-VM",
+        "target": "Standard-Boot",
+        "password": "testpass123",
+        "secureBoot": "false",
+        "uefi": "true",
+        "assertPanel": "false",
+        "requireEnforced": "false",
+        "diskSize": "110G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "isoUrl": "",
+        "name": "host-hibernate-FRACTAL-NORTH-VM-standard",
+        "state": "host-hibernateed-FRACTAL-NORTH-VM-standard",
+        "parentState": "host-installed-FRACTAL-NORTH-VM-standard",
+        "sshPort": "2267"
+      }
+    },
+    {
+      "id": "host-install-FRACTAL-NORTH-VM-secure",
+      "spec": "hosts-install/test.json",
       "after": [],
       "args": {
-        "name": "host-boot-FRACTAL-NORTH-VM-secure",
         "arch": "x86_64",
         "hostName": "FRACTAL-NORTH-VM",
         "target": "Secure-Boot",
         "password": "testpass123",
         "secureBoot": "true",
         "uefi": "true",
-        "state": "host-boot-FRACTAL-NORTH-VM-secure",
-        "sshPort": "2259",
+        "assertPanel": "false",
+        "requireEnforced": "false",
+        "diskSize": "110G",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
         "isoUrl": "",
-        "requireEnforced": "false",
+        "name": "host-install-FRACTAL-NORTH-VM-secure",
+        "state": "host-installed-FRACTAL-NORTH-VM-secure",
+        "sshPort": "2259"
+      }
+    },
+    {
+      "id": "host-boot-FRACTAL-NORTH-VM-secure",
+      "spec": "hosts-boot/test.json",
+      "after": [
+        "host-install-FRACTAL-NORTH-VM-secure"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "FRACTAL-NORTH-VM",
+        "target": "Secure-Boot",
+        "password": "testpass123",
+        "secureBoot": "true",
+        "uefi": "true",
         "assertPanel": "false",
-        "diskSize": "110G"
+        "requireEnforced": "false",
+        "diskSize": "110G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "isoUrl": "",
+        "name": "host-boot-FRACTAL-NORTH-VM-secure",
+        "state": "host-booted-FRACTAL-NORTH-VM-secure",
+        "parentState": "host-installed-FRACTAL-NORTH-VM-secure",
+        "sshPort": "2259"
+      }
+    },
+    {
+      "id": "host-hibernate-FRACTAL-NORTH-VM-secure",
+      "spec": "hosts-hibernate/test.json",
+      "after": [
+        "host-install-FRACTAL-NORTH-VM-secure"
+      ],
+      "args": {
+        "arch": "x86_64",
+        "hostName": "FRACTAL-NORTH-VM",
+        "target": "Secure-Boot",
+        "password": "testpass123",
+        "secureBoot": "true",
+        "uefi": "true",
+        "assertPanel": "false",
+        "requireEnforced": "false",
+        "diskSize": "110G",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "isoUrl": "",
+        "name": "host-hibernate-FRACTAL-NORTH-VM-secure",
+        "state": "host-hibernateed-FRACTAL-NORTH-VM-secure",
+        "parentState": "host-installed-FRACTAL-NORTH-VM-secure",
+        "sshPort": "2269"
       }
     }
   ],
@@ -790,11 +982,19 @@
     "secure-boot-cli",
     "installer-image-x86_64",
     "install-offline",
+    "installer-prebuilt-x86_64",
     "host-boot-STEAM-DECK-OLED-VM-standard",
+    "host-hibernate-STEAM-DECK-OLED-VM-standard",
+    "host-install-STEAM-DECK-OLED-VM-standard",
     "host-boot-STEAM-DECK-OLED-VM-secure",
+    "host-hibernate-STEAM-DECK-OLED-VM-secure",
+    "host-install-STEAM-DECK-OLED-VM-secure",
     "host-boot-FRACTAL-NORTH-VM-standard",
+    "host-hibernate-FRACTAL-NORTH-VM-standard",
+    "host-install-FRACTAL-NORTH-VM-standard",
     "host-boot-FRACTAL-NORTH-VM-secure",
-    "installer-prebuilt-x86_64"
+    "host-hibernate-FRACTAL-NORTH-VM-secure",
+    "host-install-FRACTAL-NORTH-VM-secure"
   ],
   "workspaceRoot": ".."
 }

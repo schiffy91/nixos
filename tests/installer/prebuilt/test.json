@@ -25,19 +25,19 @@
     },
     {
       "op": "guest",
-      "command": "set -e; test -f /etc/nixos-installer/prebuilt.json; jq -e '.\"{{prebuiltHost}}-Secure-Boot\" and .\"{{prebuiltHost}}-Standard-Boot\"' /etc/nixos-installer/prebuilt.json > /dev/null && printf manifest-ok",
+      "command": "set -e; test -f /etc/nixos-installer/prebuilt.json; jq -e '.\"{{prebuiltHost}}-Secure-Boot\".system and .\"{{prebuiltHost}}-Standard-Boot\".system' /etc/nixos-installer/prebuilt.json > /dev/null && printf manifest-ok",
       "expect": "manifest-ok",
       "timeout": 180
     },
     {
       "op": "guest",
-      "command": "set -e; for target in Secure-Boot Standard-Boot; do path=$(jq -r \".\\\"{{prebuiltHost}}-$target\\\"\" /etc/nixos-installer/prebuilt.json); test -e \"$path\"; nix-store --query --requisites \"$path\" | xargs -r nix-store --check-validity; done; printf closure-ok",
+      "command": "set -e; for target in Secure-Boot Standard-Boot; do for field in system disko mount; do path=$(jq -r \".\\\"{{prebuiltHost}}-$target\\\".$field\" /etc/nixos-installer/prebuilt.json); test -e \"$path\" || { echo \"missing $field for $target\"; exit 1; }; done; system=$(jq -r \".\\\"{{prebuiltHost}}-$target\\\".system\" /etc/nixos-installer/prebuilt.json); nix-store --query --requisites \"$system\" | xargs -r nix-store --check-validity; done; printf closure-ok",
       "expect": "closure-ok",
       "timeout": 900
     },
     {
       "op": "guest",
-      "command": "set -e; path=$(jq -r '.\"{{prebuiltHost}}-Secure-Boot\"' /etc/nixos-installer/prebuilt.json); nix-store --query --requisites \"$path\" | grep -qE 'linux-[0-9.]+-valve2' && nix-store --query --requisites \"$path\" | wc -l | awk '$1 > 500 {print \"closure-complete\"}'",
+      "command": "set -e; path=$(jq -r '.\"{{prebuiltHost}}-Secure-Boot\".system' /etc/nixos-installer/prebuilt.json); nix-store --query --requisites \"$path\" | grep -qE 'linux-[0-9.]+-valve2' && nix-store --query --requisites \"$path\" | wc -l | awk '$1 > 500 {print \"closure-complete\"}'",
       "expect": "closure-complete",
       "timeout": 900
     },

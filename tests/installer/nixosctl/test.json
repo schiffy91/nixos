@@ -18,25 +18,90 @@
   "cpus": 4,
   "sshPort": 2251,
   "operations": [
-    { "op": "require-state" },
-    { "op": "reset-state" },
-    { "op": "inherit-state" },
-    { "op": "validate-immutability-v2" },
-    { "op": "restore", "name": "live-ssh" },
-    { "op": "boot-iso" },
-    { "op": "wait-ssh", "timeout": 180 },
-    { "op": "copy-workspace", "local": ".", "remote": "/etc/nixos" },
-    { "op": "configure-vm-host" },
-    { "op": "guest", "command": "cd /etc/nixos && NIX_CONFIG='experimental-features = nix-command flakes' nix-shell shell.nix --run 'make build' >/tmp/nixosctl-build.log 2>&1 && printf built || { tail -40 /tmp/nixosctl-build.log; exit 1; }", "expect": "built", "timeout": 3600 },
-    { "op": "guest", "command": "cd /etc/nixos && printf 'n\\n' | NIX_CONFIG='experimental-features = nix-command flakes' ./build/nixosctl install --format --yes >/tmp/nixosctl-install.log 2>&1 && printf installed || { tail -60 /tmp/nixosctl-install.log; exit 1; }", "expect": "installed", "timeout": 3600 },
-    { "op": "guest", "command": "set -e; test -f /mnt/etc/nixos/flake.nix; btrfs subvolume list /mnt | grep -F '@snapshots/@root/CLEAN' >/dev/null; btrfs subvolume list /mnt | grep -F '@snapshots/@home/CLEAN' >/dev/null; printf clean-snapshots", "expect": "clean-snapshots" },
-    { "op": "stop" },
-    { "op": "boot-disk" },
-    { "op": "unlock-luks", "command": "testpass123", "timeout": 300 },
-    { "op": "guest", "command": "hostname", "expect": "VM-TEST" },
-    { "op": "guest", "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos' >/dev/null; test -f /etc/nixos/flake.nix; printf persisted-config", "expect": "persisted-config" },
-    { "op": "snapshot", "name": "installed" },
-    { "op": "record-state" },
-    { "op": "stop" }
+    {
+      "op": "require-state"
+    },
+    {
+      "op": "reset-state"
+    },
+    {
+      "op": "inherit-state"
+    },
+    {
+      "op": "validate-immutability-v2"
+    },
+    {
+      "op": "restore",
+      "name": "live-ssh"
+    },
+    {
+      "op": "boot-iso"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 180
+    },
+    {
+      "op": "copy-workspace",
+      "local": ".",
+      "remote": "/etc/nixos"
+    },
+    {
+      "op": "configure-vm-host"
+    },
+    {
+      "op": "guest",
+      "command": "cd /etc/nixos && NIX_CONFIG='experimental-features = nix-command flakes' nix-shell shell.nix --run 'make build' >/tmp/nixosctl-build.log 2>&1 && printf built || { tail -40 /tmp/nixosctl-build.log; exit 1; }",
+      "expect": "built",
+      "timeout": 3600
+    },
+    {
+      "op": "guest",
+      "command": "cd /etc/nixos && printf 'n\\n' | NIX_CONFIG='experimental-features = nix-command flakes' ./build/nixosctl install --format --yes >/tmp/nixosctl-install.log 2>&1 && printf installed || { tail -60 /tmp/nixosctl-install.log; exit 1; }",
+      "expect": "installed",
+      "timeout": 3600
+    },
+    {
+      "op": "guest",
+      "command": "set -e; test -f /mnt/etc/nixos/flake.nix; listing=$(btrfs subvolume list -a /mnt); for volume in @root @home; do echo \"$listing\" | grep -qE \"@snapshots/$volume/CLEAN$\" || { echo \"no published CLEAN for $volume\"; exit 1; }; [ \"$(btrfs property get -ts \"/mnt/.snapshots/$volume/CLEAN\" ro 2>/dev/null)\" = 'ro=true' ] || { echo \"CLEAN for $volume is not read-only\"; exit 1; }; done; if echo \"$listing\" | grep -qF 'CLEAN.tmp.'; then echo 'a CLEAN temporary was left behind'; exit 1; fi; printf clean-snapshots",
+      "expect": "clean-snapshots"
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "unlock-luks",
+      "command": "testpass123",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": "hostname",
+      "expect": "VM-TEST"
+    },
+    {
+      "op": "guest",
+      "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos' >/dev/null; test -f /etc/nixos/flake.nix; printf persisted-config",
+      "expect": "persisted-config"
+    },
+    {
+      "op": "guest",
+      "command": "set -e; timeout 420 systemctl is-system-running --wait >/dev/null 2>&1 || true; state=$(systemctl is-system-running 2>/dev/null || true); failed=$(systemctl --failed --no-legend --plain | awk '{print $1}' | tr '\\n' ' '); refused=$(journalctl -b -o cat 2>/dev/null | grep -c 'Service has no ExecStart' || true); echo \"state=$state failed=$failed refused=$refused\"; journalctl -b -o cat 2>/dev/null | grep 'Service has no ExecStart' || true; [ \"$state\" = running ] || exit 1; [ -z \"$failed\" ] || exit 1; [ \"$refused\" -eq 0 ] || exit 1; printf system-healthy",
+      "expect": "system-healthy",
+      "timeout": 600
+    },
+    {
+      "op": "snapshot",
+      "name": "installed"
+    },
+    {
+      "op": "record-state"
+    },
+    {
+      "op": "stop"
+    }
   ]
 }

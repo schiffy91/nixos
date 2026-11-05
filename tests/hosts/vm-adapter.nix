@@ -12,7 +12,7 @@ let
     ${pkgs.systemd}/bin/systemctl --failed --no-legend --plain | while read -r unit _; do
       [ -n "$unit" ] && printf 'E2E-FAILED %s\n' "$unit"
     done
-    ${pkgs.systemd}/bin/journalctl -b --no-pager -p err -o cat 2>/dev/null | grep -F 'Refusing' | while read -r line; do
+    ${pkgs.systemd}/bin/journalctl -b --no-pager -o cat 2>/dev/null | grep 'Service has no ExecStart' | while read -r line; do
       printf 'E2E-REFUSED %s\n' "$line"
     done
     printf 'E2E-HOMEMANAGER %s\n' "$(${pkgs.systemd}/bin/systemctl is-active home-manager-${config.settings.users.admin.username}.service 2>/dev/null || true)"

@@ -1,0 +1,80 @@
+{
+  "name": "host-install-{{hostName}}-{{target}}",
+  "state": "host-installed-{{hostName}}-{{target}}",
+  "stateMaterial": "host-install:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "arch": "x86_64",
+    "hostName": "STEAM-DECK-OLED-VM",
+    "target": "Standard-Boot",
+    "password": "testpass123",
+    "secureBoot": "false",
+    "requireEnforced": "false",
+    "assertPanel": "true"
+  },
+  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
+  "isoUrl": "",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "64G",
+  "diskInterface": "nvme",
+  "graphics": "virtio",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2256,
+  "operations": [
+    {
+      "op": "host",
+      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{hostName}}",
+      "timeout": 28800
+    },
+    {
+      "op": "up-iso",
+      "timeout": 1800
+    },
+    {
+      "op": "guest",
+      "command": "set -e; printf '{\"host_path\":\"/etc/nixos/tests/hosts/{{arch}}/{{hostName}}/{{hostName}}.nix\",\"target\":\"{{target}}\"}' > /etc/nixos/config.json; test -s /etc/nixos/config.json && printf host-selected",
+      "expect": "host-selected",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; lsblk -dno NAME | grep -q '^nvme0n1$' && printf nvme-present",
+      "expect": "nvme-present",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; iptables -A OUTPUT -p tcp --syn -j REJECT; iptables -A OUTPUT -p udp --dport 53 -j REJECT; if timeout 20 curl -sSI https://cache.nixos.org >/dev/null 2>&1; then echo reachable; exit 1; fi; printf network-cut",
+      "expect": "network-cut",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": "cd /etc/nixos && printf '{{password}}\\n{{password}}\\nn\\n' | nixosctl install --format --yes >/tmp/install.log 2>&1 && printf installed || { tail -60 /tmp/install.log; exit 1; }",
+      "expect": "installed",
+      "timeout": 10800
+    },
+    {
+      "op": "guest",
+      "command": "set -e; grep -q 'installing the system baked into this installer' /tmp/install.log; if grep -q 'github:nix-community/disko' /tmp/install.log; then echo fetched-disko; exit 1; fi; if grep -qE 'will be built|copying path .* from .https' /tmp/install.log; then echo built-or-fetched; exit 1; fi; printf used-prebuilt",
+      "expect": "used-prebuilt",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "listing=$(btrfs subvolume list -a /mnt); echo '--- subvolumes after install ---'; echo \"$listing\" | grep -F '@snapshots' || echo '(no @snapshots entries)'; missing=0; for volume in @root @home; do echo \"$listing\" | grep -qE \"@snapshots/$volume/CLEAN\\$\" || { echo \"MISSING published CLEAN for $volume\"; missing=1; }; done; echo \"$listing\" | grep -qF 'CLEAN.tmp.' && { echo 'LEFTOVER CLEAN temporary present'; missing=1; }; [ \"$missing\" -eq 0 ] && printf clean-published || printf clean-broken",
+      "expect": "clean-published",
+      "timeout": 300
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "snapshot",
+      "name": "installed"
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}

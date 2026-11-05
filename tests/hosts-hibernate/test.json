@@ -1,0 +1,117 @@
+{
+  "name": "host-hibernate-{{hostName}}-{{target}}",
+  "state": "host-hibernated-{{hostName}}-{{target}}",
+  "stateMaterial": "host-hibernate:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}",
+  "args": {
+    "arch": "x86_64",
+    "hostName": "STEAM-DECK-OLED-VM",
+    "target": "Standard-Boot",
+    "password": "testpass123",
+    "secureBoot": "false",
+    "requireEnforced": "false",
+    "assertPanel": "true"
+  },
+  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
+  "isoUrl": "",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "64G",
+  "diskInterface": "nvme",
+  "graphics": "virtio",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2266,
+  "operations": [
+    {
+      "op": "require-state"
+    },
+    {
+      "op": "reset-state"
+    },
+    {
+      "op": "inherit-state"
+    },
+    {
+      "op": "restore",
+      "name": "installed"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 50
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm'; fi",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && printf reported",
+      "expect": "reported",
+      "timeout": 1000
+    },
+    {
+      "op": "host",
+      "command": "timeout 900 bash -c 'until grep -qa E2E-HIBERNATING \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 5; done' || { echo 'never hibernated'; tail -c 1500 \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; exit 1; }; printf hibernated",
+      "expect": "hibernated",
+      "timeout": 1000
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 50
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm'; fi",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && printf resume-reported",
+      "expect": "resume-reported",
+      "timeout": 1000
+    },
+    {
+      "op": "host",
+      "command": "cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/resume.log\" && printf saved",
+      "expect": "saved",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "grep -qa 'E2E-RESUMED yes' \".vm/e2e/{{state}}-{{stateHashShort}}/resume.log\" && printf resumed || { echo 'no resume marker'; exit 1; }",
+      "expect": "resumed",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/resume.log' 0 {{secureBoot}} false",
+      "expect": "host-healthy",
+      "timeout": 120
+    },
+    {
+      "op": "stop"
+    }
+  ],
+  "parentState": "host-installed-{{hostName}}-{{target}}"
+}
