@@ -15,6 +15,7 @@ let
         else "";
       agentPackaged = lib.any (path: lib.hasInfix "unl0kr" (pathText path)) (initrd.systemd.storePaths or [ ]);
       forcedModules = lib.filter (module: !(lib.elem module initrd.kernelModules)) touchModules;
+      keyboardShown = ((initrd.unl0kr.settings or { }).keyboard or { }).autohide or true == false;
       drmLoaded = lib.any (module: lib.elem module initrd.kernelModules) [ "amdgpu" "i915" "simpledrm" "virtio_gpu" ];
     in lib.optionals usesKeyboard (
       lib.optional (!agentWired)
@@ -25,6 +26,8 @@ let
         "${entry.name}: the touchscreen cannot be read in initrd, ${lib.concatStringsSep " " forcedModules} are not force-loaded"
       ++ lib.optional (!drmLoaded)
         "${entry.name}: unl0kr draws over DRM but no DRM driver is force-loaded in initrd"
+      ++ lib.optional (!keyboardShown)
+        "${entry.name}: unl0kr would hide its keyboard; the generated unl0kr.conf replaces the vendor file, so keyboard.autohide must be set false explicitly"
       ++ lib.optional config.boot.plymouth.enable
         "${entry.name}: plymouth and unl0kr both claim the initrd screen; upstream does not support that"
     );

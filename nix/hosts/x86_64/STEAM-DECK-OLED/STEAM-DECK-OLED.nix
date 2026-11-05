@@ -43,7 +43,15 @@ in {
   ##### Touchscreen LUKS passphrase #####
   boot.initrd.unl0kr = {
     enable = true;
-    settings.general.backend = "drm";
+    settings = {
+      general.animations = true;
+      general.backend = "drm";
+      keyboard.autohide = false;  # the module replaces the vendor conf, whose built-in default hides it
+      keyboard.layout = "us";
+      keyboard.popovers = true;
+      textarea.obscured = true;
+      theme.default = "breezy-dark";
+    };
   };
 
   settings = {
