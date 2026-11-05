@@ -40,22 +40,9 @@ in {
 
   environment.systemPackages = with pkgs; [ google-chrome moonlight-qt chiaki-ng protonup-qt ];
 
-  ##### Touchscreen LUKS passphrase #####
-  boot.initrd.unl0kr = {
-    enable = true;
-    settings = {
-      general.animations = true;
-      general.backend = "drm";
-      keyboard.autohide = false;  # the module replaces the vendor conf, whose built-in default hides it
-      keyboard.layout = "us";
-      keyboard.popovers = true;
-      textarea.obscured = true;
-      theme.default = "breezy-dark";
-    };
-  };
-
   settings = {
     boot = {
+      touchKeyboard = true;
       kernelPackages = pkgs.jovianPackages.linuxPackages;
       plymouth.enable = false;  # unl0kr owns the screen in initrd
       autoEnrollKeys = true;

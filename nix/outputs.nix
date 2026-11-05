@@ -114,7 +114,7 @@ let
           in mkInstallerCheck {
             inherit pkgs system prebuiltHost;
             touchHost = lib.findFirst (candidate:
-              (mkSystem candidate (lib.head bootableTargets) systemModuleFiles).config.boot.initrd.unl0kr.enable or false)
+              (mkSystem candidate (lib.head bootableTargets) systemModuleFiles).config.settings.boot.touchKeyboard)
               null systemHosts;
           };
       in lib.listToAttrs (map (check: { inherit (check) name value; }) (hostChecks ++ [ installerCheck ])))))

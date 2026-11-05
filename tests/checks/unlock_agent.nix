@@ -6,7 +6,9 @@ let
     let
       config = entry.configuration.config;
       initrd = config.boot.initrd;
+      touchHost = config.settings.boot.touchKeyboard;
       usesKeyboard = initrd.unl0kr.enable or false;
+      recoveryTypable = config.system.build.recoverySystem.config.services.buffyboard.enable or false;
       agentWired = lib.hasAttr "unl0kr-agent" (initrd.systemd.paths or { });
       pathText = path:
         if !(lib.isAttrs path) then toString path
@@ -17,7 +19,11 @@ let
       forcedModules = lib.filter (module: !(lib.elem module initrd.kernelModules)) touchModules;
       keyboardShown = ((initrd.unl0kr.settings or { }).keyboard or { }).autohide or true == false;
       drmLoaded = lib.any (module: lib.elem module initrd.kernelModules) [ "amdgpu" "i915" "simpledrm" "virtio_gpu" ];
-    in lib.optionals usesKeyboard (
+    in lib.optional (touchHost && !usesKeyboard)
+      "${entry.name}: the host has no attached keyboard but the initrd prompt has none either"
+    ++ lib.optional (touchHost && !recoveryTypable)
+      "${entry.name}: recovery boots to a console with no on-screen keyboard, so it cannot be used without a USB keyboard"
+    ++ lib.optionals usesKeyboard (
       lib.optional (!agentWired)
         "${entry.name}: unl0kr is enabled but no unl0kr-agent path unit reaches the initrd, so nothing answers the passphrase request"
       ++ lib.optional (!agentPackaged)

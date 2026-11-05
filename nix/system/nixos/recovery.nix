@@ -17,6 +17,7 @@ let
   signingRequired = config.settings.boot.method == "Secure-Boot";
   systemStateVersion = config.system.stateVersion;
   nixosMount = import ./recovery/mount.nix { inherit config immutabilityPersistKey lib pkgs; };
+  touchKeyboard = config.settings.boot.touchKeyboard;
 
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
@@ -26,6 +27,7 @@ let
       "${inputs.nixpkgs}/nixos/modules/installer/netboot/netboot.nix"
       ({ config, lib, pkgs, ... }: {
         networking.hostName = "nixos-recovery";
+        services.buffyboard.enable = touchKeyboard;  # recovery is a console too
 
         boot = {
           uki = {
@@ -286,4 +288,6 @@ lib.mkIf config.settings.disk.recovery.enable {
     };
     script = installRecoveryScript true;
   };
+
+  system.build.recoverySystem = recoverySystem;  # so checks can assert on what recovery boots into
 }

@@ -13,7 +13,20 @@
         efiSysMountPoint = config.settings.disk.boot.efiSysMountPoint;
       };
     };
-    initrd.systemd.services = lib.mkIf config.boot.plymouth.enable {
+    initrd.unl0kr = lib.mkIf config.settings.boot.touchKeyboard {
+    enable = true;
+    settings = {
+      general.animations = true;
+      general.backend = "drm";
+      keyboard.autohide = false;  # the generated conf replaces the vendor one, whose built-in default hides it
+      keyboard.layout = "us";
+      keyboard.popovers = true;
+      textarea.obscured = true;
+      theme.default = "breezy-dark";
+    };
+  };
+
+  initrd.systemd.services = lib.mkIf config.boot.plymouth.enable {
       plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
     };
     plymouth = {
