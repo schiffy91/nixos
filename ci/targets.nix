@@ -7,13 +7,16 @@
     cachix = "";  # a Cachix cache name; CI pushes there only when this and CACHIX_AUTH_TOKEN are set
   };
 
-  # One CI job per attribute, so a runner's disk holds one closure. The installer ISOs
-  # are about 1.9 GB each, which fits a hosted runner but not a GitHub Pages site.
+  # One CI job per attribute, so a runner's disk holds one closure. The generic installer
+  # is about 1.9 GB, which fits a hosted runner. The host installers do not: they embed
+  # that host's whole closure and every flake input source, and measured 13 GB and 11 GB
+  # against a runner's ~14 GB of free disk, so they are in `local` only and reach the
+  # other machines through `make cache`.
   systems = [
     {
       system = "x86_64-linux";
       runner = "ubuntu-24.04";
-      attrs = [ "installer" "installer-FRACTAL-NORTH" "installer-STEAM-DECK-OLED" ];
+      attrs = [ "installer" ];
     }
     {
       system = "aarch64-linux";
