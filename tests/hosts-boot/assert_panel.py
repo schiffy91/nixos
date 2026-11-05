@@ -9,6 +9,10 @@ left at the console's pure black: that is what proves it owns the panel.
 Because it covers the screen it also hides anything printed earlier, so for
 unl0kr the log check is not meaningful and is not claimed.
 
+The same top band is measured again after unlock, under the agent name
+console-silent, so a boot that goes loud only after the passphrase is
+caught too.
+
 plymouth's splash is nearly black, which a text console also is, so instead
 the top band is measured: kernel log lines fill it with bright glyph rows,
 and a quiet boot leaves it empty.
@@ -52,6 +56,9 @@ if agent == "unl0kr":
 elif agent == "plymouth":
     if whole_black < 0.5:
         sys.exit(f"FAIL: only {whole_black:.0%} of the panel is dark; this is not plymouth's splash")
+    if top_bright > 0.02:
+        sys.exit(f"FAIL: the panel's top band is {top_bright:.1%} lit, which is kernel log text, not a quiet boot")
+elif agent == "console-silent":
     if top_bright > 0.02:
         sys.exit(f"FAIL: the panel's top band is {top_bright:.1%} lit, which is kernel log text, not a quiet boot")
 else:

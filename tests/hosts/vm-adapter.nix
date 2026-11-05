@@ -33,6 +33,24 @@ let
     printf 'E2E-HEALTH-END\n'
     ${pkgs.coreutils}/bin/cat "$report" > /dev/ttyS0
 
+    ${lib.optionalString (config.settings.boot.method == "Secure-Boot" && !config.settings.boot.autoEnrollKeys) ''
+      enabled=/nix/var/e2e-secure-boot-enabled
+      if [ ! -e "$enabled" ] && bootctl status 2>/dev/null | grep -qi setup; then
+        printf 'E2E-ENABLING-SECURE-BOOT\n' > /dev/ttyS0
+        log=/var/log/e2e-secure-boot.log
+        systemctl start generate-sb-keys.service > "$log" 2>&1
+        /run/current-system/bin/switch-to-configuration boot >> "$log" 2>&1
+        signed=$?
+        sbctl enroll-keys --yes-this-might-brick-my-machine >> "$log" 2>&1
+        enrolled=$?
+        printf 'E2E-SECURE-BOOT-ENABLE sign=%s enroll=%s\n' "$signed" "$enrolled" > /dev/ttyS0
+        if [ "$signed" -eq 0 ] && [ "$enrolled" -eq 0 ]; then
+          : > "$enabled"
+        else
+          tail -n 15 "$log" | while read -r detail; do printf 'E2E-SB-LOG %s\n' "$detail" > /dev/ttyS0; done
+        fi
+      fi
+    ''}
     finished=/nix/var/e2e-hibernated
     if [ -e "$finished" ]; then
       printf 'E2E-RESUMED yes\n' > /dev/ttyS0

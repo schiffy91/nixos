@@ -10,7 +10,8 @@
     "secureBoot": "false",
     "requireEnforced": "false",
     "assertPanel": "true",
-    "unlockAgent": "unl0kr"
+    "unlockAgent": "unl0kr",
+    "enablesSecureBoot": "false"
   },
   "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
   "isoUrl": "",
@@ -54,10 +55,50 @@
       "timeout": 120
     },
     {
+      "op": "qmp",
+      "command": "{\"execute\":\"send-key\",\"arguments\":{\"keys\":[{\"type\":\"qcode\",\"data\":\"a\"}],\"hold-time\":100}}",
+      "timeout": 60
+    },
+    {
+      "op": "sleep",
+      "timeout": 5
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0-typed.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_responds.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-typed.ppm' '{{unlockAgent}}'",
+      "expect": "panel-responds",
+      "timeout": 120
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"send-key\",\"arguments\":{\"keys\":[{\"type\":\"qcode\",\"data\":\"backspace\"}],\"hold-time\":100}}",
+      "timeout": 60
+    },
+    {
+      "op": "sleep",
+      "timeout": 3
+    },
+    {
       "op": "host",
       "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && printf boot0-reported",
       "expect": "boot0-reported",
       "timeout": 1000
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0-unlocked.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-unlocked.ppm' console-silent",
+      "expect": "panel-graphical",
+      "timeout": 120
     },
     {
       "op": "host",
@@ -70,6 +111,12 @@
       "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-0.log' 0 {{secureBoot}} false",
       "expect": "host-healthy",
       "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{enablesSecureBoot}}\" != \"true\" ]; then printf enable-done; else timeout 1800 bash -c 'until grep -qa \"E2E-SECURE-BOOT-ENABLE sign=0 enroll=0\" \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 10; done' || { echo 'secure boot enable did not succeed'; grep -a 'E2E-SB-LOG\\|E2E-SECURE-BOOT-ENABLE' \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" | tail -16; exit 1; }; printf enable-done; fi",
+      "expect": "enable-done",
+      "timeout": 1900
     },
     {
       "op": "stop"
@@ -93,10 +140,50 @@
       "timeout": 120
     },
     {
+      "op": "qmp",
+      "command": "{\"execute\":\"send-key\",\"arguments\":{\"keys\":[{\"type\":\"qcode\",\"data\":\"a\"}],\"hold-time\":100}}",
+      "timeout": 60
+    },
+    {
+      "op": "sleep",
+      "timeout": 5
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1-typed.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_responds.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-typed.ppm' '{{unlockAgent}}'",
+      "expect": "panel-responds",
+      "timeout": 120
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"send-key\",\"arguments\":{\"keys\":[{\"type\":\"qcode\",\"data\":\"backspace\"}],\"hold-time\":100}}",
+      "timeout": 60
+    },
+    {
+      "op": "sleep",
+      "timeout": 3
+    },
+    {
       "op": "host",
       "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && printf boot1-reported",
       "expect": "boot1-reported",
       "timeout": 1000
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1-unlocked.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-unlocked.ppm' console-silent",
+      "expect": "panel-graphical",
+      "timeout": 120
     },
     {
       "op": "host",
