@@ -19,6 +19,36 @@ class VmProvisioner {
         self.state = state;
     }
 
+    class string keyCodeFor(string character) {
+        if (Strings.find("abcdefghijklmnopqrstuvwxyz", character, 0) >= 0) { return character; }
+        if (Strings.find("0123456789", character, 0) >= 0) { return character; }
+        if (character.equals("-")) { return "minus"; }
+        if (character.equals(".")) { return "dot"; }
+        if (character.equals("/")) { return "slash"; }
+        if (character.equals(" ")) { return "spc"; }
+        return "";
+    }
+
+    class Vector<string> keyCodesFor(string text) {
+        Vector<string> codes = [];
+        for (int i = 0; i < text.len(); i++) {
+            var code = VmProvisioner.keyCodeFor(text.substring(i, 1));
+            if (code.isEmpty()) { return []; }
+            codes.push(code);
+        }
+        return codes;
+    }
+
+    public bool sendKeys(string text) {
+        var codes = VmProvisioner.keyCodesFor(text);
+        if (codes.len != text.len()) { NixosLog.fatal(f"No key code for part of {text}"); }
+        for code in codes {
+            var command = f"{{\"execute\":\"send-key\",\"arguments\":{{\"keys\":[{{\"type\":\"qcode\",\"data\":\"{code}\"}}],\"hold-time\":100}}}}";
+            if (!self.remote.qmp(command, 10).ok()) { return false; }
+        }
+        return self.remote.qmp("{\"execute\":\"send-key\",\"arguments\":{\"keys\":[{\"type\":\"qcode\",\"data\":\"ret\"}],\"hold-time\":100}}", 10).ok();
+    }
+
     public string pubKey() {
         return Path.readAll(PathTools.join(self.spec.workDir, "id_ed25519.pub")).trim();
     }

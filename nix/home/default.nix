@@ -1,8 +1,9 @@
-{ settings, lib, ... }:
-{
+{ settings, lib, config, ... }:
+let dev = settings.apps.enable && settings.apps.dev.enable;
+in {
   imports = [ ./agents ];
   programs.home-manager.enable = true;
-  programs.git = lib.mkIf (settings.apps.enable && settings.apps.dev.enable && settings.apps.git.enable) {
+  programs.git = lib.mkIf (dev && settings.apps.git.enable) {
     enable = true;
     package = null;
     includes = map (path: { inherit path; }) settings.apps.git.includes;
@@ -15,10 +16,15 @@
       gpg.format = "openpgp";
     };
   };
-  home.file = lib.mkIf (settings.apps.enable && settings.apps.dev.enable && settings.apps.zsh.enable) {
-    ".zprofile".text = settings.apps.zsh.profileExtra;
-    ".zshrc".text = settings.apps.zsh.initContent + lib.concatStringsSep "\n" (
-      lib.mapAttrsToList (name: value: "alias ${lib.escapeShellArg name}=${lib.escapeShellArg value}") settings.apps.zsh.shellAliases
-    ) + "\n";
+  programs.bash = lib.mkIf (dev && settings.apps.bash.enable) {
+    enable = true;
+    shellAliases = settings.apps.shell.aliases;
+    initExtra = builtins.readFile ./shell.sh;
+  };
+  programs.zsh = lib.mkIf (dev && settings.apps.zsh.enable) {
+    enable = true;
+    dotDir = config.home.homeDirectory; # pins ~/.zshrc against a future default move
+    shellAliases = settings.apps.shell.aliases;
+    initContent = builtins.readFile ./shell.sh;
   };
 }

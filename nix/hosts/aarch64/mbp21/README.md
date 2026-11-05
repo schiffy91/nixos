@@ -6,9 +6,12 @@ and Home Manager import. `nix/settings.nix` defines policy; modules under
 lookup and app modules, and shares `nix/home` with the Mac.
 
 The package list matches the previously active nix-darwin configuration.
-The shell retains the original `.local/bin/env` initialization, `.zprofile`
-helpers, `clauded` alias and LM Studio path. The existing `nix-update` and
-`nix-upgrade` aliases now target this repository. No editor is selected.
+The shell retains the original `.local/bin/env` initialization, `setopt
+no_nomatch` and LM Studio path. The `clauded` alias and the `print-files` and
+`extract-substring` helpers live in `nix/home/shell.sh`, which Linux shares and
+both shells read; Home Manager's zsh module now generates `~/.zshrc` and
+`~/.zprofile`. The existing `nix-update` and `nix-upgrade` aliases now target
+this repository. No editor is selected.
 
 `settings.apps.git.includes` points to the preserved private Git configuration
 at `~/.config/git/local-before-nix.gitconfig`. Keep that file with a machine

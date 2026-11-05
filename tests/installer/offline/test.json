@@ -1,0 +1,61 @@
+{
+  "name": "install-offline",
+  "state": "installed-offline-{{prebuiltHost}}",
+  "stateMaterial": "offline-install:{{arch}}:{{prebuiltHost}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "arch": "x86_64",
+    "prebuiltHost": "QEMU-x86_64",
+    "hostFile": "/etc/nixos/nix/hosts/x86_64/QEMU/QEMU.nix"
+  },
+  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
+  "isoUrl": "",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "30G",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2255,
+  "operations": [
+    {
+      "op": "host",
+      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{prebuiltHost}}",
+      "timeout": 21600
+    },
+    {
+      "op": "up-iso",
+      "timeout": 1800
+    },
+    {
+      "op": "guest",
+      "command": "set -e; printf '{\"host_path\":\"{{hostFile}}\",\"target\":\"Standard-Boot\"}' > /etc/nixos/config.json; test -s /etc/nixos/config.json && printf host-selected",
+      "expect": "host-selected",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; iptables -A OUTPUT -p tcp --syn -j REJECT; iptables -A OUTPUT -p udp --dport 53 -j REJECT; if timeout 20 curl -sSI https://cache.nixos.org >/dev/null 2>&1; then echo reachable; exit 1; fi; printf network-cut",
+      "expect": "network-cut",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": "cd /etc/nixos && printf 'testpass123\\ntestpass123\\n' | nixosctl install --format --yes >/tmp/offline-install.log 2>&1 && printf installed || { tail -60 /tmp/offline-install.log; exit 1; }",
+      "expect": "installed",
+      "timeout": 3600
+    },
+    {
+      "op": "guest",
+      "command": "set -e; grep -q 'installing the system baked into this installer' /tmp/offline-install.log; if grep -q 'github:nix-community/disko' /tmp/offline-install.log; then echo fetched-disko; exit 1; fi; printf used-prebuilt",
+      "expect": "used-prebuilt",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; test -f /mnt/etc/nixos/flake.nix; btrfs subvolume list /mnt | grep -F '@snapshots/@root/CLEAN' >/dev/null; printf clean-snapshots",
+      "expect": "clean-snapshots",
+      "timeout": 300
+    },
+    {
+      "op": "stop"
+    }
+  ]
+}

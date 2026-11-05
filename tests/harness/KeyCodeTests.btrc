@@ -1,0 +1,29 @@
+#include <assert.h>
+
+import Library.Vector;
+import ../e2e/qemu/VmProvisioner.btrc;
+
+int main() {
+    /* every character must become a key, or the passphrase arrives truncated and
+       the disk stays locked. Splitting on "" yields nothing, which is how this
+       first shipped: only Enter was ever sent. */
+    var codes = VmProvisioner.keyCodesFor("testpass123");
+    assert(codes.len == 11);
+    assert(codes.get(0).equals("t"));
+    assert(codes.get(4).equals("p"));
+    assert(codes.get(8).equals("1"));
+    assert(codes.get(10).equals("3"));
+
+    assert(VmProvisioner.keyCodesFor("").len == 0);
+    assert(VmProvisioner.keyCodeFor("a").equals("a"));
+    assert(VmProvisioner.keyCodeFor("7").equals("7"));
+    assert(VmProvisioner.keyCodeFor("-").equals("minus"));
+    assert(VmProvisioner.keyCodeFor(" ").equals("spc"));
+
+    /* a character with no key code must be refused, never silently dropped */
+    assert(VmProvisioner.keyCodeFor("%").isEmpty());
+    assert(VmProvisioner.keyCodesFor("ab%cd").len == 0);
+
+    print("PASS: every passphrase character becomes a key event");
+    return 0;
+}

@@ -1,5 +1,8 @@
 import Library.FileSystem;
+import Library.JSON;
 import Library.Process;
+import Library.Strings;
+import Library.Vector;
 import ./btrfs/SnapshotManager.btrc;
 import ../core/Interactive.btrc;
 import ../core/NixosLog.btrc;
@@ -29,7 +32,8 @@ class Installer {
         var flake = ShellWords.quote(f"{self.config.paths.root}#{self.config.host()}-{self.config.diskOperationTarget()}");
         var quotedMode = ShellWords.quote(mode);
         var quotedMountPoint = ShellWords.quote(self.mountPoint);
-        var command = f"nix --extra-experimental-features nix-command --extra-experimental-features flakes run github:nix-community/disko/{rev} --verbose -- --show-trace --flake {flake} --mode {quotedMode} --root-mountpoint {quotedMountPoint} {extraArgs}";
+        var fallback = f"nix --extra-experimental-features nix-command --extra-experimental-features flakes run github:nix-community/disko/{rev} --verbose -- --show-trace --flake {flake} --mode {quotedMode} --root-mountpoint {quotedMountPoint} {extraArgs}";
+        var command = Installer.diskoCommandFor(self.prebuiltEntry(mode.equals("mount") ? "mount" : "disko"), fallback);
         return self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
     }
 
@@ -48,7 +52,106 @@ class Installer {
         return self.mountDisk();
     }
 
-    public ExecResult installNixos() {
+    public Vector<string> swapFiles() {
+        Vector<string> files = [];
+        var attribute = ShellWords.quote(f"{self.config.paths.root}#nixosConfigurations.{self.config.host()}-{self.config.target()}.config.swapDevices");
+        var evaluated = self.shell.run(f"{self.config.nixCommand()} eval --json {attribute}", logFailure=false);
+        if (!evaluated.ok()) { return files; }
+        var parsed = JSONValue.parse(evaluated.trimmed());
+        if (!parsed.isArray()) { return files; }
+        for element in parsed.elements() {
+            if (element.isObject() && element.has("device")) {
+                files.push(NixosPaths.join(self.mountPoint, Strings.copy(element.get("device").asString())));
+            }
+        }
+        return files;
+    }
+
+    public Vector<string> activateSwap() {
+        Vector<string> activated = [];
+        for file in self.swapFiles() {
+            if (!FileSystem.exists(file)) { continue; }  /* disko only creates it when formatting */
+            if (self.shell.run(f"swapon {ShellWords.quote(file)}", logFailure=false).ok()) { activated.push(file); }
+        }
+        return activated;
+    }
+
+    public void deactivateSwap(Vector<string> activated) {
+        for file in activated {
+            self.shell.run(f"swapoff {ShellWords.quote(file)}", logFailure=false);  /* unmounting the subvolume needs it off */
+        }
+    }
+
+    class int memoryGigabytesIn(string meminfo) {
+        for line in Strings.split(meminfo, "\n") {
+            if (!line.startsWith("MemTotal:")) { continue; }
+            for field in Strings.split(line, " ") {
+                var kilobytes = Strings.toInt(field.trim());
+                if (kilobytes > 0) { return kilobytes / 1048576; }
+            }
+        }
+        return 0;
+    }
+
+    class int jobsForMemory(int gigabytes) {
+        if (gigabytes < 16) { return 1; }  /* unreadable meminfo also lands here */
+        return gigabytes / 8;
+    }
+
+    public int buildJobs() {
+        return Installer.jobsForMemory(Installer.memoryGigabytesIn(FileSystem.readText("/proc/meminfo")));
+    }
+
+    class string manifestPath() { return "/etc/nixos-installer/prebuilt.json"; }
+
+    class string prebuiltEntryIn(string manifest, string host, string target, string field) {
+        var parsed = JSONValue.parse(manifest);
+        if (!parsed.isObject()) { return ""; }
+        var key = f"{host}-{target}";
+        if (!parsed.has(key)) { return ""; }
+        var entry = parsed.get(key);
+        if (!entry.isObject() || !entry.has(field)) { return ""; }
+        return Strings.copy(entry.get(field).asString());
+    }
+
+    class string installSourceFor(string prebuilt, string quotedFlake) {
+        if (prebuilt.isEmpty()) { return f"--flake {quotedFlake}"; }
+        return f"--system {ShellWords.quote(prebuilt)}";
+    }
+
+    class string diskoCommandFor(string bakedScript, string fallback) {
+        if (bakedScript.isEmpty()) { return fallback; }
+        return ShellWords.quote(bakedScript);
+    }
+
+    public string prebuiltEntry(string field) {
+        if (!FileSystem.exists(Installer.manifestPath())) { return ""; }
+        var path = Installer.prebuiltEntryIn(FileSystem.readText(Installer.manifestPath()),
+            self.config.host(), self.config.target(), field);
+        if (path.isEmpty() || !FileSystem.exists(path)) { return ""; }  /* a stale manifest must not stop the install */
+        return path;
+    }
+
+    public string prebuiltSystemPath() { return self.prebuiltEntry("system"); }
+
+    public void copyFlakeSources() {
+        var manifest = "/etc/nixos-installer/sources.json";
+        if (!FileSystem.exists(manifest)) { return; }
+        var parsed = JSONValue.parse(FileSystem.readText(manifest));
+        if (!parsed.isArray()) { return; }
+        Vector<string> paths = [];
+        for element in parsed.elements() {
+            if (!element.isString()) { continue; }
+            var path = Strings.copy(element.asString());
+            if (FileSystem.exists(path)) { paths.push(ShellWords.quote(path)); }
+        }
+        if (paths.isEmpty()) { return; }
+        NixosLog.info("copying flake sources so the installed system can evaluate offline");
+        self.shell.run(f"nix --extra-experimental-features nix-command --extra-experimental-features flakes copy --no-check-sigs --to {ShellWords.quote(self.mountPoint)} {paths.join(\" \")}",
+            stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+    }
+
+    public ExecResult installNixos(bool forceUpgrade = false) {
         var installedRoot = NixosPaths.join(self.mountPoint, self.config.paths.root);
         var temporaryDirectory = NixosPaths.join(self.mountPoint, "/nix/tmp");
         FileSystem.mkdirp(temporaryDirectory);
@@ -56,14 +159,32 @@ class Installer {
         FileSystem.mkdirp(PathTools.dirname(installedRoot));
         self.shell.run(f"cp -r {ShellWords.quote(self.config.paths.root)} {ShellWords.quote(installedRoot)}", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
 
+        if (forceUpgrade) {  /* the stick's closure can be stale */
+            self.shell.run(f"{self.config.nixCommand()} flake update --flake {ShellWords.quote(installedRoot)}",
+                stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+        }
+
+        var activated = self.activateSwap();  /* uncached kernel and mesa builds outgrow RAM alone */
+        var prebuilt = forceUpgrade ? "" : self.prebuiltSystemPath();
         var flake = ShellWords.quote(f"{installedRoot}#{self.config.host()}-{self.config.target()}");
-        var result = self.shell.run(f"nixos-install --flake {flake} --root {ShellWords.quote(self.mountPoint)} --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0",
+        var source = Installer.installSourceFor(prebuilt, flake);
+        if (!prebuilt.isEmpty()) { NixosLog.info(f"installing the system baked into this installer: {prebuilt}"); }
+        var result = self.shell.run(f"nixos-install {source} --root {ShellWords.quote(self.mountPoint)} --no-channel-copy --show-trace --no-root-password --max-jobs {self.buildJobs()} --cores 0",
             stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, env=[f"TMPDIR={temporaryDirectory}"]);
+        self.deactivateSwap(activated);
+        self.syncDisk();  /* power loss must not lose CLEAN */
         FileSystem.removeRecursive(temporaryDirectory);
         if (result.ok()) {
+            self.copyFlakeSources();
             self.permissionNixos();
         }
         return result;
+    }
+
+    public void syncDisk() {
+        self.shell.run("sync", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        self.shell.run(f"btrfs filesystem sync {ShellWords.quote(self.mountPoint)}",
+            stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
     }
 
     public void permissionNixos() {
@@ -74,6 +195,7 @@ class Installer {
         var snapshots = SnapshotManager(self.config);
         snapshots.rootPrefix = self.mountPoint;
         snapshots.createInitialSnapshots();
+        self.syncDisk();
     }
 
     public string plainTextPasswordPath() {

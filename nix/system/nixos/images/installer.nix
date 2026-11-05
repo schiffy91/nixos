@@ -1,7 +1,7 @@
 # A minimal installer ISO that needs no typing: the admin's keys are already
 # authorized, this repository is already at /etc/nixos, and nixosctl is already
 # built, so a booted stick goes straight to `nixosctl install`.
-{ inputs, self, system, authorizedKeys, stateVersion }:
+{ inputs, self, system, authorizedKeys, stateVersion, prebuiltSystems ? { }, prebuiltSources ? [ ], prebuiltName ? "" }:
 let
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
   lib = inputs.nixpkgs.lib;
@@ -18,13 +18,26 @@ let
       })
       {
         networking.hostName = "nixos-installer";
-        image.baseName = lib.mkForce "nixos-installer-${system}";
+        image.baseName = lib.mkForce ("nixos-installer-${system}" + lib.optionalString (prebuiltName != "") "-${prebuiltName}");
+        boot.loader.timeout = lib.mkForce 1;
+        boot.kernelParams = [ "console=tty0" "console=ttyS0,115200n8" ];
         isoImage = {
+          forceTextMode = true;
           squashfsCompression = "zstd -Xcompression-level 15";
           makeEfiBootable = true;
           makeUsbBootable = true;
+          storeContents = lib.concatMap (entry: [ entry.system entry.disko entry.mount ])
+            (lib.attrValues prebuiltSystems) ++ prebuiltSources;
         };
         nixpkgs.config.allowUnfree = true;
+
+        environment.etc."nixos-installer/sources.json".text = builtins.toJSON prebuiltSources;
+        environment.etc."nixos-installer/prebuilt.json".text = builtins.toJSON
+          (lib.mapAttrs (_: entry: {
+            system = "${entry.system}";
+            disko = "${entry.disko}";
+            mount = "${entry.mount}";
+          }) prebuiltSystems);
         environment.systemPackages = [ nixosctl pkgs.gnumake pkgs.gcc ];
 
         # /etc/nixos has to be writable: nixosctl install writes config.json into it.

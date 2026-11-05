@@ -13,7 +13,9 @@
         efiSysMountPoint = config.settings.disk.boot.efiSysMountPoint;
       };
     };
-    initrd.systemd.services.plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
+    initrd.systemd.services = lib.mkIf config.settings.boot.plymouth.enable {
+      plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
+    };
     plymouth = {
       enable = config.settings.boot.plymouth.enable;
       theme = "bgrt";
@@ -26,6 +28,9 @@
       "systemd.show_status=auto"        # Hide systemd boot status unless there's an error
       "rd.systemd.show_status=auto"     # Same as above, but for the initrd phase
       "plymouth.ignore-serial-consoles" # Force display rendering
+    ] ++ lib.optional (config.settings.boot.plymouth.enable && config.settings.boot.plymouth.drmDevice != "") (
+      "plymouth.drm-device=${config.settings.boot.plymouth.drmDevice}"
+    ) ++ [
       "mem_sleep_default=s2idle"        # Use s2idle instead of S3 suspend
     ];
   };
@@ -54,7 +59,11 @@
       settings.default = "nixos-generation-*.efi";
       pkiBundle = config.settings.boot.pkiBundle;
       configurationLimit = config.settings.boot.previousGenerationLimit;
-      autoEnrollKeys.enable = config.settings.boot.autoEnrollKeys;
+      autoEnrollKeys = {
+        enable = config.settings.boot.autoEnrollKeys;
+        includeMicrosoftKeys = false;
+        allowBrickingMyMachine = true;
+      };
     };
   };
 })];

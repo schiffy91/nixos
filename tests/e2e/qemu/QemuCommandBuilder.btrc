@@ -64,9 +64,20 @@ class QemuCommandBuilder {
     }
 
     public void addStorageAndNetwork(Command command) {
+        if (self.spec.diskInterface.equals("nvme")) {
+            command.args([
+                "-drive",
+                f"file={self.diskPath()},format=qcow2,if=none,id=nvme0,cache=none",
+                "-device",
+                "nvme,drive=nvme0,serial=e2e0001"
+            ]);
+        } else {
+            command.args([
+                "-drive",
+                f"file={self.diskPath()},format=qcow2,if=virtio,cache=none"
+            ]);
+        }
         command.args([
-            "-drive",
-            f"file={self.diskPath()},format=qcow2,if=virtio,cache=none",
             "-netdev",
             f"user,id=net0,hostfwd=tcp::{self.spec.sshPort}-:22",
             "-device",
@@ -77,7 +88,10 @@ class QemuCommandBuilder {
     }
 
     public void addConsole(Command command) {
-        if (self.spec.arch.equals("x86_64")) { command.args(["-vga", "none"]); }
+        if (self.spec.arch.equals("x86_64") && self.spec.graphics.equals("none")) { command.args(["-vga", "none"]); }
+        if (self.spec.graphics.equals("virtio")) {
+            command.args(["-vga", "none", "-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd"]);
+        }
         command.args([
             "-display",
             "none",

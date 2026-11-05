@@ -1,0 +1,38 @@
+#include <assert.h>
+
+import Library.FileSystem;
+import Library.Process;
+import ../../btrc/immutability/lib/ImmutabilityRun.btrc;
+
+string modeOf(string path) {
+    return UnixShell().run(f"stat -c %a {ShellWords.quote(path)}").trimmed();
+}
+
+int main() {
+    var root = "/tmp/immutability-ownership-test";
+    FileSystem.removeRecursive(root);
+    var home = f"{root}/home/user";
+    FileSystem.mkdirp(home);
+    UnixShell().run(f"chmod 700 {ShellWords.quote(home)}");
+
+    /* A persisted path deep under a home: every directory created on the way
+       must inherit the home's mode, or the user cannot write beside it. That is
+       how Home Manager lost ~/.local/state and the first boot came up degraded. */
+    var run = ImmutabilityRun(false);
+    run.mkdirpInheriting(f"{home}/.local/share/app");
+
+    assert(FileSystem.isDir(f"{home}/.local/share/app"));
+    assert(modeOf(f"{home}/.local").equals("700"));
+    assert(modeOf(f"{home}/.local/share").equals("700"));
+    assert(modeOf(f"{home}/.local/share/app").equals("700"));
+    /* the ancestor itself is untouched */
+    assert(modeOf(home).equals("700"));
+
+    /* creating something that already exists changes nothing and must not fail */
+    run.mkdirpInheriting(f"{home}/.local/share/app");
+    assert(modeOf(f"{home}/.local/share").equals("700"));
+
+    FileSystem.removeRecursive(root);
+    print("PASS: persisted mount points inherit their home's ownership and mode");
+    return 0;
+}

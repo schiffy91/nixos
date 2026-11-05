@@ -1,0 +1,208 @@
+{
+  "name": "host-boot-{{hostName}}",
+  "state": "host-boot-{{hostName}}",
+  "stateMaterial": "host-boot:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "arch": "x86_64",
+    "hostName": "STEAM-DECK-OLED-VM",
+    "target": "Standard-Boot",
+    "password": "testpass123",
+    "secureBoot": "false",
+    "requireEnforced": "false",
+    "assertPanel": "true"
+  },
+  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
+  "isoUrl": "",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "64G",
+  "diskInterface": "nvme",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2256,
+  "operations": [
+    {
+      "op": "host",
+      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{hostName}}",
+      "timeout": 28800
+    },
+    {
+      "op": "up-iso",
+      "timeout": 1800
+    },
+    {
+      "op": "guest",
+      "command": "set -e; printf '{\"host_path\":\"/etc/nixos/tests/hosts/{{arch}}/{{hostName}}/{{hostName}}.nix\",\"target\":\"{{target}}\"}' > /etc/nixos/config.json; test -s /etc/nixos/config.json && printf host-selected",
+      "expect": "host-selected",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; lsblk -dno NAME | grep -q '^nvme0n1$' && printf nvme-present",
+      "expect": "nvme-present",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e; iptables -A OUTPUT -p tcp --syn -j REJECT; iptables -A OUTPUT -p udp --dport 53 -j REJECT; if timeout 20 curl -sSI https://cache.nixos.org >/dev/null 2>&1; then echo reachable; exit 1; fi; printf network-cut",
+      "expect": "network-cut",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": "cd /etc/nixos && printf '{{password}}\\n{{password}}\\nn\\n' | nixosctl install --format --yes >/tmp/install.log 2>&1 && printf installed || { tail -60 /tmp/install.log; exit 1; }",
+      "expect": "installed",
+      "timeout": 10800
+    },
+    {
+      "op": "guest",
+      "command": "set -e; grep -q 'installing the system baked into this installer' /tmp/install.log; if grep -q 'github:nix-community/disko' /tmp/install.log; then echo fetched-disko; exit 1; fi; if grep -qE 'will be built|copying path .* from .https' /tmp/install.log; then echo built-or-fetched; exit 1; fi; printf used-prebuilt",
+      "expect": "used-prebuilt",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "listing=$(btrfs subvolume list -a /mnt); echo '--- subvolumes after install ---'; echo \"$listing\" | grep -F '@snapshots' || echo '(no @snapshots entries)'; missing=0; for volume in @root @home; do echo \"$listing\" | grep -qE \"@snapshots/$volume/CLEAN\\$\" || { echo \"MISSING published CLEAN for $volume\"; missing=1; }; done; echo \"$listing\" | grep -qF 'CLEAN.tmp.' && { echo 'LEFTOVER CLEAN temporary present'; missing=1; }; [ \"$missing\" -eq 0 ] && printf clean-published || printf clean-broken",
+      "expect": "clean-published",
+      "timeout": 300
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 70
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent (a plymouth splash is mostly black too)\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm'; fi",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 1200 && printf boot0-reported",
+      "expect": "boot0-reported",
+      "timeout": 1300
+    },
+    {
+      "op": "host",
+      "command": "cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/boot-0.log\" && printf saved",
+      "expect": "saved",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-0.log' 0 {{secureBoot}} false",
+      "expect": "host-healthy",
+      "timeout": 300
+    },
+    {
+      "op": "host",
+      "command": "timeout 900 bash -c 'until grep -qa E2E-HIBERNATING \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 5; done' || { echo 'never hibernated'; tail -c 1500 \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; exit 1; }; printf hibernated",
+      "expect": "hibernated",
+      "timeout": 1000
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 70
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent (a plymouth splash is mostly black too)\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm'; fi",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 1200 && printf boot1-reported",
+      "expect": "boot1-reported",
+      "timeout": 1300
+    },
+    {
+      "op": "host",
+      "command": "cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/boot-1.log\" && printf saved",
+      "expect": "saved",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-1.log' 0 {{secureBoot}} false",
+      "expect": "host-healthy",
+      "timeout": 300
+    },
+    {
+      "op": "host",
+      "command": "grep -qa 'E2E-RESUMED yes' \".vm/e2e/{{state}}-{{stateHashShort}}/boot-1.log\" && printf resumed || { echo 'resume marker missing'; exit 1; }",
+      "expect": "resumed",
+      "timeout": 120
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 70
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-2.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{assertPanel}}\" != \"true\" ]; then echo \"panel pixels not asserted for this agent (a plymouth splash is mostly black too)\"; printf panel-graphical; else python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-2.ppm'; fi",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 1200 && printf boot2-reported",
+      "expect": "boot2-reported",
+      "timeout": 1300
+    },
+    {
+      "op": "host",
+      "command": "cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log\" && printf saved",
+      "expect": "saved",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log' 0 {{secureBoot}} {{requireEnforced}}",
+      "expect": "host-healthy",
+      "timeout": 300
+    },
+    {
+      "op": "host",
+      "command": "for b in 0 2; do grep -aE '^E2E-(STATE|FAILED|REFUSED|HOMEMANAGER|SNAPSHOTS|SWAP|UNLOCKAGENT)' \".vm/e2e/{{state}}-{{stateHashShort}}/boot-$b.log\" | sed -E 's/^(E2E-UNLOCKAGENT [a-z0-9]+).*/\\\\1/' | sort > \".vm/e2e/{{state}}-{{stateHashShort}}/norm-$b.txt\"; done; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-2.txt\" > /dev/null && printf boots-identical || { echo 'boots differ'; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-2.txt\"; exit 1; }",
+      "expect": "boots-identical",
+      "timeout": 180
+    },
+    {
+      "op": "stop"
+    }
+  ],
+  "graphics": "virtio"
+}

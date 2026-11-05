@@ -2,6 +2,7 @@ import Library.Console;
 import Library.Timer;
 import Library.FileSystem;
 import Library.Platform;
+import Library.Vector;
 import Library.Process;
 import ../../core/NixosLog.btrc;
 import ./ImmutabilityConstants.btrc;
@@ -68,6 +69,26 @@ class ImmutabilityRun {
     public void require(string command) {
         var result = self.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
         if (!result.ok()) { self.fatal(f"Failed: {command}"); }
+    }
+
+    public void mkdirpInheriting(string path) {
+        Vector<string> missing = [];
+        var ancestor = path;
+        while (!ancestor.isEmpty() && !FileSystem.exists(ancestor)) {
+            missing.push(ancestor);
+            var parent = PathTools.dirname(ancestor);
+            if (parent.equals(ancestor)) { break; }
+            ancestor = parent;
+        }
+        if (missing.isEmpty()) { return; }
+        self.mkdirp(path);
+        if (self.dryRun || !FileSystem.exists(ancestor)) { return; }
+        var reference = ShellWords.quote(ancestor);
+        for (int i = missing.len - 1; i >= 0; i--) {
+            var created = ShellWords.quote(missing.get(i));
+            self.require(f"chown --reference={reference} {created}");
+            self.require(f"chmod --reference={reference} {created}");
+        }
     }
 
     public void mkdirp(string path) {

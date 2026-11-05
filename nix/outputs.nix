@@ -6,15 +6,18 @@ let
   diskOperationTargets = [ "Disk-Operation" ];
   isHostEntry = path: lib.hasSuffix ".nix" path && (lib.removeSuffix ".nix" (baseNameOf path)) == (baseNameOf (dirOf path));
   hostFiles = lib.filter isHostEntry (lib.filesystem.listFilesRecursive ./hosts);
+  testHostFiles = lib.optionals (builtins.pathExists ../tests/hosts)
+    (lib.filter isHostEntry (lib.filesystem.listFilesRecursive ../tests/hosts));
+  allHostFiles = hostFiles ++ testHostFiles;
   hostName = hostFile: lib.removeSuffix ".nix" (baseNameOf hostFile);
   hostSystem = hostFile: "${baseNameOf (dirOf (dirOf hostFile))}-linux";
   hostArchitecture = hostFile: baseNameOf (dirOf (dirOf hostFile));
-  hostNames = map hostName hostFiles;
+  hostNames = map hostName allHostFiles;
   duplicateHostName = name: (lib.length (lib.filter (candidate: candidate == name) hostNames)) > 1;
   hostOutputName = hostFile:
     let name = hostName hostFile;
     in if duplicateHostName name then "${name}-${hostArchitecture hostFile}" else name;
-  systems = lib.unique (map hostSystem hostFiles);
+  systems = lib.unique (map hostSystem allHostFiles);
   systemModuleFiles = lib.mapAttrsToList (name: _: ./system/nixos + "/${name}")  # subdirectories hold module assets, not modules
     (lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".nix" name) (builtins.readDir ./system/nixos));
   baseConfig = {
@@ -52,31 +55,25 @@ let
       name = "${name}-${target}";
       value.disko.devices = nixos.config.disko.devices;
     };
+  flakeSources = depth: attrs: lib.unique (lib.concatMap (input:
+    lib.optional (input ? outPath) "${input.outPath}"
+    ++ lib.optionals (depth > 0 && input ? inputs) (flakeSources (depth - 1) input.inputs))
+    (lib.attrValues attrs));
   mkDiskoCheck = import ../tests/checks/disko_contract.nix { inherit lib mkDiskoSystem; };
-  # One installer ISO per architecture, taking the admin keys from the host
-  # config of that architecture so nothing is written down twice.
-  # The ISO's whole promise is no typing: keys already authorized, this
-  # repository already at a writable /etc/nixos, nixosctl already built.
-  mkInstallerCheck = system:
-    let
-      cfg = (mkInstaller system).config;
-      pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
-      repositoryScript = cfg.systemd.services.installer-repository.script or "";
-      failures = lib.optional (cfg.users.users.root.openssh.authorizedKeys.keys == []) "root has no authorized keys"
-        ++ lib.optional (!(cfg.systemd.services ? installer-repository)) "no service places /etc/nixos"
-        ++ lib.optional (!(lib.hasInfix "--chmod=u+w" repositoryScript)) "/etc/nixos would not be writable"
-        ++ lib.optional (!(lib.any (p: (p.name or "") == "nixosctl") cfg.environment.systemPackages)) "nixosctl is not installed";
-    in pkgs.runCommand "installer-contract-${system}" { } (
-      if failures == [] then "touch $out"
-      else "echo ${lib.escapeShellArg (lib.concatStringsSep "; " failures)} >&2; exit 1");
-  mkInstaller = system:
-    let hostFile = lib.findFirst (candidate: hostSystem candidate == system) (lib.head hostFiles) hostFiles;
-        host = mkSystem hostFile (lib.head bootableTargets) systemModuleFiles;
-    in import ./system/nixos/images/installer.nix {
-      inherit inputs self system;
-      authorizedKeys = host.config.settings.users.admin.authorizedKeys;
-      stateVersion = host.config.system.stateVersion;
-    };
+  installers = import ./system/nixos/images/installers.nix {
+    inherit lib inputs self hostSystem hostOutputName mkSystem systemModuleFiles bootableTargets flakeSources;
+    hostFiles = allHostFiles;
+    keyHostFiles = hostFiles;
+  };
+  inherit (installers) mkInstaller installerPackages;
+  mkInitrdUnitsCheck = import ../tests/checks/initrd_units.nix { inherit lib; };
+  mkQuietBootCheck = import ../tests/checks/quiet_boot.nix { inherit lib; };
+  mkOwnKeysCheck = import ../tests/checks/own_keys_only.nix { inherit lib; };
+  mkHomeTmpfilesCheck = import ../tests/checks/home_tmpfiles.nix { inherit lib; };
+  mkInstallerCheck = import ../tests/checks/installer_contract.nix {
+    inherit lib mkInstaller bootableTargets hostOutputName;
+    prebuiltSources = flakeSources 3 inputs;
+  };
   darwinFiles = lib.filter (path: baseNameOf path == "darwin.nix") (lib.filesystem.listFilesRecursive ./hosts);
   darwinName = darwinFile: baseNameOf (dirOf darwinFile);
   darwinConfigurationOf = darwinFile: self.darwinConfigurations.${darwinName darwinFile};
@@ -96,15 +93,26 @@ let
   in {
   darwinConfigurations = lib.listToAttrs (map (darwinFile: { name = darwinName darwinFile; value = mkDarwinSystem darwinFile; }) darwinFiles);
   homeConfigurations = lib.listToAttrs (map (darwinFile: { name = darwinHomeName darwinFile; value = mkDarwinHome darwinFile; }) darwinHomeFiles);
-  packages = lib.genAttrs systems (system: { installer = (mkInstaller system).config.system.build.isoImage; });
-  diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) hostFiles);
-  nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) hostFiles);
+  packages = lib.genAttrs systems installerPackages;
+  diskoConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoConfiguration hostFile target) diskOperationTargets) allHostFiles);
+  nixosConfigurations = lib.listToAttrs (lib.concatMap (hostFile: map (target: mkNixosSystem hostFile target) bootableTargets) allHostFiles);
   checks = (lib.genAttrs systems (system:
     let
       pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
       systemHosts = lib.filter (hostFile: hostSystem hostFile == system) hostFiles;
     in lib.listToAttrs (lib.concatMap (hostFile: map (target: mkDiskoCheck { inherit pkgs hostFile target; name = "${hostOutputName hostFile}-${target}"; }) diskOperationTargets) systemHosts)
-      // { installer-contract = mkInstallerCheck system; }))
+      // (let
+        configurations = lib.concatMap (hostFile: map (target: {
+          name = "${hostOutputName hostFile}-${target}";
+          configuration = mkSystem hostFile target systemModuleFiles;
+        }) bootableTargets) systemHosts;
+        hostChecks = map (mkCheck: mkCheck { inherit pkgs system configurations; })
+          [ mkHomeTmpfilesCheck mkOwnKeysCheck mkQuietBootCheck mkInitrdUnitsCheck ];
+        installerCheck = mkInstallerCheck {
+          inherit pkgs system;
+          prebuiltHost = lib.findFirst (candidate: hostSystem candidate == system) (lib.head hostFiles) hostFiles;
+        };
+      in lib.listToAttrs (map (check: { inherit (check) name value; }) (hostChecks ++ [ installerCheck ])))))
     // lib.genAttrs (lib.unique (map darwinSystemOf darwinHomeFiles)) (system: lib.listToAttrs
       (map (darwinFile: { name = "${darwinName darwinFile}-home"; value = self.homeConfigurations.${darwinHomeName darwinFile}.activationPackage; })
         (lib.filter (darwinFile: darwinSystemOf darwinFile == system) darwinHomeFiles)));

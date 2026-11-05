@@ -450,7 +450,7 @@ The app layer is recursively imported but policy-gated through
 
 | Path | Behavior |
 |---|---|
-| `dev/bash.nix` | Adds `nix-shell-with-pkgs` helper |
+| `dev/zsh.nix` | Makes zsh the admin login shell when `settings.apps.zsh.enable` is set, leaving compinit to Home Manager |
 | `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
 | `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-locked BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
@@ -643,6 +643,58 @@ nix run nixpkgs#statix -- check .
 `statix` still reports some style-only warnings in dense settings and legacy
 modules. Prefer fixing warnings when touching nearby code, but do not churn
 large settings blocks solely for style.
+
+## Binary Cache And Releases
+
+`ci/targets.nix` is the single list of what gets built, for which systems, on which
+runners, and what a release carries. Adding a system or an attribute there is the whole
+change: the Makefile targets, `ci/publish.py` and both GitHub workflows read that file.
+
+One machine builds for the others, with no account anywhere:
+
+```sh
+make cache        # this host's ci/targets.nix attrs, signed into ~/.cache/nix-cache
+make cache-all    # the `local` list instead: every host's system closure
+make cache-serve  # serve that directory over HTTP (CACHE_PORT=8080)
+```
+
+The first run writes `~/.config/nix/nixos-cache-1.key` and prints its public half, which
+is what the other hosts trust. The directory is shared with the other repositories on
+the host, so one server covers them all. A consumer sets two options:
+
+```nix
+settings.nix.substituters = [ "http://FRACTAL-NORTH.local:8080" ];
+settings.nix.trustedPublicKeys = [ "nixos-cache-1:..." "semu-cache-1:..." ];
+```
+
+`nix/system/nixos/nix.nix` applies them, with `connect-timeout = 5` and `fallback` so a
+publisher that is switched off costs a build five seconds instead of failing it.
+STEAM-DECK-OLED is wired this way already: the desktop builds its system and its
+emulators, and the handheld activates instead of compiling them.
+
+`.github/workflows/cache.yml` builds one job per system and attribute every Monday and
+on every push to `main`, on x86_64 and aarch64 runners. With a `CACHIX_AUTH_TOKEN`
+secret it pushes to the Cachix cache named in `ci/targets.nix`; with a
+`NIX_CACHE_SECRET_KEY` secret and no Cachix it signs the closure and leaves a flat cache
+as a workflow artifact, which `nix copy --from file://...` consumes unchanged. The
+`NIXOS_CACHE_URL` and `NIXOS_CACHE_PUBLIC_KEY` repository variables let the runners
+substitute from the cache they are filling.
+
+Architectures split by who can build them. This host builds `x86_64-linux` only: it has
+no `boot.binfmt.emulatedSystems`, so `nix` reports no aarch64 in `extra-platforms` and
+`make cache` covers x86_64. `aarch64-linux` comes from CI's `ubuntu-24.04-arm` runner,
+and `aarch64-darwin` from the Mac's own `make cache`. If you would rather build arm64
+here, `boot.binfmt.emulatedSystems = [ "aarch64-linux" ]` enables it through QEMU, at
+emulation speed and at the cost of a larger system closure.
+
+`.github/workflows/release.yml` turns a `v*` tag into a GitHub Release carrying the
+installer ISOs in `ci/targets.nix` `release`, each with its digest in `SHA256SUMS`. That
+list is only the generic `installer`, which measured 1.9 GB against GitHub's 2 GiB asset
+limit. A host installer carries that host's whole system closure *and every flake
+input source*, so the machine installs with no network and can still evaluate its own
+configuration afterwards; it measured 13 GB for FRACTAL-NORTH and 11 GB for
+STEAM-DECK-OLED — past the asset limit and past a hosted runner's disk, so those are in
+`local` and travel through `make cache` instead. The workflow still builds and frees one ISO at a time.
 
 ## Secrets And Local State
 

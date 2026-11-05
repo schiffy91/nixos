@@ -44,7 +44,7 @@ class ImmutabilityMaterializer {
         var target = self.pathInVolume(spec);
         self.run.log(f"Materializing persistent directory {store} -> {target}");
         self.removeTarget(target);
-        self.run.mkdirp(target);
+        self.run.mkdirpInheriting(target);  /* a parent born root-owned locks the user out of its own home */
         self.fs.copyDirectoryContents(store, target);
         self.fs.matchOwnerAndMode(store, target);
     }
@@ -58,7 +58,7 @@ class ImmutabilityMaterializer {
         if (store.isEmpty()) { return; }
         var temporary = f"{target}.tmp.{Platform.pid()}";
         self.run.log(f"Materializing persistent file {store} -> {target}");
-        self.run.mkdirp(PathTools.dirname(target));
+        self.run.mkdirpInheriting(PathTools.dirname(target));
         self.run.removePath(temporary);
         self.fs.copyPath(store, temporary);
         self.removeTarget(target);

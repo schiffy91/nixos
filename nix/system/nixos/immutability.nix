@@ -20,6 +20,21 @@ let
 		else 0;
 	persistenceEnabled = config.settings.disk.persistence.enable;
 	pathsToKeep = config.settings.disk.immutability.persist.paths;
+
+	homeOwners = lib.mapAttrsToList (_: user: { inherit (user) home name; })
+		(lib.filterAttrs (_: user: (user.isNormalUser or false) && user.home != null) config.users.users);
+	ancestorsUnderHome = home: path:
+		let
+			parts = lib.init (lib.splitString "/" (lib.removePrefix "${home}/" path));
+			step = state: part:
+				let next = "${state.prefix}/${part}";
+				in { prefix = next; paths = state.paths ++ [ next ]; };
+		in (lib.foldl' step { prefix = home; paths = [ ]; } parts).paths;
+	homePersistRules = lib.concatMap (owner:
+		map (directory: "d ${directory} - ${owner.name} ${owner.name} -")
+			(lib.unique (lib.concatMap (ancestorsUnderHome owner.home)
+				(lib.filter (path: lib.hasPrefix "${owner.home}/" path) pathsToKeep)))
+	) homeOwners;
 	allVolumes = config.settings.disk.subvolumes.volumes;
 	resetVolumes = lib.filter (volume: volume.resetOnBoot) allVolumes;
 	pathDepth = path: builtins.length (lib.splitString "/" (lib.removePrefix "/" path));
@@ -163,6 +178,7 @@ in
 				}
 			];
 			fileSystems = bootPersistFileSystems;
+			systemd.tmpfiles.rules = homePersistRules;
 			boot.initrd.systemd.services.initrd-nixos-activation.after = bootPersistInitrdMountUnits;
 			systemd.services."recover-boot-critical-persist" = lib.mkIf (bootPersistPaths != []) {
 				description = "Re-activate if initrd activation ran before a boot-critical persisted path was mounted";

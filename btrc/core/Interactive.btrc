@@ -17,13 +17,23 @@ class Interactive {
         return Terminal.prompt(f"{prompt} ");
     }
 
+    class int maxPromptAttempts() { return 3; }
+
+    class string confirmationFor(string response) {
+        var normalized = response.toLower().trim();
+        if (normalized.equals("y") || normalized.equals("yes")) { return "yes"; }
+        if (normalized.equals("n") || normalized.equals("no")) { return "no"; }
+        return "";
+    }
+
     public bool confirm(string prompt) {
-        while (true) {
-            var response = self.ask(f"{prompt} (y/n):").toLower().trim();
-            if (response.equals("y") || response.equals("yes")) { return true; }
-            if (response.equals("n") || response.equals("no")) { return false; }
+        for (int attempt = 0; attempt < Interactive.maxPromptAttempts(); attempt++) {
+            var answer = Interactive.confirmationFor(self.ask(f"{prompt} (y/n):"));
+            if (answer.equals("yes")) { return true; }
+            if (answer.equals("no")) { return false; }
             Console.error("Invalid input. Enter 'y' or 'n'.");
         }
+        NixosLog.error("No answer; taking that as no.");
         return false;
     }
 
@@ -59,7 +69,7 @@ class Interactive {
         if (candidates.len == 0) {
             NixosLog.fatal(f"No host files found under {hostsPath}");
         }
-        while (true) {
+        for (int attempt = 0; attempt < Interactive.maxPromptAttempts(); attempt++) {
             for (int i = 0; i < candidates.len; i++) {
                 var path = candidates.get(i);
                 var hostName = Strings.replace(PathTools.basename(path), ".nix", "");
@@ -72,6 +82,7 @@ class Interactive {
             }
             NixosLog.error("Invalid choice.");
         }
+        NixosLog.fatal("No host chosen");
         return candidates.get(0);
     }
 

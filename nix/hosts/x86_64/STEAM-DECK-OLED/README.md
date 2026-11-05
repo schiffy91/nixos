@@ -15,27 +15,33 @@ by the passphrase. Do not enroll a TPM2 keyslot on a Deck.
 
 ## Install
 
-You need a USB-C hub with a keyboard and Ethernet, and the NixOS minimal ISO on
-a USB drive. Hold Volume Down and press Power for the boot menu.
+Build the installer on another x86_64 machine and write it to a USB drive. The
+image carries this repository, the admin's keys, `nixosctl`, this host's whole
+system closure, disko's own format and mount scripts and every flake input
+source, so the Deck needs no network and builds nothing:
 
-1. Boot the ISO. git ships on it, and `make install` builds the CLI and starts
-   the installer, so the ISO's own `/etc/nixos` goes first. `make` comes from
-   `shell.nix`, which reads the flake lock and so needs the flake features:
+```sh
+make iso HOST=STEAM-DECK-OLED
+make iso-write DEVICE=/dev/sdX HOST=STEAM-DECK-OLED   # ~10 GB, so a 16 GB stick
+```
 
-   ```sh
-   sudo -i
-   rm -rf /etc/nixos && git clone https://github.com/schiffy91/nixos /etc/nixos && cd /etc/nixos
-   NIX_CONFIG='experimental-features = nix-command flakes' nix-shell --run 'make install'
-   ```
+Hold Volume Down and press Power for the boot menu and pick the USB drive. The
+ISO logs in as root and places this repository at a writable `/etc/nixos`; no
+hub, no Ethernet and no `git clone`.
 
-   `ARGS='--format --yes'` skips the prompts.
+1. Run `nixosctl install`, choose `STEAM-DECK-OLED`, and set the password. It
+   becomes both the LUKS passphrase and the account password; `nixosctl
+   change-password --full-disk-encryption-only` later changes only the
+   passphrase. `--format --yes` skips the prompts.
 
-2. Choose `STEAM-DECK-OLED` and set the password. It becomes both the LUKS
-   passphrase and the account password; `nixosctl change-password
-   --full-disk-encryption-only` later changes only the passphrase.
-3. Reboot and type the passphrase on the touchscreen. unl0kr has no rotation, so
+   The log must print `installing the system baked into this installer:`. Without
+   that line the stick carries nothing for this host, so the install falls back to
+   evaluating the flake and building the Jovian kernel and four Mesa variants,
+   which needs the network and more than the Deck's 16 GB. `--force-upgrade`
+   deliberately takes that fallback after updating the flake lock.
+2. Reboot and type the passphrase on the touchscreen. unl0kr has no rotation, so
    its keyboard follows the panel's native portrait orientation.
-4. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
+3. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
 
    Our keys only — no `--microsoft`, the same rule as every other host. The
    open question this leaves is the Deck's own firmware path:

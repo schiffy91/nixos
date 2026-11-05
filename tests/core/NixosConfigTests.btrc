@@ -1,6 +1,9 @@
 #include <assert.h>
 
+import Library.FileSystem;
+
 import ../../btrc/nixosctl/NixosConfig.btrc;
+import ../../btrc/nixosctl/Installer.btrc;
 import ../../btrc/nixosctl/PasswordManager.btrc;
 
 void expectHost(string hostPath, string host, string architecture) {
@@ -27,6 +30,28 @@ int main() {
         assert(!PasswordManager.hashUsable(locked));
     }
 
-    print("PASS: host/arch derivation from host paths, locked shadow entries rejected");
+    var hostsRoot = "/tmp/nixosctl-naming-test";
+    FileSystem.removeRecursive(hostsRoot);
+    FileSystem.mkdirp(f"{hostsRoot}/x86_64/QEMU");
+    FileSystem.writeText(f"{hostsRoot}/x86_64/QEMU/QEMU.nix", "{}");
+    FileSystem.mkdirp(f"{hostsRoot}/aarch64/QEMU");
+    FileSystem.writeText(f"{hostsRoot}/aarch64/QEMU/QEMU.nix", "{}");
+    FileSystem.writeText(f"{hostsRoot}/x86_64/FRACTAL-NORTH.nix", "{}");
+
+    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/x86_64/QEMU/QEMU.nix").equals("QEMU-x86_64"));
+    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/aarch64/QEMU/QEMU.nix").equals("QEMU-aarch64"));
+    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/x86_64/FRACTAL-NORTH.nix").equals("FRACTAL-NORTH"));
+    FileSystem.removeRecursive(hostsRoot);
+
+    assert(Installer.memoryGigabytesIn("MemTotal:       16316884 kB\nSwapTotal: 0 kB") == 15);
+    assert(Installer.memoryGigabytesIn("MemTotal:      131726068 kB") == 125);
+    assert(Installer.memoryGigabytesIn("MemFree: 123 kB") == 0);
+    assert(Installer.memoryGigabytesIn("") == 0);
+    assert(Installer.jobsForMemory(15) == 1);
+    assert(Installer.jobsForMemory(0) == 1);
+    assert(Installer.jobsForMemory(125) == 15);
+    assert(Installer.jobsForMemory(64) == 8);
+
+    print("PASS: host/arch derivation from host paths, locked shadow entries rejected, install jobs bounded by RAM");
     return 0;
 }

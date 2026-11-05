@@ -35,7 +35,11 @@ UNIT_TESTS := \
 	passwd_driver:tests/core/PasswdDriverTests.btrc \
 	secure_boot:tests/secure-boot/VerificationTests.btrc \
 	spec:tests/harness/SpecTests.btrc \
-	state_hash:tests/harness/StateHashTests.btrc
+	state_hash:tests/harness/StateHashTests.btrc \
+	offline_install:tests/installer/OfflineInstallTests.btrc \
+	interactive:tests/core/InteractiveTests.btrc \
+	key_codes:tests/harness/KeyCodeTests.btrc \
+	ownership:tests/immutability/OwnershipTests.btrc
 unit_name = $(firstword $(subst :, ,$(1)))
 unit_entry = $(lastword $(subst :, ,$(1)))
 UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
@@ -52,7 +56,8 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 
 .PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
 	check test gaming hdr-screencast install iso iso-write graph-required \
-	graph-default graph-full graph-early installer-ssh-smoke clean $(TESTS_TARGETS)
+	graph-default graph-full graph-early installer-ssh-smoke cache cache-all \
+	cache-serve clean $(TESTS_TARGETS)
 
 all: build
 
@@ -133,7 +138,7 @@ endef
 $(foreach t,$(UNIT_TESTS),$(eval $(call UNIT_TEST_RULES,$(call unit_name,$(t)),$(call unit_entry,$(t)))))
 
 unit: $(UNIT_BINS)
-	@for test in $(UNIT_BINS); do ./$$test || exit 1; done
+	@for test in $(UNIT_BINS); do ./$$test < /dev/null || exit 1; done  # closed stdin: prompts must not spin
 
 quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
@@ -163,8 +168,10 @@ install: $(BIN)
 ISO_SYSTEM ?= $(shell nix eval --raw --impure --expr builtins.currentSystem)
 ISO_LINK := $(BUILD_DIR)/iso
 
-iso: | dirs ## Build the installer ISO for ISO_SYSTEM -> build/iso
-	nix build --no-warn-dirty ".#packages.$(ISO_SYSTEM).installer" -o "$(ISO_LINK)"
+ISO_PACKAGE := installer$(if $(HOST),-$(HOST),)
+
+iso: | dirs ## Build the installer ISO for ISO_SYSTEM [HOST=name] -> build/iso
+	nix build --no-warn-dirty ".#packages.$(ISO_SYSTEM).$(ISO_PACKAGE)" -o "$(ISO_LINK)"
 	@printf '%s\n' "$$(ls $(ISO_LINK)/iso/*.iso)"
 
 iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
@@ -173,6 +180,19 @@ iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
 	@lsblk -no NAME,SIZE,MODEL,TRAN,RM "$(DEVICE)"
 	@printf '%s' 'erase this device? [y/N] ' && read answer && test "$$answer" = y
 	sudo dd if="$$(ls $(ISO_LINK)/iso/*.iso)" of="$(DEVICE)" bs=4M status=progress oflag=sync
+
+CACHE_DIR ?= $(HOME)/.cache/nix-cache  # shared with the other repositories on this host
+CACHE_PORT ?= 8080
+
+cache: ## Build this host's ci/targets.nix attrs, sign them, and add them to build/cache
+	ci/publish.py --dir "$(CACHE_DIR)"
+
+cache-all: ## The same for everything a host activates (every installer in `local`)
+	ci/publish.py --all --dir "$(CACHE_DIR)"
+
+cache-serve: ## Serve build/cache over HTTP for the other machines (CACHE_PORT=8080)
+	@printf 'serving %s on port %s; substituter: http://%s.local:%s\n' "$(CACHE_DIR)" "$(CACHE_PORT)" "$$(hostname)" "$(CACHE_PORT)"
+	@python3 -m http.server "$(CACHE_PORT)" --directory "$(CACHE_DIR)"
 
 $(TESTS_TARGETS): $(BIN)
 	$(MAKE) -C tests $@

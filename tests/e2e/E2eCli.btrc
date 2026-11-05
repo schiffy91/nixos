@@ -15,7 +15,7 @@ class E2eCli {
         return [
             "status", "hash", "setup", "download-iso", "create-key", "create-disk",
             "up", "boot-iso", "boot-disk", "bootstrap-ssh", "wait-ssh", "ssh", "host",
-            "copy-workspace", "configure-vm-host", "install-nixos", "reboot-disk",
+            "copy-workspace", "configure-vm-host", "install-nixos", "reboot-disk", "send-keys",
             "reboot-recovery", "snapshot", "restore", "record-state", "stop",
             "reset-state", "clean-state"
         ];

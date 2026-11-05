@@ -19,6 +19,7 @@ in {
     settings.users.admin.autoUnlockWallet.enabled = mkSetting bool true;
     settings.users.admin.authorizedKeys = mkSetting (listOf str) [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINJsoluI1m5T4iwuCbpSdHvLVdemN3v7wMrqk4e+XJA0"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI"  # the 1Password agent's key
     ];
     settings.users.admin.extraGroups = mkSetting (listOf str) [ "wheel" "networkmanager" ];
     settings.users.admin.homeManager.enable = mkSetting bool true;
@@ -243,6 +244,7 @@ in {
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
     settings.boot.kernelPackages = mkSetting raw pkgs.linuxPackages_latest;
     settings.boot.plymouth.enable = mkSetting bool true;
+    settings.boot.plymouth.drmDevice = mkSetting str "";
     settings.boot.pkiBundle = mkSetting str "/var/lib/sbctl";
     settings.boot.autoEnrollKeys = mkSetting bool false; # systemd-boot re-enrolls the keys whenever the firmware is back in Setup Mode
     settings.boot.previousGenerationLimit = mkSetting int 3;
@@ -326,10 +328,10 @@ in {
     settings.apps.git.enable = mkSetting bool true;
     settings.apps.git.includes = mkSetting (listOf str) [];
     settings.apps.gemini.enable = mkSetting bool false;
+    settings.apps.shell.aliases = mkSetting (attrsOf str) {}; # host extras; shared ones live in nix/home/shell.sh
+    settings.nix.substituters = mkSetting (listOf str) []; # extra binary caches, tried in order
+    settings.nix.trustedPublicKeys = mkSetting (listOf str) []; # the keys those caches sign with
     settings.apps.zsh.enable = mkSetting bool false;
-    settings.apps.zsh.shellAliases = mkSetting (attrsOf str) {};
-    settings.apps.zsh.initContent = mkSetting lines "";
-    settings.apps.zsh.profileExtra = mkSetting lines "";
     settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.nixosctl.configPath = mkSetting str "";
     settings.apps.nixosctl.caffeine.enable = mkSetting bool true;

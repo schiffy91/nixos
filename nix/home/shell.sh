@@ -1,5 +1,8 @@
-# Allow patterns with no matches to pass through
-setopt no_nomatch
+alias clauded="claude --dangerously-skip-permissions"
+
+nix-shell-with-pkgs() {
+  nix-shell -I nixpkgs=channel:nixos-unstable -p "$@"
+}
 
 print-files() {
   if [ -z "$1" ]; then
@@ -25,10 +28,7 @@ extract-substring() {
   c=$(cat "$f")
   ep=$(printf '%s\n' "$p" | sed 's/[\.*\/\[\]^$]/\\&/g')
   es=$(printf '%s\n' "$s" | sed 's/[\.*\/\[\]^$]/\\&/g')
-
-  # Use sed for substring extraction in a POSIX-compliant way
-  extracted=$(printf '%s\n' "$c" | sed -n "s/$ep\(.*\)$es/\\1/p")
-
+  extracted=$(printf '%s\n' "$c" | sed -n "s/$ep\(.*\)$es/\\1/p") # POSIX substring extraction
   if [ -n "$extracted" ]; then
     printf '%s\n' "$extracted"
   else
@@ -36,5 +36,3 @@ extract-substring() {
     return 1
   fi
 }
-
-alias clauded="claude --dangerously-skip-permissions"

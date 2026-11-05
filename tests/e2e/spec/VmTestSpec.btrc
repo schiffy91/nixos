@@ -13,6 +13,8 @@ class VmTestSpec {
     public string iso;
     public string isoUrl;
     public string diskSize;
+    public string diskInterface;  /* virtio or nvme, to match the host's own device */
+    public string graphics;  /* none, or std for a framebuffer QMP can screendump */
     public string memory;
     public int cpus;
     public int sshPort;
@@ -33,6 +35,8 @@ class VmTestSpec {
         self.iso = "";
         self.isoUrl = "";
         self.diskSize = "30G";
+        self.diskInterface = "virtio";
+        self.graphics = "none";
         self.memory = "4G";
         self.cpus = 4;
         self.sshPort = 2223;
@@ -75,6 +79,8 @@ class VmTestSpec {
         if (overrides.has("iso")) { self.iso = overrides.get("iso"); }
         if (overrides.has("isoUrl")) { self.isoUrl = overrides.get("isoUrl"); }
         if (overrides.has("diskSize")) { self.diskSize = overrides.get("diskSize"); }
+        if (overrides.has("diskInterface")) { self.diskInterface = overrides.get("diskInterface"); }
+        if (overrides.has("graphics")) { self.graphics = overrides.get("graphics"); }
         if (overrides.has("memory")) { self.memory = overrides.get("memory"); }
         if (overrides.has("cpus")) { self.cpus = Strings.toInt(overrides.get("cpus")); }
         if (overrides.has("sshPort")) { self.sshPort = Strings.toInt(overrides.get("sshPort")); }

@@ -631,6 +631,118 @@
         "iso": "build/iso/iso/nixos-installer-aarch64-linux.iso",
         "isoUrl": ""
       }
+    },
+    {
+      "id": "installer-prebuilt-x86_64",
+      "spec": "installer/prebuilt/test.json",
+      "args": {
+        "arch": "x86_64",
+        "prebuiltHost": "STEAM-DECK-OLED",
+        "name": "installer-prebuilt-x86_64",
+        "state": "installer-prebuilt-x86_64-STEAM-DECK-OLED",
+        "sshPort": "2254",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED.iso",
+        "isoUrl": ""
+      }
+    },
+    {
+      "id": "install-offline",
+      "spec": "installer/offline/test.json",
+      "after": [],
+      "args": {
+        "name": "install-offline",
+        "arch": "x86_64",
+        "prebuiltHost": "QEMU-x86_64",
+        "hostFile": "/etc/nixos/nix/hosts/x86_64/QEMU/QEMU.nix",
+        "state": "installed-offline-QEMU-x86_64",
+        "sshPort": "2255",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-QEMU-x86_64.iso",
+        "isoUrl": ""
+      }
+    },
+    {
+      "id": "host-boot-STEAM-DECK-OLED-VM-standard",
+      "spec": "hosts-boot/test.json",
+      "after": [],
+      "args": {
+        "name": "host-boot-STEAM-DECK-OLED-VM-standard",
+        "arch": "x86_64",
+        "hostName": "STEAM-DECK-OLED-VM",
+        "target": "Standard-Boot",
+        "password": "testpass123",
+        "secureBoot": "false",
+        "uefi": "true",
+        "state": "host-boot-STEAM-DECK-OLED-VM-standard",
+        "sshPort": "2256",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "isoUrl": "",
+        "requireEnforced": "false",
+        "assertPanel": "true",
+        "diskSize": "64G"
+      }
+    },
+    {
+      "id": "host-boot-STEAM-DECK-OLED-VM-secure",
+      "spec": "hosts-boot/test.json",
+      "after": [],
+      "args": {
+        "name": "host-boot-STEAM-DECK-OLED-VM-secure",
+        "arch": "x86_64",
+        "hostName": "STEAM-DECK-OLED-VM",
+        "target": "Secure-Boot",
+        "password": "testpass123",
+        "secureBoot": "true",
+        "uefi": "true",
+        "state": "host-boot-STEAM-DECK-OLED-VM-secure",
+        "sshPort": "2258",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "isoUrl": "",
+        "requireEnforced": "true",
+        "assertPanel": "true",
+        "diskSize": "64G"
+      }
+    },
+    {
+      "id": "host-boot-FRACTAL-NORTH-VM-standard",
+      "spec": "hosts-boot/test.json",
+      "after": [],
+      "args": {
+        "name": "host-boot-FRACTAL-NORTH-VM-standard",
+        "arch": "x86_64",
+        "hostName": "FRACTAL-NORTH-VM",
+        "target": "Standard-Boot",
+        "password": "testpass123",
+        "secureBoot": "false",
+        "uefi": "true",
+        "state": "host-boot-FRACTAL-NORTH-VM-standard",
+        "sshPort": "2257",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "isoUrl": "",
+        "requireEnforced": "false",
+        "assertPanel": "false",
+        "diskSize": "110G"
+      }
+    },
+    {
+      "id": "host-boot-FRACTAL-NORTH-VM-secure",
+      "spec": "hosts-boot/test.json",
+      "after": [],
+      "args": {
+        "name": "host-boot-FRACTAL-NORTH-VM-secure",
+        "arch": "x86_64",
+        "hostName": "FRACTAL-NORTH-VM",
+        "target": "Secure-Boot",
+        "password": "testpass123",
+        "secureBoot": "true",
+        "uefi": "true",
+        "state": "host-boot-FRACTAL-NORTH-VM-secure",
+        "sshPort": "2259",
+        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "isoUrl": "",
+        "requireEnforced": "false",
+        "assertPanel": "false",
+        "diskSize": "110G"
+      }
     }
   ],
   "required": [
@@ -676,7 +788,13 @@
     "password-change",
     "password-change-encrypted",
     "secure-boot-cli",
-    "installer-image-x86_64"
+    "installer-image-x86_64",
+    "install-offline",
+    "host-boot-STEAM-DECK-OLED-VM-standard",
+    "host-boot-STEAM-DECK-OLED-VM-secure",
+    "host-boot-FRACTAL-NORTH-VM-standard",
+    "host-boot-FRACTAL-NORTH-VM-secure",
+    "installer-prebuilt-x86_64"
   ],
   "workspaceRoot": ".."
 }

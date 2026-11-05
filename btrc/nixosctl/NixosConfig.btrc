@@ -73,8 +73,23 @@ class NixosConfig {
         return hostDir;
     }
 
+    class string outputNameOf(string hostsPath, string hostPath) {
+        var name = NixosConfig.hostOf(hostPath);
+        var declarations = 0;
+        for architecture in FileSystem.listDir(hostsPath) {
+            var directory = PathTools.join(hostsPath, architecture);
+            if (!FileSystem.isDir(directory)) { continue; }
+            if (FileSystem.exists(PathTools.join(directory, f"{name}.nix"))
+                || FileSystem.exists(PathTools.join(directory, f"{name}/{name}.nix"))) {
+                declarations = declarations + 1;
+            }
+        }
+        if (declarations > 1) { return f"{name}-{NixosConfig.architectureOf(hostPath)}"; }
+        return name;
+    }
+
     public string host() {
-        return NixosConfig.hostOf(self.hostPath());
+        return NixosConfig.outputNameOf(self.paths.hostsPath(), self.hostPath());
     }
 
     public string architecture() {

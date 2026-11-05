@@ -1,4 +1,5 @@
-{ config, pkgs, host, ... }: {
+{ config, pkgs, host, lib, ... }: {
+  settings.boot.plymouth.drmDevice = lib.mkDefault "/dev/dri/by-path/pci-${host.pci.amdGpu}-card";
   # KWIN_DRM_DEVICES splits on ':' with no escape — by-path symlinks contain colons.
   services.udev.extraRules = ''
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.nvidiaGpu}", SYMLINK+="dri/nvidia-card"
@@ -7,10 +8,7 @@
     SUBSYSTEM=="tty", ATTRS{idVendor}=="05ac", ATTRS{idProduct}=="9243", ENV{ID_MM_DEVICE_IGNORE}="1"
   '';
   boot = {
-    kernelParams = [
-      "amdgpu.dc=1"
-      "plymouth.drm-device=/dev/dri/by-path/pci-${host.pci.amdGpu}-card"
-    ];
+    kernelParams = [ "amdgpu.dc=1" ];
     consoleLogLevel = 0;  # silences MSFT8000 i2c spam
     kernelModules = [ "i2c-dev" ];
   };

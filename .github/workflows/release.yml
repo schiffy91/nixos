@@ -1,0 +1,50 @@
+name: release
+
+# A v* tag publishes the installer ISOs named in ci/targets.nix `release`, each with its
+# digest. A GitHub asset may be 2 GiB and an ISO is close to that, so nothing is bundled.
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag to publish (it must already exist)
+        required: true
+
+permissions:
+  contents: write  # only to attach the assets to its own release
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: make room for the ISOs
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+      - uses: DeterminateSystems/nix-installer-action@v16
+        with:
+          extra-conf: |
+            extra-substituters = ${{ vars.NIXOS_CACHE_URL }}
+            extra-trusted-public-keys = ${{ vars.NIXOS_CACHE_PUBLIC_KEY }}
+      - name: build and collect the ISOs
+        run: |
+          mkdir -p assets
+          system=$(nix eval --raw --file ci/targets.nix --apply 'c: c.release.system')
+          for attr in $(nix eval --raw --file ci/targets.nix --apply 'c: builtins.concatStringsSep " " c.release.attrs'); do
+            nix build --print-build-logs --out-link "build/$attr" ".#packages.$system.$attr"
+            cp -L "build/$attr"/iso/*.iso assets/
+            nix store delete --ignore-liveness "$(readlink -f "build/$attr")" || true  # an ISO at a time: the runner has ~14 GB
+            rm -f "build/$attr"
+          done
+          ( cd assets && sha256sum ./*.iso > SHA256SUMS )
+          ls -l assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: assets/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

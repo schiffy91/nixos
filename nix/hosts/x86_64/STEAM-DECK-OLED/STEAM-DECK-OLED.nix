@@ -29,7 +29,12 @@ in {
     };
     decky-loader.enable = true;
   };
-  systemd.tmpfiles.rules = [ "f /home/${user}/.local/share/Steam/.cef-enable-remote-debugging 0644 ${user} ${user} -" ];  # Decky needs Steam's CEF debugging, which Jovian leaves to the user
+  systemd.tmpfiles.rules = [
+    "d /home/${user}/.local 0755 ${user} ${user} -"
+    "d /home/${user}/.local/share 0755 ${user} ${user} -"
+    "d /home/${user}/.local/share/Steam 0755 ${user} ${user} -"
+    "f /home/${user}/.local/share/Steam/.cef-enable-remote-debugging 0644 ${user} ${user} -"  # Decky needs Steam's CEF debugging, which Jovian leaves to the user
+  ];
 
   users.users.${user}.uid = 1000;  # Jovian's SD card automount mounts as UID 1000
 
@@ -57,6 +62,13 @@ in {
     };
     desktop.defaultSession = "gamescope-wayland";
     networking.lanSubnet = network.lanSubnet;
+    nix = {  # the desktop builds the emulators; a handheld should never compile them
+      substituters = [ "http://FRACTAL-NORTH.local:8080" ];
+      trustedPublicKeys = [
+        "nixos-cache-1:UlVz7H6ROdjAipqWb58854E7jNS8j7KpiBLydRjaZmA="
+        "semu-cache-1:GAvdDO5fCGcTJsr1yyVLgnVn7TTyFYnfEkb7fd2zUew="
+      ];
+    };
     users.admin = {
       autoLogin.enable = true;
       autoLock.enable = false;  # every wake already asks for the LUKS passphrase

@@ -173,7 +173,7 @@ class Immutability {
             var target = PathTools.join(next, plan.spec.relativePath);
             self.run.removePath(target);
             if (plan.kind.equals("dir")) {
-                self.run.mkdirp(target);
+                self.run.mkdirpInheriting(target);
             } else {
                 var source = self.run.path(plan.store);
                 if (self.fs.exists(source)) {

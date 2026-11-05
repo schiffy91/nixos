@@ -95,6 +95,7 @@ class QemuE2eHarness {
         if (FileSystem.exists(self.legacyPidPath())) {
             VmFiles.remove(self.legacyPidPath());
         }
+        self.reapStaleVm();
         var qemuCommand = self.qemuCmd.build(fromIso);
         self.serial.prepareSerialPipe();
         self.serial.startSerialReader();
@@ -249,6 +250,14 @@ class QemuE2eHarness {
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) { return self.remote.sshWithTimeout(command, checkStatus, timeoutSeconds); }
     public ExecResult host(string command, bool checkStatus) { return self.remote.host(command, checkStatus); }
     public ExecResult nixEval(string attribute, int timeoutSeconds) { return self.remote.nixEval(attribute, timeoutSeconds); }
+    public void reapStaleVm() {
+        var port = Strings.fromInt(self.spec.sshPort);
+        var command = "pid=$(ss -tlnpH 'sport = :" + port + "' 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2); "
+            + "if [ -n \"$pid\" ] && grep -qa nixos-e2e-vm /proc/$pid/cmdline 2>/dev/null; then "
+            + "echo \"reaping stale VM $pid on port " + port + "\"; kill \"$pid\" 2>/dev/null || true; sleep 2; fi";
+        self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+    }
+
     public ExecResult qmp(string command, int timeoutSeconds) { return self.remote.qmp(command, timeoutSeconds); }
     public ExecResult workspaceFileExists(string relativePath) { return self.remote.workspaceFileExists(relativePath); }
     public void copyWorkspace(string localPath, string remotePath) { self.remote.copyWorkspace(localPath, remotePath); }
@@ -257,6 +266,7 @@ class QemuE2eHarness {
 
     public string serialLogPath() { return self.serial.serialLogPath(); }
     public void serialSend(string command) { self.serial.serialSend(command); }
+    public bool sendKeys(string text) { return self.provisioner.sendKeys(text); }
 
     public void requireCommand(string name) { self.firmware.requireCommand(name); }
     public void requireTpm2Capability() { self.firmware.requireTpm2Capability(); }

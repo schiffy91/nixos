@@ -63,6 +63,12 @@ in {
     user = admin.username;
   };
 
+  systemd.tmpfiles.rules =
+    lib.optional admin.homeManager.enable
+      "d /nix/var/nix/profiles/per-user/${admin.username} 0755 ${admin.username} ${admin.username} - "
+    ++ lib.optional (agent.enable && agent.homeManager.enable)
+      "d /nix/var/nix/profiles/per-user/${agent.username} 0755 ${agent.username} ${agent.username} - ";
+
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
@@ -95,6 +101,7 @@ in {
             shellAliases = {
               ll = "ls -alF";
             };
+            initExtra = builtins.readFile ../../home/shell.sh;
           };
           direnv = {
             enable = true;

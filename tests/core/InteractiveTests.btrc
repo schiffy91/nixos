@@ -1,0 +1,25 @@
+#include <assert.h>
+
+import Library.Strings;
+import ../../btrc/core/Interactive.btrc;
+
+int main() {
+    /* the only two answers, however they are typed */
+    for yes in ["y", "Y", "yes", "YES", " yes "] { assert(Interactive.confirmationFor(yes).equals("yes")); }
+    for no in ["n", "N", "no", "NO", " no "] { assert(Interactive.confirmationFor(no).equals("no")); }
+
+    /* anything else answers nothing, including what closed stdin returns forever */
+    for unanswered in ["", "   ", "maybe", "yep", "1", "\n"] {
+        assert(Interactive.confirmationFor(unanswered).equals(""));
+    }
+
+    /* an unattended install reaches "Restart now?" with stdin at EOF. Before this
+       was bounded it printed "Invalid input" until the disk filled: 4 GB in one
+       run here, 164 GB on the real machine. This must return, and answer no. */
+    var interactive = Interactive();
+    assert(!interactive.confirm("Restart now?"));
+    assert(Interactive.maxPromptAttempts() > 0);
+
+    print("PASS: confirmations classified, and a prompt at EOF declines instead of spinning");
+    return 0;
+}

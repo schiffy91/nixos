@@ -51,8 +51,8 @@ class NixosCtl {
         help.continuation("--rebuild-filesystem  Re-enroll the bootloader.");
         help.continuation("--reboot  Reboot after activation.");
         help.item("upgrade [...]", "Alias for: update --upgrade --clean");
-        help.item("install [--format] [--yes] [--collect-garbage] [--debug]",
-               "Format/mount disk and run nixos-install.");
+        help.item("install [--format] [--yes] [--collect-garbage] [--debug] [--force-upgrade]",
+               "Format/mount disk and run nixos-install. --force-upgrade updates the flake lock first, ignoring any closure baked into the installer.");
         help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
         help.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
 
@@ -205,7 +205,7 @@ class NixosCtl {
             var prepared = installer.prepareDisk(format);
             if (!prepared.ok()) { return prepared.code; }
             if (confirmed || installer.interactive.confirm("Install NixOS?")) {
-                var installed = installer.installNixos();
+                var installed = installer.installNixos(forceUpgrade=line.has("--force-upgrade"));
                 if (!installed.ok()) { return installed.code; }
             } else if (installer.interactive.confirm("Permission NixOS?")) {
                 installer.permissionNixos();

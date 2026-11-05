@@ -1,0 +1,58 @@
+
+import Library.Strings;
+import ../../btrc/nixosctl/Installer.btrc;
+
+string manifest() {
+    return "{\"STEAM-DECK-OLED-Standard-Boot\":{"
+        + "\"system\":\"/nix/store/aaa-nixos-system\","
+        + "\"disko\":\"/nix/store/bbb-disko\","
+        + "\"mount\":\"/nix/store/ccc-disko-mount\"},"
+        + "\"STEAM-DECK-OLED-Secure-Boot\":{"
+        + "\"system\":\"/nix/store/ddd-nixos-system\","
+        + "\"disko\":\"/nix/store/eee-disko\","
+        + "\"mount\":\"/nix/store/fff-disko-mount\"}}";
+}
+
+void expectEntry(string host, string target, string field, string expected) {
+    assert(Installer.prebuiltEntryIn(manifest(), host, target, field).equals(expected));
+}
+
+int main() {
+    expectEntry("STEAM-DECK-OLED", "Standard-Boot", "system", "/nix/store/aaa-nixos-system");
+    expectEntry("STEAM-DECK-OLED", "Standard-Boot", "disko", "/nix/store/bbb-disko");
+    expectEntry("STEAM-DECK-OLED", "Standard-Boot", "mount", "/nix/store/ccc-disko-mount");
+    expectEntry("STEAM-DECK-OLED", "Secure-Boot", "system", "/nix/store/ddd-nixos-system");
+
+    expectEntry("FRACTAL-NORTH", "Standard-Boot", "system", "");
+    expectEntry("STEAM-DECK-OLED", "Disk-Operation", "system", "");
+    expectEntry("STEAM-DECK-OLED", "Standard-Boot", "toplevel", "");
+    expectEntry("STEAM-DECK-OLED-x86_64", "Standard-Boot", "system", "");  /* the bug that shipped */
+
+    assert(Installer.prebuiltEntryIn("{}", "STEAM-DECK-OLED", "Standard-Boot", "system").equals(""));
+    assert(Installer.prebuiltEntryIn("[]", "STEAM-DECK-OLED", "Standard-Boot", "system").equals(""));
+    assert(Installer.prebuiltEntryIn("{\"STEAM-DECK-OLED-Standard-Boot\":\"/nix/store/old-flat-format\"}",
+        "STEAM-DECK-OLED", "Standard-Boot", "system").equals(""));
+
+    var source = Installer.installSourceFor("/nix/store/aaa-nixos-system", "'/mnt/etc/nixos#STEAM-DECK-OLED-Standard-Boot'");
+    assert(Strings.find(source, "--system", 0) >= 0);
+    assert(Strings.find(source, "--flake", 0) < 0);
+
+    var fallbackSource = Installer.installSourceFor("", "'/mnt/etc/nixos#STEAM-DECK-OLED-Standard-Boot'");
+    assert(Strings.find(fallbackSource, "--flake", 0) >= 0);
+    assert(Strings.find(fallbackSource, "--system", 0) < 0);
+
+    var githubFallback = "nix run github:nix-community/disko/abc123 -- --mode destroy,format,mount";
+    var formatCommand = Installer.diskoCommandFor("/nix/store/bbb-disko", githubFallback);
+    assert(Strings.find(formatCommand, "github:", 0) < 0);
+    assert(Strings.find(formatCommand, "/nix/store/bbb-disko", 0) >= 0);
+    assert(Strings.find(formatCommand, "nix run", 0) < 0);
+
+    var mountCommand = Installer.diskoCommandFor("/nix/store/ccc-disko-mount", githubFallback);
+    assert(Strings.find(mountCommand, "github:", 0) < 0);
+    assert(Strings.find(mountCommand, "/nix/store/ccc-disko-mount", 0) >= 0);
+
+    assert(Installer.diskoCommandFor("", githubFallback).equals(githubFallback));
+
+    print("PASS: prebuilt manifest lookup, --system over --flake, disko formats without GitHub");
+    return 0;
+}

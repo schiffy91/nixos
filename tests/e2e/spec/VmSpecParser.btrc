@@ -68,6 +68,8 @@ class VmSpecParser {
         spec.iso = VmSpecParser.stringField(object, "iso", spec.iso);
         spec.isoUrl = VmSpecParser.stringField(object, "isoUrl", spec.isoUrl);
         spec.diskSize = VmSpecParser.stringField(object, "diskSize", spec.diskSize);
+        spec.diskInterface = VmSpecParser.stringField(object, "diskInterface", spec.diskInterface);
+        spec.graphics = VmSpecParser.stringField(object, "graphics", spec.graphics);
         spec.memory = VmSpecParser.stringField(object, "memory", spec.memory);
         spec.cpus = VmSpecParser.integerField(object, "cpus", spec.cpus);
         spec.sshPort = VmSpecParser.integerField(object, "sshPort", spec.sshPort);
@@ -98,6 +100,8 @@ class VmSpecParser {
         if (key.equals("diskSize")) { spec.diskSize = value; return; }
         if (key.equals("memory")) { spec.memory = value; return; }
         if (key.equals("cpus")) { spec.cpus = Strings.toInt(value); return; }
+        if (key.equals("diskInterface")) { spec.diskInterface = value; return; }
+        if (key.equals("graphics")) { spec.graphics = value; return; }
         if (key.equals("sshPort")) { spec.sshPort = Strings.toInt(value); return; }
     }
 

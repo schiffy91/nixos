@@ -1,0 +1,48 @@
+{
+  "name": "installer-prebuilt-{{arch}}",
+  "state": "installer-prebuilt-{{arch}}-{{prebuiltHost}}",
+  "stateMaterial": "installer-prebuilt:{{arch}}:{{prebuiltHost}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "args": {
+    "arch": "x86_64",
+    "prebuiltHost": "STEAM-DECK-OLED"
+  },
+  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
+  "isoUrl": "",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "diskSize": "8G",
+  "memory": "4G",
+  "cpus": 4,
+  "sshPort": 2254,
+  "operations": [
+    {
+      "op": "host",
+      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{prebuiltHost}}",
+      "timeout": 21600
+    },
+    {
+      "op": "up-iso",
+      "timeout": 1800
+    },
+    {
+      "op": "guest",
+      "command": "set -e; test -f /etc/nixos-installer/prebuilt.json; jq -e '.\"{{prebuiltHost}}-Secure-Boot\" and .\"{{prebuiltHost}}-Standard-Boot\"' /etc/nixos-installer/prebuilt.json > /dev/null && printf manifest-ok",
+      "expect": "manifest-ok",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": "set -e; for target in Secure-Boot Standard-Boot; do path=$(jq -r \".\\\"{{prebuiltHost}}-$target\\\"\" /etc/nixos-installer/prebuilt.json); test -e \"$path\"; nix-store --query --requisites \"$path\" | xargs -r nix-store --check-validity; done; printf closure-ok",
+      "expect": "closure-ok",
+      "timeout": 900
+    },
+    {
+      "op": "guest",
+      "command": "set -e; path=$(jq -r '.\"{{prebuiltHost}}-Secure-Boot\"' /etc/nixos-installer/prebuilt.json); nix-store --query --requisites \"$path\" | grep -qE 'linux-[0-9.]+-valve2' && nix-store --query --requisites \"$path\" | wc -l | awk '$1 > 500 {print \"closure-complete\"}'",
+      "expect": "closure-complete",
+      "timeout": 900
+    },
+    {
+      "op": "stop"
+    }
+  ]
+}

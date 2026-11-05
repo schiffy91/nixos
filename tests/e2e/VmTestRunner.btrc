@@ -29,6 +29,7 @@ class VmOperationCatalog {
         kinds.push("bootstrap-ssh");
         kinds.push("wait-ssh");
         kinds.push("unlock-luks");
+        kinds.push("send-keys");
         kinds.push("serial-send");
         kinds.push("sleep");
         kinds.push("guest");
@@ -180,6 +181,10 @@ class VmTestRunner {
             if (!self.vm.unlockLuks(op.command, op.timeout)) {
                 self.fail(f"LUKS unlock did not reach SSH within {op.timeout} seconds; serial log: {self.vm.serialLogPath()}");
             }
+            return;
+        }
+        if (op.kind.equals("send-keys")) {
+            if (!self.vm.sendKeys(op.command)) { self.fail("QMP refused the key events"); }
             return;
         }
         if (op.kind.equals("serial-send")) {
