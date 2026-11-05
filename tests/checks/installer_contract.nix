@@ -1,5 +1,5 @@
 { lib, mkInstaller, bootableTargets, hostOutputName, prebuiltSources }:
-{ pkgs, system, prebuiltHost }:
+{ pkgs, system, prebuiltHost, touchHost ? null }:
 let
   generic = (mkInstaller system [ ]).config;
   prebuilt = (mkInstaller system [ prebuiltHost ]).config;
@@ -22,7 +22,11 @@ let
          <= lib.length generic.isoImage.storeContents + lib.length bootableTargets)
          "prebuilt ISO carries too little to install offline"
     ++ lib.optional (prebuiltSources == [ ]) "prebuilt ISO carries no flake input sources"
-    ++ lib.optional (manifestOf generic != { }) "the generic ISO must advertise no prebuilt system";
+    ++ lib.optional (manifestOf generic != { }) "the generic ISO must advertise no prebuilt system"
+    ++ lib.optional (generic.services.buffyboard.enable)
+         "the generic ISO draws an on-screen keyboard over a console that does not need one"
+    ++ lib.optional (touchHost != null && !(mkInstaller system [ touchHost ]).config.services.buffyboard.enable)
+         "${if touchHost == null then "" else hostOutputName touchHost} unlocks by touch but its installer has no on-screen keyboard, so installing needs a USB keyboard";
 in {
   name = "installer-contract";
   value = pkgs.runCommand "installer-contract-${system}" { } (

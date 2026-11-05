@@ -1,7 +1,7 @@
 # A minimal installer ISO that needs no typing: the admin's keys are already
 # authorized, this repository is already at /etc/nixos, and nixosctl is already
 # built, so a booted stick goes straight to `nixosctl install`.
-{ inputs, self, system, authorizedKeys, stateVersion, prebuiltSystems ? { }, prebuiltSources ? [ ], prebuiltName ? "" }:
+{ inputs, self, system, authorizedKeys, stateVersion, prebuiltSystems ? { }, prebuiltSources ? [ ], prebuiltName ? "", touchKeyboard ? false }:
 let
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
   lib = inputs.nixpkgs.lib;
@@ -21,6 +21,7 @@ let
         image.baseName = lib.mkForce ("nixos-installer-${system}" + lib.optionalString (prebuiltName != "") "-${prebuiltName}");
         boot.loader.timeout = lib.mkForce 1;
         boot.kernelParams = [ "console=tty0" "console=ttyS0,115200n8" ];
+        services.buffyboard.enable = touchKeyboard;  # a host that unlocks by touch installs by touch too
         isoImage = {
           forceTextMode = true;
           squashfsCompression = "zstd -Xcompression-level 15";

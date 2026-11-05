@@ -109,10 +109,14 @@ let
         }) bootableTargets) systemHosts;
         hostChecks = map (mkCheck: mkCheck { inherit pkgs system configurations; })
           [ mkHomeTmpfilesCheck mkOwnKeysCheck mkQuietBootCheck mkInitrdUnitsCheck mkUnlockAgentCheck ];
-        installerCheck = mkInstallerCheck {
-          inherit pkgs system;
-          prebuiltHost = lib.findFirst (candidate: hostSystem candidate == system) (lib.head hostFiles) hostFiles;
-        };
+        installerCheck =
+          let prebuiltHost = lib.findFirst (candidate: hostSystem candidate == system) (lib.head hostFiles) hostFiles;
+          in mkInstallerCheck {
+            inherit pkgs system prebuiltHost;
+            touchHost = lib.findFirst (candidate:
+              (mkSystem candidate (lib.head bootableTargets) systemModuleFiles).config.boot.initrd.unl0kr.enable or false)
+              null systemHosts;
+          };
       in lib.listToAttrs (map (check: { inherit (check) name value; }) (hostChecks ++ [ installerCheck ])))))
     // lib.genAttrs (lib.unique (map darwinSystemOf darwinHomeFiles)) (system: lib.listToAttrs
       (map (darwinFile: { name = "${darwinName darwinFile}-home"; value = self.homeConfigurations.${darwinHomeName darwinFile}.activationPackage; })

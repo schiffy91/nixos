@@ -16,6 +16,9 @@ let
           }) bootableTargets) prebuiltHostFiles);
       prebuiltSources = lib.optionals (prebuiltHostFiles != [ ]) (flakeSources 3 inputs);
       prebuiltName = lib.concatMapStringsSep "-" hostOutputName prebuiltHostFiles;
+      touchKeyboard = lib.any (prebuilt:
+        (mkSystem prebuilt (lib.head bootableTargets) systemModuleFiles).config.boot.initrd.unl0kr.enable or false)
+        prebuiltHostFiles;
     };
 in {
   inherit mkInstaller;
