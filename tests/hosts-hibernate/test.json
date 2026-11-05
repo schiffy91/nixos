@@ -61,7 +61,7 @@
     },
     {
       "op": "host",
-      "command": "timeout 900 bash -c 'until grep -qa E2E-HIBERNATING \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 5; done' || { echo 'never hibernated'; tail -c 1500 \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; exit 1; }; printf hibernated",
+      "command": "timeout 900 bash -c 'until grep -qa 'E2E-HIBERNATING cycle=1' \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 5; done' || { echo 'never hibernated'; tail -c 1500 \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; exit 1; }; printf hibernated",
       "expect": "hibernated",
       "timeout": 1000
     },
@@ -100,8 +100,14 @@
     },
     {
       "op": "host",
-      "command": "grep -qa 'E2E-RESUMED yes' \".vm/e2e/{{state}}-{{stateHashShort}}/resume.log\" && printf resumed || { echo 'no resume marker'; exit 1; }",
+      "command": "grep -qa 'E2E-RESUMED yes cycle=1' \".vm/e2e/{{state}}-{{stateHashShort}}/resume.log\" && printf resumed || { echo 'no resume marker for the first round trip'; exit 1; }",
       "expect": "resumed",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "line=$(grep -a 'E2E-HIBERNATELOCATION' \".vm/e2e/{{state}}-{{stateHashShort}}/resume.log\" | tail -1); echo \"cycle 1: $line\"; left=$(echo \"$line\" | awk '{print $2}'); [ \"$left\" = 0 ] || { echo 'HibernateLocation was left in the firmware after resume'; exit 1; }; printf hibernate-location-clear",
+      "expect": "hibernate-location-clear",
       "timeout": 60
     },
     {
@@ -109,6 +115,63 @@
       "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/resume.log' 0 {{secureBoot}} false",
       "expect": "host-healthy",
       "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "timeout 900 bash -c 'until grep -qa \"E2E-HIBERNATING cycle=2\" \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 5; done' || { echo 'never hibernated a second time'; tail -c 1500 \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; exit 1; }; printf hibernated-again",
+      "expect": "hibernated-again",
+      "timeout": 960
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 50
+    },
+    {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-resume-2.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-resume-2.ppm' {{unlockAgent}}",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
+      "op": "host",
+      "command": "bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && printf resume2-reported",
+      "expect": "resume2-reported",
+      "timeout": 960
+    },
+    {
+      "op": "host",
+      "command": "cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/resume-2.log\" && printf saved",
+      "expect": "saved",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "grep -qa 'E2E-RESUMED yes cycle=2' \".vm/e2e/{{state}}-{{stateHashShort}}/resume-2.log\" && printf resumed-twice || { echo 'no resume marker for the second round trip'; exit 1; }",
+      "expect": "resumed-twice",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "line=$(grep -a 'E2E-HIBERNATELOCATION' \".vm/e2e/{{state}}-{{stateHashShort}}/resume-2.log\" | tail -1); echo \"cycle 2: $line\"; left=$(echo \"$line\" | awk '{print $2}'); [ \"$left\" = 0 ] || { echo 'HibernateLocation was left in the firmware after resume'; exit 1; }; printf hibernate-location-clear",
+      "expect": "hibernate-location-clear",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/resume-2.log' 0 {{secureBoot}} false",
+      "expect": "host-healthy",
+      "timeout": 300
     },
     {
       "op": "stop"

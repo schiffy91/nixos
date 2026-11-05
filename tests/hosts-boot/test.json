@@ -11,7 +11,8 @@
     "requireEnforced": "false",
     "assertPanel": "true",
     "unlockAgent": "unl0kr",
-    "enablesSecureBoot": "false"
+    "enablesSecureBoot": "false",
+    "reenrollsKeys": "false"
   },
   "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
   "isoUrl": "",
@@ -113,6 +114,17 @@
       "timeout": 120
     },
     {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0-session.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-session.ppm' console-silent",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
       "op": "host",
       "command": "if [ \"{{enablesSecureBoot}}\" != \"true\" ]; then printf enable-done; else timeout 1800 bash -c 'until grep -qa \"E2E-SECURE-BOOT-ENABLE sign=0 enroll=0\" \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\"; do sleep 10; done' || { echo 'secure boot enable did not succeed'; grep -a 'E2E-SB-LOG\\|E2E-SECURE-BOOT-ENABLE' \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" | tail -16; exit 1; }; printf enable-done; fi",
       "expect": "enable-done",
@@ -198,10 +210,49 @@
       "timeout": 120
     },
     {
+      "op": "qmp",
+      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1-session.ppm\"}}",
+      "timeout": 60
+    },
+    {
+      "op": "host",
+      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-session.ppm' console-silent",
+      "expect": "panel-graphical",
+      "timeout": 120
+    },
+    {
       "op": "host",
       "command": "for b in 0 1; do grep -aE '^E2E-(STATE|FAILED|REFUSED|HOMEMANAGER|SNAPSHOTS|SWAP|UNLOCKAGENT)' \".vm/e2e/{{state}}-{{stateHashShort}}/boot-$b.log\" | sed -E 's/^(E2E-UNLOCKAGENT [a-z0-9]+).*/\\\\1/' | sort > \".vm/e2e/{{state}}-{{stateHashShort}}/norm-$b.txt\"; done; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-1.txt\" > /dev/null && printf boots-identical || { echo 'boots differ'; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-1.txt\"; exit 1; }",
       "expect": "boots-identical",
       "timeout": 120
+    },
+    {
+      "op": "stop"
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf flash-cleared-skipped; else pristine=\"$(readlink -f .vm/e2e/{{state}}-{{stateHashShort}}/firmware-data)/edk2-i386-vars.fd\"; cp \"$pristine\" .vm/e2e/{{state}}-{{stateHashShort}}/edk2-vars.fd && printf flash-cleared; fi",
+      "expect": "flash-cleared",
+      "timeout": 120
+    },
+    {
+      "op": "boot-disk"
+    },
+    {
+      "op": "sleep",
+      "timeout": 50
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf reenroll-skipped; else bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log\" && printf reenroll-done; fi",
+      "expect": "reenroll",
+      "timeout": 960
+    },
+    {
+      "op": "host",
+      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf enroll-skipped; else python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log' 2 true true; fi",
+      "expect": "enroll",
+      "timeout": 300
     },
     {
       "op": "stop"

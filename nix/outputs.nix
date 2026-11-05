@@ -67,6 +67,7 @@ let
   };
   inherit (installers) mkInstaller installerPackages;
   mkInitrdUnitsCheck = import ../tests/checks/initrd_units.nix { inherit lib; };
+  mkUnlockAgentCheck = import ../tests/checks/unlock_agent.nix { inherit lib; };
   mkQuietBootCheck = import ../tests/checks/quiet_boot.nix { inherit lib; };
   mkOwnKeysCheck = import ../tests/checks/own_keys_only.nix { inherit lib; };
   mkHomeTmpfilesCheck = import ../tests/checks/home_tmpfiles.nix { inherit lib; };
@@ -107,7 +108,7 @@ let
           configuration = mkSystem hostFile target systemModuleFiles;
         }) bootableTargets) systemHosts;
         hostChecks = map (mkCheck: mkCheck { inherit pkgs system configurations; })
-          [ mkHomeTmpfilesCheck mkOwnKeysCheck mkQuietBootCheck mkInitrdUnitsCheck ];
+          [ mkHomeTmpfilesCheck mkOwnKeysCheck mkQuietBootCheck mkInitrdUnitsCheck mkUnlockAgentCheck ];
         installerCheck = mkInstallerCheck {
           inherit pkgs system;
           prebuiltHost = lib.findFirst (candidate: hostSystem candidate == system) (lib.head hostFiles) hostFiles;

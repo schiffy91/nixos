@@ -34,9 +34,11 @@ if value("TEXTPROMPT", "0") != "0":
     failures.append("the passphrase was asked on a text console, so nothing owned the screen")
 # a blank panel and plymouth's splash look alike, so the unit's own result is
 # what shows the agent actually ran
-unit_result = value("UNLOCKUNIT", "unknown")
-if unit_result == "failed":
-    failures.append(f"the unlock agent's unit failed: {value('UNLOCKAGENT')}")
+unit_result = value("UNLOCKUNIT", "")
+if unit_result != "success":
+    failures.append(
+        f"the unlock agent's unit did not run to success: {value('UNLOCKAGENT')} reported "
+        f"{unit_result or 'nothing, so the unit does not exist'}")
 agent = value("UNLOCKAGENT").split()
 if len(agent) < 2 or int(agent[1] or 0) < 1:
     failures.append(f"no graphical unlock agent ran: {value('UNLOCKAGENT') or 'nothing reported'}")

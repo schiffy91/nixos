@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 let
-  unlockAgent = if (config.boot.initrd.unl0kr.enable or false) then "unl0kr" else "plymouth";
+  usesKeyboard = config.boot.initrd.unl0kr.enable or false;
+  unlockAgent = if usesKeyboard then "unl0kr" else "plymouth";
+  unlockUnit = if usesKeyboard then "unl0kr-agent.service" else "plymouth-start.service";
   healthReporter = pkgs.writeShellScript "e2e-health-report" ''
     set +e  # probes are best effort; the report must survive
     export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.systemd pkgs.btrfs-progs pkgs.util-linux pkgs.sbctl ]}:/run/current-system/sw/bin:$PATH
@@ -17,7 +19,7 @@ let
     done
     printf 'E2E-HOMEMANAGER %s\n' "$(${pkgs.systemd}/bin/systemctl is-active home-manager-${config.settings.users.admin.username}.service 2>/dev/null || true)"
     printf 'E2E-UNLOCKAGENT %s %s\n' "${unlockAgent}" "$(${pkgs.systemd}/bin/journalctl -b --no-pager 2>/dev/null | grep -ci "${unlockAgent}" || true)"
-    printf 'E2E-UNLOCKUNIT %s\n' "$(${pkgs.systemd}/bin/systemctl show -p Result --value '${unlockAgent}-start.service' 2>/dev/null || echo unknown)"
+    printf 'E2E-UNLOCKUNIT %s\n' "$(${pkgs.systemd}/bin/systemctl show -p Result --value '${unlockUnit}' 2>/dev/null || echo unknown)"
     signable="/boot/EFI/BOOT/|/boot/EFI/systemd/|/boot/EFI/Linux/"
     printf 'E2E-SBCTL %s\n' "$(sbctl verify 2>&1 | grep -E "$signable" | grep -c 'is not signed' || echo unavailable)"
     sbctl verify 2>&1 | grep -E "$signable" | grep 'is not signed' | while read -r unsigned; do
@@ -51,15 +53,18 @@ let
         fi
       fi
     ''}
-    finished=/nix/var/e2e-hibernated
-    if [ -e "$finished" ]; then
-      printf 'E2E-RESUMED yes\n' > /dev/ttyS0
-    else
-      : > "$finished"
+    counter=/nix/var/e2e-hibernations
+    cycles=$(cat "$counter" 2>/dev/null || echo 0)
+    while [ "$cycles" -lt 2 ]; do
+      cycles=$((cycles + 1))
+      echo "$cycles" > "$counter"
       ${pkgs.coreutils}/bin/sync
-      printf 'E2E-HIBERNATING\n' > /dev/ttyS0
+      printf 'E2E-HIBERNATING cycle=%s\n' "$cycles" > /dev/ttyS0
       ${pkgs.systemd}/bin/systemctl hibernate
-    fi
+      printf 'E2E-RESUMED yes cycle=%s\n' "$cycles" > /dev/ttyS0
+      left=$(ls /sys/firmware/efi/efivars 2>/dev/null | grep -c HibernateLocation || true)
+      printf 'E2E-HIBERNATELOCATION %s swap=%s\n' "$left" "$(swapon --show=NAME --noheadings | tr '\n' ' ')" > /dev/ttyS0
+    done
   '';
 in
 {
