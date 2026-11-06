@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793845990,
-        "narHash": "sha256-swxU51bpTFnwJVyVXmagOPR8RGjmUP4cG3vspGpupQM=",
+        "lastModified": 1793922495,
+        "narHash": "sha256-IG7BQ3UKCaDXLaQnC4omC/mg4q8vRRssiQjZ0odAe6g=",
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "d21c436a2a365a632909ca6a759caa6f7f2d0d60",
+        "rev": "e6e83dff51a559294ea80b2afe481b7f075fbddb",
         "type": "github"
       },
       "original": {
@@ -913,11 +913,11 @@
         "retroarch": "retroarch"
       },
       "locked": {
-        "lastModified": 1793841982,
-        "narHash": "sha256-LsOAoW3Y9y8QhXprqGs6WDv32yGYX+xQvmaGNkMtsfk=",
+        "lastModified": 1793931428,
+        "narHash": "sha256-z7VMdS8TsY/MS+1eWe0Olht86eAu89eqtlSx6xvw2E4=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "e47b198f363118fa8d58fceb609bad963714e2bb",
+        "rev": "7bac24ed5d00fa51fdfa19696d1fd73fdbc01673",
         "type": "github"
       },
       "original": {
