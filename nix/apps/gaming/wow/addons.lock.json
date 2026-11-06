@@ -33,23 +33,23 @@
   },
   "spoken": {
     "hash": "sha256-s8ggNlvT9PMyQIUSC0vE3D0wp38wF+9sacRU+C4QHcc=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken/v3.8.3/Spoken-3.8.3.zip"
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken%2Fv3.8.3/Spoken-3.8.3.zip"
   },
   "spokenBossesAudio": {
     "hash": "sha256-nQI9kju/eJTQ+S/sAl/5m7+2TLpCuG0WWYdPQi4ecdY=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/bosses-audio/v1.0.0/SpokenBossesAudio-1.0.0.zip"
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/bosses-audio%2Fv1.0.0/SpokenBossesAudio-1.0.0.zip"
   },
   "spokenPlacesAudio": {
     "hash": "sha256-3GHXRhn0DX+R+iq45UcEakPa2sgtYJXgfdguozUZbks=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/places-audio/v2.1.0/SpokenPlacesAudio-2.1.0.zip"
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/places-audio%2Fv2.1.0/SpokenPlacesAudio-2.1.0.zip"
   },
   "spokenQuestsAudio": {
     "hash": "sha256-u+cCtx8A+MNYa2/Rx9dLpnWBRJUTtVhiff3JeHsOt5A=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/quests-audio/v2.5.0/SpokenQuestsAudioAll-2.5.0.zip"
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/quests-audio%2Fv2.5.0/SpokenQuestsAudioAll-2.5.0.zip"
   },
   "spokenReadablesAudio": {
     "hash": "sha256-fvjWgaVLizbDCWdjeV1F7IXwht8RNacGaPn+dpW+u/o=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/readables-audio/v2.3.0/SpokenReadablesAudio-2.3.0.zip"
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/readables-audio%2Fv2.3.0/SpokenReadablesAudio-2.3.0.zip"
   },
   "threatClassic2": {
     "hash": "sha256-Dx6+t6A6edQrqV+kRuh4h9ov4p7xIhsUyyh9e7uEY4Q=",

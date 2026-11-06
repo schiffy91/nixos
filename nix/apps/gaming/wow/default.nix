@@ -21,7 +21,50 @@ let
     name = "wow-forever-addons";
     paths = lib.mapAttrsToList fetch lock;
   };
+  # Refreshes addons.lock.json from each repo's newest release. nixosctl upgrade runs it.
+  lockTool = pkgs.writeShellApplication {
+    name = "wow-addons-lock";
+    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.nix pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep ];
+    text = ''
+      root="''${NIXOS_CONFIG_ROOT:-/etc/nixos}/nix/apps/gaming/wow"
+      sources="$root/addons.json"
+      flavours="bcc cata classic forever mists titan titanreforged wrath retail nolib"
+      result='{}'
+      for name in $(jq -r 'keys[]' "$sources"); do
+        repo=$(jq -r --arg n "$name" '.[$n].repo' "$sources")
+        train=$(jq -r --arg n "$name" '.[$n].train // ""' "$sources")
+        want=$(jq -r --arg n "$name" '.[$n].flavour // ""' "$sources")
+        if [ -n "$train" ]; then  # the releases feed only carries the newest ten, so ask git for every tag
+          tag=$(git ls-remote --tags "https://github.com/$repo" "refs/tags/$train/*" \
+            | sed 's|.*refs/tags/||' | grep -v '\^{}$' | sort -V | tail -1)
+        else
+          tag=$(curl -fsSL "https://github.com/$repo/releases.atom" \
+            | grep -oE 'releases/tag/[^"]+' | sed 's|releases/tag/||; s|%2F|/|g; s|%2B|+|g' | head -1)
+        fi
+        [ -n "$tag" ] || { echo "$name: no release found" >&2; exit 1; }
+        assets=$(curl -fsSL "https://github.com/$repo/releases/expanded_assets/$tag" \
+          | grep -oE "/$repo/releases/download/[^\"]+\.zip" | sort -u)
+        href=""
+        for candidate in $assets; do
+          file=$(basename "$candidate" .zip)
+          suffix=''${file##*-}
+          matches=no
+          for flavour in $flavours; do [ "$suffix" = "$flavour" ] && matches=yes; done
+          if [ -n "$want" ]; then [ "$suffix" = "$want" ] && href="$candidate"
+          elif [ "$matches" = no ]; then href="$candidate"; fi
+        done
+        [ -n "$href" ] || { echo "$name: no asset for ''${want:-base} in $tag" >&2; exit 1; }
+        url="https://github.com$href"
+        hash=$(nix store prefetch-file --json --hash-type sha256 "$url" | jq -r .hash)
+        echo "$name $tag" >&2
+        result=$(printf '%s' "$result" | jq --arg n "$name" --arg u "$url" --arg h "$hash" \
+          '.[$n] = {url: $u, hash: $h}')
+      done
+      printf '%s\n' "$result" | jq -S . > "$root/addons.lock.json"
+    '';
+  };
 in lib.mkIf enabled {
+  environment.systemPackages = [ lockTool ];  # nixosctl upgrade runs it as root
   system.activationScripts.wowAddons = lib.stringAfter [ "users" ] ''
     if [ -d "${forever}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} "${forever}/Interface"
