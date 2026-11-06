@@ -67,6 +67,11 @@
       "expect": "clean-snapshots"
     },
     {
+      "op": "guest",
+      "command": "set -e; script=/mnt/etc/nixos/.github/ci/publish.py; test -x \"$script\" || { echo 'the permissions pass stripped an executable bit'; ls -l \"$script\"; exit 1; }; printf exec-bits-kept",
+      "expect": "exec-bits-kept"
+    },
+    {
       "op": "stop"
     },
     {

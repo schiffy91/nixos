@@ -86,12 +86,7 @@ class PermissionsManager {
         }
 
         var ignores = self.ignorePredicate();
-        self.chmodMatching(quotedRoot, ignores, "-type d", "755");
-        self.chmodMatching(quotedRoot, ignores, "-type f", "644");
-        var bin = PathTools.join(root, "bin");
-        if (FileSystem.exists(bin)) {
-            self.chmodMatching(ShellWords.quote(bin), "", "-type f", "755");
-        }
+        self.chmodMatching(quotedRoot, ignores, "", "u+rwX,go=rX");
         var gitObjects = PathTools.join(root, ".git/objects");
         if (FileSystem.exists(gitObjects)) {
             var quotedGitObjects = ShellWords.quote(gitObjects);
