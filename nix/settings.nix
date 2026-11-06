@@ -299,6 +299,7 @@ in {
     settings.apps.agents.rules = mkSetting bool false;
     settings.apps.bash.enable = mkSetting bool true;
     settings.apps.battlenet.enable = mkSetting bool true;
+    settings.apps.wow.enable = mkSetting bool true;
     settings.apps.assettocorsa.enable = mkSetting bool true;
     settings.apps.assettocorsa.mods = mkSetting (listOf package) [];
     settings.apps.assettocorsa.contentDirectory = mkSetting (nullOr str) "~/Games/Assetto Corsa";

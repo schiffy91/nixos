@@ -184,11 +184,11 @@ iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
 CACHE_DIR ?= $(HOME)/.cache/nix-cache  # shared with the other repositories on this host
 CACHE_PORT ?= 8080
 
-cache: ## Build this host's ci/targets.nix attrs, sign them, and add them to build/cache
-	ci/publish.py --dir "$(CACHE_DIR)"
+cache: ## Build this host's .github/ci/targets.nix attrs, sign them, and add them to build/cache
+	.github/ci/publish.py --dir "$(CACHE_DIR)"
 
 cache-all: ## The same for everything a host activates (every installer in `local`)
-	ci/publish.py --all --dir "$(CACHE_DIR)"
+	.github/ci/publish.py --all --dir "$(CACHE_DIR)"
 
 cache-serve: ## Serve build/cache over HTTP for the other machines (CACHE_PORT=8080)
 	@printf 'serving %s on port %s; substituter: http://%s.local:%s\n' "$(CACHE_DIR)" "$(CACHE_PORT)" "$$(hostname)" "$(CACHE_PORT)"

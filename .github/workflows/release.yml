@@ -1,6 +1,6 @@
 name: release
 
-# A v* tag publishes the installer ISOs named in ci/targets.nix `release`, each with its
+# A v* tag publishes the installer ISOs named in .github/ci/targets.nix `release`, each with its
 # digest. A GitHub asset may be 2 GiB and an ISO is close to that, so nothing is bundled.
 on:
   push:
@@ -33,8 +33,8 @@ jobs:
       - name: build and collect the ISOs
         run: |
           mkdir -p assets
-          system=$(nix eval --raw --file ci/targets.nix --apply 'c: c.release.system')
-          for attr in $(nix eval --raw --file ci/targets.nix --apply 'c: builtins.concatStringsSep " " c.release.attrs'); do
+          system=$(nix eval --raw --file .github/ci/targets.nix --apply 'c: c.release.system')
+          for attr in $(nix eval --raw --file .github/ci/targets.nix --apply 'c: builtins.concatStringsSep " " c.release.attrs'); do
             nix build --print-build-logs --out-link "build/$attr" ".#packages.$system.$attr"
             cp -L "build/$attr"/iso/*.iso assets/
             nix store delete --ignore-liveness "$(readlink -f "build/$attr")" || true  # an ISO at a time: the runner has ~14 GB

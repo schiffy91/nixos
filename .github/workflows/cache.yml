@@ -1,7 +1,7 @@
 name: cache
 
-# Keeps a Nix binary cache of ci/targets.nix fresh: one job per system and attribute,
-# so a runner's disk holds one closure. Pushes to Cachix when ci/targets.nix names a
+# Keeps a Nix binary cache of .github/ci/targets.nix fresh: one job per system and attribute,
+# so a runner's disk holds one closure. Pushes to Cachix when .github/ci/targets.nix names a
 # cache and CACHIX_AUTH_TOKEN is set; otherwise every job leaves its slice as a
 # workflow artifact, which `nix copy --from file://...` consumes as it is.
 on:
@@ -26,9 +26,9 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v16
       - id: read
         run: |
-          matrix=$(nix eval --json --file ci/targets.nix --apply 'c: builtins.concatMap (s: builtins.map (a: { inherit (s) system runner; attr = a; }) s.attrs) c.systems')
+          matrix=$(nix eval --json --file .github/ci/targets.nix --apply 'c: builtins.concatMap (s: builtins.map (a: { inherit (s) system runner; attr = a; }) s.attrs) c.systems')
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
-          printf 'cachix=%s\n' "$(nix eval --raw --file ci/targets.nix --apply 'c: c.cache.cachix')" >> "$GITHUB_OUTPUT"
+          printf 'cachix=%s\n' "$(nix eval --raw --file .github/ci/targets.nix --apply 'c: c.cache.cachix')" >> "$GITHUB_OUTPUT"
 
   build:
     needs: plan
@@ -67,11 +67,8 @@ jobs:
           fi
           umask 077
           printf '%s' "$NIX_CACHE_SECRET_KEY" > "$RUNNER_TEMP/cache.key"
-          out=$(nix path-info ".#packages.${{ matrix.system }}.${{ matrix.attr }}")
-          # shellcheck disable=SC2086  # one word per output path, which both commands take
-          nix store sign --key-file "$RUNNER_TEMP/cache.key" --recursive $out
-          # shellcheck disable=SC2086
-          nix copy --to "file://$PWD/cache?compression=zstd" $out
+          .github/ci/publish.py --dir "$PWD/cache" --key "$RUNNER_TEMP/cache.key" \
+            "packages.${{ matrix.system }}.${{ matrix.attr }}"
           rm -f "$RUNNER_TEMP/cache.key"
       - uses: actions/upload-artifact@v4
         if: hashFiles('cache/nix-cache-info') != ''

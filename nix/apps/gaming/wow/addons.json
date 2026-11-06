@@ -1,0 +1,51 @@
+{
+  "advancedInterfaceOptions": {
+    "repo": "Stanzilla/AdvancedInterfaceOptions"
+  },
+  "bartender4": {
+    "repo": "Nevcairiel/Bartender4"
+  },
+  "betterBags": {
+    "repo": "Cidan/BetterBags"
+  },
+  "bigWigs": {
+    "repo": "BigWigsMods/BigWigs"
+  },
+  "dialogueUI": {
+    "repo": "Peterodox/YUI-Dialogue"
+  },
+  "moveAny": {
+    "flavour": "forever",
+    "repo": "d4kir92/MoveAny"
+  },
+  "plater": {
+    "repo": "Tercioo/Plater-Nameplates"
+  },
+  "questie": {
+    "repo": "Questie/Questie"
+  },
+  "spoken": {
+    "repo": "rusty-key/spoken-wow",
+    "train": "spoken"
+  },
+  "spokenBossesAudio": {
+    "repo": "rusty-key/spoken-wow",
+    "train": "bosses-audio"
+  },
+  "spokenPlacesAudio": {
+    "repo": "rusty-key/spoken-wow",
+    "train": "places-audio"
+  },
+  "spokenQuestsAudio": {
+    "repo": "rusty-key/spoken-wow",
+    "train": "quests-audio"
+  },
+  "spokenReadablesAudio": {
+    "repo": "rusty-key/spoken-wow",
+    "train": "readables-audio"
+  },
+  "threatClassic2": {
+    "flavour": "forever",
+    "repo": "dfherr/ThreatClassic2"
+  }
+}

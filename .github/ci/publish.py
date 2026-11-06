@@ -1,9 +1,9 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i python3 -p python3
-"""Build this host's share of ci/targets.nix, sign it, and add it to a flat-file Nix
+"""Build this host's share of .github/ci/targets.nix, sign it, and add it to a flat-file Nix
 binary cache the other machines substitute from over HTTP. No account anywhere.
 
-  ci/publish.py [--all] [--dir DIR] [--key FILE] [ATTR...]
+  .github/ci/publish.py [--all] [--dir DIR] [--key FILE] [ATTR...]
 
 --all uses the `local` list instead of this system's CI attributes. The secret key is
 generated on first use, stays on this machine, and its public half is printed: that is
@@ -11,8 +11,8 @@ what goes into settings.nix.trustedPublicKeys on every other host.
 """
 import argparse, json, os, pathlib, subprocess, sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-TARGETS = ROOT / "ci" / "targets.nix"
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+TARGETS = pathlib.Path(__file__).resolve().parent / "targets.nix"
 
 
 class Cache:
@@ -57,10 +57,10 @@ class Cache:
         declared = cls.evaluate("c: c.cache.publicKey")
         path, public = cls.key(arguments.key, name)
         if declared and declared != public:
-            print(f"publish: this key is {public} but ci/targets.nix declares {declared}", file=sys.stderr)
+            print(f"publish: this key is {public} but .github/ci/targets.nix declares {declared}", file=sys.stderr)
         wanted = arguments.attrs or cls.attrs(system, arguments.all)
         if not wanted:
-            sys.exit(f"publish: ci/targets.nix names nothing for {system}")
+            sys.exit(f"publish: .github/ci/targets.nix names nothing for {system}")
         directory = pathlib.Path(arguments.dir).expanduser().resolve()
         directory.mkdir(parents=True, exist_ok=True)
         for attr in wanted:
@@ -77,7 +77,7 @@ class Cache:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("attrs", nargs="*", help="flake attributes to build instead of the list in ci/targets.nix")
+    parser.add_argument("attrs", nargs="*", help="flake attributes to build instead of the list in .github/ci/targets.nix")
     parser.add_argument("--all", action="store_true", help="build the `local` list: everything a host activates")
     parser.add_argument("--dir", default="~/.cache/nix-cache", help="the cache directory, shared with the other repositories on this host")
     parser.add_argument("--key", default="~/.config/nix/nixos-cache-1.key", help="the signing key")

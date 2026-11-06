@@ -1,0 +1,58 @@
+{
+  "advancedInterfaceOptions": {
+    "hash": "sha256-GJ/L0eUDPzEdU1nfyG3dpf3xIwsLSEnymgoXn9FWfyg=",
+    "url": "https://github.com/Stanzilla/AdvancedInterfaceOptions/releases/download/2.1.14/AdvancedInterfaceOptions-2.1.14.zip"
+  },
+  "bartender4": {
+    "hash": "sha256-cPEc6yDOFLRfU2z1Ky21QEsHun7omQcGg6wNW1Q8O+Y=",
+    "url": "https://github.com/Nevcairiel/Bartender4/releases/download/4.18.4/Bartender4-4.18.4.zip"
+  },
+  "betterBags": {
+    "hash": "sha256-afvBleVD1LIv6AYjI1TE0san+welVd6CysojU9M0F7g=",
+    "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.0/BetterBags-v0.9.0.zip"
+  },
+  "bigWigs": {
+    "hash": "sha256-SfsoM+1nF/a02JMbpDIHx61khpXJCRQ+JCZPclQfsEI=",
+    "url": "https://github.com/BigWigsMods/BigWigs/releases/download/v427.8/BigWigs-v427.8.zip"
+  },
+  "dialogueUI": {
+    "hash": "sha256-OZa4qXkuAwqVltmQWqDwyL96/ddAszH1762sdbzR4KQ=",
+    "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-b/DialogueUI-1.0.7-b.zip"
+  },
+  "moveAny": {
+    "hash": "sha256-5LXavfWFoeOsyJXYXj3JuG3fuM9ZpJNNECZw/kPKZ+k=",
+    "url": "https://github.com/d4kir92/MoveAny/releases/download/v1.14.8/MoveAny-v1.14.8-forever.zip"
+  },
+  "plater": {
+    "hash": "sha256-+3El3qHQnziW3IFUtAdF7+tNaW9ENXvYn1DtnvSNITY=",
+    "url": "https://github.com/Tercioo/Plater-Nameplates/releases/download/Plater-v663/Plater-v663.zip"
+  },
+  "questie": {
+    "hash": "sha256-IhWk6sdGrYzHwWJMLJg8FYELzSpxNbCJpEmeJGCpe9E=",
+    "url": "https://github.com/Questie/Questie/releases/download/bundle%2Fv12.6.1%2Bv1.0.11/Questie-v12.6.1+v1.0.11.zip"
+  },
+  "spoken": {
+    "hash": "sha256-s8ggNlvT9PMyQIUSC0vE3D0wp38wF+9sacRU+C4QHcc=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken/v3.8.3/Spoken-3.8.3.zip"
+  },
+  "spokenBossesAudio": {
+    "hash": "sha256-nQI9kju/eJTQ+S/sAl/5m7+2TLpCuG0WWYdPQi4ecdY=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/bosses-audio/v1.0.0/SpokenBossesAudio-1.0.0.zip"
+  },
+  "spokenPlacesAudio": {
+    "hash": "sha256-3GHXRhn0DX+R+iq45UcEakPa2sgtYJXgfdguozUZbks=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/places-audio/v2.1.0/SpokenPlacesAudio-2.1.0.zip"
+  },
+  "spokenQuestsAudio": {
+    "hash": "sha256-u+cCtx8A+MNYa2/Rx9dLpnWBRJUTtVhiff3JeHsOt5A=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/quests-audio/v2.5.0/SpokenQuestsAudioAll-2.5.0.zip"
+  },
+  "spokenReadablesAudio": {
+    "hash": "sha256-fvjWgaVLizbDCWdjeV1F7IXwht8RNacGaPn+dpW+u/o=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/readables-audio/v2.3.0/SpokenReadablesAudio-2.3.0.zip"
+  },
+  "threatClassic2": {
+    "hash": "sha256-Dx6+t6A6edQrqV+kRuh4h9ov4p7xIhsUyyh9e7uEY4Q=",
+    "url": "https://github.com/dfherr/ThreatClassic2/releases/download/2.75/ThreatClassic2-2.75-forever.zip"
+  }
+}
