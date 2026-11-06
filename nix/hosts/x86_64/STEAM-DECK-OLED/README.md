@@ -39,8 +39,9 @@ hub, no Ethernet and no `git clone`.
    evaluating the flake and building the Jovian kernel and four Mesa variants,
    which needs the network and more than the Deck's 16 GB. `--force-upgrade`
    deliberately takes that fallback after updating the flake lock.
-2. Reboot and type the passphrase on the touchscreen. unl0kr has no rotation, so
-   its keyboard follows the panel's native portrait orientation.
+2. Reboot and unlock with unl0kr's on-screen keyboard. The pinned version uses
+   the panel's native portrait orientation. Verify touch input on the actual
+   Deck before relying on keyboard-free boot; a VM cannot validate its digitizer.
 3. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
 
    Our keys only — no `--microsoft`, the same rule as every other host. The
@@ -87,6 +88,51 @@ keys. `settings.boot.autoEnrollKeys` leaves signed key files on the ESP, and
 systemd-boot enrolls them again the next time the firmware is in Setup Mode.
 
 ## Check on the device
+
+The keyboard agent waits for initrd module loading and udev processing before
+starting, and retries failed launches. Without that ordering, the NVMe disk can
+request a password before amdgpu has taken over the firmware framebuffer.
+unl0kr selects the first DRM card only once at startup. Merely including the GPU
+and touchscreen drivers in the initrd does not establish that ordering.
+
+`initrd-touch-unlock` in `tests/graph.json` boots a real encrypted volume with
+delayed module loading and an injected agent startup failure. It exercises the
+shared keyboard module. The full host boot tests remain responsible for the
+installer, Jovian kernel, and the rest of the host configuration.
+
+Plymouth stays disabled: the packaged unl0kr agent has
+`ConditionPathExists=!/run/plymouth/pid`. Enabling both does not add a keyboard to
+Plymouth. A future splash would need an explicit, tested handoff of display and
+password-agent ownership.
+
+### Hardware testing
+
+Build a fresh host-specific ISO after changing the boot configuration. The
+installer uses the system closure baked into that ISO; editing its source alone
+does not replace the installation payload.
+
+The live installer enables SSH for root with the admin's authorized public keys.
+Once it has a network connection, use `ssh root@<installer-ip>` to inspect the
+Deck and run tests from the build machine. Build on the desktop and transfer
+artifacts to the Deck, then reboot and check the physical display and touch input.
+
+Installer SSH is available after the live system boots. It does not provide
+access to an installed system stuck at its LUKS prompt. Diagnosing that stage
+remotely requires a separate diagnostic initrd with networking and SSH; a wired
+USB Ethernet connection avoids depending on early-boot Wi-Fi support.
+
+After a failed graphical unlock followed by USB-keyboard unlock, collect:
+
+```sh
+sudo journalctl -b -u unl0kr-agent.service -u systemd-modules-load.service
+sudo journalctl -b -k | rg -i 'amdgpu|drm|firmware|hid|touch|i2c'
+ls -l /dev/dri /sys/class/drm
+cat /proc/bus/input/devices
+```
+
+These distinguish missing firmware, early DRM selection, and missing touch
+devices. Source review identifies a startup race, but without the failed Deck's
+journal it cannot establish which failure occurred on that installation.
 
 The VM tests cover the LUKS, swapfile, hibernate and immutability path, but on
 the architecture of whichever machine ran the graph — `immutability-hibernate`

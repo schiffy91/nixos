@@ -35,3 +35,13 @@ reinstall from recovery. Successful compilation alone proves none of these.
 The graph source hash includes BTRC, Nix, scenario data, shell scripts, native
 headers and the compiled runner. Do not run individual specs directly or
 reuse a ready VM after changing its source without going through the graph.
+
+`initrd-touch-unlock` runs the pinned NixOS VM test driver through a graph host
+operation. It reuses the production touch-keyboard module, boots an encrypted
+root, delays initrd drivers, injects a failed agent start, and clicks the visible
+keyboard to unlock. Its absolute USB tablet input verifies the graphical keys;
+it does not emulate the Steam Deck's I2C digitizer or AMD GPU. Run it with:
+
+```sh
+nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run initrd-touch-unlock'
+```

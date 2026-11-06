@@ -959,6 +959,11 @@
         "enablesSecureBoot": "false",
         "reenrollsKeys": "false"
       }
+    },
+    {
+      "id": "initrd-touch-unlock",
+      "spec": "boot-touch/test.json",
+      "after": []
     }
   ],
   "required": [
@@ -1018,7 +1023,8 @@
     "host-install-FRACTAL-NORTH-VM-standard",
     "host-boot-FRACTAL-NORTH-VM-secure",
     "host-hibernate-FRACTAL-NORTH-VM-secure",
-    "host-install-FRACTAL-NORTH-VM-secure"
+    "host-install-FRACTAL-NORTH-VM-secure",
+    "initrd-touch-unlock"
   ],
   "workspaceRoot": ".."
 }

@@ -1,0 +1,14 @@
+{
+  "name": "initrd-touch-unlock",
+  "state": "initrd-touch-unlock",
+  "stateMaterial": "initrd-touch-unlock:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/boot-touch --no-out-link --keep-failed > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 3600
+    },
+    { "op": "record-state" }
+  ]
+}

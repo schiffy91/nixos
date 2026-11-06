@@ -1,5 +1,5 @@
 { inputs, config, pkgs, lib, ... }: {
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ];
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ./boot/touch-keyboard.nix ];
   config = lib.mkMerge [
 {
   ##### Shared Boot Settings #####
@@ -13,20 +13,7 @@
         efiSysMountPoint = config.settings.disk.boot.efiSysMountPoint;
       };
     };
-    initrd.unl0kr = lib.mkIf config.settings.boot.touchKeyboard {
-    enable = true;
-    settings = {
-      general.animations = true;
-      general.backend = "drm";
-      keyboard.autohide = false;  # the generated conf replaces the vendor one, whose built-in default hides it
-      keyboard.layout = "us";
-      keyboard.popovers = true;
-      textarea.obscured = true;
-      theme.default = "breezy-dark";
-    };
-  };
-
-  initrd.systemd.services = lib.mkIf config.boot.plymouth.enable {
+    initrd.systemd.services = lib.mkIf config.boot.plymouth.enable {
       plymouth-start.after = lib.mkAfter [ "systemd-modules-load.service" ];
     };
     plymouth = {

@@ -10,6 +10,12 @@ let
       usesKeyboard = initrd.unl0kr.enable or false;
       recoveryTypable = config.system.build.recoverySystem.config.services.buffyboard.enable or false;
       agentWired = lib.hasAttr "unl0kr-agent" (initrd.systemd.paths or { });
+      agent = initrd.systemd.services.unl0kr-agent or { };
+      waitsForDrivers = lib.all (unit: lib.elem unit (agent.after or [ ]))
+        [ "systemd-modules-load.service" "systemd-udev-trigger.service" ]
+        && lib.hasInfix "udevadm settle" (toString (agent.serviceConfig.ExecStartPre or ""));
+      retries = (agent.serviceConfig.Restart or "no") == "on-failure"
+        && (agent.unitConfig.StartLimitIntervalSec or null) == 0;
       pathText = path:
         if !(lib.isAttrs path) then toString path
         else if path ? outPath then toString path
@@ -26,6 +32,10 @@ let
     ++ lib.optionals usesKeyboard (
       lib.optional (!agentWired)
         "${entry.name}: unl0kr is enabled but no unl0kr-agent path unit reaches the initrd, so nothing answers the passphrase request"
+      ++ lib.optional (!waitsForDrivers)
+        "${entry.name}: unl0kr can start before graphics and touch drivers are loaded"
+      ++ lib.optional (!retries)
+        "${entry.name}: a transient unl0kr failure can permanently strand the user at a text prompt"
       ++ lib.optional (!agentPackaged)
         "${entry.name}: unl0kr is enabled but its binary is not in the initrd store paths"
       ++ lib.optional (forcedModules != [ ])
