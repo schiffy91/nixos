@@ -3,10 +3,6 @@
     "hash": "sha256-GJ/L0eUDPzEdU1nfyG3dpf3xIwsLSEnymgoXn9FWfyg=",
     "url": "https://github.com/Stanzilla/AdvancedInterfaceOptions/releases/download/2.1.14/AdvancedInterfaceOptions-2.1.14.zip"
   },
-  "bartender4": {
-    "hash": "sha256-cPEc6yDOFLRfU2z1Ky21QEsHun7omQcGg6wNW1Q8O+Y=",
-    "url": "https://github.com/Nevcairiel/Bartender4/releases/download/4.18.4/Bartender4-4.18.4.zip"
-  },
   "betterBags": {
     "hash": "sha256-afvBleVD1LIv6AYjI1TE0san+welVd6CysojU9M0F7g=",
     "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.0/BetterBags-v0.9.0.zip"
@@ -26,10 +22,6 @@
   "moveAny": {
     "hash": "sha256-5LXavfWFoeOsyJXYXj3JuG3fuM9ZpJNNECZw/kPKZ+k=",
     "url": "https://github.com/d4kir92/MoveAny/releases/download/v1.14.8/MoveAny-v1.14.8-forever.zip"
-  },
-  "plater": {
-    "hash": "sha256-+3El3qHQnziW3IFUtAdF7+tNaW9ENXvYn1DtnvSNITY=",
-    "url": "https://github.com/Tercioo/Plater-Nameplates/releases/download/Plater-v663/Plater-v663.zip"
   },
   "questie": {
     "hash": "sha256-K6lNsjgivOjW94NwqtgCKe8Oga6Yj52bIIzgdf8GZTE=",

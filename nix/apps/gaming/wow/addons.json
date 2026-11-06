@@ -2,9 +2,6 @@
   "advancedInterfaceOptions": {
     "repo": "Stanzilla/AdvancedInterfaceOptions"
   },
-  "bartender4": {
-    "repo": "Nevcairiel/Bartender4"
-  },
   "betterBags": {
     "repo": "Cidan/BetterBags"
   },
@@ -20,9 +17,6 @@
   "moveAny": {
     "flavour": "forever",
     "repo": "d4kir92/MoveAny"
-  },
-  "plater": {
-    "repo": "Tercioo/Plater-Nameplates"
   },
   "questie": {
     "repo": "Questie/Questie",
