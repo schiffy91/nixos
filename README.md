@@ -90,9 +90,33 @@ Important setting groups:
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
 | `settings.apps.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
+| `settings.apps.gaming.cpuAffinity` | Optional Linux CPU list for Steam games and Battle.net; `null` keeps normal scheduling |
 | `settings.apps.nixosctl.*` | `nixosctl` config path, default-on idle inhibit |
 | `settings.apps.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
 | `settings.sudolessAllowlist.*` | Optional sudo NOPASSWD command/package allowlist |
+
+### Gaming CPU affinity and power profiles
+
+`settings.apps.gaming.cpuAffinity = "0-7,16-23";` starts managed Steam games
+and Battle.net on the first CCD of FRACTAL-NORTH's Ryzen 7950X,
+including its SMT threads. CPU numbering is host-specific; other hosts default
+to `null`. Steam's per-game launch options remain intact inside the wrapper.
+Steam must be closed during activation so its configuration can be updated.
+Restart Battle.net and any running games to inherit the new affinity.
+
+`game-run COMMAND ...` applies the same policy to other launchers. Set
+`GAME_CPU_AFFINITY=all` before the wrapper to skip applying the policy for one
+launch, or set the Nix option to `null` and rebuild to disable it globally.
+This sets inherited scheduling affinity; applications can reset their own
+thread affinity. It does not reserve those cores or promise higher frame rates.
+
+The nixosctl tray's **CPU** submenu lists the power profiles advertised by power-profiles-daemon
+and marks the active one. Selecting Performance, Balanced, or Power Saver
+changes the profile immediately through the normal desktop authorization.
+Unavailable profiles are omitted. The CLI equivalents are `nixosctl power
+list`, `nixosctl power current`, and `nixosctl power set performance`.
+`nixosctl power is performance` returns success only while that profile is
+active. These controls do not change GPU power limits or clocks.
 
 ### App Flags
 

@@ -1,0 +1,16 @@
+import ../../btrc/nixosctl/desktop/PowerManager.btrc;
+
+#include <assert.h>
+
+int main() {
+    var profiles = PowerManager.parseProfiles("{\"type\":\"aa{sv}\",\"data\":[{\"Profile\":{\"type\":\"s\",\"data\":\"balanced\"}},{\"Profile\":{\"type\":\"s\",\"data\":\"power-saver\"}}]}");
+    assert(profiles.len == 2);
+    assert(profiles.contains("balanced") && profiles.contains("power-saver"));
+    assert(!profiles.contains("performance"));
+    for invalid in ["", "not json", "{}", "{\"data\":null}", "{\"data\":[{}]}"] {
+        assert(PowerManager.parseProfiles(invalid).len == 0);
+    }
+    assert(PowerManager.label("performance").equals("Performance"));
+    print("PASS: power profile availability and missing backend data");
+    return 0;
+}

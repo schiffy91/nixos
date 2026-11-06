@@ -1,6 +1,11 @@
 { pkgs, config, lib, inputs, ... }:
 let
-  btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
+  inherit (import ./tray/lib.nix { inherit pkgs inputs; }) btrcpy;
+  nixosctlBin = import ./package.nix {
+    inherit pkgs lib;
+    btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
+    inherit (config.settings.apps.nixosctl) configPath;
+  };
   nixosctlTrayBin = pkgs.stdenv.mkDerivation {
     name = "nixosctl-tray";
     src = ../../../..;
@@ -21,9 +26,11 @@ let
         $out/share/icons/hicolor/256x256/apps/nixosctl-tray.png
       wrapProgram $out/bin/nixosctl-tray \
         --set NIXOSCTL_TRAY_ICON "$out/share/icons/hicolor/256x256/apps/nixosctl-tray.png" \
-        --prefix PATH : /run/wrappers/bin:/run/current-system/sw/bin:${lib.makeBinPath (with pkgs; [
+        --prefix PATH : /run/wrappers/bin:${nixosctlBin}/bin:/run/current-system/sw/bin:${lib.makeBinPath (with pkgs; [
           kdePackages.konsole
           xdg-utils
+          systemd
+          power-profiles-daemon
         ])}
     '';
   };

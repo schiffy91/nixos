@@ -1,6 +1,7 @@
 # Use the compiler pinned in flake.lock by default. Override BTRC=... when
 # intentionally testing a local btrcpy checkout.
 BTRC ?= nix run --no-warn-dirty --inputs-from . btrc\#btrcpy --
+TRAY_BTRC ?= $(BUILD_DIR)/tray-compiler/bin/btrcpy
 CC ?= cc
 CFLAGS ?= -std=c11 -pedantic
 # Programs are transpiled program-only with strict imports and reference the
@@ -38,6 +39,7 @@ UNIT_TESTS := \
 	state_hash:tests/harness/StateHashTests.btrc \
 	offline_install:tests/installer/OfflineInstallTests.btrc \
 	interactive:tests/core/InteractiveTests.btrc \
+	power:tests/core/PowerTests.btrc \
 	key_codes:tests/harness/KeyCodeTests.btrc \
 	ownership:tests/immutability/OwnershipTests.btrc
 unit_name = $(firstword $(subst :, ,$(1)))
@@ -114,8 +116,11 @@ $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 
 # Library.Tray's Linux provider binds libdbus, so its typed header import
 # needs pkg-config at transpile time and dbus-1 at link time.
-$(TRAY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
-	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
+$(BUILD_DIR)/tray-compiler: nix/apps/utils/nixosctl/tray/lib.nix nix/apps/utils/nixosctl/tray/submenus.patch flake.lock | dirs
+	nix build --no-warn-dirty --impure --out-link "$@" --expr 'let f = builtins.getFlake "git+file://$(CURDIR)"; pkgs = import f.inputs.nixpkgs { system = builtins.currentSystem; }; in (import ./nix/apps/utils/nixosctl/tray/lib.nix { inherit pkgs; inherit (f) inputs; }).btrcpy'
+
+$(TRAY_C_OUT): $(SOURCES) $(BUILD_DIR)/tray-compiler | dirs
+	$(TRAY_BTRC) --strict-imports "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
 
 build: $(BINS)
 
@@ -125,8 +130,8 @@ $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
 $(IMMUTABILITY_BIN): $(IMMUTABILITY_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_BIN)" $(IMMUTABILITY_LIBS)
 
-$(TRAY_BIN): $(TRAY_C_OUT) $(STDLIB_LIB)
-	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(TRAY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(TRAY_BIN)" $(TRAY_LIBS)
+$(TRAY_BIN): $(TRAY_C_OUT)
+	$(CC) $(CFLAGS) "$(CURDIR)/$(TRAY_C_OUT)" -o "$(CURDIR)/$(TRAY_BIN)" $(TRAY_LIBS)
 
 define UNIT_TEST_RULES
 $$(BUILD_DIR)/$(1)_test.c: $$(SOURCES) $$(STDLIB_MANIFEST) $$(BTRC_STAMP) | dirs

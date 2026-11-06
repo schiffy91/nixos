@@ -1,4 +1,4 @@
-{ config, lib, pkgs, inputs, steam, protonCustom, winePrefixDpi, ... }:
+{ config, lib, pkgs, inputs, steam, protonCustom, winePrefixDpi, gameLaunch, ... }:
 let
   enabled = config.settings.apps.enable && config.settings.apps.gaming.enable
     && config.settings.apps.steam.enable && config.settings.apps.assettocorsa.enable
@@ -44,6 +44,7 @@ let
       assetto apply
       ${steam.configureSteamApps}/bin/configure-steam-apps \
         --steam-path "$HOME/.local/share/Steam" --app-id 244210 \
+        --launch-wrapper ${lib.escapeShellArg gameLaunch.prefix} \
         --default-tool ${protonCustom.name} --app-config ${appConfig}
       echo "Ready. Open Steam and press Play on Assetto Corsa to launch Content Manager."
     '';

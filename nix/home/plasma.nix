@@ -1,6 +1,5 @@
-{ settings, lib, ... }:
+{ settings, lib, pkgs, ... }:
 let
-  chromeApp = id: "applications:chrome-${id}-Default.desktop";
   primary = lib.findFirst (o: o.primary) null settings.desktop.outputs;
   primaryScale = if primary == null then 1.0 else primary.scaleFactor;
   scaleFactorsString = lib.concatMapStringsSep "" (o: "${o.name}=${toString o.scaleFactor};") settings.desktop.outputs;
@@ -14,6 +13,13 @@ let
 in {
   ##### Icon Theme #####
   home.packages = [ settings.desktop.plasma.iconThemePackage ];
+  xdg.desktopEntries.desktop-keyboard = lib.mkIf settings.desktop.plasma.virtualKeyboard.enable {
+    name = "On-Screen Keyboard";
+    exec = "${pkgs.kdePackages.qttools}/bin/qdbus org.kde.KWin /VirtualKeyboard org.kde.kwin.VirtualKeyboard.forceActivate";
+    icon = "input-keyboard-virtual";
+    categories = [ "Utility" "Accessibility" ];
+    terminal = false;
+  };
   programs.plasma = {
     ##### Settings #####
     enable = true;
@@ -48,7 +54,12 @@ in {
       kwinrc = {
         Xwayland.Scale = primaryScale;
         Windows.Placement = "UnderMouse";
-        Wayland.DisableTonemapping = true;
+        Wayland = {
+          DisableTonemapping = true;
+        } // lib.optionalAttrs settings.desktop.plasma.virtualKeyboard.enable {
+          InputMethod = "${pkgs.kdePackages.plasma-keyboard}/share/applications/org.kde.plasma.keyboard.desktop";
+          VirtualKeyboardMode = 1; # Touch/tablet input; the launcher can also force it open.
+        };
       };
       kcminputrc = miceConfig;
     };
@@ -68,18 +79,7 @@ in {
           }
           {
             iconTasks = {
-              launchers = [
-                "applications:org.kde.dolphin.desktop"
-                "applications:google-chrome.desktop"
-                (chromeApp "fmgjjmmmlfnkbppncabfkddbjimcfncm")  # Gmail
-                (chromeApp "kjbdgfilnfhdoflbpgamdcdgpehopbep")  # Calendar
-                (chromeApp "hnpfjngllnobngcgfapefoaidbinmjnm")  # WhatsApp
-                "applications:cider-2.desktop"
-                "applications:code.desktop"
-                "applications:org.kde.konsole.desktop"
-                "applications:battlenet.desktop"
-                "applications:steam.desktop"
-              ];
+              launchers = settings.desktop.plasma.taskbarLaunchers;
             };
           }
           "org.kde.plasma.marginsseparator"

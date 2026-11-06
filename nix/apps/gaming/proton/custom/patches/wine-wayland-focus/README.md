@@ -1,5 +1,10 @@
 # Bounded WM_CANCELMODE on Wayland keyboard leave
 
+Inactive since GE-Proton11-12: GE's
+`winewayland-avoid-user-lock-under-win-data-in-client-surface-callbacks` patch
+posts `WM_CANCELMODE` without blocking the dispatcher. This local patch is
+retained for reference and is no longer applied.
+
 ## Symptom
 A Wine process stops reacting to all Wayland input and window events while
 one of its windows is busy, for example while a launcher tears down a large

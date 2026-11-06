@@ -1,14 +1,19 @@
 {
   "name": "initrd-touch-unlock",
   "state": "initrd-touch-unlock",
-  "stateMaterial": "initrd-touch-unlock:source={{sourceHash}}",
+  "stateMaterial": "initrd-touch-unlock:source={{sourceHash}}:rotate={{rotate}}",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     {
       "op": "host",
-      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/boot-touch --no-out-link --keep-failed > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/boot-touch --arg rotate {{rotate}} --no-out-link --keep-failed --cores 4 --max-jobs 2 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
       "timeout": 3600
     },
-    { "op": "record-state" }
-  ]
+    {
+      "op": "record-state"
+    }
+  ],
+  "args": {
+    "rotate": "false"
+  }
 }

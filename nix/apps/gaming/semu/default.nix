@@ -11,6 +11,7 @@ let
   # semu deep-merges $SEMU_HOME/overrides over the target, so empty paths change nothing
   pathsOverride = pkgs.writeText "semu-nixos.json" (builtins.toJSON { inherit (config.settings.apps.semu) paths; });
   semu = inputs.semu.packages.${pkgs.stdenv.hostPlatform.system}.semu;
+  icons = import ../icons/package.nix { inherit pkgs inputs; };
   # the bundle is SEMU_ASSET_ROOT, so its bin/ and share/ are every emulator's own
   # binaries and desktop entries; a profile should publish only semu's own two
   semuProfile = pkgs.runCommand "semu-profile" { meta.mainProgram = "semu"; } ''
@@ -18,6 +19,7 @@ let
     ln -s ${semu}/bin/semu "$out/bin/semu"
     ln -s ${semu}/bin/semu-es-de "$out/bin/semu-es-de"
     ln -s ${semu}/share/applications/semu.desktop "$out/share/applications/semu.desktop"
+    install -Dm644 ${icons.semu} "$out/share/icons/hicolor/256x256/apps/es-de.png"
   '';
 in lib.mkIf enabled {
   environment.systemPackages = [ semuProfile ];

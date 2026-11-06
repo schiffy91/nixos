@@ -1,6 +1,6 @@
-# proton-custom - GE-Proton11-11 plus five small Wine bug fixes.
+# proton-custom - GE-Proton11-12 plus three small Wine bug fixes.
 #
-# Builds the exact Wine revision GE-Proton11-11 uses, applies GE's complete
+# Builds the exact Wine revision GE-Proton11-12 uses, applies GE's complete
 # wine-hotfixes set in protonprep order (the shipped tarball's wineserver
 # protocol is built from that tree, so the overlaid DLLs must be too), then
 # layers our active patch series on top. Only the modules those patches touch
@@ -13,16 +13,15 @@
 # convention), so their 0001/0002 names are series-local commit order only.
 #
 # Active series:
-#   Bounded WM_CANCELMODE on keyboard leave
 #   Layered surface alpha uploads (GE-Proton11 ships the pUpdateLayeredWindow hook)
 #   Delay-load IAT protection for PE modules with read-only thunk pages
-#   libc thread pointer for PsCreateSystemThread threads (no core dump per CEF renderer at exit)
 #   Bounded desktop-driver readiness wait in win32u
 #
-# All five were re-verified against GE-Proton11-11 at the 11-11 rebase: the
-# upstream files they patch are byte-identical to the 11-7 tree, and the GE
-# patches their context comes from (wine-wayland 0196, em-fixups 0030) are
-# unchanged, so none of them is covered upstream yet.
+# Dropped at the GE-Proton11-12 rebase, now covered upstream:
+#   Bounded WM_CANCELMODE on keyboard leave (GE posts the message as part of
+#   its client-surface lock ordering fix, avoiding the synchronous wait).
+#   System-thread signal handling (GE em-fixups 0073 keeps the existing libc
+#   thread pointer when a Unix-only system thread handles a signal).
 #
 # Dropped 2026-09-20 (the fallback GE already takes renders Battle.net correctly):
 #   DComp/DXGI/winewayland GPU presentation path and the DXVK composition
@@ -55,7 +54,7 @@
 }:
 
 let
-  toolVersion = "GE-Proton11-11";
+  toolVersion = "GE-Proton11-12";
   toolName    = "proton-custom-${toolVersion}";
 
   # false ships the pristine GE tarball (plus WineASIO) under the same tool
@@ -63,13 +62,13 @@ let
   # whether the patch series is still needed on this GE base.
   overlayPatchedBinaries = true;
 
-  # The exact Valve wine commit GE-Proton11-11 uses (from proton-ge-custom
-  # git submodule `wine` at tag GE-Proton11-11).
-  valveWineRev  = "c53678ab22a85f0fad3588dd34f0452a463bd015";
-  valveWineHash = "sha256-cEwxBXbWMwwq4mHzNK2hDDVSbkAnowJJmpf2JyW2pyk=";
+  # The exact Valve wine commit GE-Proton11-12 uses (from proton-ge-custom
+  # git submodule `wine` at tag GE-Proton11-12).
+  valveWineRev  = "fda79a585939fb7512dc220a11249f9ffe825fcf";
+  valveWineHash = "sha256-MWH0QYcgo+Ld+xwn+24Fiz5J+P+1XF1cTyJB4JcBXLg=";
 
-  geProtonRev  = "GE-Proton11-11";
-  geProtonHash = "sha256-AGHh141+Z6pa/Ed2PQzB6n09qoZhKY6XDb7hjm5doDA=";
+  geProtonRev  = "GE-Proton11-12";
+  geProtonHash = "sha256-ROk8/0NonJT2hH4ltv81vCH5LnKthTQfXGJUsVeEU2c=";
 
   wineasio64 = pkgs.wineasio;
   wineasio32Files = ../../rocksmith/assets;
@@ -79,14 +78,12 @@ let
   # pkgs.proton-ge-bin.src here would silently follow nixpkgs updates.
   ge-proton-src = pkgs.fetchurl {
     url = "https://github.com/GloriousEggRoll/proton-ge-custom/releases/download/${toolVersion}/${toolVersion}-x86_64.tar.gz";
-    hash = "sha256-qoWYbK2lcJqou/qK3X87+5JcvhVxDJiZWJjTCP8so8E=";
+    hash = "sha256-BZUVnkF8Pbv7fMOuDT7RWmF8xgeqI+91bqeQKdevXXA=";
   };
 
   activePatchSeries = [
-    ./patches/wine-wayland-focus/0001-winewayland.drv-Bound-WM_CANCELMODE-on-keyboard-leav.patch
     ./patches/wine-wayland-layered-windows/0001-winewayland.drv-Fix-layered-surface-alpha-uploads.patch
     ./patches/ntdll-delay-load/0001-ntdll-Make-the-delay-load-IAT-writable-before-patchi.patch
-    ./patches/ntdll-system-thread-signals/0001-ntdll-Record-the-libc-thread-pointer-for-system-thre.patch
     ./patches/win32u-load-driver-deadlock/0001-win32u-Bound-the-desktop-driver-readiness-wait.patch
   ];
 
@@ -138,6 +135,7 @@ let
       ge="$geProtonSrc/patches"
       relevant='^\+\+\+ b/(dlls/ntdll/|dlls/win32u/|dlls/winewayland\.drv/|server/|include/)'
       apply_ge() {
+        test -f "$1" || { echo "Missing GE patch: $1" >&2; exit 1; }
         local rej; rej="$(mktemp)"
         patch -p1 -s --no-backup-if-mismatch -r "$rej" < "$1" >/dev/null 2>&1 || true  # protonprep applies with default fuzz
         if [ -s "$rej" ]; then
@@ -162,7 +160,8 @@ let
         apply_ge_dir "$ge/wine-hotfixes/wine-staging/$d"
       done
       for f in assettocorsa-hud pso2_hack vgsoh silence-starcitizen-unsupported-os eac_60101_timeout \
-               layered-overlay-wine 0001-win32u-Avoid-zero-WM_ACTIVATEAPP-lparam-on-first-for \
+               layered-overlay-wine layered-overlay-direct-present \
+               0001-win32u-Avoid-zero-WM_ACTIVATEAPP-lparam-on-first-for \
                black-desert-keep-fullscreen-on-focus-loss maplestory-kernelbase-charprev-null \
                maplestory-spi-stickykeys-filterkeys ai-limit-dx12-compute-shader-fallback \
                max-payne-cpu-detection return-to-krondor-text-bitmap-readback nascar25-protector \
@@ -187,11 +186,12 @@ let
                secur32-schannel-fix-incomplete-message-missing-size \
                wined3d-preserve-runtime-opengl-gpu-description winex11-use-x11-drawables-for-steam-opengl-overlay \
                winex11-keep-forza-background-windows-unmapped-on-wlroots \
-               winex11-handle-unsupported-minimization-on-satellite \
+               winex11-handle-unsupported-minimization-on-satellite winex11-bound-pointer-grab-wait \
                server-clip-off-desktop-minimized-window-paint win32u-share-selected-cursors-across-processes \
                win32u-limit-extra-swapchain-image-to-doom win32u-use-three-image-present-modes-for-hades-wayland \
                win32u-use-three-image-present-modes-for-path-of-exile ntdll-retry-native-view-allocation-with-effective-range \
-               ntdll-reserve-top-down-space-for-large-address-aware-wow64 ntdll-remove-redundant-packed-split-lock \
+               ntdll-reserve-top-down-space-for-large-address-aware-wow64 ntdll-keep-nvidia-dlss-address-range-free \
+               ntdll-remove-redundant-packed-split-lock \
                ntdll-block-apcs-until-process-exit-state-is-set \
                server-dont-touch-freed-handle-table-in-close-handle \
                ntdll-prefer-native-version-resource-heuristics ntdll-keep-builtin-amd-ags-ahead-of-version-heuristic \
@@ -203,16 +203,32 @@ let
       for f in winealsa-override-channel-count 0001-fshack-Implement-AMD-FSR-upscaler-for-fullscreen-hac \
                0001-win32u-Implement-NtGdiDdDDIQueryAdapterInfo-cases 83-nv_low_latency_wine \
                build_failure_prevention-add-nls 0001-win32u-add-env-switch-to-disable-wm-decorations \
-               wine_host_block_envvar winex11-mutter-cinnamon 0001-HACK-kernelbase-allow-overriding-dlls-for-DLSS-XeSS- \
-               0002-HACK-ntdll-add-optiscaler-inection-hack 0001-ntdll-Read-QueryPerformanceCounter-from-the-TSC-in-us \
+               wine_host_block_envvar 0001-HACK-kernelbase-allow-overriding-dlls-for-DLSS-XeSS- \
+               0002-HACK-ntdll-add-optiscaler-inection-hack 0003-HACK-ntdll-redirect-streamline-dlls-for-upgrade \
+               0001-ntdll-Read-QueryPerformanceCounter-from-the-TSC-in-us \
+               0002-ntdll-Only-read-the-kernel-clocksource-for-QPC-at-start-up \
                0001-ntdll-Implement-IOCTL_SERIAL_GET_DTRRTS-for-serial-dev; do
         apply_ge "$ge/proton/$f.patch"
       done
       apply_ge_dir "$ge/ge-video-rework"
       apply_ge_dir "$ge/proton-ds5-haptic"
       apply_ge_pending winebus-switch-pro-xinput-identity winebus-diablo-iv-dualsense-edge-identity \
-               ntdll-srwlock-skip-needless-shared-release-wake
+               ntdll-srwlock-skip-needless-shared-release-wake \
+               ntdll-heap-reuse-free-blocks-of-partially-used-lfh-groups \
+               ntdll-take-in-flight-alert-when-wait-on-address-times-out \
+               ntdll-tests-wait-on-address-wake-racing-timeout ntdll-run-purple-agent-in-new-wow64-mode \
+               cmd-make-choice-timeout-work-on-console-input \
+               win32u-release-images-presented-to-hidden-windows win32u-report-b8g8r8a8-unorm-surface-format-first \
+               win32u-prefer-native-hdr-colorspace-for-host-layers winewayland-fix-win-data-locking-in-ime-text-input \
+               winewayland-avoid-user-lock-under-win-data-in-client-surface-callbacks \
+               winewayland-advertise-openvr-openxr-device-extensions winewayland-animate-animated-cursors \
+               rtworkq-dont-hold-queues-section-during-system-queue-shutdown dsound-keep-hq-resampler-for-any-buffer-count \
+               win32u-defer-nvidia-wayland-host-instance-destroy \
+               server-keep-owned-ntsync-mutex-until-owner-releases-or-dies \
+               server-keep-in-process-mutex-closed-while-in-use kernel32-tests-abandon-mutex-acquired-after-close
       apply_ge_dir "$ge/wine-hotfixes/bluetooth-le"
+      apply_ge_pending ntdll-free-teb-and-stacks-of-killed-threads kernel32-tests-killed-thread-stack-freed \
+               ntdll-dont-keep-reply-pipe-open-during-thread-init
 
       # Apply only the explicit active series in the order listed above.
       ${applyActivePatchSeries}
@@ -445,7 +461,7 @@ EOF
   '';
 
   meta = {
-    description = "${toolVersion} with five Wine Wayland/ntdll/win32u fixes and WineASIO";
+    description = "${toolVersion} with three Wine Wayland/ntdll/win32u fixes and WineASIO";
     homepage    = "https://github.com/GloriousEggRoll/proton-ge-custom";
     platforms   = [ "x86_64-linux" ];
   };

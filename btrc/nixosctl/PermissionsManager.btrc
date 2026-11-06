@@ -77,16 +77,18 @@ class PermissionsManager {
     public void secureTree(string username) {
         var root = self.config.paths.root;
         var quotedRoot = ShellWords.quote(root);
+        var ignores = self.ignorePredicate();
         if (Platform.isRoot()) {
+            var execArg = "{}";
             self.shell.run(
-                self.inRoot(f"chown -R {ShellWords.quote(username)} {quotedRoot}"),
+                self.inRoot(f"find {quotedRoot} {ignores} -prune -o -exec chown -h {ShellWords.quote(username)} {execArg} +"),
                 stdout=COMMAND_OUTPUT_STREAM,
                 stderr=COMMAND_OUTPUT_STREAM,
                 throwOnFailure=true);
         }
 
-        var ignores = self.ignorePredicate();
-        self.chmodMatching(quotedRoot, ignores, "", "u+rwX,go=rX");
+        // chmod follows symlink operands, including store links and broken VM links.
+        self.chmodMatching(quotedRoot, ignores, "\\( -type f -o -type d \\)", "u+rwX,go=rX");
         var gitObjects = PathTools.join(root, ".git/objects");
         if (FileSystem.exists(gitObjects)) {
             var quotedGitObjects = ShellWords.quote(gitObjects);

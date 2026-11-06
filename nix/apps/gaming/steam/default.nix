@@ -1,4 +1,4 @@
-{ config, pkgs, lib, inputs, protonCustom, winePrefixDpi, assetto, ... }:
+{ config, pkgs, lib, inputs, protonCustom, winePrefixDpi, gameLaunch, assetto, ... }:
 let
   user = config.settings.users.admin.username;
   home = "/home/${user}";
@@ -29,6 +29,7 @@ in {
             --steam-path "${steamPath}" \
             --default-tool "${protonCustomName}" \
             --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
+            --launch-wrapper ${lib.escapeShellArg gameLaunch.prefix} \
             --app-config ${appConfig}
         fi
       '';

@@ -4,6 +4,7 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
 in pkgs.linkFarm "gaming-tests" [
+  { name = "affinity"; path = import ./affinity.nix { inherit pkgs; }; }
   { name = "tools"; path = import ../../nix/apps/gaming/package.nix { inherit pkgs inputs; }; }
   { name = "wheel-menu"; path = import ../../nix/apps/gaming/assettocorsa/wheel-menu/package.nix { inherit pkgs; }; }
 ]

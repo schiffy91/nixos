@@ -1,4 +1,4 @@
-{ config, pkgs, lib, protonCustom, winePrefixDpi, ... }:
+{ config, pkgs, lib, inputs, protonCustom, winePrefixDpi, gameLaunch, ... }:
 let
   enabled = config.settings.apps.enable
     && config.settings.apps.gaming.enable
@@ -6,12 +6,14 @@ let
     && config.settings.apps.steam.enable
     && pkgs.stdenv.hostPlatform.isx86_64;
   user = config.settings.users.admin.username;
-  group = config.users.users.${user}.group;
   home = "/home/${user}";
   prefix = "${home}/Games/Battle.net/prefix";
   proton = protonCustom.path;
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
-  iconPath = "${home}/.local/share/icons/hicolor/256x256/apps/battlenet.png";
+  icons = import ../icons/package.nix { inherit pkgs inputs; };
+  iconPackage = pkgs.runCommand "battlenet-icon" {} ''
+    install -Dm644 ${icons.battlenet} "$out/share/icons/hicolor/256x256/apps/battlenet.png"
+  '';
   launcher = pkgs.writeShellApplication {
     name = "battlenet";
     runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.umu-launcher winePrefixDpi.package ];
@@ -43,7 +45,7 @@ let
         EXTRA_ARGS=()  # CEF reads the prefix DPI like any Windows app; no scale flags
         # ENABLE_HDR_WSI=1 (vk_hdr_layer) intentionally absent: nvidia 610 does HDR natively and the
         # layer mis-tags winewayland's scRGB (D2R/WoW DX12 too dark). Re-add next to DXVK_HDR to undo.
-        exec env \
+        exec ${gameLaunch.prefix} \
           WINEPREFIX="${prefix}" \
           TMPDIR=/tmp \
           GAMEID=umu-battlenet \
@@ -109,23 +111,5 @@ let
     '';
   };
 in lib.mkIf enabled {
-  users.users.${user}.packages = [ launcher desktop captureHelper ];
-  system.activationScripts.battlenetIcon = lib.stringAfter [ "users" ] ''
-    if [ -f "${exe}" ]; then
-      ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} "$(dirname ${iconPath})"
-      ${pkgs.coreutils}/bin/install -d -m 1777 /tmp
-      scratch=$(${pkgs.coreutils}/bin/mktemp -d /tmp/battlenet-icon.XXXXXX)
-      tmp="$scratch/icon.ico"
-      png="$scratch/icon.png"
-      if ${pkgs.icoutils}/bin/wrestool -x -t 14 -o "$tmp" "${exe}" 2>/dev/null; then
-        for w in 256 128 64 48 32; do
-          if ${pkgs.icoutils}/bin/icotool -x -w $w -o "$png" "$tmp" 2>/dev/null && [ -s "$png" ]; then
-            ${pkgs.coreutils}/bin/install -m644 -o ${user} -g ${group} "$png" "${iconPath}"
-            break
-          fi
-        done
-      fi
-      ${pkgs.coreutils}/bin/rm -rf "$scratch"
-    fi
-  '';
+  users.users.${user}.packages = [ launcher desktop captureHelper iconPackage ];
 }

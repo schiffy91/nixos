@@ -1,6 +1,6 @@
 # proton-custom
 
-`GE-Proton11-11` plus five small Wine bug fixes. The package fetches the exact
+`GE-Proton11-12` plus three small Wine bug fixes. The package fetches the exact
 Wine tree GE built from, applies GE's own `wine-hotfixes` sequence in
 `protonprep` order (their series change the wineserver protocol, so anything we
 overlay must come from the same tree), applies the patches below, rebuilds only
@@ -10,22 +10,36 @@ vkd3d-proton and everything else are GE's binaries. WineASIO is added for
 Rocksmith.
 
 `default.nix` exposes the tool to Steam through `programs.steam.extraCompatPackages`
-and links it at `~/Games/proton/proton-custom-GE-Proton11-11`, the path the
+and links it at `~/Games/proton/proton-custom-GE-Proton11-12`, the path the
 Battle.net launcher uses as `PROTONPATH`.
 
 ## Patches
 
 | Topic | Fixes |
 |---|---|
-| `wine-wayland-focus` | GE's `WM_CANCELMODE` on keyboard leave is sent synchronously from the Wayland reader thread; a busy window stalled all input. Sent as a notify message instead. |
 | `wine-wayland-layered-windows` | Layered toplevels with constant alpha or a colour key uploaded a zero alpha byte and vanished (tooltips, splash screens). |
 | `ntdll-delay-load` | `LdrResolveDelayLoadedAPI` wrote into a read-only `/guard:cf` delay-load IAT and crashed the module. |
-| `ntdll-system-thread-signals` | `PsCreateSystemThread` threads never stored their libc thread pointer, so every 32-bit CEF renderer faulted on SIGQUIT at exit and left a core dump. |
 | `win32u-load-driver-deadlock` | `load_desktop_driver()` waited forever on a stalled explorer desktop thread; the barrier is now bounded. |
 
 Each patch is `git format-patch -s` output against the GE base and is meant to
 go upstream to GE or Wine; the folder README explains symptom, root cause and
 fix.
+
+## Rebased onto GE-Proton11-12 on 2026-11-06
+
+The Wine source and binary release are pinned together. The protonprep replay
+includes the new pending patches in upstream order, including Wayland lock
+ordering, HDR presentation, NVIDIA instance destruction and thread cleanup.
+DXVK is updated from v3.1.1-134 to v3.1.1-174, whose release notes include
+present timing fixes and an NVIDIA fence workaround.
+
+Two local patches are no longer active because GE now covers their fixes:
+`wine-wayland-focus` is replaced by the upstream patch that posts
+`WM_CANCELMODE` without blocking the event dispatcher, and
+`ntdll-system-thread-signals` is replaced by `em-fixups/0073`, which leaves the
+libc thread pointer intact when a Unix-only system thread handles a signal.
+Their patch files remain as historical references. The remaining three patches
+are still applied to the new Wine tree.
 
 ## Rebased onto GE-Proton11-11 on 2026-11-02
 

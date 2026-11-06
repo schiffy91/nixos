@@ -271,6 +271,11 @@ in {
       ln -s "${config.settings.desktop.cursor.path}" "$out/share/icons/default"
     '');
     ##### Desktop: Plasma #####
+    settings.desktop.plasma.taskbarLaunchers = mkSetting (listOf str) [
+      "applications:org.kde.dolphin.desktop"
+      "applications:org.kde.konsole.desktop"
+    ];
+    settings.desktop.plasma.virtualKeyboard.enable = mkSetting bool false;
     settings.desktop.plasma.colorScheme = mkSetting str "BreezeDark";
     settings.desktop.plasma.iconTheme = mkSetting str "Papirus-Dark";
     settings.desktop.plasma.iconThemePackage = mkSetting package pkgs.papirus-icon-theme;
@@ -293,6 +298,7 @@ in {
     settings.apps.enable = mkSetting bool true;
     settings.apps.dev.enable = mkSetting bool true;
     settings.apps.gaming.enable = mkSetting bool true;
+    settings.apps.gaming.cpuAffinity = mkSetting (nullOr (strMatching "[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*")) null; # Linux CPU list; null leaves scheduling unrestricted.
     settings.apps.utils.enable = mkSetting bool true;
     settings.apps.agents.enable = mkSetting bool true;
     settings.apps.agents.skills = mkSetting (listOf str) [ "engineering-decomposition" "nixos-init" "taste" ];
@@ -352,7 +358,12 @@ in {
     settings.apps.simracing.enable = mkSetting bool false;
     settings.apps.steam.enable = mkSetting bool true;
     settings.apps.steam.protonCustom.enable = mkSetting bool true;
-    settings.apps.steam.shortcuts = mkSetting (attrsOf str) {}; # non-Steam shortcut name -> exe; Steam derives the app id from the exe, so use a stable path
+    settings.apps.steam.shortcuts = mkSetting (attrsOf (either str (submodule {
+      options = {
+        exe = lib.mkOption { type = str; }; # Keep stable: Steam derives the app ID from this and the name.
+        icon = mkSetting str "";
+      };
+    }))) {};
     settings.apps.sunshine.enable = mkSetting bool true;
     settings.apps.sunshine.capture = mkSetting (enum [ "kms" "kwin" ]) "kms";
     settings.apps.sunshine.cuda.enable = mkSetting bool false;

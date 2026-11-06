@@ -76,6 +76,18 @@ in {
       swap.size = disk.swapSize;
     };
     tpm.device = tpm.device;
+    desktop.plasma.taskbarLaunchers = [
+      "applications:org.kde.dolphin.desktop"
+      "applications:google-chrome.desktop"
+      "applications:chrome-fmgjjmmmlfnkbppncabfkddbjimcfncm-Default.desktop" # Gmail
+      "applications:chrome-kjbdgfilnfhdoflbpgamdcdgpehopbep-Default.desktop" # Calendar
+      "applications:chrome-hnpfjngllnobngcgfapefoaidbinmjnm-Default.desktop" # WhatsApp
+      "applications:cider-2.desktop"
+      "applications:code.desktop"
+      "applications:org.kde.konsole.desktop"
+      "applications:battlenet.desktop"
+      "applications:steam.desktop"
+    ];
     desktop.outputs = [{
       name        = display.primary.name;
       scaleFactor = display.primary.scaleFactor;

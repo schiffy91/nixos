@@ -9,9 +9,15 @@ import ./SteamLibrary.btrc;
 class SteamShortcut {
     public string name;
     public string exe;
+    public string icon;
+    public int iconStart;
+    public int iconEnd;
     public Bytes body;  // fields through the entry's closing 0x08, kept byte for byte
 
-    public SteamShortcut() { self.name = ""; self.exe = ""; self.body = Bytes(); }
+    public SteamShortcut() {
+        self.name = ""; self.exe = ""; self.icon = "";
+        self.iconStart = -1; self.iconEnd = -1; self.body = Bytes();
+    }
 }
 
 class SteamShortcuts {
@@ -34,6 +40,7 @@ class SteamShortcuts {
 
     public void fields(SteamShortcut entry, int depth) {
         while (true) {
+            var start = self.offset;
             var type = self.next();
             if (type == 8) { return; }
             var key = self.text().toLower();
@@ -42,6 +49,9 @@ class SteamShortcuts {
                 var value = self.text();
                 if (depth == 0 && key.equals("appname")) { entry.name = value; }
                 if (depth == 0 && key.equals("exe")) { entry.exe = value; }
+                if (depth == 0 && key.equals("icon")) {
+                    entry.icon = value; entry.iconStart = start; entry.iconEnd = self.offset;
+                }
             }
             else if (type == 2) {
                 if (self.offset + 4 > self.data.length()) { throw "Truncated shortcuts.vdf"; }
@@ -61,6 +71,7 @@ class SteamShortcuts {
             var start = self.offset;
             self.fields(entry, 0);
             entry.body = self.data.slice(start, self.offset);
+            if (entry.iconStart >= 0) { entry.iconStart -= start; entry.iconEnd -= start; }
             entries.push(entry);
         }
         if (self.next() != 8 || self.offset != self.data.length()) { throw "Trailing bytes in shortcuts.vdf"; }
@@ -139,6 +150,23 @@ class SteamShortcuts {
         return out;
     }
 
+    class string executable(JSONValue shortcut) {
+        return shortcut.isObject() ? shortcut.get("exe").asString() : shortcut.asString();
+    }
+
+    class void setIcon(SteamShortcut entry, string icon) {
+        // Patch only this field: app IDs, controller mappings, tags and playtime stay intact.
+        var start = entry.iconStart >= 0 ? entry.iconStart : entry.body.length() - 1;
+        var end = entry.iconEnd >= 0 ? entry.iconEnd : start;
+        var body = entry.body.slice(0, start);
+        SteamShortcuts.field(body, "icon", icon);
+        entry.iconStart = start;
+        entry.iconEnd = body.length();
+        body.appendBytes(entry.body.slice(end, entry.body.length()));
+        entry.body = body;
+        entry.icon = icon;
+    }
+
     class Bytes declare(Bytes current, JSONValue declared) {  // replaces stale entries by name or exe; keeps everything else
         var names = declared.keys().sorted();
         Vector<string> present = [];
@@ -146,16 +174,25 @@ class SteamShortcuts {
         for entry in SteamShortcuts(current).entries() {
             var owner = "";
             for name in names {
-                if (entry.name.equals(name) || entry.exe.equals(SteamShortcuts.quote(declared.get(name).asString()))) { owner = name; break; }
+                if (entry.name.equals(name) || entry.exe.equals(SteamShortcuts.quote(SteamShortcuts.executable(declared.get(name))))) { owner = name; break; }
             }
             if (owner.isEmpty()) { result.push(entry); continue; }
-            var exact = entry.name.equals(owner) && entry.exe.equals(SteamShortcuts.quote(declared.get(owner).asString()));
+            var exact = entry.name.equals(owner) && entry.exe.equals(SteamShortcuts.quote(SteamShortcuts.executable(declared.get(owner))));
             if (!exact || present.contains(owner)) { continue; }
             present.push(owner);
             result.push(entry);
         }
         for name in names {
-            if (!present.contains(name)) { result.push(SteamShortcuts.create(name, declared.get(name).asString())); }
+            if (!present.contains(name)) { result.push(SteamShortcuts.create(name, SteamShortcuts.executable(declared.get(name)))); }
+        }
+        // Parse newly created entries too, so their icon field offsets are available.
+        result = SteamShortcuts(SteamShortcuts.render(result)).entries();
+        for entry in result {
+            if (!declared.has(entry.name)) { continue; }
+            var shortcut = declared.get(entry.name);
+            if (shortcut.isObject() && !shortcut.get("icon").asString().isEmpty()) {
+                SteamShortcuts.setIcon(entry, shortcut.get("icon").asString());
+            }
         }
         return SteamShortcuts.render(result);
     }

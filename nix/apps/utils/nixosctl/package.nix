@@ -18,6 +18,7 @@ pkgs.stdenv.mkDerivation {
         kdePackages.libkscreen
         kdePackages.konsole
         systemd
+        power-profiles-daemon
         pulseaudio
         sbctl
         sbsigntool

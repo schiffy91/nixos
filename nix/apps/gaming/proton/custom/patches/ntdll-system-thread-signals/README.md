@@ -1,5 +1,9 @@
 # libc thread pointer for PsCreateSystemThread threads
 
+Inactive since GE-Proton11-12: GE's `em-fixups/0073` skips the `%fs` restore
+for Unix-only system threads, keeping their existing libc thread pointer.
+This local patch is retained for reference and is no longer applied.
+
 ## Symptom
 Every 32-bit CEF renderer of the Battle.net launcher faults while exiting.
 Each one leaves a core dump and a DrKonqi crash notification, so a single

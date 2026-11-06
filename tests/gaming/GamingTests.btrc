@@ -83,6 +83,19 @@ class GamingTests {
             }
         }
         assert(SteamLibrary(steam).game("244210").prefix().equals(f"{library}/steamapps/compatdata/244210/pfx"));
+        for options in ["MODE=test %command%", "dpi exec -- assetto launch -- %command%"] {
+            app.set("launchOptions", JSONValue.makeString(options));
+            GamingFiles.write(declaration, desired.stringify());
+            var command = Command(f"{ShellWords.quote(self.tools)}/configure-steam-apps");
+            command.flag("--steam-path", steam).flag("--default-tool", "unused").flag("--app-config", declaration)
+                .flag("--app-id", "244210").flag("--launch-wrapper", "game-run env");
+            for (int attempt = 0; attempt < 2; attempt++) {
+                UnixShell().run(command.render(), throwOnFailure=true);
+                var apps = SteamVdf.at(SteamVdf.read(f"{steam}/userdata/1/config/localconfig.vdf"), ["UserLocalConfigStore", "Software", "Valve", "Steam", "apps"]);
+                assert(apps.get("244210").get("LaunchOptions").asString().equals(f"game-run env {options}"));
+                assert(apps.get("805550").get("LaunchOptions").asString().equals("keep-acc"));
+            }
+        }
         print("PASS: Steam CLI, separate library, account casing, controller modes, ACC isolation, idempotence");
     }
 
@@ -117,11 +130,36 @@ class GamingTests {
         var before = GamingFiles.read(path);
         UnixShell().run(command.render(), throwOnFailure=true);
         assert(GamingFiles.read(path).equals(before));
+        var icons = JSONValue.parse(Path.readAll(declaration));
+        var chrome = JSONValue.makeObject();
+        chrome.set("exe", JSONValue.makeString("/run/current-system/sw/bin/google-chrome-stable"));
+        chrome.set("icon", JSONValue.makeString("/icons/Chrome Icon.png"));
+        icons.set("Chrome", chrome);
+        var newApp = JSONValue.makeObject();
+        newApp.set("exe", JSONValue.makeString("/opt/new-game"));
+        newApp.set("icon", JSONValue.makeString("/icons/new-game.png"));
+        icons.set("New Game", newApp);
+        GamingFiles.write(declaration, icons.stringify());
+        UnixShell().run(command.render(), throwOnFailure=true);
+        entries = SteamShortcuts(GamingFiles.read(path)).entries();
+        assert(entries.len == 5);
+        assert(entries.get(0).body.equals(foreign.body));
+        assert(entries.get(1).icon.equals("/icons/Chrome Icon.png"));
+        SteamShortcuts.setIcon(entries.get(1), "");
+        assert(entries.get(1).body.equals(played.body)); // Every non-icon byte, including playtime, survived.
+        assert(entries.get(4).name.equals("New Game") && entries.get(4).icon.equals("/icons/new-game.png"));
+        before = GamingFiles.read(path);
+        UnixShell().run(command.render(), throwOnFailure=true);
+        assert(GamingFiles.read(path).equals(before));
+        // Older/manual shortcuts can omit the icon field entirely.
+        SteamShortcuts.setIcon(entries.get(0), "/icons/keep.png");
+        var reparsed = SteamShortcuts(SteamShortcuts.render([entries.get(0)])).entries().get(0);
+        assert(reparsed.icon.equals("/icons/keep.png") && reparsed.name.equals("Keep"));
         var unknown = Bytes.fromString("not a shortcuts file");
         GamingFiles.writeBytes(path, unknown);
         assert(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
         assert(GamingFiles.read(path).equals(unknown));
-        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, playtime kept, idempotence, unknown format refusal");
+        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, icon updates preserve playtime, missing icon fields, idempotence, unknown format refusal");
     }
 
     public void presetLinks() {

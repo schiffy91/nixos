@@ -7,6 +7,7 @@ let
 in lib.mkIf config.settings.desktop.enable {
   hardware.graphics.enable = true;
   programs.dconf.enable = true;
+  programs.kde-pim.enable = false;
   services = {
     xserver.dpi = builtins.floor (96 * primaryScale);
     displayManager = {

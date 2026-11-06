@@ -1,13 +1,15 @@
 # Steam Deck OLED
 
 `STEAM-DECK-OLED.nix` enables Jovian's hardware support and Gaming Mode, a
-touchscreen LUKS prompt (unl0kr), hibernation on every sleep, Secure Boot key
+touchscreen LUKS prompt inside Plymouth, hibernation on every sleep, Secure Boot key
 re-enrollment and Sunshine with KMS capture. Its `let` block holds the device
 data: disk, SD card label and LAN.
 
 Decky Loader runs from Jovian; install plugins from its store. The non-Steam
 shortcuts in `settings.apps.steam.shortcuts` are written to every Steam profile
-at boot, before Steam starts. Other shortcuts in Steam are left alone.
+at boot, before Steam starts. Entries can specify `{ exe = "..."; icon = "..."; }`;
+icon changes preserve existing shortcut IDs, tags, controller settings and
+play history. Other shortcuts in Steam are left alone. Semu uses ES-DE's icon.
 
 The disk layout is the shared one: LUKS over btrfs, immutability, the recovery
 partition and a swapfile large enough to hibernate. The disk is unlocked only
@@ -39,9 +41,11 @@ hub, no Ethernet and no `git clone`.
    evaluating the flake and building the Jovian kernel and four Mesa variants,
    which needs the network and more than the Deck's 16 GB. `--force-upgrade`
    deliberately takes that fallback after updating the flake lock.
-2. Reboot and unlock with unl0kr's on-screen keyboard. The pinned version uses
-   the panel's native portrait orientation. Verify touch input on the actual
-   Deck before relying on keyboard-free boot; a VM cannot validate its digitizer.
+2. Reboot and unlock with Plymouth's on-screen keyboard. It appears automatically
+   when a touchscreen is present and no typing keyboard is attached. With a USB
+   keyboard attached, tap the screen to reveal it. The first tap only reveals
+   the keyboard. Rendering and touch coordinates follow the panel's DRM rotation.
+   Verify touch input on the actual Deck; a VM cannot validate its digitizer.
 3. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
 
    Our keys only — no `--microsoft`, the same rule as every other host. The
@@ -52,6 +56,20 @@ hub, no Ethernet and no `git clone`.
    is refused, disable Secure Boot in firmware for that update rather than
    enrolling Microsoft's keys. `settings.boot.autoEnrollKeys` re-enrolls our
    keys after a flash clears them.
+
+## Desktop mode
+
+The Deck has its own Plasma taskbar launchers. Workstation-only Chrome app IDs
+live in the FRACTAL-NORTH host configuration. Plasma Keyboard is selected as
+KWin's input method on the Deck, available from the taskbar's **On-Screen
+Keyboard** launcher even without Steam. Automatic pop-up is disabled so it
+does not cover Steam's keyboard when using **Steam+X**. Close one keyboard
+before opening the other.
+
+**Return to Gaming Mode** is available on the desktop, taskbar and application
+menu. It uses `steamosctl` to switch sessions. A Deck-only KWin script keeps
+Steam's separate desktop keyboard within the scaled display's work area while
+preserving its requested height so the bottom row stays visible.
 
 ## Sleep and firmware
 
@@ -89,21 +107,38 @@ systemd-boot enrolls them again the next time the firmware is in Setup Mode.
 
 ## Check on the device
 
-The keyboard agent waits for initrd module loading and udev processing before
-starting, and retries failed launches. Without that ordering, the NVMe disk can
-request a password before amdgpu has taken over the firmware framebuffer.
-unl0kr selects the first DRM card only once at startup. Merely including the GPU
-and touchscreen drivers in the initrd does not establish that ordering.
+The systemd-boot generation selector uses UEFI console mode `5`, documented by
+NixOS as the Deck's horizontal mode. This runs before Linux and Plymouth;
+`fbcon=rotate:1` and the touch keyboard cannot change its layout. Avoid `max`:
+it selects the highest mode number, not the highest resolution. Check the menu
+on the physical Deck after firmware updates, since a VM has different UEFI modes.
 
-`initrd-touch-unlock` in `tests/graph.json` boots a real encrypted volume with
-delayed module loading and an injected agent startup failure. It exercises the
-shared keyboard module. The full host boot tests remain responsible for the
-installer, Jovian kernel, and the rest of the host configuration.
+Plymouth owns both the splash and the LUKS prompt. Its patched `two-step` plugin
+contains a Steam-style US touch keyboard; it does not run the Steam client in
+the initrd. libinput watches touchscreen and keyboard hotplug events. The Deck's
+firmware keyboard and controller interfaces do not count as attached typing
+keyboards. Real USB keyboards suppress automatic display, while a screen tap
+always reveals it. A touch preference persists across incorrect-passphrase retries.
 
-Plymouth stays disabled: the packaged unl0kr agent has
-`ConditionPathExists=!/run/plymouth/pid`. Enabling both does not add a keyboard to
-Plymouth. A future splash would need an explicit, tested handoff of display and
-password-agent ownership.
+The keyboard includes uppercase, punctuation, Space, Backspace, Caps and Unlock.
+Its default Steam-style palette has a charcoal tray, dark character keys, black
+action keys, muted shifted-symbol hints and blue pressed/active keys. Rendering
+uses Plymouth's fonts, with no dependency on Steam assets. Keys and hit targets
+share the same geometry in display-logical coordinates; width is 96% of the
+screen capped at 1280 logical pixels, and five rows occupy its lower half. Labels
+fit their key bounds. Very small displays still have physically small touch targets.
+Touch coordinates use the same rotation as Plymouth's renderer, including the
+Deck's portrait panel mounted sideways. Initrd module loading precedes Plymouth
+startup so the graphics driver is available when the encrypted disk asks for its
+passphrase. There is no separate unl0kr agent competing for the display.
+
+`initrd-touch-unlock` and `initrd-touch-unlock-rotated` in `tests/graph.json` boot
+real encrypted volumes with delayed graphics-driver loading. Kernel uinput
+fixtures provide touchscreen and keyboard devices, and tests inspect screenshots
+and enter a passphrase through libinput and Plymouth. The rotated test uses an
+800×1280 virtual panel with a DRM orientation property. Small C tests cover the
+visibility policy, all printable US characters, hit regions and coordinate rotation.
+The full host boot tests cover the installer, Jovian kernel and other host modules.
 
 ### Hardware testing
 
@@ -124,21 +159,21 @@ USB Ethernet connection avoids depending on early-boot Wi-Fi support.
 After a failed graphical unlock followed by USB-keyboard unlock, collect:
 
 ```sh
-sudo journalctl -b -u unl0kr-agent.service -u systemd-modules-load.service
+sudo journalctl -b -u plymouth-start.service -u systemd-ask-password-plymouth.service -u systemd-modules-load.service
 sudo journalctl -b -k | rg -i 'amdgpu|drm|firmware|hid|touch|i2c'
 ls -l /dev/dri /sys/class/drm
 cat /proc/bus/input/devices
 ```
 
 These distinguish missing firmware, early DRM selection, and missing touch
-devices. Source review identifies a startup race, but without the failed Deck's
-journal it cannot establish which failure occurred on that installation.
+devices. A normal boot journal does not capture touch coordinates or screenshots; those
+still require testing on the physical panel.
 
 The VM tests cover the LUKS, swapfile, hibernate and immutability path, but on
 the architecture of whichever machine ran the graph — `immutability-hibernate`
 declares no `arch` — not on Deck hardware. These still need the device:
 
-- unl0kr with the DRM backend on the Valve kernel
+- Plymouth graphics and touch alignment with the DRM backend on the Valve kernel
 - hibernate and resume on the Deck's drivers
 - Sunshine KMS capture in Gaming Mode
 - the SD card label and the semu paths in `STEAM-DECK-OLED.nix`

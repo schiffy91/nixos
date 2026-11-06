@@ -21,6 +21,7 @@ import ./desktop/HardwareConfig.btrc;
 import ./desktop/AudioManager.btrc;
 import ./desktop/CaffeineManager.btrc;
 import ./desktop/DisplayManager.btrc;
+import ./desktop/PowerManager.btrc;
 import ./Installer.btrc;
 import ../../tests/e2e/Spec.btrc;
 import ../../tests/e2e/QemuE2eHarness.btrc;
@@ -81,6 +82,7 @@ class NixosCtl {
         help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
         help.item("audio <list|current|set> [sink]", "");
         help.item("caffeine <status|enable|disable|toggle>", "");
+        help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
 
         help.section("Testing");
         help.item("vm <args>", "Boot the host config in a QEMU VM.");
@@ -330,6 +332,27 @@ class NixosCtl {
             if (action.equals("set")) {
                 var sink = self.requireArg(args, 2, "Usage: nixosctl audio set <sink>");
                 audio.set(sink);
+                return 0;
+            }
+        }
+
+        if (command.equals("power")) {
+            var action = self.requireAction(args, "Usage: nixosctl power <list|current|set|is> [profile]");
+            var power = PowerManager();
+            if (action.equals("list")) {
+                for profile in power.profiles() { Console.log(profile); }
+                return 0;
+            }
+            if (action.equals("current")) {
+                var profile = power.current();
+                if (profile.isEmpty()) { throw "Power profiles are unavailable"; }
+                Console.log(profile);
+                return 0;
+            }
+            if (action.equals("set") || action.equals("is")) {
+                var profile = self.requireArg(args, 2, "Supply a power profile: performance, balanced, or power-saver");
+                if (action.equals("is")) { return power.current().equals(profile) ? 0 : 1; }
+                power.set(profile);
                 return 0;
             }
         }

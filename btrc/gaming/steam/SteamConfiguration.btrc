@@ -10,6 +10,7 @@ class SteamConfiguration {
     public string defaultTool;
     public string prefix;
     public string suffix;
+    public string wrapper;
     public Vector<string> selected;
 
     public SteamConfiguration(CLICommandLine args) {
@@ -17,6 +18,7 @@ class SteamConfiguration {
         self.defaultTool = args.option("--default-tool");
         self.prefix = args.option("--default-launch-prefix");
         self.suffix = args.option("--default-launch-suffix");
+        self.wrapper = args.option("--launch-wrapper").trim();
         self.selected = args.values("--app-id");
         self.declared = JSONValue.parse(Path.readAll(args.option("--app-config")));
         if (self.library.root.isEmpty() || self.defaultTool.isEmpty() || !self.declared.isObject()) {
@@ -44,6 +46,11 @@ class SteamConfiguration {
     }
 
     public string launchOptions(JSONValue app) {
+        var options = self.gameOptions(app);
+        return self.wrapper.isEmpty() ? options : f"{self.wrapper} {options}";
+    }
+
+    public string gameOptions(JSONValue app) {
         if (app.has("launchOptions")) { return app.get("launchOptions").asString(); }
         var inheritDefault = !app.has("inheritDefaultLaunchOptions") || app.get("inheritDefaultLaunchOptions").asBool();
         Vector<string> parts = [app.get("launchPrefix").asString(), inheritDefault ? self.prefix : "", "%command%",

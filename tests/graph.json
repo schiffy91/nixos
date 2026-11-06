@@ -964,6 +964,15 @@
       "id": "initrd-touch-unlock",
       "spec": "boot-touch/test.json",
       "after": []
+    },
+    {
+      "id": "initrd-touch-unlock-rotated",
+      "spec": "boot-touch/test.json",
+      "after": [],
+      "args": {
+        "rotate": "true",
+        "state": "initrd-touch-unlock-rotated"
+      }
     }
   ],
   "required": [
@@ -1024,7 +1033,8 @@
     "host-boot-FRACTAL-NORTH-VM-secure",
     "host-hibernate-FRACTAL-NORTH-VM-secure",
     "host-install-FRACTAL-NORTH-VM-secure",
-    "initrd-touch-unlock"
+    "initrd-touch-unlock",
+    "initrd-touch-unlock-rotated"
   ],
   "workspaceRoot": ".."
 }

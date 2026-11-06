@@ -1,6 +1,7 @@
-{ config, inputs, pkgs, ... }:
+{ config, inputs, pkgs, lib, ... }:
 let
   user = config.settings.users.admin.username;
+  icons = import ../../../apps/gaming/icons/package.nix { inherit pkgs inputs; };
   disk = {
     device   = "/dev/nvme0n1";
     swapSize = "20G";  # hibernation image for 16 GB of RAM
@@ -13,8 +14,12 @@ let
   };
   emulationRoot = "/run/media/${user}/${sdCard.label}/Emulation";
 in {
-  imports = [ inputs.jovian.nixosModules.default ];
+  imports = [ inputs.jovian.nixosModules.default ./session.nix ./touch-keyboard.nix ];
   networking.hostName = "STEAM-DECK-OLED";
+
+  # The Deck's horizontal UEFI console is mode 5. "max" selects the
+  # highest-numbered firmware mode, not necessarily the highest resolution.
+  boot.loader.systemd-boot.consoleMode = lib.mkForce "5";
 
   jovian = {
     devices.steamdeck = {
@@ -44,7 +49,7 @@ in {
     boot = {
       touchKeyboard = true;
       kernelPackages = pkgs.jovianPackages.linuxPackages;
-      plymouth.enable = false;  # unl0kr owns the screen in initrd
+      plymouth.enable = true;
       autoEnrollKeys = true;
     };
     sleep.hibernateOnSuspend = true;
@@ -55,7 +60,21 @@ in {
       immutability.enable = true;
       swap.size = disk.swapSize;
     };
-    desktop.defaultSession = "gamescope-wayland";
+    desktop = {
+      defaultSession = "gamescope-wayland";
+      outputs = [{ name = "eDP-1"; scaleFactor = 1.35; primary = true; }];
+      plasma = {
+        virtualKeyboard.enable = true;
+        taskbarLaunchers = [
+          "applications:org.kde.dolphin.desktop"
+          "applications:google-chrome.desktop"
+          "applications:org.kde.konsole.desktop"
+          "applications:steam.desktop"
+          "applications:desktop-keyboard.desktop"
+          "applications:return-to-gaming-mode.desktop"
+        ];
+      };
+    };
     networking.lanSubnet = network.lanSubnet;
     nix = {  # the desktop builds the emulators; a handheld should never compile them
       substituters = [ "http://FRACTAL-NORTH.local:8080" ];
@@ -73,10 +92,10 @@ in {
       steam = {
         protonCustom.enable = false;  # Steam's own Proton under gamescope
         shortcuts = {
-          Semu      = "/run/current-system/sw/bin/semu-es-de";
-          Moonlight = "/run/current-system/sw/bin/moonlight";
-          chiaki-ng = "/run/current-system/sw/bin/chiaki";
-          Chrome    = "/run/current-system/sw/bin/google-chrome-stable";
+          Semu = { exe = "/run/current-system/sw/bin/semu-es-de"; icon = "${icons.semu}"; };
+          Moonlight = { exe = "/run/current-system/sw/bin/moonlight"; icon = "${icons.moonlight}"; };
+          chiaki-ng = { exe = "/run/current-system/sw/bin/chiaki"; icon = icons.chiaki; };
+          Chrome = { exe = "/run/current-system/sw/bin/google-chrome-stable"; icon = icons.chrome; };
         };
       };
       battlenet.enable = true;

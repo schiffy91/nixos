@@ -1,0 +1,41 @@
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+class PowerManager {
+    class Vector<string> parseProfiles(string text) {
+        Vector<string> profiles = [];
+        var data = JSONValue.parse(text).get("data");
+        if (!data.isArray()) { return profiles; }
+        for entry in data.elements() {
+            var profile = entry.get("Profile").get("data").asString();
+            if (profile.equals("performance") || profile.equals("balanced") || profile.equals("power-saver")) {
+                if (!profiles.contains(profile)) { profiles.push(profile); }
+            }
+        }
+        return profiles;
+    }
+
+    public Vector<string> profiles() {
+        var result = UnixShell().run("busctl --system --timeout=2 --json=short get-property org.freedesktop.UPower.PowerProfiles /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles Profiles", logFailure=false);
+        if (!result.ok()) { Vector<string> empty = []; return empty; }
+        return PowerManager.parseProfiles(result.stdout());
+    }
+
+    public string current() {
+        var result = UnixShell().run("powerprofilesctl get", logFailure=false);
+        return result.ok() ? result.trimmed() : "";
+    }
+
+    public void set(string profile) {
+        if (!self.profiles().contains(profile)) { throw f"Power profile unavailable: {profile}"; }
+        UnixShell().run(f"powerprofilesctl set {ShellWords.quote(profile)}", stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+    }
+
+    class string label(string profile) {
+        if (profile.equals("performance")) { return "Performance"; }
+        if (profile.equals("balanced")) { return "Balanced"; }
+        return "Power Saver";
+    }
+}
