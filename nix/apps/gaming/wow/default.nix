@@ -34,26 +34,29 @@ let
         repo=$(jq -r --arg n "$name" '.[$n].repo' "$sources")
         train=$(jq -r --arg n "$name" '.[$n].train // ""' "$sources")
         want=$(jq -r --arg n "$name" '.[$n].flavour // ""' "$sources")
-        if [ -n "$train" ]; then  # the releases feed only carries the newest ten, so ask git for every tag
-          tag=$(git ls-remote --tags "https://github.com/$repo" "refs/tags/$train/*" \
-            | sed 's|.*refs/tags/||' | grep -v '\^{}$' | sort -V | tail -1)
+        if [ -n "$train" ]; then  # the feed carries only the newest ten, so ask git for every tag
+          tags=$(git ls-remote --tags "https://github.com/$repo" "refs/tags/$train/*" \
+            | sed 's|.*refs/tags/||' | grep -v '\^{}$' | grep -E "^$train/[^/]+$" | sort -V | tac)
         else
-          tag=$(curl -fsSL "https://github.com/$repo/releases.atom" \
-            | grep -oE 'releases/tag/[^"]+' | sed 's|releases/tag/||; s|%2F|/|g; s|%2B|+|g' | head -1)
+          tags=$(curl -fsSL "https://github.com/$repo/releases.atom" \
+            | grep -oE 'releases/tag/[^"]+' | sed 's|releases/tag/||; s|%2F|/|g; s|%2B|+|g')
         fi
-        [ -n "$tag" ] || { echo "$name: no release found" >&2; exit 1; }
-        assets=$(curl -fsSL "https://github.com/$repo/releases/expanded_assets/$tag" \
-          | grep -oE "/$repo/releases/download/[^\"]+\.zip" | sort -u)
-        href=""
-        for candidate in $assets; do
-          file=$(basename "$candidate" .zip)
-          suffix=''${file##*-}
-          matches=no
-          for flavour in $flavours; do [ "$suffix" = "$flavour" ] && matches=yes; done
-          if [ -n "$want" ]; then [ "$suffix" = "$want" ] && href="$candidate"
-          elif [ "$matches" = no ]; then href="$candidate"; fi
+        [ -n "$tags" ] || { echo "$name: no release tags" >&2; exit 1; }
+        href=""; tag=""
+        for candidate_tag in $tags; do  # a release can carry no zip at all, so walk until one does
+          assets=$(curl -fsSL "https://github.com/$repo/releases/expanded_assets/$candidate_tag" \
+            | grep -oE "/$repo/releases/download/[^\"]+\.zip" | sort -u || true)
+          for candidate in $assets; do
+            file=$(basename "$candidate" .zip)
+            suffix=''${file##*-}
+            matches=no
+            for flavour in $flavours; do [ "$suffix" = "$flavour" ] && matches=yes; done
+            if [ -n "$want" ]; then [ "$suffix" = "$want" ] && href="$candidate"
+            elif [ "$matches" = no ]; then href="$candidate"; fi
+          done
+          if [ -n "$href" ]; then tag="$candidate_tag"; break; fi
         done
-        [ -n "$href" ] || { echo "$name: no asset for ''${want:-base} in $tag" >&2; exit 1; }
+        [ -n "$href" ] || { echo "$name: no asset for ''${want:-base} in any release" >&2; exit 1; }
         url="https://github.com$href"
         hash=$(nix store prefetch-file --json --hash-type sha256 "$url" | jq -r .hash)
         echo "$name $tag" >&2
@@ -64,7 +67,8 @@ let
     '';
   };
 in lib.mkIf enabled {
-  environment.systemPackages = [ lockTool ];  # nixosctl upgrade runs it as root
+  environment.systemPackages = [ lockTool ];
+  environment.etc."${config.settings.apps.nixosctl.upgradeHooksDir}/wow-addons".source = "${lockTool}/bin/wow-addons-lock";
   system.activationScripts.wowAddons = lib.stringAfter [ "users" ] ''
     if [ -d "${forever}" ]; then
       ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} "${forever}/Interface"

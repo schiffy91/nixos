@@ -22,7 +22,8 @@
     "repo": "Tercioo/Plater-Nameplates"
   },
   "questie": {
-    "repo": "Questie/Questie"
+    "repo": "Questie/Questie",
+    "train": "bundle"
   },
   "spoken": {
     "repo": "rusty-key/spoken-wow",

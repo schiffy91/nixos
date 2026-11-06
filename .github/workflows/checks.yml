@@ -1,10 +1,5 @@
 name: checks
 
-# Every guarded contract in the flake's `checks`, which are evaluation-only and
-# need no VM: the initrd's units, a quiet boot, our keys alone, the installer's
-# offline contract, the unlock agent, and each host's disko layout. The e2e
-# graph is not here; it wants KVM, ~100 GB and hours, so it runs on a machine
-# that has them.
 on:
   push:
     branches: [ main ]

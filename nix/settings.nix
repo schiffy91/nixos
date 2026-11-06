@@ -336,6 +336,7 @@ in {
     settings.apps.zsh.enable = mkSetting bool false;
     settings.apps.nixosctl.enable = mkSetting bool true;
     settings.apps.nixosctl.configPath = mkSetting str "";
+    settings.apps.nixosctl.upgradeHooksDir = mkSetting str "nixosctl/upgrade.d";  # under /etc; modules drop pin refreshers here
     settings.apps.nixosctl.caffeine.enable = mkSetting bool true;
     settings.apps.onePassword.enable = mkSetting bool true;
     settings.apps.rclone.enable = mkSetting bool true;

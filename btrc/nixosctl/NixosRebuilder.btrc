@@ -59,17 +59,15 @@ class NixosRebuilder {
 
     // Modules drop executables here to refresh pins they own. Core knows nothing of what they are.
     public void runUpgradeHooks() {
-        var directory = "/etc/nixosctl/upgrade.d";
+        var directory = PathTools.join("/etc", self.config.evalString("config.settings.apps.nixosctl.upgradeHooksDir"));
         if (!FileSystem.isDir(directory)) { return; }
         for name in FileSystem.listDir(directory).sorted() {
             var hook = PathTools.join(directory, name);
             if (FileSystem.isDir(hook)) { continue; }
-            var result = self.shell.run(
+            self.requireOk(f"upgrade hook {name}", self.shell.run(
                 f"NIXOS_CONFIG_ROOT={ShellWords.quote(self.config.paths.root)} {ShellWords.quote(hook)}",
                 stdout=COMMAND_OUTPUT_STREAM,
-                stderr=COMMAND_OUTPUT_STREAM,
-                logFailure=false);
-            if (!result.ok()) { Console.log(f"upgrade hook failed, continuing: {name}"); }
+                stderr=COMMAND_OUTPUT_STREAM));
         }
     }
 
