@@ -11,6 +11,9 @@
   "bigWigs": {
     "repo": "BigWigsMods/BigWigs"
   },
+  "details": {
+    "url": "https://edge.forgecdn.net/files/9447/255/Details-Details.20261104.15400.172.zip"
+  },
   "dialogueUI": {
     "repo": "Peterodox/YUI-Dialogue"
   },
@@ -44,9 +47,5 @@
   "spokenReadablesAudio": {
     "repo": "rusty-key/spoken-wow",
     "train": "readables-audio"
-  },
-  "threatClassic2": {
-    "flavour": "forever",
-    "repo": "dfherr/ThreatClassic2"
   }
 }

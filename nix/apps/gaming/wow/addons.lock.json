@@ -15,6 +15,10 @@
     "hash": "sha256-SfsoM+1nF/a02JMbpDIHx61khpXJCRQ+JCZPclQfsEI=",
     "url": "https://github.com/BigWigsMods/BigWigs/releases/download/v427.8/BigWigs-v427.8.zip"
   },
+  "details": {
+    "hash": "sha256-FD43/nyTeFVELwuB3oTYFz5ByNjCRCGj8MStBLs8s24=",
+    "url": "https://edge.forgecdn.net/files/9447/255/Details-Details.20261104.15400.172.zip"
+  },
   "dialogueUI": {
     "hash": "sha256-OZa4qXkuAwqVltmQWqDwyL96/ddAszH1762sdbzR4KQ=",
     "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-b/DialogueUI-1.0.7-b.zip"
@@ -50,9 +54,5 @@
   "spokenReadablesAudio": {
     "hash": "sha256-fvjWgaVLizbDCWdjeV1F7IXwht8RNacGaPn+dpW+u/o=",
     "url": "https://github.com/rusty-key/spoken-wow/releases/download/readables-audio%2Fv2.3.0/SpokenReadablesAudio-2.3.0.zip"
-  },
-  "threatClassic2": {
-    "hash": "sha256-Dx6+t6A6edQrqV+kRuh4h9ov4p7xIhsUyyh9e7uEY4Q=",
-    "url": "https://github.com/dfherr/ThreatClassic2/releases/download/2.75/ThreatClassic2-2.75-forever.zip"
   }
 }
