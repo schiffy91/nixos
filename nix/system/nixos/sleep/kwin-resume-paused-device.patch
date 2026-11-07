@@ -1,0 +1,32 @@
+From: NixOS sleep lock integration
+Subject: [PATCH] Retain paused DRM handles for initialization after resume
+
+A compositor starting on an inactive VT can receive a paused logind device.
+Retain it until logind restores DRM master ownership and sends ResumeDevice,
+then use the existing resume callback to initialize its rendering device.
+Do not create an unauthenticated rendering device when direct node access is
+permitted independently of the active-session ACL.
+
+--- a/src/backends/drm/drm_backend.cpp
++++ b/src/backends/drm/drm_backend.cpp
+@@ -247,12 +247,18 @@
+         return nullptr;
+     }
+ 
++    // Keep the logind device while paused so its ResumeDevice notification
++    // can retry initialization. A direct node open can fail without an active
++    // session ACL, or succeed before logind restores DRM master ownership.
++    m_gpuAuthHandles.insert(fileName, authHandle);
++    if (!drmIsMaster(authHandle->fd())) {
++        return nullptr;
++    }
++
+     auto drmDevice = DrmDevice::openWithAuthentication(fileName, authHandle->fd());
+     if (!drmDevice) {
+         return nullptr;
+     }
+-
+-    m_gpuAuthHandles.insert(fileName, authHandle);
+ 
+     m_gpus.push_back(std::make_unique<DrmGpu>(this, authHandle->fd(), std::move(drmDevice)));
+     auto gpu = m_gpus.back().get();

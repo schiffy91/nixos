@@ -1,0 +1,410 @@
+From: NixOS sleep lock integration
+Subject: [PATCH] Preserve root-managed locking across greeter and release races
+
+Enabled only by settings.sleep.lockSession. Native greeter results cannot
+release a root-managed lock. Root-only methods bind release to a freshly
+generated, single-use lock token. Every new lock invalidates older authority.
+Generic logind Unlock is unversioned and available to the session UID, so this
+opt-in build refuses it; ordinary native PAM still works outside managed locks.
+
+--- a/ksldapp.cpp
++++ b/ksldapp.cpp
+@@ -32,6 +32,7 @@
+ #include <QKeyEvent>
+ #include <QProcess>
+ #include <QTimer>
++#include <QUuid>
+ // other
+ #include <signal.h>
+ #include <unistd.h>
+@@ -98,7 +99,13 @@
+ }
+ 
+ static bool s_graceTimeKill = false;
+-static bool s_logindExit = false;
++static bool s_rootUnlockPending = false;
++// Native authentication cannot bypass a root-managed sleep boundary. This
++// ownership survives ordinary Lock requests, which invalidate only the token.
++static bool s_rootManaged = false;
++static QString s_rootLockToken;
++// A repeated immediate lock revokes every result from the existing greeter.
++static bool s_relockPending = false;
+ static bool s_lockProcessRequestedExit = false;
+ 
+ void KSldApp::initialize()
+@@ -159,7 +166,18 @@
+     m_lockProcess->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+     m_lockProcess->setReadChannel(QProcess::StandardOutput);
+     auto finishedSignal = static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished);
++    connect(m_lockProcess, &QProcess::started, this, [this] {
++        if (s_relockPending) {
++            m_lockProcess->kill();
++        } else if (s_rootUnlockPending) {
++            m_lockProcess->terminate();
++        }
++    });
+     connect(m_lockProcess, &QProcess::readyRead, this, [this] {
++        if (s_relockPending || s_rootUnlockPending || lockState() == Unlocked) {
++            m_lockProcess->readAllStandardOutput();
++            return;
++        }
+         const auto str = QString::fromLocal8Bit(m_lockProcess->readLine());
+         if (str == QStringLiteral("Unlocked\n")) {
+             lockProcessRequestedUnlock();
+@@ -168,6 +186,27 @@
+     connect(m_lockProcess, finishedSignal, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+         qCDebug(KSCREENLOCKER) << "Greeter process exitted with status:" << exitStatus << "exit code:" << exitCode;
+ 
++        if (s_rootUnlockPending) {
++            s_rootUnlockPending = false;
++            s_relockPending = false;
++            m_lockProcess->readAllStandardOutput();
++            if (lockState() != Unlocked) {
++                doUnlock(true);
++            }
++            return;
++        }
++        if (s_relockPending) {
++            s_relockPending = false;
++            m_lockProcess->readAllStandardOutput();
++            if (lockState() != Unlocked) {
++                m_greeterCrashedCounter = 0;
++                startLockProcess(EstablishLock::Immediate);
++            }
++            return;
++        }
++        if (lockState() == Unlocked) {
++            return;
++        }
+         if (s_lockProcessRequestedExit) {
+             qCDebug(KSCREENLOCKER) << "Lock process had requested exit; we already did the unlock process elsewhere";
+             return;
+@@ -176,22 +215,20 @@
+         if (s_graceTimeKill) {
+             qCDebug(KSCREENLOCKER) << "screen locker killed due to grace time.";
+             s_graceTimeKill = false;
+-            s_logindExit = false;
++            s_rootUnlockPending = false;
+             return;
+         }
+         const bool regularExit = !exitCode && exitStatus == QProcess::NormalExit;
+-        if (regularExit || s_logindExit) {
++        if (regularExit && s_rootManaged) {
++            // A new native PAM attempt may finish after the sleep boundary.
++            // Keep the compositor locked until its current root token releases.
++            startLockProcess(EstablishLock::Immediate);
++            return;
++        }
++        if (regularExit) {
+             // unlock process finished successfully - we can remove the lock grab
+-
+-            if (regularExit) {
+-                qCDebug(KSCREENLOCKER) << "Unlocking now on regular exit.";
+-            } else {
+-                Q_ASSERT(s_logindExit);
+-                qCDebug(KSCREENLOCKER) << "Unlocking anyway since forced through logind.";
+-            }
+-
++            qCDebug(KSCREENLOCKER) << "Unlocking now on regular exit.";
+             s_graceTimeKill = false;
+-            s_logindExit = false;
+             doUnlock();
+             return;
+         }
+@@ -211,9 +248,21 @@
+     });
+     connect(m_lockProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+         if (error == QProcess::FailedToStart) {
+-            qCDebug(KSCREENLOCKER) << "Greeter Process  failed to start. Trying to directly unlock again.";
+-            doUnlock();
+-            qCCritical(KSCREENLOCKER) << "Greeter Process not available";
++            // Qt has not completed QProcess cleanup yet: never restart from
++            // this callback. A later explicit Lock may retry the greeter.
++            s_relockPending = false;
++            if (s_rootUnlockPending) {
++                s_rootUnlockPending = false;
++                if (lockState() != Unlocked) {
++                    doUnlock(true);
++                }
++                return;
++            }
++            qCCritical(KSCREENLOCKER) << "Greeter process not available; retaining the lock";
++            endGraceTime();
++            if (lockState() == Locked && !m_emergencyLockWindow) {
++                m_emergencyLockWindow = std::make_unique<EmergencyWindow>();
++            }
+         } else {
+             qCWarning(KSCREENLOCKER) << "Greeter Process encountered an unhandled error:" << error << ". Detailed error:" << m_lockProcess->errorString();
+         }
+@@ -230,15 +279,11 @@
+         qCDebug(KSCREENLOCKER) << "Lock requested by logind";
+         lock(EstablishLock::Immediate);
+     });
+-    connect(m_logind, &LogindIntegration::requestUnlock, this, [this]() {
+-        if (lockState() == Locked) {
+-            if (m_lockProcess->state() != QProcess::NotRunning) {
+-                s_logindExit = true;
+-                m_lockProcess->terminate();
+-            } else {
+-                doUnlock();
+-            }
+-        }
++    connect(m_logind, &LogindIntegration::requestUnlock, this, []() {
++        // logind also permits the session UID to request this signal, and it
++        // carries neither the original caller nor a lock generation. This
++        // opt-in package uses native PAM or the root-only token API instead.
++        qCDebug(KSCREENLOCKER) << "Ignoring unversioned logind unlock request";
+     });
+     connect(m_logind, &LogindIntegration::prepareForSleep, this, [this](bool goingToSleep) {
+         if (!goingToSleep) {
+@@ -288,9 +333,13 @@
+ void KSldApp::lockProcessRequestedUnlock()
+ {
+     qCDebug(KSCREENLOCKER) << "Lock process requested unlock";
++    if (s_rootManaged) {
++        startLockProcess(EstablishLock::Immediate);
++        return;
++    }
+ 
+     s_graceTimeKill = false;
+-    s_logindExit = false;
++    s_rootUnlockPending = false;
+     s_lockProcessRequestedExit = true;
+     doUnlock();
+ }
+@@ -319,13 +368,19 @@
+ {
+     qCDebug(KSCREENLOCKER) << "lock called with establishLock:" << establishLockToString(establishLock);
+ 
++    // Preserve managed ownership, but invalidate all older release authority.
++    s_rootLockToken.clear();
++    s_rootUnlockPending = false;
++    s_graceTimeKill = false;
++    s_lockProcessRequestedExit = false;
+     if (lockState() != Unlocked) {
+         // already locked or acquiring lock, no need to lock again
+         // but make sure it's really locked
+         endGraceTime();
+         if (establishLock == EstablishLock::Immediate) {
+-            // signal the greeter to switch to immediateLock mode
+-            kill(m_lockProcess->processId(), SIGUSR1);
++            // SIGUSR1 only ends grace time; it does not cancel pending PAM.
++            // Retire the old greeter before acknowledging this new boundary.
++            startLockProcess(EstablishLock::Immediate);
+         }
+         return;
+     }
+@@ -352,8 +407,48 @@
+     }
+ }
+ 
+-void KSldApp::doUnlock()
+-{
++QString KSldApp::lockFromRoot()
++{
++    s_rootManaged = true;
++    lock(EstablishLock::Immediate);
++    if (lockState() != Locked) {
++        return {};
++    }
++    s_rootLockToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
++    return s_rootLockToken;
++}
++
++bool KSldApp::isRootLockCurrent(const QString &token) const
++{
++    return s_rootManaged && lockState() == Locked && !token.isEmpty() && token == s_rootLockToken;
++}
++
++bool KSldApp::unlockFromRoot(const QString &token)
++{
++    if (!isRootLockCurrent(token)) {
++        return false;
++    }
++    // Consume before recording intent; duplicates and later locks cannot reuse
++    // this authorization. Keep ownership until the actual release completes.
++    s_rootLockToken.clear();
++    s_relockPending = false;
++    s_rootUnlockPending = true;
++    if (m_lockProcess->state() != QProcess::NotRunning) {
++        m_lockProcess->terminate();
++    } else {
++        s_rootUnlockPending = false;
++        doUnlock(true);
++    }
++    return true;
++}
++
++void KSldApp::doUnlock(bool rootAuthorized)
++{
++    if (s_rootManaged && !rootAuthorized) {
++        return;
++    }
++    s_rootManaged = false;
++    s_rootLockToken.clear();
+     qCDebug(KSCREENLOCKER) << "Unlocking now.";
+     m_emergencyLockWindow.reset();
+     m_lockState = Unlocked;
+@@ -382,6 +477,19 @@
+ {
+     qCDebug(KSCREENLOCKER) << "Starting lock process with establishLock:" << establishLockToString(establishLock);
+ 
++    if (m_lockProcess->state() != QProcess::NotRunning) {
++        s_relockPending = true;
++        m_lockProcess->kill();
++        return;
++    }
++    // A previous greeter may have emitted Unlocked before exiting. Never
++    // carry its buffered output or exit authority into the next process.
++    m_lockProcess->readAllStandardOutput();
++    s_relockPending = false;
++    s_rootUnlockPending = false;
++    s_graceTimeKill = false;
++    s_lockProcessRequestedExit = false;
++
+     Q_EMIT aboutToStartGreeter();
+ 
+     QProcessEnvironment env = m_greeterEnv;
+@@ -458,6 +566,9 @@
+ 
+ void KSldApp::unlock()
+ {
++    if (s_rootManaged) {
++        return;
++    }
+     qCDebug(KSCREENLOCKER) << "Unlock requested";
+ 
+     if (isGraceTime() || !m_requirePassword) {
+--- a/ksldapp.h
++++ b/ksldapp.h
+@@ -163,6 +163,11 @@
+      */
+     void lock(EstablishLock establishLock);
+ 
++    // Called only by the D-Bus interface after authenticating the sender UID.
++    QString lockFromRoot();
++    bool isRootLockCurrent(const QString &token) const;
++    bool unlockFromRoot(const QString &token);
++
+     /**
+      * @brief Initializes the KSldApp object.
+      */
+@@ -289,7 +294,7 @@
+      * This function is responsible for unlocking the screen. It releases the keyboard and pointer grabs,
+      * hides the lock window, and cleans up state.
+      */
+-    void doUnlock();
++    void doUnlock(bool rootAuthorized = false);
+ 
+     /**
+      * @brief The lock process has requested to unlock the screen.
+--- a/interface.cpp
++++ b/interface.cpp
+@@ -16,6 +16,7 @@
+ #include <KWindowSystem>
+ // Qt
+ #include <QDBusConnection>
++#include <QDBusConnectionInterface>
+ #include <QDBusContext>
+ #include <QDBusPendingCallWatcher>
+ #include <QDBusReply>
+@@ -132,10 +133,58 @@
+ void Interface::Lock()
+ {
+     if (!KAuthorized::authorizeAction(QStringLiteral("lock_screen"))) {
++        if (calledFromDBus()) {
++            sendErrorReply(QDBusError::AccessDenied, QStringLiteral("Screen locking is not authorized"));
++        }
+         return;
+     }
+ 
+     m_daemon->lock(calledFromDBus() ? EstablishLock::Immediate : EstablishLock::Delayed);
++}
++
++bool Interface::requireRootCaller()
++{
++    if (!calledFromDBus()) {
++        return false;
++    }
++    auto *bus = connection().interface();
++    if (!bus || !message().service().startsWith(QLatin1Char(':'))) {
++        sendErrorReply(QDBusError::AccessDenied, QStringLiteral("A root D-Bus sender is required"));
++        return false;
++    }
++    const QDBusReply<uint> uid = bus->serviceUid(message().service());
++    if (!uid.isValid() || uid.value() != 0) {
++        sendErrorReply(QDBusError::AccessDenied, QStringLiteral("A root D-Bus sender is required"));
++        return false;
++    }
++    return true;
++}
++
++QString Interface::LockFromRoot()
++{
++    if (!requireRootCaller()) {
++        return {};
++    }
++    if (!KAuthorized::authorizeAction(QStringLiteral("lock_screen"))) {
++        sendErrorReply(QDBusError::AccessDenied, QStringLiteral("Screen locking is not authorized"));
++        return {};
++    }
++    return m_daemon->lockFromRoot();
++}
++
++bool Interface::IsRootLockCurrent(const QString &token)
++{
++    return requireRootCaller() && m_daemon->isRootLockCurrent(token);
++}
++
++void Interface::UnlockFromRoot(const QString &token)
++{
++    if (!requireRootCaller()) {
++        return;
++    }
++    if (!m_daemon->unlockFromRoot(token)) {
++        sendErrorReply(QDBusError::AccessDenied, QStringLiteral("The root lock generation is no longer current"));
++    }
+ }
+ 
+ bool Interface::SetActive(bool state)
+--- a/interface.h
++++ b/interface.h
+@@ -57,6 +57,10 @@
+      * Lock the screen.
+      */
+     void Lock();
++
++    QString LockFromRoot();
++    bool IsRootLockCurrent(const QString &token);
++    void UnlockFromRoot(const QString &token);
+ 
+     /**
+      * Simulate user activity
+@@ -121,6 +125,7 @@
+     void serviceUnregistered(const QString &name);
+ 
+ private:
++    bool requireRootCaller();
+     KSldApp *m_daemon;
+     QDBusServiceWatcher *m_serviceWatcher;
+     QList<InhibitRequest> m_requests;
+--- a/dbus/org.kde.screensaver.xml
++++ b/dbus/org.kde.screensaver.xml
+@@ -3,6 +3,17 @@
+   <interface name="org.kde.screensaver">
+     <!-- Re-read configuration -->
+     <method name="configure" />
++    <!-- Root-only sleep locking; native PAM applies outside root ownership. -->
++    <method name="LockFromRoot">
++      <arg type="s" name="token" direction="out" />
++    </method>
++    <method name="IsRootLockCurrent">
++      <arg type="s" name="token" direction="in" />
++      <arg type="b" name="current" direction="out" />
++    </method>
++    <method name="UnlockFromRoot">
++      <arg type="s" name="token" direction="in" />
++    </method>
+     <!-- Emitted just before we start the lock process. Clients should release any X grabs -->
+     <signal name="AboutToLock" />
+   </interface>

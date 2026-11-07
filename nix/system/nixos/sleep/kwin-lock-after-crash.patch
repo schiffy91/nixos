@@ -1,0 +1,35 @@
+From: NixOS sleep lock integration
+Subject: [PATCH] Start locked after compositor crash or watchdog restart
+
+Use the existing initial lock path before accepting clients. Enabled only
+with settings.sleep.lockSession; a compositor crash now requires a password.
+
+--- a/src/helpers/wayland_wrapper/kwin_wrapper.cpp
++++ b/src/helpers/wayland_wrapper/kwin_wrapper.cpp
+@@ -156,7 +156,13 @@
+             return;
+         }
+         qputenv("KWIN_RESTART_COUNT", QByteArray::number(m_crashCount));
+-        // restart
++        // Lock before accepting clients after a crash. Restoring LockedHint
++        // asynchronously can otherwise expose the first reconnected frame.
++        auto args = m_kwinProcess->arguments();
++        if (!args.contains(QStringLiteral("--lockscreen"))) {
++            args << QStringLiteral("--lockscreen");
++        }
++        m_kwinProcess->setArguments(args);
+         m_kwinProcess->start();
+     });
+ 
+@@ -195,6 +201,11 @@
+ void KWinWrapper::restart()
+ {
+     terminate(m_watchdogIntervalOk ? std::chrono::duration_cast<std::chrono::milliseconds>(m_watchdogInterval) : 30000ms);
++    auto args = m_kwinProcess->arguments();
++    if (!args.contains(QStringLiteral("--lockscreen"))) {
++        args << QStringLiteral("--lockscreen");
++    }
++    m_kwinProcess->setArguments(args);
+     m_kwinProcess->start();
+ }
+ 

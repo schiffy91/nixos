@@ -1,0 +1,16 @@
+{
+  "name": "sleep-lock-authentication",
+  "state": "sleep-lock-authentication",
+  "stateMaterial": "sleep-lock-authentication:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/sleep-lock/authentication --no-out-link --cores 4 --max-jobs 1 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 5400
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}

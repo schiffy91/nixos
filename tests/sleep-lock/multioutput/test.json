@@ -1,0 +1,16 @@
+{
+  "name": "sleep-lock-multioutput",
+  "state": "sleep-lock-multioutput",
+  "stateMaterial": "sleep-lock-multioutput:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/sleep-lock/multioutput --no-out-link --cores 4 --max-jobs 1 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -100 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 5400
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}

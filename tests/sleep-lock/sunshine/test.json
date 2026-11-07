@@ -1,0 +1,14 @@
+{
+  "name": "sleep-lock-sunshine",
+  "state": "sleep-lock-sunshine",
+  "stateMaterial": "sleep-lock-sunshine:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/sleep-lock/sunshine --no-out-link --cores 4 --max-jobs 1 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -100 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 1800
+    },
+    { "op": "record-state" }
+  ]
+}

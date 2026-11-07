@@ -1,0 +1,68 @@
+From: NixOS sleep lock integration
+Subject: [PATCH] Synchronize initial input state on the session thread
+
+Inactive-start libinput must suspend before session activation so its revoked
+input descriptors reopen. Subscribe and snapshot on the session thread, then
+queue initial setup ahead of future session transitions on the input thread.
+
+--- a/src/backends/libinput/connection.cpp
++++ b/src/backends/libinput/connection.cpp
+@@ -134,18 +134,8 @@
+ 
+ void Connection::setup()
+ {
+-    QMetaObject::invokeMethod(this, &Connection::doSetup, Qt::QueuedConnection);
+-}
+-
+-void Connection::doSetup()
+-{
+-    Q_ASSERT(!m_notifier);
+-
+-    gainRealTime();
+-
+-    m_notifier = std::make_unique<QSocketNotifier>(m_input->fileDescriptor(), QSocketNotifier::Read);
+-    connect(m_notifier.get(), &QSocketNotifier::activated, this, &Connection::handleEvent);
+-
++    // setup runs on the session thread. Subscribe before taking the initial
++    // snapshot, then queue it before any later activeChanged notification.
+     connect(m_input->session(), &Session::activeChanged, this, [this](bool active) {
+         if (active) {
+             if (!m_input->isSuspended()) {
+@@ -156,6 +146,26 @@
+             deactivate();
+         }
+     });
++    const bool active = m_input->session()->isActive();
++    QMetaObject::invokeMethod(this, [this, active]() {
++        doSetup(active);
++    }, Qt::QueuedConnection);
++}
++
++void Connection::doSetup(bool active)
++{
++    Q_ASSERT(!m_notifier);
++
++    gainRealTime();
++
++    m_notifier = std::make_unique<QSocketNotifier>(m_input->fileDescriptor(), QSocketNotifier::Read);
++    connect(m_notifier.get(), &QSocketNotifier::activated, this, &Connection::handleEvent);
++
++    // An inactive startup has no activeChanged(false) transition. Suspend so
++    // activation reopens logind's revoked input descriptors.
++    if (!active) {
++        deactivate();
++    }
+     handleEvent();
+ }
+ 
+--- a/src/backends/libinput/connection.h
++++ b/src/backends/libinput/connection.h
+@@ -80,7 +80,7 @@
+     void handleEvent();
+     void applyDeviceConfig(Device *device);
+     void applyScreenToDevice(Device *device);
+-    void doSetup();
++    void doSetup(bool active);
+     TabletTool *getOrCreateTool(libinput_tablet_tool *tool);
+ 
+     std::unique_ptr<QSocketNotifier> m_notifier;

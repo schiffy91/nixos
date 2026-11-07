@@ -1,0 +1,14 @@
+{
+  "name": "sleep-gamescope-native-control",
+  "state": "sleep-gamescope-native-control",
+  "stateMaterial": "sleep-gamescope-native-control:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && bash tests/sleep-lock/gamescope-native/run.sh '.vm/e2e/{{state}}-{{stateHashShort}}' > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -120 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 1800
+    },
+    { "op": "record-state" }
+  ]
+}
