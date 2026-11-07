@@ -26,13 +26,11 @@ remove an existing bundle to make a retry succeed: verify it first.
 The helper checks filesystem authority, not disk encryption or physical device
 independence. The operator must verify those properties before choosing storage.
 
-## Proposed Deck to Fractal procedure
+## Deck to Fractal procedure
 
-This procedure is prepared for later authorized execution. It has not copied or
-read any production private key. Keep the Deck on Standard-Boot and firmware
-Secure Boot disabled during preparation. Set the Deck's
-`settings.boot.autoEnrollKeys = false` before activating any Secure-Boot
-configuration: the current true setting is inert only while using Standard-Boot.
+Keep the Deck on Standard-Boot and firmware Secure Boot disabled during
+preparation. The Deck defaults to `settings.boot.autoEnrollKeys = false`;
+retain that setting before activating any Secure-Boot configuration.
 Do not run enrollment, `nixosctl secure-boot enable`, or a boot-policy change
 merely to create or back up keys.
 
@@ -101,8 +99,7 @@ nix build --no-link --print-out-paths \
 ```
 
 The result contains `nixos-recovery.efi`. Building this artifact does not activate
-a host or enroll keys. Its evaluated derivation is available; this task did not
-build it. Sign a copy outside the Nix store using the Deck's existing db key and
+a host or enroll keys. Sign a copy outside the Nix store using the Deck's existing db key and
 certificate, and verify it with `sbverify --cert ...`. An already installed
 Secure-Boot recovery UKI at `/recovery/EFI/recovery/nixos-recovery.efi` can also be
 used after verifying its signature against that same certificate. Standard-Boot

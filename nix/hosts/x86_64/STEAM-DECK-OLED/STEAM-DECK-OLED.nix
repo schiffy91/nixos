@@ -50,7 +50,8 @@ in {
       touchKeyboard = true;
       kernelPackages = pkgs.jovianPackages.linuxPackages;
       plymouth.enable = true;
-      autoEnrollKeys = true;
+      # Enrollment follows verified external recovery and an independent key backup.
+      autoEnrollKeys = false;
     };
     sleep.hibernateOnSuspend = true;
     disk = {

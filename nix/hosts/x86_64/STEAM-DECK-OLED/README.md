@@ -83,6 +83,15 @@ and deliberate enrollment are ready. The [independent key backup procedure](../.
 uses root-only `nixosctl secure-boot keys` transfers and verifies restoration on
 Fractal North's separate encrypted disk without enrolling or rotating keys.
 
+Preparation verified on 2026-11-07: the Deck has unique keys in `/var/lib/sbctl`,
+with an independently verified backup and restoration on Fractal North under
+`/var/lib/nixos/secureboot-backups/STEAM-DECK-OLED`. A recovery UKI signed by
+those keys is prepared on Fractal at
+`/var/lib/nixos/recovery/STEAM-DECK-OLED/nixos-recovery.efi`; its signature was
+verified, but it has not been booted from a physical recovery USB. The Deck
+remains in Setup Mode with Secure Boot disabled. External recovery and firmware
+enrollment/removal checks remain required before enabling it.
+
 `nixosctl secure-boot disable` currently switches to an unsigned configuration
 only after firmware Secure Boot is already disabled. It does not remove the
 platform key. The authenticated removal candidate is `sbctl reset`, using the
