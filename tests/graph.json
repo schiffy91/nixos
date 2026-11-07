@@ -1031,6 +1031,10 @@
       "id": "installer-secret",
       "spec": "nixosctl/installer-secret/test.json",
       "after": []
+    },
+    {
+      "id": "sleep-lock-console",
+      "spec": "sleep-lock/console/test.json"
     }
   ],
   "required": [
