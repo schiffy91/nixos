@@ -479,6 +479,10 @@ agent rather than requiring a second unlocked 1Password app on the remote host.
 
 ### Secure Boot
 
+Managed no-PIN TPM unlock is opt-in and requires verified explicit enrollment.
+See [the boot policy operator guide](nix/system/nixos/boot/tpm-policy.md) for
+admission, retained-generation rollback, persistence and recovery boundaries.
+
 `settings.boot.method = "Secure-Boot"` disables systemd-boot and hands the ESP
 to Lanzaboote, which signs the unified kernel images with the PKI bundle at
 `boot.lanzaboote.pkiBundle` (`/var/lib/sbctl`). `boot.lanzaboote.settings.editor`
@@ -663,7 +667,10 @@ here. The families are `installer-*`, `install-*`, `immutability-*`,
 
 The nodes with constraints worth knowing before you run them:
 
-- `tpm2-enroll` enrolls and wipes a TPM2 LUKS keyslot on an encrypted install.
+- `tpm2-enroll` verifies refusal of unmanaged enrollment and cleanup of a
+  test-only legacy TPM keyslot on an encrypted install. `tpm-managed-policy`
+  exercises the actual managed Secure Boot policy; `tpm-managed-reset` adds
+  the repository's BTRFS root-reset behavior.
 - `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
   auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
   enforcing firmware, so `tests/shell.nix` builds Debian's

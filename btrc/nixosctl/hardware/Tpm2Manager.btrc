@@ -66,9 +66,20 @@ class Tpm2Manager {
         return result.ok();
     }
 
+    public bool enrollmentAllowed() {
+        if (!self.config.evalBool("config.settings.tpm.managedPolicy.enable")) {
+            Console.log("Enable the managed TPM boot policy and boot an eligible Secure Boot generation before enrollment");
+            return false;
+        }
+        return self.shell.run("/etc/nixosctl/tpm-policy preflight",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
+            logFailure=false).ok();
+    }
+
     public bool enroll() {
-        var command = f"systemd-cryptenroll {ShellWords.quote(self.config.rootPartLabelPath())}";
-        command = f"{command} --wipe-slot=tpm2 --tpm2-device={ShellWords.quote(self.enrollmentDevice())} --tpm2-pcrs=7+12";
+        if (!self.enrollmentAllowed()) { return false; }
+        var command = "/etc/nixosctl/tpm-policy enroll";
         return self.shell.run(
             command,
             stdout=COMMAND_OUTPUT_STREAM,
@@ -91,6 +102,11 @@ class Tpm2Manager {
         var listed = self.listedDevice();
         if (!listed.isEmpty()) {
             Console.log(f"TPM2 detected device: {listed}");
+        }
+        if (self.config.evalBool("config.settings.tpm.managedPolicy.enable")) {
+            self.shell.run("/etc/nixosctl/tpm-policy status",
+                stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+            return;
         }
         self.shell.run(
             f"systemd-cryptenroll --tpm2-device=list {ShellWords.quote(self.config.rootPartLabelPath())}",

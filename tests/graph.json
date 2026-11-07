@@ -16,7 +16,9 @@
       "spec": "harness/quick/test.json"
     },
     {
-      "after": [ "quick" ],
+      "after": [
+        "quick"
+      ],
       "id": "host-timeout",
       "spec": "harness/timeout/test.json"
     },
@@ -1065,6 +1067,16 @@
         "kernel-trust"
       ],
       "spec": "kernel-trust/host.json"
+    },
+    {
+      "id": "tpm-managed-policy",
+      "after": [],
+      "spec": "tpm2/managed/test.json"
+    },
+    {
+      "id": "tpm-managed-reset",
+      "after": [],
+      "spec": "tpm2/managed/reset.json"
     }
   ],
   "required": [
@@ -1108,6 +1120,8 @@
     "install-encrypted",
     "install-nixosctl",
     "tpm2-enroll",
+    "tpm-managed-policy",
+    "tpm-managed-reset",
     "immutability-hibernate",
     "secure-boot-aarch64",
     "password-change",

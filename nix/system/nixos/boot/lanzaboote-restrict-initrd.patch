@@ -1,0 +1,54 @@
+--- a/stub/src/main.rs
++++ b/stub/src/main.rs
+@@ -116,12 +116,19 @@
+             }
+
+             if let Some(default_dropin_dir) = default_dropin_directory {
+-                if let Ok(mut system_extensions) =
+-                    discover_system_extensions(&mut filesystem, &default_dropin_dir)
+-                {
+-                    companions.append(&mut system_extensions);
+-                } else {
+-                    warn!("Failed to discover any system extension");
++                // Managed TPM boot policy admits only the signed executable
++                // environment. Never append untrusted sysext CPIOs, including
++                // when firmware cannot extend their PCR measurement.
++                match discover_system_extensions(&mut filesystem, &default_dropin_dir) {
++                    Ok(system_extensions) if system_extensions.is_empty() => {}
++                    Ok(_) => {
++                        warn!("Managed TPM policy refuses executable companion extensions");
++                        return Status::SECURITY_VIOLATION;
++                    }
++                    Err(_) => {
++                        warn!("Managed TPM policy cannot verify companion extensions");
++                        return Status::SECURITY_VIOLATION;
++                    }
+                 }
+             }
+
+--- a/linux-bootloader/src/linux_loader.rs
++++ b/linux-bootloader/src/linux_loader.rs
+@@ -121,6 +121,23 @@
+     /// `handle` is the handle where the protocols are registered
+     /// on. `file` is the file that is served to Linux.
+     pub fn new(handle: Handle, initrd_data: Vec<u8>) -> Result<Self> {
++        // A preceding boot loader can expose an unverified initrd through the
++        // same device path. Refuse it before installing our verified provider;
++        // selecting among duplicate handles is not an authentication boundary.
++        // SAFETY: this static contains a complete, valid Linux-initrd device
++        // path and its end node. No protocol using it is installed yet.
++        let mut existing_path = unsafe {
++            DevicePath::from_ffi_ptr(core::ptr::addr_of!(DEVICE_PATH_PROTOCOL).cast())
++        };
++        match boot::locate_device_path::<LoadFile2Protocol>(&mut existing_path) {
++            Ok(_) => {
++                log::warn!("Managed TPM policy refuses an externally supplied initrd");
++                return Err(Status::SECURITY_VIOLATION.into());
++            }
++            Err(error) if error.status() == Status::NOT_FOUND => {}
++            Err(error) => return Err(error),
++        }
++
+         let mut proto = Box::pin(LoadFile2Protocol {
+             load_file: raw_load_file,
+             initrd_data,
