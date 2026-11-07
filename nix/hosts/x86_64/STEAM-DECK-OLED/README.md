@@ -67,16 +67,47 @@ hub, no Ethernet and no `git clone`.
    keyboard attached, tap the screen to reveal it. The first tap only reveals
    the keyboard. Rendering and touch coordinates follow the panel's DRM rotation.
    Verify touch input on the actual Deck; a VM cannot validate its digitizer.
-3. The firmware ships in Setup Mode. Run `sudo nixosctl secure-boot enable`.
+3. Prepare Secure Boot separately using the checks below. Do not enroll keys
+   before verifying an independent key backup and signed external recovery.
 
-   Our keys only — no `--microsoft`, the same rule as every other host. The
-   open question this leaves is the Deck's own firmware path:
-   `jupiter-biosupdate` and the `jovian.devices.steamdeck.autoUpdate`
-   BIOS/controller updates are Microsoft-signed and run with Secure Boot
-   enforcing, so verify a BIOS update still applies before trusting it. If one
-   is refused, disable Secure Boot in firmware for that update rather than
-   enrolling Microsoft's keys. `settings.boot.autoEnrollKeys` re-enrolls our
-   keys after a flash clears them.
+## Secure Boot preparation
+
+The audited OLED F7G0114 firmware was in Setup Mode with Secure Boot disabled.
+That does not establish a recovery toggle in its firmware interface. Before
+`sudo nixosctl secure-boot enable`, prepare unique keys, independently back them
+up on encrypted storage and verify restoration, and boot a signed external
+recovery device. Use only our own keys, with no `--microsoft` or publicly shared
+private keys.
+
+`nixosctl secure-boot disable` currently switches to an unsigned configuration
+only after firmware Secure Boot is already disabled. It does not remove the
+platform key. The authenticated removal candidate is `sbctl reset`, using the
+current platform key; it must be verified on the Deck with working recovery
+before relying on it. Do not assume a BIOS toggle or a firmware flash will clear
+keys.
+
+Disable automatic enrollment **before** deliberate platform-key removal.
+`settings.boot.autoEnrollKeys` configures systemd-boot to enroll keys from
+`/boot/loader/keys/auto` whenever firmware enters Setup Mode. A maintenance boot
+must keep signed boot/recovery images, set `secure-boot-enroll off`, disable the
+enrollment preparation service, and remove stale enrollment assets from the
+ESP. Turning off a Nix option alone does not prove existing files were removed.
+Otherwise the next boot can undo the intended key removal. Retained recovery
+generations must also disable enrollment; an older auto-enrolling generation
+can recreate the assets. Lanzaboote protects the currently booted generation,
+so limiting the number of entries while still running an old generation is not
+sufficient. Boot maintenance first, rebuild its menu, and verify that only safe
+maintenance/recovery entries remain. Verify both boots before removing the key.
+Firmware SecureBoot mode describes the current boot, so check its new state
+after a restart, not immediately after the runtime key update.
+
+The `secure-boot-removal` VM graph scenario checks this sequence under OVMF,
+including rejection of the wrong private key, repeated boots without automatic
+re-enrollment, explicit re-enrollment, and retained signed recovery. It does not
+validate the Deck firmware, independent backup, or a physical recovery USB.
+See [sbctl's reset implementation](https://github.com/Foxboron/sbctl/blob/0.18/cmd/sbctl/reset.go)
+and [systemd-boot enrollment policy](https://www.freedesktop.org/software/systemd/man/latest/loader.conf.html).
+The boot-time firmware mode is specified in [UEFI 2.10 section 3.3](https://uefi.org/specs/UEFI/2.10_A/03_Boot_Manager.html).
 
 ## Desktop mode
 
@@ -117,14 +148,24 @@ has to fit, and the initrd reset is ordered after
 under a hibernated kernel. `CONFIG_HIBERNATION=y` in the Valve kernel
 (`7.2.7-valve2`).
 
-The `immutability-hibernate` graph node is what proves this end to end: it
+The `immutability-hibernate` graph node exercises this sequence in a VM: it
 hibernates, boots, and asserts the `boot_id` is unchanged and no reset ran.
-It has never been run, so treat resume as designed-but-unproven until it has.
+That scope does not establish hibernation or peripheral resume on the physical
+Deck; those require separate hardware validation.
 
-BIOS and controller firmware update at boot through
-`jovian.devices.steamdeck.autoUpdate`. A BIOS flash can clear the Secure Boot
-keys. `settings.boot.autoEnrollKeys` leaves signed key files on the ESP, and
-systemd-boot enrolls them again the next time the firmware is in Setup Mode.
+`jovian.devices.steamdeck.autoUpdate` runs the packaged BIOS/controller update
+services. The BIOS updater applies version-specific rules: in the currently
+pinned `jupiter-20261028.1` package, automatic installation is disabled for
+OLED F7G0100–F7G0113, and F7G0114 has no newer target. Enabling the service therefore
+does not guarantee an available BIOS update is installed automatically.
+
+The updater runs native `h2offt` against a signed firmware payload and may stage
+`EFI/Insyde/isflash.bin` for the next reboot. Jovian also supplies a packaged
+fwupd BIOS remote. Neither path establishes that updates require Microsoft's
+Secure Boot certificates or that a flash erases our keys. Verify update
+compatibility and key retention on the physical Deck before relying on an
+own-key-only firmware-update workflow; do not add vendor trust or force a flash
+as a workaround. Source: [pinned BIOS updater](https://github.com/Jovian-Experiments/jupiter-hw-support/blob/jupiter-20261028.1/usr/bin/jupiter-biosupdate).
 
 ## Check on the device
 

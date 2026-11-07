@@ -24,7 +24,7 @@ in {
   jovian = {
     devices.steamdeck = {
       enable = true;
-      autoUpdate = true;  # BIOS + controller firmware; settings.boot.autoEnrollKeys restores keys a BIOS flash clears
+      autoUpdate = true;  # Run version-gated BIOS/controller update checks; see README before enrolling Secure Boot keys.
     };
     steam = {
       enable = true;

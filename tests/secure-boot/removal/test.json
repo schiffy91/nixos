@@ -1,0 +1,14 @@
+{
+  "name": "secure-boot-removal",
+  "state": "secure-boot-removal",
+  "stateMaterial": "secure-boot-removal:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/secure-boot/removal --no-out-link --cores 4 --max-jobs 2 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 1800
+    },
+    { "op": "record-state" }
+  ]
+}
