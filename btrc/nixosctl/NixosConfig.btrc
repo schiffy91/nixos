@@ -200,8 +200,7 @@ class NixosConfig {
     }
 
     public string hashedPasswordPath() {
-        var name = self.evalString("config.settings.secrets.hashedPasswordFile");
-        return PathTools.join(self.secretsPath(), name);
+        return self.evalString("config.settings.users.admin.hashedPasswordFile");
     }
 
     public string diskDevice() {

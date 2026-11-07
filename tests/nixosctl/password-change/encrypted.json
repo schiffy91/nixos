@@ -70,7 +70,7 @@
     },
     {
       "op": "guest",
-      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-both.log 2>&1 && grep -F 'LUKS already unlocks' /tmp/e2e-both.log && accepts newpass456 && test \"$(printf %s newpass456 | crypt)\" = \"$(cat /etc/nixos/secrets/hashed_password.txt)\" && printf converged-both || { cat /tmp/e2e-both.log; exit 1; }",
+      "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-both.log 2>&1 && grep -F 'LUKS already unlocks' /tmp/e2e-both.log && accepts newpass456 && test \"$(printf %s newpass456 | crypt)\" = \"$(cat /var/lib/nixos/credentials/password-hash)\" && printf converged-both || { cat /tmp/e2e-both.log; exit 1; }",
       "expect": "converged-both",
       "timeout": 600
     },

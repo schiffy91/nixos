@@ -155,9 +155,9 @@ class VmProvisioner {
         if (secureBootTarget) {
             commands.push(self.writeTextCommand(secureBootModule, secureBootModulePath));
         }
-        commands.push("mkdir -p /etc/nixos/secrets");
-        commands.push(self.writeTextCommand(passwordHash, "/etc/nixos/secrets/hashed_password.txt"));
-        commands.push("chmod 600 /etc/nixos/secrets/hashed_password.txt");
+        commands.push("install -d -o root -g root -m 700 /var/lib/nixos/credentials");
+        commands.push(self.writeTextCommand(passwordHash, "/var/lib/nixos/credentials/password-hash"));
+        commands.push("chmod 600 /var/lib/nixos/credentials/password-hash");
         commands.push(f"mkdir -p {ShellWords.quote(hostDir)}");
         commands.push(self.writeTextCommand(hostNix, hostPath));
         commands.push(self.writeTextCommand(localConfig, "/etc/nixos/config.json"));
@@ -223,6 +223,8 @@ class VmProvisioner {
             "mkdir -p /mnt/etc",
             "rm -rf /mnt/etc/nixos",
             "cp -r /etc/nixos /mnt/etc/nixos",
+            "install -d -o root -g root -m 700 /mnt/var/lib/nixos/credentials",
+            "install -o root -g root -m 600 /var/lib/nixos/credentials/password-hash /mnt/var/lib/nixos/credentials/password-hash",
             "mkdir -p /mnt/nix/tmp",
             f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"
         ]);

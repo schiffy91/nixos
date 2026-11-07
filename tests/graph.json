@@ -1009,6 +1009,11 @@
       "id": "nixosctl-sudo",
       "spec": "nixosctl/sudo/test.json",
       "after": []
+    },
+    {
+      "id": "password-file",
+      "spec": "nixosctl/password-file/test.json",
+      "after": []
     }
   ],
   "required": [
@@ -1074,7 +1079,8 @@
     "initrd-touch-unlock-german",
     "initrd-touch-unlock-french",
     "initrd-touch-unlock-displays",
-    "nixosctl-sudo"
+    "nixosctl-sudo",
+    "password-file"
   ],
   "workspaceRoot": ".."
 }

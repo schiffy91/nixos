@@ -8,10 +8,10 @@ in {
   options = with lib.types; {
     ##### Secrets ##### 
     settings.secrets.path = mkSetting str "/etc/nixos/secrets";
-    settings.secrets.hashedPasswordFile = mkSetting str "hashed_password.txt";
     ##### Admin ##### 
     settings.users.admin.homeDirectory = mkSetting str (if pkgs.stdenv.hostPlatform.isDarwin then "/Users/${config.settings.users.admin.username}" else adminHome);
     settings.users.admin.username = mkSetting str "alexanderschiffhauer";
+    settings.users.admin.hashedPasswordFile = mkSetting str "/var/lib/nixos/credentials/password-hash";
     settings.users.admin.publicName = mkSetting str "Alexander Schiffhauer";
     settings.users.admin.publicEmail = mkSetting str "Alexander.Schiffhauer@gmail.com";
     settings.users.admin.autoLogin.enable = mkSetting bool false;

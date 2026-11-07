@@ -16,6 +16,7 @@ let
 in {
   imports = [
     inputs.home-manager.nixosModules.home-manager
+    ./users/password.nix
   ] ++ appModules;
 
   users.mutableUsers = cfg.mutable;
@@ -43,7 +44,6 @@ in {
       isNormalUser = true;
       group = admin.username;
       extraGroups = admin.extraGroups;
-      hashedPasswordFile = "${config.settings.secrets.path}/${config.settings.secrets.hashedPasswordFile}";
       openssh.authorizedKeys.keys = admin.authorizedKeys;
     };
   } // lib.optionalAttrs agent.enable {

@@ -400,6 +400,19 @@ an isolated agent account with its own Home Manager profile and tool set. User
 mutability is disabled, so password changes must update the hashed password file
 and rebuild.
 
+`settings.users.admin.hashedPasswordFile` defaults to
+`/var/lib/nixos/credentials/password-hash`. Its directory is root-owned `0700`,
+the file is root-owned `0600`, and every parent must be root-owned and not
+writable by other users. Installation copies it explicitly; immutable-root
+systems mount the persistent `/var` subvolume before activation. Password updates use an
+exclusive lock and durable atomic replacement.
+
+On the first upgrade, the helper preserves the effective password from
+`/etc/shadow` if the new file does not yet exist. It does not trust the legacy
+file in the editable repository. Missing or unsafe credentials abort activation
+before account updates. Old generations still use their original password-file
+configuration; retain their legacy file until those generations are retired.
+
 Administration requires ordinary sudo authentication, including the configured
 1Password SSH agent. For unattended work, authenticate once to grant the admin
 account temporary passwordless sudo:
@@ -750,7 +763,7 @@ Ignored local paths:
 
 | Path | Purpose |
 |---|---|
-| `secrets/` | Local secret material such as hashed password files |
+| `secrets/` | Legacy/local secret material; authoritative account hashes live under `/var/lib/nixos/credentials` |
 | `config.json` | Local selected host/target for helper tooling |
 | `.vm/` | QEMU disks, ISO downloads, state graph data |
 | `.direnv/`, `.btrc-cache/`, `build/` | Development caches and build outputs |

@@ -55,7 +55,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; if journalctl -b -q | grep -F 'does not exist' | grep -Fq hashed_password.txt; then exit 1; fi; printf activation-secrets-ok",
+      "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; if journalctl -b -q | grep -F 'does not exist' | grep -Fq password-hash; then exit 1; fi; printf activation-secrets-ok",
       "expect": "activation-secrets-ok"
     },
     {

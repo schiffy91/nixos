@@ -28,7 +28,7 @@
     { "op": "guest", "command": "set -e; chmod 0755 /tmp; rm -rf /tmp/.X11-unix /tmp/.ICE-unix /tmp/e2e-tmp; test \"$(stat -c %a /tmp)\" = 755; printf tmp-poisoned", "expect": "tmp-poisoned" },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "set -e; test \"$(stat -c %a /tmp)\" = 1777; test \"$(systemctl show -p Result --value systemd-tmpfiles-setup.service)\" = success; su -s /bin/sh nobody -c 'mkdir /tmp/e2e-tmp && rmdir /tmp/e2e-tmp'; printf tmp-ok", "expect": "tmp-ok" },
-    { "op": "guest", "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; test -d /etc/nixos/.git; if journalctl -b -q | grep -F 'does not exist' | grep -Fq hashed_password.txt; then exit 1; fi; printf persistence-mounted", "expect": "persistence-mounted" },
+    { "op": "guest", "command": "set -e; findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos'; test -d /etc/nixos/.git; if journalctl -b -q | grep -F 'does not exist' | grep -Fq password-hash; then exit 1; fi; printf persistence-mounted", "expect": "persistence-mounted" },
     { "op": "snapshot", "name": "disabled-persistence-tested" },
     { "op": "record-state" },
     { "op": "stop" }

@@ -9,6 +9,7 @@ import ../core/NixosLog.btrc;
 import ../core/NixosPaths.btrc;
 import ./NixosConfig.btrc;
 import ./SecretsManager.btrc;
+import ./PasswordHashFile.btrc;
 import ./PermissionsManager.btrc;
 import ./NixosRebuilder.btrc;
 import ./hardware/SecureBootManager.btrc;
@@ -158,6 +159,10 @@ class Installer {
         FileSystem.removeRecursive(installedRoot);
         FileSystem.mkdirp(PathTools.dirname(installedRoot));
         self.shell.run(f"cp -r {ShellWords.quote(self.config.paths.root)} {ShellWords.quote(installedRoot)}", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+
+        var hashPath = self.config.hashedPasswordPath();
+        var hash = PasswordHashFile(hashPath).read();
+        PasswordHashFile(NixosPaths.join(self.mountPoint, hashPath)).write(hash);
 
         if (forceUpgrade) {  /* the stick's closure can be stale */
             self.shell.run(f"{self.config.nixCommand()} flake update --flake {ShellWords.quote(installedRoot)}",

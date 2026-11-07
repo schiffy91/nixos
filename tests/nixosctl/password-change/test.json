@@ -38,7 +38,7 @@
     },
     {
       "op": "guest",
-      "command": "nixosctl eval config.settings.users.admin.username | tr -d '\"' > /var/tmp/e2e-user && nixosctl eval config.settings.disk.by.partlabel.root | tr -d '\"' > /var/tmp/e2e-root && test -s /var/tmp/e2e-user && getent shadow \"$(cat /var/tmp/e2e-user)\" > /dev/null && cat > /var/tmp/e2e-crypt.sh <<'EOF'\ncrypt() { perl -e 'chomp(my $p = <STDIN>); print crypt($p, $ENV{HASH})'; }\naccepts() { HASH=$(getent shadow \"$(cat /var/tmp/e2e-user)\" | cut -d: -f2); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nfileaccepts() { HASH=$(cat /etc/nixos/secrets/hashed_password.txt); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nnowarning() { ! journalctl -b -q | grep -F 'does not exist' | grep -Fq hashed_password.txt; }\ndiag() { { u=$(cat /var/tmp/e2e-user); echo \"user=[$u]\"; getent passwd \"$u\" | cut -d: -f1-4; echo \"shadow-entry=$(getent shadow \"$u\" | cut -d: -f2 | cut -c1-16)\"; echo \"shadow-users: $(cut -d: -f1 /etc/shadow | tr '\\n' ' ')\"; ls -la /etc/shadow; echo \"file=$(cut -c1-16 /etc/nixos/secrets/hashed_password.txt)\"; findmnt -rn --target /etc/nixos; findmnt -rn --target /var/lib/nixos; readlink /run/current-system; journalctl -b -q --no-pager | grep -iE \"update-users|nixos-activation|activate|perl|warning\" | tail -12; echo \"pam-journal:\"; journalctl -b -q --no-pager | grep -iE \"passwd|pam_|chauthtok|kwallet|runuser\" | tail -20; echo \"runuser-id:\"; runuser -u \"$u\" -- id; systemctl --failed --no-pager | head -6; for f in /tmp/e2e-*.log; do [ -f \"$f\" ] && { echo \"== $f\"; tail -15 \"$f\"; }; done; } 2>&1 | sed \"s/^/DIAG /\"; }\nEOF\n. /var/tmp/e2e-crypt.sh && accepts testpass123 && fileaccepts testpass123 && nowarning && findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos' && printf boot-hash-ok || { diag; exit 1; }",
+      "command": "nixosctl eval config.settings.users.admin.username | tr -d '\"' > /var/tmp/e2e-user && nixosctl eval config.settings.disk.by.partlabel.root | tr -d '\"' > /var/tmp/e2e-root && test -s /var/tmp/e2e-user && getent shadow \"$(cat /var/tmp/e2e-user)\" > /dev/null && cat > /var/tmp/e2e-crypt.sh <<'EOF'\ncrypt() { perl -e 'chomp(my $p = <STDIN>); print crypt($p, $ENV{HASH})'; }\naccepts() { HASH=$(getent shadow \"$(cat /var/tmp/e2e-user)\" | cut -d: -f2); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nfileaccepts() { HASH=$(cat /var/lib/nixos/credentials/password-hash); case \"$HASH\" in '$'*) ;; *) return 1;; esac; export HASH; test \"$(printf %s \"$1\" | crypt)\" = \"$HASH\"; }\nnowarning() { ! journalctl -b -q | grep -F 'does not exist' | grep -Fq password-hash; }\ndiag() { { u=$(cat /var/tmp/e2e-user); echo \"user=[$u]\"; getent passwd \"$u\" | cut -d: -f1-4; echo \"shadow-entry=$(getent shadow \"$u\" | cut -d: -f2 | cut -c1-16)\"; echo \"shadow-users: $(cut -d: -f1 /etc/shadow | tr '\\n' ' ')\"; ls -la /etc/shadow; echo \"file=$(cut -c1-16 /var/lib/nixos/credentials/password-hash)\"; findmnt -rn --target /etc/nixos; findmnt -rn --target /var/lib/nixos; readlink /run/current-system; journalctl -b -q --no-pager | grep -iE \"update-users|nixos-activation|activate|perl|warning\" | tail -12; echo \"pam-journal:\"; journalctl -b -q --no-pager | grep -iE \"passwd|pam_|chauthtok|kwallet|runuser\" | tail -20; echo \"runuser-id:\"; runuser -u \"$u\" -- id; systemctl --failed --no-pager | head -6; for f in /tmp/e2e-*.log; do [ -f \"$f\" ] && { echo \"== $f\"; tail -15 \"$f\"; }; done; } 2>&1 | sed \"s/^/DIAG /\"; }\nEOF\n. /var/tmp/e2e-crypt.sh && accepts testpass123 && fileaccepts testpass123 && nowarning && findmnt -rn --target /etc/nixos | grep -F '@persist/dirs/etc!nixos' && printf boot-hash-ok || { diag; exit 1; }",
       "expect": "boot-hash-ok",
       "timeout": 300
     },
@@ -50,7 +50,7 @@
     },
     {
       "op": "guest",
-      "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && ! grep -F 'PAM password change failed' /tmp/e2e-change.log && journalctl -b -q --no-pager | grep -F \"pam_unix(passwd:chauthtok): password changed for $(cat /var/tmp/e2e-user)\" && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /etc/nixos/secrets/hashed_password.txt)\" = 600 && printf account-changed || { diag; exit 1; }",
+      "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && ! grep -F 'PAM password change failed' /tmp/e2e-change.log && journalctl -b -q --no-pager | grep -F \"pam_unix(passwd:chauthtok): password changed for $(cat /var/tmp/e2e-user)\" && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /var/lib/nixos/credentials/password-hash)\" = 600 && printf account-changed || { diag; exit 1; }",
       "expect": "account-changed",
       "timeout": 1800
     },
@@ -93,6 +93,12 @@
     },
     {
       "op": "guest",
+      "command": "nixosctl sudo enable --for 1h && printf handoff-authorized",
+      "expect": "handoff-authorized",
+      "timeout": 60
+    },
+    {
+      "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && u=$(cat /var/tmp/e2e-user) && ! runuser -u \"$u\" -- env NIXOS_OLD_PASSWORD=wrongpass NIXOS_NEW_PASSWORD=neverused nixosctl change-password --user-account-only > /tmp/e2e-unpriv-wrong.log 2>&1 && grep -F 'not the current account password' /tmp/e2e-unpriv-wrong.log && accepts newpass456 && printf unpriv-wrong-rejected || { cat /tmp/e2e-unpriv-wrong.log; diag; exit 1; }",
       "expect": "unpriv-wrong-rejected",
       "timeout": 120
@@ -102,6 +108,25 @@
       "command": ". /var/tmp/e2e-crypt.sh && u=$(cat /var/tmp/e2e-user) && runuser -u \"$u\" -- env NIXOS_OLD_PASSWORD=newpass456 NIXOS_NEW_PASSWORD=newpass789 nixosctl change-password --user-account-only > /tmp/e2e-unpriv-change.log 2>&1 && ! grep -F -e newpass789 -e newpass456 /tmp/e2e-unpriv-change.log && accepts newpass789 && fileaccepts newpass789 && printf unpriv-account-changed || { cat /tmp/e2e-unpriv-change.log; diag; exit 1; }",
       "expect": "unpriv-account-changed",
       "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": "set -e; . /var/tmp/e2e-crypt.sh; nixosctl sudo disable && u=$(cat /var/tmp/e2e-user) && if runuser -u \"$u\" -- sh -c \"echo bogus > /var/lib/nixos/credentials/password-hash\"; then exit 1; fi; test \"$(stat -c %u:%g:%a /var/lib/nixos/credentials/password-hash)\" = 0:0:600 && test -z \"$(find /tmp -maxdepth 1 -name 'nixosctl-password.*' -print -quit)\" && printf hash-protected",
+      "expect": "hash-protected",
+      "timeout": 60
+    },
+    {
+      "op": "reboot-disk"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && accepts newpass789 && fileaccepts newpass789 && findmnt -rn --target /var/lib/nixos | grep -F '[/@var]' && printf final-password-persisted",
+      "expect": "final-password-persisted",
+      "timeout": 60
     },
     {
       "op": "snapshot",
