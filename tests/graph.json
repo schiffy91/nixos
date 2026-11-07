@@ -1011,6 +1011,10 @@
       "after": []
     },
     {
+      "id": "boot-fallback",
+      "spec": "boot/fallback/test.json"
+    },
+    {
       "id": "sunshine-credentials",
       "spec": "nixosctl/sunshine/test.json"
     },
@@ -1088,6 +1092,7 @@
     "initrd-touch-unlock-french",
     "initrd-touch-unlock-displays",
     "nixosctl-sudo",
+    "boot-fallback",
     "sunshine-credentials",
     "onepassword-integration",
     "password-file"
