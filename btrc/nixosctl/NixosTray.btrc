@@ -17,7 +17,7 @@ int main() {
     var profiles = PowerManager().profiles();
     for profile in ["performance", "balanced", "power-saver"] {
         if (!profiles.contains(profile)) { continue; }
-        cpu.checkItem(PowerManager.label(profile),
+        cpu.radioItem(PowerManager.label(profile),
             f"nixosctl power set {profile}", f"nixosctl power is {profile}");
     }
     if (cpu.items.len > 0) { tray.submenu("CPU", cpu); }

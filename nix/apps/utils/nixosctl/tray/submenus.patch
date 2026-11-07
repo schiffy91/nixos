@@ -1,11 +1,12 @@
 --- a/src/stdlib/Tray/TrayModel.btrc
 +++ b/src/stdlib/Tray/TrayModel.btrc
-@@ -6,12 +6,16 @@
+@@ -6,12 +6,18 @@
  	public string label;
  	public string command;
  	public bool enabled;
 +	public int parentId;
 +	public bool isSubmenu;
++	public bool isRadio;
  	public string stateCommand;  /* non-empty: exit 0 renders a checkmark */
  
  	public TrayItem(string label, string command) {
@@ -14,13 +15,32 @@
  		self.enabled = true;
 +		self.parentId = 0;
 +		self.isSubmenu = false;
++		self.isRadio = false;
  		self.stateCommand = "";
  	}
  
-@@ -62,6 +66,22 @@
- 		self.items.push(item);
+@@ -51,15 +57,38 @@
+ 
+ 	/* A checkable item: the mark mirrors stateCommand's exit status (0 = on),
+      * probed when the menu is realized and again after each activation. */
+-	public Tray checkItem(string label, string command, string stateCommand) {
++	public Tray checkItem(string label, string command, string stateCommand, bool radio = false) {
+ 		TrayItem entry = TrayItem(label, command);
+ 		entry.stateCommand = stateCommand;
++		entry.isRadio = radio;
+ 		self.items.push(entry);
  		return self;
  	}
+ 
++	/* Radio state is supplied by one mutually exclusive external setting. */
++	public Tray radioItem(string label, string command, string stateCommand) {
++		return self.checkItem(label, command, stateCommand, radio=true);
++	}
++
+ 	public Tray add(TrayItem item) {
+ 		self.items.push(item);
++		return self;
++	}
 +
 +	public Tray submenu(string label, Tray menu) {
 +		int parentId = self.items.len + 1;
@@ -32,36 +52,39 @@
 +			child.enabled = entry.enabled;
 +			child.stateCommand = entry.stateCommand;
 +			child.isSubmenu = entry.isSubmenu;
++			child.isRadio = entry.isRadio;
 +			child.parentId = parentId + entry.parentId;
 +			self.items.push(child);
 +		}
-+		return self;
-+	}
+ 		return self;
+ 	}
  }
- 
- class TraySignal {
 --- a/src/stdlib/Tray/Tray.btrc
 +++ b/src/stdlib/Tray/Tray.btrc
-@@ -25,6 +25,8 @@
+@@ -23,7 +23,11 @@
  
- 	public SystemTray add(TrayItem item) { self.model.add(item); return self; }
+ 	public SystemTray checkItem(string label, string command, string stateCommand) { self.model.checkItem(label, command, stateCommand); return self; }
  
-+	public SystemTray submenu(string label, Tray menu) { self.model.submenu(label, menu); return self; }
++	public SystemTray radioItem(string label, string command, string stateCommand) { self.model.radioItem(label, command, stateCommand); return self; }
 +
+ 	public SystemTray add(TrayItem item) { self.model.add(item); return self; }
++
++	public SystemTray submenu(string label, Tray menu) { self.model.submenu(label, menu); return self; }
+ 
  	public bool available() { return self._provider != null; }
  
- 	/* Create the native item and menu once; native failure throws. */
 --- a/src/stdlib/Tray/Linux/LinuxTray.btrc
 +++ b/src/stdlib/Tray/Linux/LinuxTray.btrc
-@@ -398,6 +398,7 @@
+@@ -398,48 +398,55 @@
  		DBusWriter.dictString(&properties, "label", entry.label);
  		DBusWriter.dictBool(&properties, "enabled", entry.enabled);
  		DBusWriter.dictBool(&properties, "visible", true);
 +		if (entry.isSubmenu) { DBusWriter.dictString(&properties, "children-display", "submenu"); }
  		if (!entry.stateCommand.isEmpty()) {
- 			DBusWriter.dictString(&properties, "toggle-type", "checkmark");
+-			DBusWriter.dictString(&properties, "toggle-type", "checkmark");
++			DBusWriter.dictString(&properties, "toggle-type", entry.isRadio ? "radio" : "checkmark");
  			DBusWriter.dictInt32(&properties, "toggle-state", self._checked.get(index) ? 1 : 0);
-@@ -405,41 +406,47 @@
+ 		}
  		dbus_message_iter_close_container(node, &properties);
  	}
  
@@ -139,11 +162,13 @@
  		return true;
  	}
  
-@@ -540,6 +547,7 @@
+@@ -540,7 +547,8 @@
  		if (name.equals("label")) { DBusWriter.variantString(arguments, entry.label); }
  		else if (name.equals("enabled")) { DBusWriter.variantBool(arguments, entry.enabled); }
  		else if (name.equals("visible")) { DBusWriter.variantBool(arguments, true); }
+-		else if (name.equals("toggle-type") && checkable) { DBusWriter.variantString(arguments, "checkmark"); }
 +		else if (name.equals("children-display") && entry.isSubmenu) { DBusWriter.variantString(arguments, "submenu"); }
- 		else if (name.equals("toggle-type") && checkable) { DBusWriter.variantString(arguments, "checkmark"); }
++		else if (name.equals("toggle-type") && checkable) { DBusWriter.variantString(arguments, entry.isRadio ? "radio" : "checkmark"); }
  		else if (name.equals("toggle-state") && checkable) { DBusWriter.variantInt32(arguments, self._checked.get(index) ? 1 : 0); }
  		else { return false; }
+ 		return true;
