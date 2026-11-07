@@ -28,7 +28,7 @@
     ] ++ lib.optional (config.settings.boot.plymouth.enable && config.settings.boot.plymouth.drmDevice != "") (
       "plymouth.drm-device=${config.settings.boot.plymouth.drmDevice}"
     ) ++ [
-      "mem_sleep_default=s2idle"        # Use s2idle instead of S3 suspend
+      "mem_sleep_default=${config.settings.sleep.suspendMode}"
     ];
   };
   systemd.sleep.settings.Sleep.AllowHibernation = if config.settings.sleep.allowHibernation || config.settings.sleep.hibernateOnSuspend then "yes" else "no";

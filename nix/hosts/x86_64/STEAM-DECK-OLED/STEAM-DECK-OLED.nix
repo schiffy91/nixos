@@ -53,7 +53,11 @@ in {
       # Enrollment follows verified external recovery and an independent key backup.
       autoEnrollKeys = false;
     };
-    sleep.hibernateOnSuspend = true;
+    sleep = {
+      # The Valve kernel explicitly rejects s2idle on Jupiter/Galileo.
+      suspendMode = "deep";
+      hibernateOnSuspend = true;
+    };
     disk = {
       inherit (disk) device;
       encryption.enable = true;

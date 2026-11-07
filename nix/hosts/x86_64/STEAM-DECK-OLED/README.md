@@ -139,10 +139,25 @@ preserving its requested height so the bottom row stays visible.
 ## Sleep and firmware
 
 Steam and Plasma ask logind to suspend, and `settings.sleep.hibernateOnSuspend`
-turns that into hibernation, so every wake goes through the passphrase. Valve
-disabled hibernation on the Deck in the SteamOS 3.9.4 beta (October 2026),
-citing driver bugs. If resume misbehaves, set `settings.sleep.hibernateOnSuspend
-= false;` in the host file to go back to suspend.
+turns that into hibernation. With the current Deck configuration, a successful
+hibernation resume asks for the LUKS passphrase; an aborted request still needs
+a session lock. Valve [disabled Deck hibernation in the SteamOS 3.9.4 beta](https://steamcommunity.com/ogg/1675200/announcements/detail/694275728822242440)
+(October 2026), citing driver bugs. Switching `settings.sleep.hibernateOnSuspend`
+to `false` uses ordinary suspend and requires a working password lock first.
+
+The Deck selects `settings.sleep.suspendMode = "deep"`. The pinned Valve
+kernel [explicitly rejects s2idle on Jupiter/Galileo](https://github.com/Jovian-Experiments/linux/blob/7.2.10-valve1/kernel/power/suspend.c),
+even when a forced `mem_sleep_default=s2idle` makes it appear selected in sysfs.
+Other hosts retain their s2idle default. This corrects the suspend selection;
+it does not establish reliable deep suspend on the physical Deck. Keep the
+known-booted fallback and verify wake, input, graphics, audio and networking
+before changing the daily hibernation policy.
+
+Read-only journal inspection on 2026-11-07 confirmed both successful physical
+hibernation/resume and prior failures: a freezer abort, and image writes aborted
+by a pending wakeup (`-11`) with AMDGPU thaw errors (`-16`). Hibernation is
+possible but not a reliable authentication boundary by itself. A failed sleep
+request still needs password locking; do not treat an unlocked return as safe.
 
 Resume needs no kernel command line. The image lands in the btrfs swapfile, and
 `systemd-hibernate` records its device and offset in the `HibernateLocation`
@@ -159,7 +174,7 @@ header, so a half-wired pair is worse than none. The swapfile is sized in
 has to fit, and the initrd reset is ordered after
 `systemd-hibernate-resume.service` so it can never roll the filesystem back
 under a hibernated kernel. `CONFIG_HIBERNATION=y` in the Valve kernel
-(`7.2.7-valve2`).
+(`7.2.10-valve1`).
 
 The `immutability-hibernate` graph node exercises this sequence in a VM: it
 hibernates, boots, and asserts the `boot_id` is unchanged and no reset ran.

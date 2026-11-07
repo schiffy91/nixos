@@ -129,7 +129,7 @@
     {
       "op": "nix-eval",
       "command": "nixosConfigurations.STEAM-DECK-OLED-Secure-Boot.config.boot.lanzaboote.autoEnrollKeys.enable",
-      "expect": "true"
+      "expect": "false"
     },
     {
       "op": "nix-eval",
@@ -145,6 +145,16 @@
       "op": "nix-eval",
       "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.boot.plymouth.enable",
       "expect": "true"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.boot.kernelParams",
+      "expect": "mem_sleep_default=deep"
+    },
+    {
+      "op": "nix-eval",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.boot.kernelParams",
+      "expect": "mem_sleep_default=s2idle"
     },
     {
       "op": "nix-eval",

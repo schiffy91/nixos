@@ -239,8 +239,9 @@ in {
       "${adminHome}/.config/rclone"
     ] ++ lib.optionals config.settings.users.agent.enable config.settings.users.agent.persist.paths);
     ##### Sleep #####
+    settings.sleep.suspendMode = mkSetting (enum [ "s2idle" "deep" ]) "s2idle";
     settings.sleep.allowHibernation = mkSetting bool false;
-    settings.sleep.hibernateOnSuspend = mkSetting bool false; # implies allowHibernation; every wake goes back through the LUKS prompt
+    settings.sleep.hibernateOnSuspend = mkSetting bool false; # implies allowHibernation; use hibernation for suspend requests
     ##### Boot #####
     settings.boot.method = mkSetting (enum [ "Disk-Operation" "Standard-Boot" "Secure-Boot"]) "Standard-Boot";
     settings.boot.kernelPackages = mkSetting raw pkgs.linuxPackages_latest;
