@@ -1039,9 +1039,15 @@
     {
       "id": "sleep-lock-console",
       "spec": "sleep-lock/console/test.json"
+    },
+    {
+      "id": "sd-unlock",
+      "after": [],
+      "spec": "sd-unlock/boot/test.json"
     }
   ],
   "required": [
+    "sd-unlock",
     "cli-parity",
     "spec-toml",
     "spec-yaml",

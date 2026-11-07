@@ -118,6 +118,7 @@ in {
     settings.disk.swap.size = mkSetting str "";
     ##### Disk: Encryption #####
     settings.disk.encryption.enable = mkSetting bool true;
+    settings.disk.encryption.unlockSD = mkSetting bool false;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/run/nixosctl-install/passphrase";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
