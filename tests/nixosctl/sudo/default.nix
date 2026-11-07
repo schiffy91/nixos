@@ -19,7 +19,7 @@ in pkgs.testers.runNixOSTest {
       ../../../nix/system/nixos/networking.nix
     ];
     settings.users.admin.username = "admin";
-    settings.networking.forwardAgentHosts = [ "trusted.example" "192.0.2.1" ];
+    settings.networking.forwardAgentHosts = [ "TRUSTED.example" "192.0.2.1" ];
     users.users.admin = {
       isNormalUser = true;
       extraGroups = [ "wheel" ];

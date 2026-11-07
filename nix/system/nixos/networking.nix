@@ -50,8 +50,15 @@ in {
   programs.ssh = {
     startAgent = true;
     extraConfig = ''
+      # Remote sessions must use the incoming agent instead of the remote
+      # machine's desktop socket. Local sessions keep the 1Password agent.
+      # sudo preserves SSH_AUTH_SOCK; root has no desktop agent of its own.
+      Match localuser root
+        IdentityAgent SSH_AUTH_SOCK
+      Match exec "test -n \"$SSH_CONNECTION\" && test -S \"$SSH_AUTH_SOCK\""
+        IdentityAgent SSH_AUTH_SOCK
       ${lib.optionalString (config.settings.networking.forwardAgentHosts != []) ''
-      Host ${lib.concatStringsSep " " config.settings.networking.forwardAgentHosts}
+      Host ${lib.concatStringsSep " " (lib.unique (config.settings.networking.forwardAgentHosts ++ map lib.toLower config.settings.networking.forwardAgentHosts))}
         ForwardAgent yes
       ''}
       Host *

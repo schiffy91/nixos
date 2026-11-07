@@ -424,6 +424,8 @@ read-only `status` operation, which reads the protected grant metadata.
 `settings.networking.forwardAgentHosts` explicitly lists destinations allowed to
 use that agent remotely; other destinations default to no forwarding. A trusted
 remote root can use a forwarded agent while connected, so keep this list narrow.
+Inside an SSH session with a forwarded agent, outgoing SSH/Git uses that incoming
+agent rather than requiring a second unlocked 1Password app on the remote host.
 
 ### Secure Boot
 

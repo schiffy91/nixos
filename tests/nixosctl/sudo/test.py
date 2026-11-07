@@ -1,6 +1,8 @@
 import concurrent.futures
+import os
 from pathlib import Path
 import shlex
+import socket
 import subprocess
 import time
 
@@ -79,10 +81,22 @@ run("nixosctl sudo enable --for 1h", success=False)
 directory.unlink()
 Path("/run/nixosctl-sudo.saved").rename(directory)
 
-for host, expected in [("trusted.example", "yes"), ("192.0.2.1", "yes"),
+for host, expected in [("trusted.example", "yes"), ("TRUSTED.example", "yes"), ("192.0.2.1", "yes"),
                        ("untrusted.example", "no"), ("github.com", "no")]:
     config = run(f"ssh -G {host}", "admin")
     assert f"forwardagent {expected}\n" in config, config
     assert "identityagent /home/admin/.1password/agent.sock\n" in config, config
+
+with socket.socket(socket.AF_UNIX) as forwarded:
+    forwarded.bind("/tmp/forwarded-agent.sock")
+    os.chmod("/tmp/forwarded-agent.sock", 0o666)
+    remote = run("SSH_CONNECTION='192.0.2.1 1000 192.0.2.2 22' SSH_AUTH_SOCK=/tmp/forwarded-agent.sock ssh -G github.com", "admin")
+    assert "identityagent SSH_AUTH_SOCK\n" in remote, remote
+    assert "forwardagent no\n" in remote, remote
+    local = run("SSH_AUTH_SOCK=/tmp/forwarded-agent.sock ssh -G github.com", "admin")
+    assert "identityagent /home/admin/.1password/agent.sock\n" in local, local
+    root = run("SSH_AUTH_SOCK=/tmp/forwarded-agent.sock ssh -G github.com")
+    assert "identityagent SSH_AUTH_SOCK\n" in root, root
+    assert "forwardagent no\n" in root, root
 
 print("sudo authentication, renewal, revocation, expiration, isolation and SSH defaults passed")
