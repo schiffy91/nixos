@@ -1,7 +1,23 @@
-{ lib, config, ... }:
+{ lib, config, pkgs, ... }:
 let
   enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable;
   capture = config.settings.apps.sunshine.capture;
+  automatic = capture == "auto";
+  desktopConfig = (pkgs.formats.keyValue {}).generate "sunshine-desktop.conf" config.services.sunshine.settings;
+  gamingApps = (pkgs.formats.json {}).generate "sunshine-gaming-apps.json" {
+    apps = [{ name = "Gaming Mode"; image-path = "steam.png"; }];
+  };
+  gamingConfig = (pkgs.formats.keyValue {}).generate "sunshine-gaming.conf"
+    ((builtins.removeAttrs config.services.sunshine.settings [ "output_name" ]) // {
+      capture = "kms";
+      file_apps = "${gamingApps}";
+    });
+  sessionLauncher = import ./session/package.nix {
+    inherit pkgs;
+    # KWin checks the real executable against Sunshine's desktop entry.
+    desktopCommand = lib.escapeShellArgs [ (lib.getExe config.services.sunshine.package) desktopConfig ];
+    gamingCommand = lib.escapeShellArgs [ "${config.security.wrapperDir}/sunshine" gamingConfig ];
+  };
 in {
   nixpkgs.overlays = lib.optional (enabled && config.settings.apps.sunshine.cuda.enable)
     (_final: prev: {
@@ -30,7 +46,7 @@ in {
   #     Sunshine only requests BT.2020 + PQ for xBGR_210LE
   #   - fall back to memfd when no dmabuf format can be allocated, instead of
   #     failing the stream outright
-  ++ lib.optional (enabled && capture == "kwin")
+  ++ lib.optional (enabled && (capture == "kwin" || automatic))
     (_final: prev: {
       kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
         kwin = kdePrev.kwin.overrideAttrs (old: {
@@ -43,8 +59,8 @@ in {
     enable = true;
     openFirewall = false;
     autoStart = true;
-    capSysAdmin = capture == "kms";  # gamescope has no screencast portal; KMS capture reads the scanout directly
-    settings.capture = capture;
+    capSysAdmin = capture == "kms" || automatic;  # gamescope needs privileged KMS capture
+    settings.capture = if automatic then "kwin" else capture;
   };
   settings.networking.ports = lib.mkIf enabled {
     tcp = [ 47984 47989 47990 48010 ];
@@ -58,6 +74,7 @@ in {
     sunshine = {
       unitConfig.ConditionUser = config.settings.users.admin.username;
       environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+      serviceConfig.ExecStart = lib.mkIf automatic (lib.mkForce (lib.getExe sessionLauncher));
     };
     "app-dev.lizardbyte.app.Sunshine" = {
       unitConfig.ConditionUser = config.settings.users.admin.username;

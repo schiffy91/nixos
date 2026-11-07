@@ -2,7 +2,7 @@
 
 `STEAM-DECK-OLED.nix` enables Jovian's hardware support and Gaming Mode, a
 touchscreen LUKS prompt inside Plymouth, hibernation on every sleep, Secure Boot key
-re-enrollment and Sunshine with KMS capture. Its `let` block holds the device
+re-enrollment and Sunshine with session-aware capture. Its `let` block holds the device
 data: disk, SD card label and LAN.
 
 Decky Loader runs from Jovian; install plugins from its store. The non-Steam
@@ -10,6 +10,27 @@ shortcuts in `settings.apps.steam.shortcuts` are written to every Steam profile
 at boot, before Steam starts. Entries can specify `{ exe = "..."; icon = "..."; }`;
 icon changes preserve existing shortcut IDs, tags, controller settings and
 play history. Other shortcuts in Steam are left alone. Semu uses ES-DE's icon.
+
+Both physical hosts import `../desktop-apps.nix` for Cider, mpv, the development
+CLIs, zsh, Mullvad, OpenVPN 3, Discord, Solaar and Logitech receiver support. Racing-wheel
+tools remain on FRACTAL-NORTH. Both use the same custom Proton package. Battle.net
+opens Blizzard's installer on first launch if its Windows client is absent.
+Proton launches use XWayland in Gaming Mode and native Wayland in a Wayland
+desktop session; Gamescope lacks the subcompositor protocol Wine requires.
+
+Sunshine uses KMS in Gaming Mode and a KWin virtual display in Plasma. The virtual
+display follows the streaming client's resolution and restores the local display
+when streaming stops. KRFB is installed with that feature.
+
+The SD card holds the entire emulation library, including emulator settings and
+mod links; the emulator programs live in the Nix store on the internal SSD. Its
+mount path is derived from `settings.users.admin.username` and the SD label.
+Semu creates relative mod links and ownership records so moving the card to a
+different mount point keeps them usable. After importing older state with broken
+links, close affected emulators and run `semu mods repair --target steam-deck`.
+This reconnects only broken links for entries present in the configured mods
+library, leaves working foreign links and real files alone, and records old link
+targets in each emulator's `semu-mod-repairs.tsv`.
 
 The disk layout is the shared one: LUKS over btrfs, immutability, the recovery
 partition and a swapfile large enough to hibernate. The disk is unlocked only

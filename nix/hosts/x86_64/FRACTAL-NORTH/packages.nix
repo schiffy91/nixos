@@ -14,21 +14,10 @@
     distrobox
     pciutils
     usbutils
-    (mpv.override { youtubeSupport = false; })  # avoids V8 source build chain
     lmstudio
     protonup-qt
     sbctl
     fwupd
-    nixd
-    claude-code
-    codex
-    (pkgs.cider-2.overrideAttrs (old: {
-      postFixup = (old.postFixup or "") + ''
-        substituteInPlace $out/share/applications/cider-2.desktop \
-          --replace-fail "Exec=cider-2" "Exec=cider-2 --force-device-scale-factor=1 --ozone-platform=wayland --enable-features=WaylandWindowDecorations"
-      '';
-    }))
-    solaar
     mesa-demos
     vulkan-tools
     vdpauinfo

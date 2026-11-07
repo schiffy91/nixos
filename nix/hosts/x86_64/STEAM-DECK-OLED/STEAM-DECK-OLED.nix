@@ -14,7 +14,7 @@ let
   };
   emulationRoot = "/run/media/${user}/${sdCard.label}/Emulation";
 in {
-  imports = [ inputs.jovian.nixosModules.default ./session.nix ./touch-keyboard.nix ];
+  imports = [ ../desktop-apps.nix inputs.jovian.nixosModules.default ./session.nix ./touch-keyboard.nix ];
   networking.hostName = "STEAM-DECK-OLED";
 
   # The Deck's horizontal UEFI console is mode 5. "max" selects the
@@ -90,12 +90,20 @@ in {
     apps = {
       nixosctl.caffeine.enable = false;
       steam = {
-        protonCustom.enable = false;  # Steam's own Proton under gamescope
+        protonCustom.enable = true;
         shortcuts = {
+          "Battle.net" = { exe = "/etc/profiles/per-user/${user}/bin/battlenet"; icon = "${icons.battlenet}"; };
           Semu = { exe = "/run/current-system/sw/bin/semu-es-de"; icon = "${icons.semu}"; };
           Moonlight = { exe = "/run/current-system/sw/bin/moonlight"; icon = "${icons.moonlight}"; };
           chiaki-ng = { exe = "/run/current-system/sw/bin/chiaki"; icon = icons.chiaki; };
           Chrome = { exe = "/run/current-system/sw/bin/google-chrome-stable"; icon = icons.chrome; };
+        };
+      };
+      sunshine = {
+        capture = "auto";  # KWin virtual display in Plasma; KMS in Gaming Mode
+        virtualDisplay = {
+          enable = true;
+          disablePrimaryOnStream = true;
         };
       };
       battlenet.enable = true;

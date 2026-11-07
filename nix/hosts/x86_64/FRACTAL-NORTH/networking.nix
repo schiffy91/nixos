@@ -1,4 +1,4 @@
-{ lib, pkgs, host, ... }: {
+{ pkgs, host, ... }: {
   networking = {
     interfaces.${host.network.primaryInterface}.wakeOnLan.enable = true;
     networkmanager.unmanaged = map (mac: "mac:${mac}") host.network.unmanagedMacs;
@@ -7,13 +7,7 @@
     lanSubnet = host.network.lanSubnet;
     primaryInterface = host.network.primaryInterface;
   };
-  programs.openvpn3.enable = true;
   services = {
-    resolved.enable = true;
-    mullvad-vpn = {
-      enable = true;
-      gui.enable = true;
-    };
     ##### Thunderbolt #####
     hardware.bolt.enable = true;
   };
@@ -32,9 +26,5 @@
       RemainAfterExit = true;
       ExecStart = "${pkgs.ethtool}/bin/ethtool -K ${host.network.primaryInterface} tx-udp-segmentation off";
     };
-  };
-  systemd.services.mullvad-daemon = {
-    wants = lib.mkForce [ "network.target" ];
-    after = lib.mkForce [ "NetworkManager.service" "systemd-resolved.service" ];
   };
 }

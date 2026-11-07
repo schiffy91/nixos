@@ -10,7 +10,7 @@ let
   target = config.settings.apps.semu.target;
   # semu deep-merges $SEMU_HOME/overrides over the target, so empty paths change nothing
   pathsOverride = pkgs.writeText "semu-nixos.json" (builtins.toJSON { inherit (config.settings.apps.semu) paths; });
-  semu = inputs.semu.packages.${pkgs.stdenv.hostPlatform.system}.semu;
+  semu = import ./package.nix { inherit inputs pkgs; };
   icons = import ../icons/package.nix { inherit pkgs inputs; };
   # the bundle is SEMU_ASSET_ROOT, so its bin/ and share/ are every emulator's own
   # binaries and desktop entries; a profile should publish only semu's own two

@@ -4,7 +4,7 @@ let
   home = "/home/${user}";
   steamPath = "${home}/.local/share/Steam";
   protonCustomName = protonCustom.name;  # patched Wayland+SNI build
-  defaultLaunchPrefix = "${winePrefixDpi.launchPrefix} PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 DXVK_HDR=1";  # DPI into the prefix registry; no hdr_wsi layer (driver does HDR natively)
+  defaultLaunchPrefix = "${winePrefixDpi.launchPrefix} PROTON_ENABLE_HDR=1 DXVK_HDR=1";  # DPI into the prefix registry; no hdr_wsi layer (driver does HDR natively)
   games = import ./games.nix {
     inherit protonCustomName;
     inherit assetto;
@@ -29,7 +29,7 @@ in {
             --steam-path "${steamPath}" \
             --default-tool "${protonCustomName}" \
             --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
-            --launch-wrapper ${lib.escapeShellArg gameLaunch.prefix} \
+            --launch-wrapper ${lib.escapeShellArg gameLaunch.protonPrefix} \
             --app-config ${appConfig}
         fi
       '';

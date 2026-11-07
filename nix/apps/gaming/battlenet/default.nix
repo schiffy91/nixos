@@ -16,7 +16,7 @@ let
   '';
   launcher = pkgs.writeShellApplication {
     name = "battlenet";
-    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.umu-launcher winePrefixDpi.package ];
+    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.curl pkgs.libnotify pkgs.umu-launcher winePrefixDpi.package ];
     text = ''
         mkdir -p "${prefix}"
         EXE="''${1:-${exe}}"
@@ -29,6 +29,22 @@ let
         # during Battle.net's CEF handoff.
         if ! [ -t 1 ]; then
           exec >> "$PROTON_RUNTIME_LOG_DIR/battlenet-wrapper.log" 2>&1
+        fi
+
+        if [ "$#" -eq 0 ] && [ ! -f "$EXE" ]; then
+          cache="''${XDG_CACHE_HOME:-$HOME/.cache}/battlenet"
+          mkdir -p "$cache"
+          installer=$(mktemp "$cache/installer.XXXXXXXX.exe")
+          notify-send Battle.net "Downloading the Battle.net installer…" || true
+          if ! curl --fail --location --retry 2 --connect-timeout 15 --max-time 180 \
+            'https://downloader.battle.net/download/getInstaller?os=win&installer=Battle.net-Setup.exe' \
+            --output "$installer"; then
+            rm -f "$installer"
+            notify-send -u critical Battle.net "Installer download failed. Check your connection and try again." || true
+            exit 1
+          fi
+          mv "$installer" "$cache/Battle.net-Setup.exe"
+          EXE="$cache/Battle.net-Setup.exe"
         fi
 
         # One session per prefix: a previous launch's Agent keeps a wineserver
@@ -45,7 +61,7 @@ let
         EXTRA_ARGS=()  # CEF reads the prefix DPI like any Windows app; no scale flags
         # ENABLE_HDR_WSI=1 (vk_hdr_layer) intentionally absent: nvidia 610 does HDR natively and the
         # layer mis-tags winewayland's scRGB (D2R/WoW DX12 too dark). Re-add next to DXVK_HDR to undo.
-        exec ${gameLaunch.prefix} \
+        exec ${gameLaunch.protonPrefix} \
           WINEPREFIX="${prefix}" \
           TMPDIR=/tmp \
           GAMEID=umu-battlenet \
@@ -56,7 +72,6 @@ let
           PROTON_USE_WOW64=1 \
           WINE_SIMULATE_WRITECOPY=1 \
           WINE_WAYLAND_HACKS=1 \
-          PROTON_ENABLE_WAYLAND=1 \
           PROTON_ENABLE_HDR=1 \
           DXVK_HDR=1 \
           DXVK_LOG_LEVEL="''${DXVK_LOG_LEVEL:-none}" \

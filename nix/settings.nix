@@ -365,7 +365,7 @@ in {
       };
     }))) {};
     settings.apps.sunshine.enable = mkSetting bool true;
-    settings.apps.sunshine.capture = mkSetting (enum [ "kms" "kwin" ]) "kms";
+    settings.apps.sunshine.capture = mkSetting (enum [ "kms" "kwin" "auto" ]) "kms";
     settings.apps.sunshine.cuda.enable = mkSetting bool false;
     settings.apps.sunshine.virtualDisplay.enable = mkSetting bool false;
     settings.apps.sunshine.virtualDisplay.name = mkSetting str "sunshine-vmon";

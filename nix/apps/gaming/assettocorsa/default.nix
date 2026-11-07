@@ -54,7 +54,7 @@ in lib.mkMerge [ {
     inherit enabled package wheelLauncher steamConfig;
   };
 } (lib.mkIf enabled {
-    environment.systemPackages = [ package setup pkgs.protontricks ];
+    environment.systemPackages = [ package setup ];
     fonts.packages = [ pkgs.corefonts ];
     system.build.assetto = package;
     system.build.assetto-setup = setup;

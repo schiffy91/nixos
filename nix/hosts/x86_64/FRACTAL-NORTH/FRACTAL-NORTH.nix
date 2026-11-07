@@ -53,6 +53,7 @@ let
   };
 in {
   imports = [
+    ../desktop-apps.nix
     ./assettocorsa.nix
     ./audio.nix
     ./cpu.nix
@@ -104,7 +105,6 @@ in {
     };
     apps.nixosctl.configPath = "${./nixosctl.toml}";
     apps.simracing.enable = true;
-    apps.zsh.enable = true;
     sudolessAllowlist.enable = true;
   };
 }

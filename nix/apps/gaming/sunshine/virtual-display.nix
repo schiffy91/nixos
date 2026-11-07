@@ -50,9 +50,11 @@ let
             outputs: [
               .outputs[]
               | select(.enabled and .name != $output)
+              | .currentModeId as $mode
               | {
                   name,
-                  currentModeId,
+                  # KScreen renumbers mode IDs when outputs are hotplugged.
+                  mode: ([.modes[] | select(.id == $mode)] | first | .name),
                   pos,
                   scale,
                   hdr,
@@ -168,7 +170,7 @@ let
           if [ -n "$priority" ] && [ "$priority" != "null" ]; then
             args+=("output.$name.priority.$priority")
           fi
-        done < <(jq -r '.outputs[] | [.name, .currentModeId, .pos.x, .pos.y, .scale, .hdr, .wcg, .priority] | @tsv' "$state_file")
+        done < <(jq -r '.outputs[] | [.name, .mode, .pos.x, .pos.y, .scale, .hdr, .wcg, .priority] | @tsv' "$state_file")
 
         if [ "''${#args[@]}" -gt 0 ]; then
           kscreen-doctor "''${args[@]}" || true

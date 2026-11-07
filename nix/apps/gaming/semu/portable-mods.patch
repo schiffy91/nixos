@@ -1,0 +1,193 @@
+--- a/src/lib/paths.btrc
++++ b/src/lib/paths.btrc
+@@ -26,6 +26,23 @@
+         return (path.startsWith("/") ? "/" : "") + Strings.join(kept, "/");
+     }
+ 
++    class string relative(string directory, string target) {
++        Vector<string> base = Strings.split(SemuPaths.normalize(directory), "/");
++        Vector<string> destination = Strings.split(SemuPaths.normalize(target), "/");
++        int common = 0;
++        while (common < base.size() && common < destination.size() && base.get(common).equals(destination.get(common))) { common++; }
++        Vector<string> parts = [];
++        for (int index = common; index < base.size(); index++) { if (!base.get(index).isEmpty()) { parts.push(".."); } }
++        for (int index = common; index < destination.size(); index++) { parts.push(destination.get(index)); }
++        return parts.isEmpty() ? "." : parts.join("/");
++    }
++
++    class string linkDestination(string path) {
++        if (!FileSystem.isSymlink(path)) { return ""; }
++        string target = FileSystem.readLink(path);
++        return SemuPaths.normalize(PathTools.isAbsolute(target) ? target : PathTools.join(PathTools.dirname(path), target));
++    }
++
+     class bool inside(string root, string path) {  // after normalizing both, so root/../x is outside
+         string normalRoot = SemuPaths.normalize(root);
+         string normalPath = SemuPaths.normalize(path);
+--- a/src/mods/install.btrc
++++ b/src/mods/install.btrc
+@@ -40,6 +40,28 @@
+         return report;
+     }
+ 
++    class SemuModInstallReport repair(SemuPlan plan, SemuEmulator emulator) {
++        SemuModInstallReport report = SemuModInstallReport();
++        if (!SemuModLibrary.available(plan)) { report.note("mods: library absent, nothing repaired"); return report; }
++        string stateRoot = plan.path("state_root");
++        SemuModManifest manifest = SemuModManifest.read(stateRoot);
++        for kind in SemuModKind.declared(plan, emulator) {
++            for entry in SemuModLibrary.entries(plan, kind) {
++                string place = SemuModInstaller.linkPath(kind.target, entry.linkRelative);
++                if (!entry.problem.isEmpty() || !SemuPaths.ownedPlace(stateRoot, place) || !FileSystem.isSymlink(place) || FileSystem.exists(place)) { continue; }
++                string original = FileSystem.readLink(place);
++                string history = PathTools.join(stateRoot, "semu-mod-repairs.tsv");
++                string record = SemuModRecord("link", kind.id, SemuPaths.relative(stateRoot, place), original).line() + "\n";
++                if (!SemuPaths.writeOwned(stateRoot, history, FileSystem.readText(history) + record)) { report.note("mods: could not record repair for " + place); continue; }
++                string outcome = SemuModInstaller.place(stateRoot, place, entry.source, true);
++                report.add(f"{kind.emulator} {kind.id} {entry.relative}: {outcome}");
++                if (outcome.startsWith("installed")) { manifest.records.push(SemuModRecord("link", kind.id, place, FileSystem.readLink(place))); }
++            }
++        }
++        if (!manifest.write(stateRoot)) { report.note("mods: could not write " + manifest.path); }
++        return report;
++    }
++
+     class string existingName(string directory, string name) {  // the spelling of a real folder whose name differs only in case: reused, never doubled
+         if (!FileSystem.isDir(directory)) { return name; }
+         string found = name;
+@@ -60,17 +82,18 @@
+ 
+     class string place(string stateRoot, string linkPath, string source, bool owned) {  // "installed..." when the link now names SOURCE
+         if (!SemuPaths.ownedPlace(stateRoot, linkPath) || !SemuPaths.prepareDirectory(PathTools.dirname(linkPath))) { return "skipped: a folder above it in the emulator's state is a link"; }
++        string target = SemuPaths.relative(PathTools.dirname(linkPath), source);
+         if (FileSystem.isSymlink(linkPath)) {
+-            if (FileSystem.readLink(linkPath).equals(source)) { return "installed"; }
+-            if (!owned) { return "shadowed by a link Semu did not make"; }
+-            return SemuPaths.linkOwned(stateRoot, linkPath, source) ? "installed (relinked)" : "failed: could not relink";
++            if (FileSystem.readLink(linkPath).equals(target)) { return "installed"; }
++            if (!owned && !SemuPaths.linkDestination(linkPath).equals(source)) { return "shadowed by a link Semu did not make"; }
++            return SemuPaths.linkOwned(stateRoot, linkPath, target) ? "installed (relinked)" : "failed: could not relink";
+         }
+         if (FileSystem.isDir(linkPath)) {  // an emulator makes an empty title folder before it looks for a pack
+             if (!SemuPaths.removeEmptyDirectory(stateRoot, linkPath)) { return "shadowed by a folder in the emulator's state"; }
+-            return SemuPaths.linkOwned(stateRoot, linkPath, source) ? "installed (replaced the emulator's empty folder)" : "failed: could not link";
++            return SemuPaths.linkOwned(stateRoot, linkPath, target) ? "installed (replaced the emulator's empty folder)" : "failed: could not link";
+         }
+         if (FileSystem.exists(linkPath)) { return "shadowed by a file in the emulator's state"; }
+-        return SemuPaths.linkOwned(stateRoot, linkPath, source) ? "installed" : "failed: could not link";
++        return SemuPaths.linkOwned(stateRoot, linkPath, target) ? "installed" : "failed: could not link";
+     }
+ 
+     class void reconcile(SemuPlan plan, SemuModKind kind, string stateRoot, bool off, int scale, SemuModManifest manifest, SemuModInstallReport report) {
+@@ -90,10 +113,10 @@
+                 continue;
+             }
+             string path = SemuModInstaller.linkPath(kind.target, entry.linkRelative);
+-            string outcome = SemuModInstaller.place(stateRoot, path, entry.source, manifest.owns(path));
++            string outcome = SemuModInstaller.place(stateRoot, path, entry.source, manifest.ownsLink(stateRoot, path));
+             report.add(f"{label} {entry.relative}: {outcome}");
+             if (!outcome.startsWith("installed")) { continue; }
+-            links.push(SemuModRecord("link", kind.id, path, entry.source));
++            links.push(SemuModRecord("link", kind.id, path, FileSystem.readLink(path)));
+             if (!titles.contains(entry.title())) { titles.push(entry.title()); }
+         }
+         for record in manifest.of("link", kind.id) {
+--- a/src/mods/listing.btrc
++++ b/src/mods/listing.btrc
+@@ -36,8 +36,8 @@
+         if (!entry.problem.isEmpty()) { return SemuModState("invalid", entry.problem); }
+         string path = SemuModInstaller.linkPath(kind.target, entry.linkRelative);
+         if (FileSystem.isSymlink(path)) {
+-            if (FileSystem.readLink(path).equals(entry.source)) { return SemuModState("installed", path); }
+-            return manifest.owns(path) ? SemuModState("pending", "relinked at the next launch") : SemuModState("shadowed", "a link Semu did not make: " + path);
++            if (SemuPaths.linkDestination(path).equals(entry.source)) { return SemuModState("installed", path); }
++            return manifest.ownsLink(PathTools.dirname(manifest.path), path) ? SemuModState("pending", "relinked at the next launch") : SemuModState("shadowed", "a link Semu did not make: " + path);
+         }
+         if (FileSystem.isDir(path) && SemuModKind.holdsAnything(path)) { return SemuModState("shadowed", "a folder in the emulator's state: " + path); }
+         if (!FileSystem.isDir(path) && FileSystem.exists(path)) { return SemuModState("shadowed", "a file in the emulator's state: " + path); }
+--- a/src/mods/manifest.btrc
++++ b/src/mods/manifest.btrc
+@@ -34,7 +34,11 @@
+         self.records = [];
+         for line in Strings.split(original, "\n") {
+             Vector<string> fields = Strings.split(line, "\t");
+-            if (fields.size() == 4 && (fields.get(0).equals("link") || fields.get(0).equals("file"))) { self.records.push(SemuModRecord(fields.get(0), fields.get(1), fields.get(2), fields.get(3))); }
++            if (fields.size() == 4 && (fields.get(0).equals("link") || fields.get(0).equals("file"))) {
++                string place = fields.get(2);
++                if (!PathTools.isAbsolute(place)) { place = SemuPaths.normalize(PathTools.join(PathTools.dirname(path), place)); }
++                self.records.push(SemuModRecord(fields.get(0), fields.get(1), place, fields.get(3)));
++            }
+         }
+     }
+ 
+@@ -57,6 +61,17 @@
+         return false;
+     }
+ 
++    public bool ownsLink(string stateRoot, string place) {
++        if (self.owns(place)) { return true; }
++        if (!SemuPaths.ownedPlace(stateRoot, place) || !FileSystem.isSymlink(place)) { return false; }
++        string suffix = "/" + SemuPaths.relative(stateRoot, place);
++        string target = FileSystem.readLink(place);
++        for record in self.records {
++            if (record.type.equals("link") && record.path.endsWith(suffix) && record.target.equals(target)) { return true; }
++        }
++        return false;
++    }
++
+     public void replace(string type, string kind, Vector<SemuModRecord> fresh) {  // this kind's records of this type become FRESH
+         Vector<SemuModRecord> kept = [];
+         for record in self.records { if (!record.type.equals(type) || !record.kind.equals(kind)) { kept.push(record); } }
+@@ -66,7 +81,11 @@
+ 
+     public string text() {
+         Vector<string> lines = [];
+-        for record in self.records { lines.push(record.line()); }
++        for record in self.records {
++            string root = PathTools.dirname(self.path);
++            string place = SemuPaths.inside(root, record.path) ? SemuPaths.relative(root, record.path) : record.path;
++            lines.push(SemuModRecord(record.type, record.kind, place, record.target).line());
++        }
+         return lines.isEmpty() ? "" : lines.join("\n") + "\n";
+     }
+ 
+--- a/src/cli.btrc
++++ b/src/cli.btrc
+@@ -25,6 +25,8 @@
+ import ./steam/input_template.btrc;
+ import ./bezel/editor.btrc;
+ import ./mods/layout.btrc;
++import ./mods/install.btrc;
++import ./mods/report.btrc;
+ import ./mods/listing.btrc;
+ import ./mods/migrate.btrc;
+ 
+@@ -53,7 +55,7 @@
+         help.item("sync start | stop | run | status | device-id | enabled", "Syncthing for saves: detach, run in the foreground, inspect, print this device's id.");
+         help.item("steam shortcuts [--steam-root DIR] [--force] | status", "Add or refresh the Semu non-Steam shortcut in every Steam profile.");
+         help.item("steam input [--steam-root DIR]", "With Steam stopped: write the Steam Input templates (Deck, Steam Controllers), their icons, each user's Semu profile and the configset entry that makes Steam load it.");
+-        help.item("mods list [--json] [--roms] | layout | init", "The mods library: each entry with its game and whether the emulator sees it (--roms reads ROM headers for the game names), the folder layout, or create that layout with README files.");
++        help.item("mods list [--json] [--roms] | layout | init | repair", "The mods library: each entry with its game and whether the emulator sees it (--roms reads ROM headers for the game names), the folder layout, or create that layout with README files. repair reconnects broken links to entries in the configured library, recording their old targets.");
+         help.item("mods migrate [--dry-run] [--allow-copy] [--detach] [--reverse]", "Move the mods out of the old emulator folders into the library: a rename on one filesystem, a copy that keeps the source only with --allow-copy, never a delete; logged and recorded in the state root so --reverse renames them back.");
+         help.item("bezel resolve | emit | edit [--packages a,b] [--port N]", "Mega Bezel presets: print their resolved chains, write the packages' layers and screens, or serve the bezel editor.");
+         help.item("version", "Print the Semu version.");
+@@ -332,6 +334,19 @@
+         if (plan == null) { return self.fail(diagnostics); }
+         if (!SemuChecker.check(model, plan, diagnostics)) { return self.fail(diagnostics); }
+         if (self.line.operand(1, "").equals("migrate")) { return SemuModMigration.command(model, plan, self.line.has("--dry-run"), self.line.has("--allow-copy"), self.line.has("--detach"), self.line.has("--reverse")); }
++        if (self.line.operand(1, "").equals("repair")) {
++            string root = plan.stateRoot();
++            int status = 0;
++            for emulatorId in plan.emulators {
++                SemuEmulator? emulator = model.emulator(emulatorId);
++                if (emulator == null) { continue; }
++                plan.tokens.put("state_root", PathTools.join(root, emulatorId));
++                SemuModInstallReport report = SemuModInstaller.repair(plan, emulator);
++                for message in report.lines { Console.log(message); }
++                if (!report.notice.isEmpty()) { status = 1; }
++            }
++            return status;
++        }
+         int code = SemuModCommand.run(model, plan, self.line.operand(1, ""), self.line.has("--json"), self.line.has("--roms"));
+         return code == 64 ? self.usage(64) : code;
+     }
