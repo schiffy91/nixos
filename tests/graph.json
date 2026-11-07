@@ -26,6 +26,13 @@
       "after": [
         "quick"
       ],
+      "id": "source-hash",
+      "spec": "harness/source-hash/test.json"
+    },
+    {
+      "after": [
+        "quick"
+      ],
       "args": {
         "marker": "graph-default"
       },
@@ -1081,6 +1088,7 @@
   ],
   "required": [
     "host-timeout",
+    "source-hash",
     "sd-unlock",
     "secure-boot-backup",
     "cli-parity",

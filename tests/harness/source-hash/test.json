@@ -1,0 +1,15 @@
+{
+  "name": "source-hash",
+  "state": "source-hash",
+  "stateMaterial": "source-hash:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "python3 tests/harness/source-hash/check.py",
+      "timeout": 120,
+      "expect": "PASS: C++ and JavaScript content invalidates graph cache; unchanged content reuses it"
+    },
+    { "op": "record-state" }
+  ]
+}
