@@ -50,16 +50,30 @@
       "op": "configure-vm-host"
     },
     {
+      "op": "host",
+      "command": "bash tests/installer/nixosctl/provision-cli.sh .vm/e2e/{{state}}-{{stateHashShort}} {{sshPort}} {{arch}}",
+      "timeout": 1800
+    },
+    {
       "op": "guest",
-      "command": "cd /etc/nixos && NIX_CONFIG='experimental-features = nix-command flakes' nix-shell shell.nix --run 'make build' >/tmp/nixosctl-build.log 2>&1 && printf built || { tail -40 /tmp/nixosctl-build.log; exit 1; }",
-      "expect": "built",
+      "command": "rm /run/nixosctl-install/passphrase"
+    },
+    {
+      "op": "guest",
+      "command": "set -e\ntrap 'tail -60 /tmp/nixosctl-failed-install.log' ERR\ncd /etc/nixos\n# Discover the configured fixture so this also works in a native ARM run.\nhost=$(find nix/hosts -path '*/VM-TEST/VM-TEST.nix' -print -quit)\ntest -n \"$host\"\nsed -i 's|settings.disk.device = \"/dev/vda\";|settings.disk.device = \"/dev/nixosctl-missing-disk\";|' \"$host\"\nprevious_hash=$(cat /var/lib/nixos/credentials/password-hash)\nif printf 'testpass123\\ntestpass123\\n' | /run/nixosctl-under-test install --format --yes >/tmp/nixosctl-failed-install.log 2>&1; then\n  echo 'expected disk preparation to fail'; exit 1\nfi\ntest \"$previous_hash\" != \"$(cat /var/lib/nixos/credentials/password-hash)\"\ngrep -F /dev/nixosctl-missing-disk /tmp/nixosctl-failed-install.log >/dev/null\ntest ! -e /run/nixosctl-install/passphrase\nsed -i 's|settings.disk.device = \"/dev/nixosctl-missing-disk\";|settings.disk.device = \"/dev/vda\";|' \"$host\"\nprintf failure-cleaned\n",
+      "expect": "failure-cleaned",
+      "timeout": 1800
+    },
+    {
+      "op": "guest",
+      "command": "cd /etc/nixos && printf 'testpass123\\ntestpass123\\nn\\n' | NIX_CONFIG='experimental-features = nix-command flakes' /run/nixosctl-under-test install --format --yes >/tmp/nixosctl-install.log 2>&1 && printf installed || { tail -60 /tmp/nixosctl-install.log; exit 1; }",
+      "expect": "installed",
       "timeout": 3600
     },
     {
       "op": "guest",
-      "command": "cd /etc/nixos && printf 'n\\n' | NIX_CONFIG='experimental-features = nix-command flakes' ./build/nixosctl install --format --yes >/tmp/nixosctl-install.log 2>&1 && printf installed || { tail -60 /tmp/nixosctl-install.log; exit 1; }",
-      "expect": "installed",
-      "timeout": 3600
+      "command": "test ! -e /run/nixosctl-install/passphrase && test ! -e /tmp/plain_text_password.txt && printf passphrase-cleaned",
+      "expect": "passphrase-cleaned"
     },
     {
       "op": "guest",

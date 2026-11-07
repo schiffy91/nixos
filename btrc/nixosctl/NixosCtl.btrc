@@ -219,12 +219,20 @@ class NixosCtl {
                 installer.debugShell();
             }
             installer.bootstrapConfigIfMissing();
-            SecretsManager(self.config).createIfMissing(installer.plainTextPasswordPath());
+            var secrets = SecretsManager(self.config);
             var confirmed = line.has("--yes");
-            var formatPrompt = f"Format {self.config.diskDevice()}?";
-            var format = line.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
-            var prepared = installer.prepareDisk(format);
-            if (!prepared.ok()) { return prepared.code; }
+            int prepareStatus = 0;
+            try {
+                secrets.createIfMissing(installer.plainTextPasswordPath());
+                var formatPrompt = f"Format {self.config.diskDevice()}?";
+                var format = line.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
+                var prepared = installer.prepareDisk(format);
+                prepareStatus = prepared.code;
+            } finally {
+                secrets.releaseInstallerPassword();
+            }
+            // The pinned compiler skips finally on early returns: return only after cleanup.
+            if (prepareStatus != 0) { return prepareStatus; }
             if (confirmed || installer.interactive.confirm("Install NixOS?")) {
                 var installed = installer.installNixos(forceUpgrade=line.has("--force-upgrade"));
                 if (!installed.ok()) { return installed.code; }

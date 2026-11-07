@@ -1026,6 +1026,11 @@
       "id": "password-file",
       "spec": "nixosctl/password-file/test.json",
       "after": []
+    },
+    {
+      "id": "installer-secret",
+      "spec": "nixosctl/installer-secret/test.json",
+      "after": []
     }
   ],
   "required": [
@@ -1095,7 +1100,8 @@
     "boot-fallback",
     "sunshine-credentials",
     "onepassword-integration",
-    "password-file"
+    "password-file",
+    "installer-secret"
   ],
   "workspaceRoot": ".."
 }

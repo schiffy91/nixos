@@ -1,0 +1,25 @@
+import Library.CLI;
+import Library.Terminal;
+import ../../../btrc/nixosctl/SecretsManager.btrc;
+import ../../../btrc/core/NixosLog.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var config = NixosConfig("/var/lib/installer-test/config");
+        config.cache.put(f"{config.flakeRef()}:config.settings.secrets.path:raw-string", "/var/lib/installer-test/legacy");
+        config.cache.put(f"{config.flakeRef()}:config.settings.users.admin.hashedPasswordFile:raw-string", args.get(1));
+        var manager = SecretsManager(config);
+        try {
+            manager.createIfMissing(args.get(0));
+            Terminal.prompt("prepared: ");
+            if (args.get(2).equals("fail")) { throw "Injected failure after preparation"; }
+        } finally {
+            manager.releaseInstallerPassword();
+        }
+        return 0;
+    } catch (string error) {
+        NixosLog.error(error);
+        return 1;
+    }
+}

@@ -118,7 +118,7 @@ in {
     settings.disk.swap.size = mkSetting str "";
     ##### Disk: Encryption #####
     settings.disk.encryption.enable = mkSetting bool true;
-    settings.disk.encryption.plainTextPasswordFile = mkSetting str "/tmp/plain_text_password.txt";
+    settings.disk.encryption.plainTextPasswordFile = mkSetting str "/run/nixosctl-install/passphrase";
     ##### Disk: Immutability #####
     settings.disk.immutability.enable = mkSetting bool false;
     settings.disk.immutability.mode = mkSetting (enum [ "converge" "reset" "prepare-only" "publish-prepared" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-generation" "restore-previous" "restore-penultimate" "disabled" ]) "converge";

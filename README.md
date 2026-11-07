@@ -407,6 +407,15 @@ writable by other users. Installation copies it explicitly; immutable-root
 systems mount the persistent `/var` subvolume before activation. Password updates use an
 exclusive lock and durable atomic replacement.
 
+The installer uses `/run/nixosctl-install/passphrase` for the temporary LUKS
+passphrase. It creates the directory as root-only `0700` and the file as `0600`
+before writing, rejects unsafe existing files and ancestors, and removes a file
+it created after disk preparation, including ordinary failure paths. A hard kill
+can leave the protected file until reboot; `/run` is temporary. A securely
+pre-provided file is preserved for its caller. Custom
+`settings.disk.encryption.plainTextPasswordFile` paths must meet the same ownership
+and permission rules; shared writable directories such as `/tmp` are rejected.
+
 On the first upgrade, the helper preserves the effective password from
 `/etc/shadow` if the new file does not yet exist. It does not trust the legacy
 file in the editable repository. Missing or unsafe credentials abort activation
