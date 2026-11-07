@@ -1,5 +1,5 @@
 { inputs, config, pkgs, lib, ... }: {
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ./boot/touch-keyboard.nix ];
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ./boot/touch-keyboard.nix ./boot/kernel-trust.nix ];
   config = lib.mkMerge [
 {
   ##### Shared Boot Settings #####

@@ -18,6 +18,8 @@ let
   systemStateVersion = config.system.stateVersion;
   nixosMount = import ./recovery/mount.nix { inherit config immutabilityPersistKey lib pkgs; };
   touchKeyboard = config.settings.boot.touchKeyboard;
+  verifyModules = config.settings.boot.verifyModules;
+  lockdown = config.settings.boot.lockdown;
 
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
@@ -25,9 +27,12 @@ let
       "${inputs.nixpkgs}/nixos/modules/profiles/minimal.nix"
       "${inputs.nixpkgs}/nixos/modules/profiles/installation-device.nix"
       "${inputs.nixpkgs}/nixos/modules/installer/netboot/netboot.nix"
+      ../../settings.nix
+      ./boot/kernel-trust.nix
       ({ config, lib, pkgs, ... }: {
         networking.hostName = "nixos-recovery";
         services.buffyboard.enable = touchKeyboard;  # recovery is a console too
+        settings.boot = { inherit verifyModules lockdown; };
 
         boot = {
           uki = {

@@ -1048,6 +1048,18 @@
     {
       "id": "secure-boot-backup",
       "spec": "secure-boot/backup/test.json"
+    },
+    {
+      "id": "kernel-trust",
+      "after": [],
+      "spec": "kernel-trust/test.json"
+    },
+    {
+      "id": "kernel-trust-host",
+      "after": [
+        "kernel-trust"
+      ],
+      "spec": "kernel-trust/host.json"
     }
   ],
   "required": [
@@ -1121,7 +1133,9 @@
     "sunshine-credentials",
     "onepassword-integration",
     "password-file",
-    "installer-secret"
+    "installer-secret",
+    "kernel-trust",
+    "kernel-trust-host"
   ],
   "workspaceRoot": ".."
 }
