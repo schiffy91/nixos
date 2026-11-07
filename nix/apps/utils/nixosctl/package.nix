@@ -1,5 +1,6 @@
 { pkgs, lib, btrcpy, configPath ? "" }:
-pkgs.stdenv.mkDerivation {
+let secureBootKeys = import ./secure-boot-keys/package.nix { inherit pkgs; };
+in pkgs.stdenv.mkDerivation {
   name = "nixosctl";
   src = lib.fileset.toSource {
     root = ../../../..;
@@ -18,9 +19,11 @@ pkgs.stdenv.mkDerivation {
     mkdir -p $out/bin
     cp nixosctl $out/bin/nixosctl
     cp nixosctl-password-file $out/bin/nixosctl-password-file
+    ln -s ${secureBootKeys}/bin/nixosctl-secure-boot-keys $out/bin/nixosctl-secure-boot-keys
     wrapProgram $out/bin/nixosctl \
       ${lib.optionalString (configPath != "") "--set NIXOS_CONFIG ${lib.escapeShellArg configPath}"} \
       --prefix PATH : ${lib.makeBinPath (with pkgs; [
+        secureBootKeys
         kdePackages.libkscreen
         kdePackages.konsole
         systemd

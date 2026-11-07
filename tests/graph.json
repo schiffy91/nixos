@@ -1044,10 +1044,15 @@
       "id": "sd-unlock",
       "after": [],
       "spec": "sd-unlock/boot/test.json"
+    },
+    {
+      "id": "secure-boot-backup",
+      "spec": "secure-boot/backup/test.json"
     }
   ],
   "required": [
     "sd-unlock",
+    "secure-boot-backup",
     "cli-parity",
     "spec-toml",
     "spec-yaml",

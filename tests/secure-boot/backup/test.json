@@ -1,0 +1,14 @@
+{
+  "name": "secure-boot-backup",
+  "state": "secure-boot-backup",
+  "stateMaterial": "secure-boot-backup:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/secure-boot/backup --no-out-link --cores 4 --max-jobs 1 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -90 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 1800
+    },
+    { "op": "record-state" }
+  ]
+}

@@ -72,6 +72,8 @@ class NixosCtl {
         help.section("Boot + crypto");
         help.item("secure-boot <enable|disable|status> [--microsoft] [--no-reboot]",
                "Manage Lanzaboote / Secure Boot enrollment.");
+        help.item("secure-boot keys <export|import|verify> /absolute/bundle/path",
+               "Transfer existing PK/KEK/db keys privately on stdin/stdout; never overwrite.");
         help.item("tpm2 <enable|disable|status>", "Manage TPM2 LUKS keyslot.");
         help.item("change-password [--update-tpm2]",
                "Converge LUKS, account and hashed file to one new password.");
@@ -172,6 +174,9 @@ class NixosCtl {
         }
         if (self.needsTestShell(args)) {
             return self.nixShellSelf(args);
+        }
+        if (command.equals("secure-boot") && args.count() >= 2 && args.get(1).equals("keys") && !Platform.isRoot()) {
+            NixosLog.fatal("Secure Boot key transfer requires root; use an existing root session or sudo -n explicitly.");
         }
         if (self.needsRoot(command) && !Platform.isRoot()) {
             return self.sudoSelf(args);
@@ -313,6 +318,15 @@ class NixosCtl {
 
         if (command.equals("secure-boot")) {
             var action = self.requireAction(args, "Usage: nixosctl secure-boot <enable|disable|status>");
+            if (action.equals("keys")) {
+                if (args.count() != 4) { NixosLog.fatal("Usage: nixosctl secure-boot keys <export|import|verify> /absolute/bundle/path"); }
+                // Preserve the actual pipe/terminal descriptors; never collect secret stdout.
+                Vector<string> values = [args.get(2), args.get(3)];
+                var child = ChildProcessArguments.build("nixosctl-secure-boot-keys", values);
+                execvp(child[0], child);
+                CStringArray.freeAll(child);
+                throw "Cannot execute Secure Boot key helper";
+            }
             var manager = SecureBootManager(self.config);
             if (action.equals("enable")) { manager.enable(line.has("--microsoft"), !line.has("--no-reboot")); return 0; }
             if (action.equals("disable")) { manager.disable(); return 0; }

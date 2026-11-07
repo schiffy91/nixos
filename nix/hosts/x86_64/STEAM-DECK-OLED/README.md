@@ -77,7 +77,11 @@ That does not establish a recovery toggle in its firmware interface. Before
 `sudo nixosctl secure-boot enable`, prepare unique keys, independently back them
 up on encrypted storage and verify restoration, and boot a signed external
 recovery device. Use only our own keys, with no `--microsoft` or publicly shared
-private keys.
+private keys. Keep `settings.boot.autoEnrollKeys = false` during this preparation,
+including the first signed maintenance configuration, until external recovery
+and deliberate enrollment are ready. The [independent key backup procedure](../../../../tests/secure-boot/backup/README.md)
+uses root-only `nixosctl secure-boot keys` transfers and verifies restoration on
+Fractal North's separate encrypted disk without enrolling or rotating keys.
 
 `nixosctl secure-boot disable` currently switches to an unsigned configuration
 only after firmware Secure Boot is already disabled. It does not remove the
