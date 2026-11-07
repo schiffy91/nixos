@@ -1,7 +1,10 @@
 { pkgs, lib, btrcpy, configPath ? "" }:
 pkgs.stdenv.mkDerivation {
   name = "nixosctl";
-  src = ../../../..;
+  src = lib.fileset.toSource {
+    root = ../../../..;
+    fileset = lib.fileset.unions [ ../../../../btrc ../../../../tests/e2e ];
+  };
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
   dontConfigure = true;
   buildPhase = ''

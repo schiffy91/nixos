@@ -4,6 +4,7 @@
     networkmanager.unmanaged = map (mac: "mac:${mac}") host.network.unmanagedMacs;
   };
   settings.networking = {
+    forwardAgentHosts = [ "STEAM-DECK-OLED" "STEAM-DECK-OLED.local" "192.168.50.52" ];
     lanSubnet = host.network.lanSubnet;
     primaryInterface = host.network.primaryInterface;
   };

@@ -105,6 +105,5 @@ in {
     };
     apps.nixosctl.configPath = "${./nixosctl.toml}";
     apps.simracing.enable = true;
-    sudolessAllowlist.enable = true;
   };
 }

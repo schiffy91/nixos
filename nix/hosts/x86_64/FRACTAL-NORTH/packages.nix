@@ -12,6 +12,10 @@
       ];
     })
     distrobox
+    tcpdump
+    ethtool
+    python3
+    moonlight-qt
     pciutils
     usbutils
     lmstudio

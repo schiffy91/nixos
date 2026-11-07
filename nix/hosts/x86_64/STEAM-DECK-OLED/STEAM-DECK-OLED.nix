@@ -76,6 +76,7 @@ in {
       };
     };
     networking.lanSubnet = network.lanSubnet;
+    networking.forwardAgentHosts = [ "FRACTAL-NORTH" "FRACTAL-NORTH.local" "192.168.50.67" ];
     nix = {  # the desktop builds the emulators; a handheld should never compile them
       substituters = [ "http://FRACTAL-NORTH.local:8080" ];
       trustedPublicKeys = [

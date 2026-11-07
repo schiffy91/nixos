@@ -50,9 +50,13 @@ in {
   programs.ssh = {
     startAgent = true;
     extraConfig = ''
+      ${lib.optionalString (config.settings.networking.forwardAgentHosts != []) ''
+      Host ${lib.concatStringsSep " " config.settings.networking.forwardAgentHosts}
+        ForwardAgent yes
+      ''}
       Host *
         IdentityAgent ${config.settings.networking.identityAgent}
-        ForwardAgent yes
+        ForwardAgent no
     '';
   };
   security.pam.sshAgentAuth.enable = true;

@@ -93,7 +93,7 @@ Important setting groups:
 | `settings.apps.gaming.cpuAffinity` | Optional Linux CPU list for Steam games and Battle.net; `null` keeps normal scheduling |
 | `settings.apps.nixosctl.*` | `nixosctl` config path, default-on idle inhibit |
 | `settings.apps.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
-| `settings.sudolessAllowlist.*` | Optional sudo NOPASSWD command/package allowlist |
+| `settings.networking.forwardAgentHosts` | Explicitly trusted SSH agent-forwarding destinations |
 
 ### Gaming CPU affinity and power profiles
 
@@ -400,8 +400,30 @@ an isolated agent account with its own Home Manager profile and tool set. User
 mutability is disabled, so password changes must update the hashed password file
 and rebuild.
 
-`nix/system/nixos/sudolessAllowlist.nix` is opt-in through
-`settings.sudolessAllowlist.enable`.
+Administration requires ordinary sudo authentication, including the configured
+1Password SSH agent. For unattended work, authenticate once to grant the admin
+account temporary passwordless sudo:
+
+```bash
+nixosctl sudo enable --for 8h
+nixosctl sudo status
+nixosctl sudo disable
+```
+
+Durations accept whole seconds, minutes, or hours, up to 24 hours. Enabling or
+extending a grant requires fresh authentication. Sudo itself enforces its UTC
+expiry; no cleanup timer is needed. The root-owned grant lives under `/run` and
+disappears at reboot. Expired or revoked grants return to ordinary sudo policy,
+including any normal authentication cache. The grant applies to **every process
+using the admin account**, not only an agent. It cannot revoke existing root
+processes or undo changes they made. The separate agent account does not gain
+administrative access. The only permanent passwordless command is the helper's
+read-only `status` operation, which reads the protected grant metadata.
+
+`settings.networking.identityAgent` retains the local 1Password agent.
+`settings.networking.forwardAgentHosts` explicitly lists destinations allowed to
+use that agent remotely; other destinations default to no forwarding. A trusted
+remote root can use a forwarded agent while connected, so keep this list narrow.
 
 ### Secure Boot
 

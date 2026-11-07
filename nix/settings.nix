@@ -383,6 +383,7 @@ in {
     settings.networking.lanSubnet = mkSetting str "192.168.1.0/24"; # ip -o -f inet addr show | awk '/scope global/ {print $4}';
     settings.networking.ports.udp = mkSetting (listOf int) [];
     settings.networking.ports.tcp = mkSetting (listOf int) [];
+    settings.networking.forwardAgentHosts = mkSetting (listOf str) [];
     settings.networking.identityAgent = mkSetting str "~/.1password/agent.sock";
     settings.networking.primaryInterface = mkSetting str "";  # empty = no preference; set to e.g. "eno2" to route outbound via that NIC (prevents asymmetric routing when multiple NICs on one subnet)
     ##### Input #####
@@ -394,27 +395,5 @@ in {
         accelProfile = mkSetting (enum [ "flat" "adaptive" ]) "flat";
       };
     })) [];
-    ##### Sudoless Allowlist #####
-    settings.sudolessAllowlist.enable   = mkSetting bool false;
-    settings.sudolessAllowlist.nopasswd = mkSetting (attrsOf bool) {
-      nixos-rebuild = true;
-      tcpdump       = true;
-      ethtool       = true;
-      mount         = true;
-      umount        = true;
-      losetup       = true;
-      "mkfs.btrfs"  = true;
-      btrfs         = true;
-      python3       = true;
-      nixosctl      = true;
-      systemctl     = true;
-      immutability  = true;
-    };
-    settings.sudolessAllowlist.packages = mkSetting (attrsOf bool) {
-      tcpdump       = true;
-      ethtool       = true;
-      python3       = true;
-      moonlight-qt  = true;
-    };
   };
 }

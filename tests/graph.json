@@ -1004,6 +1004,11 @@
         "state": "initrd-touch-unlock-displays",
         "multi": "true"
       }
+    },
+    {
+      "id": "nixosctl-sudo",
+      "spec": "nixosctl/sudo/test.json",
+      "after": []
     }
   ],
   "required": [
@@ -1068,7 +1073,8 @@
     "initrd-touch-unlock-rotated",
     "initrd-touch-unlock-german",
     "initrd-touch-unlock-french",
-    "initrd-touch-unlock-displays"
+    "initrd-touch-unlock-displays",
+    "nixosctl-sudo"
   ],
   "workspaceRoot": ".."
 }
