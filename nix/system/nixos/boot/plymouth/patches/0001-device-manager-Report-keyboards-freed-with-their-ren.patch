@@ -1,0 +1,118 @@
+From b6844162305e26c1ef0e178865829f928df6d4d2 Mon Sep 17 00:00:00 2001
+From: Chris Allen <cma@bitemyapp.com>
+Date: Sat, 24 Oct 2026 22:05:47 -0500
+Subject: [PATCH 01/12] device-manager: Report keyboards freed with their
+ renderer
+
+free_keyboards_for_renderer() frees a renderer's keyboards without
+calling keyboard_removed_handler, so plymouthd never detaches its
+handlers from them and the splash keeps the keyboard it was given. This
+happens whenever a renderer goes away while plymouthd runs, as when a
+GPU's DRM driver takes over from simpledrm.
+
+Call the handler before freeing each keyboard. When one is removed,
+have plymouthd give the splash one of the keyboards that are left, and
+have ply_boot_splash_unset_keyboard() forget the one it unset. The device
+manager stays quiet about keyboards freed along with itself: by then
+plymouthd may have freed the splash.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+(cherry picked from commit 049738c7b31b8b5a81abfd0747973c2907b0774c)
+---
+ src/daemon/plymouthd-input.c                | 32 +++++++++++++++++++--
+ src/libply-splash-core/ply-boot-splash.c    |  1 +
+ src/libply-splash-core/ply-device-manager.c |  8 +++++-
+ 3 files changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/src/daemon/plymouthd-input.c b/src/daemon/plymouthd-input.c
+index 2a372a4c..36db19f4 100644
+--- a/src/daemon/plymouthd-input.c
++++ b/src/daemon/plymouthd-input.c
+@@ -150,16 +150,42 @@ detach_keyboard (ply_keyboard_t                  *keyboard,
+                 (ply_keyboard_enter_handler_t) on_enter);
+ }
+ 
++typedef struct
++{
++        ply_boot_splash_t *splash;
++        ply_keyboard_t    *removed;
++} remaining_keyboard_t;
++
++static void
++attach_remaining_keyboard_to_splash (ply_keyboard_t *keyboard,
++                                     void           *user_data)
++{
++        remaining_keyboard_t *remaining = user_data;
++
++        if (keyboard != remaining->removed)
++                ply_boot_splash_set_keyboard (remaining->splash, keyboard);
++}
++
+ static void
+ keyboard_removed (plymouthd_t                     *daemon,
+                   ply_keyboard_t                  *keyboard,
+                   plymouthd_input_escape_handler_t escape_handler)
+ {
++        remaining_keyboard_t remaining;
++
+         detach_keyboard (keyboard, escape_handler);
+ 
+-        if (plymouthd_splash_get (daemon->splash) != NULL)
+-                ply_boot_splash_unset_keyboard (
+-                        plymouthd_splash_get (daemon->splash));
++        remaining.splash = plymouthd_splash_get (daemon->splash);
++        if (remaining.splash == NULL)
++                return;
++
++        /* The splash may have been using this keyboard; give it one of
++         * those that are left. */
++        ply_boot_splash_unset_keyboard (remaining.splash);
++        remaining.removed = keyboard;
++        plymouthd_devices_for_each_keyboard (daemon->devices,
++                                             attach_remaining_keyboard_to_splash,
++                                             &remaining);
+ }
+ 
+ void
+diff --git a/src/libply-splash-core/ply-boot-splash.c b/src/libply-splash-core/ply-boot-splash.c
+index 217f455e..a47cc4dd 100644
+--- a/src/libply-splash-core/ply-boot-splash.c
++++ b/src/libply-splash-core/ply-boot-splash.c
+@@ -125,6 +125,7 @@ ply_boot_splash_unset_keyboard (ply_boot_splash_t *splash)
+                 return;
+ 
+         splash->plugin_interface->unset_keyboard (splash->plugin, splash->keyboard);
++        splash->keyboard = NULL;
+ }
+ 
+ void
+diff --git a/src/libply-splash-core/ply-device-manager.c b/src/libply-splash-core/ply-device-manager.c
+index f6a21937..8133b345 100644
+--- a/src/libply-splash-core/ply-device-manager.c
++++ b/src/libply-splash-core/ply-device-manager.c
+@@ -168,8 +168,10 @@ free_keyboards_for_renderer (ply_device_manager_t *manager,
+                 keyboard_renderer = ply_keyboard_get_renderer (keyboard);
+ 
+                 if (keyboard_renderer == renderer) {
+-                        ply_keyboard_free (keyboard);
++                        if (manager->keyboard_removed_handler != NULL)
++                                manager->keyboard_removed_handler (manager->event_handler_data, keyboard);
+                         ply_list_remove_node (manager->keyboards, node);
++                        ply_keyboard_free (keyboard);
+                 }
+ 
+                 node = next_node;
+@@ -934,6 +936,10 @@ ply_device_manager_free (ply_device_manager_t *manager)
+         if (manager == NULL)
+                 return;
+ 
++        /* Whoever watched for keyboards may already be gone: say nothing
++         * about the ones freed with the manager. */
++        manager->keyboard_removed_handler = NULL;
++
+         ply_event_loop_stop_watching_for_exit (manager->loop,
+                                                (ply_event_loop_exit_handler_t)
+                                                detach_from_event_loop,
+-- 
+2.56.0
+

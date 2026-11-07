@@ -1,0 +1,164 @@
+From 9fe873d1d5f79762bd33aedbadf84bf671d63b4b Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 17:40:15 -0800
+Subject: [PATCH 11/12] initrd: Include complete XKB, compose and touchscreen
+ runtime data
+
+Honor the sysroot when finding input data. Preserve nested keyboard symbols, compose aliases and libinput quirks, along with locale and keyboard configuration. Extend the populate-initrd fixture to verify files are taken from the target sysroot.
+---
+ scripts/meson.build                 |  1 +
+ scripts/plymouth-populate-initrd.in | 65 +++++++++--------------------
+ tests/test-populate-initrd.sh       | 30 ++++++++++++-
+ 3 files changed, 48 insertions(+), 48 deletions(-)
+
+diff --git a/scripts/meson.build b/scripts/meson.build
+index 0fd635b3..976cee23 100644
+--- a/scripts/meson.build
++++ b/scripts/meson.build
+@@ -20,6 +20,7 @@ configure_file(
+     'PLYMOUTH_POLICY_DIR': plymouth_policy_dir,
+     'PLYMOUTH_CLIENT_DIR': get_option('prefix') / get_option('bindir'),
+     'PLYMOUTH_DAEMON_DIR': get_option('prefix') / get_option('sbindir'),
++    'PLYMOUTH_LIBINPUT_DATA_DIR': touchscreen_enabled ? libinput_dep.get_variable(pkgconfig: 'prefix') / 'share/libinput' : '',
+     'SYSTEMD_UNIT_DIR': get_option('systemd-integration')? systemd_unit_dir : '',
+     'RELEASE_FILE': get_option('release-file'),
+   },
+diff --git a/scripts/plymouth-populate-initrd.in b/scripts/plymouth-populate-initrd.in
+index ee094b1b..85784f18 100755
+--- a/scripts/plymouth-populate-initrd.in
++++ b/scripts/plymouth-populate-initrd.in
+@@ -25,6 +25,7 @@
+ [ -z "$PLYMOUTH_CLIENT_PATH" ] && PLYMOUTH_CLIENT_PATH="@PLYMOUTH_CLIENT_DIR@/plymouth"
+ [ -z "$PLYMOUTH_DRM_ESCROW_PATH" ] && PLYMOUTH_DRM_ESCROW_PATH="@PLYMOUTH_LIBEXECDIR@/plymouth/plymouthd-fd-escrow"
+ [ -z "$SYSTEMD_UNIT_DIR" ] && SYSTEMD_UNIT_DIR="@SYSTEMD_UNIT_DIR@"
++[ -z "$PLYMOUTH_LIBINPUT_DATA_DIR" ] && PLYMOUTH_LIBINPUT_DATA_DIR="@PLYMOUTH_LIBINPUT_DATA_DIR@"
+ 
+ # Generic substring function.  If $2 is in $1, return 0.
+ strstr() { [ "${1#*$2*}" != "$1" ]; }
+@@ -492,54 +493,26 @@ inst @RELEASE_FILE@ $INITRDDIR
+ inst ${PLYMOUTH_POLICYDIR}/plymouthd.defaults $INITRDDIR
+ inst ${PLYMOUTH_CONFDIR}/plymouthd.conf $INITRDDIR
+ 
+-# Install xkb info
+-if [ -d "${X11_DIRECTORY}" ]; then
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/xkb/"
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/xkb/compat/"
+-
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/xkb/keycodes/"
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/xkb/rules/"
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/xkb/symbols/"
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/xkb/types/"
+-    mkdir -p "${INITRDDIR}/${X11_DIRECTORY}/locale/"
+-    inst ${X11_DIRECTORY}/xkb/compat/accessx $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/basic $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/caps $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/complete $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/iso9995 $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/ledcaps $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/lednum $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/ledscroll $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/level5 $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/misc $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/mousekeys $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/compat/xfree86 $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/keycodes/aliases $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/keycodes/evdev $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/rules/evdev $INITRDDIR
+-    find ${X11_DIRECTORY}/xkb/symbols -maxdepth 1 ! -type d | while read file; do
+-        inst $file $INITRDDIR
+-    done
+-    inst ${X11_DIRECTORY}/xkb/types/basic $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/complete $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/extra $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/iso9995 $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/level5 $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/mousekeys $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/numpad $INITRDDIR
+-    inst ${X11_DIRECTORY}/xkb/types/pc $INITRDDIR
+-
+-    # In the off chance the user uses their compose key when
+-    # typing their password, install compose sequences
+-    if [ -f "${X11_DIRECTORY}/locale/compose.dir" ]; then
+-        inst ${X11_DIRECTORY}/locale/compose.dir $INITRDDIR
+-        grep UTF-8/Compose: ${X11_DIRECTORY}/locale/compose.dir | awk -F: '{ print $1 }' | sort -u | xargs dirname | while read DIR; do
+-            find ${X11_DIRECTORY}/locale/$DIR -maxdepth 1 ! -type d | while read file; do
+-                inst $file $INITRDDIR
+-             done
+-        done
++# XKB includes may refer to nested symbols, custom models and locale aliases.
++# Copy the complete data trees rather than maintaining a language-specific list.
++for directory in "$X11_DIRECTORY/xkb" "$X11_DIRECTORY/locale"; do
++    if [[ -d "$PLYMOUTH_SYSROOT$directory" ]]; then
++        inst_recur "$directory"
+     fi
++done
++
++# Libinput needs its device quirks even when running before the real root mounts.
++if [[ -n "$PLYMOUTH_LIBINPUT_DATA_DIR" && -d "$PLYMOUTH_SYSROOT$PLYMOUTH_LIBINPUT_DATA_DIR" ]]; then
++    inst_recur "$PLYMOUTH_LIBINPUT_DATA_DIR"
+ fi
++if [[ -d "$PLYMOUTH_SYSROOT/etc/libinput" ]]; then
++    inst_recur /etc/libinput
++fi
++for configuration in /etc/vconsole.conf /etc/locale.conf; do
++    if [[ -f "$PLYMOUTH_SYSROOT$configuration" ]]; then
++        inst "$configuration" "$INITRDDIR"
++    fi
++done
+ 
+ if [ -z "$PLYMOUTH_THEME_NAME" ]; then
+     echo "No default plymouth plugin is set" >&2
+diff --git a/tests/test-populate-initrd.sh b/tests/test-populate-initrd.sh
+index 900193da..c32221c9 100644
+--- a/tests/test-populate-initrd.sh
++++ b/tests/test-populate-initrd.sh
+@@ -88,14 +88,15 @@ run_populate_initrd()
+         PLYMOUTH_DAEMON_PATH=/usr/sbin/plymouthd \
+         PLYMOUTH_CLIENT_PATH=/usr/bin/plymouth \
+         PLYMOUTH_DRM_ESCROW_PATH=/usr/libexec/plymouth/plymouthd-fd-escrow \
++        PLYMOUTH_LIBINPUT_DATA_DIR=/usr/share/libinput \
+         SYSTEMD_UNIT_DIR=/not-present \
+                 "$populate_initrd" \
+                 --targetdir "$1" \
+-                --x11-directory /not-present
++                --x11-directory /usr/share/X11
+ }
+ 
+ echo 'TAP version 13'
+-echo '1..2'
++echo '1..3'
+ 
+ run_populate_initrd "$initrd_directory"
+ 
+@@ -132,3 +133,28 @@ else
+         echo 'not ok 2 - rewrite overridden theme configuration'
+         exit 1
+ fi
++
++# The source exists only in the sysroot; host data must not decide whether it
++# gets installed. Include nested XKB files and compose locale aliases.
++input_paths=(
++        /usr/share/X11/xkb/symbols/vendor/custom
++        /usr/share/X11/locale/compose.dir
++        /usr/share/X11/locale/locale.alias
++        /usr/share/X11/locale/en_US.UTF-8/Compose
++        /usr/share/libinput/50-system-test.quirks
++        /etc/libinput/local-overrides.quirks
++        /etc/vconsole.conf
++        /etc/locale.conf
++)
++for input_path in "${input_paths[@]}"; do
++        mkdir -p "$sysroot${input_path%/*}"
++        printf '%s\n' "$input_path" > "$sysroot$input_path"
++done
++run_populate_initrd "$test_directory/initrd-input"
++for input_path in "${input_paths[@]}"; do
++        if ! cmp "$sysroot$input_path" "$test_directory/initrd-input$input_path"; then
++                echo "not ok 3 - input runtime data: missing or changed $input_path"
++                exit 1
++        fi
++done
++echo 'ok 3 - input runtime data from sysroot'
+-- 
+2.56.0
+

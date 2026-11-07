@@ -1,0 +1,492 @@
+From b2f22d6d6bf6785bbaed397ff4d39369c3165b3e Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 17:16:02 -0800
+Subject: [PATCH 09/12] input: Add an optional libinput touchscreen provider
+
+Separate seat and device lifecycle from splash rendering. Report calibrated touch coordinates, cancellation and hotplug events through an opaque interface, expose output associations, and suspend devices when inactive. Builds without libinput or udev retain ordinary keyboard support.
+---
+ meson.build                              |   6 +
+ meson_options.txt                        |   5 +
+ src/libply-splash-core/meson.build       |   6 +
+ src/libply-splash-core/ply-touch-input.c | 334 +++++++++++++++++++++++
+ src/libply-splash-core/ply-touch-input.h |  56 ++++
+ 5 files changed, 407 insertions(+)
+ create mode 100644 src/libply-splash-core/ply-touch-input.c
+ create mode 100644 src/libply-splash-core/ply-touch-input.h
+
+diff --git a/meson.build b/meson.build
+index 4ff0849d..28c1a75f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -29,6 +29,11 @@ ldl_dep = dependency('dl')
+ libpng_dep = dependency('libpng', version: '>= 1.2.16')
+ 
+ libudev_dep = dependency('libudev', required: get_option('udev'))
++libinput_dep = dependency('libinput', required: get_option('touchscreen'))
++touchscreen_enabled = libinput_dep.found() and libudev_dep.found()
++if get_option('touchscreen').enabled() and not libudev_dep.found()
++  error('Touchscreen input requires udev support')
++endif
+ libpango_dep = dependency('pango', required: get_option('pango'))
+ libcairo_dep = dependency('cairo', required: get_option('pango'))
+ libpangocairo_dep = dependency('pangocairo', required: get_option('pango'))
+@@ -74,6 +79,7 @@ conf.set_quoted('BOOT_TTY', get_option('boot-tty'))
+ conf.set_quoted('SHUTDOWN_TTY', get_option('shutdown-tty'))
+ conf.set_quoted('RELEASE_FILE', get_option('release-file'))
+ conf.set('HAVE_UDEV', libudev_dep.found())
++conf.set('HAVE_TOUCHSCREEN', touchscreen_enabled)
+ conf.set('PLY_ENABLE_SYSTEMD_INTEGRATION', get_option('systemd-integration'))
+ conf.set('PLY_ENABLE_TRACING', get_option('tracing'))
+ conf.set_quoted('PLYMOUTH_RUNTIME_DIR', plymouth_runtime_dir)
+diff --git a/meson_options.txt b/meson_options.txt
+index 4f601bb0..13db301c 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -58,6 +58,11 @@ option('udev',
+   value: 'auto',
+   description: 'Build with udev support',
+ )
++option('touchscreen',
++  type: 'feature',
++  value: 'auto',
++  description: 'Build touchscreen input support (requires libinput and udev)',
++)
+ option('pango',
+   type: 'feature',
+   value: 'enabled',
+diff --git a/src/libply-splash-core/meson.build b/src/libply-splash-core/meson.build
+index 290109b3..9382cdc3 100644
+--- a/src/libply-splash-core/meson.build
++++ b/src/libply-splash-core/meson.build
+@@ -13,6 +13,7 @@ libply_splash_core_sources = files(
+   'ply-text-display.c',
+   'ply-text-progress-bar.c',
+   'ply-text-step-bar.c',
++  'ply-touch-input.c',
+ )
+ 
+ libply_splash_core_public_deps = [
+@@ -30,6 +31,10 @@ if libudev_dep.found()
+   libply_splash_core_private_deps += libudev_dep
+ endif
+ 
++if touchscreen_enabled
++  libply_splash_core_private_deps += libinput_dep
++endif
++
+ libply_splash_core_cflags = [
+   '-DPLYMOUTH_BACKGROUND_COLOR=@0@'.format(get_option('background-color')),
+   '-DPLYMOUTH_BACKGROUND_START_COLOR=@0@'.format(get_option('background-start-color-stop')),
+@@ -118,6 +123,7 @@ libply_splash_core_headers = files(
+   'ply-text-display.h',
+   'ply-text-progress-bar.h',
+   'ply-text-step-bar.h',
++  'ply-touch-input.h',
+ )
+ 
+ install_headers(libply_splash_core_headers,
+diff --git a/src/libply-splash-core/ply-touch-input.c b/src/libply-splash-core/ply-touch-input.c
+new file mode 100644
+index 00000000..be6f25a2
+--- /dev/null
++++ b/src/libply-splash-core/ply-touch-input.c
+@@ -0,0 +1,334 @@
++/* ply-touch-input.c - touchscreen device and event handling
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "ply-touch-input.h"
++
++#include <stdlib.h>
++#include <string.h>
++
++#include "ply-logger.h"
++
++#ifdef HAVE_TOUCHSCREEN
++#include <errno.h>
++#include <fcntl.h>
++#include <libinput.h>
++#include <libudev.h>
++#include <unistd.h>
++#endif
++
++struct _ply_touch_device
++{
++        char                   *output_name;
++        bool                    touchscreen;
++        bool                    keyboard;
++#ifdef HAVE_TOUCHSCREEN
++        struct libinput_device *device;
++#endif
++};
++
++struct _ply_touch_input
++{
++        ply_event_loop_t         *loop;
++        ply_fd_watch_t           *watch;
++        ply_list_t               *devices;
++        ply_touch_input_handler_t handler;
++        void                     *user_data;
++        unsigned int              keyboards;
++        bool                      active;
++#ifdef HAVE_TOUCHSCREEN
++        struct udev              *udev;
++        struct libinput          *context;
++#endif
++};
++
++#ifdef HAVE_TOUCHSCREEN
++static int
++open_device (const char *path,
++             int         flags,
++             void       *user_data)
++{
++        int fd = open (path, flags | O_CLOEXEC);
++
++        return fd < 0 ? -errno : fd;
++}
++
++static void
++close_device (int   fd,
++              void *user_data)
++{
++        close (fd);
++}
++
++static const struct libinput_interface input_interface = {
++        .open_restricted  = open_device,
++        .close_restricted = close_device
++};
++
++static bool
++is_typing_keyboard (struct libinput_device *device)
++{
++        struct udev_device *udev;
++        const char *typing, *ignore;
++        bool result;
++
++        udev = libinput_device_get_udev_device (device);
++        if (udev == NULL)
++                return false;
++
++        typing = udev_device_get_property_value (udev, "ID_INPUT_KEYBOARD");
++        ignore = udev_device_get_property_value (udev, "PLYMOUTH_IGNORE_KEYBOARD");
++        result = typing != NULL && strcmp (typing, "1") == 0 &&
++                 !(ignore != NULL && strcmp (ignore, "1") == 0);
++        udev_device_unref (udev);
++        return result;
++}
++
++static void
++free_device (ply_touch_device_t *device)
++{
++        libinput_device_set_user_data (device->device, NULL);
++        libinput_device_unref (device->device);
++        free (device->output_name);
++        free (device);
++}
++
++static void
++notify (ply_touch_input_t *input,
++        ply_touch_event_t *event)
++{
++        if (input->handler != NULL)
++                input->handler (input->user_data, event);
++}
++
++static void
++add_device (ply_touch_input_t      *input,
++            struct libinput_device *device)
++{
++        ply_touch_device_t *touch_device;
++        ply_touch_event_t event;
++        const char *output_name;
++
++        touch_device = calloc (1, sizeof(*touch_device));
++        if (touch_device == NULL)
++                return;
++
++        touch_device->device = libinput_device_ref (device);
++        touch_device->touchscreen = libinput_device_has_capability (device, LIBINPUT_DEVICE_CAP_TOUCH);
++        touch_device->keyboard = is_typing_keyboard (device);
++        output_name = libinput_device_get_output_name (device);
++        if (output_name != NULL)
++                touch_device->output_name = strdup (output_name);
++
++        if (output_name != NULL && touch_device->output_name == NULL) {
++                free_device (touch_device);
++                return;
++        }
++
++        libinput_device_set_user_data (device, touch_device);
++        ply_list_append_data (input->devices, touch_device);
++        if (touch_device->keyboard)
++                input->keyboards++;
++
++        event = (ply_touch_event_t) { .type = PLY_TOUCH_DEVICE_ADDED, .device = touch_device, .slot = -1 };
++        notify (input, &event);
++}
++
++static void
++remove_device (ply_touch_input_t      *input,
++               struct libinput_device *device)
++{
++        ply_touch_device_t *touch_device = libinput_device_get_user_data (device);
++        ply_touch_event_t event;
++
++        if (touch_device == NULL)
++                return;
++
++        ply_list_remove_data (input->devices, touch_device);
++        if (touch_device->keyboard)
++                input->keyboards--;
++
++        event = (ply_touch_event_t) { .type = PLY_TOUCH_DEVICE_REMOVED, .device = touch_device, .slot = -1 };
++        notify (input, &event);
++        free_device (touch_device);
++}
++
++static void
++handle_events (void *user_data,
++               int   fd)
++{
++        ply_touch_input_t *input = user_data;
++        struct libinput_event *event;
++
++        if (libinput_dispatch (input->context) < 0) {
++                if (input->active) {
++                        ply_error ("Unable to read touchscreen events");
++                        ply_touch_input_set_active (input, false);
++                }
++                return;
++        }
++
++        while ((event = libinput_get_event (input->context)) != NULL) {
++                struct libinput_device *device = libinput_event_get_device (event);
++                enum libinput_event_type type = libinput_event_get_type (event);
++
++                if (type == LIBINPUT_EVENT_DEVICE_ADDED) {
++                        add_device (input, device);
++                } else if (type == LIBINPUT_EVENT_DEVICE_REMOVED) {
++                        remove_device (input, device);
++                } else if (input->active) {
++                        struct libinput_event_touch *touch;
++                        ply_touch_event_t touch_event = { .device = libinput_device_get_user_data (device) };
++
++                        switch (type) {
++                        case LIBINPUT_EVENT_TOUCH_DOWN: touch_event.type = PLY_TOUCH_DOWN; break;
++                        case LIBINPUT_EVENT_TOUCH_MOTION: touch_event.type = PLY_TOUCH_MOTION; break;
++                        case LIBINPUT_EVENT_TOUCH_UP: touch_event.type = PLY_TOUCH_UP; break;
++                        case LIBINPUT_EVENT_TOUCH_CANCEL: touch_event.type = PLY_TOUCH_CANCEL; break;
++                        default: goto next_event;
++                        }
++
++                        if (touch_event.device == NULL)
++                                goto next_event;
++
++                        touch = libinput_event_get_touch_event (event);
++                        touch_event.slot = libinput_event_touch_get_seat_slot (touch);
++                        if (type == LIBINPUT_EVENT_TOUCH_DOWN || type == LIBINPUT_EVENT_TOUCH_MOTION) {
++                                touch_event.x = libinput_event_touch_get_x_transformed (touch, 1);
++                                touch_event.y = libinput_event_touch_get_y_transformed (touch, 1);
++                        }
++                        notify (input, &touch_event);
++                }
++next_event:
++                libinput_event_destroy (event);
++        }
++}
++
++static void
++on_disconnect (void *user_data,
++               int   fd)
++{
++        ply_touch_input_set_active (user_data, false);
++}
++#endif
++
++ply_touch_input_t *
++ply_touch_input_new (ply_event_loop_t         *loop,
++                     const char               *seat,
++                     ply_touch_input_handler_t handler,
++                     void                     *user_data)
++{
++#ifdef HAVE_TOUCHSCREEN
++        ply_touch_input_t *input;
++
++        if (loop == NULL || seat == NULL || handler == NULL)
++                return NULL;
++
++        input = calloc (1, sizeof(*input));
++        if (input == NULL)
++                return NULL;
++
++        input->loop = loop;
++        input->handler = handler;
++        input->user_data = user_data;
++        input->devices = ply_list_new ();
++        input->udev = udev_new ();
++        if (input->udev != NULL)
++                input->context = libinput_udev_create_context (&input_interface, NULL, input->udev);
++
++        if (input->context == NULL || libinput_udev_assign_seat (input->context, seat) < 0) {
++                ply_touch_input_free (input);
++                return NULL;
++        }
++
++        libinput_suspend (input->context);
++        return input;
++#else
++        return NULL;
++#endif
++}
++
++void
++ply_touch_input_free (ply_touch_input_t *input)
++{
++        if (input == NULL)
++                return;
++
++#ifdef HAVE_TOUCHSCREEN
++        input->handler = NULL;
++        ply_touch_input_set_active (input, false);
++        while (ply_list_get_first_node (input->devices) != NULL) {
++                ply_list_node_t *node = ply_list_get_first_node (input->devices);
++                ply_touch_device_t *device = ply_list_node_get_data (node);
++
++                ply_list_remove_node (input->devices, node);
++                free_device (device);
++        }
++        if (input->context != NULL)
++                libinput_unref (input->context);
++        if (input->udev != NULL)
++                udev_unref (input->udev);
++#endif
++        ply_list_free (input->devices);
++        free (input);
++}
++
++bool
++ply_touch_input_set_active (ply_touch_input_t *input,
++                            bool               active)
++{
++#ifdef HAVE_TOUCHSCREEN
++        if (input == NULL)
++                return false;
++        if (input->active == active)
++                return true;
++
++        if (active) {
++                if (libinput_resume (input->context) < 0)
++                        return false;
++
++                input->watch = ply_event_loop_watch_fd (input->loop, libinput_get_fd (input->context),
++                                                        PLY_EVENT_LOOP_FD_STATUS_HAS_DATA,
++                                                        handle_events, on_disconnect, input);
++                if (input->watch == NULL) {
++                        libinput_suspend (input->context);
++                        return false;
++                }
++        } else {
++                ply_event_loop_stop_watching_fd (input->loop, input->watch);
++                input->watch = NULL;
++                libinput_suspend (input->context);
++        }
++
++        input->active = active;
++        /* Device discovery can queue events without making the fd readable. */
++        handle_events (input, libinput_get_fd (input->context));
++        return input->active == active;
++#else
++        return false;
++#endif
++}
++
++ply_list_t *
++ply_touch_input_get_devices (ply_touch_input_t *input)
++{
++        return input != NULL ? input->devices : NULL;
++}
++
++unsigned int
++ply_touch_input_get_keyboard_count (ply_touch_input_t *input)
++{
++        return input != NULL ? input->keyboards : 0;
++}
++
++bool
++ply_touch_device_is_touchscreen (ply_touch_device_t *device)
++{
++        return device->touchscreen;
++}
++
++const char *
++ply_touch_device_get_output_name (ply_touch_device_t *device)
++{
++        return device->output_name;
++}
+diff --git a/src/libply-splash-core/ply-touch-input.h b/src/libply-splash-core/ply-touch-input.h
+new file mode 100644
+index 00000000..19b551b9
+--- /dev/null
++++ b/src/libply-splash-core/ply-touch-input.h
+@@ -0,0 +1,56 @@
++/* ply-touch-input.h - touchscreen device and event handling
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#ifndef PLY_TOUCH_INPUT_H
++#define PLY_TOUCH_INPUT_H
++
++#include <stdbool.h>
++
++#include "ply-event-loop.h"
++#include "ply-list.h"
++
++typedef struct _ply_touch_input ply_touch_input_t;
++typedef struct _ply_touch_device ply_touch_device_t;
++
++typedef enum
++{
++        PLY_TOUCH_DEVICE_ADDED,
++        PLY_TOUCH_DEVICE_REMOVED,
++        PLY_TOUCH_DOWN,
++        PLY_TOUCH_MOTION,
++        PLY_TOUCH_UP,
++        PLY_TOUCH_CANCEL
++} ply_touch_event_type_t;
++
++typedef struct
++{
++        ply_touch_event_type_t type;
++        ply_touch_device_t    *device;
++        int                    slot;
++        /* Calibrated panel coordinates in [0, 1], before display rotation.
++         * Only DOWN and MOTION carry coordinates. */
++        double                 x, y;
++} ply_touch_event_t;
++
++typedef void (*ply_touch_input_handler_t) (void                    *user_data,
++                                           const ply_touch_event_t *event);
++
++#ifndef PLY_HIDE_FUNCTION_DECLARATIONS
++/* Returns NULL when touchscreen support is unavailable. No devices remain
++ * open until set_active(true); failure must leave physical input usable. */
++ply_touch_input_t *ply_touch_input_new (ply_event_loop_t         *loop,
++                                        const char               *seat,
++                                        ply_touch_input_handler_t handler,
++                                        void                     *user_data);
++void ply_touch_input_free (ply_touch_input_t *input);
++bool ply_touch_input_set_active (ply_touch_input_t *input,
++                                 bool               active);
++/* Borrowed devices, valid until their REMOVED callback returns. */
++ply_list_t *ply_touch_input_get_devices (ply_touch_input_t *input);
++unsigned int ply_touch_input_get_keyboard_count (ply_touch_input_t *input);
++bool ply_touch_device_is_touchscreen (ply_touch_device_t *device);
++const char *ply_touch_device_get_output_name (ply_touch_device_t *device);
++#endif
++
++#endif /* PLY_TOUCH_INPUT_H */
+-- 
+2.56.0
+

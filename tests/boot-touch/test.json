@@ -1,12 +1,12 @@
 {
   "name": "initrd-touch-unlock",
   "state": "initrd-touch-unlock",
-  "stateMaterial": "initrd-touch-unlock:source={{sourceHash}}:rotate={{rotate}}",
+  "stateMaterial": "initrd-touch-unlock:source={{sourceHash}}:rotate={{rotate}}:layout={{layout}}:light={{light}}:multi={{multi}}:scale={{scale}}",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     {
       "op": "host",
-      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/boot-touch --arg rotate {{rotate}} --no-out-link --keep-failed --cores 4 --max-jobs 2 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/boot-touch --arg rotate {{rotate}} --argstr layout {{layout}} --arg light {{light}} --arg multi {{multi}} --arg scale {{scale}} --no-out-link --keep-failed --cores 4 --max-jobs 2 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
       "timeout": 3600
     },
     {
@@ -14,6 +14,10 @@
     }
   ],
   "args": {
-    "rotate": "false"
+    "rotate": "false",
+    "layout": "us",
+    "light": "false",
+    "multi": "false",
+    "scale": "1"
   }
 }

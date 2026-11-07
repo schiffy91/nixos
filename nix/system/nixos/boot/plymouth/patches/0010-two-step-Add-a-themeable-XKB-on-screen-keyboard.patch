@@ -1,0 +1,1482 @@
+From 782721461af3b13fec9840ca0fba5a69667e01a3 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 17:27:38 -0800
+Subject: [PATCH 10/12] two-step: Add a themeable XKB on-screen keyboard
+
+Keep geometry, layout translation and touch input separate from rendering. Support configured layout groups, one-shot modifiers, translated actions, configurable colors and custom geometry. Reserve prompt space per mapped display and restore pending prompts on late display discovery. Add geometry tests and configuration documentation.
+---
+ docs/on-screen-keyboard.md                    | 172 ++++++
+ po/POTFILES.in                                |   1 +
+ src/libply-splash-graphics/meson.build        |   5 +
+ .../ply-keyboard-geometry.c                   | 207 +++++++
+ .../ply-keyboard-geometry.h                   |  43 ++
+ .../ply-on-screen-keyboard.c                  | 520 ++++++++++++++++++
+ .../ply-on-screen-keyboard.h                  |  36 ++
+ src/plugins/splash/two-step/plugin.c          | 104 ++++
+ tests/meson.build                             |  15 +
+ tests/test-keyboard-geometry.c                | 111 ++++
+ 10 files changed, 1214 insertions(+)
+ create mode 100644 docs/on-screen-keyboard.md
+ create mode 100644 src/libply-splash-graphics/ply-keyboard-geometry.c
+ create mode 100644 src/libply-splash-graphics/ply-keyboard-geometry.h
+ create mode 100644 src/libply-splash-graphics/ply-on-screen-keyboard.c
+ create mode 100644 src/libply-splash-graphics/ply-on-screen-keyboard.h
+ create mode 100644 tests/test-keyboard-geometry.c
+
+diff --git a/docs/on-screen-keyboard.md b/docs/on-screen-keyboard.md
+new file mode 100644
+index 00000000..11a15bb3
+--- /dev/null
++++ b/docs/on-screen-keyboard.md
+@@ -0,0 +1,172 @@
++# On-screen keyboard
++
++The two-step splash plugin can display a touch keyboard while asking for a
++password or an ordinary text answer. It appears automatically when a mapped
++touchscreen is present and no typing keyboard is attached. With a physical
++keyboard attached, touching the screen reveals it; that first touch does not
++type a key. Selection happens on release. Dragging out of a key, cancellation,
++device removal, or leaving the prompt cancels the pending selection.
++
++Build with `-Dtouchscreen=enabled` to require libinput and udev, `auto` to use
++them when available, or `disabled` to omit touchscreen support. Physical input
++does not depend on this option. The input provider, XKB layout model, geometry
++and widget are reusable library components; two-step is the first consumer.
++Script themes do not gain a keyboard automatically.
++
++## Keyboard configuration and input
++
++The widget uses the device manager's configured XKB keymap, including its model,
++layouts, variants and options. Distributions must include XKB keyboard data and
++the desired compose tables in the initramfs and supply XKB settings in
++`/etc/vconsole.conf`, for example:
++
++```
++XKBMODEL=pc105
++XKBLAYOUT=us,de,fr
++XKBVARIANT=,,
++XKBOPTIONS=
++```
++
++Use the same configuration for physical and software input. A legacy `KEYMAP`
++setting alone does not necessarily identify an XKB map. If Plymouth has no XKB
++map, the widget is unavailable; it does not silently assume US input. The daemon
++needs a UTF-8 locale for international input, and the initramfs font must contain
++the corresponding glyphs.
++
++The layout key cycles through configured XKB groups. Shift and AltGr latch until
++the next ordinary key; touching them again cancels the latch. Caps uses XKB lock
++semantics. Software modifier state is independent of physical key presses, so a
++latched touch modifier does not change a physical keyboard's input. The keyboard
++shows its own active layout and Caps state. The existing hardware indicators
++continue to describe physical input.
++
++Dead keys and XKB compose sequences produce UTF-8 text. Pending composition and
++latched modifiers clear when the prompt is dismissed. No separate password
++buffer is maintained by the widget: text goes through Plymouth's existing
++input, backspace and submission handlers. The new software-input entrypoint
++rejects malformed text before changing the line and does not log input bytes.
++Existing physical-input debugging options still have their existing behavior.
++
++The default geometry assumes the usual ISO modifier positions. When XKB options
++remap a modifier to a different role, a custom geometry can choose the matching
++`Behavior` (for example, `latch` for Caps remapped to Control). Action labels
++follow the configured keysym rather than assuming a key name implies its action.
++
++The initial implementation does not provide a candidate-selection IME,
++handwriting, prediction, clipboard input, or press-and-hold repetition. Installing
++a language's XKB map is not equivalent to implementing an IME for that language.
++
++## Touchscreen mapping
++
++Libinput supplies device calibration and normalized coordinates. The widget
++then applies the display's rotation and logical scale before hit testing.
++
++With one display, an unmapped touchscreen uses that display. With multiple
++displays, configure the input device's `WL_OUTPUT` udev property to a DRM
++connector name, for example `eDP-1`. A card-qualified name such as
++`card0-eDP-1` disambiguates matching connector names on multiple GPUs. The
++renderer checks all connectors belonging to a logical head, including cloned
++and tiled outputs. An absent or ambiguous association is not guessed from
++resolution; the corresponding touchscreen will not type until its association
++is unambiguous.
++
++For firmware input devices which claim to be keyboards but cannot be used for
++typing, distributions can set `PLYMOUTH_IGNORE_KEYBOARD=1`. This changes only
++automatic touch-keyboard visibility, not physical event routing. Device-specific
++rules belong to the distribution, not to Plymouth's widget. Include relevant
++rules and touchscreen drivers in the initramfs.
++
++## Appearance
++
++Add an `[OnScreenKeyboard]` group to the theme's `.plymouth` file. Colors are
++24-bit `0xRRGGBB`. Dimensions use logical pixels; renderer scaling applies once.
++These two examples change appearance without rebuilding Plymouth.
++
++Dark:
++
++```ini
++[OnScreenKeyboard]
++BackgroundColor=0x23262e
++KeyColor=0x0e141b
++ActionColor=0x000000
++SelectedColor=0x1a9fff
++TextColor=0xffffff
++Font=Sans
++FontSize=18
++MaxWidth=1280
++HeightPercent=52
++Gap=4
++```
++
++Light:
++
++```ini
++[OnScreenKeyboard]
++BackgroundColor=0xe8e8ec
++KeyColor=0xffffff
++ActionColor=0xc8c8d0
++SelectedColor=0x99c1f1
++TextColor=0x16161b
++Font=Sans
++FontSize=20
++MaxWidth=1100
++HeightPercent=48
++Gap=6
++```
++
++The dark example gives the defaults. `FontSize` accepts 6–48, `MaxWidth`
++240–8192, `HeightPercent` 20–70 and `Gap` 0–32. Invalid values use defaults.
++Labels shrink to fit their actual key bounds. Action labels use gettext;
++character labels come from XKB, never from a translated character table.
++
++## Geometry
++
++The default geometry covers ISO key positions, including the extra key needed
++by several European layouts. Character assignment remains XKB's responsibility.
++To replace the arrangement, set `Geometry=/absolute/path/to/layout.keyboard`
++and include that file in the initramfs. Invalid geometry falls back to the
++default arrangement.
++
++Geometry uses a normal Plymouth key file. `[Keyboard Geometry]` defines
++positive `Columns` and `Rows` up to 4096. Each `[Key NAME]` group defines `X`,
++`Y`, `Width` and `Height` in those units. `NAME` is an XKB key name such as
++`AD01`, not a character such as `q`. Width and height default to four units.
++The standard geometry uses a 60 by 20 grid: four units equal one ordinary key.
++
++`Behavior` is `key` (default), `latch` for a held modifier, `lock` for a toggle
++such as Caps, or `group` to cycle layouts. A group-switch key does not need an
++XKB keycode. Geometry is limited to 128 nonoverlapping keys, all within the
++declared grid. For example, this fragment places Shift and the first two keys
++of the bottom letter row; a complete file must provide all keys its users need:
++
++```ini
++[Keyboard Geometry]
++Columns=60
++Rows=20
++
++[Key LFSH]
++X=0
++Y=12
++Width=6
++Behavior=latch
++
++[Key LSGT]
++X=6
++Y=12
++
++[Key AB01]
++X=10
++Y=12
++```
++
++Drawing and hit testing use the same computed rectangles. Changing key
++placement, spacing or overall size therefore changes the visible and touchable
++areas together.
++
++## Validation
++
++`keyboard-layout`, `keyboard` and `keyboard-geometry` are Meson tests for input,
++ownership, modifiers, composition, bounds and configuration. They complement
++boot tests; passing them does not establish touchscreen, display hotplug or
++encrypted-disk unlock behavior. The submission's test report records the boot
++configurations actually exercised and any remaining limitations.
+diff --git a/po/POTFILES.in b/po/POTFILES.in
+index d9f9d05f..51e23143 100644
+--- a/po/POTFILES.in
++++ b/po/POTFILES.in
+@@ -3,6 +3,7 @@
+ # For now we only translate the user visible strings in some splash plugins
+ # (the daemon and commandline utils output is untranslated for now)
+ src/plugins/splash/two-step/plugin.c
++src/libply-splash-graphics/ply-on-screen-keyboard.c
+ 
+ themes/bgrt/bgrt.plymouth.desktop
+ themes/spinner/spinner.plymouth.desktop
+diff --git a/src/libply-splash-graphics/meson.build b/src/libply-splash-graphics/meson.build
+index 977ec633..73ba230f 100644
+--- a/src/libply-splash-graphics/meson.build
++++ b/src/libply-splash-graphics/meson.build
+@@ -5,6 +5,8 @@ libply_splash_graphics_sources = files(
+   'ply-entry.c',
+   'ply-image.c',
+   'ply-keymap-icon.c',
++  'ply-keyboard-geometry.c',
++  'ply-on-screen-keyboard.c',
+   'ply-progress-animation.c',
+   'ply-progress-bar.c',
+   'ply-throbber.c',
+@@ -14,6 +16,7 @@ libply_splash_graphics_deps = [
+   libply_splash_core_dep,
+   lm_dep,
+   libpng_dep,
++  xkbcommon_dep,
+ ]
+ 
+ libply_splash_graphics_cflags = [
+@@ -74,6 +77,8 @@ libply_splash_graphics_headers = files(
+   'ply-entry.h',
+   'ply-image.h',
+   'ply-keymap-icon.h',
++  'ply-keyboard-geometry.h',
++  'ply-on-screen-keyboard.h',
+   'ply-keymap-metadata.h',
+   'ply-label-plugin.h',
+   'ply-label.h',
+diff --git a/src/libply-splash-graphics/ply-keyboard-geometry.c b/src/libply-splash-graphics/ply-keyboard-geometry.c
+new file mode 100644
+index 00000000..6db8113b
+--- /dev/null
++++ b/src/libply-splash-graphics/ply-keyboard-geometry.c
+@@ -0,0 +1,207 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#include "ply-keyboard-geometry.h"
++
++#include <limits.h>
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#define MAX_KEYS 128
++#define MAX_UNITS 4096
++
++struct _ply_keyboard_geometry
++{
++        ply_keyboard_key_t keys[MAX_KEYS];
++        size_t             count;
++        unsigned long      columns, rows;
++        bool               valid;
++};
++
++/* ISO key positions in quarter-key units. XKB supplies all characters. */
++#define KEY(name, x, y, width) { name, PLY_KEYBOARD_KEY, x, y, width, 4 }
++static const ply_keyboard_key_t default_keys[] = {
++        KEY ("TLDE", 0,                  0,  4),  KEY ("AE01", 4,  0,           4), KEY ("AE02", 8,  0,  4), KEY ("AE03", 12, 0,  4),
++        KEY ("AE04", 16,                 0,  4),  KEY ("AE05", 20, 0,           4), KEY ("AE06", 24, 0,  4), KEY ("AE07", 28, 0,  4),
++        KEY ("AE08", 32,                 0,  4),  KEY ("AE09", 36, 0,           4), KEY ("AE10", 40, 0,  4), KEY ("AE11", 44, 0,  4),
++        KEY ("AE12", 48,                 0,  4),  KEY ("BKSP", 52, 0,           8),
++        KEY ("TAB",  0,                  4,  4),  KEY ("AD01", 4,  4,           4), KEY ("AD02", 8,  4,  4), KEY ("AD03", 12, 4,  4),
++        KEY ("AD04", 16,                 4,  4),  KEY ("AD05", 20, 4,           4), KEY ("AD06", 24, 4,  4), KEY ("AD07", 28, 4,  4),
++        KEY ("AD08", 32,                 4,  4),  KEY ("AD09", 36, 4,           4), KEY ("AD10", 40, 4,  4), KEY ("AD11", 44, 4,  4),
++        KEY ("AD12", 48,                 4,  4),  KEY ("BKSL", 52, 4,           8),
++        { "CAPS",    PLY_KEYBOARD_LOCK,  0,  8,   7,           4 },
++        KEY ("AC01", 7,                  8,  4),  KEY ("AC02", 11, 8,           4), KEY ("AC03", 15, 8,  4), KEY ("AC04", 19, 8,  4),
++        KEY ("AC05", 23,                 8,  4),  KEY ("AC06", 27, 8,           4), KEY ("AC07", 31, 8,  4), KEY ("AC08", 35, 8,  4),
++        KEY ("AC09", 39,                 8,  4),  KEY ("AC10", 43, 8,           4), KEY ("AC11", 47, 8,  4),
++        { "LFSH",    PLY_KEYBOARD_LATCH, 0,  12,  6,           4 },KEY ("LSGT", 6,  12,          4),
++        KEY ("AB01", 10,                 12, 4),  KEY ("AB02", 14, 12,          4), KEY ("AB03", 18, 12, 4), KEY ("AB04", 22, 12, 4),
++        KEY ("AB05", 26,                 12, 4),  KEY ("AB06", 30, 12,          4), KEY ("AB07", 34, 12, 4), KEY ("AB08", 38, 12, 4),
++        KEY ("AB09", 42,                 12, 4),  KEY ("AB10", 46, 12,          4),
++        { "RTSH",    PLY_KEYBOARD_LATCH, 50, 12,  10,          4 },
++        { "GROUP",   PLY_KEYBOARD_GROUP, 0,  16,  10,          4 },
++        { "RALT",    PLY_KEYBOARD_LATCH, 10, 16,  8,           4 },
++        KEY ("SPCE", 18,                 16, 24), KEY ("RTRN", 42, 16,          18)
++};
++#undef KEY
++
++ply_keyboard_geometry_t *
++ply_keyboard_geometry_new (void)
++{
++        ply_keyboard_geometry_t *geometry = calloc (1, sizeof(*geometry));
++
++        if (geometry == NULL)
++                return NULL;
++        memcpy (geometry->keys, default_keys, sizeof(default_keys));
++        geometry->count = sizeof(default_keys) / sizeof(default_keys[0]);
++        geometry->columns = 60;
++        geometry->rows = 20;
++        geometry->valid = true;
++        return geometry;
++}
++
++typedef struct
++{
++        ply_keyboard_geometry_t *geometry;
++        ply_key_file_t          *file;
++} load_data_t;
++
++static void
++load_key (const char *group,
++          const char *entry,
++          const char *value,
++          void       *user_data)
++{
++        load_data_t *data = user_data;
++        ply_keyboard_geometry_t *geometry = data->geometry;
++        ply_keyboard_key_t *key;
++        char *behavior;
++        size_t i;
++
++        if (strncmp (group, "Key ", 4) != 0 || !geometry->valid)
++                return;
++        for (i = 0; i < geometry->count; i++) {
++                if (strcmp (geometry->keys[i].name, group + 4) == 0)
++                        return;
++        }
++        if (geometry->count == MAX_KEYS || strlen (group + 4) == 0 || strlen (group + 4) >= sizeof(key->name)) {
++                geometry->valid = false;
++                return;
++        }
++
++        key = &geometry->keys[geometry->count++];
++        strcpy (key->name, group + 4);
++        key->x = ply_key_file_get_ulong (data->file, group, "X", ULONG_MAX);
++        key->y = ply_key_file_get_ulong (data->file, group, "Y", ULONG_MAX);
++        key->width = ply_key_file_get_ulong (data->file, group, "Width", 4);
++        key->height = ply_key_file_get_ulong (data->file, group, "Height", 4);
++        behavior = ply_key_file_get_value (data->file, group, "Behavior");
++        if (behavior == NULL || strcmp (behavior, "key") == 0)
++                key->behavior = PLY_KEYBOARD_KEY;
++        else if (strcmp (behavior, "latch") == 0)
++                key->behavior = PLY_KEYBOARD_LATCH;
++        else if (strcmp (behavior, "lock") == 0)
++                key->behavior = PLY_KEYBOARD_LOCK;
++        else if (strcmp (behavior, "group") == 0)
++                key->behavior = PLY_KEYBOARD_GROUP;
++        else
++                geometry->valid = false;
++        free (behavior);
++
++        if (key->width == 0 || key->height == 0 || key->width > geometry->columns ||
++            key->height > geometry->rows || key->x > geometry->columns - key->width ||
++            key->y > geometry->rows - key->height)
++                geometry->valid = false;
++}
++
++ply_keyboard_geometry_t *
++ply_keyboard_geometry_load (ply_key_file_t *file)
++{
++        ply_keyboard_geometry_t *geometry = calloc (1, sizeof(*geometry));
++        load_data_t data = { geometry, file };
++        size_t i, j;
++
++        if (geometry == NULL)
++                return NULL;
++        geometry->columns = ply_key_file_get_ulong (file, "Keyboard Geometry", "Columns", 0);
++        geometry->rows = ply_key_file_get_ulong (file, "Keyboard Geometry", "Rows", 0);
++        geometry->valid = geometry->columns > 0 && geometry->columns <= MAX_UNITS &&
++                          geometry->rows > 0 && geometry->rows <= MAX_UNITS;
++        ply_key_file_foreach_entry (file, load_key, &data);
++        for (i = 0; geometry->valid && i < geometry->count; i++) {
++                const ply_keyboard_key_t *a = &geometry->keys[i];
++                for (j = i + 1; j < geometry->count; j++) {
++                        const ply_keyboard_key_t *b = &geometry->keys[j];
++                        if (a->x < b->x + b->width && b->x < a->x + a->width &&
++                            a->y < b->y + b->height && b->y < a->y + a->height)
++                                geometry->valid = false;
++                }
++        }
++        if (!geometry->valid || geometry->count == 0) {
++                free (geometry);
++                return NULL;
++        }
++        return geometry;
++}
++
++void
++ply_keyboard_geometry_free (ply_keyboard_geometry_t *geometry)
++{
++        free (geometry);
++}
++
++size_t
++ply_keyboard_geometry_get_key_count (ply_keyboard_geometry_t *geometry)
++{
++        return geometry->count;
++}
++
++const ply_keyboard_key_t *
++ply_keyboard_geometry_get_key (ply_keyboard_geometry_t *geometry,
++                               size_t                   index)
++{
++        return index < geometry->count ? &geometry->keys[index] : NULL;
++}
++
++bool
++ply_keyboard_geometry_get_rectangle (ply_keyboard_geometry_t *geometry,
++                                     size_t                   index,
++                                     const ply_rectangle_t   *area,
++                                     double                   gap,
++                                     ply_rectangle_t         *rectangle)
++{
++        const ply_keyboard_key_t *key = ply_keyboard_geometry_get_key (geometry, index);
++        double x, y, right, bottom, inset;
++
++        if (key == NULL || area->width == 0 || area->height == 0 || !isfinite (gap) || gap < 0)
++                return false;
++        x = area->x + (double) key->x * area->width / geometry->columns;
++        y = area->y + (double) key->y * area->height / geometry->rows;
++        right = area->x + (double) (key->x + key->width) * area->width / geometry->columns;
++        bottom = area->y + (double) (key->y + key->height) * area->height / geometry->rows;
++        inset = fmin (gap, fmin (right - x, bottom - y) * .4) / 2;
++        rectangle->x = ceil (x + inset);
++        rectangle->y = ceil (y + inset);
++        if (floor (right - inset) <= rectangle->x || floor (bottom - inset) <= rectangle->y)
++                return false;
++        rectangle->width = floor (right - inset) - rectangle->x;
++        rectangle->height = floor (bottom - inset) - rectangle->y;
++        return true;
++}
++
++int
++ply_keyboard_geometry_hit (ply_keyboard_geometry_t *geometry,
++                           const ply_rectangle_t   *area,
++                           double                   gap,
++                           double                   x,
++                           double                   y)
++{
++        size_t i;
++        ply_rectangle_t rectangle;
++
++        for (i = 0; i < geometry->count; i++) {
++                if (ply_keyboard_geometry_get_rectangle (geometry, i, area, gap, &rectangle) &&
++                    x >= rectangle.x && x < rectangle.x + rectangle.width &&
++                    y >= rectangle.y && y < rectangle.y + rectangle.height)
++                        return i;
++        }
++        return -1;
++}
+diff --git a/src/libply-splash-graphics/ply-keyboard-geometry.h b/src/libply-splash-graphics/ply-keyboard-geometry.h
+new file mode 100644
+index 00000000..b44a8fe9
+--- /dev/null
++++ b/src/libply-splash-graphics/ply-keyboard-geometry.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#ifndef PLY_KEYBOARD_GEOMETRY_H
++#define PLY_KEYBOARD_GEOMETRY_H
++
++#include "ply-key-file.h"
++#include "ply-rectangle.h"
++
++typedef enum
++{
++        PLY_KEYBOARD_KEY,
++        PLY_KEYBOARD_LATCH,
++        PLY_KEYBOARD_LOCK,
++        PLY_KEYBOARD_GROUP
++} ply_keyboard_key_behavior_t;
++
++typedef struct
++{
++        char                        name[32];
++        ply_keyboard_key_behavior_t behavior;
++        unsigned long               x, y, width, height;
++} ply_keyboard_key_t;
++
++typedef struct _ply_keyboard_geometry ply_keyboard_geometry_t;
++
++#ifndef PLY_HIDE_FUNCTION_DECLARATIONS
++ply_keyboard_geometry_t *ply_keyboard_geometry_new (void);
++ply_keyboard_geometry_t *ply_keyboard_geometry_load (ply_key_file_t *file);
++void ply_keyboard_geometry_free (ply_keyboard_geometry_t *geometry);
++size_t ply_keyboard_geometry_get_key_count (ply_keyboard_geometry_t *geometry);
++const ply_keyboard_key_t *ply_keyboard_geometry_get_key (ply_keyboard_geometry_t *geometry,
++                                                         size_t                   index);
++bool ply_keyboard_geometry_get_rectangle (ply_keyboard_geometry_t *geometry,
++                                          size_t                   index,
++                                          const ply_rectangle_t   *area,
++                                          double                   gap,
++                                          ply_rectangle_t         *rectangle);
++int ply_keyboard_geometry_hit (ply_keyboard_geometry_t *geometry,
++                               const ply_rectangle_t   *area,
++                               double                   gap,
++                               double                   x,
++                               double                   y);
++#endif
++#endif
+diff --git a/src/libply-splash-graphics/ply-on-screen-keyboard.c b/src/libply-splash-graphics/ply-on-screen-keyboard.c
+new file mode 100644
+index 00000000..b0a82425
+--- /dev/null
++++ b/src/libply-splash-graphics/ply-on-screen-keyboard.c
+@@ -0,0 +1,520 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#include "ply-on-screen-keyboard.h"
++
++#include <libintl.h>
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <xkbcommon/xkbcommon-keysyms.h>
++
++#include "ply-keyboard-geometry.h"
++#include "ply-keyboard-layout.h"
++#include "ply-label.h"
++#include "ply-list.h"
++#include "ply-logger.h"
++#include "ply-touch-input.h"
++
++#define _(text) dgettext ("plymouth", text)
++#define SETTINGS "OnScreenKeyboard"
++
++struct _ply_on_screen_keyboard
++{
++        ply_keyboard_geometry_t         *geometry;
++        ply_keyboard_layout_t           *layout;
++        ply_keyboard_t                  *keyboard;
++        ply_touch_input_t               *touch;
++        ply_list_t                      *displays;
++        ply_label_t                     *label;
++        ply_on_screen_keyboard_changed_t changed;
++        void                            *user_data;
++        bool                            *latched;
++        bool                             active, prompt, password, requested;
++        ply_touch_device_t              *pressed_device;
++        ply_pixel_display_t             *pressed_display;
++        int                              pressed_slot, pressed_key;
++        uint32_t                         background_color, key_color, action_color, selected_color, text_color;
++        unsigned long                    max_width, height_percent, gap, font_size;
++        char                            *font;
++};
++
++static void
++cancel_touch (ply_on_screen_keyboard_t *keyboard)
++{
++        keyboard->pressed_device = NULL;
++        keyboard->pressed_display = NULL;
++        keyboard->pressed_slot = keyboard->pressed_key = -1;
++}
++
++static xkb_keycode_t
++keycode_for_index (ply_on_screen_keyboard_t *keyboard,
++                   size_t                    index)
++{
++        const ply_keyboard_key_t *key = ply_keyboard_geometry_get_key (keyboard->geometry, index);
++        struct xkb_keymap *keymap = xkb_state_get_keymap (ply_keyboard_layout_get_state (keyboard->layout));
++
++        return xkb_keymap_key_by_name (keymap, key->name);
++}
++
++static void
++release_latches (ply_on_screen_keyboard_t *keyboard)
++{
++        ply_buffer_t *output;
++        size_t i;
++
++        if (keyboard->layout == NULL)
++                return;
++        output = ply_buffer_new ();
++        for (i = 0; i < ply_keyboard_geometry_get_key_count (keyboard->geometry); i++) {
++                if (keyboard->latched[i]) {
++                        ply_keyboard_layout_key (keyboard->layout, keycode_for_index (keyboard, i), XKB_KEY_UP, output);
++                        keyboard->latched[i] = false;
++                }
++        }
++        ply_buffer_free (output);
++}
++
++static ply_pixel_display_t *
++display_for_device (ply_on_screen_keyboard_t *keyboard,
++                    ply_touch_device_t       *device)
++{
++        const char *name = ply_touch_device_get_output_name (device);
++        ply_list_node_t *node;
++        ply_pixel_display_t *match = NULL;
++        unsigned int matches = 0;
++
++        for (node = ply_list_get_first_node (keyboard->displays); node != NULL; node = ply_list_get_next_node (keyboard->displays, node)) {
++                ply_pixel_display_t *display = ply_list_node_get_data (node);
++
++                if (name == NULL || ply_renderer_head_has_output (ply_pixel_display_get_renderer (display),
++                                                                  ply_pixel_display_get_renderer_head (display), name)) {
++                        matches++;
++                        match = display;
++                }
++        }
++        /* An unspecified or ambiguous association must never type on a
++         * different monitor. A single output needs no explicit mapping. */
++        return matches == 1 ? match : NULL;
++}
++
++bool
++ply_on_screen_keyboard_is_visible (ply_on_screen_keyboard_t *keyboard,
++                                   ply_pixel_display_t      *display)
++{
++        ply_list_t *devices;
++        ply_list_node_t *node;
++
++        if (keyboard == NULL || !keyboard->active || !keyboard->prompt || keyboard->layout == NULL ||
++            (!keyboard->requested && ply_touch_input_get_keyboard_count (keyboard->touch) > 0))
++                return false;
++        devices = ply_touch_input_get_devices (keyboard->touch);
++        if (devices == NULL)
++                return false;
++        for (node = ply_list_get_first_node (devices); node != NULL; node = ply_list_get_next_node (devices, node)) {
++                ply_touch_device_t *device = ply_list_node_get_data (node);
++                if (ply_touch_device_is_touchscreen (device) && display_for_device (keyboard, device) == display)
++                        return true;
++        }
++        return false;
++}
++
++unsigned long
++ply_on_screen_keyboard_get_height (ply_on_screen_keyboard_t *keyboard,
++                                   ply_pixel_display_t      *display)
++{
++        if (!ply_on_screen_keyboard_is_visible (keyboard, display))
++                return 0;
++        return ply_pixel_display_get_height (display) * keyboard->height_percent / 100;
++}
++
++static ply_rectangle_t
++keyboard_area (ply_on_screen_keyboard_t *keyboard,
++               ply_pixel_display_t      *display)
++{
++        unsigned long width = ply_pixel_display_get_width (display);
++        unsigned long height = ply_pixel_display_get_height (display);
++        unsigned long keyboard_width = fmin (width * .96, keyboard->max_width);
++        unsigned long keyboard_height = height * keyboard->height_percent / 100;
++
++        return (ply_rectangle_t) { .x = (width - keyboard_width) / 2,
++                                   .y = height - keyboard_height + keyboard->gap,
++                                   .width = keyboard_width,
++                                   .height = keyboard_height > 2 * keyboard->gap ? keyboard_height - 2 * keyboard->gap : 0 };
++}
++
++static int
++hit (ply_on_screen_keyboard_t *keyboard,
++     ply_pixel_display_t      *display,
++     double                    x,
++     double                    y)
++{
++        ply_pixel_buffer_t *buffer = ply_renderer_get_buffer_for_head (ply_pixel_display_get_renderer (display),
++                                                                       ply_pixel_display_get_renderer_head (display));
++        ply_rectangle_t area = keyboard_area (keyboard, display);
++        double a = x, b = y;
++
++        if (buffer == NULL)
++                return -1;
++        switch (ply_pixel_buffer_get_device_rotation (buffer)) {
++        case PLY_PIXEL_BUFFER_ROTATE_CLOCKWISE: x = b; y = 1 - a; break;
++        case PLY_PIXEL_BUFFER_ROTATE_COUNTER_CLOCKWISE: x = 1 - b; y = a; break;
++        case PLY_PIXEL_BUFFER_ROTATE_UPSIDE_DOWN: x = 1 - a; y = 1 - b; break;
++        default: break;
++        }
++        return ply_keyboard_geometry_hit (keyboard->geometry, &area, keyboard->gap,
++                                          x * ply_pixel_display_get_width (display), y * ply_pixel_display_get_height (display));
++}
++
++static void
++activate_key (ply_on_screen_keyboard_t *keyboard,
++              int                       index)
++{
++        const ply_keyboard_key_t *key;
++        ply_buffer_t *output;
++        xkb_keycode_t keycode;
++        struct xkb_state *state;
++
++        if (index < 0 || keyboard->layout == NULL || keyboard->keyboard == NULL)
++                return;
++        key = ply_keyboard_geometry_get_key (keyboard->geometry, index);
++        state = ply_keyboard_layout_get_state (keyboard->layout);
++        if (key->behavior == PLY_KEYBOARD_GROUP) {
++                xkb_layout_index_t group = xkb_state_serialize_layout (state, XKB_STATE_LAYOUT_EFFECTIVE);
++                xkb_layout_index_t count = xkb_keymap_num_layouts (xkb_state_get_keymap (state));
++
++                release_latches (keyboard);
++                ply_keyboard_layout_set_group (keyboard->layout, (group + 1) % count);
++                return;
++        }
++        keycode = keycode_for_index (keyboard, index);
++        if (keycode == XKB_KEYCODE_INVALID)
++                return;
++        output = ply_buffer_new ();
++        if (key->behavior == PLY_KEYBOARD_LATCH) {
++                keyboard->latched[index] = !keyboard->latched[index];
++                ply_keyboard_layout_key (keyboard->layout, keycode,
++                                         keyboard->latched[index] ? XKB_KEY_DOWN : XKB_KEY_UP, output);
++        } else {
++                ply_keyboard_layout_key (keyboard->layout, keycode, XKB_KEY_DOWN, output);
++                ply_keyboard_layout_key (keyboard->layout, keycode, XKB_KEY_UP, output);
++                if (key->behavior == PLY_KEYBOARD_KEY)
++                        release_latches (keyboard);
++        }
++        /* Delivery may synchronously change or dismiss the prompt. All local
++         * modifier transitions must finish before invoking its handlers. */
++        if (ply_buffer_get_size (output) > 0)
++                ply_keyboard_input (keyboard->keyboard, ply_buffer_get_bytes (output), ply_buffer_get_size (output));
++        ply_buffer_clear (output);
++        ply_buffer_free (output);
++}
++
++static void
++on_touch (void                    *user_data,
++          const ply_touch_event_t *event)
++{
++        ply_on_screen_keyboard_t *keyboard = user_data;
++        ply_pixel_display_t *display;
++
++        if (event->type == PLY_TOUCH_DEVICE_ADDED || event->type == PLY_TOUCH_DEVICE_REMOVED) {
++                cancel_touch (keyboard);
++                keyboard->changed (keyboard->user_data);
++                return;
++        }
++        if (!keyboard->active || !keyboard->prompt || keyboard->layout == NULL)
++                return;
++        display = display_for_device (keyboard, event->device);
++        if (display == NULL)
++                return;
++        if (event->type == PLY_TOUCH_DOWN && keyboard->pressed_device == NULL) {
++                bool visible = ply_on_screen_keyboard_is_visible (keyboard, display);
++
++                keyboard->requested = true;
++                keyboard->pressed_device = event->device;
++                keyboard->pressed_display = display;
++                keyboard->pressed_slot = event->slot;
++                keyboard->pressed_key = visible ? hit (keyboard, display, event->x, event->y) : -1;
++        } else if (keyboard->pressed_device == event->device && keyboard->pressed_slot == event->slot) {
++                if (event->type == PLY_TOUCH_MOTION) {
++                        if (hit (keyboard, display, event->x, event->y) != keyboard->pressed_key)
++                                keyboard->pressed_key = -1;
++                } else if (event->type == PLY_TOUCH_UP) {
++                        int index = keyboard->pressed_key;
++
++                        cancel_touch (keyboard);
++                        activate_key (keyboard, index);
++                } else if (event->type == PLY_TOUCH_CANCEL) {
++                        cancel_touch (keyboard);
++                }
++        }
++        keyboard->changed (keyboard->user_data);
++}
++
++static unsigned long
++setting (ply_key_file_t *settings,
++         const char     *name,
++         unsigned long   fallback,
++         unsigned long   minimum,
++         unsigned long   maximum)
++{
++        unsigned long value = ply_key_file_get_ulong (settings, SETTINGS, name, fallback);
++
++        return value >= minimum && value <= maximum ? value : fallback;
++}
++
++ply_on_screen_keyboard_t *
++ply_on_screen_keyboard_new (ply_key_file_t                  *settings,
++                            ply_on_screen_keyboard_changed_t changed,
++                            void                            *user_data)
++{
++        ply_on_screen_keyboard_t *keyboard = calloc (1, sizeof(*keyboard));
++        char *geometry_path;
++
++        if (keyboard == NULL)
++                return NULL;
++        keyboard->geometry = ply_keyboard_geometry_new ();
++        geometry_path = ply_key_file_get_value (settings, SETTINGS, "Geometry");
++        if (geometry_path != NULL) {
++                ply_key_file_t *file = ply_key_file_new (geometry_path);
++                ply_keyboard_geometry_t *geometry = NULL;
++
++                if (ply_key_file_load (file))
++                        geometry = ply_keyboard_geometry_load (file);
++                if (geometry != NULL) {
++                        ply_keyboard_geometry_free (keyboard->geometry);
++                        keyboard->geometry = geometry;
++                } else {
++                        ply_error ("Invalid on-screen keyboard geometry; using the default");
++                }
++                ply_key_file_free (file);
++                free (geometry_path);
++        }
++        if (keyboard->geometry == NULL) {
++                free (keyboard);
++                return NULL;
++        }
++        keyboard->latched = calloc (ply_keyboard_geometry_get_key_count (keyboard->geometry), sizeof(bool));
++        if (keyboard->latched == NULL) {
++                ply_keyboard_geometry_free (keyboard->geometry);
++                free (keyboard);
++                return NULL;
++        }
++        keyboard->background_color = setting (settings, "BackgroundColor", 0x23262e, 0, 0xffffff);
++        keyboard->key_color = setting (settings, "KeyColor", 0x0e141b, 0, 0xffffff);
++        keyboard->action_color = setting (settings, "ActionColor", 0, 0, 0xffffff);
++        keyboard->selected_color = setting (settings, "SelectedColor", 0x1a9fff, 0, 0xffffff);
++        keyboard->text_color = setting (settings, "TextColor", 0xffffff, 0, 0xffffff);
++        keyboard->max_width = setting (settings, "MaxWidth", 1280, 240, 8192);
++        keyboard->height_percent = setting (settings, "HeightPercent", 52, 20, 70);
++        keyboard->gap = setting (settings, "Gap", 4, 0, 32);
++        keyboard->font_size = setting (settings, "FontSize", 18, 6, 48);
++        keyboard->font = ply_key_file_get_value (settings, SETTINGS, "Font");
++        if (keyboard->font == NULL)
++                keyboard->font = strdup ("Sans");
++        keyboard->displays = ply_list_new ();
++        keyboard->label = ply_label_new ();
++        keyboard->changed = changed;
++        keyboard->user_data = user_data;
++        cancel_touch (keyboard);
++        keyboard->touch = ply_touch_input_new (ply_event_loop_get_default (), "seat0", on_touch, keyboard);
++        return keyboard;
++}
++
++void
++ply_on_screen_keyboard_free (ply_on_screen_keyboard_t *keyboard)
++{
++        if (keyboard == NULL)
++                return;
++        ply_touch_input_free (keyboard->touch);
++        ply_keyboard_layout_free (keyboard->layout);
++        ply_keyboard_geometry_free (keyboard->geometry);
++        ply_list_free (keyboard->displays);
++        ply_label_free (keyboard->label);
++        free (keyboard->font);
++        free (keyboard->latched);
++        free (keyboard);
++}
++
++void
++ply_on_screen_keyboard_set_keyboard (ply_on_screen_keyboard_t *keyboard,
++                                     ply_keyboard_t           *input)
++{
++        const char *locale;
++
++        if (keyboard == NULL || keyboard->keyboard == input)
++                return;
++        cancel_touch (keyboard);
++        release_latches (keyboard);
++        ply_keyboard_layout_free (keyboard->layout);
++        keyboard->layout = NULL;
++        keyboard->keyboard = input;
++        locale = getenv ("LC_ALL");
++        if (locale == NULL) locale = getenv ("LC_CTYPE");
++        if (locale == NULL) locale = getenv ("LANG");
++        if (locale == NULL) locale = "C";
++        if (input != NULL && ply_keyboard_get_keymap (input) != NULL)
++                keyboard->layout = ply_keyboard_layout_new (ply_keyboard_get_keymap (input), locale);
++}
++
++void
++ply_on_screen_keyboard_set_active (ply_on_screen_keyboard_t *keyboard,
++                                   bool                      active)
++{
++        if (keyboard == NULL)
++                return;
++        keyboard->active = active;
++        if (!active) {
++                cancel_touch (keyboard);
++                release_latches (keyboard);
++                if (keyboard->layout != NULL)
++                        ply_keyboard_layout_reset_compose (keyboard->layout);
++        }
++        ply_touch_input_set_active (keyboard->touch, active);
++}
++
++void
++ply_on_screen_keyboard_set_prompt (ply_on_screen_keyboard_t *keyboard,
++                                   bool                      prompt,
++                                   bool                      password)
++{
++        if (keyboard == NULL)
++                return;
++        keyboard->password = password;
++        if (keyboard->prompt != prompt) {
++                cancel_touch (keyboard);
++                release_latches (keyboard);
++                if (keyboard->layout != NULL)
++                        ply_keyboard_layout_reset_compose (keyboard->layout);
++        }
++        keyboard->prompt = prompt;
++}
++
++void
++ply_on_screen_keyboard_add_display (ply_on_screen_keyboard_t *keyboard,
++                                    ply_pixel_display_t      *display)
++{
++        if (keyboard == NULL)
++                return;
++        cancel_touch (keyboard);
++        ply_list_append_data (keyboard->displays, display);
++}
++
++void
++ply_on_screen_keyboard_remove_display (ply_on_screen_keyboard_t *keyboard,
++                                       ply_pixel_display_t      *display)
++{
++        if (keyboard == NULL)
++                return;
++        cancel_touch (keyboard);
++        ply_list_remove_data (keyboard->displays, display);
++}
++
++static char *
++key_label (ply_on_screen_keyboard_t *keyboard,
++           const ply_keyboard_key_t *key,
++           size_t                    index)
++{
++        const char *label = NULL;
++        struct xkb_state *state = ply_keyboard_layout_get_state (keyboard->layout);
++        xkb_keysym_t symbol;
++
++        if (key->behavior == PLY_KEYBOARD_GROUP) {
++                xkb_layout_index_t group = xkb_state_serialize_layout (state, XKB_STATE_LAYOUT_EFFECTIVE);
++                label = xkb_keymap_layout_get_name (xkb_state_get_keymap (state), group);
++                return strdup (label != NULL ? label : _ ("Layout"));
++        }
++        if (keycode_for_index (keyboard, index) == XKB_KEYCODE_INVALID)
++                return strdup ("");
++        symbol = xkb_state_key_get_one_sym (state, keycode_for_index (keyboard, index));
++        switch (symbol) {
++        case XKB_KEY_BackSpace: return strdup (_ ("Backspace"));
++        case XKB_KEY_Return: return strdup (keyboard->password ? _ ("Unlock") : _ ("Enter"));
++        case XKB_KEY_space: return strdup (_ ("Space"));
++        case XKB_KEY_Shift_L:
++        case XKB_KEY_Shift_R: return strdup (_ ("Shift"));
++        case XKB_KEY_Caps_Lock: return strdup (_ ("Caps"));
++        case XKB_KEY_ISO_Level3_Shift: return strdup (_ ("AltGr"));
++        case XKB_KEY_Alt_L:
++        case XKB_KEY_Alt_R: return strdup (_ ("Alt"));
++        case XKB_KEY_Control_L:
++        case XKB_KEY_Control_R: return strdup (_ ("Ctrl"));
++        case XKB_KEY_Tab:
++        case XKB_KEY_ISO_Left_Tab: return strdup (_ ("Tab"));
++        case XKB_KEY_Escape: return strdup (_ ("Esc"));
++        case XKB_KEY_Multi_key: return strdup (_ ("Compose"));
++        case XKB_KEY_dead_acute: return strdup ("´");
++        case XKB_KEY_dead_grave: return strdup ("`");
++        case XKB_KEY_dead_circumflex: return strdup ("^");
++        case XKB_KEY_dead_diaeresis: return strdup ("¨");
++        case XKB_KEY_dead_tilde: return strdup ("~");
++        case XKB_KEY_dead_caron: return strdup ("ˇ");
++        case XKB_KEY_dead_cedilla: return strdup ("¸");
++        case XKB_KEY_dead_abovering: return strdup ("°");
++        default: return ply_keyboard_layout_get_label (keyboard->layout, keycode_for_index (keyboard, index));
++        }
++}
++
++static void
++draw_label (ply_on_screen_keyboard_t *keyboard,
++            ply_pixel_buffer_t       *buffer,
++            const ply_rectangle_t    *rectangle,
++            const char               *text)
++{
++        double size = keyboard->font_size;
++        char *font;
++        long width, height;
++
++        ply_label_set_text (keyboard->label, text);
++        ply_label_set_hex_color (keyboard->label, (keyboard->text_color << 8) | 0xff);
++        for (;;) {
++                if (asprintf (&font, "%s %.1f", keyboard->font, size) < 0)
++                        return;
++                ply_label_set_font (keyboard->label, font);
++                free (font);
++                ply_label_show (keyboard->label, NULL, 0, 0);
++                width = ply_label_get_width (keyboard->label);
++                height = ply_label_get_height (keyboard->label);
++                if ((width <= rectangle->width * .9 && height <= rectangle->height * .9) || size <= 4)
++                        break;
++                size = fmax (4, size * .8);
++        }
++        ply_label_show (keyboard->label, NULL, rectangle->x + ((long) rectangle->width - width) / 2,
++                        rectangle->y + ((long) rectangle->height - height) / 2);
++        ply_label_draw_area (keyboard->label, buffer, rectangle->x, rectangle->y, rectangle->width, rectangle->height);
++}
++
++void
++ply_on_screen_keyboard_draw (ply_on_screen_keyboard_t *keyboard,
++                             ply_pixel_display_t      *display,
++                             ply_pixel_buffer_t       *buffer)
++{
++        ply_rectangle_t area, background, rectangle;
++        size_t i;
++
++        if (!ply_on_screen_keyboard_is_visible (keyboard, display))
++                return;
++        area = keyboard_area (keyboard, display);
++        background = (ply_rectangle_t) { .x = 0, .y = area.y - keyboard->gap,
++                                         .width = ply_pixel_display_get_width (display),
++                                         .height = ply_on_screen_keyboard_get_height (keyboard, display) };
++        ply_pixel_buffer_fill_with_hex_color (buffer, &background, keyboard->background_color);
++        for (i = 0; i < ply_keyboard_geometry_get_key_count (keyboard->geometry); i++) {
++                const ply_keyboard_key_t *key = ply_keyboard_geometry_get_key (keyboard->geometry, i);
++                bool selected = keyboard->latched[i] ||
++                                (keyboard->pressed_display == display && keyboard->pressed_key == (int) i);
++                uint32_t color;
++                char *label;
++
++                if (!ply_keyboard_geometry_get_rectangle (keyboard->geometry, i, &area, keyboard->gap, &rectangle))
++                        continue;
++                if (strcmp (key->name, "CAPS") == 0)
++                        selected |= xkb_state_led_name_is_active (ply_keyboard_layout_get_state (keyboard->layout), XKB_LED_NAME_CAPS) > 0;
++                color = selected ? keyboard->selected_color :
++                        key->behavior == PLY_KEYBOARD_KEY ? keyboard->key_color : keyboard->action_color;
++                ply_pixel_buffer_fill_with_hex_color (buffer, &rectangle, color);
++                label = key_label (keyboard, key, i);
++                if (label != NULL) {
++                        draw_label (keyboard, buffer, &rectangle, label);
++                        free (label);
++                }
++        }
++}
+diff --git a/src/libply-splash-graphics/ply-on-screen-keyboard.h b/src/libply-splash-graphics/ply-on-screen-keyboard.h
+new file mode 100644
+index 00000000..af61ff05
+--- /dev/null
++++ b/src/libply-splash-graphics/ply-on-screen-keyboard.h
+@@ -0,0 +1,36 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#ifndef PLY_ON_SCREEN_KEYBOARD_H
++#define PLY_ON_SCREEN_KEYBOARD_H
++
++#include "ply-key-file.h"
++#include "ply-keyboard.h"
++#include "ply-pixel-display.h"
++
++typedef struct _ply_on_screen_keyboard ply_on_screen_keyboard_t;
++typedef void (*ply_on_screen_keyboard_changed_t) (void *user_data);
++
++#ifndef PLY_HIDE_FUNCTION_DECLARATIONS
++ply_on_screen_keyboard_t *ply_on_screen_keyboard_new (ply_key_file_t                  *settings,
++                                                      ply_on_screen_keyboard_changed_t changed,
++                                                      void                            *user_data);
++void ply_on_screen_keyboard_free (ply_on_screen_keyboard_t *keyboard);
++void ply_on_screen_keyboard_set_keyboard (ply_on_screen_keyboard_t *keyboard,
++                                          ply_keyboard_t           *input);
++void ply_on_screen_keyboard_set_active (ply_on_screen_keyboard_t *keyboard,
++                                        bool                      active);
++void ply_on_screen_keyboard_set_prompt (ply_on_screen_keyboard_t *keyboard,
++                                        bool                      prompt,
++                                        bool                      password);
++void ply_on_screen_keyboard_add_display (ply_on_screen_keyboard_t *keyboard,
++                                         ply_pixel_display_t      *display);
++void ply_on_screen_keyboard_remove_display (ply_on_screen_keyboard_t *keyboard,
++                                            ply_pixel_display_t      *display);
++bool ply_on_screen_keyboard_is_visible (ply_on_screen_keyboard_t *keyboard,
++                                        ply_pixel_display_t      *display);
++unsigned long ply_on_screen_keyboard_get_height (ply_on_screen_keyboard_t *keyboard,
++                                                 ply_pixel_display_t      *display);
++void ply_on_screen_keyboard_draw (ply_on_screen_keyboard_t *keyboard,
++                                  ply_pixel_display_t      *display,
++                                  ply_pixel_buffer_t       *buffer);
++#endif
++#endif
+diff --git a/src/plugins/splash/two-step/plugin.c b/src/plugins/splash/two-step/plugin.c
+index bc48e8e9..434d17f2 100644
+--- a/src/plugins/splash/two-step/plugin.c
++++ b/src/plugins/splash/two-step/plugin.c
+@@ -44,6 +44,7 @@
+ #include "ply-buffer.h"
+ #include "ply-capslock-icon.h"
+ #include "ply-entry.h"
++#include "ply-on-screen-keyboard.h"
+ #include "ply-event-loop.h"
+ #include "ply-label.h"
+ #include "ply-list.h"
+@@ -96,6 +97,7 @@ typedef struct
+         ply_boot_splash_plugin_t *plugin;
+         ply_pixel_display_t      *display;
+         ply_entry_t              *entry;
++        unsigned long             keyboard_height;
+         ply_keymap_icon_t        *keymap_icon;
+         ply_capslock_icon_t      *capslock_icon;
+         ply_animation_t          *end_animation;
+@@ -144,6 +146,11 @@ struct _ply_boot_splash_plugin
+         double                              secure_boot_start_time;
+         double                              secure_boot_opacity;
+         ply_list_t                         *views;
++        ply_on_screen_keyboard_t           *on_screen_keyboard;
++        ply_keyboard_t                     *keyboard;
++        char                               *prompt;
++        char                               *entry_text;
++        int                                 bullets;
+ 
+         ply_boot_splash_display_type_t      state;
+ 
+@@ -222,6 +229,7 @@ static void on_boot_output (ply_boot_splash_plugin_t *plugin,
+                             const char               *output,
+                             size_t                    size);
+ static void toggle_console_messages (ply_boot_splash_plugin_t *plugin);
++static void keyboard_changed (void *user_data);
+ static void display_console_messages (ply_boot_splash_plugin_t *plugin);
+ static void hide_console_messages (ply_boot_splash_plugin_t *plugin);
+ static void unhide_console_messages (ply_boot_splash_plugin_t *plugin);
+@@ -244,6 +252,7 @@ view_new (ply_boot_splash_plugin_t *plugin,
+         view = calloc (1, sizeof(view_t));
+         view->plugin = plugin;
+         view->display = display;
++        ply_on_screen_keyboard_add_display (plugin->on_screen_keyboard, display);
+ 
+         view->entry = ply_entry_new (plugin->animation_dir);
+         view->keymap_icon = ply_keymap_icon_new (display, plugin->animation_dir);
+@@ -290,6 +299,7 @@ view_new (ply_boot_splash_plugin_t *plugin,
+ static void
+ view_free (view_t *view)
+ {
++        ply_on_screen_keyboard_remove_display (view->plugin->on_screen_keyboard, view->display);
+         ply_entry_free (view->entry);
+         ply_keymap_icon_free (view->keymap_icon);
+         ply_capslock_icon_free (view->capslock_icon);
+@@ -991,6 +1001,8 @@ view_show_prompt (view_t     *view,
+ 
+         screen_width = ply_pixel_display_get_width (view->display);
+         screen_height = ply_pixel_display_get_height (view->display);
++        view->keyboard_height = ply_on_screen_keyboard_get_height (plugin->on_screen_keyboard, view->display);
++        screen_height -= view->keyboard_height;
+ 
+         if (ply_entry_is_hidden (view->entry)) {
+                 view->lock_area.width = ply_image_get_width (plugin->lock_image);
+@@ -1378,6 +1390,7 @@ create_plugin (ply_key_file_t *key_file)
+         free (show_animation_fraction);
+ 
+         plugin->views = ply_list_new ();
++        plugin->on_screen_keyboard = ply_on_screen_keyboard_new (key_file, keyboard_changed, plugin);
+ 
+         plugin->needs_redraw = true;
+ 
+@@ -1466,6 +1479,9 @@ destroy_plugin (ply_boot_splash_plugin_t *plugin)
+         free (plugin->monospace_font);
+         free (plugin->animation_dir);
+         free_views (plugin);
++        ply_on_screen_keyboard_free (plugin->on_screen_keyboard);
++        free (plugin->prompt);
++        free (plugin->entry_text);
+         free (plugin);
+ }
+ 
+@@ -1701,6 +1717,7 @@ on_draw (view_t             *view,
+                                                                 box_data);
+                 }
+ 
++                ply_on_screen_keyboard_draw (plugin->on_screen_keyboard, view->display, pixel_buffer);
+                 ply_entry_draw_area (view->entry,
+                                      pixel_buffer,
+                                      x, y, width, height);
+@@ -1802,12 +1819,17 @@ add_pixel_display (ply_boot_splash_plugin_t *plugin,
+                         ply_list_append_data (plugin->views, view);
+                         if (plugin->is_animating)
+                                 view_start_progress_animation (view);
++                        if (plugin->state != PLY_BOOT_SPLASH_DISPLAY_NORMAL) {
++                                view_show_prompt (view, plugin->prompt, plugin->entry_text, plugin->bullets);
++                                view_redraw (view);
++                        }
+                 } else {
+                         view_free (view);
+                 }
+         } else {
+                 ply_list_append_data (plugin->views, view);
+         }
++        keyboard_changed (plugin);
+ }
+ 
+ static void
+@@ -1829,6 +1851,7 @@ remove_pixel_display (ply_boot_splash_plugin_t *plugin,
+                         ply_pixel_display_set_draw_handler (view->display, NULL, NULL);
+                         view_free (view);
+                         ply_list_remove_node (plugin->views, node);
++                        keyboard_changed (plugin);
+                         return;
+                 }
+ 
+@@ -1961,6 +1984,7 @@ show_splash_screen (ply_boot_splash_plugin_t *plugin,
+         start_progress_animation (plugin);
+ 
+         plugin->is_visible = true;
++        ply_on_screen_keyboard_set_active (plugin->on_screen_keyboard, !plugin->should_show_console_messages);
+         if (mode == PLY_BOOT_SPLASH_MODE_BOOT_UP && plugin->secure_boot_image != NULL) {
+                 plugin->secure_boot_start_time = ply_get_timestamp ();
+                 animate_secure_boot_emblem (plugin, loop);
+@@ -2081,6 +2105,7 @@ hide_splash_screen (ply_boot_splash_plugin_t *plugin,
+         }
+ 
+         plugin->is_visible = false;
++        ply_on_screen_keyboard_set_active (plugin->on_screen_keyboard, false);
+ }
+ 
+ static void
+@@ -2209,6 +2234,72 @@ system_update (ply_boot_splash_plugin_t *plugin,
+         update_progress_animation (plugin, progress / 100.0);
+ }
+ 
++static void
++cache_prompt (ply_boot_splash_plugin_t *plugin,
++              const char               *prompt,
++              const char               *entry_text,
++              int                       bullets)
++{
++        char *new_prompt = strdup (prompt != NULL ? prompt : "");
++        char *new_entry_text = entry_text != NULL ? strdup (entry_text) : NULL;
++
++        free (plugin->prompt);
++        free (plugin->entry_text);
++        plugin->prompt = new_prompt;
++        plugin->entry_text = new_entry_text;
++        plugin->bullets = bullets;
++}
++
++static void
++keyboard_changed (void *user_data)
++{
++        ply_boot_splash_plugin_t *plugin = user_data;
++        ply_list_node_t *node;
++
++        if (!plugin->is_visible || plugin->should_show_console_messages ||
++            plugin->state == PLY_BOOT_SPLASH_DISPLAY_NORMAL)
++                return;
++        pause_views (plugin);
++        for (node = ply_list_get_first_node (plugin->views); node != NULL;
++             node = ply_list_get_next_node (plugin->views, node)) {
++                view_t *view = ply_list_node_get_data (node);
++                unsigned long height = ply_on_screen_keyboard_get_height (plugin->on_screen_keyboard, view->display);
++
++                if (height != view->keyboard_height) {
++                        /* Relayout every prompt control, including indicators
++                         * which must be hidden before being shown again. */
++                        ply_entry_hide (view->entry);
++                        ply_capslock_icon_hide (view->capslock_icon);
++                        ply_keymap_icon_hide (view->keymap_icon);
++                        ply_label_hide (view->label);
++                        view_show_prompt (view, plugin->prompt, plugin->entry_text, plugin->bullets);
++                }
++        }
++        redraw_views (plugin);
++        process_needed_redraws (plugin);
++        unpause_views (plugin);
++}
++
++static void
++set_keyboard (ply_boot_splash_plugin_t *plugin,
++              ply_keyboard_t           *keyboard)
++{
++        plugin->keyboard = keyboard;
++        ply_on_screen_keyboard_set_keyboard (plugin->on_screen_keyboard, keyboard);
++        keyboard_changed (plugin);
++}
++
++static void
++unset_keyboard (ply_boot_splash_plugin_t *plugin,
++                ply_keyboard_t           *keyboard)
++{
++        if (plugin->keyboard == keyboard) {
++                plugin->keyboard = NULL;
++                ply_on_screen_keyboard_set_keyboard (plugin->on_screen_keyboard, NULL);
++                keyboard_changed (plugin);
++        }
++}
++
+ static void
+ display_normal (ply_boot_splash_plugin_t *plugin)
+ {
+@@ -2217,6 +2308,11 @@ display_normal (ply_boot_splash_plugin_t *plugin)
+                 hide_prompt (plugin);
+ 
+         plugin->state = PLY_BOOT_SPLASH_DISPLAY_NORMAL;
++        ply_on_screen_keyboard_set_prompt (plugin->on_screen_keyboard, false, false);
++        free (plugin->prompt);
++        plugin->prompt = NULL;
++        free (plugin->entry_text);
++        plugin->entry_text = NULL;
+ 
+         if (!plugin->should_show_console_messages)
+                 start_progress_animation (plugin);
+@@ -2240,6 +2336,8 @@ display_password (ply_boot_splash_plugin_t *plugin,
+                 stop_animation (plugin);
+ 
+         plugin->state = PLY_BOOT_SPLASH_DISPLAY_PASSWORD_ENTRY;
++        cache_prompt (plugin, prompt, NULL, bullets);
++        ply_on_screen_keyboard_set_prompt (plugin->on_screen_keyboard, true, true);
+         show_prompt (plugin, prompt, NULL, bullets);
+         redraw_views (plugin);
+ 
+@@ -2260,6 +2358,8 @@ display_question (ply_boot_splash_plugin_t *plugin,
+                 stop_animation (plugin);
+ 
+         plugin->state = PLY_BOOT_SPLASH_DISPLAY_QUESTION_ENTRY;
++        cache_prompt (plugin, prompt, entry_text, -1);
++        ply_on_screen_keyboard_set_prompt (plugin->on_screen_keyboard, true, false);
+         show_prompt (plugin, prompt, entry_text, -1);
+         redraw_views (plugin);
+ 
+@@ -2337,6 +2437,7 @@ static void
+ unhide_console_messages (ply_boot_splash_plugin_t *plugin)
+ {
+         plugin->should_show_console_messages = true;
++        ply_on_screen_keyboard_set_active (plugin->on_screen_keyboard, false);
+         display_console_messages (plugin);
+ }
+ 
+@@ -2347,6 +2448,7 @@ hide_console_messages (ply_boot_splash_plugin_t *plugin)
+         view_t *view;
+ 
+         plugin->should_show_console_messages = false;
++        ply_on_screen_keyboard_set_active (plugin->on_screen_keyboard, plugin->is_visible);
+ 
+         pause_views (plugin);
+         plugin->plugin_console_messages_updating = true;
+@@ -2392,6 +2494,8 @@ ply_boot_splash_plugin_get_interface (void)
+         static ply_boot_splash_plugin_interface_t plugin_interface =
+         {
+                 .create_plugin        = create_plugin,
++                .set_keyboard         = set_keyboard,
++                .unset_keyboard       = unset_keyboard,
+                 .destroy_plugin       = destroy_plugin,
+                 .add_pixel_display    = add_pixel_display,
+                 .remove_pixel_display = remove_pixel_display,
+diff --git a/tests/meson.build b/tests/meson.build
+index 81a25b6c..9750cc04 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -26,6 +26,21 @@ test_environment = environment()
+ test_environment.set('LC_ALL', 'C')
+ test_timeout = 30
+ 
++keyboard_geometry_test = executable(
++  'test-keyboard-geometry',
++  'test-keyboard-geometry.c',
++  c_args: test_c_args,
++  dependencies: [libply_splash_graphics_dep, libply_splash_core_dep, lm_dep],
++)
++test(
++  'keyboard-geometry',
++  keyboard_geometry_test,
++  env: test_environment,
++  protocol: 'tap',
++  suite: ['unit', 'splash-graphics'],
++  timeout: test_timeout,
++)
++
+ keyboard_test = executable(
+   'test-keyboard',
+   'test-keyboard.c',
+diff --git a/tests/test-keyboard-geometry.c b/tests/test-keyboard-geometry.c
+new file mode 100644
+index 00000000..9b641f74
+--- /dev/null
++++ b/tests/test-keyboard-geometry.c
+@@ -0,0 +1,111 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++#include "ply-test.h"
++
++#include <fcntl.h>
++#include <math.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "ply-keyboard-geometry.h"
++
++static ply_keyboard_geometry_t *
++load (const char *contents)
++{
++        char path[] = "/tmp/plymouth-keyboard-geometry-XXXXXX";
++        int fd = mkstemp (path);
++        ply_key_file_t *file;
++        ply_keyboard_geometry_t *geometry = NULL;
++
++        if (fd < 0)
++                return NULL;
++        if (write (fd, contents, strlen (contents)) == (ssize_t) strlen (contents)) {
++                close (fd);
++                file = ply_key_file_new (path);
++                if (ply_key_file_load (file))
++                        geometry = ply_keyboard_geometry_load (file);
++                ply_key_file_free (file);
++        } else {
++                close (fd);
++        }
++        unlink (path);
++        return geometry;
++}
++
++static bool
++test_key_targets_share_drawing_geometry (void)
++{
++        const unsigned long sizes[][2] = { { 320, 120 }, { 1280, 400 }, { 3840, 1080 }, { 768, 1000 } };
++        ply_keyboard_geometry_t *geometry = ply_keyboard_geometry_new ();
++        size_t i, n;
++
++        PLY_TEST_ASSERT (geometry != NULL);
++        for (n = 0; n < sizeof(sizes) / sizeof(sizes[0]); n++) {
++                ply_rectangle_t area = { .x = 17, .y = 23, .width = sizes[n][0], .height = sizes[n][1] };
++                for (i = 0; i < ply_keyboard_geometry_get_key_count (geometry); i++) {
++                        ply_rectangle_t key;
++                        PLY_TEST_ASSERT (ply_keyboard_geometry_get_rectangle (geometry, i, &area, 4, &key));
++                        PLY_TEST_ASSERT (key.x >= area.x && key.y >= area.y);
++                        PLY_TEST_ASSERT (key.x + key.width <= area.x + area.width);
++                        PLY_TEST_ASSERT (key.y + key.height <= area.y + area.height);
++                        PLY_TEST_ASSERT (ply_keyboard_geometry_hit (geometry, &area, 4,
++                                                                    key.x + key.width / 2., key.y + key.height / 2.) == (int) i);
++                        PLY_TEST_ASSERT (ply_keyboard_geometry_hit (geometry, &area, 4,
++                                                                    key.x + key.width, key.y + key.height / 2.) == -1);
++                }
++                PLY_TEST_ASSERT (ply_keyboard_geometry_hit (geometry, &area, 4, NAN, 30) == -1);
++                PLY_TEST_ASSERT (ply_keyboard_geometry_hit (geometry, &area, 4, 30, INFINITY) == -1);
++        }
++        ply_keyboard_geometry_free (geometry);
++        return true;
++}
++
++static bool
++test_configured_geometry_changes_targets (void)
++{
++        ply_keyboard_geometry_t *geometry = load (
++                "[Keyboard Geometry]\nColumns=12\nRows=8\n"
++                "[Key AD01]\nX=8\nY=0\n"
++                "[Key SPCE]\nX=0\nY=4\nWidth=8\n"
++                "[Key GROUP]\nX=8\nY=4\nBehavior=group\n");
++        ply_rectangle_t area = { .width = 120, .height = 80 };
++        int index;
++
++        PLY_TEST_ASSERT (geometry != NULL);
++        PLY_TEST_ASSERT (ply_keyboard_geometry_get_key_count (geometry) == 3);
++        index = ply_keyboard_geometry_hit (geometry, &area, 2, 100, 20);
++        PLY_TEST_ASSERT (index >= 0);
++        PLY_TEST_ASSERT (strcmp (ply_keyboard_geometry_get_key (geometry, index)->name, "AD01") == 0);
++        index = ply_keyboard_geometry_hit (geometry, &area, 2, 100, 60);
++        PLY_TEST_ASSERT (index >= 0);
++        PLY_TEST_ASSERT (ply_keyboard_geometry_get_key (geometry, index)->behavior == PLY_KEYBOARD_GROUP);
++        PLY_TEST_ASSERT (ply_keyboard_geometry_hit (geometry, &area, 2, 20, 20) == -1);
++        ply_keyboard_geometry_free (geometry);
++        return true;
++}
++
++static bool
++test_invalid_geometry_is_rejected (void)
++{
++        static const char *invalid[] = {
++                "[Keyboard Geometry]\nColumns=0\nRows=20\n[Key AD01]\nX=0\nY=0\n",
++                "[Keyboard Geometry]\nColumns=60\nRows=20\n[Key AD01]\nX=-1\nY=0\n",
++                "[Keyboard Geometry]\nColumns=60\nRows=20\n[Key AD01]\nX=0\nY=0\nWidth=18446744073709551615\n",
++                "[Keyboard Geometry]\nColumns=60\nRows=20\n[Key AD01]\nX=0\nY=0\nBehavior=invalid\n",
++                "[Keyboard Geometry]\nColumns=60\nRows=20\n[Key AD01]\nX=0\nY=0\n[Key AD02]\nX=2\nY=0\n",
++                "[Keyboard Geometry]\nColumns=60\nRows=20\n[Key AD01]\nY=0\n",
++                "[Keyboard Geometry]\nColumns=60\nRows=20\n",
++        };
++        size_t i;
++
++        for (i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
++                PLY_TEST_ASSERT (load (invalid[i]) == NULL);
++        }
++        return true;
++}
++
++static const ply_test_case_t test_cases[] = {
++        PLY_TEST_CASE (test_key_targets_share_drawing_geometry),
++        PLY_TEST_CASE (test_configured_geometry_changes_targets),
++        PLY_TEST_CASE (test_invalid_geometry_is_rejected)
++};
++PLY_TEST_MAIN (test_cases)
+-- 
+2.56.0
+

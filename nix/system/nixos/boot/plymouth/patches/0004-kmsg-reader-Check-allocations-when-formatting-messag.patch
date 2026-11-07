@@ -1,0 +1,58 @@
+From 0894500202e3a4272063e33b2d333167e7084ca8 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 17:31:11 -0800
+Subject: [PATCH 04/12] kmsg-reader: Check allocations when formatting messages
+
+Drop messages on allocation failure instead of dereferencing invalid storage. Keep the formatted allocation directly rather than duplicating it. This also fixes builds with fortified asprintf and warnings as errors.
+---
+ src/libply-splash-core/ply-kmsg-reader.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/src/libply-splash-core/ply-kmsg-reader.c b/src/libply-splash-core/ply-kmsg-reader.c
+index b56bd81d..595c1f27 100644
+--- a/src/libply-splash-core/ply-kmsg-reader.c
++++ b/src/libply-splash-core/ply-kmsg-reader.c
+@@ -86,7 +86,7 @@ handle_kmsg_message (ply_kmsg_reader_t *kmsg_reader,
+         if (bytes_read > 0) {
+                 bool bold_enabled = false;
+                 ply_terminal_color_t color = PLY_TERMINAL_ATTRIBUTE_FOREGROUND_COLOR_OFFSET + PLY_TERMINAL_COLOR_DEFAULT;
+-                char *fields, *field_prefix, *field_sequence, *field_timestamp, *message, *message_substr, *msgptr, *saveptr, *format_begin, *new_message;
++                char *fields, *field_prefix, *field_sequence, *field_timestamp, *message, *message_substr, *msgptr, *saveptr, *format_begin;
+                 int prefix, priority, facility;
+                 uint64_t sequence;
+                 unsigned long long timestamp;
+@@ -140,23 +140,27 @@ handle_kmsg_message (ply_kmsg_reader_t *kmsg_reader,
+                         color = PLY_TERMINAL_ATTRIBUTE_FOREGROUND_COLOR_OFFSET + PLY_TERMINAL_COLOR_GREEN;
+                         break;
+                 }
+-                asprintf (&format_begin, bold_enabled ? "\033[0;1;%im" : "\033[0;%im", color);
++                if (asprintf (&format_begin, bold_enabled ? "\033[0;1;%im" : "\033[0;%im", color) < 0)
++                        return 0;
+ 
+                 message_substr = strtok_r (message, "\n", &saveptr);
+                 while (message_substr != NULL) {
+                         kmsg_message = calloc (1, sizeof(kmsg_message_t));
++                        if (kmsg_message == NULL)
++                                break;
+ 
+                         kmsg_message->priority = priority;
+                         kmsg_message->facility = facility;
+                         kmsg_message->sequence = sequence;
+                         kmsg_message->timestamp = timestamp;
+ 
+-                        asprintf (&new_message, "%s%s%s", format_begin, message_substr, "\033[0m");
+-                        kmsg_message->message = strndup (new_message, strlen (new_message));
++                        if (asprintf (&kmsg_message->message, "%s%s%s", format_begin, message_substr, "\033[0m") < 0) {
++                                free (kmsg_message);
++                                break;
++                        }
+ 
+                         ply_trigger_pull (kmsg_reader->kmsg_trigger, kmsg_message);
+                         ply_list_append_data (kmsg_reader->kmsg_messages, kmsg_message);
+-                        free (new_message);
+ 
+                         message_substr = strtok_r (NULL, "\n", &saveptr);
+                 }
+-- 
+2.56.0
+

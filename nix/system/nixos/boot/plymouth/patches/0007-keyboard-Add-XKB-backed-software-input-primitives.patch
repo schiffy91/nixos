@@ -1,0 +1,801 @@
+From 058ea572c423d97b05e62ee14e639df0ecd3b37a Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 17:07:56 -0800
+Subject: [PATCH 07/12] keyboard: Add XKB-backed software input primitives
+
+Expose the configured keymap to software keyboards and deliver validated text through the existing password handlers without raw key-event logging. Add an XKB layout model for modifier state, layout groups and composed UTF-8 input, with tests for US, German and French maps, corrections and prompt retries.
+---
+ src/libply-splash-core/meson.build           |   2 +
+ src/libply-splash-core/ply-device-manager.c  |   2 +
+ src/libply-splash-core/ply-keyboard-layout.c | 193 +++++++++++++++++
+ src/libply-splash-core/ply-keyboard-layout.h |  32 +++
+ src/libply-splash-core/ply-keyboard.c        |  46 ++++
+ src/libply-splash-core/ply-keyboard.h        |  11 +-
+ tests/meson.build                            |  30 +++
+ tests/test-keyboard-layout.c                 | 217 +++++++++++++++++++
+ tests/test-keyboard.c                        | 132 +++++++++++
+ 9 files changed, 664 insertions(+), 1 deletion(-)
+ create mode 100644 src/libply-splash-core/ply-keyboard-layout.c
+ create mode 100644 src/libply-splash-core/ply-keyboard-layout.h
+ create mode 100644 tests/test-keyboard-layout.c
+ create mode 100644 tests/test-keyboard.c
+
+diff --git a/src/libply-splash-core/meson.build b/src/libply-splash-core/meson.build
+index ce088b2d..290109b3 100644
+--- a/src/libply-splash-core/meson.build
++++ b/src/libply-splash-core/meson.build
+@@ -4,6 +4,7 @@ libply_splash_core_sources = files(
+   'ply-input-device.c',
+   'ply-kmsg-reader.c',
+   'ply-keyboard.c',
++  'ply-keyboard-layout.c',
+   'ply-pixel-buffer.c',
+   'ply-pixel-display.c',
+   'ply-rich-text.c',
+@@ -106,6 +107,7 @@ libply_splash_core_headers = files(
+   'ply-input-device.h',
+   'ply-kmsg-reader.h',
+   'ply-keyboard.h',
++  'ply-keyboard-layout.h',
+   'ply-pixel-buffer.h',
+   'ply-pixel-display.h',
+   'ply-renderer-plugin.h',
+diff --git a/src/libply-splash-core/ply-device-manager.c b/src/libply-splash-core/ply-device-manager.c
+index 8133b345..4cc5fbcd 100644
+--- a/src/libply-splash-core/ply-device-manager.c
++++ b/src/libply-splash-core/ply-device-manager.c
+@@ -1148,6 +1148,7 @@ create_devices_for_terminal_and_renderer_type (ply_device_manager_t *manager,
+ 
+         if (renderer != NULL) {
+                 keyboard = ply_keyboard_new_for_renderer (renderer);
++                ply_keyboard_set_keymap (keyboard, manager->xkb_keymap);
+                 ply_list_append_data (manager->keyboards, keyboard);
+ 
+                 if (manager->keyboard_added_handler != NULL)
+@@ -1165,6 +1166,7 @@ create_devices_for_terminal_and_renderer_type (ply_device_manager_t *manager,
+                         ply_terminal_refresh_geometry (terminal);
+         } else if (terminal != NULL) {
+                 keyboard = ply_keyboard_new_for_terminal (terminal);
++                ply_keyboard_set_keymap (keyboard, manager->xkb_keymap);
+                 ply_list_append_data (manager->keyboards, keyboard);
+ 
+                 if (manager->keyboard_added_handler != NULL)
+diff --git a/src/libply-splash-core/ply-keyboard-layout.c b/src/libply-splash-core/ply-keyboard-layout.c
+new file mode 100644
+index 00000000..902a8057
+--- /dev/null
++++ b/src/libply-splash-core/ply-keyboard-layout.c
+@@ -0,0 +1,193 @@
++/* ply-keyboard-layout.c - XKB input for on-screen keyboards
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "ply-keyboard-layout.h"
++
++#include <stdlib.h>
++#include <string.h>
++#include <xkbcommon/xkbcommon-compose.h>
++#include <xkbcommon/xkbcommon-keysyms.h>
++
++struct _ply_keyboard_layout
++{
++        struct xkb_state         *state;
++        struct xkb_compose_state *compose;
++};
++
++ply_keyboard_layout_t *
++ply_keyboard_layout_new (struct xkb_keymap *keymap,
++                         const char        *locale)
++{
++        ply_keyboard_layout_t *layout;
++        struct xkb_context *context;
++        struct xkb_compose_table *table;
++
++        if (keymap == NULL || locale == NULL)
++                return NULL;
++
++        layout = calloc (1, sizeof(*layout));
++        if (layout == NULL)
++                return NULL;
++
++        layout->state = xkb_state_new (keymap);
++        if (layout->state == NULL) {
++                free (layout);
++                return NULL;
++        }
++
++        context = xkb_context_new (XKB_CONTEXT_NO_FLAGS);
++        if (context != NULL) {
++                table = xkb_compose_table_new_from_locale (context, locale, XKB_COMPOSE_COMPILE_NO_FLAGS);
++                if (table != NULL) {
++                        layout->compose = xkb_compose_state_new (table, XKB_COMPOSE_STATE_NO_FLAGS);
++                        xkb_compose_table_unref (table);
++                }
++                xkb_context_unref (context);
++        }
++
++        return layout;
++}
++
++void
++ply_keyboard_layout_free (ply_keyboard_layout_t *layout)
++{
++        if (layout == NULL)
++                return;
++
++        xkb_compose_state_unref (layout->compose);
++        xkb_state_unref (layout->state);
++        free (layout);
++}
++
++static void
++append_composed_text (ply_keyboard_layout_t *layout,
++                      ply_buffer_t          *output)
++{
++        int length;
++        char *text;
++
++        length = xkb_compose_state_get_utf8 (layout->compose, NULL, 0);
++        if (length <= 0)
++                return;
++
++        text = malloc (length + 1);
++        if (text == NULL)
++                return;
++
++        xkb_compose_state_get_utf8 (layout->compose, text, length + 1);
++        ply_buffer_append_bytes (output, text, length);
++        explicit_bzero (text, length);
++        free (text);
++}
++
++void
++ply_keyboard_layout_key (ply_keyboard_layout_t *layout,
++                         xkb_keycode_t          keycode,
++                         enum xkb_key_direction direction,
++                         ply_buffer_t          *output)
++{
++        xkb_keysym_t symbol;
++        int length;
++        char *text;
++
++        symbol = xkb_state_key_get_one_sym (layout->state, keycode);
++        xkb_state_update_key (layout->state, keycode, direction);
++        if (direction == XKB_KEY_UP)
++                return;
++
++        if (layout->compose != NULL && symbol != XKB_KEY_NoSymbol &&
++            xkb_compose_state_feed (layout->compose, symbol) == XKB_COMPOSE_FEED_ACCEPTED) {
++                switch (xkb_compose_state_get_status (layout->compose)) {
++                case XKB_COMPOSE_COMPOSING:
++                        return;
++                case XKB_COMPOSE_COMPOSED:
++                        append_composed_text (layout, output);
++                        xkb_compose_state_reset (layout->compose);
++                        return;
++                case XKB_COMPOSE_CANCELLED:
++                        xkb_compose_state_reset (layout->compose);
++                        return;
++                case XKB_COMPOSE_NOTHING:
++                        break;
++                }
++        }
++
++        switch (symbol) {
++        case XKB_KEY_BackSpace:
++                ply_buffer_append_bytes (output, "\177", 1);
++                return;
++        case XKB_KEY_Return:
++        case XKB_KEY_KP_Enter:
++                ply_buffer_append_bytes (output, "\n", 1);
++                return;
++        default:
++                break;
++        }
++
++        length = xkb_state_key_get_utf8 (layout->state, keycode, NULL, 0);
++        if (length <= 0)
++                return;
++
++        text = malloc (length + 1);
++        if (text == NULL)
++                return;
++
++        xkb_state_key_get_utf8 (layout->state, keycode, text, length + 1);
++        ply_buffer_append_bytes (output, text, length);
++        explicit_bzero (text, length);
++        free (text);
++}
++
++char *
++ply_keyboard_layout_get_label (ply_keyboard_layout_t *layout,
++                               xkb_keycode_t          keycode)
++{
++        xkb_keysym_t symbol;
++        char text[128];
++        int length;
++
++        symbol = xkb_state_key_get_one_sym (layout->state, keycode);
++        length = xkb_keysym_to_utf8 (symbol, text, sizeof(text));
++        if (length > 1 && (unsigned char) text[0] >= 0x20 && text[0] != 0x7f)
++                return strdup (text);
++
++        /* Dead keys have no standalone UTF-8 value. Use their XKB name until
++         * the widget supplies a presentation label, never emit this name. */
++        if (xkb_keysym_get_name (symbol, text, sizeof(text)) > 0)
++                return strdup (text);
++
++        return strdup ("");
++}
++
++struct xkb_state *
++ply_keyboard_layout_get_state (ply_keyboard_layout_t *layout)
++{
++        return layout->state;
++}
++
++void
++ply_keyboard_layout_reset_compose (ply_keyboard_layout_t *layout)
++{
++        if (layout->compose != NULL)
++                xkb_compose_state_reset (layout->compose);
++}
++
++bool
++ply_keyboard_layout_set_group (ply_keyboard_layout_t *layout,
++                               xkb_layout_index_t     group)
++{
++        struct xkb_keymap *keymap;
++        xkb_mod_mask_t depressed, latched, locked;
++
++        keymap = xkb_state_get_keymap (layout->state);
++        if (group >= xkb_keymap_num_layouts (keymap))
++                return false;
++
++        depressed = xkb_state_serialize_mods (layout->state, XKB_STATE_MODS_DEPRESSED);
++        latched = xkb_state_serialize_mods (layout->state, XKB_STATE_MODS_LATCHED);
++        locked = xkb_state_serialize_mods (layout->state, XKB_STATE_MODS_LOCKED);
++        xkb_state_update_mask (layout->state, depressed, latched, locked, 0, 0, group);
++        ply_keyboard_layout_reset_compose (layout);
++        return true;
++}
+diff --git a/src/libply-splash-core/ply-keyboard-layout.h b/src/libply-splash-core/ply-keyboard-layout.h
+new file mode 100644
+index 00000000..47dbebad
+--- /dev/null
++++ b/src/libply-splash-core/ply-keyboard-layout.h
+@@ -0,0 +1,32 @@
++/* ply-keyboard-layout.h - XKB input for on-screen keyboards
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#ifndef PLY_KEYBOARD_LAYOUT_H
++#define PLY_KEYBOARD_LAYOUT_H
++
++#include <stdbool.h>
++#include <xkbcommon/xkbcommon.h>
++
++#include "ply-buffer.h"
++
++typedef struct _ply_keyboard_layout ply_keyboard_layout_t;
++
++#ifndef PLY_HIDE_FUNCTION_DECLARATIONS
++ply_keyboard_layout_t *ply_keyboard_layout_new (struct xkb_keymap *keymap,
++                                                const char        *locale);
++void ply_keyboard_layout_free (ply_keyboard_layout_t *layout);
++/* Keycodes and groups refer to the supplied keymap, never a private US map. */
++void ply_keyboard_layout_key (ply_keyboard_layout_t *layout,
++                              xkb_keycode_t          keycode,
++                              enum xkb_key_direction direction,
++                              ply_buffer_t          *output);
++char *ply_keyboard_layout_get_label (ply_keyboard_layout_t *layout,
++                                     xkb_keycode_t          keycode);
++struct xkb_state *ply_keyboard_layout_get_state (ply_keyboard_layout_t *layout);
++void ply_keyboard_layout_reset_compose (ply_keyboard_layout_t *layout);
++bool ply_keyboard_layout_set_group (ply_keyboard_layout_t *layout,
++                                    xkb_layout_index_t     group);
++#endif
++
++#endif /* PLY_KEYBOARD_LAYOUT_H */
+diff --git a/src/libply-splash-core/ply-keyboard.c b/src/libply-splash-core/ply-keyboard.c
+index d3fb83bb..877fb79e 100644
+--- a/src/libply-splash-core/ply-keyboard.c
++++ b/src/libply-splash-core/ply-keyboard.c
+@@ -93,6 +93,7 @@ struct _ply_keyboard
+         ply_keyboard_provider_t      provider;
+ 
+         ply_buffer_t                *line_buffer;
++        struct xkb_keymap           *keymap;
+ 
+         ply_list_t                  *keyboard_input_handler_list;
+         ply_list_t                  *backspace_handler_list;
+@@ -254,6 +255,50 @@ process_keyboard_input (ply_keyboard_t *keyboard,
+         }
+ }
+ 
++bool
++ply_keyboard_input (ply_keyboard_t *keyboard,
++                    const char     *text,
++                    size_t          size)
++{
++        mbstate_t state = { 0 };
++        size_t offset, length;
++        wchar_t character;
++
++        if (!keyboard->is_active || text == NULL)
++                return false;
++
++        /* Validate the whole input before changing the password buffer. */
++        for (offset = 0; offset < size; offset += length) {
++                length = mbrtowc (&character, text + offset, size - offset, &state);
++                if (length == (size_t) -1 || length == (size_t) -2 || length == 0)
++                        return false;
++        }
++
++        memset (&state, 0, sizeof(state));
++        for (offset = 0; offset < size; offset += length) {
++                length = mbrtowc (&character, text + offset, size - offset, &state);
++                process_keyboard_input (keyboard, text + offset, length);
++        }
++
++        return true;
++}
++
++void
++ply_keyboard_set_keymap (ply_keyboard_t    *keyboard,
++                         struct xkb_keymap *keymap)
++{
++        struct xkb_keymap *old_keymap = keyboard->keymap;
++
++        keyboard->keymap = keymap != NULL ? xkb_keymap_ref (keymap) : NULL;
++        xkb_keymap_unref (old_keymap);
++}
++
++struct xkb_keymap *
++ply_keyboard_get_keymap (ply_keyboard_t *keyboard)
++{
++        return keyboard->keymap;
++}
++
+ static void
+ on_key_event (ply_keyboard_t *keyboard,
+               ply_buffer_t   *buffer)
+@@ -508,6 +553,7 @@ ply_keyboard_free (ply_keyboard_t *keyboard)
+         ply_keyboard_stop_watching_for_input (keyboard);
+ 
+         ply_buffer_free (keyboard->line_buffer);
++        xkb_keymap_unref (keyboard->keymap);
+ 
+         if (keyboard->provider_type == PLY_KEYBOARD_PROVIDER_TYPE_RENDERER) {
+                 free (keyboard->provider.if_renderer);
+diff --git a/src/libply-splash-core/ply-keyboard.h b/src/libply-splash-core/ply-keyboard.h
+index bf10a2ef..cae5a79e 100644
+--- a/src/libply-splash-core/ply-keyboard.h
++++ b/src/libply-splash-core/ply-keyboard.h
+@@ -48,6 +48,16 @@ ply_keyboard_t *ply_keyboard_new_for_terminal (ply_terminal_t *terminal);
+ ply_keyboard_t *ply_keyboard_new_for_renderer (ply_renderer_t *renderer);
+ void ply_keyboard_free (ply_keyboard_t *keyboard);
+ 
++void ply_keyboard_set_keymap (ply_keyboard_t    *keyboard,
++                              struct xkb_keymap *keymap);
++/* Borrowed; remains valid until the keymap is replaced or the keyboard freed. */
++struct xkb_keymap *ply_keyboard_get_keymap (ply_keyboard_t *keyboard);
++/* Reject inactive input and malformed UTF-8 before delivering any characters.
++ * Software input is never passed through raw key-event debug logging. */
++bool ply_keyboard_input (ply_keyboard_t *keyboard,
++                         const char     *text,
++                         size_t          size);
++
+ void ply_keyboard_add_input_handler (ply_keyboard_t              *keyboard,
+                                      ply_keyboard_input_handler_t input_handler,
+                                      void                        *user_data);
+@@ -79,4 +89,3 @@ const char *ply_keyboard_get_keyboard_layout (ply_keyboard_t *keyboard);
+ #endif
+ 
+ #endif /* PLY_KEYBOARD_H */
+-
+diff --git a/tests/meson.build b/tests/meson.build
+index 70d3dd01..81a25b6c 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -26,6 +26,36 @@ test_environment = environment()
+ test_environment.set('LC_ALL', 'C')
+ test_timeout = 30
+ 
++keyboard_test = executable(
++  'test-keyboard',
++  'test-keyboard.c',
++  c_args: test_c_args,
++  dependencies: [libply_splash_core_dep, xkbcommon_dep],
++)
++test(
++  'keyboard',
++  keyboard_test,
++  env: test_environment,
++  protocol: 'tap',
++  suite: ['unit', 'libply-splash-core'],
++  timeout: test_timeout,
++)
++
++keyboard_layout_test = executable(
++  'test-keyboard-layout',
++  'test-keyboard-layout.c',
++  c_args: test_c_args,
++  dependencies: [libply_splash_core_dep, xkbcommon_dep],
++)
++test(
++  'keyboard-layout',
++  keyboard_layout_test,
++  env: test_environment,
++  protocol: 'tap',
++  suite: ['unit', 'libply-splash-core'],
++  timeout: test_timeout,
++)
++
+ subdir('plugins')
+ 
+ foreach test_name, test_source : libply_test_sources
+diff --git a/tests/test-keyboard-layout.c b/tests/test-keyboard-layout.c
+new file mode 100644
+index 00000000..bccd0d7d
+--- /dev/null
++++ b/tests/test-keyboard-layout.c
+@@ -0,0 +1,217 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++
++#include "ply-test.h"
++
++#include <stdlib.h>
++#include <string.h>
++
++#include "ply-keyboard-layout.h"
++
++typedef struct
++{
++        struct xkb_context    *context;
++        struct xkb_keymap     *keymap;
++        ply_keyboard_layout_t *layout;
++        ply_buffer_t          *output;
++} fixture_t;
++
++static bool
++fixture_init (fixture_t  *fixture,
++              const char *layouts,
++              const char *variants)
++{
++        struct xkb_rule_names names = {
++                .rules   = "evdev",
++                .model   = "pc105",
++                .layout  = layouts,
++                .variant = variants,
++                .options = ""
++        };
++
++        memset (fixture, 0, sizeof(*fixture));
++        fixture->context = xkb_context_new (XKB_CONTEXT_NO_FLAGS);
++        PLY_TEST_ASSERT (fixture->context != NULL);
++        fixture->keymap = xkb_keymap_new_from_names (fixture->context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
++        PLY_TEST_ASSERT (fixture->keymap != NULL);
++        fixture->layout = ply_keyboard_layout_new (fixture->keymap, "en_US.UTF-8");
++        PLY_TEST_ASSERT (fixture->layout != NULL);
++        fixture->output = ply_buffer_new ();
++        return true;
++}
++
++static void
++fixture_clear (fixture_t *fixture)
++{
++        ply_buffer_free (fixture->output);
++        ply_keyboard_layout_free (fixture->layout);
++        xkb_keymap_unref (fixture->keymap);
++        xkb_context_unref (fixture->context);
++}
++
++static void
++key (fixture_t             *fixture,
++     const char            *name,
++     enum xkb_key_direction direction)
++{
++        xkb_keycode_t keycode = xkb_keymap_key_by_name (fixture->keymap, name);
++
++        ply_keyboard_layout_key (fixture->layout, keycode, direction, fixture->output);
++}
++
++static void
++tap (fixture_t  *fixture,
++     const char *name)
++{
++        key (fixture, name, XKB_KEY_DOWN);
++        key (fixture, name, XKB_KEY_UP);
++}
++
++static bool
++output_is (fixture_t  *fixture,
++           const char *expected)
++{
++        PLY_TEST_ASSERT (ply_buffer_get_size (fixture->output) == strlen (expected));
++        PLY_TEST_ASSERT (memcmp (ply_buffer_get_bytes (fixture->output), expected, strlen (expected)) == 0);
++        ply_buffer_clear (fixture->output);
++        return true;
++}
++
++static bool
++label_is (fixture_t  *fixture,
++          const char *name,
++          const char *expected)
++{
++        char *label = ply_keyboard_layout_get_label (fixture->layout,
++                                                     xkb_keymap_key_by_name (fixture->keymap, name));
++        bool matches = label != NULL && strcmp (label, expected) == 0;
++
++        free (label);
++        PLY_TEST_ASSERT (matches);
++        return true;
++}
++
++static bool
++test_us_modifiers_and_control_keys (void)
++{
++        fixture_t fixture;
++
++        PLY_TEST_ASSERT (fixture_init (&fixture, "us", ""));
++        PLY_TEST_ASSERT (label_is (&fixture, "AC01", "a"));
++        tap (&fixture, "AC01");
++        key (&fixture, "LFSH", XKB_KEY_DOWN);
++        PLY_TEST_ASSERT (label_is (&fixture, "AC01", "A"));
++        tap (&fixture, "AC01");
++        tap (&fixture, "AE01");
++        key (&fixture, "LFSH", XKB_KEY_UP);
++        tap (&fixture, "CAPS");
++        tap (&fixture, "AC01");
++        tap (&fixture, "AE01");
++        key (&fixture, "LFSH", XKB_KEY_DOWN);
++        tap (&fixture, "AC01");
++        key (&fixture, "LFSH", XKB_KEY_UP);
++        tap (&fixture, "SPCE");
++        tap (&fixture, "BKSP");
++        tap (&fixture, "RTRN");
++        PLY_TEST_ASSERT (output_is (&fixture, "aA!A1a \177\n"));
++        fixture_clear (&fixture);
++        return true;
++}
++
++static bool
++test_german_characters_and_altgr (void)
++{
++        fixture_t fixture;
++
++        PLY_TEST_ASSERT (fixture_init (&fixture, "de", ""));
++        PLY_TEST_ASSERT (label_is (&fixture, "AD06", "z"));
++        PLY_TEST_ASSERT (label_is (&fixture, "AC11", "ä"));
++        tap (&fixture, "AD06");
++        tap (&fixture, "AB01");
++        tap (&fixture, "AC11");
++        key (&fixture, "LFSH", XKB_KEY_DOWN);
++        tap (&fixture, "AC11");
++        key (&fixture, "LFSH", XKB_KEY_UP);
++        key (&fixture, "RALT", XKB_KEY_DOWN);
++        PLY_TEST_ASSERT (label_is (&fixture, "AD01", "@"));
++        tap (&fixture, "AD01");
++        key (&fixture, "RALT", XKB_KEY_UP);
++        PLY_TEST_ASSERT (output_is (&fixture, "zyäÄ@"));
++        fixture_clear (&fixture);
++        return true;
++}
++
++static bool
++test_french_characters_and_compose (void)
++{
++        fixture_t fixture;
++
++        PLY_TEST_ASSERT (fixture_init (&fixture, "fr", ""));
++        PLY_TEST_ASSERT (label_is (&fixture, "AD01", "a"));
++        PLY_TEST_ASSERT (label_is (&fixture, "AE02", "é"));
++        tap (&fixture, "AD01");
++        tap (&fixture, "AE02");
++        key (&fixture, "RALT", XKB_KEY_DOWN);
++        tap (&fixture, "AD03");
++        key (&fixture, "RALT", XKB_KEY_UP);
++        PLY_TEST_ASSERT (output_is (&fixture, "aé€"));
++        tap (&fixture, "AD11");
++        PLY_TEST_ASSERT (output_is (&fixture, ""));
++        tap (&fixture, "AD03");
++        tap (&fixture, "AD03");
++        PLY_TEST_ASSERT (output_is (&fixture, "êe"));
++        fixture_clear (&fixture);
++        return true;
++}
++
++static bool
++test_groups_and_retry_clear_pending_compose (void)
++{
++        fixture_t fixture;
++
++        PLY_TEST_ASSERT (fixture_init (&fixture, "us,de,fr", ""));
++        tap (&fixture, "AD01");
++        PLY_TEST_ASSERT (ply_keyboard_layout_set_group (fixture.layout, 1));
++        tap (&fixture, "AD06");
++        tap (&fixture, "AE12");
++        tap (&fixture, "AD03");
++        PLY_TEST_ASSERT (output_is (&fixture, "qzé"));
++        tap (&fixture, "AE12");
++        ply_keyboard_layout_reset_compose (fixture.layout);
++        tap (&fixture, "AD03");
++        PLY_TEST_ASSERT (output_is (&fixture, "e"));
++        tap (&fixture, "AE12");
++        PLY_TEST_ASSERT (ply_keyboard_layout_set_group (fixture.layout, 2));
++        tap (&fixture, "AD01");
++        PLY_TEST_ASSERT (output_is (&fixture, "a"));
++        PLY_TEST_ASSERT (!ply_keyboard_layout_set_group (fixture.layout, 3));
++        PLY_TEST_ASSERT (label_is (&fixture, "AD01", "a"));
++        fixture_clear (&fixture);
++        return true;
++}
++
++static bool
++test_variant_and_cancelled_compose (void)
++{
++        fixture_t fixture;
++
++        PLY_TEST_ASSERT (fixture_init (&fixture, "us", "intl"));
++        tap (&fixture, "AC11");
++        tap (&fixture, "AD03");
++        PLY_TEST_ASSERT (output_is (&fixture, "é"));
++        tap (&fixture, "AC11");
++        tap (&fixture, "BKSP");
++        tap (&fixture, "AD03");
++        PLY_TEST_ASSERT (output_is (&fixture, "e"));
++        fixture_clear (&fixture);
++        return true;
++}
++
++static const ply_test_case_t test_cases[] = {
++        PLY_TEST_CASE (test_us_modifiers_and_control_keys),
++        PLY_TEST_CASE (test_german_characters_and_altgr),
++        PLY_TEST_CASE (test_french_characters_and_compose),
++        PLY_TEST_CASE (test_groups_and_retry_clear_pending_compose),
++        PLY_TEST_CASE (test_variant_and_cancelled_compose)
++};
++
++PLY_TEST_MAIN (test_cases)
+diff --git a/tests/test-keyboard.c b/tests/test-keyboard.c
+new file mode 100644
+index 00000000..3390fdf5
+--- /dev/null
++++ b/tests/test-keyboard.c
+@@ -0,0 +1,132 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++
++#include "ply-test.h"
++
++#include <fcntl.h>
++#include <locale.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "ply-keyboard.h"
++#include "ply-terminal.h"
++
++typedef struct
++{
++        char    *line;
++        unsigned inputs;
++        unsigned backspaces;
++        unsigned submissions;
++} input_state_t;
++
++static void
++on_input (void       *data,
++          const char *text,
++          size_t      length)
++{
++        input_state_t *state = data;
++
++        state->inputs++;
++}
++
++static void
++on_backspace (void *data)
++{
++        input_state_t *state = data;
++
++        state->backspaces++;
++}
++
++static void
++on_enter (void       *data,
++          const char *line)
++{
++        input_state_t *state = data;
++
++        free (state->line);
++        state->line = strdup (line);
++        state->submissions++;
++}
++
++static bool
++test_software_input_uses_existing_password_handlers (void)
++{
++        ply_terminal_t *terminal;
++        ply_keyboard_t *keyboard;
++        input_state_t state = { 0 };
++        int fd;
++
++        PLY_TEST_ASSERT (setlocale (LC_CTYPE, "C.UTF-8") != NULL);
++        fd = posix_openpt (O_RDWR | O_NOCTTY | O_CLOEXEC);
++        PLY_TEST_ASSERT (fd >= 0);
++        PLY_TEST_ASSERT (grantpt (fd) == 0 && unlockpt (fd) == 0);
++        terminal = ply_terminal_new (ptsname (fd), NULL);
++        PLY_TEST_ASSERT (ply_terminal_open (terminal));
++        keyboard = ply_keyboard_new_for_terminal (terminal);
++        ply_keyboard_add_input_handler (keyboard, on_input, &state);
++        ply_keyboard_add_backspace_handler (keyboard, on_backspace, &state);
++        ply_keyboard_add_enter_handler (keyboard, on_enter, &state);
++
++        PLY_TEST_ASSERT (!ply_keyboard_input (keyboard, "inactive", 8));
++        PLY_TEST_ASSERT (ply_keyboard_watch_for_input (keyboard));
++        PLY_TEST_ASSERT (ply_keyboard_input (keyboard, "éä", strlen ("éä")));
++        PLY_TEST_ASSERT (state.inputs == 2);
++        /* Reject the entire batch: even the valid prefix must not be typed. */
++        PLY_TEST_ASSERT (!ply_keyboard_input (keyboard, "x\xc3", 2));
++        PLY_TEST_ASSERT (!ply_keyboard_input (keyboard, "x\0y", 3));
++        PLY_TEST_ASSERT (!ply_keyboard_input (keyboard, "\xc0\xaf", 2));
++        PLY_TEST_ASSERT (state.inputs == 2);
++        PLY_TEST_ASSERT (ply_keyboard_input (keyboard, "\177\n", 2));
++        PLY_TEST_ASSERT (state.backspaces == 1);
++        PLY_TEST_ASSERT (state.submissions == 1);
++        PLY_TEST_ASSERT (strcmp (state.line, "é") == 0);
++
++        /* Submission clears the existing line buffer before the retry. */
++        PLY_TEST_ASSERT (ply_keyboard_input (keyboard, "z\n", 2));
++        PLY_TEST_ASSERT (state.submissions == 2);
++        PLY_TEST_ASSERT (strcmp (state.line, "z") == 0);
++        ply_keyboard_stop_watching_for_input (keyboard);
++        PLY_TEST_ASSERT (!ply_keyboard_input (keyboard, "late\n", 5));
++        PLY_TEST_ASSERT (state.submissions == 2);
++
++        ply_keyboard_remove_input_handler (keyboard, on_input);
++        ply_keyboard_remove_backspace_handler (keyboard, on_backspace);
++        ply_keyboard_remove_enter_handler (keyboard, on_enter);
++        ply_keyboard_free (keyboard);
++        ply_terminal_free (terminal);
++        close (fd);
++        free (state.line);
++        return true;
++}
++
++static bool
++test_keyboard_retains_configured_keymap (void)
++{
++        struct xkb_context *context;
++        struct xkb_keymap *keymap;
++        struct xkb_rule_names names = { .layout = "de,fr", .options = "" };
++        ply_keyboard_t *keyboard;
++
++        context = xkb_context_new (XKB_CONTEXT_NO_FLAGS);
++        PLY_TEST_ASSERT (context != NULL);
++        keymap = xkb_keymap_new_from_names (context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
++        PLY_TEST_ASSERT (keymap != NULL);
++        keyboard = ply_keyboard_new_for_terminal (NULL);
++        PLY_TEST_ASSERT (ply_keyboard_get_keymap (keyboard) == NULL);
++        ply_keyboard_set_keymap (keyboard, keymap);
++        PLY_TEST_ASSERT (ply_keyboard_get_keymap (keyboard) == keymap);
++        ply_keyboard_set_keymap (keyboard, keymap);
++        xkb_keymap_unref (keymap);
++        PLY_TEST_ASSERT (xkb_keymap_num_layouts (ply_keyboard_get_keymap (keyboard)) == 2);
++        ply_keyboard_set_keymap (keyboard, NULL);
++        PLY_TEST_ASSERT (ply_keyboard_get_keymap (keyboard) == NULL);
++        ply_keyboard_free (keyboard);
++        xkb_context_unref (context);
++        return true;
++}
++
++static const ply_test_case_t test_cases[] = {
++        PLY_TEST_CASE (test_software_input_uses_existing_password_handlers),
++        PLY_TEST_CASE (test_keyboard_retains_configured_keymap)
++};
++
++PLY_TEST_MAIN (test_cases)
+-- 
+2.56.0
+

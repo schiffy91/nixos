@@ -1,22 +1,24 @@
-{ plymouth, libinput, systemd }:
+{ plymouth, lib, libinput, systemd }:
 (plymouth.override { inherit systemd; }).overrideAttrs (old: {
-  patches = (old.patches or [ ]) ++ [ ./keyboard.patch ];
+  version = "26.310.630-osk";
+  src = builtins.fetchTree {
+    type = "git";
+    url = "https://gitlab.freedesktop.org/plymouth/plymouth.git";
+    rev = "b79b178641e41682204052036da6591896097473";
+    narHash = "sha256-s/jMY0Pydh4XrIO7JohFOGBIvd1FdftraLILdWKEgT0=";
+  };
+  patches = (old.patches or [ ]) ++ map
+    (name: ./patches + "/${name}")
+    (builtins.filter (lib.hasSuffix ".patch") (builtins.attrNames (builtins.readDir ./patches)));
   buildInputs = old.buildInputs ++ [ libinput ];
+  mesonFlags = old.mesonFlags ++ [ "-Dtouchscreen=enabled" ];
   passthru = (old.passthru or { }) // { touchKeyboard = true; };
-  postPatch = (old.postPatch or "") + ''
-    cp ${./ply-osk.c} src/plugins/splash/two-step/ply-osk.c
-    cp ${./ply-osk.h} src/plugins/splash/two-step/ply-osk.h
-    cp ${./osk-layout.c} src/plugins/splash/two-step/osk-layout.c
-    cp ${./osk-layout.h} src/plugins/splash/two-step/osk-layout.h
-  '';
+  postPatch = lib.replaceStrings [ "'26.134.222'" ]
+    [ "'26.310.630-osk'" ] (old.postPatch or "");
   doCheck = true;
   checkPhase = ''
     runHook preCheck
-    $CC -std=c11 -Wall -Wextra -Werror \
-      -I ../src/plugins/splash/two-step \
-      ${../../../../../tests/plymouth-keyboard/model.c} \
-      ../src/plugins/splash/two-step/osk-layout.c -lm -o osk-test
-    ./osk-test
+    meson test --no-rebuild --print-errorlogs --suite unit --suite fuzz
     runHook postCheck
   '';
 })

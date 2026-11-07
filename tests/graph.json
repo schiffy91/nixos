@@ -973,6 +973,37 @@
         "rotate": "true",
         "state": "initrd-touch-unlock-rotated"
       }
+    },
+    {
+      "id": "initrd-touch-unlock-german",
+      "spec": "boot-touch/test.json",
+      "after": [],
+      "args": {
+        "state": "initrd-touch-unlock-german",
+        "rotate": "true",
+        "layout": "de",
+        "light": "true"
+      }
+    },
+    {
+      "id": "initrd-touch-unlock-french",
+      "spec": "boot-touch/test.json",
+      "after": [],
+      "args": {
+        "state": "initrd-touch-unlock-french",
+        "layout": "fr",
+        "light": "true",
+        "scale": "2"
+      }
+    },
+    {
+      "id": "initrd-touch-unlock-displays",
+      "spec": "boot-touch/test.json",
+      "after": [],
+      "args": {
+        "state": "initrd-touch-unlock-displays",
+        "multi": "true"
+      }
     }
   ],
   "required": [
@@ -1034,7 +1065,10 @@
     "host-hibernate-FRACTAL-NORTH-VM-secure",
     "host-install-FRACTAL-NORTH-VM-secure",
     "initrd-touch-unlock",
-    "initrd-touch-unlock-rotated"
+    "initrd-touch-unlock-rotated",
+    "initrd-touch-unlock-german",
+    "initrd-touch-unlock-french",
+    "initrd-touch-unlock-displays"
   ],
   "workspaceRoot": ".."
 }

@@ -1,0 +1,36 @@
+From 0f5316e4de523021e99bab3ba45539d25e08e3cf Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 17:32:24 -0800
+Subject: [PATCH 05/12] tests: Check allocation results in BGRT fixtures
+
+---
+ tests/test-bgrt.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/tests/test-bgrt.c b/tests/test-bgrt.c
+index cd495543..0aecb8ae 100644
+--- a/tests/test-bgrt.c
++++ b/tests/test-bgrt.c
+@@ -36,7 +36,8 @@ write_metadata (const char *directory,
+         bool written;
+         int fd;
+ 
+-        asprintf (&path, "%s/%s", directory, name);
++        if (asprintf (&path, "%s/%s", directory, name) < 0)
++                return false;
+         fd = open (path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+         free (path);
+         if (fd < 0)
+@@ -61,7 +62,8 @@ remove_metadata_directory (const char *directory)
+         for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+                 char *path = NULL;
+ 
+-                asprintf (&path, "%s/%s", directory, names[i]);
++                if (asprintf (&path, "%s/%s", directory, names[i]) < 0)
++                        abort ();
+                 unlink (path);
+                 free (path);
+         }
+-- 
+2.56.0
+

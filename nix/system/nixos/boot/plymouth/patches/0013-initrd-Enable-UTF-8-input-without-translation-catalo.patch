@@ -1,0 +1,93 @@
+From 42a39df5d743d288230b7badc60b0886db2b27d0 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 18:19:33 -0800
+Subject: [PATCH] initrd: Enable UTF-8 input without translation catalogs
+
+---
+ docs/on-screen-keyboard.md          | 13 +++++++++++--
+ scripts/plymouth-populate-initrd.in |  9 +++++++++
+ src/main.c                          |  4 ++++
+ tests/test-populate-initrd.sh       |  1 +
+ 4 files changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/docs/on-screen-keyboard.md b/docs/on-screen-keyboard.md
+index 11a15bb3..78c948ef 100644
+--- a/docs/on-screen-keyboard.md
++++ b/docs/on-screen-keyboard.md
+@@ -31,7 +31,11 @@ Use the same configuration for physical and software input. A legacy `KEYMAP`
+ setting alone does not necessarily identify an XKB map. If Plymouth has no XKB
+ map, the widget is unavailable; it does not silently assume US input. The daemon
+ needs a UTF-8 locale for international input, and the initramfs font must contain
+-the corresponding glyphs.
++the corresponding glyphs. Set the daemon's `LANG` to an installed UTF-8 locale
++(for example `C.UTF-8`) and include its libc `LC_CTYPE` runtime data. This is
++separate from XKB compose tables and gettext message catalogs. The populate
++helper includes the usual glibc `C.utf8`/`C.UTF-8` directories; distributions
++using other locales or filesystem locations must include those explicitly.
+ 
+ The layout key cycles through configured XKB groups. Shift and AltGr latch until
+ the next ordinary key; touching them again cancels the latch. Caps uses XKB lock
+@@ -68,7 +72,12 @@ connector name, for example `eDP-1`. A card-qualified name such as
+ renderer checks all connectors belonging to a logical head, including cloned
+ and tiled outputs. An absent or ambiguous association is not guessed from
+ resolution; the corresponding touchscreen will not type until its association
+-is unambiguous.
++is unambiguous. Device and display removal cancels a pending touch. Reconnecting
++a display restores the pending prompt; it does not submit or discard its text.
++Multiple touchscreens may map to different displays, with one active gesture
++at a time. DRM card numbers and connector names can change when a GPU is
++removed or reprobed; distribution mapping rules must track the current names.
++They are not persistent hardware identities.
+ 
+ For firmware input devices which claim to be keyboards but cannot be used for
+ typing, distributions can set `PLYMOUTH_IGNORE_KEYBOARD=1`. This changes only
+diff --git a/scripts/plymouth-populate-initrd.in b/scripts/plymouth-populate-initrd.in
+index 85784f18..fdc4cb7e 100755
+--- a/scripts/plymouth-populate-initrd.in
++++ b/scripts/plymouth-populate-initrd.in
+@@ -501,6 +501,15 @@ for directory in "$X11_DIRECTORY/xkb" "$X11_DIRECTORY/locale"; do
+     fi
+ done
+ 
++# Glibc can store even C.UTF-8 in separate locale files. Without LC_CTYPE
++# data an initrd may silently fall back to ASCII despite LANG=C.UTF-8.
++# Other configured locales remain the initrd builder's responsibility.
++for directory in /usr/lib/locale/C.utf8 /usr/lib/locale/C.UTF-8; do
++    if [[ -d "$PLYMOUTH_SYSROOT$directory" ]]; then
++        inst_recur "$directory"
++    fi
++done
++
+ # Libinput needs its device quirks even when running before the real root mounts.
+ if [[ -n "$PLYMOUTH_LIBINPUT_DATA_DIR" && -d "$PLYMOUTH_SYSROOT$PLYMOUTH_LIBINPUT_DATA_DIR" ]]; then
+     inst_recur "$PLYMOUTH_LIBINPUT_DATA_DIR"
+diff --git a/src/main.c b/src/main.c
+index 553a1acf..92886fff 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -32,6 +32,10 @@ main (int    argc,
+         loop = ply_event_loop_get_default ();
+         options = plymouthd_options_new ();
+ 
++        /* Character input needs the configured encoding even in an initrd
++         * without message catalogs. Keep message translation conditional. */
++        setlocale (LC_CTYPE, "");
++
+         /* Initialize the translations if they are available (!initrd) */
+         if (ply_file_exists (PLYMOUTH_LOCALE_DIRECTORY
+                              "/nl/LC_MESSAGES/plymouth.mo"))
+diff --git a/tests/test-populate-initrd.sh b/tests/test-populate-initrd.sh
+index c32221c9..25db016c 100644
+--- a/tests/test-populate-initrd.sh
++++ b/tests/test-populate-initrd.sh
+@@ -137,6 +137,7 @@ fi
+ # The source exists only in the sysroot; host data must not decide whether it
+ # gets installed. Include nested XKB files and compose locale aliases.
+ input_paths=(
++        /usr/lib/locale/C.utf8/LC_CTYPE
+         /usr/share/X11/xkb/symbols/vendor/custom
+         /usr/share/X11/locale/compose.dir
+         /usr/share/X11/locale/locale.alias
+-- 
+2.56.0
+

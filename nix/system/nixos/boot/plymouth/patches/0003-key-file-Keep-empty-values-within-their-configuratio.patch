@@ -1,0 +1,149 @@
+From 4add5755db4ec3abba1e2edace743ca134448678 Mon Sep 17 00:00:00 2001
+From: Alexander Schiffhauer <Alexander.Schiffhauer@gmail.com>
+Date: Fri, 6 Nov 2026 18:08:22 -0800
+Subject: [PATCH 03/12] key-file: Keep empty values within their configuration
+ line
+
+---
+ src/libply/ply-key-file.c | 19 +++++++++++++++++--
+ tests/test-key-file.c     | 37 +++++++++++++++++++++++++++++++++++++
+ tests/test-vconsole.c     | 22 ++++++++++++++++++++++
+ 3 files changed, 76 insertions(+), 2 deletions(-)
+
+diff --git a/src/libply/ply-key-file.c b/src/libply/ply-key-file.c
+index fe9fb95f..ba99a6ec 100644
+--- a/src/libply/ply-key-file.c
++++ b/src/libply/ply-key-file.c
+@@ -178,6 +178,9 @@ ply_key_file_load_group (ply_key_file_t *key_file,
+                 char *value;
+                 off_t offset;
+                 int first_byte;
++                char *line = NULL;
++                size_t line_size = 0;
++                int value_offset = 0;
+ 
+                 key = NULL;
+                 value = NULL;
+@@ -202,7 +205,20 @@ ply_key_file_load_group (ply_key_file_t *key_file,
+                 ungetc (first_byte, key_file->fp);
+ 
+                 offset = ftello (key_file->fp);
+-                items_matched = fscanf (key_file->fp, " %m[^= \t\n] = %m[^\n] ", &key, &value);
++                /* Parse one line at a time: scanf whitespace also consumes
++                 * newlines, which otherwise turns an empty value into the
++                 * next setting or group header. */
++                if (getline (&line, &line_size, key_file->fp) < 0)
++                        items_matched = EOF;
++                else
++                        items_matched = sscanf (line, " %m[^= \t\r\n] = %n%m[^\r\n]",
++                                                &key, &value_offset, &value);
++                free (line);
++
++                if (items_matched == 1 && value_offset > 0) {
++                        value = strdup ("");
++                        items_matched = 2;
++                }
+ 
+                 if (items_matched != 2) {
+                         if (items_matched == 1)
+@@ -493,4 +509,3 @@ ply_key_file_load_groupless_file (ply_key_file_t *key_file)
+ 
+         return key_file->groupless_group != NULL;
+ }
+-
+diff --git a/tests/test-key-file.c b/tests/test-key-file.c
+index f899ee4f..cd2c530f 100644
+--- a/tests/test-key-file.c
++++ b/tests/test-key-file.c
+@@ -283,6 +283,42 @@ test_foreach_visits_grouped_entries (void)
+         return true;
+ }
+ 
++static bool
++test_empty_values_preserve_following_lines (void)
++{
++        static const char contents[] =
++                "[First]\n"
++                "Empty=\n"
++                "Next=value\n"
++                "Whitespace= \t\r\n"
++                "# comment after an empty value\n"
++                "BeforeGroup=\n"
++                "[Second]\n"
++                "Last=";
++        static const char *empty_keys[] = { "Empty", "Whitespace", "BeforeGroup", "Last" };
++        char path[64];
++        ply_key_file_t *key_file;
++        char *value;
++        size_t i;
++
++        PLY_TEST_ASSERT (write_fixture (contents, path));
++        key_file = ply_key_file_new (path);
++        PLY_TEST_ASSERT (ply_key_file_load (key_file));
++        for (i = 0; i < 4; i++) {
++                value = ply_key_file_get_value (key_file, i == 3 ? "Second" : "First", empty_keys[i]);
++                PLY_TEST_ASSERT (value != NULL);
++                PLY_TEST_ASSERT (strcmp (value, "") == 0);
++                free (value);
++        }
++        value = ply_key_file_get_value (key_file, "First", "Next");
++        PLY_TEST_ASSERT (value != NULL);
++        PLY_TEST_ASSERT (strcmp (value, "value") == 0);
++        free (value);
++        ply_key_file_free (key_file);
++        unlink (path);
++        return true;
++}
++
+ static const ply_test_case_t test_cases[] =
+ {
+         PLY_TEST_CASE (test_missing_file_fails_to_load),
+@@ -292,6 +328,7 @@ static const ply_test_case_t test_cases[] =
+         PLY_TEST_CASE (test_typed_accessors_handle_defaults),
+         PLY_TEST_CASE (test_groupless_file_uses_null_group),
+         PLY_TEST_CASE (test_foreach_visits_grouped_entries),
++        PLY_TEST_CASE (test_empty_values_preserve_following_lines),
+ };
+ 
+ PLY_TEST_MAIN (test_cases)
+diff --git a/tests/test-vconsole.c b/tests/test-vconsole.c
+index fbd252cb..b53aa93c 100644
+--- a/tests/test-vconsole.c
++++ b/tests/test-vconsole.c
+@@ -126,11 +126,33 @@ test_missing_file_is_rejected (void)
+         return true;
+ }
+ 
++static bool
++fixture_preserves_empty_variant (const char *path)
++{
++        ply_vconsole_settings_t settings;
++
++        PLY_TEST_ASSERT (ply_vconsole_settings_load (path, &settings));
++        PLY_TEST_ASSERT (settings.xkb_variant != NULL);
++        PLY_TEST_ASSERT (strcmp (settings.xkb_variant, "") == 0);
++        PLY_TEST_ASSERT (settings.xkb_options != NULL);
++        PLY_TEST_ASSERT (strcmp (settings.xkb_options, "terminate:ctrl_alt_bksp") == 0);
++        ply_vconsole_settings_clear (&settings);
++        return true;
++}
++
++static bool
++test_empty_variant_does_not_consume_options (void)
++{
++        return with_fixture ("XKBLAYOUT=us,de\nXKBVARIANT=\nXKBOPTIONS=terminate:ctrl_alt_bksp\n",
++                             fixture_preserves_empty_variant);
++}
++
+ static const ply_test_case_t test_cases[] =
+ {
+         PLY_TEST_CASE (test_quoted_and_unquoted_settings_load),
+         PLY_TEST_CASE (test_missing_values_and_unmatched_quote_are_safe),
+         PLY_TEST_CASE (test_missing_file_is_rejected),
++        PLY_TEST_CASE (test_empty_variant_does_not_consume_options),
+ };
+ 
+ PLY_TEST_MAIN (test_cases)
+-- 
+2.56.0
+

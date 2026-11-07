@@ -1,0 +1,191 @@
+From 57f49e5547aeda7abbafc1abfe96019539485c9f Mon Sep 17 00:00:00 2001
+From: Chris Allen <cma@bitemyapp.com>
+Date: Sat, 24 Oct 2026 22:05:47 -0500
+Subject: [PATCH 02/12] script: Follow the splash's keyboard
+
+The script plugin's Plymouth library is given the plugin's keyboard when
+the script starts and keeps it. set_keyboard and unset_keyboard only
+changed the plugin's own pointer, so Plymouth.GetCapslockState() and
+Plymouth.GetKeyboardLayout() went on reading the keyboard the script
+started with after Plymouth had freed it, and the plugin's keystroke
+handler stayed on it. A theme that checks Caps Lock while a passphrase
+is asked crashed plymouthd in ply_keyboard_get_capslock_state() once a
+GPU's driver had taken over from simpledrm.
+
+Have set_keyboard and unset_keyboard move the input handler and update
+the library, and answer GetCapslockState() with no keyboard as off, as
+GetKeyboardLayout() already answers with no layout.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+(cherry picked from commit 311dbd364c10e60c2725459e94d03e2a74558319)
+---
+ src/plugins/splash/script/plugin.c            | 21 ++++++
+ .../splash/script/script-lib-plymouth.c       |  9 ++-
+ .../splash/script/script-lib-plymouth.h       |  2 +
+ tests/test-script-lib-plymouth.c              | 66 +++++++++++++++++++
+ 4 files changed, 96 insertions(+), 2 deletions(-)
+
+diff --git a/src/plugins/splash/script/plugin.c b/src/plugins/splash/script/plugin.c
+index 9b2d0a0f..04653df8 100644
+--- a/src/plugins/splash/script/plugin.c
++++ b/src/plugins/splash/script/plugin.c
+@@ -449,14 +449,35 @@ static void
+ set_keyboard (ply_boot_splash_plugin_t *plugin,
+               ply_keyboard_t           *keyboard)
+ {
++        if (plugin->is_animating && plugin->keyboard != NULL)
++                ply_keyboard_remove_input_handler (plugin->keyboard,
++                                                   (ply_keyboard_input_handler_t)
++                                                   on_keyboard_input);
++
+         plugin->keyboard = keyboard;
++
++        if (plugin->script_plymouth_lib != NULL)
++                script_lib_plymouth_set_keyboard (plugin->script_plymouth_lib, keyboard);
++
++        if (plugin->is_animating && keyboard != NULL)
++                ply_keyboard_add_input_handler (keyboard,
++                                                (ply_keyboard_input_handler_t)
++                                                on_keyboard_input, plugin);
+ }
+ 
+ static void
+ unset_keyboard (ply_boot_splash_plugin_t *plugin,
+                 ply_keyboard_t           *keyboard)
+ {
++        if (plugin->is_animating && plugin->keyboard != NULL)
++                ply_keyboard_remove_input_handler (plugin->keyboard,
++                                                   (ply_keyboard_input_handler_t)
++                                                   on_keyboard_input);
++
+         plugin->keyboard = NULL;
++
++        if (plugin->script_plymouth_lib != NULL)
++                script_lib_plymouth_set_keyboard (plugin->script_plymouth_lib, NULL);
+ }
+ 
+ static void
+diff --git a/src/plugins/splash/script/script-lib-plymouth.c b/src/plugins/splash/script/script-lib-plymouth.c
+index 242a04c7..af8ad3a0 100644
+--- a/src/plugins/splash/script/script-lib-plymouth.c
++++ b/src/plugins/splash/script/script-lib-plymouth.c
+@@ -103,9 +103,8 @@ static script_return_t plymouth_get_capslock_state (script_state_t *state,
+ 
+         bool is_on = false;
+ 
+-        if (ply_keyboard_get_capslock_state != NULL) {
++        if (ply_keyboard_get_capslock_state != NULL && data->keyboard != NULL)
+                 is_on = ply_keyboard_get_capslock_state (data->keyboard);
+-        }
+ 
+ 
+         obj = is_on ? script_obj_new_number (1) : script_obj_new_number (0);
+@@ -274,6 +273,12 @@ script_lib_plymouth_data_t *script_lib_plymouth_setup (script_state_t        *st
+         return data;
+ }
+ 
++void script_lib_plymouth_set_keyboard (script_lib_plymouth_data_t *data,
++                                       ply_keyboard_t             *keyboard)
++{
++        data->keyboard = keyboard;
++}
++
+ void script_lib_plymouth_destroy (script_lib_plymouth_data_t *data)
+ {
+         script_parse_op_free (data->script_main_op);
+diff --git a/src/plugins/splash/script/script-lib-plymouth.h b/src/plugins/splash/script/script-lib-plymouth.h
+index 9d2a5e9c..825720f6 100644
+--- a/src/plugins/splash/script/script-lib-plymouth.h
++++ b/src/plugins/splash/script/script-lib-plymouth.h
+@@ -53,6 +53,8 @@ script_lib_plymouth_data_t *script_lib_plymouth_setup (script_state_t        *st
+                                                        int                    refresh_rate,
+                                                        ply_keyboard_t        *keyboard);
+ void script_lib_plymouth_destroy (script_lib_plymouth_data_t *data);
++void script_lib_plymouth_set_keyboard (script_lib_plymouth_data_t *data,
++                                       ply_keyboard_t             *keyboard);
+ 
+ void script_lib_plymouth_on_refresh (script_state_t             *state,
+                                      script_lib_plymouth_data_t *data);
+diff --git a/tests/test-script-lib-plymouth.c b/tests/test-script-lib-plymouth.c
+index 9270bea7..d19e77cb 100644
+--- a/tests/test-script-lib-plymouth.c
++++ b/tests/test-script-lib-plymouth.c
+@@ -70,9 +70,75 @@ test_get_keyboard_layout_reports_renderer_layout (void)
+         return true;
+ }
+ 
++static bool
++test_keyboard_queries_follow_the_splash_keyboard (void)
++{
++        script_lib_plymouth_data_t *plymouth_data;
++        script_return_t result;
++        ply_keyboard_t *keyboard;
++        ply_renderer_t *renderer;
++        script_state_t *state;
++        script_op_t *op;
++        int terminal_marker;
++        int local_console_marker;
++        char *layout;
++
++        renderer = ply_renderer_new_with_plugin_directory (
++                PLY_RENDERER_TYPE_FRAME_BUFFER,
++                TEST_RENDERER_PLUGIN_DIR,
++                "/dev/requested",
++                (ply_terminal_t *) &terminal_marker,
++                (ply_terminal_t *) &local_console_marker);
++        PLY_TEST_ASSERT (renderer != NULL);
++        PLY_TEST_ASSERT (ply_renderer_open (renderer, true));
++        keyboard = ply_keyboard_new_for_renderer (renderer);
++        PLY_TEST_ASSERT (keyboard != NULL);
++
++        state = script_state_new (NULL);
++        plymouth_data = script_lib_plymouth_setup (state,
++                                                   PLY_BOOT_SPLASH_MODE_BOOT_UP,
++                                                   50,
++                                                   keyboard);
++        op = script_parse_string ("caps = Plymouth.GetCapslockState ();"
++                                  "layout = Plymouth.GetKeyboardLayout ();",
++                                  "test.script");
++        PLY_TEST_ASSERT (op != NULL);
++
++        /* The keyboard the script started with goes away, as when a
++         * renderer is replaced: the script must not read it. */
++        script_lib_plymouth_set_keyboard (plymouth_data, NULL);
++        result = script_execute (state, op);
++        script_obj_unref (result.object);
++
++        PLY_TEST_ASSERT (script_obj_hash_get_number (state->global, "caps") == 0);
++        layout = script_obj_hash_get_string (state->global, "layout");
++        PLY_TEST_ASSERT (layout != NULL);
++        PLY_TEST_ASSERT (strcmp (layout, "#NULL") == 0);
++        free (layout);
++
++        /* Another keyboard arrives: the script reads that one. */
++        script_lib_plymouth_set_keyboard (plymouth_data, keyboard);
++        result = script_execute (state, op);
++        script_obj_unref (result.object);
++
++        layout = script_obj_hash_get_string (state->global, "layout");
++        PLY_TEST_ASSERT (layout != NULL);
++        PLY_TEST_ASSERT (strcmp (layout, "Russian") == 0);
++
++        free (layout);
++        script_parse_op_free (op);
++        script_lib_plymouth_destroy (plymouth_data);
++        script_state_destroy (state);
++        ply_keyboard_free (keyboard);
++        ply_renderer_close (renderer);
++        ply_renderer_free (renderer);
++        return true;
++}
++
+ static const ply_test_case_t test_cases[] =
+ {
+         PLY_TEST_CASE (test_get_keyboard_layout_reports_renderer_layout),
++        PLY_TEST_CASE (test_keyboard_queries_follow_the_splash_keyboard),
+ };
+ 
+ PLY_TEST_MAIN (test_cases)
+-- 
+2.56.0
+
