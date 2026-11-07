@@ -1,0 +1,15 @@
+{
+  "name": "host-timeout",
+  "state": "host-timeout",
+  "stateMaterial": "host-timeout:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "python3 tests/harness/timeout/check.py",
+      "timeout": 30,
+      "expect": "PASS: host deadlines stop commands and their children"
+    },
+    { "op": "record-state" }
+  ]
+}

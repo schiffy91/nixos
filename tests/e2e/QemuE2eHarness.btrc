@@ -248,7 +248,7 @@ class QemuE2eHarness {
 
     public ExecResult ssh(string command, bool checkStatus) { return self.remote.ssh(command, checkStatus); }
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) { return self.remote.sshWithTimeout(command, checkStatus, timeoutSeconds); }
-    public ExecResult host(string command, bool checkStatus) { return self.remote.host(command, checkStatus); }
+    public ExecResult host(string command, bool checkStatus, int timeoutSeconds = 0) { return self.remote.host(command, checkStatus, timeoutSeconds); }
     public ExecResult nixEval(string attribute, int timeoutSeconds) { return self.remote.nixEval(attribute, timeoutSeconds); }
     public void reapStaleVm() {
         var port = Strings.fromInt(self.spec.sshPort);

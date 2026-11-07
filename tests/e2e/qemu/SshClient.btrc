@@ -61,8 +61,8 @@ class SshClient {
         return self.sshWithTimeout(command, checkStatus, 5);
     }
 
-    public ExecResult host(string command, bool checkStatus) {
-        return self.shell.run(command, logFailure=checkStatus);
+    public ExecResult host(string command, bool checkStatus, int timeoutSeconds = 0) {
+        return self.shell.run(command, logFailure=checkStatus, timeoutMilliseconds=timeoutSeconds * 1000);
     }
 
     public ExecResult workspaceFileExists(string relativePath) {

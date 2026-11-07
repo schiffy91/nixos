@@ -209,7 +209,7 @@ class VmTestRunner {
             return;
         }
         if (op.kind.equals("host")) {
-            var result = self.vm.host(op.command, false);
+            var result = self.vm.host(op.command, false, op.timeout);
             self.assertResult("host command", result, op.expect);
             return;
         }
