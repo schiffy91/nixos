@@ -5,9 +5,13 @@
     vault = "Private"
   '';
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.onePassword.enable) {
-  users.users.${user}.packages = with pkgs; [ _1password-gui _1password-cli ];
+  programs._1password.enable = true;
+  programs._1password-gui = {
+    enable = true;
+    polkitPolicyOwners = [ user ];
+  };
   system.activationScripts.onePasswordAgent = lib.stringAfter [ "users" ] ''
-    ${pkgs.coreutils}/bin/install -d -o ${user} -m 0700 /home/${user}/.config/1Password/ssh
-    ${pkgs.coreutils}/bin/install -o ${user} -m 0600 ${agentToml} /home/${user}/.config/1Password/ssh/agent.toml
+    ${pkgs.coreutils}/bin/install -d -o ${user} -m 0700 ${lib.escapeShellArg "${config.settings.users.admin.homeDirectory}/.config/1Password/ssh"}
+    ${pkgs.coreutils}/bin/install -o ${user} -m 0600 ${agentToml} ${lib.escapeShellArg "${config.settings.users.admin.homeDirectory}/.config/1Password/ssh/agent.toml"}
   '';
 }

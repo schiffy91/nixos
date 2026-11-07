@@ -1011,6 +1011,10 @@
       "after": []
     },
     {
+      "id": "onepassword-integration",
+      "spec": "nixosctl/onepassword/test.json"
+    },
+    {
       "id": "password-file",
       "spec": "nixosctl/password-file/test.json",
       "after": []
@@ -1080,6 +1084,7 @@
     "initrd-touch-unlock-french",
     "initrd-touch-unlock-displays",
     "nixosctl-sudo",
+    "onepassword-integration",
     "password-file"
   ],
   "workspaceRoot": ".."
