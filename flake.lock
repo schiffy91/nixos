@@ -541,11 +541,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793757180,
-        "narHash": "sha256-gyV7AtCwLnOImcrfSETP4J3Ie96bz19DY47B7m7Y3HM=",
+        "lastModified": 1793979366,
+        "narHash": "sha256-7OoWDsYO9teiPxl0QdlS5lYE20Pue8/5mpscSL32FUA=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "b787c48e2ec57a9d098f5c2721882a3bc1e16f97",
+        "rev": "2c0c1f01521469cf0271180c453c79782d53c2f6",
         "type": "github"
       },
       "original": {
@@ -582,11 +582,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793804549,
-        "narHash": "sha256-qYZLU2B4dHrDPIJThzDJnavdF1XTDvd1Kw3gbSjN8xE=",
+        "lastModified": 1793955117,
+        "narHash": "sha256-FhaAtAykFOipr3DIBQpxYfo73rMjY3UHuYA6xAs5K6E=",
         "owner": "Jovian-Experiments",
         "repo": "Jovian-NixOS",
-        "rev": "422ba2f963ebb9783a59eb38b5968578e534f5e2",
+        "rev": "6d21db8ad755a73cc5df076e80fa80b714f555a6",
         "type": "github"
       },
       "original": {
@@ -626,11 +626,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793702400,
-        "narHash": "sha256-C/zm8AITImubyYSUhbDoPGf37cg0tB9BGlwxC0V8fTw=",
+        "lastModified": 1793988493,
+        "narHash": "sha256-AaZofxUb0nJ8DvKAgBnzEsmMn5fIYjlvLYIc327jZBo=",
         "owner": "mescon",
         "repo": "logitech-trueforce-linux-driver",
-        "rev": "1af9b3335db86200eca67c81beb3ccb090394840",
+        "rev": "08b4d134e8d99d1c07df2f2f23e3614fddc19abd",
         "type": "github"
       },
       "original": {
