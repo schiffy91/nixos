@@ -3,6 +3,12 @@ let
   enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable;
   capture = config.settings.apps.sunshine.capture;
   automatic = capture == "auto";
+  credentials = import ./credentials/package.nix {
+    inherit pkgs;
+    user = config.settings.users.admin.username;
+    home = config.settings.users.admin.homeDirectory;
+    inherit (config.settings.apps.sunshine.credentials) usernameReference passwordReference;
+  };
   desktopConfig = (pkgs.formats.keyValue {}).generate "sunshine-desktop.conf" config.services.sunshine.settings;
   gamingApps = (pkgs.formats.json {}).generate "sunshine-gaming-apps.json" {
     apps = [{ name = "Gaming Mode"; image-path = "steam.png"; }];
@@ -19,7 +25,15 @@ let
     gamingCommand = lib.escapeShellArgs [ "${config.security.wrapperDir}/sunshine" gamingConfig ];
   };
 in {
-  nixpkgs.overlays = lib.optional (enabled && config.settings.apps.sunshine.cuda.enable)
+  nixpkgs.overlays = lib.optional enabled
+    (_final: prev: {
+      # Protect every entry point, including manual and desktop launches, without
+      # wrapping the executable that KWin checks for capture permission.
+      sunshine = prev.sunshine.overrideAttrs (old: {
+        patches = (old.patches or []) ++ [ ./require-credentials.patch ];
+      });
+    })
+  ++ lib.optional (enabled && config.settings.apps.sunshine.cuda.enable)
     (_final: prev: {
       sunshine = (prev.sunshine.override { cudaSupport = true; }).overrideAttrs (old: {
         # cudaSupport wraps $out/bin/sunshine in a shell script that exec's
@@ -61,7 +75,10 @@ in {
     autoStart = true;
     capSysAdmin = capture == "kms" || automatic;  # gamescope needs privileged KMS capture
     settings.capture = if automatic then "kwin" else capture;
+    settings.credentials_file = "${config.settings.users.admin.homeDirectory}/.config/sunshine/credentials.json";
+    settings.origin_web_ui_allowed = "lan";
   };
+  environment.systemPackages = lib.optional enabled credentials;
   settings.networking.ports = lib.mkIf enabled {
     tcp = [ 47984 47989 47990 48010 ];
     udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
@@ -74,11 +91,13 @@ in {
     sunshine = {
       unitConfig.ConditionUser = config.settings.users.admin.username;
       environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+      serviceConfig.ExecStartPre = "${credentials}/bin/nixosctl-sunshine prepare";
       serviceConfig.ExecStart = lib.mkIf automatic (lib.mkForce (lib.getExe sessionLauncher));
     };
     "app-dev.lizardbyte.app.Sunshine" = {
       unitConfig.ConditionUser = config.settings.users.admin.username;
       environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+      serviceConfig.ExecStartPre = "${credentials}/bin/nixosctl-sunshine prepare";
     };
   };
 }

@@ -57,6 +57,7 @@ class NixosCtl {
         help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
         help.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
         help.item("sudo <enable --for 8h|status|disable>", "Manage an expiring, account-wide passwordless sudo grant.");
+        help.item("sunshine <sync|provision|status>", "Sync web credentials from 1Password; provision accepts JSON on stdin.");
 
         help.section("Disk + immutability");
         help.item("diff [--recent] [--pattern <p>] [--depth <n>]",
@@ -174,6 +175,15 @@ class NixosCtl {
         }
         if (self.needsRoot(command) && !Platform.isRoot()) {
             return self.sudoSelf(args);
+        }
+
+        if (command.equals("sunshine")) {
+            var action = self.requireAction(args, "Usage: nixosctl sunshine <sync|provision|status>");
+            if (args.count() != 2 || (!action.equals("sync") && !action.equals("provision") && !action.equals("status"))) {
+                NixosLog.fatal("Usage: nixosctl sunshine <sync|provision|status>");
+            }
+            return UnixShell().run(f"/run/current-system/sw/bin/nixosctl-sunshine {ShellWords.quote(action)}",
+                stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true).code;
         }
 
         if (command.equals("sudo")) {

@@ -1011,6 +1011,10 @@
       "after": []
     },
     {
+      "id": "sunshine-credentials",
+      "spec": "nixosctl/sunshine/test.json"
+    },
+    {
       "id": "onepassword-integration",
       "spec": "nixosctl/onepassword/test.json"
     },
@@ -1084,6 +1088,7 @@
     "initrd-touch-unlock-french",
     "initrd-touch-unlock-displays",
     "nixosctl-sudo",
+    "sunshine-credentials",
     "onepassword-integration",
     "password-file"
   ],

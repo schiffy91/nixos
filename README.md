@@ -146,7 +146,7 @@ Use these for per-host or per-profile policy. Architecture checks are still
 capability guards. Battle.net and Rocksmith require their own flag,
 `settings.apps.steam.enable`, and an x86_64 host platform. Sunshine's CUDA
 build is opt-in through `settings.apps.sunshine.cuda.enable`; other hosts keep
-upstream `pkgs.sunshine`.
+the non-CUDA build. Both builds require provisioned administration credentials.
 
 Plasma desktop state is intentionally not treated as an optional app flag. It is
 part of the shared desktop surface, not an app install.
@@ -432,6 +432,34 @@ using the admin account**, not only an agent. It cannot revoke existing root
 processes or undo changes they made. The separate agent account does not gain
 administrative access. The only permanent passwordless command is the helper's
 read-only `status` operation, which reads the protected grant metadata.
+
+Sunshine administration credentials are declared with
+`settings.apps.sunshine.credentials.usernameReference` and `passwordReference`.
+Defaults reference the `username` and `password` fields of `Sunshine HOSTNAME` in
+1Password's `Private` vault. Enable 1Password's Developer → Integrate with
+1Password CLI setting, then run as the configured desktop user:
+
+```sh
+nixosctl sunshine sync
+nixosctl sunshine status
+systemctl --user restart sunshine
+```
+
+Secrets are retrieved only by the explicit sync command. The local salted
+verifier is stored atomically in the user's private
+`.config/sunshine/credentials.json`, allowing offline startup. Existing valid
+credentials are imported from `sunshine_state.json` on first service start;
+Moonlight pairings, host identity, and certificates stay in their original files.
+Updating credentials does not rewrite that pairing state. Missing or invalid
+credentials prevent Sunshine from opening its first-run administration interface,
+including when launched directly.
+
+For remote provisioning, `nixosctl sunshine provision` accepts a JSON object with
+`username` and `password` through stdin. Feed it through a private pipe from the
+credential provider; do not place secret values in command arguments, shell
+history, files, or chat. Run it as the remote desktop user, then restart that
+user's Sunshine service. Vault retrieval failures leave existing credentials
+intact.
 
 `settings.networking.identityAgent` retains the local 1Password agent.
 `settings.networking.forwardAgentHosts` explicitly lists destinations allowed to
