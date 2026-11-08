@@ -1,7 +1,6 @@
 """Root-only sleep ordering; passwords stay in the native PAM conversation."""
 import contextlib
 import fcntl
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,14 +19,11 @@ BLANK = "@blank@"
 PLYMOUTH = "@plymouth@"
 PLYMOUTHD = "@plymouthd@"
 SYSTEMCTL = "@systemctl@"
+LOGINCTL = "@loginctl@"
 USER = "@user@"
 UNIT = "nixos-sleep-lock.service"
-GAMING_ONLY = @gamingOnly@
 GAMING_MARKER = Path("/run/nixos-gaming-locked")
 SUNSHINE_UNITS = ("sunshine.service", "app-dev.lizardbyte.app.Sunshine.service")
-_plasma_spec = importlib.util.spec_from_file_location("sleep_lock_plasma", "@plasma@")
-plasma = importlib.util.module_from_spec(_plasma_spec)
-_plasma_spec.loader.exec_module(plasma)
 SLEEP_UNITS = {
     "systemd-suspend.service", "systemd-hibernate.service",
     "systemd-hybrid-sleep.service", "systemd-suspend-then-hibernate.service",
@@ -68,9 +64,8 @@ def load():
     private(STATE, 0o600)
     data = json.loads(STATE.read_text())
     if (not isinstance(data, dict)
-            or set(data) != {"uid", "vt", "sysrq", "epoch", "holds", "phase", "ready", "plasma", "sunshine"}
+            or set(data) != {"uid", "vt", "sysrq", "epoch", "holds", "phase", "ready", "sunshine"}
             or type(data["uid"]) is not int or data["uid"] < 0
-            or (data["plasma"] is not None and not plasma.valid(data["plasma"]))
             or (data["sunshine"] is not None and
                 (not isinstance(data["sunshine"], list) or
                  not all(unit in SUNSHINE_UNITS for unit in data["sunshine"])))
@@ -86,8 +81,6 @@ def load():
         raise RuntimeError("Invalid sleep-lock state")
     if data["uid"] != pwd.getpwnam(USER).pw_uid:
         raise RuntimeError("The configured password account changed")
-    if data["plasma"] and any(record["uid"] != data["uid"] for record in data["plasma"]):
-        raise RuntimeError("Recorded Plasma session belongs to another account")
     return data
 
 
@@ -105,10 +98,22 @@ def save(data):
 
 
 def gaming_session():
+    def loginctl(*args):
+        return subprocess.run([LOGINCTL, "--no-ask-password", *args], check=True,
+                              timeout=3, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, env={"LANG": "C.UTF-8"}, text=True).stdout
+
     uid = pwd.getpwnam(USER).pw_uid
-    return any(int(state["User"]) == uid and state["Type"] == "wayland" and
-               "gamescope" in state["Desktop"].lower().split(":")
-               for state in plasma.graphical_sessions())
+    for entry in json.loads(loginctl("list-sessions", "--json=short")):
+        if entry["class"] != "user":
+            continue
+        output = loginctl("show-session", entry["session"], "--property=User",
+                          "--property=Type", "--property=Desktop")
+        state = dict(line.split("=", 1) for line in output.splitlines())
+        if (int(state["User"]) == uid and state["Type"] == "wayland" and
+                "gamescope" in state["Desktop"].lower().split(":")):
+            return True
+    return False
 
 
 def user_service(*args):
@@ -132,8 +137,6 @@ def stream_state(unit):
 
 
 def stop_streams(data):
-    if not GAMING_ONLY:
-        return
     fd = os.open(GAMING_MARKER, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644)
     os.fchmod(fd, 0o644)
     os.close(fd)
@@ -151,8 +154,6 @@ def stop_streams(data):
 
 
 def verify_streams():
-    if not GAMING_ONLY:
-        return
     private(GAMING_MARKER, 0o644)
     for unit in SUNSHINE_UNITS:
         state = stream_state(unit)
@@ -161,8 +162,6 @@ def verify_streams():
 
 
 def restore_streams(data):
-    if not GAMING_ONLY:
-        return
     GAMING_MARKER.unlink(missing_ok=True)
     for unit in data["sunshine"] or []:
         try:
@@ -175,10 +174,6 @@ def restore_streams(data):
 def finish(data):
     if data["phase"] != "authenticated" or data["holds"]:
         raise RuntimeError("Unlock has not been authenticated")
-    # Fresh root PAM success authorizes this account's exact recorded native
-    # session, including a lock already present before the sleep request.
-    if not GAMING_ONLY:
-        plasma.release(data["plasma"])
     command(NATIVE, "release", str(data["vt"]))
     Path("/proc/sys/kernel/sysrq").write_text(str(data["sysrq"]))
     restore_streams(data)
@@ -186,43 +181,18 @@ def finish(data):
 
 
 def recover_release(data):
-    # A durable success record cannot distinguish an interrupted Unlock from a
-    # later native relock. Never replay that older authorization on restart.
-    # Reacquire both boundaries and require a fresh PAM success for the current
-    # native session, even if the previous attempt already unlocked it.
+    # Never replay an interrupted release after restart. Reacquire the console
+    # and require fresh PAM success before returning to the game.
     data["phase"] = "acquiring"
     data["ready"] = False
     data["epoch"] = secrets.token_hex(16)
-    data["plasma"] = None
     save(data)
 
 
-def verify_plasma(records):
-    if not GAMING_ONLY:
-        plasma.verify(records)
-
-
-def lock_plasma(data):
-    if GAMING_ONLY:
-        # Desktop transitions while the console is held must not require the
-        # optional custom KDE API. Fresh PAM still gates the physical console.
-        data.update(plasma=[], epoch=secrets.token_hex(16), ready=False)
-        save(data)
-        return
-    if data["plasma"] is None:
-        data["plasma"] = plasma.capture(USER)
-        # Persist identity before requesting a lock, so recovery cannot unlock
-        # a replacement session with the previous request's authorization.
-        save(data)
-    else:
-        current = plasma.rebind(data["plasma"])
-        data["plasma"] = current
-    # Every native reacquisition invalidates the root PAM generation as well.
-    # Persist that invalidation before requesting new native release authority.
+def reset_authentication(data):
+    # Every console reacquisition invalidates an earlier password attempt.
     data["epoch"] = secrets.token_hex(16)
     data["ready"] = False
-    save(data)
-    data["plasma"] = plasma.lock(data["plasma"])
     save(data)
 
 
@@ -231,7 +201,7 @@ def prepare(unit):
         data = load()
         if data and data["phase"] == "authenticated":
             recover_release(data)
-        if data is None and GAMING_ONLY and not gaming_session():
+        if data is None and not gaming_session():
             return
         if data is None:
             vt = Path("/sys/class/tty/tty0/active").read_text().strip()
@@ -239,7 +209,7 @@ def prepare(unit):
                 raise RuntimeError("Cannot identify the session console")
             data = {"uid": pwd.getpwnam(USER).pw_uid,
                     "vt": int(vt[3:]), "sysrq": int(Path("/proc/sys/kernel/sysrq").read_text()),
-                    "epoch": "", "holds": [], "phase": "acquiring", "ready": False, "plasma": None, "sunshine": None}
+                    "epoch": "", "holds": [], "phase": "acquiring", "ready": False, "sunshine": None}
         data["epoch"] = secrets.token_hex(16)
         data["ready"] = False
         data["holds"] = sorted(set(data["holds"]) | {unit})
@@ -247,9 +217,9 @@ def prepare(unit):
         save(data)
         try:
             stop_streams(data)
-            lock_plasma(data)
+            reset_authentication(data)
         finally:
-            # Native lock failure must still conceal the physical session and
+            # Stream shutdown failure must still conceal the physical session and
             # deny the sleep backend. Recovery retries on the held console.
             Path("/proc/sys/kernel/sysrq").write_text("0")
             command(NATIVE, "verify" if data["phase"] == "locked" else "secure")
@@ -269,7 +239,6 @@ def prepare(unit):
             command(NATIVE, "verify")
             ready = data["ready"]
         if ready:
-            verify_plasma(data["plasma"])
             verify_streams()
             command(PLYMOUTH, "--has-safe-displays")
             command(SYSTEMCTL, "is-active", "--quiet", UNIT)
@@ -322,7 +291,7 @@ def cycle():
         if not data or data["phase"] != "locked" or data["epoch"] != epoch:
             return
         stop_streams(data)
-        lock_plasma(data)
+        reset_authentication(data)
         epoch = data["epoch"]
     daemon = subprocess.Popen([PLYMOUTHD, "--no-daemon", "--no-boot-log", "--tty=/dev/tty63",
                                "--mode=boot-up", "--pid-file=" + str(DIRECTORY / "plymouth.pid")],
@@ -351,7 +320,6 @@ def cycle():
                 raise RuntimeError("Session lock state changed unexpectedly")
             if data["epoch"] != epoch:
                 return
-            verify_plasma(data["plasma"])
             verify_streams()
             data["ready"] = True
             save(data)
@@ -381,7 +349,6 @@ def cycle():
                 continue
             # systemd-sleep freezes user.slice, including the user bus. Once
             # acknowledged, do not wait on that frozen bus during the backend.
-            verify_plasma(data["plasma"])
             verify_streams()
             # Keep supervising the request generation while PAM waits for input.
             # A later sleep must cancel this prompt before acknowledging its UI.
@@ -399,7 +366,6 @@ def cycle():
                             raise RuntimeError("Session lock state changed unexpectedly")
                         if current["epoch"] != epoch or current["holds"]:
                             return
-                        verify_plasma(current["plasma"])
                         verify_streams()
                     time.sleep(.1)
             finally:
@@ -421,7 +387,6 @@ def cycle():
                     retry = False
                     continue
                 command(NATIVE, "verify")
-                verify_plasma(data["plasma"])
                 command(PLYMOUTH, "quit")
                 daemon.wait(timeout=10)
                 data["phase"] = "authenticated"

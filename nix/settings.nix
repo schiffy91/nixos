@@ -239,7 +239,6 @@ in {
       "${adminHome}/.config/rclone"
     ] ++ lib.optionals config.settings.users.agent.enable config.settings.users.agent.persist.paths);
     ##### Sleep #####
-    settings.sleep.lockSession = mkSetting bool false;
     settings.sleep.lockGamingSession = mkSetting bool false;
     settings.sleep.suspendMode = mkSetting (enum [ "s2idle" "deep" ]) "s2idle";
     settings.sleep.allowHibernation = mkSetting bool false;

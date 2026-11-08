@@ -11,7 +11,6 @@ in pkgs.testers.runNixOSTest {
       ../../../nix/system/nixos/boot/touch-keyboard.nix ../../../nix/system/nixos/sleep.nix ];
     disabledModules = [ "${inputs.jovian}/modules/jovian/overlay.nix" ];
     # First prove that the unmodified direct-DRM Gaming Mode can render/input.
-    settings.sleep.lockSession = false;
     settings.users.admin.username = "observer";
     settings.boot.touchKeyboard = true;
     boot.plymouth.enable = true;

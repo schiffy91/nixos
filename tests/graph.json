@@ -1055,10 +1055,6 @@
       "spec": "secure-boot/removal/test.json"
     },
     {
-      "id": "sleep-lock-console",
-      "spec": "sleep-lock/console/test.json"
-    },
-    {
       "id": "sd-unlock",
       "after": [],
       "spec": "sd-unlock/boot/test.json"
@@ -1090,47 +1086,6 @@
       "spec": "tpm2/managed/reset.json"
     },
     {
-      "id": "sleep-suspend-control",
-      "spec": "sleep-lock/suspend-control/test.json"
-    },
-    {
-      "id": "sleep-lock-authentication",
-      "spec": "sleep-lock/authentication/test.json",
-      "after": [
-        "sleep-suspend-control"
-      ]
-    },
-    {
-      "id": "sleep-lock-multioutput",
-      "spec": "sleep-lock/multioutput/test.json"
-    },
-    {
-      "id": "sleep-lock-capture",
-      "spec": "sleep-lock/capture/test.json"
-    },
-    {
-      "id": "sleep-lock-restart-control",
-      "spec": "sleep-lock/restart-control/test.json"
-    },
-    {
-      "id": "sleep-lock-restart-upstream",
-      "spec": "sleep-lock/restart-control/test.json",
-      "args": {
-        "patched": "false",
-        "state": "sleep-lock-restart-upstream",
-        "name": "sleep-lock-restart-upstream"
-      }
-    },
-    {
-      "id": "sleep-lock-restart-video",
-      "spec": "sleep-lock/restart-control/test.json",
-      "args": {
-        "video": "true",
-        "state": "sleep-lock-restart-video",
-        "name": "sleep-lock-restart-video"
-      }
-    },
-    {
       "id": "sleep-gamescope-native-control",
       "spec": "sleep-lock/gamescope-native/test.json"
     },
@@ -1153,19 +1108,13 @@
     {
       "id": "sleep-gamescope-native-suspend-control",
       "spec": "sleep-lock/gamescope-native-suspend-control/test.json"
-    },
-    {
-      "id": "sleep-lock-sunshine",
-      "spec": "sleep-lock/sunshine/test.json"
     }
   ],
   "required": [
     "host-timeout",
-    "sleep-lock-multioutput",
     "source-hash",
     "sd-unlock",
     "secure-boot-backup",
-    "sleep-lock-authentication",
     "sleep-gaming-plasma",
     "cli-parity",
     "spec-toml",
@@ -1240,9 +1189,7 @@
     "password-file",
     "installer-secret",
     "kernel-trust",
-    "kernel-trust-host",
-    "sleep-lock-capture",
-    "sleep-lock-sunshine"
+    "kernel-trust-host"
   ],
   "workspaceRoot": ".."
 }

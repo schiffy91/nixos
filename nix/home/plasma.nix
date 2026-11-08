@@ -39,7 +39,7 @@ in {
     ##### Auto Lock #####
     kscreenlocker = {
       autoLock = settings.users.admin.autoLock.enable;
-      lockOnResume = settings.users.admin.autoLock.enable && !settings.sleep.lockSession;
+      lockOnResume = settings.users.admin.autoLock.enable;
       timeout = if settings.users.admin.autoLock.enable then 10 else null;
     };
     ##### Config Files #####
