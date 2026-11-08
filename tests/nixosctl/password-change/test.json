@@ -50,6 +50,12 @@
     },
     {
       "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && if NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=\"$(printf 'bad\\npassword')\" nixosctl change-password --user-account-only > /tmp/e2e-newline.log 2>&1; then exit 1; fi; grep -F \"Passwords must be non-empty and contain no newline characters\" /tmp/e2e-newline.log && accepts testpass123 && fileaccepts testpass123 && printf newline-rejected",
+      "expect": "newline-rejected",
+      "timeout": 60
+    },
+    {
+      "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && ! grep -F 'PAM password change failed' /tmp/e2e-change.log && journalctl -b -q --no-pager | grep -F \"pam_unix(passwd:chauthtok): password changed for $(cat /var/tmp/e2e-user)\" && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /var/lib/nixos/credentials/password-hash)\" = 600 && printf account-changed || { diag; exit 1; }",
       "expect": "account-changed",
       "timeout": 1800
@@ -126,6 +132,25 @@
       "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && accepts newpass789 && fileaccepts newpass789 && findmnt -rn --target /var/lib/nixos | grep -F '[/@var]' && printf final-password-persisted",
       "expect": "final-password-persisted",
+      "timeout": 60
+    },
+    {
+      "op": "guest",
+      "command": "set -e; . /var/tmp/e2e-crypt.sh; old=/.snapshots/@root/generation-2/etc/shadow; test -s \"$old\"; HASH=$(awk -F: -v user=\"$(cat /var/tmp/e2e-user)\" '$1 == user {print $2}' \"$old\"); export HASH; if test \"$(printf %s newpass789 | crypt)\" = \"$HASH\"; then echo \"rollback fixture must contain an older password\"; exit 1; fi; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf rollback-prepared",
+      "expect": "rollback-prepared",
+      "timeout": 1800
+    },
+    {
+      "op": "reboot-disk"
+    },
+    {
+      "op": "wait-ssh",
+      "timeout": 180
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && accepts newpass789 && fileaccepts newpass789 && ! accepts newpass456 && printf \"%s\\0\" newpass789 | unix_chkpwd \"$(cat /var/tmp/e2e-user)\" nullok && printf password-survived-root-rollback",
+      "expect": "password-survived-root-rollback",
       "timeout": 60
     },
     {

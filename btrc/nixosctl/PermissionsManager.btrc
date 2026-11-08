@@ -2,7 +2,6 @@ import Library.FileSystem;
 import Library.Platform;
 import Library.Process;
 import ./NixosConfig.btrc;
-import ./SecretsManager.btrc;
 
 class PermissionsManager {
     public NixosConfig config;
@@ -32,7 +31,7 @@ class PermissionsManager {
     public void chmodMatching(string quotedRoot, string ignores, string predicate, string mode) {
         var execArg = "{}";
         var prune = ignores.isEmpty() ? "" : f"{ignores} -prune -o";
-        var command = f"find {quotedRoot} {prune} {predicate} -exec chmod {mode} {execArg} +";
+        var command = f"find {quotedRoot} {prune} {predicate} -exec chmod -h {mode} {execArg} +";
         self.shell.run(
             self.inRoot(command),
             stdout=COMMAND_OUTPUT_STREAM,
@@ -41,23 +40,26 @@ class PermissionsManager {
     }
 
     public void secureSecretsPath(string path) {
-        if (!FileSystem.exists(path)) { return; }
         var quoted = ShellWords.quote(path);
+        if (!self.shell.run(self.inRoot(f"test ! -L {quoted}"), logFailure=false).ok()) {
+            throw "Secret directory must not be a symlink";
+        }
+        if (!self.shell.run(self.inRoot(f"test -d {quoted}"), logFailure=false).ok()) { return; }
         if (Platform.isRoot()) {
             self.shell.run(
-                self.inRoot(f"chown -R root:root {quoted}"),
+                self.inRoot(f"chown -hRP root:root {quoted}"),
                 stdout=COMMAND_OUTPUT_STREAM,
                 stderr=COMMAND_OUTPUT_STREAM,
                 throwOnFailure=true);
         }
         var execArg = "{}";
         self.shell.run(
-            self.inRoot(f"find {quoted} -type d -exec chmod 700 {execArg} +"),
+            self.inRoot(f"find {quoted} -type d -exec chmod -h 700 {execArg} +"),
             stdout=COMMAND_OUTPUT_STREAM,
             stderr=COMMAND_OUTPUT_STREAM,
             throwOnFailure=true);
         self.shell.run(
-            self.inRoot(f"find {quoted} -type f -exec chmod 600 {execArg} +"),
+            self.inRoot(f"find {quoted} -type f -exec chmod -h 600 {execArg} +"),
             stdout=COMMAND_OUTPUT_STREAM,
             stderr=COMMAND_OUTPUT_STREAM,
             throwOnFailure=true);
@@ -94,7 +96,7 @@ class PermissionsManager {
             var quotedGitObjects = ShellWords.quote(gitObjects);
             var execArg = "{}";
             self.shell.run(
-                self.inRoot(f"find {quotedGitObjects} -type f -exec chmod 444 {execArg} +"),
+                self.inRoot(f"find {quotedGitObjects} -type f -exec chmod -h 444 {execArg} +"),
                 stdout=COMMAND_OUTPUT_STREAM,
                 stderr=COMMAND_OUTPUT_STREAM,
                 throwOnFailure=true);
@@ -102,10 +104,7 @@ class PermissionsManager {
 
         self.trustGitDirectory(root);
 
-        if (self.config.exists()) {
-            SecretsManager(self.config).secure();
-        } else {
-            self.secureSecretsPath(self.config.paths.secretsPathFallback());
-        }
+        self.secureSecretsPath(self.config.exists()
+            ? self.config.secretsPath() : self.config.paths.secretsPathFallback());
     }
 }

@@ -37,9 +37,12 @@ if len(sys.argv) > 1:
 
 authenticate("testpass123")
 assert not target.exists()
-# The legacy file is attacker-controlled. Migration must preserve shadow instead.
-run("chown -R admin:users /etc/nixos")
-run("echo attacker | mkpasswd -m sha-512 -s > /etc/nixos/secrets/hashed_password.txt")
+# Root owns the old secret directory and file, but the admin owns its parent.
+# Renaming an entry within that writable parent does not require reading it.
+run("chown admin:users /etc/nixos")
+assert run("stat -c '%u:%g:%a' /etc/nixos/secrets") == "0:0:700"
+run("runuser -u admin -- cat /etc/nixos/secrets/hashed_password.txt", success=False)
+run("runuser -u admin -- sh -c 'mv /etc/nixos/secrets /etc/nixos/secrets-original; mkdir -m 700 /etc/nixos/secrets; echo attacker | mkpasswd -m sha-512 -s > /etc/nixos/secrets/hashed_password.txt'")
 protected = run("readlink -f /run/current-system/specialisation/protected")
 run(f"{protected}/bin/switch-to-configuration test")
 authenticate("testpass123")
@@ -47,7 +50,7 @@ authenticate("attacker", success=False)
 original = target.read_bytes()
 Path("/var/tmp/original-hash").write_bytes(original)
 os.chmod("/var/tmp/original-hash", 0o600)
-for command in [f"cat {target}", f"rm {target}", f"mv {target.parent} /tmp/stolen", f"echo bogus > {target}"]:
+for command in [f"cat {target}", f"rm {target}", f"mv {target.parent} {target.parent}-replaced", f"echo bogus > {target}"]:
     run(f"runuser -u admin -- sh -c {shlex.quote(command)}", success=False)
 
 # Existing state wins over subsequent shadow changes; initialization is idempotent.
@@ -57,6 +60,23 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
 assert target.read_bytes() == original
 run(f"{protected}/bin/switch-to-configuration test")
 authenticate("testpass123")
+
+# The permission repair must skip store links, missing VM links and external
+# targets, and must keep legacy secrets private without following their links.
+outside = Path('/var/lib/permissions-outside')
+outside.write_text('public test fixture')
+os.chown(outside, 1000, 100)
+outside.chmod(0o600)
+run('ln -s /run/current-system /etc/nixos/result; ln -s /missing-vm-firmware /etc/nixos/dangling')
+run(f'ln -s {outside} /etc/nixos/external; ln -s {outside} /etc/nixos/secrets/external')
+run('env NIXOS_CONFIG_ROOT=/etc/nixos SUDO_USER=admin nixosctl fix-permissions')
+assert run("stat -c '%u:%a' /etc/nixos") == '1000:755'
+assert run("stat -c '%u:%g:%a' /etc/nixos/secrets") == '0:0:700'
+assert run(f"stat -c '%u:%a' {outside}") == '1000:600'
+assert target.read_bytes() == original
+run('mv /etc/nixos/secrets /etc/nixos/secrets-current; ln -s /var/lib /etc/nixos/secrets')
+run('env NIXOS_CONFIG_ROOT=/etc/nixos SUDO_USER=admin nixosctl fix-permissions', success=False)
+run('rm /etc/nixos/secrets; mv /etc/nixos/secrets-current /etc/nixos/secrets')
 
 fixtures = Path("/var/lib/password-file-test")
 fixtures.mkdir(mode=0o755)

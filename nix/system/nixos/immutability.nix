@@ -62,7 +62,7 @@ let
 		inherit device;
 		fsType = "btrfs";
 		options = [ "subvol=${immutabilityPersistRoot}/dirs/${persistKey path}" "compress=zstd" "noatime" "nofail" "x-systemd.after=persistence-mounts.service" ];
-		neededForBoot = true;  # initrd activation reads hashedPasswordFile from here
+		neededForBoot = true;
 	});
 	bootPersistInitrdMountUnits = map (path: "${utils.escapeSystemdPath "/sysroot${path}"}.mount") bootPersistPaths;
 
@@ -180,21 +180,6 @@ in
 			fileSystems = bootPersistFileSystems;
 			systemd.tmpfiles.rules = homePersistRules;
 			boot.initrd.systemd.services.initrd-nixos-activation.after = bootPersistInitrdMountUnits;
-			systemd.services."recover-boot-critical-persist" = lib.mkIf (bootPersistPaths != []) {
-				description = "Re-activate if initrd activation ran before a boot-critical persisted path was mounted";
-				after = [ "persistence-mounts.service" ];
-				before = [ "multi-user.target" ];
-				wantedBy = [ "multi-user.target" ];
-				unitConfig.DefaultDependencies = "no";
-				serviceConfig.Type = "oneshot";
-				path = [ pkgs.systemd pkgs.gnugrep ];
-				script = ''
-					if journalctl -b -q --no-pager | grep -qE 'password file.*does not exist'; then
-						echo "initrd activation could not see a persisted file; re-activating now that persistence-mounts has run" >&2
-						/run/current-system/bin/switch-to-configuration switch
-					fi
-				'';
-			};
 		})
 		(lib.mkIf (immutabilityEnabled && config.settings.disk.immutability.enforce.onReboot) {
 			fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));

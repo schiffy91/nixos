@@ -1,11 +1,28 @@
-{ config, inputs, lib, pkgs, ... }:
+{ config, inputs, lib, pkgs, utils, ... }:
 let
   admin = config.settings.users.admin;
+  containsPassword = path: path == "/" || lib.hasPrefix "${lib.removeSuffix "/" path}/" admin.hashedPasswordFile;
+  passwordVolumes = lib.sort (a: b: builtins.stringLength a.mountPoint > builtins.stringLength b.mountPoint)
+    (lib.filter (volume: containsPassword volume.mountPoint) config.settings.disk.subvolumes.volumes);
+  resetPassword = passwordVolumes != [] && (builtins.head passwordVolumes).resetOnBoot;
   helper = import ../../../apps/utils/nixosctl/package.nix {
     inherit pkgs lib;
     btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
   };
 in {
+  assertions = [
+    {
+      assertion = lib.all utils.fsNeededForBoot
+        (lib.filter (fs: containsPassword fs.mountPoint) (builtins.attrValues config.fileSystems));
+      message = "Every filesystem containing settings.users.admin.hashedPasswordFile must be mounted before activation (neededForBoot).";
+    }
+    {
+      assertion = !config.settings.disk.immutability.enable || !resetPassword
+        || (config.settings.disk.persistence.enable
+          && lib.any containsPassword config.settings.disk.immutability.persist.neededForBoot);
+      message = "settings.users.admin.hashedPasswordFile must survive immutable-root resets and be available before activation.";
+    }
+  ];
   users.users.${admin.username}.hashedPasswordFile = admin.hashedPasswordFile;
   system.activationScripts.passwordFile = {
     deps = [ "specialfs" ];

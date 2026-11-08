@@ -10,7 +10,8 @@ let
     btrcpy = inputs.btrc.packages.${system}.btrcpy;
   };
   python = pkgs.python3.withPackages (p: [ p.pexpect ]);
-in pkgs.testers.runNixOSTest {
+in assert import ./storage.nix { inherit inputs system; };
+pkgs.testers.runNixOSTest {
   name = "password-file";
   nodes.machine = { lib, ... }: {
     _module.args.inputs = inputs;

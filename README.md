@@ -406,6 +406,13 @@ the file is root-owned `0600`, and every parent must be root-owned and not
 writable by other users. Installation copies it explicitly; immutable-root
 systems mount the persistent `/var` subvolume before activation. Password updates use an
 exclusive lock and durable atomic replacement.
+The configuration rejects a credential location that would disappear during an
+immutable-root reset or be mounted too late for activation. Restoring an older
+root snapshot keeps the current password from persistent storage.
+
+Use `nixosctl change-password` for persistent password changes. A direct `passwd`
+changes the running account only; with immutable users, activation restores the
+authoritative hash on rebuild or boot.
 
 The installer uses `/run/nixosctl-install/passphrase` for the temporary LUKS
 passphrase. It creates the directory as root-only `0700` and the file as `0600`
@@ -415,6 +422,9 @@ can leave the protected file until reboot; `/run` is temporary. A securely
 pre-provided file is preserved for its caller. Custom
 `settings.disk.encryption.plainTextPasswordFile` paths must meet the same ownership
 and permission rules; shared writable directories such as `/tmp` are rejected.
+Supplied files must contain the exact passphrase bytes, without a trailing
+newline, CR, or NUL, and at most 4096 bytes. A supplied file takes precedence over
+a hash left by an earlier installer attempt so disk and account passwords agree.
 
 On the first upgrade, the helper preserves the effective password from
 `/etc/shadow` if the new file does not yet exist. It does not trust the legacy

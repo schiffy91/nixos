@@ -72,9 +72,18 @@ actual = subprocess.run(['mkpasswd', '-m', 'sha-512', '-S', salt, '-s'],
 assert actual.stdout.strip() == hashed
 child = spawn(path, prompt=False)
 finish(child)
-assert (hash_root / 'supplied').read_text().strip() == hashed
+assert (hash_root / 'supplied').read_text().strip().startswith('$6$')
 
-for kind in ['public', 'owner', 'symlink', 'hardlink', 'parent', 'parent-link', 'leaf-owner', 'empty', 'nul']:
+# A supplied passphrase must replace a stale hash from a failed/earlier install.
+(hash_root / 'supplied').write_text('!\n')
+child = spawn(path, prompt=False)
+finish(child)
+hashed = (hash_root / 'supplied').read_text().strip()
+actual = subprocess.run(['mkpasswd', '-m', 'sha-512', '-S', hashed.split('$')[2], '-s'],
+                        input='testpass123\n', text=True, capture_output=True, check=True)
+assert actual.stdout.strip() == hashed
+
+for kind in ['public', 'owner', 'symlink', 'hardlink', 'parent', 'parent-link', 'leaf-owner', 'empty', 'nul', 'newline', 'carriage-return', 'oversize']:
     path = root / kind / 'passphrase'
     path.parent.mkdir(mode=0o700)
     path.touch(mode=0o600)
@@ -93,6 +102,9 @@ for kind in ['public', 'owner', 'symlink', 'hardlink', 'parent', 'parent-link', 
     if kind == 'leaf-owner': os.chown(path.parent, 1000, 100)
     if kind == 'empty': path.write_bytes(b'')
     if kind == 'nul': path.write_bytes(b'testpass123\0extra')
+    if kind == 'newline': path.write_bytes(b'testpass123\nextra')
+    if kind == 'carriage-return': path.write_bytes(b'testpass123\rextra')
+    if kind == 'oversize': path.write_bytes(b'a' * 4097)
     result = subprocess.run(['installer-secret-test', str(path), str(hash_root / kind), 'ok'],
                             input='', text=True, capture_output=True, timeout=10)
     assert result.returncode != 0, kind

@@ -66,6 +66,11 @@
     },
     {
       "op": "guest",
+      "command": "set -e; install -d -m 755 /etc/nixos/secrets; printf fixture > /etc/nixos/secrets/permissions-fixture; chmod 644 /etc/nixos/secrets/permissions-fixture; printf source-permissions-ready",
+      "expect": "source-permissions-ready"
+    },
+    {
+      "op": "guest",
       "command": "cd /etc/nixos && printf 'testpass123\\ntestpass123\\nn\\n' | NIX_CONFIG='experimental-features = nix-command flakes' /run/nixosctl-under-test install --format --yes >/tmp/nixosctl-install.log 2>&1 && printf installed || { tail -60 /tmp/nixosctl-install.log; exit 1; }",
       "expect": "installed",
       "timeout": 3600
@@ -84,6 +89,11 @@
       "op": "guest",
       "command": "set -e; script=/mnt/etc/nixos/.github/ci/publish.py; test -x \"$script\" || { echo 'the permissions pass stripped an executable bit'; ls -l \"$script\"; exit 1; }; printf exec-bits-kept",
       "expect": "exec-bits-kept"
+    },
+    {
+      "op": "guest",
+      "command": "set -e; test \"$(stat -c %a /etc/nixos/secrets/permissions-fixture)\" = 644; test \"$(stat -c %u:%g:%a /mnt/etc/nixos/secrets)\" = 0:0:700; test \"$(stat -c %u:%g:%a /mnt/etc/nixos/secrets/permissions-fixture)\" = 0:0:600; cmp /var/lib/nixos/credentials/password-hash /mnt/var/lib/nixos/credentials/password-hash; test \"$(stat -c %u:%g:%a /mnt/var/lib/nixos/credentials/password-hash)\" = 0:0:600; printf installed-secrets-protected",
+      "expect": "installed-secrets-protected"
     },
     {
       "op": "stop"
