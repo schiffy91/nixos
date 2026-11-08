@@ -1,0 +1,64 @@
+import unlock.Native;
+import unlock.Policy;
+
+#include <assert.h>
+
+int main() {
+    assert(UnlockPolicy.typeAllowed(CRYPT_LUKS1) && UnlockPolicy.typeAllowed(CRYPT_LUKS2));
+    assert(!UnlockPolicy.typeAllowed(NULL) && !UnlockPolicy.typeAllowed("PLAIN"));
+    assert(UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, (int)CRYPT_REENCRYPT_NONE, 0, 0, NULL));
+    assert(UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, (int)CRYPT_REENCRYPT_NONE, 0, 0, ""));
+    assert(!UnlockPolicy.softwareOnly(1, (int)CRYPT_REENCRYPT_NONE, 0, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly(2, (int)CRYPT_REENCRYPT_NONE, 0, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly(-22, (int)CRYPT_REENCRYPT_NONE, 0, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, 1, 0, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, 2, 0, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, -1, 0, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, (int)CRYPT_REENCRYPT_NONE, -22, 0, NULL));
+    assert(!UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, (int)CRYPT_REENCRYPT_NONE, 0, 1, NULL));
+    assert(!UnlockPolicy.softwareOnly((int)CRYPT_SW_ONLY, (int)CRYPT_REENCRYPT_NONE, 0, 0, "hmac-sha256"));
+    assert(UnlockPolicy.activeSlot((int)CRYPT_SLOT_ACTIVE) && UnlockPolicy.activeSlot((int)CRYPT_SLOT_ACTIVE_LAST));
+    assert(!UnlockPolicy.activeSlot(-1) && !UnlockPolicy.activeSlot((int)CRYPT_SLOT_INACTIVE) && !UnlockPolicy.activeSlot((int)CRYPT_SLOT_UNBOUND));
+    assert(UnlockPolicy.cipherAllowed("aes-xts-plain64", 32) && UnlockPolicy.cipherAllowed("aes-xts-plain64", 64));
+    assert(UnlockPolicy.cipherAllowed("aes-cbc-essiv:sha256", 32));
+    assert(!UnlockPolicy.cipherAllowed(NULL, 64) && !UnlockPolicy.cipherAllowed("cipher_null", 64));
+    assert(!UnlockPolicy.cipherAllowed("aes-xts-plain64", 16));
+    assert(UnlockPolicy.volumeCipherAllowed("aes", "xts-plain64", 64));
+    assert(UnlockPolicy.volumeCipherAllowed("aes", "cbc-essiv:sha256", 32));
+    assert(!UnlockPolicy.volumeCipherAllowed(NULL, "xts-plain64", 64));
+    assert(!UnlockPolicy.volumeCipherAllowed("aes", NULL, 64));
+    assert(!UnlockPolicy.volumeCipherAllowed("serpent", "xts-plain64", 64));
+    assert(!UnlockPolicy.volumeCipherAllowed("cipher_null", "xts-plain64", 64));
+    assert(!UnlockPolicy.volumeCipherAllowed("aes", "cbc-plain64", 32));
+    assert(!UnlockPolicy.volumeCipherAllowed("aes", "xts-plain64", 16));
+    crypt_pbkdf_type kdf;
+    memset(&kdf, 0, sizeof(kdf));
+    kdf.type = CRYPT_KDF_PBKDF2;
+    kdf.hash = "sha256";
+    kdf.iterations = 100000000;
+    assert(UnlockPolicy.kdfAllowed(&kdf));
+    kdf.hash = "sha512"; assert(UnlockPolicy.kdfAllowed(&kdf));
+    kdf.hash = "sha1"; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.hash = NULL; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.hash = "sha256";
+    kdf.iterations = 100000001; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.iterations = 0; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.iterations = 2;
+    kdf.type = NULL; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.type = "scrypt"; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.type = CRYPT_KDF_ARGON2ID;
+    kdf.max_memory_kb = 1024 * 1024;
+    kdf.parallel_threads = 8;
+    kdf.iterations = 32;
+    assert(UnlockPolicy.kdfAllowed(&kdf));
+    kdf.type = CRYPT_KDF_ARGON2I; assert(UnlockPolicy.kdfAllowed(&kdf));
+    kdf.max_memory_kb = 1024 * 1024 + 1; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.max_memory_kb = 0; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.max_memory_kb = 65536;
+    kdf.iterations = 33; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.iterations = 2;
+    kdf.parallel_threads = 9; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    kdf.parallel_threads = 0; assert(!UnlockPolicy.kdfAllowed(&kdf));
+    printf("PASS: software LUKS, unsupported formats, cipher and KDF resource boundaries\n");
+    return 0;
+}

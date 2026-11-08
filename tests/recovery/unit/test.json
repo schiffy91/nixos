@@ -1,0 +1,10 @@
+{
+  "name": "recovery-mount-contracts",
+  "state": "recovery-mount-contracts",
+  "stateMaterial": "recovery-mount-contracts:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "host", "command": "nix-build tests/recovery/unit.nix --no-out-link", "timeout": 300 },
+    { "op": "record-state" }
+  ]
+}

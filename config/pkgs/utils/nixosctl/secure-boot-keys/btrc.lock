@@ -1,0 +1,1 @@
+{"manifest-hash":"70ec24dd8e05a2bfee71c88cc8f342b3f4e018d1a9e9a56d1ea3d4ead57b161d","packages":[{"dependencies":{},"manifest-hash":"b7838123bc16583e4e453932600c3ced211b69a5131cccc7174feae48b18cde7","name":"nixos_secure_boot_keys","source":{"path":"."}}],"root":"nixos_secure_boot_keys","schema":3}

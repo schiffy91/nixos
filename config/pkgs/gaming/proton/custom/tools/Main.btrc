@@ -1,0 +1,119 @@
+import ./Capture.btrc;
+import ./Sources.btrc;
+
+class ProtonTools {
+    public ProtonContext context;
+    public ProtonTools(ProtonContext context) { self.context = context; }
+    class void help(string tool) {
+        if (tool.equals("build")) { print("Usage: proton-custom-build [changed|all|package|wayland|ntdll|win32u|TARGET...]"); }
+        else if (tool.equals("install")) { print("Usage: proton-custom-install [dev|store PATH|production|restore|status]"); }
+        else if (tool.equals("make")) { print("Usage: proton-custom-make [MAKE_ARGUMENT...]"); }
+        else {
+            print("Usage: proton-custom-dev COMMAND [OPTIONS]\n"
+                "  setup [--force] | use | restore | status | configure [--keep-running]\n"
+                "  check-patches | patch-lint | source-drift | reset-source-drift\n"
+                "  setup-wine [--force] [--force-configure]\n"
+                "  build-wine [--jobs N] [TARGET...] | wine-loop [--seconds N] [--log FILE] [TARGET...]\n"
+                "  overlay-wine --wine PATH | --wine64 PATH --wine32 PATH\n"
+                "  launch [--seconds N] [--trace quiet|modules] [--winedebug FLAGS] [--env KEY=VALUE] [--log FILE]\n"
+                "  smoke [--seconds N] [--log FILE] | cleanup\n"
+                "  capture [--delay N] [--mode active|current|cursor|full] [--output FILE] [--log FILE]\n"
+                "  frames | grab-frames [--focus] | hover-frames [--profile battle-net|chat|main]\n"
+                "    [--count N] [--interval SECONDS] [--mode MODE] [--format png|jpg] [--output-dir DIR]\n"
+                "  focus | analyze-frames [--output-dir DIR] [--all]");
+        }
+    }
+    public void make(Vector<string> arguments) {
+        var args = ["make", "-C", self.context.directory]; for argument in arguments { args.push(argument); }
+        self.context.shell(args, environment=["PROTON_CUSTOM_QUIET_SHELL=1"]);
+    }
+    class string target(string name) {
+        if (name.equals("wayland")) { return "dlls/winewayland.drv/all"; }
+        if (name.equals("ntdll")) { return "dlls/ntdll/all"; }
+        if (name.equals("win32u")) { return "dlls/win32u/all"; }
+        if (name.contains("/")) { return name; }
+        throw f"Unknown build target: {name}";
+    }
+    public bool changed(Vector<string> paths) {
+        if (!FileSystem.isDir(self.context.source() + "/.git")) { return false; }
+        var args = ["-C", self.context.source(), "diff", "--quiet", "--"]; for path in paths { args.push(path); }
+        var result = ChildProcess.run("git", args);
+        if (result.code > 1) { throw "Cannot inspect Wine source changes"; }
+        return result.code == 1;
+    }
+    public void build(Vector<string> arguments) {
+        var mode = arguments.isEmpty() ? "changed" : arguments.get(0);
+        if (mode.equals("all")) { self.make(["build-all"]); return; }
+        if (mode.equals("package")) { print(self.context.nixPath("")); return; }
+        Vector<string> targets = [];
+        if (mode.equals("changed")) {
+            if (self.changed(["include", "server"])) { targets = ProtonWine.targets(); }
+            else {
+                for target in ProtonWine.targets() { if (self.changed([target.substring(0, target.len() - 4)])) { targets.push(target); } }
+            }
+        } else { for name in arguments { var target = ProtonTools.target(name); if (!targets.contains(target)) { targets.push(target); } } }
+        if (targets.isEmpty()) { print("no Wine source diffs detected"); }
+        else { self.make(["build", "TARGETS=" + targets.join(" ")]); }
+    }
+    public void install(Vector<string> arguments) {
+        var mode = arguments.isEmpty() ? "dev" : arguments.get(0); var wine = ProtonWine(self.context);
+        if (mode.equals("dev")) { wine.use(); }
+        else if (mode.equals("restore")) { wine.restore(); }
+        else if (mode.equals("status")) { wine.status(); }
+        else if (mode.equals("production") || mode.equals("system")) { self.context.execute("nixos", ["update"]); }
+        else if (mode.equals("store")) {
+            if (arguments.len != 2 || !FileSystem.isDir(arguments.get(1) + "/files")) { throw "store mode needs a built proton-custom store path"; }
+            var target = PathTools.absolute(arguments.get(1)); self.context.link(target); FileSystem.mkdirp(self.context.devRoot); Path.writeAll(self.context.saved(), target + "\n");
+        } else { throw f"Unknown installation mode: {mode}"; }
+    }
+    public void dev(Vector<string> arguments) {
+        var options = ProtonOptions(arguments); var command = options.command; var wine = ProtonWine(self.context); var runtime = ProtonRuntime(self.context); var capture = ProtonCapture(self.context);
+        if (command.equals("help") || command.equals("--help") || command.equals("-h") || options.flag("--help")) { ProtonTools.help("dev"); }
+        else if (command.equals("setup")) { wine.setup(options.flag("--force")); }
+        else if (command.equals("use")) { wine.use(); }
+        else if (command.equals("restore")) { wine.restore(); }
+        else if (command.equals("status")) { wine.status(); }
+        else if (command.equals("check-patches")) { print("wine source: " + self.context.nixPath("passthru.wineSource")); }
+        else if (command.equals("patch-lint")) { ProtonSources(self.context).patchLint(); }
+        else if (command.equals("source-drift") || command.equals("reset-source-drift")) { ProtonSources(self.context).drift(command.equals("reset-source-drift")); }
+        else if (command.equals("setup-wine")) { wine.setupSource(options.flag("--force"), options.flag("--force-configure")); }
+        else if (command.equals("overlay-wine")) { wine.overlay(options.get("--wine"), options.get("--wine64"), options.get("--wine32"), ProtonWine.targets()); }
+        else if (command.equals("build-wine") || command.equals("wine-loop")) {
+            var start = MonotonicClock.milliseconds(); wine.build(options.positional.isEmpty() ? ProtonWine.targets() : options.positional, options.number("--jobs", 0));
+            var built = MonotonicClock.milliseconds();
+            if (command.equals("wine-loop")) {
+                if (!options.flag("--seconds")) { options.values.set("--seconds", JSONValue.makeString("5")); }
+                if (!options.flag("--log")) { options.values.set("--log", JSONValue.makeString("/tmp/battlenet-wine-loop.log")); }
+                runtime.launch(options, true); var finished = MonotonicClock.milliseconds();
+                print(f"build+overlay: {(built - start) / 1000.0}s\nsmoke: {(finished - built) / 1000.0}s\ntotal: {(finished - start) / 1000.0}s");
+            }
+        } else if (command.equals("configure")) {
+            wine.use(); if (!options.flag("--keep-running")) { runtime.cleanup(); } runtime.prepare();
+            print("prefix: " + self.context.prefix()); print("proton: " + self.context.tool() + " -> " + FileSystem.realPath(self.context.tool())); print("logs: " + self.context.logDirectory());
+        } else if (command.equals("cleanup")) { runtime.cleanup(); print("Battle.net dev processes cleaned up"); }
+        else if (command.equals("launch") || command.equals("smoke")) { runtime.launch(options, command.equals("smoke")); }
+        else if (command.equals("focus")) { capture.focus(); }
+        else if (command.equals("capture") || command.equals("frames")) { capture.launch(options); }
+        else if (command.equals("grab-frames")) { if (options.flag("--focus")) { capture.focus(); } capture.frames(options); }
+        else if (command.equals("hover-frames")) { capture.hover(options); }
+        else if (command.equals("analyze-frames")) { capture.analyze(options); }
+        else { throw f"Unknown development command: {command}"; }
+    }
+}
+
+int main(int argc, char** argv) {
+    setvbuf((FILE*)stdout, null, (int)_IOLBF, (size_t)0);
+    try {
+        var args = CLIArgs(argc, argv); var mode = args.command(); Vector<string> arguments = [];
+        for (int i = 1; i < args.count(); i++) { arguments.push(args.get(i)); }
+        if (mode.equals("--help") || mode.equals("-h") || mode.isEmpty()) { print("Usage: proton-custom-tools dev|build|install|make [ARGUMENT...]"); return 0; }
+        if (!arguments.isEmpty() && ["--help", "-h"].contains(arguments.get(0))) { ProtonTools.help(mode); return 0; }
+        var tools = ProtonTools(ProtonContext());
+        if (mode.equals("dev")) { tools.dev(arguments); }
+        else if (mode.equals("build")) { tools.build(arguments); }
+        else if (mode.equals("install")) { tools.install(arguments); }
+        else if (mode.equals("make")) { tools.make(arguments); }
+        else { throw f"Unknown tool: {mode}"; }
+        return 0;
+    } catch (string error) { fprintf(stderr, "proton-custom: %s\n", error); return 1; }
+}

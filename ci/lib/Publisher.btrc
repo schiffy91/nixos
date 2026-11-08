@@ -1,0 +1,102 @@
+import Library.CLI;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Process;
+import Library.Strings;
+
+class CachePublisher {
+    public string root;
+    public CachePublisher(string root) { self.root = root; }
+
+    public string command(Vector<string> arguments, string input = "", bool stream = false) {
+        var result = ChildProcess.run("nix", arguments, cwd=self.root, stdinData=input,
+            stdout=stream ? COMMAND_OUTPUT_STREAM : COMMAND_OUTPUT_COLLECT, stderr=COMMAND_OUTPUT_STREAM);
+        if (!result.ok()) { throw "Nix cache command failed"; }
+        return result.stdout().trim();
+    }
+    class Vector<string> attributes(JSONValue targets, string system, bool all) {
+        Vector<string> result = [];
+        var values = targets.get("local");
+        if (!all) {
+            values = JSONValue.makeArray();
+            for entry in targets.get("systems").elements() {
+                if (entry.get("system").asString().equals(system)) { values = entry.get("attrs"); break; }
+            }
+        }
+        for value in values.elements() { result.push(value.asString()); }
+        return result;
+    }
+    class string expand(string path) {
+        if (path.equals("~")) { return Environment.get("HOME", ""); }
+        if (path.startsWith("~/")) { return PathTools.join(Environment.get("HOME", ""), path.substring(2, path.len() - 2)); }
+        return PathTools.absolute(path);
+    }
+    public string key(string path, string name) {
+        if (!FileSystem.exists(path)) {
+            FileSystem.mkdirp(PathTools.dirname(path));
+            var secret = self.command(["key", "generate-secret", "--key-name", name]);
+            var descriptor = open(path, ((int)O_WRONLY | (int)O_CREAT | (int)O_EXCL | (int)O_CLOEXEC), (mode_t)0600);
+            if (descriptor < 0) { throw "Cannot exclusively create cache signing key"; }
+            var bytes = Bytes.fromString(secret + "\n");
+            int offset = 0;
+            bool failed = false;
+            while (offset < bytes.length()) {
+                var count = (int)write(descriptor, bytes.data + offset, (size_t)(bytes.length() - offset));
+                if (count < 0 && errno == EINTR) { continue; }
+                if (count <= 0) { failed = true; break; }
+                offset += count;
+            }
+            if (fsync(descriptor) != 0) { failed = true; }
+            close(descriptor);
+            if (failed) { unlink(path); throw "Cannot write cache signing key"; }
+            fprintf(stderr, "publish: generated %s — keep a copy\n", path);
+        }
+        return self.command(["key", "convert-secret-to-public"], Path.readAll(path));
+    }
+    public int run(CLIArgs args) {
+        bool all = false;
+        var directory = "~/.cache/nix-cache"; var keyPath = "~/.config/nix/nixos-cache-1.key";
+        Vector<string> requested = [];
+        for (int i = 1; i < args.count(); i++) {
+            var value = args.get(i);
+            if (value.equals("--")) { for (int rest = i + 1; rest < args.count(); rest++) { requested.push(args.get(rest)); } break; }
+            if (value.equals("--all")) { all = true; }
+            else if (value.equals("--dir")) { directory = args.require(++i, "--dir requires a directory"); }
+            else if (value.equals("--key")) { keyPath = args.require(++i, "--key requires a file"); }
+            else if (value.startsWith("--dir=")) { directory = value.substring(6, value.len() - 6); }
+            else if (value.startsWith("--key=")) { keyPath = value.substring(6, value.len() - 6); }
+            else if (value.equals("--help") || value.equals("-h")) {
+                print("Usage: repo-tools publish [--all] [--dir DIR] [--key FILE] [ATTR...]"); return 0;
+            } else if (value.startsWith("--")) { throw f"Unknown publish option: {value}"; }
+            else { requested.push(value); }
+        }
+        var targets = JSONValue.parse(self.command(["eval", "--json", "--file", PathTools.join(self.root, "ci/targets.nix")]));
+        if (!targets.isObject()) { throw "Invalid cache target configuration"; }
+        var system = self.command(["eval", "--raw", "--impure", "--expr", "builtins.currentSystem"]);
+        var publicKey = self.key(CachePublisher.expand(keyPath), targets.get("cache").get("name").asString());
+        var declared = targets.get("cache").get("publicKey").asString();
+        if (!declared.isEmpty() && !declared.equals(publicKey)) { fprintf(stderr, "publish: this key is %s but ci/targets.nix declares %s\n", publicKey, declared); }
+        var wanted = requested.isEmpty() ? CachePublisher.attributes(targets, system, all) : requested;
+        if (wanted.isEmpty()) { throw f"ci/targets.nix names nothing for {system}"; }
+        directory = CachePublisher.expand(directory); FileSystem.mkdirp(directory);
+        for attr in wanted {
+            fprintf(stderr, "publish: %s#%s\n", system, attr);
+            var built = Strings.split(self.command(["build", "--no-link", "--print-out-paths", self.root + "#" + attr]), "\n");
+            var sign = ["store", "sign", "--key-file", CachePublisher.expand(keyPath), "--recursive"];
+            var copy = ["copy", "--to", f"file://{directory}?compression=zstd"];
+            for path in built { if (!path.isEmpty()) { sign.push(path); copy.push(path); } }
+            if (copy.len == 3) { throw f"Build returned no output paths for {attr}"; }
+            self.command(sign, stream=true); self.command(copy, stream=true);
+        }
+        int served = 0; for name in FileSystem.listDir(directory) { if (name.endsWith(".narinfo")) { served++; } }
+        char hostname[256];
+        if (gethostname(hostname, sizeof(hostname)) != 0) { throw "Cannot read local hostname"; }
+        hostname[255] = '\0';
+        var host = Strings.copy(hostname);
+        print(f"publish: {directory} holds {served} paths. Serve it with make cache-serve.");
+        print(f"  settings.nix.substituters = [ \"http://{host}.local:8080\" ];");
+        print(f"  settings.nix.trustedPublicKeys = [ \"{publicKey}\" ];");
+        return 0;
+    }
+}

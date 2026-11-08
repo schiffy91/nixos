@@ -1,0 +1,155 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+#include <signal.h>
+
+volatile sig_atomic_t recoveryArtifactSignal = 0;
+void interruptRecoveryArtifacts(int number) { recoveryArtifactSignal = (sig_atomic_t)number; }
+
+class RecoveryArtifacts {
+    public JSONValue plan;
+    public Vector<string> staged = [];
+    public Vector<string> targets = [];
+
+    public RecoveryArtifacts(JSONValue plan) {
+        if (!plan.isObject() || !plan.get("artifacts").isArray() || plan.get("artifacts").elements().isEmpty()) { throw "Invalid recovery artifact plan"; }
+        self.plan = plan;
+        for root in [self.boot(), self.recovery()] {
+            if (!root.startsWith("/") || root.equals("/") || Strings.split(root, "/").contains("..")) { throw "Invalid recovery mount point"; }
+        }
+        Vector<string> destinations = [];
+        for artifact in plan.get("artifacts").elements() {
+            var target = artifact.get("target").asString();
+            self.requireTarget(target);
+            if (destinations.contains(target) || artifact.get("source").asString().isEmpty()) { throw "Duplicate or incomplete recovery artifact"; }
+            destinations.push(target);
+        }
+        for obsolete in plan.get("obsolete").elements() {
+            self.requireTarget(obsolete.asString());
+            if (destinations.contains(obsolete.asString())) { throw "Recovery artifact also selected for deletion"; }
+        }
+    }
+
+    public string boot() { return self.plan.get("boot").asString(); }
+    public string recovery() { return self.plan.get("recovery").asString(); }
+    public bool signing() { return self.plan.get("signingRequired").asBool(); }
+    public string publicKey() { return self.plan.get("publicKey").asString(); }
+    public string privateKey() { return self.plan.get("privateKey").asString(); }
+
+    public void requireTarget(string target) {
+        if ((!target.startsWith(self.boot() + "/") && !target.startsWith(self.recovery() + "/")) ||
+            Strings.split(target, "/").contains("..")) { throw f"Recovery artifact escapes its mount: {target}"; }
+    }
+
+    class void handleInterruptions() {
+        recoveryArtifactSignal = 0;
+        signal((int)SIGINT, interruptRecoveryArtifacts);
+        signal((int)SIGTERM, interruptRecoveryArtifacts);
+    }
+
+    class void checkInterrupted() {
+        if (recoveryArtifactSignal != (sig_atomic_t)0) { throw "Recovery artifact installation interrupted"; }
+    }
+
+    class void require(string command) {
+        RecoveryArtifacts.checkInterrupted();
+        UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+        RecoveryArtifacts.checkInterrupted();
+    }
+
+    public bool ready(bool strict) {
+        var guard = self.plan.get("bootSafety").asString();
+        if (!guard.isEmpty()) { RecoveryArtifacts.require(ShellWords.quote(guard)); }
+        var shell = UnixShell();
+        if (!shell.run(f"mountpoint -q {ShellWords.quote(self.boot())}", logFailure=false).ok() ||
+            !shell.run(f"mountpoint -q {ShellWords.quote(self.recovery())}", logFailure=false).ok()) {
+            if (strict) { throw "Recovery and boot filesystems must both be mounted"; }
+            Console.error("Skipping recovery boot artifacts because a filesystem is not mounted.");
+            return false;
+        }
+        return self.credentialsReady(strict);
+    }
+
+    public bool credentialsReady(bool strict) {
+        if (self.signing() && (!FileSystem.isFile(self.publicKey()) || !FileSystem.isFile(self.privateKey()))) {
+            if (strict) { throw "Secure-Boot recovery artifacts require the sbctl db certificate and private key"; }
+            Console.error("Skipping Secure-Boot recovery artifacts because sbctl db keys are not available yet.");
+            return false;
+        }
+        return true;
+    }
+
+    public string manifest() {
+        var result = self.plan.stringify() + "\n";
+        if (self.signing()) { result = result + UnixShell().run(f"sha256sum {ShellWords.quote(self.publicKey())}", throwOnFailure=true).stdout(); }
+        return result;
+    }
+
+    public bool current(string manifest) {
+        var installed = self.recovery() + "/.nixos-recovery-artifacts.manifest";
+        var checksums = self.recovery() + "/.nixos-recovery-checksums";
+        if (!FileSystem.isFile(installed) || !Path.readAll(installed).equals(manifest) || !FileSystem.isFile(checksums)) { return false; }
+        for artifact in self.plan.get("artifacts").elements() {
+            var target = artifact.get("target").asString();
+            if (!FileSystem.isFile(target)) { return false; }
+            if (artifact.get("signed").asBool() && !UnixShell().run(
+                f"sbverify --cert {ShellWords.quote(self.publicKey())} {ShellWords.quote(target)}", logFailure=false).ok()) { return false; }
+        }
+        return UnixShell().run(f"sha256sum --check --status {ShellWords.quote(checksums)}", logFailure=false).ok();
+    }
+
+    public void stage(string source, string target) {
+        RecoveryArtifacts.require(f"mkdir -p {ShellWords.quote(PathTools.dirname(target))}");
+        var temporary = UnixShell().run(f"mktemp {ShellWords.quote(target + ".XXXXXX")}", throwOnFailure=true).stdout().trim();
+        self.staged.push(temporary);
+        self.targets.push(target);
+        RecoveryArtifacts.require(f"install -m 0644 {ShellWords.quote(source)} {ShellWords.quote(temporary)}");
+        RecoveryArtifacts.require(f"sync -f {ShellWords.quote(temporary)}");
+    }
+
+    public void install() {
+        var manifest = self.manifest();
+        var alreadyCurrent = self.current(manifest);
+        RecoveryArtifacts.checkInterrupted();
+        if (alreadyCurrent) { print("Recovery boot artifacts already current."); return; }
+        var created = FileSystem.createTemporaryDirectory("nixos-recovery-sign");
+        if (!created.ok()) { throw "Cannot create recovery staging directory"; }
+        var scratch = created.value();
+        self.staged = []; self.targets = [];
+        try {
+            for artifact in self.plan.get("artifacts").elements() {
+                var source = artifact.get("source").asString();
+                if (artifact.get("signed").asBool()) {
+                    var signedFile = scratch.path() + "/signed";
+                    RecoveryArtifacts.require(f"sbsign --key {ShellWords.quote(self.privateKey())} --cert {ShellWords.quote(self.publicKey())} --output {ShellWords.quote(signedFile)} {ShellWords.quote(source)}");
+                    RecoveryArtifacts.require(f"sbverify --cert {ShellWords.quote(self.publicKey())} {ShellWords.quote(signedFile)}");
+                    source = signedFile;
+                }
+                self.stage(source, artifact.get("target").asString());
+            }
+            // Every payload is staged and verified before any bootable file is
+            // replaced. A signed UKI is complete within its single rename.
+            for (int i = 0; i < self.staged.len; i++) {
+                RecoveryArtifacts.require(f"mv -f {ShellWords.quote(self.staged.get(i))} {ShellWords.quote(self.targets.get(i))}");
+            }
+            RecoveryArtifacts.require(f"sync -f {ShellWords.quote(self.boot())}");
+            RecoveryArtifacts.require(f"sync -f {ShellWords.quote(self.recovery())}");
+            for obsolete in self.plan.get("obsolete").elements() { RecoveryArtifacts.require(f"rm -f {ShellWords.quote(obsolete.asString())}"); }
+            Vector<string> quoted = [];
+            for target in self.targets { quoted.push(ShellWords.quote(target)); }
+            var checksums = UnixShell().run("sha256sum " + quoted.join(" "), throwOnFailure=true).stdout();
+            var checksumsFile = scratch.path() + "/checksums";
+            var manifestFile = scratch.path() + "/manifest";
+            if (!Path.writeAll(checksumsFile, checksums) || !Path.writeAll(manifestFile, manifest)) { throw "Cannot write recovery artifact metadata"; }
+            RecoveryArtifacts.require(f"install -m 0600 {ShellWords.quote(checksumsFile)} {ShellWords.quote(self.recovery() + "/.nixos-recovery-checksums")}");
+            RecoveryArtifacts.require(f"install -m 0600 {ShellWords.quote(manifestFile)} {ShellWords.quote(self.recovery() + "/.nixos-recovery-artifacts.manifest")}");
+        } finally {
+            for temporary in self.staged { unlink(temporary); }
+            scratch.close();
+        }
+    }
+}

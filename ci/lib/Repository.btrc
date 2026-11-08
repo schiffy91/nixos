@@ -1,0 +1,66 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Process;
+import Library.Strings;
+import ./PipeProcess.btrc;
+
+class Repository {
+    public string root;
+    public Vector<string> files = [];
+
+    public Repository(string root) {
+        self.root = FileSystem.realPath(root);
+        if (!FileSystem.isFile(PathTools.join(self.root, "flake.nix"))) { throw "Run repository tools from the flake root"; }
+    }
+    class Vector<string> paths(Bytes data) {
+        Vector<string> result = [];
+        int start = 0;
+        for (int i = 0; i < data.length(); i++) {
+            if (data.get(i) != 0) { continue; }
+            var entry = data.slice(start, i);
+            if (!entry.isNulFreeUtf8()) { throw "Source filename is not UTF-8"; }
+            var path = entry.toString();
+            if (!path.isEmpty() && !result.contains(path)) { result.push(path); }
+            start = i + 1;
+        }
+        if (start != data.length()) { throw "Incomplete Git source list"; }
+        return result.sorted();
+    }
+    public void discover() {
+        var process = PipeProcess("git", ["-C", self.root, "ls-files", "--cached", "--others", "--exclude-standard", "-z"]);
+        process.closeInput();
+        var data = Bytes();
+        var deadline = MonotonicClock.deadlineAfter(30000);
+        while (true) {
+            var part = process.read(deadline);
+            if (part == null) { break; }
+            data.appendBytes(part);
+        }
+        if (process.wait(deadline) != 0) { throw "Cannot enumerate repository sources"; }
+        self.files = [];
+        for path in Repository.paths(data) {
+            if (FileSystem.isFile(PathTools.join(self.root, path))) { self.files.push(path); }
+        }
+    }
+    public Vector<string> suffix(string suffix) {
+        Vector<string> result = [];
+        for path in self.files { if (path.endsWith(suffix)) { result.push(path); } }
+        return result;
+    }
+    public Vector<string> scripts(string language) {
+        Vector<string> result = language.equals("python") ? self.suffix(".py") : self.suffix(".sh");
+        if (language.equals("python")) { for path in self.suffix(".pyi") { result.push(path); } }
+        else if (self.files.contains(".envrc")) { result.push(".envrc"); }
+        for path in self.files {
+            if (PathTools.basename(path).contains(".")) { continue; }
+            var text = Path.readAll(PathTools.join(self.root, path));
+            if (!text.startsWith("#!")) { continue; }
+            var lines = Strings.split(text, "\n");
+            var first = lines.get(0);
+            if (language.equals("bash") && first.contains("bash")) { result.push(path); }
+            else if (language.equals("python") && !first.contains("bash") && (first.contains("python") || (lines.len > 1 && lines.get(1).contains("python")))) { result.push(path); }
+        }
+        return result;
+    }
+}

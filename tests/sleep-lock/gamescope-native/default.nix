@@ -7,8 +7,9 @@ in pkgs.testers.runNixOSTest {
   enableOCR = true;
   extraPythonPackages = p: [ p.vncdotool ];
   nodes.machine = { config, pkgs, lib, ... }: {
-    imports = [ inputs.jovian.nixosModules.default ../../../nix/settings.nix
-      ../../../nix/system/nixos/boot/touch-keyboard.nix ../../../nix/system/nixos/sleep.nix ];
+    _module.args.inputs = inputs;
+    imports = [ inputs.jovian.nixosModules.default ../../../config/settings.nix
+      ../../../config/system/nixos/boot/touch-keyboard.nix ../../../config/system/nixos/sleep.nix ];
     disabledModules = [ "${inputs.jovian}/modules/jovian/overlay.nix" ];
     # First prove that the unmodified direct-DRM Gaming Mode can render/input.
     settings.users.admin.username = "observer";

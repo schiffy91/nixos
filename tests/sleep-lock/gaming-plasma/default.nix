@@ -1,4 +1,4 @@
-{ system ? builtins.currentSystem }:
+{ system ? builtins.currentSystem, inputs ? (builtins.getFlake "git+file://${toString ../../..}").inputs }:
 let
   locked = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree {
@@ -10,7 +10,8 @@ in pkgs.testers.runNixOSTest {
   enableOCR = true;
   extraPythonPackages = packages: [ packages.pillow ];
   nodes.machine = { pkgs, lib, ... }: {
-    imports = [ ../../../nix/settings.nix ../../../nix/system/nixos/boot/touch-keyboard.nix ../../../nix/system/nixos/sleep.nix ];
+    _module.args.inputs = inputs;
+    imports = [ ../../../config/settings.nix ../../../config/system/nixos/boot/touch-keyboard.nix ../../../config/system/nixos/sleep.nix ];
     settings.boot.touchKeyboard = true;
     settings.sleep.lockGamingSession = true;
     settings.users.admin.username = "observer";

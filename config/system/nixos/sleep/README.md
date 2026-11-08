@@ -1,0 +1,85 @@
+# Sleep password authentication
+
+## Gaming Mode sleep password
+
+`settings.sleep.lockGamingSession` uses the existing Plymouth touchscreen keyboard
+and Linux-account PAM authentication for sleep requested while the configured
+user has a Gamescope session. The Deck enables this policy; Fractal does not.
+
+The game keeps running in its existing session. Sleep preparation switches to a
+locked console and hides the game's scanout before allowing the sleep backend.
+After wake, enter the Linux account password with touch or a physical keyboard.
+The keyboard supports letters, Shift/Caps, digits, punctuation, spaces and
+backspace. Wrong input, Escape, a cancelled attempt, an interrupted controller,
+and a failed sleep backend do not release the console.
+
+Desktop Mode keeps native Plasma idle and resume locking. The Gaming Mode policy
+neither patches KDE nor routes ordinary Plasma sleep through the console UI.
+If a desktop session appears while a Gaming lock is already held, fresh account
+password authentication still gates return to the physical console.
+
+Configured Sunshine services are stopped before sleep is admitted. Their start
+condition prevents normal restarts while locked. After password authentication,
+only services that were previously running are restarted. Consequently an active
+stream disconnects on sleep; reconnect after local unlock. This boundary covers
+the configured `sunshine.service` and desktop-app service, not arbitrary same-user
+capture programs or manually launched binaries.
+
+These hooks cover suspend, hibernate, hybrid sleep and suspend-then-hibernate.
+They do not add a Steam menu/manual or Gaming Mode idle-lock action. Steam's own
+PIN lock is separate. The Deck's existing `hibernateOnSuspend` setting is retained;
+hibernation can therefore require boot LUKS unlock followed by this account prompt.
+
+Direct Gamescope VM tests use the real compositor, DRM, Xwayland and kernel input,
+with an interactive terminal standing in for the signed-in Steam application.
+They verify `aB3! z` entered through touchscreen Shift, number/symbol keys, space,
+and backspace, plus physical-keyboard authentication and return to the same
+running compositor/client. Service tests exercise actual systemd user-unit
+stop/start conditions with harmless fixture processes, not a paired stream.
+Real Steam controller/UI behavior, OLED touch rotation and real hardware suspend
+still need physical validation. The existing native-context VM GPU loses state
+on real suspend even in its unlocked control; no new passing suspend claim is made.
+
+The host configuration enables the Gaming policy on the next deployment. It has
+not been activated or accepted on the physical Deck by this change. Native
+Plasma automatic locking is also enabled in the Deck's account configuration.
+
+## Controller boundary
+
+The root controller holds VT63 while Plymouth provides the password prompt.
+It disables keyboard SysRq temporarily, checks the kernel console-switch lock,
+and waits for the DRM scanout readiness check before admitting sleep. A separate BTRC
+PAM process receives the password through a private pipe; the BTRC controller
+receives only authentication success or failure. Root-only state in `/run`
+contains the account UID, original VT/SysRq setting, pending sleep requests,
+authentication generation and previously active Sunshine units. It contains no
+password or hash.
+
+The helpers in `helpers/` use typed PAM/DRM bindings and raw POSIX memory. The
+password process locks its address space, wipes its raw input buffer, disables
+core dumps and kills its Plymouth child if its parent exits. It links PAM without
+DRM; the scanout helper separately disables CRTCs and planes and verifies their
+readback. The three native headers contain declarations only.
+
+Each new request or controller recovery invalidates earlier authentication.
+A correct password releases the console only after every pending sleep operation
+has finished. Failed preparation, cancelled sleep and controller failure retain
+the console lock. An interrupted release requires fresh authentication.
+
+KDE uses its standard locking behavior. This module does not patch KWin or
+KScreenLocker, add a root desktop-bus interface, or drive a second Plasma lock.
+The logind query only identifies whether the configured user has a Gamescope
+session before starting a Gaming lock.
+
+## Regression tests
+
+Build the CLI with `make build`, then run the graph nodes:
+
+```sh
+nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run sleep-gamescope-native-lock sleep-gamescope-native-lock-without-sunshine sleep-gaming-plasma'
+```
+
+The [direct Gamescope fixtures](../../../../tests/sleep-lock/gamescope-native/README.md)
+retain separate baseline and real-suspend controls. The stock Plasma regression
+checks a wrong and correct mixed-character password and confirms that desktop
+sleep creates neither Gaming lock state nor its service-start blocking marker.

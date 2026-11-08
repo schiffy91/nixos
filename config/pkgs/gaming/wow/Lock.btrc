@@ -1,0 +1,99 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Process;
+import Library.Regex;
+import Library.Strings;
+
+class AddonLock {
+    class Vector<string> feedTags(string feed) {
+        Vector<string> result = [];
+        for match in Regex.findAll("releases/tag/[^\"<[:space:]]+", feed) {
+            var tag = match.substring(13, match.len() - 13).replace("%2F", "/").replace("%2B", "+");
+            if (!result.contains(tag)) { result.push(tag); }
+        }
+        return result;
+    }
+    class Vector<string> trainTags(string references, string train) {
+        Vector<string> result = [];
+        for line in Strings.split(references, "\n") {
+            int start = line.find("refs/tags/", 0); if (start < 0) { continue; }
+            var tag = line.substring(start + 10, line.len() - start - 10).trim();
+            if (!tag.startsWith(train + "/") || tag.endsWith("^{}")) { continue; }
+            if (!tag.substring(train.len() + 1, tag.len() - train.len() - 1).contains("/") && !result.contains(tag)) { result.push(tag); }
+        }
+        return result;
+    }
+    class string asset(string html, string repository, string wanted) {
+        Vector<string> candidates = [];
+        for candidate in Regex.findAll("/[^\"<>[:space:]]+[.]zip", html) {
+            if (candidate.startsWith("/" + repository + "/releases/download/") && !candidates.contains(candidate)) { candidates.push(candidate); }
+        }
+        var flavours = ["bcc", "cata", "classic", "forever", "mists", "titan", "titanreforged", "wrath", "retail", "nolib"];
+        var selected = "";
+        for candidate in candidates.sorted() {
+            var name = PathTools.basename(candidate); name = name.substring(0, name.len() - 4);
+            var pieces = Strings.split(name, "-"); var suffix = pieces.get(pieces.len - 1);
+            if (wanted.isEmpty() ? !flavours.contains(suffix) : suffix.equals(wanted)) { selected = candidate; }
+        }
+        return selected;
+    }
+    class string command(string program, Vector<string> arguments, string input = "", bool allowFailure = false) {
+        var result = ChildProcess.run(program, arguments, stdinData=input);
+        if (!result.ok()) {
+            if (allowFailure) { return ""; }
+            throw program + " failed: " + result.stderr();
+        }
+        return result.stdout();
+    }
+    class Vector<string> tags(string repository, string train) {
+        if (train.isEmpty()) { return AddonLock.feedTags(AddonLock.command("curl", ["-fsSL", "https://github.com/" + repository + "/releases.atom"])); }
+        var references = AddonLock.command("git", ["ls-remote", "--tags", "https://github.com/" + repository, "refs/tags/" + train + "/*"]);
+        var tags = AddonLock.trainTags(references, train);
+        var sorted = AddonLock.command("sort", ["-Vr"], tags.join("\n") + "\n");
+        Vector<string> result = []; for tag in Strings.split(sorted, "\n") { if (!tag.isEmpty()) { result.push(tag); } } return result;
+    }
+    class JSONValue refresh(JSONValue sources) {
+        if (!sources.isObject()) { throw "Addon sources must be a JSON object"; }
+        var result = JSONValue.makeObject();
+        for name in sources.keys().sorted() {
+            var source = sources.get(name); var url = source.get("url").asString(); var tag = "pinned URL";
+            if (url.isEmpty()) {
+                var repository = source.get("repo").asString(); if (repository.isEmpty()) { throw name + ": missing repo or URL"; }
+                var tags = AddonLock.tags(repository, source.get("train").asString());
+                if (tags.isEmpty()) { throw name + ": no release tags"; }
+                for candidate in tags {
+                    var html = AddonLock.command("curl", ["-fsSL", "https://github.com/" + repository + "/releases/expanded_assets/" + candidate], allowFailure=true);
+                    var href = AddonLock.asset(html, repository, source.get("flavour").asString());
+                    if (!href.isEmpty()) { tag = candidate; url = "https://github.com" + href; break; }
+                }
+                if (url.isEmpty()) { throw name + ": no matching asset in any release"; }
+            }
+            var fetched = JSONValue.parse(AddonLock.command("nix", ["store", "prefetch-file", "--json", "--hash-type", "sha256", url]));
+            var hash = fetched.get("hash").asString(); if (hash.isEmpty()) { throw name + ": prefetch returned no hash"; }
+            var pin = JSONValue.makeObject(); pin.set("hash", JSONValue.makeString(hash)); pin.set("url", JSONValue.makeString(url)); result.set(name, pin);
+            fprintf(stderr, "%s %s\n", name, tag);
+        }
+        return result;
+    }
+    class void publish(string path, JSONValue lock) {
+        struct stat existing;
+        bool present = stat(path, &existing) == 0;
+        if (!present && errno != ENOENT) { throw "Cannot inspect existing addon lock"; }
+        char* pattern = CStringArray.copyEntry(PathTools.dirname(path) + "/.addons.lock.XXXXXX");
+        if (pattern == null) { throw "Cannot allocate addon lock filename"; }
+        int descriptor = mkstemp(pattern); var temporary = Strings.copy(pattern); free(pattern);
+        if (descriptor < 0) { throw "Cannot create temporary addon lock"; }
+        var bytes = Bytes.fromString(lock.document()); int written = 0; bool failed = false;
+        while (written < bytes.length()) {
+            int count = (int)write(descriptor, bytes.data + written, (size_t)(bytes.length() - written));
+            if (count < 0 && errno == EINTR) { continue; }
+            if (count <= 0) { failed = true; break; } written += count;
+        }
+        if (present && fchown(descriptor, existing.st_uid, existing.st_gid) != 0) { failed = true; }
+        if (fchmod(descriptor, (mode_t)0644) != 0 || fsync(descriptor) != 0) { failed = true; }
+        if (close(descriptor) != 0) { failed = true; }
+        if (failed || rename(temporary, path) != 0) { unlink(temporary); throw "Cannot publish addon lock"; }
+    }
+}

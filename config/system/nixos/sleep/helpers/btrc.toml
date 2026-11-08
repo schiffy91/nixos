@@ -1,0 +1,30 @@
+manifest-version = 1
+
+[package]
+name = "nixos_sleep_native"
+exports = ["Posix", "Authentication", "Authenticate", "Display", "Blank"]
+
+[[native.bindings]]
+module = "Posix"
+header = "posix.h"
+language = "c"
+standard = "c11"
+symbols = ["VT_GETSTATE", "VT_ACTIVATE", "VT_WAITACTIVE", "VT_LOCKSWITCH", "VT_UNLOCKSWITCH", "MCL_CURRENT", "MCL_FUTURE", "PR_SET_PDEATHSIG", "PR_SET_DUMPABLE", "vt_stat", "rlimit", "dirent", "scandir", "alphasort"]
+
+[[native.bindings]]
+module = "Authentication"
+header = "pam.h"
+language = "c"
+standard = "c11"
+symbols = ["pam_handle_t", "pam_message", "pam_response", "pam_conv", "pam_start", "pam_authenticate", "pam_acct_mgmt", "pam_end", "PAM_MAX_RESP_SIZE", "PAM_MAX_NUM_MSG", "PAM_CONV_ERR", "PAM_BUF_ERR", "PAM_PROMPT_ECHO_OFF", "PAM_PROMPT_ECHO_ON", "PAM_TEXT_INFO", "PAM_ERROR_MSG", "PAM_SUCCESS", "PAM_DISALLOW_NULL_AUTHTOK", "PAM_SILENT"]
+
+[[native.pkg-config]]
+name = "libdrm"
+modules = ["Display"]
+
+[[native.bindings]]
+module = "Display"
+header = "drm.h"
+language = "c"
+standard = "c11"
+symbols = ["drmModeRes", "drmModeCrtc", "drmModePlane", "drmModePlaneRes", "drmModeGetResources", "drmSetMaster", "drmIsMaster", "drmModeFreeResources", "drmModeSetCrtc", "drmModeGetCrtc", "drmModeFreeCrtc", "drmSetClientCap", "DRM_CLIENT_CAP_UNIVERSAL_PLANES", "drmModeGetPlaneResources", "drmModeGetPlane", "drmModeSetPlane", "drmModeFreePlane", "drmModeFreePlaneResources", "drmDropMaster"]

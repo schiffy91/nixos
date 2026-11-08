@@ -1,0 +1,33 @@
+import ../../../../config/pkgs/gaming/proton/custom/tools/Capture.btrc;
+#include <assert.h>
+
+int main() {
+    var options = ProtonOptions(["launch", "--seconds", "3", "--env", "VALUE=a=b", "--env", "OTHER=two words"]);
+    assert(options.number("--seconds", 0) == 3 && options.environment.len == 2);
+    assert(options.environment.get(0).equals("VALUE=a=b"));
+    var inlineOptions = ProtonOptions(["launch", "--seconds=3", "--env=VALUE=a=b"]);
+    assert(inlineOptions.number("--seconds", 0) == 3 && inlineOptions.environment.get(0).equals("VALUE=a=b"));
+    bool failed = false;
+    try { var missing = ProtonOptions(["launch", "--seconds"]); } catch (string error) { failed = true; }
+    assert(failed);
+    var environment = ["FIRST=old", "SECOND=kept"];
+    ProtonRuntime.set(environment, "FIRST", "new=value");
+    assert(environment.len == 2 && ProtonRuntime.value(environment, "FIRST").equals("new=value"));
+    var bytes = Bytes.fromString("ONE=one"); bytes.append(0); bytes.appendBytes(Bytes.fromString("TWO=two words")); bytes.append(0);
+    assert(ProtonRuntime.environmentEntries(bytes).len == 2);
+    assert(ProtonRuntime.logDestination("/tmp/launch.wrapper.log").equals("/tmp/launch.proton.log"));
+    assert(ProtonRuntime.logDestination("/tmp/smoke.log").equals("/tmp/smoke.proton.log"));
+    var artifacts = ProtonWine.artifacts(ProtonWine.targets());
+    assert(artifacts.len == 12);
+    assert(artifacts.get(0).relative.equals("x86_64-unix/ntdll.so"));
+    assert(ProtonWine.artifacts(["dlls/winewayland.drv/all"]).get(1).buildRelative.equals("dlls/winewayland.drv/x86_64-windows/winewayland.drv"));
+    failed = false; try { ProtonWine.artifacts(["unknown/all"]); } catch (string error) { failed = true; } assert(failed);
+    var window = ProtonCapture.geometry("Position: -10.2,20.8\nGeometry: 800x600\n");
+    assert(window.x == -10 && window.y == 21 && window.width == 800 && window.height == 600);
+    var screen = ProtonCapture.screen("Output: 1\n enabled\n Geometry: 1920,0 800x600\nOutput: 2\n enabled\n Geometry: 0,0 1920x1080\n");
+    assert(screen.width == 1920 && screen.height == 1080);
+    assert(ProtonCapture.points("battle-net").len == 11 && ProtonCapture.points("chat").len == 8);
+    assert(ProtonContext.quote("a'b").equals("'a'\\''b'"));
+    print("PASS: Proton options, environment, log paths, artifact mapping, geometry and capture profiles");
+    return 0;
+}

@@ -1,0 +1,46 @@
+import Library.JSON;
+import Library.Strings;
+import Library.Vector;
+
+class SleepState {
+    class Vector<string> sleepUnits() { return ["systemd-suspend.service", "systemd-hibernate.service", "systemd-hybrid-sleep.service", "systemd-suspend-then-hibernate.service"]; }
+    class Vector<string> streamUnits() { return ["sunshine.service", "app-dev.lizardbyte.app.Sunshine.service"]; }
+
+    class bool allowedArray(JSONValue value, Vector<string> allowed) {
+        if (!value.isArray()) { return false; }
+        for item in value.elements() { if (!item.isString() || !allowed.contains(item.asString())) { return false; } }
+        return true;
+    }
+
+    class void validate(JSONValue state, int uid) {
+        if (!state.isObject() || !state.keys().sorted().join(",").equals("epoch,holds,phase,ready,sunshine,sysrq,uid,vt")
+            || !state.get("uid").isInt() || state.get("uid").asInt() < 0
+            || !state.get("vt").isInt() || state.get("vt").asInt() < 1 || state.get("vt").asInt() >= 63
+            || !state.get("sysrq").isInt() || state.get("sysrq").asInt() < 0
+            || !state.get("ready").isBool()
+            || !state.get("epoch").isString() || state.get("epoch").asString().length() != 32
+            || !SleepState.allowedArray(state.get("holds"), SleepState.sleepUnits())
+            || (!state.get("sunshine").isNull() && !SleepState.allowedArray(state.get("sunshine"), SleepState.streamUnits()))
+            || !state.get("phase").isString() || !["acquiring", "locked", "authenticated"].contains(state.get("phase").asString())) { throw "Invalid sleep-lock state"; }
+        if (state.get("uid").asInt() != uid) { throw "The configured password account changed"; }
+    }
+
+    class JSONValue hold(JSONValue state, string unit, bool pending) {
+        if (!SleepState.sleepUnits().contains(unit)) { throw "Invalid sleep-lock operation"; }
+        Vector<string> holds = [];
+        for old in state.get("holds").elements() { if (!old.asString().equals(unit)) { holds.push(old.asString()); } }
+        if (pending) { holds.push(unit); }
+        var values = JSONValue.makeArray();
+        for value in holds.distinct().sorted() { values.push(JSONValue.makeString(value)); }
+        state.set("holds", values);
+        return state;
+    }
+
+    class bool hasHold(JSONValue state, string unit) {
+        for hold in state.get("holds").elements() { if (hold.asString().equals(unit)) { return true; } }
+        return false;
+    }
+
+    class bool sameAttempt(JSONValue state, string epoch) { return state.get("phase").asString().equals("locked") && state.get("epoch").asString().equals(epoch); }
+    class bool releaseAllowed(JSONValue state) { return state.get("phase").asString().equals("authenticated") && state.get("holds").size() == 0; }
+}

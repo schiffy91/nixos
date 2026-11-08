@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "networking_tests"
+
+[dependencies]
+networking = { path = "../../config/system/nixos/networking" }

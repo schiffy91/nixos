@@ -14,5 +14,5 @@
     semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver"; inputs.nixpkgs.follows = "nixpkgs"; };
   };
-  outputs = inputs@{ self, ... }: import ./nix/outputs.nix { inherit inputs self; };
+  outputs = inputs@{ self, ... }: import ./config/outputs { inherit inputs self; };
 }

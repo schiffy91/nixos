@@ -4,8 +4,8 @@
 import Library.Terminal.PTYProcess;
 import Library.Timer;
 import Library.Vector;
-import ../../btrc/nixosctl/PasswdPromptClassifier.btrc;
-import ../../btrc/nixosctl/PasswdDriver.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/PasswdPromptClassifier.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/PasswdDriver.btrc;
 
 Vector<string> env() { return ["PATH=/run/current-system/sw/bin:/usr/bin:/bin", "LC_ALL=C"]; }
 

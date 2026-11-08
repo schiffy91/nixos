@@ -1,0 +1,27 @@
+import Library.CLI;
+import ./Grant.btrc;
+
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv);
+    var duration = 0;
+    try {
+        if (args.count() < 3) { throw "Usage: nixosctl sudo enable --for <duration> | status | disable"; }
+        var action = args.get(2);
+        if (action.equals("enable") && args.count() == 5 && args.get(3).equals("--for")) { duration = SudoGrant.duration(args.get(4)); }
+        else if (args.count() != 3 || !(action.equals("status") || action.equals("disable"))) { throw "Usage: nixosctl sudo enable --for <duration> | status | disable"; }
+    } catch (string error) { fprintf(stderr, "%s\n", error); return 2; }
+    try {
+        var action = args.get(2);
+        if (geteuid() != (uid_t)0) {
+            Vector<string> arguments = [action.equals("status") ? "-n" : "-k", "--", "/run/current-system/sw/bin/nixosctl-sudo"];
+            for (int index = 2; index < args.count(); index++) { arguments.push(args.get(index)); }
+            var child = ChildProcessArguments.build("/run/wrappers/bin/sudo", arguments);
+            if (child == NULL) { throw "Cannot allocate sudo arguments"; }
+            execv(child[0], child);
+            CStringArray.freeAll(child);
+            throw "Cannot execute sudo";
+        }
+        SudoGrant(args.get(0), args.get(1)).run(action, duration);
+        return 0;
+    } catch (string error) { fprintf(stderr, "%s\n", error); return 1; }
+}

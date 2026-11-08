@@ -1,0 +1,14 @@
+{
+  "name": "secure-boot-key-contracts",
+  "state": "secure-boot-key-contracts",
+  "stateMaterial": "secure-boot-key-contracts:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/secure-boot/unit.nix --no-out-link > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 300
+    },
+    { "op": "record-state" }
+  ]
+}

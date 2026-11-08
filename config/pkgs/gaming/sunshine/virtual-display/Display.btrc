@@ -1,0 +1,112 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Timer;
+import ../../../../lib/BackgroundProcess.btrc;
+
+class SunshineDisplay {
+    class JSONValue snapshot(JSONValue inventory, string primary, string virtualOutput) {
+        if (!inventory.get("outputs").isArray()) { throw "Invalid KScreen output inventory"; }
+        var saved = JSONValue.makeObject();
+        saved.set("primary", JSONValue.makeString(primary));
+        var outputs = JSONValue.makeArray();
+        for output in inventory.get("outputs").elements() {
+            if (!output.get("enabled").asBool() || output.get("name").asString().equals(virtualOutput)) { continue; }
+            var state = JSONValue.makeObject();
+            for field in ["name", "pos", "scale", "hdr", "wcg", "priority"] { state.set(field, output.get(field)); }
+            state.set("mode", JSONValue.makeNull());
+            // KScreen renumbers mode IDs across hotplug; save the mode name.
+            for mode in output.get("modes").elements() {
+                if (mode.get("id").stringify().equals(output.get("currentModeId").stringify())) { state.set("mode", mode.get("name")); break; }
+            }
+            outputs.push(state);
+        }
+        saved.set("outputs", outputs);
+        return saved;
+    }
+
+    class string scalar(JSONValue value) { return value.isString() ? value.asString() : value.stringify(); }
+
+    class Vector<string> restore(JSONValue snapshot) {
+        Vector<string> arguments = [];
+        for output in snapshot.get("outputs").elements() {
+            var prefix = f"output.{output.get("name").asString()}";
+            arguments.push(prefix + ".enable");
+            for field in ["mode", "scale", "priority"] {
+                if (!output.get(field).isNull()) { arguments.push(f"{prefix}.{field}.{SunshineDisplay.scalar(output.get(field))}"); }
+            }
+            var position = output.get("pos");
+            if (!position.get("x").isNull() && !position.get("y").isNull()) { arguments.push(f"{prefix}.position.{SunshineDisplay.scalar(position.get("x"))},{SunshineDisplay.scalar(position.get("y"))}"); }
+            for field in ["hdr", "wcg"] {
+                if (output.get(field).isBool()) { arguments.push(f"{prefix}.{field}.{output.get(field).asBool() ? "enable" : "disable"}"); }
+            }
+        }
+        return arguments;
+    }
+
+    class int dimension(string value, int maximum) {
+        if (value.isEmpty() || value.length() > f"{maximum}".length()) { throw "Invalid streaming display dimensions"; }
+        for (int index = 0; index < value.length(); index++) { if (value[index] < '0' || value[index] > '9') { throw "Invalid streaming display dimensions"; } }
+        int number = Strings.toInt(value);
+        if (number < 1 || number > maximum) { throw "Invalid streaming display dimensions"; }
+        return number;
+    }
+
+    class Vector<string> configure(JSONValue config, int width, int height, int fps, bool hdr) {
+        var output = f"output.Virtual-{config.get("name").asString()}";
+        Vector<string> arguments = [output + ".enable", f"{output}.scale.{config.get("scale").asString()}", f"{output}.position.{config.get("position").asString()}", f"{output}.mode.{width}x{height}@{fps}", output + ".priority.1", output + (hdr ? ".hdr.enable" : ".hdr.disable"), output + (hdr ? ".wcg.enable" : ".wcg.disable")];
+        var primary = f"output.{config.get("primary").asString()}";
+        arguments.push(primary + (config.get("disablePrimaryOnStream").asBool() ? ".disable" : ".priority.2"));
+        return arguments;
+    }
+
+    class ExecResult doctor(Vector<string> arguments, bool required = true) {
+        var result = ChildProcess.run("kscreen-doctor", arguments, environment=["QT_QPA_PLATFORM=wayland"], timeoutMilliseconds=15000);
+        if (required && !result.ok()) { throw "KScreen display configuration failed"; }
+        return result;
+    }
+
+    class bool connected(string name) {
+        var document = JSONValue.parse(SunshineDisplay.doctor(["--json"]).stdout());
+        for output in document.get("outputs").elements() { if (output.get("name").asString().equals(name) && output.get("connected").asBool()) { return true; } }
+        return false;
+    }
+
+    class void killMonitor(string pidFile) {
+        if (!FileSystem.isFile(pidFile)) { return; }
+        var text = Path.readAll(pidFile).trim();
+        // Reject malformed process IDs before passing them to kill(2).
+        var pid = SunshineDisplay.dimension(text, 4194304);
+        if (pid > 1) { kill((pid_t)pid, SIGTERM); }
+        unlink(pidFile);
+    }
+
+    class void start(JSONValue config, string directory) {
+        var output = f"Virtual-{config.get("name").asString()}";
+        var width = SunshineDisplay.dimension(Environment.get("SUNSHINE_CLIENT_WIDTH", SunshineDisplay.scalar(config.get("defaultWidth"))), 32768);
+        var height = SunshineDisplay.dimension(Environment.get("SUNSHINE_CLIENT_HEIGHT", SunshineDisplay.scalar(config.get("defaultHeight"))), 32768);
+        var frameRate = Environment.get("SUNSHINE_CLIENT_FPS", SunshineDisplay.scalar(config.get("defaultFps")));
+        var fps = SunshineDisplay.dimension(Strings.split(frameRate, ".").get(0), 1000);
+        var hdr = ["true", "1", "yes", "on"].contains(Environment.get("SUNSHINE_CLIENT_HDR", "false").toLower());
+        var inventory = JSONValue.parse(SunshineDisplay.doctor(["--json"]).stdout());
+        Path.writeAll(directory + "/state.json", SunshineDisplay.snapshot(inventory, config.get("primary").asString(), output).stringify());
+        SunshineDisplay.killMonitor(directory + "/krfb-virtualmonitor.pid");
+        var password = ChildProcess.run("od", ["-An", "-tx1", "-N16", "/dev/urandom"]);
+        if (!password.ok()) { throw "Cannot create virtual monitor password"; }
+        var process = BackgroundProcess.start("krfb-virtualmonitor", ["--resolution", f"{width}x{height}", "--name", config.get("name").asString(), "--password", password.stdout().replace(" ", "").replace("\n", ""), "--scale", config.get("scale").asString(), "--port", SunshineDisplay.scalar(config.get("port"))], ["QT_QPA_PLATFORM=wayland"]);
+        Path.writeAll(directory + "/krfb-virtualmonitor.pid", f"{process.pid}\n");
+        bool appeared = false;
+        for (int second = 0; second < config.get("settleSeconds").asInt(); second++) { usleep(1000000); if (SunshineDisplay.connected(output)) { appeared = true; break; } }
+        if (!appeared) { process.stop(); unlink(directory + "/krfb-virtualmonitor.pid"); throw f"Virtual display {output} did not appear"; }
+        SunshineDisplay.doctor([f"output.{output}.addCustomMode.{width}.{height}.{fps * 1000}.full"], false);
+        SunshineDisplay.doctor(SunshineDisplay.configure(config, width, height, fps, hdr));
+    }
+
+    class void stop(JSONValue config, string directory) {
+        var state = directory + "/state.json";
+        if (FileSystem.isFile(state)) { var arguments = SunshineDisplay.restore(JSONValue.readFile(state)); if (!arguments.isEmpty()) { SunshineDisplay.doctor(arguments, false); } }
+        else { SunshineDisplay.doctor([f"output.{config.get("primary").asString()}.enable", f"output.{config.get("primary").asString()}.priority.1"], false); }
+        SunshineDisplay.killMonitor(directory + "/krfb-virtualmonitor.pid");
+        unlink(state);
+    }
+}

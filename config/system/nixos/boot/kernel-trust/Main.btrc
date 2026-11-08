@@ -1,0 +1,16 @@
+import Library.CLI;
+import ./Modules.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.count() < 3) { throw "Usage: check-module-trust <image> <certificates> <version> [module-package ...]"; }
+        Vector<string> packages = [];
+        for (int index = 3; index < args.count(); index++) { packages.push(args.get(index)); }
+        ModuleTrust.check(args.get(0), args.get(1), args.get(2), packages);
+        return 0;
+    } catch (string error) {
+        fprintf(stderr, "Kernel module trust is not ready: %s\n", error);
+        return 1;
+    }
+}

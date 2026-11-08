@@ -1,0 +1,329 @@
+import Library.FileSystem;
+import Library.Process;
+import ../../core/NixosLog.btrc;
+import ../Spec.btrc;
+
+class QemuFirmware {
+    public VmTestSpec spec;
+    public UnixShell shell;
+
+    public QemuFirmware(VmTestSpec spec) {
+        self.spec = spec;
+        self.shell = UnixShell();
+    }
+
+    public string firmwareVarsPath() { return PathTools.join(self.spec.workDir, "edk2-vars.fd"); }
+    public string firmwareVarsSnapshotPath(string name) { return PathTools.join(self.spec.workDir, "edk2-vars." + name + ".fd"); }
+    public string tpmDir() { return PathTools.join(self.spec.workDir, "tpm"); }
+    public string tpmStateDir() { return PathTools.join(self.tpmDir(), "state"); }
+    public string tpmSocketPath() { return PathTools.join(self.tpmDir(), "swtpm.sock"); }
+    public string tpmPidPath() { return PathTools.join(self.tpmDir(), "swtpm.pid"); }
+    public string tpmLogPath() { return PathTools.join(self.tpmDir(), "swtpm.log"); }
+    public string firmwareCodeAliasPath() { return PathTools.join(self.spec.workDir, "edk2-code.fd"); }
+    public string firmwareDataAliasPath() { return PathTools.join(self.spec.workDir, "firmware-data"); }
+
+    public string qemuBinary() {
+        return f"qemu-system-{self.spec.arch}";
+    }
+
+    public bool argEnabled(string key) {
+        return self.spec.args.getOrDefault(key, "false").equals("true");
+    }
+
+    public bool tpm2Enabled() {
+        return self.argEnabled("tpm2");
+    }
+
+    public bool secureBootEnabled() {
+        return self.argEnabled("secureBoot");
+    }
+
+    public bool bootloaderRequiresUefi() {
+        return self.spec.args.getOrDefault("bootloader", "").equals("systemd-boot");
+    }
+
+    public bool uefiEnabled() {
+        return self.argEnabled("uefi") || self.argEnabled("uefiDisk") || self.bootloaderRequiresUefi() || self.secureBootEnabled();
+    }
+
+    public bool shouldUseUefi(bool fromIso) {
+        if (self.spec.arch.equals("aarch64")) { return true; }
+        if (self.argEnabled("uefi")) { return true; }
+        if (!fromIso && self.uefiEnabled()) { return true; }
+        if (fromIso && self.argEnabled("uefiIso")) { return true; }
+        return false;
+    }
+
+    public bool hostArchMatchesGuest() {
+        return VmSpecArgs.hostArch().equals(self.spec.arch);
+    }
+
+    public string qemuSharePath(string fileName) {
+        var script = "bin=$(command -v " + ShellWords.quote(self.qemuBinary()) + ") || exit 1; "
+            + "prefix=$(dirname \"$(dirname \"$bin\")\") || exit 1; "
+            + "file=" + ShellWords.quote(fileName) + "; "
+            + "path=\"$prefix/share/qemu/$file\"; "
+            + "test -f \"$path\" || exit 1; printf %s \"$path\"";
+        var result = self.shell.run(script, logFailure=false);
+        if (!result.ok()) { return ""; }
+        return result.trimmed();
+    }
+
+    public string qemuShareDir() {
+        var script = "bin=$(command -v " + ShellWords.quote(self.qemuBinary()) + ") || exit 1; "
+            + "prefix=$(dirname \"$(dirname \"$bin\")\") || exit 1; "
+            + "path=\"$prefix/share/qemu\"; "
+            + "test -d \"$path\" || exit 1; printf %s \"$path\"";
+        var result = self.shell.run(script, logFailure=false);
+        if (result.ok()) { return result.trimmed(); }
+        if (FileSystem.exists("/opt/homebrew/share/qemu")) { return "/opt/homebrew/share/qemu"; }
+        return "";
+    }
+
+    public string prepareFirmwareDataAlias() {
+        var dataDir = self.qemuShareDir();
+        if (dataDir.isEmpty()) { NixosLog.fatal("Could not find QEMU firmware data directory for " + self.spec.arch); }
+        VmFiles.remove(self.firmwareDataAliasPath());
+        var command = "ln -s " + ShellWords.quote(dataDir) + " " + ShellWords.quote(self.firmwareDataAliasPath());
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        if (!result.ok()) { NixosLog.fatal("Failed to prepare firmware data alias"); }
+        return self.firmwareDataAliasPath();
+    }
+
+    public void addFirmwareData(Command command) {
+        command.args(["-L", self.prepareFirmwareDataAlias()]);
+    }
+
+    public string findFirst(string findArgs) {
+        return self.shell.run("find " + findArgs + " -print -quit 2>/dev/null", logFailure=false).trimmed();
+    }
+
+    public string firmwareCodePath() {
+        if (self.secureBootEnabled()) {
+            return self.secureFirmwareCodePath();
+        }
+        if (self.spec.arch.equals("aarch64")) {
+            var packaged = self.qemuSharePath("edk2-aarch64-code.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+            if (FileSystem.exists("/opt/homebrew/share/qemu/edk2-aarch64-code.fd")) {
+                return "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
+            }
+        }
+        if (self.spec.arch.equals("x86_64")) {
+            var packaged = self.qemuSharePath("edk2-x86_64-code.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+        }
+        return self.findFirst("/nix/store -maxdepth 4 -name OVMF_CODE.fd");
+    }
+
+    public string secureFirmwareCodePath() {
+        if (self.spec.arch.equals("aarch64")) {
+            var store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_CODE.secboot.fd'");
+            if (!store.isEmpty()) { return store; }
+            return self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_CODE.secboot.fd");
+        }
+        if (!self.spec.arch.equals("x86_64")) { return ""; }
+        var packaged = self.qemuSharePath("edk2-x86_64-secure-code.fd");
+        if (!packaged.isEmpty()) { return packaged; }
+        return self.findFirst("/nix/store -maxdepth 5 \\( -name OVMF_CODE.secboot.fd -o -name OVMF_CODE_4M.secboot.fd -o -name '*secure*CODE*.fd' \\)");
+    }
+
+    public string firmwareVarsTemplatePath() {
+        if (self.secureBootEnabled() && self.spec.arch.equals("aarch64")) {
+            var store = self.findFirst("/nix/store -path '*aavmf-secboot*/AAVMF_VARS.fd'");
+            if (!store.isEmpty()) { return store; }
+            var deb = self.findFirst("\"$(pwd)/.vm/firmware\" -name AAVMF_VARS.fd");
+            if (!deb.isEmpty()) { return deb; }
+        }
+        if (self.spec.arch.equals("aarch64")) {
+            var packaged = self.qemuSharePath("edk2-arm-vars.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+        }
+        if (self.spec.arch.equals("x86_64")) {
+            var packaged = self.qemuSharePath("edk2-i386-vars.fd");
+            if (!packaged.isEmpty()) { return packaged; }
+        }
+        return self.findFirst("/nix/store -maxdepth 4 -name OVMF_VARS.fd");
+    }
+
+    public void makeFirmwareVarsWritable() {
+        var command = f"chmod 600 {ShellWords.quote(self.firmwareVarsPath())}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        if (!result.ok()) { NixosLog.fatal("Failed to make firmware vars writable"); }
+    }
+
+    public void setupFirmwareVars() {
+        if (FileSystem.exists(self.firmwareVarsPath())) {
+            self.makeFirmwareVarsWritable();
+            return;
+        }
+        var template = self.firmwareVarsTemplatePath();
+        if (!template.isEmpty()) {
+            var command = f"cp {ShellWords.quote(template)} {ShellWords.quote(self.firmwareVarsPath())}";
+            var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+            if (!result.ok()) { NixosLog.fatal("Failed to copy EDK2 vars file"); }
+            self.makeFirmwareVarsWritable();
+            return;
+        }
+        var created = self.shell.run(f"dd if=/dev/zero of={ShellWords.quote(self.firmwareVarsPath())} bs=1M count=64", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+        if (!created.ok()) { NixosLog.fatal("Failed to create firmware vars file"); }
+        self.makeFirmwareVarsWritable();
+    }
+
+    public string prepareFirmwareCodeAlias(string codePath) {
+        VmFiles.remove(self.firmwareCodeAliasPath());
+        var command = "ln -s " + ShellWords.quote(codePath) + " " + ShellWords.quote(self.firmwareCodeAliasPath());
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        if (!result.ok()) { NixosLog.fatal("Failed to prepare firmware code alias"); }
+        return self.firmwareCodeAliasPath();
+    }
+
+    public bool commandExists(string name) {
+        var result = self.shell.run("command -v " + ShellWords.quote(name) + " >/dev/null 2>&1", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        return result.ok();
+    }
+
+    public void requireCommand(string name) {
+        if (!self.commandExists(name)) {
+            NixosLog.fatal("Missing required command: " + name);
+        }
+    }
+
+    public bool qemuDeviceAvailable(string deviceName) {
+        var command = self.qemuBinary() + " -device help 2>/dev/null | grep -q " + ShellWords.quote("name \"" + deviceName + "\"");
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        return result.ok();
+    }
+
+    public string tpmQemuDevice() {
+        if (self.spec.arch.equals("aarch64")) { return "tpm-tis-device"; }
+        return "tpm-tis";
+    }
+
+    public void requireTpm2Capability() {
+        self.requireCommand("swtpm");
+        var deviceName = self.tpmQemuDevice();
+        if (!self.qemuDeviceAvailable(deviceName)) {
+            NixosLog.fatal("QEMU TPM2 device is unavailable: " + deviceName);
+        }
+    }
+
+    public void requireUefiCapability() {
+        var codePath = self.firmwareCodePath();
+        var varsPath = self.firmwareVarsTemplatePath();
+        if (codePath.isEmpty() || varsPath.isEmpty()) {
+            NixosLog.fatal("QEMU UEFI firmware is unavailable for " + self.spec.arch);
+        }
+    }
+
+    public void requireSecureBootCapability() {
+        var codePath = self.secureFirmwareCodePath();
+        var varsPath = self.firmwareVarsTemplatePath();
+        if (codePath.isEmpty() || varsPath.isEmpty()) {
+            NixosLog.fatal("QEMU Secure Boot firmware is unavailable for " + self.spec.arch);
+        }
+        self.requireTpm2Capability();
+    }
+
+    public string secureBootCapabilityReport() {
+        var qemu = self.commandExists(self.qemuBinary());
+        var swtpm = self.commandExists("swtpm");
+        var firmware = self.secureFirmwareCodePath();
+        var vars = self.firmwareVarsTemplatePath();
+        var device = self.tpmQemuDevice();
+        var tpmDevice = qemu && self.qemuDeviceAvailable(device);
+        var available = qemu
+            && swtpm
+            && tpmDevice
+            && !firmware.isEmpty()
+            && !vars.isEmpty();
+        return "secureBootQemu=" + (available ? "available" : "unavailable")
+            + "\narch=" + self.spec.arch
+            + "\nqemu=" + (qemu ? "yes" : "no")
+            + "\nswtpm=" + (swtpm ? "yes" : "no")
+            + "\ntpmDevice=" + (tpmDevice ? device : "missing")
+            + "\nfirmware=" + (firmware.isEmpty() ? "missing" : firmware)
+            + "\nvars=" + (vars.isEmpty() ? "missing" : vars);
+    }
+
+    public bool isDarwin() {
+        var result = self.shell.run("uname -s");
+        return result.trimmed().equals("Darwin");
+    }
+
+    public void startSwtpm() {
+        if (!self.tpm2Enabled()) { return; }
+        self.requireTpm2Capability();
+        FileSystem.mkdirp(self.tpmStateDir());
+        VmFiles.remove(self.tpmSocketPath());
+        if (FileSystem.exists(self.tpmPidPath())) {
+            var running = self.shell.run("pid=$(cat " + ShellWords.quote(self.tpmPidPath()) + "); kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + ShellWords.quote(self.tpmSocketPath()) + " >/dev/null", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+            if (running.ok()) { return; }
+            VmFiles.remove(self.tpmPidPath());
+        }
+
+        // Command quotes argv[0], so the executable stands alone.
+        var command = Command("swtpm").args([
+            "socket",
+            "--tpm2",
+            "--tpmstate",
+            "dir=" + self.tpmStateDir(),
+            "--ctrl",
+            "type=unixio,path=" + self.tpmSocketPath(),
+            "--daemon",
+            "--pid",
+            "file=" + self.tpmPidPath(),
+            "--log",
+            "file=" + self.tpmLogPath() + ",level=20"
+        ]);
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+        if (!result.ok()) { NixosLog.fatal("Failed to start swtpm"); }
+        var waitCommand = "for i in 1 2 3 4 5 6 7 8 9 10; do test -S "
+            + ShellWords.quote(self.tpmSocketPath())
+            + " && exit 0; sleep 1; done; exit 1";
+        var ready = self.shell.run(waitCommand, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        if (!ready.ok()) { NixosLog.fatal("swtpm socket did not become ready"); }
+    }
+
+    public void stopSwtpm() {
+        if (FileSystem.exists(self.tpmPidPath())) {
+            var quotedPid = ShellWords.quote(self.tpmPidPath());
+            var quotedSocket = ShellWords.quote(self.tpmSocketPath());
+            self.shell.run("pid=$(cat " + quotedPid + "); if kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + quotedSocket + " >/dev/null; then kill \"$pid\" 2>/dev/null || true; fi", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+            VmFiles.remove(self.tpmPidPath());
+        }
+        VmFiles.remove(self.tpmSocketPath());
+    }
+
+    public void addFirmware(Command command, bool fromIso) {
+        if (!self.shouldUseUefi(fromIso)) { return; }
+        self.requireUefiCapability();
+        if (self.secureBootEnabled()) { self.requireSecureBootCapability(); }
+        if (self.spec.arch.equals("x86_64")) {
+            command.args(["-machine", "q35"]);
+        }
+        self.setupFirmwareVars();
+        var codePath = self.firmwareCodePath();
+        if (codePath.isEmpty()) { NixosLog.fatal("Could not find EDK2 firmware for " + self.spec.arch); }
+        var codeArg = self.prepareFirmwareCodeAlias(codePath);
+        command.args([
+            "-drive",
+            f"if=pflash,format=raw,readonly=on,file={codeArg}",
+            "-drive",
+            f"if=pflash,format=raw,file={self.firmwareVarsPath()}"
+        ]);
+    }
+
+    public void addTpm2(Command command) {
+        if (!self.tpm2Enabled()) { return; }
+        self.startSwtpm();
+        command.args([
+            "-chardev",
+            f"socket,id=chrtpm,path={self.tpmSocketPath()}",
+            "-tpmdev",
+            "emulator,id=tpm0,chardev=chrtpm",
+            "-device",
+            f"{self.tpmQemuDevice()},tpmdev=tpm0"
+        ]);
+    }
+}

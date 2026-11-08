@@ -15,7 +15,7 @@ package=$(nix-build --no-out-link --cores 4 --max-jobs 2 \
     let
       flake = builtins.getFlake ("git+file://" + root);
       pkgs = import flake.inputs.nixpkgs { inherit system; };
-    in import (flake.outPath + "/nix/apps/utils/nixosctl/package.nix") {
+    in import (flake.outPath + "/config/pkgs/utils/nixosctl/package.nix") {
       inherit pkgs;
       inherit (pkgs) lib;
       btrcpy = flake.inputs.btrc.packages.${system}.btrcpy;

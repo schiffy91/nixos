@@ -1,3 +1,9 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # NixOS supplies these names when executing the test script.
+    from nixos_test import machine, start_all, subtest  # ty: ignore[unresolved-import]
+
 import base64
 import json
 from pathlib import Path

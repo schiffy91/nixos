@@ -1,0 +1,1 @@
+{"manifest-hash":"9d24554cf8f2ec1dfac92cc0705693ffd4b8ffe8dc30eb279976c70bac8ee45f","packages":[{"dependencies":{},"manifest-hash":"9f6c5e7b5485ab246134565bd9f7786fda2948ed07a82c20b34d52ef2c23b8fa","name":"nixos_opportunistic_unlock","source":{"path":"."}}],"root":"nixos_opportunistic_unlock","schema":3}

@@ -1,0 +1,15 @@
+import Library.CLI;
+import ./Slopsmith.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.count() != 2) { throw "Expected Slopsmith configuration and operation"; }
+        var configuration = JSONValue.readFile(args.get(0));
+        var action = args.get(1);
+        if (action.equals("launch")) { return Slopsmith.launch(configuration); }
+        if (action.equals("session")) { return Slopsmith.session(configuration, args.get(0), args.program); }
+        if (action.equals("stop")) { Slopsmith.stop(Slopsmith.runtimeDirectory()); return 0; }
+        throw "Unknown Slopsmith operation";
+    } catch (string error) { Console.error(error); return 1; }
+}

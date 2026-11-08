@@ -5,32 +5,14 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; };
   kernelPackages = pkgs.linuxPackages_latest;
-  kernel = kernelPackages.kernel;
-  probe = name: pkgs.stdenv.mkDerivation {
-    pname = name;
-    version = "1";
-    src = pkgs.runCommand "${name}-source" { } ''
-      mkdir -p $out
-      cp ${./probe.c} $out/${name}.c
-      echo 'obj-m := ${name}.o' > $out/Makefile
-    '';
-    nativeBuildInputs = kernel.moduleBuildDependencies;
-    buildPhase = ''
-      make -C ${kernel.dev}/lib/modules/${kernel.modDirVersion}/build M="$PWD" \
-        ${pkgs.lib.escapeShellArgs kernelPackages.kernelModuleMakeFlags} modules
-    '';
-    installPhase = ''
-      make -C ${kernel.dev}/lib/modules/${kernel.modDirVersion}/build M="$PWD" \
-        ${pkgs.lib.escapeShellArgs kernelPackages.kernelModuleMakeFlags} \
-        INSTALL_MOD_PATH="$out" INSTALL_MOD_DIR=extra modules_install
-    '';
-  };
+  probe = name: import ./probe.nix { inherit pkgs kernelPackages name; };
   trusted = probe "trusted_probe";
   foreign = probe "foreign_probe";
 in pkgs.testers.runNixOSTest {
   name = "kernel-trust";
   nodes.machine = { config, lib, ... }: {
-    imports = [ ../../nix/settings.nix ../../nix/system/nixos/boot/kernel-trust.nix inputs.lanzaboote.nixosModules.lanzaboote ];
+    _module.args.inputs = inputs;
+    imports = [ ../../config/settings.nix ../../config/system/nixos/boot/kernel-trust.nix inputs.lanzaboote.nixosModules.lanzaboote ];
     boot.kernelPackages = kernelPackages;
     boot.extraModulePackages = [ trusted ];
     settings.boot.verifyModules = true;
@@ -41,7 +23,7 @@ in pkgs.testers.runNixOSTest {
     boot.loader.efi.canTouchEfiVariables = true;
     boot.loader.timeout = 0;
     environment.systemPackages = [ pkgs.sbctl pkgs.sbsigntool pkgs.openssl pkgs.python3 pkgs.keyutils pkgs.kmodigest pkgs.zstd ];
-    environment.etc."check-module-trust.py".source = ../../nix/system/nixos/boot/kernel-trust/check-modules.py;
+    environment.etc."check-module-trust".source = "${import ../../config/system/nixos/boot/kernel-trust/package.nix { inherit pkgs inputs; }}/bin/check-module-trust";
     environment.etc."module-adversary.py".source = ./adversary.py;
     environment.etc."fixture-paths".text = builtins.toJSON {
       inherit trusted foreign;

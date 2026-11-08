@@ -1,0 +1,6 @@
+{
+  "include": ["../config", "../tests", "."],
+  "exclude": ["**/__pycache__", "../config/pkgs/dev/agents/skills", "../config/pkgs/gaming/proton/custom/src"],
+  "extraPaths": ["../tests"],
+  "typeCheckingMode": "basic"
+}

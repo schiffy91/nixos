@@ -1,0 +1,34 @@
+import ./Posix.btrc;
+import ./Display.btrc;
+
+int main(void) {
+    if (getuid() != (uid_t)0 || geteuid() != (uid_t)0) return 1;
+    int consoleFlags = (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOCTTY;
+    int tty = open("/dev/tty63", consoleFlags);
+    struct vt_stat state;
+    if (tty < 0 || ioctl(tty, VT_GETSTATE, &state) < 0 || state.v_active != 63 ||
+        ioctl(tty, VT_LOCKSWITCH) < 0) {
+        fprintf(stderr, "Blanking requires the locked console\n");
+        return 1;
+    }
+    close(tty);
+    struct dirent** cards = NULL;
+    int count = scandir("/dev/dri", &cards, NULL, alphasort);
+    if (count < 0) {
+        fprintf(stderr, "Cannot enumerate DRM cards\n");
+        return 1;
+    }
+    bool safe = true, found = false;
+    for (int i = 0; i < count; i++) {
+        struct dirent* entry = cards[i];
+        if (strncmp(entry->d_name, "card", 4) == 0 && entry->d_name[4] >= '0' && entry->d_name[4] <= '9') {
+            char path[PATH_MAX];
+            int length = snprintf(path, sizeof(path), "/dev/dri/%s", entry->d_name);
+            found = true;
+            if (length < 0 || (size_t)length >= sizeof(path) || !blankCard(path)) safe = false;
+        }
+        free(entry);
+    }
+    free(cards);
+    return safe && found ? 0 : 1;
+}

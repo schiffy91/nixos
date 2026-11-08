@@ -1,0 +1,13 @@
+manifest-version = 1
+
+[package]
+name = "ci_native_lsp_fixture"
+exports = ["Valid"]
+
+[[native.bindings]]
+module = "Valid"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = ["inspect_name", "PROBE_READY"]
+read-only-borrows = ["inspect_name.name"]

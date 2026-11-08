@@ -1,6 +1,6 @@
 #include <assert.h>
 
-import ../e2e/spec/VmSpecParser.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/simulator/spec/VmSpecParser.btrc;
 
 string materialFor(string stateMaterial) {
     var spec = VmSpecParser.parse("{\"name\":\"node\",\"stateMaterial\":\"" + stateMaterial + "\",\"args\":{"

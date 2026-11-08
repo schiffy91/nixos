@@ -2,7 +2,7 @@
 
 import Library.FileSystem;
 import Library.Process;
-import ../../btrc/immutability/lib/ImmutabilityRun.btrc;
+import ../../config/system/storage/immutability/src/lib/ImmutabilityRun.btrc;
 
 string modeOf(string path) {
     return UnixShell().run(f"stat -c %a {ShellWords.quote(path)}").trimmed();

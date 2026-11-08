@@ -1,0 +1,39 @@
+import ../../../config/pkgs/gaming/sunshine/credentials/src/Credentials.btrc;
+import ../../../config/pkgs/gaming/sunshine/virtual-display/Display.btrc;
+import ../../../config/pkgs/gaming/slopsmith/src/Slopsmith.btrc;
+#include <assert.h>
+
+int main() {
+    assert(SunshineCredentials.digest("password", "salt").equals("997B60F3DD238B10ECDEDC2805F9E3DCB42A5AFAC089909AC1EA18895CB8377A"));
+    var state = JSONValue.parse("{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":true,\"currentModeId\":\"old-id\",\"modes\":[{\"id\":\"old-id\",\"name\":\"3840x2160@60\"}],\"pos\":{\"x\":0,\"y\":200},\"scale\":1.5,\"hdr\":true,\"wcg\":false,\"priority\":2},{\"name\":\"Virtual-Sunshine\",\"enabled\":true},{\"name\":\"DP-2\",\"enabled\":false}]}");
+    var saved = SunshineDisplay.snapshot(state, "DP-1", "Virtual-Sunshine");
+    assert(saved.get("outputs").size() == 1);
+    var restored = SunshineDisplay.restore(saved);
+    assert(restored.contains("output.DP-1.mode.3840x2160@60"));
+    assert(restored.contains("output.DP-1.position.0,200"));
+    assert(restored.contains("output.DP-1.scale.1.5"));
+    assert(restored.contains("output.DP-1.hdr.enable"));
+    assert(restored.contains("output.DP-1.wcg.disable"));
+    assert(restored.contains("output.DP-1.priority.2"));
+    assert(!restored.join(" ").contains("old-id"));
+    var config = JSONValue.parse("{\"name\":\"Sunshine\",\"primary\":\"DP-1\",\"scale\":\"1.25\",\"position\":\"0,0\",\"disablePrimaryOnStream\":true}");
+    var enabled = SunshineDisplay.configure(config, 2560, 1440, 120, true);
+    assert(enabled.contains("output.Virtual-Sunshine.mode.2560x1440@120"));
+    assert(enabled.contains("output.Virtual-Sunshine.hdr.enable") && enabled.contains("output.DP-1.disable"));
+    config.set("disablePrimaryOnStream", JSONValue.makeBool(false));
+    assert(SunshineDisplay.configure(config, 1280, 720, 60, false).contains("output.DP-1.priority.2"));
+    for bad in ["", "0", "-1", "1;false", "99999999"] {
+        bool rejected = false;
+        try { SunshineDisplay.dimension(bad, 32768); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    var compose = Slopsmith.compose("/source/\"quoted\"", "/game: dlc", "/config/space\nnext", 8000);
+    var roundtrip = JSONValue.parse(compose.stringify()).get("services").get("web");
+    assert(roundtrip.get("build").get("context").asString().equals("/source/\"quoted\""));
+    assert(roundtrip.get("ports").at(0).asString().equals("127.0.0.1:8000:8000"));
+    assert(roundtrip.get("volumes").at(0).get("source").asString().equals("/game: dlc"));
+    assert(roundtrip.get("volumes").at(0).get("read_only").asBool());
+    assert(!roundtrip.get("volumes").at(1).get("read_only").asBool());
+    print("Credential digest, display snapshot/restore and Compose argument contracts passed");
+    return 0;
+}

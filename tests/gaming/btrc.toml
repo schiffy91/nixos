@@ -4,4 +4,4 @@ manifest-version = 1
 name = "nixos_unit_tests"
 
 [dependencies]
-assetto = { path = "../../btrc/gaming/assettocorsa" }
+assetto = { path = "../../config/pkgs/gaming/assettocorsa/src" }

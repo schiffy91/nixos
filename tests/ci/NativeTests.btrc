@@ -1,0 +1,23 @@
+import Library.CLI;
+import ../../ci/lib/Lsp.btrc;
+
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv);
+    var server = args.require(0, "native test requires SERVER FILE");
+    var path = PathTools.absolute(args.require(1, "native test requires SERVER FILE"));
+    var source = Path.readAll(path);
+    var session = LspSession(server, "btrc", Platform.currentDirectory(), "native-server.log");
+    var valid = session.diagnostics(path, "btrc", source);
+    if (valid.size() != 0) { throw "Valid typed native call was rejected: " + valid.stringify(); }
+    session.finish();
+    // A fresh session cannot confuse didClose's clearing notification with
+    // diagnostics for a reopened buffer at the same URI.
+    var invalidSession = LspSession(server, "btrc", Platform.currentDirectory(), "native-invalid-server.log");
+    var invalid = invalidSession.diagnostics(path, "btrc", source.replace("inspect_name(\"example\")", "inspect_name(42)"));
+    bool diagnosed = false;
+    for diagnostic in invalid.elements() { if (diagnostic.get("severity").asInt() == 1 && diagnostic.get("message").asString().contains("inspect_name")) { diagnosed = true; } }
+    invalidSession.finish();
+    if (!diagnosed) { throw "Invalid native call was hidden by the language server: " + invalid.stringify(); }
+    print("PASS: typed native return/borrow metadata and invalid-call diagnostics");
+    return 0;
+}

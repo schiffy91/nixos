@@ -94,13 +94,15 @@ with open("/var/tmp/moonlight-pair.log", "w") as log:
     try:
         pending = []
         for _ in range(40):
-            pending = api(endpoint="/api/pin")[1].get("pairings", [])
+            code, response = api(endpoint="/api/pin")
+            assert code == 200 and response is not None
+            pending = response.get("pairings", [])
             if pending:
                 break
             time.sleep(0.5)
         assert pending, Path("/var/tmp/moonlight-pair.log").read_text()
         code, result = api(endpoint="/api/pin", payload={"pairing_id": pending[0]["id"], "pin": "1234", "name": "test-client"})
-        assert code == 200 and result["status"] is True
+        assert code == 200 and result is not None and result["status"] is True
         for _ in range(60):
             if state.exists() and json.loads(state.read_text()).get("root", {}).get("named_devices"):
                 break

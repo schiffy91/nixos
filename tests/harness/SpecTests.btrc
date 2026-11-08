@@ -1,4 +1,4 @@
-import ../e2e/spec/VmSpecParser.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/simulator/spec/VmSpecParser.btrc;
 
 #include <assert.h>
 

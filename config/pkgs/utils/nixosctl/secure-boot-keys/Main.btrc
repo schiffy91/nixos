@@ -1,0 +1,41 @@
+import Library.CLI;
+import ./Archive.btrc;
+import ./Crypto.btrc;
+import ./Files.btrc;
+
+#include <sys/prctl.h>
+#include <sys/resource.h>
+
+int main(int argc, char** argv) {
+    try {
+        if (getuid() != (uid_t)0 || geteuid() != (uid_t)0) { throw "Secure Boot key transfer requires root"; }
+        struct rlimit noCore = {0, 0};
+        if (setrlimit(RLIMIT_CORE, &noCore) != 0 || prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) { throw "Could not disable process dumps"; }
+        umask(0077);
+        var args = CLIArgs(argc, argv);
+        if (args.count() != 2 || !(args.get(0).equals("export") || args.get(0).equals("import") || args.get(0).equals("verify"))) {
+            throw "Usage: nixosctl secure-boot keys <export|import|verify> /absolute/bundle/path";
+        }
+        var action = args.get(0);
+        var path = args.get(1);
+        KeyFiles.components(path);
+        Map<string, Bytes> files = {};
+        if (action.equals("import")) {
+            if (isatty(STDIN_FILENO) != 0) { throw "Import requires a private archive on stdin"; }
+            files = KeyArchive.decode(KeyFiles.read(STDIN_FILENO, 1048576));
+        } else { files = KeyFiles.readBundle(path); }
+        var report = KeyCrypto.verify(files);
+        if (action.equals("export")) {
+            if (isatty(STDOUT_FILENO) != 0) { throw "Refusing to print private keys to a terminal; pipe directly to the remote importer"; }
+            KeyFiles.write(STDOUT_FILENO, KeyArchive.encode(files));
+        } else if (action.equals("import")) {
+            KeyFiles.publish(files, path);
+            fprintf(stderr, "Secure Boot key bundle imported and verified.\n");
+        } else { print(report.document()); }
+        return 0;
+    } catch (string error) {
+        // Only our fixed diagnostic strings reach this boundary, never key bytes.
+        fprintf(stderr, "%s\n", error);
+        return 1;
+    }
+}

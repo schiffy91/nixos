@@ -1,0 +1,38 @@
+import ../../ci/lib/Lsp.btrc;
+import ../../ci/lib/Repository.btrc;
+import ../../ci/lib/Publisher.btrc;
+#include <assert.h>
+
+int main() {
+    var message = JSONValue.parse("{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":\"é雪\"}");
+    var encoded = LspFrames.encode(message);
+    var frames = LspFrames();
+    for (int i = 0; i < encoded.length() - 1; i++) {
+        frames.append(encoded.slice(i, i + 1));
+        assert(frames.take() == null);
+    }
+    frames.append(encoded.slice(encoded.length() - 1, encoded.length()));
+    var decoded = frames.take();
+    if (decoded == null) { throw "Fragmented LSP message was lost"; }
+    assert(decoded.get("result").asString().equals("é雪"));
+    frames.append(encoded); frames.append(encoded);
+    assert(frames.take() != null && frames.take() != null && frames.take() == null);
+    for invalid in ["Content-Length: -1\r\n\r\n", "Content-Length: 4294967296\r\n\r\n", "Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}", "Content-Length: 2\r\n\r\nxx"] {
+        bool rejected = false;
+        try { var bad = LspFrames(); bad.append(Bytes.fromString(invalid)); bad.take(); }
+        catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    var names = Bytes.fromString("path with spaces"); names.append(0);
+    names.appendBytes(Bytes.fromString("line\nbreak")); names.append(0);
+    names.appendBytes(Bytes.fromString("path with spaces")); names.append(0);
+    var paths = Repository.paths(names);
+    assert(paths.len == 2 && paths.contains("line\nbreak") && paths.contains("path with spaces"));
+    assert(LspSession.uri("/tmp/a b#é").equals("file:///tmp/a%20b%23%C3%A9"));
+    var targets = JSONValue.parse("{\"systems\":[{\"system\":\"x86_64-linux\",\"attrs\":[\"installer\"]}],\"local\":[\"desktop\",\"deck\"]}");
+    assert(CachePublisher.attributes(targets, "x86_64-linux", false).join(",").equals("installer"));
+    assert(CachePublisher.attributes(targets, "aarch64-linux", false).isEmpty());
+    assert(CachePublisher.attributes(targets, "aarch64-linux", true).join(",").equals("desktop,deck"));
+    print("PASS: fragmented/coalesced UTF-8 LSP framing, malformed frame rejection, Git path boundaries and cache target selection");
+    return 0;
+}

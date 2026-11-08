@@ -1,0 +1,19 @@
+import Library.CLI;
+import ./Controller.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        if (getuid() != (uid_t)0 || geteuid() != (uid_t)0) { throw "Session locking requires root"; }
+        umask((mode_t)0077);
+        var args = CLIArgs(argc, argv);
+        if (args.count() < 2) { throw "Invalid sleep-lock operation"; }
+        var controller = SleepController(JSONValue.readFile(args.get(0)));
+        if (args.count() == 2 && args.get(1).equals("run")) { controller.run(); }
+        else if (args.count() == 3 && SleepState.sleepUnits().contains(args.get(2))) {
+            if (args.get(1).equals("prepare")) { controller.prepare(args.get(2)); }
+            else if (args.get(1).equals("resume")) { controller.resume(args.get(2)); }
+            else { throw "Invalid sleep-lock operation"; }
+        } else { throw "Invalid sleep-lock operation"; }
+        return 0;
+    } catch (string error) { Console.error(f"Sleep lock failed: {error}"); return 1; }
+}

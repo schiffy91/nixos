@@ -1,0 +1,441 @@
+import Library.CLI;
+import Library.Console;
+import Library.FileSystem;
+import Library.Platform;
+import Library.Process;
+import Library.Strings;
+import ./lib/core/Interactive.btrc;
+import ./lib/core/NixosLog.btrc;
+import ./lib/NixosConfig.btrc;
+import ./lib/SecretsManager.btrc;
+import ./lib/PermissionsManager.btrc;
+import ./lib/NixosRebuilder.btrc;
+import ./lib/PasswordManager.btrc;
+import ./lib/btrfs/DiffScanner.btrc;
+import ./lib/btrfs/BtrfsImmutabilityManager.btrc;
+import ./lib/btrfs/PersistenceManager.btrc;
+import ./lib/hardware/SecureBootManager.btrc;
+import ./lib/hardware/Tpm2Manager.btrc;
+import ./lib/core/NixosPaths.btrc;
+import ./lib/desktop/HardwareConfig.btrc;
+import ./lib/desktop/AudioManager.btrc;
+import ./lib/desktop/CaffeineManager.btrc;
+import ./lib/desktop/DisplayManager.btrc;
+import ./lib/desktop/PowerManager.btrc;
+import ./lib/Installer.btrc;
+import ./lib/simulator/Spec.btrc;
+import ./lib/simulator/QemuE2eHarness.btrc;
+import ./lib/simulator/VmTestRunner.btrc;
+import ./lib/simulator/Graph.btrc;
+import ./lib/simulator/E2eCli.btrc;
+
+class NixosCtl {
+    public NixosConfig config;
+
+    public NixosCtl() {
+        self.config = NixosConfig(NixosPaths.rootFromEnv());
+    }
+
+    class string env(string name, string fallback) {
+        return Environment.get(name, fallback);
+    }
+
+    public void usage() {
+        var help = CLIHelp();
+        help.line("Usage: nixosctl <command> [options]");
+
+        help.section("System lifecycle");
+        help.item("update [--clean] [--upgrade] [--rebuild-filesystem] [--reboot]",
+               "Rebuild and switch the current system.");
+        help.continuation("--clean   nix-collect-garbage + verify --repair first.");
+        help.continuation("--upgrade Refresh flake inputs (implies --clean).");
+        help.continuation("--rebuild-filesystem  Re-enroll the bootloader.");
+        help.continuation("--reboot  Reboot after activation.");
+        help.item("upgrade [...]", "Alias for: update --upgrade --clean");
+        help.item("install [--format] [--yes] [--collect-garbage] [--debug] [--force-upgrade]",
+               "Format/mount disk and run nixos-install. --force-upgrade updates the flake lock first, ignoring any closure baked into the installer.");
+        help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
+        help.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
+        help.item("sudo <enable --for 8h|status|disable>", "Manage an expiring, account-wide passwordless sudo grant.");
+        help.item("sunshine <sync|provision|status>", "Sync web credentials from 1Password; provision accepts JSON on stdin.");
+
+        help.section("Disk + immutability");
+        help.item("diff [--recent] [--pattern <p>] [--depth <n>]",
+               "Show files diverged from the CLEAN snapshot.");
+        help.continuation("[--show-symlinks] [--show-persist-paths] [--show-children <path>]");
+        help.continuation("[--diffignore <file>]");
+        help.item("persistence materialize [--dry-run] [--refresh-clean]",
+               "Copy persisted paths back into their reset subvolumes.");
+        help.item("immutability <plan|prepare> [--dry-run]",
+               "Inspect or prepare the next boot reset while running.");
+
+        help.section("Boot + crypto");
+        help.item("secure-boot <enable|disable|status> [--microsoft] [--no-reboot]",
+               "Manage Lanzaboote / Secure Boot enrollment.");
+        help.item("secure-boot keys <export|import|verify> /absolute/bundle/path",
+               "Transfer existing PK/KEK/db keys privately on stdin/stdout; never overwrite.");
+        help.item("tpm2 <enable|disable|status>", "Manage TPM2 LUKS keyslot.");
+        help.item("change-password [--update-tpm2]",
+               "Converge LUKS, account and hashed file to one new password.");
+        help.continuation("[--full-disk-encryption-only | --user-account-only]");
+        help.continuation("Parts already using the new password are skipped; the");
+        help.continuation("current password is asked only for parts that change.");
+        help.continuation("As root, NIXOS_OLD_PASSWORD + NIXOS_NEW_PASSWORD script it.");
+
+        help.section("Hardware");
+        help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
+        help.item("audio <list|current|set> [sink]", "");
+        help.item("caffeine <status|enable|disable|toggle>", "");
+        help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
+
+        help.section("Testing");
+        help.item("vm <args>", "Boot the host config in a QEMU VM.");
+        help.item("e2e <args>", "Run end-to-end test scenarios.");
+        help.item("graph <args>", "Inspect / render the test-scenario graph.");
+
+        help.blank();
+        help.line("Privileged commands auto-elevate via sudo. Set NIXOS_CONFIG_ROOT to point");
+        help.line("at a tree other than /etc/nixos.");
+        help.print();
+    }
+
+    public bool needsRoot(string command) {
+        if (NixosCtl.env("NIXOSCTL_ASSUME_ROOT_FOR_TESTS", "false").equals("true")) {
+            return false;
+        }
+        return command.equals("update")
+            || command.equals("upgrade")
+            || command.equals("install")
+            || command.equals("diff")
+            || command.equals("persistence")
+            || command.equals("immutability")
+            || command.equals("fix-permissions")
+            || command.equals("secure-boot")
+            || command.equals("tpm2");
+    }
+
+    public int sudoSelf(CLIArgs args) {
+        var command = f"sudo {ShellWords.quote(args.program)}";
+        for value in args.values {
+            command = f"{command} {ShellWords.quote(value)}";
+        }
+        var result = UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true);  /* child owns the tty so sudo can prompt */
+        return result.code;
+    }
+
+    public bool needsTestShell(CLIArgs args) {
+        if (NixosCtl.env("NIXOS_BTRC_TEST_SHELL", "").equals("1")) {
+            return false;
+        }
+        var command = args.command();
+        if (command.equals("vm")) { return args.count() >= 3; }
+        if (command.equals("e2e")) { return args.count() >= 2; }
+        if (command.equals("graph")) { return args.count() >= 3; }
+        return false;
+    }
+
+    public string requireArg(CLIArgs args, int index, string usage) {
+        try {
+            return args.require(index, usage);
+        } catch (string error) {
+            var message = f"{error}";
+            NixosLog.fatal(message);
+        }
+        return "";
+    }
+
+    public string requireAction(CLIArgs args, string usage) {
+        return self.requireArg(args, 1, usage);
+    }
+
+    public int nixShellSelf(CLIArgs args) {
+        var shellPath = PathTools.join(self.config.paths.root, "tests/shell.nix");
+        var runCmd = f"export NIXOS_BTRC_TEST_SHELL=1 && exec {ShellWords.quote(args.program)}";
+        for value in args.values {
+            runCmd = f"{runCmd} {ShellWords.quote(value)}";
+        }
+        NixosLog.info(f"nixosctl {args.command()}: entering tests/shell.nix (qemu/swtpm/socat). First entry can take a minute.");
+        var command = f"nix-shell {ShellWords.quote(shellPath)} --run {ShellWords.quote(runCmd)}";
+        var result = UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true);  /* inner nixosctl prompts on the tty */
+        return result.code;
+    }
+
+    public int run(CLIArgs args) {
+        var line = CLICommandLine.parse(args);  // options moved off CLIArgs
+        if (args.count() == 0) {
+            self.usage();
+            return 1;
+        }
+
+        var command = args.command();
+        if (command.equals("--help") || command.equals("-h") || command.equals("help")) {
+            self.usage();
+            return 0;
+        }
+        if (self.needsTestShell(args)) {
+            return self.nixShellSelf(args);
+        }
+        if (command.equals("secure-boot") && args.count() >= 2 && args.get(1).equals("keys") && !Platform.isRoot()) {
+            NixosLog.fatal("Secure Boot key transfer requires root; use an existing root session or sudo -n explicitly.");
+        }
+        if (self.needsRoot(command) && !Platform.isRoot()) {
+            return self.sudoSelf(args);
+        }
+
+        if (command.equals("sunshine")) {
+            var action = self.requireAction(args, "Usage: nixosctl sunshine <sync|provision|status>");
+            if (args.count() != 2 || (!action.equals("sync") && !action.equals("provision") && !action.equals("status"))) {
+                NixosLog.fatal("Usage: nixosctl sunshine <sync|provision|status>");
+            }
+            return UnixShell().run(f"/run/current-system/sw/bin/nixosctl-sunshine {ShellWords.quote(action)}",
+                stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true).code;
+        }
+
+        if (command.equals("sudo")) {
+            var invocation = "/run/current-system/sw/bin/nixosctl-sudo";
+            Vector<string> values = [];
+            for (var index = 1; index < args.count(); index++) {
+                values.push(args.get(index));
+            }
+            // This is delegation, so preserve the caller's process group and tty.
+            var child = ChildProcessArguments.build(invocation, values);
+            if (child == NULL) { throw "Cannot allocate sudo helper arguments"; }
+            execv(child[0], child);
+            CStringArray.freeAll(child);
+            throw "Cannot execute sudo helper";
+        }
+
+        if (command.equals("eval")) {
+            var attribute = self.requireArg(args, 1, "Usage: nixosctl eval <attribute>");
+            Console.log(self.config.evalRaw(attribute));
+            return 0;
+        }
+
+        if (command.equals("update") || command.equals("upgrade")) {
+            var options = RebuildOptions();
+            options.rebuildFileSystem = line.has("--rebuild-filesystem");
+            options.reboot = line.has("--reboot");
+            options.clean = line.has("--clean") || line.has("--upgrade") || command.equals("upgrade");
+            options.upgrade = line.has("--upgrade") || command.equals("upgrade");
+            NixosRebuilder(self.config).update(options);
+            return 0;
+        }
+
+        if (command.equals("install")) {
+            var installer = Installer(self.config);
+            if (line.has("--collect-garbage")) {
+                installer.collectGarbage();
+            }
+            if (line.has("--debug")) {
+                installer.debugShell();
+            }
+            installer.bootstrapConfigIfMissing();
+            var secrets = SecretsManager(self.config);
+            var confirmed = line.has("--yes");
+            int prepareStatus = 0;
+            try {
+                secrets.createIfMissing(installer.plainTextPasswordPath());
+                var formatPrompt = f"Format {self.config.diskDevice()}?";
+                var format = line.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
+                var prepared = installer.prepareDisk(format);
+                prepareStatus = prepared.code;
+            } finally {
+                secrets.releaseInstallerPassword();
+            }
+            // The pinned compiler skips finally on early returns: return only after cleanup.
+            if (prepareStatus != 0) { return prepareStatus; }
+            if (confirmed || installer.interactive.confirm("Install NixOS?")) {
+                var installed = installer.installNixos(forceUpgrade=line.has("--force-upgrade"));
+                if (!installed.ok()) { return installed.code; }
+            } else if (installer.interactive.confirm("Permission NixOS?")) {
+                installer.permissionNixos();
+            }
+            installer.interactive.askToReboot();
+            return 0;
+        }
+
+        if (command.equals("diff")) {
+            var options = DiffOptions();
+            options.recent = line.has("--recent");
+            options.showSymlinks = line.has("--show-symlinks");
+            options.showPersistPaths = line.has("--show-persist-paths");
+            options.showChildren = line.option("--show-children", "");
+            var depth = line.option("--depth", "");
+            if (!depth.isEmpty()) { options.depth = Strings.toInt(depth); }
+            options.pattern = line.option("--pattern", "");
+            options.diffignore = line.option("--diffignore", "");
+            DiffScanner(self.config).print(options);
+            return 0;
+        }
+
+        if (command.equals("persistence")) {
+            var action = self.requireAction(args, "Usage: nixosctl persistence <materialize>");
+            if (action.equals("materialize")) {
+                PersistenceManager(self.config).materialize(line.has("--dry-run"), line.has("--refresh-clean"));
+                return 0;
+            }
+            NixosLog.fatal("Usage: nixosctl persistence <materialize>");
+        }
+
+        if (command.equals("immutability")) {
+            var action = self.requireAction(args, "Usage: nixosctl immutability <plan|prepare>");
+            if (action.equals("plan") || action.equals("prepare")) {
+                BtrfsImmutabilityManager(self.config).require(action, line.has("--dry-run"));
+                return 0;
+            }
+            NixosLog.fatal("Usage: nixosctl immutability <plan|prepare>");
+        }
+
+        if (command.equals("fix-permissions")) {
+            var username = NixosCtl.env("SUDO_USER", "");
+            if (username.isEmpty()) {
+                username = NixosCtl.env("USER", "root");
+            }
+            PermissionsManager(self.config).secureTree(username);
+            return 0;
+        }
+
+        if (command.equals("change-password")) {
+            if (line.has("--full-disk-encryption-only") && line.has("--user-account-only")) {
+                NixosLog.fatal("Cannot use both --full-disk-encryption-only and --user-account-only");
+            }
+            if (line.has("--old") || line.has("--new")) {
+                NixosLog.fatal("--old/--new are unsupported: passwords on argv leak via /proc/<pid>/cmdline. Set NIXOS_OLD_PASSWORD / NIXOS_NEW_PASSWORD in the environment, or run change-password interactively.");
+            }
+            var manager = PasswordManager(self.config);
+            var newPassword = "";
+            var reexecSecretsPath = line.option("--reexec-secrets", "");
+            if (!reexecSecretsPath.isEmpty()) {
+                /* Re-exec'd as root by PasswordManager.reexecAsRoot: the unprivileged
+                   parent already resolved these; env vars don't survive sudo's reset. */
+                var lines = Strings.split(Path.readAll(reexecSecretsPath), "\n");
+                newPassword = lines.get(0);
+                manager.suppliedCurrentPassword = lines.len > 1 ? lines.get(1) : "";
+                FileSystem.removeRecursive(reexecSecretsPath);
+            } else {
+                manager.suppliedCurrentPassword = NixosCtl.env("NIXOS_OLD_PASSWORD", "");
+                newPassword = NixosCtl.env("NIXOS_NEW_PASSWORD", "");
+                if (newPassword.isEmpty()) {
+                    newPassword = Interactive().askPasswordConfirmed("Enter new password");
+                }
+            }
+            return manager.change(args, newPassword, !line.has("--user-account-only"), !line.has("--full-disk-encryption-only"), line.has("--update-tpm2"));
+        }
+
+        if (command.equals("secure-boot")) {
+            var action = self.requireAction(args, "Usage: nixosctl secure-boot <enable|disable|status>");
+            if (action.equals("keys")) {
+                if (args.count() != 4) { NixosLog.fatal("Usage: nixosctl secure-boot keys <export|import|verify> /absolute/bundle/path"); }
+                // Preserve the actual pipe/terminal descriptors; never collect secret stdout.
+                Vector<string> values = [args.get(2), args.get(3)];
+                var child = ChildProcessArguments.build("nixosctl-secure-boot-keys", values);
+                execvp(child[0], child);
+                CStringArray.freeAll(child);
+                throw "Cannot execute Secure Boot key helper";
+            }
+            var manager = SecureBootManager(self.config);
+            if (action.equals("enable")) { manager.enable(line.has("--microsoft"), !line.has("--no-reboot")); return 0; }
+            if (action.equals("disable")) { manager.disable(); return 0; }
+            if (action.equals("status")) { return manager.status() ? 0 : 1; }
+            NixosLog.fatal("Usage: nixosctl secure-boot <enable|disable|status>");
+        }
+
+        if (command.equals("tpm2")) {
+            var action = self.requireAction(args, "Usage: nixosctl tpm2 <enable|disable|status>");
+            var tpm = Tpm2Manager(self.config);
+            if (action.equals("status")) {
+                tpm.status();
+                return 0;
+            }
+            if (action.equals("enable")) {
+                if (!tpm.exists()) { NixosLog.fatal("TPM2 does not exist"); }
+                if (!tpm.diskEncrypted()) { NixosLog.fatal("Root disk is not LUKS encrypted"); }
+                if (!tpm.enroll()) { NixosLog.fatal("TPM2 enrollment failed"); }
+                return 0;
+            }
+            if (action.equals("disable")) {
+                if (!tpm.wipe()) { NixosLog.fatal("TPM2 wipe failed"); }
+                return 0;
+            }
+        }
+
+        if (command.equals("displays")) {
+            var action = self.requireAction(args, "Usage: nixosctl displays <list|layout|enable|disable|primary|dpms> [args]");
+            var displays = DisplayManager();
+            if (action.equals("list")) { displays.list(); return 0; }
+            if (action.equals("layout")) { displays.layout(); return 0; }
+            var display = self.requireArg(args, 2, "Missing display argument");
+            if (action.equals("enable")) { displays.enable(display); return 0; }
+            if (action.equals("disable")) { displays.disable(display); return 0; }
+            if (action.equals("primary")) { displays.primary(display); return 0; }
+            if (action.equals("dpms")) { displays.dpms(display); return 0; }
+        }
+
+        if (command.equals("audio")) {
+            var action = self.requireAction(args, "Usage: nixosctl audio <list|current|set> [sink]");
+            var audio = AudioManager();
+            if (action.equals("list")) { audio.list(); return 0; }
+            if (action.equals("current")) { Console.log(audio.current()); return 0; }
+            if (action.equals("set")) {
+                var sink = self.requireArg(args, 2, "Usage: nixosctl audio set <sink>");
+                audio.set(sink);
+                return 0;
+            }
+        }
+
+        if (command.equals("power")) {
+            var action = self.requireAction(args, "Usage: nixosctl power <list|current|set|is> [profile]");
+            var power = PowerManager();
+            if (action.equals("list")) {
+                for profile in power.profiles() { Console.log(profile); }
+                return 0;
+            }
+            if (action.equals("current")) {
+                var profile = power.current();
+                if (profile.isEmpty()) { throw "Power profiles are unavailable"; }
+                Console.log(profile);
+                return 0;
+            }
+            if (action.equals("set") || action.equals("is")) {
+                var profile = self.requireArg(args, 2, "Supply a power profile: performance, balanced, or power-saver");
+                if (action.equals("is")) { return power.current().equals(profile) ? 0 : 1; }
+                power.set(profile);
+                return 0;
+            }
+        }
+
+        if (command.equals("caffeine")) {
+            var action = self.requireAction(args, "Usage: nixosctl caffeine <status|enable|disable|toggle>");
+            var caffeine = CaffeineManager();
+            if (action.equals("status")) { return caffeine.enabled() ? 0 : 1; }
+            if (action.equals("enable")) { caffeine.enable(); return 0; }
+            if (action.equals("disable")) { caffeine.disable(); return 0; }
+            if (action.equals("toggle")) { caffeine.toggle(); return 0; }
+        }
+
+        if (command.equals("vm")) {
+            return E2eCli().runVm(args);
+        }
+
+        if (command.equals("e2e")) {
+            return E2eCli().runE2e(args);
+        }
+
+        if (command.equals("graph")) {
+            return E2eCli().runGraph(args);
+        }
+
+        self.usage();
+        return 1;
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        return NixosCtl().run(args);
+    } catch (string error) {
+        NixosLog.error(error);
+        return 1;
+    }
+}

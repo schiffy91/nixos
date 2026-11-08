@@ -14,7 +14,7 @@ in pkgs.testers.runNixOSTest {
   name = "plymouth-touch-unlock-${layout}" + pkgs.lib.optionalString rotate "-rotated";
   extraPythonPackages = packages: [ packages.pillow ];
   nodes.machine = { config, lib, pkgs, ... }: {
-    imports = [ ../../nix/settings.nix ../../nix/system/nixos/boot/touch-keyboard.nix ];
+    imports = [ ../../config/settings.nix ../../config/system/nixos/boot/touch-keyboard.nix ];
     settings.boot.touchKeyboard = true;
     services.xserver.xkb.layout = "${layout},${if layout == "us" then "de" else "us"}";
     boot.plymouth = {
@@ -85,7 +85,7 @@ in pkgs.testers.runNixOSTest {
     };
   };
   testScript = { nodes, ... }: builtins.replaceStrings
-    [ "@ROTATED@" "@SYSTEM@" "@LAYOUT@" "@LIGHT@" "@DISPLAY_TESTS@" "@SCALE@" ]
+    [ "@ROTATED@" "@SYSTEM@" "@LAYOUT@" "@LIGHT@" "# @DISPLAY_TESTS@" "@SCALE@" ]
     [ (if rotate then "True" else "False") "${nodes.machine.specialisation.encrypted.configuration.system.build.toplevel}" layout (if light then "True" else "False") (if multi then builtins.readFile ./displays.py else "") (toString scale) ]
     (builtins.readFile ./test.py);
 }

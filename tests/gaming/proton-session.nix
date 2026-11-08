@@ -4,7 +4,7 @@ let
     test "$*" = "--user is-active --quiet gamescope-session.service"
     exit "''${GAMESCOPE_STATUS:-3}"
   '';
-  launcher = import ../../nix/apps/gaming/launch/proton/package.nix {
+  launcher = import ../../config/pkgs/gaming/game-run/proton/package.nix {
     pkgs = pkgs // { systemd = systemctl; };
   };
   capture = pkgs.writeShellScript "capture-proton-driver" ''

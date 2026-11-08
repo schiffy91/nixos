@@ -1,0 +1,11 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.direnv/python/bin/python3",
+  "python.analysis.include": ["config", "tests", "ci"],
+  "python.analysis.exclude": ["**/__pycache__", "config/pkgs/dev/agents/skills", "config/pkgs/gaming/proton/custom/src"],
+  "python.analysis.extraPaths": ["tests"],
+  "python.analysis.typeCheckingMode": "basic",
+  "nix.enableLanguageServer": true,
+  "nix.serverPath": ["nix-shell", "${workspaceFolder}/shell.nix", "--run", "nixd"],
+  "btrc.serverCommand": "btrc-lsp",
+  "btrc.useNixDevShell": true
+}

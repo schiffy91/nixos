@@ -1,0 +1,1 @@
+{"manifest-hash":"1b6956484d5fbd2b6f4f2fae5ca814677be59661c67b9ca3e5e1ba7070435cad","packages":[{"dependencies":{},"manifest-hash":"6666a0ed037491c06e9ce7915f96ba2b726c95e2e82c4331ae059768e3e7aef9","name":"nixos_sunshine_ssh_login","source":{"path":"."}}],"root":"nixos_sunshine_ssh_login","schema":3}

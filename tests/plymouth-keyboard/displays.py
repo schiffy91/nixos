@@ -1,6 +1,16 @@
 # This fragment runs inside the same real LUKS prompt as the basic input tests.
 # A second GPU is unbound/rebound in the guest: QEMU disables PCI hotplug
 # for virtio-gpu. This still exercises real DRM/udev removal and recreation.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # This fragment is inserted into test.py by default.nix.
+    from .test import (  # ty: ignore[unresolved-import]
+        Image, ImageChops, Path, box, command, connector, empty, has_keyboard,
+        key, key_position, machine, map_touchscreen, position, screen_height,
+        screen_width, screenshot, shlex, time, wait_keyboard,
+    )
+
 def qmp(command, arguments=None):
     client = machine.qmp_client
     assert client is not None, "The VM monitor must be connected"

@@ -1,0 +1,10 @@
+{
+  "name": "host-picker",
+  "state": "host-picker",
+  "stateMaterial": "host-picker:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "host", "command": "python3 tests/host-picker/test.py", "timeout": 180 },
+    { "op": "record-state" }
+  ]
+}

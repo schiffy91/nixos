@@ -8,10 +8,11 @@ in pkgs.testers.runNixOSTest {
   name = "sunshine-credentials";
   node.pkgsReadOnly = false;
   nodes.machine = { config, lib, pkgs, ... }: {
+    _module.args.inputs = inputs;
     imports = [
       (inputs.nixpkgs + "/nixos/tests/common/x11.nix")
-      ../../../nix/settings.nix
-      ../../../nix/apps/gaming/sunshine/default.nix
+      ../../../config/settings.nix
+      ../../../config/pkgs/gaming/sunshine/default.nix
     ];
     settings.users.admin = { username = "operator"; homeDirectory = "/srv/operator"; };
     users.users.operator = { isNormalUser = true; home = "/srv/operator"; uid = 1000; extraGroups = [ "video" "audio" "input" ]; };
@@ -28,7 +29,7 @@ in pkgs.testers.runNixOSTest {
     systemd.user.services.sunshine.environment = { DISPLAY = ":0"; XAUTHORITY = "/srv/operator/.Xauthority"; };
     environment.systemPackages = [
       pkgs.python3 pkgs.moonlight-qt
-      (import ../../../nix/apps/utils/nixosctl/package.nix {
+      (import ../../../config/pkgs/utils/nixosctl/package.nix {
         inherit pkgs lib;
         btrcpy = inputs.btrc.packages.${system}.btrcpy;
       })

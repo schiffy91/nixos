@@ -1,0 +1,33 @@
+manifest-version = 1
+
+[package]
+name = "nixos_opportunistic_unlock"
+exports = ["Native", "Policy", "Devices", "Secrets", "Worker"]
+
+[[native.pkg-config]]
+name = "libcryptsetup"
+modules = ["Native"]
+
+[[native.bindings]]
+module = "Native"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = [
+  "unlockDiskSequence", "unlockReadOnly", "PROT_READ", "PROT_WRITE",
+  "MAP_PRIVATE", "MAP_ANONYMOUS", "MADV_DONTDUMP", "SYS_keyctl",
+  "KEYCTL_SEARCH", "KEYCTL_DESCRIBE", "KEYCTL_REVOKE", "KEYCTL_READ",
+  "KEY_SPEC_USER_KEYRING", "UNLOCK_PASSPHRASE_KEY", "UNLOCK_PASSPHRASE_PERMISSIONS", "PR_SET_PDEATHSIG",
+  "PR_SET_DUMPABLE", "alphasort", "scandir", "dirent",
+  "crypt_init", "crypt_init_by_name", "crypt_get_device_name", "crypt_free",
+  "crypt_load", "crypt_status", "crypt_volume_key_get", "crypt_activate_by_volume_key",
+  "crypt_deactivate", "crypt_set_log_callback", "CRYPT_LUKS", "CRYPT_ANY_SLOT",
+  "CRYPT_INACTIVE", "CRYPT_ACTIVATE_IGNORE_PERSISTENT", "CRYPT_ACTIVATE_READONLY", "crypt_device",
+  "crypt_pbkdf_type", "crypt_params_integrity", "crypt_get_type", "crypt_get_cipher",
+  "crypt_get_cipher_mode", "crypt_get_volume_key_size", "crypt_get_hw_encryption_type", "crypt_reencrypt_status",
+  "crypt_persistent_flags_get", "crypt_get_integrity_info", "crypt_keyslot_max", "crypt_keyslot_status",
+  "crypt_keyslot_get_encryption", "crypt_keyslot_get_pbkdf", "CRYPT_LUKS1", "CRYPT_LUKS2",
+  "CRYPT_KDF_PBKDF2", "CRYPT_KDF_ARGON2I", "CRYPT_KDF_ARGON2ID", "CRYPT_SW_ONLY",
+  "CRYPT_REENCRYPT_NONE", "CRYPT_FLAGS_REQUIREMENTS", "CRYPT_SLOT_INACTIVE", "CRYPT_SLOT_UNBOUND",
+  "CRYPT_SLOT_ACTIVE", "CRYPT_SLOT_ACTIVE_LAST",
+]

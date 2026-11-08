@@ -235,7 +235,8 @@
     },
     {
       "after": [
-        "installer-ssh-x86_64"
+        "installer-ssh-x86_64",
+        "recovery-artifacts"
       ],
       "args": {
         "arch": "x86_64",
@@ -249,7 +250,8 @@
     },
     {
       "after": [
-        "installer-ssh-aarch64"
+        "installer-ssh-aarch64",
+        "recovery-artifacts"
       ],
       "args": {
         "arch": "aarch64",
@@ -263,7 +265,8 @@
     },
     {
       "after": [
-        "installer-ssh-x86_64"
+        "installer-ssh-x86_64",
+        "recovery-artifacts"
       ],
       "args": {
         "arch": "x86_64",
@@ -277,7 +280,8 @@
     },
     {
       "after": [
-        "installer-ssh-aarch64"
+        "installer-ssh-aarch64",
+        "recovery-artifacts"
       ],
       "args": {
         "arch": "aarch64",
@@ -667,7 +671,7 @@
         "name": "install-offline",
         "arch": "x86_64",
         "prebuiltHost": "QEMU-x86_64",
-        "hostFile": "/etc/nixos/nix/hosts/x86_64/QEMU/QEMU.nix",
+        "hostFile": "/etc/nixos/config/hosts/x86_64/QEMU/default.nix",
         "state": "installed-offline-QEMU-x86_64",
         "sshPort": "2255",
         "iso": "build/iso/iso/nixos-installer-x86_64-linux-QEMU-x86_64.iso",
@@ -1030,11 +1034,17 @@
     },
     {
       "id": "sunshine-ssh-login",
-      "spec": "nixosctl/sunshine-ssh/test.json"
+      "spec": "nixosctl/sunshine-ssh/test.json",
+      "after": [
+        "gaming-runtime"
+      ]
     },
     {
       "id": "sunshine-credentials",
-      "spec": "nixosctl/sunshine/test.json"
+      "spec": "nixosctl/sunshine/test.json",
+      "after": [
+        "gaming-runtime"
+      ]
     },
     {
       "id": "onepassword-integration",
@@ -1055,17 +1065,31 @@
       "spec": "secure-boot/removal/test.json"
     },
     {
-      "id": "sd-unlock",
+      "id": "opportunistic-unlock-policy",
       "after": [],
-      "spec": "sd-unlock/boot/test.json"
+      "spec": "opportunistic-unlock/unit/test.json"
+    },
+    {
+      "id": "opportunistic-unlock",
+      "after": [
+        "opportunistic-unlock-policy"
+      ],
+      "spec": "opportunistic-unlock/boot/test.json"
+    },
+    {
+      "id": "secure-boot-key-contracts",
+      "spec": "secure-boot/unit/test.json"
     },
     {
       "id": "secure-boot-backup",
+      "after": [
+        "secure-boot-key-contracts"
+      ],
       "spec": "secure-boot/backup/test.json"
     },
     {
       "id": "kernel-trust",
-      "after": [],
+      "after": ["kernel-trust-contracts"],
       "spec": "kernel-trust/test.json"
     },
     {
@@ -1081,29 +1105,101 @@
     },
     {
       "id": "sleep-gamescope-native-lock",
-      "spec": "sleep-lock/gamescope-native-lock/test.json"
+      "spec": "sleep-lock/gamescope-native-lock/test.json",
+      "after": [
+        "sleep-lock-state"
+      ]
     },
     {
       "id": "sleep-gamescope-native-lock-without-sunshine",
-      "spec": "sleep-lock/gamescope-native-lock/without-sunshine.json"
+      "spec": "sleep-lock/gamescope-native-lock/without-sunshine.json",
+      "after": [
+        "sleep-lock-state"
+      ]
     },
     {
       "id": "sleep-gaming-plasma",
-      "spec": "sleep-lock/gaming-plasma/test.json"
+      "spec": "sleep-lock/gaming-plasma/test.json",
+      "after": [
+        "sleep-lock-state"
+      ]
     },
     {
       "id": "sleep-gamescope-native-resume-lock",
-      "spec": "sleep-lock/gamescope-native-lock/resume.json"
+      "spec": "sleep-lock/gamescope-native-lock/resume.json",
+      "after": [
+        "sleep-lock-state"
+      ]
     },
     {
       "id": "sleep-gamescope-native-suspend-control",
       "spec": "sleep-lock/gamescope-native-suspend-control/test.json"
+    },
+    {
+      "after": [
+        "networking-policy"
+      ],
+      "id": "networking-roaming",
+      "spec": "networking/roaming/test.json"
+    },
+    {
+      "after": [
+        "quick"
+      ],
+      "id": "networking-policy",
+      "spec": "networking/policy/test.json"
+    },
+    {
+      "after": [
+        "quick"
+      ],
+      "id": "host-picker",
+      "spec": "host-picker/test.json"
+    },
+    {
+      "after": [
+        "quick"
+      ],
+      "id": "persistence-ownership",
+      "spec": "persistence/ownership/test.json"
+    },
+    {
+      "after": [
+        "persistence-ownership"
+      ],
+      "id": "immutability-feature-disable",
+      "spec": "immutability/feature-disable/test.json"
+    },
+    {
+      "id": "gaming-runtime",
+      "spec": "gaming/runtime/test.json",
+      "after": []
+    },
+    {
+      "id": "sleep-lock-state",
+      "spec": "sleep-lock/unit/test.json",
+      "after": []
+    },
+    {
+      "id": "recovery-artifacts",
+      "after": ["recovery-mount-contracts"],
+      "spec": "recovery/artifacts/test.json"
+    },
+    {
+      "id": "recovery-mount-contracts",
+      "after": [],
+      "spec": "recovery/unit/test.json"
+    },
+    {
+      "id": "kernel-trust-contracts",
+      "after": [],
+      "spec": "kernel-trust/unit/test.json"
     }
   ],
   "required": [
     "host-timeout",
     "source-hash",
-    "sd-unlock",
+    "opportunistic-unlock",
     "secure-boot-backup",
     "sleep-gaming-plasma",
     "cli-parity",
@@ -1177,7 +1273,13 @@
     "password-file",
     "installer-secret",
     "kernel-trust",
-    "kernel-trust-host"
+    "kernel-trust-host",
+    "networking-roaming",
+    "host-picker",
+    "immutability-feature-disable",
+    "gaming-runtime",
+    "sleep-lock-state",
+    "recovery-artifacts"
   ],
   "workspaceRoot": ".."
 }

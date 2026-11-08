@@ -1,0 +1,1 @@
+{"manifest-hash":"0e7eca6efc339579095d6468aca4094fb3740c3a936152c89970acb4f8b9fbd9","packages":[{"dependencies":{},"manifest-hash":"293a4ac1a852131ba2e424cb50f1873036a6bd052520671de2d507484db2b5f0","name":"nixos_sleep_native","source":{"path":"."}}],"root":"nixos_sleep_native","schema":3}

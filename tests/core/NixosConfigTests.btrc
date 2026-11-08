@@ -2,9 +2,9 @@
 
 import Library.FileSystem;
 
-import ../../btrc/nixosctl/NixosConfig.btrc;
-import ../../btrc/nixosctl/Installer.btrc;
-import ../../btrc/nixosctl/PasswordManager.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/NixosConfig.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/Installer.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/PasswordManager.btrc;
 
 void expectHost(string hostPath, string host, string architecture) {
     assert(NixosConfig.hostOf(hostPath).equals(host));
@@ -12,16 +12,20 @@ void expectHost(string hostPath, string host, string architecture) {
 }
 
 int main() {
-    expectHost("nix/hosts/x86_64/FRACTAL-NORTH.nix", "FRACTAL-NORTH", "x86_64");
-    expectHost("nix/hosts/aarch64/VM-TEST.nix", "VM-TEST", "aarch64");
-    expectHost("/etc/nixos/nix/hosts/x86_64/VM-TEST.nix", "VM-TEST", "x86_64");
+    expectHost("config/hosts/x86_64/FRACTAL-NORTH.nix", "FRACTAL-NORTH", "x86_64");
+    expectHost("config/hosts/aarch64/VM-TEST.nix", "VM-TEST", "aarch64");
+    expectHost("/etc/nixos/config/hosts/x86_64/VM-TEST.nix", "VM-TEST", "x86_64");
 
     /* a host may own a directory named after itself */
-    expectHost("nix/hosts/x86_64/VM-TEST/VM-TEST.nix", "VM-TEST", "x86_64");
-    expectHost("nix/hosts/aarch64/VM-TEST/VM-TEST.nix", "VM-TEST", "aarch64");
+    expectHost("config/hosts/x86_64/VM-TEST/VM-TEST.nix", "VM-TEST", "x86_64");
+    expectHost("config/hosts/aarch64/VM-TEST/VM-TEST.nix", "VM-TEST", "aarch64");
 
     /* a directory that merely resembles the host name is still the arch */
-    expectHost("nix/hosts/x86_64/VM-TEST-2/VM-TEST.nix", "VM-TEST", "VM-TEST-2");
+    expectHost("config/hosts/x86_64/VM-TEST-2/VM-TEST.nix", "VM-TEST", "VM-TEST-2");
+
+    expectHost("config/hosts/x86_64/FRACTAL-NORTH/default.nix", "FRACTAL-NORTH", "x86_64");
+    expectHost("config/hosts/aarch64/QEMU/default.nix", "QEMU", "aarch64");
+    expectHost("nix/hosts/x86_64/FRACTAL-NORTH/FRACTAL-NORTH.nix", "FRACTAL-NORTH", "x86_64");
 
     /* locked and malformed shadow entries must never match a password */
     assert(PasswordManager.hashUsable("$6$salt$hash"));
@@ -41,6 +45,13 @@ int main() {
     assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/x86_64/QEMU/QEMU.nix").equals("QEMU-x86_64"));
     assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/aarch64/QEMU/QEMU.nix").equals("QEMU-aarch64"));
     assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/x86_64/FRACTAL-NORTH.nix").equals("FRACTAL-NORTH"));
+    FileSystem.removeRecursive(hostsRoot);
+    FileSystem.mkdirp(f"{hostsRoot}/x86_64/QEMU");
+    FileSystem.mkdirp(f"{hostsRoot}/aarch64/QEMU");
+    FileSystem.writeText(f"{hostsRoot}/x86_64/QEMU/default.nix", "{}");
+    FileSystem.writeText(f"{hostsRoot}/aarch64/QEMU/default.nix", "{}");
+    assert(NixosConfig.outputNameOf(hostsRoot, "nix/hosts/x86_64/QEMU/QEMU.nix").equals("QEMU-x86_64"));
+    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/aarch64/QEMU/default.nix").equals("QEMU-aarch64"));
     FileSystem.removeRecursive(hostsRoot);
 
     assert(Installer.memoryGigabytesIn("MemTotal:       16316884 kB\nSwapTotal: 0 kB") == 15);

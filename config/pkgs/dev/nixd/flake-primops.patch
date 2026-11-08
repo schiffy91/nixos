@@ -1,0 +1,23 @@
+--- a/src/Basic/PrimOpsInfoGen.cpp
++++ b/src/Basic/PrimOpsInfoGen.cpp
+@@ -1,0 +2 @@
++#include <nix/expr/eval-settings.hh>
+@@ -2,0 +4 @@
++#include <nix/flake/settings.hh>
+@@ -8,0 +11,8 @@
++  bool ReadOnlyMode = true;
++  nix::EvalSettings EvalSettings(ReadOnlyMode);
++  nix::flake::Settings FlakeSettings;
++  FlakeSettings.configureEvalSettings(EvalSettings);
++  auto PrimOps = nix::RegisterPrimOp::primOps();
++  PrimOps.insert(PrimOps.end(), EvalSettings.extraPrimOps.begin(),
++                 EvalSettings.extraPrimOps.end());
++
+@@ -15 +25 @@
+-  for (const auto &PrimOp : nix::RegisterPrimOp::primOps()) {
++  for (const auto &PrimOp : PrimOps) {
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -42 +42 @@
+-    dependencies: [ nix_expr ],
++    dependencies: [ nix_expr, dependency('nix-flake') ],

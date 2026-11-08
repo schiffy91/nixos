@@ -1,0 +1,196 @@
+--- a/src/cryptsetup/cryptsetup.c
++++ b/src/cryptsetup/cryptsetup.c
+@@ -5,6 +5,7 @@
+ #include <unistd.h>
+
+ #include "sd-device.h"
++#include "nixos-unlock-handoff.h"
+ #include "sd-event.h"
+ #include "sd-json.h"
+
+@@ -80,6 +81,7 @@
+ static uint64_t arg_keyfile_offset = 0;
+ static bool arg_keyfile_erase = false;
+ static bool arg_try_empty_password = false;
++static bool arg_opportunistic_passphrase = false;
+ static char *arg_hash = NULL;
+ static char *arg_header = NULL;
+ static unsigned arg_tries = 3;
+@@ -187,7 +189,9 @@
+         if (startswith(option, "keyfile-timeout="))
+                 return 0;
+
+-        if ((val = startswith(option, "cipher="))) {
++        if (streq(option, "x-nixos.opportunistic-passphrase"))
++                arg_opportunistic_passphrase = true;
++        else if ((val = startswith(option, "cipher="))) {
+                 r = free_and_strdup(&arg_cipher, val);
+                 if (r < 0)
+                         return log_oom();
+@@ -1096,9 +1100,12 @@
+                 int keyslot,
+                 const void *volume_key,
+                 size_t volume_key_size,
+-                uint32_t flags) {
++                uint32_t flags, bool *ret_verified) {
+
+         int r;
++
++        if (ret_verified)
++                *ret_verified = false;
+
+         assert(cd);
+         assert(name);
+@@ -1130,6 +1137,9 @@
+         if (r < 0)
+                 return r;
+
++        if (ret_verified)
++                *ret_verified = true;
++
+         if (arg_tpm2_measure_pcr == UINT_MAX) {
+                 log_debug("Not measuring volume key, deactivated.");
+                 return 0;
+@@ -1151,11 +1161,14 @@
+                 int keyslot,
+                 const char *passphrase,
+                 size_t passphrase_size,
+-                uint32_t flags) {
++                uint32_t flags, bool *ret_verified) {
+
+         _cleanup_(erase_and_freep) void *vk = NULL;
+         size_t vks;
+         int r;
++
++        if (ret_verified)
++                *ret_verified = false;
+
+         assert(cd);
+
+@@ -1183,7 +1196,7 @@
+         if (keyslot < 0)
+                 return keyslot;
+
+-        return measured_crypt_activate_by_volume_key(cd, name, mechanism, keyslot, vk, vks, flags);
++        return measured_crypt_activate_by_volume_key(cd, name, mechanism, keyslot, vk, vks, flags, ret_verified);
+
+ shortcut:
+         keyslot = sym_crypt_activate_by_passphrase(cd, name, keyslot, passphrase, passphrase_size, flags);
+@@ -1191,6 +1204,9 @@
+                 return log_external_activation(keyslot, name);
+         if (keyslot < 0)
+                 return keyslot;
++
++        if (ret_verified)
++                *ret_verified = true;
+
+         (void) measure_keyslot(cd, name, mechanism, keyslot);
+         return keyslot;
+@@ -1280,7 +1296,7 @@
+                         /* keyslot= */ -1,
+                         /* volume_key= */ NULL,
+                         /* volume_key_size= */ 0,
+-                        flags);
++                        flags, NULL);
+         if (r < 0)
+                 return log_error_errno(r, "Failed to activate tcrypt device %s: %m", sym_crypt_get_device_name(cd));
+
+@@ -1652,7 +1668,7 @@
+                                 /* keyslot= */ -1,
+                                 decrypted_key,
+                                 decrypted_key_size,
+-                                flags);
++                                flags, NULL);
+         else {
+                 _cleanup_(erase_and_freep) char *base64_encoded = NULL;
+                 ssize_t base64_encoded_size;
+@@ -1670,7 +1686,7 @@
+                                 keyslot,
+                                 base64_encoded,
+                                 base64_encoded_size,
+-                                flags);
++                                flags, NULL);
+         }
+         if (r == -EPERM) {
+                 log_error_errno(r, "Failed to activate with FIDO2 decrypted key. (Key incorrect?)");
+@@ -1825,7 +1841,7 @@
+                                 /* keyslot= */ -1,
+                                 decrypted_key,
+                                 decrypted_key_size,
+-                                flags);
++                                flags, NULL);
+         else {
+                 _cleanup_(erase_and_freep) char *base64_encoded = NULL;
+                 ssize_t base64_encoded_size;
+@@ -1849,7 +1865,7 @@
+                                 keyslot,
+                                 base64_encoded,
+                                 base64_encoded_size,
+-                                flags);
++                                flags, NULL);
+         }
+         if (r == -EPERM) {
+                 log_error_errno(r, "Failed to activate with PKCS#11 decrypted key. (Key incorrect?)");
+@@ -2155,7 +2171,7 @@
+                                 /* keyslot= */ -1,
+                                 decrypted_key.iov_base,
+                                 decrypted_key.iov_len,
+-                                flags);
++                                flags, NULL);
+         else {
+                 _cleanup_(erase_and_freep) char *base64_encoded = NULL;
+                 ssize_t base64_encoded_size;
+@@ -2173,7 +2189,7 @@
+                                 keyslot,
+                                 base64_encoded,
+                                 base64_encoded_size,
+-                                flags);
++                                flags, NULL);
+         }
+         if (r == -EPERM) {
+                 log_error_errno(r, "Failed to activate with TPM2 decrypted key. (Key incorrect?)");
+@@ -2199,9 +2215,9 @@
+         assert(key_data);
+
+         if (pass_volume_key)
+-                r = measured_crypt_activate_by_volume_key(cd, name, /* mechanism= */ NULL, /* keyslot= */ -1, key_data->iov_base, key_data->iov_len, flags);
++                r = measured_crypt_activate_by_volume_key(cd, name, /* mechanism= */ NULL, /* keyslot= */ -1, key_data->iov_base, key_data->iov_len, flags, NULL);
+         else
+-                r = measured_crypt_activate_by_passphrase(cd, name, /* mechanism= */ NULL, arg_key_slot, key_data->iov_base, key_data->iov_len, flags);
++                r = measured_crypt_activate_by_passphrase(cd, name, /* mechanism= */ NULL, arg_key_slot, key_data->iov_base, key_data->iov_len, flags, NULL);
+         if (r == -EPERM) {
+                 log_error_errno(r, "Failed to activate. (Key incorrect?)");
+                 return -EAGAIN; /* Log actual error, but return EAGAIN */
+@@ -2252,9 +2268,9 @@
+                 return log_error_errno(r, "Failed to read key file '%s': %m", key_file);
+
+         if (pass_volume_key)
+-                r = measured_crypt_activate_by_volume_key(cd, name, /* mechanism= */ NULL, /* keyslot= */ -1, kfdata, kfsize, flags);
++                r = measured_crypt_activate_by_volume_key(cd, name, /* mechanism= */ NULL, /* keyslot= */ -1, kfdata, kfsize, flags, NULL);
+         else
+-                r = measured_crypt_activate_by_passphrase(cd, name, /* mechanism= */ NULL, arg_key_slot, kfdata, kfsize, flags);
++                r = measured_crypt_activate_by_passphrase(cd, name, /* mechanism= */ NULL, arg_key_slot, kfdata, kfsize, flags, NULL);
+         if (r == -EPERM) {
+                 log_error_errno(r, "Failed to activate with key file '%s'. (Key data incorrect?)", key_file);
+                 return -EAGAIN; /* Log actual error, but return EAGAIN */
+@@ -2279,12 +2295,17 @@
+
+         r = -EINVAL;
+         STRV_FOREACH(p, passwords) {
++                bool verified = false;
+                 if (pass_volume_key)
+-                        r = measured_crypt_activate_by_volume_key(cd, name, /* mechanism= */ NULL, /* keyslot= */ -1, *p, arg_key_size, flags);
++                        r = measured_crypt_activate_by_volume_key(cd, name, /* mechanism= */ NULL, /* keyslot= */ -1, *p, arg_key_size, flags, NULL);
+                 else
+-                        r = measured_crypt_activate_by_passphrase(cd, name, /* mechanism= */ NULL, arg_key_slot, *p, strlen(*p), flags);
+-                if (r >= 0)
++                        r = measured_crypt_activate_by_passphrase(cd, name, /* mechanism= */ NULL, arg_key_slot, *p, strlen(*p), flags, &verified);
++                if (r >= 0) {
++                        if (verified && arg_opportunistic_passphrase &&
++                            STR_IN_SET(sym_crypt_get_type(cd), CRYPT_LUKS1, CRYPT_LUKS2))
++                                unlock_export_passphrase(*p, strlen(*p));
+                         break;
++                }
+         }
+         if (r == -EPERM) {
+                 log_error_errno(r, "Failed to activate with specified passphrase. (Passphrase incorrect?)");

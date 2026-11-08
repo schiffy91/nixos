@@ -11,7 +11,7 @@
   "operations": [
     { "op": "probe-secure-boot" },
     { "op": "require-secure-boot" },
-    { "op": "host", "command": "set -e; cd {{workspaceRootShell}}; lpath=$(nix flake archive --no-write-lock-file --json | jq -r '.inputs.lanzaboote.path'); grep -q autoGenerateKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q autoEnrollKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q inputs.lanzaboote nix/system/nixos/boot.nix; printf lanzaboote", "expect": "lanzaboote" },
+    { "op": "host", "command": "set -e; cd {{workspaceRootShell}}; lpath=$(nix flake archive --no-write-lock-file --json | jq -r '.inputs.lanzaboote.path'); grep -q autoGenerateKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q autoEnrollKeys \"$lpath/nix/modules/lanzaboote.nix\"; grep -q inputs.lanzaboote config/system/nixos/boot.nix; printf lanzaboote", "expect": "lanzaboote" },
     { "op": "record-state" }
   ]
 }

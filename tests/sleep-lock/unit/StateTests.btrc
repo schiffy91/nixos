@@ -1,0 +1,43 @@
+import ../../../config/system/nixos/sleep/State.btrc;
+#include <assert.h>
+
+JSONValue fixture() {
+    return JSONValue.parse("{\"uid\":1000,\"vt\":2,\"sysrq\":176,\"epoch\":\"0123456789abcdef0123456789abcdef\",\"holds\":[],\"phase\":\"locked\",\"ready\":true,\"sunshine\":[\"sunshine.service\"]}");
+}
+
+bool rejected(JSONValue value, int uid = 1000) {
+    try { SleepState.validate(value, uid); return false; }
+    catch (string error) { return true; }
+}
+
+int main() {
+    var state = fixture(); SleepState.validate(state, 1000);
+    assert(!SleepState.releaseAllowed(state));
+    SleepState.hold(state, "systemd-suspend.service", true);
+    SleepState.hold(state, "systemd-hibernate.service", true);
+    SleepState.hold(state, "systemd-suspend.service", true);
+    assert(state.get("holds").size() == 2);
+    state.set("phase", JSONValue.makeString("authenticated"));
+    assert(!SleepState.releaseAllowed(state));
+    SleepState.hold(state, "systemd-suspend.service", false);
+    assert(!SleepState.releaseAllowed(state));
+    SleepState.hold(state, "systemd-hibernate.service", false);
+    assert(SleepState.releaseAllowed(state));
+    state = fixture();
+    assert(SleepState.sameAttempt(state, "0123456789abcdef0123456789abcdef"));
+    assert(!SleepState.sameAttempt(state, "ffffffffffffffffffffffffffffffff"));
+    state.set("phase", JSONValue.makeString("acquiring"));
+    assert(!SleepState.sameAttempt(state, "0123456789abcdef0123456789abcdef"));
+    assert(rejected(fixture(), 1001));
+    for field in ["uid", "vt", "sysrq"] { state = fixture(); state.set(field, JSONValue.makeBool(true)); assert(rejected(state)); }
+    for vt in [0, -1, 63, 100] { state = fixture(); state.set("vt", JSONValue.makeInt(vt)); assert(rejected(state)); }
+    for phase in ["released", "", "LOCKED"] { state = fixture(); state.set("phase", JSONValue.makeString(phase)); assert(rejected(state)); }
+    state = fixture(); state.set("ready", JSONValue.makeInt(1)); assert(rejected(state));
+    state = fixture(); state.set("epoch", JSONValue.makeString("short")); assert(rejected(state));
+    state = fixture(); state.set("extra", JSONValue.makeInt(1)); assert(rejected(state));
+    state = fixture(); state.set("holds", JSONValue.parse("[\"other.service\"]")); assert(rejected(state));
+    state = fixture(); state.set("sunshine", JSONValue.parse("[\"ssh.service\"]")); assert(rejected(state));
+    state = fixture(); state.set("sunshine", JSONValue.makeNull()); SleepState.validate(state, 1000);
+    print("Sleep overlapping holds, authentication generations, account binding and corrupt-state rejection passed");
+    return 0;
+}

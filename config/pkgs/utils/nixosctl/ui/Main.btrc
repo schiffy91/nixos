@@ -1,0 +1,35 @@
+import Library.Tray;
+import ../lib/core/NixosPaths.btrc;
+import ../lib/desktop/PowerManager.btrc;
+
+int main() {
+    var iconPath = NixosPaths.trayIconPathFromEnv();
+    var tray = SystemTray("NixOS");
+    if (!iconPath.isEmpty()) {
+        tray.icon(iconPath);
+    }
+    tray.tip("NixOS management")
+        .item("Rebuild (switch)", "konsole -e sudo nixosctl update")
+        .item("Upgrade & rebuild", "konsole -e sudo nixosctl update --upgrade")
+        .item("Show changed files", "konsole -e nixosctl diff")
+        .checkItem("Caffeine", "nixosctl caffeine toggle", "nixosctl caffeine status");
+    var cpu = Tray("CPU");
+    var profiles = PowerManager().profiles();
+    for profile in ["performance", "balanced", "power-saver"] {
+        if (!profiles.contains(profile)) { continue; }
+        cpu.radioItem(PowerManager.label(profile),
+            f"nixosctl power set {profile}", f"nixosctl power is {profile}");
+    }
+    if (cpu.items.len > 0) { tray.submenu("CPU", cpu); }
+    tray.item("Open /etc/nixos", "xdg-open /etc/nixos")
+        .item("Quit tray", TraySignal.quit());
+
+    try {
+        tray.show();
+    } catch (string error) {  // headless session or no StatusNotifierWatcher
+        print("nixosctl-tray: no native tray available (" + error + ").");
+        return 0;
+    }
+    tray.run();
+    return 0;
+}

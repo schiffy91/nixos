@@ -11,9 +11,10 @@ coverage/
 .coverage
 .claude
 /result
-nix/apps/gaming/proton/custom/src/
-nix/apps/gaming/battlenet/tests/.build/
+config/pkgs/gaming/proton/custom/src/
+config/pkgs/gaming/battlenet/tests/.build/
 build/
 .btrc-cache/
 generated/
 bin/
+!config/pkgs/gaming/battlenet/tests/bin/

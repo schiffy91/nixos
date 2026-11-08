@@ -9,7 +9,7 @@
     { "op": "require-uefi" },
     {
       "op": "workspace-file",
-      "command": "nix/hosts/{{arch}}/QEMU/QEMU.nix",
+      "command": "config/hosts/{{arch}}/QEMU/default.nix",
       "expect": "exists"
     },
     {

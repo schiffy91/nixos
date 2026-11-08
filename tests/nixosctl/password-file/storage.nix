@@ -6,8 +6,8 @@ let
       config = (lib.nixosSystem {
         inherit system;
         modules = [
-          ../../../nix/settings.nix
-          ../../../nix/system/nixos/users/password.nix
+          ../../../config/settings.nix
+          ../../../config/system/nixos/users/password.nix
           { _module.args.inputs = inputs; }
           module
         ];

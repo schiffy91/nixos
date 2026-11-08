@@ -1,0 +1,19 @@
+import Library.CLI;
+import Library.FileSystem;
+import keys.Crypto;
+
+#include <assert.h>
+
+int main(int argc, char** argv) {
+    try {
+        assert(KeyCrypto.guid(Bytes.fromString("{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}\n")).equals("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+        var rejected = false;
+        try { KeyCrypto.guid(Bytes.fromString("not a GUID")); } catch (string error) { rejected = true; }
+        assert(rejected);
+        var args = CLIArgs(argc, argv);
+        if (args.count() == 1 && args.get(0).equals("--deadline")) { KeyCrypto.limitVerification(1); pause(); return 99; }
+        if (args.count() != 2) { throw "Usage: crypto-tests <private-key> <certificate>"; }
+        print(KeyCrypto.verifyPair(FileSystem.readBytes(args.get(0)), FileSystem.readBytes(args.get(1))));
+        return 0;
+    } catch (string error) { fprintf(stderr, "%s\n", error); return 1; }
+}

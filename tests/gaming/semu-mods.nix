@@ -4,7 +4,7 @@ inputs.semu.checks.${pkgs.stdenv.hostPlatform.system}.contracts.overrideAttrs (o
   # from upstream's filtered check source.
   src = inputs.semu.outPath;
   patches = (old.patches or []) ++ [
-    ../../nix/apps/gaming/semu/portable-mods.patch
-    ../../nix/apps/gaming/semu/portable-mods-tests.patch
+    ../../config/pkgs/gaming/semu/portable-mods.patch
+    ../../config/pkgs/gaming/semu/portable-mods-tests.patch
   ];
 })

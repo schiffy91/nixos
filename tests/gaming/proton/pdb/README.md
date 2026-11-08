@@ -16,7 +16,7 @@ fixture=$(nix build --impure --no-link --print-out-paths --expr '
 proton=$(nix build --impure --no-link --print-out-paths --expr '
   let flake = builtins.getFlake "git+file:///etc/nixos";
       pkgs = flake.nixosConfigurations.FRACTAL-NORTH-Secure-Boot.pkgs;
-  in pkgs.callPackage /etc/nixos/nix/apps/gaming/proton/custom/package.nix {}')
+  in pkgs.callPackage /etc/nixos/config/apps/gaming/proton/custom/package.nix {}')
 test_prefix=$(mktemp -d /tmp/ac-pdb-test.XXXXXX)
 cd /tmp
 WINEPREFIX="$test_prefix/pfx" WINEARCH=win64 WINEDEBUG=-all \

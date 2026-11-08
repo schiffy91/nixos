@@ -1,0 +1,22 @@
+import Library.CLI;
+import ./Client.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var commandLine = CLIArgs(argc, argv);
+        for (int index = 0; index < commandLine.values.len; index++) {
+            if (commandLine.values.get(index).equals("-i")) { commandLine.values.set(index, "--identity"); }
+        }
+        if (commandLine.values.contains("-h") || commandLine.values.contains("--help")) {
+            print("Usage: sunshine-ssh-login HTTPS-ORIGIN -i PUBLIC-KEY --challenge ID [--certificate PEM]"); return 0;
+        }
+        var args = CLICommandLine.parse(commandLine);
+        for name in args.optionNames { if (!["--identity", "--challenge", "--certificate"].contains(name)) { throw f"Unknown SSH login option: {name}"; } }
+        if (args.operands.len != 1) { throw "Usage: sunshine-ssh-login HTTPS-ORIGIN -i PUBLIC-KEY --challenge ID [--certificate PEM]"; }
+        var identity = args.option("--identity", "");
+        var challenge = args.option("--challenge", "");
+        if (identity.isEmpty() || challenge.isEmpty()) { throw "An identity and browser challenge are required"; }
+        SunshineLogin.login(args.operands.get(0), identity, challenge, args.option("--certificate", ""));
+        return 0;
+    } catch (string error) { Console.error(f"SSH login failed: {error}"); return 1; }
+}

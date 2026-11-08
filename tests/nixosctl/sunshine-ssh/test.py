@@ -21,7 +21,7 @@ def user(*args, success=True):
     return result
 
 
-def request(path, data=None, cookie=None, source=origin, authorization=None):
+def request(path, data=None, cookie=None, source: str | None=origin, authorization=None):
     # A non-localhost origin exercises browser mutations outside the legacy CSRF allowlist.
     # The installed helper separately proves exact TLS pinning.
     connection = http.client.HTTPSConnection("sunshine.test", 47990, context=ssl._create_unverified_context(), timeout=5)

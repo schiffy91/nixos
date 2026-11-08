@@ -1,0 +1,1 @@
+{"manifest-hash":"e6393fafdbbdc7cf02e9041f6d039dc7e42969d9009658c9948ed67592ad91d7","packages":[{"dependencies":{},"manifest-hash":"436414e70fe663b907f80cccd7bc6fbbfd43f2c737d206c7488f55b773efa8b3","name":"ci_native_lsp_fixture","source":{"path":"."}}],"root":"ci_native_lsp_fixture","schema":3}

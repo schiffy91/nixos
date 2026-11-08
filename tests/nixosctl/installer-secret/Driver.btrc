@@ -1,7 +1,7 @@
 import Library.CLI;
 import Library.Terminal;
-import ../../../btrc/nixosctl/SecretsManager.btrc;
-import ../../../btrc/core/NixosLog.btrc;
+import ../../../config/pkgs/utils/nixosctl/lib/SecretsManager.btrc;
+import ../../../config/pkgs/utils/nixosctl/lib/core/NixosLog.btrc;
 
 int main(int argc, char** argv) {
     try {

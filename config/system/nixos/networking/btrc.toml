@@ -1,0 +1,13 @@
+manifest-version = 1
+
+[package]
+name = "nixos_trusted_connections"
+exports = ["TrustedConnections"]
+
+[[native.bindings]]
+module = "TrustedConnections"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = ["inet_pton", "inet_ntop", "AF_INET", "AF_INET6"]
+read-only-borrows = ["inet_pton.__cp"]

@@ -1,0 +1,142 @@
+import Library.Bytes;
+import Library.Process;
+import Library.Timer;
+
+#include <spawn.h>
+extern int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t* actions, int descriptor, const char* path, int flags, mode_t mode);
+#if defined(__linux__)
+extern int posix_spawn_file_actions_addclosefrom_np(posix_spawn_file_actions_t* actions, int first);
+#endif
+
+/* A byte-preserving child session. Unlike a terminal, these pipes do not echo,
+ * translate newlines, or combine diagnostics with the protocol stream. */
+class PipeProcess {
+    private int process = -1;
+    private int input = -1;
+    private int output = -1;
+
+    public PipeProcess(string executable, Vector<string> arguments, string errorLog = "") {
+        int incoming[2] = {-1, -1};
+        int outgoing[2] = {-1, -1};
+        if (pipe(incoming) != 0) { throw "Cannot create child input pipe"; }
+        if (pipe(outgoing) != 0) { close(incoming[0]); close(incoming[1]); throw "Cannot create child output pipe"; }
+        int setup = 0;
+        for (int i = 0; i < 2; i++) {
+            // Leave standard descriptors available for the child's dup actions.
+            if (incoming[i] < 3) { int copy = fcntl(incoming[i], F_DUPFD_CLOEXEC, 3); close(incoming[i]); incoming[i] = copy; }
+            if (outgoing[i] < 3) { int copy = fcntl(outgoing[i], F_DUPFD_CLOEXEC, 3); close(outgoing[i]); outgoing[i] = copy; }
+            if (incoming[i] < 0 || outgoing[i] < 0 || fcntl(incoming[i], F_SETFD, FD_CLOEXEC) != 0 || fcntl(outgoing[i], F_SETFD, FD_CLOEXEC) != 0) { setup = ENOMEM; }
+        }
+        var argv = ChildProcessArguments.build(executable, arguments);
+        posix_spawn_file_actions_t actions;
+        int initialized = posix_spawn_file_actions_init(&actions);
+        if (setup == 0) { setup = initialized; }
+        if (setup == 0) { setup = posix_spawn_file_actions_adddup2(&actions, incoming[0], STDIN_FILENO); }
+        if (setup == 0) { setup = posix_spawn_file_actions_adddup2(&actions, outgoing[1], STDOUT_FILENO); }
+        if (setup == 0) { setup = posix_spawn_file_actions_addclose(&actions, incoming[0]); }
+        if (setup == 0) { setup = posix_spawn_file_actions_addclose(&actions, incoming[1]); }
+        if (setup == 0) { setup = posix_spawn_file_actions_addclose(&actions, outgoing[0]); }
+        if (setup == 0) { setup = posix_spawn_file_actions_addclose(&actions, outgoing[1]); }
+        if (setup == 0 && !errorLog.isEmpty()) {
+            char* logPath = CStringArray.copyEntry(errorLog);
+            setup = logPath == null ? ENOMEM : posix_spawn_file_actions_addopen(&actions, (int)STDERR_FILENO, logPath, ((int)O_WRONLY | (int)O_CREAT | (int)O_TRUNC), (mode_t)0600);
+            free(logPath);
+        }
+        // Match subprocess close_fds: only the explicit stdin/stdout/stderr
+        // mappings cross exec, including when the caller inherited open files.
+#if defined(__linux__)
+        if (setup == 0) { setup = posix_spawn_file_actions_addclosefrom_np(&actions, 3); }
+#else
+        int bound = ChildProcess.descriptorCloseBound();
+        if (bound < 0) { setup = EINVAL; }
+        for (int descriptor = 3; setup == 0 && descriptor < bound; descriptor++) {
+            if (descriptor == incoming[0] || descriptor == incoming[1] || descriptor == outgoing[0] || descriptor == outgoing[1]) { continue; }
+            if (fcntl(descriptor, F_GETFD, 0) >= 0) { setup = posix_spawn_file_actions_addclose(&actions, descriptor); }
+        }
+#endif
+        pid_t child;
+        int result = argv == null ? ENOMEM : setup;
+        if (result == 0) { result = posix_spawnp(&child, argv[0], &actions, null, argv, environ); }
+        if (initialized == 0) { posix_spawn_file_actions_destroy(&actions); }
+        CStringArray.freeAll(argv);
+        close(incoming[0]); close(outgoing[1]);
+        if (result != 0) {
+            close(incoming[1]); close(outgoing[0]);
+            throw f"Cannot start {executable}: {result}";
+        }
+        self.process = child;
+        self.input = incoming[1];
+        self.output = outgoing[0];
+        if (fcntl(self.input, F_SETFL, O_NONBLOCK) != 0 || fcntl(self.output, F_SETFL, O_NONBLOCK) != 0) {
+            self.close(); throw "Cannot configure child pipes";
+        }
+    }
+
+    class bool ready(int descriptor, short events, long long deadline) {
+        struct pollfd state;
+        state.fd = descriptor;
+        state.events = events;
+        state.revents = 0;
+        while (MonotonicClock.before(deadline)) {
+            int result = poll(&state, (nfds_t)1, (int)MonotonicClock.remaining(deadline));
+            if (result > 0) { return true; }
+            if (result == 0) { return false; }
+            if (errno != EINTR) { throw "Cannot poll child pipe"; }
+        }
+        return false;
+    }
+
+    public void write(Bytes bytes, long long deadline) {
+        int offset = 0;
+        while (offset < bytes.length()) {
+            if (self.input < 0 || !PipeProcess.ready(self.input, (short)POLLOUT, deadline)) { throw "Child input timed out"; }
+            var count = (int)write(self.input, bytes.data + offset, (size_t)(bytes.length() - offset));
+            if (count > 0) { offset += (int)count; }
+            else if (count < 0 && errno != EINTR && errno != EAGAIN) { throw "Child input closed"; }
+        }
+    }
+
+    /* null means EOF; a timeout throws so a stalled server cannot pass. */
+    public Bytes? read(long long deadline) {
+        if (self.output < 0) { return null; }
+        char buffer[65536];
+        while (true) {
+            if (!PipeProcess.ready(self.output, (short)POLLIN, deadline)) { throw "Child output timed out"; }
+            var count = (int)read(self.output, buffer, sizeof(buffer));
+            if (count == 0) { return null; }
+            if (count > 0) { var bytes = Bytes(); bytes.appendRaw(buffer, (int)count); return bytes; }
+            if (errno != EINTR && errno != EAGAIN) { throw "Cannot read child output"; }
+        }
+        return null;
+    }
+
+    public void closeInput() {
+        if (self.input >= 0) { close(self.input); self.input = -1; }
+    }
+
+    public int wait(long long deadline) {
+        int status;
+        while (self.process > 0 && MonotonicClock.before(deadline)) {
+            var waited = (int)waitpid(self.process, &status, WNOHANG);
+            if (waited == self.process) {
+                self.process = -1;
+                return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+            }
+            if (waited < 0 && errno != EINTR) { throw "Cannot wait for child"; }
+            Timer.sleepMillis(10);
+        }
+        throw "Child did not exit before deadline";
+    }
+
+    public void close() {
+        self.closeInput();
+        if (self.output >= 0) { close(self.output); self.output = -1; }
+        if (self.process > 0) {
+            kill(self.process, SIGKILL);
+            int status;
+            while ((int)waitpid(self.process, &status, 0) < 0 && errno == EINTR) { }
+            self.process = -1;
+        }
+    }
+    public void __del__() { self.close(); }
+}

@@ -61,6 +61,7 @@ pkgs.mkShell {
     libarchive
     openssh
     qemuPackage
+    ripgrep
     socat
     swtpm
     util-linux

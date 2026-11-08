@@ -8,10 +8,11 @@ in pkgs.testers.runNixOSTest {
   name = "sunshine-ssh-login";
   node.pkgsReadOnly = false;
   nodes.machine = { config, lib, pkgs, ... }: {
+    _module.args.inputs = inputs;
     imports = [
       (inputs.nixpkgs + "/nixos/tests/common/x11.nix")
-      ../../../nix/settings.nix
-      ../../../nix/apps/gaming/sunshine/default.nix
+      ../../../config/settings.nix
+      ../../../config/pkgs/gaming/sunshine/default.nix
     ];
     settings.users.admin = { username = "operator"; homeDirectory = "/srv/operator"; };
     settings.apps.sunshine.sshLogin = {

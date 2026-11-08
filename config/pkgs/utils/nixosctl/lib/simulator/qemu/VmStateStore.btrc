@@ -1,0 +1,233 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+import ../../core/NixosLog.btrc;
+import ../Spec.btrc;
+import ./QemuFirmware.btrc;
+
+class VmStateStore {
+    public VmTestSpec spec;
+    public UnixShell shell;
+    public QemuFirmware firmware;
+    public string runningPid;
+
+    public VmStateStore(VmTestSpec spec, QemuFirmware firmware) {
+        self.spec = spec;
+        self.shell = UnixShell();
+        self.firmware = firmware;
+        self.runningPid = "";
+    }
+
+    public string diskPath() { return PathTools.join(self.spec.workDir, "disk.qcow2"); }
+    public string pidPath() { return self.spec.vmPidPath(); }
+    public string legacyPidPath() { return self.spec.legacyVmPidPath(); }
+    public string qemuExitPath() { return self.spec.vmExitPath(); }
+    public string sshKeyPath() { return PathTools.join(self.spec.workDir, "id_ed25519"); }
+    public string sshPubKeyPath() { return self.sshKeyPath() + ".pub"; }
+    public string parentStateDir() { return PathTools.join(self.spec.stateRoot, self.spec.parentState); }
+    public string parentWorkDirFile() { return PathTools.join(self.parentStateDir(), "workDir"); }
+    public string parentMetadataPath() { return PathTools.join(self.parentStateDir(), "metadata.json"); }
+    public string backingDiskFile() { return PathTools.join(self.spec.workDir, "backing-disk"); }
+
+    public void rememberPid(string pid) {
+        self.runningPid = pid.trim();
+    }
+
+    public void clearPid() {
+        self.runningPid = "";
+    }
+
+    public string currentPid() {
+        if (!self.runningPid.isEmpty()) { return self.runningPid; }
+        if (FileSystem.exists(self.pidPath())) { return Path.readAll(self.pidPath()).trim(); }
+        if (FileSystem.exists(self.legacyPidPath())) { return Path.readAll(self.legacyPidPath()).trim(); }
+        return "";
+    }
+
+    public void ensureWorkDir() {
+        var isoDir = PathTools.dirname(self.spec.iso);
+        if (FileSystem.mkdirp(self.spec.workDir) != 0 || !FileSystem.isDir(self.spec.workDir)) {
+            NixosLog.fatal(f"Failed to create VM work directory: {self.spec.workDir}");
+        }
+        if (FileSystem.mkdirp(isoDir) != 0 || !FileSystem.isDir(isoDir)) {
+            NixosLog.fatal(f"Failed to create VM ISO directory: {isoDir}");
+        }
+    }
+
+    public string absolutePath(string path) {
+        var script = f"cd {ShellWords.quote(PathTools.dirname(path))} && printf '%s/%s' \"$PWD\" {ShellWords.quote(PathTools.basename(path))}";
+        var command = f"sh -c {ShellWords.quote(script)}";
+        var result = self.shell.run(command);
+        if (!result.ok()) { NixosLog.fatal("Failed to resolve path " + path); }
+        return result.trimmed();
+    }
+
+    public void cleanStateRecord() {
+        VmFiles.remove(self.spec.stateDir());
+    }
+
+    public void requireParentState() {
+        if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
+        if (!FileSystem.exists(self.spec.parentHashFile())) {
+            NixosLog.fatal(f"Missing parent state {self.spec.parentState}; run its test first");
+        }
+    }
+
+    public void copyIfExists(string source, string target) {
+        if (!FileSystem.exists(source)) { return; }
+        var command = f"cp {ShellWords.quote(source)} {ShellWords.quote(target)}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
+    }
+
+    public void copyTreeIfExists(string source, string target) {
+        if (!FileSystem.exists(source)) { return; }
+        VmFiles.remove(target);
+        var command = f"cp -R {ShellWords.quote(source)} {ShellWords.quote(target)}";
+        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state tree {source}"); }
+    }
+
+    public void inheritParentFirmwareArgs() {
+        if (!FileSystem.exists(self.parentMetadataPath())) { return; }
+        var metadata = JSONValue.readFile(self.parentMetadataPath());
+        if ((metadata.has("uefi") ? metadata.get("uefi").asString() : "false").equals("true") && !self.spec.args.has("uefi") && !self.spec.args.has("uefiDisk")) {
+            self.spec.setArg("uefiDisk", "true");
+        }
+        if ((metadata.has("secureBoot") ? metadata.get("secureBoot").asString() : "false").equals("true") && !self.spec.args.has("secureBoot")) {
+            self.spec.setArg("secureBoot", "true");
+        }
+        if ((metadata.has("tpm2") ? metadata.get("tpm2").asString() : "false").equals("true") && !self.spec.args.has("tpm2")) {
+            self.spec.setArg("tpm2", "true");
+        }
+    }
+
+    public void inheritState() {
+        self.requireParentState();
+        if (self.spec.parentState.equals("root") || self.spec.parentState.isEmpty()) { return; }
+        if (!FileSystem.exists(self.parentWorkDirFile())) {
+            NixosLog.fatal(f"Parent state {self.spec.parentState} has no workDir record");
+        }
+        self.inheritParentFirmwareArgs();
+        var parentWorkDir = Path.readAll(self.parentWorkDirFile()).trim();
+        self.ensureWorkDir();
+        var parentDisk = PathTools.join(parentWorkDir, "disk.qcow2");
+        if (!FileSystem.exists(self.diskPath()) && FileSystem.exists(parentDisk)) {
+            var backing = self.absolutePath(parentDisk);
+            var command = f"qemu-img create -f qcow2 -F qcow2 -b {ShellWords.quote(backing)} {ShellWords.quote(self.diskPath())}";
+            var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+            if (!result.ok()) { NixosLog.fatal("Failed to create qcow2 state delta for " + self.spec.state); }
+            Path.writeAll(self.backingDiskFile(), backing + "\n");
+        }
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519"), self.sshKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519.pub"), self.sshPubKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmware.firmwareVarsPath());
+        self.copyTreeIfExists(PathTools.join(parentWorkDir, "tpm"), self.firmware.tpmDir());
+    }
+
+    public void recordState() {
+        var stateDir = self.spec.stateDir();
+        if (FileSystem.mkdirp(stateDir) != 0 || !FileSystem.isDir(stateDir)) {
+            NixosLog.fatal(f"Failed to create VM state directory {stateDir}");
+        }
+        Path.writeAll(self.spec.stateHashFile(), self.spec.stateHash + "\n");
+        if (!FileSystem.exists(self.spec.stateHashFile())) {
+            NixosLog.fatal(f"Failed to write VM state hash {self.spec.stateHashFile()}");
+        }
+        var workDirRecord = PathTools.join(stateDir, "workDir");
+        Path.writeAll(workDirRecord, self.spec.workDir + "\n");
+        if (!FileSystem.exists(workDirRecord)) {
+            NixosLog.fatal(f"Failed to write VM state workDir {workDirRecord}");
+        }
+        var metadata = JSONValue.makeObject();
+        metadata.set("state", JSONValue.makeString(self.spec.state));
+        metadata.set("parentState", JSONValue.makeString(self.spec.parentState));
+        metadata.set("parentHash", JSONValue.makeString(self.spec.parentHash));
+        metadata.set("hash", JSONValue.makeString(self.spec.stateHash));
+        metadata.set("hashShort", JSONValue.makeString(self.spec.stateHashShort));
+        metadata.set("workDir", JSONValue.makeString(self.spec.workDir));
+        metadata.set("iso", JSONValue.makeString(self.spec.iso));
+        metadata.set("isoUrl", JSONValue.makeString(self.spec.isoUrl));
+        metadata.set("disk", JSONValue.makeString(self.diskPath()));
+        metadata.set("uefi", JSONValue.makeString(self.firmware.uefiEnabled() ? "true" : "false"));
+        metadata.set("secureBoot", JSONValue.makeString(self.firmware.secureBootEnabled() ? "true" : "false"));
+        metadata.set("tpm2", JSONValue.makeString(self.firmware.tpm2Enabled() ? "true" : "false"));
+        if (FileSystem.exists(self.backingDiskFile())) {
+            metadata.set("delta", JSONValue.makeString("qcow2-backing"));
+            metadata.set("backingDisk", JSONValue.makeString(Path.readAll(self.backingDiskFile()).trim()));
+        } else {
+            metadata.set("delta", JSONValue.makeString("base"));
+        }
+        var metadataPath = PathTools.join(stateDir, "metadata.json");
+        Path.writeAll(metadataPath, metadata.document());
+        if (!FileSystem.exists(metadataPath)) {
+            NixosLog.fatal(f"Failed to write VM state metadata {metadataPath}");
+        }
+    }
+
+    public bool isRunning() {
+        var pid = self.currentPid();
+        if (pid.isEmpty()) { return false; }
+        var result = self.shell.run("pid=" + ShellWords.quote(pid) + "; kill -0 \"$pid\" 2>/dev/null && ps -p \"$pid\" -o command= 2>/dev/null | grep -F " + ShellWords.quote(self.spec.vmProcessName()) + " >/dev/null", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        return result.ok();
+    }
+
+    public string runningDetail() {
+        var pid = self.currentPid();
+        var exitDetail = "";
+        if (FileSystem.exists(self.qemuExitPath())) {
+            exitDetail = "; " + Path.readAll(self.qemuExitPath()).trim();
+        }
+        if (pid.isEmpty()) { return "missing pidfile " + self.pidPath() + exitDetail; }
+        var result = self.shell.run("pid=" + ShellWords.quote(pid) + "; if kill -0 \"$pid\" 2>/dev/null; then printf 'pid=%s running ' \"$pid\"; ps -p \"$pid\" -o pid=,ppid=,pgid=,stat=,command= 2>/dev/null; else printf 'pid=%s not-running' \"$pid\"; fi", logFailure=false);
+        return result.trimmed() + exitDetail;
+    }
+
+    public Vector<string> words(string line) {
+        Vector<string> result = [];
+        for part in Strings.split(line.trim(), " ") {
+            var word = part.trim();
+            if (!word.isEmpty()) { result.push(word); }
+        }
+        return result;
+    }
+
+    public bool hasSnapshot(string name) {
+        if (!FileSystem.exists(self.diskPath())) { return false; }
+        var result = self.shell.run(f"qemu-img snapshot -l {ShellWords.quote(self.diskPath())}", logFailure=false);
+        if (!result.ok()) {
+            NixosLog.fatal(f"Failed to list snapshots for {self.diskPath()}");
+        }
+        var lines = Strings.split(result.stdout(), "\n");
+        for line in lines {
+            var fields = self.words(line);
+            if (fields.len >= 2 && fields.get(1).equals(name)) { return true; }
+        }
+        return false;
+    }
+
+    public bool hasBackingDisk() {
+        return FileSystem.exists(self.backingDiskFile());
+    }
+
+    public void printStatus() {
+        var recorded = "no";
+        if (FileSystem.exists(self.spec.stateHashFile())) {
+            var savedHash = Path.readAll(self.spec.stateHashFile()).trim();
+            recorded = savedHash.equals(self.spec.stateHash) ? "yes" : "stale";
+        }
+        Console.log("State:     " + self.spec.state);
+        Console.log("Hash:      " + self.spec.stateHash);
+        Console.log("Parent:    " + self.spec.parentState + " (" + self.spec.parentHash + ")");
+        Console.log("Work dir:  " + self.spec.workDir);
+        Console.log("Arch:      " + self.spec.arch);
+        Console.log("ISO:       " + (FileSystem.exists(self.spec.iso) ? "yes" : "no") + " " + self.spec.iso);
+        Console.log("Disk:      " + (FileSystem.exists(self.diskPath()) ? "yes" : "no") + " " + self.diskPath());
+        Console.log("SSH key:   " + (FileSystem.exists(self.sshKeyPath()) ? "yes" : "no") + " " + self.sshKeyPath());
+        Console.log("Running:   " + (self.isRunning() ? "yes" : "no"));
+        Console.log("Recorded:  " + recorded + " " + self.spec.stateDir());
+    }
+}

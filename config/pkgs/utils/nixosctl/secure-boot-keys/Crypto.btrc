@@ -1,0 +1,111 @@
+import Library.Bytes;
+import Library.JSON;
+import Library.Map;
+import Library.Strings;
+import ./Files.btrc;
+
+#include <signal.h>
+#include <unistd.h>
+
+class KeyCrypto {
+    class void limitVerification(int seconds = 10) {
+        signal((int)SIGALRM, SIG_DFL);
+        sigset_t deadline;
+        sigemptyset(&deadline);
+        sigaddset(&deadline, SIGALRM);
+        if (sigprocmask((int)SIG_UNBLOCK, &deadline, NULL) != 0) { throw "Could not enforce key verification deadline"; }
+        alarm((unsigned int)seconds);
+    }
+
+    class string guid(Bytes bytes) {
+        if (!bytes.isNulFreeUtf8()) { throw "Invalid sbctl owner GUID"; }
+        var text = bytes.toString().trim().toLower();
+        if (text.startsWith("urn:uuid:")) { text = text.substring(9, text.length() - 9); }
+        if (text.startsWith("{") && text.endsWith("}")) { text = text.substring(1, text.length() - 2); }
+        text = text.replace("-", "");
+        if (text.length() != 32) { throw "Invalid sbctl owner GUID"; }
+        for (int index = 0; index < text.length(); index++) {
+            if (!((text[index] >= '0' && text[index] <= '9') || (text[index] >= 'a' && text[index] <= 'f'))) { throw "Invalid sbctl owner GUID"; }
+        }
+        return f"{text.substring(0, 8)}-{text.substring(8, 4)}-{text.substring(12, 4)}-{text.substring(16, 4)}-{text.substring(20, 12)}";
+    }
+
+    class EVP_PKEY* privateKey(Bytes bytes) {
+        BIO* input = BIO_new_mem_buf(bytes.data, bytes.len);
+        if (input == NULL) { throw "Could not read Secure Boot private key"; }
+        EVP_PKEY* key = bundle_private_key(input);
+        BIO_free(input);
+        if (key == NULL) {
+            input = BIO_new_mem_buf(bytes.data, bytes.len);
+            if (input == NULL) { throw "Could not read Secure Boot private key"; }
+            key = d2i_PrivateKey_bio(input, NULL);
+            BIO_free(input);
+        }
+        if (key == NULL) { throw "Invalid Secure Boot private key"; }
+        return key;
+    }
+
+    class X509* certificate(Bytes bytes) {
+        BIO* input = BIO_new_mem_buf(bytes.data, bytes.len);
+        if (input == NULL) { throw "Could not read Secure Boot certificate"; }
+        X509* certificate = bundle_certificate(input);
+        BIO_free(input);
+        if (certificate == NULL) {
+            input = BIO_new_mem_buf(bytes.data, bytes.len);
+            if (input == NULL) { throw "Could not read Secure Boot certificate"; }
+            certificate = d2i_X509_bio(input, NULL);
+            BIO_free(input);
+        }
+        if (certificate == NULL) { throw "Invalid Secure Boot certificate"; }
+        return certificate;
+    }
+
+    class string fingerprint(X509* certificate) {
+        unsigned char digest[32];
+        unsigned int length = 0;
+        if (X509_digest(certificate, EVP_sha256(), digest, &length) != 1 || length != 32U) { throw "Could not fingerprint Secure Boot certificate"; }
+        var fingerprint = StringBuilder();
+        var digits = "0123456789ABCDEF";
+        for (int index = 0; index < 32; index++) {
+            if (index != 0) { fingerprint.appendChar(':'); }
+            fingerprint.appendChar(digits[(int)digest[index] / 16]);
+            fingerprint.appendChar(digits[(int)digest[index] % 16]);
+        }
+        return fingerprint.toString();
+    }
+
+    class string verifyPair(Bytes privateBytes, Bytes certificateBytes) {
+        // Untrusted key parameters must not make root spend unbounded CPU time.
+        KeyCrypto.limitVerification();
+        EVP_PKEY* key = NULL;
+        EVP_PKEY* publicKey = NULL;
+        EVP_PKEY_CTX* context = NULL;
+        X509* certificate = NULL;
+        try {
+            key = KeyCrypto.privateKey(privateBytes);
+            context = EVP_PKEY_CTX_new(key, NULL);
+            if (context == NULL || EVP_PKEY_check(context) != 1) { throw "Invalid Secure Boot private key"; }
+            certificate = KeyCrypto.certificate(certificateBytes);
+            publicKey = X509_get_pubkey(certificate);
+            if (publicKey == NULL || EVP_PKEY_eq(key, publicKey) != 1) { throw "Secure Boot private key does not match its certificate"; }
+            return KeyCrypto.fingerprint(certificate);
+        } finally {
+            if (publicKey != NULL) { EVP_PKEY_free(publicKey); }
+            if (certificate != NULL) { X509_free(certificate); }
+            if (context != NULL) { EVP_PKEY_CTX_free(context); }
+            if (key != NULL) { EVP_PKEY_free(key); }
+            alarm(0);
+        }
+    }
+
+    class JSONValue verify(Map<string, Bytes> files) {
+        var report = JSONValue.makeObject();
+        report.set("guid", JSONValue.makeString(KeyCrypto.guid(files.get("GUID"))));
+        var fingerprints = JSONValue.makeObject();
+        for name in ["PK", "KEK", "db"] {
+            fingerprints.set(name, JSONValue.makeString(KeyCrypto.verifyPair(files.get(f"keys/{name}/{name}.key"), files.get(f"keys/{name}/{name}.pem"))));
+        }
+        report.set("certificateSha256", fingerprints);
+        return report;
+    }
+}

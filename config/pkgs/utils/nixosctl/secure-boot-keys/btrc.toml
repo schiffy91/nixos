@@ -1,0 +1,23 @@
+manifest-version = 1
+
+[package]
+name = "nixos_secure_boot_keys"
+exports = ["Archive", "Files", "Crypto"]
+
+[[native.bindings]]
+module = "Files"
+header = "files.h"
+language = "c"
+standard = "c11"
+symbols = ["RENAME_NOREPLACE", "PR_SET_DUMPABLE", "sigset_t", "sigprocmask"]
+
+[[native.pkg-config]]
+name = "libcrypto"
+modules = ["Crypto"]
+
+[[native.bindings]]
+module = "Crypto"
+header = "crypto.h"
+language = "c"
+standard = "c11"
+symbols = ["BIO", "EVP_PKEY", "EVP_PKEY_CTX", "X509", "BIO_new_mem_buf", "BIO_free", "bundle_private_key", "bundle_certificate", "d2i_PrivateKey_bio", "d2i_X509_bio", "EVP_PKEY_CTX_new", "EVP_PKEY_CTX_free", "EVP_PKEY_check", "EVP_PKEY_eq", "EVP_PKEY_free", "X509_get_pubkey", "X509_digest", "EVP_sha256", "X509_free"]

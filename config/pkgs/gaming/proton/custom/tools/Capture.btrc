@@ -1,0 +1,131 @@
+import ./Runtime.btrc;
+
+class WindowGeometry {
+    public int x; public int y; public int width; public int height;
+    public WindowGeometry(int x, int y, int width, int height) { self.x = x; self.y = y; self.width = width; self.height = height; }
+}
+class HoverPoint {
+    public double x; public double y; public int dwell;
+    public HoverPoint(double x, double y, int dwell) { self.x = x; self.y = y; self.dwell = dwell; }
+}
+class ProtonCapture {
+    public ProtonContext context;
+    public ProtonCapture(ProtonContext context) { self.context = context; }
+    class Vector<string> windowQuery() { return ["search", "--class", "battle[.]net[.]exe", "--limit", "1"]; }
+    public void focus() { var args = ProtonCapture.windowQuery(); args.push("windowactivate"); args.push("%1"); args.push("windowraise"); args.push("%1"); self.context.execute("kdotool", args); }
+    class WindowGeometry geometry(string text) {
+        var position = Regex.findAll("-?[0-9]+([.][0-9]+)?", Regex.first("Position:[^\n]+", text));
+        var size = Regex.findAll("[0-9]+([.][0-9]+)?", Regex.first("Geometry:[^\n]+", text));
+        if (position.len != 2 || size.len != 2) { throw "Could not parse Battle.net window geometry: " + text; }
+        return WindowGeometry((int)round(atof(position.get(0))), (int)round(atof(position.get(1))), (int)round(atof(size.get(0))), (int)round(atof(size.get(1))));
+    }
+    public WindowGeometry window() { var args = ProtonCapture.windowQuery(); args.push("getwindowgeometry"); args.push("%1"); return ProtonCapture.geometry(self.context.execute("kdotool", args, true).stdout()); }
+    class WindowGeometry screen(string text) {
+        var plain = Regex.replaceAll("\x1b\\[[0-9;]*m", text, "");
+        WindowGeometry? first = null;
+        for chunk in Strings.split(plain, "Output:") {
+            if (!Regex.matches("(^|[[:space:]])enabled([[:space:]]|$)", chunk)) { continue; }
+            var values = Regex.findAll("-?[0-9]+", Regex.first("Geometry:[^\n]+", chunk));
+            if (values.len != 4) { continue; }
+            var output = WindowGeometry(values.get(0).toInt(), values.get(1).toInt(), values.get(2).toInt(), values.get(3).toInt());
+            if (output.x == 0 && output.y == 0) { return output; }
+            if (first == null) { first = output; }
+        }
+        if (first != null) { return first; }
+        throw "Could not determine enabled display geometry from kscreen-doctor";
+    }
+    public Vector<int> mouse() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            var text = ChildProcess.run("kdotool", ["getmouselocation", "--shell"]).stdout();
+            var x = Regex.first("(^|\n)X=-?[0-9]+", text).trim(); var y = Regex.first("(^|\n)Y=-?[0-9]+", text).trim();
+            if (!x.isEmpty() && !y.isEmpty()) { return [Strings.split(x, "=").get(1).toInt(), Strings.split(y, "=").get(1).toInt()]; }
+            Timer.sleepMillis(50);
+        }
+        throw "Could not read mouse location from KWin";
+    }
+    public void move(int x, int y, WindowGeometry screen) {
+        var current = self.mouse(); int dx = x - current.get(0); int dy = y - current.get(1);
+        int distance = abs(dx) > abs(dy) ? abs(dx) : abs(dy); int steps = distance / 90 + 1; if (steps > 18) { steps = 18; }
+        Vector<string> actions = [];
+        for (int i = 1; i <= steps; i++) {
+            double px = round(current.get(0) + (double)dx * i / steps) / (screen.width > 1 ? screen.width - 1 : 1);
+            double py = round(current.get(1) + (double)dy * i / steps) / (screen.height > 1 ? screen.height - 1 : 1);
+            if (px < 0) { px = 0; } if (px > 1) { px = 1; } if (py < 0) { py = 0; } if (py > 1) { py = 1; }
+            actions.push(f"mouseto {px} {py}");
+        }
+        self.context.execute("dotool", [], input=actions.join("\n") + "\n"); Timer.sleepMillis(30);
+    }
+    class Vector<HoverPoint> points(string profile) {
+        if (profile.equals("chat")) { return [HoverPoint(.86,.14,220), HoverPoint(.86,.22,220), HoverPoint(.86,.30,220), HoverPoint(.86,.38,220), HoverPoint(.86,.46,220), HoverPoint(.86,.54,220), HoverPoint(.86,.62,220), HoverPoint(.72,.22,220)]; }
+        if (profile.equals("main")) { return [HoverPoint(.24,.24,180), HoverPoint(.42,.27,180), HoverPoint(.62,.31,180), HoverPoint(.75,.41,180), HoverPoint(.35,.58,180), HoverPoint(.55,.63,180), HoverPoint(.70,.72,180)]; }
+        if (profile.equals("battle-net")) { return [HoverPoint(.86,.18,180), HoverPoint(.86,.26,180), HoverPoint(.86,.34,180), HoverPoint(.86,.45,180), HoverPoint(.86,.56,180), HoverPoint(.30,.30,150), HoverPoint(.48,.34,150), HoverPoint(.66,.38,150), HoverPoint(.37,.61,150), HoverPoint(.58,.67,150), HoverPoint(.72,.75,150)]; }
+        throw f"Unknown hover profile: {profile}";
+    }
+    public void screenshot(string output, string mode) {
+        if (mode.equals("full") && !Environment.get("PROTON_CUSTOM_ALLOW_FULL_DESKTOP_CAPTURE", "").equals("1")) { throw "Full desktop capture is disabled; set PROTON_CUSTOM_ALLOW_FULL_DESKTOP_CAPTURE=1 to override"; }
+        var modes = ["full", "active", "current", "cursor"]; var flags = ["-f", "-a", "-m", "-u"]; int index = modes.indexOf(mode);
+        if (index < 0) { throw f"Unknown capture mode: {mode}"; }
+        FileSystem.mkdirp(PathTools.dirname(output));
+        var locked = AdvisoryFileLock.acquire("/tmp/battlenet-screenshot.lock", true);
+        if (!locked.ok()) { throw "Cannot acquire screenshot lock"; }
+        var lock = locked.value(); var detail = "";
+        for (int attempt = 0; attempt < 3; attempt++) {
+            unlink(output); var result = ChildProcess.run("spectacle", ["-b", "-n", flags.get(index), "-o", output]);
+            if (result.ok() && FileSystem.isFile(output) && FileSystem.readBytes(output).length() > 0) { lock.close(); return; }
+            detail = result.stderr().isEmpty() ? result.stdout() : result.stderr(); Timer.sleepMillis(150);
+        }
+        lock.close(); throw f"Screenshot failed: {output}: {detail}";
+    }
+    public void frames(ProtonOptions options) {
+        var directory = options.get("--output-dir", "/tmp/battlenet-" + options.command);
+        int count = options.number("--count", options.command.equals("hover-frames") ? 48 : 24);
+        var intervalText = options.get("--interval", options.command.equals("hover-frames") ? "0.08" : "0.15");
+        if (!Regex.fullMatch("[0-9]+([.][0-9]+)?", intervalText)) { throw "--interval must be nonnegative"; }
+        int interval = (int)(atof(intervalText) * 1000); var extension = options.get("--format", "jpg");
+        if (!["png", "jpg"].contains(extension)) { throw "--format must be png or jpg"; }
+        FileSystem.mkdirp(directory);
+        for name in FileSystem.listDir(directory) { if (name.startsWith("frame-") && name.contains(".")) { unlink(directory + "/" + name); } }
+        for (int i = 0; i < count; i++) {
+            var number = f"{i}"; while (number.len() < 3) { number = "0" + number; }
+            self.screenshot(directory + "/frame-" + number + "." + extension, options.get("--mode", "active"));
+            if (interval > 0) { Timer.sleepMillis(interval); }
+        }
+        print("frames: " + directory);
+    }
+    public void hover(ProtonOptions options) {
+        self.focus(); var window = self.window(); var desktop = ProtonCapture.screen(self.context.execute("kscreen-doctor", ["-o"], true).stdout());
+        var points = ProtonCapture.points(options.get("--profile", "battle-net"));
+        int motion = (int)fork(); if (motion < 0) { throw "Cannot start hover motion"; }
+        if (motion == 0) {
+            try { while (true) { for point in points { self.move((int)(window.x + window.width * point.x), (int)(window.y + window.height * point.y), desktop); Timer.sleepMillis(point.dwell); } } }
+            catch (string error) { fprintf(stderr, "hover motion: %s\n", error); }
+            _exit(1);
+        }
+        try { self.frames(options); }
+        catch (string error) { kill(motion, SIGTERM); int status; while ((int)waitpid(motion, &status, 0) < 0 && errno == EINTR) { } throw error; }
+        kill(motion, SIGTERM); int status; while ((int)waitpid(motion, &status, 0) < 0 && errno == EINTR) { }
+    }
+    public void launch(ProtonOptions options) {
+        ProtonWine(self.context).use(); var runtime = ProtonRuntime(self.context); var environment = runtime.environment(options);
+        runtime.cleanup(environment); runtime.resetLog();
+        var log = options.get("--log", "/tmp/battlenet-" + options.command + ".wrapper.log"); var child = runtime.start(log, environment);
+        try {
+            Timer.sleepMillis(options.number("--delay", 8) * 1000); self.focus();
+            if (options.command.equals("capture")) { var path = options.get("--output", "/tmp/battlenet-capture.png"); self.screenshot(path, options.get("--mode", "active")); print("screenshot: " + path); }
+            else { self.frames(options); }
+        } catch (string error) { child.stop(); runtime.cleanup(environment); throw error; }
+        child.stop(); runtime.cleanup(environment); runtime.collectLog(log); print("log: " + log);
+    }
+    public void analyze(ProtonOptions options) {
+        var directory = options.get("--output-dir", "/tmp/battlenet-grab-frames"); Vector<string> frames = [];
+        for name in FileSystem.listDir(directory) { if (name.startsWith("frame-") && name.contains(".")) { frames.push(name); } }
+        frames = frames.sorted(); if (frames.len < 2) { throw f"Need at least two frames in {directory}"; }
+        for (int i = 1; i < frames.len; i++) {
+            var previous = frames.get(i - 1); var current = frames.get(i);
+            var result = ChildProcess.run("compare", ["-metric", "AE", directory + "/" + previous, directory + "/" + current, "null:"]);
+            var value = (result.stderr().isEmpty() ? result.stdout() : result.stderr()).trim(); if (value.isEmpty()) { value = "0"; }
+            if (result.code > 1) { throw "ImageMagick compare failed: " + value; }
+            if (options.flag("--all") || (!value.equals("0") && !value.equals("0.0"))) { print(previous + "->" + current + ": " + value); }
+        }
+    }
+}

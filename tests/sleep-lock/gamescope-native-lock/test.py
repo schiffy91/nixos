@@ -1,3 +1,9 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # NixOS supplies these names when executing the test script.
+    from nixos_test import machine, real_suspend, start_all, subtest, with_sunshine  # ty: ignore[unresolved-import]
+
 import json
 import shlex
 import subprocess
@@ -38,7 +44,7 @@ def cannot_switch():
 
 def prompt(label):
     assert client is not None
-    machine.wait_until_succeeds("pgrep -f '^/nix/store/[^ ]+/bin/sleep-lock-native authenticate observer( retry)?$'", timeout=30)
+    machine.wait_until_succeeds("pgrep -f '^/nix/store/[^ ]+/bin/sleep-lock-native /nix/store/[^ ]+/bin/plymouth authenticate observer( retry)?$'", timeout=30)
     screenshot = Path(machine.out_dir) / f"gamescope-lock-{label}.png"
     for _ in range(40):
         client.captureScreen(str(screenshot), incremental=False)

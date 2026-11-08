@@ -1,0 +1,56 @@
+import ./Wine.btrc;
+
+class ProtonSources {
+    public ProtonContext context;
+    public ProtonSources(ProtonContext context) { self.context = context; }
+    class void walk(string root, string relative, Vector<string> result) {
+        for name in FileSystem.listDir(PathTools.join(root, relative)) {
+            if (name.equals(".git")) { continue; }
+            var child = relative.isEmpty() ? name : relative + "/" + name;
+            if (FileSystem.isDir(root + "/" + child) && !FileSystem.isSymlink(root + "/" + child)) { ProtonSources.walk(root, child, result); }
+            else if (FileSystem.isFile(root + "/" + child)) { result.push(child); }
+        }
+    }
+    public void patchLint() {
+        var root = self.context.directory + "/patches";
+        Vector<string> paths = []; ProtonSources.walk(root, "", paths); bool failed = false;
+        for path in paths.sorted() {
+            if (!path.endsWith(".patch")) { continue; }
+            var text = Path.readAll(root + "/" + path); Vector<string> problems = [];
+            var bytes = FileSystem.readBytes(root + "/" + path);
+            for (int i = 0; i < bytes.length(); i++) { if (bytes.get(i) > 127) { problems.push("non-ASCII byte"); break; } }
+            if (text.startsWith("From 0000000000000000000000000000000000000000 ")) { problems.push("placeholder From hash"); }
+            if (Strings.split(text, "Signed-off-by: Alexander Schiffhauer <alexander.schiffhauer@gmail.com>").len != 2) { problems.push("unexpected Signed-off-by count"); }
+            if (text.contains("\r")) { problems.push("CRLF line ending"); }
+            for name in ["proton-custom", "scwhine", "schwine"] { if (text.contains(name)) { problems.push("local project name in patch: " + name); } }
+            for problem in problems { print(path + ": " + problem); failed = true; }
+        }
+        if (failed) { throw "Patch lint failed"; } print("patch lint passed");
+    }
+    public void drift(bool reset) {
+        var c = self.context; var packaged = c.nixPath("passthru.wineSource");
+        if (!FileSystem.exists(c.source() + "/.git")) { print("source matches packaged patch source"); return; }
+        Vector<string> paths = []; ProtonSources.walk(packaged, "", paths);
+        for options in ["tracked", "untracked"] {
+            var args = ["-C", c.source(), "ls-files"];
+            if (options.equals("untracked")) { args.push("--others"); args.push("--exclude-standard"); }
+            for path in ProtonContext.lines(c.execute("git", args, true).stdout()) { if (!paths.contains(path)) { paths.push(path); } }
+        }
+        bool changed = false;
+        for relative in paths.sorted() {
+            var original = packaged + "/" + relative; var edited = c.source() + "/" + relative;
+            if (FileSystem.isFile(original) && FileSystem.isFile(edited) && ChildProcess.run("cmp", ["-s", "--", original, edited]).ok()) { continue; }
+            if (!FileSystem.exists(original) && !FileSystem.exists(edited)) { continue; }
+            changed = true; print("wine: " + relative);
+            if (reset) {
+                if (FileSystem.exists(original)) { c.copy(original, edited); }
+                else if (ProtonContext.exists(edited)) { c.execute("rm", ["-rf", "--", edited]); }
+            }
+        }
+        if (reset) {
+            for relative in ProtonContext.lines(c.execute("git", ["-C", c.source(), "ls-files", "--others", "--exclude-standard"], true).stdout()) { c.execute("rm", ["-rf", "--", c.source() + "/" + relative]); }
+            ProtonWine(c).gitBaseline("baseline: current wine patch series", true);
+        } else if (changed) { throw "Source differs from packaged patch source"; }
+        print(reset ? "source reset to packaged patch source" : "source matches packaged patch source");
+    }
+}

@@ -1,0 +1,194 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
+import ./Archive.btrc;
+
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/random.h>
+#include <unistd.h>
+#include <linux/fs.h>
+#include <signal.h>
+
+class KeyPublicationSignals {
+    private sigset_t* previous = NULL;
+    private bool active = false;
+
+    public KeyPublicationSignals() {
+        sigset_t blocked;
+        sigemptyset(&blocked);
+        sigaddset(&blocked, SIGINT);
+        sigaddset(&blocked, SIGTERM);
+        self.previous = (sigset_t*)malloc(sizeof(sigset_t));
+        if (self.previous == NULL) { throw "Could not allocate publication signal mask"; }
+        if (sigprocmask((int)SIG_BLOCK, &blocked, self.previous) != 0) {
+            free(self.previous); self.previous = NULL;
+            throw "Could not protect atomic key publication";
+        }
+        self.active = true;
+    }
+
+    public void close() {
+        if (self.active) { self.active = false; sigprocmask((int)SIG_SETMASK, self.previous, NULL); }
+        if (self.previous != NULL) { free(self.previous); self.previous = NULL; }
+    }
+
+    public void __del__() { self.close(); }
+}
+
+class KeyFiles {
+    class Vector<string> components(string path) {
+        if (!path.startsWith("/") || path.equals("/") || path.equals("/nix/store") || path.startsWith("/nix/store/")) {
+            throw "Use an absolute bundle path outside the Nix store";
+        }
+        Vector<string> parts = [];
+        var all = Strings.split(path, "/");
+        for (int index = 1; index < all.len; index++) {
+            var part = all.get(index);
+            if (part.isEmpty() || part.equals(".") || part.equals("..")) { throw "Bundle paths cannot contain empty or relative components"; }
+            parts.push(part);
+        }
+        return parts;
+    }
+
+    class Vector<string> parent(Vector<string> parts) {
+        Vector<string> result = [];
+        for (int index = 0; index < parts.len - 1; index++) { result.push(parts.get(index)); }
+        return result;
+    }
+
+    class void directory(int descriptor) {
+        struct stat info;
+        if (descriptor < 0 || fstat(descriptor, &info) != 0 || !S_ISDIR(info.st_mode)
+            || info.st_uid != (uid_t)0 || (info.st_mode & (mode_t)0022) != (mode_t)0) {
+            throw "Bundle ancestors must be root-owned directories without group/other write access";
+        }
+    }
+
+    class int openDirectory(Vector<string> parts, bool create = false, int initial = -1) {
+        var descriptor = initial < 0 ? open("/", (int)O_RDONLY | (int)O_DIRECTORY | (int)O_CLOEXEC) : fcntl(initial, F_DUPFD_CLOEXEC, 3);
+        try {
+            KeyFiles.directory(descriptor);
+            for part in parts {
+                if (create) {
+                    if (mkdirat(descriptor, part, 0700) == 0) {
+                        if (fsync(descriptor) != 0) { throw "Could not sync bundle directory"; }
+                    } else if (errno != EEXIST) { throw "Could not create bundle directory"; }
+                }
+                var child = openat(descriptor, part, (int)O_RDONLY | (int)O_DIRECTORY | (int)O_NOFOLLOW | (int)O_CLOEXEC);
+                close(descriptor);
+                descriptor = child;
+                KeyFiles.directory(descriptor);
+            }
+            return descriptor;
+        } catch (string error) { if (descriptor >= 0) { close(descriptor); } throw error; }
+    }
+
+    class Bytes read(int descriptor, int limit) {
+        var bytes = Bytes();
+        char chunk[8192];
+        while (true) {
+            var count = read(descriptor, chunk, sizeof(chunk));
+            if (count < (ssize_t)0) { throw "Could not read complete key bundle"; }
+            if (count == (ssize_t)0) { break; }
+            if (bytes.len > limit - (int)count) { throw "Oversized key bundle input"; }
+            bytes.appendRaw(chunk, (int)count);
+        }
+        return bytes;
+    }
+
+    class Map<string, Bytes> readBundle(string path) {
+        var bundle = KeyFiles.openDirectory(KeyFiles.components(path));
+        Map<string, Bytes> files = {};
+        try {
+            for name in KeyArchive.members() {
+                var parts = Strings.split(name, "/");
+                var parent = KeyFiles.openDirectory(KeyFiles.parent(parts), initial=bundle);
+                var descriptor = -1;
+                try {
+                    descriptor = openat(parent, parts.get(parts.len - 1), (int)O_RDONLY | (int)O_NOFOLLOW | (int)O_NONBLOCK | (int)O_CLOEXEC);
+                    struct stat info;
+                    if (descriptor < 0 || fstat(descriptor, &info) != 0) { throw "Could not open key bundle file"; }
+                    var mode = (int)(info.st_mode & (mode_t)07777);
+                    var permitted = mode == 0400 || mode == 0600 || (!name.endsWith(".key") && (mode == 0444 || mode == 0644));
+                    if (!S_ISREG(info.st_mode) || info.st_uid != (uid_t)0 || info.st_nlink != (nlink_t)1 || !permitted) {
+                        throw "Unsafe key bundle file type, ownership, link count, or permissions";
+                    }
+                    var bytes = KeyFiles.read(descriptor, 65536);
+                    if (bytes.isEmpty()) { throw "Empty key bundle file"; }
+                    files.put(name, bytes);
+                } finally { if (descriptor >= 0) { close(descriptor); } close(parent); }
+            }
+        } finally { close(bundle); }
+        return files;
+    }
+
+    class void write(int descriptor, Bytes bytes) {
+        var offset = 0;
+        while (offset < bytes.len) {
+            var count = write(descriptor, bytes.data + offset, (size_t)(bytes.len - offset));
+            if (count <= (ssize_t)0) { throw "Could not write complete key bundle"; }
+            offset = offset + (int)count;
+        }
+    }
+
+    class string stagingName() {
+        unsigned char random[16];
+        if (getrandom(random, sizeof(random), 0) != (ssize_t)sizeof(random)) { throw "Could not reserve key staging name"; }
+        var name = StringBuilder();
+        name.append(".secure-boot-keys-");
+        var digits = "0123456789abcdef";
+        for (int index = 0; index < 16; index++) {
+            name.appendChar(digits[(int)random[index] / 16]);
+            name.appendChar(digits[(int)random[index] % 16]);
+        }
+        return name.toString();
+    }
+
+    class void publish(Map<string, Bytes> files, string path) {
+        // Finish or clean up the private staging tree before honoring termination.
+        var signals = KeyPublicationSignals();
+        var parts = KeyFiles.components(path);
+        var parent = KeyFiles.openDirectory(KeyFiles.parent(parts), create=true);
+        var name = parts.get(parts.len - 1);
+        var staged = KeyFiles.stagingName();
+        var stage = -1;
+        var created = false;
+        var published = false;
+        try {
+            struct stat existing;
+            if (fstatat(parent, name, &existing, AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT) { throw "Destination already exists or cannot be checked; no keys were overwritten"; }
+            if (mkdirat(parent, staged, 0700) != 0) { throw "Could not create private key staging directory"; }
+            created = true;
+            stage = KeyFiles.openDirectory([staged], initial=parent);
+            for member in KeyArchive.members() {
+                var relative = Strings.split(member, "/");
+                var directory = KeyFiles.openDirectory(KeyFiles.parent(relative), create=true, initial=stage);
+                var descriptor = -1;
+                try {
+                    descriptor = openat(directory, relative.get(relative.len - 1), (int)O_WRONLY | (int)O_CREAT | (int)O_EXCL | (int)O_NOFOLLOW | (int)O_CLOEXEC, 0600);
+                    if (descriptor < 0) { throw "Could not stage key bundle file"; }
+                    KeyFiles.write(descriptor, files.get(member));
+                    if (fsync(descriptor) != 0 || fsync(directory) != 0) { throw "Could not sync key bundle file"; }
+                } finally { if (descriptor >= 0) { close(descriptor); } close(directory); }
+            }
+            if (fsync(stage) != 0 || renameat2(parent, staged, parent, name, RENAME_NOREPLACE) != 0) {
+                throw "Could not atomically publish key bundle; no existing keys were overwritten";
+            }
+            published = true;
+            if (fsync(parent) != 0) { throw "Key bundle was published but its directory could not be synced"; }
+        } finally {
+            if (!published && stage >= 0) {
+                for member in KeyArchive.members() { unlinkat(stage, member, 0); }
+                for directory in ["keys/db", "keys/KEK", "keys/PK", "keys"] { unlinkat(stage, directory, AT_REMOVEDIR); }
+            }
+            if (stage >= 0) { close(stage); }
+            if (!published && created) { unlinkat(parent, staged, AT_REMOVEDIR); }
+            close(parent);
+            signals.close();
+        }
+    }
+}

@@ -89,7 +89,7 @@ merely to create or back up keys.
 
 ## Existing external recovery artifact and physical gate
 
-`nix/system/nixos/recovery.nix` already exposes the self-contained recovery system
+`config/system/nixos/recovery.nix` already exposes the self-contained recovery system
 and UKI. No new installer ISO or recovery-image framework is needed. The existing
 build entrypoint for an **unsigned** Deck recovery UKI is:
 

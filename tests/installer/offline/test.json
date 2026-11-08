@@ -5,7 +5,7 @@
   "args": {
     "arch": "x86_64",
     "prebuiltHost": "QEMU-x86_64",
-    "hostFile": "/etc/nixos/nix/hosts/x86_64/QEMU/QEMU.nix"
+    "hostFile": "/etc/nixos/config/hosts/x86_64/QEMU/default.nix"
   },
   "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
   "isoUrl": "",

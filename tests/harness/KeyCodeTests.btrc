@@ -1,7 +1,7 @@
 #include <assert.h>
 
 import Library.Vector;
-import ../e2e/qemu/VmProvisioner.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/simulator/qemu/VmProvisioner.btrc;
 
 int main() {
     /* every character must become a key, or the passphrase arrives truncated and

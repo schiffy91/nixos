@@ -60,7 +60,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e\ntrap 'tail -60 /tmp/nixosctl-failed-install.log' ERR\ncd /etc/nixos\n# Discover the configured fixture so this also works in a native ARM run.\nhost=$(find nix/hosts -path '*/VM-TEST/VM-TEST.nix' -print -quit)\ntest -n \"$host\"\nsed -i 's|settings.disk.device = \"/dev/vda\";|settings.disk.device = \"/dev/nixosctl-missing-disk\";|' \"$host\"\nprevious_hash=$(cat /var/lib/nixos/credentials/password-hash)\nif printf 'testpass123\\ntestpass123\\n' | /run/nixosctl-under-test install --format --yes >/tmp/nixosctl-failed-install.log 2>&1; then\n  echo 'expected disk preparation to fail'; exit 1\nfi\ntest \"$previous_hash\" != \"$(cat /var/lib/nixos/credentials/password-hash)\"\ngrep -F /dev/nixosctl-missing-disk /tmp/nixosctl-failed-install.log >/dev/null\ntest ! -e /run/nixosctl-install/passphrase\nsed -i 's|settings.disk.device = \"/dev/nixosctl-missing-disk\";|settings.disk.device = \"/dev/vda\";|' \"$host\"\nprintf failure-cleaned\n",
+      "command": "set -e\ntrap 'tail -60 /tmp/nixosctl-failed-install.log' ERR\ncd /etc/nixos\n# Discover the configured fixture so this also works in a native ARM run.\nhost=$(find config/hosts -path '*/VM-TEST/default.nix' -print -quit)\ntest -n \"$host\"\nsed -i 's|settings.disk.device = \"/dev/vda\";|settings.disk.device = \"/dev/nixosctl-missing-disk\";|' \"$host\"\nprevious_hash=$(cat /var/lib/nixos/credentials/password-hash)\nif printf 'testpass123\\ntestpass123\\n' | /run/nixosctl-under-test install --format --yes >/tmp/nixosctl-failed-install.log 2>&1; then\n  echo 'expected disk preparation to fail'; exit 1\nfi\ntest \"$previous_hash\" != \"$(cat /var/lib/nixos/credentials/password-hash)\"\ngrep -F /dev/nixosctl-missing-disk /tmp/nixosctl-failed-install.log >/dev/null\ntest ! -e /run/nixosctl-install/passphrase\nsed -i 's|settings.disk.device = \"/dev/nixosctl-missing-disk\";|settings.disk.device = \"/dev/vda\";|' \"$host\"\nprintf failure-cleaned\n",
       "expect": "failure-cleaned",
       "timeout": 1800
     },
@@ -87,7 +87,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; script=/mnt/etc/nixos/.github/ci/publish.py; test -x \"$script\" || { echo 'the permissions pass stripped an executable bit'; ls -l \"$script\"; exit 1; }; printf exec-bits-kept",
+      "command": "set -e; script=/mnt/etc/nixos/tests/hosts-boot/unlock_and_wait.sh; test -x \"$script\" || { echo 'the permissions pass stripped an executable bit'; ls -l \"$script\"; exit 1; }; printf exec-bits-kept",
       "expect": "exec-bits-kept"
     },
     {

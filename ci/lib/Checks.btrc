@@ -1,0 +1,133 @@
+import Library.Console;
+import ./Repository.btrc;
+import ./Lsp.btrc;
+
+class Checks {
+    public Repository repository;
+    private Vector<string> failures = [];
+    public Checks(Repository repository) { self.repository = repository; }
+
+    public bool run(string name, string executable, Vector<string> arguments, bool quiet = false) {
+        if (!quiet) { print(f"\n{name}"); }
+        var result = ChildProcess.run(executable, arguments, cwd=self.repository.root,
+            stdout=quiet ? COMMAND_OUTPUT_SUPPRESS : COMMAND_OUTPUT_STREAM,
+            stderr=quiet ? COMMAND_OUTPUT_COLLECT : COMMAND_OUTPUT_STREAM);
+        if (!result.ok()) {
+            self.failures.push(name);
+            if (quiet) { print(f"{name}: {result.stderr()}"); }
+        }
+        return result.ok();
+    }
+    public void files(string name, string executable, Vector<string> arguments, Vector<string> paths) {
+        print(f"\n{name}: {paths.len} files");
+        var logs = PathTools.join(self.repository.root, "build/lint"); FileSystem.mkdirp(logs);
+        // Four independent compiler processes retain the previous audit's
+        // bounded concurrency. Drain output as bytes rather than buffering IR.
+        for (int start = 0; start < paths.len; start += 4) {
+            Vector<PipeProcess> children = []; Vector<string> errors = [];
+            for (int index = start; index < start + 4 && index < paths.len; index++) {
+                var command = arguments.copy(); command.push(PathTools.join(self.repository.root, paths.get(index)));
+                var log = PathTools.join(logs, name.replace(" ", "-") + f"-{index}.log");
+                var child = PipeProcess(executable, command, log); child.closeInput(); children.push(child); errors.push(log);
+            }
+            for (int index = 0; index < children.len; index++) {
+                var child = children.get(index); var output = Bytes(); var deadline = MonotonicClock.deadlineAfter(300000);
+                while (true) {
+                    var bytes = child.read(deadline); if (bytes == null) { break; }
+                    int remaining = 65536 - output.length();
+                    if (remaining > 0) { output.appendBytes(bytes.slice(0, bytes.length() < remaining ? bytes.length() : remaining)); }
+                }
+                if (child.wait(deadline) != 0) {
+                    var path = paths.get(start + index); self.failures.push(path);
+                    print(path + ":\n" + output.toStringLossy() + Path.readAll(errors.get(index)));
+                } else { unlink(errors.get(index)); }
+            }
+        }
+    }
+    public void record(JSONValue diagnostics, string path, JSONValue errors, JSONValue warnings) {
+        for diagnostic in diagnostics.elements() {
+            diagnostic.set("path", JSONValue.makeString(path));
+            if (!diagnostic.has("severity") || diagnostic.get("severity").asInt() == 1) { errors.push(diagnostic); }
+            else { warnings.push(diagnostic); }
+        }
+    }
+    public bool lsp(string server, string language, Vector<string> paths) {
+        FileSystem.mkdirp(PathTools.join(self.repository.root, "build/lint"));
+        var session = LspSession(server, language, self.repository.root, PathTools.join(self.repository.root, f"build/lint/{language}-server.log"));
+        var errors = JSONValue.makeArray(); var warnings = JSONValue.makeArray();
+        Vector<string> uris = [];
+        int count = 0;
+        for path in paths {
+            var absolute = PathTools.join(self.repository.root, path);
+            uris.push(LspSession.uri(absolute));
+            self.record(session.diagnostics(absolute, language, Path.readAll(absolute)), path, errors, warnings);
+            count++;
+            if (count % 20 == 0) { print(f"{language} {count}/{paths.len}: {errors.size()} errors"); }
+        }
+        session.finish();
+        for uri in session.workspace.keys() { if (!uris.contains(uri)) { self.record(session.workspace.get(uri), uri, errors, warnings); } }
+        var report = JSONValue.makeObject(); report.set("errors", errors); report.set("warnings", warnings);
+        Path.writeAll(PathTools.join(self.repository.root, f"build/lint/{language}-diagnostics.json"), report.document());
+        print(f"{language}: {paths.len} files, {errors.size()} errors, {warnings.size()} other diagnostics");
+        for error in errors.elements() { print(error.get("path").asString() + ": " + error.get("message").asString()); }
+        if (errors.size() > 0) { self.failures.push(f"{language} workspace diagnostics"); }
+        return errors.size() == 0;
+    }
+    public bool builtinRegression(string server) {
+        FileSystem.mkdirp(PathTools.join(self.repository.root, "build/lint"));
+        var session = LspSession(server, "nix", self.repository.root, PathTools.join(self.repository.root, "build/lint/nix-regression-server.log"));
+        var valid = session.diagnostics(PathTools.join(self.repository.root, "build/lint/valid-builtins.nix"), "nix", "{ a = builtins.getFlake; b = builtins.parseFlakeRef; c = builtins.flakeRefToString; }\n");
+        var invalid = session.diagnostics(PathTools.join(self.repository.root, "build/lint/invalid-builtin.nix"), "nix", "builtins.getFlkae\n");
+        bool genuineError = false;
+        for diagnostic in invalid.elements() { if (diagnostic.get("code").asString().equals("sema-primop-unknown")) { genuineError = true; } }
+        session.finish();
+        if (valid.size() != 0 || !genuineError) { self.failures.push("Nix builtin regression"); return false; }
+        print("PASS: flake builtins recognized; unknown builtin still diagnosed");
+        return true;
+    }
+    public int lint(bool full) {
+        self.repository.discover();
+        var nix = self.repository.suffix(".nix"); var btrc = self.repository.suffix(".btrc");
+        var python = self.repository.scripts("python"); var shell = self.repository.scripts("bash");
+        self.files("Nix parser", "nix-instantiate", ["--parse"], nix);
+        self.files("BTRC compiler", "btrcpy", ["--strict-imports", "--emit-ir"], btrc);
+        self.files("Python syntax", "python3", ["-m", "py_compile"], python);
+        var pythonLint = ["check", "--select", "E9,F63,F7,F82"]; for path in python { pythonLint.push(path); }
+        self.run("Python lint", "ruff", pythonLint);
+        var types = ["--project", "ci/pyrightconfig.json", "--pythonpath", Environment.get("CI_PYTHON", "python3")]; for path in python { types.push(path); }
+        self.run("Python workspace types", "pyright", types);
+        self.files("JavaScript parser", "node", ["--check"], self.repository.suffix(".js"));
+        self.files("Lua compiler", "luac", ["-p"], self.repository.suffix(".lua"));
+        var shellLint = ["--severity=error", "--shell=bash"]; for path in shell { shellLint.push(path); }
+        self.run("ShellCheck", "shellcheck", shellLint);
+        self.run("GitHub workflows", "actionlint", []);
+        for path in self.repository.suffix(".json") {
+            if (JSONValue.readFile(PathTools.join(self.repository.root, path)).isError()) { print(f"Invalid JSON: {path}"); self.failures.push(path); }
+        }
+        self.files("TOML parser", "taplo", ["check"], self.repository.suffix(".toml"));
+        self.files("YAML parser", "yq", ["eval", "."], self.repository.suffix(".yaml"));
+        self.files("YAML parser", "yq", ["eval", "."], self.repository.suffix(".yml"));
+        self.lsp("nixd", "nix", nix); self.builtinRegression("nixd"); self.lsp("btrc-lsp", "btrc", btrc);
+        if (full) {
+            self.run("Native programs and unit suites", "make", ["-j4", "build", "unit"]);
+            self.run("CI protocol and publisher contracts", "nix-build", ["tests/ci", "--no-out-link"]);
+            self.run("Signed module verification", "nix-build", ["tests/kernel-trust/unit.nix", "--no-out-link"]);
+            self.run("Key archive and recovery contracts", "nix-build", ["tests/secure-boot/unit.nix", "tests/recovery/unit.nix", "--no-out-link"]);
+            self.run("Recovery artifact installation", "nix-build", ["tests/recovery/artifacts", "--no-out-link"]);
+            self.run("Sleep controller contracts", "nix-build", ["tests/sleep-lock/unit", "--no-out-link"]);
+            self.run("Sleep authentication and display helpers", "nix-build", ["tests/sleep-lock/helpers", "--no-out-link"]);
+            self.run("Unlock header and memory contracts", "nix-build", ["tests/opportunistic-unlock/unit", "--no-out-link"]);
+            self.run("Trusted connection rules", "nix-build", ["tests/networking/policy", "--no-out-link"]);
+            self.run("Gaming programs and unit suites", "nix-build", ["tests/gaming", "--no-out-link"]);
+            self.run("Native compilation", "nix-build", ["ci/native.nix", "--no-out-link"]);
+            var coverage = ChildProcess.run("nix", ["eval", "--json", "--impure", "--expr", "(import ./ci/native.nix {}).coveredSources"], cwd=self.repository.root);
+            var covered = JSONValue.parse(coverage.stdout());
+            Vector<string> actual = self.repository.suffix(".c"); for path in self.repository.suffix(".h") { actual.push(path); }
+            Vector<string> declared = []; for entry in covered.elements() { declared.push(entry.asString()); }
+            if (!coverage.ok() || !covered.isArray() || !actual.sorted().join("\n").equals(declared.sorted().join("\n"))) { self.failures.push("Native source coverage"); print("Native C/header inventory does not match ci/native.nix"); }
+            self.run("Flake configuration checks", "nix", ["flake", "check", "--no-build", "--all-systems"]);
+        }
+        if (!self.failures.isEmpty()) { print("Failed checks: " + self.failures.join(", ")); return 1; }
+        print("All compiler and workspace error checks passed."); return 0;
+    }
+}

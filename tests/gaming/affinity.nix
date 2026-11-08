@@ -1,6 +1,6 @@
 { pkgs }:
 let
-  launcher = import ../../nix/apps/gaming/launch/package.nix { inherit pkgs; };
+  launcher = import ../../config/pkgs/gaming/game-run/package.nix { inherit pkgs; };
 in pkgs.runCommand "gaming-affinity-tests" {
   nativeBuildInputs = [ pkgs.python3 ];
 } ''

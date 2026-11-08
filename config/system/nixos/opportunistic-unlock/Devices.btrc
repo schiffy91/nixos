@@ -1,0 +1,168 @@
+import ./Native.btrc;
+
+struct BlockDevice {
+    char name[NAME_MAX + 1];
+    dev_t device, disk;
+    uint64_t sequence, start, size;
+};
+
+bool readText(const char *path, char *text, size_t size) {
+    int fd = open(path, (int)O_RDONLY | (int)O_CLOEXEC | (int)O_NOFOLLOW);
+    if (fd < 0) { return false; }
+    ssize_t n = read(fd, text, size - (size_t)1);
+    close(fd);
+    if (n <= (ssize_t)0 || (size_t) n == size - (size_t)1) { return false; }
+    text[n] = 0;
+    text[strcspn(text, "\r\n")] = 0;
+    return true;
+}
+
+bool numberAt(const char *directory, const char *name, uint64_t *value) {
+    char path[PATH_MAX], text[64], *end;
+    if (snprintf(path, sizeof(path), "%s/%s", directory, name) >= (int) sizeof(path) ||
+      !readText(path, text, sizeof(text)) || text[0] < '0' || text[0] > '9') return false;
+    errno = 0;
+    *value = strtoull(text, &end, 10);
+    return errno == 0 && *end == 0;
+}
+
+bool deviceAt(const char *directory, dev_t *device) {
+    char path[PATH_MAX], text[64], extra;
+    unsigned majorNumber, minorNumber;
+    if (snprintf(path, sizeof(path), "%s/dev", directory) >= (int) sizeof(path) ||
+      !readText(path, text, sizeof(text)) ||
+      sscanf(text, "%u:%u%c", &majorNumber, &minorNumber, &extra) != 2) return false;
+    *device = makedev(majorNumber, minorNumber);
+    return true;
+}
+
+/* Kernel generation and sector ranges identify an attachment, not its owner.
+* Stacked/loop/network devices are outside this one-pass local-device scan. */
+bool blockInfo(const char *name, struct BlockDevice *block) {
+    char path[PATH_MAX], resolved[PATH_MAX], disk[PATH_MAX];
+    snprintf(path, sizeof(path), "/sys/class/block/%s", name);
+    if (strlen(name) > NAME_MAX || !realpath(path, resolved) ||
+      strstr(resolved, "/virtual/block/") != NULL || strstr(resolved, "/session") != NULL ||
+      strstr(resolved, "/rport-") != NULL || strstr(resolved, "/nvme-fabrics/") != NULL) return false;
+    strcpy(disk, resolved);
+    uint64_t partition;
+    block->start = 0;
+    if (numberAt(resolved, "partition", &partition)) {
+        *strrchr(disk, '/') = 0;
+        if (!numberAt(resolved, "start", &block->start)) { return false; }
+    }
+    if (strncmp(strrchr(disk, '/') + 1, "nvme", 4) == 0) {
+        char transport[32];
+        if (snprintf(path, sizeof(path), "%s/device/transport", disk) >= (int) sizeof(path) ||
+          !readText(path, transport, sizeof(transport)) || strcmp(transport, "pcie") != 0)
+            return false;
+    }
+    if (!deviceAt(resolved, &block->device) || !deviceAt(disk, &block->disk) ||
+      !numberAt(disk, "diskseq", &block->sequence) || block->sequence == 0 ||
+      !numberAt(resolved, "size", &block->size) || block->size == 0 ||
+      block->start > (uint64_t)UINT64_MAX - block->size) return false;
+    snprintf(path, sizeof(path), "/dev/%s", name);
+    struct stat st;
+    if (lstat(path, &st) < 0 || !S_ISBLK(st.st_mode) || (dev_t)st.st_rdev != block->device) { return false; }
+    strcpy(block->name, name);
+    return true;
+}
+
+bool overlaps(const struct BlockDevice *a, const struct BlockDevice *b) {
+    return a->disk == b->disk && a->sequence == b->sequence &&
+        a->start < b->start + b->size && b->start < a->start + a->size;
+}
+
+bool overlapsRoot(const struct BlockDevice *candidate, dev_t root, unsigned depth) {
+    char path[PATH_MAX], resolved[PATH_MAX];
+    unsigned rootMajor = (unsigned)major(root);
+    unsigned rootMinor = (unsigned)minor(root);
+    snprintf(path, sizeof(path), "/sys/dev/block/%u:%u", rootMajor, rootMinor);
+    if (depth > 8 || !realpath(path, resolved)) { return true; }
+    struct BlockDevice leaf;
+    if (blockInfo(strrchr(resolved, '/') + 1, &leaf)) { return overlaps(candidate, &leaf); }
+    if (snprintf(path, sizeof(path), "%s/slaves", resolved) >= (int) sizeof(path)) { return true; }
+    DIR *directory = opendir(path);
+    if (!directory) { return true; }
+    bool found = false, blocked = false;
+    struct dirent *entry;
+    while ((entry = readdir(directory))) {
+        if (entry->d_name[0] == '.') continue;
+        found = true;
+        char slave[PATH_MAX];
+        dev_t device;
+        snprintf(slave, sizeof(slave), "/sys/class/block/%s", entry->d_name);
+        if (!deviceAt(slave, &device) || overlapsRoot(candidate, device, depth + 1)) {
+            blocked = true;
+            break;
+        }
+    }
+    closedir(directory);
+    return !found || blocked;
+}
+
+bool inUse(const struct BlockDevice *block) {
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/sys/class/block/%s/holders", block->name);
+    DIR *directory = opendir(path);
+    if (!directory) { return true; }
+    bool held = false;
+    struct dirent *entry;
+    while ((entry = readdir(directory)))
+        if (entry->d_name[0] != '.') { held = true; break; }
+    closedir(directory);
+    if (held) { return true; }
+    FILE *mounts = fopen("/proc/self/mountinfo", "re");
+    if (!mounts) { return true; }
+    char *line = NULL;
+    size_t length = 0;
+    while (getline(&line, &length, mounts) >= 0) {
+        unsigned majorNumber, minorNumber;
+        if (sscanf(line, "%*u %*u %u:%u", &majorNumber, &minorNumber) == 2 &&
+          (dev_t)makedev(majorNumber, minorNumber) == block->device) {
+            held = true;
+            break;
+        }
+    }
+    free(line);
+    fclose(mounts);
+    return held;
+}
+
+bool eligible(const struct BlockDevice *candidate, dev_t root) {
+    if (overlapsRoot(candidate, root, 0)) { return false; }
+    DIR *directory = opendir("/sys/class/block");
+    if (!directory) { return false; }
+    bool available = true;
+    struct dirent *entry;
+    while ((entry = readdir(directory))) {
+        struct BlockDevice other;
+        if (blockInfo(entry->d_name, &other) && overlaps(candidate, &other) && inUse(&other)) {
+            available = false;
+            break;
+        }
+    }
+    closedir(directory);
+    return available;
+}
+
+bool sameAttachment(const struct BlockDevice *candidate, int fd) {
+    struct stat st;
+    uint64_t sequence;
+    struct BlockDevice current;
+    return fstat(fd, &st) == 0 && S_ISBLK(st.st_mode) && (dev_t)st.st_rdev == candidate->device &&
+        ioctl(fd, unlockDiskSequence, &sequence) == 0 && sequence == candidate->sequence &&
+        blockInfo(candidate->name, &current) && current.device == candidate->device &&
+        current.disk == candidate->disk && current.sequence == candidate->sequence &&
+        current.start == candidate->start && current.size == candidate->size;
+}
+
+bool mappingMatches(const char *mapping, dev_t backing) {
+    struct crypt_device *active = NULL;
+    if (crypt_init_by_name(&active, mapping) < 0) { return false; }
+    const char *path = crypt_get_device_name(active);
+    struct stat st;
+    bool matches = path != NULL && stat(path, &st) == 0 && S_ISBLK(st.st_mode) && (dev_t)st.st_rdev == backing;
+    crypt_free(active);
+    return matches;
+}

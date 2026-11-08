@@ -1,0 +1,32 @@
+import keys.Archive;
+import keys.Files;
+#include <assert.h>
+
+int main() {
+    Map<string, Bytes> files = {};
+    for name in KeyArchive.members() { files.put(name, Bytes.fromString(f"contents of {name}")); }
+    var archive = KeyArchive.encode(files);
+    var decoded = KeyArchive.decode(archive);
+    assert(decoded.len == 7);
+    for name in KeyArchive.members() { assert(decoded.get(name).equals(files.get(name))); }
+    for path in ["relative", "/", "/nix/store/key", "/nix/store", "/keys/../secret", "/keys/./secret", "/keys//secret", "/keys/"] {
+        var rejected = false;
+        try { KeyFiles.components(path); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    assert(KeyFiles.components("/safe/bundle").len == 2);
+    for size in [0, 511, 1024, archive.len - 512, archive.len - 1] {
+        var rejected = false;
+        try { KeyArchive.decode(archive.slice(0, size)); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    for position in [0, 124, 148, 156, 257, 345, archive.len - 1] {
+        var corrupted = archive.slice(0, archive.len);
+        corrupted.set(position, 255);
+        var rejected = false;
+        try { KeyArchive.decode(corrupted); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    print("PASS: fixed key archive round-trip, truncation, checksums, metadata, paths and trailing data");
+    return 0;
+}

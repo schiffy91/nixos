@@ -1,0 +1,5 @@
+manifest-version = 1
+[package]
+name = "sleep_helper_tests"
+[dependencies]
+helpers = { path = "../../../config/system/nixos/sleep/helpers" }

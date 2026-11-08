@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "nixos_secure_boot_tests"
+
+[dependencies]
+keys = { path = "../../config/pkgs/utils/nixosctl/secure-boot-keys" }

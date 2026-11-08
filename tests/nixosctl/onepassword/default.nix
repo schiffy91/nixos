@@ -7,7 +7,7 @@ let
 in pkgs.testers.runNixOSTest {
   name = "onepassword-integration";
   nodes.machine = { ... }: {
-    imports = [ ../../../nix/settings.nix ../../../nix/apps/utils/1password.nix ];
+    imports = [ ../../../config/settings.nix ../../../config/pkgs/utils/1password.nix ];
     security.polkit.enable = true;
     settings.users.admin = {
       username = "operator";

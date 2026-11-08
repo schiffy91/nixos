@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="module-adversary-", dir="/run") as temp
     image.write_bytes(b"fixture image " + certificate)
     target.write_bytes(signed)
     cert.write_bytes(certificate)
-    command = ["python3", "/etc/check-module-trust.py", str(image), str(bundle), version, str(package)]
+    command = ["/etc/check-module-trust", str(image), str(bundle), version, str(package)]
     run(*command)
 
     def rejected(reason):

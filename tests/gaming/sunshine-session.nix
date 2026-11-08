@@ -4,7 +4,7 @@ let
     test "$*" = "--user is-active --quiet gamescope-session.service"
     exit "''${GAMESCOPE_STATUS:-3}"
   '';
-  launcher = import ../../nix/apps/gaming/sunshine/session/package.nix {
+  launcher = import ../../config/pkgs/gaming/sunshine/session/package.nix {
     pkgs = pkgs // { systemd = systemctl; };
     desktopCommand = "${pkgs.coreutils}/bin/echo desktop";
     gamingCommand = "${pkgs.coreutils}/bin/echo gaming";

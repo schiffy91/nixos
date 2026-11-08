@@ -1,5 +1,5 @@
 import Library.JSON;
-import ../../btrc/nixosctl/hardware/SecureBootVerification.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/hardware/SecureBootVerification.btrc;
 
 #include <assert.h>
 

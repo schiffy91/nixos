@@ -1,0 +1,27 @@
+import ../../config/system/nixos/recovery/Mount.btrc;
+
+#include <assert.h>
+
+int main() {
+    var mount = JSONValue.parse("{\"source\":\"/dev/root[/root]\",\"options\":\"rw,subvol=/root,compress=zstd\"}");
+    assert(RecoveryMount.subvolume(mount, "root"));
+    assert(!RecoveryMount.subvolume(mount, "roo"));
+    assert(!RecoveryMount.subvolume(mount, "other"));
+    assert(RecoveryMount.device("/dev/root[/root]").equals("/dev/root"));
+    assert(RecoveryMount.device("/dev/root").equals("/dev/root"));
+    assert(RecoveryMount.option("ro,subvolid=5,noatime", "subvolid=5"));
+    assert(!RecoveryMount.option("ro,subvolid=50", "subvolid=5"));
+    assert(RecoveryMount.covered(["/mnt/home"], "/mnt/home/alex"));
+    assert(!RecoveryMount.covered(["/mnt/home"], "/mnt/home-other"));
+    assert(!RecoveryMount.covered(["/mnt/home"], "/mnt/home"));
+    assert(RecoveryMount.covered(["/"], "/home"));
+    var recovery = RecoveryMount(JSONValue.makeObject(), "/mnt///");
+    assert(recovery.path("/").equals("/mnt"));
+    assert(recovery.path("/home").equals("/mnt/home"));
+    assert(RecoveryMount(JSONValue.makeObject(), "/").path("/home").equals("/home"));
+    var rejected = false;
+    try { RecoveryMount(JSONValue.makeObject(), "relative"); } catch (string error) { rejected = true; }
+    assert(rejected);
+    print("PASS: recovery mount identity, subvolume matching, persistence coverage and target paths");
+    return 0;
+}

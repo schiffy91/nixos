@@ -1,0 +1,126 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Timer;
+import ../../../../lib/BackgroundProcess.btrc;
+
+volatile sig_atomic_t slopsmithSignal = 0;
+void stopSlopsmith(int number) { slopsmithSignal = (sig_atomic_t)number; }
+
+class Slopsmith {
+    class string expand(string value) {
+        if (value.equals("$HOME")) { return Environment.get("HOME", ""); }
+        if (value.startsWith("$HOME/")) { return Environment.get("HOME", "") + value.substring(5, value.length() - 5); }
+        return value;
+    }
+
+    class int port(string value) {
+        if (value.isEmpty() || value.length() > 5) { throw "Invalid Slopsmith port"; }
+        for (int index = 0; index < value.length(); index++) { if (value[index] < '0' || value[index] > '9') { throw "Invalid Slopsmith port"; } }
+        var number = Strings.toInt(value);
+        if (number < 1 || number > 65535) { throw "Invalid Slopsmith port"; }
+        return number;
+    }
+
+    class JSONValue compose(string source, string dlc, string configuration, int port) {
+        // JSON is valid Compose YAML and safely encodes arbitrary directory names.
+        var service = JSONValue.makeObject();
+        var build = JSONValue.makeObject(); build.set("context", JSONValue.makeString(source));
+        service.set("build", build);
+        var ports = JSONValue.makeArray(); ports.push(JSONValue.makeString(f"127.0.0.1:{port}:8000")); service.set("ports", ports);
+        var volumes = JSONValue.makeArray();
+        for pair in [[dlc, "/dlc"], [configuration, "/config"]] {
+            var mount = JSONValue.makeObject();
+            mount.set("type", JSONValue.makeString("bind")); mount.set("source", JSONValue.makeString(pair.get(0))); mount.set("target", JSONValue.makeString(pair.get(1))); mount.set("read_only", JSONValue.makeBool(pair.get(1).equals("/dlc")));
+            volumes.push(mount);
+        }
+        service.set("volumes", volumes);
+        var environment = JSONValue.makeObject();
+        environment.set("PYTHONPATH", JSONValue.makeString("/app/lib:/app"));
+        environment.set("DLC_DIR", JSONValue.makeString("/dlc"));
+        environment.set("CONFIG_DIR", JSONValue.makeString("/config"));
+        environment.set("RSCLI_PATH", JSONValue.makeString("/opt/rscli/RsCli"));
+        environment.set("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", JSONValue.makeString("1"));
+        environment.set("LOG_FILE", JSONValue.makeString("/config/slopsmith.log"));
+        service.set("environment", environment);
+        var services = JSONValue.makeObject(); services.set("web", service);
+        var document = JSONValue.makeObject(); document.set("services", services);
+        return document;
+    }
+
+    class string runtimeDirectory() {
+        var directory = Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/slopsmith";
+        if (FileSystem.mkdirp(directory) != 0) { throw "Cannot create Slopsmith runtime directory"; }
+        return directory;
+    }
+
+    class int launch(JSONValue config) {
+        var dlc = Slopsmith.expand(Environment.get("DLC_PATH", config.get("rocksmithDlc").asString()));
+        var directory = Slopsmith.expand(Environment.get("CONFIG_DIR", config.get("configDir").asString()));
+        var source = Environment.get("SLOPSMITH_SOURCE", config.get("source").asString());
+        var port = Slopsmith.port(Environment.get("SLOPSMITH_PORT", config.get("port").stringify()));
+        if (!FileSystem.isDir(dlc)) { throw f"Rocksmith DLC directory does not exist: {dlc}"; }
+        var podman = ChildProcess.run("podman", ["info"], stdout=COMMAND_OUTPUT_SUPPRESS);
+        if (!podman.ok()) { throw f"Podman is not ready: {podman.stderr()}"; }
+        if (FileSystem.mkdirp(directory) != 0) { throw "Cannot create Slopsmith configuration directory"; }
+        var file = Slopsmith.runtimeDirectory() + "/docker-compose.yml";
+        if (!Path.writeAll(file, Slopsmith.compose(source, dlc, directory, port).stringifyPretty())) { throw "Cannot write Slopsmith Compose configuration"; }
+        return ChildProcess.run("podman-compose", ["-p", "slopsmith", "-f", file, "up", "--build"], stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM).code;
+    }
+
+    class void stop(string directory) {
+        var compose = directory + "/docker-compose.yml";
+        if (FileSystem.isFile(compose)) { ChildProcess.run("podman-compose", ["-p", "slopsmith", "-f", compose, "down", "--remove-orphans"], stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM); }
+        ChildProcess.run("podman", ["rm", "-f", "slopsmith_web_1"]);
+        ChildProcess.run("podman", ["network", "rm", "slopsmith_default"]);
+        unlink(directory + "/slopsmith.pid");
+    }
+
+    class bool openWhenReady(string url) {
+        if (!ChildProcess.run("curl", ["--fail", "--silent", "--show-error", "--max-time", "2", url], timeoutMilliseconds=3000).ok()) { return false; }
+        ChildProcess.run("xdg-open", [url]);
+        return true;
+    }
+
+    class int session(JSONValue config, string configuration, string executable) {
+        var directory = Slopsmith.runtimeDirectory();
+        var state = Environment.get("XDG_STATE_HOME", Environment.get("HOME", "") + "/.local/state") + "/slopsmith";
+        if (FileSystem.mkdirp(state) != 0) { throw "Cannot create Slopsmith log directory"; }
+        var port = Slopsmith.port(Environment.get("SLOPSMITH_PORT", config.get("port").stringify()));
+        var url = f"http://127.0.0.1:{port}";
+        var locked = AdvisoryFileLock.acquire(directory + "/session.lock");
+        if (!locked.ok()) {
+            if ((int)locked.error().nativeCode() != (int)EWOULDBLOCK && (int)locked.error().nativeCode() != (int)EAGAIN) { throw "Cannot lock Slopsmith session"; }
+            print("Slopsmith is already running; opening the existing session.");
+            for (int attempt = 0; attempt < 120; attempt++) { if (Slopsmith.openWhenReady(url)) { return 0; } usleep(500000); }
+            print(f"Slopsmith did not become ready at {url}. Logs are in {state}/slopsmith.log.");
+            return 0;
+        }
+        var lease = locked.value();
+        signal((int)SIGINT, stopSlopsmith); signal((int)SIGTERM, stopSlopsmith); signal((int)SIGHUP, stopSlopsmith);
+        print("Starting Slopsmith. Close this window to stop the Podman service.");
+        print(f"Logs are also written to {state}/slopsmith.log");
+        // A single pipeline keeps console output and the log identical; all
+        // lifecycle, readiness and cleanup policy lives in this controller.
+        var pipeline = f"{ShellWords.quote(executable)} {ShellWords.quote(configuration)} launch 2>&1 | tee {ShellWords.quote(state + "/slopsmith.log")}";
+        var service = BackgroundProcess.start("bash", ["-o", "pipefail", "-c", pipeline]);
+        Path.writeAll(directory + "/slopsmith.pid", f"{service.pid}\n");
+        var attempts = 0;
+        bool opened = false;
+        try {
+            while (service.running() && slopsmithSignal == (sig_atomic_t)0) {
+                if (!opened && attempts < 120) {
+                    opened = Slopsmith.openWhenReady(url); attempts++;
+                    if (!opened && attempts == 120) { print(f"Slopsmith did not become ready at {url}. Logs are in {state}/slopsmith.log."); }
+                }
+                usleep(500000);
+            }
+        } catch (string error) { Slopsmith.stop(directory); service.stop(); lease.close(); throw error; }
+        print("Stopping Slopsmith...");
+        Slopsmith.stop(directory);
+        service.stop();
+        lease.close();
+        print("Slopsmith stopped.");
+        return slopsmithSignal == (sig_atomic_t)0 ? service.code : (slopsmithSignal == (sig_atomic_t)SIGINT ? 130 : 143);
+    }
+}

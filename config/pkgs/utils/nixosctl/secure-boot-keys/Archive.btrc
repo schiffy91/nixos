@@ -1,0 +1,102 @@
+import Library.Bytes;
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
+
+// The transfer format is deliberately a fixed USTAR bundle, not an extractor.
+class KeyArchive {
+    class Vector<string> members() {
+        return ["GUID", "keys/PK/PK.key", "keys/PK/PK.pem", "keys/KEK/KEK.key", "keys/KEK/KEK.pem", "keys/db/db.key", "keys/db/db.pem"];
+    }
+
+    class bool zero(Bytes bytes, int start, int end) {
+        for (int index = start; index < end; index++) { if (bytes.get(index) != 0) { return false; } }
+        return true;
+    }
+
+    class string text(Bytes bytes, int offset, int length) {
+        var end = offset;
+        while (end < offset + length && bytes.get(end) != 0) { end++; }
+        var value = bytes.slice(offset, end);
+        if (!value.isNulFreeUtf8()) { throw "Invalid key archive header"; }
+        return value.toString();
+    }
+
+    class int octal(Bytes bytes, int offset, int length) {
+        var value = KeyArchive.text(bytes, offset, length).trim();
+        if (value.isEmpty()) { return 0; }
+        var number = 0;
+        for (int index = 0; index < value.length(); index++) {
+            if (value[index] < '0' || value[index] > '7' || number > 1048576) { throw "Invalid key archive number"; }
+            number = number * 8 + (int)(value[index] - '0');
+        }
+        return number;
+    }
+
+    class Map<string, Bytes> decode(Bytes archive) {
+        if (archive.len < 1024 || archive.len > 1048576 || archive.len % 512 != 0 || !KeyArchive.zero(archive, archive.len - 1024, archive.len)) {
+            throw "Incomplete or oversized key archive";
+        }
+        Map<string, Bytes> files = {};
+        var offset = 0;
+        while (offset + 512 <= archive.len && !KeyArchive.zero(archive, offset, offset + 512)) {
+            var name = KeyArchive.text(archive, offset, 100);
+            if (!KeyArchive.members().contains(name) || files.has(name) || archive.get(offset + 156) != (int)'0'
+                || !KeyArchive.zero(archive, offset + 345, offset + 500)
+                || !KeyArchive.text(archive, offset + 257, 6).equals("ustar")) {
+                throw "Key archive must contain exactly the seven regular sbctl bundle files";
+            }
+            var checksum = 0;
+            for (int index = 0; index < 512; index++) { checksum = checksum + (index >= 148 && index < 156 ? 32 : archive.get(offset + index)); }
+            if (checksum != KeyArchive.octal(archive, offset + 148, 8)) { throw "Invalid key archive checksum"; }
+            var size = KeyArchive.octal(archive, offset + 124, 12);
+            if (size <= 0 || size > 65536) { throw "Empty or oversized archive member"; }
+            var end = offset + 512 + ((size + 511) / 512) * 512;
+            if (end > archive.len - 1024) { throw "Incomplete archive member"; }
+            files.put(name, archive.slice(offset + 512, offset + 512 + size));
+            offset = end;
+        }
+        if (!KeyArchive.zero(archive, offset, archive.len)) { throw "Unexpected trailing data in key archive"; }
+        if (files.len != KeyArchive.members().len) { throw "Incomplete key bundle"; }
+        return files;
+    }
+
+    class void field(Bytes header, int offset, string text) {
+        for (int index = 0; index < text.length(); index++) { header.set(offset + index, (int)text[index]); }
+    }
+
+    class void number(Bytes header, int offset, int length, int value) {
+        for (int index = offset + length - 2; index >= offset; index--) {
+            header.set(index, (int)'0' + value % 8);
+            value = value / 8;
+        }
+    }
+
+    class Bytes encode(Map<string, Bytes> files) {
+        var archive = Bytes();
+        for name in KeyArchive.members() {
+            if (!files.has(name) || files.get(name).len < 1 || files.get(name).len > 65536) { throw "Invalid key bundle file"; }
+            var header = Bytes();
+            for (int index = 0; index < 512; index++) { header.append(0); }
+            KeyArchive.field(header, 0, name);
+            KeyArchive.number(header, 100, 8, 0600);
+            KeyArchive.number(header, 108, 8, 0);
+            KeyArchive.number(header, 116, 8, 0);
+            KeyArchive.number(header, 124, 12, files.get(name).len);
+            KeyArchive.number(header, 136, 12, 0);
+            KeyArchive.field(header, 148, "        ");
+            KeyArchive.field(header, 156, "0");
+            KeyArchive.field(header, 257, "ustar");
+            KeyArchive.field(header, 263, "00");
+            var checksum = 0;
+            for (int index = 0; index < 512; index++) { checksum = checksum + header.get(index); }
+            KeyArchive.number(header, 148, 7, checksum);
+            header.set(154, 0);
+            archive.appendBytes(header);
+            archive.appendBytes(files.get(name));
+            while (archive.len % 512 != 0) { archive.append(0); }
+        }
+        for (int index = 0; index < 1024; index++) { archive.append(0); }
+        return archive;
+    }
+}

@@ -1,0 +1,171 @@
+import ./Wine.btrc;
+
+/* Owns a launched session until explicitly detached. All argv/environment data
+ * is copied before fork; the child only uses async-signal-safe POSIX calls. */
+class ProtonChild {
+    public int pid = -1;
+    public ProtonChild(string executable, Vector<string> arguments, Vector<string> environment, string directory, string log) {
+        var resolved = ChildProcessExecutable.resolve(executable, directory, environment, []);
+        if (resolved.isEmpty()) { throw f"{executable} is missing; enter the Battle.net development shell"; }
+        var argv = ChildProcessArguments.build(resolved, arguments);
+        var envp = ChildProcessEnvironment.build(environment, []);
+        char* cwd = CStringArray.copyEntry(directory);
+        FileSystem.mkdirp(PathTools.dirname(log));
+        int output = open(log, ((int)O_WRONLY | (int)O_CREAT | (int)O_TRUNC | (int)O_CLOEXEC), (mode_t)0600);
+        int errors[2];
+        if (argv == null || envp == null || cwd == null || output < 0 || pipe(errors) != 0) {
+            CStringArray.freeAll(argv); CStringArray.freeAll(envp); free(cwd); if (output >= 0) { close(output); }
+            throw "Cannot prepare Battle.net launch";
+        }
+        if (ChildProcess.moveOutsideStandardStreams(&output) != 0 || ChildProcess.moveOutsideStandardStreams(&errors[0]) != 0 || ChildProcess.moveOutsideStandardStreams(&errors[1]) != 0) {
+            close(output); close(errors[0]); close(errors[1]); CStringArray.freeAll(argv); CStringArray.freeAll(envp); free(cwd);
+            throw "Cannot reserve child descriptors";
+        }
+        fcntl(errors[1], F_SETFD, FD_CLOEXEC);
+        int descriptorBound = ChildProcess.descriptorCloseBound();
+        int pid = (int)fork();
+        if (pid == 0) {
+            close(errors[0]);
+            if ((int)setsid() >= 0 && chdir(cwd) == 0 && dup2(output, STDOUT_FILENO) >= 0 && dup2(output, STDERR_FILENO) >= 0) {
+                close(output);
+                // The same runtime close-range provider used by ChildProcess.run,
+                // retaining only the CLOEXEC startup-error pipe above stderr.
+                if (__btrc_close_descriptors_except(descriptorBound, errors[1]) == 0) { execve(argv[0], argv, envp); }
+            }
+            int failure = errno; int ignored = (int)write(errors[1], &failure, sizeof(failure)); _exit(ignored < 0 ? 126 : 127);
+        }
+        close(output); close(errors[1]); CStringArray.freeAll(argv); CStringArray.freeAll(envp); free(cwd);
+        int failure; int count = -1;
+        if (pid > 0) { do { count = (int)read(errors[0], &failure, sizeof(failure)); } while (count < 0 && errno == EINTR); }
+        close(errors[0]); self.pid = pid;
+        if (pid < 0 || count != 0) { self.stop(); throw "Cannot execute Battle.net launcher"; }
+    }
+    public bool wait(int milliseconds) {
+        var deadline = MonotonicClock.deadlineAfter(milliseconds);
+        do {
+            if (self.pid <= 0) { return true; }
+            int status; var result = (int)waitpid(self.pid, &status, WNOHANG);
+            if (result == self.pid || (result < 0 && errno == ECHILD)) { self.pid = -1; return true; }
+            if (result < 0 && errno != EINTR) { throw "Cannot wait for Battle.net launcher"; }
+            Timer.sleepMillis(10);
+        } while (MonotonicClock.before(deadline));
+        return false;
+    }
+    public void stop() {
+        if (self.pid > 0) {
+            kill(self.pid, SIGTERM);
+            if (!self.wait(1000)) { kill(self.pid, SIGKILL); int status; while ((int)waitpid(self.pid, &status, 0) < 0 && errno == EINTR) { } self.pid = -1; }
+        }
+    }
+    public void detach() { self.pid = -1; }
+    public void __del__() { self.stop(); }
+}
+
+class ProtonRuntime {
+    public ProtonContext context;
+    public ProtonRuntime(ProtonContext context) { self.context = context; }
+    class void set(Vector<string> environment, string name, string value) {
+        for (int i = 0; i < environment.len; i++) {
+            if (ChildProcessEnvironment.assignmentHasName(environment.get(i), name)) { environment.set(i, name + "=" + value); return; }
+        }
+        environment.push(name + "=" + value);
+    }
+    class string value(Vector<string> environment, string name) {
+        for entry in environment { if (ChildProcessEnvironment.assignmentHasName(entry, name)) { return entry.substring(name.len() + 1, entry.len() - name.len() - 1); } }
+        return Environment.get(name, "");
+    }
+    public Vector<string> environment(ProtonOptions options, string trace = "quiet") {
+        var c = self.context;
+        Vector<string> result = ["PROTON_LOG=1", "PROTON_LOG_DIR=" + c.logDirectory(), "TMPDIR=/tmp", "WINEPREFIX=" + c.prefix(), "GAMEID=umu-battlenet", "PROTONPATH=" + c.devTool(), "PROTON_USE_WOW64=1", "WINE_SIMULATE_WRITECOPY=1", "WINE_WAYLAND_HACKS=1", "PROTON_ENABLE_WAYLAND=1", "PROTON_ENABLE_HDR=1", "DXVK_HDR=1"];
+        FileSystem.mkdirp(c.logDirectory());
+        var selectedTrace = options.get("--trace", trace);
+        if (!selectedTrace.equals("quiet") && !selectedTrace.equals("modules")) { throw f"Unknown trace preset: {selectedTrace}"; }
+        ProtonRuntime.set(result, "WINEDEBUG", Environment.get("WINEDEBUG", selectedTrace.equals("quiet") ? "-all" : "+timestamp,+pid,+tid,+loaddll,+module"));
+        ProtonRuntime.set(result, "DXVK_LOG_LEVEL", Environment.get("DXVK_LOG_LEVEL", selectedTrace.equals("quiet") ? "none" : "info"));
+        if (options.flag("--winedebug")) { ProtonRuntime.set(result, "WINEDEBUG", options.get("--winedebug")); }
+        for entry in options.environment {
+            var split = entry.find("=", 0); if (split <= 0) { throw f"Environment entry must be KEY=VALUE: {entry}"; }
+            ProtonRuntime.set(result, entry.substring(0, split), entry.substring(split + 1, entry.len() - split - 1));
+        }
+        var log = ProtonRuntime.value(result, "DXVK_LOG_PATH"); if (!log.isEmpty() && !log.equals("none")) { FileSystem.mkdirp(log); }
+        return result;
+    }
+    class Bytes procBytes(string path) {
+        var data = Bytes(); int descriptor = open(path, ((int)O_RDONLY | (int)O_CLOEXEC)); if (descriptor < 0) { return data; }
+        char buffer[8192];
+        while (data.length() < 1048576) {
+            int count = (int)read(descriptor, buffer, sizeof(buffer));
+            if (count < 0 && errno == EINTR) { continue; }
+            if (count <= 0) { break; } data.appendRaw(buffer, count);
+        }
+        close(descriptor); return data;
+    }
+    class Vector<string> environmentEntries(Bytes bytes) {
+        Vector<string> result = []; int start = 0;
+        for (int i = 0; i < bytes.length(); i++) { if (bytes.get(i) == 0) { result.push(bytes.slice(start, i).toStringLossy()); start = i + 1; } }
+        return result;
+    }
+    public Vector<int> processes() {
+        var c = self.context; Vector<int> result = [];
+        for name in FileSystem.listDir("/proc") {
+            if (!Regex.fullMatch("[0-9]+", name)) { continue; }
+            int pid = name.toInt(); if (pid == (int)getpid() || pid == (int)getppid()) { continue; }
+            var entries = ProtonRuntime.environmentEntries(ProtonRuntime.procBytes("/proc/" + name + "/environ"));
+            bool matched = false;
+            for entry in entries {
+                var split = entry.find("=", 0); if (split <= 0) { continue; }
+                var key = entry.substring(0, split); var value = entry.substring(split + 1, entry.len() - split - 1);
+                if ((key.equals("PROTONPATH") && ProtonContext.same(value, c.devTool())) || (["STEAM_COMPAT_DATA_PATH", "WINEPREFIX"].contains(key) && ProtonContext.same(value, c.prefix()))) { matched = true; }
+            }
+            var command = ProtonRuntime.environmentEntries(ProtonRuntime.procBytes("/proc/" + name + "/cmdline")).join(" ");
+            if (matched || command.contains(c.toolName + "-dev") || command.contains(c.devTool())) { result.push(pid); }
+        }
+        return result;
+    }
+    public void cleanup(Vector<string> environment = []) {
+        var c = self.context;
+        ProtonRuntime.set(environment, "WINEPREFIX", c.prefix());
+        var server = c.devTool() + "/files/bin-wow64/wineserver";
+        if (FileSystem.exists(server)) { c.execute(server, ["-k"], check=false, environment=environment); }
+        var pids = self.processes(); for pid in pids { kill(pid, SIGTERM); }
+        if (!pids.isEmpty()) { Timer.sleepMillis(500); }
+        var remaining = self.processes(); for pid in remaining { if (pids.contains(pid)) { kill(pid, SIGKILL); } }
+    }
+    public void prepare() {
+        var c = self.context; FileSystem.mkdirp(c.prefix());
+        var wrapper = ChildProcessExecutable.resolve("battlenet", "", [], []);
+        if (!wrapper.isEmpty()) {
+            var match = Regex.first("wine-prefix-dpi set --dpi [0-9]+", Path.readAll(wrapper));
+            if (!match.isEmpty()) { var parts = Strings.split(match, " "); c.execute("wine-prefix-dpi", ["set", "--dpi", parts.get(parts.len - 1), c.prefix()]); }
+        }
+    }
+    public void resetLog() { unlink(self.context.log()); unlink(self.context.home + "/steam-battlenet.log"); }
+    class string logDestination(string wrapper) {
+        if (wrapper.endsWith(".wrapper.log")) { return wrapper.substring(0, wrapper.len() - 12) + ".proton.log"; }
+        var basename = PathTools.basename(wrapper); int dot = -1;
+        for (int i = 0; i < basename.len(); i++) { if (basename[i] == '.') { dot = i; } }
+        return dot < 0 ? wrapper + ".proton.log" : PathTools.dirname(wrapper) + "/" + PathTools.basename(wrapper).substring(0, dot) + ".proton.log";
+    }
+    public void collectLog(string wrapper) {
+        if (!FileSystem.exists(self.context.log())) { return; }
+        var destination = ProtonRuntime.logDestination(wrapper); FileSystem.mkdirp(PathTools.dirname(destination));
+        self.context.execute("mv", ["-f", "--", self.context.log(), destination]); print("proton log: " + destination);
+    }
+    public ProtonChild start(string log, Vector<string> environment) {
+        if (!FileSystem.exists(self.context.launcher())) { throw "Battle.net launcher is missing: " + self.context.launcher(); }
+        self.prepare(); return ProtonChild("umu-run", [self.context.launcher()], environment, self.context.home, log);
+    }
+    public void launch(ProtonOptions options, bool smoke = false) {
+        ProtonWine(self.context).use();
+        var environment = self.environment(options, smoke ? "modules" : "quiet"); self.cleanup(environment); self.resetLog();
+        var log = options.get("--log", smoke ? "/tmp/battlenet-smoke.log" : "/tmp/battlenet-launch.wrapper.log");
+        var child = self.start(log, environment);
+        print(f"pid: {child.pid}\nlog: {log}\nproton log while running: {self.context.log()}");
+        print("WINEDEBUG=" + ProtonRuntime.value(environment, "WINEDEBUG")); print("DXVK_LOG_LEVEL=" + ProtonRuntime.value(environment, "DXVK_LOG_LEVEL"));
+        int seconds = options.number("--seconds", smoke ? 8 : 0);
+        if (seconds == 0 && !smoke) { child.detach(); print("left running; use battlenet-make cleanup when done"); return; }
+        try { child.wait(seconds * 1000); child.stop(); } catch (string error) { child.stop(); self.cleanup(environment); throw error; }
+        self.cleanup(environment); self.collectLog(log);
+        if (smoke && FileSystem.exists(log)) { var lines = Strings.split(Path.readAll(log), "\n"); for (int i = 0; i < 8 && i < lines.len; i++) { print(lines.get(i)); } }
+    }
+}

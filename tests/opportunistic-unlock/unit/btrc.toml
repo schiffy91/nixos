@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "opportunistic_unlock_tests"
+
+[dependencies]
+unlock = { path = "../../../config/system/nixos/opportunistic-unlock" }

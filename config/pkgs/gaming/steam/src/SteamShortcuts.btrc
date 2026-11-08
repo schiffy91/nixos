@@ -1,0 +1,231 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Strings;
+import Library.Vector;
+import ../../lib/GamingFiles.btrc;
+import ./SteamLibrary.btrc;
+
+class SteamShortcut {
+    public string name;
+    public string exe;
+    public string icon;
+    public long id;
+    public int iconStart;
+    public int iconEnd;
+    public Bytes body;  // fields through the entry's closing 0x08, kept byte for byte
+
+    public SteamShortcut() {
+        self.name = ""; self.exe = ""; self.icon = "";
+        self.id = 0;
+        self.iconStart = -1; self.iconEnd = -1; self.body = Bytes();
+    }
+}
+
+class SteamShortcuts {
+    public Bytes data;
+    public int offset;
+
+    public SteamShortcuts(Bytes data) { self.data = data; self.offset = 0; }
+
+    public int next() {
+        if (self.offset >= self.data.length()) { throw "Truncated shortcuts.vdf"; }
+        self.offset++;
+        return self.data.get(self.offset - 1);
+    }
+
+    public string text() {
+        var start = self.offset;
+        while (self.next() != 0) {}
+        return self.data.slice(start, self.offset - 1).toStringLossy();
+    }
+
+    public void fields(SteamShortcut entry, int depth) {
+        while (true) {
+            var start = self.offset;
+            var type = self.next();
+            if (type == 8) { return; }
+            var key = self.text().toLower();
+            if (type == 0) { self.fields(entry, depth + 1); }
+            else if (type == 1) {
+                var value = self.text();
+                if (depth == 0 && key.equals("appname")) { entry.name = value; }
+                if (depth == 0 && key.equals("exe")) { entry.exe = value; }
+                if (depth == 0 && key.equals("icon")) {
+                    entry.icon = value; entry.iconStart = start; entry.iconEnd = self.offset;
+                }
+            }
+            else if (type == 2) {
+                if (self.offset + 4 > self.data.length()) { throw "Truncated shortcuts.vdf"; }
+                if (depth == 0 && key.equals("appid")) {
+                    entry.id = 0;
+                    for (int byte = 0; byte < 4; byte++) {
+                        entry.id |= (long)self.data.get(self.offset + byte) << (8 * byte);
+                    }
+                }
+                self.offset = self.offset + 4;
+            }
+            else { throw f"Unknown shortcuts.vdf field type {type}; not rewriting it"; }
+        }
+    }
+
+    public Vector<SteamShortcut> entries() {
+        Vector<SteamShortcut> entries = [];
+        if (self.data.isEmpty()) { return entries; }
+        if (self.next() != 0 || !self.text().toLower().equals("shortcuts")) { throw "Not a shortcuts.vdf"; }
+        while (self.next() == 0) {
+            self.text();
+            var entry = SteamShortcut();
+            var start = self.offset;
+            self.fields(entry, 0);
+            entry.body = self.data.slice(start, self.offset);
+            if (entry.iconStart >= 0) { entry.iconStart -= start; entry.iconEnd -= start; }
+            entries.push(entry);
+        }
+        if (self.next() != 8 || self.offset != self.data.length()) { throw "Trailing bytes in shortcuts.vdf"; }
+        return entries;
+    }
+
+    class long crc32(string text) {
+        long crc = 0xFFFFFFFFL;
+        for (int index = 0; index < text.len(); index++) {
+            crc = crc ^ (long)(((int)text.charAt(index)) & 255);
+            for (int bit = 0; bit < 8; bit++) { crc = (crc & 1) != 0 ? ((crc >> 1) ^ 0xEDB88320L) : (crc >> 1); }
+        }
+        return (crc ^ 0xFFFFFFFFL) & 0xFFFFFFFFL;
+    }
+
+    class long appid(string quotedExe, string name) { return SteamShortcuts.crc32(quotedExe + name) | 0x80000000L; }
+
+    class string quote(string value) { return f"\"{value}\""; }
+
+    class void cstring(Bytes out, string value) {
+        out.appendBytes(Bytes.fromString(value));
+        out.append(0);
+    }
+
+    class void field(Bytes out, string key, string value) {
+        out.append(1);
+        SteamShortcuts.cstring(out, key);
+        SteamShortcuts.cstring(out, value);
+    }
+
+    class void number(Bytes out, string key, long value) {
+        out.append(2);
+        SteamShortcuts.cstring(out, key);
+        for (int index = 0; index < 4; index++) { out.append((int)((value >> (8 * index)) & 255)); }
+    }
+
+    class SteamShortcut create(string name, string exe) {
+        var entry = SteamShortcut();
+        entry.name = name;
+        entry.exe = SteamShortcuts.quote(exe);
+        var body = entry.body;
+        SteamShortcuts.number(body, "appid", SteamShortcuts.appid(entry.exe, name));
+        SteamShortcuts.field(body, "AppName", name);
+        SteamShortcuts.field(body, "Exe", entry.exe);
+        SteamShortcuts.field(body, "StartDir", SteamShortcuts.quote(PathTools.dirname(exe)));
+        SteamShortcuts.field(body, "icon", "");
+        SteamShortcuts.field(body, "ShortcutPath", "");
+        SteamShortcuts.field(body, "LaunchOptions", "");
+        SteamShortcuts.number(body, "IsHidden", 0);
+        SteamShortcuts.number(body, "AllowDesktopConfig", 1);
+        SteamShortcuts.number(body, "AllowOverlay", 1);
+        SteamShortcuts.number(body, "OpenVR", 0);
+        SteamShortcuts.number(body, "Devkit", 0);
+        SteamShortcuts.field(body, "DevkitGameID", "");
+        SteamShortcuts.number(body, "DevkitOverrideAppID", 0);
+        SteamShortcuts.number(body, "LastPlayTime", 0);
+        SteamShortcuts.field(body, "FlatpakAppID", "");
+        body.append(0);
+        SteamShortcuts.cstring(body, "tags");
+        body.append(8);
+        body.append(8);
+        return entry;
+    }
+
+    class Bytes render(Vector<SteamShortcut> entries) {
+        var out = Bytes();
+        out.append(0);
+        SteamShortcuts.cstring(out, "shortcuts");
+        for (int index = 0; index < entries.len; index++) {
+            out.append(0);
+            SteamShortcuts.cstring(out, Strings.fromInt(index));
+            out.appendBytes(entries.get(index).body);
+        }
+        out.append(8);
+        out.append(8);
+        return out;
+    }
+
+    class string executable(JSONValue shortcut) {
+        return shortcut.isObject() ? shortcut.get("exe").asString() : shortcut.asString();
+    }
+
+    class void setIcon(SteamShortcut entry, string icon) {
+        // Patch only this field: app IDs, controller mappings, tags and playtime stay intact.
+        var start = entry.iconStart >= 0 ? entry.iconStart : entry.body.length() - 1;
+        var end = entry.iconEnd >= 0 ? entry.iconEnd : start;
+        var body = entry.body.slice(0, start);
+        SteamShortcuts.field(body, "icon", icon);
+        entry.iconStart = start;
+        entry.iconEnd = body.length();
+        body.appendBytes(entry.body.slice(end, entry.body.length()));
+        entry.body = body;
+        entry.icon = icon;
+    }
+
+    class Bytes declare(Bytes current, JSONValue declared) {  // replaces stale entries by name or exe; keeps everything else
+        var names = declared.keys().sorted();
+        Vector<string> present = [];
+        Vector<SteamShortcut> result = [];
+        for entry in SteamShortcuts(current).entries() {
+            var owner = "";
+            for name in names {
+                if (entry.name.equals(name) || entry.exe.equals(SteamShortcuts.quote(SteamShortcuts.executable(declared.get(name))))) { owner = name; break; }
+            }
+            if (owner.isEmpty()) { result.push(entry); continue; }
+            var exact = entry.name.equals(owner) && entry.exe.equals(SteamShortcuts.quote(SteamShortcuts.executable(declared.get(owner))));
+            if (!exact || present.contains(owner)) { continue; }
+            present.push(owner);
+            result.push(entry);
+        }
+        for name in names {
+            if (!present.contains(name)) { result.push(SteamShortcuts.create(name, SteamShortcuts.executable(declared.get(name)))); }
+        }
+        // Parse newly created entries too, so their icon field offsets are available.
+        result = SteamShortcuts(SteamShortcuts.render(result)).entries();
+        for entry in result {
+            if (!declared.has(entry.name)) { continue; }
+            var shortcut = declared.get(entry.name);
+            if (shortcut.isObject() && !shortcut.get("icon").asString().isEmpty()) {
+                SteamShortcuts.setIcon(entry, shortcut.get("icon").asString());
+            }
+        }
+        return SteamShortcuts.render(result);
+    }
+
+    class void install(SteamLibrary library, JSONValue declared) {
+        if (library.root.isEmpty() || !declared.isObject()) { throw "Required: --steam-path PATH --shortcuts JSON"; }
+        for path in library.userShortcuts() {
+            var current = FileSystem.isFile(path) ? GamingFiles.read(path) : Bytes();
+            var desired = SteamShortcuts.declare(current, declared);
+            for entry in SteamShortcuts(desired).entries() {
+                if (!declared.has(entry.name) || entry.id == 0) { continue; }
+                var shortcut = declared.get(entry.name);
+                if (!shortcut.isObject()) { continue; }
+                var artwork = shortcut.get("artwork").asString();
+                if (artwork.isEmpty()) { continue; }
+                var grid = f"{PathTools.dirname(path)}/grid";
+                // Fill missing artwork; a user's custom PNG/JPEG always wins.
+                for suffix in ["p", "", "_hero", "_logo"] {
+                    var target = f"{grid}/{entry.id}{suffix}";
+                    if (FileSystem.exists(f"{target}.png") || FileSystem.exists(f"{target}.jpg")) { continue; }
+                    var source = f"{artwork}/{suffix.isEmpty() ? "landscape" : suffix}.png";
+                    GamingFiles.copy(source, f"{target}.png");
+                }
+            }
+            if (!desired.equals(current)) { GamingFiles.writeBytes(path, desired); }
+        }
+    }
+}

@@ -1,0 +1,58 @@
+--- a/src/devex/lsp/workspace/workspace.py
++++ b/src/devex/lsp/workspace/workspace.py
+@@ -20,0 +21 @@
++from src.compiler.python.frontend.native_imports import NativeDeclarationImporter, NativeHeaderSource
+@@ -98 +99,2 @@
+-    native_symbols: frozenset[str] = frozenset()  # names a manifest declares for its module
++    native_declarations: tuple = ()
++    native_identity: str | None = None
+@@ -112,0 +115 @@
++            self.native_identity,
+@@ -363 +366,7 @@
+-        decls: list = []
++        # Use the compiler's native import plan, including typed declarations,
++        # ownership effects, and SDK identity. Symbol-name suppression hides real
++        # errors and cannot supply return types or read-only borrow contracts.
++        sources = graph.source_paths()
++        native_plan = packages.native_plan.for_sources(sources).with_stdlib(self._stdlib.directory(), sources)
++        native = NativeDeclarationImporter().resolve(native_plan, use_cache=True)
++        decls: list = list(native.declarations)
+@@ -377,18 +386,3 @@
+-            native_symbols=self._manifest_symbols(packages),
+-        )
+-
+-    @staticmethod
+-    def _manifest_symbols(packages: ResolvedPackages) -> frozenset[str]:
+-        """Names a native manifest declares.
+-
+-        Typed header imports need BTRC_NATIVE_HEADER_READER, which the
+-        compiler's shell has and an editor's need not. Without it the headers
+-        cannot be read, so these names would read as unresolved here while the
+-        compiler accepts them; the manifest declaring them is enough.
+-        """
+-
+-        plan = getattr(packages, "native_plan", None)
+-        names: set[str] = set()
+-        for binding in getattr(plan, "bindings", ()) or ():
+-            names.update(getattr(binding, "symbols", ()) or ())
+-        return frozenset(names)
++            native_declarations=native.declarations,
++            native_identity=native.cache_identity,
++        )
+@@ -436 +430,5 @@
+-        user_decls: list = []
++        user_decls: list = [
++            declaration for declaration in comp.native_declarations
++            if not (isinstance(getattr(declaration, "source_file", None), NativeHeaderSource)
++                    and declaration.source_file.coalesced)
++        ]
+--- a/src/devex/lsp/analysis/document.py
++++ b/src/devex/lsp/analysis/document.py
+@@ -152 +151,0 @@
+-_QUOTED_NAME = re.compile(r"'([A-Za-z_][A-Za-z0-9_]*)'")
+@@ -282 +280,0 @@
+-        manifest_names = composition.native_symbols
+@@ -289,3 +286,0 @@
+-            if manifest_names and _QUOTED_NAME.findall(diagnostic.message):
+-                if any(name in manifest_names for name in _QUOTED_NAME.findall(diagnostic.message)):
+-                    continue

@@ -1,0 +1,26 @@
+import Library.CLI;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import ./Artifacts.btrc;
+
+#include <sys/file.h>
+#include <fcntl.h>
+
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv);
+    if (args.count() != 2 || (!args.get(1).equals("--strict") && !args.get(1).equals("--optional"))) {
+        Console.error("Usage: nixos-recovery-artifacts PLAN --strict|--optional"); return 1;
+    }
+    umask(0077);
+    RecoveryArtifacts.handleInterruptions();
+    try {
+        var installer = RecoveryArtifacts(JSONValue.parse(Path.readAll(args.get(0))));
+        RecoveryArtifacts.require("mkdir -p /run/lock");
+        var lock = (int)open("/run/lock/nixos-recovery.lock", (int)O_WRONLY | (int)O_CREAT | (int)O_CLOEXEC | (int)O_NOFOLLOW, 0600);
+        if (lock < 0 || (int)flock(lock, (int)LOCK_EX) != 0) { if (lock >= 0) { close(lock); } throw "Cannot lock recovery artifact installation"; }
+        try { if (installer.ready(args.get(1).equals("--strict"))) { installer.install(); } }
+        finally { close(lock); }
+    } catch (string error) { Console.error(f"nixos-recovery-artifacts: {error}"); return 1; }
+    return 0;
+}

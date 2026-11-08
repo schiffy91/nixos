@@ -4,8 +4,8 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  btrcpy = (import ../../../nix/apps/utils/nixosctl/tray/lib.nix { inherit pkgs inputs; }).btrcpy;
-  cli = import ../../../nix/apps/utils/nixosctl/package.nix { inherit pkgs btrcpy; lib = pkgs.lib; };
+  btrcpy = (import ../../../config/pkgs/utils/nixosctl/ui/tray/lib.nix { inherit pkgs inputs; }).btrcpy;
+  cli = import ../../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs btrcpy; lib = pkgs.lib; };
   common = { ... }: {
     # Exercise the newly built CLI by store path on an older host profile.
     # Calling /run/current-system's helper would deliberately fail this test.

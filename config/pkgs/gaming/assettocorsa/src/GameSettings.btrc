@@ -1,0 +1,74 @@
+import Library.JSON;
+import ../../lib/GamingFiles.btrc;
+
+class GameSettings {
+    // AC/CSP INI values are not TOML. Preserve unrelated settings and comments.
+    class string set(string text, string section, string key, string value) {
+        var newline = text.contains("\r\n") ? "\r\n" : "\n";
+        Vector<string> result = [];
+        var active = false;
+        var found = false;
+        var written = false;
+        var desired = f"{key}={value}";
+        for line in Strings.split(text.replace("\r\n", "\n"), "\n") {
+            var trimmed = line.trim();
+            if (trimmed.startsWith("[")) {
+                if (active && !written) { result.push(desired); written = true; }
+                active = trimmed.equals(f"[{section}]");
+                if (active) { found = true; }
+            }
+            var equals = Strings.find(trimmed, "=", 0);
+            if (active && equals >= 0 && trimmed.substring(0, equals).trim().equals(key)) {
+                if (!written) { result.push(desired); written = true; }
+            } else { result.push(line); }
+        }
+        if (!found) { result.push(f"[{section}]"); }
+        if (!written) { result.push(desired); result.push(""); }
+        return result.join(newline);
+    }
+
+    // Declared {file: {section: {key: value}}} under cfg/; undeclared keys stay user-owned.
+    class void apply(string prefix, JSONValue declared) {
+        if (!declared.isObject()) { throw "Invalid Assetto game settings declaration"; }
+        var root = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg";
+        for file in declared.keys() {
+            if (!file.endsWith(".ini") || file.startsWith("/") || file.contains("..") || file.contains("\\")) { throw f"Invalid game settings file: {file}"; }
+            var sections = declared.get(file);
+            if (!sections.isObject()) { throw f"Invalid game settings for {file}"; }
+            var path = GamingFiles.inside(root, file);
+            var original = FileSystem.isFile(path) ? Path.readAll(path) : "";
+            var updated = original;
+            for section in sections.keys() {
+                var values = sections.get(section);
+                if (!values.isObject()) { throw f"Invalid game settings section {file} [{section}]"; }
+                for key in values.keys() {
+                    var value = values.get(key);
+                    if (!value.isString() || value.asString().contains("\n") || value.asString().contains("\r")) { throw f"Invalid game setting {file} [{section}] {key}"; }
+                    updated = GameSettings.set(updated, section, key, value.asString());
+                }
+            }
+            if (!updated.equals(original)) {
+                if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix")) { GamingFiles.copy(path, f"{path}.before-nix"); }
+                GamingFiles.write(path, updated);
+            }
+        }
+    }
+
+    class void configure(string prefix, string scale) {
+        if (scale.isEmpty()) { return; }
+        var number = scale.toFloat();
+        if (!(number >= 1 && number <= 2) || scale.contains("\n") || scale.contains("\r")) {
+            throw "CSP UI scale must be between 1 and 2";
+        }
+        var path = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension/gui.ini";
+        var original = FileSystem.isFile(path) ? Path.readAll(path) : "";
+        var updated = GameSettings.set(original, "NEW_UI", "UI_SCALE", scale);
+        // The original AC race menu does not honor CSP's UI_SCALE.
+        updated = GameSettings.set(updated, "NEW_UI", "REPLACE_MAIN_MENU", "1");
+        updated = GameSettings.set(updated, "NEW_PAUSE_MENU", "ENABLED", "1");
+        if (!updated.equals(original)) {
+            if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix")) { GamingFiles.copy(path, f"{path}.before-nix"); }
+            GamingFiles.write(path, updated);
+        }
+    }
+}

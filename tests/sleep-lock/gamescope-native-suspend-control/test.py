@@ -1,3 +1,9 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # NixOS supplies these names when executing the test script.
+    from nixos_test import machine, start_all  # ty: ignore[unresolved-import]
+
 import json
 import shlex
 import subprocess

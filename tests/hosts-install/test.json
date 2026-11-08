@@ -32,7 +32,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; printf '{\"host_path\":\"/etc/nixos/tests/hosts/{{arch}}/{{hostName}}/{{hostName}}.nix\",\"target\":\"{{target}}\"}' > /etc/nixos/config.json; test -s /etc/nixos/config.json && printf host-selected",
+      "command": "set -e; printf '{\"host_path\":\"/etc/nixos/tests/hosts/{{arch}}/{{hostName}}/default.nix\",\"target\":\"{{target}}\"}' > /etc/nixos/config.json; test -s /etc/nixos/config.json && printf host-selected",
       "expect": "host-selected",
       "timeout": 120
     },

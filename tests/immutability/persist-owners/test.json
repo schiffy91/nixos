@@ -21,7 +21,7 @@
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 180 },
     { "op": "guest", "command": "set -e; mkdir -p /opt/test-owned-dir; chown 1000:100 /opt/test-owned-dir; chmod 0750 /opt/test-owned-dir; echo seed > /opt/test-owned-dir/seed.txt; chown 1000:100 /opt/test-owned-dir/seed.txt; chmod 0640 /opt/test-owned-dir/seed.txt; stat -c '%u:%g %a' /opt/test-owned-dir", "expect": "1000:100 750" },
-    { "op": "guest", "command": "set -e; sed -i 's|\"/etc/nixos\"|\"/etc/nixos\" \"/opt/test-owned-dir\"|' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; grep -q 'opt/test-owned-dir' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix && printf spec-edited", "expect": "spec-edited" },
+    { "op": "guest", "command": "set -e; sed -i 's|\"/etc/nixos\"|\"/etc/nixos\" \"/opt/test-owned-dir\"|' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix; grep -q 'opt/test-owned-dir' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix && printf spec-edited", "expect": "spec-edited" },
     { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && printf switched", "expect": "switched", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "btrfs subvolume list / | grep -q 'dirs/opt!test-owned-dir' && printf subvol-present", "expect": "subvol-present" },

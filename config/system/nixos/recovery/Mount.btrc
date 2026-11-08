@@ -1,0 +1,123 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+class RecoveryMount {
+    public JSONValue plan;
+    public string target;
+    public string top = "/run/nixos-top";
+
+    public RecoveryMount(JSONValue plan, string target) {
+        if (!target.startsWith("/")) { throw f"target must be absolute: {target}"; }
+        self.plan = plan;
+        self.target = target;
+        while (self.target.length() > 1 && self.target.endsWith("/")) {
+            self.target = self.target.substring(0, self.target.length() - 1);
+        }
+    }
+
+    class string device(string source) {
+        var bracket = source.indexOf("[");
+        return bracket < 0 ? source : source.substring(0, bracket);
+    }
+
+    class bool option(string options, string expected) {
+        return Strings.split(options, ",").contains(expected);
+    }
+
+    class bool subvolume(JSONValue mount, string name) {
+        return mount.get("source").asString().endsWith(f"[{name}]")
+            || RecoveryMount.option(mount.get("options").asString(), f"subvol={name}")
+            || RecoveryMount.option(mount.get("options").asString(), f"subvol=/{name}");
+    }
+
+    class bool covered(Vector<string> selected, string path) {
+        for parent in selected {
+            if (path.startsWith(parent.equals("/") ? "/" : f"{parent}/") && !path.equals(parent)) { return true; }
+        }
+        return false;
+    }
+
+    public string path(string absolute) {
+        if (absolute.equals("/")) { return self.target; }
+        return self.target.equals("/") ? absolute : f"{self.target}{absolute}";
+    }
+
+    class void require(string command) {
+        UnixShell().run(command, foreground=true, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+    }
+
+    class JSONValue mounted(string target) {
+        var result = UnixShell().run(f"findmnt --json --mountpoint {ShellWords.quote(target)} --output SOURCE,FSTYPE,OPTIONS", logFailure=false);
+        if (!result.ok()) { return JSONValue.makeNull(); }
+        var mounts = JSONValue.parse(result.stdout()).get("filesystems");
+        if (!mounts.isArray() || mounts.elements().len != 1) { throw f"Cannot identify mount at {target}"; }
+        return mounts.elements().get(0);
+    }
+
+    class bool sameDevice(string left, string right) {
+        var resolved = FileSystem.realPath(RecoveryMount.device(left));
+        return !resolved.isEmpty() && resolved.equals(FileSystem.realPath(RecoveryMount.device(right)));
+    }
+
+    public void mountBtrfs(string target, string subvolume, string options, bool topLevel = false) {
+        FileSystem.mkdirp(target);
+        var current = RecoveryMount.mounted(target);
+        var device = self.plan.get("rootDevice").asString();
+        if (!current.isNull()) {
+            var matches = RecoveryMount.subvolume(current, subvolume);
+            if (topLevel) { matches = RecoveryMount.option(current.get("options").asString(), "subvolid=5"); }
+            if (current.get("fstype").asString().equals("btrfs") && RecoveryMount.sameDevice(current.get("source").asString(), device) && matches) { return; }
+            throw f"mountpoint already mounted differently: {target}";
+        }
+        var selection = topLevel ? "ro,subvolid=5" : f"subvol={subvolume}";
+        if (!options.isEmpty()) { selection = f"{selection},{options}"; }
+        RecoveryMount.require(f"mount -t btrfs -o {ShellWords.quote(selection)} {ShellWords.quote(device)} {ShellWords.quote(target)}");
+    }
+
+    public void mountDevice(string path, string device, bool required) {
+        var target = self.path(path);
+        FileSystem.mkdirp(target);
+        var current = RecoveryMount.mounted(target);
+        if (!current.isNull()) {
+            if (RecoveryMount.sameDevice(current.get("source").asString(), device)) { return; }
+            throw f"mountpoint already mounted differently: {target}";
+        }
+        if (!FileSystem.exists(device)) {
+            if (required) { throw f"missing device: {device}"; }
+            return;
+        }
+        RecoveryMount.require(f"mount {ShellWords.quote(device)} {ShellWords.quote(target)}");
+    }
+
+    public void run() {
+        var root = self.plan.get("rootDevice").asString();
+        if (self.plan.get("encrypted").asBool() && !FileSystem.exists(root)) {
+            var partition = ShellWords.quote(self.plan.get("rootPartition").asString());
+            var name = ShellWords.quote(self.plan.get("rootName").asString());
+            RecoveryMount.require(f"cryptsetup open {partition} {name}");
+        }
+        for volume in self.plan.get("volumes").elements() {
+            self.mountBtrfs(self.path(volume.get("mountPoint").asString()), volume.get("name").asString(), volume.get("options").asString());
+        }
+        var temporary = self.path("/tmp");
+        FileSystem.mkdirp(temporary);
+        RecoveryMount.require(f"chmod 1777 {ShellWords.quote(temporary)}");
+        self.mountBtrfs(self.top, "", "", true);
+        Vector<string> selected = [];
+        for mount in self.plan.get("persist").elements() {
+            var target = self.path(mount.get("path").asString());
+            var subvolume = mount.get("subvolume").asString();
+            if (RecoveryMount.covered(selected, target)) { continue; }
+            var source = PathTools.join(self.top, subvolume);
+            if (!UnixShell().run(f"btrfs subvolume show {ShellWords.quote(source)}", logFailure=false).ok()) { continue; }
+            self.mountBtrfs(target, subvolume, "compress=zstd,noatime");
+            selected.push(target);
+        }
+        self.mountDevice("/boot", self.plan.get("bootPartition").asString(), true);
+        self.mountDevice("/recovery", self.plan.get("recoveryPartition").asString(), false);
+        RecoveryMount.require(f"findmnt -R {ShellWords.quote(self.target)}");
+    }
+}

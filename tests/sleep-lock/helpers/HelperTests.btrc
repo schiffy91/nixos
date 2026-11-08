@@ -1,0 +1,66 @@
+import helpers.Authentication;
+import helpers.Display;
+import helpers.Posix;
+
+volatile int wipeCount = 0;
+void testWipe(void* buffer, size_t length) {
+    volatile unsigned char* wiping = (volatile unsigned char*)buffer;
+    for (size_t i = 0; i < length; i++) wiping[i] = 0;
+    unsigned char* bytes = (unsigned char*)buffer;
+    for (size_t i = 0; i < length; i++) assert(bytes[i] == 0);
+    wipeCount++;
+}
+
+void testCheckedWipe(void* buffer, size_t length, size_t bound) {
+    assert(length <= bound);
+    testWipe(buffer, length);
+}
+
+int main(int argc, char** argv) {
+    assert(argc == 2);
+    testWipe(NULL, 0); testCheckedWipe(NULL, 0, 0); wipeCount = 0;
+    char* answer = askPassword("success", argv[1]);
+    assert(answer != NULL && strcmp(answer, "fixture-password") == 0);
+    assert(wipeCount == 1);
+    explicit_bzero(answer, strlen(answer)); free(answer);
+    assert(askPassword("empty", argv[1]) == NULL);
+    assert(askPassword("nul", argv[1]) == NULL);
+    assert(askPassword("failed", argv[1]) == NULL);
+    assert(askPassword("overflow", argv[1]) == NULL);
+    assert(askPassword("success", "/nonexistent-plymouth") == NULL);
+    assert(wipeCount == 7);
+    assert(PAM_MAX_RESP_SIZE == 512);
+    answer = askPassword("maximum", argv[1]);
+    assert(answer != NULL && strlen(answer) == (size_t)512);
+    explicit_bzero(answer, strlen(answer)); free(answer);
+
+    char prompt[] = "success";
+    struct PasswordPrompt request = { prompt, argv[1] };
+    struct pam_message secret = { PAM_PROMPT_ECHO_OFF, "Password" };
+    struct pam_message info = { PAM_TEXT_INFO, "Info" };
+    struct pam_message rejected = { PAM_PROMPT_ECHO_ON, "Username" };
+    const struct pam_message* messages[2] = { &secret, &info };
+    struct pam_response* responses = NULL;
+    assert(converse(0, messages, &responses, &request) == PAM_CONV_ERR);
+    assert(converse(PAM_MAX_NUM_MSG + 1, messages, &responses, &request) == PAM_CONV_ERR);
+    assert(converse(2, messages, &responses, &request) == PAM_SUCCESS);
+    assert(responses != NULL && strcmp(responses[0].resp, "fixture-password") == 0);
+    assert(responses[1].resp == NULL);
+    explicit_bzero(responses[0].resp, strlen(responses[0].resp));
+    free(responses[0].resp); free(responses); responses = NULL;
+    const struct pam_message* rejectedMessages[2] = { &secret, &rejected };
+    int before = wipeCount;
+    assert(converse(2, rejectedMessages, &responses, &request) == PAM_CONV_ERR);
+    assert(responses == NULL && wipeCount == before + 2);
+
+    drmModeCrtc crtc = {0};
+    drmModePlane plane = {0};
+    assert(!crtcBlank(NULL) && !planeBlank(NULL));
+    assert(crtcBlank(&crtc) && planeBlank(&plane));
+    crtc.mode_valid = 1; assert(!crtcBlank(&crtc));
+    crtc.mode_valid = 0; crtc.buffer_id = 42; assert(!crtcBlank(&crtc));
+    plane.fb_id = 42; assert(!planeBlank(&plane));
+    plane.fb_id = 0; plane.crtc_id = 42; assert(!planeBlank(&plane));
+    puts("sleep helper contracts passed");
+    return 0;
+}

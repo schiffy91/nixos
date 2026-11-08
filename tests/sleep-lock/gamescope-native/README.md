@@ -54,6 +54,34 @@ Relevant pinned sources:
 - [Gamescope Steam focus selection and X11 properties](https://github.com/ValveSoftware/gamescope/blob/3.17.0/src/steamcompmgr.cpp)
 - [Linux virtio GPU freeze/restore](https://github.com/torvalds/linux/blob/v7.3/drivers/gpu/drm/virtio/virtgpu_drv.c)
 
+## BTRC migration results (2026-11-07)
+
+The BTRC controller, raw PAM authentication and DRM helpers passed the focused
+state, secret-buffer, descriptor-isolation and helper checks before these graph
+runs. The three lock regressions passed:
+
+| Node and run | Result |
+| --- | --- |
+| `sleep-gamescope-native-lock` / `c02ef12d0ad9` | PASS, 95.33 seconds. Touch and keyboard authentication, rejection and escape checks, failed sleep, controller restart, overlapping holds, stream restoration and original game input/rendering. |
+| `sleep-gamescope-native-lock-without-sunshine` / `0111e01a814a` | PASS, 104.40 seconds. The same lock lifecycle with both Sunshine units absent. |
+| `sleep-gaming-plasma` / `70ea99ce2452` | PASS, 54.24 seconds. Stock Plasma password locking remains independent of the Gaming controller. |
+
+The optional real-suspend runs retain their complete assertions and still fail
+at game input recovery. `sleep-gamescope-native-resume-lock` / `fd5b9ffe394f`
+entered and exited kernel s2idle, displayed the password keyboard, rejected a
+wrong password and restored the original VT and Gamescope PID after correct
+authentication. It then failed waiting for the game input marker at 118.55
+seconds. The unchanged unlocked `sleep-gamescope-native-suspend-control` /
+`061413e20d66` reproduced the same missing input marker at 40.79 seconds, with
+the Gaming lock disabled. Both logged virtio GPU commands `0x10c` and `0x208`
+failing with responses `0x1200` and `0x1203` after wake.
+
+This reproduces the existing native-context VM GPU recovery limitation below;
+it does not establish physical Steam Deck suspend behavior. Neither assertions
+nor production GPU handling were changed to conceal the failures. All graph
+drivers and guests exited. Logs and captured frames remain under the respective
+`.vm/e2e/<node>-<run>/` directories.
+
 ## Initial Gaming-only policy results (2026-11-07)
 
 The production Gaming-only controller passed `sleep-gamescope-native-lock`
@@ -103,7 +131,7 @@ The unlocked reproduction identifies a native-context VM power-management
 failure independent of the root lock. It does not establish real Steam Deck
 suspend behavior. No kernel, QEMU, Mesa, or Gamescope patch was added to hide it.
 The separate `sleep-gamescope-native-resume-lock` gate retains the complete
-real-suspend assertion and was not rerun after splitting the original test.
+real-suspend assertion; its BTRC migration rerun is recorded above.
 
 These runs used the repository's `f2798b0` base plus this fixture. The non-PM
 pass and unlocked suspend failure used frozen fixture diff SHA-256

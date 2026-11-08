@@ -1,0 +1,157 @@
+import Library.Bytes;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+
+#include "native.h"
+
+struct LoginResponse {
+    char bytes[20001];
+    size_t count;
+};
+
+size_t captureLoginResponse(char* data, size_t size, size_t count, void* context) {
+    struct LoginResponse* response = (struct LoginResponse*)context;
+    if (size != (size_t)0 && count > (size_t)20000 / size) { return (size_t)0; }
+    size_t length = size * count;
+    if (length > (size_t)20000 - response->count) { return (size_t)0; }
+    memcpy(response->bytes + response->count, data, length);
+    response->count += length;
+    response->bytes[response->count] = '\0';
+    return length;
+}
+
+int verifyLoginCertificate(X509_STORE_CTX* store, void* expected) {
+    unsigned char digest[32];
+    unsigned int size = 0;
+    X509* certificate = X509_STORE_CTX_get0_cert(store);
+    bool valid = certificate != NULL && X509_digest(certificate, EVP_sha256(), digest, &size) == 1 && size == 32U && CRYPTO_memcmp(digest, expected, (size_t)32) == 0;
+    X509_STORE_CTX_set_error(store, valid ? X509_V_OK : X509_V_ERR_CERT_REJECTED);
+    return valid ? 1 : 0;
+}
+
+CURLcode configureLoginTls(CURL* connection, void* context, void* pin) {
+    SSL_CTX_set_cert_verify_callback((SSL_CTX*)context, verifyLoginCertificate, pin);
+    return CURLE_OK;
+}
+
+class SunshineLogin {
+    class string origin(string url) {
+        if (!url.startsWith("https://")) { throw "Use an HTTPS origin, for example https://deck:47990"; }
+        var authority = url.substring(8, url.length() - 8);
+        if (authority.endsWith("/")) { authority = authority.substring(0, authority.length() - 1); }
+        if (authority.isEmpty() || authority.contains("/") || authority.contains("@") || authority.contains("?") || authority.contains("#")) { throw "Expected an HTTPS origin without credentials, path, query, or fragment"; }
+        string host = "";
+        string port = "";
+        if (authority.startsWith("[")) {
+            var end = authority.indexOf("]");
+            if (end < 2) { throw "Invalid IPv6 origin"; }
+            host = authority.substring(0, end + 1).toLower();
+            for (int index = 1; index < end; index++) { if ("0123456789abcdef:.".indexOf(host.substring(index, 1)) < 0) { throw "Invalid IPv6 origin"; } }
+            var rest = authority.substring(end + 1, authority.length() - end - 1);
+            if (!rest.isEmpty()) { if (!rest.startsWith(":")) { throw "Invalid origin port"; } port = rest.substring(1, rest.length() - 1); }
+        } else {
+            var parts = Strings.split(authority, ":");
+            if (parts.len > 2) { throw "IPv6 origins require brackets"; }
+            host = parts.get(0).toLower();
+            if (parts.len == 2) { port = parts.get(1); if (port.isEmpty()) { throw "Invalid origin port"; } }
+            for (int index = 0; index < host.length(); index++) { if ("abcdefghijklmnopqrstuvwxyz0123456789.-".indexOf(host.substring(index, 1)) < 0) { throw "Invalid origin hostname"; } }
+        }
+        if (host.isEmpty()) { throw "Missing origin hostname"; }
+        if (!port.isEmpty()) {
+            for (int index = 0; index < port.length(); index++) { if (port[index] < '0' || port[index] > '9') { throw "Invalid origin port"; } }
+            var number = Strings.toInt(port);
+            if (port.length() > 5 || number < 1 || number > 65535) { throw "Invalid origin port"; }
+            port = number == 443 ? "" : f":{number}";
+        }
+        return f"https://{host}{port}";
+    }
+
+    class string message(string origin, string identifier) {
+        if (identifier.length() != 64) { throw "Invalid Sunshine challenge"; }
+        for (int index = 0; index < identifier.length(); index++) { if ("0123456789abcdef".indexOf(identifier.substring(index, 1)) < 0) { throw "Invalid Sunshine challenge"; } }
+        return f"Sunshine Web UI login\nOrigin: {origin}\nChallenge: {identifier}\n";
+    }
+
+    class void challenge(JSONValue challenge, string origin, string identifier) {
+        var expected = SunshineLogin.message(origin, identifier);
+        if (!challenge.get("challenge").asString().equals(identifier) || !challenge.get("namespace").asString().equals("sunshine-web-login") || !challenge.get("message").asString().equals(expected)) { throw "Sunshine returned a challenge for a different destination or purpose"; }
+    }
+
+    class bool certificatePin(string file, unsigned char* digest) {
+        BIO* input = BIO_new_file(file, "r");
+        if (input == NULL) { return false; }
+        X509* certificate = sunshine_read_certificate(input, NULL, NULL, NULL);
+        BIO_free(input);
+        if (certificate == NULL) { return false; }
+        unsigned int length = 0;
+        bool valid = X509_digest(certificate, EVP_sha256(), digest, &length) == 1 && length == 32U;
+        X509_free(certificate);
+        return valid;
+    }
+
+    class JSONValue post(string url, JSONValue document, string certificate) {
+        unsigned char pin[32];
+        if (!certificate.isEmpty() && !SunshineLogin.certificatePin(certificate, pin)) { throw "Invalid Sunshine certificate"; }
+        CURL* connection = curl_easy_init();
+        if (connection == NULL) { throw "Cannot initialize HTTPS"; }
+        struct LoginResponse response;
+        response.count = (size_t)0;
+        response.bytes[0] = '\0';
+        char* destination = strdup(url);
+        char* body = strdup(document.stringify());
+        struct curl_slist* headers = curl_slist_append(NULL, "Content-Type: application/json");
+        if (destination == NULL || body == NULL || headers == NULL) {
+            curl_easy_cleanup(connection); curl_slist_free_all(headers); free(destination); free(body);
+            throw "Cannot allocate HTTPS request";
+        }
+        bool configured = true;
+        configured = (sunshine_setopt_pointer(connection, CURLOPT_URL, (void*)destination) == CURLE_OK) && configured;
+        configured = (sunshine_setopt_pointer(connection, CURLOPT_PROXY, (void*)"") == CURLE_OK) && configured;
+        configured = (sunshine_setopt_long(connection, CURLOPT_TIMEOUT, 15L) == CURLE_OK) && configured;
+        configured = (sunshine_setopt_pointer(connection, CURLOPT_HTTPHEADER, (void*)headers) == CURLE_OK) && configured;
+        configured = (sunshine_setopt_pointer(connection, CURLOPT_POSTFIELDS, (void*)body) == CURLE_OK) && configured;
+        configured = (sunshine_setopt_long(connection, CURLOPT_POSTFIELDSIZE, (long)strlen(body)) == CURLE_OK) && configured;
+        configured = ((CURLcode)curl_easy_setopt(connection, CURLOPT_WRITEFUNCTION, captureLoginResponse) == CURLE_OK) && configured;
+        configured = (sunshine_setopt_pointer(connection, CURLOPT_WRITEDATA, (void*)&response) == CURLE_OK) && configured;
+        if (!certificate.isEmpty()) {
+            // Exact leaf pin replaces CA/hostname trust. It is checked inside
+            // the TLS handshake, before libcurl sends any HTTP login data.
+            configured = (sunshine_setopt_long(connection, CURLOPT_SSL_VERIFYHOST, 0L) == CURLE_OK) && configured;
+            configured = (sunshine_setopt_long(connection, CURLOPT_SSL_VERIFYPEER, 1L) == CURLE_OK) && configured;
+            configured = ((CURLcode)curl_easy_setopt(connection, CURLOPT_SSL_CTX_FUNCTION, configureLoginTls) == CURLE_OK) && configured;
+            configured = (sunshine_setopt_pointer(connection, CURLOPT_SSL_CTX_DATA, (void*)pin) == CURLE_OK) && configured;
+        }
+        var status = configured ? curl_easy_perform(connection) : CURLE_FAILED_INIT;
+        long http = 0;
+        sunshine_response_code(connection, CURLINFO_RESPONSE_CODE, &http);
+        curl_easy_cleanup(connection);
+        curl_slist_free_all(headers);
+        free(destination);
+        free(body);
+        if (status != CURLE_OK) { throw "Sunshine HTTPS request failed (certificate, transport, or response limit)"; }
+        if (http != 200L) { throw f"Sunshine refused the login request (HTTP {http})"; }
+        var bytes = Bytes.fromRaw(response.bytes, (int)response.count);
+        if (!bytes.isNulFreeUtf8()) { throw "Invalid Sunshine login response"; }
+        var value = JSONValue.parse(bytes.toString());
+        if (!value.isObject()) { throw "Invalid Sunshine login response"; }
+        return value;
+    }
+
+    class void login(string url, string identity, string identifier, string certificate) {
+        var origin = SunshineLogin.origin(url);
+        var message = SunshineLogin.message(origin, identifier);
+        var request = JSONValue.makeObject();
+        request.set("challenge", JSONValue.makeString(identifier));
+        SunshineLogin.challenge(SunshineLogin.post(origin + "/api/ssh/challenge", request, certificate), origin, identifier);
+        Console.error(f"Approve signing in to {origin} with your SSH key.");
+        var signature = ChildProcess.run("ssh-keygen", ["-Y", "sign", "-n", "sunshine-web-login", "-f", identity], stdinData=message, stderr=COMMAND_OUTPUT_STREAM, maxStdoutBytes=16384);
+        if (!signature.ok()) { throw "SSH agent signing failed"; }
+        request.set("signature", JSONValue.makeString(signature.stdout()));
+        var completed = SunshineLogin.post(origin + "/api/ssh/complete", request, certificate);
+        if (!completed.get("status").isBool() || !completed.get("status").asBool()) { throw "Sunshine did not approve the browser login"; }
+        Console.error("Login approved. Return to the browser that requested it.");
+    }
+}

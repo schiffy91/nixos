@@ -1,0 +1,119 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Vector;
+import ../core/Interactive.btrc;
+import ../core/NixosLog.btrc;
+import ../NixosConfig.btrc;
+import ../NixosRebuilder.btrc;
+import ./SecureBootVerification.btrc;
+
+class SecureBootManager {
+    public NixosConfig config;
+    public UnixShell shell;
+
+    public SecureBootManager(NixosConfig config) {
+        self.config = config;
+        self.shell = UnixShell();
+    }
+
+    public string dbPublicKey() {
+        return PathTools.join(self.config.evalString("config.settings.boot.pkiBundle"), "keys/db/db.pem");
+    }
+
+    public bool keysExist() {
+        var bundle = self.config.evalString("config.settings.boot.pkiBundle");
+        for key in ["PK", "KEK", "db"] {
+            if (!FileSystem.isFile(f"{bundle}/keys/{key}/{key}.pem")
+                || !FileSystem.isFile(f"{bundle}/keys/{key}/{key}.key")) { return false; }
+        }
+        return true;
+    }
+
+    public void createKeys() {
+        if (self.keysExist()) { return; }
+        var bundle = self.config.evalString("config.settings.boot.pkiBundle");
+        if (FileSystem.exists(f"{bundle}/GUID") || FileSystem.exists(f"{bundle}/keys")) {
+            throw "Incomplete existing Secure Boot keys; restore the missing files instead of rotating keys";
+        }
+        self.shell.run("sbctl create-keys", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+        if (!self.keysExist()) {
+            NixosLog.fatal("sbctl did not create a complete PK/KEK/db key bundle");
+        }
+    }
+
+    public void enrollKeys(bool microsoft) {
+        var command = "sbctl enroll-keys";
+        if (microsoft) {
+            command = f"{command} --microsoft";
+        } else {
+            command = f"{command} --yes-this-might-brick-my-machine";
+        }
+        self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
+    }
+
+    public bool verify() {
+        try {
+            var boot = self.config.evalString("config.settings.disk.boot.efiSysMountPoint");
+            var arch = self.config.evalString("pkgs.stdenv.hostPlatform.efiArch");
+            var fallback = f"EFI/BOOT/BOOT{arch.toUpper()}.EFI";
+            Vector<string> required = [f"{boot}/{fallback}", f"{boot}/EFI/systemd/systemd-boot{arch}.efi"];
+            var entries = self.shell.run(f"bootctl --esp-path={ShellWords.quote(boot)} --json=short list", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
+            required.push(SecureBootVerification.defaultImage(entries.stdout(), boot));
+            for name in FileSystem.listDir(f"{boot}/EFI/Linux") {
+                if (name.endsWith(".efi")) { required.push(f"{boot}/EFI/Linux/{name}"); }
+            }
+            var result = self.shell.run("sbctl verify --json", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
+            var unsignedPaths = SecureBootVerification.failures(result.stdout(), required);
+            if (!unsignedPaths.isEmpty()) {
+                for path in unsignedPaths { NixosLog.error(f"NOT signed or missing: {path}"); }
+                return false;
+            }
+            if (self.config.evalBool("config.settings.disk.recovery.enable")) {
+                var recovery = self.config.evalString("config.settings.disk.recovery.mountPoint");
+                for path in [f"{boot}/EFI/recovery/nixos-recovery.efi", f"{recovery}/EFI/recovery/nixos-recovery.efi", f"{recovery}/{fallback}"] {
+                    self.shell.run(f"sbverify --cert {ShellWords.quote(self.dbPublicKey())} {ShellWords.quote(path)}", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
+                }
+            }
+            NixosLog.info("Required system and recovery boot images are signed with our key");
+            return true;
+        } catch (string error) {
+            NixosLog.error(error);
+            return false;
+        }
+    }
+
+    public void requireVerified() {
+        if (!self.verify()) {
+            NixosLog.fatal("Secure Boot verification found unsigned EFI binaries");
+        }
+    }
+
+    public void enable(bool microsoft, bool promptReboot = true) {
+        if (!SecureBootVerification.variable("SetupMode")) {
+            throw "Key enrollment requires firmware Setup Mode; use nixosctl update for an already enrolled system";
+        }
+        self.createKeys();
+        self.config.local.setString("target", self.config.secureBootTarget());
+        var options = RebuildOptions();
+        options.rebuildFileSystem = true;
+        options.promptReboot = false;
+        NixosRebuilder(self.config).update(options);
+        self.requireVerified();
+        self.enrollKeys(microsoft);
+        if (promptReboot) { Interactive().askToReboot(); }
+    }
+
+    public void disable() {
+        SecureBootVerification.requireDisabled();
+        self.config.local.setString("target", self.config.standardTarget());
+        var options = RebuildOptions();
+        options.rebuildFileSystem = true;
+        NixosRebuilder(self.config).update(options);
+    }
+
+    public bool status() {
+        var result = self.shell.run("sbctl status", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+        return result.ok() && self.verify();
+    }
+}

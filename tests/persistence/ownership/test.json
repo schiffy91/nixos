@@ -1,0 +1,14 @@
+{
+  "name": "persistence-ownership",
+  "state": "persistence-ownership",
+  "stateMaterial": "persistence-ownership:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "nix build --no-link '.#checks.{{arch}}-linux.persistence-ownership'",
+      "timeout": 300
+    },
+    { "op": "record-state" }
+  ]
+}

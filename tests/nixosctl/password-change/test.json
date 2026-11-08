@@ -142,7 +142,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; . /var/tmp/e2e-crypt.sh; old=/.snapshots/@root/generation-2/etc/shadow; test -s \"$old\"; HASH=$(awk -F: -v user=\"$(cat /var/tmp/e2e-user)\" '$1 == user {print $2}' \"$old\"); export HASH; if test \"$(printf %s newpass789 | crypt)\" = \"$HASH\"; then echo \"rollback fixture must contain an older password\"; exit 1; fi; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf rollback-prepared",
+      "command": "set -e; . /var/tmp/e2e-crypt.sh; old=/.snapshots/@root/generation-2/etc/shadow; test -s \"$old\"; HASH=$(awk -F: -v user=\"$(cat /var/tmp/e2e-user)\" '$1 == user {print $2}' \"$old\"); export HASH; if test \"$(printf %s newpass789 | crypt)\" = \"$HASH\"; then echo \"rollback fixture must contain an older password\"; exit 1; fi; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf rollback-prepared",
       "expect": "rollback-prepared",
       "timeout": 1800
     },

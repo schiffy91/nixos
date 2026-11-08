@@ -2,8 +2,8 @@
 #include <string.h>
 
 import Library.IO;
-import ../../btrc/immutability/lib/ImmutabilityConfig.btrc;
-import ../../btrc/immutability/lib/ImmutabilityPaths.btrc;
+import ../../config/system/storage/immutability/src/lib/ImmutabilityConfig.btrc;
+import ../../config/system/storage/immutability/src/lib/ImmutabilityPaths.btrc;
 
 void expectKey(string path, string key) {
     var actual = ImmutabilityPaths.key(path);

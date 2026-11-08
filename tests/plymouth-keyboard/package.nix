@@ -3,4 +3,4 @@ let
   pkgs = import (builtins.fetchTree {
     inherit (locked) type owner repo rev narHash;
   }) { system = builtins.currentSystem; };
-in pkgs.callPackage ../../nix/system/nixos/boot/plymouth/package.nix { }
+in pkgs.callPackage ../../config/system/nixos/boot/plymouth/package.nix { }

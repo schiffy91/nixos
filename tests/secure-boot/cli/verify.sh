@@ -2,7 +2,7 @@ set -euo pipefail
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
 mkdir -p "$root/bin" "$root/boot/EFI/Linux" "$root/config"
-printf '{"target":"Secure-Boot","host_path":"/etc/nixos/nix/hosts/x86_64/VM-TEST/VM-TEST.nix"}' > "$root/config/config.json"
+printf '{"target":"Secure-Boot","host_path":"/etc/nixos/config/hosts/x86_64/VM-TEST/default.nix"}' > "$root/config/config.json"
 cat > "$root/bin/nix" <<'EOF'
 #!/bin/sh
 case "$*" in

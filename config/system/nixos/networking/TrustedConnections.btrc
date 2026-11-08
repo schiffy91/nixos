@@ -1,0 +1,115 @@
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+#include <arpa/inet.h>
+
+class TrustedRules {
+    public Vector<string> ipv4;
+    public Vector<string> ipv6;
+
+    public TrustedRules() { self.ipv4 = []; self.ipv6 = []; }
+
+    class string restore(Vector<string> rules) {
+        return "*filter\n:nixos-trusted - [0:0]\n-F nixos-trusted\n" + rules.join("\n") +
+            (rules.isEmpty() ? "" : "\n") + "COMMIT\n";
+    }
+
+    class bool safeInterface(string device) {
+        // iptables treats a trailing '+' as an interface prefix wildcard.
+        if (device.isEmpty() || device.endsWith("+")) { return false; }
+        for (int i = 0; i < device.len(); i++) {
+            var c = device[i];
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                  (c >= '0' && c <= '9') || c == '_' || c == '.' || c == ':' || c == '+' || c == '-')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    class string subnet(JSONValue address) {
+        if (!address.get("scope").asString().equals("global")) { return ""; }
+        var family = address.get("family").asString();
+        var bits = family.equals("inet") ? 32 : (family.equals("inet6") ? 128 : 0);
+        if (bits == 0 || !address.get("prefixlen").isInt()) { return ""; }
+        var prefix = address.get("prefixlen").asInt();
+        // A missing subnet must never turn into universal access.
+        if (prefix <= 0 || prefix > bits) { return ""; }
+        unsigned char bytes[16];
+        char text[64];
+        var domain = bits == 32 ? (int)AF_INET : (int)AF_INET6;
+        if ((int)inet_pton(domain, address.get("local").asString(), bytes) != 1) { return ""; }
+        for (int i = 0; i < bits / 8; i++) {
+            var remaining = prefix - i * 8;
+            if (remaining <= 0) { bytes[i] = 0; }
+            else if (remaining < 8) { bytes[i] = (unsigned char)((int)bytes[i] & (255 << (8 - remaining))); }
+        }
+        if (inet_ntop(domain, bytes, text, 64) == NULL) { return ""; }
+        return f"{text}/{prefix}";
+    }
+
+    class TrustedRules forAddresses(JSONValue addresses, Vector<string> trusted, JSONValue ports, Vector<string> excluded) {
+        if (!addresses.isArray()) { throw "Invalid interface inventory"; }
+        var rules = TrustedRules();
+        for entry in addresses.elements() {
+            var device = entry.get("ifname").asString();
+            if (!trusted.contains(device) || excluded.contains(device) || !TrustedRules.safeInterface(device)) { continue; }
+            Vector<string> networks = [];
+            for address in entry.get("addr_info").elements() {
+                var network = TrustedRules.subnet(address);
+                if (!network.isEmpty() && !networks.contains(network)) { networks.push(network); }
+            }
+            for network in networks.sorted() {
+                for protocol in ["tcp", "udp"] {
+                    Vector<int> numbers = [];
+                    for port in ports.get(protocol).elements() {
+                        if (!port.isInt() || port.asInt() < 1 || port.asInt() > 65535) { throw "Invalid service port"; }
+                        numbers.push(port.asInt());
+                    }
+                    for port in numbers.distinct().sorted() {
+                        var rule = f"-A nixos-trusted -i {device} -s {network} -p {protocol} --dport {port} -j nixos-fw-accept";
+                        if (network.contains(":")) { rules.ipv6.push(rule); } else { rules.ipv4.push(rule); }
+                    }
+                }
+            }
+        }
+        return rules;
+    }
+
+    public void apply(bool stop = false) {
+        var shell = UnixShell();
+        for command in ["iptables", "ip6tables"] {
+            if (!shell.run(f"{command} --wait -S nixos-fw", logFailure=false).ok()) { continue; }
+            var installed = shell.run(f"{command} --wait -C nixos-fw -j nixos-trusted", logFailure=false).ok();
+            if (stop) {
+                if (installed) { shell.run(f"{command} --wait -D nixos-fw -j nixos-trusted", throwOnFailure=true); }
+                if (shell.run(f"{command} --wait -S nixos-trusted", logFailure=false).ok()) {
+                    shell.run(f"{command} --wait -F nixos-trusted", throwOnFailure=true);
+                    shell.run(f"{command} --wait -X nixos-trusted", throwOnFailure=true);
+                }
+            } else {
+                var rules = command.equals("iptables") ? self.ipv4 : self.ipv6;
+                shell.run(f"{command}-restore --wait --noflush", stdin=TrustedRules.restore(rules), throwOnFailure=true);
+                if (!installed) { shell.run(f"{command} --wait -I nixos-fw 1 -j nixos-trusted", throwOnFailure=true); }
+            }
+        }
+    }
+
+    class TrustedRules current(JSONValue configuration, Vector<string> excluded) {
+        var shell = UnixShell();
+        // Avoid D-Bus activation of NM while it waits for network-pre.target.
+        if (!shell.run("systemctl is-active --quiet NetworkManager.service", logFailure=false).ok()) { return TrustedRules(); }
+        var addresses = JSONValue.parse(shell.run("ip -json address show up", throwOnFailure=true).stdout());
+        Vector<string> profiles = [];
+        for profile in configuration.get("connections").elements() { profiles.push(profile.asString()); }
+        Vector<string> trusted = [];
+        for entry in addresses.elements() {
+            var device = entry.get("ifname").asString();
+            var profile = shell.run(f"nmcli --get-values GENERAL.CON-UUID device show {ShellWords.quote(device)}", logFailure=false);
+            if (profile.ok() && profiles.contains(profile.stdout().trim())) { trusted.push(device); }
+        }
+        return TrustedRules.forAddresses(addresses, trusted, configuration.get("ports"), excluded);
+    }
+}

@@ -19,13 +19,13 @@ STDLIB_IMPL := $(STDLIB_DIR)/btrc_stdlib.c
 STDLIB_MANIFEST := $(STDLIB_DIR)/btrc_stdlib.manifest
 STDLIB_LIB := $(BUILD_DIR)/libbtrc.a
 BTRC_STAMP := $(BUILD_DIR)/.btrc-tool
-NIXOSCTL_ENTRY := btrc/nixosctl/NixosCtl.btrc
-IMMUTABILITY_ENTRY := btrc/immutability/Immutability.btrc
+NIXOSCTL_ENTRY := config/pkgs/utils/nixosctl/Main.btrc
+IMMUTABILITY_ENTRY := config/system/storage/immutability/src/Immutability.btrc
 NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
 IMMUTABILITY_C_OUT := $(BUILD_DIR)/immutability.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
 IMMUTABILITY_BIN := $(BUILD_DIR)/immutability
-TRAY_ENTRY := btrc/nixosctl/NixosTray.btrc
+TRAY_ENTRY := config/pkgs/utils/nixosctl/ui/Main.btrc
 TRAY_C_OUT := $(BUILD_DIR)/nixosctl-tray.c
 TRAY_BIN := $(BUILD_DIR)/nixosctl-tray
 # <binary name>:<entry point>, one per unit suite
@@ -41,13 +41,23 @@ UNIT_TESTS := \
 	interactive:tests/core/InteractiveTests.btrc \
 	power:tests/core/PowerTests.btrc \
 	key_codes:tests/harness/KeyCodeTests.btrc \
+	ci_tools:tests/ci/ToolsTests.btrc \
+	ci_pipe:tests/ci/PipeTests.btrc \
+	recovery_mount:tests/recovery/MountTests.btrc \
+	module_trust:tests/kernel-trust/ModuleTests.btrc \
+	secure_boot_archive:tests/secure-boot/ArchiveTests.btrc \
+	sudo_grant:tests/nixosctl/sudo/GrantTests.btrc \
+	shell_tools:tests/core/ShellToolsTests.btrc \
+	proton_tools:tests/gaming/proton/tools/ToolsTests.btrc \
+	wow_lock:tests/gaming/wow/LockTests.btrc \
+	networking_rules:tests/networking/RulesTests.btrc \
 	ownership:tests/immutability/OwnershipTests.btrc
 unit_name = $(firstword $(subst :, ,$(1)))
 unit_entry = $(lastword $(subst :, ,$(1)))
 UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
 BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN)
-SOURCES := $(shell find btrc tests -name '*.btrc' | sort)
+SOURCES := $(shell rg --files config tests ci -g '*.btrc' -g '*.h' -g btrc.toml -g btrc.lock | sort)
 
 # Every one of these just forwards to tests/Makefile under the same name
 TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
@@ -63,12 +73,17 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 
 all: build
 
+.PHONY: lint
+lint:
+	nix-shell ci/tools.nix -A shell --run 'repo-tools lint'
+
 help:
 	@printf '%s\n' 'Build:'
 	@printf '%s\n' '  build             nixosctl, immutability and the tray binary'
 	@printf '%s\n' '  clean             remove build/'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Tests, fastest first:'
+	@printf '%s\n' '  lint              repository compilers, linters and workspace diagnostics'
 	@printf '%s\n' '  unit              in-process suites, no VM (seconds)'
 	@printf '%s\n' '  quick             unit + a CLI smoke + the graph node named "quick"'
 	@printf '%s\n' '  check             quick + stateful-host + gaming; what to run before committing'
@@ -116,8 +131,8 @@ $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 
 # Library.Tray's Linux provider binds libdbus, so its typed header import
 # needs pkg-config at transpile time and dbus-1 at link time.
-$(BUILD_DIR)/tray-compiler: nix/apps/utils/nixosctl/tray/lib.nix nix/apps/utils/nixosctl/tray/submenus.patch flake.lock | dirs
-	nix build --no-warn-dirty --impure --out-link "$@" --expr 'let f = builtins.getFlake "git+file://$(CURDIR)"; pkgs = import f.inputs.nixpkgs { system = builtins.currentSystem; }; in (import ./nix/apps/utils/nixosctl/tray/lib.nix { inherit pkgs; inherit (f) inputs; }).btrcpy'
+$(BUILD_DIR)/tray-compiler: config/pkgs/utils/nixosctl/ui/tray/lib.nix config/pkgs/utils/nixosctl/ui/tray/submenus.patch config/pkgs/dev/btrc/native-lsp.patch flake.lock | dirs
+	nix build --no-warn-dirty --impure --out-link "$@" --expr 'let f = builtins.getFlake "git+file://$(CURDIR)"; pkgs = import f.inputs.nixpkgs { system = builtins.currentSystem; }; in (import ./config/pkgs/utils/nixosctl/ui/tray/lib.nix { inherit pkgs; inherit (f) inputs; }).btrcpy'
 
 $(TRAY_C_OUT): $(SOURCES) $(BUILD_DIR)/tray-compiler | dirs
 	$(TRAY_BTRC) --strict-imports "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
@@ -163,7 +178,7 @@ gaming:
 # Needs a real GPU, so deliberately not part of check/test
 .PHONY: hdr-screencast
 hdr-screencast:
-	nix/apps/gaming/sunshine/hdr-screencast-test/hdr-screencast-test $(ARGS)
+	config/pkgs/gaming/sunshine/hdr-screencast-test/hdr-screencast-test $(ARGS)
 
 # Installs this host from an installer ISO; nixosctl elevates and prompts itself
 install: $(BIN)
@@ -189,15 +204,18 @@ iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
 CACHE_DIR ?= $(HOME)/.cache/nix-cache  # shared with the other repositories on this host
 CACHE_PORT ?= 8080
 
-cache: ## Build this host's .github/ci/targets.nix attrs, sign them, and add them to build/cache
-	.github/ci/publish.py --dir "$(CACHE_DIR)"
+$(BUILD_DIR)/repo-tools: $(shell rg --files ci -g '*.btrc') ci/tools.nix config/lib/btrc.nix flake.lock | dirs
+	nix-build ci/tools.nix -A package --out-link "$@"
 
-cache-all: ## The same for everything a host activates (every installer in `local`)
-	.github/ci/publish.py --all --dir "$(CACHE_DIR)"
+cache: $(BUILD_DIR)/repo-tools ## Build this host's ci/targets.nix attrs, sign them, and add them to build/cache
+	$(BUILD_DIR)/repo-tools/bin/repo-tools publish --dir "$(CACHE_DIR)"
+
+cache-all: $(BUILD_DIR)/repo-tools ## The same for everything a host activates (every installer in `local`)
+	$(BUILD_DIR)/repo-tools/bin/repo-tools publish --all --dir "$(CACHE_DIR)"
 
 cache-serve: ## Serve build/cache over HTTP for the other machines (CACHE_PORT=8080)
 	@printf 'serving %s on port %s; substituter: http://%s.local:%s\n' "$(CACHE_DIR)" "$(CACHE_PORT)" "$$(hostname)" "$(CACHE_PORT)"
-	@python3 -m http.server "$(CACHE_PORT)" --directory "$(CACHE_DIR)"
+	@nix-shell ci/tools.nix -A shell --run 'darkhttpd "$(CACHE_DIR)" --port "$(CACHE_PORT)"'
 
 $(TESTS_TARGETS): $(BIN)
 	$(MAKE) -C tests $@

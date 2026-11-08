@@ -1,0 +1,162 @@
+import ../../../config/system/nixos/recovery/Artifacts.btrc;
+import Library.Platform;
+
+#include <assert.h>
+
+JSONValue artifact(string source, string target, bool sign = false) {
+    var value = JSONValue.makeObject();
+    value.set("source", JSONValue.makeString(source));
+    value.set("target", JSONValue.makeString(target));
+    value.set("signed", JSONValue.makeBool(sign));
+    return value;
+}
+
+JSONValue plan(string root, string image, bool secure) {
+    var value = JSONValue.makeObject();
+    var boot = root + "/boot with spaces";
+    var recovery = root + "/recovery";
+    RecoveryArtifacts.require(f"mkdir -p {ShellWords.quote(boot)} {ShellWords.quote(recovery)}");
+    value.set("boot", JSONValue.makeString(boot));
+    value.set("recovery", JSONValue.makeString(recovery));
+    value.set("publicKey", JSONValue.makeString(root + "/db.pem"));
+    value.set("privateKey", JSONValue.makeString(root + "/db.key"));
+    value.set("signingRequired", JSONValue.makeBool(secure));
+    value.set("bootSafety", JSONValue.makeString(""));
+    var files = JSONValue.makeArray();
+    files.push(artifact(image, boot + "/EFI/recovery/payload.efi", secure));
+    files.push(artifact(image, recovery + "/EFI/recovery/payload.efi", secure));
+    files.push(artifact(image, recovery + "/EFI/BOOT/BOOTX64.EFI", secure));
+    assert(Path.writeAll(root + "/entry", "title Recovery\n"));
+    files.push(artifact(root + "/entry", boot + "/loader/entries/recovery.conf"));
+    files.push(artifact(root + "/entry", recovery + "/loader/entries/recovery.conf"));
+    value.set("artifacts", files);
+    var obsolete = JSONValue.makeArray();
+    obsolete.push(JSONValue.makeString(recovery + "/legacy"));
+    value.set("obsolete", obsolete);
+    return value;
+}
+
+void noStagedFiles(JSONValue configuration) {
+    for file in configuration.get("artifacts").elements() {
+        var target = file.get("target").asString();
+        if (!FileSystem.isDir(PathTools.dirname(target))) { continue; }
+        for name in FileSystem.listDir(PathTools.dirname(target)) { assert(!name.startsWith(PathTools.basename(target) + ".")); }
+    }
+}
+
+void certificate(string root, string prefix) {
+    UnixShell().run(f"openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=Recovery-Test-{prefix}/ -days 1 -keyout {ShellWords.quote(root + "/" + prefix + ".key")} -out {ShellWords.quote(root + "/" + prefix + ".pem")}", throwOnFailure=true);
+}
+
+int main(int argc, char** argv) {
+    assert(argc == 3);
+    RecoveryArtifacts.handleInterruptions();
+    var created = FileSystem.createTemporaryDirectory("recovery-artifact-tests");
+    assert(created.ok());
+    var fixture = created.value();
+    try {
+        var root = fixture.path();
+        assert(Path.writeAll(root + "/payload", "kernel-image"));
+        var configuration = plan(root, root + "/payload", false);
+        var installer = RecoveryArtifacts(configuration);
+        assert(!installer.ready(false));
+        var rejected = false;
+        try { installer.ready(true); } catch (string error) { rejected = true; }
+        assert(rejected);
+        assert(Path.writeAll(installer.recovery() + "/legacy", "obsolete"));
+        installer.install();
+        assert(installer.current(installer.manifest()));
+        assert(!FileSystem.exists(installer.recovery() + "/legacy"));
+        var target = configuration.get("artifacts").elements().get(0).get("target").asString();
+        var inode = UnixShell().run(f"stat -c %i {ShellWords.quote(target)}", throwOnFailure=true).stdout();
+        installer.install();
+        assert(UnixShell().run(f"stat -c %i {ShellWords.quote(target)}", throwOnFailure=true).stdout().equals(inode));
+        assert(Path.writeAll(target, "tampered"));
+        assert(!installer.current(installer.manifest()));
+        installer.install();
+        assert(Path.readAll(target).equals("kernel-image"));
+        assert(Path.writeAll(root + "/replacement", "replacement"));
+        var broken = JSONValue.parse(configuration.stringify());
+        broken.get("artifacts").elements().get(0).set("source", JSONValue.makeString(root + "/replacement"));
+        broken.get("artifacts").elements().get(4).set("source", JSONValue.makeString(root + "/missing"));
+        rejected = false;
+        try { RecoveryArtifacts(broken).install(); } catch (string error) { rejected = true; }
+        assert(rejected && Path.readAll(target).equals("kernel-image"));
+        assert(installer.current(installer.manifest()));
+        noStagedFiles(configuration);
+        // Real signals delivered while a staging child is running must unwind
+        // through finally; signal handlers themselves only set an atomic flag.
+        var oldPath = Environment.get("PATH", "");
+        var commands = root + "/commands";
+        RecoveryArtifacts.require(f"mkdir -p {ShellWords.quote(commands)}");
+        for number in [15, 2] {
+            var installCommand = commands + "/install";
+            var script = f"#!/bin/sh\nkill -{number} {getpid()}\nexec {ShellWords.quote(argv[2])} \"$@\"\n";
+            assert(Path.writeAll(installCommand, script));
+            RecoveryArtifacts.require(f"chmod 700 {ShellWords.quote(installCommand)}");
+            setenv("PATH", commands + ":" + oldPath, 1);
+            rejected = false;
+            var interruptedInstaller = RecoveryArtifacts(broken);
+            try { interruptedInstaller.install(); } catch (string error) { rejected = true; }
+            assert(recoveryArtifactSignal == (sig_atomic_t)number && interruptedInstaller.staged.len == 1);
+            setenv("PATH", oldPath, 1);
+            RecoveryArtifacts.handleInterruptions();
+            assert(rejected && Path.readAll(target).equals("kernel-image"));
+            noStagedFiles(configuration);
+            assert(installer.current(installer.manifest()));
+        }
+        var escaping = JSONValue.parse(configuration.stringify());
+        escaping.get("artifacts").elements().get(0).set("target", JSONValue.makeString(root + "/outside"));
+        rejected = false;
+        try { RecoveryArtifacts(escaping); } catch (string error) { rejected = true; }
+        assert(rejected);
+        // A failed Standard-Boot guard must run even for optional activation,
+        // before a missing mount can turn that activation into a harmless skip.
+        var guarded = JSONValue.parse(configuration.stringify());
+        var guard = root + "/guard";
+        assert(Path.writeAll(guard, "#!/bin/sh\nexit 17\n"));
+        RecoveryArtifacts.require(f"chmod 700 {ShellWords.quote(guard)}");
+        guarded.set("bootSafety", JSONValue.makeString(guard));
+        rejected = false;
+        try { RecoveryArtifacts(guarded).ready(false); } catch (string error) { rejected = true; }
+        assert(rejected);
+
+        certificate(root, "db");
+        var secure = plan(root + "/secure", argv[1], true);
+        var awaitingKeys = RecoveryArtifacts(secure);
+        assert(!awaitingKeys.credentialsReady(false));
+        rejected = false;
+        try { awaitingKeys.credentialsReady(true); } catch (string error) { rejected = true; }
+        assert(rejected);
+        secure.set("publicKey", JSONValue.makeString(root + "/db.pem"));
+        secure.set("privateKey", JSONValue.makeString(root + "/db.key"));
+        var signedInstaller = RecoveryArtifacts(secure);
+        signedInstaller.install();
+        assert(signedInstaller.current(signedInstaller.manifest()));
+        var signedTarget = secure.get("artifacts").elements().get(0).get("target").asString();
+        var before = UnixShell().run(f"sha256sum {ShellWords.quote(signedTarget)}", throwOnFailure=true).stdout();
+        var invalidImage = JSONValue.parse(secure.stringify());
+        invalidImage.get("artifacts").push(artifact(root + "/payload", signedInstaller.recovery() + "/invalid.efi", true));
+        rejected = false;
+        try { RecoveryArtifacts(invalidImage).install(); } catch (string error) { rejected = true; }
+        assert(rejected);
+        assert(UnixShell().run(f"sha256sum {ShellWords.quote(signedTarget)}", throwOnFailure=true).stdout().equals(before));
+        noStagedFiles(secure);
+        certificate(root, "other");
+        var mismatch = JSONValue.parse(secure.stringify());
+        mismatch.set("privateKey", JSONValue.makeString(root + "/other.key"));
+        rejected = false;
+        try { RecoveryArtifacts(mismatch).install(); } catch (string error) { rejected = true; }
+        assert(rejected && signedInstaller.current(signedInstaller.manifest()));
+        var oldManifest = signedInstaller.manifest();
+        RecoveryArtifacts.require(f"cp {ShellWords.quote(root + "/other.pem")} {ShellWords.quote(root + "/db.pem")}");
+        RecoveryArtifacts.require(f"cp {ShellWords.quote(root + "/other.key")} {ShellWords.quote(root + "/db.key")}");
+        assert(!oldManifest.equals(signedInstaller.manifest()));
+        assert(!signedInstaller.current(signedInstaller.manifest()));
+        signedInstaller.install();
+        assert(signedInstaller.current(signedInstaller.manifest()));
+        noStagedFiles(secure);
+    } finally { fixture.close(); }
+    print("PASS: recovery artifact staging, idempotence, tamper repair, failed-update isolation, signatures and certificate rotation");
+    return 0;
+}

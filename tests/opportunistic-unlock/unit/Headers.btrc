@@ -1,0 +1,11 @@
+import unlock.Native;
+import unlock.Policy;
+
+int main(int argc, char** argv) {
+    if (argc != 3) { return 2; }
+    crypt_device* device = NULL;
+    bool allowed = crypt_init(&device, argv[1]) == 0 && crypt_load(device, CRYPT_LUKS, NULL) == 0 && UnlockPolicy.headerAllowed(device);
+    crypt_free(device);
+    if (allowed != (atoi(argv[2]) != 0)) { fprintf(stderr, "unexpected header policy for %s\n", argv[1]); return 1; }
+    return 0;
+}

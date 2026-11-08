@@ -1,0 +1,26 @@
+import ../../../config/lib/BackgroundProcess.btrc;
+#include <assert.h>
+
+int main(int argc, char** argv) {
+    if (argc == 3 && strcmp(argv[1], "--check-descriptor") == 0) {
+        int descriptor = atoi(argv[2]);
+        if (fcntl(descriptor, F_GETFD, 0) >= 0 || errno != EBADF) { return 1; }
+        for (int standard = 0; standard < 3; standard++) {
+            if (fcntl(standard, F_GETFD, 0) < 0) { return 2; }
+        }
+        return 0;
+    }
+    int original = open("/dev/null", O_RDONLY);
+    assert(original >= 0);
+    int descriptor = fcntl(original, F_DUPFD, 100);
+    close(original);
+    assert(descriptor >= 100 && fcntl(descriptor, F_GETFD, 0) == 0);
+    var child = BackgroundProcess.start(Strings.copy(argv[0]), ["--check-descriptor", f"{descriptor}"]);
+    var deadline = MonotonicClock.deadlineAfter(5000);
+    while (child.running() && MonotonicClock.before(deadline)) { Timer.sleepMillis(10); }
+    assert(!child.running() && child.code == 0);
+    assert(fcntl(descriptor, F_GETFD, 0) == 0);
+    close(descriptor);
+    print("Background children retain standard streams and close unrelated inherited descriptors");
+    return 0;
+}

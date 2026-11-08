@@ -8,7 +8,7 @@ let
     name = "installer-secret-test";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../../btrc ./Driver.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/utils/nixosctl/lib ./Driver.btrc ];
     };
     nativeBuildInputs = [ inputs.btrc.packages.${system}.btrcpy ];
     buildPhase = ''

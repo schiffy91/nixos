@@ -1,0 +1,94 @@
+import ./Posix.btrc;
+
+struct PasswordPrompt { const char* prompt; const char* plymouth; };
+
+void require(int result, const char *operation) {
+    if (result < 0) {
+        perror(operation);
+        exit(EXIT_FAILURE);
+    }
+}
+
+unsigned activeVt(int fd) {
+    struct vt_stat state;
+    require(ioctl(fd, VT_GETSTATE, &state), "VT_GETSTATE");
+    return state.v_active;
+}
+
+char* askPassword(const char* prompt, const char* plymouth) {
+    int fds[2], status;
+    char buffer[PAM_MAX_RESP_SIZE + 1];
+    size_t used = 0;
+    bool read_failed = false;
+    ssize_t n;
+    pid_t child, parent = getpid();
+    if (pipe2(fds, O_CLOEXEC) < 0)
+        return NULL;
+    child = fork();
+    if (child == (pid_t)0) {
+        if (prctl(PR_SET_PDEATHSIG, SIGKILL) < 0 || (pid_t)getppid() != parent)
+            _exit(1);
+        if (dup2(fds[1], STDOUT_FILENO) < 0)
+            _exit(1);
+        close(fds[0]);
+        close(fds[1]);
+        execl(plymouth, plymouth, "ask-for-password", prompt, NULL);
+        _exit(1);
+    }
+    close(fds[1]);
+    if (child < (pid_t)0) {
+        close(fds[0]);
+        return NULL;
+    }
+    while (used < sizeof(buffer)) {
+        n = read(fds[0], buffer + used, sizeof(buffer) - used);
+        if (n < (ssize_t)0 && errno == EINTR)
+            continue;
+        if (n <= (ssize_t)0) {
+            read_failed = n < (ssize_t)0;
+            break;
+        }
+        used += (size_t)n;
+    }
+    close(fds[0]);
+    if (read_failed || used == sizeof(buffer))
+        kill(child, SIGKILL);
+    do { n = waitpid(child, &status, 0); } while (n < (ssize_t)0 && errno == EINTR);
+    char *answer = NULL;
+    if (!read_failed && (pid_t)n == child && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
+        used > (size_t)0 && used < sizeof(buffer) && memchr(buffer, 0, used) == NULL) {
+        buffer[used] = 0;
+        answer = strdup(buffer);
+    }
+    explicit_bzero(buffer, sizeof(buffer));
+    return answer;
+}
+
+int converse(int count, const struct pam_message **messages,
+                    struct pam_response **responses, void *data) {
+    if (count <= 0 || count > PAM_MAX_NUM_MSG)
+        return PAM_CONV_ERR;
+    struct pam_response *answers = (struct pam_response*)calloc((size_t)count, sizeof(struct pam_response));
+    if (!answers)
+        return PAM_BUF_ERR;
+    for (int i = 0; i < count; i++) {
+        if (messages[i]->msg_style == PAM_PROMPT_ECHO_OFF) {
+            answers[i].resp = askPassword(((struct PasswordPrompt*)data)->prompt, ((struct PasswordPrompt*)data)->plymouth);
+            if (answers[i].resp)
+                continue;
+        } else if (messages[i]->msg_style == PAM_TEXT_INFO ||
+                   messages[i]->msg_style == PAM_ERROR_MSG) {
+            continue;
+        }
+        for (int j = 0; j < count; j++) {
+            if (answers[j].resp) {
+                explicit_bzero(answers[j].resp, strlen(answers[j].resp));
+                free(answers[j].resp);
+            }
+        }
+        free(answers);
+        return PAM_CONV_ERR;
+    }
+    *responses = answers;
+    return PAM_SUCCESS;
+}

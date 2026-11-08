@@ -1,0 +1,14 @@
+#include <unistd.h>
+
+int main(int argc, char** argv) {
+    if (argc != 3 || strcmp(argv[1], "ask-for-password") != 0) return 1;
+    if (strcmp(argv[2], "success") == 0) { assert(write(1, "fixture-password", 16) == (ssize_t)16); return 0; }
+    if (strcmp(argv[2], "empty") == 0) return 0;
+    if (strcmp(argv[2], "failed") == 0) { assert(write(1, "fixture-password", 16) == (ssize_t)16); return 1; }
+    if (strcmp(argv[2], "nul") == 0) { char bytes[3] = { 'a', 0, 'b' }; assert(write(1, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes)); return 0; }
+    char bytes[4096];
+    memset(bytes, 'x', sizeof(bytes));
+    if (strcmp(argv[2], "maximum") == 0) { assert(write(1, bytes, 512) == (ssize_t)512); return 0; }
+    if (strcmp(argv[2], "overflow") == 0) { assert(write(1, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes)); return 0; }
+    return 1;
+}

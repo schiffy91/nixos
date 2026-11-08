@@ -1,0 +1,10 @@
+{
+  "name": "kernel-trust-contracts",
+  "state": "kernel-trust-contracts",
+  "stateMaterial": "kernel-trust-contracts:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "host", "command": "nix-build tests/kernel-trust/unit.nix --no-out-link", "timeout": 300 },
+    { "op": "record-state" }
+  ]
+}

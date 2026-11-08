@@ -1,0 +1,131 @@
+import Library.CLI;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Process;
+import Library.Regex;
+import Library.Strings;
+import Library.Timer;
+
+class ProtonOptions {
+    public string command;
+    public JSONValue values = JSONValue.makeObject();
+    public Vector<string> positional = [];
+    public Vector<string> environment = [];
+    public ProtonOptions(Vector<string> arguments) {
+        self.command = arguments.isEmpty() ? "help" : arguments.get(0);
+        for (int i = 1; i < arguments.len; i++) {
+            var value = arguments.get(i);
+            if (value.equals("--")) { for (int rest = i + 1; rest < arguments.len; rest++) { self.positional.push(arguments.get(rest)); } break; }
+            var inlineValue = ""; bool inlineOption = value.startsWith("--") && value.contains("=");
+            if (inlineOption) { int separator = value.find("=", 0); inlineValue = value.substring(separator + 1, value.len() - separator - 1); value = value.substring(0, separator); }
+            if (["--force", "--force-configure", "--keep-running", "--focus", "--all", "--help"].contains(value)) {
+                if (inlineOption) { throw f"{value} does not take a value"; }
+                self.values.set(value, JSONValue.makeString("1"));
+            } else if (value.startsWith("--")) {
+                if (!["--jobs", "--seconds", "--log", "--wine", "--wine64", "--wine32", "--trace", "--winedebug", "--env", "--delay", "--mode", "--output", "--count", "--interval", "--format", "--output-dir", "--profile"].contains(value)) { throw f"Unknown option: {value}"; }
+                if (!inlineOption && ++i >= arguments.len) { throw f"Missing value for {value}"; }
+                var argument = inlineOption ? inlineValue : arguments.get(i);
+                if (value.equals("--env")) { self.environment.push(argument); }
+                else { self.values.set(value, JSONValue.makeString(argument)); }
+            } else { self.positional.push(value); }
+        }
+    }
+    public string get(string name, string fallback = "") { return self.values.has(name) ? self.values.get(name).asString() : fallback; }
+    public bool flag(string name) { return self.values.has(name); }
+    public int number(string name, int fallback) {
+        if (!self.values.has(name)) { return fallback; }
+        var value = self.get(name);
+        if (!Regex.fullMatch("[0-9]+", value) || value.toInt() < 0) { throw f"{name} requires a nonnegative integer"; }
+        return value.toInt();
+    }
+}
+
+class ProtonContext {
+    public string root;
+    public string directory;
+    public string version;
+    public string toolName;
+    public string home;
+    public string devRoot;
+    public ProtonContext() {
+        self.root = PathTools.absolute(Environment.get("NIXOS_CONFIG_ROOT", "/etc/nixos"));
+        self.directory = PathTools.absolute(Environment.get("PROTON_CUSTOM_ROOT", self.root + "/config/pkgs/gaming/proton/custom"));
+        var declaration = Regex.first("toolVersion[[:space:]]*=[[:space:]]*\"[^\"]+\"", Path.readAll(self.directory + "/package.nix"));
+        var parts = Strings.split(declaration, "\"");
+        if (parts.len < 2) { throw "toolVersion is missing from Proton package.nix"; }
+        self.version = parts.get(1); self.toolName = "proton-custom-" + self.version;
+        self.home = Environment.get("HOME", "");
+        if (self.home.isEmpty()) { throw "HOME is not set"; }
+        self.devRoot = Environment.get("PROTON_CUSTOM_DEV_ROOT", self.directory + "/src");
+    }
+    public string tool() { return self.home + "/.local/share/Steam/compatibilitytools.d/" + self.toolName; }
+    public string devTool() { return self.tool() + "-dev"; }
+    public string source() { return self.devRoot + "/wine"; }
+    public string build(string target) { return self.devRoot + "/wine" + target; }
+    public string saved() { return self.devRoot + "/.store-target"; }
+    public string prefix() { return self.home + "/Games/Battle.net/prefix"; }
+    public string logDirectory() { return Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/battlenet-proton"; }
+    public string log() { return self.logDirectory() + "/steam-battlenet.log"; }
+    public string launcher() { return self.prefix() + "/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"; }
+    public ExecResult execute(string program, Vector<string> arguments, bool collect = false, bool check = true, string cwd = "", Vector<string> environment = [], string input = "") {
+        print("+ " + ChildProcess.render(program, arguments));
+        var result = ChildProcess.run(program, arguments, cwd=cwd, environment=environment, stdinData=input,
+            stdout=collect ? COMMAND_OUTPUT_COLLECT : COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM,
+            foreground=!collect, stdinMode=input.isEmpty() && !collect ? CHILD_STDIN_INHERIT : CHILD_STDIN_NULL);
+        if (check && !result.ok()) { throw f"{program} failed with status {result.code}"; }
+        return result;
+    }
+    class string quote(string value) { return "'" + value.replace("'", "'\\''") + "'"; }
+    class string shellCommand(string program, Vector<string> arguments) {
+        var result = ProtonContext.quote(program);
+        for argument in arguments { result = result + " " + ProtonContext.quote(argument); }
+        return result;
+    }
+    public void shell(Vector<string> arguments, string target = "64", string cwd = "", Vector<string> environment = []) {
+        var command = ProtonContext.shellCommand(arguments.get(0), arguments.slice(1, arguments.len));
+        if (!cwd.isEmpty()) { command = "cd " + ProtonContext.quote(cwd) + " && " + command; }
+        if (target.equals("64") && Environment.get("PROTON_CUSTOM_IN_DEV_SHELL", "").equals("1")) {
+            self.execute(arguments.get(0), arguments.slice(1, arguments.len), cwd=cwd, environment=environment);
+        } else {
+            self.execute("nix-shell", [self.directory + "/dev-shell.nix", "--argstr", "protonRoot", self.directory, "--argstr", "target", target, "--run", command], environment=environment);
+        }
+    }
+    public string expression(string attr, bool package = true) {
+        var quotedRoot = JSONValue.makeString("git+file://" + self.root).stringify();
+        var result = "let flake = builtins.getFlake " + quotedRoot + "; pkgs = import flake.inputs.nixpkgs { system = \"x86_64-linux\"; config.allowUnfree = true; }; in ";
+        if (package) {
+            result = result + "(pkgs.callPackage (builtins.toPath " + JSONValue.makeString(self.directory + "/package.nix").stringify() + ") { inherit (pkgs) makeWrapper rsync unzip; })";
+            return attr.isEmpty() ? result : result + "." + attr;
+        }
+        return result + "pkgs." + attr;
+    }
+    public string nixPath(string attr, bool package = true, bool evaluate = false) {
+        var args = evaluate ? ["eval", "--raw", "--impure", "--expr", self.expression(attr, package)] : ["build", "--no-link", "--print-out-paths", "--impure", "--expr", self.expression(attr, package)];
+        var lines = Strings.split(self.execute("nix", args, true).trimmed(), "\n");
+        if (lines.isEmpty() || lines.get(lines.len - 1).isEmpty()) { throw "Nix returned no path"; }
+        return lines.get(lines.len - 1);
+    }
+    class bool same(string left, string right) {
+        if (left.isEmpty()) { return false; }
+        var resolved = FileSystem.realPath(left);
+        return !resolved.isEmpty() && resolved.equals(FileSystem.realPath(right));
+    }
+    class bool exists(string path) { return FileSystem.exists(path) || FileSystem.isSymlink(path); }
+    public void copy(string source, string destination) {
+        FileSystem.mkdirp(PathTools.dirname(destination));
+        if (ProtonContext.same(source, destination)) { self.execute("chmod", ["u+w", destination]); return; }
+        if (FileSystem.exists(destination)) { self.execute("chmod", ["u+w", destination]); }
+        self.execute("cp", ["--preserve=mode,timestamps", "--", source, destination]);
+        self.execute("chmod", ["u+w", destination]);
+    }
+    public void link(string target) {
+        FileSystem.mkdirp(PathTools.dirname(self.tool()));
+        if (ProtonContext.exists(self.tool()) && unlink(self.tool()) != 0) { throw "Cannot replace active Proton symlink"; }
+        if (symlink(target, self.tool()) != 0) { throw "Cannot create active Proton symlink"; }
+        print(self.tool() + " -> " + FileSystem.realPath(self.tool()));
+    }
+    class Vector<string> lines(string text) {
+        Vector<string> result = []; for line in Strings.split(text, "\n") { if (!line.isEmpty()) { result.push(line); } } return result;
+    }
+}

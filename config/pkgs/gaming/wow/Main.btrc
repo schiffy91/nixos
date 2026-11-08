@@ -1,0 +1,10 @@
+import ./Lock.btrc;
+
+int main() {
+    try {
+        var root = Environment.get("NIXOS_CONFIG_ROOT", "/etc/nixos") + "/config/pkgs/gaming/wow";
+        var result = AddonLock.refresh(JSONValue.readFile(root + "/addons.json"));
+        AddonLock.publish(root + "/addons.lock.json", result);
+        return 0;
+    } catch (string error) { fprintf(stderr, "wow-addons-lock: %s\n", error); return 1; }
+}

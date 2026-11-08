@@ -1,6 +1,6 @@
 
 import Library.Strings;
-import ../../btrc/nixosctl/Installer.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/Installer.btrc;
 
 string manifest() {
     return "{\"STEAM-DECK-OLED-Standard-Boot\":{"

@@ -1,7 +1,7 @@
 #include <assert.h>
 
 import Library.Strings;
-import ../../btrc/core/Interactive.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/core/Interactive.btrc;
 
 int main() {
     /* the only two answers, however they are typed */

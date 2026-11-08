@@ -1,0 +1,30 @@
+import ../../config/system/nixos/boot/kernel-trust/Modules.btrc;
+#include <assert.h>
+
+int main() {
+    var certificate = Bytes();
+    for byte in [0x30, 3, 1, 0, 255] { certificate.append(byte); }
+    var aggregate = Bytes(); aggregate.appendBytes(certificate); aggregate.appendBytes(certificate);
+    assert(ModuleTrust.certificates(aggregate).len == 1);
+    var image = Bytes.fromString("image"); image.appendBytes(aggregate); image.append(0);
+    assert(ModuleTrust.contains(image, aggregate));
+    assert(!ModuleTrust.contains(certificate, aggregate));
+    assert(!ModuleTrust.contains(image, Bytes()));
+    for bytes in [Bytes.fromString("bad"), certificate.slice(0, 4), Bytes.fromString("0") ] {
+        var rejected = false;
+        try { ModuleTrust.certificates(bytes); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    var raw = Bytes.fromString("bodySIGN");
+    for byte in [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 4] { raw.append(byte); }
+    raw.appendBytes(Bytes.fromString("~Module signature appended~\n"));
+    assert(ModuleTrust.signatureSize(raw) == 4);
+    for length in [0, 9, 255] {
+        raw.set(19, length);
+        var rejected = false;
+        try { ModuleTrust.signatureSize(raw); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    print("PASS: DER boundaries, certificate membership, image matching and module signature bounds");
+    return 0;
+}

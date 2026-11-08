@@ -5,9 +5,9 @@ import Library.FileSystem;
 import Library.JSON;
 import Library.Platform;
 import Library.Process;
-import ../../btrc/gaming/steam/SteamConfiguration.btrc;
-import ../../btrc/gaming/steam/SteamShortcuts.btrc;
-import ../../btrc/gaming/wine/WinePrefix.btrc;
+import ../../config/pkgs/gaming/steam/src/SteamConfiguration.btrc;
+import ../../config/pkgs/gaming/steam/src/SteamShortcuts.btrc;
+import ../../config/pkgs/gaming/wine/src/WinePrefix.btrc;
 import assetto.Assetto;
 import assetto.GameSettings;
 import assetto.ControlBindings;
@@ -155,6 +155,29 @@ class GamingTests {
         SteamShortcuts.setIcon(entries.get(0), "/icons/keep.png");
         var reparsed = SteamShortcuts(SteamShortcuts.render([entries.get(0)])).entries().get(0);
         assert(reparsed.icon.equals("/icons/keep.png") && reparsed.name.equals("Keep"));
+        var artwork = f"{self.root}/Chrome Artwork";
+        for filename in ["p", "landscape", "_hero", "_logo"] {
+            GamingFiles.write(f"{artwork}/{filename}.png", filename);
+        }
+        chrome.set("artwork", JSONValue.makeString(artwork));
+        icons.set("Chrome", chrome);
+        GamingFiles.write(declaration, icons.stringify());
+        // Steam may retain an ID that differs from the executable/name CRC.
+        entries = SteamShortcuts(GamingFiles.read(path)).entries();
+        for (int byte = 0; byte < 4; byte++) { entries.get(1).body.set(7 + byte, byte == 3 ? 128 : 0); }
+        GamingFiles.writeBytes(path, SteamShortcuts.render(entries));
+        before = GamingFiles.read(path);
+        var grid = f"{steam}/userdata/1/config/grid";
+        GamingFiles.write(f"{grid}/2147483648_hero.jpg", "custom-hero");
+        UnixShell().run(command.render(), throwOnFailure=true);
+        assert(GamingFiles.read(path).equals(before));
+        assert(Path.readAll(f"{grid}/2147483648p.png").equals("p"));
+        assert(Path.readAll(f"{grid}/2147483648.png").equals("landscape"));
+        assert(Path.readAll(f"{grid}/2147483648_logo.png").equals("_logo"));
+        assert(!FileSystem.exists(f"{grid}/2147483648_hero.png"));
+        GamingFiles.write(f"{grid}/2147483648p.png", "custom-cover");
+        UnixShell().run(command.render(), throwOnFailure=true);
+        assert(Path.readAll(f"{grid}/2147483648p.png").equals("custom-cover"));
         var unknown = Bytes.fromString("not a shortcuts file");
         GamingFiles.writeBytes(path, unknown);
         assert(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
@@ -361,6 +384,8 @@ class GamingTests {
 
     public void launch() {
         var library = f"{self.root}/Separate Library";
+        GamingFiles.write(f"{self.root}/Steam/steamapps/libraryfolders.vdf", "libraryfolders { 0 { path " + SteamVdf.quote(library) + " } }");
+        GamingFiles.write(f"{library}/steamapps/appmanifest_244210.acf", "AppState { StateFlags 4 installdir assettocorsa }");
         var game = f"{library}/steamapps/common/assettocorsa";
         var prefix = f"{library}/steamapps/compatdata/244210/pfx";
         var pack = f"{self.root}/launch-pack";
@@ -504,9 +529,22 @@ class GamingTests {
     }
 }
 
-int main() {
+int main(int argc, char** argv) {
     var tests = GamingTests();
-    tests.vdf(); tests.steam(); tests.shortcuts(); tests.dpi(); tests.mods(); tests.contentDirectory(); tests.presetLinks(); tests.contentManager(); tests.gameSettings(); tests.declaredGameSettings(); tests.controlBindings(); tests.launch();
+    var suite = CLIArgs(argc, argv).command();
+    var all = suite.isEmpty();
+    if (all || suite.equals("steam")) { tests.vdf(); tests.steam(); tests.shortcuts(); }
+    if (all || suite.equals("wine")) { tests.dpi(); }
+    if (all || suite.equals("assetto")) {
+        tests.mods(); tests.contentDirectory(); tests.presetLinks(); tests.contentManager();
+        tests.gameSettings(); tests.declaredGameSettings(); tests.controlBindings();
+    }
+    if (all || suite.equals("integration")) { tests.launch(); }
+    if (!all && !suite.equals("steam") && !suite.equals("wine") && !suite.equals("assetto") && !suite.equals("integration")) {
+        print(f"Unknown gaming test suite: {suite}");
+        FileSystem.removeRecursive(tests.root);
+        return 1;
+    }
     FileSystem.removeRecursive(tests.root);
     return 0;
 }

@@ -1,0 +1,17 @@
+manifest-version = 1
+[package]
+name = "nixos_sunshine_ssh_login"
+exports = ["Client"]
+[[native.pkg-config]]
+name = "libcurl"
+modules = ["Client"]
+[[native.pkg-config]]
+name = "openssl"
+modules = ["Client"]
+[[native.bindings]]
+module = "Client"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = ["sunshine_read_certificate", "sunshine_setopt_pointer", "sunshine_setopt_long", "sunshine_response_code", "CURL", "CURLcode", "curl_easy_init", "curl_easy_cleanup", "curl_easy_perform", "curl_slist", "curl_slist_append", "curl_slist_free_all", "CURLE_OK", "CURLE_FAILED_INIT", "CURLE_SSL_CERTPROBLEM", "CURLOPT_URL", "CURLOPT_PROXY", "CURLOPT_TIMEOUT", "CURLOPT_SSL_VERIFYHOST", "CURLOPT_SSL_VERIFYPEER", "CURLOPT_SSL_CTX_FUNCTION", "CURLOPT_SSL_CTX_DATA", "CURLOPT_WRITEFUNCTION", "CURLOPT_WRITEDATA", "CURLOPT_POSTFIELDS", "CURLOPT_POSTFIELDSIZE", "CURLOPT_HTTPHEADER", "CURLOPT_CAINFO", "CURLINFO_RESPONSE_CODE", "BIO", "BIO_new_file", "BIO_free", "X509", "X509_free", "X509_digest", "EVP_sha256", "SSL_CTX", "X509_STORE_CTX", "X509_STORE_CTX_get0_cert", "X509_STORE_CTX_set_error", "X509_V_OK", "X509_V_ERR_CERT_REJECTED", "CRYPTO_memcmp"]
+read-only-borrows = ["BIO_new_file.filename", "BIO_new_file.mode", "curl_slist_append.data"]

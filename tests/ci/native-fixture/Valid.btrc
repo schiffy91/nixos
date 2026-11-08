@@ -1,0 +1,6 @@
+class NativeProbe {
+    class bool ready() {
+        var state = inspect_name("example");
+        return state == PROBE_READY;
+    }
+}

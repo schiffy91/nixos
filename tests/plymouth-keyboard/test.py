@@ -1,12 +1,16 @@
 import shlex
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 from PIL import Image, ImageChops
 
-rotated = @ROTATED@
+if TYPE_CHECKING:
+    from nixos_test import machine  # ty: ignore[unresolved-import]
+
+rotated = "@ROTATED@" == "True"
 layout = "@LAYOUT@"
-light = @LIGHT@
-scale = @SCALE@
+light = "@LIGHT@" == "True"
+scale = int("@SCALE@")
 passphrase = {"us": "aB3! z", "de": "äÖz@ €", "fr": "éAê €"}[layout]
 machine.wait_for_unit("multi-user.target")
 # Public test credentials, written without a shell pipeline or newline.
@@ -50,6 +54,7 @@ def has_keyboard(img):
     key_color = (255, 255, 255) if light else (0x0e, 0x14, 0x1b)
     # Read backgrounds away from labels and borders; never inspect password text.
     colors = img.crop((0, img.height // 2, img.width, img.height)).getcolors(img.width * img.height)
+    assert colors is not None
     counts = {color: count for count, color in colors}
     return counts.get(tray, 0) > img.width * 10 and counts.get(key_color, 0) > img.width * 10
 
@@ -58,7 +63,10 @@ def wait_keyboard(visible, name):
     for _ in range(20):
         img = screenshot(name)
         field = img.crop((img.width // 4, 0, 3 * img.width // 4, int(img.height * .45)))
-        border = sum(b > 120 and b > 2 * r and g > 60 for r, g, b in field.getdata())
+        border = sum(
+            pixel[2] > 120 and pixel[2] > 2 * pixel[0] and pixel[1] > 60
+            for pixel in field.getdata() if isinstance(pixel, tuple)
+        )
         if has_keyboard(img) == visible and border > 50:
             return img
         time.sleep(.5)
@@ -177,7 +185,7 @@ assert "\n" not in connector and connector.endswith("-Virtual-1")
 map_touchscreen(connector)
 wait_keyboard(True, "card-qualified-touch-output")
 
-@DISPLAY_TESTS@
+# @DISPLAY_TESTS@
 
 key("GROUP")
 screenshot("alternate-layout")

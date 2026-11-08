@@ -4,7 +4,7 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  nixosctl = import (flake.outPath + "/nix/apps/utils/nixosctl/package.nix") {
+  nixosctl = import (flake.outPath + "/config/pkgs/utils/nixosctl/package.nix") {
     inherit pkgs;
     inherit (pkgs) lib;
     btrcpy = inputs.btrc.packages.${system}.btrcpy;
@@ -15,7 +15,7 @@ pkgs.testers.runNixOSTest {
   name = "password-file";
   nodes.machine = { lib, ... }: {
     _module.args.inputs = inputs;
-    imports = [ ../../../nix/settings.nix ../../../nix/system/nixos/sudo.nix ];
+    imports = [ ../../../config/settings.nix ../../../config/system/nixos/sudo.nix ];
     settings.users.admin.username = "admin";
     users.mutableUsers = false;
     users.users.admin = {
@@ -35,7 +35,7 @@ pkgs.testers.runNixOSTest {
     };
     system.activationScripts.users.deps = [ "legacyPassword" ];
     specialisation.protected.configuration = {
-      imports = [ ../../../nix/system/nixos/users/password.nix ];
+      imports = [ ../../../config/system/nixos/users/password.nix ];
     };
     security.sudo.extraConfig = "Defaults passwd_tries=1";
     environment.systemPackages = [ nixosctl python pkgs.mkpasswd ];

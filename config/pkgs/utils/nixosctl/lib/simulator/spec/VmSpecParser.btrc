@@ -1,0 +1,234 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Map;
+import Library.Strings;
+import Library.TOML;
+import Library.Vector;
+import ../../core/NixosLog.btrc;
+import ./VmSpecArgs.btrc;
+import ./VmOperation.btrc;
+import ./VmTestSpec.btrc;
+
+class VmSpecParser {
+    class string stringField(JSONValue object, string key, string fallback = "") {
+        if (!object.has(key)) { return fallback; }
+        var value = object.get(key);
+        if (!value.isString()) { throw f"Spec field {key} must be a string"; }
+        return value.asString();
+    }
+
+    class int integerField(JSONValue object, string key, int fallback) {
+        if (!object.has(key)) { return fallback; }
+        var value = object.get(key);
+        if (!value.isInt() || value.asInt() <= 0) { throw f"Spec field {key} must be a positive integer"; }
+        return value.asInt();
+    }
+
+    class VmOperation operation(JSONValue object) {
+        if (!object.isObject()) { throw "Spec operation must be an object"; }
+        var op = VmOperation();
+        op.kind = VmSpecParser.stringField(object, "op");
+        if (op.kind.isEmpty()) { throw "Spec operation is missing op"; }
+        op.command = VmSpecParser.stringField(object, "command");
+        op.expect = VmSpecParser.stringField(object, "expect");
+        op.name = VmSpecParser.stringField(object, "name");
+        op.localPath = VmSpecParser.stringField(object, "local");
+        op.remotePath = VmSpecParser.stringField(object, "remote");
+        op.timeout = VmSpecParser.integerField(object, "timeout", 120);
+        return op;
+    }
+
+    class Vector<VmOperation> operations(JSONValue array) {
+        if (!array.isArray() || array.size() == 0) { throw "Spec needs a nonempty operations array"; }
+        Vector<VmOperation> result = [];
+        for object in array.elements() {
+            result.push(VmSpecParser.operation(object));
+        }
+        return result;
+    }
+
+    class void normalize(VmTestSpec spec, bool hasState, bool hasWorkDir, bool hasIso, bool hasIsoUrl) {
+        if (!hasState) { spec.state = spec.name; }
+        if (!hasWorkDir) { spec.workDir = ".vm/e2e/" + spec.name; }
+        if (!hasIso) { spec.iso = VmSpecArgs.defaultIso(spec.arch); }
+        if (!hasIsoUrl) { spec.isoUrl = VmSpecArgs.defaultIsoUrl(spec.arch); }
+    }
+
+    class VmTestSpec parse(string text) {
+        var object = JSONValue.parse(text);
+        if (!object.isObject()) { throw "Spec must be a valid JSON object"; }
+        var spec = VmTestSpec();
+        spec.name = VmSpecParser.stringField(object, "name", spec.name);
+        spec.arch = VmSpecParser.stringField(object, "arch", spec.arch);
+        spec.state = VmSpecParser.stringField(object, "state", spec.state);
+        spec.parentState = VmSpecParser.stringField(object, "parentState", spec.parentState);
+        spec.stateRoot = VmSpecParser.stringField(object, "stateRoot", spec.stateRoot);
+        spec.stateMaterial = VmSpecParser.stringField(object, "stateMaterial", spec.stateMaterial);
+        spec.workDir = VmSpecParser.stringField(object, "workDir", spec.workDir);
+        spec.iso = VmSpecParser.stringField(object, "iso", spec.iso);
+        spec.isoUrl = VmSpecParser.stringField(object, "isoUrl", spec.isoUrl);
+        spec.diskSize = VmSpecParser.stringField(object, "diskSize", spec.diskSize);
+        spec.diskInterface = VmSpecParser.stringField(object, "diskInterface", spec.diskInterface);
+        spec.graphics = VmSpecParser.stringField(object, "graphics", spec.graphics);
+        spec.memory = VmSpecParser.stringField(object, "memory", spec.memory);
+        spec.cpus = VmSpecParser.integerField(object, "cpus", spec.cpus);
+        spec.sshPort = VmSpecParser.integerField(object, "sshPort", spec.sshPort);
+        if (object.has("args")) {
+            var args = object.get("args");
+            if (!args.isObject()) { throw "Spec args must be an object"; }
+            for key in args.keys() {
+                var value = args.get(key);
+                if (!value.isString() && !value.isNumber() && !value.isBool()) { throw f"Invalid spec argument: {key}"; }
+                spec.args.put(key, value.isString() ? value.asString() : value.stringify());
+            }
+        }
+        spec.operations = VmSpecParser.operations(object.get("operations"));
+        VmSpecParser.normalize(spec, object.has("state"), object.has("workDir"), object.has("iso"), object.has("isoUrl"));
+        return spec;
+    }
+
+    class void applySpecField(VmTestSpec spec, string key, string value) {
+        if (key.equals("name")) { spec.name = value; return; }
+        if (key.equals("state")) { spec.state = value; return; }
+        if (key.equals("parentState")) { spec.parentState = value; return; }
+        if (key.equals("stateRoot")) { spec.stateRoot = value; return; }
+        if (key.equals("stateMaterial")) { spec.stateMaterial = value; return; }
+        if (key.equals("workDir")) { spec.workDir = value; return; }
+        if (key.equals("arch")) { spec.arch = value; return; }
+        if (key.equals("iso")) { spec.iso = value; return; }
+        if (key.equals("isoUrl")) { spec.isoUrl = value; return; }
+        if (key.equals("diskSize")) { spec.diskSize = value; return; }
+        if (key.equals("memory")) { spec.memory = value; return; }
+        if (key.equals("cpus")) { spec.cpus = Strings.toInt(value); return; }
+        if (key.equals("diskInterface")) { spec.diskInterface = value; return; }
+        if (key.equals("graphics")) { spec.graphics = value; return; }
+        if (key.equals("sshPort")) { spec.sshPort = Strings.toInt(value); return; }
+    }
+
+    class void applyOperationField(VmOperation op, string key, string value) {
+        if (key.equals("op")) { op.kind = value; return; }
+        if (key.equals("kind")) { op.kind = value; return; }
+        if (key.equals("command")) { op.command = value; return; }
+        if (key.equals("expect")) { op.expect = value; return; }
+        if (key.equals("name")) { op.name = value; return; }
+        if (key.equals("local")) { op.localPath = value; return; }
+        if (key.equals("remote")) { op.remotePath = value; return; }
+        if (key.equals("timeout")) { op.timeout = Strings.toInt(value); return; }
+    }
+
+    class bool hasOperation(VmOperation op) {
+        return !op.kind.isEmpty() || !op.command.isEmpty() || !op.name.isEmpty();
+    }
+
+    class Map<string, string> tomlRootMap(string text) {
+        Map<string, string> result = {};
+        for line in Strings.split(text, "\n") {
+            var cleaned = TOML.stripInlineComment(line);
+            if (cleaned.isEmpty()) { continue; }
+            if (!TOML.sectionName(cleaned).isEmpty() || !TOML.tableArrayName(cleaned).isEmpty()) {
+                break;
+            }
+            var key = TOML.key(cleaned);
+            if (!key.isEmpty()) {
+                result.put(key, TOML.value(cleaned));
+            }
+        }
+        return result;
+    }
+
+    class string yamlKey(string line) {
+        var pos = Strings.find(line, ":", 0);
+        if (pos < 0) { return ""; }
+        return TOML.unquote(line.substring(0, pos).trim());
+    }
+
+    class string yamlValue(string line) {
+        var pos = Strings.find(line, ":", 0);
+        if (pos < 0) { return ""; }
+        return TOML.unquote(TOML.stripInlineComment(line.substring(pos + 1, line.len() - pos - 1)).trim());
+    }
+
+    class VmTestSpec parseToml(string text) {
+        var spec = VmTestSpec();
+        var root = VmSpecParser.tomlRootMap(text);
+        for key, value in root {
+            VmSpecParser.applySpecField(spec, key, value);
+        }
+        for key, value in TOML.sectionMap(text, "args") {
+            spec.args.put(key, value);
+        }
+        for fields in TOML.tableArrayBlocks(text, "operations") {
+            var op = VmOperation();
+            for key, value in fields {
+                VmSpecParser.applyOperationField(op, key, value);
+            }
+            if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+        }
+        VmSpecParser.normalize(spec, root.has("state"), root.has("workDir"), root.has("iso"), root.has("isoUrl"));
+        return spec;
+    }
+
+    class VmTestSpec parseYaml(string text) {
+        var spec = VmTestSpec();
+        var hasState = false;
+        var hasWorkDir = false;
+        var hasIso = false;
+        var hasIsoUrl = false;
+        var section = "root";
+        var op = VmOperation();
+        var lines = Strings.split(text, "\n");
+        for raw in lines {
+            var line = TOML.stripInlineComment(raw);
+            if (line.trim().isEmpty()) { continue; }
+            var trimmed = line.trim();
+            if (trimmed.equals("args:")) {
+                if (VmSpecParser.hasOperation(op)) {
+                    spec.operations.push(op);
+                    op = VmOperation();
+                }
+                section = "args";
+                continue;
+            }
+            if (trimmed.equals("operations:")) {
+                section = "operations";
+                continue;
+            }
+            if (trimmed.startsWith("- ")) {
+                if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+                op = VmOperation();
+                section = "operations";
+                var rest = trimmed.substring(2, trimmed.len() - 2).trim();
+                if (!rest.isEmpty()) {
+                    VmSpecParser.applyOperationField(op, VmSpecParser.yamlKey(rest), VmSpecParser.yamlValue(rest));
+                }
+                continue;
+            }
+            var key = VmSpecParser.yamlKey(trimmed);
+            if (key.isEmpty()) { continue; }
+            var value = VmSpecParser.yamlValue(trimmed);
+            if (section.equals("args")) {
+                spec.args.put(key, value);
+                continue;
+            }
+            if (section.equals("operations")) {
+                VmSpecParser.applyOperationField(op, key, value);
+                continue;
+            }
+            if (key.equals("state")) { hasState = true; }
+            if (key.equals("workDir")) { hasWorkDir = true; }
+            if (key.equals("iso")) { hasIso = true; }
+            if (key.equals("isoUrl")) { hasIsoUrl = true; }
+            VmSpecParser.applySpecField(spec, key, value);
+        }
+        if (VmSpecParser.hasOperation(op)) { spec.operations.push(op); }
+        VmSpecParser.normalize(spec, hasState, hasWorkDir, hasIso, hasIsoUrl);
+        return spec;
+    }
+
+    class VmTestSpec readFile(string path) {
+        var text = Path.readAll(path);
+        if (path.endsWith(".toml")) { return VmSpecParser.parseToml(text); }
+        if (path.endsWith(".yaml") || path.endsWith(".yml")) { return VmSpecParser.parseYaml(text); }
+        return VmSpecParser.parse(text);
+    }
+}

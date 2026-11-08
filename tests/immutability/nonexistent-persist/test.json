@@ -21,7 +21,7 @@
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 180 },
     { "op": "guest", "command": "set -e; test ! -e /opt/missing-persist-target && printf source-absent", "expect": "source-absent" },
-    { "op": "guest", "command": "set -e; sed -i 's|\"/etc/nixos\"|\"/etc/nixos\" \"/opt/missing-persist-target\"|' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; grep -q 'opt/missing-persist-target' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix && printf spec-edited", "expect": "spec-edited" },
+    { "op": "guest", "command": "set -e; sed -i 's|\"/etc/nixos\"|\"/etc/nixos\" \"/opt/missing-persist-target\"|' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix; grep -q 'opt/missing-persist-target' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix && printf spec-edited", "expect": "spec-edited" },
     { "op": "guest", "command": "nixos-rebuild switch --flake /etc/nixos#VM-TEST-Standard-Boot && printf switched", "expect": "switched", "timeout": 1800 },
     { "op": "guest", "command": "grep -q 'opt/missing-persist-target' /etc/immutability/spec.toml && printf spec-has-path", "expect": "spec-has-path" },
     { "op": "reboot-disk" },

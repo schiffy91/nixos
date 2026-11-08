@@ -1,4 +1,4 @@
-import ../../btrc/nixosctl/desktop/PowerManager.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/desktop/PowerManager.btrc;
 
 #include <assert.h>
 

@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ "${BATTLENET_IN_DEV_SHELL:-}" != 1 ]; then
+  exec nix-shell "$app_dir/dev-shell.nix" --run "$(printf '%q ' "$0" "$@")"
+fi
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
+desktop_entry="/etc/profiles/per-user/${USER}/share/applications/battlenet.desktop"  # users.users.<user>.packages, not systemPackages
+
+repeat=3
+delay=45
+log_lines=80
+frames=4
+frame_interval=1
+artifact_dir=""
+capture_fallback="foreground"
+stop_on_white=0
+trace="quiet"
+reset_cache=0
+keep_agent=0
+
+usage() {
+  cat <<EOF
+usage: battlenet-reproduce [options]
+
+Runs a repeatable KDE-entry Battle.net repro loop:
+  1. stop the Battle.net prefix (or only the launcher with --keep-agent 1, so
+     a running download keeps the Agent busy across the relaunch)
+  2. launch the user profile battlenet.desktop through kioclient
+  3. wait DELAY seconds
+  4. capture only the Battle.net window through KWin's by-window API
+  5. save SNI metadata, redacted logs, and probe stats
+
+Environment:
+  --repeat N
+  --delay SECONDS
+  --log-lines N
+  --frames N
+  --frame-interval SECONDS
+  --artifact-dir PATH
+  --capture-fallback none|foreground
+  --stop-on-white 0|1
+  --trace quiet|modules
+  --reset-cache 0|1
+  --keep-agent 0|1     kill only Battle.net.exe, leave Agent.exe running
+
+A white frame also captures native thread stacks (battlenet-debug stacks).
+BATTLENET_BIN=/nix/store/...-battlenet/bin/battlenet launches that wrapper
+instead of the activated desktop entry, to test a build before switching.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --repeat)
+      repeat="$2"
+      shift 2
+      ;;
+    --delay)
+      delay="$2"
+      shift 2
+      ;;
+    --log-lines)
+      log_lines="$2"
+      shift 2
+      ;;
+    --frames)
+      frames="$2"
+      shift 2
+      ;;
+    --frame-interval)
+      frame_interval="$2"
+      shift 2
+      ;;
+    --artifact-dir)
+      artifact_dir="$2"
+      shift 2
+      ;;
+    --capture-fallback)
+      capture_fallback="$2"
+      shift 2
+      ;;
+    --stop-on-white)
+      stop_on_white="$2"
+      shift 2
+      ;;
+    --trace)
+      trace="$2"
+      shift 2
+      ;;
+    --reset-cache)
+      reset_cache="$2"
+      shift 2
+      ;;
+    --keep-agent)
+      keep_agent="$2"
+      shift 2
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$artifact_dir" ]; then
+  artifact_dir="/tmp/battlenet-repro-$(date +%Y%m%dT%H%M%S)"
+fi
+
+mkdir -p "$artifact_dir"
+echo "artifact-dir=$artifact_dir"
+
+case "$trace" in
+  quiet|modules) ;;
+  *)
+    echo "invalid trace mode: $trace" >&2
+    exit 2
+    ;;
+esac
+
+run_once() {
+  local index="$1"
+  local run_dir="$artifact_dir/run-$index"
+  local frame
+
+  printf '\n==> repro %s/%s <==\n' "$index" "$repeat"
+  mkdir -p "$run_dir"
+
+  if [ "$keep_agent" = 1 ]; then
+    "$app_dir/bin/battlenet-debug" stop-launcher
+  else
+    proton-custom-dev cleanup
+  fi
+  if [ "$reset_cache" = 1 ]; then
+    "$app_dir/bin/battlenet-debug" reset-browser-cache >"$run_dir/cache-reset.txt" 2>&1 || true
+  fi
+  mkdir -p "$runtime_dir"
+  rm -f "$runtime_dir"/battlenet-wrapper.log "$runtime_dir"/steam-battlenet.log
+  "$app_dir/bin/battlenet-debug" install-capture-helper >"$run_dir/capture-helper.txt" 2>&1 || true
+
+  case "$trace" in
+    quiet)
+      unset WINEDEBUG DXVK_LOG_LEVEL DXVK_LOG_PATH
+      ;;
+    modules)
+      export WINEDEBUG="+timestamp,+pid,+tid,+loaddll,+module"
+      export DXVK_LOG_LEVEL="info"
+      export DXVK_LOG_PATH="$run_dir/dxvk"
+      ;;
+  esac
+  {
+    echo "trace=$trace"
+    echo "WINEDEBUG=${WINEDEBUG:-}"
+    echo "DXVK_LOG_LEVEL=${DXVK_LOG_LEVEL:-}"
+    echo "DXVK_LOG_PATH=${DXVK_LOG_PATH:-}"
+  } > "$run_dir/trace-env.txt"
+
+  if [ -n "${BATTLENET_BIN:-}" ]; then
+    "$BATTLENET_BIN" >"$run_dir/kioclient.log" 2>&1 &  # an unactivated build under test
+  elif [ -e "$desktop_entry" ]; then
+    kioclient exec "$desktop_entry" >"$run_dir/kioclient.log" 2>&1 &
+  else
+    battlenet >"$run_dir/kioclient.log" 2>&1 &
+  fi
+
+  sleep "$delay"
+  "$app_dir/bin/battlenet-debug" status >"$run_dir/status.txt" 2>&1 || true
+  "$app_dir/bin/battlenet-debug" sni >"$run_dir/sni.txt" 2>&1 || true
+  "$app_dir/bin/battlenet-debug" logs "$log_lines" >"$run_dir/logs.txt" 2>&1 || true
+  cp -f "$runtime_dir/battlenet-wrapper.log" "$run_dir/battlenet-wrapper.log" 2>/dev/null || true
+  cp -f "$runtime_dir/steam-battlenet.log" "$run_dir/steam-battlenet.log" 2>/dev/null || true
+
+  for frame in $(seq 1 "$frames"); do
+    date --iso-8601=ns > "$run_dir/window-$frame.time"
+    BATTLENET_CAPTURE_FALLBACK="$capture_fallback" \
+      "$app_dir/bin/battlenet-debug" probe-window "$run_dir/window-$frame.png" \
+      >"$run_dir/probe-$frame.txt" 2>&1 || true
+    cat "$run_dir/probe-$frame.txt"
+    if grep -q 'classification=white' "$run_dir/probe-$frame.txt"; then
+      "$app_dir/bin/battlenet-debug" status >"$run_dir/status-after-white.txt" 2>&1 || true
+      "$app_dir/bin/battlenet-debug" sni >"$run_dir/sni-after-white.txt" 2>&1 || true
+      "$app_dir/bin/battlenet-debug" logs "$log_lines" >"$run_dir/logs-after-white.txt" 2>&1 || true
+      cp -f "$runtime_dir/battlenet-wrapper.log" "$run_dir/battlenet-wrapper-after-white.log" 2>/dev/null || true
+      cp -f "$runtime_dir/steam-battlenet.log" "$run_dir/steam-battlenet-after-white.log" 2>/dev/null || true
+      "$app_dir/bin/battlenet-debug" stacks "$run_dir/stacks-after-white" >"$run_dir/stacks-after-white.txt" 2>&1 || true
+      echo "white-frame=$run_dir/window-$frame.png"
+      if [ "$stop_on_white" = 1 ]; then
+        echo "stopping on white frame; Battle.net left running for inspection"
+        exit 10
+      fi
+    fi
+    sleep "$frame_interval"
+  done
+
+  echo "run-dir=$run_dir"
+}
+
+for index in $(seq 1 "$repeat"); do
+  run_once "$index"
+done

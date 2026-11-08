@@ -1,0 +1,152 @@
+import ./Context.btrc;
+
+class WineArtifact {
+    public string target;
+    public string relative;
+    public string buildRelative;
+    public string architecture;
+    public WineArtifact(string target, string relative, string buildRelative, string architecture) {
+        self.target = target; self.relative = relative; self.buildRelative = buildRelative; self.architecture = architecture;
+    }
+}
+
+class ProtonWine {
+    public ProtonContext context;
+    public ProtonWine(ProtonContext context) { self.context = context; }
+    class Vector<string> targets() { return ["dlls/ntdll/all", "dlls/win32u/all", "dlls/winewayland.drv/all"]; }
+    class Vector<WineArtifact> artifacts(Vector<string> targets) {
+        Vector<WineArtifact> result = [];
+        for target in targets {
+            if (!ProtonWine.targets().contains(target)) { throw f"No overlay mapping for Wine target: {target}"; }
+            var module = Strings.split(target, "/").get(1);
+            var unixName = module.equals("winewayland.drv") ? "winewayland.so" : module + ".so";
+            var windowsName = module.equals("winewayland.drv") ? module : module + ".dll";
+            for architecture in ["64", "32"] {
+                var prefix = architecture.equals("64") ? "x86_64" : "i386";
+                result.push(WineArtifact(target, prefix + "-unix/" + unixName, "dlls/" + module + "/" + unixName, architecture));
+                result.push(WineArtifact(target, prefix + "-windows/" + windowsName, "dlls/" + module + "/" + prefix + "-windows/" + windowsName, architecture));
+            }
+        }
+        return result;
+    }
+    public string storeTarget() {
+        var c = self.context;
+        if (!ProtonContext.exists(c.tool())) { throw c.tool() + " does not exist; run normal NixOS activation first"; }
+        var target = FileSystem.realPath(c.tool());
+        if (ProtonContext.same(target, c.devTool())) {
+            if (FileSystem.exists(c.saved())) { return Path.readAll(c.saved()).trim(); }
+            throw "Active tool is the development tree, but no saved store target exists";
+        }
+        return target;
+    }
+    public void asio() {
+        var c = self.context;
+        var installed = c.nixPath("wineasio", false);
+        for relative in ["x86_64-windows/wineasio64.dll", "x86_64-unix/wineasio64.dll.so", "i386-windows/wineasio32.dll", "i386-unix/wineasio32.dll.so"] {
+            var source = relative.startsWith("x86_64") ? installed + "/lib/wine/" + relative : c.root + "/config/pkgs/gaming/rocksmith/assets/" + PathTools.basename(relative);
+            if (!FileSystem.exists(source)) { throw f"Missing WineASIO payload: {source}"; }
+            var destination = c.devTool() + "/files/lib/wine/" + relative;
+            c.copy(source, destination); c.execute("chmod", ["644", destination]);
+        }
+    }
+    public void setup(bool force = false) {
+        var c = self.context; var source = self.storeTarget(); var destination = c.devTool();
+        FileSystem.mkdirp(c.devRoot);
+        var previous = FileSystem.exists(c.saved()) ? Path.readAll(c.saved()).trim() : "";
+        if (force && FileSystem.exists(destination)) { c.execute("rm", ["-rf", "--", destination]); }
+        if (!FileSystem.exists(destination) || !previous.equals(source)) {
+            FileSystem.mkdirp(PathTools.dirname(destination));
+            c.execute("rsync", ["-a", "--delete", source + "/", destination + "/"]);
+            c.execute("chmod", ["-R", "u+rwX", destination]);
+        }
+        Path.writeAll(c.saved(), source + "\n");
+        var vdf = destination + "/compatibilitytool.vdf";
+        if (FileSystem.exists(vdf)) {
+            Path.writeAll(vdf, Path.readAll(vdf).replace("\"display_name\" \"proton-custom " + c.version + " (Wayland SNI)\"", "\"display_name\" \"proton-custom DEV " + c.version + " (Wayland SNI)\""));
+        }
+        self.asio(); print(f"dev tool: {destination}\nstore base: {source}");
+    }
+    public void use() { self.setup(); if (!ProtonContext.same(self.context.tool(), self.context.devTool())) { self.context.link(self.context.devTool()); } }
+    public void restore() {
+        var c = self.context;
+        if (!FileSystem.exists(c.saved())) { throw "No saved store target; nothing to restore"; }
+        var target = Path.readAll(c.saved()).trim();
+        if (!FileSystem.exists(target)) { throw f"Saved store target no longer exists: {target}"; }
+        c.link(target);
+    }
+    public void status() {
+        var c = self.context;
+        print("active: " + c.tool() + " -> " + FileSystem.realPath(c.tool()));
+        print("dev: " + c.devTool() + (FileSystem.exists(c.devTool()) ? " (present)" : " (missing)"));
+        if (FileSystem.exists(c.saved())) { print("store: " + Path.readAll(c.saved()).trim()); }
+        print("dev root: " + c.devRoot); print("wine source: " + c.source());
+        for target in ["64", "32"] { print("wine" + target + " build: " + c.build(target) + (FileSystem.exists(c.build(target) + "/Makefile") ? " (configured)" : " (missing)")); }
+    }
+    public void overlay(string wine, string wine64, string wine32, Vector<string> targets) {
+        self.use(); var c = self.context;
+        if (wine.isEmpty() && (wine64.isEmpty() || wine32.isEmpty())) { throw "overlay-wine needs --wine or both --wine64 and --wine32"; }
+        int copied = 0;
+        for artifact in ProtonWine.artifacts(targets) {
+            var source = wine.isEmpty() ? (artifact.architecture.equals("64") ? wine64 : wine32) + "/" + artifact.buildRelative : wine + "/lib/wine/" + artifact.relative;
+            if (FileSystem.exists(source)) { c.copy(source, c.devTool() + "/files/lib/wine/" + artifact.relative); print("  " + artifact.relative); copied++; }
+        }
+        if (copied == 0) { throw "No Wine artifacts copied; check the build directories"; }
+    }
+    public void gitBaseline(string message, bool refresh = false) {
+        var c = self.context; var src = c.source(); bool existing = FileSystem.exists(src + "/.git");
+        if (!existing) {
+            c.execute("git", ["-C", src, "init", "-q", "-b", "main"]);
+            for key in ["user.name", "user.email"] {
+                var result = c.execute("git", ["config", "--global", key], true, false).trimmed();
+                if (result.isEmpty()) { result = key.equals("user.name") ? "Alexander Schiffhauer" : "alexander.schiffhauer@gmail.com"; }
+                c.execute("git", ["-C", src, "config", key, result]);
+            }
+        }
+        c.execute("git", ["-C", src, "config", "core.fileMode", "false"]);
+        if (!existing || refresh) {
+            c.execute("git", ["-C", src, "add", "-A"]);
+            if (!c.execute("git", ["-C", src, "diff", "--cached", "--quiet"], false, false).ok()) { c.execute("git", ["-C", src, "commit", "--quiet", "-m", message]); }
+        }
+    }
+    public void setupSource(bool force = false, bool configure = false) {
+        var c = self.context; FileSystem.mkdirp(c.devRoot);
+        if (force && FileSystem.exists(c.source())) { c.execute("rm", ["-rf", "--", c.source()]); }
+        if (!FileSystem.exists(c.source())) { c.execute("rsync", ["-a", "--delete", c.nixPath("passthru.wineSource") + "/", c.source() + "/"]); }
+        c.execute("chmod", ["-R", "u+rwX", c.source()]);
+        for rel in ["autogen.sh", "configure", "tools/make_requests"] { if (FileSystem.exists(c.source() + "/" + rel)) { c.execute("chmod", ["u+x", c.source() + "/" + rel]); } }
+        if (configure) { unlink(c.source() + "/configure"); }
+        var workHome = c.devRoot + "/.home"; FileSystem.mkdirp(workHome);
+        var environment = ["HOME=" + workHome];
+        if (!FileSystem.exists(c.source() + "/configure")) {
+            var vulkan = c.nixPath("vulkan-headers", false, true) + "/share/vulkan/registry/";
+            c.shell(["python3", "dlls/winevulkan/make_vulkan", "-x", vulkan + "vk.xml", "-X", vulkan + "video.xml"], cwd=c.source(), environment=environment);
+            try { c.shell(["perl", "./tools/make_requests"], cwd=c.source(), environment=environment); } catch (string error) { print(error); }
+            c.shell(["autoreconf", "-fi"], cwd=c.source(), environment=environment);
+        }
+        self.gitBaseline("baseline: Valve Wine plus active Battle.net series");
+        for target in ["64", "32"] {
+            var build = c.build(target); var makefile = build + "/Makefile"; FileSystem.mkdirp(build);
+            if (FileSystem.exists(makefile) && (configure || !Path.readAll(makefile).contains(c.source()))) { unlink(makefile); }
+            if (!FileSystem.exists(makefile)) {
+                var args = [c.source() + "/configure", "--without-x", "--disable-tests", target.equals("64") ? "--enable-win64" : "--with-wine64=" + c.build("64")];
+                c.shell(args, target, build, environment);
+            }
+        }
+        print("wine source: " + c.source());
+    }
+    public void build(Vector<string> targets, int jobs) {
+        var c = self.context;
+        for target in ["64", "32"] {
+            var makefile = c.build(target) + "/Makefile";
+            if (!FileSystem.exists(makefile) || !Path.readAll(makefile).contains(c.source())) { self.setupSource(); break; }
+        }
+        for target in ["64", "32"] {
+            for tool in ["tools/makedep", "tools/widl/widl", "tools/winebuild/winebuild", "tools/winegcc/winegcc", "tools/wrc/wrc"] {
+                var path = c.build(target) + "/" + tool; if (FileSystem.exists(path)) { c.execute("chmod", ["u+x", path]); }
+            }
+            var args = ["make", "-C", c.build(target), "-j" + (jobs > 0 ? f"{jobs}" : c.execute("nproc", [], true).trimmed())];
+            for item in targets { args.push(item); } c.shell(args, target);
+        }
+        self.overlay("", c.build("64"), c.build("32"), targets);
+    }
+}

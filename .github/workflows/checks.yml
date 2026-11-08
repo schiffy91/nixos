@@ -20,10 +20,12 @@ jobs:
           extra-conf: |
             extra-substituters = ${{ vars.NIXOS_CACHE_URL }}
             extra-trusted-public-keys = ${{ vars.NIXOS_CACHE_PUBLIC_KEY }}
+      - name: compiler and workspace errors
+        run: make lint
       - name: run every check
         run: |
           names=$(nix eval --json '.#checks.x86_64-linux' --apply builtins.attrNames | jq -r '.[]')
-          echo "$names" | sed 's/^/  /'
+          printf '%s\n' "$names"
           failed=""
           for name in $names; do
             printf '\n=== %s\n' "$name"

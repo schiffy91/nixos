@@ -33,11 +33,11 @@
     { "op": "guest", "command": "set -e; echo GAMMA > /root/gen" },
     { "op": "guest", "command": "set -e; btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-1'; btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-2'; ! btrfs subvolume list / | grep -E 'path @snapshots/.*/[ABC]$'; printf generation-slots-ok", "expect": "generation-slots-ok" },
 
-    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-previous\"/g' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-previous\"/g' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "cat /root/gen", "expect": "BETA" },
 
-    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/nix/hosts/{{arch}}/VM-TEST/VM-TEST.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
+    { "op": "guest", "command": "set -e; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-penultimate\"/g' /etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "cat /root/gen", "expect": "ALPHA" },
 

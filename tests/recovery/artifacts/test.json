@@ -1,0 +1,10 @@
+{
+  "name": "recovery-artifacts",
+  "state": "recovery-artifacts",
+  "stateMaterial": "recovery-artifacts:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    { "op": "host", "command": "nix-build tests/recovery/artifacts --no-out-link", "timeout": 300 },
+    { "op": "record-state" }
+  ]
+}

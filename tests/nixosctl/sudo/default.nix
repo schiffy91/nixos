@@ -4,7 +4,7 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  nixosctl = import (flake.outPath + "/nix/apps/utils/nixosctl/package.nix") {
+  nixosctl = import (flake.outPath + "/config/pkgs/utils/nixosctl/package.nix") {
     inherit pkgs;
     inherit (pkgs) lib;
     btrcpy = inputs.btrc.packages.${system}.btrcpy;
@@ -13,10 +13,11 @@ let
 in pkgs.testers.runNixOSTest {
   name = "nixosctl-sudo";
   nodes.machine = { ... }: {
+    _module.args.inputs = inputs;
     imports = [
-      ../../../nix/settings.nix
-      ../../../nix/system/nixos/sudo.nix
-      ../../../nix/system/nixos/networking.nix
+      ../../../config/settings.nix
+      ../../../config/system/nixos/sudo.nix
+      ../../../config/system/nixos/networking.nix
     ];
     settings.users.admin.username = "admin";
     settings.networking.forwardAgentHosts = [ "TRUSTED.example" "192.0.2.1" ];
