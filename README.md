@@ -409,6 +409,8 @@ exclusive lock and durable atomic replacement.
 The configuration rejects a credential location that would disappear during an
 immutable-root reset or be mounted too late for activation. Restoring an older
 root snapshot keeps the current password from persistent storage.
+The containing mounts must be required (`nofail` and `noauto` are rejected),
+and the hash itself cannot be a bind mount because updates replace it atomically.
 
 Use `nixosctl change-password` for persistent password changes. A direct `passwd`
 changes the running account only; with immutable users, activation restores the

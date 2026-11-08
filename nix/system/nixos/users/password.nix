@@ -17,9 +17,10 @@ in {
       message = "settings.users.admin.hashedPasswordFile must not itself be a filesystem mountpoint: password updates require atomic file replacement. Mount its parent directory instead.";
     }
     {
-      assertion = lib.all utils.fsNeededForBoot
+      assertion = lib.all (fs: utils.fsNeededForBoot fs
+        && !(lib.elem "nofail" fs.options) && !(lib.elem "noauto" fs.options))
         (lib.filter (fs: containsPassword fs.mountPoint) (builtins.attrValues config.fileSystems));
-      message = "Every filesystem containing settings.users.admin.hashedPasswordFile must be mounted before activation (neededForBoot).";
+      message = "Every filesystem containing settings.users.admin.hashedPasswordFile must be required before activation (neededForBoot, without nofail or noauto).";
     }
     {
       assertion = !config.settings.disk.immutability.enable || !resetPassword

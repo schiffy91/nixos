@@ -33,6 +33,12 @@ assert !(valid {
 assert !(valid {
   fileSystems."/var/lib/nixos/credentials/password-hash" = { device = "/fixture/hash"; fsType = "none"; options = [ "bind" ]; neededForBoot = true; };
 });
+assert !(valid {
+  fileSystems."/var" = { device = "/dev/missing"; fsType = "ext4"; options = [ "nofail" ]; };
+});
+assert !(valid {
+  fileSystems."/var" = { device = "/dev/missing"; fsType = "ext4"; options = [ "noauto" ]; };
+});
 assert valid {
   settings.disk.immutability.enable = true;
   settings.users.admin.hashedPasswordFile = "/etc/private/password-hash";

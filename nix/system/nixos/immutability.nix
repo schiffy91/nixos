@@ -61,7 +61,8 @@ let
 	bootPersistFileSystems = lib.genAttrs bootPersistPaths (path: {
 		inherit device;
 		fsType = "btrfs";
-		options = [ "subvol=${immutabilityPersistRoot}/dirs/${persistKey path}" "compress=zstd" "noatime" "nofail" "x-systemd.after=persistence-mounts.service" ];
+		options = [ "subvol=${immutabilityPersistRoot}/dirs/${persistKey path}" "compress=zstd" "noatime" "x-systemd.after=persistence-mounts.service" ]
+			++ lib.optional (!(lib.hasPrefix "${path}/" config.settings.users.admin.hashedPasswordFile)) "nofail";
 		neededForBoot = true;
 	});
 	bootPersistInitrdMountUnits = map (path: "${utils.escapeSystemdPath "/sysroot${path}"}.mount") bootPersistPaths;
