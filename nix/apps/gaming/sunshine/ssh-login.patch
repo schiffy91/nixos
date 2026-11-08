@@ -182,7 +182,7 @@ index 1b47397..5f0fc33 100644
      server.resource["^/api/apps$"]["GET"] = getApps;
      server.resource["^/api/apps$"]["POST"] = saveApp;
 diff --git a/src/confighttp.h b/src/confighttp.h
-index 49c7039..0dfbb5d 100644
+index 49c7039..55e76aa 100644
 --- a/src/confighttp.h
 +++ b/src/confighttp.h
 @@ -40,7 +40,7 @@ namespace confighttp {
@@ -194,16 +194,21 @@ index 49c7039..0dfbb5d 100644
    void not_found(const resp_https_t &response, const req_https_t &request, const std::string &error_message = "Not Found");
    void bad_request(const resp_https_t &response, const req_https_t &request, const std::string &error_message = "Bad Request");
    /**
-@@ -100,6 +100,9 @@ namespace confighttp {
-    * @param response HTTP response object to populate.
-    * @param request HTTP request data from the client.
+@@ -102,6 +102,14 @@ namespace confighttp {
     */
-+  /** @brief Create or update the Web UI account after authenticating the current credentials. */
-+  void savePassword(const resp_https_t &response, const req_https_t &request);
-+
    void savePin(const resp_https_t &response, const req_https_t &request);
  
++  /**
++   * @brief Create or update the Web UI account after authenticating the current credentials.
++   *
++   * @param response HTTP response object to populate.
++   * @param request HTTP request data from the client.
++   */
++  void savePassword(const resp_https_t &response, const req_https_t &request);
++
    /**
+    * @brief Check whether a detected driver version identifies a development build.
+    *
 diff --git a/src/httpcommon.cpp b/src/httpcommon.cpp
 index d12d010..5522032 100644
 --- a/src/httpcommon.cpp
@@ -284,10 +289,10 @@ index d12d010..5522032 100644
        return -1;
 diff --git a/src/web_auth.cpp b/src/web_auth.cpp
 new file mode 100644
-index 0000000..38c7530
+index 0000000..d60ac79
 --- /dev/null
 +++ b/src/web_auth.cpp
-@@ -0,0 +1,359 @@
+@@ -0,0 +1,381 @@
 +/**
 + * @file src/web_auth.cpp
 + * @brief Verification of OpenSSH SSHSIG login challenges and browser sessions.
@@ -316,14 +321,20 @@ index 0000000..38c7530
 +    constexpr size_t max_entries = 128;  ///< Bound each unauthenticated and authenticated token store.
 +    constexpr size_t max_signature_size = 16384;  ///< Bound all untrusted SSH wire-format parsing.
 +
-+    /** @brief Read the length-prefixed strings specified by RFC 4251 and PROTOCOL.sshsig. */
++    /**
++     * @brief Read the length-prefixed strings specified by RFC 4251 and PROTOCOL.sshsig.
++     */
 +    class reader_t {
 +    public:
-+      /** @brief Construct a reader over bounded, untrusted bytes. */
++      /**
++       * @brief Construct a reader over bounded, untrusted bytes.
++       */
 +      explicit reader_t(std::string_view bytes):
 +          bytes(bytes) {}
 +
-+      /** @brief Consume an unsigned network-order 32-bit integer. */
++      /**
++       * @brief Consume an unsigned network-order 32-bit integer.
++       */
 +      uint32_t integer() {
 +        if (bytes.size() < 4) {
 +          throw std::invalid_argument("Truncated SSH integer");
@@ -336,7 +347,9 @@ index 0000000..38c7530
 +        return value;
 +      }
 +
-+      /** @brief Consume a length-prefixed SSH string, rejecting out-of-bounds lengths. */
++      /**
++       * @brief Consume a length-prefixed SSH string, rejecting out-of-bounds lengths.
++       */
 +      std::string_view string() {
 +        const auto size = integer();
 +        if (size > bytes.size()) {
@@ -347,7 +360,9 @@ index 0000000..38c7530
 +        return result;
 +      }
 +
-+      /** @brief Require complete consumption, rejecting ambiguous trailing bytes. */
++      /**
++       * @brief Require complete consumption, rejecting ambiguous trailing bytes.
++       */
 +      void finish() const {
 +        if (!bytes.empty()) {
 +          throw std::invalid_argument("Trailing SSH data");
@@ -358,7 +373,9 @@ index 0000000..38c7530
 +      std::string_view bytes;  ///< Remaining bytes, always a view into the caller's bounded input.
 +    };
 +
-+    /** @brief Decode canonical, padded base64 without accepting punctuation or extra padding. */
++    /**
++     * @brief Decode canonical, padded base64 without accepting punctuation or extra padding.
++     */
 +    std::string decode_base64(std::string_view text) {
 +      if (text.empty() || text.size() > max_signature_size || text.size() % 4) {
 +        throw std::invalid_argument("Invalid base64 length");
@@ -385,7 +402,9 @@ index 0000000..38c7530
 +      return decoded;
 +    }
 +
-+    /** @brief Read a plain OpenSSH public-key line; authorized_keys options and certificates are not accepted. */
++    /**
++     * @brief Read a plain OpenSSH public-key line; authorized_keys options and certificates are not accepted.
++     */
 +    std::string key_blob(std::string_view line) {
 +      const auto separator = line.find_first_of(" \t");
 +      const auto type = line.substr(0, separator);
@@ -406,7 +425,9 @@ index 0000000..38c7530
 +      return blob;
 +    }
 +
-+    /** @brief Check a binary key against the current configured public-key list. */
++    /**
++     * @brief Check a binary key against the current configured public-key list.
++     */
 +    bool authorized(std::string_view key, std::span<const std::string> keys) {
 +      for (const auto &entry : keys) {
 +        try {
@@ -420,7 +441,9 @@ index 0000000..38c7530
 +      return false;
 +    }
 +
-+    /** @brief Append an SSH wire-format string to a signature payload. */
++    /**
++     * @brief Append an SSH wire-format string to a signature payload.
++     */
 +    void append_string(std::string &out, std::string_view value) {
 +      const auto size = static_cast<uint32_t>(value.size());
 +      for (int shift = 24; shift >= 0; shift -= 8) {
@@ -431,7 +454,9 @@ index 0000000..38c7530
 +
 +    using key_ptr = std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)>;  ///< OpenSSL public-key ownership.
 +
-+    /** @brief Decode an Ed25519 or RSA SSH public key using OpenSSL's public-key import API. */
++    /**
++     * @brief Decode an Ed25519 or RSA SSH public key using OpenSSL's public-key import API.
++     */
 +    key_ptr public_key(std::string_view blob) {
 +      reader_t reader(blob);
 +      const auto type = reader.string();
@@ -471,7 +496,9 @@ index 0000000..38c7530
 +      return {key, EVP_PKEY_free};
 +    }
 +
-+    /** @brief Generate a 256-bit opaque token, failing closed if the OS random source fails. */
++    /**
++     * @brief Generate a 256-bit opaque token, failing closed if the OS random source fails.
++     */
 +    std::string token() {
 +      std::array<unsigned char, 32> bytes;
 +      if (RAND_bytes(bytes.data(), bytes.size()) != 1) {
@@ -649,10 +676,10 @@ index 0000000..38c7530
 +}  // namespace web_auth
 diff --git a/src/web_auth.h b/src/web_auth.h
 new file mode 100644
-index 0000000..48fe096
+index 0000000..b9e09fa
 --- /dev/null
 +++ b/src/web_auth.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,101 @@
 +/**
 + * @file src/web_auth.h
 + * @brief SSH signatures and short-lived Web UI authentication sessions.
@@ -692,31 +719,51 @@ index 0000000..48fe096
 +  public:
 +    using clock = std::chrono::steady_clock;  ///< Monotonic deadlines unaffected by wall-clock adjustments.
 +
-+    /** @brief Public challenge identifier and the private binding kept only in a browser cookie. */
++    /**
++     * @brief Public challenge identifier and the private binding kept only in a browser cookie.
++     */
 +    struct challenge_t {
 +      std::string id;  ///< Public identifier passed to the signing helper.
 +      std::string binding;  ///< Secret proving which browser requested the login.
 +    };
 +
-+    /** @brief Create a short-lived challenge for the requested HTTPS origin. */
++    /**
++     * @brief Create a short-lived challenge for the requested HTTPS origin.
++     */
 +    std::optional<challenge_t> begin(const std::string &origin, clock::time_point now = clock::now());
-+    /** @brief Return the exact, domain-separated message that the client signs. */
++    /**
++     * @brief Return the exact, domain-separated message that the client signs.
++     */
 +    static std::string message(std::string_view challenge, std::string_view origin);
-+    /** @brief Retrieve the exact message for a pending public challenge identifier. */
++    /**
++     * @brief Retrieve the exact message for a pending public challenge identifier.
++     */
 +    std::optional<std::string> describe(const std::string &challenge, const std::string &origin, clock::time_point now = clock::now());
-+    /** @brief Authorize a pending browser challenge after verifying its one-use SSH signature. */
++    /**
++     * @brief Authorize a pending browser challenge after verifying its one-use SSH signature.
++     */
 +    bool complete(const std::string &challenge, std::string_view signature, const std::string &origin, std::span<const std::string> keys, clock::time_point now = clock::now());
-+    /** @brief Issue a session only to the browser that requested the approved challenge. */
++    /**
++     * @brief Issue a session only to the browser that requested the approved challenge.
++     */
 +    std::optional<std::string> exchange(const std::string &challenge, const std::string &binding, const std::string &origin, std::span<const std::string> keys, clock::time_point now = clock::now());
-+    /** @brief Check a session's origin, expiry, and current public-key authorization. */
++    /**
++     * @brief Check a session's origin, expiry, and current public-key authorization.
++     */
 +    bool authenticate(const std::string &session, const std::string &origin, std::span<const std::string> keys, clock::time_point now = clock::now());
-+    /** @brief Revoke a browser session. */
++    /**
++     * @brief Revoke a browser session.
++     */
 +    void revoke(const std::string &session);
-+    /** @brief Revoke all sessions and outstanding logins after an account credential change. */
++    /**
++     * @brief Revoke all sessions and outstanding logins after an account credential change.
++     */
 +    void clear();
 +
 +  private:
-+    /** @brief A pending login or authenticated session and its absolute expiration. */
++    /**
++     * @brief A pending login or authenticated session and its absolute expiration.
++     */
 +    struct entry_t {
 +      std::string origin;  ///< Exact HTTPS origin that requested the challenge.
 +      std::string binding;  ///< Secret cookie binding for a pending browser challenge.
@@ -725,7 +772,9 @@ index 0000000..48fe096
 +    };
 +
 +    using entries_t = std::unordered_map<std::string, entry_t>;  ///< Secret random tokens mapped to their authorization state.
-+    /** @brief Remove expired entries before enforcing bounded storage. */
++    /**
++     * @brief Remove expired entries before enforcing bounded storage.
++     */
 +    void expire(clock::time_point now);
 +    std::mutex mutex;  ///< Serializes consumption so concurrent replays cannot succeed.
 +    entries_t challenges;  ///< Outstanding challenges awaiting signatures.
@@ -734,10 +783,10 @@ index 0000000..48fe096
 +}  // namespace web_auth
 diff --git a/src/web_auth_http.cpp b/src/web_auth_http.cpp
 new file mode 100644
-index 0000000..c81dcc8
+index 0000000..75a40ff
 --- /dev/null
 +++ b/src/web_auth_http.cpp
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,226 @@
 +/**
 + * @file src/web_auth_http.cpp
 + * @brief HTTPS endpoints for optional SSH-key Web UI login.
@@ -763,7 +812,9 @@ index 0000000..c81dcc8
 +    web_auth::sessions_t sessions;  ///< Process-local login state; restart invalidates every token.
 +    constexpr std::string_view cookie_name = "__Host-sunshine-session";  ///< Host-only cookie prevents sibling-domain cookie injection.
 +
-+    /** @brief Build the canonical HTTPS origin without accepting URL delimiters or duplicate Host headers. */
++    /**
++     * @brief Build the canonical HTTPS origin without accepting URL delimiters or duplicate Host headers.
++     */
 +    std::optional<std::string> origin(const confighttp::req_https_t &request) {
 +      const auto host = request->header.find("Host");
 +      if (host == request->header.end() || request->header.count("Host") != 1 || host->second.empty() || host->second.size() > 260 || !std::ranges::all_of(host->second, [](unsigned char ch) {
@@ -778,13 +829,17 @@ index 0000000..c81dcc8
 +      return "https://" + authority;
 +    }
 +
-+    /** @brief Require the browser's exact origin; CLI-only endpoints may omit Origin. */
++    /**
++     * @brief Require the browser's exact origin; CLI-only endpoints may omit Origin.
++     */
 +    bool same_origin(const confighttp::req_https_t &request, const std::string &expected, bool browser) {
 +      const auto source = request->header.find("Origin");
 +      return source == request->header.end() ? !browser : request->header.count("Origin") == 1 && source->second == expected;
 +    }
 +
-+    /** @brief Apply the existing Web UI network restriction to unauthenticated SSH endpoints. */
++    /**
++     * @brief Apply the existing Web UI network restriction to unauthenticated SSH endpoints.
++     */
 +    bool allowed(const confighttp::resp_https_t &response, const confighttp::req_https_t &request, bool browser) {
 +      const auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
 +      const auto expected = origin(request);
@@ -799,7 +854,9 @@ index 0000000..c81dcc8
 +      return confighttp::check_content_type(response, request, "application/json");
 +    }
 +
-+    /** @brief Read a bounded JSON object without logging authentication material. */
++    /**
++     * @brief Read a bounded JSON object without logging authentication material.
++     */
 +    nlohmann::json body(const confighttp::req_https_t &request) {
 +      if (request->content.size() > 20000) {
 +        throw std::invalid_argument("Login request is too large");
@@ -811,7 +868,9 @@ index 0000000..c81dcc8
 +      return result;
 +    }
 +
-+    /** @brief Return authentication data with cache prevention and framing protection. */
++    /**
++     * @brief Return authentication data with cache prevention and framing protection.
++     */
 +    void respond(const confighttp::resp_https_t &response, const nlohmann::json &data, const std::string &cookie = {}) {
 +      SimpleWeb::CaseInsensitiveMultimap headers {
 +        {"Content-Type", "application/json"},
@@ -825,13 +884,17 @@ index 0000000..c81dcc8
 +      response->write(data.dump(), headers);
 +    }
 +
-+    /** @brief Reject failed login attempts without issuing a Basic-auth browser prompt. */
++    /**
++     * @brief Reject failed login attempts without issuing a Basic-auth browser prompt.
++     */
 +    void reject(const confighttp::resp_https_t &response) {
 +      response->write(SimpleWeb::StatusCode::client_error_forbidden, "Login invalid or expired", {{"Cache-Control", "no-store"}});
 +    }
 +  }  // namespace
 +
-+  /** @brief Read one unambiguous opaque cookie without accepting duplicate names. */
++  /**
++   * @brief Read one unambiguous opaque cookie without accepting duplicate names.
++   */
 +  static std::string read_cookie(const confighttp::req_https_t &request, std::string_view name) {
 +    std::string result;
 +    const auto [begin, end] = request->header.equal_range("Cookie");
@@ -952,10 +1015,10 @@ index 0000000..c81dcc8
 +}  // namespace web_auth_http
 diff --git a/src/web_auth_http.h b/src/web_auth_http.h
 new file mode 100644
-index 0000000..2732c1e
+index 0000000..7290377
 --- /dev/null
 +++ b/src/web_auth_http.h
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,43 @@
 +/**
 + * @file src/web_auth_http.h
 + * @brief HTTPS adapters for SSH-key Web UI authentication.
@@ -966,21 +1029,37 @@ index 0000000..2732c1e
 +#include "confighttp.h"
 +
 +namespace web_auth_http {
-+  /** @brief Authenticate a browser cookie, including same-origin checks on modifying requests. */
++  /**
++   * @brief Authenticate a browser cookie, including same-origin checks on modifying requests.
++   */
 +  bool authenticated(const confighttp::req_https_t &request);
-+  /** @brief Read the browser session identifier for CSRF token isolation. */
++  /**
++   * @brief Read the browser session identifier for CSRF token isolation.
++   */
 +  std::string session_id(const confighttp::req_https_t &request);
-+  /** @brief Start a login bound to this browser through a secret HTTP-only cookie. */
++  /**
++   * @brief Start a login bound to this browser through a secret HTTP-only cookie.
++   */
 +  void begin(const confighttp::resp_https_t &response, const confighttp::req_https_t &request);
-+  /** @brief Describe a pending browser challenge to the signing helper. */
++  /**
++   * @brief Describe a pending browser challenge to the signing helper.
++   */
 +  void challenge(const confighttp::resp_https_t &response, const confighttp::req_https_t &request);
-+  /** @brief Verify an SSH signature and approve the browser that requested the challenge. */
++  /**
++   * @brief Verify an SSH signature and approve the browser that requested the challenge.
++   */
 +  void complete(const confighttp::resp_https_t &response, const confighttp::req_https_t &request);
-+  /** @brief Exchange the approved, browser-bound challenge for a secure, HTTP-only session cookie. */
++  /**
++   * @brief Exchange the approved, browser-bound challenge for a secure, HTTP-only session cookie.
++   */
 +  void exchange(const confighttp::resp_https_t &response, const confighttp::req_https_t &request);
-+  /** @brief Revoke the current browser session and clear its cookie. */
++  /**
++   * @brief Revoke the current browser session and clear its cookie.
++   */
 +  void logout(const confighttp::resp_https_t &response, const confighttp::req_https_t &request);
-+  /** @brief Revoke all SSH login state after account credentials change. */
++  /**
++   * @brief Revoke all SSH login state after account credentials change.
++   */
 +  void clear();
 +}  // namespace web_auth_http
 diff --git a/src_assets/common/assets/web/Navbar.vue b/src_assets/common/assets/web/Navbar.vue
