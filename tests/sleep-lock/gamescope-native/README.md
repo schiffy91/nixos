@@ -42,7 +42,7 @@ Its private scratch and VM disks are removed on exit; graph logs and images
 remain under `.vm/e2e/`.
 
 QEMU's EGL headless console is observed using its own VNC listener on a Unix
-socket inside private scratch, with `vncdotool`; there is no TCP listener or
+socket inside private scratch, through BTRC's typed libvncclient bridge; there is no TCP listener or
 guest VNC server. QMP injects keyboard events. Guest files and OCR of actual
 console pixels jointly prove input and rendering. The HMP `screendump`
 response is recorded because QEMU 11.1.2 rejects GL scanouts with `no surface`.
@@ -54,7 +54,22 @@ Relevant pinned sources:
 - [Gamescope Steam focus selection and X11 properties](https://github.com/ValveSoftware/gamescope/blob/3.17.0/src/steamcompmgr.cpp)
 - [Linux virtio GPU freeze/restore](https://github.com/torvalds/linux/blob/v7.3/drivers/gpu/drm/virtio/virtgpu_drv.c)
 
-## BTRC migration results (2026-11-07)
+## Python driver removal (2026-11-08)
+
+The scenarios now run directly as compiled BTRC, with a typed libvncclient
+boundary copying actual EGL/VNC frames into `Library.Image`. No Python driver
+or vncdotool runs. The native control passed (`0b1f9e7c21d2`), as did the full
+lock (`816b14e1f7eb`) and absent-Sunshine variant (`e7ce3f338a9f`).
+
+The real-suspend scenarios retain the existing failure: unlocked control
+`7a5b72f805f8` and authenticated resume `9816c549e34e` both wake from s2idle
+but fail the subsequent game input marker. The same virtio-GPU invalid-resource
+errors remain in their console artifacts. The locked scenario rejects the wrong
+password and restores its original VT/PID before failing input recovery.
+These results preserve the distinction between lock behavior and the VM GPU's
+power-management limitation.
+
+## BTRC controller migration results (2026-11-07)
 
 The BTRC controller, raw PAM authentication and DRM helpers passed the focused
 state, secret-buffer, descriptor-isolation and helper checks before these graph

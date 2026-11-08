@@ -1,11 +1,12 @@
-{ flake ? builtins.getFlake "git+file://${toString ../../..}", system ? builtins.currentSystem, renderNode ? "/dev/dri/renderD128" }:
+{ flake ? builtins.getFlake "git+file://${toString ../../..}", system ? builtins.currentSystem, renderNode ? "/dev/dri/renderD128", extraModules ? [], settings ? { mode = "control"; withSunshine = false; realSuspend = false; } }:
 let
   inherit (flake) inputs;
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; overlays = [ inputs.jovian.overlays.default ]; };
-in pkgs.testers.runNixOSTest {
+in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+  imports = extraModules;
   name = "sleep-gamescope-native-control";
-  enableOCR = true;
-  extraPythonPackages = p: [ p.vncdotool ];
+  graphical = true;
+  inherit settings;
   nodes.machine = { config, pkgs, lib, ... }: {
     _module.args.inputs = inputs;
     imports = [ inputs.jovian.nixosModules.default ../../../config/settings.nix
@@ -71,5 +72,6 @@ in pkgs.testers.runNixOSTest {
     environment.systemPackages = [ pkgs.vulkan-tools pkgs.xterm pkgs.xprop ];
     systemd.sleep.settings.Sleep.MemorySleepMode = "s2idle";
   };
-  testScript = builtins.readFile ./control.py;
+  scenario = ./Main.btrc;
+  extraFiles = [ ./Scenario.btrc ./btrc.toml ];
 }

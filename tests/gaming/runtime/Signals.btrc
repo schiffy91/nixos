@@ -1,0 +1,5 @@
+class FixtureSignals {
+    class void installStop() { if (testInstallStop() == 0) { throw "Cannot install fixture stop handler"; } }
+    class bool stopped() { return testHasStopped() != 0; }
+    class void send(int pid, int number) { if (testSendSignal(pid, number) == 0) { throw "Cannot signal fixture child"; } }
+}

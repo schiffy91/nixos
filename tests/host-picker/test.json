@@ -4,7 +4,7 @@
   "stateMaterial": "host-picker:{{arch}}:source={{sourceHash}}",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
-    { "op": "host", "command": "python3 tests/host-picker/test.py", "timeout": 180 },
+    { "op": "host", "command": "make build/host-picker-test && ./build/host-picker-test", "timeout": 180 },
     { "op": "record-state" }
   ]
 }

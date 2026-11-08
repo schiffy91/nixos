@@ -1,7 +1,6 @@
 { config, inputs, lib, pkgs, ... }:
 let
-  declared = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.simracing.enable;
-  enabled = declared && pkgs.stdenv.hostPlatform.isx86_64;
+  enabled = config.settings.apps.gaming.simracing.enable;
 in {
   imports = [ inputs.logitech-trueforce.nixosModules.default ];
 

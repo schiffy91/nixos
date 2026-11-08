@@ -1,8 +1,8 @@
 { lib, config, pkgs, inputs, ... }:
 let
-  enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable;
-  capture = config.settings.apps.sunshine.capture;
-  sshLogin = config.settings.apps.sunshine.sshLogin;
+  enabled = config.settings.apps.gaming.sunshine.enable;
+  capture = config.settings.apps.gaming.sunshine.capture;
+  sshLogin = config.settings.apps.gaming.sunshine.sshLogin;
   sshKeys = lib.optionals sshLogin.enable sshLogin.publicKeys;
   automatic = capture == "auto";
   credentials = import ./credentials/package.nix {
@@ -10,7 +10,7 @@ let
     user = config.settings.users.admin.username;
     home = config.settings.users.admin.homeDirectory;
     publicKeys = sshKeys;
-    inherit (config.settings.apps.sunshine.credentials) usernameReference passwordReference;
+    inherit (config.settings.apps.gaming.sunshine.credentials) usernameReference passwordReference;
   };
   sshLoginHelper = import ./ssh-login/package.nix { inherit pkgs inputs; };
   desktopConfig = (pkgs.formats.keyValue {}).generate "sunshine-desktop.conf" config.services.sunshine.settings;
@@ -31,13 +31,6 @@ let
 in {
   imports = [ ./virtual-display.nix ];
   settings.disk.immutability.persist.paths = lib.mkIf enabled [ "${config.settings.users.admin.homeDirectory}/.config/sunshine" ];
-  settings.apps.sunshine = lib.mkIf config.settings.apps.desktop.enable {
-    sshLogin.enable = lib.mkDefault true;
-    virtualDisplay = {
-      enable = lib.mkDefault true;
-      disablePrimaryOnStream = lib.mkDefault true;
-    };
-  };
   nixpkgs.overlays = lib.optional enabled
     (_final: prev: {
       # Protect every entry point, including manual and desktop launches, without
@@ -49,7 +42,7 @@ in {
         });
       });
     })
-  ++ lib.optional (enabled && config.settings.apps.sunshine.cuda.enable)
+  ++ lib.optional (config.settings.apps.gaming.sunshine.cuda.enable)
     (_final: prev: {
       sunshine = (prev.sunshine.override { cudaSupport = true; }).overrideAttrs (old: {
         # cudaSupport wraps $out/bin/sunshine in a shell script that exec's
@@ -95,7 +88,7 @@ in {
     settings.origin_web_ui_allowed = "lan";
     settings.web_ui_ssh_keys = lib.concatStringsSep "," sshKeys;
   };
-  assertions = lib.optional (enabled && sshLogin.enable) {
+  assertions = lib.optional (sshLogin.enable) {
     assertion = sshKeys != [] && lib.all (key:
       builtins.match "(ssh-ed25519|ssh-rsa) [A-Za-z0-9+/=]+( .*)?" key != null
       && !lib.hasInfix "," key && !lib.hasInfix "\n" key

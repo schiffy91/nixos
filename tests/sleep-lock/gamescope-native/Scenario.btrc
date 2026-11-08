@@ -1,0 +1,201 @@
+import ../../vm/Lab.btrc;
+import ../../vm/Framebuffer.btrc;
+
+class GamescopeScenario {
+    private Lab lab;
+    private Guest machine;
+    private Framebuffer? framebuffer = null;
+    private string userSystemctl = "runuser -u observer -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user";
+    private string focusQuery = "";
+    private string session = "";
+    private string originalVT = "";
+    private string originalPID = "";
+    private bool withSunshine;
+    public GamescopeScenario(Lab lab) { self.lab = lab; self.machine = lab.guest("machine"); self.withSunshine = lab.settings().get("withSunshine").asBool(); }
+    private Framebuffer frames() { var frames = self.framebuffer; if (frames == null) { throw "Framebuffer not connected"; } return frames; }
+    private string systemctl(string arguments) { return self.userSystemctl + " " + arguments; }
+    private string sessionProperty(string property) { return self.machine.succeed(self.systemctl(f"show gamescope-session.service -p {property} --value")).trim(); }
+    public void start() {
+        var machine = self.machine; self.lab.startAll(); machine.waitForUnit("multi-user.target");
+        machine.waitUntil(self.systemctl("is-active gamescope-session.service"), 60); machine.waitUntil(self.systemctl("is-active steam-launcher.service"), 30); Timer.sleepMillis(3000);
+        var journal = machine.succeed("journalctl -b --no-pager _UID=1000"); var selected = 0;
+        for line in Strings.split(journal, "\n") {
+            if (!line.contains("selecting physical device")) { continue; }
+            selected++; Check.that(line.contains("RADV") && !line.contains("Venus") && !line.contains("llvmpipe"), "native RADV physical device");
+        }
+        Check.that(selected > 0 && journal.contains("opening DRM node '/dev/dri/card0'"), "direct DRM Gamescope"); Check.equal(self.sessionProperty("NRestarts"), "0", "stable Gamescope session");
+        machine.waitForFile("/tmp/gamescope-control-window", 10); var window = machine.succeed("cat /tmp/gamescope-control-window").trim(); Check.that(Regex.matches("^[0-9]+$", window), "numeric client window");
+        var display = "";
+        for line in Strings.split(machine.succeed("cat /run/user/1000/gamescope-environment"), "\n") { if (line.startsWith("DISPLAY=")) { display = line.substring(8, line.len() - 8); } }
+        Check.that(!display.isEmpty(), "Gamescope display environment");
+        var xprop = "runuser -u observer -- env DISPLAY=" + ShellWords.quote(display) + " xprop";
+        print(machine.succeed(f"{xprop} -id {window} STEAM_GAME WM_NAME"));
+        self.focusQuery = xprop + " -root GAMESCOPECTRL_BASELAYER_APPID GAMESCOPE_FOCUSABLE_APPS GAMESCOPE_FOCUSABLE_WINDOWS GAMESCOPE_FOCUSED_APP GAMESCOPE_FOCUSED_APP_GFX GAMESCOPE_FOCUSED_WINDOW";
+        print(machine.succeed(self.focusQuery)); machine.waitUntil(xprop + " -root GAMESCOPE_FOCUSED_APP_GFX | grep -Fx 'GAMESCOPE_FOCUSED_APP_GFX(CARDINAL) = 769'", 10);
+        print(machine.monitorCommand("screendump " + self.lab.artifact("qmp-diagnostic.ppm"))); print(machine.execute("cat /sys/kernel/debug/dri/0/state").output);
+        self.framebuffer = Framebuffer(machine.statePath("gamescope.vnc"));
+        self.frames().waitForText("GAMESCOPE_CONTROL_READY", self.lab.artifact("gamescope-control-start.ppm"));
+        machine.sendChars("touch /tmp/gamescope-before; echo BEFOREINPUTWORKS\n"); machine.waitForFile("/tmp/gamescope-before", 10);
+        self.frames().waitForText("BEFOREINPUTWORKS", self.lab.artifact("gamescope-control-before.ppm"), 10);
+        for entry in JSONValue.parse(machine.succeed("loginctl list-sessions --json=short")).elements() { if (entry.get("uid").asInt() == 1000 && entry.get("seat").asString().equals("seat0")) { self.session = entry.get("session").asString(); break; } }
+        Check.that(!self.session.isEmpty(), "Gaming seat session"); Check.equal(self.sessionProperty("NRestarts"), "0", "input did not restart compositor"); self.originalPID = self.sessionProperty("MainPID");
+    }
+    private void locked() { Check.equal(self.machine.succeed("cat /sys/class/tty/tty0/active").trim(), "tty63", "lock owns foreground VT"); }
+    private void cannotSwitch() {
+        self.machine.execute("timeout 2 chvt " + self.originalVT); self.machine.succeed("loginctl activate " + ShellWords.quote(self.session));
+        self.machine.sendKey("ctrl-alt-f" + self.originalVT); Timer.sleepMillis(500); self.locked();
+    }
+    private Image prompt(string label) {
+        self.machine.waitUntil("pgrep -f '^/nix/store/[^ ]+/bin/sleep-lock-native /nix/store/[^ ]+/bin/plymouth authenticate observer( retry)?$'", 30);
+        for (int attempt = 0; attempt < 40; attempt++) {
+            var frame = self.frames().save(self.lab.artifact(f"gamescope-lock-{label}.ppm")); var background = 0;
+            for (int y = 0; y < frame.height; y++) { for (int x = 0; x < frame.width; x++) { var pixel = frame.pixel(x, y); if (pixel.red == 0x23 && pixel.green == 0x26 && pixel.blue == 0x2e) { background++; } } }
+            if (background > frame.width * 10) { return frame; } Timer.sleepMillis(250);
+        }
+        throw "Password keyboard absent in actual framebuffer";
+    }
+    private Image begin(string label, bool fail = false) {
+        self.machine.succeed("rm -f /run/sleep-backend-entered /run/fail-sleep-backend"); if (fail) { self.machine.succeed("touch /run/fail-sleep-backend"); }
+        self.machine.succeed("systemctl reset-failed"); if (fail) { self.machine.fail("systemctl start systemd-suspend.service"); } else { self.machine.succeed("systemctl start systemd-suspend.service"); }
+        self.machine.waitForFile("/run/sleep-backend-entered", 30); return self.prompt(label);
+    }
+    private void touchKey(string key, Image frame) {
+        int x = 0; int y = 0; int width = 4;
+        if (key.equals("a")) { x = 7; y = 8; }
+        else if (key.equals("b")) { x = 26; y = 12; }
+        else if (key.equals("3")) { x = 12; }
+        else if (key.equals("1")) { x = 4; }
+        else if (key.equals("shift")) { y = 12; width = 6; }
+        else if (key.equals("space")) { x = 18; y = 16; width = 24; }
+        else if (key.equals("x")) { x = 14; y = 12; }
+        else if (key.equals("z")) { x = 10; y = 12; }
+        else if (key.equals("backspace")) { x = 52; width = 8; }
+        else if (key.equals("enter")) { x = 42; y = 16; width = 18; }
+        else { throw "Unknown fixture key"; }
+        var keyboardWidth = frame.width * 96 / 100; if (keyboardWidth > 1280) { keyboardWidth = 1280; }
+        var keyboardHeight = frame.height * 52 / 100;
+        var touchX = (int)(((frame.width - keyboardWidth) / 2 + keyboardWidth * (x + width / 2.0) / 60.0) * 32767.0 / frame.width);
+        var touchY = (int)((frame.height - keyboardHeight + 4 + (keyboardHeight - 8) * (y + 2) / 20.0) * 32767.0 / frame.height);
+        self.machine.succeed(f"echo 'down {touchX} {touchY}' > /run/test-input"); Timer.sleepMillis(150); self.machine.succeed("echo up > /run/test-input"); Timer.sleepMillis(150);
+    }
+    private void streamsStopped() {
+        self.machine.succeed("test -f /run/nixos-gaming-locked");
+        for unit in ["sunshine.service", "app-dev.lizardbyte.app.Sunshine.service"] {
+            if (!self.withSunshine) { Check.equal(self.machine.succeed(self.systemctl(f"show {unit} -p LoadState --value")).trim(), "not-found", "absent streaming unit"); continue; }
+            self.machine.succeed(self.systemctl("start " + unit)); Check.equal(self.machine.succeed(self.systemctl(f"show {unit} -p ActiveState --value")).trim(), "inactive", "stream cannot start while locked"); Check.equal(self.machine.succeed(self.systemctl(f"show {unit} -p MainPID --value")).trim(), "0", "no streaming process");
+        }
+    }
+    private void stream(string verb, string units, bool success = true) {
+        if (!self.withSunshine) { return; } var command = self.systemctl(verb + " " + units); if (success) { self.machine.succeed(command); } else { self.machine.fail(command); }
+    }
+    private void restored(string marker) {
+        self.machine.waitUntil("test ! -e /run/nixos-sleep-lock/state.json; test ! -e /run/nixos-gaming-locked", 30);
+        Check.equal(self.machine.succeed("cat /sys/class/tty/tty0/active").trim(), "tty" + self.originalVT, "original VT restored");
+        Check.equal(self.sessionProperty("MainPID"), self.originalPID, "original compositor retained"); Check.equal(self.sessionProperty("NRestarts"), "0", "compositor never restarted");
+        self.frames().save(self.lab.artifact(f"gamescope-before-input-{marker}.ppm")); print(self.machine.execute("cat /sys/kernel/debug/dri/0/state").output); print(self.machine.execute("timeout 3 " + self.focusQuery).output);
+        self.machine.sendChars(f"touch /tmp/{marker}; echo {marker}\n"); self.machine.waitForFile(f"/tmp/{marker}", 10); self.frames().waitForText(marker, self.lab.artifact(f"gamescope-restored-{marker}.ppm")); print(self.machine.execute("cat /sys/kernel/debug/dri/0/state").output);
+    }
+    private void waitConsoleCount(string text, int before) {
+        var deadline = MonotonicClock.deadlineAfter(30000);
+        while (self.machine.console().count(text) == before) { Check.that(MonotonicClock.before(deadline), "kernel transition: " + text); Timer.sleepMillis(100); }
+    }
+    private void suspend() {
+        self.machine.succeed("echo 1 > /sys/power/pm_debug_messages; dmesg -n 8; systemctl reset-failed");
+        var idle = self.machine.console().count("PM: suspend-to-idle"); var exited = self.machine.console().count("PM: suspend exit");
+        self.machine.succeed("systemctl suspend --no-block"); self.waitConsoleCount("PM: suspend-to-idle", idle); Timer.sleepMillis(3000);
+        Check.that(self.machine.console().count("PM: suspend exit") == exited, "kernel remains suspended until wake event");
+        self.machine.qmp("system_powerdown", JSONValue.makeObject()); self.waitConsoleCount("PM: suspend exit", exited);
+        self.machine.waitUntil("test $(systemctl show -p SubState --value systemd-suspend.service) = dead", 30); self.machine.succeed("test $(systemctl show -p Result --value systemd-suspend.service) = success");
+    }
+    public void suspendControl() {
+        self.suspend(); Check.equal(self.sessionProperty("MainPID"), self.originalPID, "unlocked suspend retains compositor"); Check.equal(self.sessionProperty("NRestarts"), "0", "unlocked suspend does not restart compositor");
+        self.frames().save(self.lab.artifact("gamescope-unlocked-resume.ppm")); print(self.machine.execute("cat /sys/kernel/debug/dri/0/state").output); print(self.machine.execute("timeout 3 " + self.focusQuery).output);
+        self.machine.sendChars("touch /tmp/UNLOCKEDRESUME; echo UNLOCKEDRESUME\n"); self.machine.waitForFile("/tmp/UNLOCKEDRESUME", 10); self.frames().waitForText("UNLOCKEDRESUME", self.lab.artifact("gamescope-unlocked-resume-input.ppm"));
+    }
+    public void lock(bool realSuspend) {
+        var machine = self.machine; machine.waitUntil("test -p /run/test-input", 10);
+        self.originalVT = machine.succeed("loginctl show-session " + ShellWords.quote(self.session) + " -p VTNr --value").trim();
+        Check.that(Regex.matches("^[0-9]+$", self.originalVT) && Strings.toInt(self.originalVT) > 0 && Strings.toInt(self.originalVT) < 63, "valid Gaming VT");
+        var desktop = machine.succeed("loginctl show-session " + ShellWords.quote(self.session) + " -p Desktop --value").trim().toLower(); Check.that(Strings.split(desktop, ":").contains("gamescope"), "Gaming desktop session"); machine.succeed("touch /run/expect-gaming-lock");
+        var units = "sunshine.service app-dev.lizardbyte.app.Sunshine.service";
+        self.stream("start", units);
+        self.stream("is-active", units);
+        self.begin("wrong-password");
+        self.streamsStopped();
+        self.cannotSwitch();
+        machine.sendChars("touch /tmp/INPUTLEAK\n");
+        Timer.sleepMillis(3000);
+        self.cannotSwitch();
+        machine.succeed("test ! -e /tmp/INPUTLEAK");
+        self.prompt("touch-password");
+        machine.sendKey("esc");
+        machine.sendKey("ctrl-c");
+        self.cannotSwitch();
+        machine.sendKey("esc");
+        var frame = self.prompt("after-cancel");
+        for key in ["a", "shift", "b", "3", "shift", "1", "space", "x", "backspace", "z", "enter"] { self.touchKey(key, frame); }
+        self.restored("AFTERTOUCH");
+        self.stream("is-active", units);
+        machine.succeed("test ! -e /tmp/INPUTLEAK");
+
+        self.stream("stop", units);
+        self.begin("failed-backend", true);
+        self.streamsStopped();
+        self.cannotSwitch();
+        machine.sendChars("aB3! z\n");
+        self.restored("AFTERFAILED");
+        self.stream("is-active", "sunshine.service", false);
+        self.stream("is-active", "app-dev.lizardbyte.app.Sunshine.service", false);
+        machine.succeed("rm /run/fail-sleep-backend");
+
+        self.stream("start", "sunshine.service");
+        self.begin("restart-controller");
+        machine.succeed("systemctl kill --kill-whom=all -s SIGKILL nixos-sleep-lock");
+        self.prompt("after-controller-restart");
+        self.cannotSwitch();
+        self.streamsStopped();
+        machine.succeed("touch /run/hold-sleep-backend; rm /run/sleep-backend-entered; systemctl start --no-block systemd-suspend.service");
+        machine.waitForFile("/run/sleep-backend-entered", 30);
+        machine.sendChars("aB3! z\n");
+        Timer.sleepMillis(1000);
+        self.cannotSwitch();
+        self.streamsStopped();
+        machine.succeed("rm /run/hold-sleep-backend");
+        self.prompt("after-overlap");
+        machine.sendChars("wrong\n");
+        Timer.sleepMillis(3000);
+        self.cannotSwitch();
+        self.prompt("after-overlap-rejection");
+        machine.sendChars("aB3! z\n");
+        self.restored("AFTERRESTART");
+        self.stream("is-active", "sunshine.service");
+        self.stream("is-active", "app-dev.lizardbyte.app.Sunshine.service", false);
+
+        self.begin("desktop-transition");
+        machine.succeed("systemd-run --unit=desktop-transition --property=User=observer --property=PAMName=login --setenv=XDG_SESSION_TYPE=wayland --setenv=XDG_SESSION_DESKTOP=KDE --setenv=XDG_SESSION_CLASS=user /run/current-system/sw/bin/sleep infinity");
+        Timer.sleepMillis(1000);
+        self.cannotSwitch();
+        self.streamsStopped();
+        machine.sendChars("aB3! z\n");
+        self.restored("AFTERTRANSITION");
+        machine.succeed("systemctl stop desktop-transition.service");
+        if (realSuspend) {
+            machine.succeed("touch /run/real-suspend");
+            self.suspend();
+            self.prompt("real-suspend");
+            self.cannotSwitch();
+            machine.sendChars("wrong\n");
+            Timer.sleepMillis(3000);
+            self.cannotSwitch();
+            self.prompt("after-resume-rejection");
+            machine.sendChars("aB3! z\n");
+            self.restored("AFTERRESUME");
+            machine.succeed("rm /run/real-suspend");
+        }
+        machine.succeed("systemctl stop display-manager; loginctl terminate-user observer; rm /run/expect-gaming-lock"); machine.waitUntil("! systemctl is-active user@1000.service", 20);
+        machine.succeed("chvt 2; rm /run/sleep-backend-entered; systemctl reset-failed; systemctl start systemd-suspend.service; test -f /run/sleep-backend-entered; test ! -e /run/nixos-sleep-lock/state.json; test ! -e /run/nixos-gaming-locked"); Check.equal(machine.succeed("cat /sys/class/tty/tty0/active").trim(), "tty2", "non-Gaming session unaffected"); Check.that(!machine.succeed("journalctl -b --no-pager").contains("aB3! z"), "password absent from journal");
+    }
+    public void diagnostics() {
+        for command in ["journalctl -b --no-pager -u nixos-sleep-lock -u systemd-suspend | tail -n 160", "journalctl -b --no-pager -u display-manager -t gamescope -t gamescope-session | tail -n 120", "journalctl -b --no-pager _UID=1000 | tail -n 180"] { print(self.machine.execute(command).output); }
+    }
+}

@@ -1,10 +1,132 @@
 import Library.Bytes;
+import Library.Digest.SHA256;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Process;
 import Library.Vector;
 
 class SecureBootVerification {
+    class long little32(Bytes bytes, int offset) {
+        if (offset < 0 || offset > bytes.len - 4) { throw "Truncated EFI signature database"; }
+        return (long)bytes.get(offset) | ((long)bytes.get(offset + 1) << 8)
+            | ((long)bytes.get(offset + 2) << 16) | ((long)bytes.get(offset + 3) << 24);
+    }
+
+    // efivarfs prefixes the EFI_SIGNATURE_LIST payload with four attribute bytes.
+    // Hash exact certificate DER, not an untrusted owner GUID or subject name.
+    class Vector<string> database(Bytes bytes) {
+        Vector<string> result = [];
+        if (bytes.len == 0) { return result; } // absent variable
+        if (bytes.len <= 4 || bytes.len > 1048576 || (SecureBootVerification.little32(bytes, 0) & 7L) != 7L) {
+            throw "Invalid EFI signature database attributes or size";
+        }
+        Vector<int> x509 = [0xa1, 0x59, 0xc0, 0xa5, 0xe4, 0x94, 0xa7, 0x4a, 0x87, 0xb5, 0xab, 0x15, 0x5c, 0x2b, 0xf0, 0x72];
+        int offset = 4;
+        while (offset < bytes.len) {
+            if (bytes.len - offset < 28) { throw "Truncated EFI signature list"; }
+            var listSize = SecureBootVerification.little32(bytes, offset + 16);
+            var headerSize = SecureBootVerification.little32(bytes, offset + 20);
+            var signatureSize = SecureBootVerification.little32(bytes, offset + 24);
+            if (listSize < 28 || listSize > bytes.len - offset || headerSize > listSize - 28 ||
+                signatureSize <= 16 || signatureSize > listSize - 28 - headerSize ||
+                (listSize - 28 - headerSize) % signatureSize != 0) { throw "Invalid EFI signature list lengths"; }
+            var certificate = headerSize == 0;
+            for (int index = 0; index < 16; index++) {
+                if (bytes.get(offset + index) != x509.get(index)) { certificate = false; }
+            }
+            int end = offset + (int)listSize;
+            for (int entry = offset + 28 + (int)headerSize; entry < end; entry += (int)signatureSize) {
+                if (result.len >= 4096) { throw "Too many EFI signatures"; }
+                var digest = SHA256.digestBytes(bytes.slice(entry + 16, entry + (int)signatureSize));
+                result.push(certificate ? digest : f"unsupported:{digest}");
+            }
+            offset = end;
+        }
+        return result;
+    }
+
+    class string fingerprint(string value) {
+        var normalized = value.replace(":", "").toLower();
+        if (normalized.length() != 64) { throw "Invalid Secure Boot certificate fingerprint"; }
+        for (int index = 0; index < normalized.length(); index++) {
+            if (!((normalized[index] >= '0' && normalized[index] <= '9') ||
+                (normalized[index] >= 'a' && normalized[index] <= 'f'))) { throw "Invalid Secure Boot certificate fingerprint"; }
+        }
+        return normalized;
+    }
+
+    class bool owns(Vector<string> signatures, string expected) {
+        return signatures.len == 1 && signatures.get(0).equals(SecureBootVerification.fingerprint(expected));
+    }
+
+    class string generation(string id) {
+        var fields = Strings.split(id, "-");
+        if (fields.len < 4 || !fields.get(0).equals("nixos") || !fields.get(1).equals("generation") || !id.endsWith(".efi")) {
+            throw "Unrecognized boot generation; inspect the retained boot menu before key removal";
+        }
+        var number = fields.get(2);
+        if (number.isEmpty()) { throw "Missing boot generation number"; }
+        for (int index = 0; index < number.length(); index++) {
+            if (number[index] < '0' || number[index] > '9') { throw "Invalid boot generation number"; }
+        }
+        return number;
+    }
+
+    class bool enrollmentOff(string text) {
+        int declarations = 0;
+        for line in Strings.split(text, "\n") {
+            var fields = Strings.split(line.replace("\t", " ").trim(), " ");
+            Vector<string> words = [];
+            for field in fields { if (!field.isEmpty()) { words.push(field); } }
+            if (words.isEmpty() || words.get(0).startsWith("#") || !words.get(0).equals("secure-boot-enroll")) { continue; }
+            if (words.len != 2 || !words.get(1).equals("off")) { return false; }
+            declarations++;
+        }
+        return declarations == 1;
+    }
+
+    class bool recoveryEntry(string text) {
+        int images = 0;
+        for line in Strings.split(text, "\n") {
+            Vector<string> words = [];
+            for word in Strings.split(line.replace("\t", " ").trim(), " ") { if (!word.isEmpty()) { words.push(word); } }
+            if (words.isEmpty() || words.get(0).startsWith("#")) { continue; }
+            var directive = words.get(0);
+            if (directive.equals("efi")) {
+                if (words.len != 2 || !words.get(1).equals("/EFI/recovery/nixos-recovery.efi")) { return false; }
+                images++;
+            } else if ((!directive.equals("title") && !directive.equals("sort-key")) || words.len < 2) { return false; }
+        }
+        return images == 1;
+    }
+
+    class string variablePath(string name) {
+        var guid = name.equals("db") ? "d719b2cb-3d3a-4596-a3bc-dad00e67656f" : "8be4df61-93ca-11d2-aa0d-00e098032b8c";
+        return f"/sys/firmware/efi/efivars/{name}-{guid}";
+    }
+
+    class void requireFirmware() {
+        var filesystem = UnixShell().run("stat -f -c %T /sys/firmware/efi/efivars", logFailure=false);
+        if (!filesystem.ok() || !filesystem.trimmed().equals("efivarfs")) { throw "Readable efivarfs is required for Secure Boot"; }
+    }
+
+    class Bytes readDatabase(string name) {
+        SecureBootVerification.requireFirmware();
+        var path = SecureBootVerification.variablePath(name);
+        if (!FileSystem.exists(path)) { return Bytes(); }
+        var opened = FileSystem.openRegularFileSnapshot(path, 1048576LL);
+        if (!opened.ok()) { throw f"Cannot read firmware {name}"; }
+        var file = opened.value();
+        Bytes result;
+        try {
+            if (file.size() < 4LL) { throw "Invalid EFI variable size"; }
+            var bytes = file.readExactAt(0LL, (int)file.size());
+            if (!bytes.ok()) { throw f"Cannot read firmware {name}"; }
+            SecureBootVerification.database(bytes.value());
+            result = bytes.value();
+        } finally { file.close(); }
+        return result;
+    }
     class JSONValue signatures(string text) {
         var entries = JSONValue.parse(text);
         if (!entries.isArray() || entries.size() == 0) { throw "sbctl returned no verification records"; }

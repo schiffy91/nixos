@@ -2,7 +2,27 @@ import Library.JSON;
 import Library.Strings;
 import Library.Vector;
 
+enum SleepPhase { SLEEP_ACQUIRING, SLEEP_LOCKED, SLEEP_AUTHENTICATED };
+
+// JSON is only the on-disk representation. Holds and authentication belong to
+// one lock attempt; a new attempt cannot reuse a previous password result.
 class SleepState {
+    public int uid;
+    public int vt;
+    public int sysrq;
+    public bool ready;
+    public string epoch;
+    public Vector<string> holds;
+    public Vector<string> sunshine;
+    public bool streamsCaptured;
+    private SleepPhase phase;
+
+    public SleepState(int uid, int vt, int sysrq) {
+        self.uid = uid; self.vt = vt; self.sysrq = sysrq;
+        self.ready = false; self.epoch = ""; self.holds = [];
+        self.sunshine = []; self.streamsCaptured = false; self.phase = SLEEP_ACQUIRING;
+    }
+
     class Vector<string> sleepUnits() { return ["systemd-suspend.service", "systemd-hibernate.service", "systemd-hybrid-sleep.service", "systemd-suspend-then-hibernate.service"]; }
     class Vector<string> streamUnits() { return ["sunshine.service", "app-dev.lizardbyte.app.Sunshine.service"]; }
 
@@ -25,22 +45,56 @@ class SleepState {
         if (state.get("uid").asInt() != uid) { throw "The configured password account changed"; }
     }
 
-    class JSONValue hold(JSONValue state, string unit, bool pending) {
-        if (!SleepState.sleepUnits().contains(unit)) { throw "Invalid sleep-lock operation"; }
-        Vector<string> holds = [];
-        for old in state.get("holds").elements() { if (!old.asString().equals(unit)) { holds.push(old.asString()); } }
-        if (pending) { holds.push(unit); }
-        var values = JSONValue.makeArray();
-        for value in holds.distinct().sorted() { values.push(JSONValue.makeString(value)); }
-        state.set("holds", values);
+    class SleepState decode(JSONValue value, int uid) {
+        SleepState.validate(value, uid);
+        var state = SleepState(uid, value.get("vt").asInt(), value.get("sysrq").asInt());
+        state.ready = value.get("ready").asBool(); state.epoch = value.get("epoch").asString();
+        for unit in value.get("holds").elements() { state.holds.push(unit.asString()); }
+        if (!value.get("sunshine").isNull()) {
+            state.streamsCaptured = true;
+            for unit in value.get("sunshine").elements() { state.sunshine.push(unit.asString()); }
+        }
+        var phase = value.get("phase").asString();
+        if (phase.equals("locked")) { state.phase = SLEEP_LOCKED; }
+        if (phase.equals("authenticated")) { state.phase = SLEEP_AUTHENTICATED; }
         return state;
     }
 
-    class bool hasHold(JSONValue state, string unit) {
-        for hold in state.get("holds").elements() { if (hold.asString().equals(unit)) { return true; } }
-        return false;
+    public JSONValue encode() {
+        var value = JSONValue.makeObject();
+        value.set("uid", JSONValue.makeInt(self.uid)); value.set("vt", JSONValue.makeInt(self.vt));
+        value.set("sysrq", JSONValue.makeInt(self.sysrq)); value.set("ready", JSONValue.makeBool(self.ready));
+        value.set("epoch", JSONValue.makeString(self.epoch));
+        value.set("phase", JSONValue.makeString(self.locked() ? "locked" : (self.authenticated() ? "authenticated" : "acquiring")));
+        var holds = JSONValue.makeArray();
+        for unit in self.holds { holds.push(JSONValue.makeString(unit)); }
+        value.set("holds", holds);
+        var sunshine = JSONValue.makeNull();
+        if (self.streamsCaptured) {
+            sunshine = JSONValue.makeArray();
+            for unit in self.sunshine { sunshine.push(JSONValue.makeString(unit)); }
+        }
+        value.set("sunshine", sunshine);
+        return value;
     }
 
-    class bool sameAttempt(JSONValue state, string epoch) { return state.get("phase").asString().equals("locked") && state.get("epoch").asString().equals(epoch); }
-    class bool releaseAllowed(JSONValue state) { return state.get("phase").asString().equals("authenticated") && state.get("holds").size() == 0; }
+    public void hold(string unit, bool pending) {
+        if (!SleepState.sleepUnits().contains(unit)) { throw "Invalid sleep-lock operation"; }
+        Vector<string> holds = [];
+        for old in self.holds { if (!old.equals(unit)) { holds.push(old); } }
+        if (pending) { holds.push(unit); }
+        self.holds = holds.distinct().sorted();
+    }
+
+    public bool hasHold(string unit) { return self.holds.contains(unit); }
+    public bool pending() { return !self.holds.isEmpty(); }
+    public bool locked() { return self.phase == SLEEP_LOCKED; }
+    public bool acquiring() { return self.phase == SLEEP_ACQUIRING; }
+    public bool authenticated() { return self.phase == SLEEP_AUTHENTICATED; }
+    public void markLocked() { self.phase = SLEEP_LOCKED; }
+    public void markAuthenticated() { self.phase = SLEEP_AUTHENTICATED; }
+    public void invalidate(string epoch) { self.epoch = epoch; self.ready = false; }
+    public void recover(string epoch) { self.phase = SLEEP_ACQUIRING; self.invalidate(epoch); }
+    public bool sameAttempt(string epoch) { return self.locked() && self.epoch.equals(epoch); }
+    public bool releaseAllowed() { return self.authenticated() && !self.pending(); }
 }

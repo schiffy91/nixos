@@ -13,4 +13,16 @@ module = "ContentManager"
 header = "compression.h"
 language = "c"
 standard = "c11"
-symbols = ["z_stream", "inflateInit2_", "inflate", "inflateEnd", "zlibVersion", "compress2", "cmZlibOk", "cmZlibFinish", "cmZlibStreamEnd"]
+symbols = ["compress2", "cmZlibOk", "cmLzfCompress", "ContentSettingsHandle", "contentSettingsDecode", "contentSettingsRelease", "contentSettingsText"]
+
+owned-results = ["contentSettingsDecode"]
+read-only-borrows = ["contentSettingsDecode.input"]
+borrowed-parameters = ["contentSettingsText.settings"]
+
+[native.bindings.resources.ContentSettingsHandle]
+ownership = "unique"
+release = "contentSettingsRelease"
+
+[native.bindings.copied-results.contentSettingsText]
+kind = "string"
+owner = "settings"

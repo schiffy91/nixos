@@ -1,0 +1,62 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/CommandLog.btrc;
+import ../../lib/TestDirectory.btrc;
+
+class RefreshTests {
+    private TestDirectory fixture;
+    private string program;
+    private string directory;
+
+    public RefreshTests(string program, string command) {
+        self.fixture = TestDirectory("wow-lock"); self.program = program;
+        self.directory = self.fixture.path("config/pkgs/gaming/wow");
+        self.fixture.write("config/pkgs/gaming/wow/addons.json", "{\"pinned\":{\"url\":\"https://fixture.invalid/pinned.zip\"},\"base\":{\"repo\":\"Org/Addon\"},\"forever\":{\"repo\":\"Org/Addon\",\"flavour\":\"forever\"},\"train\":{\"repo\":\"Org/Addon\",\"train\":\"bundle\"}}");
+        Check.that(FileSystem.mkdirp(self.fixture.path("bin")) == 0, "create refresh commands");
+        for name in ["curl", "git", "nix"] { Check.that(FileSystem.symlink(command, self.fixture.path(f"bin/{name}")) == 0, "install refresh command"); }
+    }
+
+    private ExecResult run(string failure = "") {
+        var environment = [f"NIXOS_CONFIG_ROOT={self.fixture.path()}", f"CALLS={self.fixture.path("calls.jsonl")}", f"PATH={self.fixture.path("bin")}:{Environment.get("PATH", "")}"];
+        if (!failure.isEmpty()) { environment.push(f"{failure}=1"); }
+        return ChildProcess.run(self.program, [], environment=environment, timeoutMilliseconds=15000);
+    }
+
+    private string ownership(string path) { return Check.exited(ChildProcess.run("stat", ["-c", "%u:%g", path])).trimmed(); }
+
+    public void check() {
+        Check.exited(self.run());
+        var path = PathTools.join(self.directory, "addons.lock.json");
+        var contents = Path.readAll(path);
+        var owner = self.ownership(path);
+        Check.exited(self.run());
+        Check.equal(self.ownership(path), owner, "preserve lock owner");
+        var result = JSONValue.parse(contents);
+        Check.equal(result.get("pinned").get("url").asString(), "https://fixture.invalid/pinned.zip", "pinned release");
+        Check.that(result.get("base").get("url").asString().endsWith("/old/Addon.zip"), "fallback to complete release");
+        Check.that(result.get("forever").get("url").asString().endsWith("/old/Addon-forever.zip"), "release flavour");
+        Check.that(result.get("train").get("url").asString().endsWith("/bundle/10/Addon.zip"), "numeric train ordering");
+        for name in result.keys() { Check.equal(result.get(name).get("hash").asString(), "sha256-fixture", "prefetched hash"); }
+        for failure in ["FAIL_PREFETCH", "FAIL_RELEASE"] {
+            self.fixture.write("calls.jsonl", "");
+            var failed = self.run(failure);
+            Check.that(!failed.timedOut && failed.code != 0, "refresh rejects command failure");
+            Check.equal(Path.readAll(path), contents, "failed refresh preserves lock bytes");
+            for name in FileSystem.listDir(self.directory) { Check.that(!name.startsWith(".addons.lock."), "remove staging files"); }
+            if (failure.equals("FAIL_RELEASE")) {
+                for command in CommandLog.read(self.fixture.path("calls.jsonl")) {
+                    for argument in command.elements() { Check.that(!argument.asString().contains("expanded_assets/old"), "network errors cannot masquerade as absent assets"); }
+                }
+            }
+        }
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        RefreshTests(args.require(0, "Supply lock tool"), args.require(1, "Supply command fixture")).check();
+        print("PASS: pinned/feed/train refresh, release fallback, hashes and atomic failure isolation"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

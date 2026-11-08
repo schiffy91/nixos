@@ -1,0 +1,81 @@
+import Library.Image.Pixels;
+import ../lib/Check.btrc;
+
+class TouchPoint {
+    private double _x;
+    private double _y;
+    public TouchPoint(double x, double y) { self._x = x; self._y = y; }
+    public double x { get { return self._x; } }
+    public double y { get { return self._y; } }
+    public string input(bool rotated) { return rotated ? f"{(int)((1.0 - self.y) * 32767)} {(int)(self.x * 32767)}" : f"{(int)(self.x * 32767)} {(int)(self.y * 32767)}"; }
+}
+
+// Independent ISO geometry, in quarter-key units. This does not import the
+// production keyboard layout or its hit-testing implementation.
+class KeyboardGeometry {
+    private int width;
+    private int height;
+    public KeyboardGeometry(int width, int height) { self.width = width; self.height = height; }
+    public TouchPoint key(string name) {
+        var x = 0; var y = 0; var width = 4;
+        if (name.equals("TLDE")) {}
+        else if (name.equals("BKSP")) { x = 52; width = 8; }
+        else if (name.equals("TAB")) { y = 4; }
+        else if (name.equals("CAPS")) { y = 8; width = 7; }
+        else if (name.equals("LFSH")) { y = 12; width = 6; }
+        else if (name.equals("LSGT")) { x = 6; y = 12; }
+        else if (name.equals("RTSH")) { x = 50; y = 12; width = 10; }
+        else if (name.equals("GROUP")) { y = 16; width = 10; }
+        else if (name.equals("RALT")) { x = 10; y = 16; width = 8; }
+        else if (name.equals("SPCE")) { x = 18; y = 16; width = 24; }
+        else if (name.equals("RTRN")) { x = 42; y = 16; width = 18; }
+        else {
+            Check.that(name.len() == 4, "ISO key name");
+            var prefix = name.substring(0, 2); var number = Strings.toInt(name.substring(2, 2)); var count = 12; var first = 4;
+            if (prefix.equals("AE")) { y = 0; }
+            else if (prefix.equals("AD")) { y = 4; }
+            else if (prefix.equals("AC")) { y = 8; count = 11; first = 7; }
+            else if (prefix.equals("AB")) { y = 12; count = 10; first = 10; }
+            else { throw "Unknown ISO key row"; }
+            Check.that(number >= 1 && number <= count, "ISO key number"); x = first + (number - 1) * 4;
+        }
+        var keyboardWidth = self.width * 96 / 100; if (keyboardWidth > 1280) { keyboardWidth = 1280; }
+        var keyboardHeight = self.height * 52 / 100;
+        return TouchPoint(((self.width - keyboardWidth) / 2 + keyboardWidth * (x + width / 2.0) / 60.0) / self.width,
+            (self.height - keyboardHeight + 4 + (keyboardHeight - 8) * (y + 2) / 20.0) / self.height);
+    }
+}
+class Screen {
+    class Image logical(Image source, bool rotated, int scale) {
+        var width = rotated ? source.height : source.width; var height = rotated ? source.width : source.height;
+        if (rotated) { Check.that(source.width < source.height, "native portrait framebuffer"); }
+        var result = Image(width / scale, height / scale);
+        for (int y = 0; y < result.height; y++) { for (int x = 0; x < result.width; x++) {
+            var sourceX = x * scale + scale / 2; var sourceY = y * scale + scale / 2;
+            result.setPixel(x, y, rotated ? source.pixel(source.width - 1 - sourceY, sourceX) : source.pixel(sourceX, sourceY));
+        } }
+        return result;
+    }
+    class bool keyboard(Image image, bool light) {
+        var tray = light ? RGBA(0xe6, 0xe8, 0xec) : RGBA(0x23, 0x26, 0x2e);
+        var key = light ? RGBA(255, 255, 255) : RGBA(0x0e, 0x14, 0x1b); var trays = 0; var keys = 0;
+        for (int y = image.height / 2; y < image.height; y++) { for (int x = 0; x < image.width; x++) {
+            var pixel = image.pixel(x, y);
+            if (pixel.red == tray.red && pixel.green == tray.green && pixel.blue == tray.blue) { trays++; }
+            if (pixel.red == key.red && pixel.green == key.green && pixel.blue == key.blue) { keys++; }
+        } }
+        return trays > image.width * 10 && keys > image.width * 10;
+    }
+    class bool field(Image image) {
+        var border = 0;
+        for (int y = 0; y < image.height * 45 / 100; y++) { for (int x = image.width / 4; x < 3 * image.width / 4; x++) {
+            var pixel = image.pixel(x, y); if (pixel.blue > 120 && pixel.blue > 2 * pixel.red && pixel.green > 60) { border++; }
+        } } return border > 50;
+    }
+    class void changed(Image before, Image after, bool expected, string description, int bottomPercent = 30) {
+        Check.that(before.width == after.width && before.height == after.height, "comparable screenshot dimensions");
+        var left = before.width / 4; var top = before.height / 10; var right = before.width * 3 / 4; var bottom = before.height * bottomPercent / 100;
+        var difference = before.crop(left, top, right - left, bottom - top).diff(after.crop(left, top, right - left, bottom - top));
+        Check.that(difference.comparable && (difference.changedPixels > 0) == expected, description);
+    }
+}

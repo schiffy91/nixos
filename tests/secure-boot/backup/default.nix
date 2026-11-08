@@ -9,7 +9,7 @@ let
   common = { ... }: {
     # Exercise the newly built CLI by store path on an older host profile.
     # Calling /run/current-system's helper would deliberately fail this test.
-    environment.systemPackages = [ pkgs.sbctl pkgs.openssl pkgs.python3
+    environment.systemPackages = [ pkgs.sbctl pkgs.openssl pkgs.gnutar
       (pkgs.writeShellScriptBin "nixosctl-secure-boot-keys" "echo wrong-host-helper >&2; exit 97")
     ];
     environment.etc."fixture-cli-path".text = "${cli}/bin/nixosctl";
@@ -41,8 +41,8 @@ let
       '';
     };
   };
-in pkgs.testers.runNixOSTest {
+in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "secure-boot-backup";
   nodes = { deck = common; fractal = common; };
-  testScript = builtins.readFile ./test.py;
+  scenario = ./Main.btrc;
 }

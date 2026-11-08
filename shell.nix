@@ -14,9 +14,12 @@ let
   # that typed native bindings (Library.Tray on libdbus) need; the raw source does not.
   btrcNode = lock.nodes.btrc.locked;
   btrcFlake = builtins.getFlake "github:${btrcNode.owner}/${btrcNode.repo}/${btrcNode.rev}";
-  inherit (btrcFlake.packages.${system}) btrcpy btrc-lsp;
-  nativeLibraries = [ pkgs.liblzf pkgs.zlib pkgs.curl pkgs.openssl ]
-    ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.cryptsetup pkgs.pam pkgs.libdrm ];
+  inherit (import ./config/pkgs/dev/btrc/compat.nix {
+    inherit pkgs;
+    packages = btrcFlake.packages.${system};
+  }) btrcpy btrc-lsp;
+  nativeLibraries = [ pkgs.liblzf pkgs.zlib pkgs.curl pkgs.openssl pkgs.glib ]
+    ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.cryptsetup pkgs.pam pkgs.libdrm pkgs.libvncserver pkgs.libpng pkgs.libjpeg_turbo ];
 in
 pkgs.mkShell {
   buildInputs = nativeLibraries;

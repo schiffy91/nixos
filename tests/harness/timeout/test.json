@@ -6,8 +6,8 @@
   "operations": [
     {
       "op": "host",
-      "command": "python3 tests/harness/timeout/check.py",
-      "timeout": 30,
+      "command": "make build/host-timeout-test && ./build/host-timeout-test",
+      "timeout": 120,
       "expect": "PASS: host deadlines stop commands and their children"
     },
     { "op": "record-state" }

@@ -1,4 +1,5 @@
 import networking.TrustedConnections;
+import networking.NetworkPrefix;
 
 #include <assert.h>
 
@@ -7,6 +8,15 @@ JSONValue address(string device = "wlan0", string local = "192.168.50.52", int p
 }
 
 int main() {
+    var subnet = NetworkPrefix.fromAddress(address(local="192.168.50.255", prefix=25).at(0).get("addr_info").at(0));
+    if (subnet == null) { throw "Expected a global network prefix"; }
+    assert(subnet.cidr().equals("192.168.50.128/25"));
+    subnet = NetworkPrefix.fromAddress(address(local="fd00:1234:5678:9abc:ffff::52", prefix=73, family="inet6").at(0).get("addr_info").at(0));
+    if (subnet == null) { throw "Expected a global network prefix"; }
+    assert(subnet.cidr().equals("fd00:1234:5678:9abc:ff80::/73"));
+    for invalid in [address(local="::1", prefix=129, family="inet6"), address(local="::1", prefix=0, family="inet6"), address(family="unknown")] {
+        assert(NetworkPrefix.fromAddress(invalid.at(0).get("addr_info").at(0)) == null);
+    }
     var ports = JSONValue.parse("{\"tcp\":[22,47990,22],\"udp\":[5353]}");
     var rules = TrustedRules.forAddresses(address(), [], ports, []);
     assert(rules.ipv4.len == 0 && rules.ipv6.len == 0);

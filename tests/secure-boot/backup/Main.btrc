@@ -1,0 +1,80 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+class KeyTransferTests {
+    private Guest deck;
+    private Guest fractal;
+    private string root = "/var/lib/secureboot-fixture";
+    private string source = "/var/lib/secureboot-fixture/sbctl";
+    private string backup = "/var/lib/secureboot-fixture/backups/STEAM-DECK-OLED";
+    private string restored = "/var/lib/secureboot-fixture/restored";
+    private string archive = "/var/lib/secureboot-fixture/archive.tar";
+    private string cli = "$(cat /etc/fixture-cli-path) secure-boot keys";
+    private string ssh = "env -u SSH_AUTH_SOCK ssh -T -i /root/transfer-key -o BatchMode=yes -o IdentityAgent=none -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes root@fractal";
+    private string members = "GUID keys/PK/PK.key keys/PK/PK.pem keys/KEK/KEK.key keys/KEK/KEK.pem keys/db/db.key keys/db/db.pem";
+
+    public KeyTransferTests(Guest deck, Guest fractal) { self.deck = deck; self.fractal = fractal; }
+    private string verified(Guest guest, string path) { return JSONValue.parse(guest.succeed(f"{self.cli} verify {path}")).stringify(); }
+    private void unchanged(string original) {
+        Check.equal(self.verified(self.deck, self.source), original, "source key identities");
+        Check.equal(self.verified(self.fractal, self.backup), original, "backup key identities");
+    }
+
+    public void check() {
+        for node in [self.deck, self.fractal] {
+            node.waitForUnit("multi-user.target"); node.waitForUnit("sshd");
+            node.succeed(f"findmnt -n -o SOURCE {self.root} | grep /dev/mapper/fixture");
+            node.fail("command -v nixosctl"); node.fail("/run/current-system/sw/bin/nixosctl-secure-boot-keys");
+        }
+        print("Fresh fixture keys, encrypted storage and pinned SSH");
+        self.deck.succeed("sbctl --config /etc/fixture-sbctl.conf create-keys");
+        var original = self.verified(self.deck, self.source);
+        self.deck.succeed("install -d -m700 /root/.ssh; ssh-keygen -q -t ed25519 -N '' -f /root/transfer-key");
+        var clientKey = self.deck.succeed("cat /root/transfer-key.pub").trim();
+        var hostKey = self.fractal.succeed("cat /etc/ssh/ssh_host_ed25519_key.pub").trim();
+        self.fractal.succeed(f"install -d -m700 /root/.ssh; umask 077; printf '%s\\n' {ShellWords.quote(clientKey)} > /root/.ssh/authorized_keys");
+        self.deck.succeed(f"umask 077; printf '%s\\n' {ShellWords.quote("fractal " + hostKey)} > /root/.ssh/known_hosts"); self.deck.succeed(self.ssh + " true");
+        print("CLI streams verified backup without local archive or secret output");
+        self.deck.succeed(f"{self.cli} export {self.source} | {self.ssh} {ShellWords.quote(self.cli + " import " + self.backup)}"); self.unchanged(original);
+        self.fractal.succeed(f"test $(stat -c %a {self.backup}) = 700; test $(find {self.backup} -type f | wc -l) = 7");
+        self.fractal.fail(f"find {self.backup} -type f ! -perm 0600 | grep ."); self.fractal.fail(f"find {self.backup} ! -user root | grep .");
+        self.fractal.fail(f"runuser -u observer -- cat {self.backup}/keys/PK/PK.key"); self.deck.fail(f"runuser -u observer -- {self.cli} export {self.source}");
+        self.deck.fail(f"script -qec {ShellWords.quote(self.cli + " export " + self.source)} /dev/null > {self.root}/terminal-result 2>&1"); self.deck.fail(f"grep -a 'BEGIN .*PRIVATE KEY' {self.root}/terminal-result");
+        print("Restore preserves seven files and existing-key creation cannot rotate them");
+        self.deck.succeed(f"{self.ssh} {ShellWords.quote(self.cli + " export " + self.backup)} | {self.cli} import {self.restored}");
+        self.deck.succeed(f"for file in {self.members}; do cmp -s {self.source}/$file {self.restored}/$file; done");
+        Check.equal(self.verified(self.deck, self.restored), original, "restored key identities");
+        self.deck.succeed("sbctl --config /etc/fixture-sbctl.conf create-keys"); self.deck.succeed(f"for file in {self.members}; do cmp -s {self.source}/$file {self.restored}/$file; done");
+        self.deck.fail(f"{self.cli} export {self.source} | {self.ssh} {ShellWords.quote(self.cli + " import " + self.backup)}"); self.unchanged(original);
+        print("Unsafe export sources are refused before writing private bytes");
+        self.deck.succeed(f"ln -s {self.source} {self.root}/source-link"); self.deck.fail(f"{self.cli} export {self.root}/source-link > {self.root}/refused");
+        self.deck.succeed(f"test ! -s {self.root}/refused; cp -a {self.source} {self.root}/bad");
+        self.deck.succeed(f"rm {self.root}/bad/keys/PK/PK.key; ln -s {self.source}/keys/PK/PK.key {self.root}/bad/keys/PK/PK.key"); self.deck.fail(f"{self.cli} export {self.root}/bad > {self.root}/refused");
+        self.deck.succeed(f"test ! -s {self.root}/refused; rm {self.root}/bad/keys/PK/PK.key; cp {self.source}/keys/PK/PK.key {self.root}/bad/keys/PK/PK.key; chmod 0644 {self.root}/bad/keys/PK/PK.key"); self.deck.fail(f"{self.cli} export {self.root}/bad > {self.root}/refused");
+        self.deck.succeed(f"test ! -s {self.root}/refused; chmod 0600 {self.root}/bad/keys/PK/PK.key; ln {self.root}/bad/keys/PK/PK.key {self.root}/hardlink"); self.deck.fail(f"{self.cli} export {self.root}/bad > {self.root}/refused");
+        self.deck.succeed(f"test ! -s {self.root}/refused; rm {self.root}/hardlink; cp {self.source}/keys/KEK/KEK.pem {self.root}/bad/keys/PK/PK.pem"); self.deck.fail(f"{self.cli} export {self.root}/bad > {self.root}/refused"); self.deck.succeed(f"test ! -s {self.root}/refused");
+        print("Unsafe destinations and interrupted streams never publish bundles");
+        self.deck.succeed(f"umask 077; {self.cli} export {self.source} > {self.archive}; ln -s {self.source} {self.root}/destination-link; mkdir -m0777 {self.root}/writable");
+        for destination in [self.root + "/destination-link", self.root + "/destination-link/child", self.root + "/writable/child", "/nix/store/refused-private-keys"] { self.deck.fail(f"{self.cli} import {destination} < {self.archive}"); }
+        self.deck.fail(f"head -c 4096 {self.archive} | {self.cli} import {self.root}/truncated"); self.deck.fail(f"test -e {self.root}/truncated");
+        self.deck.succeed(f"mkfifo -m600 {self.root}/input; (head -c 512 {self.archive}; sleep 30) > {self.root}/input & writer=$!; {self.cli} import {self.root}/interrupted < {self.root}/input >/dev/null 2>{self.root}/interrupt-result & reader=$!; sleep 1; kill -TERM $reader; wait $reader && exit 1; kill $writer 2>/dev/null || true; rm {self.root}/input");
+        self.deck.fail(f"test -e {self.root}/interrupted"); self.deck.fail(f"find {self.root} -maxdepth 1 -name '.secure-boot-keys-*' | grep ."); self.unchanged(original);
+        print("Independent USTAR fixtures reject traversal, links, duplicate members and corrupt keys");
+        self.deck.succeed(f"umask 077; tar --format=ustar --transform='s,^GUID$,../escaped,' -cf {self.root}/traversal.tar -C {self.source} {self.members}; tar --format=ustar -cf {self.root}/duplicate.tar -C {self.source} GUID {self.members}; cp -a {self.source} {self.root}/archive-members; rm {self.root}/archive-members/GUID; ln -s /etc/shadow {self.root}/archive-members/GUID; tar --format=ustar -cf {self.root}/symlink.tar -C {self.root}/archive-members {self.members}; rm {self.root}/archive-members/GUID; cp {self.source}/GUID {self.root}/archive-members/GUID; for key in PK KEK db; do printf invalid-private-key > {self.root}/archive-members/keys/$key/$key.key; done; tar --format=ustar -cf {self.root}/corrupt.tar -C {self.root}/archive-members {self.members}");
+        for scenario in ["traversal", "symlink", "duplicate", "corrupt"] {
+            self.deck.fail(f"{self.cli} import {self.root}/invalid-{scenario} < {self.root}/{scenario}.tar"); self.deck.fail(f"test -e {self.root}/invalid-{scenario}");
+        }
+        self.deck.fail("test -e /var/lib/escaped");
+        print("Storage exhaustion leaves no published or partial destination");
+        self.deck.succeed(f"mkdir -m700 {self.root}/full; mount -t tmpfs -o size=8k,mode=700 tmpfs {self.root}/full");
+        self.deck.fail(f"{self.cli} import {self.root}/full/backup < {self.archive}"); self.deck.fail(f"test -e {self.root}/full/backup"); self.deck.fail(f"find {self.root}/full -mindepth 1 | grep ."); self.deck.succeed(f"umount {self.root}/full");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor")); lab.startAll();
+        KeyTransferTests(lab.guest("deck"), lab.guest("fractal")).check(); lab.close();
+        print("PASS: encrypted key backup, SSH transfer, restoration, hostile archives and failure isolation"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

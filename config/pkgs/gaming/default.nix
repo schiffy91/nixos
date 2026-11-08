@@ -15,7 +15,7 @@
     ./wine
     ./wow
   ];
-  settings.disk.immutability.persist.paths = lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable) [
+  settings.disk.immutability.persist.paths = lib.mkIf (config.settings.apps.gaming.enable) [
     "${config.settings.users.admin.homeDirectory}/Games"
     "${config.settings.users.admin.homeDirectory}/My Games"
     "${config.settings.users.admin.homeDirectory}/.local/share/Larian Studios"

@@ -1,0 +1,44 @@
+import Library.CLI;
+import ../lib/TestDirectory.btrc;
+import ./AlarmState.btrc;
+
+class CryptoIntegration {
+    class ExecResult openssl(Vector<string> arguments) { return Check.exited(ChildProcess.run("openssl", arguments, timeoutMilliseconds=15000)); }
+
+    class void rejects(string program, string key, string certificate) {
+        var result = ChildProcess.run(program, [key, certificate], timeoutMilliseconds=5000);
+        Check.that(!result.timedOut && result.code != 0, "reject mismatched, corrupt or encrypted pair without prompting");
+        Check.that(!result.stderr().contains("PRIVATE KEY") && !result.stderr().contains("BEGIN"), "no key material in diagnostics");
+    }
+
+    class void check(string program) {
+        var fixture = TestDirectory("secure-boot-crypto");
+        for name in ["first", "second"] {
+            CryptoIntegration.openssl(["req", "-new", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-subj", f"/CN={name}", "-keyout", fixture.path(f"{name}.key"), "-out", fixture.path(f"{name}.pem")]);
+        }
+        var key = fixture.path("first.key");
+        var certificate = fixture.path("first.pem");
+        var fingerprint = CryptoIntegration.openssl(["x509", "-in", certificate, "-fingerprint", "-sha256", "-noout"]).trimmed();
+        var expected = Strings.split(fingerprint, "=").get(1);
+        Check.equal(Check.exited(ChildProcess.run(program, [key, certificate], timeoutMilliseconds=15000)).trimmed(), expected, "PEM pair and canonical fingerprint");
+        CryptoIntegration.openssl(["pkey", "-in", key, "-outform", "DER", "-out", fixture.path("key.der")]);
+        CryptoIntegration.openssl(["x509", "-in", certificate, "-outform", "DER", "-out", fixture.path("certificate.der")]);
+        Check.equal(Check.exited(ChildProcess.run(program, [fixture.path("key.der"), fixture.path("certificate.der")], timeoutMilliseconds=15000)).trimmed(), expected, "DER pair and canonical fingerprint");
+        var invalid = Bytes.fromString("invalid"); invalid.append(0); invalid.appendBytes(Bytes.fromString("private-key"));
+        var file = File(fixture.path("invalid.key"), "w");
+        Check.that(file.ok() && file.writeBytes(invalid) && file.close(), "binary invalid key fixture");
+        CryptoIntegration.openssl(["pkey", "-in", key, "-aes256", "-passout", "pass:fixture", "-out", fixture.path("encrypted.key")]);
+        for name in ["second.key", "invalid.key", "encrypted.key"] { CryptoIntegration.rejects(program, fixture.path(name), certificate); }
+        CryptoIntegration.rejects(program, key, fixture.path("invalid.key"));
+        var expired = ChildProcess.run(program, ["--deadline"], timeoutMilliseconds=3000);
+        Check.that(!expired.timedOut && expired.terminatingSignal == AlarmState.signal(), "deadline restores ignored and blocked alarm");
+        fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        CryptoIntegration.check(CLIArgs(argc, argv).require(0, "Supply crypto driver"));
+        print("PASS: PEM/DER matching, canonical fingerprint, mismatched/corrupt/encrypted keys, bounded verification and no key output"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

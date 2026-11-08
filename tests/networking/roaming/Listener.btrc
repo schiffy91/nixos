@@ -1,0 +1,15 @@
+import Library.CLI;
+import Library.HTTP;
+
+int main(int argc, char** argv) {
+    var server = HTTPServer(Strings.toInt(CLIArgs(argc, argv).require(0, "Supply port")));
+    server.bindAny = true;
+    if (!server.start()) { return 1; }
+    while (true) {
+        var connection = server.acceptConn();
+        if (connection < 0) { continue; }
+        try { server.readRequest(connection); server.respond(connection, HTTPResponse.text("ready\n")); }
+        finally { server.closeConn(connection); }
+    }
+    return 0;
+}

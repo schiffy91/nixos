@@ -16,26 +16,35 @@ void testCheckedWipe(void* buffer, size_t length, size_t bound) {
     testWipe(buffer, length);
 }
 
+char* capturePassword(string label, string executable) {
+    var response = PasswordPrompt(executable, label).read();
+    if (response == null) { return NULL; }
+    char* answer = response.copyForPam(); response.close();
+    // The explicit close is idempotent when the owner leaves scope.
+    response.close();
+    return answer;
+}
+
 int main(int argc, char** argv) {
     assert(argc == 2);
     testWipe(NULL, 0); testCheckedWipe(NULL, 0, 0); wipeCount = 0;
-    char* answer = askPassword("success", argv[1]);
+    char* answer = capturePassword("success", argv[1]);
     assert(answer != NULL && strcmp(answer, "fixture-password") == 0);
     assert(wipeCount == 1);
     explicit_bzero(answer, strlen(answer)); free(answer);
-    assert(askPassword("empty", argv[1]) == NULL);
-    assert(askPassword("nul", argv[1]) == NULL);
-    assert(askPassword("failed", argv[1]) == NULL);
-    assert(askPassword("overflow", argv[1]) == NULL);
-    assert(askPassword("success", "/nonexistent-plymouth") == NULL);
+    assert(capturePassword("empty", argv[1]) == NULL);
+    assert(capturePassword("nul", argv[1]) == NULL);
+    assert(capturePassword("failed", argv[1]) == NULL);
+    assert(capturePassword("overflow", argv[1]) == NULL);
+    assert(capturePassword("success", "/nonexistent-plymouth") == NULL);
     assert(wipeCount == 7);
     assert(PAM_MAX_RESP_SIZE == 512);
-    answer = askPassword("maximum", argv[1]);
+    answer = capturePassword("maximum", argv[1]);
     assert(answer != NULL && strlen(answer) == (size_t)512);
     explicit_bzero(answer, strlen(answer)); free(answer);
 
     char prompt[] = "success";
-    struct PasswordPrompt request = { prompt, argv[1] };
+    struct PasswordPromptData request = { prompt, argv[1] };
     struct pam_message secret = { PAM_PROMPT_ECHO_OFF, "Password" };
     struct pam_message info = { PAM_TEXT_INFO, "Info" };
     struct pam_message rejected = { PAM_PROMPT_ECHO_ON, "Username" };
@@ -55,12 +64,12 @@ int main(int argc, char** argv) {
 
     drmModeCrtc crtc = {0};
     drmModePlane plane = {0};
-    assert(!crtcBlank(NULL) && !planeBlank(NULL));
-    assert(crtcBlank(&crtc) && planeBlank(&plane));
-    crtc.mode_valid = 1; assert(!crtcBlank(&crtc));
-    crtc.mode_valid = 0; crtc.buffer_id = 42; assert(!crtcBlank(&crtc));
-    plane.fb_id = 42; assert(!planeBlank(&plane));
-    plane.fb_id = 0; plane.crtc_id = 42; assert(!planeBlank(&plane));
+    assert(!DisplayCard.crtcBlank(NULL) && !DisplayCard.planeBlank(NULL));
+    assert(DisplayCard.crtcBlank(&crtc) && DisplayCard.planeBlank(&plane));
+    crtc.mode_valid = 1; assert(!DisplayCard.crtcBlank(&crtc));
+    crtc.mode_valid = 0; crtc.buffer_id = 42; assert(!DisplayCard.crtcBlank(&crtc));
+    plane.fb_id = 42; assert(!DisplayCard.planeBlank(&plane));
+    plane.fb_id = 0; plane.crtc_id = 42; assert(!DisplayCard.planeBlank(&plane));
     puts("sleep helper contracts passed");
     return 0;
 }

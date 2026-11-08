@@ -2,8 +2,10 @@
 
 This repository configures NixOS and macOS machines in
 `config/hosts`, with local management tooling written in BTRC. System
-management is Nix plus BTRC end to end; there is no Python or Rust in the
-management layer.
+management, application tooling, CI orchestration and test scenarios use Nix
+and BTRC. Native bindings handle operating-system and library boundaries.
+Upstream build tools, including the pinned BTRC compiler and Wine generators,
+may still depend on Python.
 
 ## Current Hosts
 
@@ -102,10 +104,10 @@ Important setting groups:
 | `settings.apps.*` | Optional app policy flags |
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
-| `settings.apps.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
+| `settings.apps.gaming.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
 | `settings.apps.gaming.cpuAffinity` | Optional Linux CPU list for Steam games and Battle.net; `null` keeps normal scheduling |
-| `settings.apps.nixosctl.*` | Structured display/audio settings, generated TOML config path, default-on idle inhibit |
-| `settings.apps.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
+| `settings.apps.utils.nixosctl.*` | Structured display/audio settings, generated TOML config path, default-on idle inhibit |
+| `settings.apps.gaming.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
 | `settings.networking.forwardAgentHosts` | Explicitly trusted SSH agent-forwarding destinations |
 
 ### Gaming CPU affinity and power profiles
@@ -133,34 +135,68 @@ active. These controls do not change GPU power limits or clocks.
 
 ### App Flags
 
-Application groups and individual apps have settings switches. The shared groups
-default to enabled; optional tools such as LM Studio and Gemini are opt-in:
+Application settings follow their category: `apps.dev.vscode`,
+`apps.gaming.steam`, and `apps.utils.chrome`. Modules check only their own
+`enable` switch. Nix validates the hierarchy before building or activating it;
+there is no runtime enablement resolver.
+
+Default-on children inherit their parent's enablement. Optional tools such as
+LM Studio and Gemini default off. An explicit `true` under a disabled parent
+is an error, including `mkForce true`; either disable that child or enable its
+parent. Non-enable configuration (URLs, paths, preferences) may remain declared
+while an app is disabled. For example, this is rejected:
+
+```nix
+settings.apps.dev.enable = false;
+settings.apps.dev.vscode.enable = true;
+```
+
+The error names both settings. Disabling a category in a host that explicitly
+enables children requires changing those child settings too; it does not
+silently override the host's declared intent. Common defaults are:
 
 ```nix
 settings.apps.enable = true;
 settings.apps.dev.enable = true;
 settings.apps.gaming.enable = true;
 settings.apps.utils.enable = true;
-settings.apps.agents.enable = true;
-settings.apps.onePassword.enable = true;
-settings.apps.bash.enable = true;
-settings.apps.battlenet.enable = true;
-settings.apps.claude.enable = true;
-settings.apps.codex.enable = true;
-settings.apps.git.enable = true;
-settings.apps.nixosctl.enable = true;
-settings.apps.rclone.enable = true;
-settings.apps.rocksmith.enable = true;
-settings.apps.steam.enable = true;
-settings.apps.sunshine.enable = true;
-settings.apps.vscode.enable = true;
+settings.apps.dev.agents.enable = true;
+settings.apps.utils.onePassword.enable = true;
+settings.apps.dev.bash.enable = true;
+settings.apps.gaming.battlenet.enable = true;
+settings.apps.dev.claude.enable = true;
+settings.apps.dev.codex.enable = true;
+settings.apps.dev.git.enable = true;
+settings.apps.utils.nixosctl.enable = true;
+settings.apps.utils.rclone.enable = true;
+settings.apps.gaming.rocksmith.enable = true;
+settings.apps.gaming.steam.enable = true;
+settings.apps.gaming.sunshine.enable = true;
+settings.apps.dev.vscode.enable = true;
 ```
 
-Use these for per-host or per-profile policy. Architecture checks are still
-capability guards. Battle.net and Rocksmith require their own flag,
-`settings.apps.steam.enable`, and an x86_64 host platform. Sunshine's CUDA
-build is opt-in through `settings.apps.sunshine.cuda.enable`; other hosts keep
+Sibling dependencies are checked during evaluation too. Assetto Corsa,
+Battle.net, and Rocksmith require `settings.apps.gaming.steam.protonCustom.enable`
+and x86_64 Linux; WoW requires Battle.net. Their defaults follow those dependencies.
+Sunshine's CUDA
+build is opt-in through `settings.apps.gaming.sunshine.cuda.enable`; other hosts keep
 the non-CUDA build. Both builds require provisioned administration credentials.
+
+Chrome PWAs have individual switches and stable taskbar references:
+
+```nix
+settings.apps.utils.chrome.webApps.mail = {
+  enable = true;
+  name = "Mail";
+  url = "https://mail.example.com/";
+};
+# Taskbar reference: config.settings.apps.utils.chrome.webApps.mail.launcher
+```
+
+Omitting a PWA's `enable` makes it follow Chrome. Setting it to `false` removes
+its installation policy and managed launcher. Enabled PWAs under disabled
+Chrome are rejected just like other children. The validator discovers enable
+options from the module schema, so newly declared apps need no separate registry.
 
 Plasma desktop state is intentionally not treated as an optional app flag. It is
 part of the shared desktop surface, not an app install.
@@ -359,7 +395,7 @@ module. A host can add paths in the same way, including state it wants to retain
 while a package is disabled:
 
 ```nix
-settings.apps.sunshine.enable = false;
+settings.apps.gaming.sunshine.enable = false;
 settings.disk.immutability.persist.paths = [
   "${config.settings.users.admin.homeDirectory}/.config/sunshine"
 ];
@@ -502,28 +538,11 @@ file in the editable repository. Missing or unsafe credentials abort activation
 before account updates. Old generations still use their original password-file
 configuration; retain their legacy file until those generations are retired.
 
-Administration requires ordinary sudo authentication, including the configured
-1Password SSH agent. For unattended work, authenticate once to grant the admin
-account temporary passwordless sudo:
-
-```bash
-nixosctl sudo enable --for 8h
-nixosctl sudo status
-nixosctl sudo disable
-```
-
-Durations accept whole seconds, minutes, or hours, up to 24 hours. Enabling or
-extending a grant requires fresh authentication. Sudo itself enforces its UTC
-expiry; no cleanup timer is needed. The root-owned grant lives under `/run` and
-disappears at reboot. Expired or revoked grants return to ordinary sudo policy,
-including any normal authentication cache. The grant applies to **every process
-using the admin account**, not only an agent. It cannot revoke existing root
-processes or undo changes they made. The separate agent account does not gain
-administrative access. The only permanent passwordless command is the helper's
-read-only `status` operation, which reads the protected grant metadata.
+Administration uses ordinary sudo authentication, including the configured
+1Password SSH agent. The separate agent account has no administrative access.
 
 Sunshine supports administration with the SSH keys held in your local 1Password
-agent. Enable `settings.apps.sunshine.sshLogin.enable`; its public keys default
+agent. Enable `settings.apps.gaming.sunshine.sshLogin.enable`; its public keys default
 to `settings.users.admin.authorizedKeys`. Existing Sunshine passwords keep
 working, and a new instance needs no shared password. Sign in by running the
 browser's displayed helper command and approving the agent signature. See
@@ -531,7 +550,7 @@ browser's displayed helper command and approving the agent signature. See
 files, certificate trust, exact commands, session limits and VM checks.
 
 For password login, Sunshine administration credentials are declared with
-`settings.apps.sunshine.credentials.usernameReference` and `passwordReference`.
+`settings.apps.gaming.sunshine.credentials.usernameReference` and `passwordReference`.
 Defaults reference the `username` and `password` fields of `Sunshine HOSTNAME` in
 1Password's `Private` vault. Enable 1Password's Developer → Integrate with
 1Password CLI setting, then run as the configured desktop user:
@@ -570,24 +589,34 @@ agent rather than requiring a second unlocked 1Password app on the remote host.
 
 `settings.boot.method = "Secure-Boot"` disables systemd-boot and hands the ESP
 to Lanzaboote, which signs the unified kernel images with the PKI bundle at
-`boot.lanzaboote.pkiBundle` (`/var/lib/sbctl`). `boot.lanzaboote.settings.editor`
+`settings.boot.pkiBundle` (`/var/lib/sbctl`). `boot.lanzaboote.settings.editor`
 is false, so the loader offers no interactive command line to edit.
 
 Enrollment and teardown go through `nixosctl`, never through raw `sbctl`:
 
 ```bash
-sudo nixosctl secure-boot status           # sbctl status + verify our own images
-sudo nixosctl secure-boot enable           # our keys only
-sudo nixosctl secure-boot disable
+sudo nixosctl secure-boot status           # current enforcement, ownership, signatures
+sudo nixosctl secure-boot prepare          # reuse/create keys and install signed images
+sudo nixosctl secure-boot enable           # enroll missing own keys, PK last
+sudo nixosctl secure-boot disable          # authenticated PK removal; keep signed images
 ```
 
-| Step in `secure-boot enable` | Why it is in that order |
-|---|---|
-| Require firmware Setup Mode | Enrollment cannot replace keys on an already-enrolled machine; use `nixosctl update` there |
-| `sbctl create-keys` and assert a complete PK/KEK/db bundle | A partial bundle would enroll a machine we cannot sign for |
-| Switch the recorded target and rebuild | The ESP must hold signed files *before* the firmware starts enforcing |
-| Verify, then enroll | `requireVerified` is fatal on any unsigned image, so enrollment never runs against an ESP we have not proven |
-| Prompt for reboot | Enforcement only begins on the next boot |
+`prepare` validates and reuses a complete local PK/KEK/db bundle, creating keys
+only when none exist. It selects the signed target, rebuilds and switches the
+system, verifies its boot images, and prints public certificate fingerprints and
+the signed recovery artifact location. It does not enroll firmware keys. Before
+preparation or any key change, each firmware database must be absent or contain
+only the matching local certificate. Foreign or mixed trust is refused before
+the rebuild; migrating a machine with factory keys requires a separate,
+deliberate firmware procedure.
+
+`enable` prepares and verifies images before enrolling missing databases, with
+PK last. It preserves every existing owned database byte for byte. If all our
+keys are already enrolled, it verifies the existing configuration without a
+rebuild or firmware write. An enrolled PK with missing KEK/db is reported as
+incomplete rather than silently repaired. Enrollment requires Setup Mode when
+PK is absent. `enable` and `disable` accept `--no-reboot` to suppress their reboot
+prompt; use `status` after a restart to confirm actual enforcement.
 
 Verification covers the fallback loader, `systemd-boot<arch>.efi`, the default
 boot entry resolved from `bootctl --json=short list`, and every
@@ -596,19 +625,27 @@ checks the recovery UKI on both the ESP and the recovery partition, plus the
 recovery partition's fallback loader, with `sbverify --cert` against our db
 certificate.
 
-**Never enroll Microsoft's keys.** `secure-boot enable` takes a `--microsoft`
-flag, and it is not used on any host. Without it, enrollment passes
-`--yes-this-might-brick-my-machine` and trusts our keys alone. The cost is
-real: option ROMs and vendor firmware updaters that ship Microsoft-signed
-binaries are not trusted, including the Steam Deck's `jupiter-biosupdate`. The
-answer there is to disable Secure Boot in firmware for that one operation, not
-to widen the trust store. Do not reach for `--microsoft` to unblock something
-else.
+Only our own keys are supported: `--microsoft` is rejected. Enrollment keeps
+sbctl's option-ROM checks and does not pass its dangerous bypass flag. A refusal
+requires investigating the actual firmware and option-ROM requirements, not
+silently broadening trust. Independently back up the keys, verify restoration,
+and boot signed external recovery before relying on this workflow on hardware.
 
-`secure-boot disable` is the mirror image: it refuses while the firmware still
-enforces Secure Boot (`Disable Secure Boot in firmware before installing
-Standard-Boot`), which is the same invariant the Standard-Boot safety guard
-enforces at activation time.
+`disable` authenticates removal of PK with its private key. It retains KEK/db,
+the local signing bundle, the signed target and all signed boot/recovery images.
+Repeated removal is harmless. It refuses stale enrollment assets, an active
+enrollment service, unsafe current/booted or retained generations, orphaned
+UKIs, and ambiguous legacy loader entries. Boot a safe signed generation and
+prune/rebuild the old menu before retrying. Automatic enrollment is unsupported
+in repository configurations; the loader explicitly uses `secure-boot-enroll
+off`. This prevents a later boot from undoing deliberate PK removal.
+
+`status` reads firmware state and verifies artifacts without changing keys or
+configuration. Current enforcement and pending key changes are reported
+separately: removing PK may still require a reboot, and an enrolled PK alone
+does not prove firmware enforcement. Switching to `Standard-Boot` remains a
+separate operation, guarded against installing unsigned images while firmware
+still enforces Secure Boot.
 
 ### Firmware Security Posture
 
@@ -631,20 +668,20 @@ Two facts are easy to forget:
 ## Apps And Package Overrides
 
 `config/pkgs/default.nix` imports explicit dev, gaming and utility catalogs.
-Application modules are gated through `settings.apps`. Category gates let lean
+Application modules use the validated hierarchy under `settings.apps`. Groups let lean
 profiles turn off whole groups:
 `settings.apps.dev.enable`, `settings.apps.gaming.enable`, and
 `settings.apps.utils.enable`.
 
 | Path | Behavior |
 |---|---|
-| `dev/zsh.nix` | Makes zsh the admin login shell when `settings.apps.zsh.enable` is set, leaving compinit to Home Manager |
+| `dev/zsh.nix` | Makes zsh the admin login shell when `settings.apps.dev.zsh.enable` is set, leaving compinit to Home Manager |
 | `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
 | `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-locked BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
-| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.steam.protonCustom.enable` is set |
+| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.gaming.steam.protonCustom.enable` is set |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
-| `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.steam.shortcuts` as non-Steam shortcuts when Steam is enabled |
+| `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.gaming.steam.shortcuts` as non-Steam shortcuts when Steam is enabled |
 | `gaming/sunshine/default.nix` | Sunshine service and ports; the CUDA overlay, and the KWin HDR screencast patch when capture is `kwin` |
 | `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |
 | `gaming/assettocorsa/default.nix` | Assetto Corsa content import, CM presets, control bindings, UI scale, and the CSP wheel menu |

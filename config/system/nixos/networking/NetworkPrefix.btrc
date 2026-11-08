@@ -1,0 +1,25 @@
+import Library.JSON;
+
+class NetworkPrefix {
+    private string network;
+    public int length;
+
+    private NetworkPrefix(string network, int length) { self.network = network; self.length = length; }
+
+    class NetworkPrefix? fromAddress(JSONValue address) {
+        if (!address.get("scope").asString().equals("global")) { return null; }
+        var family = address.get("family").asString();
+        var width = family.equals("inet") ? 32 : (family.equals("inet6") ? 128 : 0);
+        if (width == 0 || !address.get("prefixlen").isInt()) { return null; }
+        var length = address.get("prefixlen").asInt();
+        // An invalid or absent subnet must never grant universal access.
+        if (length <= 0 || length > width) { return null; }
+        var parsed = networkPrefixParse(address.get("local").asString(), width, length);
+        if (parsed == null) { return null; }
+        var network = networkPrefixText(parsed);
+        if (network == null) { return null; }
+        return NetworkPrefix(network, length);
+    }
+
+    public string cidr() { return self.network; }
+}

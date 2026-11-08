@@ -2,63 +2,93 @@ import Library.Process;
 import Library.Timer;
 
 #include <spawn.h>
-#include <signal.h>
-#include <sys/wait.h>
 extern int posix_spawn_file_actions_addclosefrom_np(posix_spawn_file_actions_t* actions, int first);
 
-class BackgroundProcess {
-    public int pid;
-    public bool exited;
-    public int code;
+// Own the temporary POSIX launch data, including partial initialization.
+class ProcessLaunch {
+    private string executable;
+    private char** arguments = NULL;
+    private char** environment = NULL;
 
-    public BackgroundProcess(int pid) { self.pid = pid; self.exited = false; self.code = -1; }
-
-    class BackgroundProcess start(string command, Vector<string> arguments, Vector<string> environment = []) {
-        var executable = ChildProcessExecutable.resolve(command, "", environment, []);
-        if (executable.isEmpty()) { throw f"Cannot find {command}"; }
-        char** argv = ChildProcessArguments.build(executable, arguments);
-        char** env = ChildProcessEnvironment.build(environment, []);
-        char* path = strdup(executable);
-        if (argv == NULL || env == NULL || path == NULL) {
-            free(path); CStringArray.freeAll(argv); CStringArray.freeAll(env);
-            throw "Cannot allocate child process arguments";
-        }
-        pid_t pid = (pid_t)0;
-        posix_spawn_file_actions_t actions;
-        int initialized = posix_spawn_file_actions_init(&actions);
-        int error = initialized;
-        // Linux launchers inherit standard streams, never unrelated caller files.
-        if (error == 0) { error = posix_spawn_file_actions_addclosefrom_np(&actions, 3); }
-        if (error == 0) { error = posix_spawn(&pid, path, &actions, NULL, argv, env); }
-        if (initialized == 0) { posix_spawn_file_actions_destroy(&actions); }
-        free(path);
-        CStringArray.freeAll(argv);
-        CStringArray.freeAll(env);
-        if (error != 0) { throw f"Cannot start {command}"; }
-        return BackgroundProcess((int)pid);
+    public int start(string command, Vector<string> arguments, Vector<string> environment) {
+        ChildProcess.validateArguments(arguments);
+        ChildProcess.validateEnvironment(environment, []);
+        self.executable = ChildProcessExecutable.resolve(command, "", environment, []);
+        if (self.executable.isEmpty()) { throw f"Cannot find {command}"; }
+        self.arguments = ChildProcessArguments.build(self.executable, arguments);
+        self.environment = ChildProcessEnvironment.build(environment, []);
+        if (self.arguments == NULL || self.environment == NULL) { throw "Cannot allocate child process arguments"; }
+        return self.launch();
     }
 
-    public bool running() {
-        if (self.exited) { return false; }
-        int status = 0;
-        var result = waitpid((pid_t)self.pid, &status, WNOHANG);
-        if (result == (pid_t)0 || (result < (pid_t)0 && errno == EINTR)) { return true; }
-        self.exited = true;
-        self.code = result > (pid_t)0 ? ProcessStatus(status).code() : 1;
-        return false;
+    private int launch() {
+        posix_spawn_file_actions_t actions;
+        self.check(posix_spawn_file_actions_init(&actions));
+        // Preserve standard streams; never pass unrelated caller files.
+        int error = posix_spawn_file_actions_addclosefrom_np(&actions, 3);
+        pid_t child = (pid_t)0;
+        if (error == 0) { error = posix_spawn(&child, self.executable, &actions, NULL, self.arguments, self.environment); }
+        posix_spawn_file_actions_destroy(&actions);
+        self.check(error);
+        return (int)child;
+    }
+
+    private void check(int error) {
+        if (error != 0) { throw f"Cannot start {self.executable}: {Strings.copy(strerror(error))}"; }
+    }
+
+    public void __del__() {
+        CStringArray.freeAll(self.arguments);
+        CStringArray.freeAll(self.environment);
+    }
+}
+
+// Explicit stop: virtual monitors intentionally outlive their launcher.
+class BackgroundProcess {
+    private int child;
+    private ProcessStatus? status = null;
+
+    private BackgroundProcess(int child) { self.child = child; }
+
+    class BackgroundProcess start(string command, Vector<string> arguments, Vector<string> environment = []) {
+        var launch = ProcessLaunch();
+        return BackgroundProcess(launch.start(command, arguments, environment));
+    }
+
+    public int pid() { return self.child; }
+    public int code() { return self.status == null ? -1 : self.status.code(); }
+    public bool running() { return !self.reap(WNOHANG); }
+
+    private bool reap(int flags) {
+        if (self.status != null) { return true; }
+        int raw = 0;
+        var result = waitpid((pid_t)self.child, &raw, flags);
+        while (result < (pid_t)0 && errno == EINTR) { result = waitpid((pid_t)self.child, &raw, flags); }
+        if (result == (pid_t)0) { return false; }
+        if (result < (pid_t)0) { throw f"Cannot wait for child {self.child}: {Strings.copy(strerror(errno))}"; }
+        self.status = ProcessStatus(raw);
+        return true;
+    }
+
+    public bool waitUntil(long long deadline) {
+        while (self.running()) {
+            if (!MonotonicClock.before(deadline)) { return false; }
+            Timer.sleepMillis(10);
+        }
+        return true;
+    }
+
+    private void signal(int number) {
+        if (kill((pid_t)self.child, number) != 0 && errno != ESRCH) {
+            throw f"Cannot signal child {self.child}: {Strings.copy(strerror(errno))}";
+        }
     }
 
     public void stop(int graceMilliseconds = 2000) {
         if (!self.running()) { return; }
-        kill((pid_t)self.pid, SIGTERM);
-        var deadline = MonotonicClock.deadlineAfter((long long)graceMilliseconds);
-        while (self.running() && MonotonicClock.before(deadline)) { usleep(10000); }
-        if (self.running()) {
-            kill((pid_t)self.pid, SIGKILL);
-            int status = 0;
-            while (waitpid((pid_t)self.pid, &status, 0) < (pid_t)0 && errno == EINTR) {}
-            self.exited = true;
-            self.code = 137;
-        }
+        self.signal(SIGTERM);
+        if (self.waitUntil(MonotonicClock.deadlineAfter(graceMilliseconds))) { return; }
+        self.signal(SIGKILL);
+        self.reap(0);
     }
 }

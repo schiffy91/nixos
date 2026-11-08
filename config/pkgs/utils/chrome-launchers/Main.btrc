@@ -1,0 +1,14 @@
+import Library.CLI;
+import Library.Console;
+import ./Launchers.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.count() != 2) { throw "Usage: chrome-launchers DECLARATION APPLICATIONS_DIRECTORY"; }
+        var declaration = JSONValue.readFile(args.get(0));
+        if (declaration.isError()) { throw "Cannot read Chrome app declaration"; }
+        ChromeLaunchers.sync(args.get(1), declaration);
+        return 0;
+    } catch (string error) { Console.error(f"chrome-launchers: {error}"); return 1; }
+}

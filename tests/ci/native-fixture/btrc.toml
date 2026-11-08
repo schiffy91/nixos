@@ -9,5 +9,16 @@ module = "Valid"
 header = "native.h"
 language = "c"
 standard = "c11"
-symbols = ["inspect_name", "PROBE_READY"]
+symbols = ["inspect_name", "PROBE_READY", "ProbeBuffer", "probe_open", "probe_close", "probe_length", "probe_bytes"]
 read-only-borrows = ["inspect_name.name"]
+owned-results = ["probe_open"]
+borrowed-parameters = ["probe_length.buffer", "probe_bytes.buffer"]
+[native.bindings.resources.ProbeBuffer]
+ownership = "unique"
+release = "probe_close"
+[native.bindings.copied-results.probe_bytes]
+kind = "bytes"
+owner = "buffer"
+length-function = "probe_length"
+length-arguments = ["buffer"]
+length-preserves-result = true

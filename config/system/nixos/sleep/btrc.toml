@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "nixos_sleep"
+
+[dependencies]
+nixosctl = { path = "../../../pkgs/utils/nixosctl" }

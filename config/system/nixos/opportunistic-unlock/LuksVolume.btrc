@@ -1,0 +1,84 @@
+import ./Devices.btrc;
+import ./Secrets.btrc;
+
+class LuksVolume {
+    private crypt_device* handle = NULL;
+
+    public LuksVolume(string path) {
+        crypt_device* opened = NULL;
+        var initialized = crypt_init(&opened, path);
+        self.handle = opened;
+        if (initialized < 0 || crypt_load(self.handle, CRYPT_LUKS, NULL) < 0) {
+            self.close();
+            throw "Not a readable LUKS volume";
+        }
+    }
+
+    // Libcryptsetup validates formats, algorithms and keyslots. These exclusions
+    // keep this operation to software decryption without hardware credentials or
+    // reencryption/integrity metadata work.
+    public bool softwareOnly() {
+        var type = Strings.copy((string)crypt_get_type(self.handle));
+        if (type.equals("LUKS1")) { return true; }
+        if (!type.equals("LUKS2")) { return false; }
+        crypt_params_integrity integrity;
+        memset(&integrity, 0, sizeof(integrity));
+        var hasIntegrity = crypt_get_integrity_info(self.handle, &integrity) == 0 &&
+            integrity.integrity != NULL && integrity.integrity[0] != 0;
+        return crypt_get_hw_encryption_type(self.handle) == CRYPT_SW_ONLY &&
+            crypt_reencrypt_status(self.handle, NULL) == CRYPT_REENCRYPT_NONE && !hasIntegrity;
+    }
+
+    public void activate(BlockVolume volume, VolumeInventory inventory, int descriptor, BootPassphrase passphrase) {
+        var mapping = volume.mapping();
+        if (crypt_status(self.handle, mapping) != CRYPT_INACTIVE) { return; }
+        var key = self.verifiedKey(passphrase);
+        try { self.activateWithKey(volume, inventory, descriptor, key); }
+        finally { key.close(); }
+    }
+
+    public LockedSecret verifiedKey(BootPassphrase passphrase) {
+        if (!self.softwareOnly()) { throw "Not a software-only LUKS volume"; }
+        var key = LockedSecret(crypt_get_volume_key_size(self.handle));
+        size_t keySize = (size_t)key.capacity;
+        var verified = crypt_volume_key_get(self.handle, CRYPT_ANY_SLOT, key.borrow(), &keySize,
+            passphrase.secret.borrow(), (size_t)passphrase.length);
+        passphrase.secret.erase();
+        if (verified < 0 || keySize != (size_t)key.capacity) { key.close(); throw "Passphrase does not unlock this volume"; }
+        return key;
+    }
+
+    private void activateWithKey(BlockVolume volume, VolumeInventory inventory, int descriptor, LockedSecret key) {
+        if (!volume.sameAttachment(descriptor) || !inventory.available(volume)) { return; }
+        int readonly = 1;
+        if (ioctl(descriptor, unlockReadOnly, &readonly) != 0) { return; }
+        var flags = (uint32_t)CRYPT_ACTIVATE_IGNORE_PERSISTENT | (readonly != 0 ? (uint32_t)CRYPT_ACTIVATE_READONLY : 0);
+        var mapping = volume.mapping();
+        if (crypt_activate_by_volume_key(self.handle, mapping, key.borrow(), (size_t)key.capacity, flags) >= 0 &&
+            (!volume.sameAttachment(descriptor) || !LuksVolume.matches(mapping, volume))) { crypt_deactivate(self.handle, mapping); }
+    }
+
+    class bool matches(string mapping, BlockVolume volume) {
+        crypt_device* active = NULL;
+        if (crypt_init_by_name(&active, mapping) < 0) { return false; }
+        var path = crypt_get_device_name(active);
+        var matches = path != NULL && BlockVolume.numberAt(Strings.copy((string)path)).equals(volume.number);
+        crypt_free(active);
+        return matches;
+    }
+
+    class void unlock(BlockVolume volume, VolumeInventory inventory, BootPassphrase passphrase) {
+        var descriptor = (int)open(volume.path(), (int)O_RDONLY | (int)O_CLOEXEC | (int)O_NOFOLLOW | (int)O_NONBLOCK);
+        if (descriptor < 0) { return; }
+        try {
+            if (volume.sameAttachment(descriptor) && inventory.available(volume)) {
+                var luks = LuksVolume(f"/proc/self/fd/{descriptor}");
+                try { luks.activate(volume, inventory, descriptor, passphrase); }
+                finally { luks.close(); }
+            }
+        } finally { close(descriptor); }
+    }
+
+    public void close() { if (self.handle != NULL) { crypt_free(self.handle); self.handle = NULL; } }
+    public void __del__() { self.close(); }
+}

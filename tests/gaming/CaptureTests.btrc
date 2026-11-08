@@ -1,0 +1,22 @@
+import ../../config/pkgs/gaming/sunshine/hdr-screencast-test/Capture.btrc;
+import ../lib/Check.btrc;
+
+class CaptureTests {
+    class string log(string format, string primaries, string transfer, string dmabuf, string frames, string white) {
+        return f"noise\nRESULT: negotiated_format={format}\nRESULT: negotiated_primaries={primaries}\nRESULT: negotiated_transfer={transfer}\nRESULT: dmabuf={dmabuf}\nRESULT: frames={frames}\nRESULT: center_rgb={white},128,128\n";
+    }
+}
+int main() {
+    var sdr = CaptureMode.named("shm-sdr"); var pq = CaptureMode.named("shm-pq"); var hdr = CaptureMode.named("hdr10");
+    Check.that(sdr.failures(CaptureEvidence(CaptureTests.log("8", "1", "4", "0", "1", "245"))).isEmpty(), "SDR lower white boundary");
+    Check.that(sdr.failures(CaptureEvidence(CaptureTests.log("8", "1", "4", "0", "1", "255"))).isEmpty(), "SDR upper white boundary");
+    Check.that(!sdr.failures(CaptureEvidence(CaptureTests.log("8", "1", "4", "0", "1", "244"))).isEmpty(), "reject dark SDR white");
+    for white in ["120", "190"] { Check.that(pq.failures(CaptureEvidence(CaptureTests.log("8", "7", "14", "0", "2", white))).isEmpty(), "PQ white boundaries"); }
+    for white in ["119", "191", "invalid"] { Check.that(!pq.failures(CaptureEvidence(CaptureTests.log("8", "7", "14", "0", "2", white))).isEmpty(), "reject invalid PQ white"); }
+    Check.that(hdr.failures(CaptureEvidence(CaptureTests.log("81", "7", "14", "1", "2", "0"))).isEmpty(), "HDR10 negotiated DMABUF");
+    Check.that(!hdr.failures(CaptureEvidence(CaptureTests.log("81", "7", "14", "0", "2", "0"))).isEmpty(), "HDR10 requires DMABUF");
+    for frames in ["0", "", "-1", "1bad", "4294967297"] { Check.that(!hdr.failures(CaptureEvidence(CaptureTests.log("81", "7", "14", "1", frames, "0"))).isEmpty(), "actual valid frames required"); }
+    Check.that(!hdr.failures(CaptureEvidence(CaptureTests.log("8", "1", "4", "1", "2", "0"))).isEmpty(), "wrong negotiated colorimetry rejected");
+    Check.that(!hdr.failures(CaptureEvidence("no evidence")).isEmpty(), "missing evidence fails");
+    print("PASS: capture colorimetry, frame and reference-white evidence"); return 0;
+}

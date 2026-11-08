@@ -1,16 +1,11 @@
 { config, pkgs, lib, inputs, protonCustom, winePrefixDpi, gameLaunch, ... }:
 let
-  enabled = config.settings.apps.enable
-    && config.settings.apps.gaming.enable
-    && config.settings.apps.battlenet.enable
-    && config.settings.apps.steam.enable
-    && pkgs.stdenv.hostPlatform.isx86_64;
+  enabled = config.settings.apps.gaming.battlenet.enable;
   user = config.settings.users.admin.username;
-  home = "/home/${user}";
-  prefix = "${home}/Games/Battle.net/prefix";
+  prefix = config.settings.apps.gaming.battlenet.prefix;
   proton = protonCustom.path;
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
-  icons = import ../icons/package.nix { inherit pkgs inputs; };
+  icons = import ../artwork/icons.nix { inherit pkgs inputs; };
   iconPackage = pkgs.runCommand "battlenet-icon" {} ''
     install -Dm644 ${icons.battlenet} "$out/share/icons/hicolor/256x256/apps/battlenet.png"
   '';
@@ -18,8 +13,10 @@ let
     name = "battlenet";
     runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.curl pkgs.libnotify pkgs.umu-launcher winePrefixDpi.package ];
     text = ''
-        mkdir -p "${prefix}"
-        EXE="''${1:-${exe}}"
+        prefix=${lib.escapeShellArg prefix}
+        mkdir -p "$prefix"
+        EXE=${lib.escapeShellArg exe}
+        EXE="''${1:-$EXE}"
         PROTON_RUNTIME_LOG_DIR="''${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
         mkdir -p "$PROTON_RUNTIME_LOG_DIR"
         rm -f "$PROTON_RUNTIME_LOG_DIR"/steam-battlenet.log "$PROTON_RUNTIME_LOG_DIR"/battlenet-wrapper.log
@@ -51,18 +48,20 @@ let
         # alive inside its own runtime container, where no host socket reaches
         # it, and a second server on the same prefix clobbers the registry.
         for pid in $(pgrep -u "$(id -u)"); do  # umu appends /pfx to the prefix it is given
-          if tr '\0' '\n' 2>/dev/null < "/proc/$pid/environ" | grep -qE "^(WINEPREFIX|STEAM_COMPAT_DATA_PATH)=${prefix}(/pfx/?)?$"; then
+          if tr '\0' '\n' 2>/dev/null < "/proc/$pid/environ" | grep -qxF \
+            -e "WINEPREFIX=$prefix" -e "WINEPREFIX=$prefix/pfx" -e "WINEPREFIX=$prefix/pfx/" \
+            -e "STEAM_COMPAT_DATA_PATH=$prefix" -e "STEAM_COMPAT_DATA_PATH=$prefix/pfx" -e "STEAM_COMPAT_DATA_PATH=$prefix/pfx/"; then
             kill "$pid" 2>/dev/null || true
           fi
         done
 
-        wine-prefix-dpi set --dpi ${toString winePrefixDpi.dpi} "${prefix}"
+        wine-prefix-dpi set --dpi ${toString winePrefixDpi.dpi} "$prefix"
         cd "$HOME"
         EXTRA_ARGS=()  # CEF reads the prefix DPI like any Windows app; no scale flags
         # ENABLE_HDR_WSI=1 (vk_hdr_layer) intentionally absent: nvidia 610 does HDR natively and the
         # layer mis-tags winewayland's scRGB (D2R/WoW DX12 too dark). Re-add next to DXVK_HDR to undo.
         exec ${gameLaunch.protonPrefix} \
-          WINEPREFIX="${prefix}" \
+          WINEPREFIX="$prefix" \
           TMPDIR=/tmp \
           GAMEID=umu-battlenet \
           PROTONPATH="${proton}" \

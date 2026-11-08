@@ -1,0 +1,14 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor")); var machine = lab.guest("machine");
+        for phase in ["", "reboot"] {
+            machine.start(); machine.waitForUnit("user@1000.service"); machine.waitUntil("test -S /tmp/.X11-unix/X0 && test -s /srv/operator/.Xauthority");
+            print(machine.succeed("sunshine-credentials-contracts " + phase, 300));
+            if (phase.isEmpty()) { machine.shutdown(); }
+        }
+        lab.close(); print("PASS: Sunshine credential lifecycle across reboot"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

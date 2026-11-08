@@ -1,0 +1,30 @@
+import Library.CLI;
+import Library.FileSystem;
+import ./PanelEvidence.btrc;
+import ./BootHealth.btrc;
+
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv);
+    try {
+        var command = args.command();
+        var path = args.require(1, "Usage: boot-evidence panel|responds|health <file> ...");
+        if (command.equals("panel")) {
+            PanelEvidence(PanelEvidence.load(path)).verify(args.require(2, "Supply the unlock agent"));
+            print("panel-graphical");
+        } else if (command.equals("responds")) {
+            var after = PanelEvidence.load(args.require(2, "Supply the after screenshot"));
+            PanelEvidence.responds(PanelEvidence.load(path), after, args.require(3, "Supply the unlock agent"));
+            print("panel-responds");
+        } else if (command.equals("health")) {
+            var health = BootHealth(FileSystem.readBytes(path).toStringLossy(), Strings.toInt(args.require(2, "Supply the boot index")));
+            Vector<string> observations = [];
+            for tag in ["STATE", "HOMEMANAGER", "UNLOCKAGENT", "SNAPSHOTS", "UNLOCKUNIT", "SBCTL", "SIGNED", "VENDORKEYS", "SECUREBOOT"] {
+                observations.push(f"{tag}={health.value(tag)}");
+            }
+            print(f"log={PathTools.basename(path)} {observations.join(" | ")}");
+            health.verify(args.count() > 4 && args.get(4).equals("true"));
+            print("host-healthy");
+        } else { throw f"Unknown evidence command: {command}"; }
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

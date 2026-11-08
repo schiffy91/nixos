@@ -11,33 +11,35 @@ bool rejected(JSONValue value, int uid = 1000) {
 }
 
 int main() {
-    var state = fixture(); SleepState.validate(state, 1000);
-    assert(!SleepState.releaseAllowed(state));
-    SleepState.hold(state, "systemd-suspend.service", true);
-    SleepState.hold(state, "systemd-hibernate.service", true);
-    SleepState.hold(state, "systemd-suspend.service", true);
-    assert(state.get("holds").size() == 2);
-    state.set("phase", JSONValue.makeString("authenticated"));
-    assert(!SleepState.releaseAllowed(state));
-    SleepState.hold(state, "systemd-suspend.service", false);
-    assert(!SleepState.releaseAllowed(state));
-    SleepState.hold(state, "systemd-hibernate.service", false);
-    assert(SleepState.releaseAllowed(state));
-    state = fixture();
-    assert(SleepState.sameAttempt(state, "0123456789abcdef0123456789abcdef"));
-    assert(!SleepState.sameAttempt(state, "ffffffffffffffffffffffffffffffff"));
-    state.set("phase", JSONValue.makeString("acquiring"));
-    assert(!SleepState.sameAttempt(state, "0123456789abcdef0123456789abcdef"));
+    var state = SleepState.decode(fixture(), 1000);
+    assert(SleepState.decode(state.encode(), 1000).sameAttempt(state.epoch));
+    assert(!state.releaseAllowed());
+    state.hold("systemd-suspend.service", true);
+    state.hold("systemd-hibernate.service", true);
+    state.hold("systemd-suspend.service", true);
+    assert(state.holds.len == 2);
+    state.markAuthenticated();
+    assert(!state.releaseAllowed());
+    state.hold("systemd-suspend.service", false);
+    assert(!state.releaseAllowed());
+    state.hold("systemd-hibernate.service", false);
+    assert(state.releaseAllowed());
+    state = SleepState.decode(fixture(), 1000);
+    assert(state.sameAttempt("0123456789abcdef0123456789abcdef"));
+    assert(!state.sameAttempt("ffffffffffffffffffffffffffffffff"));
+    state.recover("0123456789abcdef0123456789abcdef");
+    assert(!state.sameAttempt("0123456789abcdef0123456789abcdef"));
+    var value = fixture();
     assert(rejected(fixture(), 1001));
-    for field in ["uid", "vt", "sysrq"] { state = fixture(); state.set(field, JSONValue.makeBool(true)); assert(rejected(state)); }
-    for vt in [0, -1, 63, 100] { state = fixture(); state.set("vt", JSONValue.makeInt(vt)); assert(rejected(state)); }
-    for phase in ["released", "", "LOCKED"] { state = fixture(); state.set("phase", JSONValue.makeString(phase)); assert(rejected(state)); }
-    state = fixture(); state.set("ready", JSONValue.makeInt(1)); assert(rejected(state));
-    state = fixture(); state.set("epoch", JSONValue.makeString("short")); assert(rejected(state));
-    state = fixture(); state.set("extra", JSONValue.makeInt(1)); assert(rejected(state));
-    state = fixture(); state.set("holds", JSONValue.parse("[\"other.service\"]")); assert(rejected(state));
-    state = fixture(); state.set("sunshine", JSONValue.parse("[\"ssh.service\"]")); assert(rejected(state));
-    state = fixture(); state.set("sunshine", JSONValue.makeNull()); SleepState.validate(state, 1000);
+    for field in ["uid", "vt", "sysrq"] { value = fixture(); value.set(field, JSONValue.makeBool(true)); assert(rejected(value)); }
+    for vt in [0, -1, 63, 100] { value = fixture(); value.set("vt", JSONValue.makeInt(vt)); assert(rejected(value)); }
+    for phase in ["released", "", "LOCKED"] { value = fixture(); value.set("phase", JSONValue.makeString(phase)); assert(rejected(value)); }
+    value = fixture(); value.set("ready", JSONValue.makeInt(1)); assert(rejected(value));
+    value = fixture(); value.set("epoch", JSONValue.makeString("short")); assert(rejected(value));
+    value = fixture(); value.set("extra", JSONValue.makeInt(1)); assert(rejected(value));
+    value = fixture(); value.set("holds", JSONValue.parse("[\"other.service\"]")); assert(rejected(value));
+    value = fixture(); value.set("sunshine", JSONValue.parse("[\"ssh.service\"]")); assert(rejected(value));
+    value = fixture(); value.set("sunshine", JSONValue.makeNull()); SleepState.validate(value, 1000);
     print("Sleep overlapping holds, authentication generations, account binding and corrupt-state rejection passed");
     return 0;
 }

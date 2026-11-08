@@ -1,6 +1,15 @@
+import Library.Bytes;
+
 class NativeProbe {
     class bool ready() {
         var state = inspect_name("example");
         return state == PROBE_READY;
+    }
+
+    class bool copied() {
+        var buffer = probe_open();
+        if (buffer == null) { return false; }
+        var bytes = probe_bytes(buffer);
+        return bytes != null && bytes.length() > 0;
     }
 }

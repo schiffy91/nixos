@@ -1,0 +1,17 @@
+manifest-version = 1
+
+[package]
+name = "nixos_wow"
+
+[[native.bindings]]
+module = "Files"
+header = "files.h"
+language = "c"
+standard = "c11"
+symbols = ["addonFileMove", "addonFileRemove", "addonLockPublish"]
+read-only-borrows = ["addonFileMove.source", "addonFileMove.target", "addonFileRemove.path", "addonLockPublish.path", "addonLockPublish.pattern", "addonLockPublish.text"]
+
+[[native.defines]]
+name = "_POSIX_C_SOURCE"
+value = "200809L"
+modules = ["Files"]

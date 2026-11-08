@@ -18,6 +18,14 @@ int main(int argc, char** argv) {
     for diagnostic in invalid.elements() { if (diagnostic.get("severity").asInt() == 1 && diagnostic.get("message").asString().contains("inspect_name")) { diagnosed = true; } }
     invalidSession.finish();
     if (!diagnosed) { throw "Invalid native call was hidden by the language server: " + invalid.stringify(); }
-    print("PASS: typed native return/borrow metadata and invalid-call diagnostics");
+    var forgedSession = LspSession(server, "btrc", Platform.currentDirectory(), "native-forged-server.log");
+    var forged = forgedSession.diagnostics(path, "btrc", source.replace("import Library.Bytes;", "class Bytes { public Bytes() {} class Bytes fromRaw(char* data, int length) { return Bytes(); } public int length() { return 0; } }"));
+    bool refused = false;
+    for diagnostic in forged.elements() {
+        if (diagnostic.get("severity").asInt() == 1 && diagnostic.get("message").asString().contains("authenticated import Library.Bytes")) { refused = true; }
+    }
+    forgedSession.finish();
+    if (!refused) { throw "Language server accepted a forged native byte-copy destination: " + forged.stringify(); }
+    print("PASS: native return/borrow metadata, authenticated byte copies and invalid-call diagnostics");
     return 0;
 }

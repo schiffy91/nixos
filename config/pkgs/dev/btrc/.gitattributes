@@ -1,0 +1,2 @@
+# Unified-diff context preserves upstream indentation and blank lines.
+*.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab

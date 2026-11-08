@@ -7,13 +7,14 @@ let
     inherit lib;
     inherit (diskOperations) mkDiskoSystem;
   };
-  mkHostChecks = map (path: import path { inherit lib; }) [
+  mkHostChecks = map (path: lib.callPackageWith { inherit lib inputs; } path {}) [
     ../../tests/checks/home_tmpfiles.nix
     ../../tests/checks/own_keys_only.nix
     ../../tests/checks/quiet_boot.nix
     ../../tests/checks/initrd_units.nix
     ../../tests/checks/unlock_agent.nix
     ../../tests/checks/package_groups.nix
+    ../../tests/checks/app_hierarchy.nix
     ../../tests/checks/persistence_ownership.nix
   ];
   mkInstallerCheck = import ../../tests/checks/installer_contract.nix {

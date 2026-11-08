@@ -1,0 +1,35 @@
+manifest-version = 1
+
+[package]
+name = "nixos_chrome_launchers"
+exports = ["DesktopEntry", "Launchers"]
+
+[[native.pkg-config]]
+name = "glib-2.0"
+modules = ["DesktopEntry"]
+
+[[native.bindings]]
+module = "DesktopEntry"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = ["DesktopEntryHandle", "desktopEntryOpen", "desktopEntryRelease", "desktopEntryValue", "desktopEntryHidden", "desktopEntryParseArguments", "desktopEntryArgument", "desktopEntryAlias", "desktopEntryPublish", "desktopEntryRemove"]
+owned-results = ["desktopEntryOpen"]
+read-only-borrows = ["desktopEntryOpen.path", "desktopEntryValue.key", "desktopEntryParseArguments.command", "desktopEntryPublish.path", "desktopEntryPublish.text", "desktopEntryRemove.path"]
+borrowed-parameters = ["desktopEntryValue.entry", "desktopEntryHidden.entry", "desktopEntryParseArguments.entry", "desktopEntryArgument.entry", "desktopEntryAlias.entry"]
+
+[native.bindings.resources.DesktopEntryHandle]
+ownership = "unique"
+release = "desktopEntryRelease"
+
+[native.bindings.copied-results.desktopEntryValue]
+kind = "string"
+owner = "entry"
+
+[native.bindings.copied-results.desktopEntryArgument]
+kind = "string"
+owner = "entry"
+
+[native.bindings.copied-results.desktopEntryAlias]
+kind = "string"
+owner = "entry"

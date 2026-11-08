@@ -1,15 +1,38 @@
 { pkgs, inputs }:
 let
+  addon = pkgs.runCommand "wow-addon-fixture" {} ''
+    mkdir -p "$out/Details" "$out/Questie"
+    printf new > "$out/Details/version"
+  '';
+  bundle = import ../../../config/pkgs/gaming/wow/bundle.nix { inherit pkgs; addons = [ addon ]; };
+  duplicate = import ../../../config/pkgs/gaming/wow/bundle.nix { inherit pkgs; addons = [ addon addon ]; };
+  legacy = pkgs.runCommand "wow-forever-addons" {} ''
+    mkdir -p "$out/Details"
+    printf old > "$out/Details/version"
+  '';
+  options = import ./options.nix { inherit pkgs inputs; };
+  tools = import ../../../config/pkgs/gaming/wow/package.nix { inherit pkgs inputs; };
   programs = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
     name = "wow-lock-contract-tests";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/gaming/wow/Lock.btrc ../../../config/pkgs/gaming/wow/Main.btrc ./LockTests.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/gaming/wow ../../../ci/Main.btrc ../../../ci/lib ../../../ci/native.h ../../../ci/btrc.toml ../../../ci/btrc.lock ../../lib ./LockTests.btrc ./RefreshTests.btrc ./RefreshFixture.btrc ./InstallTests.btrc ./btrc.toml ./btrc.lock ];
     };
-    programs = { wow-addons-lock = "config/pkgs/gaming/wow/Main.btrc"; wow-lock-tests = "tests/gaming/wow/LockTests.btrc"; };
+    programs = {
+      wow-addons-lock = "config/pkgs/gaming/wow/Main.btrc";
+      wow-lock-tests = "tests/gaming/wow/LockTests.btrc";
+      wow-refresh-tests = "tests/gaming/wow/RefreshTests.btrc";
+      wow-refresh-fixture = "tests/gaming/wow/RefreshFixture.btrc";
+      wow-install-tests = "tests/gaming/wow/InstallTests.btrc";
+    };
   };
-in pkgs.runCommand "wow-lock-contract-check" { nativeBuildInputs = [ pkgs.python3 pkgs.coreutils ]; } ''
+in assert options; pkgs.runCommand "wow-contract-check" { nativeBuildInputs = [ pkgs.coreutils ]; } ''
   ${programs}/bin/wow-lock-tests
-  python3 ${./test.py} ${programs}/bin/wow-addons-lock
+  ${programs}/bin/wow-refresh-tests ${programs}/bin/wow-addons-lock ${programs}/bin/wow-refresh-fixture
+  ${programs}/bin/wow-install-tests ${tools}/bin/wow-addons-install ${bundle} ${legacy}
+  if out="$TMPDIR/duplicate" bash -e ${pkgs.writeText "duplicate-addons.sh" duplicate.buildCommand}; then
+    echo "Duplicate addon directories must fail the bundle build" >&2
+    exit 1
+  fi
   touch "$out"
 ''

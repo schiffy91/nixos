@@ -1,0 +1,60 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/TestDirectory.btrc;
+
+class SourceHashTests {
+    private TestDirectory fixture;
+    private string root;
+    private Vector<string> extensions = ["cpp", "cc", "cxx", "hpp", "hh", "hxx", "js"];
+
+    public SourceHashTests(string root) {
+        self.fixture = TestDirectory("nixos-source-hash"); self.root = root;
+        for extension in self.extensions {
+            var declaration = extension.equals("js") ? "const revision" : "constexpr int revision";
+            self.fixture.write(f"fixtures with spaces/capture.{extension}", f"{declaration} = 1;\n");
+        }
+        Check.that(FileSystem.mkdirp(self.fixture.path(".vm")) == 0, "create state directory");
+        var spec = JSONValue.parse("{\"name\":\"source-probe\",\"state\":\"source-probe\",\"stateMaterial\":\"source-probe:{{sourceHash}}\",\"operations\":[]}");
+        spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
+        spec.set("workDir", JSONValue.makeString(self.fixture.path(".vm/work")));
+        var host = JSONValue.parse("{\"op\":\"host\"}");
+        host.set("command", JSONValue.makeString(f"printf 'run\\n' >> {ShellWords.quote(self.fixture.path(".vm/executions"))}"));
+        spec.get("operations").push(host); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
+        self.fixture.json("probe.json", spec);
+        self.fixture.write("graph.json", "{\"name\":\"source-hash-regression\",\"workspaceRoot\":\".\",\"nodes\":[{\"id\":\"probe\",\"spec\":\"probe.json\"}]}");
+    }
+
+    private string run(int executions) {
+        Check.exited(ChildProcess.run(PathTools.join(self.root, "build/nixosctl"), ["graph", self.fixture.path("graph.json"), "run", "probe"], cwd=self.fixture.path(), environment=[f"NIXOS_CONFIG_ROOT={self.root}"], timeoutMilliseconds=20000));
+        var expected = "";
+        for (int i = 0; i < executions; i++) { expected = expected + "run\n"; }
+        Check.equal(Path.readAll(self.fixture.path(".vm/executions")), expected, "graph execution count");
+        return Path.readAll(self.fixture.path(".vm/chain/source-probe/hash"));
+    }
+
+    public void check() {
+        var previous = self.run(1);
+        Check.equal(self.run(1), previous, "reuse unchanged sources");
+        for (int index = 0; index < self.extensions.len; index++) {
+            var extension = self.extensions.get(index);
+            var path = f"fixtures with spaces/capture.{extension}";
+            self.fixture.write(path, Path.readAll(self.fixture.path(path)).replace("= 1", "= 2"));
+            var current = self.run(index + 2);
+            Check.that(!current.equals(previous), f".{extension} content invalidates state");
+            Check.equal(self.run(index + 2), current, f"reuse unchanged .{extension}");
+            Check.exited(ChildProcess.run("touch", [self.fixture.path(path)]));
+            Check.equal(self.run(index + 2), current, f".{extension} mtime is not content identity");
+            previous = current;
+        }
+        for excluded in ["build", ".vm"] { self.fixture.write(f"{excluded}/generated.cpp", "constexpr int generated = 1;\n"); }
+        Check.equal(self.run(self.extensions.len + 1), previous, "generated outputs excluded from source identity");
+        self.fixture.close();
+    }
+}
+
+int main() {
+    try {
+        SourceHashTests(Platform.currentDirectory()).check();
+        print("PASS: C++ and JavaScript content invalidates graph cache; unchanged content reuses it"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

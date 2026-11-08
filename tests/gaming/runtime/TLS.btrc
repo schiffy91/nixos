@@ -1,0 +1,50 @@
+import Library.Bytes;
+import Library.HTTP.HTTPServer;
+import Library.HTTP.HTTPFraming;
+import ../../lib/Check.btrc;
+
+class TLSConnection {
+    private TestTLSConnection connection;
+    public TLSConnection(TestTLSConnection connection) { self.connection = connection; }
+    public HTTPRequest? request() {
+        var bytes = Bytes();
+        while (bytes.length() < 65536) {
+            if (testTLSRead(self.connection) <= 0) { return null; }
+            var chunk = testTLSBytes(self.connection);
+            if (chunk == null) { throw "Cannot copy TLS bytes"; }
+            bytes.appendBytes(chunk);
+            var end = HTTPFraming.headerEnd(bytes);
+            if (end < 0) { continue; }
+            var length = HTTPFraming.contentLength(bytes.slice(0, end).toStringLossy());
+            Check.that(length >= 0 && length <= 32768, "bounded fixture HTTP request");
+            if (bytes.length() < end + 4 + length) { continue; }
+            var request = HTTPServer(0).parseBytes(bytes);
+            Check.that(request.valid, "valid fixture HTTP request");
+            return request;
+        }
+        throw "Fixture HTTP headers exceeded limit";
+    }
+    public void respond(int status, string body) {
+        var bytes = Bytes.fromString(f"HTTP/1.1 {status} Fixture\r\nContent-Length: {Bytes.fromString(body).length()}\r\nConnection: close\r\n\r\n{body}");
+        var offset = 0;
+        while (offset < bytes.length()) {
+            var count = testTLSWrite(self.connection, bytes.data, bytes.length(), offset);
+            if (count <= 0) { return; } // Client may deliberately reject the response.
+            offset += count;
+        }
+    }
+}
+class TLSListener {
+    private TestTLSListener listener;
+    public TLSListener(string certificate, string key) {
+        var listener = testTLSListen(certificate, key);
+        if (listener == null) { throw "Cannot start TLS fixture"; }
+        self.listener = listener;
+    }
+    public int port { get { return testTLSPort(self.listener); } }
+    public TLSConnection? accept() {
+        var connection = testTLSAccept(self.listener);
+        if (connection == null) { return null; }
+        return TLSConnection(connection);
+    }
+}

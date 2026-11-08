@@ -1,0 +1,81 @@
+import Library.CLI;
+import Library.Platform;
+import Library.Timer;
+import ../../../lib/CommandLog.btrc;
+import ../../../lib/TestDirectory.btrc;
+
+class ProtonIntegration {
+    private TestDirectory fixture;
+    private string program;
+    private string config;
+    private string proton;
+    private string active;
+    private string development;
+    private Vector<string> environment;
+
+    public ProtonIntegration(string program, string command) {
+        self.fixture = TestDirectory("proton-tools"); self.program = program;
+        self.config = self.fixture.path("repo with spaces");
+        self.proton = PathTools.join(self.config, "config/pkgs/gaming/proton/custom");
+        self.fixture.write("repo with spaces/config/pkgs/gaming/proton/custom/package.nix", "let toolVersion = \"test\"; in {}");
+        var tools = self.fixture.path("home/.local/share/Steam/compatibilitytools.d");
+        Check.that(FileSystem.mkdirp(tools) == 0 && FileSystem.mkdirp(self.fixture.path("store/files")) == 0, "Proton directories");
+        self.fixture.write("store/compatibilitytool.vdf", "\"display_name\" \"proton-custom test (Wayland SNI)\"");
+        self.active = PathTools.join(tools, "proton-custom-test"); self.development = PathTools.join(tools, "proton-custom-test-dev");
+        Check.that(FileSystem.symlink(self.fixture.path("store"), self.active) == 0, "active store link");
+        self.fixture.write("wineasio/lib/wine/x86_64-windows/wineasio64.dll", "wineasio64.dll");
+        self.fixture.write("wineasio/lib/wine/x86_64-unix/wineasio64.dll.so", "wineasio64.dll.so");
+        for name in ["wineasio32.dll", "wineasio32.dll.so"] { self.fixture.write(f"repo with spaces/config/pkgs/gaming/rocksmith/assets/{name}", name); }
+        Check.that(FileSystem.mkdirp(self.fixture.path("bin")) == 0, "command fixture directory");
+        for name in ["nix", "make", "umu-run"] { Check.that(FileSystem.symlink(command, self.fixture.path(f"bin/{name}")) == 0, "install command fixture"); }
+        self.fixture.write("home/Games/Battle.net/prefix/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe", "");
+        self.environment = [f"HOME={self.fixture.path("home")}", f"NIXOS_CONFIG_ROOT={self.config}", "PROTON_CUSTOM_IN_DEV_SHELL=1", f"COMMAND_LOG={self.fixture.path("commands.jsonl")}", f"ASIO={self.fixture.path("wineasio")}", f"PATH={self.fixture.path("bin")}:{Environment.get("PATH", "")}"];
+    }
+
+    private void run(Vector<string> arguments, bool success = true) {
+        var result = ChildProcess.run(self.program, arguments, environment=self.environment, timeoutMilliseconds=15000);
+        Check.that(!result.timedOut && !result.captureFailed && (result.code == 0) == success, f"Proton operation: {result.stdout()} {result.stderr()}");
+    }
+
+    private void target(string expected) { Check.equal(FileSystem.realPath(self.active), expected, "active Proton target"); }
+
+    public void check() {
+        self.run(["dev", "status"]); self.target(self.fixture.path("store"));
+        self.run(["dev", "setup"]);
+        Check.that(Path.readAll(PathTools.join(self.development, "compatibilitytool.vdf")).contains("proton-custom DEV test"), "development tool name");
+        Check.that(FileSystem.isFile(PathTools.join(self.development, "files/lib/wine/i386-unix/wineasio32.dll.so")) != 0, "WineASIO installation");
+        self.run(["dev", "use"]); self.target(self.development);
+        self.run(["dev", "restore"]); self.target(self.fixture.path("store"));
+        self.run(["install", "store", self.fixture.path("store")]);
+        Check.equal(Path.readAll(PathTools.join(self.proton, "src/.store-target")).trim(), self.fixture.path("store"), "remember store target");
+        self.run(["install", "store", self.fixture.path("missing")], false); self.target(self.fixture.path("store"));
+        self.run(["build", "wayland", "ntdll", "wayland"]);
+        var makes = CommandLog.named(CommandLog.read(self.fixture.path("commands.jsonl")), "make");
+        Check.that(!makes.isEmpty(), "invoked make");
+        Check.equal(makes.get(makes.len - 1).stringify(), CommandLog.arguments(["make", "-C", self.proton, "build", "TARGETS=dlls/winewayland.drv/all dlls/ntdll/all"]).stringify(), "deduplicated build argv");
+        self.run(["build", "invalid"], false);
+        self.run(["dev", "grab-frames", "--mode", "full", "--count", "1", "--output-dir", self.fixture.path("frames")], false);
+        self.run(["dev", "launch", "--env", "bad"], false);
+        var wrapper = self.fixture.path("launch.wrapper.log");
+        var deadline = MonotonicClock.deadlineAfter(5000);
+        // Open a deliberately inheritable descriptor in the caller shell; the
+        // production launcher must close it before starting the game process.
+        var script = f"exec 9>{ShellWords.quote(self.fixture.path("private-input"))}; exec \"$@\"";
+        Check.exited(ChildProcess.run("sh", ["-c", script, "proton-caller", self.program, "dev", "launch", "--seconds", "1", "--env", "TEST_VALUE=two words=value", "--env", "TEST_FD=9", "--log", wrapper], environment=self.environment, timeoutMilliseconds=10000));
+        Check.that(MonotonicClock.before(deadline), "bounded launch");
+        Check.equal(Path.readAll(wrapper), f"{self.development}\ntwo words=value\n", "child environment and descriptor isolation");
+        Check.that(FileSystem.removeRecursivePath(self.fixture.path("bin/umu-run")) == 0, "replace command link");
+        self.fixture.write("bin/umu-run", "#!/definitely/missing/interpreter\n");
+        Check.that(FileSystem.chmod(self.fixture.path("bin/umu-run"), 0755) == 0, "failed exec fixture");
+        self.run(["dev", "launch", "--seconds", "1", "--log", wrapper], false);
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        ProtonIntegration(args.require(0, "Supply Proton tools"), args.require(1, "Supply command fixture")).check();
+        print("PASS: Proton setup/use/restore, WineASIO, build argv, capture guard, bounded launch, descriptor isolation and failed exec"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

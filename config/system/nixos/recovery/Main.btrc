@@ -1,19 +1,33 @@
 import Library.CLI;
+import Library.Console;
 import Library.JSON;
 import ./Mount.btrc;
 
+class RecoveryMountCommand {
+    public CLIArgs args;
+
+    public RecoveryMountCommand(CLIArgs args) { self.args = args; }
+
+    public void run() {
+        var usage = "Usage: nixos-mount [target]";
+        if (self.args.count() == 2 && self.args.get(1).equals("--help")) {
+            CLIHelp().line(usage).blank()
+                .line("Unlocks and mounts the installed NixOS system at target, defaulting to /mnt.").print();
+            return;
+        }
+        if (self.args.count() < 1 || self.args.count() > 2) { throw usage; }
+        var plan = JSONValue.readFile(self.args.require(0, usage));
+        var target = self.args.count() == 2 ? self.args.get(1) : "/mnt";
+        RecoveryMount(plan, target).run();
+    }
+}
+
 int main(int argc, char** argv) {
     try {
-        var args = CLIArgs(argc, argv);
-        if (args.count() == 2 && args.get(1).equals("--help")) {
-            print("Usage: nixos-mount [target]\n\nUnlocks and mounts the installed NixOS system at target, defaulting to /mnt.");
-            return 0;
-        }
-        if (args.count() < 1 || args.count() > 2) { throw "Usage: nixos-mount [target]"; }
-        RecoveryMount(JSONValue.readFile(args.get(0)), args.count() == 2 ? args.get(1) : "/mnt").run();
+        RecoveryMountCommand(CLIArgs(argc, argv)).run();
         return 0;
     } catch (string error) {
-        fprintf(stderr, "%s\n", error);
+        Console.error(error);
         return 1;
     }
 }

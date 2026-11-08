@@ -1,0 +1,67 @@
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
+
+class BootHealth {
+    private Map<string, string> values = {};
+    private Vector<string> failed = [];
+    private Vector<string> refused = [];
+    private Vector<string> unsignedFiles = [];
+
+    public BootHealth(string text, int bootIndex) {
+        if (bootIndex < 0) { throw "Negative boot index"; }
+        var index = 0;
+        var offset = 0;
+        while (true) {
+            var begin = text.find("E2E-HEALTH-BEGIN", offset);
+            if (begin < 0) { throw f"FAIL: wanted health block {bootIndex}, found {index}"; }
+            var end = text.find("E2E-HEALTH-END", begin);
+            if (end < 0) { throw "FAIL: incomplete health block"; }
+            if (index == bootIndex) {
+                self.parse(text.substring(begin, end - begin).replace("\r", ""));
+                return;
+            }
+            offset = end + 14;
+            index++;
+        }
+    }
+
+    private void parse(string block) {
+        for line in Strings.split(block, "\n") {
+            if (!line.startsWith("E2E-")) { continue; }
+            var space = line.find(" ", 0);
+            if (space < 0) { continue; }
+            var tag = line.substring(4, space - 4);
+            var value = line.substring(space + 1, line.len() - space - 1).trim();
+            if (tag.equals("FAILED")) { self.failed.push(value); }
+            if (tag.equals("REFUSED")) { self.refused.push(value); }
+            if (tag.equals("UNSIGNED")) { self.unsignedFiles.push(value); }
+            if (!self.values.has(tag)) { self.values.put(tag, value); }
+        }
+    }
+
+    public string value(string tag, string fallback = "") { return self.values.getOrDefault(tag, fallback); }
+
+    public void verify(bool requireEnforced) {
+        Vector<string> failures = [];
+        if (!self.value("STATE").equals("running")) { failures.push(f"system state: {self.value("STATE")}"); }
+        for unit in self.failed { failures.push(f"failed unit: {unit}"); }
+        for unit in self.refused { failures.push(f"systemd refused: {unit}"); }
+        if (!self.value("HOMEMANAGER").equals("active")) { failures.push("home-manager is not active"); }
+        if (!self.value("TEXTPROMPT", "0").equals("0")) { failures.push("passphrase was asked on a text console"); }
+        if (!self.value("UNLOCKUNIT").equals("success")) { failures.push("unlock agent did not succeed"); }
+        var agent = Strings.split(self.value("UNLOCKAGENT").replace("\t", " "), " ").filter(bool function(string part) { return !part.isEmpty(); });
+        if (agent.len < 2 || Strings.toInt(agent.get(1)) < 1) { failures.push("no graphical unlock agent ran"); }
+        if (Strings.toInt(self.value("SNAPSHOTS", "0")) < 1) { failures.push("no CLEAN snapshot exists"); }
+        if (self.value("SWAP").isEmpty()) { failures.push("no swap is active"); }
+        if (requireEnforced && !self.value("SECUREBOOT").toLower().contains("enabled")) { failures.push("secure boot is not enforcing"); }
+        if (requireEnforced && Strings.toInt(self.value("SIGNED", "0")) < 3) { failures.push("expected three signed EFI binaries"); }
+        if (!self.value("VENDORKEYS", "0").equals("0")) { failures.push("Microsoft keys are enrolled"); }
+        if (self.value("CMDLINE-QUIET", "0").equals("0")) { failures.push("quiet is not in effect"); }
+        if (self.value("CMDLINE-LOGLEVEL", "0").equals("0")) { failures.push("loglevel=3 is not in effect"); }
+        if (requireEnforced && !self.value("SBCTL").equals("0") && !self.value("SBCTL").equals("unavailable")) {
+            failures.push(f"sbctl reports unsigned: {self.unsignedFiles.join("; ")}");
+        }
+        if (!failures.isEmpty()) { throw f"FAIL: {failures.join("; ")}"; }
+    }
+}

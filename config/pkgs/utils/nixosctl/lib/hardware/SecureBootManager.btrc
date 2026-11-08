@@ -1,57 +1,176 @@
 import Library.FileSystem;
 import Library.JSON;
+import Library.Map;
 import Library.Process;
 import Library.Vector;
 import ../core/Interactive.btrc;
 import ../core/NixosLog.btrc;
 import ../NixosConfig.btrc;
 import ../NixosRebuilder.btrc;
+import ../RootSecretFile.btrc;
 import ./SecureBootVerification.btrc;
 
 class SecureBootManager {
     public NixosConfig config;
-    public UnixShell shell;
+    public UnixShell shell = UnixShell();
 
-    public SecureBootManager(NixosConfig config) {
-        self.config = config;
-        self.shell = UnixShell();
+    public SecureBootManager(NixosConfig config) { self.config = config; }
+    public string bundle() { return self.config.evalString("config.settings.boot.pkiBundle"); }
+    public string dbPublicKey() { return PathTools.join(self.bundle(), "keys/db/db.pem"); }
+
+    public ExecResult sbctl(string arguments) {
+        // Explicit configuration also works before installing the signed target.
+        // JSON is valid YAML; the pipe contains paths, never private key bytes.
+        var configuration = JSONValue.makeObject();
+        configuration.set("keydir", JSONValue.makeString(PathTools.join(self.bundle(), "keys")));
+        configuration.set("guid", JSONValue.makeString(PathTools.join(self.bundle(), "GUID")));
+        var result = self.shell.run(f"sbctl --config /dev/stdin {arguments}", stdin=configuration.stringify(),
+            stderr=COMMAND_OUTPUT_COLLECT, maxStderrBytes=16384, logFailure=false);
+        if (!result.ok()) { throw f"sbctl {arguments} failed ({result.code}): {result.stderr().trim()}"; }
+        return result;
     }
 
-    public string dbPublicKey() {
-        return PathTools.join(self.config.evalString("config.settings.boot.pkiBundle"), "keys/db/db.pem");
-    }
-
-    public bool keysExist() {
-        var bundle = self.config.evalString("config.settings.boot.pkiBundle");
-        for key in ["PK", "KEK", "db"] {
-            if (!FileSystem.isFile(f"{bundle}/keys/{key}/{key}.pem")
-                || !FileSystem.isFile(f"{bundle}/keys/{key}/{key}.key")) { return false; }
+    public JSONValue keys(bool create) {
+        var bundle = self.bundle();
+        if (!bundle.startsWith("/") || bundle.endsWith("/")) { throw "Secure Boot key bundle must be an absolute directory"; }
+        var parent = "/";
+        for component in Strings.split(bundle, "/") {
+            if (component.isEmpty()) { continue; }
+            if (component.equals(".") || component.equals("..")) { throw "Invalid Secure Boot key bundle path"; }
+            parent = PathTools.join(parent, component);
+            if (!FileStatus(parent).isMissing()) { RootSecretFile.requireRootDirectory(parent); }
         }
-        return true;
+        var missing = FileStatus(bundle + "/GUID").isMissing() && FileStatus(bundle + "/keys").isMissing();
+        if (missing && !create) { return JSONValue.makeNull(); }
+        if (missing) { self.sbctl("create-keys"); }
+        // Existing partial/corrupt bundles are rejected, never regenerated.
+        var report = self.shell.run(f"nixosctl-secure-boot-keys verify {ShellWords.quote(bundle)}",
+            stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
+        var result = JSONValue.parse(report.stdout());
+        for name in ["PK", "KEK", "db"] {
+            SecureBootVerification.fingerprint(result.get("certificateSha256").get(name).asString());
+        }
+        return result;
     }
 
-    public void createKeys() {
-        if (self.keysExist()) { return; }
-        var bundle = self.config.evalString("config.settings.boot.pkiBundle");
-        if (FileSystem.exists(f"{bundle}/GUID") || FileSystem.exists(f"{bundle}/keys")) {
-            throw "Incomplete existing Secure Boot keys; restore the missing files instead of rotating keys";
-        }
-        self.shell.run("sbctl create-keys", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
-        if (!self.keysExist()) {
-            NixosLog.fatal("sbctl did not create a complete PK/KEK/db key bundle");
+    public Map<string, Bytes> databases() {
+        Map<string, Bytes> result = {};
+        for name in ["PK", "KEK", "db"] { result.put(name, SecureBootVerification.readDatabase(name)); }
+        return result;
+    }
+
+    public bool owns(Map<string, Bytes> databases, JSONValue report, string name) {
+        if (report.isNull()) { return false; }
+        return SecureBootVerification.owns(SecureBootVerification.database(databases.get(name)),
+            report.get("certificateSha256").get(name).asString());
+    }
+
+    public void requireOwnership(Map<string, Bytes> databases, JSONValue report) {
+        for name in ["PK", "KEK", "db"] {
+            if (!databases.get(name).isEmpty() && !self.owns(databases, report, name)) {
+                throw f"Firmware {name} is not exclusively owned by this key bundle; restore the matching keys or inspect firmware policy before changing it";
+            }
         }
     }
 
-    public void enrollKeys(bool microsoft) {
-        var command = "sbctl enroll-keys";
-        if (microsoft) {
-            command = f"{command} --microsoft";
-        } else {
-            command = f"{command} --yes-this-might-brick-my-machine";
+    public void requireUnchanged(Map<string, Bytes> expected, Map<string, Bytes> actual, Vector<string> names) {
+        for name in names {
+            if (!expected.get(name).equals(actual.get(name))) { throw f"Firmware {name} changed unexpectedly"; }
         }
-        self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
     }
 
+    public void requireSafeGeneration(string system) {
+        var resolved = FileSystem.realPath(system);
+        if (!resolved.startsWith("/nix/store/") || !FileSystem.isFile(resolved + "/init")) {
+            throw f"Cannot identify retained system {system}; boot the signed generation and rebuild/prune the old boot menu";
+        }
+        if (FileSystem.exists(resolved + "/etc/systemd/system/prepare-sb-auto-enroll.service") ||
+            FileSystem.exists(resolved + "/etc/systemd/system/multi-user.target.wants/prepare-sb-auto-enroll.service")) {
+            throw f"Retained system can recreate automatic enrollment: {resolved}; boot a signed generation with enrollment off, then rebuild/prune unsafe entries";
+        }
+    }
+
+    public string imageSystem(string image, string scratch) {
+        var section = scratch + "/cmdline";
+        unlink(section);
+        self.shell.run(f"objcopy -O binary --only-section=.cmdline {ShellWords.quote(image)} {ShellWords.quote(section)}",
+            stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
+        var opened = FileSystem.openRegularFileSnapshot(section, 65536LL);
+        if (!opened.ok()) { throw "Cannot read retained image command line"; }
+        var file = opened.value();
+        Bytes bytes;
+        try {
+            if (file.size() == 0LL) { throw "Empty retained image command line"; }
+            var read = file.readExactAt(0LL, (int)file.size());
+            if (!read.ok()) { throw "Cannot read retained image command line"; }
+            bytes = read.value();
+        } finally { file.close(); }
+        int end = bytes.len;
+        while (end > 0 && bytes.get(end - 1) == 0) { end--; }
+        var text = bytes.slice(0, end);
+        if (!text.isNulFreeUtf8()) { throw "Invalid retained image command line"; }
+        var commandLine = text.toString();
+        if (commandLine.contains("\t") || commandLine.contains("\r") || commandLine.contains("\n")) { throw "Noncanonical retained image command line"; }
+        var system = "";
+        for word in Strings.split(commandLine, " ") {
+            if (!word.startsWith("init=")) { continue; }
+            if (!system.isEmpty() || !word.startsWith("init=/nix/store/") || !word.endsWith("/init")) { throw "Ambiguous retained image init"; }
+            system = word.substring(5, word.length() - 10);
+        }
+        if (system.isEmpty() || system.contains("/../") || !FileSystem.realPath(system).equals(system)) { throw "Cannot identify retained image system"; }
+        return system;
+    }
+
+    public void requireNoEnrollment(bool removing) {
+        if (self.config.evalBool("config.settings.boot.autoEnrollKeys") || self.config.evalBool("config.boot.lanzaboote.autoEnrollKeys.enable")) {
+            throw "Automatic enrollment must be disabled; use the explicit Secure Boot commands";
+        }
+        var boot = self.config.evalString("config.settings.disk.boot.efiSysMountPoint");
+        if (!SecureBootVerification.enrollmentOff(Path.readAll(boot + "/loader/loader.conf"))) { throw "Install a signed generation with secure-boot-enroll off before changing firmware keys"; }
+        var enrollment = boot + "/loader/keys";
+        if (FileSystem.isDir(enrollment) && !FileSystem.listDir(enrollment).isEmpty()) {
+            throw "Stale enrollment assets remain in the ESP loader/keys directory; retire them after disabling automatic enrollment";
+        }
+        if (self.shell.run("systemctl is-active --quiet prepare-sb-auto-enroll.service", logFailure=false).ok()) { throw "Automatic enrollment preparation is still active"; }
+        self.requireSafeGeneration("/run/current-system");
+        self.requireSafeGeneration("/run/booted-system");
+        var created = FileSystem.createTemporaryDirectory("nixos-secure-boot-check");
+        if (!created.ok()) { throw "Cannot inspect retained boot images"; }
+        var scratch = created.value();
+        try {
+            for image in FileSystem.listDir(boot + "/EFI/Linux") {
+                if (!image.toLower().endsWith(".efi")) { continue; }
+                var generation = SecureBootVerification.generation(image);
+                var profile = f"/nix/var/nix/profiles/system-{generation}-link";
+                var system = self.imageSystem(boot + "/EFI/Linux/" + image, scratch.path());
+                var matches = system.equals(FileSystem.realPath(profile));
+                var specialisations = profile + "/specialisation";
+                if (FileSystem.isDir(specialisations)) {
+                    for name in FileSystem.listDir(specialisations) {
+                        if (system.equals(FileSystem.realPath(specialisations + "/" + name))) { matches = true; }
+                    }
+                }
+                if (!matches) { throw f"Orphaned or mismatched retained image {image}; boot the signed generation and rebuild/prune the old boot menu"; }
+                self.requireSafeGeneration(system);
+            }
+            if (self.config.evalBool("config.settings.disk.recovery.enable")) {
+                var recovery = self.config.evalString("config.settings.disk.recovery.mountPoint");
+                var arch = self.config.evalString("pkgs.stdenv.hostPlatform.efiArch");
+                for image in [boot + "/EFI/recovery/nixos-recovery.efi", recovery + "/EFI/recovery/nixos-recovery.efi", f"{recovery}/EFI/BOOT/BOOT{arch.toUpper()}.EFI"] {
+                    self.requireSafeGeneration(self.imageSystem(image, scratch.path()));
+                }
+            }
+        } finally { scratch.close(); }
+        if (removing && FileSystem.isDir(boot + "/loader/entries")) {
+            for name in FileSystem.listDir(boot + "/loader/entries") {
+                if (!name.toLower().endsWith(".conf")) { continue; }
+                var text = Path.readAll(boot + "/loader/entries/" + name);
+                if (!self.config.evalBool("config.settings.disk.recovery.enable") || !name.equals("nixos-recovery.conf") || !SecureBootVerification.recoveryEntry(text)) {
+                    throw "Retire legacy loader entries before removing PK; keep the verified signed recovery entry";
+                }
+            }
+        }
+    }
     public bool verify() {
         try {
             var boot = self.config.evalString("config.settings.disk.boot.efiSysMountPoint");
@@ -61,9 +180,9 @@ class SecureBootManager {
             var entries = self.shell.run(f"bootctl --esp-path={ShellWords.quote(boot)} --json=short list", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
             required.push(SecureBootVerification.defaultImage(entries.stdout(), boot));
             for name in FileSystem.listDir(f"{boot}/EFI/Linux") {
-                if (name.endsWith(".efi")) { required.push(f"{boot}/EFI/Linux/{name}"); }
+                if (name.toLower().endsWith(".efi")) { required.push(f"{boot}/EFI/Linux/{name}"); }
             }
-            var result = self.shell.run("sbctl verify --json", stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
+            var result = self.sbctl("verify --json");
             var unsignedPaths = SecureBootVerification.failures(result.stdout(), required);
             if (!unsignedPaths.isEmpty()) {
                 for path in unsignedPaths { NixosLog.error(f"NOT signed or missing: {path}"); }
@@ -89,31 +208,121 @@ class SecureBootManager {
         }
     }
 
-    public void enable(bool microsoft, bool promptReboot = true) {
-        if (!SecureBootVerification.variable("SetupMode")) {
-            throw "Key enrollment requires firmware Setup Mode; use nixosctl update for an already enrolled system";
+    public JSONValue prepareImages() {
+        if (self.config.evalBool("config.settings.boot.autoEnrollKeys") || self.config.evalBool("config.boot.lanzaboote.autoEnrollKeys.enable")) {
+            throw "Preparation requires automatic enrollment off";
         }
-        self.createKeys();
+        var report = self.keys(true);
         self.config.local.setString("target", self.config.secureBootTarget());
+        NixosLog.info("Installing the signed system and recovery generation; firmware keys are unchanged");
         var options = RebuildOptions();
         options.rebuildFileSystem = true;
         options.promptReboot = false;
         NixosRebuilder(self.config).update(options);
         self.requireVerified();
-        self.enrollKeys(microsoft);
+        var checked = self.keys(false);
+        if (!checked.stringify().equals(report.stringify())) { throw "Signing keys changed during preparation"; }
+        Console.log(report.document());
+        if (self.config.evalBool("config.settings.disk.recovery.enable")) {
+            var recovery = self.config.evalString("config.settings.disk.recovery.mountPoint");
+            NixosLog.info(f"Signed external recovery source: {recovery}/EFI/recovery/nixos-recovery.efi");
+        }
+        NixosLog.info("Preparation does not verify an independent backup or a physical external recovery boot");
+        return report;
+    }
+
+    public void change(string action, bool promptReboot = true) {
+        var locked = AdvisoryFileLock.acquire("/run/lock/nixosctl-secure-boot.lock");
+        if (!locked.ok()) { throw "Another Secure Boot operation holds the lock"; }
+        var lock = locked.value();
+        try {
+            self.changeLocked(action, promptReboot);
+        } finally { lock.close(); }
+    }
+
+    public void changeLocked(string action, bool promptReboot) {
+        var before = self.databases();
+        var report = self.keys(false);
+        self.requireOwnership(before, report);
+        if (action.equals("prepare")) {
+            self.prepareImages();
+            self.requireUnchanged(before, self.databases(), ["PK", "KEK", "db"]);
+            return;
+        }
+        var present = !before.get("PK").isEmpty();
+        if (action.equals("enable")) {
+            if (present) {
+                for name in ["PK", "KEK", "db"] {
+                    if (!self.owns(before, report, name)) { throw f"Our PK is enrolled but {name} is missing; inspect and restore the incomplete firmware policy before enabling"; }
+                }
+                self.requireVerified();
+                self.requireNoEnrollment(false);
+                self.describe(before, report);
+                NixosLog.info("Our keys are already enrolled; firmware was not changed");
+                return;
+            }
+            if (!SecureBootVerification.variable("SetupMode")) { throw "Enrollment requires firmware Setup Mode"; }
+            report = self.prepareImages();
+            self.requireNoEnrollment(false);
+            self.requireUnchanged(before, self.databases(), ["PK", "KEK", "db"]);
+            var current = before;
+            // PK comes last. Only absent variables are written; sbctl's global
+            // immutable check also examines retained variables, so skip that
+            // check while preserving its option-ROM checks on every write.
+            for name in ["db", "KEK", "PK"] {
+                if (!current.get(name).isEmpty()) { continue; }
+                self.sbctl(f"enroll-keys --partial {name} --ignore-immutable");
+                var after = self.databases();
+                for other in ["PK", "KEK", "db"] {
+                    if (!other.equals(name)) { self.requireUnchanged(current, after, [other]); }
+                }
+                if (!self.owns(after, report, name)) { throw f"Enrollment did not establish our {name}; inspect firmware state before retrying"; }
+                current = after;
+            }
+            NixosLog.info("Our keys are enrolled. Reboot, then check secure-boot status for enforcement");
+        } else if (action.equals("disable")) {
+            if (!self.config.target().equals(self.config.secureBootTarget())) { throw "Prepare and boot the signed configuration before removing PK"; }
+            self.requireVerified();
+            self.requireNoEnrollment(true);
+            if (!present) {
+                self.describe(before, report);
+                NixosLog.info("PK is already absent; signed images and retained databases were not changed");
+                return;
+            }
+            self.requireUnchanged(before, self.databases(), ["PK", "KEK", "db"]);
+            self.sbctl("reset --partial PK");
+            var after = self.databases();
+            if (!after.get("PK").isEmpty()) { throw "Firmware retained PK; enforcement was not disabled"; }
+            self.requireUnchanged(before, after, ["KEK", "db"]);
+            NixosLog.info("PK removed using its private key. Signed boot/recovery images and KEK/db are retained; reboot to finish disabling enforcement");
+        } else { throw "Unknown Secure Boot operation"; }
         if (promptReboot) { Interactive().askToReboot(); }
     }
 
-    public void disable() {
-        SecureBootVerification.requireDisabled();
-        self.config.local.setString("target", self.config.standardTarget());
-        var options = RebuildOptions();
-        options.rebuildFileSystem = true;
-        NixosRebuilder(self.config).update(options);
+    public void prepare() { self.change("prepare", false); }
+    public void enable(bool promptReboot = true) { self.change("enable", promptReboot); }
+    public void disable(bool promptReboot = true) { self.change("disable", promptReboot); }
+
+    public void describe(Map<string, Bytes> databases, JSONValue report) {
+        var enforced = SecureBootVerification.variable("SecureBoot");
+        var setup = SecureBootVerification.variable("SetupMode");
+        NixosLog.info(enforced ? "Firmware enforcement: enabled for this boot" : "Firmware enforcement: disabled for this boot");
+        NixosLog.info(setup ? "Firmware Setup Mode: enabled" : "Firmware Setup Mode: disabled");
+        for name in ["PK", "KEK", "db"] {
+            var state = databases.get(name).isEmpty() ? "absent" : (self.owns(databases, report, name) ? "our certificate" : "foreign or mixed certificates");
+            NixosLog.info(f"{name}: {state}");
+        }
+        if (enforced && databases.get("PK").isEmpty()) { NixosLog.info("PK removal awaits a reboot; current enforcement has not changed"); }
+        if (!enforced && !databases.get("PK").isEmpty()) { NixosLog.info("PK is enrolled; reboot and check firmware policy before claiming enforcement"); }
+        if (report.isNull()) { NixosLog.info("Local signing keys: absent"); }
+        else { Console.log(report.document()); }
     }
 
     public bool status() {
-        var result = self.shell.run("sbctl status", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
-        return result.ok() && self.verify();
+        var databases = self.databases();
+        var report = self.keys(false);
+        self.describe(databases, report);
+        if (report.isNull()) { NixosLog.info("Signed artifacts: not prepared"); return true; }
+        return self.verify();
     }
 }

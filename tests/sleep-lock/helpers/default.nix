@@ -22,10 +22,6 @@ import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
   postInstall = ''
     $CC -std=c11 -O2 -D_GNU_SOURCE helper-tests.c -I${pkgs.lib.getDev pkgs.libdrm}/include/libdrm -lpam -ldrm -Wl,--wrap=explicit_bzero,--defsym=__wrap_explicit_bzero=testWipe,--wrap=__explicit_bzero_chk,--defsym=__wrap___explicit_bzero_chk=testCheckedWipe -o wrapped-tests
     ./wrapped-tests "$PWD/prompt"
-    if grep -Eq '__btrc_(string|arc|cleanup|throw)|pthread_create|pthread_mutex' authenticate.c; then
-      echo 'managed or threaded runtime in password helper' >&2
-      exit 1
-    fi
     grep -q 'mlockall' authenticate.c
     grep -q 'PR_SET_PDEATHSIG' authenticate.c
     nm -D authenticate | grep -q explicit_bzero

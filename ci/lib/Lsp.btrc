@@ -66,7 +66,7 @@ class LspSession {
         if (language.equals("nix")) { arguments.push("--nixpkgs-expr={}"); }
         self.child = PipeProcess(server, arguments, log);
         var params = JSONValue.makeObject();
-        params.set("processId", JSONValue.makeInt((int)getpid()));
+        params.set("processId", JSONValue.makeInt(Platform.pid()));
         params.set("rootUri", JSONValue.makeString(LspSession.uri(root)));
         var folder = JSONValue.makeObject(); folder.set("uri", JSONValue.makeString(LspSession.uri(root))); folder.set("name", JSONValue.makeString(PathTools.basename(root)));
         var folders = JSONValue.makeArray(); folders.push(folder); params.set("workspaceFolders", folders);
@@ -144,7 +144,10 @@ class LspSession {
     }
     public void finish() {
         self.request(2, "shutdown", JSONValue.makeNull()); self.response(2); self.notify("exit", JSONValue.makeNull());
+        // Let the server consume exit before closing its input. A simultaneous
+        // pipe HUP can otherwise make a server drop the queued notification.
+        var status = self.child.wait(MonotonicClock.deadlineAfter(5000));
         self.child.closeInput();
-        if (self.child.wait(MonotonicClock.deadlineAfter(5000)) != 0) { throw "LSP server exited with an error"; }
+        if (status != 0) { throw f"LSP server exited with status {status}"; }
     }
 }

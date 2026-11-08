@@ -1,0 +1,6 @@
+import Library.CLI;
+import ./Scenario.btrc;
+int main(int argc, char** argv) {
+    try { var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); PlymouthScenario(lab).run(); lab.close(); return 0; }
+    catch (string error) { print(error); return 1; }
+}

@@ -5,41 +5,16 @@ import Library.Strings;
 import ../../wine/src/WinePrefix.btrc;
 import ./AssettoMods.btrc;
 
-#include <lzf.h>
-#include <zlib.h>
-
-// Hosted declarations until the pinned header importer supports liblzf's
-// top-level const pointer parameters (the C function type is unchanged).
-extern unsigned int lzf_decompress(const void* input, unsigned int inputLength, void* output, unsigned int outputLength);
-extern unsigned int lzf_compress(const void* input, unsigned int inputLength, void* output, unsigned int outputLength);
-
 class ContentManager {
     // Values.data v2 is plain UTF-8, LZF (0x0b), or raw DEFLATE (0x00).
     class string decode(Bytes bytes) {
         if (bytes.length() == 0) { throw "Empty Content Manager settings"; }
         if (bytes.get(0) != 0 && bytes.get(0) != 11) { return bytes.toString(); }
-        var maximum = 16 * 1024 * 1024;
-        char* output = (char*)malloc((size_t)maximum);
-        if (output == NULL) { throw "Cannot allocate Content Manager settings buffer"; }
-        var length = 0;
-        if (bytes.get(0) == 11) {
-            length = (int)lzf_decompress(bytes.data + 1, (unsigned int)(bytes.length() - 1), output, (unsigned int)maximum);
-        } else {
-            z_stream stream;
-            memset(&stream, 0, sizeof(stream));
-            stream.next_in = (unsigned char*)(bytes.data + 1);
-            stream.avail_in = (unsigned int)(bytes.length() - 1);
-            stream.next_out = (unsigned char*)output;
-            stream.avail_out = (unsigned int)maximum;
-            if (inflateInit2_(&stream, -15, zlibVersion(), (int)sizeof(stream)) == cmZlibOk) {
-                if (inflate(&stream, cmZlibFinish) == cmZlibStreamEnd) { length = (int)stream.total_out; }
-                inflateEnd(&stream);
-            }
-        }
-        var decoded = Bytes.fromRaw(output, length);
-        free(output);
-        if (length == 0) { throw "Invalid or oversized compressed Content Manager settings"; }
-        return decoded.toString();
+        var decoded = contentSettingsDecode(bytes.data, bytes.length());
+        if (decoded == null) { throw "Invalid or oversized compressed Content Manager settings"; }
+        var content = contentSettingsText(decoded);
+        if (content == null) { throw "Cannot read decoded Content Manager settings"; }
+        return content;
     }
 
     class JSONValue entries(string text) {

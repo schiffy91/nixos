@@ -1,5 +1,5 @@
 { config, lib, pkgs, ... }:
-lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.cider.enable) {
+lib.mkIf (config.settings.apps.utils.cider.enable) {
   settings.disk.immutability.persist.paths = [ "${config.settings.users.admin.homeDirectory}/.config/sh.cider.genten" ];
   environment.systemPackages = [
     (pkgs.cider-2.overrideAttrs (old: {

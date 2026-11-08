@@ -4,11 +4,9 @@ let
   pkgs = import (builtins.fetchTree {
     inherit (locked) type owner repo rev narHash;
   }) { inherit system; };
-in pkgs.testers.runNixOSTest {
+in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   node.pkgsReadOnly = false;
   name = "sleep-gaming-plasma";
-  enableOCR = true;
-  extraPythonPackages = packages: [ packages.pillow ];
   nodes.machine = { pkgs, lib, ... }: {
     _module.args.inputs = inputs;
     imports = [ ../../../config/settings.nix ../../../config/system/nixos/boot/touch-keyboard.nix ../../../config/system/nixos/sleep.nix ];
@@ -68,5 +66,5 @@ in pkgs.testers.runNixOSTest {
     ];
 
   };
-  testScript = builtins.readFile ./test.py;
+  scenario = ./Main.btrc;
 }

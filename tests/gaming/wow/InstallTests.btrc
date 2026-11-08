@@ -1,0 +1,135 @@
+import Library.CLI;
+import ../../../ci/lib/PipeProcess.btrc;
+import ../../lib/TestDirectory.btrc;
+
+class InstallTests {
+    private TestDirectory fixture;
+    private string installer;
+    private string bundle;
+    private string legacy;
+    private string game;
+    private string selection;
+
+    public InstallTests(string installer, string bundle, string legacy) {
+        self.fixture = TestDirectory("wow-install");
+        self.installer = installer; self.bundle = bundle; self.legacy = legacy;
+        self.game = self.fixture.path("external disk/World of Warcraft/_forever_");
+        self.selection = bundle;
+    }
+
+    private string path(string relative) { return PathTools.join(self.game, relative); }
+
+    private void write(string relative, string text) {
+        Check.that(FileSystem.mkdirp(PathTools.dirname(self.path(relative))) == 0, "create game fixture");
+        Check.that(FileSystem.writeText(self.path(relative), text), "write game fixture");
+    }
+
+    private ExecResult run(bool success = true) {
+        var settings = JSONValue.makeObject();
+        settings.set("directory", JSONValue.makeString(self.game));
+        settings.set("addons", JSONValue.makeString(self.selection));
+        self.fixture.json("settings.json", settings);
+        var result = ChildProcess.run(self.installer, [self.fixture.path("settings.json")], timeoutMilliseconds=10000);
+        Check.that(!result.timedOut && !result.captureFailed && (result.code == 0) == success, f"installer status: {result.stderr()}");
+        return result;
+    }
+
+    private string identity(string relative) {
+        // GNU stat observes the link itself by default, including dangling links.
+        return Check.exited(ChildProcess.run("stat", ["-c", "%d:%i", self.path(relative)])).trimmed();
+    }
+
+    private void installed(string version, bool questie) {
+        Check.equal(Path.readAll(self.path("Interface/AddOns/Details/version")), version, "selected addon version");
+        var path = self.path("Interface/AddOns/Questie");
+        if (questie) { Check.that(FileSystem.isDir(path) != 0, "selected addon is installed"); }
+        else { Check.that(!FileSystem.exists(path) && !FileSystem.isSymlink(path), "removed addon leaves no link"); }
+    }
+
+    private void preservesUserFiles() {
+        Check.equal(Path.readAll(self.path("Interface/AddOns/Manual/user.lua")), "keep me", "manual addon");
+        Check.equal(Path.readAll(self.path("WTF/Account/FIRST/SavedVariables/Details.lua")), "in-game edits", "user profile");
+    }
+
+    private Vector<string> backups() {
+        Vector<string> paths = [];
+        for name in FileSystem.listDir(self.path("Interface")) {
+            if (name.startsWith("AddOns.backup-")) { paths.push(self.path(f"Interface/{name}/AddOns")); }
+        }
+        return paths;
+    }
+
+    public void check() {
+        self.run();
+        Check.that(!FileSystem.exists(self.game), "never create phantom installation");
+        self.write("Interface/AddOns/Manual/user.lua", "keep me");
+        self.write("WTF/Account/FIRST/SavedVariables/Details.lua", "in-game edits");
+        self.run(); self.installed("new", true); self.preservesUserFiles();
+        var addon = self.identity("Interface/AddOns/Details");
+        var pointer = self.identity("Interface/.nixos-wow-addons");
+        self.run();
+        Check.equal(self.identity("Interface/AddOns/Details"), addon, "stable addon inode");
+        Check.equal(self.identity("Interface/.nixos-wow-addons"), pointer, "stable bundle pointer inode");
+        self.selection = self.legacy; self.run(); self.installed("old", false);
+        self.selection = self.bundle; self.run(); self.installed("new", true);
+        self.selection = self.fixture.path("missing bundle"); self.run(false); self.installed("new", true);
+        self.selection = self.fixture.path("unreadable bundle");
+        Check.that(FileSystem.mkdirp(self.selection) == 0 && FileSystem.chmod(self.selection, 0) == 0, "unreadable bundle fixture");
+        try { self.run(false); self.installed("new", true); }
+        finally { Check.that(FileSystem.chmod(self.selection, 0700) == 0, "restore fixture permissions"); }
+        self.selection = self.bundle; self.run();
+        var lock = AdvisoryFileLock.acquire(self.path("Interface/.nixos-wow.lock")).value();
+        var child = PipeProcess(self.installer, [self.fixture.path("settings.json")], self.fixture.path("lock-error.log"));
+        var blocked = false;
+        try { child.wait(MonotonicClock.deadlineAfter(200)); }
+        catch (string error) { blocked = error.equals("Child did not exit before deadline"); }
+        Check.that(lock.close().ok(), "release installation lock");
+        Check.that(blocked, "installer waits for lock");
+        Check.that(child.wait(MonotonicClock.deadlineAfter(10000)) == 0, "installer resumes after lock release");
+        child.close();
+        Check.that(FileSystem.mkdirp(self.path("WTF/Account/LATER")) == 0, "later account");
+        self.run();
+        Check.that(FileSystem.listDir(self.path("WTF/Account/LATER")).isEmpty(), "account data belongs to WoW");
+        self.preservesUserFiles();
+        Check.that(FileSystem.removeRecursivePath(self.path("Interface/AddOns/Details")) == 0, "replace owned addon manually");
+        self.write("Interface/AddOns/Details/version", "manual replacement");
+        self.fixture.write("other bundle/Details/version", "other");
+        self.selection = self.fixture.path("other bundle");
+        Check.that(self.run().stderr().contains("Preserving manually installed addon"), "explain manual preservation");
+        self.installed("manual replacement", false); self.preservesUserFiles();
+        self.selection = self.fixture.path("empty bundle");
+        Check.that(FileSystem.mkdirp(self.selection) == 0, "empty selection");
+        self.run(); self.installed("manual replacement", false); self.preservesUserFiles();
+        self.game = self.fixture.path("legacy game"); self.selection = self.bundle;
+        Check.that(FileSystem.mkdirp(self.path("Interface")) == 0 && FileSystem.symlink(self.legacy, self.path("Interface/AddOns")) == 0, "legacy whole-directory link");
+        self.run(); self.installed("new", true);
+        Check.that(!FileSystem.isSymlink(self.path("Interface/AddOns")) && !FileSystem.exists(self.path("WTF")), "migrate only addons");
+        var backups = self.backups();
+        Check.that(backups.len == 1, "single recovery backup");
+        Check.equal(FileSystem.readLink(backups.get(0)), self.legacy, "preserve legacy link");
+        Check.equal(Path.readAll(PathTools.join(backups.get(0), "Details/version")), "old", "backup remains usable");
+        self.run(); Check.that(self.backups().len == 1, "migration is idempotent");
+        self.game = self.fixture.path("symlink game");
+        Check.that(FileSystem.mkdirp(self.path("Interface")) == 0 && FileSystem.symlink(self.fixture.path("other bundle"), self.path("Interface/AddOns")) == 0, "unrelated whole-directory link");
+        self.run(false);
+        Check.equal(FileSystem.readLink(self.path("Interface/AddOns")), self.fixture.path("other bundle"), "preserve unrelated link");
+        Check.equal(Path.readAll(self.fixture.path("other bundle/Details/version")), "other", "preserve unrelated bundle");
+        self.game = self.fixture.path("dangling game");
+        Check.that(FileSystem.mkdirp(self.path("Interface/AddOns")) == 0, "dangling addon fixture");
+        Check.that(FileSystem.symlink(self.fixture.path("missing addon"), self.path("Interface/AddOns/Details")) == 0, "dangling addon link");
+        Check.that(FileSystem.mkdirp(self.path("WTF/Account/FIRST/SavedVariables")) == 0, "dangling profile fixture");
+        Check.that(FileSystem.symlink(self.fixture.path("missing profile"), self.path("WTF/Account/FIRST/SavedVariables/Details.lua")) == 0, "dangling profile link");
+        self.run();
+        Check.equal(FileSystem.readLink(self.path("Interface/AddOns/Details")), self.fixture.path("missing addon"), "preserve dangling addon");
+        Check.that(FileSystem.isSymlink(self.path("WTF/Account/FIRST/SavedVariables/Details.lua")) && !FileSystem.exists(self.fixture.path("missing profile")), "preserve dangling profile");
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        InstallTests(args.require(0, "Supply installer"), args.require(1, "Supply bundle"), args.require(2, "Supply legacy bundle")).check();
+        print("PASS: late install/accounts, manual addons, migration backup, ownership, profiles, locking and idempotence"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

@@ -1,17 +1,14 @@
 #ifndef NIXOS_OPPORTUNISTIC_UNLOCK_NATIVE_H
 #define NIXOS_OPPORTUNISTIC_UNLOCK_NATIVE_H
-#define _GNU_SOURCE
-#include <dirent.h>
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <linux/fs.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -20,7 +17,6 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 #include <libcryptsetup.h>
 #include "handoff.h"

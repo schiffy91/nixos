@@ -1,6 +1,7 @@
 import Library.Bytes;
 import Library.CLI;
 import Library.Console;
+import Library.Digest;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Platform;
@@ -175,9 +176,25 @@ class GamingTests {
         assert(Path.readAll(f"{grid}/2147483648.png").equals("landscape"));
         assert(Path.readAll(f"{grid}/2147483648_logo.png").equals("_logo"));
         assert(!FileSystem.exists(f"{grid}/2147483648_hero.png"));
+        // New curated defaults replace only files still matching our ownership record.
+        GamingFiles.write(f"{artwork}/landscape.png", "new-landscape");
+        UnixShell().run(command.render(), throwOnFailure=true);
+        assert(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
+        // Recognize the exact old generator output even without an ownership record.
+        GamingFiles.remove(f"{grid}/.nixos-artwork/2147483648_logo.sha256");
+        var legacy = JSONValue.makeObject();
+        legacy.set("_logo", JSONValue.makeString(SHA256.digestBytes(Bytes.fromString("_logo"))));
+        GamingFiles.write(f"{artwork}/legacy.json", legacy.stringify());
+        GamingFiles.write(f"{artwork}/_logo.png", "curated-logo");
+        UnixShell().run(command.render(), throwOnFailure=true);
+        assert(Path.readAll(f"{grid}/2147483648_logo.png").equals("curated-logo"));
         GamingFiles.write(f"{grid}/2147483648p.png", "custom-cover");
+        GamingFiles.write(f"{grid}/2147483648.jpeg", "custom-landscape");
+        GamingFiles.write(f"{artwork}/landscape.png", "third-landscape");
         UnixShell().run(command.render(), throwOnFailure=true);
         assert(Path.readAll(f"{grid}/2147483648p.png").equals("custom-cover"));
+        assert(Path.readAll(f"{grid}/2147483648.jpeg").equals("custom-landscape"));
+        assert(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
         var unknown = Bytes.fromString("not a shortcuts file");
         GamingFiles.writeBytes(path, unknown);
         assert(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
@@ -347,7 +364,7 @@ class GamingTests {
         for (int i = 0; i < 50; i++) { text = text + "preserve-"; }
         var raw = Bytes.fromString(text);
         char output[4096];
-        unsigned int length = lzf_compress(raw.data, (unsigned int)raw.length(), output, 4096);
+        unsigned int length = cmLzfCompress(raw.data, (unsigned int)raw.length(), output, 4096);
         assert(length > 0);
         var packed = Bytes(); packed.append(11); packed.appendRaw(output, (int)length);
         assert(ContentManager.decode(packed).equals(text));

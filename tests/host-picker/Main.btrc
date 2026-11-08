@@ -1,0 +1,48 @@
+import Library.CLI;
+import Library.Platform;
+import ../lib/TestDirectory.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/core/Interactive.btrc;
+
+class HostPickerTests {
+    private string picker;
+    public HostPickerTests(string picker) { self.picker = picker; }
+
+    private ExecResult select(string root, string input) {
+        return ChildProcess.run(self.picker, ["--picker", PathTools.join(root, "config/hosts")], stdinData=input, timeoutMilliseconds=30000);
+    }
+
+    public void check(string root) {
+        var registry = Check.exited(ChildProcess.run("nix", ["--extra-experimental-features", "nix-command flakes", "eval", "--json", f"{root}#lib.hosts"], timeoutMilliseconds=60000));
+        var hosts = JSONValue.parse(registry.stdout()).elements();
+        Check.that(!hosts.isEmpty(), "nonempty host registry");
+        for (int index = 0; index < hosts.len; index++) {
+            var host = hosts.get(index);
+            Check.that(host.get("system").asString().endsWith("-linux"), "only Linux hosts in picker");
+            var expected = PathTools.join(PathTools.join(root, "config/hosts"), host.get("path").asString());
+            var result = Check.exited(self.select(root, f"{index + 1}\n"));
+            Check.that(result.stdout().contains(f"SELECTED={expected}") && FileSystem.isFile(expected), "select registered host");
+        }
+        var expected = PathTools.join(PathTools.join(root, "config/hosts"), hosts.get(0).get("path").asString());
+        Check.that(Check.exited(self.select(root, "999\n1\n")).stdout().contains(f"SELECTED={expected}"), "retry invalid selection");
+        var eof = self.select(root, "");
+        Check.that(!eof.timedOut && eof.code != 0 && eof.stderr().contains("No host chosen"), "bound EOF input");
+        var fixture = TestDirectory("host-picker");
+        fixture.write("config/hosts/x86_64/FIXTURE/default.nix", "{}\n");
+        fixture.write("flake.nix", "{ outputs = _: { lib.hosts = builtins.trace \"host-picker diagnostic\" [{ name = \"FIXTURE\"; system = \"x86_64-linux\"; outputName = \"FIXTURE\"; path = \"x86_64/FIXTURE/default.nix\"; }]; }; }\n");
+        var diagnostic = Check.exited(self.select(fixture.path(), "1\n"));
+        Check.that(diagnostic.stderr().contains("host-picker diagnostic"), "Nix diagnostics reach stderr");
+        Check.that(diagnostic.stdout().contains(f"SELECTED={fixture.path("config/hosts/x86_64/FIXTURE/default.nix")}"), "Nix diagnostics do not corrupt JSON");
+        fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.command().equals("--picker")) {
+            print(f"SELECTED={Interactive().askHostPath(args.require(1, "Supply hosts directory"))}"); return 0;
+        }
+        HostPickerTests(PathTools.absolute(args.program)).check(Platform.currentDirectory());
+        print("PASS: real registry selects every Linux host, tolerates Nix diagnostics and bounds invalid/EOF input"); return 0;
+    } catch (string error) { Console.error(error); return 1; }
+}

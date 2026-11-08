@@ -3,7 +3,7 @@
 Sunshine can use the administrator's SSH keys for Web UI login:
 
 ```nix
-settings.apps.sunshine.sshLogin.enable = true;
+settings.apps.gaming.sunshine.sshLogin.enable = true;
 ```
 
 `sshLogin.publicKeys` defaults to `settings.users.admin.authorizedKeys` and can

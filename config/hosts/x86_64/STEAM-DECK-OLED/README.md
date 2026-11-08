@@ -4,15 +4,19 @@
 hardware support and Gaming Mode, the touchscreen LUKS prompt inside Plymouth,
 hibernation and Secure Boot policy. It explicitly imports the session and keyboard
 modules; the keyboard script lives beside `system/session.nix`. `pkgs/default.nix`
-holds package selections, Steam shortcuts, Sunshine and emulator settings.
+holds package selections, Sunshine and emulator settings.
 
 Decky Loader runs from Jovian; install plugins from its store. The non-Steam
-shortcuts in `settings.apps.steam.shortcuts` are written to every Steam profile
-at boot, before Steam starts. Entries can specify `{ exe = "..."; icon = "..."; }`;
-icon changes preserve existing shortcut IDs, tags, controller settings and
-play history. Other shortcuts in Steam are left alone. Semu uses ES-DE's icon.
+shortcuts in `settings.apps.gaming.steam.shortcuts` are written to every Steam profile
+at boot, before Steam starts. The shared Steam module supplies complete artwork
+for enabled Battle.net, Semu, Chrome, Moonlight and chiaki-ng shortcuts. Entries
+can specify `{ exe = "..."; icon = "..."; artwork = /path/to/images; }`; artwork
+changes preserve existing shortcut IDs, tags, controller settings and play history.
+Other shortcuts and custom artwork are left alone. See
+[application artwork](../../../pkgs/gaming/artwork/README.md) for the curated
+sets, KDE icons, SGDBoop and the SteamGridDB Decky plugin.
 
-Both physical hosts enable `settings.apps.desktop.enable` for the shared desktop
+Both physical hosts enable `settings.apps.utils.desktop.enable` for the shared desktop
 packages and services under `config/pkgs`: Cider, mpv, the development CLIs, zsh,
 Mullvad, OpenVPN 3, Discord, Solaar and Logitech receiver support. Racing-wheel
 tools remain on FRACTAL-NORTH. Both use the same custom Proton package. Battle.net
@@ -78,13 +82,15 @@ See [firmware settings](BIOS.md) for the observed BIOS state, how to enter Setup
 Utility, and the separate firmware and kernel requirements for IOMMU.
 
 The audited OLED F7G0114 firmware was in Setup Mode with Secure Boot disabled.
-That does not establish a recovery toggle in its firmware interface. Before
-`sudo nixosctl secure-boot enable`, prepare unique keys, independently back them
-up on encrypted storage and verify restoration, and boot a signed external
-recovery device. Use only our own keys, with no `--microsoft` or publicly shared
-private keys. Keep `settings.boot.autoEnrollKeys = false` during this preparation,
-including the first signed maintenance configuration, until external recovery
-and deliberate enrollment are ready. The [independent key backup procedure](../../../../tests/secure-boot/backup/README.md)
+That does not establish a recovery toggle in its firmware interface. Run
+`sudo nixosctl secure-boot prepare` to validate/reuse unique keys and install
+signed normal and recovery images without enrolling firmware keys. Preparation
+requires each firmware database to be absent or exclusively match the local
+keys; it does not migrate factory or foreign trust. Independently back up the
+keys on encrypted storage, verify restoration, and boot a signed external
+recovery device before `sudo nixosctl secure-boot enable`. Only our own keys are
+supported; `--microsoft` and publicly shared private keys are excluded.
+`settings.boot.autoEnrollKeys` must remain false. The [independent key backup procedure](../../../../tests/secure-boot/backup/README.md)
 uses root-only `nixosctl secure-boot keys` transfers and verifies restoration on
 Fractal North's separate encrypted disk without enrolling or rotating keys.
 
@@ -97,27 +103,24 @@ verified, but it has not been booted from a physical recovery USB. The Deck
 remains in Setup Mode with Secure Boot disabled. External recovery and firmware
 enrollment/removal checks remain required before enabling it.
 
-`nixosctl secure-boot disable` currently switches to an unsigned configuration
-only after firmware Secure Boot is already disabled. It does not remove the
-platform key. The authenticated removal candidate is `sbctl reset`, using the
-current platform key; it must be verified on the Deck with working recovery
-before relying on it. Do not assume a BIOS toggle or a firmware flash will clear
-keys.
+`nixosctl secure-boot disable` now uses the current private platform key to
+authenticate PK-only removal, retaining KEK/db and signed boot/recovery images.
+The CLI checks for stale enrollment assets and unsafe current/booted or retained
+generations, and verifies recovery signatures and embedded system closures before
+changing keys. It does not boot those recovery images.
+Repository configurations prohibit automatic enrollment and explicitly set
+`secure-boot-enroll off`; old ESP files and generations still require deliberate
+retirement. If the guard refuses, boot a safe signed generation, prune unsafe
+generations and rebuild its menu. Lanzaboote protects the booted generation, so
+pruning while still running an old unsafe generation is insufficient.
 
-Disable automatic enrollment **before** deliberate platform-key removal.
-`settings.boot.autoEnrollKeys` configures systemd-boot to enroll keys from
-`/boot/loader/keys/auto` whenever firmware enters Setup Mode. A maintenance boot
-must keep signed boot/recovery images, set `secure-boot-enroll off`, disable the
-enrollment preparation service, and remove stale enrollment assets from the
-ESP. Turning off a Nix option alone does not prove existing files were removed.
-Otherwise the next boot can undo the intended key removal. Retained recovery
-generations must also disable enrollment; an older auto-enrolling generation
-can recreate the assets. Lanzaboote protects the currently booted generation,
-so limiting the number of entries while still running an old generation is not
-sufficient. Boot maintenance first, rebuild its menu, and verify that only safe
-maintenance/recovery entries remain. Verify both boots before removing the key.
-Firmware SecureBoot mode describes the current boot, so check its new state
-after a restart, not immediately after the runtime key update.
+The existing signed normal and recovery generations provide this workflow; no
+separate maintenance target or custom jump loader is needed. Authenticated
+removal still requires physical verification on the Deck with working external
+recovery. Do not assume a BIOS toggle or firmware flash clears keys. Check
+`nixosctl secure-boot status` after reboot: the current boot's enforcement flag
+can remain set immediately after PK removal, and PK enrollment alone does not
+prove enforcement.
 
 The `secure-boot-removal` VM graph scenario checks this sequence under OVMF,
 including rejection of the wrong private key, repeated boots without automatic
@@ -129,8 +132,18 @@ The boot-time firmware mode is specified in [UEFI 2.10 section 3.3](https://uefi
 
 ## Desktop mode
 
-The Deck has its own Plasma taskbar launchers. Workstation-only Chrome app IDs
-live in the FRACTAL-NORTH host configuration. Plasma Keyboard is selected as
+The Deck has its own Plasma taskbar launchers. Hosts can declare Chrome PWAs
+through `settings.apps.utils.chrome.webApps` (the reusable URL catalog is in
+`config/pkgs/utils/chrome-apps.nix`) and pin each app's `.launcher` value.
+Chrome installs these apps through `WebAppInstallForceList`, manages their
+icons and updates, and prevents manual uninstall while they are declared.
+The policy applies to every Chrome profile; `settings.apps.utils.chrome.profile`
+selects the profile used for taskbar pins (default `Default`, or e.g. `Profile 2`).
+Pins resolve after Chrome exports the installed app's desktop entry. Initial
+installation requires Chrome to run with network access and may require sign-in.
+The launcher watcher follows native launcher updates and removes stale aliases;
+it preserves Chrome's original entries and hides aliases from application menus.
+Plasma Keyboard is selected as
 KWin's input method on the Deck, available from the taskbar's **On-Screen
 Keyboard** launcher even without Steam. Automatic pop-up is disabled so it
 does not cover Steam's keyboard when using **Steam+X**. Close one keyboard

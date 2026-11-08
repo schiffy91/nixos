@@ -1,4 +1,5 @@
-import Library.Bytes;
+import ./Files.btrc;
+import Library.Console;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Platform;
@@ -35,14 +36,16 @@ class AddonLock {
         for candidate in candidates.sorted() {
             var name = PathTools.basename(candidate); name = name.substring(0, name.len() - 4);
             var pieces = Strings.split(name, "-"); var suffix = pieces.get(pieces.len - 1);
-            if (wanted.isEmpty() ? !flavours.contains(suffix) : suffix.equals(wanted)) { selected = candidate; }
+            if (wanted.isEmpty() ? !flavours.contains(suffix) : suffix.equals(wanted)) {
+                if (!selected.isEmpty()) { throw "Ambiguous addon assets in " + repository + ": " + selected + " and " + candidate; }
+                selected = candidate;
+            }
         }
         return selected;
     }
-    class string command(string program, Vector<string> arguments, string input = "", bool allowFailure = false) {
+    class string command(string program, Vector<string> arguments, string input = "") {
         var result = ChildProcess.run(program, arguments, stdinData=input);
         if (!result.ok()) {
-            if (allowFailure) { return ""; }
             throw program + " failed: " + result.stderr();
         }
         return result.stdout();
@@ -64,7 +67,7 @@ class AddonLock {
                 var tags = AddonLock.tags(repository, source.get("train").asString());
                 if (tags.isEmpty()) { throw name + ": no release tags"; }
                 for candidate in tags {
-                    var html = AddonLock.command("curl", ["-fsSL", "https://github.com/" + repository + "/releases/expanded_assets/" + candidate], allowFailure=true);
+                    var html = AddonLock.command("curl", ["-fsSL", "https://github.com/" + repository + "/releases/expanded_assets/" + candidate]);
                     var href = AddonLock.asset(html, repository, source.get("flavour").asString());
                     if (!href.isEmpty()) { tag = candidate; url = "https://github.com" + href; break; }
                 }
@@ -73,27 +76,9 @@ class AddonLock {
             var fetched = JSONValue.parse(AddonLock.command("nix", ["store", "prefetch-file", "--json", "--hash-type", "sha256", url]));
             var hash = fetched.get("hash").asString(); if (hash.isEmpty()) { throw name + ": prefetch returned no hash"; }
             var pin = JSONValue.makeObject(); pin.set("hash", JSONValue.makeString(hash)); pin.set("url", JSONValue.makeString(url)); result.set(name, pin);
-            fprintf(stderr, "%s %s\n", name, tag);
+            Console.error(f"{name} {tag}");
         }
         return result;
     }
-    class void publish(string path, JSONValue lock) {
-        struct stat existing;
-        bool present = stat(path, &existing) == 0;
-        if (!present && errno != ENOENT) { throw "Cannot inspect existing addon lock"; }
-        char* pattern = CStringArray.copyEntry(PathTools.dirname(path) + "/.addons.lock.XXXXXX");
-        if (pattern == null) { throw "Cannot allocate addon lock filename"; }
-        int descriptor = mkstemp(pattern); var temporary = Strings.copy(pattern); free(pattern);
-        if (descriptor < 0) { throw "Cannot create temporary addon lock"; }
-        var bytes = Bytes.fromString(lock.document()); int written = 0; bool failed = false;
-        while (written < bytes.length()) {
-            int count = (int)write(descriptor, bytes.data + written, (size_t)(bytes.length() - written));
-            if (count < 0 && errno == EINTR) { continue; }
-            if (count <= 0) { failed = true; break; } written += count;
-        }
-        if (present && fchown(descriptor, existing.st_uid, existing.st_gid) != 0) { failed = true; }
-        if (fchmod(descriptor, (mode_t)0644) != 0 || fsync(descriptor) != 0) { failed = true; }
-        if (close(descriptor) != 0) { failed = true; }
-        if (failed || rename(temporary, path) != 0) { unlink(temporary); throw "Cannot publish addon lock"; }
-    }
+    class void publish(string path, JSONValue lock) { AddonFiles.publish(path, lock.document()); }
 }

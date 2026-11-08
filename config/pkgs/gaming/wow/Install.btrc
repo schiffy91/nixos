@@ -1,0 +1,121 @@
+import ./Files.btrc;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Regex;
+import Library.Strings;
+import Library.Vector;
+
+class AddonInstall {
+    private string directory;
+    private string bundle;
+    private string interfaceDirectory;
+    private string addons;
+    private string current;
+
+    public AddonInstall(JSONValue settings) {
+        self.directory = settings.get("directory").asString();
+        self.bundle = settings.get("addons").asString();
+        if (!PathTools.isAbsolute(self.directory) || !PathTools.isAbsolute(self.bundle)) {
+            throw "WoW directory and addon bundle must be absolute paths";
+        }
+        self.interfaceDirectory = PathTools.join(self.directory, "Interface");
+        self.addons = PathTools.join(self.interfaceDirectory, "AddOns");
+        self.current = PathTools.join(self.interfaceDirectory, ".nixos-wow-addons");
+    }
+
+    private string ownedTarget(string name) { return PathTools.join("../.nixos-wow-addons", name); }
+
+    private bool owns(string path) {
+        return FileSystem.isSymlink(path) && FileSystem.readLink(path).equals(self.ownedTarget(PathTools.basename(path)));
+    }
+
+    private Vector<string> entries(string path) {
+        var directory = Directory(path);
+        var names = directory.entries();
+        if (directory.failed()) { throw f"Cannot list addon directory: {path}"; }
+        return names.sorted();
+    }
+
+    private string temporary(string prefix) {
+        // Renames must stay on the game's filesystem, which may differ from TMPDIR.
+        var path = TemporaryDirectory.reservePath(f"{self.interfaceDirectory}/{prefix}XXXXXX");
+        if (path.isEmpty()) { throw f"Cannot create staging directory in {self.interfaceDirectory}"; }
+        return path;
+    }
+
+    private void migrate(Vector<string> names) {
+        if (!FileSystem.isSymlink(self.addons)) {
+            if (FileSystem.mkdirp(self.addons) != 0) { throw f"Cannot create {self.addons}"; }
+            return;
+        }
+        var previous = FileSystem.readLink(self.addons);
+        if (!Regex.matches("^/nix/store/[0-9a-z]{32}-wow-forever-addons$", previous)) {
+            throw f"Preserving unmanaged AddOns symlink: {self.addons} -> {previous}";
+        }
+        var staging = self.temporary(".wow-migrate-");
+        try {
+            var replacement = PathTools.join(staging, "AddOns");
+            if (FileSystem.mkdirp(replacement) != 0) { throw f"Cannot create {replacement}"; }
+            for name in names {
+                if (FileSystem.symlink(self.ownedTarget(name), PathTools.join(replacement, name)) != 0) {
+                    throw f"Cannot stage addon: {name}";
+                }
+            }
+            // Keep the previous module's whole-directory link for recovery.
+            var backup = PathTools.join(self.temporary("AddOns.backup-"), "AddOns");
+            if (!AddonFiles.move(self.addons, backup)) { throw f"Cannot back up {self.addons}"; }
+            if (!AddonFiles.move(replacement, self.addons)) {
+                if (!AddonFiles.move(backup, self.addons)) { throw f"Cannot restore {self.addons}; original link is at {backup}"; }
+                throw f"Cannot migrate {self.addons}; original link restored";
+            }
+        } finally { FileSystem.removeRecursive(staging); }
+    }
+
+    private void reconcile() {
+        if (!FileSystem.isDir(self.bundle)) { throw f"Missing addon bundle: {self.bundle}"; }
+        var names = self.entries(self.bundle);
+        for name in names {
+            if (!FileSystem.isDir(PathTools.join(self.bundle, name))) {
+                throw f"Addon bundle must contain only addon directories: {self.bundle}";
+            }
+        }
+        if (FileSystem.exists(self.current) && !FileSystem.isSymlink(self.current)) {
+            throw f"Preserving unmanaged path: {self.current}";
+        }
+        self.migrate(names);
+        for name in names {
+            var destination = PathTools.join(self.addons, name);
+            if (self.owns(destination)) { continue; }
+            if (FileSystem.symlink(self.ownedTarget(name), destination) != 0) {
+                if (errno != EEXIST) { throw f"Cannot link addon: {destination}"; }
+                Console.error(f"Preserving manually installed addon: {destination}");
+            }
+        }
+        if (!FileSystem.isSymlink(self.current) || !FileSystem.readLink(self.current).equals(self.bundle)) {
+            var staging = self.temporary(".wow-bundle-");
+            try {
+                var link = PathTools.join(staging, "current");
+                if (FileSystem.symlink(self.bundle, link) != 0 || !AddonFiles.move(link, self.current)) {
+                    throw f"Cannot switch addon bundle: {self.current}";
+                }
+            } finally { FileSystem.removeRecursive(staging); }
+        }
+        for name in self.entries(self.addons) {
+            var destination = PathTools.join(self.addons, name);
+            if (!names.contains(name) && self.owns(destination) && !AddonFiles.remove(destination)) {
+                throw f"Cannot remove managed addon: {destination}";
+            }
+        }
+    }
+
+    public void apply() {
+        if (!FileSystem.isDir(self.directory)) { return; }
+        if (FileSystem.mkdirp(self.interfaceDirectory) != 0) { throw f"Cannot create {self.interfaceDirectory}"; }
+        var acquired = AdvisoryFileLock.acquire(PathTools.join(self.interfaceDirectory, ".nixos-wow.lock"), wait=true);
+        if (!acquired.ok()) { throw f"Cannot lock addon installation: {self.directory}"; }
+        var lock = acquired.value();
+        try { self.reconcile(); }
+        finally { lock.close(); }
+    }
+}

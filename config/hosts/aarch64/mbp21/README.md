@@ -12,11 +12,11 @@ no_nomatch` and LM Studio path. The `clauded` alias and the `print-files` and
 `extract-substring` helpers are shared through `config/pkgs/dev/shell.nix`, with
 their programs in `config/pkgs/dev/shell/`. Home Manager's zsh module generates `~/.zshrc` and
 `~/.zprofile`. The existing `nix-update` and `nix-upgrade` aliases now target
-this repository. No editor is selected. `settings.apps.lmstudio.enable` enables
+this repository. No editor is selected. `settings.apps.dev.lmstudio.enable` enables
 LM Studio's CLI path through `config/pkgs/dev/lmstudio/home.nix`; the native app still owns
 its installation and updates.
 
-`settings.apps.git.includes` points to the preserved private Git configuration
+`settings.apps.dev.git.includes` points to the preserved private Git configuration
 at `~/.config/git/local-before-nix.gitconfig`. Keep that file with a machine
 backup; it retains identity, signing and credential-helper settings.
 

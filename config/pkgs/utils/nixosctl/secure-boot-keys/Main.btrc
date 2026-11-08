@@ -1,3 +1,4 @@
+import Library.Console;
 import Library.CLI;
 import ./Archive.btrc;
 import ./Crypto.btrc;
@@ -30,12 +31,12 @@ int main(int argc, char** argv) {
             KeyFiles.write(STDOUT_FILENO, KeyArchive.encode(files));
         } else if (action.equals("import")) {
             KeyFiles.publish(files, path);
-            fprintf(stderr, "Secure Boot key bundle imported and verified.\n");
+            Console.error("Secure Boot key bundle imported and verified.");
         } else { print(report.document()); }
         return 0;
     } catch (string error) {
         // Only our fixed diagnostic strings reach this boundary, never key bytes.
-        fprintf(stderr, "%s\n", error);
+        Console.error(f"{error}");
         return 1;
     }
 }

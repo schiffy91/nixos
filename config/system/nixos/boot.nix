@@ -1,7 +1,11 @@
 { inputs, config, pkgs, lib, ... }: {
-  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ./boot/touch-keyboard.nix ./boot/kernel-trust.nix ];
+  imports = [ inputs.lanzaboote.nixosModules.lanzaboote ./boot/safety.nix ./boot/touch-keyboard.nix ];
   config = lib.mkMerge [
 {
+  assertions = [{
+    assertion = !config.settings.boot.autoEnrollKeys && !config.boot.lanzaboote.autoEnrollKeys.enable;
+    message = "Automatic Secure Boot enrollment is unsupported; use nixosctl secure-boot prepare/enable/disable so key removal stays effective.";
+  }];
   # Keep prepared signing keys across Standard/Secure Boot transitions.
   settings.disk.immutability.persist.paths = [ config.settings.boot.pkiBundle ];
   ##### Shared Boot Settings #####
@@ -55,12 +59,17 @@
     loader.systemd-boot.enable = lib.mkForce false; # Forcibly disable the systemd boot loader
     lanzaboote = {
       enable = true;
-      settings.default = "nixos-generation-*.efi";
+      settings = {
+        default = "nixos-generation-*.efi";
+        secure-boot-enroll = "off";
+      };
       pkiBundle = config.settings.boot.pkiBundle;
       configurationLimit = config.settings.boot.previousGenerationLimit;
       autoEnrollKeys = {
-        enable = config.settings.boot.autoEnrollKeys;
+        enable = false;
         includeMicrosoftKeys = false;
+        # Pinned upstream requires this even when enrollment is off. The
+        # assertion above and enable=false keep its forced enrollment inactive.
         allowBrickingMyMachine = true;
       };
     };

@@ -1,0 +1,54 @@
+import Library.Platform;
+import ../../ci/lib/Lsp.btrc;
+import ../lib/Check.btrc;
+import ./ProcessProbe.btrc;
+
+class ShutdownServer {
+    private LspFrames frames = LspFrames();
+    private File output = File("/dev/stdout", "w");
+
+    private JSONValue receive() {
+        while (true) {
+            var message = self.frames.take();
+            if (message != null) { return message; }
+            var byte = ProcessProbe.readInputByte();
+            Check.that(byte >= 0, "EOF before exit notification");
+            var bytes = Bytes(); bytes.append(byte); self.frames.append(bytes);
+        }
+        throw "Unreachable receive";
+    }
+
+    private void send(JSONValue message) {
+        message.set("jsonrpc", JSONValue.makeString("2.0"));
+        Check.that(self.output.writeBytes(LspFrames.encode(message)) && self.output.flush(), "send LSP reply");
+    }
+
+    public void serve() {
+        Check.that(FileSystem.writeText("server.pid", f"{Platform.pid()}"), "record server PID");
+        while (true) {
+            var message = self.receive();
+            var method = message.get("method").asString();
+            if (method.equals("initialize") || method.equals("shutdown")) {
+                var reply = JSONValue.makeObject(); reply.set("id", message.get("id"));
+                reply.set("result", method.equals("initialize") ? JSONValue.parse("{\"capabilities\":{}}") : JSONValue.makeNull());
+                self.send(reply);
+            } else if (method.equals("textDocument/didOpen")) {
+                var notification = JSONValue.parse("{\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"diagnostics\":[]}}");
+                notification.get("params").set("uri", message.get("params").get("textDocument").get("uri"));
+                self.send(notification);
+            } else if (method.equals("exit")) {
+                if (Environment.get("LSP_SHUTDOWN_CASE", "").equals("wait-for-eof")) {
+                    while (ProcessProbe.readInputByte() >= 0) {}
+                    throw "This server deliberately ignored exit";
+                }
+                Check.that(ProcessProbe.inputRemainsOpen(200), "client closed stdin before server completed exit");
+                return;
+            }
+        }
+    }
+}
+
+int main() {
+    try { ShutdownServer().serve(); return 0; }
+    catch (string error) { var log = File("/dev/stderr", "w"); log.writeLine(error); log.flush(); return 1; }
+}

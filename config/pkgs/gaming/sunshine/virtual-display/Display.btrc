@@ -94,7 +94,7 @@ class SunshineDisplay {
         var password = ChildProcess.run("od", ["-An", "-tx1", "-N16", "/dev/urandom"]);
         if (!password.ok()) { throw "Cannot create virtual monitor password"; }
         var process = BackgroundProcess.start("krfb-virtualmonitor", ["--resolution", f"{width}x{height}", "--name", config.get("name").asString(), "--password", password.stdout().replace(" ", "").replace("\n", ""), "--scale", config.get("scale").asString(), "--port", SunshineDisplay.scalar(config.get("port"))], ["QT_QPA_PLATFORM=wayland"]);
-        Path.writeAll(directory + "/krfb-virtualmonitor.pid", f"{process.pid}\n");
+        Path.writeAll(directory + "/krfb-virtualmonitor.pid", f"{process.pid()}\n");
         bool appeared = false;
         for (int second = 0; second < config.get("settleSeconds").asInt(); second++) { usleep(1000000); if (SunshineDisplay.connected(output)) { appeared = true; break; } }
         if (!appeared) { process.stop(); unlink(directory + "/krfb-virtualmonitor.pid"); throw f"Virtual display {output} did not appear"; }

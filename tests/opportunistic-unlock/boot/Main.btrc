@@ -1,0 +1,136 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+class UnlockScenario {
+    private Guest machine;
+    private Vector<string> devices = ["/dev/mmcblk0", "/dev/sda", "/dev/vdc", "/dev/nvme0n1p1"];
+    private string service = "nixos-opportunistic-unlock";
+    private string handoff = "nixos:opportunistic-unlock";
+    public UnlockScenario(Guest machine) { self.machine = machine; }
+    private void boot(bool wrongFirst = false) {
+        self.machine.start(); self.machine.waitForConsole("Starting password query on /dev/tty1", 60);
+        if (wrongFirst) {
+            self.machine.sendChars("differentpass\n"); self.machine.waitForConsole("Passphrase incorrect", 20);
+            Timer.sleepMillis(200); // Let the password agent recreate its query.
+        }
+        self.machine.sendChars("testpass123\n"); self.machine.waitForUnit("multi-user.target");
+    }
+    private string key() { return self.machine.succeed(f"keyctl search @u user {self.handoff}").trim(); }
+    private void noKey() { self.machine.fail(f"keyctl search @u user {self.handoff}"); }
+    private string exportPassword(Vector<string> values = ["testpass123"], bool measured = false) {
+        self.machine.succeed("if cryptsetup status already-open-proof >/dev/null; then cryptsetup close already-open-proof; fi");
+        self.machine.succeed("keyctl link @u @s");
+        self.machine.succeed(f"printf {ShellWords.quote(values.join("\\000"))} | keyctl padd user cryptsetup @u >/dev/null");
+        var options = "password-cache=read-only,x-nixos.opportunistic-passphrase";
+        if (measured) { options = options + ",tpm2-measure-pcr=15"; }
+        self.machine.succeed("timeout 10 \"$(cat /etc/test-cryptsetup)\" attach already-open-proof /dev/vdb - " + ShellWords.quote(options) + " </dev/null 2>&1"); return self.key();
+    }
+    private Vector<string> mappings(string device) {
+        var output = self.machine.succeed(f"lsblk -nrpo NAME,TYPE {ShellWords.quote(device)} | awk '$2 == \"crypt\" {{print $1}}'").trim();
+        if (output.isEmpty()) { return []; } return Strings.split(output, "\n");
+    }
+    private void closed(string device) { Check.that(self.mappings(device).isEmpty(), f"no mapping for {device}"); }
+    private string opened(string device) {
+        var mappings = self.mappings(device); Check.that(mappings.len == 1, f"one mapping for {device}");
+        self.machine.succeed("cryptsetup status " + ShellWords.quote(mappings.get(0)));
+        self.machine.fail("findmnt -rn --source " + ShellWords.quote(mappings.get(0))); return mappings.get(0);
+    }
+    private void closeDevices() { for device in self.devices { for mapping in self.mappings(device) { self.machine.succeed("cryptsetup close " + ShellWords.quote(mapping)); } } }
+    private void waitWorker() {
+        self.machine.waitUntil(f"test $(systemctl show {self.service} -p ActiveState --value) = inactive", 26);
+        self.machine.succeed(f"test $(systemctl show {self.service} -p Result --value) = success"); self.noKey();
+        Check.that(self.mappings("/dev/vda").len == 1, "root backing not reopened");
+        if (self.machine.execute("cryptsetup status already-open-proof >/dev/null").code == 0) { Check.that(self.mappings("/dev/vdb").len == 1, "already-open backing not reopened"); }
+    }
+    private void worker() {
+        var began = MonotonicClock.milliseconds(); self.machine.succeed(f"touch /var/lib/test-auto-unlock; systemctl start {self.service}");
+        Check.that(MonotonicClock.milliseconds() - began < 3000, "optional volume work does not delay startup"); self.waitWorker();
+    }
+    private void format(string device, string kind = "luks2", bool argon = false, string cipher = "") {
+        self.machine.succeed(f"wipefs -a {device}");
+        var options = argon ? "--pbkdf argon2id --pbkdf-memory 65536 --pbkdf-parallel 2 --pbkdf-force-iterations 4" : "--pbkdf pbkdf2 --iter-time 1";
+        if (!cipher.isEmpty()) { options = options + " --cipher " + cipher + " --key-size 256"; }
+        self.machine.succeed(f"cryptsetup luksFormat --batch-mode --type {kind} {options} --key-file /run/fixture-pass {device}");
+        self.machine.succeed(f"cryptsetup open --key-file /run/fixture-pass {device} format-volume; mkfs.ext4 -q -L OPTIONAL /dev/mapper/format-volume; cryptsetup close format-volume");
+    }
+    private void stopCandidate() {
+        self.exportPassword();
+        self.machine.succeed(f"systemctl start {self.service}; parent=$(systemctl show {self.service} -p MainPID --value); child=; for i in $(seq 1 500); do child=$(pgrep -P $parent | sort -n | head -n1); if test -n \"$child\" && kill -STOP $child; then break; fi; sleep .001; done; test -n \"$child\"; echo $child > /run/stopped-worker; systemctl is-active multi-user.target");
+        self.machine.succeed("ps -o stat= -p $(cat /run/stopped-worker) | grep T"); self.noKey();
+    }
+    public void run() {
+        var machine = self.machine;
+        for image in ["sdcard.raw", "usb.raw", "nvme.raw"] { Check.exited(ChildProcess.run("truncate", ["-s", "256M", machine.statePath(image)])); }
+        var sd = self.devices.get(0); var usb = self.devices.get(1); var internal = self.devices.get(2); var nvme = self.devices.get(3);
+        self.boot();
+        for device in [sd, usb, internal, "/dev/nvme0n1"] { machine.waitUntil(f"test -b {device}"); }
+        machine.succeed("test $(cat /sys/class/block/mmcblk0/device/type) = SD; findmnt -n -o SOURCE / | grep /dev/mapper/testroot");
+        var serial = self.key();
+        machine.succeed(f"keyctl rdescribe {serial} | grep '3f0000.*{self.handoff}'");
+        var ttl = machine.succeed(f"serial=$(printf '%08x' {serial}); awk -v serial=\"$serial\" '$1 == serial {{print $4}}' /proc/keys").trim();
+        Check.that(Regex.matches("^[0-9]+s$", ttl) && Strings.toInt(ttl.substring(0, ttl.len() - 1)) > 0 && Strings.toInt(ttl.substring(0, ttl.len() - 1)) <= 45, "bounded handoff expiry");
+        machine.fail(f"runuser -u volumeuser -- keyctl pipe {serial}"); machine.fail(f"runuser -u volumeuser -- keyctl update {serial} replaced"); machine.fail(f"runuser -u volumeuser -- unshare -Ur keyctl pipe {serial}");
+        machine.succeed("umask 077; printf testpass123 > /run/fixture-pass; printf differentpass > /run/fixture-other");
+        machine.succeed(f"keyctl pipe {serial} | cmp - /run/fixture-pass; mkfs.ext4 -q {sd}"); self.worker(); self.closed(sd); machine.fail("systemctl is-active udisks2");
+        machine.succeed("parted -s /dev/nvme0n1 mklabel gpt mkpart primary 1MiB 100%; udevadm settle"); machine.waitUntil(f"test -b {nvme}");
+        print("Root unlock exports an owner-only, expiring handoff across switch-root");
+        machine.succeed("cryptsetup luksFormat --batch-mode --pbkdf pbkdf2 --iter-time 1 --key-file /run/fixture-pass /dev/vdb");
+        serial = self.exportPassword(["differentpass", "testpass123"]); machine.succeed(f"keyctl pipe {serial} | cmp - /run/fixture-pass; keyctl revoke {serial}");
+        serial = self.exportPassword(measured=true); machine.succeed(f"keyctl pipe {serial} | cmp - /run/fixture-pass; keyctl revoke {serial}; cryptsetup close already-open-proof");
+        machine.succeed("\"$(cat /etc/test-cryptsetup)\" attach already-open-proof /dev/vdb /run/fixture-pass x-nixos.opportunistic-passphrase </dev/null 2>&1"); self.noKey();
+        machine.succeed("\"$(cat /etc/test-cryptsetup)\" attach already-open-proof /dev/vdb - x-nixos.opportunistic-passphrase </dev/null 2>&1"); self.noKey();
+        self.format(sd, argon=true); self.format(usb); self.format(internal, "luks1"); self.format(nvme);
+        self.exportPassword(); self.worker(); for device in self.devices { self.opened(device); }
+        machine.fail("findmnt /run/media/volumeuser/OPTIONAL"); self.closeDevices(); self.worker(); for device in self.devices { self.closed(device); }
+        machine.succeed(f"cryptsetup luksChangeKey --key-file /run/fixture-pass {usb} /run/fixture-other");
+        self.exportPassword(["differentpass", "testpass123"]); self.worker(); self.closed(usb);
+        for device in [sd, internal, nvme] { self.opened(device); }
+        machine.succeed(f"cryptsetup open --key-file /run/fixture-other {usb} manual-volume; cryptsetup close manual-volume"); self.closeDevices();
+        machine.succeed(f"cryptsetup luksChangeKey --key-file /run/fixture-other {usb} /run/fixture-pass");
+        self.exportPassword(); var began = MonotonicClock.milliseconds();
+        machine.succeed("bash -c 'trap \"\" CHLD; exec nixos-opportunistic-unlock testroot'", 10);
+        Check.that(MonotonicClock.milliseconds() - began < 8000, "ignored SIGCHLD does not retain completed slots"); self.noKey();
+        for device in self.devices { self.opened(device); } self.closeDevices();
+        serial = self.exportPassword(); machine.succeed(f"keyctl timeout {serial} 1"); Timer.sleepMillis(2000); self.worker(); for device in self.devices { self.closed(device); }
+        serial = self.exportPassword(); machine.succeed(f"keyctl setperm {serial} 0x3f3f0000"); self.worker(); for device in self.devices { self.closed(device); }
+        machine.succeed("basename $(realpath /sys/class/mmc_host/mmc0/device) > /run/sd-controller; cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/unbind");
+        machine.waitUntil(f"test ! -e {sd}"); self.exportPassword(); self.worker();
+        machine.succeed("cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/bind"); machine.waitUntil(f"test -b {sd}"); Timer.sleepMillis(1000); self.closed(sd); self.noKey(); self.closeDevices();
+        machine.succeed(f"dd if={internal} of={usb} bs=4M count=64 conv=fsync status=none; test $(cryptsetup luksUUID {internal}) = $(cryptsetup luksUUID {usb})");
+        self.exportPassword(); self.worker(); var first = self.opened(internal); var second = self.opened(usb); Check.that(!first.equals(second), "duplicate UUIDs remain distinct physical candidates"); self.closeDevices();
+        self.format(usb, "luks1", cipher="aes-cbc-plain64");
+        machine.succeed(f"wipefs -a {internal}; printf 'LUKS\\272\\276\\000\\002' | dd of={internal} conv=notrunc status=none");
+        self.exportPassword(); self.worker(); self.opened(usb); self.closed(internal); self.opened(sd); self.opened(nvme); self.closeDevices(); self.format(internal, "luks1"); self.format(usb);
+        print("Mixed LUKS formats, ciphers, UUID collisions, absent devices and rejected secrets passed");
+        began = MonotonicClock.milliseconds(); self.stopCandidate(); machine.waitUntil(f"lsblk -nrpo TYPE {internal} | grep -x crypt", 6);
+        machine.fail("grep -aF testpass123 /proc/$(cat /run/stopped-worker)/cmdline /proc/$(cat /run/stopped-worker)/environ");
+        machine.succeed(f"test $(systemctl show {self.service} -p MemorySwapMax --value) = 0; test $(systemctl show {self.service} -p LimitCORE --value) = 0");
+        machine.fail(f"journalctl -b -u {self.service} | grep -F testpass123"); self.waitWorker();
+        Check.that(MonotonicClock.milliseconds() - began < 15000, "slow first candidate does not exhaust inventory budget");
+        machine.fail("kill -0 $(cat /run/stopped-worker)"); self.closed(sd); self.opened(internal); self.closeDevices();
+        self.stopCandidate();
+        machine.succeed("cat /sys/class/block/mmcblk0/diskseq > /run/old-diskseq; cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/unbind; cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/bind");
+        machine.waitUntil(f"test -b {sd}"); machine.succeed("test $(cat /run/old-diskseq) != $(cat /sys/class/block/mmcblk0/diskseq); kill -CONT $(cat /run/stopped-worker)");
+        self.waitWorker(); self.closed(sd); self.opened(internal); self.closeDevices();
+        machine.succeed(f"blockdev --flushbufs {sd}; echo 3 > /proc/sys/vm/drop_caches");
+        machine.qmp("blockdev-add", JSONValue.parse("{\"driver\":\"blkdebug\",\"node-name\":\"sd-errors\",\"image\":\"sdfile\",\"inject-error\":[{\"event\":\"read_aio\",\"errno\":5,\"immediately\":true}]}"));
+        machine.qmp("blockdev-reopen", JSONValue.parse("{\"options\":[{\"driver\":\"raw\",\"node-name\":\"sdcard\",\"file\":\"sd-errors\"}]}"));
+        self.exportPassword(); self.worker(); self.closed(sd); self.opened(internal);
+        machine.qmp("blockdev-reopen", JSONValue.parse("{\"options\":[{\"driver\":\"raw\",\"node-name\":\"sdcard\",\"file\":\"sdfile\"}]}")); machine.qmp("blockdev-del", JSONValue.parse("{\"node-name\":\"sd-errors\"}")); self.closeDevices();
+        self.exportPassword(); machine.succeed("nixos-opportunistic-unlock nonexistent-root"); self.noKey(); for device in self.devices { self.closed(device); }
+        print("Bounded workers, inventory identity and device-local read failures passed");
+        machine.shutdown(); self.boot(true); self.waitWorker(); for device in self.devices { self.opened(device); }
+        machine.succeed("systemctl is-active multi-user.target"); self.closeDevices(); machine.succeed("umask 077; printf testpass123 > /run/fixture-pass");
+        machine.waitUntil("test -e /dev/tpmrm0"); for mapping in self.mappings("/dev/vdb") { machine.succeed("cryptsetup close " + ShellWords.quote(mapping)); }
+        machine.succeed("systemd-cryptenroll --unlock-key-file=/run/fixture-pass --tpm2-device=auto --tpm2-pcrs=7 /dev/vdb", 60);
+        machine.succeed("if cryptsetup status already-open-proof >/dev/null; then cryptsetup close already-open-proof; fi");
+        machine.succeed("\"$(cat /etc/test-cryptsetup)\" attach already-open-proof /dev/vdb - tpm2-device=auto,x-nixos.opportunistic-passphrase </dev/null 2>&1"); self.noKey(); self.worker(); for device in self.devices { self.closed(device); }
+        machine.succeed("systemd-cryptenroll --unlock-key-file=/run/fixture-pass --tpm2-device=auto --tpm2-pcrs=7 /dev/vda", 60);
+        machine.shutdown(); machine.start(); machine.waitForUnit("multi-user.target", 60); machine.succeed("findmnt -n -o SOURCE / | grep /dev/mapper/testroot"); self.waitWorker(); for device in self.devices { self.closed(device); }
+        print("PASS: opportunistic unlock, console rejection/retry and TPM-only boot");
+    }
+}
+int main(int argc, char** argv) {
+    try { var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); UnlockScenario(lab.guest("machine")).run(); lab.close(); return 0; }
+    catch (string error) { print(error); return 1; }
+}

@@ -1,10 +1,10 @@
+import Library.Console;
 import Library.CLI;
 import ./lib/Checks.btrc;
 import ./lib/Publisher.btrc;
 
 int main(int argc, char** argv) {
-    signal((int)SIGPIPE, SIG_IGN);
-    setvbuf((FILE*)stdout, null, (int)_IOLBF, (size_t)0);
+    ciConfigureIO();
     try {
         var args = CLIArgs(argc, argv);
         var repository = Repository(Environment.get("NIXOS_CONFIG_ROOT", Platform.currentDirectory()));
@@ -22,5 +22,5 @@ int main(int argc, char** argv) {
         if (args.command().equals("nix-builtins")) { return checks.builtinRegression(args.count() > 1 ? args.get(1) : "nixd") ? 0 : 1; }
         print("Usage: repo-tools lint [--sources-only] | lsp SERVER LANGUAGE [FILE...] | nix-builtins [SERVER] | publish [OPTIONS]");
         return args.command().equals("--help") ? 0 : 1;
-    } catch (string error) { fprintf(stderr, "repo-tools: %s\n", error); return 1; }
+    } catch (string error) { Console.error(f"repo-tools: {error}"); return 1; }
 }

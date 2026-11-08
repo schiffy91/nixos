@@ -2,36 +2,49 @@ import Library.CLI;
 import Library.Console;
 import Library.FileSystem;
 import ./TrustedConnections.btrc;
+import ./TrustedFirewall.btrc;
 
-#include <sys/file.h>
-#include <fcntl.h>
+class TrustedConnectionsCommand {
+    public TrustedFirewall firewall = TrustedFirewall();
 
-int main(int argc, char** argv) {
-    var args = CLIArgs(argc, argv);
-    if (args.count() < 1) { Console.error("Usage: trusted-connections CONFIG [--stop] [--exclude-interface DEVICE]"); return 1; }
-    var lock = (int)open("/run/nixos-trusted-connections.lock", (int)O_WRONLY | (int)O_CREAT | (int)O_CLOEXEC | (int)O_NOFOLLOW, 0600);
-    if (lock < 0 || (int)flock(lock, (int)LOCK_EX) != 0) { if (lock >= 0) { close(lock); } return 1; }
-    try {
+    public void execute(CLIArgs args) {
+        var configuration = args.require(0, "Usage: trusted-connections CONFIG [--stop] [--exclude-interface DEVICE]");
         Vector<string> excluded = [];
         var stop = false;
-        for (int i = 1; i < args.count(); i++) {
-            if (args.get(i).equals("--stop")) { stop = true; }
-            else if (args.get(i).equals("--exclude-interface") && i + 1 < args.count()) { i++; excluded.push(args.get(i)); }
-            else { throw "Unknown or incomplete argument"; }
+        for (int index = 1; index < args.count(); index++) {
+            var option = args.get(index);
+            if (option.equals("--stop")) { stop = true; }
+            else if (option.equals("--exclude-interface") && index + 1 < args.count()) {
+                index++;
+                excluded.push(args.get(index));
+            } else { throw "Unknown or incomplete argument"; }
         }
-        if (stop) { TrustedRules().apply(true); }
-        else {
-            var configuration = JSONValue.parse(Path.readAll(args.get(0)));
-            if (!configuration.isObject()) { throw "Invalid trusted-connections configuration"; }
-            TrustedRules.current(configuration, excluded).apply();
-        }
-    } catch (string error) {
-        // An unavailable or malformed inventory must close previously granted access.
-        TrustedRules().apply();
-        close(lock);
-        Console.error(f"trusted-connections: {error}");
-        return 1;
+        if (stop) { self.firewall.remove(); }
+        else { self.firewall.replace(TrustedConnections(configuration).current(excluded)); }
     }
-    close(lock);
-    return 0;
+
+    public int run(CLIArgs args) {
+        if (args.count() == 0) {
+            Console.error("Usage: trusted-connections CONFIG [--stop] [--exclude-interface DEVICE]");
+            return 1;
+        }
+        var acquired = AdvisoryFileLock.acquire("/run/nixos-trusted-connections.lock", wait=true);
+        if (!acquired.ok()) { Console.error("Cannot lock trusted network rules"); return 1; }
+        var lock = acquired.value();
+        var status = 0;
+        try {
+            try { self.execute(args); }
+            catch (string error) {
+                // Failed discovery must revoke old grants while still serialized.
+                self.firewall.replace(TrustedRules());
+                Console.error(f"trusted-connections: {error}");
+                status = 1;
+            }
+        } finally { lock.close(); }
+        return status;
+    }
+}
+
+int main(int argc, char** argv) {
+    return TrustedConnectionsCommand().run(CLIArgs(argc, argv));
 }

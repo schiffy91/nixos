@@ -1,0 +1,22 @@
+import Library.CLI;
+import Library.Platform;
+import Library.Timer;
+import ../../../lib/CommandLog.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var command = PathTools.basename(args.program);
+        if (command.equals("umu-run")) {
+            Check.that(!FileSystem.exists(f"/proc/self/fd/{Environment.get("TEST_FD", "")}"), "private caller descriptor is closed");
+            var output = File("/dev/stdout", "w");
+            Check.that(output.writeLine(Environment.get("PROTONPATH", "")) && output.writeLine(Environment.get("TEST_VALUE", "")) && output.flush(), "publish launcher environment");
+            Timer.sleepMillis(20000); return 0;
+        }
+        Check.that(command.equals("nix") || command.equals("make"), "known Proton fixture command");
+        var record = [command]; for argument in args.values { record.push(argument); }
+        CommandLog.append(Environment.get("COMMAND_LOG", ""), record);
+        if (command.equals("nix")) { print(Environment.get("ASIO", "")); }
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

@@ -1,0 +1,24 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+class BootFallback {
+    class void reboot(Guest machine, string marker) {
+        machine.shutdown(); machine.start(); machine.waitForUnit("multi-user.target");
+        Check.equal(machine.succeed("cat /etc/generation-marker").trim(), marker, "booted selected generation");
+    }
+    class void run(Guest machine) {
+        machine.waitForUnit("multi-user.target");
+        var baseline = machine.succeed("readlink -f /run/booted-system").trim(); var updated = machine.succeed("readlink -f /run/current-system/specialisation/updated").trim();
+        machine.succeed("mkdir -p /nix/var/nix/profiles/system-profiles"); machine.succeed("nix-env -p /nix/var/nix/profiles/system-profiles/boot-tested --set " + ShellWords.quote(baseline));
+        machine.succeed("nix-env -p /nix/var/nix/profiles/system --set " + ShellWords.quote(updated)); machine.succeed(ShellWords.quote(updated) + "/bin/switch-to-configuration boot"); BootFallback.reboot(machine, "updated");
+        machine.succeed("nix-env -p /nix/var/nix/profiles/system --set " + ShellWords.quote(baseline)); machine.succeed("nix-env -p /nix/var/nix/profiles/system --set " + ShellWords.quote(updated));
+        Check.equal(machine.succeed("readlink -f /run/current-system").trim(), updated, "retaining baseline does not activate it");
+        machine.succeed(ShellWords.quote(updated) + "/bin/switch-to-configuration boot"); machine.succeed("test $(readlink -f /nix/var/nix/profiles/system) = " + ShellWords.quote(updated));
+        var entry = machine.succeed("grep -l -F " + ShellWords.quote("init=" + baseline + "/init ") + " /boot/loader/entries/*.conf | head -n 1 | xargs basename").trim(); Check.that(!entry.isEmpty(), "retained fallback entry");
+        machine.succeed("bootctl set-oneshot " + ShellWords.quote(entry)); BootFallback.reboot(machine, "baseline"); BootFallback.reboot(machine, "updated");
+    }
+}
+int main(int argc, char** argv) {
+    try { var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); BootFallback.run(lab.guest("machine")); lab.close(); print("PASS: one-shot fallback preserves updated default"); return 0; }
+    catch (string error) { print(error); return 1; }
+}

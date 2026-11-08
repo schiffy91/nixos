@@ -12,5 +12,5 @@ in {
     protonPrefix = "${package}/bin/game-run ${protonSession}/bin/proton-session env";
   };
   users.users.${config.settings.users.admin.username}.packages =
-    lib.optionals (config.settings.apps.enable && config.settings.apps.gaming.enable) [ package ];
+    lib.optionals (config.settings.apps.gaming.enable) [ package ];
 }

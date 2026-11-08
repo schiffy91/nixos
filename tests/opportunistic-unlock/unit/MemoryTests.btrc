@@ -1,40 +1,75 @@
-import unlock.Native;
-import unlock.Secrets;
-import unlock.Devices;
+import Library.Console;
+import unlock.Worker;
 
 #include <assert.h>
 
+class MemoryFixture {
+    class void fill(LockedSecret secret, int value) { memset(secret.borrow(), value, secret.capacity); }
+    class void expect(LockedSecret secret, int value) {
+        var bytes = secret.borrow();
+        for (int index = 0; index < secret.capacity; index++) { assert((unsigned char)bytes[index] == value); }
+    }
+    class long lockedKiB() {
+        for line in Strings.split(Path.readAll("/proc/self/status"), "\n") {
+            if (!line.startsWith("VmLck:")) { continue; }
+            for field in Strings.split(line.replace("\t", " "), " ") {
+                if (field.isDigit()) { return field.toLong(); }
+            }
+        }
+        throw "Missing locked-memory accounting";
+    }
+    class void failWithSecret(LockedSecret secret) {
+        try { throw "fixture failure"; }
+        finally { secret.erase(); }
+    }
+    class void expectExceptionWipe(LockedSecret secret) {
+        var failed = false;
+        try { MemoryFixture.failWithSecret(secret); }
+        catch (string error) { failed = true; }
+        assert(failed);
+        MemoryFixture.expect(secret, 0);
+    }
+}
+
 int main() {
-    char* secret = SecretMemory.allocate();
-    assert(secret != NULL);
-    memset(secret, 0x5a, secretBytes);
-    pid_t child = fork();
-    assert(child >= (pid_t)0);
-    if (child == (pid_t)0) {
-        // mlock is not inherited across fork. Re-lock before touching the copy.
-        assert(mlock(secret, secretBytes) == 0);
-        SecretMemory.forgetPassword(secret);
-        for (int i = 0; i < passwordLimit; i++) { assert(secret[i] == 0); }
-        for (int i = passwordLimit; i < secretBytes; i++) { assert(secret[i] == 0x5a); }
-        SecretMemory.wipe(secret);
-        for (int i = 0; i < secretBytes; i++) { assert(secret[i] == 0); }
-        SecretMemory.dispose(secret);
+    assert(ProcessLimits.singleThreaded());
+    assert(ProcessLimits.protectSecrets());
+    var passphrase = BootPassphrase();
+    passphrase.length = 16;
+    MemoryFixture.fill(passphrase.secret, 0x5a);
+    assert(MemoryFixture.lockedKiB() >= 4);
+    var metadata = VolumeInventory.names("/proc/self/fd");
+    assert(!metadata.isEmpty());
+    var child = (int)fork();
+    assert(child >= 0);
+    if (child == 0) {
+        assert(MemoryFixture.lockedKiB() == 0);
+        assert(passphrase.secret.lockAfterFork());
+        assert(MemoryFixture.lockedKiB() >= 4);
+        // Exercise actual managed allocation, iteration and filesystem access
+        // after fork; no parent-owned descriptors or runtime threads survive it.
+        var names = VolumeInventory.names("/proc/self/fd");
+        for name in names { assert(!f"/proc/self/fd/{name}".isEmpty()); }
+        assert(names.len == metadata.len);
+        var key = LockedSecret(64);
+        MemoryFixture.fill(key, 0xa5);
+        passphrase.secret.erase();
+        MemoryFixture.expect(passphrase.secret, 0);
+        MemoryFixture.expect(key, 0xa5);
+        key.close();
+        passphrase.close();
+        assert(MemoryFixture.lockedKiB() == 0);
         _exit(0);
     }
     int status;
-    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
-    for (int i = 0; i < secretBytes; i++) { assert(secret[i] == 0x5a); }
-    SecretMemory.wipe(secret);
-    for (int i = 0; i < secretBytes; i++) { assert(secret[i] == 0); }
-    SecretMemory.dispose(secret);
-    struct BlockDevice first;
-    memset(&first, 0, sizeof(first));
-    first.disk = (dev_t)1; first.sequence = 10; first.start = 100; first.size = 100;
-    struct BlockDevice second = first;
-    second.start = 199; assert(overlaps(&first, &second));
-    second.start = 200; assert(!overlaps(&first, &second));
-    second.start = 100; second.sequence = 11; assert(!overlaps(&first, &second));
-    second.sequence = 10; second.disk = (dev_t)2; assert(!overlaps(&first, &second));
-    printf("PASS: locked raw secret, password/key wipe boundary, fork isolation and device generation ranges\n");
+    assert((int)waitpid((pid_t)child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    MemoryFixture.expect(passphrase.secret, 0x5a);
+    assert(passphrase.length == 16);
+    MemoryFixture.expectExceptionWipe(passphrase.secret);
+    passphrase.close();
+    passphrase.close();
+    assert(passphrase.secret.borrow() == NULL);
+    assert(MemoryFixture.lockedKiB() == 0);
+    Console.log("PASS: locked ownership, exception wipe, independent key lifetime, managed metadata after fork and child relocking");
     return 0;
 }

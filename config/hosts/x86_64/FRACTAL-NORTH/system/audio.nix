@@ -7,9 +7,9 @@
   ];
   services.pipewire = {
     extraConfig.pipewire."10-low-latency"."context.properties" = {
-      "default.clock.min-quantum" = config.settings.apps.rocksmith.sampleSize;
-      "default.clock.rate" = config.settings.apps.rocksmith.sampleRate;
-      "default.clock.allowed-rates" = [ config.settings.apps.rocksmith.sampleRate ];
+      "default.clock.min-quantum" = config.settings.apps.gaming.rocksmith.sampleSize;
+      "default.clock.rate" = config.settings.apps.gaming.rocksmith.sampleRate;
+      "default.clock.allowed-rates" = [ config.settings.apps.gaming.rocksmith.sampleRate ];
     };
     wireplumber.extraConfig."51-alsa-tweaks"."monitor.alsa.rules" = [
       {

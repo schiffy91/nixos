@@ -1,0 +1,23 @@
+--- a/src/stdlib/Image/Linux/Codecs.h
++++ b/src/stdlib/Image/Linux/Codecs.h
+@@ -5,6 +5,10 @@
+ #include <turbojpeg.h>
+ #include <string.h>
+ 
++static inline tjhandle btrcJpegCreate(int initType) {
++	return tj3Init(initType);
++}
++
+ /* Reads dimensions; 1 on success, 0 when the bytes are not a readable PNG. */
+ static inline int btrcPngHeader(const unsigned char* data, size_t size, unsigned int* width, unsigned int* height) {
+ 	png_image image;
+--- a/src/stdlib/Image/Linux/LinuxEncodedImageDecoder.btrc
++++ b/src/stdlib/Image/Linux/LinuxEncodedImageDecoder.btrc
+@@ -37,1 +37,1 @@
+-		var handle = tj3Init(TJINIT_DECOMPRESS);
++		var handle = btrcJpegCreate(TJINIT_DECOMPRESS);
+--- a/src/stdlib/Image/btrc.toml
++++ b/src/stdlib/Image/btrc.toml
+@@ -31,1 +31,1 @@
+-symbols = ["btrcPngHeader", "btrcPngDecode", "tjhandle", "tj3Init", "tj3Destroy", "tj3DecompressHeader", "tj3Get", "tj3Decompress8", "TJINIT_DECOMPRESS", "TJPARAM_JPEGWIDTH", "TJPARAM_JPEGHEIGHT", "TJPF_RGBA"]
++symbols = ["btrcPngHeader", "btrcPngDecode", "tjhandle", "btrcJpegCreate", "tj3Destroy", "tj3DecompressHeader", "tj3Get", "tj3Decompress8", "TJINIT_DECOMPRESS", "TJPARAM_JPEGWIDTH", "TJPARAM_JPEGHEIGHT", "TJPF_RGBA"]

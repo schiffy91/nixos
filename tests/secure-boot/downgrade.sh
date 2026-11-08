@@ -26,10 +26,16 @@ trap - EXIT
 boot_files() { find /boot -type f -print0 | sort -z | xargs -0 sha256sum; }
 before=$(boot_files)
 cp config.json /var/tmp/config-before-downgrade.json
-if nixosctl secure-boot disable > /var/tmp/disable.log 2>&1; then
+# Explicit Standard-Boot remains blocked; secure-boot disable now removes only
+# our owned PK while preserving signed boot and is covered by the lifecycle VM.
+jq '.target = "Standard-Boot"' config.json > /var/tmp/config-standard.json
+cp /var/tmp/config-standard.json config.json
+if nixosctl update > /var/tmp/disable.log 2>&1; then
+  cp /var/tmp/config-before-downgrade.json config.json
   cat /var/tmp/disable.log; exit 1
 fi
 grep -F 'Disable Secure Boot in firmware' /var/tmp/disable.log
+cp /var/tmp/config-before-downgrade.json config.json
 cmp config.json /var/tmp/config-before-downgrade.json
 standard=$(nix build --no-link --print-out-paths .#nixosConfigurations.VM-TEST-Standard-Boot.config.system.build.toplevel)
 for action in boot switch; do

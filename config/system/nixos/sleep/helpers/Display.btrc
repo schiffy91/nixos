@@ -1,73 +1,70 @@
+import Library.Console;
 import ./Posix.btrc;
 
-/* The lock VT must already own input. Never save or restore private scanout:
- * failure leaves the console locked and the display disabled for a retry.
- * Keep this separate from PAM so the password helper has no DRM dependencies.
- */
-bool crtcBlank(const drmModeCrtc* state) { return state != NULL && state->mode_valid == 0 && state->buffer_id == 0; }
-bool planeBlank(const drmModePlane* state) { return state != NULL && state->fb_id == 0 && state->crtc_id == 0; }
+// Own DRM master and its enumerations only while clearing this card. Nothing
+// saves the game's scanout or restores it on error; Plymouth redraws the lock.
+class DisplayCard {
+    private int descriptor;
+    private drmModeRes* resources;
+    private drmModePlaneRes* planes;
+    private bool master;
 
-bool blankCard(const char *path) {
-    bool safe = true;
-    int fd = open(path, (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOFOLLOW);
-    if (fd < 0) {
-        perror(path);
-        return false;
+    public DisplayCard(string path) {
+        self.resources = NULL; self.planes = NULL; self.master = false;
+        self.descriptor = open(path, (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOFOLLOW);
     }
-    drmModeRes *resources = drmModeGetResources(fd);
-    if (!resources || drmSetMaster(fd) != 0 || drmIsMaster(fd) != 1) {
-        fprintf(stderr, "Cannot acquire DRM card %s: %m\n", path);
-        if (resources) drmModeFreeResources(resources);
-        close(fd);
-        return false;
+
+    class bool crtcBlank(const drmModeCrtc* state) { return state != NULL && state->mode_valid == 0 && state->buffer_id == 0; }
+    class bool planeBlank(const drmModePlane* state) { return state != NULL && state->fb_id == 0 && state->crtc_id == 0; }
+
+    private bool clearCrtc(uint32_t crtc) {
+        bool cleared = drmModeSetCrtc(self.descriptor, crtc, 0, 0, 0, NULL, 0, NULL) == 0;
+        var state = drmModeGetCrtc(self.descriptor, crtc);
+        bool blank = DisplayCard.crtcBlank(state);
+        if (state != NULL) { drmModeFreeCrtc(state); }
+        return cleared && blank;
     }
-    for (int i = 0; i < resources->count_crtcs; i++) {
-        uint32_t crtc = resources->crtcs[i];
-        if (drmModeSetCrtc(fd, crtc, 0, 0, 0, NULL, 0, NULL) != 0) {
-            fprintf(stderr, "Cannot blank %s CRTC %u: %m\n", path, crtc);
-            safe = false;
+
+    private bool clearPlane(uint32_t id) {
+        var plane = drmModeGetPlane(self.descriptor, id);
+        if (plane == NULL) { return false; }
+        bool cleared = DisplayCard.planeBlank(plane)
+            || drmModeSetPlane(self.descriptor, id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) == 0;
+        drmModeFreePlane(plane);
+        plane = drmModeGetPlane(self.descriptor, id);
+        bool blank = DisplayCard.planeBlank(plane);
+        if (plane != NULL) { drmModeFreePlane(plane); }
+        return cleared && blank;
+    }
+
+    public bool blank() {
+        if (self.descriptor < 0) { return false; }
+        self.resources = drmModeGetResources(self.descriptor);
+        if (self.resources == NULL || drmSetMaster(self.descriptor) != 0) { return false; }
+        self.master = true;
+        if (drmIsMaster(self.descriptor) != 1) { return false; }
+        bool safe = true;
+        for (int index = 0; index < self.resources->count_crtcs; index++) {
+            if (!self.clearCrtc(self.resources->crtcs[index])) { safe = false; }
         }
-        drmModeCrtc *state = drmModeGetCrtc(fd, crtc);
-        if (!crtcBlank(state)) {
-            fprintf(stderr, "Blanking readback failed for %s CRTC %u\n", path, crtc);
-            safe = false;
+        // Disabling CRTCs alone can leave cursor/overlay bindings behind.
+        if (drmSetClientCap(self.descriptor, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) == 0) {
+            self.planes = drmModeGetPlaneResources(self.descriptor);
         }
-        if (state) drmModeFreeCrtc(state);
-    }
-    /* CRTC disable alone may retain overlay/cursor bindings in atomic state.
-     * Clear every plane before another renderer is allowed to enable a CRTC.
-     */
-    drmModePlaneRes *planes = NULL;
-    if (drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) == 0)
-        planes = drmModeGetPlaneResources(fd);
-    if (!planes) {
-        fprintf(stderr, "Cannot enumerate %s planes: %m\n", path);
-        safe = false;
-    } else {
-        for (uint32_t i = 0; i < planes->count_planes; i++) {
-            drmModePlane *plane = drmModeGetPlane(fd, planes->planes[i]);
-            if (!plane) {
-                safe = false;
-                continue;
-            }
-            if ((plane->fb_id != 0 || plane->crtc_id != 0) &&
-                drmModeSetPlane(fd, plane->plane_id, 0, 0, 0,
-                                0, 0, 0, 0, 0, 0, 0, 0) != 0) {
-                fprintf(stderr, "Cannot clear %s plane %u: %m\n", path, plane->plane_id);
-                safe = false;
-            }
-            drmModeFreePlane(plane);
-            plane = drmModeGetPlane(fd, planes->planes[i]);
-            if (!planeBlank(plane)) {
-                fprintf(stderr, "Plane readback failed for %s plane %u\n", path, planes->planes[i]);
-                safe = false;
-            }
-            if (plane) drmModeFreePlane(plane);
+        if (self.planes == NULL) { return false; }
+        for (uint32_t index = 0; index < self.planes->count_planes; index++) {
+            if (!self.clearPlane(self.planes->planes[index])) { safe = false; }
         }
-        drmModeFreePlaneResources(planes);
+        return safe;
     }
-    drmModeFreeResources(resources);
-    if (drmDropMaster(fd) != 0) safe = false;
-    close(fd);
-    return safe;
+
+    public bool close() {
+        if (self.planes != NULL) { drmModeFreePlaneResources(self.planes); self.planes = NULL; }
+        if (self.resources != NULL) { drmModeFreeResources(self.resources); self.resources = NULL; }
+        bool dropped = !self.master || drmDropMaster(self.descriptor) == 0;
+        self.master = false;
+        if (self.descriptor >= 0) { close(self.descriptor); self.descriptor = -1; }
+        return dropped;
+    }
+    public void __del__() { self.close(); }
 }

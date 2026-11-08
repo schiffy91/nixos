@@ -1,9 +1,10 @@
 { flake ? builtins.getFlake "git+file://${toString ../../..}", system ? builtins.currentSystem, renderNode ? "/dev/dri/renderD128", realSuspend ? false, withSunshine ? true }:
-(import ../gamescope-native { inherit flake system renderNode; }).extend {
-  modules = [ ({ lib, ... }: {
+(import ../gamescope-native {
+  inherit flake system renderNode;
+  settings = { mode = "lock"; inherit realSuspend withSunshine; };
+  extraModules = [ ({ lib, ... }: {
     name = lib.mkForce (if realSuspend then "sleep-gamescope-native-resume-lock" else "sleep-gamescope-native-lock" + lib.optionalString (!withSunshine) "-without-sunshine");
     node.pkgsReadOnly = false;
-    extraPythonPackages = p: [ p.pillow ];
     nodes.machine = { config, pkgs, ... }: let
       input = pkgs.runCommandCC "gamescope-lock-input" { } ''
         mkdir -p $out/bin
@@ -55,6 +56,5 @@
         ''}"
       ];
     };
-    testScript = lib.mkForce ("real_suspend = ${if realSuspend then "True" else "False"}\nwith_sunshine = ${if withSunshine then "True" else "False"}\n" + builtins.readFile ./test.py);
   }) ];
-}
+})

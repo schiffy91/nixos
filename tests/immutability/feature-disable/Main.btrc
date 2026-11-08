@@ -1,0 +1,62 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+class FeaturePersistence {
+    private Guest machine;
+    private string top = "/run/persistence-top";
+    private string feature = "/fixture/user/.config/rclone";
+    private string store = "/run/persistence-top/@persist/dirs/fixture!user!.config!rclone";
+
+    public FeaturePersistence(Guest machine) { self.machine = machine; }
+
+    private void reset(string profile) {
+        self.machine.succeed("if mountpoint -q /fixture; then umount -R /fixture; fi");
+        self.machine.succeed(f"IMMUTABILITY_MOUNT_PATH={self.top} immutability --assume-mounted -- /dev/vdb @snapshots CLEAN reset @persist /etc/persistence-features/{profile}.toml @fixture=/fixture");
+        self.machine.succeed("mount -t btrfs -o subvol=@fixture /dev/vdb /fixture");
+        self.machine.succeed(f"IMMUTABILITY_MOUNT_PATH={self.top} immutability --assume-mounted -- mount /dev/vdb @persist /etc/persistence-features/{profile}.toml");
+    }
+
+    private void token(string path, string expected) { Check.equal(self.machine.succeed(f"cat {ShellWords.quote(path + "/token")}"), expected, "persistent token contents"); }
+
+    public void check() {
+        self.machine.waitForUnit("multi-user.target");
+        var profiles = JSONValue.parse(self.machine.succeed("cat /etc/persistence-features/profiles.json"));
+        for name in ["enabled", "disabled", "retained"] {
+            var profile = profiles.get(name);
+            Check.that(profile.get("enabled").asBool() == name.equals("enabled"), "feature enablement");
+            var persists = false;
+            for path in profile.get("paths").elements() { if (path.asString().equals(self.feature)) { persists = true; } }
+            Check.that(persists == !name.equals("disabled"), "feature persistence contribution");
+        }
+        self.machine.succeed(f"mkfs.btrfs -f /dev/vdb && mkdir -p {self.top} /fixture && mount -t btrfs -o subvolid=5 /dev/vdb {self.top} && btrfs subvolume create {self.top}/@fixture && btrfs subvolume create {self.top}/@snapshots && mkdir -p {self.top}/@snapshots/@fixture {self.top}/@fixture/user/.config/rclone {self.top}/@fixture/shared && btrfs subvolume snapshot -r {self.top}/@fixture {self.top}/@snapshots/@fixture/CLEAN && printf original-rclone-state > {self.top}/@fixture/user/.config/rclone/token && printf host-owned-state > {self.top}/@fixture/shared/token");
+        print("Enabled feature and host contributions persist together");
+        self.reset("enabled"); self.machine.succeed(f"mountpoint -q {self.feature}"); self.token(self.feature, "original-rclone-state");
+        self.machine.succeed(f"printf updated-rclone-state > {self.feature}/token"); self.reset("enabled");
+        self.token(self.feature, "updated-rclone-state"); self.token("/fixture/shared", "host-owned-state");
+        print("Disabling quarantines feature state while preserving host state");
+        self.reset("disabled");
+        self.machine.fail(f"mountpoint -q {self.feature}"); self.machine.fail(f"test -e {self.feature}/token"); self.machine.fail(f"test -e {self.store}");
+        self.token("/fixture/shared", "host-owned-state");
+        var orphan = self.machine.succeed(f"find {self.top}/@persist/.orphans -mindepth 1 -maxdepth 1 -name 'fixture!user!.config!rclone-*'").trim();
+        Check.that(!orphan.isEmpty() && !orphan.contains("\n"), "exactly one quarantined directory");
+        self.token(orphan, "updated-rclone-state");
+        print("Re-enabling starts fresh and preserves the recoverable orphan");
+        self.reset("enabled"); self.machine.succeed(f"mountpoint -q {self.feature}"); self.machine.fail(f"test -e {self.feature}/token"); self.token(orphan, "updated-rclone-state");
+        print("Explicit recovery restores the quarantined directory");
+        self.machine.succeed(f"umount {self.feature} && btrfs subvolume delete {self.store} && mv {ShellWords.quote(orphan)} {self.store}");
+        self.machine.succeed(f"IMMUTABILITY_MOUNT_PATH={self.top} immutability --assume-mounted -- mount /dev/vdb @persist /etc/persistence-features/enabled.toml");
+        self.token(self.feature, "updated-rclone-state"); self.reset("enabled"); self.token(self.feature, "updated-rclone-state");
+        print("Host retains feature data after disabling the package");
+        self.reset("retained"); self.machine.succeed(f"mountpoint -q {self.feature}");
+        self.token(self.feature, "updated-rclone-state"); self.token("/fixture/shared", "host-owned-state");
+        Check.equal(self.machine.succeed(f"find {self.top}/@persist/.orphans -mindepth 1 -maxdepth 1").trim(), "", "no orphan remains after explicit restoration");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        FeaturePersistence(lab.guest("machine")).check(); lab.close();
+        print("PASS: feature persistence, quarantine, recovery and explicit host retention"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

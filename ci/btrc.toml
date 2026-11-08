@@ -1,0 +1,27 @@
+manifest-version = 1
+[package]
+name = "nixos_ci"
+
+[[native.bindings]]
+module = "Main"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = ["ciConfigureIO"]
+
+[[native.bindings]]
+module = "lib.Publisher"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = ["ciWriteSigningKey", "ciHostname"]
+read-only-borrows = ["ciWriteSigningKey.path", "ciWriteSigningKey.text"]
+
+[native.bindings.copied-results.ciHostname]
+kind = "string"
+lifetime = "static"
+
+[[native.defines]]
+name = "_POSIX_C_SOURCE"
+value = "200809L"
+modules = ["Main", "lib.Publisher"]

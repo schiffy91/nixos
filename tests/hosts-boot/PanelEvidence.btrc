@@ -1,0 +1,58 @@
+import Library.Image.Pixels;
+
+class PanelEvidence {
+    private int width;
+    private int height;
+    private double black;
+    private double bright;
+
+    public PanelEvidence(Image image) {
+        if (image.isEmpty()) { throw "Cannot inspect an empty panel"; }
+        self.width = image.width;
+        self.height = image.height;
+        var black = 0;
+        var bright = 0;
+        var count = 0;
+        var topCount = 0;
+        var top = image.height / 5;
+        if (top == 0) { top = 1; }
+        for (int y = 0; y < image.height; y++) {
+            for (int x = 0; x < image.width; x += 2) {
+                var pixel = image.pixel(x, y);
+                count++;
+                if (pixel.red < 16 && pixel.green < 16 && pixel.blue < 16) { black++; }
+                if (y < top) {
+                    topCount++;
+                    if (pixel.red > 90 || pixel.green > 90 || pixel.blue > 90) { bright++; }
+                }
+            }
+        }
+        self.black = (double)black / (double)count;
+        self.bright = (double)bright / (double)topCount;
+    }
+
+    public void verify(string agent) {
+        print(f"panel {self.width}x{self.height} agent={agent} near_black={self.black} top_band_bright={self.bright}");
+        // An opaque keyboard hides earlier console output; only the uncovered
+        // splash and post-unlock console can prove the top band stayed quiet.
+        if (agent.equals("unl0kr")) {
+            if (self.black > 0.5) { throw "FAIL: unl0kr is not drawing its keyboard"; }
+        } else if (agent.equals("plymouth") || agent.equals("console-silent")) {
+            if (agent.equals("plymouth") && self.black < 0.5) { throw "FAIL: panel is not plymouth's dark splash"; }
+            if (self.bright > 0.02) { throw "FAIL: panel top band contains bright console text"; }
+        } else { throw f"No panel expectation defined for {agent}"; }
+    }
+
+    class Image load(string path) {
+        var result = ImageIO.loadPpm(path);
+        if (!result.ok()) { throw f"Cannot read panel {path}: {result.error}"; }
+        return result.image;
+    }
+
+    class void responds(Image before, Image after, string agent) {
+        var difference = before.diff(after, 12);
+        if (!difference.comparable) { throw "FAIL: panel changed resolution"; }
+        print(f"agent={agent} changed_pixels={difference.changedPixels}");
+        if (difference.changedPixels < 40) { throw f"FAIL: {agent} did not draw the keystroke"; }
+    }
+}

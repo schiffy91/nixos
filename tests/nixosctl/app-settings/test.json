@@ -23,7 +23,7 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.btrsmith.enable",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.gaming.btrsmith.enable",
       "expect": "false"
     },
     {
@@ -33,7 +33,7 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.steam.enable",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.gaming.steam.enable",
       "expect": "true"
     },
     {
@@ -43,7 +43,7 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.sunshine.enable",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.gaming.sunshine.enable",
       "expect": "true"
     },
     {
@@ -53,12 +53,12 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.nixosctl.enable",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.utils.nixosctl.enable",
       "expect": "true"
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.nixosctl.configPath",
+      "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.settings.apps.utils.nixosctl.configPath",
       "expect": "nixosctl.toml"
     },
     {
@@ -198,12 +198,12 @@
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.settings.apps.steam.protonCustom.enable",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.settings.apps.gaming.steam.protonCustom.enable",
       "expect": "true"
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.settings.apps.sunshine.capture",
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.settings.apps.gaming.sunshine.capture",
       "expect": "\"auto\""
     },
     {

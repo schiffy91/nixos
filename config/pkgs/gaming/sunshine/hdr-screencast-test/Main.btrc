@@ -1,0 +1,49 @@
+import Library.CLI;
+import Library.Platform;
+import ./Capture.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLICommandLine.parseFrom(CLIArgs(argc, argv), 0);
+        if (!args.ok()) { throw args.errors.join("; "); }
+        if (args.has("--help") || args.operand(0).equals("-h")) {
+            print("Usage: hdr-screencast-test [--kwin STORE_PATH] [--mode shm-sdr|shm-pq|hdr10] [--timeout SECONDS] [--keep-going]");
+            return 0;
+        }
+        for name in args.optionNames {
+            if (!name.equals("--kwin") && !name.equals("--mode") && !name.equals("--timeout") && !name.equals("--keep-going")) { throw f"Unknown option: {name}"; }
+        }
+        if (args.operandCount() != 0) { throw "Unexpected positional argument"; }
+        var timeout = CaptureEvidence.integer(args.option("--timeout", "240"));
+        if (timeout < 1 || timeout > 86400) { throw "Timeout must be 1..86400 seconds"; }
+        var modes = args.values("--mode");
+        if (modes.isEmpty()) { modes = ["hdr10", "shm-pq", "shm-sdr"]; }
+        for mode in modes { CaptureMode.named(mode); }
+        var kwin = args.option("--kwin", "");
+        if (kwin.isEmpty()) {
+            var executable = ChildProcessExecutable.resolve("kwin_wayland", "", [], []);
+            if (executable.isEmpty()) { executable = "/run/current-system/sw/bin/kwin_wayland"; }
+            kwin = PathTools.dirname(PathTools.dirname(FileSystem.realPath(executable)));
+        }
+        var probe = Environment.get("HDR_SCREENCAST_PROBE", "");
+        if (probe.isEmpty()) { throw "HDR_SCREENCAST_PROBE is not configured"; }
+        var logs = FileSystem.tempDir("kwin-hdr-logs");
+        if (logs.isEmpty()) { throw "Cannot create capture log directory"; }
+        print(f"kwin: {kwin}\nlogs: {logs}");
+        var failures = 0;
+        for name in modes {
+            var mode = CaptureMode.named(name);
+            var result = CaptureSession.run(kwin, probe, mode, timeout);
+            var log = result.stdout() + result.stderr();
+            if (!FileSystem.writeText(PathTools.join(logs, f"{name}.log"), log)) { throw "Cannot save capture log"; }
+            var errors = mode.failures(CaptureEvidence(log));
+            if (result.timedOut || result.captureFailed || result.captureExceeded) { errors.push(f"{name}: capture did not finish within its limits"); }
+            else if (result.code != 0) { errors.push(f"{name}: capture process exited with {result.code}"); }
+            for error in errors { print(f"FAIL: {error}"); failures++; }
+            if (errors.isEmpty()) { print(f"PASS: {name} format, colorimetry, frames and reference white"); }
+            if (failures > 0 && !args.flag("--keep-going")) { break; }
+        }
+        print(f"{failures} capture failures");
+        return failures == 0 ? 0 : 1;
+    } catch (string error) { print(error); return 1; }
+}

@@ -9,9 +9,6 @@ import ./PresetLinks.btrc;
 import ./GameSettings.btrc;
 import ./ControlBindings.btrc;
 
-#include <sys/file.h>
-#include <fcntl.h>
-
 class Assetto {
     class void idle() {
         // CSP renames the running game's main thread (and Linux comm).
@@ -66,8 +63,9 @@ class Assetto {
         var command = action.equals("launch") ? Assetto.launchCommand(options.operands, game) : options.operands;
         Assetto.idle();
         var lockPath = GamingFiles.inside(game, ".nix-assettocorsa.lock");
-        int lock = open(lockPath, (int)O_WRONLY | (int)O_CREAT | (int)O_CLOEXEC | (int)O_NOFOLLOW, 0600);
-        if (lock < 0 || (int)flock(lock, (int)LOCK_EX | (int)LOCK_NB) != 0) { if (lock >= 0) { close(lock); } throw "Assetto deployment is already running, or its lock cannot be opened"; }
+        var acquired = AdvisoryFileLock.acquire(lockPath);
+        if (!acquired.ok()) { throw "Assetto deployment is already running, or its lock cannot be opened"; }
+        var lock = acquired.value();
         try {
             Vector<string> sources = [];
             if (!action.equals("restore")) {
@@ -90,8 +88,7 @@ class Assetto {
                         Environment.get("ASSETTO_BRAKE_GAMMA", ""));
                 }
             }
-        } catch (string error) { close(lock); throw error; }
-        close(lock);
+        } finally { lock.close(); }
         if (!action.equals("launch")) { print(f"Assetto Corsa mods: {action} complete."); return; }
         setenv("PROTON_ENABLE_WAYLAND", "0", 1);
         setenv("PROTON_ENABLE_HDR", "0", 1);

@@ -1,0 +1,32 @@
+diff --git a/src/devex/lsp/workspace/workspace.py b/src/devex/lsp/workspace/workspace.py
+--- a/src/devex/lsp/workspace/workspace.py
++++ b/src/devex/lsp/workspace/workspace.py
+@@ -21,6 +21,7 @@
+ from src.compiler.python.frontend.native_imports import NativeDeclarationImporter, NativeHeaderSource
+ from src.compiler.python.frontend.packages import IncludeResolutionError, PackageTarget, ResolvedPackages
+ from src.compiler.python.frontend.sources import (
++    CompilerStdlibSource,
+     ConditionalEnvironment,
+     SourceConditionals,
+     SourceDependencyGraph,
+@@ -418,6 +419,20 @@
+         """
+         from src.compiler.python.analyzer.analyzer import SemanticAnalyzer
+ 
++        # Match frontend.stage: authenticate resolved compiler-owned stdlib,
++        # including nested methods. Never trust a class merely named Bytes.
++        # Reapply after loading cached FileUnits, whose paths are plain text.
++        stdlib_root = os.path.realpath(self._stdlib.directory())
++        for unit in (*comp.stdlib, *comp.imported):
++            canonical = os.path.realpath(unit.path)
++            if canonical == os.path.realpath(comp.active.path):
++                continue
++            if os.path.commonpath((canonical, stdlib_root)) != stdlib_root:
++                continue
++            for declaration in unit.decls:
++                declaration.source_file = CompilerStdlibSource(unit.path)
++                CompilerStdlibSource.stamp_nested(declaration)
++
+         target = self._target.analysis
+         base = self._stdlib_base(comp.stdlib)
+         if base is None:

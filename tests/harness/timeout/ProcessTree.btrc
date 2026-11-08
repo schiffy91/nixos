@@ -1,0 +1,61 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Timer;
+import ../../lib/Check.btrc;
+
+class ProcessIdentity {
+    private int pid;
+    private string started;
+
+    public ProcessIdentity(int pid, string started) { self.pid = pid; self.started = started; }
+
+    class Vector<string> fields(int pid) {
+        var path = f"/proc/{pid}/stat";
+        if (!FileSystem.exists(path)) { return []; }
+        var text = Path.readAll(path);
+        var end = text.lastIndexOf(")");
+        if (end < 0) { return []; }
+        return Strings.split(text.substring(end + 1, text.len() - end - 1).trim(), " ");
+    }
+
+    class string stamp(int pid) {
+        var fields = ProcessIdentity.fields(pid);
+        Check.that(fields.len > 19, "record process start identity");
+        return fields.get(19);
+    }
+
+    public bool running() {
+        var fields = ProcessIdentity.fields(self.pid);
+        return fields.len > 19 && fields.get(19).equals(self.started) && !fields.get(0).equals("Z") && !fields.get(0).equals("X");
+    }
+
+    public void stop() { if (self.running()) { testKillProcess(self.pid); } }
+}
+
+class ProcessTree {
+    class void block(string marker, bool stubborn) {
+        if (stubborn) { Check.that(testIgnoreTermination() != 0, "ignore graceful termination"); }
+        var child = testFork();
+        Check.that(child >= 0, "fork command descendant");
+        if (child > 0) {
+            var records = JSONValue.makeObject();
+            for pid in [Platform.pid(), child] { records.set(f"{pid}", JSONValue.makeString(ProcessIdentity.stamp(pid))); }
+            Check.that(FileSystem.writeText(marker, records.stringify()), "publish process identities");
+        }
+        while (true) { Timer.sleepMillis(60000); }
+    }
+
+    class Vector<ProcessIdentity> read(string marker) {
+        Vector<ProcessIdentity> processes = [];
+        if (!FileSystem.exists(marker)) { return processes; }
+        var records = JSONValue.readFile(marker);
+        for pid in records.keys() { processes.push(ProcessIdentity(Strings.toInt(pid), records.get(pid).asString())); }
+        return processes;
+    }
+
+    class bool running(Vector<ProcessIdentity> processes) {
+        for process in processes { if (process.running()) { return true; } }
+        return false;
+    }
+}

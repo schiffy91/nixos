@@ -1,0 +1,1 @@
+{"manifest-hash":"0f551461d966076701a50d5d4257c91c63d32677c560f590336451f1b2372e22","packages":[{"dependencies":{},"manifest-hash":"21e963617f74869faaa90d28b9e8c107b84c8e15160341c9a37a973e479d8597","name":"nixos_affinity_tests","source":{"path":"."}}],"root":"nixos_affinity_tests","schema":3}

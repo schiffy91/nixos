@@ -1,0 +1,14 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); var machine = lab.guest("machine");
+        machine.waitForUnit("multi-user.target"); machine.succeed("runuser -u operator -- op --version");
+        machine.succeed("test $(stat -c %U:%G:%a /run/wrappers/bin/op) = root:onepassword-cli:2511; test $(stat -c %U:%G:%a /run/wrappers/bin/1Password-BrowserSupport) = root:onepassword:2511; test $(stat -c %U:%a /srv/operator/.config/1Password/ssh/agent.toml) = operator:600");
+        machine.succeed("runuser -u operator -- grep -F 'vault = \"Private\"' /srv/operator/.config/1Password/ssh/agent.toml"); machine.fail("test -e /home/operator/.config/1Password");
+        machine.succeed("grep -F unix-user:operator /run/current-system/sw/share/polkit-1/actions/com.1password.1Password.policy");
+        machine.reboot(); machine.waitForShutdown(); machine.start(); machine.waitForUnit("multi-user.target");
+        machine.succeed("runuser -u operator -- op --version; test $(stat -c %U:%G:%a /run/wrappers/bin/op) = root:onepassword-cli:2511");
+        lab.close(); print("PASS: 1Password integration and reboot"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

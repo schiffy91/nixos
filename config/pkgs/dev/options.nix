@@ -4,18 +4,19 @@ let
 in {
   imports = [ ./agents/options.nix ];
   options = with lib.types; {
-    settings.apps.dev.enable = mkSetting bool true;
+    settings.apps.dev.enable = mkSetting bool config.settings.apps.enable;
     settings.apps.dev.packages = mkSetting (listOf package) [];
-    settings.apps.distrobox.enable = mkSetting bool false;
-    settings.apps.bash.enable = mkSetting bool true;
-    settings.apps.claude.enable = mkSetting bool true;
-    settings.apps.codex.enable = mkSetting bool true;
-    settings.apps.git.enable = mkSetting bool true;
-    settings.apps.git.includes = mkSetting (listOf str) [];
-    settings.apps.gemini.enable = mkSetting bool false;
-    settings.apps.lmstudio.enable = mkSetting bool false;
-    settings.apps.shell.aliases = mkSetting (attrsOf str) {}; # host extras; shared aliases live in shell.nix
-    settings.apps.zsh.enable = mkSetting bool false;
-    settings.apps.vscode.enable = mkSetting bool true;
+    settings.apps.dev.distrobox.enable = mkSetting bool false;
+    settings.apps.dev.bash.enable = mkSetting bool config.settings.apps.dev.enable;
+    settings.apps.dev.claude.enable = mkSetting bool config.settings.apps.dev.enable;
+    settings.apps.dev.codex.enable = mkSetting bool config.settings.apps.dev.enable;
+    settings.apps.dev.git.enable = mkSetting bool config.settings.apps.dev.enable;
+    settings.apps.dev.git.includes = mkSetting (listOf str) [];
+    settings.apps.dev.gemini.enable = mkSetting bool false;
+    settings.apps.dev.lmstudio.enable = mkSetting bool false;
+    settings.apps.dev.shell.aliases = mkSetting (attrsOf str) {}; # host extras; shared aliases live in shell.nix
+    settings.apps.dev.zsh.enable = mkSetting bool (config.settings.apps.dev.enable && config.settings.desktop.enable);
+    settings.apps.dev.nixd.enable = mkSetting bool (config.settings.apps.dev.enable && config.settings.desktop.enable);
+    settings.apps.dev.vscode.enable = mkSetting bool config.settings.apps.dev.enable;
   };
 }

@@ -1,34 +1,24 @@
-import ./Posix.btrc;
+import Library.Console;
+import Library.FileSystem;
+import Library.Platform;
+import ./Console.btrc;
 import ./Display.btrc;
 
-int main(void) {
-    if (getuid() != (uid_t)0 || geteuid() != (uid_t)0) return 1;
-    int consoleFlags = (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOCTTY;
-    int tty = open("/dev/tty63", consoleFlags);
-    struct vt_stat state;
-    if (tty < 0 || ioctl(tty, VT_GETSTATE, &state) < 0 || state.v_active != 63 ||
-        ioctl(tty, VT_LOCKSWITCH) < 0) {
-        fprintf(stderr, "Blanking requires the locked console\n");
-        return 1;
-    }
-    close(tty);
-    struct dirent** cards = NULL;
-    int count = scandir("/dev/dri", &cards, NULL, alphasort);
-    if (count < 0) {
-        fprintf(stderr, "Cannot enumerate DRM cards\n");
-        return 1;
-    }
-    bool safe = true, found = false;
-    for (int i = 0; i < count; i++) {
-        struct dirent* entry = cards[i];
-        if (strncmp(entry->d_name, "card", 4) == 0 && entry->d_name[4] >= '0' && entry->d_name[4] <= '9') {
-            char path[PATH_MAX];
-            int length = snprintf(path, sizeof(path), "/dev/dri/%s", entry->d_name);
+int main() {
+    try {
+        if (!Platform.isRoot() || getuid() != (uid_t)0) { throw "Display clearing requires root"; }
+        var console = LockedConsole(); console.verify(); console.close();
+        var directory = Directory("/dev/dri");
+        var entries = directory.entries().sorted();
+        if (directory.failed()) { throw "Cannot enumerate DRM cards"; }
+        bool safe = true; bool found = false;
+        for name in entries {
+            if (!name.startsWith("card") || name.length() < 5 || name[4] < '0' || name[4] > '9') { continue; }
             found = true;
-            if (length < 0 || (size_t)length >= sizeof(path) || !blankCard(path)) safe = false;
+            var card = DisplayCard(PathTools.join("/dev/dri", name));
+            bool blank = card.blank(); bool closed = card.close();
+            if (!blank || !closed) { Console.error(f"Cannot safely clear {name}"); safe = false; }
         }
-        free(entry);
-    }
-    free(cards);
-    return safe && found ? 0 : 1;
+        return safe && found ? 0 : 1;
+    } catch (string error) { Console.error(error); return 1; }
 }

@@ -104,7 +104,7 @@ class Slopsmith {
         // lifecycle, readiness and cleanup policy lives in this controller.
         var pipeline = f"{ShellWords.quote(executable)} {ShellWords.quote(configuration)} launch 2>&1 | tee {ShellWords.quote(state + "/slopsmith.log")}";
         var service = BackgroundProcess.start("bash", ["-o", "pipefail", "-c", pipeline]);
-        Path.writeAll(directory + "/slopsmith.pid", f"{service.pid}\n");
+        Path.writeAll(directory + "/slopsmith.pid", f"{service.pid()}\n");
         var attempts = 0;
         bool opened = false;
         try {
@@ -121,6 +121,6 @@ class Slopsmith {
         service.stop();
         lease.close();
         print("Slopsmith stopped.");
-        return slopsmithSignal == (sig_atomic_t)0 ? service.code : (slopsmithSignal == (sig_atomic_t)SIGINT ? 130 : 143);
+        return slopsmithSignal == (sig_atomic_t)0 ? service.code() : (slopsmithSignal == (sig_atomic_t)SIGINT ? 130 : 143);
     }
 }

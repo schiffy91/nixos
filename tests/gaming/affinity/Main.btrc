@@ -1,0 +1,46 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/CommandLog.btrc;
+import ./Affinity.btrc;
+
+class AffinityTests {
+    class JSONValue cpus() {
+        var result = JSONValue.makeArray();
+        for cpu in Affinity().values() { result.push(JSONValue.makeInt(cpu)); }
+        Check.that(result.size() > 0, "process has available CPUs");
+        return result;
+    }
+
+    class JSONValue run(string launcher, string probe, string affinity) {
+        var result = Check.exited(ChildProcess.run(launcher, ["env", "GAME_TEST=value with spaces", probe, "--probe", "one argument", "$(literal)"], environment=[f"GAME_CPU_AFFINITY={affinity}"], timeoutMilliseconds=5000));
+        return JSONValue.parse(result.stdout());
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.command().equals("--exit")) { return 37; }
+        if (args.command().equals("--probe")) {
+            var result = JSONValue.makeArray();
+            result.push(AffinityTests.cpus());
+            result.push(CommandLog.arguments(args.values.slice(1, args.count())));
+            result.push(JSONValue.makeString(Environment.get("GAME_TEST", "")));
+            print(result.stringify()); return 0;
+        }
+        var launcher = args.require(0, "Supply game launcher");
+        var probe = PathTools.absolute(args.program);
+        var available = AffinityTests.cpus();
+        var cpu = available.at(0).asInt();
+        var selected = AffinityTests.run(launcher, probe, f"{cpu}");
+        Check.equal(selected.at(0).stringify(), f"[{cpu}]", "real CPU affinity");
+        Check.equal(selected.at(1).stringify(), CommandLog.arguments(["one argument", "$(literal)"]).stringify(), "preserve argv");
+        Check.equal(selected.at(2).asString(), "value with spaces", "preserve environment");
+        for optout in ["all", ""] {
+            Check.equal(AffinityTests.run(launcher, probe, optout).at(0).stringify(), available.stringify(), "opt-out preserves inherited affinity");
+        }
+        Check.exited(ChildProcess.run(launcher, [probe, "--exit"], environment=[f"GAME_CPU_AFFINITY={cpu}"], timeoutMilliseconds=5000), 37);
+        Check.exited(ChildProcess.run(launcher, [], timeoutMilliseconds=5000), 2);
+        print("PASS: real CPU affinity, opt-out, environment/argv preservation, and exit status"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

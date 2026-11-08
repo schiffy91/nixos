@@ -105,12 +105,6 @@
     },
     {
       "op": "guest",
-      "command": "nixosctl sudo enable --for 1h && printf handoff-authorized",
-      "expect": "handoff-authorized",
-      "timeout": 60
-    },
-    {
-      "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && u=$(cat /var/tmp/e2e-user) && ! runuser -u \"$u\" -- env NIXOS_OLD_PASSWORD=wrongpass NIXOS_NEW_PASSWORD=neverused nixosctl change-password --user-account-only > /tmp/e2e-unpriv-wrong.log 2>&1 && grep -F 'not the current account password' /tmp/e2e-unpriv-wrong.log && accepts newpass456 && printf unpriv-wrong-rejected || { cat /tmp/e2e-unpriv-wrong.log; diag; exit 1; }",
       "expect": "unpriv-wrong-rejected",
       "timeout": 120
@@ -123,7 +117,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; . /var/tmp/e2e-crypt.sh; nixosctl sudo disable && u=$(cat /var/tmp/e2e-user) && if runuser -u \"$u\" -- sh -c \"echo bogus > /var/lib/nixos/credentials/password-hash\"; then exit 1; fi; test \"$(stat -c %u:%g:%a /var/lib/nixos/credentials/password-hash)\" = 0:0:600 && test -z \"$(find /tmp -maxdepth 1 -name 'nixosctl-password.*' -print -quit)\" && printf hash-protected",
+      "command": "set -e; . /var/tmp/e2e-crypt.sh; u=$(cat /var/tmp/e2e-user) && if runuser -u \"$u\" -- sh -c \"echo bogus > /var/lib/nixos/credentials/password-hash\"; then exit 1; fi; test \"$(stat -c %u:%g:%a /var/lib/nixos/credentials/password-hash)\" = 0:0:600 && test -z \"$(find /tmp -maxdepth 1 -name 'nixosctl-password.*' -print -quit)\" && printf hash-protected",
       "expect": "hash-protected",
       "timeout": 60
     },

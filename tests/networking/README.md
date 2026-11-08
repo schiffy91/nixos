@@ -11,6 +11,8 @@ depends on that node, so the small checks run first. Its two VMs use real
 NetworkManager profiles and the production dispatcher: trusted access, profile
 switches on the same interface/subnet, subnet changes, firewall restart and
 connection teardown. Undeclared ports remain closed.
+Malformed configuration also revokes existing grants, and the next valid
+reconciliation must acquire the same lock and restore the permitted access.
 
 Fixed hosts may set `settings.networking.lanSubnet`. Roaming hosts instead list
 trusted NetworkManager profile UUIDs in `settings.networking.trustedConnections`.

@@ -1,0 +1,47 @@
+import Library.Vector;
+
+// GLib owns desktop-entry syntax and Exec quoting; native results are copied
+// into managed strings before the next operation can replace their storage.
+class DesktopEntry {
+    private DesktopEntryHandle entry;
+
+    public DesktopEntry(string path) {
+        var opened = desktopEntryOpen(path);
+        if (opened == null) { throw f"Invalid desktop entry: {path}"; }
+        self.entry = opened;
+    }
+
+    public string value(string key) {
+        var value = desktopEntryValue(self.entry, key);
+        if (value == null) { throw f"Missing or invalid desktop entry key: {key}"; }
+        return value;
+    }
+
+    public bool hidden() { return desktopEntryHidden(self.entry); }
+
+    public Vector<string> arguments() {
+        var count = desktopEntryParseArguments(self.entry, self.value("Exec"));
+        if (count < 0) { throw "Invalid desktop Exec arguments"; }
+        Vector<string> arguments = [];
+        for index in range(count) {
+            var argument = desktopEntryArgument(self.entry, index);
+            if (argument == null) { throw "Missing desktop Exec argument"; }
+            arguments.push(argument);
+        }
+        return arguments;
+    }
+
+    public string alias() {
+        var text = desktopEntryAlias(self.entry);
+        if (text == null) { throw "Cannot serialize desktop entry"; }
+        return text;
+    }
+
+    class void publish(string path, string text) {
+        if (!desktopEntryPublish(path, text)) { throw f"Cannot publish desktop alias: {path}"; }
+    }
+
+    class void remove(string path) {
+        if (!desktopEntryRemove(path)) { throw f"Cannot remove stale Chrome alias: {path}"; }
+    }
+}

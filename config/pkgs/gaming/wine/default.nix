@@ -13,7 +13,7 @@ in lib.mkMerge [
       launchPrefix = "${tool}/bin/wine-prefix-dpi exec --dpi ${toString dpi} --";
     };
   }
-  (lib.mkIf (config.settings.apps.enable && config.settings.apps.gaming.enable) {
+  (lib.mkIf (config.settings.apps.gaming.enable) {
     settings.disk.immutability.persist.paths = [ "${config.settings.users.admin.homeDirectory}/.local/share/umu" ];
     users.users.${config.settings.users.admin.username}.packages = [ tool ];
   })

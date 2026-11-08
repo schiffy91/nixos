@@ -1,0 +1,1 @@
+{"manifest-hash":"8ff5702c0b4e5a6f38fcfb2d2c970ce3961242c739c1a62fad8048714c7aeb35","packages":[{"dependencies":{},"manifest-hash":"e777d36ee10920c2108c079e9cc0cb8b22287aacf654d65e694bd23a9823bf33","name":"nixos_chrome_launchers","source":{"path":"."}}],"root":"nixos_chrome_launchers","schema":3}

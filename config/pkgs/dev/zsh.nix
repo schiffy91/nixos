@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }: lib.mkIf (config.settings.apps.enable && config.settings.apps.dev.enable && config.settings.apps.zsh.enable) {
+{ config, lib, pkgs, ... }: lib.mkIf (config.settings.apps.dev.zsh.enable) {
   programs.zsh = {
     enable = true;
     enableGlobalCompInit = false; # Home Manager runs compinit in ~/.zshrc

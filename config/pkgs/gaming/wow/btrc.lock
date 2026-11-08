@@ -1,0 +1,1 @@
+{"manifest-hash":"c96e7fbb7b63046e459940846409abaa9eab418cb9b6a5cfbd6a8ebedd5151fc","packages":[{"dependencies":{},"manifest-hash":"1ae23f1cc019303694a2aa99742e55f1cc31952b8467bceb0e39e591684f938e","name":"nixos_wow","source":{"path":"."}}],"root":"nixos_wow","schema":3}

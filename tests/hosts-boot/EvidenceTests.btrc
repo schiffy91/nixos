@@ -1,0 +1,42 @@
+import Library.Image.Pixels;
+import ../lib/Check.btrc;
+import ./PanelEvidence.btrc;
+import ./BootHealth.btrc;
+
+int main() {
+    try {
+        var dark = Image(100, 100);
+        dark.fill(RGBA(0, 0, 0));
+        PanelEvidence(dark).verify("plymouth");
+        PanelEvidence(dark).verify("console-silent");
+        var rejected = false;
+        try { PanelEvidence(dark).verify("unl0kr"); } catch (string error) { rejected = true; }
+        Check.that(rejected, "blank console is not an unlock keyboard");
+        var noisy = dark.crop(0, 0, 100, 100);
+        noisy.fillRect(0, 0, 100, 1, RGBA(255, 255, 255));
+        rejected = false;
+        try { PanelEvidence(noisy).verify("console-silent"); } catch (string error) { rejected = true; }
+        Check.that(rejected, "bright console band fails");
+        var typed = dark.crop(0, 0, 100, 100);
+        typed.fillRect(0, 60, 40, 1, RGBA(13, 0, 0));
+        PanelEvidence.responds(dark, typed, "fixture");
+        typed.setPixel(0, 60, RGBA(12, 0, 0));
+        rejected = false;
+        try { PanelEvidence.responds(dark, typed, "fixture"); } catch (string error) { rejected = true; }
+        Check.that(rejected, "exact channel and pixel thresholds are preserved");
+        Check.that(!ImageIO.decodePpm(Bytes.fromString("P6\n2 2\n255\nshort")).ok(), "truncated image fails");
+        var health = "E2E-HEALTH-BEGIN\nE2E-STATE running\nE2E-HOMEMANAGER active\nE2E-UNLOCKUNIT success\nE2E-UNLOCKAGENT plymouth 1\nE2E-SNAPSHOTS 1\nE2E-SWAP /dev/dm-1\nE2E-SECUREBOOT enabled\nE2E-SIGNED 3\nE2E-CMDLINE-QUIET 1\nE2E-CMDLINE-LOGLEVEL 1\nE2E-SBCTL 0\nE2E-HEALTH-END\n";
+        BootHealth(health, 0).verify(true);
+        BootHealth(health + health, 1).verify(true);
+        for broken in [health.replace("E2E-SIGNED 3", "E2E-SIGNED 2"), health.replace("E2E-STATE running", "E2E-STATE degraded"), health.replace("E2E-HEALTH-END", "E2E-FAILED sample.service\nE2E-HEALTH-END")] {
+            rejected = false;
+            try { BootHealth(broken, 0).verify(true); } catch (string error) { rejected = true; }
+            Check.that(rejected, "unhealthy boot fails");
+        }
+        rejected = false;
+        try { BootHealth(health, 1); } catch (string error) { rejected = true; }
+        Check.that(rejected, "missing boot fails");
+        print("PASS: panel thresholds, corrupt images, boot indexing and health failures");
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

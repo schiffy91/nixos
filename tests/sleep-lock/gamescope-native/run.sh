@@ -31,19 +31,15 @@ printf 'Using existing AMD render-node access: %s (%s)\n' "$render_node" "$(read
 # AMD native context is experimental. It does not acquire host DRM master,
 # but a host driver hang/reset can affect other clients of this same iGPU.
 printf 'Experimental AMD native-context control; bounded to two vCPUs, 4 GiB, and 600 seconds.\n'
-driver=$(nix-build "$fixture" -A driver --argstr renderNode "$render_node" "${nix_args[@]}" --no-out-link --cores 4 --max-jobs 1)
+driver=$(nix-build "$fixture" -A runner --argstr renderNode "$render_node" "${nix_args[@]}" --no-out-link --cores 4 --max-jobs 1)
 scratch=$(mktemp -d /var/tmp/nixos-gamescope-native.XXXXXX)
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$work_dir/output"
 cd "$scratch"
 export XDG_RUNTIME_DIR="$scratch" TMPDIR="$scratch"
 unset DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS TESSDATA_PREFIX
-# An absent DISPLAY makes the driver append -nographic, overriding EGL.
-# The empty value avoids that heuristic without connecting to a desktop.
-export DISPLAY=
 export NIX_BUILD_CORES=4 OMP_THREAD_LIMIT=1
 export VK_DRIVER_FILES=/run/opengl-driver/share/vulkan/icd.d/radeon_icd.x86_64.json
-export LOGFILE="$work_dir/output/driver.xml"
 # Build only the driver in Nix's sandbox; run it outside as the ordinary user.
 # No sandbox exceptions or host device permission changes are needed.
-timeout --kill-after=10s 600s "$driver/bin/nixos-test-driver" -o "$work_dir/output"
+timeout --kill-after=10s 600s "$driver/bin/btrc-vm-test" "$work_dir/output"

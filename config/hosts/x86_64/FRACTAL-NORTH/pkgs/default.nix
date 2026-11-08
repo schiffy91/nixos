@@ -1,25 +1,33 @@
 { pkgs, host, ... }: {
-  imports = [ ./assettocorsa.nix ];
+  imports = [ ./desktop.nix ];
   settings.apps = {
     dev.packages = with pkgs; [ python3 ];
     gaming.packages = with pkgs; [ protonup-qt ];
-    distrobox.enable = true;
-    moonlight.enable = true;
+    dev.distrobox.enable = true;
+    gaming.moonlight.enable = true;
     utils.packages = with pkgs; [
       tcpdump ethtool pciutils usbutils sbctl fwupd mesa-demos
       vulkan-tools vdpauinfo libva-utils nvtopPackages.full
     ];
-    desktop.enable = true;
-    lmstudio.enable = true;
-    chrome.renderNode = "/dev/dri/by-path/pci-${host.pci.nvidiaGpu}-render";
-    steam.extraEnv = host.nvidiaOffloadEnv;
-    sunshine = {
+    utils.desktop.enable = true;
+    dev.lmstudio.enable = true;
+    utils.chrome.renderNode = "/dev/dri/by-path/pci-${host.pci.nvidiaGpu}-render";
+    gaming.steam.extraEnv = host.nvidiaOffloadEnv;
+    gaming.sunshine = {
       capture = "kwin";
       cuda.enable = true;
       virtualDisplay.primaryOutput = host.display.primary.name;
     };
-    simracing.enable = true;
-    nixosctl.settings = {
+    gaming.simracing.enable = true;
+    gaming.assettocorsa = {
+      contentDirectory = "~/Drive/media/Games/Assetto Corsa";
+      presetName = "FRACTAL-NORTH";
+      graphicsPreset = "pure-lcs-medium";
+      wheelProfile = "logitech-pro-playstation";
+      brakeGamma = 1.0; # Linear response for the pressure-sensing PRO brake.
+      wheelMenu.enable = true;
+    };
+    utils.nixosctl.settings = {
       displays = { "DP-1" = "ProXDR"; "HDMI-A-2" = "S89C"; };
       layout = [{ display = "HDMI-A-2"; position = "left-of"; relative_to = "DP-1"; }];
       audio = [

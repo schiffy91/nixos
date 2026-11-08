@@ -1,0 +1,73 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Map;
+import Library.Regex;
+import Library.Vector;
+import ./DesktopEntry.btrc;
+
+class ChromeLaunchers {
+    class string marker() { return "# Managed by nixos chrome-launchers\n"; }
+
+    class Map<string, Vector<string>> installed(string directory, string profile) {
+        Map<string, Vector<string>> installed = {};
+        for name in FileSystem.listDir(directory).sorted() {
+            if (!Regex.fullMatch("chrome-[a-p]{32}-.+\\.desktop", name)) { continue; }
+            var path = PathTools.join(directory, name);
+            try {
+                var entry = DesktopEntry(path);
+                var arguments = entry.arguments();
+                var hasAppId = false;
+                for argument in arguments {
+                    if (Regex.fullMatch("--app-id=[a-p]{32}", argument)) { hasAppId = true; }
+                }
+                if (!arguments.contains(f"--profile-directory={profile}") || !hasAppId || entry.hidden()) { continue; }
+                var title = entry.value("Name");
+                if (!installed.has(title)) { installed.put(title, new Vector<string>()); }
+                installed.get(title).push(ChromeLaunchers.marker() + entry.alias());
+            } catch (string error) { Console.error(f"Skipping {path}: {error}"); }
+        }
+        return installed;
+    }
+
+    class bool managed(string path) {
+        return !FileSystem.isSymlink(path) && FileSystem.isFile(path)
+            && Path.readAll(path).startsWith(ChromeLaunchers.marker());
+    }
+
+    class void sync(string directory, JSONValue declaration) {
+        var names = declaration.get("apps");
+        if (!declaration.get("profile").isString() || !names.isObject()) { throw "Invalid Chrome app declaration"; }
+        for key in names.keys() {
+            if (!Regex.fullMatch("[a-zA-Z0-9_-]+", key) || !names.get(key).isString()) { throw f"Invalid Chrome app: {key}"; }
+        }
+        if (FileSystem.mkdirp(directory) != 0) { throw f"Cannot create applications directory: {directory}"; }
+        var profile = declaration.get("profile").asString();
+        var installed = ChromeLaunchers.installed(directory, profile);
+        Map<string, string> desired = {};
+        for key in names.keys() {
+            var name = names.get(key).asString();
+            if (!installed.has(name)) { continue; }
+            var matches = installed.get(name);
+            if (matches.len == 1) { desired.put(f"chrome-app-{key}.desktop", matches.get(0)); }
+            else { Console.error(f"Ambiguous Chrome app {name} in profile {profile}; no alias created"); }
+        }
+        for filename in FileSystem.listDir(directory) {
+            var path = PathTools.join(directory, filename);
+            if (filename.startsWith("chrome-app-") && filename.endsWith(".desktop")
+                    && !desired.has(filename) && ChromeLaunchers.managed(path)) {
+                DesktopEntry.remove(path);
+            }
+        }
+        for filename in desired.keys() {
+            var path = PathTools.join(directory, filename);
+            if (FileSystem.isSymlink(path) || (FileSystem.exists(path) && !ChromeLaunchers.managed(path))) {
+                Console.error(f"Preserving unmanaged launcher {path}");
+                continue;
+            }
+            var content = desired.get(filename);
+            if (FileSystem.isFile(path) && Path.readAll(path).equals(content)) { continue; }
+            DesktopEntry.publish(path, content);
+        }
+    }
+}

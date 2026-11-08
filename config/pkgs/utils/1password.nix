@@ -4,7 +4,7 @@
     [[ssh-keys]]
     vault = "Private"
   '';
-in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.onePassword.enable) {
+in lib.mkIf (config.settings.apps.utils.onePassword.enable) {
   settings.disk.immutability.persist.paths = [ "${config.settings.users.admin.homeDirectory}/.config/1Password" ];
   programs._1password.enable = true;
   programs._1password-gui = {

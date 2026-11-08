@@ -33,7 +33,7 @@ UNIT_TESTS := \
 	immutability_paths:tests/immutability/PathsTests.btrc \
 	nixos_paths:tests/core/NixosPathsTests.btrc \
 	nixos_config:tests/core/NixosConfigTests.btrc \
-	passwd_driver:tests/core/PasswdDriverTests.btrc \
+	password_change:tests/core/PasswordChangeTests.btrc \
 	secure_boot:tests/secure-boot/VerificationTests.btrc \
 	spec:tests/harness/SpecTests.btrc \
 	state_hash:tests/harness/StateHashTests.btrc \
@@ -44,10 +44,7 @@ UNIT_TESTS := \
 	ci_tools:tests/ci/ToolsTests.btrc \
 	ci_pipe:tests/ci/PipeTests.btrc \
 	recovery_mount:tests/recovery/MountTests.btrc \
-	module_trust:tests/kernel-trust/ModuleTests.btrc \
 	secure_boot_archive:tests/secure-boot/ArchiveTests.btrc \
-	sudo_grant:tests/nixosctl/sudo/GrantTests.btrc \
-	shell_tools:tests/core/ShellToolsTests.btrc \
 	proton_tools:tests/gaming/proton/tools/ToolsTests.btrc \
 	wow_lock:tests/gaming/wow/LockTests.btrc \
 	networking_rules:tests/networking/RulesTests.btrc \
@@ -56,7 +53,7 @@ unit_name = $(firstword $(subst :, ,$(1)))
 unit_entry = $(lastword $(subst :, ,$(1)))
 UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
 BIN := $(NIXOSCTL_BIN)
-BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN)
+BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN) $(BUILD_DIR)/boot-evidence
 SOURCES := $(shell rg --files config tests ci -g '*.btrc' -g '*.h' -g btrc.toml -g btrc.lock | sort)
 
 # Every one of these just forwards to tests/Makefile under the same name
@@ -139,6 +136,26 @@ $(TRAY_C_OUT): $(SOURCES) $(BUILD_DIR)/tray-compiler | dirs
 
 build: $(BINS)
 
+$(BUILD_DIR)/host-picker-test: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/host-picker/Main.btrc -o "$(BUILD_DIR)/host-picker-test.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/host-picker-test.c" -lm -lpthread -lutil -o "$@"
+
+$(BUILD_DIR)/source-hash-test: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/harness/source-hash/Main.btrc -o "$(BUILD_DIR)/source-hash-test.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/source-hash-test.c" -lm -lpthread -o "$@"
+
+$(BUILD_DIR)/host-timeout-test: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/harness/timeout/Main.btrc -o "$(BUILD_DIR)/host-timeout-test.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/host-timeout-test.c" -lm -lpthread -o "$@"
+
+$(BUILD_DIR)/boot-evidence: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/hosts-boot/Main.btrc -o "$(BUILD_DIR)/boot-evidence.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/boot-evidence.c" -lm -lpthread -o "$@"
+
+$(BUILD_DIR)/boot-evidence-test: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/hosts-boot/EvidenceTests.btrc -o "$(BUILD_DIR)/boot-evidence-test.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/boot-evidence-test.c" -lm -lpthread -o "$@"
+
 $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(NIXOSCTL_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(NIXOSCTL_BIN)" $(NIXOSCTL_LIBS)
 
@@ -157,8 +174,10 @@ $$(BUILD_DIR)/$(1)_test: $$(BUILD_DIR)/$(1)_test.c $$(STDLIB_LIB)
 endef
 $(foreach t,$(UNIT_TESTS),$(eval $(call UNIT_TEST_RULES,$(call unit_name,$(t)),$(call unit_entry,$(t)))))
 
-unit: $(UNIT_BINS)
+unit: $(UNIT_BINS) $(BUILD_DIR)/boot-evidence-test
 	@for test in $(UNIT_BINS); do ./$$test < /dev/null || exit 1; done  # closed stdin: prompts must not spin
+	./$(BUILD_DIR)/boot-evidence-test
+	bash tests/core/shell_tools.sh
 
 quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \

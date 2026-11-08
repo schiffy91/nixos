@@ -1,0 +1,55 @@
+import Library.Strings;
+import ./Posix.btrc;
+
+// Closing this handle never unlocks the session. Only an authenticated caller
+// may release it; a failed operation or process exit leaves VT switching held.
+class LockedConsole {
+    private int descriptor;
+
+    public LockedConsole() {
+        self.descriptor = open("/dev/tty63", (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOCTTY);
+        LockedConsole.require(self.descriptor, "open lock console");
+    }
+
+    class void require(int result, string operation) {
+        if (result < 0) { throw f"Cannot {operation}"; }
+    }
+
+    private int active() {
+        struct vt_stat state;
+        LockedConsole.require(ioctl(self.descriptor, VT_GETSTATE, &state), "read active console");
+        return (int)state.v_active;
+    }
+
+    public void verify() {
+        if (self.active() != 63) { throw "The lock console is not active"; }
+        LockedConsole.require(ioctl(self.descriptor, VT_LOCKSWITCH), "retain console lock");
+    }
+
+    public void secure() {
+        struct termios mode;
+        LockedConsole.require(tcgetattr(self.descriptor, &mode), "read console input mode");
+        mode.c_lflag &= ~((tcflag_t)ECHO | (tcflag_t)ECHONL | (tcflag_t)ISIG);
+        mode.c_iflag &= ~(tcflag_t)IXON;
+        LockedConsole.require(tcsetattr(self.descriptor, TCSAFLUSH, &mode), "secure console input");
+        if (self.active() != 63) {
+            LockedConsole.require(ioctl(self.descriptor, VT_ACTIVATE, 63), "activate lock console");
+            LockedConsole.require(ioctl(self.descriptor, VT_WAITACTIVE, 63), "wait for lock console");
+        }
+        LockedConsole.require(ioctl(self.descriptor, VT_LOCKSWITCH), "lock console switching");
+        if (self.active() != 63) { throw "The lock console is not active"; }
+    }
+
+    public void unlock(int original) {
+        if (original < 1 || original >= 63) { throw "Invalid session console"; }
+        LockedConsole.require(tcflush(self.descriptor, TCIFLUSH), "discard lock console input");
+        LockedConsole.require(ioctl(self.descriptor, VT_UNLOCKSWITCH), "release console lock");
+        LockedConsole.require(ioctl(self.descriptor, VT_ACTIVATE, original), "restore session console");
+        LockedConsole.require(ioctl(self.descriptor, VT_WAITACTIVE, original), "wait for session console");
+    }
+
+    public void close() {
+        if (self.descriptor >= 0) { close(self.descriptor); self.descriptor = -1; }
+    }
+    public void __del__() { self.close(); }
+}

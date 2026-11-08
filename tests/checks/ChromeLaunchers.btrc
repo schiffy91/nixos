@@ -1,0 +1,119 @@
+import Library.CLI;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import ../lib/Check.btrc;
+import ../lib/TestDirectory.btrc;
+
+class ChromeLaunchers {
+    private TestDirectory fixture;
+    private string resolver;
+    private string directory;
+    private string alias;
+
+    public ChromeLaunchers(string resolver) {
+        self.fixture = TestDirectory("chrome-launchers");
+        self.resolver = resolver;
+        self.directory = self.fixture.path("data with spaces/applications");
+        self.alias = f"{self.directory}/chrome-app-mail.desktop";
+    }
+
+    private ExecResult run(string profile = "Default", string title = "Mail") {
+        var apps = JSONValue.makeObject();
+        if (!title.isEmpty()) { apps.set("mail", JSONValue.makeString(title)); }
+        var configuration = JSONValue.makeObject();
+        configuration.set("profile", JSONValue.makeString(profile));
+        configuration.set("apps", apps);
+        self.fixture.json("apps.json", configuration);
+        return Check.exited(ChildProcess.run(self.resolver, [self.fixture.path("apps.json"), self.directory], timeoutMilliseconds=10000));
+    }
+
+    private string install(string id, string profile = "Default") {
+        var path = f"{self.directory}/chrome-{id}-{profile.replace(" ", "_")}.desktop";
+        Check.that(FileSystem.writeText(path,
+            f"[Desktop Entry]\nVersion=1.0\nType=Application\nName=Mail\nExec=/nix/store/example/bin/google-chrome-stable --profile-directory=\"{profile}\" --app-id={id}\nIcon=chrome-{id}-{profile}\nStartupWMClass=crx_{id}\nActions=Compose;\n\n[Desktop Action Compose]\nName=Compose\nExec=/nix/store/example/bin/google-chrome-stable --app-id={id} --app-launch-url-for-shortcuts-menu-item=https://example.com/compose\n"), "write Chrome export");
+        return path;
+    }
+
+    // Inspect serialized fields independently of the production GLib parser.
+    private string field(string section, string key) {
+        var active = false;
+        for line in Strings.split(Path.readAll(self.alias), "\n") {
+            if (line.startsWith("[")) { active = line.equals(f"[{section}]"); }
+            if (active && line.startsWith(f"{key}=")) { return line.substring(key.len() + 1, line.len() - key.len() - 1); }
+        }
+        throw f"Missing desktop field {section}/{key}";
+    }
+
+    private void missing() { Check.that(!FileSystem.exists(self.alias), "alias must be absent"); }
+    private void remove(string path) { Check.that(FileSystem.removeRecursivePath(path) == 0, f"remove {path}"); }
+
+    public void check() {
+        self.run();
+        self.missing();
+        var id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var native = self.install(id);
+        var original = Path.readAll(native);
+        self.run();
+        Check.equal(self.field("Desktop Entry", "NoDisplay"), "true", "hidden alias");
+        Check.equal(self.field("Desktop Entry", "StartupWMClass"), f"crx_{id}", "window class");
+        Check.equal(self.field("Desktop Entry", "Icon"), f"chrome-{id}-Default", "icon");
+        Check.equal(self.field("Desktop Action Compose", "Name"), "Compose", "desktop action");
+        Check.equal(Path.readAll(native), original, "native export unchanged");
+        var file = FileHandle.openExact(self.alias).value();
+        var before = file.snapshot().value();
+        self.run();
+        var current = FileHandle.openExact(self.alias).value();
+        Check.that(before.sameVersion(current.snapshot().value()), "repeated run must not rewrite the alias");
+        Check.that(file.close().ok() && current.close().ok(), "close alias observations");
+
+        Check.that(FileSystem.writeText(native, original.replace("Name=Mail\n", "Name=Mail\\sBox\nName[fr]=Courrier\n")), "write escaped name");
+        self.run("Default", "Mail Box");
+        Check.that(Path.readAll(self.alias).contains("Name[fr]=Courrier") && Path.readAll(self.alias).contains("[Desktop Action Compose]"), "preserve translations and actions");
+        Check.that(FileSystem.writeText(native, original.replace("Type=Application", "Type=Application\nHidden=true")), "hide export");
+        self.run(); self.missing();
+        Check.that(FileSystem.writeText(native, original.replace("--profile-directory=\"Default\"", "--profile-directory=\"Default")), "malformed command");
+        Check.that(self.run().stderr().contains("Skipping"), "skip malformed command"); self.missing();
+        Check.that(FileSystem.writeText(native, original), "restore export");
+
+        var second = self.install("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "Profile 2");
+        self.run("Profile 2");
+        Check.that(Path.readAll(self.alias).contains("--app-id=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), "profile comes from Exec");
+        Check.that(FileSystem.writeText(second, Path.readAll(second).replace("Icon=chrome-", "Icon=updated-")), "update profile icon");
+        self.run("Profile 2");
+        Check.that(Path.readAll(self.alias).contains("Icon=updated-"), "update alias icon");
+        self.remove(second); self.run("Profile 2"); self.missing();
+
+        var duplicate = self.install("cccccccccccccccccccccccccccccccc");
+        Check.that(self.run().stderr().contains("Ambiguous"), "reject ambiguous app"); self.missing();
+        self.remove(duplicate); self.run();
+        Check.that(FileSystem.exists(self.alias), "restore unique match");
+        self.run("Default", ""); self.missing();
+        Check.equal(Path.readAll(native), original, "removal preserves export");
+
+        Check.that(FileSystem.writeText(self.alias, "user-owned"), "write unmanaged alias");
+        Check.that(self.run().stderr().contains("Preserving unmanaged"), "preserve unmanaged alias");
+        self.run("Default", "");
+        Check.equal(Path.readAll(self.alias), "user-owned", "unmanaged alias survives cleanup");
+        self.remove(self.alias);
+        Check.that(FileSystem.symlink(PathTools.basename(native), self.alias) == 0, "link alias");
+        self.run(); self.run("Default", "");
+        Check.that(FileSystem.isSymlink(self.alias), "preserve alias symlink");
+        Check.equal(Path.readAll(native), original, "symlink target unchanged");
+        self.remove(self.alias);
+
+        Check.that(FileSystem.writeText(f"{self.directory}/chrome-dddddddddddddddddddddddddddddddd-Default.desktop", "broken"), "write damaged export");
+        Check.that(self.run().stderr().contains("Skipping"), "report damaged export");
+        Check.that(FileSystem.exists(self.alias), "other export still resolves");
+        self.remove(native); self.run(); self.missing();
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        ChromeLaunchers(CLIArgs(argc, argv).require(0, "Supply the launcher resolver")).check();
+        print("PASS: Chrome exports, profiles, idempotence, ambiguity and unmanaged files");
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

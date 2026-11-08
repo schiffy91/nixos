@@ -51,7 +51,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' {{unlockAgent}}",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -71,7 +71,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_responds.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-typed.ppm' '{{unlockAgent}}'",
+      "command": "./build/boot-evidence responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-typed.ppm' '{{unlockAgent}}'",
       "expect": "panel-responds",
       "timeout": 120
     },
@@ -97,7 +97,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-unlocked.ppm' console-silent",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-unlocked.ppm' console-silent",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -109,7 +109,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-0.log' 0 {{secureBoot}} false",
+      "command": "./build/boot-evidence health '.vm/e2e/{{state}}-{{stateHashShort}}/boot-0.log' 0 {{secureBoot}} false",
       "expect": "host-healthy",
       "timeout": 120
     },
@@ -120,7 +120,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-session.ppm' console-silent",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-session.ppm' console-silent",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -147,7 +147,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' {{unlockAgent}}",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -167,7 +167,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_responds.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-typed.ppm' '{{unlockAgent}}'",
+      "command": "./build/boot-evidence responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-typed.ppm' '{{unlockAgent}}'",
       "expect": "panel-responds",
       "timeout": 120
     },
@@ -193,7 +193,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-unlocked.ppm' console-silent",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-unlocked.ppm' console-silent",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -205,7 +205,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-1.log' 0 {{secureBoot}} {{requireEnforced}}",
+      "command": "./build/boot-evidence health '.vm/e2e/{{state}}-{{stateHashShort}}/boot-1.log' 0 {{secureBoot}} {{requireEnforced}}",
       "expect": "host-healthy",
       "timeout": 120
     },
@@ -216,7 +216,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-session.ppm' console-silent",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-session.ppm' console-silent",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -250,7 +250,7 @@
     },
     {
       "op": "host",
-      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf enroll-skipped; else python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log' 2 true true; fi",
+      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf enroll-skipped; else ./build/boot-evidence health '.vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log' 2 true true; fi",
       "expect": "enroll",
       "timeout": 300
     },

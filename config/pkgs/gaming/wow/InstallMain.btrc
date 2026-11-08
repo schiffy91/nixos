@@ -1,0 +1,13 @@
+import Library.CLI;
+import Library.Console;
+import Library.JSON;
+import ./Install.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.count() != 1) { throw "Usage: wow-addons-install SETTINGS.json"; }
+        AddonInstall(JSONValue.readFile(args.get(0))).apply();
+        return 0;
+    } catch (string error) { Console.error(f"wow-addons-install: {error}"); return 1; }
+}

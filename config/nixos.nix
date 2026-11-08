@@ -12,7 +12,6 @@
     ./system/nixos/opportunistic-unlock.nix
     ./system/nixos/sleep.nix
     ./system/nixos/sound.nix
-    ./system/nixos/sudo.nix
     ./system/nixos/users.nix
     ./system/storage/immutability
   ];

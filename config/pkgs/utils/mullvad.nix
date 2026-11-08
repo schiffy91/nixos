@@ -1,6 +1,6 @@
 { config, lib, ... }:
 let apps = config.settings.apps;
-in lib.mkIf (apps.enable && apps.utils.enable && apps.mullvad.enable) {
+in lib.mkIf (apps.utils.mullvad.enable) {
   settings.disk.immutability.persist.paths = [
     "/etc/mullvad-vpn/"
     "${config.settings.users.admin.homeDirectory}/.config/Mullvad VPN"

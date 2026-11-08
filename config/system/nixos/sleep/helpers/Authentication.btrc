@@ -1,94 +1,148 @@
+import Library.OwnedBuffer;
+import Library.Process;
 import ./Posix.btrc;
 
-struct PasswordPrompt { const char* prompt; const char* plymouth; };
+// Password bytes have one owner, fixed capacity and an explicit wipe. They
+// never become a managed string, an ExecResult, or part of controller state.
+class PasswordResponse {
+    private OwnedBuffer<char> bytes;
+    private int used;
 
-void require(int result, const char *operation) {
-    if (result < 0) {
-        perror(operation);
-        exit(EXIT_FAILURE);
+    public PasswordResponse() {
+        self.bytes = new OwnedBuffer<char>((size_t)PAM_MAX_RESP_SIZE + (size_t)1);
+        self.used = 0;
     }
-}
 
-unsigned activeVt(int fd) {
-    struct vt_stat state;
-    require(ioctl(fd, VT_GETSTATE, &state), "VT_GETSTATE");
-    return state.v_active;
-}
-
-char* askPassword(const char* prompt, const char* plymouth) {
-    int fds[2], status;
-    char buffer[PAM_MAX_RESP_SIZE + 1];
-    size_t used = 0;
-    bool read_failed = false;
-    ssize_t n;
-    pid_t child, parent = getpid();
-    if (pipe2(fds, O_CLOEXEC) < 0)
-        return NULL;
-    child = fork();
-    if (child == (pid_t)0) {
-        if (prctl(PR_SET_PDEATHSIG, SIGKILL) < 0 || (pid_t)getppid() != parent)
-            _exit(1);
-        if (dup2(fds[1], STDOUT_FILENO) < 0)
-            _exit(1);
-        close(fds[0]);
-        close(fds[1]);
-        execl(plymouth, plymouth, "ask-for-password", prompt, NULL);
-        _exit(1);
-    }
-    close(fds[1]);
-    if (child < (pid_t)0) {
-        close(fds[0]);
-        return NULL;
-    }
-    while (used < sizeof(buffer)) {
-        n = read(fds[0], buffer + used, sizeof(buffer) - used);
-        if (n < (ssize_t)0 && errno == EINTR)
-            continue;
-        if (n <= (ssize_t)0) {
-            read_failed = n < (ssize_t)0;
-            break;
+    public bool readFrom(int descriptor) {
+        if (!self.bytes.opened()) { return false; }
+        int capacity = (int)self.bytes.count();
+        while (self.used < capacity) {
+            var count = read(descriptor, self.bytes.borrow() + self.used, (size_t)(capacity - self.used));
+            if (count < (ssize_t)0 && errno == EINTR) { continue; }
+            if (count < (ssize_t)0) { return false; }
+            if (count == (ssize_t)0) { break; }
+            self.used += (int)count;
         }
-        used += (size_t)n;
+        return self.used > 0 && self.used < capacity
+            && memchr(self.bytes.borrow(), 0, (size_t)self.used) == NULL;
     }
-    close(fds[0]);
-    if (read_failed || used == sizeof(buffer))
-        kill(child, SIGKILL);
-    do { n = waitpid(child, &status, 0); } while (n < (ssize_t)0 && errno == EINTR);
-    char *answer = NULL;
-    if (!read_failed && (pid_t)n == child && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
-        used > (size_t)0 && used < sizeof(buffer) && memchr(buffer, 0, used) == NULL) {
-        buffer[used] = 0;
-        answer = strdup(buffer);
+
+    // PAM owns and frees successful responses according to its C ABI.
+    public char* copyForPam() {
+        if (!self.bytes.opened() || self.used <= 0 || self.used >= (int)self.bytes.count()) { return NULL; }
+        return strdup(self.bytes.borrow());
     }
-    explicit_bzero(buffer, sizeof(buffer));
-    return answer;
+    public void close() {
+        if (self.bytes != null && self.bytes.opened()) {
+            explicit_bzero(self.bytes.borrow(), self.bytes.count()); self.bytes.close();
+        }
+    }
+    public void __del__() { self.close(); }
 }
 
-int converse(int count, const struct pam_message **messages,
-                    struct pam_response **responses, void *data) {
-    if (count <= 0 || count > PAM_MAX_NUM_MSG)
-        return PAM_CONV_ERR;
-    struct pam_response *answers = (struct pam_response*)calloc((size_t)count, sizeof(struct pam_response));
-    if (!answers)
-        return PAM_BUF_ERR;
-    for (int i = 0; i < count; i++) {
-        if (messages[i]->msg_style == PAM_PROMPT_ECHO_OFF) {
-            answers[i].resp = askPassword(((struct PasswordPrompt*)data)->prompt, ((struct PasswordPrompt*)data)->plymouth);
-            if (answers[i].resp)
-                continue;
-        } else if (messages[i]->msg_style == PAM_TEXT_INFO ||
-                   messages[i]->msg_style == PAM_ERROR_MSG) {
-            continue;
+class PasswordPrompt {
+    private char* executable;
+    private char* label;
+
+    public PasswordPrompt(string executable, string label) { self.executable = strdup(executable); self.label = strdup(label);
+        if (self.executable == NULL || self.label == NULL) { free(self.executable); free(self.label); self.executable = NULL; self.label = NULL; throw "Cannot allocate password prompt"; } }
+
+    public void __del__() { free(self.executable); free(self.label); }
+
+    public PasswordResponse? read() {
+        int descriptors[2];
+        if (pipe2(descriptors, O_CLOEXEC) < 0) { return null; }
+        // ChildProcess captures into managed strings. This narrow pipe bridge
+        // instead delivers the secret directly to its wipeable owner.
+        const char* executable = self.executable;
+        const char* label = self.label;
+        pid_t parent = getpid();
+        pid_t child = fork();
+        if (child == (pid_t)0) {
+            if (prctl(PR_SET_PDEATHSIG, SIGKILL) < 0 || (pid_t)getppid() != parent
+                || dup2(descriptors[1], STDOUT_FILENO) < 0) { _exit(1); }
+            close(descriptors[0]); close(descriptors[1]);
+            execl(executable, executable, "ask-for-password", label, NULL); _exit(1);
         }
-        for (int j = 0; j < count; j++) {
-            if (answers[j].resp) {
-                explicit_bzero(answers[j].resp, strlen(answers[j].resp));
-                free(answers[j].resp);
+        close(descriptors[1]);
+        if (child < (pid_t)0) { close(descriptors[0]); return null; }
+        var answer = PasswordResponse();
+        bool valid = answer.readFrom(descriptors[0]);
+        close(descriptors[0]);
+        if (!valid) { kill(child, SIGKILL); }
+        int status = 0;
+        pid_t waited;
+        do { waited = waitpid(child, &status, 0); } while (waited < (pid_t)0 && errno == EINTR);
+        if (!valid || waited != child || !ProcessStatus(status).ok()) { answer.close(); return null; }
+        return answer;
+    }
+}
+
+class PamResponses {
+    private struct pam_response* values;
+    private int count;
+
+    public PamResponses(int count) { self.count = count; self.values = (struct pam_response*)calloc((size_t)count, sizeof(struct pam_response)); }
+    public bool allocated() { return self.values != NULL; }
+    public bool answer(int index, PasswordResponse? password) {
+        if (password == null) { return false; }
+        self.values[index].resp = password.copyForPam(); password.close();
+        return self.values[index].resp != NULL;
+    }
+    public struct pam_response* transferToPam() { var values = self.values; self.values = NULL; return values; }
+    public void close() {
+        if (self.values == NULL) { return; }
+        for (int index = 0; index < self.count; index++) {
+            char* response = self.values[index].resp;
+            if (response != NULL) { explicit_bzero(response, strlen(response)); free(response); }
+        }
+        free(self.values); self.values = NULL;
+    }
+    public void __del__() { self.close(); }
+}
+
+// Only this callback uses PAM's native message/response layout. Metadata is
+// borrowed for the synchronous authentication call; the secret is never there.
+struct PasswordPromptData { const char* prompt; const char* plymouth; };
+int converse(int count, const struct pam_message** messages, struct pam_response** responses, void* data) {
+    if (count <= 0 || count > PAM_MAX_NUM_MSG) { return PAM_CONV_ERR; }
+    try {
+        var request = (struct PasswordPromptData*)data;
+        var prompt = PasswordPrompt((string)request->plymouth, (string)request->prompt);
+        var answers = PamResponses(count);
+        if (!answers.allocated()) { return PAM_BUF_ERR; }
+        for (int index = 0; index < count; index++) {
+            int style = messages[index]->msg_style;
+            if (style == PAM_TEXT_INFO || style == PAM_ERROR_MSG) { continue; }
+            if (style != PAM_PROMPT_ECHO_OFF || !answers.answer(index, prompt.read())) {
+                answers.close(); return PAM_CONV_ERR;
             }
         }
-        free(answers);
-        return PAM_CONV_ERR;
+        *responses = answers.transferToPam(); return PAM_SUCCESS;
+    } catch (string error) { return PAM_CONV_ERR; }
+}
+
+class AccountAuthentication {
+    private char* user;
+    private char* plymouth;
+    public AccountAuthentication(string user, string plymouth) { self.user = strdup(user); self.plymouth = strdup(plymouth);
+        if (self.user == NULL || self.plymouth == NULL) { free(self.user); free(self.plymouth); self.user = NULL; self.plymouth = NULL; throw "Cannot allocate authentication request"; } }
+
+    public void __del__() { free(self.user); free(self.plymouth); }
+
+    public bool check(bool retry) {
+        // This dedicated process locks PAM's copies as well as our response.
+        if (mlockall((int)MCL_CURRENT | (int)MCL_FUTURE) < 0) { throw "Cannot lock authentication memory"; }
+        char initialPrompt[] = "--prompt=Unlock session";
+        char retryPrompt[] = "--prompt=Authentication failed. Try again.";
+        const char* label = retry ? retryPrompt : initialPrompt;
+        struct PasswordPromptData request = { label, self.plymouth };
+        struct pam_conv conversation = { converse, &request };
+        pam_handle_t* pam = NULL;
+        int result = pam_start("nixos-sleep-lock", self.user, &conversation, &pam);
+        if (result == PAM_SUCCESS) { result = pam_authenticate(pam, PAM_DISALLOW_NULL_AUTHTOK); }
+        if (result == PAM_SUCCESS) { result = pam_acct_mgmt(pam, PAM_SILENT); }
+        if (pam != NULL) { pam_end(pam, result); }
+        return result == PAM_SUCCESS;
     }
-    *responses = answers;
-    return PAM_SUCCESS;
 }

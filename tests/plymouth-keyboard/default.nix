@@ -1,4 +1,4 @@
-{ system ? builtins.currentSystem, rotate ? false, layout ? "us", light ? false, multi ? false, scale ? 1 }:
+{ system ? builtins.currentSystem, rotate ? false, layout ? "us", light ? false, multi ? false, scale ? 1, inputs ? (builtins.getFlake "git+file://${toString ../..}").inputs }:
 assert builtins.elem layout [ "us" "de" "fr" ];
 assert builtins.elem scale [ 1 2 ];
 let
@@ -10,9 +10,8 @@ let
     mkdir -p $out/bin
     $CC -Wall -Wextra -Werror ${./input.c} -o $out/bin/test-input
   '';
-in pkgs.testers.runNixOSTest {
+in (import ../vm/test.nix { inherit pkgs inputs; }) {
   name = "plymouth-touch-unlock-${layout}" + pkgs.lib.optionalString rotate "-rotated";
-  extraPythonPackages = packages: [ packages.pillow ];
   nodes.machine = { config, lib, pkgs, ... }: {
     imports = [ ../../config/settings.nix ../../config/system/nixos/boot/touch-keyboard.nix ];
     settings.boot.touchKeyboard = true;
@@ -84,8 +83,10 @@ in pkgs.testers.runNixOSTest {
       };
     };
   };
-  testScript = { nodes, ... }: builtins.replaceStrings
-    [ "@ROTATED@" "@SYSTEM@" "@LAYOUT@" "@LIGHT@" "# @DISPLAY_TESTS@" "@SCALE@" ]
-    [ (if rotate then "True" else "False") "${nodes.machine.specialisation.encrypted.configuration.system.build.toplevel}" layout (if light then "True" else "False") (if multi then builtins.readFile ./displays.py else "") (toString scale) ]
-    (builtins.readFile ./test.py);
+  scenario = ./Main.btrc;
+  extraFiles = [ ./Scenario.btrc ./Screen.btrc ];
+  settings = nodes: {
+    inherit rotate layout light multi scale;
+    system = toString nodes.machine.specialisation.encrypted.configuration.system.build.toplevel;
+  };
 }

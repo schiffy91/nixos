@@ -1,0 +1,7 @@
+class AlarmState {
+    class void ignoreAndBlock() {
+        if (testIgnoreAndBlockAlarm() == 0) { throw "Cannot prepare ignored and blocked alarm"; }
+    }
+    class void wait() { testWaitForSignal(); }
+    class int signal() { return testAlarmSignal(); }
+}

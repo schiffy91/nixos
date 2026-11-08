@@ -91,14 +91,17 @@ class ProtonRuntime {
         return result;
     }
     class Bytes procBytes(string path) {
-        var data = Bytes(); int descriptor = open(path, ((int)O_RDONLY | (int)O_CLOEXEC)); if (descriptor < 0) { return data; }
-        char buffer[8192];
+        var data = Bytes();
+        var opened = FileHandle.openExact(path);
+        if (!opened.ok()) { return data; }
+        var file = opened.value();
         while (data.length() < 1048576) {
-            int count = (int)read(descriptor, buffer, sizeof(buffer));
-            if (count < 0 && errno == EINTR) { continue; }
-            if (count <= 0) { break; } data.appendRaw(buffer, count);
+            var chunk = file.readAt(data.length(), 8192);
+            if (!chunk.ok() && chunk.error().nativeCode() == EINTR) { continue; }
+            if (chunk.kind() != FILE_READ_DATA) { break; }
+            data.appendBytes(chunk.bytes());
         }
-        close(descriptor); return data;
+        return data;
     }
     class Vector<string> environmentEntries(Bytes bytes) {
         Vector<string> result = []; int start = 0;
@@ -109,7 +112,7 @@ class ProtonRuntime {
         var c = self.context; Vector<int> result = [];
         for name in FileSystem.listDir("/proc") {
             if (!Regex.fullMatch("[0-9]+", name)) { continue; }
-            int pid = name.toInt(); if (pid == (int)getpid() || pid == (int)getppid()) { continue; }
+            int pid = name.toInt(); if (pid == Platform.pid() || pid == (int)getppid()) { continue; }
             var entries = ProtonRuntime.environmentEntries(ProtonRuntime.procBytes("/proc/" + name + "/environ"));
             bool matched = false;
             for entry in entries {

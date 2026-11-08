@@ -1,0 +1,39 @@
+import Library.CLI;
+import Library.Platform;
+import ../lib/CommandLog.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var path = Environment.get("MOUNT_FIXTURE_STATE", "");
+        var state = JSONValue.readFile(path);
+        var command = PathTools.basename(args.program);
+        var record = [command];
+        for argument in args.values { record.push(argument); }
+        state.get("commands").push(CommandLog.arguments(record));
+        Check.that(FileSystem.writeText(path, state.stringify()), "record mount command");
+        if (command.equals("findmnt")) {
+            if (args.get(0).equals("-R")) { print("fixture mounts"); return 0; }
+            var target = args.get(args.values.indexOf("--mountpoint") + 1);
+            if (!state.get("mounts").has(target)) { return 1; }
+            var result = JSONValue.makeObject();
+            var mounts = JSONValue.makeArray(); mounts.push(state.get("mounts").get(target));
+            result.set("filesystems", mounts); print(result.stringify());
+        } else if (command.equals("cryptsetup")) {
+            Check.that(FileSystem.writeText(state.get("root").asString(), "unlocked fixture"), "unlock fixture device");
+        } else if (command.equals("btrfs")) {
+            for available in state.get("available").elements() {
+                if (available.asString().equals(args.get(args.count() - 1))) { return 0; }
+            }
+            return 1;
+        } else if (command.equals("mount")) {
+            var mount = JSONValue.makeObject();
+            mount.set("source", JSONValue.makeString(args.get(args.count() - 2)));
+            mount.set("fstype", JSONValue.makeString(args.values.contains("-t") ? "btrfs" : "vfat"));
+            mount.set("options", JSONValue.makeString(args.values.contains("-o") ? args.get(args.values.indexOf("-o") + 1) : "rw"));
+            state.get("mounts").set(args.get(args.count() - 1), mount);
+            Check.that(FileSystem.writeText(path, state.stringify()), "record mounted filesystem");
+        } else { throw f"Unexpected fixture command: {command}"; }
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

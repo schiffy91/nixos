@@ -1,0 +1,31 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/CommandLog.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var command = PathTools.basename(args.program);
+        var record = [command];
+        for argument in args.values { record.push(argument); }
+        CommandLog.append(Environment.get("CALLS", ""), record);
+        if (command.equals("git")) { print("hash\trefs/tags/bundle/2\nhash\trefs/tags/bundle/10\nhash\trefs/tags/bundle/10^{}"); }
+        else if (command.equals("nix")) {
+            if (Environment.has("FAIL_PREFETCH")) { return 9; }
+            print("{\"hash\":\"sha256-fixture\"}");
+        } else if (command.equals("curl")) {
+            var url = args.get(args.count() - 1);
+            if (url.endsWith("releases.atom")) { print("<a href=\"https://github.com/Org/Addon/releases/tag/new\"/><a href=\"https://github.com/Org/Addon/releases/tag/old\"/>"); }
+            else if (url.endsWith("/new")) {
+                if (Environment.has("FAIL_RELEASE")) { return 22; }
+                print("no archive");
+            } else {
+                var pieces = Strings.split(url, "expanded_assets/");
+                Check.that(pieces.len == 2, "expanded assets URL");
+                var tag = pieces.get(1);
+                print(f"<a href=\"/Org/Addon/releases/download/{tag}/Addon.zip\"/><a href=\"/Org/Addon/releases/download/{tag}/Addon-forever.zip\"/>");
+            }
+        } else { throw f"Unexpected refresh command: {command}"; }
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

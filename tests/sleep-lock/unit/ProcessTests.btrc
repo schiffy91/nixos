@@ -1,5 +1,71 @@
 import ../../../config/lib/BackgroundProcess.btrc;
+import Library.FileSystem;
 #include <assert.h>
+#include <signal.h>
+#include <sys/wait.h>
+
+volatile sig_atomic_t terminated = 0;
+void terminate(int number) { terminated = (sig_atomic_t)number; }
+
+class ProcessTests {
+    private string executable;
+    public ProcessTests(string executable) { self.executable = executable; }
+
+    public void descriptors() {
+        int original = open("/dev/null", O_RDONLY);
+        assert(original >= 0);
+        int descriptor = fcntl(original, F_DUPFD, 100);
+        close(original);
+        assert(descriptor >= 100 && fcntl(descriptor, F_GETFD, 0) == 0);
+        var child = BackgroundProcess.start(self.executable, ["--check-descriptor", f"{descriptor}"]);
+        assert(child.waitUntil(MonotonicClock.deadlineAfter(5000)) && child.code() == 0);
+        assert(fcntl(descriptor, F_GETFD, 0) == 0);
+        close(descriptor);
+    }
+
+    public void arguments() {
+        var child = BackgroundProcess.start(self.executable, ["--arguments", "", "spaces ' quotes $() ;"], ["BACKGROUND_PROCESS_TEST=literal value"]);
+        assert(child.waitUntil(MonotonicClock.deadlineAfter(5000)) && child.code() == 37);
+        child.stop(); child.stop();
+        assert(!child.running() && child.code() == 37);
+        int status = 0;
+        assert(waitpid((pid_t)child.pid(), &status, WNOHANG) == (pid_t)(-1) && errno == ECHILD);
+    }
+
+    public void stopping(bool ignoreTerm) {
+        var directory = TemporaryDirectory.create("background-process-tests").value();
+        var ready = directory.path() + "/ready";
+        var child = BackgroundProcess.start(self.executable, [ignoreTerm ? "--ignore-term" : "--term", ready]);
+        var deadline = MonotonicClock.deadlineAfter(5000);
+        while (!FileSystem.isFile(ready) && child.running() && MonotonicClock.before(deadline)) { Timer.sleepMillis(10); }
+        assert(FileSystem.isFile(ready) && child.running() && child.code() == -1);
+        assert(!child.waitUntil(MonotonicClock.deadlineAfter(0)));
+        child.stop(ignoreTerm ? 20 : 2000);
+        assert(!child.running() && child.code() == (ignoreTerm ? 137 : 42));
+        child.stop();
+        int status = 0;
+        assert(waitpid((pid_t)child.pid(), &status, WNOHANG) == (pid_t)(-1) && errno == ECHILD);
+        directory.close();
+    }
+
+    public void failedLaunches() {
+        var directory = TemporaryDirectory.create("background-process-failures").value();
+        var invalid = directory.path() + "/invalid";
+        Path.writeAll(invalid, "not an executable image\n");
+        assert(chmod(invalid, (mode_t)0700) == 0);
+        for command in [directory.path() + "/missing", invalid] {
+            bool failed = false;
+            try { BackgroundProcess.start(command, []); }
+            catch (string error) { failed = true; }
+            assert(failed);
+        }
+        bool failed = false;
+        try { BackgroundProcess.start(self.executable, [], ["invalid"]); }
+        catch (string error) { failed = true; }
+        assert(failed);
+        directory.close();
+    }
+}
 
 int main(int argc, char** argv) {
     if (argc == 3 && strcmp(argv[1], "--check-descriptor") == 0) {
@@ -10,17 +76,24 @@ int main(int argc, char** argv) {
         }
         return 0;
     }
-    int original = open("/dev/null", O_RDONLY);
-    assert(original >= 0);
-    int descriptor = fcntl(original, F_DUPFD, 100);
-    close(original);
-    assert(descriptor >= 100 && fcntl(descriptor, F_GETFD, 0) == 0);
-    var child = BackgroundProcess.start(Strings.copy(argv[0]), ["--check-descriptor", f"{descriptor}"]);
-    var deadline = MonotonicClock.deadlineAfter(5000);
-    while (child.running() && MonotonicClock.before(deadline)) { Timer.sleepMillis(10); }
-    assert(!child.running() && child.code == 0);
-    assert(fcntl(descriptor, F_GETFD, 0) == 0);
-    close(descriptor);
-    print("Background children retain standard streams and close unrelated inherited descriptors");
+    if (argc == 4 && strcmp(argv[1], "--arguments") == 0) {
+        assert(strcmp(argv[2], "") == 0 && strcmp(argv[3], "spaces ' quotes $() ;") == 0);
+        assert(Environment.get("BACKGROUND_PROCESS_TEST", "").equals("literal value"));
+        return 37;
+    }
+    if (argc == 3) {
+        if (strcmp(argv[1], "--ignore-term") == 0) { signal((int)SIGTERM, SIG_IGN); }
+        else { signal((int)SIGTERM, terminate); }
+        Path.writeAll(Strings.copy(argv[2]), "ready");
+        while (terminated == (sig_atomic_t)0) { Timer.sleepMillis(10); }
+        return 42;
+    }
+    var tests = ProcessTests(Strings.copy(argv[0]));
+    tests.descriptors();
+    tests.arguments();
+    tests.stopping(false);
+    tests.stopping(true);
+    tests.failedLaunches();
+    print("PASS: background process streams, descriptor isolation, literal arguments, environment, exit status, deadlines, termination, reaping and launch failures");
     return 0;
 }

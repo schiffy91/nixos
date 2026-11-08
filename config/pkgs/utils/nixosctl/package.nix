@@ -4,7 +4,7 @@ in pkgs.stdenv.mkDerivation {
   name = "nixosctl";
   src = lib.fileset.toSource {
     root = ../../../..;
-    fileset = lib.fileset.unions [ ./Main.btrc ./lib ];
+    fileset = lib.fileset.unions [ ./Main.btrc ./lib ./btrc.toml ./btrc.lock ];
   };
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
   dontConfigure = true;
@@ -34,6 +34,7 @@ in pkgs.stdenv.mkDerivation {
         sbctl
         sbsigntool
         btrfs-progs
+        binutils
         cryptsetup
         util-linux
         coreutils

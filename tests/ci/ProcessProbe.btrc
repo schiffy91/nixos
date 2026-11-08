@@ -1,0 +1,5 @@
+class ProcessProbe {
+    class int readInputByte() { return testReadInputByte(); }
+    class bool inputRemainsOpen(int milliseconds) { return testInputRemainsOpen(milliseconds) != 0; }
+    class bool exists(int pid) { return testProcessExists(pid) != 0; }
+}

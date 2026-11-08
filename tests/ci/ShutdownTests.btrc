@@ -1,0 +1,29 @@
+import Library.CLI;
+import Library.Timer;
+import ../lib/TestDirectory.btrc;
+import ./ProcessProbe.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var client = args.require(0, "Supply LSP client");
+        var server = args.require(1, "Supply shutdown server");
+        var fixture = TestDirectory("lsp-shutdown");
+        fixture.write("flake.nix", "");
+        fixture.write("sample.nix", "{}\n");
+        for scenario in ["normal", "wait-for-eof"] {
+            var deadline = MonotonicClock.deadlineAfter(10000);
+            var result = ChildProcess.run(client, ["lsp", server, "nix", "sample.nix"], cwd=fixture.path(), environment=[f"LSP_SHUTDOWN_CASE={scenario}"], timeoutMilliseconds=12000);
+            if (scenario.equals("normal")) { Check.exited(result); }
+            else {
+                Check.that(!result.timedOut && result.code != 0 && result.stderr().contains("before deadline"), "unresponsive shutdown fails by deadline");
+                Check.that(MonotonicClock.before(deadline), "bounded shutdown");
+            }
+            var pid = Strings.toInt(Path.readAll(fixture.path("server.pid")));
+            Check.that(pid > 0 && !ProcessProbe.exists(pid), "server reaped after shutdown");
+        }
+        fixture.close();
+        print("PASS: LSP exit delivery, bounded unresponsive shutdown and child cleanup");
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

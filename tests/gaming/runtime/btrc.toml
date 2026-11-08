@@ -1,0 +1,43 @@
+manifest-version = 1
+[package]
+name = "nixos_gaming_runtime_tests"
+
+[[native.bindings]]
+module = "TLS"
+header = "tls.h"
+language = "c"
+standard = "c11"
+symbols = ["TestTLSListener", "TestTLSConnection", "testTLSListen", "testTLSListenerClose", "testTLSPort", "testTLSAccept", "testTLSConnectionClose", "testTLSRead", "testTLSBytes", "testTLSLength", "testTLSWrite"]
+owned-results = ["testTLSListen", "testTLSAccept"]
+read-only-borrows = ["testTLSListen.certificate", "testTLSListen.key", "testTLSWrite.bytes"]
+borrowed-parameters = ["testTLSPort.listener", "testTLSAccept.listener", "testTLSRead.connection", "testTLSBytes.connection", "testTLSLength.connection", "testTLSWrite.connection"]
+[native.bindings.resources.TestTLSListener]
+ownership = "unique"
+release = "testTLSListenerClose"
+[native.bindings.resources.TestTLSConnection]
+ownership = "unique"
+release = "testTLSConnectionClose"
+[native.bindings.copied-results.testTLSBytes]
+kind = "bytes"
+owner = "connection"
+length-function = "testTLSLength"
+length-arguments = ["connection"]
+length-preserves-result = true
+
+[[native.bindings]]
+module = "Signals"
+header = "signals.h"
+language = "c"
+standard = "c11"
+symbols = ["testInstallStop", "testHasStopped", "testSendSignal"]
+
+[[native.defines]]
+name = "_GNU_SOURCE"
+value = "1"
+modules = ["TLS", "Signals"]
+[[native.libraries]]
+name = "ssl"
+modules = ["TLS"]
+[[native.libraries]]
+name = "crypto"
+modules = ["TLS"]

@@ -1,0 +1,12 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor")); var machine = lab.guest("machine");
+        machine.waitForUnit("multi-user.target"); print(machine.succeed("password-file-contracts", 300));
+        machine.reboot(); machine.waitForShutdown(); machine.start(); machine.waitForUnit("multi-user.target");
+        print(machine.succeed("password-file-contracts reboot", 120)); lab.close();
+        print("PASS: protected password authority survives activation and reboot"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

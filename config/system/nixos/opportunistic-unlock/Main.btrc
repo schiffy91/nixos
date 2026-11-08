@@ -1,46 +1,15 @@
-import ./Native.btrc;
-import ./Devices.btrc;
-import ./Secrets.btrc;
+import Library.CLI;
 import ./Worker.btrc;
 
 int main(int argc, char** argv) {
-    if (argc != 2 || getuid() != (uid_t)0 || geteuid() != (uid_t)0) { return 1; }
-    struct rlimit noCore;
-    noCore.rlim_cur = 0;
-    noCore.rlim_max = 0;
-    if (setrlimit(RLIMIT_CORE, &noCore) < 0 || prctl(PR_SET_DUMPABLE, 0) < 0) { return 0; }
-    long key = SecretMemory.findKey();
-    if (key < 0) { return 0; }
-    char rootPath[PATH_MAX];
-    char rootUuid[256];
-    struct stat rootStat;
-    bool knownRoot = strchr(argv[1], '/') == NULL &&
-        snprintf(rootPath, sizeof(rootPath), "/dev/mapper/%s", argv[1]) < (int)sizeof(rootPath) &&
-        stat(rootPath, &rootStat) == 0 && S_ISBLK(rootStat.st_mode);
-    if (knownRoot) {
-        unsigned rootMajor = (unsigned)major(rootStat.st_rdev);
-        unsigned rootMinor = (unsigned)minor(rootStat.st_rdev);
-        snprintf(rootPath, sizeof(rootPath), "/sys/dev/block/%u:%u/dm/uuid", rootMajor, rootMinor);
-        knownRoot = readText(rootPath, rootUuid, sizeof(rootUuid)) && strncmp(rootUuid, "CRYPT-LUKS", 10) == 0;
-    }
-    size_t count = 0;
-    struct dirent** entries = NULL;
-    int found = knownRoot ? scandir("/sys/class/block", &entries, NULL, alphasort) : -1;
-    struct BlockDevice* candidates = found > 0 ? (struct BlockDevice*)calloc((size_t)found, sizeof(struct BlockDevice)) : NULL;
-    for (int i = 0; i < found; i++) {
-        struct BlockDevice candidate;
-        if (candidates != NULL && blockInfo(entries[i]->d_name, &candidate) && eligible(&candidate, rootStat.st_rdev)) { candidates[count++] = candidate; }
-        free(entries[i]);
-    }
-    free(entries);
-    char* secret = SecretMemory.allocate();
-    if (secret == NULL) { SecretMemory.revoke(key); free(candidates); return 0; }
-    long length = SecretMemory.consume(key, secret);
-    if (length > 0 && count > 0) {
-        crypt_set_log_callback(NULL, quietCryptsetup, NULL);
-        runCandidates(candidates, count, rootStat.st_rdev, secret, (size_t)length);
-    }
-    SecretMemory.dispose(secret);
-    free(candidates);
+    var arguments = CLIArgs(argc, argv);
+    if (arguments.count() != 1 || getuid() != (uid_t)0 || geteuid() != (uid_t)0) { return 1; }
+    if (!ProcessLimits.protectSecrets()) { return 0; }
+    var passphrase = BootPassphrase.consume();
+    if (passphrase == null) { return 0; }
+    crypt_set_log_callback(NULL, quietCryptsetup, NULL);
+    try { UnlockSession(passphrase).run(arguments.get(0)); }
+    catch (string error) {} // Optional disks must never prevent the normal boot.
+    finally { passphrase.close(); }
     return 0;
 }

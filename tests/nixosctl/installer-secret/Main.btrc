@@ -1,0 +1,12 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor")); var machine = lab.guest("machine");
+        machine.waitForUnit("multi-user.target"); print(machine.succeed("installer-secret-contracts", 180));
+        machine.reboot(); machine.waitForShutdown(); machine.start(); machine.waitForUnit("multi-user.target");
+        machine.succeed("test ! -e /run/installer-test/killed/passphrase"); lab.close();
+        print("PASS: installer secret contracts and volatile secret removal across reboot"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

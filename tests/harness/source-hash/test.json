@@ -6,7 +6,7 @@
   "operations": [
     {
       "op": "host",
-      "command": "python3 tests/harness/source-hash/check.py",
+      "command": "make build/source-hash-test && ./build/source-hash-test",
       "timeout": 120,
       "expect": "PASS: C++ and JavaScript content invalidates graph cache; unchanged content reuses it"
     },

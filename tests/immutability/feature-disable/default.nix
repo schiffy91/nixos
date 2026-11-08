@@ -15,7 +15,7 @@ let
       ../../../config/system/storage/immutability
       {
         settings = {
-          apps.rclone.enable = enabled;
+          apps.utils.rclone.enable = enabled;
           users.admin = { username = "fixture"; homeDirectory = home; };
           users.agent.enable = false;
           disk = {
@@ -44,7 +44,7 @@ let
   runtime = lib.findFirst (package: lib.getName package == "immutability")
     (throw "persistence-only profile did not expose the immutability runtime")
     profiles.enabled.environment.systemPackages;
-in pkgs.testers.runNixOSTest {
+in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "persistence-feature-disable";
   nodes.machine = { ... }: {
     virtualisation.emptyDiskImages = [ 512 ];
@@ -56,10 +56,10 @@ in pkgs.testers.runNixOSTest {
       }) profiles // {
       "persistence-features/profiles.json".text = builtins.toJSON
         (lib.mapAttrs (_: config: {
-          enabled = config.settings.apps.rclone.enable;
+          enabled = config.settings.apps.utils.rclone.enable;
           paths = config.settings.disk.immutability.persist.paths;
         }) profiles);
     };
   };
-  testScript = builtins.readFile ./test.py;
+  scenario = ./Main.btrc;
 }

@@ -1,0 +1,10 @@
+import Library.FileSystem;
+
+class AddonFiles {
+    class bool move(string source, string target) { return addonFileMove(source, target); }
+    class bool remove(string path) { return addonFileRemove(path); }
+    class void publish(string path, string text) {
+        var pattern = PathTools.join(PathTools.dirname(path), ".addons.lock.XXXXXX");
+        if (!addonLockPublish(path, pattern, text)) { throw "Cannot publish addon lock"; }
+    }
+}

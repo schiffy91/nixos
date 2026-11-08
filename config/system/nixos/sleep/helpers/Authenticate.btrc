@@ -1,67 +1,30 @@
-import ./Posix.btrc;
+import Library.CLI;
+import Library.Console;
+import Library.Platform;
+import ./Console.btrc;
 import ./Authentication.btrc;
 
-int main(int argc, char **argv) {
-    if (getuid() != (uid_t)0 || geteuid() != (uid_t)0 || argc < 3)
-        return 1;
-    struct rlimit core = { 0, 0 };
-    require(setrlimit(RLIMIT_CORE, &core), "disable core dumps");
-    require(prctl(PR_SET_DUMPABLE, 0), "disable process dumps");
-    if (!strcmp(argv[2], "authenticate") && (argc == 4 || argc == 5)) {
-        if (argc == 5 && strcmp(argv[4], "retry") != 0)
-            return 1;
-        char initialPrompt[] = "--prompt=Unlock session";
-        char retryPrompt[] = "--prompt=Authentication failed. Try again.";
-        const char* prompt = initialPrompt;
-        if (argc == 5) prompt = retryPrompt;
-        /* A short-lived, locked address space contains PAM's copies as well as
-         * our pipe buffer. The controller never receives the password. */
-        require(mlockall((int)MCL_CURRENT | (int)MCL_FUTURE), "lock authentication memory");
-        pam_handle_t *pam = NULL;
-        struct PasswordPrompt request = { prompt, argv[1] };
-        struct pam_conv conversation = { converse, &request };
-        int result = pam_start("nixos-sleep-lock", argv[3], &conversation, &pam);
-        if (result == PAM_SUCCESS)
-            result = pam_authenticate(pam, PAM_DISALLOW_NULL_AUTHTOK);
-        if (result == PAM_SUCCESS)
-            result = pam_acct_mgmt(pam, PAM_SILENT);
-        if (pam)
-            pam_end(pam, result);
-        return result == PAM_SUCCESS ? 0 : 1;
-    }
-
-    int consoleFlags = (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOCTTY;
-    int fd = open("/dev/tty63", consoleFlags);
-    require(fd, "open lock console");
-    if (!strcmp(argv[2], "secure") && argc == 3) {
-        struct termios term;
-        require(tcgetattr(fd, &term), "read console input mode");
-        term.c_lflag &= ~((tcflag_t)ECHO | (tcflag_t)ECHONL | (tcflag_t)ISIG);
-        term.c_iflag &= ~(tcflag_t)IXON;
-        require(tcsetattr(fd, TCSAFLUSH, &term), "secure console input");
-        if (activeVt(fd) != 63) {
-            require(ioctl(fd, VT_ACTIVATE, 63), "activate lock console");
-            require(ioctl(fd, VT_WAITACTIVE, 63), "wait for lock console");
+int main(int argc, char** argv) {
+    try {
+        if (!Platform.isRoot() || getuid() != (uid_t)0) { throw "Session locking requires root"; }
+        struct rlimit core = { 0, 0 };
+        LockedConsole.require(setrlimit(RLIMIT_CORE, &core), "disable core dumps");
+        LockedConsole.require(prctl(PR_SET_DUMPABLE, 0), "disable process dumps");
+        var args = CLIArgs(argc, argv);
+        if (args.count() < 2) { throw "Missing session lock operation"; }
+        var operation = args.get(1);
+        if (operation.equals("authenticate") && (args.count() == 3 || args.count() == 4)) {
+            if (args.count() == 4 && !args.get(3).equals("retry")) { throw "Invalid authentication option"; }
+            return AccountAuthentication(args.get(2), args.get(0)).check(args.count() == 4) ? 0 : 1;
         }
-        require(ioctl(fd, VT_LOCKSWITCH), "lock console switching");
-        if (activeVt(fd) != 63)
-            return 1;
-    } else if (!strcmp(argv[2], "verify") && argc == 3) {
-        if (activeVt(fd) != 63)
-            return 1;
-        require(ioctl(fd, VT_LOCKSWITCH), "retain console lock");
-    } else if (!strcmp(argv[2], "release") && argc == 4) {
-        char *end;
-        long vt = strtol(argv[3], &end, 10);
-        if (*end != 0 || vt <= 0 || vt >= 63)
-            return 1;
-        require(tcflush(fd, TCIFLUSH), "discard lock console input");
-        require(ioctl(fd, VT_UNLOCKSWITCH), "release console lock");
-        require(ioctl(fd, VT_ACTIVATE, (int)vt), "restore session console");
-        require(ioctl(fd, VT_WAITACTIVE, (int)vt), "wait for session console");
-    } else {
-        return 1;
-    }
-    close(fd);
-    return 0;
+        var console = LockedConsole();
+        if (operation.equals("secure") && args.count() == 2) { console.secure(); }
+        else if (operation.equals("verify") && args.count() == 2) { console.verify(); }
+        else if (operation.equals("release") && args.count() == 3) {
+            var original = args.get(2);
+            for digit in original { if (digit < '0' || digit > '9') { throw "Invalid session console"; } }
+            console.unlock(Strings.toInt(original));
+        } else { throw "Invalid session lock operation"; }
+        return 0;
+    } catch (string error) { Console.error(error); return 1; }
 }

@@ -1,0 +1,19 @@
+import Library.Vector;
+
+class Affinity {
+    private TestCpuSet cpus;
+
+    public Affinity() {
+        var cpus = testCpuSetCreate();
+        if (cpus == null) { throw "Cannot observe CPU affinity"; }
+        self.cpus = cpus;
+    }
+
+    public Vector<int> values() {
+        Vector<int> values = [];
+        for (int cpu = 0; cpu < testCpuSetCapacity(self.cpus); cpu++) {
+            if (testCpuSetContains(self.cpus, cpu) != 0) { values.push(cpu); }
+        }
+        return values;
+    }
+}

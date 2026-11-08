@@ -1,0 +1,23 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/HTTPProbe.btrc;
+import ../../lib/CredentialDigest.btrc;
+import ../../lib/ParallelCommands.btrc;
+
+class SunshineFixture {
+    class Vector<string> arguments(Vector<string> arguments) {
+        var prefix = ["-u", "operator", "--", "env", "XDG_RUNTIME_DIR=/run/user/1000", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus", "DISPLAY=:0", "XAUTHORITY=/srv/operator/.Xauthority"];
+        for argument in arguments { prefix.push(argument); } return prefix;
+    }
+    class ExecResult user(Vector<string> arguments, string data = "", bool success = true) {
+        var result = ChildProcess.run("runuser", SunshineFixture.arguments(arguments), stdinData=data, timeoutMilliseconds=90000);
+        Check.that(!result.timedOut && !result.captureFailed && (result.code == 0) == success, f"operator command: {result.stdout()} {result.stderr()}"); return result;
+    }
+    class void command(Vector<string> arguments) { Check.exited(ChildProcess.run(arguments.get(0), arguments.slice(1, arguments.len), timeoutMilliseconds=10000)); }
+    class void write(string path, string text) { Check.that(FileSystem.writeText(path, text), "write Sunshine fixture"); }
+    class void owned(string path) { SunshineFixture.command(["chown", "1000:100", path]); SunshineFixture.command(["chmod", "600", path]); }
+    class JSONValue password(string password) {
+        var payload = JSONValue.makeObject(); payload.set("username", JSONValue.makeString("admin")); payload.set("password", JSONValue.makeString(password)); return payload;
+    }
+    class void noPort() { Check.exited(ChildProcess.run("nc", ["-z", "-w", "1", "127.0.0.1", "47990"], timeoutMilliseconds=3000), 1); }
+}

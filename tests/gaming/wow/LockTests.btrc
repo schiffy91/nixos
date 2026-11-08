@@ -11,6 +11,10 @@ int main() {
     assert(AddonLock.asset(assets, "Org/Addon", "forever").endsWith("Addon-1-forever.zip"));
     assert(AddonLock.asset(assets, "Org/Addon", "classic").isEmpty());
     assert(AddonLock.asset(assets, "Other/Addon", "").isEmpty());
+    bool ambiguous = false;
+    try { AddonLock.asset(assets + "<a href=\"/Org/Addon/releases/download/v1/Other.zip\"/>", "Org/Addon", ""); }
+    catch (string error) { ambiguous = true; }
+    assert(ambiguous);
     print("PASS: addon feed decoding, train filtering and base/flavour asset selection");
     return 0;
 }

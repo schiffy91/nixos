@@ -1,7 +1,7 @@
 { config, pkgs, lib, inputs, ... }:
 let
-  virtualDisplay = config.settings.apps.sunshine.virtualDisplay;
-  enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable && virtualDisplay.enable;
+  virtualDisplay = config.settings.apps.gaming.sunshine.virtualDisplay;
+  enabled = virtualDisplay.enable;
   primary = lib.findFirst (output: output.primary) null config.settings.desktop.outputs;
   primaryOutput =
     if virtualDisplay.primaryOutput != ""

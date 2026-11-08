@@ -1,0 +1,34 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); var machine = lab.guest("machine");
+        lab.startAll(); machine.waitForUnit("multi-user.target"); machine.waitUntil("pgrep -u observer plasmashell", 60);
+        var active = "runuser -u observer -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver GetActive";
+        machine.waitUntil(active + " | grep -Fx 'b false'");
+        var session = "";
+        for entry in JSONValue.parse(machine.succeed("loginctl list-sessions --json=short")).elements() {
+            if (entry.get("uid").asInt() == 1000 && entry.get("seat").asString().equals("seat0")) { session = entry.get("session").asString(); break; }
+        }
+        Check.that(!session.isEmpty(), "Plasma seat session");
+        var vt = machine.succeed(f"loginctl show-session {ShellWords.quote(session)} -p VTNr --value").trim();
+        try {
+            machine.succeed("systemctl suspend --no-block"); machine.waitForFile("/run/sleep-backend-entered", 30);
+            machine.waitUntil(active + " | grep -Fx 'b true'", 30);
+            machine.succeed("test ! -e /run/nixos-sleep-lock/state.json; test ! -e /run/nixos-gaming-locked");
+            Check.equal(machine.succeed("cat /sys/class/tty/tty0/active").trim(), "tty" + vt, "Plasma retains its VT");
+            machine.waitUntil("pgrep -f kscreenlocker_greet", 15);
+            machine.succeed("printf '%s\\n' 'aB3! z' | pamtester kde observer authenticate");
+            Timer.sleepMillis(3000); machine.sendKey("a"); Timer.sleepMillis(1000);
+            machine.sendKey("ctrl-a"); machine.sendKey("backspace"); machine.screenshot(lab.artifact("native-plasma-password-prompt.ppm"));
+            machine.sendChars("wrong\n");
+            machine.waitUntil("journalctl -b --no-pager | grep -F 'pam_unix(kde:auth): authentication failure'", 30);
+            Timer.sleepMillis(4000); machine.succeed(active + " | grep -Fx 'b true'");
+            machine.sendKey("ctrl-a"); machine.sendKey("backspace"); machine.sendChars("aB3! z\n");
+            machine.waitUntil(active + " | grep -Fx 'b false'", 30);
+            machine.succeed("test ! -e /run/nixos-sleep-lock/state.json; test ! -e /run/nixos-gaming-locked");
+        } catch (string error) { machine.screenshot(lab.artifact("native-plasma-failure.ppm")); throw error; }
+        lab.close(); print("PASS: ordinary Plasma retains native password locking"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

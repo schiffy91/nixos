@@ -1,0 +1,132 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+class SecureBootScenario {
+    private Guest machine;
+    private string guid = "8be4df61-93ca-11d2-aa0d-00e098032b8c";
+    private string pk = "/sys/firmware/efi/efivars/PK-8be4df61-93ca-11d2-aa0d-00e098032b8c";
+    private string kek = "/sys/firmware/efi/efivars/KEK-8be4df61-93ca-11d2-aa0d-00e098032b8c";
+    private string db = "/sys/firmware/efi/efivars/db-d719b2cb-3d3a-4596-a3bc-dad00e67656f";
+    private string pki = "/var/lib/secure-boot-test";
+    private string recoveryRoot = "/var/lib/secure-boot-recovery";
+    private string architecture;
+    private JSONValue buildTools;
+    private Map<string, string> systems = {};
+    public SecureBootScenario(Guest machine) {
+        self.machine = machine; machine.start(); machine.waitForUnit("multi-user.target");
+        var architecture = machine.succeed("uname -m").trim();
+        Check.that(architecture.equals("x86_64") || architecture.equals("aarch64"), "supported EFI architecture");
+        self.architecture = architecture.equals("x86_64") ? "x64" : "aa64";
+        self.buildTools = JSONValue.parse(machine.succeed("cat /etc/fixture-build-tools.json"));
+        for name in ["stale", "maintenance", "recovery"] { self.systems.put(name, machine.succeed("readlink -f /run/current-system/specialisation/" + name).trim()); }
+        self.systems.put("setup", machine.succeed("readlink -f /run/current-system").trim());
+    }
+    private void write(string path, string text) { self.machine.succeed(f"printf %s {ShellWords.quote(text)} > {ShellWords.quote(path)}"); }
+    private string literal(string text) { return JSONValue.makeString(text).stringify(); }
+    private void configure(bool recovery = false) {
+        var settings = JSONValue.parse("{\"boot\":{\"pkiBundle\":\"/var/lib/secure-boot-test\",\"autoEnrollKeys\":false,\"method\":\"Secure-Boot\"},\"disk\":{\"boot\":{\"efiSysMountPoint\":\"/boot\"},\"recovery\":{\"enable\":false,\"mountPoint\":\"/var/lib/secure-boot-recovery\"}},\"users\":{\"admin\":{\"username\":\"root\",\"hashedPasswordFile\":\"/etc/nixos/secrets/password\"}},\"secrets\":{\"path\":\"/etc/nixos/secrets\"}}");
+        settings.get("disk").get("recovery").set("enable", JSONValue.makeBool(recovery));
+        var document = self.literal(settings.stringify());
+        var text = "{ outputs = { self }: let existing = path: builtins.appendContext path { \"${path}\" = { path = true; }; }; make = path: method: { pkgs.stdenv.hostPlatform.efiArch = " + self.literal(self.architecture) + "; config = { settings = (builtins.fromJSON " + document + ") // { boot = (builtins.fromJSON " + document + ").boot // { inherit method; }; }; boot.lanzaboote.autoEnrollKeys.enable = false; system.build = { toplevel = existing path; nixos-rebuild = existing " + self.literal(self.buildTools.get("rebuild").asString()) + "; }; }; }; in { nixosConfigurations = { VM-TEST-Standard-Boot = make " + self.literal(self.systems.get("setup")) + " \"Standard-Boot\"; VM-TEST-Secure-Boot = make " + self.literal(self.systems.get("maintenance")) + " \"Secure-Boot\"; }; }; }";
+        self.write("/etc/nixos/flake.nix", text);
+    }
+    private void firmware(int secure, int setup) {
+        Check.equal(self.machine.succeed(f"od -An -tu1 -j4 /sys/firmware/efi/efivars/SecureBoot-{self.guid}").trim(), f"{secure}", "firmware SecureBoot");
+        Check.equal(self.machine.succeed(f"od -An -tu1 -j4 /sys/firmware/efi/efivars/SetupMode-{self.guid}").trim(), f"{setup}", "firmware SetupMode");
+    }
+    private void reboot(string marker) {
+        self.machine.shutdown(); self.machine.start(); self.machine.waitForUnit("multi-user.target");
+        Check.equal(self.machine.succeed("cat /etc/generation-marker").trim(), marker, "booted generation");
+    }
+    private string generation() { return Strings.split(self.machine.succeed("readlink /nix/var/nix/profiles/system").trim(), "-").get(1); }
+    private string select(string name) { self.machine.succeed("nix-env -p /nix/var/nix/profiles/system --set " + ShellWords.quote(self.systems.get(name))); return self.generation(); }
+    private void activate() { self.machine.succeed(ShellWords.quote(self.systems.get("maintenance")) + "/bin/switch-to-configuration boot"); }
+    private string cli(string action, bool success = true) { var command = "nixosctl secure-boot " + action + " 2>&1"; if (success) { return self.machine.succeed(command); } return self.machine.fail(command); }
+    private string hashes(Vector<string> paths) { var command = "sha256sum"; for path in paths { command = command + " " + ShellWords.quote(path); } return self.machine.succeed(command); }
+    private string keyHashes() {
+        var paths = [self.pki + "/GUID"]; for key in ["PK", "KEK", "db"] { for extension in ["key", "pem"] { paths.push(f"{self.pki}/keys/{key}/{key}.{extension}"); } } return self.hashes(paths);
+    }
+    private string bootHashes() { return self.machine.succeed(f"find /boot {self.recoveryRoot} -type f -print0 | sort -z | xargs -0 sha256sum"); }
+    private void verifySigned() {
+        self.machine.succeed(f"sbverify --cert {self.pki}/keys/db/db.pem /boot/EFI/BOOT/BOOT{self.architecture.toUpper()}.EFI");
+        self.machine.succeed(f"sbverify --cert {self.pki}/keys/db/db.pem /boot/EFI/systemd/systemd-boot{self.architecture}.efi");
+        self.machine.succeed(f"for image in /boot/EFI/Linux/*.efi; do sbverify --cert {self.pki}/keys/db/db.pem \"$image\"; done");
+    }
+    private JSONValue recoveryEntry(string generation) {
+        Vector<JSONValue> matches = [];
+        for entry in JSONValue.parse(self.machine.succeed("bootctl list --json=short")).elements() {
+            if (entry.get("type").asString().equals("type2") && entry.get("id").asString().startsWith(f"nixos-generation-{generation}-")) { matches.push(entry); }
+        }
+        Check.that(matches.len == 1, "exactly one retained recovery UKI"); return matches.get(0);
+    }
+    public void run() {
+        var machine = self.machine; var setupGeneration = self.generation(); self.firmware(0, 1);
+        machine.succeed("test \"$(wc -c < /sys/kernel/security/tpm0/binary_bios_measurements)\" -gt 0");
+        machine.succeed("install -d -m700 /etc/nixos/secrets; mkdir -p /etc/nixos/config/hosts/x86_64/VM-TEST; touch /etc/nixos/config/hosts/x86_64/VM-TEST/default.nix; printf '!\\n' > /etc/nixos/secrets/password; chmod 600 /etc/nixos/secrets/password");
+        self.write("/etc/nixos/config.json", "{\"target\":\"Standard-Boot\",\"host_path\":\"/etc/nixos/config/hosts/x86_64/VM-TEST/default.nix\"}"); self.configure();
+        machine.succeed(f"install -d -m700 {self.pki}; printf incomplete > {self.pki}/GUID"); self.cli("prepare", false); machine.succeed("test ! -e " + self.pk);
+        machine.succeed(f"test ! -e {self.pki}/keys; rm -r {self.pki}"); self.cli("prepare"); self.firmware(0, 1); machine.succeed("test ! -e " + self.pk);
+        var originalKeys = self.keyHashes();
+        Check.equal(JSONValue.parse(machine.succeed("cat /etc/nixos/config.json")).get("target").asString(), "Secure-Boot", "prepared target");
+        Check.equal(machine.succeed("cat /etc/generation-marker").trim(), "maintenance", "prepared active generation");
+        self.cli("prepare"); Check.equal(self.keyHashes(), originalKeys, "idempotent prepare"); machine.succeed("test ! -e " + self.pk); self.verifySigned();
+        Check.that(self.cli("enable --no-reboot", false).contains("Retained system can recreate automatic enrollment"), "retained enrolling system blocks enable");
+        machine.succeed("test ! -e " + self.pk); self.reboot("maintenance"); machine.succeed("nix-env -p /nix/var/nix/profiles/system --delete-generations " + setupGeneration);
+        var recoveryGeneration = self.select("recovery"); self.select("maintenance"); self.activate(); machine.succeed("rm -f /boot/loader/entries/nixos-*.conf");
+        var recovery = self.recoveryEntry(recoveryGeneration);
+        var recoveryPaths = ["/boot/EFI/recovery/nixos-recovery.efi", self.recoveryRoot + "/EFI/recovery/nixos-recovery.efi", f"{self.recoveryRoot}/EFI/BOOT/BOOT{self.architecture.toUpper()}.EFI"];
+        for path in recoveryPaths { machine.succeed("install -Dm644 " + ShellWords.quote(recovery.get("path").asString()) + " " + ShellWords.quote(path)); }
+        self.write("/boot/loader/entries/nixos-recovery.conf", "title NixOS Recovery\nsort-key recovery\nefi /EFI/recovery/nixos-recovery.efi\n"); self.configure(true);
+        var recoveryHashes = self.hashes(recoveryPaths); self.cli("status");
+        machine.succeed("mv " + ShellWords.quote(recoveryPaths.get(0)) + " /var/lib/temporarily-missing-recovery.efi"); self.cli("enable --no-reboot", false); machine.succeed("test ! -e " + self.pk);
+        machine.succeed("mv /var/lib/temporarily-missing-recovery.efi " + ShellWords.quote(recoveryPaths.get(0))); self.cli("enable --no-reboot"); machine.succeed("test -s " + self.pk);
+        Check.equal(self.keyHashes(), originalKeys, "enable preserves keys"); Check.equal(self.hashes(recoveryPaths), recoveryHashes, "enable preserves recovery"); self.reboot("maintenance"); self.firmware(1, 0); self.cli("status");
+        var databases = self.hashes([self.kek, self.db]); var platform = self.hashes([self.pk]); self.cli("enable --no-reboot");
+        Check.equal(self.hashes([self.pk]), platform, "idempotent PK"); Check.equal(self.hashes([self.kek, self.db]), databases, "idempotent databases"); Check.equal(self.keyHashes(), originalKeys, "idempotent key material");
+        print("Prepare, independent recovery verification and actual enrollment passed");
+        self.write("/run/untrusted-sbctl.conf", "keydir: /var/lib/untrusted-test/keys\nguid: /var/lib/untrusted-test/GUID\n"); machine.succeed("sbctl --config /run/untrusted-sbctl.conf create-keys");
+        machine.succeed(f"cp {self.pki}/GUID /var/lib/untrusted-test/GUID"); var before = self.bootHashes(); machine.fail("sbctl --config /run/untrusted-sbctl.conf reset");
+        machine.succeed(f"mv {self.pki} {self.pki}-owned; mv /var/lib/untrusted-test {self.pki}");
+        for action in ["prepare", "enable --no-reboot", "disable --no-reboot"] {
+            self.cli(action, false); Check.equal(self.hashes([self.pk]), platform, "foreign keys preserve PK"); Check.equal(self.hashes([self.kek, self.db]), databases, "foreign keys preserve databases"); Check.equal(self.bootHashes(), before, "foreign keys preserve boot payload");
+        }
+        machine.succeed(f"mv {self.pki} /var/lib/untrusted-test; mv {self.pki}-owned {self.pki}"); self.cli("status");
+        var loader = machine.succeed("cat /boot/loader/loader.conf"); self.write("/boot/loader/loader.conf", loader + "\nsecure-boot-enroll force\n"); self.cli("disable --no-reboot", false); Check.equal(self.hashes([self.pk]), platform, "enrolling loader blocks disable"); self.write("/boot/loader/loader.conf", loader);
+        machine.succeed("install -d /boot/loader/keys/auto; printf stale > /boot/loader/keys/auto/PK.auth"); self.cli("disable --no-reboot", false); machine.succeed("test -s /boot/loader/keys/auto/PK.auth"); Check.equal(self.hashes([self.pk]), platform, "stale enrollment blocks disable"); machine.succeed("rm -r /boot/loader/keys/auto");
+        machine.succeed("cp " + ShellWords.quote(recoveryPaths.get(0)) + " /boot/EFI/Linux/unchecked.EFI"); self.cli("disable --no-reboot", false); Check.equal(self.hashes([self.pk]), platform, "uppercase image suffix checked"); machine.succeed("rm /boot/EFI/Linux/unchecked.EFI");
+        self.write("/boot/loader/entries/legacy.CONF", "title Unreviewed Entry\nefi /EFI/recovery/nixos-recovery.efi\n"); self.cli("disable --no-reboot", false); Check.equal(self.hashes([self.pk]), platform, "uppercase entry suffix checked"); machine.succeed("rm /boot/loader/entries/legacy.CONF");
+        var ambiguous = f"/boot/EFI/Linux/nixos-generation-{recoveryGeneration}-ambiguous.efi";
+        machine.succeed("cp " + ShellWords.quote(recoveryPaths.get(0)) + " /run/ambiguous.efi; sbattach --remove /run/ambiguous.efi");
+        machine.succeed("printf 'init=%s/init\\tinit=/nix/store/foreign/init\\000' " + ShellWords.quote(self.systems.get("recovery")) + " > /run/ambiguous-cmdline");
+        machine.succeed("objcopy --update-section .cmdline=/run/ambiguous-cmdline /run/ambiguous.efi " + ShellWords.quote(ambiguous)); machine.succeed("sbctl sign " + ShellWords.quote(ambiguous)); machine.succeed(f"sbverify --cert {self.pki}/keys/db/db.pem " + ShellWords.quote(ambiguous));
+        Check.that(self.cli("disable --no-reboot", false).contains("Noncanonical retained image command line"), "reject ambiguous signed command line"); Check.equal(self.hashes([self.pk]), platform, "ambiguous command line preserves PK"); machine.succeed("rm " + ShellWords.quote(ambiguous));
+        var staleGeneration = self.select("stale"); self.select("maintenance"); self.activate(); self.recoveryEntry(staleGeneration);
+        Check.that(self.cli("disable --no-reboot", false).contains("Retained system can recreate automatic enrollment"), "retained enrolling generation blocks disable"); Check.equal(self.hashes([self.pk]), platform, "retained generation preserves PK");
+        machine.succeed("nix-env -p /nix/var/nix/profiles/system --delete-generations " + staleGeneration); recoveryGeneration = self.select("recovery"); var maintenanceGeneration = self.select("maintenance");
+        for line in Strings.split(machine.succeed("nix-env -p /nix/var/nix/profiles/system --list-generations").trim(), "\n") {
+            var number = Strings.split(line.trim(), " ").get(0);
+            if (!number.equals(recoveryGeneration) && !number.equals(maintenanceGeneration)) { machine.succeed("nix-env -p /nix/var/nix/profiles/system --delete-generations " + ShellWords.quote(number)); }
+        }
+        self.activate(); self.reboot("maintenance"); self.activate();
+        machine.succeed("find /boot/loader/entries -name 'nixos-*.conf' ! -name nixos-recovery.conf -delete"); self.recoveryEntry(recoveryGeneration);
+        Check.that(Strings.split(machine.succeed("find /boot/EFI/Linux -name '*.efi' -printf '%f\\n'").trim(), "\n").len == 2, "exact retained boot images");
+        machine.succeed("grep -q '^secure-boot-enroll off$' /boot/loader/loader.conf; test ! -e /boot/loader/keys/auto; bootctl set-oneshot nixos-recovery.conf"); self.reboot("recovery"); self.firmware(1, 0); self.reboot("maintenance"); self.firmware(1, 0);
+        print("Foreign keys, stale enrollment and ambiguous retained images refused without firmware mutation");
+        before = self.bootHashes(); self.cli("disable --no-reboot"); machine.succeed("test ! -e " + self.pk);
+        Check.equal(self.hashes([self.kek, self.db]), databases, "disable retains KEK/db"); Check.equal(self.keyHashes(), originalKeys, "disable retains local keys"); Check.equal(self.bootHashes(), before, "disable retains boot payload");
+        Check.equal(JSONValue.parse(machine.succeed("cat /etc/nixos/config.json")).get("target").asString(), "Secure-Boot", "disable retains signed target"); self.cli("disable --no-reboot");
+        for (int index = 0; index < 2; index++) { self.reboot("maintenance"); self.firmware(0, 1); machine.succeed("test ! -e /boot/loader/keys/auto; test ! -e " + self.pk); self.cli("status"); self.verifySigned(); }
+        machine.succeed("bootctl set-oneshot nixos-recovery.conf"); self.reboot("recovery"); self.firmware(0, 1); machine.succeed("test ! -e " + self.pk); Check.equal(self.hashes(recoveryPaths), recoveryHashes, "disabled recovery bytes intact"); self.reboot("maintenance");
+        self.cli("enable --no-reboot"); Check.equal(self.hashes([self.kek, self.db]), databases, "re-enable retains databases"); Check.equal(self.keyHashes(), originalKeys, "re-enable retains keys"); Check.equal(self.hashes(recoveryPaths), recoveryHashes, "re-enable retains recovery");
+        self.reboot("maintenance"); self.firmware(1, 0); self.cli("status"); machine.succeed("grep -q '^secure-boot-enroll off$' /boot/loader/loader.conf; test ! -e /boot/loader/keys/auto; bootctl set-oneshot nixos-recovery.conf"); self.reboot("recovery"); self.firmware(1, 0); self.reboot("maintenance"); self.firmware(1, 0);
+        platform = self.hashes([self.pk]); var retainedDB = self.hashes([self.db]); machine.succeed("sbctl reset --partial KEK"); machine.succeed("test ! -e " + self.kek); self.cli("enable --no-reboot", false);
+        Check.equal(self.hashes([self.pk]), platform, "incomplete policy preserves PK"); Check.equal(self.hashes([self.db]), retainedDB, "incomplete policy preserves db");
+        self.cli("disable --no-reboot"); self.reboot("maintenance"); self.firmware(0, 1); self.cli("enable --no-reboot"); machine.succeed("test -s " + self.kek);
+        Check.equal(self.hashes([self.db]), retainedDB, "setup repair retains db"); Check.equal(self.keyHashes(), originalKeys, "setup repair retains keys"); Check.equal(self.hashes(recoveryPaths), recoveryHashes, "setup repair retains recovery"); self.reboot("maintenance"); self.firmware(1, 0); self.cli("status");
+        print("PASS: Secure Boot removal, recovery boots, explicit re-enrollment and incomplete-policy repair");
+    }
+}
+int main(int argc, char** argv) {
+    try { var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); SecureBootScenario(lab.guest("machine")).run(); lab.close(); return 0; }
+    catch (string error) { print(error); return 1; }
+}

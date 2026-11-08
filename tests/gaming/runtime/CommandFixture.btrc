@@ -1,0 +1,35 @@
+import Library.CLI;
+import Library.Platform;
+import Library.Timer;
+import ../../lib/CommandLog.btrc;
+import ./Signals.btrc;
+
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv);
+    var name = PathTools.basename(args.program);
+    var root = Environment.get("FIXTURE_ROOT", "");
+    var marker = PathTools.join(root, "up");
+    if (name.equals("krfb-virtualmonitor")) {
+        FixtureSignals.installStop();
+        Check.that(FileSystem.writeText(PathTools.join(root, "monitor"), ""), "mark virtual monitor ready");
+        while (!FixtureSignals.stopped()) { Timer.sleepMillis(50); }
+        Check.that(FileSystem.removeRecursivePath(PathTools.join(root, "monitor")) == 0, "remove virtual monitor marker"); return 0;
+    }
+    var command = [name]; for argument in args.values { command.push(argument); }
+    CommandLog.append(PathTools.join(root, "calls"), command);
+    if (name.equals("kscreen-doctor") && args.values.contains("--json")) {
+        var inventory = JSONValue.parse(Path.readAll(PathTools.join(root, "inventory.json")));
+        if (FileSystem.exists(PathTools.join(root, "monitor"))) {
+            inventory.get("outputs").push(JSONValue.parse("{\"name\":\"Virtual-Sunshine\",\"connected\":true}"));
+        }
+        print(inventory.stringify());
+    }
+    if (name.equals("podman-compose") && args.values.contains("up")) {
+        Check.that(FileSystem.writeText(marker, ""), "start compose fixture");
+        var output = File("/dev/stdout", "w"); output.writeLine("service log"); output.flush();
+        while (FileSystem.exists(marker)) { Timer.sleepMillis(50); }
+    }
+    if (name.equals("podman-compose") && args.values.contains("down")) { FileSystem.removeRecursivePath(marker); }
+    if (name.equals("curl") && !FileSystem.exists(marker)) { return 7; }
+    return 0;
+}

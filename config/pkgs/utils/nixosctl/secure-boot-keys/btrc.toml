@@ -15,9 +15,29 @@ symbols = ["RENAME_NOREPLACE", "PR_SET_DUMPABLE", "sigset_t", "sigprocmask"]
 name = "libcrypto"
 modules = ["Crypto"]
 
+[[native.defines]]
+name = "_POSIX_C_SOURCE"
+value = "200809L"
+modules = ["Crypto"]
+
 [[native.bindings]]
 module = "Crypto"
 header = "crypto.h"
 language = "c"
 standard = "c11"
-symbols = ["BIO", "EVP_PKEY", "EVP_PKEY_CTX", "X509", "BIO_new_mem_buf", "BIO_free", "bundle_private_key", "bundle_certificate", "d2i_PrivateKey_bio", "d2i_X509_bio", "EVP_PKEY_CTX_new", "EVP_PKEY_CTX_free", "EVP_PKEY_check", "EVP_PKEY_eq", "EVP_PKEY_free", "X509_get_pubkey", "X509_digest", "EVP_sha256", "X509_free"]
+symbols = ["SecureBootPrivateKey", "SecureBootCertificate", "secureBootVerificationDeadline", "secureBootVerificationFinished", "secureBootPrivateKeyRead", "secureBootPrivateKeyRelease", "secureBootPrivateKeyValid", "secureBootCertificateRead", "secureBootCertificateRelease", "secureBootKeyMatches", "secureBootCertificateFingerprint"]
+owned-results = ["secureBootPrivateKeyRead", "secureBootCertificateRead"]
+read-only-borrows = ["secureBootPrivateKeyRead.bytes", "secureBootCertificateRead.bytes"]
+borrowed-parameters = ["secureBootPrivateKeyValid.key", "secureBootKeyMatches.key", "secureBootKeyMatches.certificate", "secureBootCertificateFingerprint.certificate"]
+
+[native.bindings.resources.SecureBootPrivateKey]
+ownership = "unique"
+release = "secureBootPrivateKeyRelease"
+
+[native.bindings.resources.SecureBootCertificate]
+ownership = "unique"
+release = "secureBootCertificateRelease"
+
+[native.bindings.copied-results.secureBootCertificateFingerprint]
+kind = "string"
+owner = "certificate"

@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "nixos_installer_secret_tests"
+
+[dependencies]
+nixosctl = { path = "../../../config/pkgs/utils/nixosctl" }

@@ -4,7 +4,7 @@ lib.listToAttrs (map (host:
     darwin = systems.darwinConfigurations.${host.name};
     username = darwin.config.settings.users.admin.username;
     home = darwin.config.home-manager.users.${username};
-    failures = map (entry: entry.message) (lib.filter (entry: !entry.assertion) home.assertions);
+    failures = map (entry: entry.message) (lib.filter (entry: !entry.assertion) (darwin.config.assertions ++ home.assertions));
     checked = assert lib.assertMsg (failures == [ ]) (lib.concatStringsSep "\n" failures); home;
   in {
     name = "${username}@${host.name}";

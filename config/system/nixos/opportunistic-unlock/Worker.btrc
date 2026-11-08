@@ -1,102 +1,99 @@
-import ./Native.btrc;
-import ./Devices.btrc;
-import ./Policy.btrc;
-import ./Secrets.btrc;
+import Library.Timer;
+import ./LuksVolume.btrc;
 
-#define WORKERS 2
-#define DEVICE_SECONDS 8
-#define TOTAL_SECONDS 20
+void quietCryptsetup(int level, const char* message, void* data) {}
 
-struct UnlockWorker { pid_t pid; double deadline; };
+class ProcessLimits {
+    class bool singleThreaded() {
+        var tasks = Directory("/proc/self/task");
+        var names = tasks.entries();
+        return !tasks.failed() && names.len == 1;
+    }
 
-double monotonic() {
-    struct timespec now;
-    if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) { _exit(1); }
-    return (double)now.tv_sec + (double)now.tv_nsec / 1000000000.0;
-}
+    class bool protectSecrets() {
+        struct rlimit limit;
+        limit.rlim_cur = 0;
+        limit.rlim_max = 0;
+        return ProcessLimits.singleThreaded() && setrlimit(RLIMIT_CORE, &limit) == 0 && prctl(PR_SET_DUMPABLE, 0) == 0;
+    }
 
-void quietCryptsetup(int level, const char* message, void* data) {
-    (void)level; (void)message; (void)data;
-}
-
-void activateVolume(struct BlockDevice* candidate, dev_t root, int fd, crypt_device* device, const char* mapping, char* secret, size_t length) {
-    if (!UnlockPolicy.headerAllowed(device) || crypt_status(device, mapping) != CRYPT_INACTIVE) { return; }
-    char* volumeKey = secret + passwordLimit;
-    size_t keySize = 64;
-    var verified = crypt_volume_key_get(device, CRYPT_ANY_SLOT, volumeKey, &keySize, secret, length);
-    SecretMemory.forgetPassword(secret);
-    if (verified < 0 || !sameAttachment(candidate, fd) || !eligible(candidate, root)) { return; }
-    int readonly = 1;
-    if (ioctl(fd, unlockReadOnly, &readonly) < 0) { return; }
-    uint32_t flags = (uint32_t)CRYPT_ACTIVATE_IGNORE_PERSISTENT | (readonly != 0 ? (uint32_t)CRYPT_ACTIVATE_READONLY : 0);
-    if (crypt_activate_by_volume_key(device, mapping, volumeKey, keySize, flags) >= 0 &&
-        (!sameAttachment(candidate, fd) || !mappingMatches(mapping, candidate->device))) {
-        crypt_deactivate(device, mapping);
+    class bool child(pid_t parent) {
+        struct rlimit memory;
+        memory.rlim_cur = 1536UL * 1024 * 1024;
+        memory.rlim_max = memory.rlim_cur;
+        return prctl(PR_SET_PDEATHSIG, SIGKILL) == 0 && (pid_t)getppid() == parent && setrlimit(RLIMIT_AS, &memory) == 0;
     }
 }
 
-void unlockDevice(struct BlockDevice* candidate, dev_t root, char* secret, size_t length) {
-    char path[PATH_MAX];
-    char pinned[64];
-    char mapping[128];
-    snprintf(path, sizeof(path), "/dev/%s", candidate->name);
-    int fd = open(path, (int)O_RDONLY | (int)O_CLOEXEC | (int)O_NOFOLLOW | (int)O_NONBLOCK);
-    if (fd < 0) { return; }
-    crypt_device* device = NULL;
-    snprintf(pinned, sizeof(pinned), "/proc/self/fd/%d", fd);
-    unsigned deviceMajor = (unsigned)major(candidate->device);
-    unsigned deviceMinor = (unsigned)minor(candidate->device);
-    snprintf(mapping, sizeof(mapping), "opportunistic-%u-%u-%ju", deviceMajor, deviceMinor, (uintmax_t)candidate->sequence);
-    if (sameAttachment(candidate, fd) && eligible(candidate, root) &&
-        crypt_init(&device, pinned) >= 0 && crypt_load(device, CRYPT_LUKS, NULL) >= 0) {
-        activateVolume(candidate, root, fd, device, mapping, secret, length);
-    }
-    SecretMemory.wipe(secret);
-    crypt_free(device);
-    close(fd);
-}
+class UnlockAttempt {
+    private int process = 0;
+    private long long deadline = 0;
 
-void runCandidates(struct BlockDevice* candidates, size_t count, dev_t root, char* secret, size_t length) {
-    struct UnlockWorker workers[WORKERS];
-    memset(workers, 0, sizeof(workers));
-    double deadline = monotonic() + TOTAL_SECONDS;
-    size_t next = 0;
-    pid_t parent = getpid();
-    while (monotonic() < deadline) {
-        bool running = false;
-        for (size_t i = 0; i < WORKERS; i++) {
-            if (workers[i].pid > (pid_t)0) {
-                int status;
-                pid_t exited = waitpid(workers[i].pid, &status, WNOHANG);
-                if (exited == workers[i].pid || (exited < (pid_t)0 && errno != EINTR)) { workers[i].pid = 0; }
-                else if (workers[i].deadline > 0 && monotonic() >= workers[i].deadline) {
-                    kill(workers[i].pid, SIGKILL);
-                    workers[i].deadline = 0;
+    public void start(BlockVolume volume, VolumeInventory inventory, BootPassphrase passphrase) {
+        var parent = getpid();
+        self.process = (int)fork();
+        if (self.process == 0) {
+            // No runtime threads are started before fork. Managed metadata can
+            // be used normally; the inherited secret mapping must be relocked.
+            try {
+                if (ProcessLimits.child(parent) && passphrase.secret.lockAfterFork()) {
+                    LuksVolume.unlock(volume, inventory, passphrase);
                 }
-            }
-            if (workers[i].pid == (pid_t)0 && next < count) {
-                size_t index = next++;
-                pid_t child = fork();
-                if (child == (pid_t)0) {
-                    struct rlimit memory;
-                    memory.rlim_cur = 1536UL * 1024 * 1024;
-                    memory.rlim_max = memory.rlim_cur;
-                    if (prctl(PR_SET_PDEATHSIG, SIGKILL) == 0 && (pid_t)getppid() == parent &&
-                        setrlimit(RLIMIT_AS, &memory) == 0 && mlock(secret, secretBytes) == 0) {
-                        unlockDevice(&candidates[index], root, secret, length);
-                    }
-                    SecretMemory.wipe(secret);
-                    _exit(0);
-                }
-                if (child > (pid_t)0) { workers[i].pid = child; workers[i].deadline = monotonic() + DEVICE_SECONDS; }
-            }
-            running = running || workers[i].pid > (pid_t)0;
+            } catch (string error) {}
+            passphrase.close();
+            _exit(0);
         }
-        if (next == count) { SecretMemory.wipe(secret); }
-        if (!running && next == count) { break; }
-        usleep(10000);
+        if (self.process < 0) { self.process = 0; }
+        self.deadline = MonotonicClock.deadlineAfter(8000);
     }
-    SecretMemory.wipe(secret);
-    for (size_t i = 0; i < WORKERS; i++) { if (workers[i].pid > (pid_t)0) { kill(workers[i].pid, SIGKILL); } }
-    // Dead devices may leave kernel I/O uninterruptible. Never wait for them.
+
+    public bool running() {
+        if (self.process == 0) { return false; }
+        int status;
+        var exited = (int)waitpid((pid_t)self.process, &status, WNOHANG);
+        if (exited == self.process || (exited < 0 && errno != EINTR)) { self.process = 0; }
+        else if (self.deadline != 0 && !MonotonicClock.before(self.deadline)) { self.stop(); }
+        return self.process != 0;
+    }
+
+    public void stop() {
+        if (self.process > 0) { kill((pid_t)self.process, SIGKILL); }
+        self.deadline = 0;
+        // Keep the slot until waitpid reaps it. Stuck kernel I/O must not turn
+        // one timed-out disk into an unbounded number of concurrent attempts.
+    }
+}
+
+class UnlockSession {
+    private BootPassphrase passphrase;
+    private long long deadline;
+
+    public UnlockSession(BootPassphrase passphrase) {
+        self.passphrase = passphrase;
+        self.deadline = MonotonicClock.deadlineAfter(20000);
+    }
+
+    public void run(string rootMapping) {
+        var inventory = VolumeInventory(rootMapping);
+        Vector<UnlockAttempt> attempts = [UnlockAttempt(), UnlockAttempt()];
+        var next = 0;
+        try {
+            while (MonotonicClock.before(self.deadline)) {
+                var running = false;
+                for attempt in attempts {
+                    if (!attempt.running() && next < inventory.volumes.len) {
+                        attempt.start(inventory.volumes.get(next), inventory, self.passphrase);
+                        next++;
+                    }
+                    running = attempt.running() || running;
+                }
+                if (next == inventory.volumes.len) { self.passphrase.secret.erase(); }
+                if (!running && next == inventory.volumes.len) { break; }
+                Timer.sleep(0.01);
+            }
+        } finally {
+            self.passphrase.close();
+            for attempt in attempts { attempt.stop(); }
+        }
+    }
 }

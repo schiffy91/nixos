@@ -1,3 +1,4 @@
+import Library.Console;
 import ./Lock.btrc;
 
 int main() {
@@ -6,5 +7,5 @@ int main() {
         var result = AddonLock.refresh(JSONValue.readFile(root + "/addons.json"));
         AddonLock.publish(root + "/addons.lock.json", result);
         return 0;
-    } catch (string error) { fprintf(stderr, "wow-addons-lock: %s\n", error); return 1; }
+    } catch (string error) { Console.error(f"wow-addons-lock: {error}"); return 1; }
 }

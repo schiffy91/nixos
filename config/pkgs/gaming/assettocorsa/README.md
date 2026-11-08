@@ -36,7 +36,7 @@ is preserved. Steam's runtime command and arguments are retained. Both the
 launcher override and Steam Input setting are applied by rebuild activation
 (with Steam closed) and `assetto-setup`, using the same declaration.
 
-To change controller emulation, set `settings.apps.assettocorsa.steamInput` to
+To change controller emulation, set `settings.apps.gaming.assettocorsa.steamInput` to
 `"disabled"` (default), `"default"` (follow Steam's global preference), or
 `"enabled"`. It affects only original AC. This controls Steam's input
 emulation, not AC's steering/pedal/gear bindings; those still need validation
@@ -57,7 +57,7 @@ assetto restore  # restore overwritten originals; remove managed additions
 ```
 
 `restore` leaves Steam's launch options alone. To return completely to the
-stock launcher, restore first, set `settings.apps.assettocorsa.enable = false`,
+stock launcher, restore first, set `settings.apps.gaming.assettocorsa.enable = false`,
 exit Steam, and rebuild. While enabled, the next Play reapplies the pack.
 
 Mod deployment records its files in the game's `.nix-assettocorsa/` directory.
@@ -82,7 +82,7 @@ content on the next apply. Runtime edits are archived before removal.
 The directory is configured with a string, not a Nix path:
 
 ```nix
-settings.apps.assettocorsa.contentDirectory = "~/Games/Assetto Corsa";
+settings.apps.gaming.assettocorsa.contentDirectory = "~/Games/Assetto Corsa";
 ```
 
 Use `null` to disable local content imports. The flake still pins CM, CSP,
@@ -95,10 +95,31 @@ these source files; the installed game and extraction cache stay local.
 Drive must be available when applying mods. Another PC still needs to install
 the shared mods. Content Manager itself remains supplied by Nix.
 
+The host selects shared profiles in its `pkgs/default.nix`:
+
+```nix
+assettocorsa = {
+  contentDirectory = "~/Drive/media/Games/Assetto Corsa";
+  presetName = "FRACTAL-NORTH";
+  graphicsPreset = "pure-lcs-medium";
+  wheelProfile = "logitech-pro-playstation";
+  brakeGamma = 1.0;
+  wheelMenu.enable = true;
+};
+```
+
+These attributes belong under `settings.apps`. `presetName` links matching
+video, audio and control presets from `contentDirectory`; either value being
+`null` disables these automatic links. Explicit `presets` replace that list.
+Both profile selectors default to `null`. The graphics profile lives in
+`pure-lcs-medium.nix` and supplies defaults that individual `gameSettings`
+keys can override. It expects Pure LCS to be installed through local content.
+Explicit `controlBindings` replace the wheel profile's bindings.
+
 The in-game CSP UI follows the same display-derived DPI as the shared Wine
 launcher, capped to CSP's documented 100–200% range. For example, FRACTAL-NORTH's
 250% desktop scale produces a 200% game UI. Override it with
-`settings.apps.assettocorsa.uiScale = 1.5;` for 150%, or use `null` to follow DPI.
+`settings.apps.gaming.assettocorsa.uiScale = 1.5;` for 150%, or use `null` to follow DPI.
 Setup updates only the relevant keys in Documents/Assetto Corsa/cfg/extension/gui.ini
 and saves the original as `gui.ini.before-nix` when that file already exists.
 It enables CSP's replacement race and pause menus because the original menus
@@ -106,7 +127,7 @@ ignore that scale setting. CSP marks the replacement main menu experimental; leg
 apps can still have their own independent sizing. Game rendering resolution is
 unchanged.
 
-On Plasma, `settings.apps.assettocorsa.followLauncher = true;` (the default)
+On Plasma, `settings.apps.gaming.assettocorsa.followLauncher = true;` (the default)
 starts each race on Content Manager's current monitor. Move CM to the TV
 before starting a race to use that screen. A small KWin script waits for Wine's
 startup geometry requests to settle, places the game once, then leaves manual
@@ -116,7 +137,7 @@ Set this option to `false` to leave placement entirely to the game.
 Saved CM presets can live beside the downloads and remain writable:
 
 ```nix
-settings.apps.assettocorsa.presets = [{
+settings.apps.gaming.assettocorsa.presets = [{
   name = "Video Settings/FRACTAL-NORTH.cmpreset";
   source = "~/Games/Assetto Corsa/FRACTAL-NORTH.cmpreset";
 }];
@@ -139,7 +160,7 @@ The same migration, conflict detection and unlink behavior applies. Audio and
 other CM presets keep their actual category, for example `Audio Settings/...`.
 
 Additional wheel bindings are ordinary records in
-`settings.apps.assettocorsa.controlBindings`:
+`settings.apps.gaming.assettocorsa.controlBindings`:
 
 ```nix
 [
@@ -160,10 +181,10 @@ them. Removing a declaration stops enforcing it; it does not reset controls.
 a linear response from its load-cell brake. Other pedal calibration stays saved
 in the external control preset. Adjust the physical brake force on the wheel.
 
-The complete host binding declaration is in
-`config/hosts/x86_64/FRACTAL-NORTH/pkgs/assettocorsa.nix`. The current profile uses
+The shared wheel binding declaration is in
+`logitech-pro-playstation.nix`. The current profile uses
 direct buttons and a dial-operated Wheel Menu, enabled with
-`settings.apps.assettocorsa.wheelMenu.enable`. It replaces the earlier
+`settings.apps.gaming.assettocorsa.wheelMenu.enable`. It replaces the earlier
 L2/Share modifier layout; those buttons now have ordinary actions.
 
 | Control | Action |
@@ -233,8 +254,8 @@ testing or further wheel access. The physical pedal
 axes, H-shifter gears and FFB need an in-car check. CM's desktop settings
 pages do not yet have a wheel-operated interface.
 
-`settings.apps.assettocorsa.mods` remains available for optional pinned Nix
-packages containing game-root trees. `settings.apps.assettocorsa.csp` can
+`settings.apps.gaming.assettocorsa.mods` remains available for optional pinned Nix
+packages containing game-root trees. `settings.apps.gaming.assettocorsa.csp` can
 replace the public CSP package with a licensed preview. Conflicting content
 is rejected instead of silently choosing a version.
 
@@ -249,7 +270,7 @@ This rig has the **PlayStation/PC PRO Racing Wheel** (`046d:c268`), PRO
 Racing Pedals, and Playseat Trophy. The H-pattern accessory's product name
 is **RS H-Shifter** (7+R); it is distinct from the sequential RS Shifter &
 Handbrake. The wheel driver is enabled only on FRACTAL-NORTH through
-`settings.apps.simracing.enable` and rebuilt with the selected kernel.
+`settings.apps.gaming.simracing.enable` and rebuilt with the selected kernel.
 
 1. Connect the wheel in **PC / PRO mode**. Connect the pedals to the wheel
    base for the initial setup; the H-shifter can connect by USB directly to

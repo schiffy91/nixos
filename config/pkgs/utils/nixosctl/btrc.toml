@@ -1,0 +1,57 @@
+manifest-version = 1
+
+[package]
+name = "nixosctl"
+
+[[native.bindings]]
+module = "lib.accounts.UserAccount"
+header = "lib/accounts/native.h"
+language = "c"
+standard = "c11"
+symbols = ["UserAccountRecord", "userAccountFind", "userAccountRelease", "userAccountName", "userAccountHome", "userAccountIsCurrent"]
+owned-results = ["userAccountFind"]
+read-only-borrows = ["userAccountFind.name"]
+borrowed-parameters = ["userAccountName.account", "userAccountHome.account", "userAccountIsCurrent.account"]
+
+[native.bindings.resources.UserAccountRecord]
+ownership = "unique"
+release = "userAccountRelease"
+
+[native.bindings.copied-results.userAccountName]
+kind = "string"
+owner = "account"
+
+[native.bindings.copied-results.userAccountHome]
+kind = "string"
+owner = "account"
+
+[[native.defines]]
+name = "_POSIX_C_SOURCE"
+value = "200809L"
+modules = ["lib.accounts.UserAccount", "lib.RootSecretFile", "lib.PasswordHashFile"]
+
+[[native.bindings]]
+module = "lib.RootSecretFile"
+header = "lib/credentials.h"
+language = "c"
+standard = "c11"
+symbols = ["credentialRootDirectory"]
+read-only-borrows = ["credentialRootDirectory.path"]
+
+[[native.bindings]]
+module = "lib.PasswordHashFile"
+header = "lib/credentials.h"
+language = "c"
+standard = "c11"
+symbols = ["AccountHashHandle", "accountHashSupported", "accountHashRead", "accountHashRelease", "accountHashValue"]
+owned-results = ["accountHashRead"]
+read-only-borrows = ["accountHashRead.user"]
+borrowed-parameters = ["accountHashValue.account"]
+
+[native.bindings.resources.AccountHashHandle]
+ownership = "unique"
+release = "accountHashRelease"
+
+[native.bindings.copied-results.accountHashValue]
+kind = "string"
+owner = "account"

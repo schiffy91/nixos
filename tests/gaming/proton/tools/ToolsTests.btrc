@@ -15,6 +15,11 @@ int main() {
     assert(environment.len == 2 && ProtonRuntime.value(environment, "FIRST").equals("new=value"));
     var bytes = Bytes.fromString("ONE=one"); bytes.append(0); bytes.appendBytes(Bytes.fromString("TWO=two words")); bytes.append(0);
     assert(ProtonRuntime.environmentEntries(bytes).len == 2);
+    // procfs reports size zero even though environ contains NUL-separated data.
+    var current = ProtonRuntime.environmentEntries(ProtonRuntime.procBytes(f"/proc/{Platform.pid()}/environ"));
+    assert(current.len > 0);
+    assert(ProtonRuntime.value(current, "PATH").equals(Environment.get("PATH", "")));
+    assert(ProtonRuntime.procBytes("/proc/no-such-process/environ").length() == 0);
     assert(ProtonRuntime.logDestination("/tmp/launch.wrapper.log").equals("/tmp/launch.proton.log"));
     assert(ProtonRuntime.logDestination("/tmp/smoke.log").equals("/tmp/smoke.proton.log"));
     var artifacts = ProtonWine.artifacts(ProtonWine.targets());

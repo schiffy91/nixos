@@ -1,4 +1,5 @@
 import Library.Bytes;
+import Library.Digest;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Strings;
@@ -217,12 +218,28 @@ class SteamShortcuts {
                 var artwork = shortcut.get("artwork").asString();
                 if (artwork.isEmpty()) { continue; }
                 var grid = f"{PathTools.dirname(path)}/grid";
-                // Fill missing artwork; a user's custom PNG/JPEG always wins.
+                var legacyPath = f"{artwork}/legacy.json";
+                var legacy = FileSystem.isFile(legacyPath) ? JSONValue.parse(Path.readAll(legacyPath)) : JSONValue.makeObject();
                 for suffix in ["p", "", "_hero", "_logo"] {
                     var target = f"{grid}/{entry.id}{suffix}";
-                    if (FileSystem.exists(f"{target}.png") || FileSystem.exists(f"{target}.jpg")) { continue; }
-                    var source = f"{artwork}/{suffix.isEmpty() ? "landscape" : suffix}.png";
+                    var filename = suffix.isEmpty() ? "landscape" : suffix;
+                    var source = f"{artwork}/{filename}.png";
+                    var record = f"{grid}/.nixos-artwork/{entry.id}{suffix}.sha256";
+                    // Only our unchanged defaults may be upgraded. Artwork tools and
+                    // Steam can replace files in place or choose another extension.
+                    var custom = false;
+                    for extension in ["jpg", "jpeg", "webp"] {
+                        if (FileSystem.exists(f"{target}.{extension}")) { custom = true; }
+                    }
+                    if (custom) { continue; }
+                    if (FileSystem.exists(f"{target}.png")) {
+                        var digest = SHA256.digestBytes(GamingFiles.read(f"{target}.png"));
+                        var previous = FileSystem.isFile(record) ? Path.readAll(record).trim() : "";
+                        if (!digest.equals(previous) && !digest.equals(legacy.get(filename).asString())) { continue; }
+                        if (GamingFiles.read(source).equals(GamingFiles.read(f"{target}.png"))) { continue; }
+                    }
                     GamingFiles.copy(source, f"{target}.png");
+                    GamingFiles.write(record, SHA256.digestBytes(GamingFiles.read(source)));
                 }
             }
             if (!desired.equals(current)) { GamingFiles.writeBytes(path, desired); }

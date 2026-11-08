@@ -2,7 +2,7 @@
 let
   user = config.settings.users.admin.username;
   apps = config.settings.apps;
-  steamEnabled = apps.enable && apps.gaming.enable && apps.steam.enable;
+  steamEnabled = apps.gaming.steam.enable;
 in {
   imports = [ inputs.jovian.nixosModules.default ./session.nix ./touch-keyboard.nix ];
 
@@ -62,7 +62,7 @@ in {
         virtualKeyboard.enable = true;
         taskbarLaunchers = [
           "applications:org.kde.dolphin.desktop"
-          "applications:google-chrome.desktop"
+        ] ++ lib.optional apps.utils.chrome.enable "applications:google-chrome.desktop" ++ [
           "applications:org.kde.konsole.desktop"
         ] ++ lib.optionals steamEnabled [
           "applications:steam.desktop"

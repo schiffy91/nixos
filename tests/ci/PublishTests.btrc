@@ -1,0 +1,62 @@
+import Library.CLI;
+import Library.Platform;
+import ../lib/CommandLog.btrc;
+import ../lib/TestDirectory.btrc;
+
+class PublishTests {
+    private TestDirectory fixture;
+    private string program;
+
+    public PublishTests(string program, string command) {
+        self.fixture = TestDirectory("publisher");
+        self.program = program;
+        self.fixture.write("flake.nix", "");
+        Check.that(FileSystem.symlink(command, self.fixture.path("nix")) == 0, "install Nix fixture");
+    }
+
+    private Vector<JSONValue> run(Vector<string> extra = [], bool fail = false) {
+        self.fixture.write("commands.jsonl", "");
+        var arguments = ["publish", "--key", self.fixture.path("private key"), "--dir", self.fixture.path("cache with spaces")];
+        for argument in extra { arguments.push(argument); }
+        var environment = [f"PATH={self.fixture.path()}:{Environment.get("PATH", "")}", f"NIXOS_CONFIG_ROOT={self.fixture.path()}", f"COMMAND_LOG={self.fixture.path("commands.jsonl")}"];
+        if (fail) { environment.push("FAIL_BUILD=1"); }
+        var result = ChildProcess.run(self.program, arguments, environment=environment, timeoutMilliseconds=15000);
+        Check.that(!result.timedOut && (result.code != 0) == fail, f"publisher exit: {result.stderr()}");
+        Check.that(!(result.stdout() + result.stderr()).contains("test-1:secret"), "never print signing key");
+        return CommandLog.read(self.fixture.path("commands.jsonl"));
+    }
+
+    private void builds(Vector<JSONValue> commands, Vector<string> expected) {
+        var actual = CommandLog.named(commands, "build");
+        Check.that(actual.len == expected.len, "number of builds");
+        for (int index = 0; index < actual.len; index++) {
+            var command = actual.get(index);
+            Check.equal(command.at(command.size() - 1).asString(), f"{self.fixture.path()}#{expected.get(index)}", "build target");
+        }
+    }
+
+    public void check() {
+        var commands = self.run();
+        Check.equal(Check.exited(ChildProcess.run("stat", ["-c", "%a", self.fixture.path("private key")])).trimmed(), "600", "signing key mode");
+        Check.equal(Path.readAll(self.fixture.path("private key")), "test-1:secret\n", "signing key contents");
+        self.builds(commands, ["one"]);
+        Check.that(CommandLog.named(commands, "store").len == 1 && CommandLog.named(commands, "copy").len == 1, "sign and publish");
+        commands = self.run(["--all"]);
+        for command in CommandLog.named(commands, "key") { Check.that(!command.at(1).asString().equals("generate-secret"), "reuse existing key"); }
+        self.builds(commands, ["one", "two"]);
+        self.builds(self.run(["explicit"]), ["explicit"]);
+        self.builds(self.run([f"--dir={self.fixture.path("cache with spaces")}", f"--key={self.fixture.path("private key")}", "--", "explicit"]), ["explicit"]);
+        commands = self.run([], true);
+        Check.that(CommandLog.named(commands, "store").isEmpty() && CommandLog.named(commands, "copy").isEmpty(), "failed build is never published");
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        PublishTests(args.require(0, "Supply repo-tools"), args.require(1, "Supply Nix fixture")).check();
+        print("PASS: publishing targets, key ownership, argv boundaries and failure isolation");
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

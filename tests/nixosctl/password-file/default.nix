@@ -4,18 +4,26 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  nixosctl = import (flake.outPath + "/config/pkgs/utils/nixosctl/package.nix") {
+  nixosctl = import ../../../config/pkgs/utils/nixosctl/package.nix {
     inherit pkgs;
     inherit (pkgs) lib;
     btrcpy = inputs.btrc.packages.${system}.btrcpy;
   };
-  python = pkgs.python3.withPackages (p: [ p.pexpect ]);
+  contracts = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+    name = "password-file-contracts";
+    src = pkgs.lib.fileset.toSource {
+      root = ../../..;
+      fileset = pkgs.lib.fileset.unions [ ../../lib ../../../config/lib/BackgroundProcess.btrc ./GuestTests.btrc ];
+    };
+    programs.password-file-contracts = "tests/nixosctl/password-file/GuestTests.btrc";
+    linkFlags = [ "-lutil" ];
+  };
 in assert import ./storage.nix { inherit inputs system; };
-pkgs.testers.runNixOSTest {
+(import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "password-file";
   nodes.machine = { lib, ... }: {
     _module.args.inputs = inputs;
-    imports = [ ../../../config/settings.nix ../../../config/system/nixos/sudo.nix ];
+    imports = [ ../../../config/settings.nix ];
     settings.users.admin.username = "admin";
     users.mutableUsers = false;
     users.users.admin = {
@@ -38,19 +46,9 @@ pkgs.testers.runNixOSTest {
       imports = [ ../../../config/system/nixos/users/password.nix ];
     };
     security.sudo.extraConfig = "Defaults passwd_tries=1";
-    environment.systemPackages = [ nixosctl python pkgs.mkpasswd ];
-    environment.etc."password-file-test.py".source = ./test.py;
+    environment.systemPackages = [ nixosctl contracts pkgs.mkpasswd ];
     virtualisation.memorySize = 1024;
     virtualisation.useBootLoader = true;
   };
-  testScript = ''
-    start_all()
-    machine.wait_for_unit("multi-user.target")
-    machine.succeed("${python}/bin/python3 ${./test.py}")
-    machine.reboot()
-    machine.wait_for_shutdown()
-    machine.start()
-    machine.wait_for_unit("multi-user.target")
-    machine.succeed("${python}/bin/python3 ${./test.py} reboot")
-  '';
+  scenario = ./Main.btrc;
 }

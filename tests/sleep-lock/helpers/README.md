@@ -9,8 +9,9 @@ partially completed conversation. Link-time interception observes every raw
 buffer wipe, including glibc's fortified entrypoint; production binaries retain
 real `explicit_bzero` calls.
 
-CRTC and plane readback predicates reject missing or still-bound state. Generated
-authentication code must contain no managed-string, ARC or threaded runtime; its
-locked address space, raw pipe/stack buffers, PAM response allocation and
-parent-death behavior remain independent of the managed controller. Actual VT,
-PAM and suspend ordering are exercised by the existing sleep VM scenarios.
+CRTC and plane readback predicates reject missing or still-bound state. The
+password response owns a fixed `OwnedBuffer<char>` and wipes it before closing;
+repeated explicit close and scope cleanup are safe. Managed objects hold only
+metadata. The helper process locks memory before PAM or password capture, and
+the Plymouth child remains tied to its parent. Actual VT, PAM and suspend
+ordering are exercised by the existing sleep VM scenarios.

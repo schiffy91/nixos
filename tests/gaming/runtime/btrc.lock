@@ -1,0 +1,1 @@
+{"manifest-hash":"40f8f9d61dbb794067e8bd9c7fd11d2a5bc6f22dc8210d46717cec556d7a0050","packages":[{"dependencies":{},"manifest-hash":"4de19b6941520b7bc5764f15da5522e9710a7987dba7e95c4a4ad269a62e919c","name":"nixos_gaming_runtime_tests","source":{"path":"."}}],"root":"nixos_gaming_runtime_tests","schema":3}

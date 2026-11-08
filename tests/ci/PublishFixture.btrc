@@ -1,0 +1,28 @@
+import Library.CLI;
+import Library.Platform;
+import ../lib/CommandLog.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        CommandLog.append(Environment.get("COMMAND_LOG", ""), args.values);
+        var command = args.command();
+        var action = args.count() > 1 ? args.get(1) : "";
+        if (command.equals("eval") && action.equals("--json")) {
+            print("{\"cache\":{\"name\":\"test-1\",\"publicKey\":\"test-1:public\"},\"systems\":[{\"system\":\"x86_64-linux\",\"attrs\":[\"one\"]}],\"local\":[\"one\",\"two\"]}");
+        } else if (command.equals("eval") && action.equals("--raw")) { print("x86_64-linux"); }
+        else if (command.equals("key") && action.equals("generate-secret")) { print("test-1:secret"); }
+        else if (command.equals("key") && action.equals("convert-secret-to-public")) {
+            Check.equal(File("/dev/stdin", "r").read(), "test-1:secret\n", "signing key stdin");
+            print("test-1:public");
+        } else if (command.equals("build")) {
+            if (Environment.has("FAIL_BUILD")) { return 7; }
+            print("/nix/store/fake-output");
+        } else if (command.equals("store") && action.equals("sign")) {
+            Check.that(args.count() == 6 && args.get(2).equals("--key-file") && args.get(4).equals("--recursive") && args.get(5).equals("/nix/store/fake-output"), "sign arguments");
+        } else if (command.equals("copy")) {
+            Check.that(args.count() == 4 && action.equals("--to") && args.get(2).endsWith("?compression=zstd") && args.get(3).equals("/nix/store/fake-output"), "copy arguments");
+        } else { throw "Unexpected Nix fixture command"; }
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

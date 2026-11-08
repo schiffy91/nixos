@@ -1,0 +1,20 @@
+class UserAccount {
+    public string name;
+    public string homeDirectory;
+    public bool current;
+
+    private UserAccount(string name, string homeDirectory, bool current) {
+        self.name = name;
+        self.homeDirectory = homeDirectory;
+        self.current = current;
+    }
+
+    class UserAccount? find(string name) {
+        var record = userAccountFind(name);
+        if (record == null) { return null; }
+        var accountName = userAccountName(record);
+        var homeDirectory = userAccountHome(record);
+        if (accountName == null || homeDirectory == null) { return null; }
+        return UserAccount(accountName, homeDirectory, userAccountIsCurrent(record));
+    }
+}

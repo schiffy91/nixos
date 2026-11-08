@@ -5,7 +5,7 @@ let
   inputs.btrc = let node = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.btrc.locked;
     in builtins.getFlake "github:${node.owner}/${node.repo}/${node.rev}";
   worker = import ../../../config/system/nixos/opportunistic-unlock/package.nix { inherit pkgs inputs; };
-in pkgs.testers.runNixOSTest {
+in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "opportunistic-unlock";
   nodes.machine = { config, ... }: {
     _module.args.inputs = inputs;
@@ -61,5 +61,5 @@ in pkgs.testers.runNixOSTest {
     systemd.services.nixos-opportunistic-unlock.unitConfig.ConditionPathExists = "/var/lib/test-auto-unlock";
     boot.kernelModules = [ "sdhci_pci" "mmc_block" "usb_storage" "xhci_pci" "sd_mod" "nvme" ];
   };
-  testScript = builtins.readFile ./test.py;
+  scenario = ./Main.btrc;
 }

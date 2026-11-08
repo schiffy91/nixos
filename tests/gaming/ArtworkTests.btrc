@@ -1,0 +1,48 @@
+import Library.CLI;
+import Library.Image.SystemImageDecoder;
+import ../lib/Check.btrc;
+import Library.FileSystem;
+
+class ArtworkTests {
+    class Image png(string path) {
+        var encoded = FileSystem.readBytes(path);
+        Check.that(EncodedImageSignature.sniff(encoded) == ENCODED_IMAGE_FORMAT_PNG, f"PNG content: {path}");
+        var decoded = SystemImageDecoder().decode(encoded, EncodedImageDecodeLimits(67108864, 8192, 8192, 33554432));
+        Check.that(decoded.succeeded(), f"decode {path}: {decoded.message()}");
+        return decoded.image();
+    }
+
+    class void check(string root) {
+        Check.equal(FileSystem.listDir(root).sorted().join(","), "battlenet,chiaki,chrome,moonlight,semu", "artwork applications");
+        for app in FileSystem.listDir(root) {
+            var directory = PathTools.join(root, app);
+            for name in ["p", "landscape", "_hero"] {
+                var image = ArtworkTests.png(PathTools.join(directory, f"{name}.png"));
+                bool valid = false;
+                if (name.equals("p")) { valid = image.width == 600 && image.height == 900; }
+                else if (name.equals("landscape")) { valid = image.width == 920 && image.height == 430; }
+                else { valid = (image.width == 1920 && image.height == 620) || (image.width == 3840 && image.height == 1240); }
+                Check.that(valid, f"{app} {name}: dimensions {image.width}x{image.height}");
+            }
+            var logo = ArtworkTests.png(PathTools.join(directory, "_logo.png"));
+            Check.that(logo.width > logo.height, f"{app}: wordmark proportions");
+            var transparent = false;
+            var opaque = false;
+            for (int y = 0; y < logo.height; y++) {
+                for (int x = 0; x < logo.width; x++) {
+                    var alpha = logo.pixel(x, y).alpha;
+                    transparent = transparent || alpha == 0;
+                    opaque = opaque || alpha == 255;
+                }
+            }
+            Check.that(transparent && opaque, f"{app}: logo alpha spans transparent to opaque");
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        ArtworkTests.check(CLIArgs(argc, argv).require(0, "Supply artwork directory"));
+        print("All five apps have valid portrait, landscape, hero and transparent logo assets"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

@@ -1,0 +1,6 @@
+manifest-version = 1
+[package]
+name = "nixos_wow_tests"
+[dependencies]
+wow = { path = "../../../config/pkgs/gaming/wow" }
+ci = { path = "../../../ci" }

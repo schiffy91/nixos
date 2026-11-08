@@ -1,0 +1,1 @@
+{"manifest-hash":"bb6070aeaff10890d6864605b57b9193e00cbfad1dfa7fdb104e1cd91fa0e72a","packages":[{"dependencies":{},"manifest-hash":"f1f39f371d377231b66986c92e714b7b6015e6c991f984fb56176c5c88b62145","name":"nixos_ci","source":{"path":"."}}],"root":"nixos_ci","schema":3}

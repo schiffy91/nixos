@@ -1,0 +1,101 @@
+import Library.FileSystem;
+import Library.Map;
+import Library.Process;
+import Library.Strings;
+
+class CaptureMode {
+    private string _name;
+    private int format;
+    private int primaries;
+    private int transfer;
+    private int dmabuf;
+    private int whiteLow;
+    private int whiteHigh;
+
+    private CaptureMode(string name, int format, int primaries, int transfer, int dmabuf, int whiteLow, int whiteHigh) {
+        self._name = name;
+        self.format = format;
+        self.primaries = primaries;
+        self.transfer = transfer;
+        self.dmabuf = dmabuf;
+        self.whiteLow = whiteLow;
+        self.whiteHigh = whiteHigh;
+    }
+
+    public string name { get { return self._name; } }
+
+    class CaptureMode named(string name) {
+        if (name.equals("shm-sdr")) { return CaptureMode(name, 8, 1, 4, 0, 245, 255); }
+        // SDR reference white is 203 nits, approximately 0.583 after PQ encoding.
+        if (name.equals("shm-pq")) { return CaptureMode(name, 8, 7, 14, 0, 120, 190); }
+        if (name.equals("hdr10")) { return CaptureMode(name, 81, 7, 14, 1, -1, -1); }
+        throw f"Unknown capture mode: {name}";
+    }
+
+    public Vector<string> failures(CaptureEvidence evidence) {
+        Vector<string> failures = [];
+        Vector<(string, int)> expected = [("negotiated_format", self.format), ("negotiated_primaries", self.primaries), ("negotiated_transfer", self.transfer), ("dmabuf", self.dmabuf)];
+        for pair in expected {
+            var actual = evidence.value(pair._0);
+            if (!actual.equals(f"{pair._1}")) { failures.push(f"{self.name} {pair._0}={actual}, expected {pair._1}"); }
+        }
+        if (evidence.number("frames") < 1) { failures.push(f"{self.name}: no captured frames"); }
+        if (self.whiteLow >= 0) {
+            var rgb = Strings.split(evidence.value("center_rgb"), ",");
+            var white = rgb.len == 3 ? CaptureEvidence.integer(rgb.get(0)) : -1;
+            if (white < self.whiteLow || white > self.whiteHigh) { failures.push(f"{self.name} white={white}, expected {self.whiteLow}..{self.whiteHigh}"); }
+        }
+        return failures;
+    }
+}
+
+class CaptureEvidence {
+    private Map<string, string> fields = {};
+
+    public CaptureEvidence(string log) {
+        for line in Strings.split(log, "\n") {
+            var marker = line.find("RESULT: ", 0);
+            if (marker < 0) { continue; }
+            var field = line.substring(marker + 8, line.len() - marker - 8).trim();
+            var equals = field.find("=", 0);
+            if (equals < 1) { continue; }
+            var value = field.substring(equals + 1, field.len() - equals - 1);
+            var length = 0;
+            while (length < value.len() && !Strings.isSpace(value[length])) { length++; }
+            self.fields.put(field.substring(0, equals), value.substring(0, length));
+        }
+    }
+
+    public string value(string key) { return self.fields.getOrDefault(key, ""); }
+    public int number(string key) { return CaptureEvidence.integer(self.value(key)); }
+
+    class int integer(string value) {
+        if (value.isEmpty()) { return -1; }
+        var number = 0;
+        for character in value {
+            if (!Strings.isDigit(character)) { return -1; }
+            var digit = (int)character - 48;
+            if (number > (2147483647 - digit) / 10) { return -1; }
+            number = number * 10 + digit;
+        }
+        return number;
+    }
+}
+
+class CaptureSession {
+    class ExecResult run(string kwin, string probe, CaptureMode mode, int timeoutSeconds) {
+        var directory = TemporaryDirectory.create("kwin-hdr-test").value();
+        var inner = PathTools.join(directory.path(), "inner.sh");
+        if (!FileSystem.writeText(inner, f"#!/bin/sh\nexec {ShellWords.quote(probe)} {ShellWords.quote(mode.name)}\n") || FileSystem.chmod(inner, 0755) != 0) { throw "Cannot create capture session"; }
+        Vector<string> environment = ["QT_FORCE_STDERR_LOGGING=1", "QT_LOGGING_RULES=kwin_screencast.debug=true;kwin_screencast.info=true", "LD_LIBRARY_PATH=/run/opengl-driver/lib", "__EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d"];
+        for name in ["CONFIG", "DATA", "CACHE", "STATE"] {
+            var path = PathTools.join(directory.path(), name.toLower());
+            if (FileSystem.mkdirp(path) != 0) { throw "Cannot isolate KWin configuration"; }
+            environment.push(f"XDG_{name}_HOME={path}");
+        }
+        var result = ChildProcess.run("dbus-run-session", ["--", f"{kwin}/bin/kwin_wayland", "--virtual", "--width", "1024", "--height", "768", f"--socket={PathTools.basename(directory.path())}", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities", f"--exit-with-session={inner}"],
+            environment=environment, unsetEnvironment=["WAYLAND_DISPLAY", "DISPLAY", "KWIN_DRM_DEVICES", "PROBE_FORMAT", "PROBE_NO_SIZE", "PROBE_NO_RATE", "PROBE_NO_COLOR"], timeoutMilliseconds=timeoutSeconds * 1000);
+        if (!directory.close().ok()) { throw "Cannot clean up capture session"; }
+        return result;
+    }
+}

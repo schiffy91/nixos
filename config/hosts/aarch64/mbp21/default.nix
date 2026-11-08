@@ -20,17 +20,18 @@ in {
     };
   };
   settings.apps = {
+    gaming.enable = false;
     dev.packages = with pkgs; [ direnv gh glfw nodejs podman python313 qemu wgpu-native ];
     utils.packages = with pkgs; [ _1password-cli coreutils imagemagick qpdf ];
-    zsh.enable = true;
-    shell.aliases = {
+    dev.zsh.enable = true;
+    dev.shell.aliases = {
       nix-update = "sudo darwin-rebuild switch --flake ${flake}";
       nix-upgrade = "nix flake update nixpkgs-darwin home-manager-darwin nix-darwin --flake ${repoPath} && sudo darwin-rebuild switch --flake ${flake}";
     };
-    git.includes = [ "${config.settings.users.admin.homeDirectory}/.config/git/local-before-nix.gitconfig" ];
-    gemini.enable = true;
-    lmstudio.enable = true;
-    agents.rules = true;
+    dev.git.includes = [ "${config.settings.users.admin.homeDirectory}/.config/git/local-before-nix.gitconfig" ];
+    dev.gemini.enable = true;
+    dev.lmstudio.enable = true;
+    dev.agents.rules = true;
   };
   # Permission intent is reviewed/applied through System Settings.
   settings.macos.permissions = {

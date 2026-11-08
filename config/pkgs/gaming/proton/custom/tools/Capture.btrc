@@ -1,3 +1,4 @@
+import Library.Console;
 import ./Runtime.btrc;
 
 class WindowGeometry {
@@ -98,7 +99,7 @@ class ProtonCapture {
         int motion = (int)fork(); if (motion < 0) { throw "Cannot start hover motion"; }
         if (motion == 0) {
             try { while (true) { for point in points { self.move((int)(window.x + window.width * point.x), (int)(window.y + window.height * point.y), desktop); Timer.sleepMillis(point.dwell); } } }
-            catch (string error) { fprintf(stderr, "hover motion: %s\n", error); }
+            catch (string error) { Console.error(f"hover motion: {error}"); }
             _exit(1);
         }
         try { self.frames(options); }

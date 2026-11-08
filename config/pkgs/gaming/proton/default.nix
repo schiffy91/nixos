@@ -5,7 +5,7 @@ let
   home = "/home/${user}";
   protonDir = "${home}/Games/proton";
   compatDir = "${home}/.local/share/Steam/compatibilitytools.d";
-  enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.steam.enable && config.settings.apps.steam.protonCustom.enable;
+  enabled = config.settings.apps.gaming.steam.protonCustom.enable;
   protonCustom = pkgs.callPackage ./custom/package.nix {
     inherit (pkgs) makeWrapper rsync unzip;
   };

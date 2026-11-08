@@ -1,0 +1,87 @@
+import Library.CLI;
+import Library.Platform;
+import ../lib/CommandLog.btrc;
+import ../lib/TestDirectory.btrc;
+
+class MountIntegration {
+    private TestDirectory fixture;
+    private string driver;
+
+    public MountIntegration(string driver, string command) {
+        self.fixture = TestDirectory("recovery-mount");
+        self.driver = driver;
+        Check.that(FileSystem.mkdirp(self.fixture.path("bin")) == 0, "create fixture commands");
+        for name in ["findmnt", "mount", "cryptsetup", "btrfs"] {
+            Check.that(FileSystem.symlink(command, self.fixture.path(f"bin/{name}")) == 0, "install fixture command");
+        }
+        self.fixture.write("boot", "");
+        var plan = JSONValue.parse("{\"encrypted\":true,\"rootPartition\":\"/fixture/partition\",\"rootName\":\"fixture\",\"volumes\":[{\"mountPoint\":\"/\",\"name\":\"@root\",\"options\":\"compress=zstd\"},{\"mountPoint\":\"/home\",\"name\":\"@home\",\"options\":\"\"}],\"persist\":[{\"path\":\"/var/lib\",\"subvolume\":\"persist/var\"},{\"path\":\"/var/lib/nested\",\"subvolume\":\"persist/nested\"},{\"path\":\"/missing\",\"subvolume\":\"persist/absent\"}]}");
+        plan.set("rootDevice", JSONValue.makeString(self.fixture.path("device")));
+        plan.set("bootPartition", JSONValue.makeString(self.fixture.path("boot")));
+        plan.set("recoveryPartition", JSONValue.makeString(self.fixture.path("absent")));
+        self.fixture.json("plan.json", plan);
+        var state = JSONValue.parse("{\"mounts\":{},\"commands\":[]}");
+        state.set("root", JSONValue.makeString(self.fixture.path("device")));
+        state.set("available", CommandLog.arguments([self.fixture.path("top/persist/var"), self.fixture.path("top/persist/nested")]));
+        self.fixture.json("state.json", state);
+    }
+
+    private ExecResult run() {
+        return ChildProcess.run(self.driver, [self.fixture.path("plan.json"), self.fixture.path("target"), self.fixture.path("top")],
+            environment=[f"PATH={self.fixture.path("bin")}:{Environment.get("PATH", "")}", f"MOUNT_FIXTURE_STATE={self.fixture.path("state.json")}"], timeoutMilliseconds=15000);
+    }
+
+    private JSONValue state() { return JSONValue.readFile(self.fixture.path("state.json")); }
+
+    private void resetCommands(JSONValue state) {
+        state.set("commands", JSONValue.makeArray());
+        self.fixture.json("state.json", state);
+    }
+
+    public void check() {
+        Check.exited(self.run());
+        var state = self.state();
+        var mounts = CommandLog.named(state.get("commands").elements(), "mount");
+        var expected = ["target", "target/home", "top", "target/var/lib", "target/boot"];
+        Check.that(mounts.len == expected.len, "mount count excludes nested and absent persistence");
+        for (int i = 0; i < mounts.len; i++) {
+            var mount = mounts.get(i);
+            Check.equal(mount.at(mount.size() - 1).asString(), self.fixture.path(expected.get(i)), "mount order");
+        }
+        Check.that(CommandLog.named(state.get("commands").elements(), "cryptsetup").len == 1, "unlock once");
+        Check.equal(Check.exited(ChildProcess.run("stat", ["-c", "%a", self.fixture.path("target/tmp")])).trimmed(), "1777", "temporary directory mode");
+        self.resetCommands(state);
+        Check.exited(self.run());
+        state = self.state();
+        Check.that(CommandLog.named(state.get("commands").elements(), "mount").isEmpty() && CommandLog.named(state.get("commands").elements(), "cryptsetup").isEmpty(), "idempotent recovery");
+        for field in ["source", "fstype", "options"] {
+            // Parse a fresh observation for each adversary so mutations cannot
+            // contaminate the baseline through JSONValue's shared objects.
+            var changed = JSONValue.parse(state.stringify());
+            changed.get("mounts").get(self.fixture.path("target")).set(field, JSONValue.makeString(field.equals("source") ? self.fixture.path("boot") : field.equals("fstype") ? "ext4" : "subvol=@other"));
+            self.resetCommands(changed);
+            var result = self.run();
+            Check.that(result.code != 0 && result.stderr().contains("mounted differently"), "reject conflicting mount");
+            Check.that(CommandLog.named(self.state().get("commands").elements(), "mount").isEmpty(), "conflict has no mount effects");
+        }
+        var remaining = JSONValue.makeObject();
+        for target in state.get("mounts").keys() {
+            if (!target.equals(self.fixture.path("target/boot"))) { remaining.set(target, state.get("mounts").get(target)); }
+        }
+        state.set("mounts", remaining);
+        self.resetCommands(state);
+        Check.that(FileSystem.removeRecursivePath(self.fixture.path("boot")) == 0, "remove required fixture device");
+        var result = self.run();
+        Check.that(result.code != 0 && result.stderr().contains("missing device"), "require boot device");
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        MountIntegration(args.require(0, "Supply recovery driver"), args.require(1, "Supply command fixture")).check();
+        print("PASS: encrypted recovery, mount order, idempotence, persistence, conflicts and required devices");
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

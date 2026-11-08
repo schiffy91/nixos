@@ -59,7 +59,7 @@ class NixosRebuilder {
 
     // Modules drop executables here to refresh pins they own. Core knows nothing of what they are.
     public void runUpgradeHooks() {
-        var directory = PathTools.join("/etc", self.config.evalString("config.settings.apps.nixosctl.upgradeHooksDir"));
+        var directory = PathTools.join("/etc", self.config.evalString("config.settings.apps.utils.nixosctl.upgradeHooksDir"));
         if (!FileSystem.isDir(directory)) { return; }
         for name in FileSystem.listDir(directory).sorted() {
             var hook = PathTools.join(directory, name);

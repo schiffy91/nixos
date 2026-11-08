@@ -1,0 +1,76 @@
+import Library.CLI;
+import ../../lib/TerminalSession.btrc;
+import ../../lib/TestDirectory.btrc;
+import ../../lib/ParallelCommands.btrc;
+
+class PasswordFileTests {
+    private string target = "/var/lib/nixos/credentials/password-hash";
+
+    private string run(string command, bool success = true) {
+        var result = ChildProcess.run("sh", ["-c", "set -eu; " + command], timeoutMilliseconds=90000);
+        Check.that(!result.timedOut && !result.captureFailed && (result.code == 0) == success, f"{command}\n{result.stdout()} {result.stderr()}"); return result.stdout().trim();
+    }
+    private void authenticate(string password, bool success = true) {
+        var terminal = TerminalSession("runuser", ["--pty", "-u", "admin", "--", "/bin/sh", "-c", "sudo -k true"]);
+        terminal.expect("[sudo] password for admin: "); terminal.line(password); terminal.finish(success);
+    }
+    private void unchanged(string original) { Check.equal(Path.readAll(self.target), original, "protected hash unchanged"); }
+    private void write(string path, string text) { Check.that(FileSystem.writeText(path, text), "write password-file fixture"); }
+
+    public void check(bool reboot) {
+        Check.that(Platform.isRoot(), "password-file contracts run in guest");
+        if (reboot) {
+            self.authenticate("testpass123"); self.authenticate("attacker", false); self.unchanged(Path.readAll("/var/tmp/original-hash"));
+            Check.equal(self.run("stat -c '%u:%g:%a' /var/lib/nixos/credentials"), "0:0:700", "credential directory after reboot");
+            Check.equal(self.run(f"stat -c '%u:%g:%a' {self.target}"), "0:0:600", "credential file after reboot"); return;
+        }
+        self.authenticate("testpass123"); Check.that(!FileSystem.exists(self.target), "legacy profile has no protected hash yet");
+        self.run("chown admin:users /etc/nixos"); Check.equal(self.run("stat -c '%u:%g:%a' /etc/nixos/secrets"), "0:0:700", "legacy secret permissions");
+        self.run("runuser -u admin -- cat /etc/nixos/secrets/hashed_password.txt", false);
+        self.run("runuser -u admin -- sh -c 'mv /etc/nixos/secrets /etc/nixos/secrets-original; mkdir -m 700 /etc/nixos/secrets; echo attacker | mkpasswd -m sha-512 -s > /etc/nixos/secrets/hashed_password.txt'");
+        var protected = self.run("readlink -f /run/current-system/specialisation/protected");
+        self.run(f"{protected}/bin/switch-to-configuration test"); self.authenticate("testpass123"); self.authenticate("attacker", false);
+        var original = Path.readAll(self.target); self.write("/var/tmp/original-hash", original); self.run("chmod 600 /var/tmp/original-hash");
+        for command in [f"cat {self.target}", f"rm {self.target}", "mv /var/lib/nixos/credentials /var/lib/nixos/credentials-replaced", f"echo bogus > {self.target}"] { self.run(f"runuser -u admin -- sh -c {ShellWords.quote(command)}", false); }
+        self.run("echo 'admin:changed-shadow-only' | chpasswd");
+        var concurrency = TestDirectory("password-file-concurrency");
+        ParallelCommands.run("nixosctl-password-file", [self.target, "admin"], "/dev/null", concurrency.path(), 12, 6);
+        self.unchanged(original); self.run(f"{protected}/bin/switch-to-configuration test"); self.authenticate("testpass123");
+        self.write("/var/lib/permissions-outside", "public test fixture"); self.run("chown 1000:100 /var/lib/permissions-outside; chmod 600 /var/lib/permissions-outside");
+        self.run("ln -s /run/current-system /etc/nixos/result; ln -s /missing-vm-firmware /etc/nixos/dangling; ln -s /var/lib/permissions-outside /etc/nixos/external; ln -s /var/lib/permissions-outside /etc/nixos/secrets/external");
+        self.run("env NIXOS_CONFIG_ROOT=/etc/nixos SUDO_USER=admin nixosctl fix-permissions");
+        Check.equal(self.run("stat -c '%u:%a' /etc/nixos"), "1000:755", "repository ownership"); Check.equal(self.run("stat -c '%u:%g:%a' /etc/nixos/secrets"), "0:0:700", "legacy secrets stay private");
+        Check.equal(self.run("stat -c '%u:%a' /var/lib/permissions-outside"), "1000:600", "external link target untouched"); self.unchanged(original);
+        self.run("mv /etc/nixos/secrets /etc/nixos/secrets-current; ln -s /var/lib /etc/nixos/secrets");
+        self.run("env NIXOS_CONFIG_ROOT=/etc/nixos SUDO_USER=admin nixosctl fix-permissions", false); self.run("rm /etc/nixos/secrets; mv /etc/nixos/secrets-current /etc/nixos/secrets");
+        self.run("install -d -m755 /var/lib/password-file-test");
+        for kind in ["writable-parent", "owned-parent", "symlink-parent", "symlink-leaf", "writable-leaf", "owned-leaf", "symlink-file", "hardlink-file", "public-file", "owned-file", "invalid-hash", "nul-hash", "missing-account"] {
+            var parent = f"/var/lib/password-file-test/{kind}"; var leaf = parent + "/private"; var path = leaf + "/hash";
+            self.run(f"mkdir -m755 {parent}; mkdir -m700 {leaf}; install -m600 /dev/null {path}"); self.write(path, original);
+            if (kind.equals("writable-parent")) { self.run(f"chmod 777 {parent}"); }
+            if (kind.equals("owned-parent")) { self.run(f"chown 1000:100 {parent}"); }
+            if (kind.equals("symlink-parent") || kind.equals("symlink-leaf")) { var link = kind.equals("symlink-parent") ? parent : leaf; self.run(f"mv {link} {link}.real; ln -s {link}.real {link}"); }
+            if (kind.equals("writable-leaf")) { self.run(f"chmod 750 {leaf}"); }
+            if (kind.equals("owned-leaf")) { self.run(f"chown 1000:100 {leaf}"); }
+            if (kind.equals("symlink-file")) { self.run(f"rm {path}; ln -s {self.target} {path}"); }
+            if (kind.equals("hardlink-file")) { self.run(f"ln {path} {leaf}/alias"); }
+            if (kind.equals("public-file")) { self.run(f"chmod 644 {path}"); }
+            if (kind.equals("owned-file")) { self.run(f"chown 1000:100 {path}"); }
+            if (kind.equals("invalid-hash")) { self.write(path, "not-a-hash\n"); }
+            if (kind.equals("nul-hash")) {
+                var bytes = Bytes.fromString(original.trim()); bytes.append(0); bytes.appendBytes(Bytes.fromString("extra\n"));
+                var file = File(path, "w"); Check.that(file.ok() && file.writeBytes(bytes) && file.close(), "embedded NUL hash fixture");
+            }
+            if (kind.equals("missing-account")) { self.run(f"rm {path}"); }
+            var account = kind.equals("missing-account") ? "does-not-exist" : "admin";
+            self.run(f"nixosctl-password-file {path} {account}", false); self.unchanged(original);
+        }
+        self.run(f"chmod 644 {self.target}"); self.run(f"{protected}/activate", false); self.authenticate("testpass123"); self.run(f"chmod 600 {self.target}");
+        self.run(f"nix-env -p /nix/var/nix/profiles/system --set {protected}"); self.run(f"{protected}/bin/switch-to-configuration boot"); concurrency.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try { PasswordFileTests().check(CLIArgs(argc, argv).count() > 0); print("PASS: password migration, authentication, concurrency, permissions and activation failures"); return 0; }
+    catch (string error) { print(error); return 1; }
+}

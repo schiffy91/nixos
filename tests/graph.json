@@ -1024,11 +1024,6 @@
       }
     },
     {
-      "id": "nixosctl-sudo",
-      "spec": "nixosctl/sudo/test.json",
-      "after": []
-    },
-    {
       "id": "boot-fallback",
       "spec": "boot/fallback/test.json"
     },
@@ -1062,6 +1057,7 @@
     },
     {
       "id": "secure-boot-removal",
+      "after": [ "secure-boot-cli", "secure-boot-key-contracts" ],
       "spec": "secure-boot/removal/test.json"
     },
     {
@@ -1086,18 +1082,6 @@
         "secure-boot-key-contracts"
       ],
       "spec": "secure-boot/backup/test.json"
-    },
-    {
-      "id": "kernel-trust",
-      "after": ["kernel-trust-contracts"],
-      "spec": "kernel-trust/test.json"
-    },
-    {
-      "id": "kernel-trust-host",
-      "after": [
-        "kernel-trust"
-      ],
-      "spec": "kernel-trust/host.json"
     },
     {
       "id": "sleep-gamescope-native-control",
@@ -1189,11 +1173,6 @@
       "id": "recovery-mount-contracts",
       "after": [],
       "spec": "recovery/unit/test.json"
-    },
-    {
-      "id": "kernel-trust-contracts",
-      "after": [],
-      "spec": "kernel-trust/unit/test.json"
     }
   ],
   "required": [
@@ -1265,15 +1244,12 @@
     "initrd-touch-unlock-german",
     "initrd-touch-unlock-french",
     "initrd-touch-unlock-displays",
-    "nixosctl-sudo",
     "boot-fallback",
     "sunshine-credentials",
     "sunshine-ssh-login",
     "onepassword-integration",
     "password-file",
     "installer-secret",
-    "kernel-trust",
-    "kernel-trust-host",
     "networking-roaming",
     "host-picker",
     "immutability-feature-disable",

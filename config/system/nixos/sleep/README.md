@@ -2,6 +2,12 @@
 
 ## Gaming Mode sleep password
 
+This module supplies account-password locking for an already-running Gamescope
+session. Systemd/logind still perform suspend and hibernate; Plasma keeps its
+normal screen locker. The pinned Gamescope lacks the session-lock protocol used
+by ordinary Wayland lockers. A login greeter alone does not hide or lock the
+running game's console.
+
 `settings.sleep.lockGamingSession` uses the existing Plymouth touchscreen keyboard
 and Linux-account PAM authentication for sleep requested while the configured
 user has a Gamescope session. The Deck enables this policy; Fractal does not.
@@ -55,11 +61,19 @@ contains the account UID, original VT/SysRq setting, pending sleep requests,
 authentication generation and previously active Sunshine units. It contains no
 password or hash.
 
-The helpers in `helpers/` use typed PAM/DRM bindings and raw POSIX memory. The
-password process locks its address space, wipes its raw input buffer, disables
-core dumps and kills its Plymouth child if its parent exits. It links PAM without
-DRM; the scanout helper separately disables CRTCs and planes and verifies their
-readback. The three native headers contain declarations only.
+`SleepState` owns typed phases, pending requests and authentication attempts;
+JSON is only its persistence format. The controller uses standard-library
+filesystem leases, process execution and timers. `LockedConsole` and
+`DisplayCard` own the native resources; closing either never authorizes unlock.
+The remaining native boundary is VT ioctls, DRM blank/readback and PAM.
+
+`PasswordResponse` owns a fixed standard-library buffer that is wiped on close.
+`PamResponses` owns native responses until PAM accepts them. The password is
+never converted to a managed string; ordinary metadata uses BTRC classes and
+strings. The dedicated PAM process locks memory, disables core dumps and ties
+its Plymouth child to its lifetime. It links PAM without DRM; the separate
+scanout helper clears CRTCs and planes and verifies the result. The three native
+headers contain declarations only.
 
 Each new request or controller recovery invalidates earlier authentication.
 A correct password releases the console only after every pending sleep operation

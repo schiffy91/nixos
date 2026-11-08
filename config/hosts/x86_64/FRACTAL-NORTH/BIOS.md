@@ -45,7 +45,7 @@ regression.
 | Suspend-to-idle (HSI-3) | ✘ Disabled | Desktop firmware does not set the FACP `LOW_POWER_S0_IDLE` flag; `mem_sleep_default=s2idle` is already set on the kernel side |
 | Processor rollback protection (HSI-4) | ✘ Disabled | AMD FAR/SPL fuse. ASUS's "BIOS Image Rollback Support" toggle is a different mechanism (fwupd #5261) |
 | Encrypted RAM (HSI-4) | ✔ Encrypted | Only ✘ if TSME was reset — go fix it |
-| Linux kernel lockdown | ✘ Disabled until deliberately enabled | The pinned kernel supports lockdown and NVIDIA modules are signed, but their certificates must be embedded before enforcement. See [module trust](../../../system/nixos/boot/kernel-trust/README.md). Integrity lockdown prevents hibernation; this policy remains opt-in. |
+| Linux kernel lockdown | ✘ Disabled | This configuration does not enable kernel lockdown. |
 | Linux swap | ✘ Invalid | False positive: btrfs swapfile `st_dev` is anonymous, fwupd cannot walk to the LUKS `dm-0` (fwupd #5123, wontfix). Swap is inside LUKS |
 | Linux kernel | ✘ Tainted | `O` = NVIDIA out-of-tree, `W` = amdgpu WARN on the Raphael iGPU at boot |
 

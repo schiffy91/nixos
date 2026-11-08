@@ -9,36 +9,22 @@ import ../../../pkgs/utils/nixosctl/lib/RootSecretFile.btrc;
 import ./State.btrc;
 
 #include <pwd.h>
-#include <sys/random.h>
 
+// RootSecretFile delegates owner/mode/link checks and locking to the stdlib
+// PrivateDirectory and ExclusiveFileLease; only state decoding belongs here.
 class SleepStore {
     private RootSecretFile file;
     private int uid;
-    class void privateMode(string path, int mode, bool directory = false) {
-        struct stat info;
-        if (lstat(path, &info) != 0) {
-            if (!directory && errno == ENOENT) { return; }
-            throw "Cannot inspect sleep-lock state";
-        }
-        if (directory) {
-            if (!S_ISDIR(info.st_mode)) { throw "Unsafe sleep-lock state type"; }
-        } else if (!S_ISREG(info.st_mode)) { throw "Unsafe sleep-lock state type"; }
-        if (info.st_uid != (uid_t)0
-            || (info.st_mode & (mode_t)07777) != (mode_t)mode || (!directory && info.st_nlink != (nlink_t)1)) { throw "Unsafe sleep-lock state permissions"; }
-    }
     public SleepStore(int uid) {
         self.uid = uid; self.file = RootSecretFile("/run/nixos-sleep-lock/state.json", "mutex");
-        SleepStore.privateMode("/run/nixos-sleep-lock", 0700, true);
-        SleepStore.privateMode("/run/nixos-sleep-lock/mutex", 0600);
     }
-    public JSONValue load() {
-        SleepStore.privateMode("/run/nixos-sleep-lock/state.json", 0600);
+    public SleepState? load() {
         var read = self.file.read(65536);
-        if (!read.found()) { return JSONValue.makeNull(); }
+        if (!read.found()) { return null; }
         if (!read.bytes().isNulFreeUtf8()) { throw "Invalid sleep-lock state"; }
-        var state = JSONValue.parse(read.bytes().toString()); SleepState.validate(state, self.uid); return state;
+        return SleepState.decode(JSONValue.parse(read.bytes().toString()), self.uid);
     }
-    public void save(JSONValue state) { SleepState.validate(state, self.uid); self.file.write(Bytes.fromString(state.stringify())); }
+    public void save(SleepState state) { var value = state.encode(); SleepState.validate(value, self.uid); self.file.write(Bytes.fromString(value.stringify())); }
     public void remove() { self.file.remove(); }
     public void close() { self.file.close(); }
     public void __del__() { if (self.file != null) { self.file.close(); } }
@@ -52,11 +38,7 @@ class SleepController {
 
     public SleepController(JSONValue config) {
         self.config = config; self.user = config.get("user").asString();
-        struct passwd account;
-        struct passwd* found = NULL;
-        char buffer[16384];
-        if (getpwnam_r(self.user, &account, buffer, sizeof(buffer), &found) != 0 || found == NULL) { throw "Cannot resolve the password account"; }
-        self.uid = (int)account.pw_uid; self.gid = (int)account.pw_gid;
+        self.uid = -1; self.accountUid();
     }
 
     public int accountUid() {
@@ -64,24 +46,17 @@ class SleepController {
         struct passwd* found = NULL;
         char buffer[16384];
         if (getpwnam_r(self.user, &account, buffer, sizeof(buffer), &found) != 0 || found == NULL
-            || (int)account.pw_uid != self.uid) { throw "The configured password account changed"; }
-        self.gid = (int)account.pw_gid;
+            || (self.uid >= 0 && (int)account.pw_uid != self.uid)) { throw "The configured password account changed"; }
+        self.uid = (int)account.pw_uid; self.gid = (int)account.pw_gid;
         return self.uid;
     }
 
     class string epoch() {
-        unsigned char entropy[16];
-        int offset = 0;
-        while (offset < 16) {
-            ssize_t count = getrandom(entropy + offset, (size_t)(16 - offset), 0);
-            if (count < (ssize_t)0 && errno == EINTR) { continue; }
-            if (count <= (ssize_t)0) { throw "Cannot obtain authentication entropy"; }
-            offset += (int)count;
-        }
-        var result = StringBuilder();
-        var digits = "0123456789abcdef";
-        for (int index = 0; index < 16; index++) { result.append(digits.substring((int)entropy[index] >> 4, 1)); result.append(digits.substring((int)entropy[index] & 15, 1)); }
-        return result.toString();
+        // This kernel interface supplies a fresh UUID for each read. It is an
+        // attempt identity, never password material.
+        var epoch = Path.readAll("/proc/sys/kernel/random/uuid").trim().replace("-", "");
+        if (epoch.length() != 32) { throw "Cannot create an authentication attempt"; }
+        return epoch;
     }
 
     public string executable(string name) { return self.config.get(name).asString(); }
@@ -145,7 +120,7 @@ class SleepController {
         for unit in SleepState.streamUnits() { if (!SleepController.streamStopped(self.streamState(unit))) { throw "A Sunshine service is still running while Gaming Mode is locked"; } }
     }
 
-    public void stopStreams(JSONValue state, SleepStore store) {
+    public void stopStreams(SleepState state, SleepStore store) {
         int marker = open("/run/nixos-gaming-locked", (int)O_WRONLY | (int)O_CREAT | (int)O_NOFOLLOW | (int)O_CLOEXEC, (mode_t)0644);
         if (marker < 0) { throw "Cannot create gaming lock marker"; }
         int changed = fchmod(marker, (mode_t)0644); close(marker);
@@ -153,55 +128,53 @@ class SleepController {
         SleepController.marker();
         var statuses = JSONValue.makeObject();
         for unit in SleepState.streamUnits() { statuses.set(unit, self.streamState(unit)); }
-        if (state.get("sunshine").isNull()) {
-            var previous = JSONValue.makeArray();
+        if (!state.streamsCaptured) {
+            Vector<string> previous = [];
             for unit in SleepState.streamUnits() {
                 var status = statuses.get(unit);
-                if (!status.isNull() && !["inactive", "failed"].contains(status.get("ActiveState").asString())) { previous.push(JSONValue.makeString(unit)); }
+                if (!status.isNull() && !["inactive", "failed"].contains(status.get("ActiveState").asString())) { previous.push(unit); }
             }
-            state.set("sunshine", previous); store.save(state);
+            state.sunshine = previous; state.streamsCaptured = true; store.save(state);
         }
         for unit in SleepState.streamUnits() { if (!SleepController.streamStopped(statuses.get(unit))) { self.userService(["stop", unit]); } }
         self.verifyStreams();
     }
 
-    public void restoreStreams(JSONValue state) {
+    public void restoreStreams(SleepState state) {
         if (unlink("/run/nixos-gaming-locked") != 0 && errno != ENOENT) { throw "Cannot remove gaming lock marker"; }
-        for unit in state.get("sunshine").elements() {
-            try { self.userService(["start", unit.asString()]); }
+        for unit in state.sunshine {
+            try { self.userService(["start", unit]); }
             catch (string error) { Console.error("Could not restart Sunshine after unlocking"); }
         }
     }
 
-    class void reset(JSONValue state) { state.set("epoch", JSONValue.makeString(SleepController.epoch())); state.set("ready", JSONValue.makeBool(false)); }
-    class void recover(JSONValue state) { state.set("phase", JSONValue.makeString("acquiring")); SleepController.reset(state); }
+    class void reset(SleepState state) { state.invalidate(SleepController.epoch()); }
+    class void recover(SleepState state) { state.recover(SleepController.epoch()); }
     class void sysrq(string value) { if (!Path.writeAll("/proc/sys/kernel/sysrq", value)) { throw "Cannot update keyboard SysRq policy"; } }
 
-    public void finish(JSONValue state, SleepStore store) {
-        if (!SleepState.releaseAllowed(state)) { throw "Unlock has not been authenticated"; }
-        self.command("native", ["release", f"{state.get("vt").asInt()}"]);
-        SleepController.sysrq(f"{state.get("sysrq").asInt()}");
+    public void finish(SleepState state, SleepStore store) {
+        if (!state.releaseAllowed()) { throw "Unlock has not been authenticated"; }
+        self.command("native", ["release", f"{state.vt}"]);
+        SleepController.sysrq(f"{state.sysrq}");
         self.restoreStreams(state); store.remove();
     }
 
     public bool acquire(string unit) {
         var store = SleepStore(self.accountUid());
         var state = store.load();
-        if (!state.isNull() && state.get("phase").asString().equals("authenticated")) { SleepController.recover(state); store.save(state); }
-        if (state.isNull() && !self.gamingSession()) { return false; }
-        if (state.isNull()) {
+        if (state != null && state.authenticated()) { SleepController.recover(state); store.save(state); }
+        if (state == null && !self.gamingSession()) { return false; }
+        if (state == null) {
             var console = Path.readAll("/sys/class/tty/tty0/active").trim();
             if (!console.startsWith("tty")) { throw "Cannot identify the session console"; }
             var number = console.substring(3, console.length() - 3);
             for (int index = 0; index < number.length(); index++) { if (number[index] < '0' || number[index] > '9') { throw "Cannot identify the session console"; } }
             int vt = Strings.toInt(number);
             if (vt < 1 || vt >= 63) { throw "Cannot identify the session console"; }
-            state = JSONValue.makeObject();
-            state.set("uid", JSONValue.makeInt(self.uid)); state.set("vt", JSONValue.makeInt(vt)); state.set("sysrq", JSONValue.makeInt(Strings.toInt(Path.readAll("/proc/sys/kernel/sysrq").trim())));
-            state.set("holds", JSONValue.makeArray()); state.set("phase", JSONValue.makeString("acquiring")); state.set("sunshine", JSONValue.makeNull());
+            state = SleepState(self.uid, vt, Strings.toInt(Path.readAll("/proc/sys/kernel/sysrq").trim()));
         }
-        SleepController.reset(state); SleepState.hold(state, unit, true);
-        bool alreadyLocked = state.get("phase").asString().equals("locked");
+        SleepController.reset(state); state.hold(unit, true);
+        bool alreadyLocked = state.locked();
         store.save(state);
         string failure = "";
         try { self.stopStreams(state, store); SleepController.reset(state); store.save(state); }
@@ -209,7 +182,7 @@ class SleepController {
         // Even a failed stream shutdown must conceal the physical session and
         // deny the sleep backend. The controller recovers the held console.
         SleepController.sysrq("0"); self.command("native", [alreadyLocked ? "verify" : "secure"]);
-        state.set("phase", JSONValue.makeString("locked")); store.save(state);
+        state.markLocked(); store.save(state);
         if (!alreadyLocked) { self.command("blank"); }
         if (!failure.isEmpty()) { throw failure; }
         return true;
@@ -220,27 +193,27 @@ class SleepController {
         self.command("systemctl", ["start", "nixos-sleep-lock.service"], timeout=30000);
         for (int attempt = 0; attempt < 200; attempt++) {
             var store = SleepStore(self.accountUid()); var state = store.load();
-            if (state.isNull() || !state.get("phase").asString().equals("locked") || !SleepState.hasHold(state, unit)) { throw "Sleep lock lost its pending request"; }
-            self.command("native", ["verify"]); bool ready = state.get("ready").asBool(); store.close();
+            if (state == null || !state.locked() || !state.hasHold(unit)) { throw "Sleep lock lost its pending request"; }
+            self.command("native", ["verify"]); bool ready = state.ready; store.close();
             if (ready) { self.verifyStreams(); self.command("plymouth", ["--has-safe-displays"]); self.command("systemctl", ["is-active", "--quiet", "nixos-sleep-lock.service"]); return; }
-            usleep(100000);
+            Timer.sleepMillis(100);
         }
         throw "Password display was not acknowledged";
     }
 
     public void resume(string unit) {
         var store = SleepStore(self.accountUid()); var state = store.load();
-        if (!state.isNull()) { SleepState.hold(state, unit, false); store.save(state); }
+        if (state != null) { state.hold(unit, false); store.save(state); }
         store.close();
-        if (!state.isNull()) { self.command("systemctl", ["start", "--no-block", "nixos-sleep-lock.service"]); }
+        if (state != null) { self.command("systemctl", ["start", "--no-block", "nixos-sleep-lock.service"]); }
     }
 
-    public JSONValue beginCycle() {
+    public SleepState? beginCycle() {
         var store = SleepStore(self.accountUid()); var state = store.load();
-        if (state.isNull()) { return state; }
-        if (state.get("phase").asString().equals("authenticated")) { SleepController.recover(state); store.save(state); }
-        if (state.get("phase").asString().equals("acquiring")) { SleepController.sysrq("0"); self.command("native", ["secure"]); state.set("phase", JSONValue.makeString("locked")); }
-        self.command("native", ["verify"]); state.set("ready", JSONValue.makeBool(false)); store.save(state);
+        if (state == null) { return state; }
+        if (state.authenticated()) { SleepController.recover(state); store.save(state); }
+        if (state.acquiring()) { SleepController.sysrq("0"); self.command("native", ["secure"]); state.markLocked(); }
+        self.command("native", ["verify"]); state.ready = false; store.save(state);
         return state;
     }
 
@@ -248,7 +221,7 @@ class SleepController {
         for (int attempt = 0; attempt < 100; attempt++) {
             if (!daemon.running()) { throw "Password display exited"; }
             if (self.command("plymouth", [operation], false).ok()) { return; }
-            usleep(100000);
+            Timer.sleepMillis(100);
         }
         throw message;
     }
@@ -261,12 +234,12 @@ class SleepController {
                 if (!daemon.running()) { throw "Password display exited"; }
                 self.command("plymouth", ["--has-safe-displays"]);
                 var store = SleepStore(self.accountUid()); var state = store.load();
-                if (state.isNull() || !state.get("phase").asString().equals("locked")) { throw "Session lock state changed unexpectedly"; }
-                if (!SleepState.sameAttempt(state, epoch) || state.get("holds").size() > 0) { authentication.stop(); return false; }
-                self.verifyStreams(); store.close(); usleep(100000);
+                if (state == null || !state.locked()) { throw "Session lock state changed unexpectedly"; }
+                if (!state.sameAttempt(epoch) || state.pending()) { authentication.stop(); return false; }
+                self.verifyStreams(); store.close(); Timer.sleepMillis(100);
             }
         } catch (string error) { authentication.stop(); throw error; }
-        return authentication.code == 0;
+        return authentication.code() == 0;
     }
 
     public void prompt(BackgroundProcess daemon, string epoch, bool pendingSeen) {
@@ -274,44 +247,44 @@ class SleepController {
         self.command("plymouth", ["show-splash"]);
         self.displayReady(daemon, "--has-safe-displays", "Not every display is safely covered");
         var store = SleepStore(self.accountUid()); var state = store.load();
-        if (state.isNull() || !state.get("phase").asString().equals("locked")) { throw "Session lock state changed unexpectedly"; }
-        if (!SleepState.sameAttempt(state, epoch)) { return; }
-        self.verifyStreams(); state.set("ready", JSONValue.makeBool(true)); store.save(state); store.close();
+        if (state == null || !state.locked()) { throw "Session lock state changed unexpectedly"; }
+        if (!state.sameAttempt(epoch)) { return; }
+        self.verifyStreams(); state.ready = true; store.save(state); store.close();
         bool retry = false;
         while (true) {
             if (!daemon.running()) { throw "Password display exited"; }
             self.command("plymouth", ["--has-safe-displays"]);
             store = SleepStore(self.accountUid()); state = store.load();
-            if (state.isNull() || !state.get("phase").asString().equals("locked")) { throw "Session lock state changed unexpectedly"; }
+            if (state == null || !state.locked()) { throw "Session lock state changed unexpectedly"; }
             self.command("native", ["verify"]);
-            if (!SleepState.sameAttempt(state, epoch)) { return; }
-            bool pending = state.get("holds").size() > 0;
-            if (!pending && pendingSeen) { state.set("ready", JSONValue.makeBool(false)); store.save(state); return; }
+            if (!state.sameAttempt(epoch)) { return; }
+            bool pending = state.pending();
+            if (!pending && pendingSeen) { state.ready = false; store.save(state); return; }
             store.close();
-            if (pending) { pendingSeen = true; usleep(100000); continue; }
+            if (pending) { pendingSeen = true; Timer.sleepMillis(100); continue; }
             // user.slice may be frozen during the backend; only contact it after
             // pending holds clear. A new epoch cancels authentication immediately.
             self.verifyStreams();
             bool authenticated = self.authenticate(daemon, epoch, retry);
             store = SleepStore(self.accountUid()); state = store.load();
-            if (state.isNull() || !state.get("phase").asString().equals("locked")) { throw "Session lock state changed unexpectedly"; }
-            if (!SleepState.sameAttempt(state, epoch) || state.get("holds").size() > 0) { return; }
+            if (state == null || !state.locked()) { throw "Session lock state changed unexpectedly"; }
+            if (!state.sameAttempt(epoch) || state.pending()) { return; }
             if (!authenticated) { retry = true; store.close(); continue; }
             self.command("native", ["verify"]); self.command("plymouth", ["quit"]);
             var deadline = MonotonicClock.deadlineAfter(10000LL);
-            while (daemon.running() && MonotonicClock.before(deadline)) { usleep(10000); }
+            while (daemon.running() && MonotonicClock.before(deadline)) { Timer.sleepMillis(10); }
             if (daemon.running()) { throw "Password display did not stop"; }
-            state.set("phase", JSONValue.makeString("authenticated")); store.save(state); self.finish(state, store); return;
+            state.markAuthenticated(); store.save(state); self.finish(state, store); return;
         }
     }
 
     public void cycle() {
-        var state = self.beginCycle(); if (state.isNull()) { return; }
-        var epoch = state.get("epoch").asString(); bool pendingSeen = state.get("holds").size() > 0;
+        var state = self.beginCycle(); if (state == null) { return; }
+        var epoch = state.epoch; bool pendingSeen = state.pending();
         self.command("blank");
         var store = SleepStore(self.accountUid()); state = store.load();
-        if (state.isNull() || !SleepState.sameAttempt(state, epoch)) { return; }
-        self.stopStreams(state, store); SleepController.reset(state); store.save(state); epoch = state.get("epoch").asString(); store.close();
+        if (state == null || !state.sameAttempt(epoch)) { return; }
+        self.stopStreams(state, store); SleepController.reset(state); store.save(state); epoch = state.epoch; store.close();
         var daemon = BackgroundProcess.start(self.executable("plymouthd"), ["--no-daemon", "--no-boot-log", "--tty=/dev/tty63", "--mode=boot-up", "--pid-file=/run/nixos-sleep-lock/plymouth.pid"]);
         try { self.prompt(daemon, epoch, pendingSeen); }
         catch (string error) { daemon.stop(5000); throw error; }
@@ -321,9 +294,9 @@ class SleepController {
 
     public void run() {
         var store = SleepStore(self.accountUid()); var state = store.load();
-        if (!state.isNull()) { state.set("ready", JSONValue.makeBool(false)); store.save(state); }
+        if (state != null) { state.ready = false; store.save(state); }
         store.close();
         self.command("notify", ["--ready", "--pid=parent"]);
-        while (true) { self.cycle(); usleep(100000); }
+        while (true) { self.cycle(); Timer.sleepMillis(100); }
     }
 }

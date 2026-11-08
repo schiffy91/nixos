@@ -8,13 +8,18 @@ let
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [
+        ./btrc.toml ./btrc.lock
         ./StateTests.btrc
         ./ProcessTests.btrc
+        ../../../config/system/nixos/sleep/btrc.toml
+        ../../../config/system/nixos/sleep/btrc.lock
         ../../../config/system/nixos/sleep/Main.btrc
         ../../../config/system/nixos/sleep/Controller.btrc
         ../../../config/system/nixos/sleep/State.btrc
         ../../../config/lib/BackgroundProcess.btrc
-        ../../../config/pkgs/utils/nixosctl/lib/RootSecretFile.btrc
+        ../../../config/pkgs/utils/nixosctl/lib
+        ../../../config/pkgs/utils/nixosctl/btrc.toml
+        ../../../config/pkgs/utils/nixosctl/btrc.lock
       ];
     };
     programs = {

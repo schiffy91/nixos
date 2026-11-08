@@ -49,7 +49,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' {{unlockAgent}}",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -82,7 +82,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' {{unlockAgent}}",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -112,7 +112,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/resume.log' 0 {{secureBoot}} false",
+      "command": "./build/boot-evidence health '.vm/e2e/{{state}}-{{stateHashShort}}/resume.log' 0 {{secureBoot}} false",
       "expect": "host-healthy",
       "timeout": 120
     },
@@ -139,7 +139,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_panel.py '.vm/e2e/{{state}}-{{stateHashShort}}/panel-resume-2.ppm' {{unlockAgent}}",
+      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-resume-2.ppm' {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 120
     },
@@ -169,7 +169,7 @@
     },
     {
       "op": "host",
-      "command": "python3 tests/hosts-boot/assert_health.py '.vm/e2e/{{state}}-{{stateHashShort}}/resume-2.log' 0 {{secureBoot}} false",
+      "command": "./build/boot-evidence health '.vm/e2e/{{state}}-{{stateHashShort}}/resume-2.log' 0 {{secureBoot}} false",
       "expect": "host-healthy",
       "timeout": 300
     },

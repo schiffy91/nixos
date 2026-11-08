@@ -3,16 +3,16 @@ let
   btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
   nixosctlBin = import ./package.nix {
     inherit pkgs lib btrcpy;
-    inherit (config.settings.apps.nixosctl) configPath;
+    inherit (config.settings.apps.utils.nixosctl) configPath;
   };
 in {
   imports = [ ./ui ];
   config = lib.mkMerge [
     {
-      settings.apps.nixosctl.configPath = lib.mkIf (config.settings.apps.nixosctl.settings != {})
-        (lib.mkDefault (toString ((pkgs.formats.toml {}).generate "nixosctl.toml" config.settings.apps.nixosctl.settings)));
+      settings.apps.utils.nixosctl.configPath = lib.mkIf (config.settings.apps.utils.nixosctl.settings != {})
+        (lib.mkDefault (toString ((pkgs.formats.toml {}).generate "nixosctl.toml" config.settings.apps.utils.nixosctl.settings)));
     }
-    (lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.nixosctl.enable) {
+    (lib.mkIf (config.settings.apps.utils.nixosctl.enable) {
       environment.systemPackages = [ nixosctlBin ];
       # Rebuilds run as root, but fix-permissions gives this repository to the admin.
       # Root's mutable Git config disappears when the immutable root is reset.

@@ -1,16 +1,12 @@
 { config, pkgs, lib, inputs, protonCustom, ... }:
 let
-  enabled = config.settings.apps.enable
-    && config.settings.apps.gaming.enable
-    && config.settings.apps.rocksmith.enable
-    && config.settings.apps.steam.enable
-    && pkgs.stdenv.hostPlatform.isx86_64;
+  enabled = config.settings.apps.gaming.rocksmith.enable;
   user = config.settings.users.admin.username;
   group = config.users.users.${user}.group;
   home = "/home/${user}";
-  sampleSize = config.settings.apps.rocksmith.sampleSize;
-  cdlcPath = config.settings.apps.rocksmith.cdlcPath;
-  slopsmithConfigPath = config.settings.apps.rocksmith.slopsmith.configPath;
+  sampleSize = config.settings.apps.gaming.rocksmith.sampleSize;
+  cdlcPath = config.settings.apps.gaming.rocksmith.cdlcPath;
+  slopsmithConfigPath = config.settings.apps.gaming.rocksmith.slopsmith.configPath;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
     [Config]
     EnableWasapiOutputs=0
@@ -74,7 +70,7 @@ let
     inherit inputs;
     rocksmithDlc = dlcPath;
     configDir = slopsmithConfigPath;
-    port = config.settings.apps.rocksmith.slopsmith.port;
+    port = config.settings.apps.gaming.rocksmith.slopsmith.port;
   };
 in lib.mkIf enabled {
   virtualisation.podman.enable = true;

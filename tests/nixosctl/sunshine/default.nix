@@ -4,7 +4,15 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-in pkgs.testers.runNixOSTest {
+  contracts = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+    name = "sunshine-credentials-contracts";
+    src = pkgs.lib.fileset.toSource {
+      root = ../../..;
+      fileset = pkgs.lib.fileset.unions [ ../../lib ../../../config/lib/BackgroundProcess.btrc ./GuestTests.btrc ./Fixture.btrc ];
+    };
+    programs.sunshine-credentials-contracts = "tests/nixosctl/sunshine/GuestTests.btrc";
+  };
+in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "sunshine-credentials";
   node.pkgsReadOnly = false;
   nodes.machine = { config, lib, pkgs, ... }: {
@@ -28,25 +36,14 @@ in pkgs.testers.runNixOSTest {
     };
     systemd.user.services.sunshine.environment = { DISPLAY = ":0"; XAUTHORITY = "/srv/operator/.Xauthority"; };
     environment.systemPackages = [
-      pkgs.python3 pkgs.moonlight-qt
+      contracts pkgs.curl pkgs.openssl pkgs.netcat-openbsd pkgs.moonlight-qt
       (import ../../../config/pkgs/utils/nixosctl/package.nix {
         inherit pkgs lib;
         btrcpy = inputs.btrc.packages.${system}.btrcpy;
       })
     ];
-    environment.etc."sunshine-credentials-test.py".source = ./test.py;
     virtualisation.memorySize = 4096;
     virtualisation.cores = 4;
   };
-  testScript = ''
-    start_all()
-    machine.wait_for_x()
-    machine.wait_for_unit("user@1000.service")
-    machine.succeed("python3 /etc/sunshine-credentials-test.py", timeout=300)
-    machine.shutdown()
-    machine.start()
-    machine.wait_for_x()
-    machine.wait_for_unit("user@1000.service")
-    machine.succeed("python3 /etc/sunshine-credentials-test.py reboot", timeout=120)
-  '';
+  scenario = ./Main.btrc;
 }

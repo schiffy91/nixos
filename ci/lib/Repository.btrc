@@ -48,18 +48,16 @@ class Repository {
         for path in self.files { if (path.endsWith(suffix)) { result.push(path); } }
         return result;
     }
-    public Vector<string> scripts(string language) {
-        Vector<string> result = language.equals("python") ? self.suffix(".py") : self.suffix(".sh");
-        if (language.equals("python")) { for path in self.suffix(".pyi") { result.push(path); } }
-        else if (self.files.contains(".envrc")) { result.push(".envrc"); }
+    public Vector<string> shellScripts() {
+        var result = self.suffix(".sh");
+        if (self.files.contains(".envrc")) { result.push(".envrc"); }
         for path in self.files {
             if (PathTools.basename(path).contains(".")) { continue; }
             var text = Path.readAll(PathTools.join(self.root, path));
             if (!text.startsWith("#!")) { continue; }
             var lines = Strings.split(text, "\n");
             var first = lines.get(0);
-            if (language.equals("bash") && first.contains("bash")) { result.push(path); }
-            else if (language.equals("python") && !first.contains("bash") && (first.contains("python") || (lines.len > 1 && lines.get(1).contains("python")))) { result.push(path); }
+            if (first.contains("bash")) { result.push(path); }
         }
         return result;
     }

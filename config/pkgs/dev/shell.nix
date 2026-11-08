@@ -1,15 +1,19 @@
-{ pkgs, inputs }:
+{ pkgs, ... }:
 let
-  tools = (import ../../lib/btrc.nix { inherit pkgs inputs; }) {
-    name = "dev-shell-tools";
-    src = ./shell;
-    programs.dev-shell-tools = "Main.btrc";
+  printFiles = pkgs.writeShellApplication {
+    name = "print-files";
+    runtimeInputs = [ pkgs.coreutils pkgs.findutils ];
+    text = builtins.readFile ./shell/print-files.sh;
+  };
+  extractSubstring = pkgs.writeShellApplication {
+    name = "extract-substring";
+    text = builtins.readFile ./shell/extract-substring.sh;
   };
 in {
   aliases = {
     clauded = "claude --dangerously-skip-permissions";
-    print-files = "${tools}/bin/dev-shell-tools print-files";
-    extract-substring = "${tools}/bin/dev-shell-tools extract-substring";
+    print-files = "${printFiles}/bin/print-files";
+    extract-substring = "${extractSubstring}/bin/extract-substring";
   };
   init = ''
     nix-shell-with-pkgs() {

@@ -1,0 +1,97 @@
+import Library.Platform;
+import ../../lib/TestDirectory.btrc;
+import ../../lib/TerminalSession.btrc;
+
+class InstallerSecretTests {
+    private string root = "/run/installer-test";
+    private string hashes = "/var/lib/installer-test/hashes";
+
+    private ExecResult run(Vector<string> arguments, string input = "", bool success = true) {
+        var result = ChildProcess.run(arguments.get(0), arguments.slice(1, arguments.len), stdinData=input, timeoutMilliseconds=10000);
+        Check.that(!result.timedOut && !result.captureFailed && (result.code == 0) == success, f"fixture command: {result.stderr()}"); return result;
+    }
+    private string path(string name) { return f"{self.root}/{name}/passphrase"; }
+    private string hash(string name) { return f"{self.hashes}/{name}"; }
+    private void write(string path, Bytes bytes) {
+        var file = File(path, "w"); Check.that(file.ok() && file.writeBytes(bytes) && file.close(), "write secret fixture");
+    }
+    private void supplied(string name, Bytes bytes) {
+        self.run(["install", "-d", "-m700", f"{self.root}/{name}"]);
+        self.run(["install", "-m600", "/dev/null", self.path(name)]); self.write(self.path(name), bytes);
+    }
+    private TerminalSession prepare(string name, string mode = "ok", bool prompt = true) {
+        var command = f"umask 0; exec installer-secret-test {ShellWords.quote(self.path(name))} {ShellWords.quote(self.hash(name))} {ShellWords.quote(mode)}";
+        var terminal = TerminalSession("sh", ["-c", command]);
+        if (prompt) {
+            terminal.expect("Set your password: "); terminal.password("testpass123");
+            terminal.expect("Confirm password: "); terminal.password("testpass123");
+        }
+        terminal.expect("prepared: "); return terminal;
+    }
+    private void privateFile(string path) {
+        Check.equal(Path.readAll(path), "testpass123", "private passphrase contents");
+        Check.equal(self.run(["stat", "-c", "%u:%a", path]).trimmed(), "0:600", "private file owner and mode");
+        Check.equal(self.run(["stat", "-c", "%a", PathTools.dirname(path)]).trimmed(), "700", "private directory mode");
+        Check.equal(self.run(["runuser", "-u", "observer", "--", "cat", path], success=false).stdout(), "", "observer cannot read password");
+    }
+    private void complete(TerminalSession terminal, bool success = true) { terminal.line("continue"); terminal.finish(success); }
+    private void hashMatches(string name, string password) {
+        var hash = Path.readAll(self.hash(name)).trim();
+        Check.that(hash.startsWith("$6$"), "SHA-512 password hash");
+        var salt = Strings.split(hash, "$").get(2);
+        Check.equal(self.run(["mkpasswd", "-m", "sha-512", "-S", salt, "-s"], password + "\n").trimmed(), hash, "hash represents supplied password");
+    }
+
+    public void check() {
+        Check.that(Platform.isRoot(), "installer test runs as guest root");
+        self.run(["install", "-d", "-m755", self.root]); self.run(["install", "-d", "-m700", self.hashes]);
+        for mode in ["ok", "fail", "killed"] {
+            var terminal = self.prepare(mode, mode); self.privateFile(self.path(mode));
+            if (mode.equals("killed")) { terminal.kill(); self.privateFile(self.path(mode)); }
+            else { self.complete(terminal, mode.equals("ok")); Check.that(!FileSystem.exists(self.path(mode)), "owned password removed after operation"); }
+        }
+        self.supplied("supplied", Bytes.fromString("testpass123"));
+        var terminal = self.prepare("supplied", prompt=false); self.privateFile(self.path("supplied")); self.complete(terminal); self.privateFile(self.path("supplied"));
+        self.hashMatches("supplied", "testpass123"); self.complete(self.prepare("supplied", prompt=false)); self.hashMatches("supplied", "testpass123");
+        self.write(self.hash("supplied"), Bytes.fromString("!\n")); self.complete(self.prepare("supplied", prompt=false)); self.hashMatches("supplied", "testpass123");
+        var boundary = ""; for (int i = 0; i < 127; i++) { boundary = boundary + "A7!z"; } boundary = boundary + "A7!";
+        Check.that(boundary.len() == 511, "password boundary size");
+        self.supplied("boundary", Bytes.fromString(boundary)); self.complete(self.prepare("boundary", prompt=false));
+        Check.equal(Path.readAll(self.path("boundary")), boundary, "caller retains boundary password"); self.hashMatches("boundary", boundary);
+        for kind in ["public", "owner", "symlink", "hardlink", "parent", "parent-link", "leaf-owner", "empty", "nul", "newline", "carriage-return", "oversize"] {
+            self.supplied(kind, Bytes.fromString("testpass123")); var path = self.path(kind); var parent = PathTools.dirname(path);
+            if (kind.equals("public")) { self.run(["chmod", "644", path]); }
+            if (kind.equals("owner")) { self.run(["chown", "1000:100", path]); }
+            if (kind.equals("symlink")) { self.run(["rm", path]); self.run(["ln", "-s", self.path("supplied"), path]); }
+            if (kind.equals("hardlink")) { self.run(["ln", path, parent + "/alias"]); }
+            if (kind.equals("parent")) { self.run(["chmod", "777", parent]); }
+            if (kind.equals("parent-link")) { self.run(["mv", parent, self.root + "/parent-real"]); self.run(["ln", "-s", self.root + "/parent-real", parent]); }
+            if (kind.equals("leaf-owner")) { self.run(["chown", "1000:100", parent]); }
+            if (kind.equals("empty")) { self.write(path, Bytes()); }
+            if (kind.equals("nul")) { var bytes = Bytes.fromString("testpass123"); bytes.append(0); bytes.appendBytes(Bytes.fromString("extra")); self.write(path, bytes); }
+            if (kind.equals("newline")) { self.write(path, Bytes.fromString("testpass123\nextra")); }
+            if (kind.equals("carriage-return")) { self.write(path, Bytes.fromString("testpass123\rextra")); }
+            if (kind.equals("oversize")) { self.write(path, Bytes.fromString(boundary + "x")); }
+            var rejected = self.run(["installer-secret-test", path, self.hash(kind), "ok"], success=false);
+            Check.that(!rejected.stderr().contains("prepared:") && !(rejected.stdout() + rejected.stderr()).contains("testpass123"), "unsafe password rejected without leakage");
+            Check.that(!FileSystem.exists(self.hash(kind)), "unsafe password never initializes account hash");
+        }
+        Check.equal(Path.readAll(self.path("supplied")), "testpass123", "unsafe links cannot change caller-owned password");
+        var migrated = self.hash("migrated");
+        self.run(["nixosctl-password-file", migrated, "missing-installer-account"], success=false); Check.that(!FileSystem.exists(migrated), "missing account creates no hash");
+        var locked = Strings.split(self.run(["getent", "shadow", "observer"]).stdout(), ":").get(1);
+        Check.that(locked.startsWith("!") || locked.equals("*"), "fixture account starts locked");
+        self.run(["nixosctl-password-file", migrated, "observer"]); Check.equal(Path.readAll(migrated).trim(), locked, "migration preserves locked account"); self.run(["rm", migrated]);
+        var hash = self.run(["mkpasswd", "-m", "sha-512", "-s"], "migration-fixture\n").trimmed();
+        self.run(["chpasswd", "-e"], f"observer:{hash}\n"); self.run(["nixosctl-password-file", migrated, "observer"]);
+        Check.equal(Path.readAll(migrated).trim(), hash, "NSS account hash migration"); Check.equal(self.run(["stat", "-c", "%u:%a", migrated]).trimmed(), "0:600", "migrated hash is private");
+        Check.equal(self.run(["runuser", "-u", "observer", "--", "cat", migrated], success=false).stdout(), "", "observer cannot read migrated hash");
+        self.run(["usermod", "-L", "observer"]); self.run(["nixosctl-password-file", migrated, "observer"]);
+        Check.equal(Path.readAll(migrated).trim(), hash, "existing hash wins over changed account");
+    }
+}
+
+int main() {
+    try { InstallerSecretTests().check(); print("PASS: private installer passwords, caller-owned reuse, unsafe files, PTY prompts and account hash migration"); return 0; }
+    catch (string error) { print(error); return 1; }
+}

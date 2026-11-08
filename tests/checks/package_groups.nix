@@ -1,4 +1,4 @@
-{ lib }:
+{ lib, inputs }:
 { pkgs, configurations, ... }:
 let
   find = name: lib.findFirst (entry: entry.name == name) null configurations;
@@ -8,20 +8,67 @@ let
   failures = lib.optionals (fractal != null && deck != null) (let
     desktop = fractal.configuration;
     handheld = deck.configuration.config;
-    disabled = group: (desktop.extendModules {
-      modules = [{ settings.apps.${group}.enable = lib.mkForce false; }];
+    disable = import ./disable-apps.nix { inherit lib; };
+    disabled = path: (desktop.extendModules {
+      modules = [ (lib.setAttrByPath ([ "settings" "apps" ] ++ lib.splitString "." path)
+        (disable (lib.getAttrFromPath (lib.splitString "." path) desktop.config.settings.apps))) ]
+        ++ lib.optional (path == "gaming.steam") { settings.apps.gaming.assettocorsa.wheelMenu.enable = lib.mkForce false; };
     }).config;
     noGaming = disabled "gaming";
     noDev = disabled "dev";
     noUtils = disabled "utils";
-    noLmstudio = disabled "lmstudio";
-    deckWithout = disabledOptions: (deck.configuration.extendModules {
-      modules = [{ settings.apps = disabledOptions; }];
+    noLmstudio = disabled "dev.lmstudio";
+    noApps = (desktop.extendModules {
+      modules = [{ settings.apps = disable desktop.config.settings.apps; }];
+    }).config;
+    customChrome = (desktop.extendModules {
+      modules = [{
+        settings.apps.utils.chrome.profile = "Profile 2";
+        settings.apps.utils.chrome.webApps.notes = { name = "Notes"; url = "https://notes.example.com/"; };
+      }];
+    }).config;
+    invalidDev = (desktop.extendModules {
+      modules = [{ settings.apps.dev.enable = lib.mkForce false; }];
+    }).config;
+    chromeLaunchers = [
+      "applications:google-chrome.desktop"
+      "applications:chrome-app-gmail.desktop"
+      "applications:chrome-app-calendar.desktop"
+      "applications:chrome-app-whatsapp.desktop"
+    ];
+    cider = "applications:cider-2.desktop";
+    code = "applications:code.desktop";
+    battlenet = "applications:battlenet.desktop";
+    steam = "applications:steam.desktop";
+    expectedLaunchers = [ "applications:org.kde.dolphin.desktop" ] ++ chromeLaunchers
+      ++ [ cider code "applications:org.kde.konsole.desktop" battlenet steam ];
+    launcherCases = [
+      { config = desktop.config; removed = []; }
+      { config = noApps; removed = chromeLaunchers ++ [ cider code battlenet steam ]; }
+      { config = noUtils; removed = chromeLaunchers ++ [ cider ]; }
+      { config = noDev; removed = [ code ]; }
+      { config = noGaming; removed = [ battlenet steam ]; }
+      { config = disabled "utils.chrome"; removed = chromeLaunchers; }
+      { config = disabled "utils.cider"; removed = [ cider ]; }
+      { config = disabled "dev.vscode"; removed = [ code ]; }
+      { config = disabled "gaming.steam"; removed = [ battlenet steam ]; }
+      { config = disabled "gaming.battlenet"; removed = [ battlenet ]; }
+      { config = disabled "utils.chrome.webApps.gmail"; removed = [ "applications:chrome-app-gmail.desktop" ]; }
+    ];
+    deckWithout = path: (deck.configuration.extendModules {
+      modules = [ (lib.setAttrByPath ([ "settings" "apps" ] ++ path)
+        (disable (lib.getAttrFromPath path handheld.settings.apps))) ];
     }).config;
     disabledDecks = [
-      (deckWithout { enable = lib.mkForce false; })
-      (deckWithout { gaming.enable = lib.mkForce false; })
-      (deckWithout { steam.enable = lib.mkForce false; })
+      (deckWithout [])
+      (deckWithout [ "gaming" ])
+      # Battle.net is explicitly enabled on the Deck and requires Proton.
+      ((deck.configuration.extendModules { modules = [{
+        settings.apps.gaming = {
+          steam = disable handheld.settings.apps.gaming.steam;
+          battlenet.enable = lib.mkForce false;
+        };
+      }]; }).config)
     ];
     noDecky = (deck.configuration.extendModules {
       modules = [{ jovian.decky-loader.enable = lib.mkForce false; }];
@@ -51,13 +98,44 @@ let
       "LM Studio's feature switch must control the shared Linux installation."
     ++ check (!(builtins.elem "google-chrome" (names noUtils)) && !noUtils.services.mullvad-vpn.enable)
       "Disabling utils must disable Chrome and the shared desktop utility services."
-    ++ check (desktop.config.settings.apps.chrome.flags == handheld.settings.apps.chrome.flags
-      && desktop.config.settings.apps.chrome.renderNode == "/dev/dri/by-path/pci-0000:01:00.0-render"
-      && handheld.settings.apps.chrome.renderNode == null)
+    ++ check (desktop.config.settings.apps.utils.chrome.flags == handheld.settings.apps.utils.chrome.flags
+      && desktop.config.settings.apps.utils.chrome.renderNode == "/dev/dri/by-path/pci-0000:01:00.0-render"
+      && handheld.settings.apps.utils.chrome.renderNode == null)
       "Chrome must share common flags while keeping the NVIDIA renderer on FRACTAL-NORTH."
-    ++ check (handheld.settings.apps.semu.paths.roms == "/run/media/alexanderschiffhauer/SD/Emulation/ES-DE/ES-DE/ROMs")
+    ++ check (lib.all (case:
+      case.config.settings.desktop.plasma.taskbarLaunchers == lib.subtractLists case.removed expectedLaunchers)
+      launcherCases)
+      "FRACTAL-NORTH's taskbar must preserve app order and Chrome identities while following package switches."
+    ++ check (lib.all (case: lib.all (entry: entry.assertion) case.config.assertions) launcherCases
+      && lib.all (config: lib.all (entry: entry.assertion) config.assertions) disabledDecks)
+      "Package-switch fixtures must satisfy the hierarchy and dependency assertions."
+    ++ check (!(builtins.tryEval invalidDev.system.build.toplevel.drvPath).success)
+      "A host with explicitly enabled dev children must fail system evaluation when dev is disabled."
+    ++ check (lib.length (disabled "utils.chrome.webApps.gmail").programs.chromium.extraOpts.WebAppInstallForceList == 2)
+      "Disabling a PWA must remove its install policy as well as its taskbar pin."
+    ++ check (desktop.config.programs.chromium.extraOpts.WebAppInstallForceList == [
+      { url = "https://calendar.google.com/calendar/"; custom_name = "Google Calendar"; default_launch_container = "window"; create_desktop_shortcut = false; }
+      { url = "https://mail.google.com/mail/"; custom_name = "Gmail"; default_launch_container = "window"; create_desktop_shortcut = false; }
+      { url = "https://web.whatsapp.com/"; custom_name = "WhatsApp"; default_launch_container = "window"; create_desktop_shortcut = false; }
+    ]) "Chrome must install native PWAs by URL with stable policy names."
+    ++ check ((builtins.fromJSON desktop.config.environment.etc."opt/chrome/policies/managed/extra.json".text).WebAppInstallForceList
+      == desktop.config.programs.chromium.extraOpts.WebAppInstallForceList)
+      "PWA policy must be written to Google Chrome's managed policy directory."
+    ++ check (customChrome.settings.apps.utils.chrome.webApps.notes.launcher == "applications:chrome-app-notes.desktop"
+      && customChrome.settings.apps.utils.chrome.webApps.gmail.launcher == desktop.config.settings.apps.utils.chrome.webApps.gmail.launcher
+      && builtins.elem {
+        url = "https://notes.example.com/"; custom_name = "Notes";
+        default_launch_container = "window"; create_desktop_shortcut = false;
+      } customChrome.programs.chromium.extraOpts.WebAppInstallForceList)
+      "Adding a PWA must generate its policy and stable launcher without a Chrome ID or profile-specific pin."
+    ++ check (lib.all (config:
+      !(config.programs.chromium.extraOpts ? WebAppInstallForceList)
+      && !(config.home-manager.users.${config.settings.users.admin.username}.systemd.user.services ? chrome-launchers))
+      [ noApps noUtils (disabled "utils.chrome") ])
+      "Disabling Chrome or its package groups must remove PWA installation policy and launcher watching."
+    ++ check (handheld.settings.apps.gaming.semu.paths.roms == "/run/media/alexanderschiffhauer/SD/Emulation/ES-DE/ES-DE/ROMs")
       "The shared Semu root must preserve the Deck's SD-card ROM directory."
-    ++ check (handheld.settings.apps.sunshine.capture == "auto" && desktop.config.settings.apps.sunshine.capture == "kwin")
+    ++ check (handheld.settings.apps.gaming.sunshine.capture == "auto" && desktop.config.settings.apps.gaming.sunshine.capture == "kwin")
       "Sunshine must preserve the Deck's automatic session capture and desktop KWin capture."
     ++ check (lib.length steamDefinitions == 1
       && (lib.head steamDefinitions).value.drvPath == deck.configuration.pkgs.jovianPackages.steam.drvPath)
@@ -72,7 +150,10 @@ let
 in {
   name = "package-groups";
   value = pkgs.runCommand "package-groups" {} (
-    if failures == [] then "touch $out"
+    if failures == [] then ''
+      test -e ${import ./chrome-launchers.nix { inherit pkgs inputs; }}
+      touch $out
+    ''
     else "echo ${lib.escapeShellArg (lib.concatStringsSep "; " failures)} >&2; exit 1"
   );
 }

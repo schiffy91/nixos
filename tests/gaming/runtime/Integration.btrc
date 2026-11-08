@@ -1,0 +1,171 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/TestDirectory.btrc;
+import ../../lib/CredentialDigest.btrc;
+import ../../lib/CommandLog.btrc;
+import ../../lib/ParallelCommands.btrc;
+import ./Signals.btrc;
+
+class RuntimeTests {
+    private string tools;
+    private string ssh;
+    public RuntimeTests(string tools, string ssh) { self.tools = tools; self.ssh = ssh; }
+    private string tool(string name) { return PathTools.join(self.tools, name); }
+    private ExecResult run(string executable, Vector<string> arguments, string input = "", bool success = true, Vector<string> environment = []) {
+        var result = ChildProcess.run(executable, arguments, stdinData=input, environment=environment, timeoutMilliseconds=20000);
+        Check.that(!result.timedOut && !result.captureFailed && !result.captureExceeded && (result.code == 0) == success, f"{executable}: {result.code}\n{result.stdout()}\n{result.stderr()}"); return result;
+    }
+    private void command(Vector<string> arguments) { Check.exited(ChildProcess.run(arguments.get(0), arguments.slice(1, arguments.len), timeoutMilliseconds=10000)); }
+    private void waitFor(string path, bool exists = true, string contains = "") {
+        var deadline = MonotonicClock.deadlineAfter(15000);
+        while (true) {
+            bool ready = (FileSystem.exists(path) != 0) == exists;
+            if (ready && (contains.isEmpty() || Path.readAll(path).contains(contains))) { return; }
+            Check.that(MonotonicClock.before(deadline), f"fixture readiness: {path}"); Timer.sleepMillis(50);
+        }
+    }
+    private Vector<string> environment(TestDirectory directory, Vector<string> commands) {
+        Check.that(FileSystem.mkdirp(directory.path("bin")) == 0, "fixture binaries");
+        for name in commands { Check.that(FileSystem.symlink(self.tool("command-fixture"), directory.path(f"bin/{name}")) == 0, "link command fixture"); }
+        return [f"FIXTURE_ROOT={directory.path()}", f"PATH={directory.path("bin")}:{Environment.get("PATH", "")}", f"XDG_RUNTIME_DIR={directory.path()}", f"XDG_STATE_HOME={directory.path()}"];
+    }
+    public void credentials() {
+        var directory = TestDirectory("runtime-credentials");
+        Check.that(FileSystem.mkdirp(directory.path("home")) == 0 && FileSystem.chmod(directory.path("home"), 0700) == 0, "private home");
+        var config = JSONValue.makeObject();
+        config.set("user", JSONValue.makeString(self.run("id", ["-un"]).trimmed()));
+        config.set("home", JSONValue.makeString(directory.path("home"))); config.set("publicKeys", JSONValue.makeArray());
+        config.set("usernameReference", JSONValue.makeString("op://missing/user")); config.set("passwordReference", JSONValue.makeString("op://missing/password"));
+        directory.json("config.json", config);
+        var args = [directory.path("config.json")];
+        self.run(self.tool("credentials"), [args.get(0), "prepare"], success=false);
+        var target = directory.path("home/.config/sunshine/credentials.json");
+        var legacy = directory.path("home/.config/sunshine/sunshine_state.json");
+        var record = JSONValue.makeObject(); record.set("username", JSONValue.makeString("admin")); record.set("salt", JSONValue.makeString("0123456789abcdef"));
+        record.set("password", JSONValue.makeString(CredentialDigest.hash("first-password", "0123456789abcdef")));
+        var previous = JSONValue.parse(record.stringify()); previous.set("root", JSONValue.parse("{\"paired\":[\"client\"]}"));
+        Check.that(FileSystem.writeText(legacy, previous.stringify()) && FileSystem.chmod(legacy, 0644) == 0, "legacy pairing state");
+        var original = Path.readAll(legacy);
+        self.run(self.tool("credentials"), [args.get(0), "prepare"]);
+        var migrated = JSONValue.parse(Path.readAll(target));
+        for key in ["username", "salt", "password"] { Check.equal(migrated.get(key).asString(), record.get(key).asString(), "migrate credential field"); }
+        Check.that(migrated.size() == 3, "credentials exclude pairing state");
+        Check.equal(Path.readAll(legacy), original, "legacy bytes preserved");
+        var payload = "{\"username\":\"admin\",\"password\":\"updated-passé🔑\"}";
+        directory.write("payload", payload);
+        ParallelCommands.run(self.tool("credentials"), [args.get(0), "provision"], directory.path("payload"), directory.path(), 8);
+        var current = Path.readAll(target); var saved = JSONValue.parse(current);
+        Check.equal(saved.get("password").asString(), CredentialDigest.hash("updated-passé🔑", saved.get("salt").asString()), "Unicode password digest");
+        Check.equal(self.run("stat", ["-c", "%a", target]).trimmed(), "600", "private credentials");
+        Check.equal(self.run("stat", ["-c", "%a", PathTools.dirname(target)]).trimmed(), "700", "private credential directory");
+        self.run(self.tool("credentials"), [args.get(0), "provision"], payload);
+        Check.equal(Path.readAll(target), current, "idempotent credentials"); Check.equal(Path.readAll(legacy), original, "pairing unchanged");
+        self.run(self.tool("credentials"), [args.get(0), "sync"], success=false);
+        Check.equal(Path.readAll(target), current, "failed sync preserves credential");
+        for invalid in ["{invalid", "{\"username\":\"a:b\",\"password\":\"x\"}", "{\"username\":\"admin\",\"password\":\"a\\u0000b\"}", "{\"username\":\"\",\"password\":\"x\"}", "{\"username\":\"admin\",\"password\":\"\"}", Strings.repeat(" ", 32769), "{\"username\":\"admin\",\"password\":\"\\ud800\"}", "{\"username\":\"admin\",\"password\":\"\\udc00\"}", "{\"username\":\"admin\",\"password\":\"\\ud800x\"}"] {
+            self.run(self.tool("credentials"), [args.get(0), "provision"], invalid, success=false);
+            Check.equal(Path.readAll(target), current, "invalid payload preserves credentials");
+        }
+        for kind in ["symlink", "hardlink", "public", "fifo", "malformed"] {
+            self.command(["rm", "-f", "--", target]);
+            if (kind.equals("symlink")) { self.command(["ln", "-s", legacy, target]); }
+            else if (kind.equals("fifo")) { self.command(["mkfifo", "-m", "600", target]); }
+            else {
+                Check.that(FileSystem.writeText(target, kind.equals("malformed") ? "{invalid" : current), "unsafe credential fixture");
+                Check.that(FileSystem.chmod(target, kind.equals("public") ? 0644 : 0600) == 0, "fixture permission");
+                if (kind.equals("hardlink")) { self.command(["ln", target, directory.path("alias")]); }
+            }
+            self.run(self.tool("credentials"), [args.get(0), "provision"], payload, success=false);
+            Check.equal(Path.readAll(legacy), original, "hostile credentials cannot alter pairing state");
+            self.command(["rm", "-f", "--", target, directory.path("alias")]);
+            Check.that(FileSystem.writeText(target, current) && FileSystem.chmod(target, 0600) == 0, "restore fixture");
+        }
+        print("Credential migration, Unicode hashing, concurrent writes and unsafe-file rejection passed");
+    }
+    public void login() {
+        var directory = TestDirectory("runtime-tls");
+        self.command(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", directory.path("tls.key"), "-out", directory.path("tls.crt"), "-subj", "/CN=fixture", "-days", "1", "-set_serial", "1"]);
+        self.command(["openssl", "req", "-x509", "-key", directory.path("tls.key"), "-out", directory.path("changed.crt"), "-subj", "/CN=fixture", "-days", "1", "-set_serial", "2"]);
+        self.command(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", directory.path("identity")]);
+        directory.write("allowed_signers", "test " + Path.readAll(directory.path("identity.pub"))); directory.write("mode", "valid"); directory.write("requests", "");
+        var server = OwnedProcess(self.tool("login-server"), [directory.path()], directory.path("server.log"));
+        try {
+            self.waitFor(directory.path("origin"));
+            var origin = Path.readAll(directory.path("origin"));
+            var args = [origin, "--challenge", Strings.repeat("a", 64), "-i", directory.path("identity")];
+            var pinned = args.copy(); pinned.push("--certificate"); pinned.push(directory.path("tls.crt"));
+            self.run(self.ssh, pinned);
+            var requests = CommandLog.read(directory.path("requests"));
+            Check.that(requests.len == 2, "two login requests");
+            Check.equal(requests.get(0).at(0).asString(), "/api/ssh/challenge", "challenge before signing");
+            Check.equal(requests.get(1).at(0).asString(), "/api/ssh/complete", "signature completion");
+            directory.write("requests", "");
+            var changed = args.copy(); changed.push("--certificate"); changed.push(directory.path("changed.crt"));
+            self.run(self.ssh, changed, success=false); self.run(self.ssh, args, success=false);
+            Check.that(CommandLog.read(directory.path("requests")).isEmpty(), "certificate mismatch and untrusted TLS fail before HTTP");
+            for mode in ["wrong-purpose", "wrong-origin", "wrong-id", "oversized", "redirect"] {
+                directory.write("mode", mode); directory.write("requests", "");
+                self.run(self.ssh, pinned, success=false);
+                requests = CommandLog.read(directory.path("requests"));
+                Check.that(requests.len == 1 && requests.get(0).at(0).asString().equals("/api/ssh/challenge"), f"reject {mode} before signing");
+            }
+            for invalid in ["http://127.0.0.1", "https://user@127.0.0.1", origin + "/path", origin + "?query", origin + "#fragment"] {
+                directory.write("requests", "");
+                self.run(self.ssh, [invalid, "--challenge", Strings.repeat("a", 64), "-i", directory.path("identity"), "--certificate", directory.path("tls.crt")], success=false);
+                Check.that(CommandLog.read(directory.path("requests")).isEmpty(), "invalid origin rejected before HTTP");
+            }
+        } finally { server.close(); }
+        print("Real TLS leaf pin, same-key rejection, destination-bound signing and response limits passed");
+    }
+    public void display() {
+        var directory = TestDirectory("runtime-display");
+        var environment = self.environment(directory, ["kscreen-doctor", "krfb-virtualmonitor"]);
+        for entry in ["SUNSHINE_CLIENT_WIDTH=2560", "SUNSHINE_CLIENT_HEIGHT=1440", "SUNSHINE_CLIENT_FPS=119.9", "SUNSHINE_CLIENT_HDR=true"] { environment.push(entry); }
+        directory.write("inventory.json", "{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":true,\"currentModeId\":\"1\",\"modes\":[{\"id\":\"1\",\"name\":\"1920x1080@60\"}],\"pos\":{\"x\":0,\"y\":0},\"scale\":1,\"hdr\":false,\"wcg\":false,\"priority\":1}]}");
+        directory.write("config.json", "{\"name\":\"Sunshine\",\"primary\":\"DP-1\",\"defaultWidth\":1920,\"defaultHeight\":1080,\"defaultFps\":60,\"scale\":\"1\",\"position\":\"0,0\",\"port\":5909,\"settleSeconds\":2,\"disablePrimaryOnStream\":true}");
+        try {
+            self.run("sh", ["-c", f"exec {ShellWords.quote(self.tool("virtual-display"))} {ShellWords.quote(directory.path("config.json"))} start >{ShellWords.quote(directory.path("start.log"))} 2>&1"], environment=environment);
+            self.waitFor(directory.path("monitor"));
+            bool configured = false;
+            for command in CommandLog.read(directory.path("calls")) {
+                var text = command.stringify();
+                if (text.contains("output.Virtual-Sunshine.mode.2560x1440@119") && text.contains("output.DP-1.disable") && text.contains("output.Virtual-Sunshine.hdr.enable")) { configured = true; }
+            }
+            Check.that(configured, "client mode, HDR and physical-output disabling");
+            self.run(self.tool("virtual-display"), [directory.path("config.json"), "stop"], environment=environment);
+            self.waitFor(directory.path("monitor"), false);
+            Check.that(Path.readAll(directory.path("calls")).contains("output.DP-1.mode.1920x1080@60"), "physical output restored");
+            Check.that(!FileSystem.exists(directory.path("sunshine-virtual-display/state.json")), "virtual display state removed");
+        } finally { self.run(self.tool("virtual-display"), [directory.path("config.json"), "stop"], environment=environment); }
+        print("Virtual monitor lifecycle, client HDR and physical-output restoration passed");
+    }
+    public void slopsmith() {
+        var directory = TestDirectory("runtime-slopsmith");
+        var environment = self.environment(directory, ["podman", "podman-compose", "curl", "xdg-open"]);
+        var dlc = directory.path("DLC: \"quoted\""); Check.that(FileSystem.mkdirp(dlc) == 0, "DLC fixture");
+        var config = JSONValue.makeObject(); config.set("rocksmithDlc", JSONValue.makeString(dlc)); config.set("configDir", JSONValue.makeString(directory.path("config"))); config.set("source", JSONValue.makeString(directory.path())); config.set("port", JSONValue.makeInt(8000)); directory.json("config.json", config);
+        for number in [15, 1, 2] {
+            directory.write("calls", "");
+            var session = OwnedProcess(self.tool("slopsmith-runtime"), [directory.path("config.json"), "session"], directory.path("session.log"), environment=environment);
+            try {
+                self.waitFor(directory.path("calls"), contains="\"xdg-open\"");
+                var compose = JSONValue.parse(Path.readAll(directory.path("slopsmith/docker-compose.yml")));
+                Check.equal(compose.get("services").get("web").get("volumes").at(0).get("source").asString(), dlc, "quoted DLC path");
+                self.run(self.tool("slopsmith-runtime"), [directory.path("config.json"), "session"], environment=environment);
+                FixtureSignals.send(session.pid(), number);
+                Check.that(session.wait(MonotonicClock.deadlineAfter(15000)) == (number == 2 ? 130 : 143), "signal exit status");
+                Check.that(!FileSystem.exists(directory.path("up")) && !FileSystem.exists(directory.path("slopsmith/slopsmith.pid")), "session cleanup");
+                var commands = CommandLog.read(directory.path("calls"));
+                var ups = 0;
+                for command in CommandLog.named(commands, "podman-compose") { if (command.stringify().contains("\"up\"")) { ups++; } }
+                Check.that(ups == 1 && CommandLog.named(commands, "xdg-open").len == 2, "single session and duplicate browser launch");
+                Check.that(Path.readAll(directory.path("slopsmith/slopsmith.log")).contains("service log"), "service log preserved");
+            } finally { session.close(); FileSystem.removeRecursivePath(directory.path("up")); }
+        }
+        print("Slopsmith single-session locking, readiness, logs and signal cleanup passed");
+    }
+}
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv); var tests = RuntimeTests(args.require(0, "tools"), args.require(1, "SSH login"));
+    tests.credentials(); tests.login(); tests.display(); tests.slopsmith(); return 0;
+}

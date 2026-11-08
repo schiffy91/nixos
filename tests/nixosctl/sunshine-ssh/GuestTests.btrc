@@ -1,0 +1,100 @@
+import ../sunshine/Fixture.btrc;
+
+class BrowserChallenge {
+    private string _identifier;
+    private string _cookie;
+    public BrowserChallenge(string identifier, string cookie) { self._identifier = identifier; self._cookie = cookie; }
+    public string identifier { get { return self._identifier; } }
+    public string cookie { get { return self._cookie; } }
+    public JSONValue payload() { var result = JSONValue.makeObject(); result.set("challenge", JSONValue.makeString(self.identifier)); return result; }
+}
+
+class SunshineSSHTests {
+    private string origin = "https://sunshine.test:47990";
+    private string home = "/srv/operator";
+    private string socket = "/run/user/1000/sunshine-test-agent.sock";
+
+    private HTTPObservation request(string path, JSONValue? data = null, string cookie = "", string source = "https://sunshine.test:47990", string basic = "") {
+        Vector<string> headers = [];
+        if (!source.isEmpty()) { headers.push("Origin: " + source); }
+        if (!cookie.isEmpty()) { headers.push("Cookie: " + cookie); }
+        return HTTPProbe.fixture(self.origin + path, data, headers, basic);
+    }
+    private void status(HTTPObservation response, int expected) { Check.that(response.status == expected, f"HTTP status {response.status}, expected {expected}: {response.body}"); }
+    private string cookie(HTTPObservation response) {
+        var header = response.header("Set-Cookie");
+        Check.that(header.contains("Secure; HttpOnly; SameSite=Strict"), "secure browser cookie attributes");
+        return Strings.split(header, ";").get(0);
+    }
+    private BrowserChallenge begin() {
+        var response = self.request("/api/ssh/begin", JSONValue.makeObject()); self.status(response, 200);
+        return BrowserChallenge(response.json().get("challenge").asString(), self.cookie(response));
+    }
+    private void approve(BrowserChallenge challenge) {
+        SunshineFixture.user(["env", "SSH_AUTH_SOCK=" + self.socket, "sunshine-ssh-login", self.origin, "--challenge", challenge.identifier, "-i", self.home + "/fixture-key.pub", "--certificate", self.home + "/.config/sunshine/server.crt"]);
+    }
+    private string authenticate() {
+        var challenge = self.begin(); self.approve(challenge);
+        var response = self.request("/api/ssh/exchange", challenge.payload(), challenge.cookie); self.status(response, 200); return self.cookie(response);
+    }
+    private void start() {
+        SunshineFixture.user(["systemctl", "--user", "start", "sunshine"]);
+        var deadline = MonotonicClock.deadlineAfter(30000);
+        while (MonotonicClock.before(deadline)) { if (self.request("/ssh-login").status == 200) { return; } Timer.sleepMillis(500); }
+        throw SunshineFixture.user(["journalctl", "--user", "-u", "sunshine", "--no-pager"]).stdout();
+    }
+
+    public void check(bool reboot) {
+        self.start();
+        if (reboot) {
+            var saved = JSONValue.readFile("/var/tmp/ssh-login-session.json");
+            self.status(self.request("/api/config", cookie=saved.get("cookie").asString()), 401);
+            self.status(self.request("/api/config", basic="admin:fixture-password"), 200); return;
+        }
+        var credentials = self.home + "/.config/sunshine/credentials.json";
+        Check.that(!FileSystem.exists(credentials), "key-only instance needs no password file");
+        Check.equal(Path.readAll("/etc/sunshine/ssh-keys/key-1.pub"), Path.readAll("/etc/sunshine-ssh-fixture.pub"), "configured authorized key");
+        Check.that(SunshineFixture.user(["nixosctl-sunshine", "status"]).stdout().contains("SSH-key"), "report key-only authentication");
+        var landing = self.request("/"); self.status(landing, 307); Check.equal(landing.header("Location"), "/ssh-login", "login redirect");
+        self.status(self.request("/api/config"), 401);
+        self.status(self.request("/api/password", JSONValue.parse("{\"newUsername\":\"attacker\",\"newPassword\":\"wrong\",\"confirmNewPassword\":\"wrong\"}")), 401);
+        self.status(self.request("/api/ssh/begin", JSONValue.makeObject(), source="https://attacker.invalid"), 403);
+        self.status(self.request("/api/ssh/begin", JSONValue.makeObject(), source=""), 403);
+        SunshineFixture.user(["install", "-m600", "/etc/sunshine-ssh-fixture", self.home + "/fixture-key"]);
+        SunshineFixture.user(["install", "-m644", "/etc/sunshine-ssh-fixture.pub", self.home + "/fixture-key.pub"]);
+        var agent = OwnedProcess("runuser", SunshineFixture.arguments(["ssh-agent", "-D", "-a", self.socket]), "/var/tmp/sunshine-agent.log");
+        try {
+            var deadline = MonotonicClock.deadlineAfter(5000);
+            while (!FileSystem.exists(self.socket)) { Check.that(MonotonicClock.before(deadline) && agent.running(), "SSH agent socket ready"); Timer.sleepMillis(50); }
+            SunshineFixture.user(["env", "SSH_AUTH_SOCK=" + self.socket, "ssh-add", self.home + "/fixture-key"]); SunshineFixture.user(["rm", self.home + "/fixture-key"]);
+            var challenge = self.begin(); self.status(self.request("/api/ssh/exchange", challenge.payload(), challenge.cookie), 202);
+            self.approve(challenge); self.status(self.request("/api/ssh/exchange", challenge.payload()), 202);
+            var exchange = self.request("/api/ssh/exchange", challenge.payload(), challenge.cookie); self.status(exchange, 200); var cookie = self.cookie(exchange);
+            self.status(self.request("/api/ssh/exchange", challenge.payload(), challenge.cookie), 202);
+            self.status(self.request("/api/config", cookie=cookie), 200); self.status(self.request("/api/csrf-token", cookie=cookie), 200);
+            self.status(self.request("/api/password", JSONValue.makeObject(), cookie, "https://attacker.invalid"), 401);
+            self.status(self.request("/api/ssh/logout", JSONValue.makeObject(), cookie, "https://attacker.invalid"), 403);
+            self.status(self.request("/api/ssh/logout", JSONValue.makeObject(), cookie), 200); self.status(self.request("/api/config", cookie=cookie), 401);
+            cookie = self.authenticate();
+            var changed = self.request("/api/password", JSONValue.parse("{\"newUsername\":\"admin\",\"newPassword\":\"fixture-password\",\"confirmNewPassword\":\"fixture-password\"}"), cookie);
+            self.status(changed, 200); Check.that(changed.json().get("status").asBool(), "password change accepted");
+            self.status(self.request("/api/config", cookie=cookie), 401); self.status(self.request("/api/config", basic="admin:fixture-password"), 200);
+            cookie = self.authenticate(); var saved = JSONValue.makeObject(); saved.set("cookie", JSONValue.makeString(cookie)); SunshineFixture.write("/var/tmp/ssh-login-session.json", saved.stringify());
+            self.status(self.request("/api/config", cookie=cookie), 200); SunshineFixture.user(["systemctl", "--user", "stop", "sunshine"]);
+            var password = JSONValue.readFile(credentials);
+            Check.equal(Check.exited(ChildProcess.run("stat", ["-c", "%a", credentials])).trimmed(), "600", "password record mode");
+            SunshineFixture.user(["nixosctl-sunshine", "prepare"]); Check.equal(JSONValue.readFile(credentials).stringify(), password.stringify(), "preparation preserves password record");
+            var state = self.home + "/.config/sunshine/sunshine_state.json";
+            var legacy = FileSystem.exists(state) ? JSONValue.readFile(state) : JSONValue.makeObject();
+            for key in password.keys() { legacy.set(key, password.get(key)); }
+            SunshineFixture.write(state, legacy.stringify()); SunshineFixture.owned(state); SunshineFixture.command(["rm", credentials]);
+            SunshineFixture.user(["nixosctl-sunshine", "prepare"]); Check.equal(JSONValue.readFile(credentials).stringify(), password.stringify(), "legacy transition preserves password record");
+            Check.equal(JSONValue.readFile(state).stringify(), legacy.stringify(), "legacy transition preserves pairing state");
+        } finally { agent.close(); }
+    }
+}
+
+int main(int argc, char** argv) {
+    try { SunshineSSHTests().check(CLIArgs(argc, argv).count() > 0); print("PASS: agent signing, browser binding, key-only setup, CSRF, logout and password/session revocation"); return 0; }
+    catch (string error) { print(error); return 1; }
+}

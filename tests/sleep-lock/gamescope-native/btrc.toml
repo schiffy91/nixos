@@ -1,0 +1,5 @@
+manifest-version = 1
+[package]
+name = "nixos_gamescope_tests"
+[dependencies]
+vm = { path = "../../vm" }

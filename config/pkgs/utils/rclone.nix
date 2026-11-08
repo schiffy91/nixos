@@ -22,7 +22,7 @@ let
 
     ${fusermount3} -uz ${lib.escapeShellArg mountPoint} >/dev/null 2>&1 || true
   '';
-in lib.mkIf (config.settings.apps.enable && config.settings.apps.utils.enable && config.settings.apps.rclone.enable) {
+in lib.mkIf (config.settings.apps.utils.rclone.enable) {
   settings.disk.immutability.persist.paths = [ "${home}/.config/rclone" ];
   users.users.${user}.packages = [ pkgs.rclone ];
 

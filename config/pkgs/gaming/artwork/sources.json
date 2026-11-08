@@ -1,0 +1,172 @@
+{
+  "semu": {
+    "portrait": {
+      "url": "https://cdn2.steamgriddb.com/grid/9364bb35f48a5e1deb916a1b90b407e1.png",
+      "hash": "sha256-+CroGVYoRLKk26bbCmYAJd+hLhixHgVbi2k1I10lYfw=",
+      "page": "https://www.steamgriddb.com/grid/671648",
+      "author": "notNSANE",
+      "width": 600,
+      "height": 900
+    },
+    "landscape": {
+      "url": "https://cdn2.steamgriddb.com/grid/1b56b855cdb0443658f2a3345763b320.png",
+      "hash": "sha256-86H92QnGFZ5FrQprGlbQJbaEFiZ8Ru5/CjM/rYuLbB8=",
+      "page": "https://www.steamgriddb.com/grid/825558",
+      "author": "LeonSe",
+      "width": 920,
+      "height": 430
+    },
+    "hero": {
+      "url": "https://cdn2.steamgriddb.com/hero/fdfc0532699bfc56e633dfaf53464a2f.png",
+      "hash": "sha256-0noZSN6LueR0EqLtsg8P63KbOTGwCgcfM6b9j+rj770=",
+      "page": "https://www.steamgriddb.com/hero/151582",
+      "author": "Bazmina",
+      "width": 3840,
+      "height": 1240
+    },
+    "logo": {
+      "url": "https://cdn2.steamgriddb.com/logo/73ae3588cf5a856b40d8df12292e02d1.png",
+      "hash": "sha256-mJOwDgJp4qhmkFVMhn9nsJkcfgyPj4wQOPJJXJHjlaI=",
+      "page": "https://www.steamgriddb.com/logo/178430",
+      "author": "LeonSe",
+      "width": 934,
+      "height": 296
+    }
+  },
+  "battlenet": {
+    "portrait": {
+      "url": "https://cdn2.steamgriddb.com/grid/356c41d28e278e936b46739712043616.png",
+      "hash": "sha256-9S5Kn/jkrNaXjLlGFK6edXdfbXUBRDGBuE9nZT91/No=",
+      "page": "https://www.steamgriddb.com/grid/312127",
+      "author": "alextiley",
+      "width": 600,
+      "height": 900
+    },
+    "landscape": {
+      "url": "https://cdn2.steamgriddb.com/grid/95dc580680cdd8578951011c081121c4.png",
+      "hash": "sha256-JlPo3W1oTrpQok/U1WS8Nu0ZFJjQlx8zTXWHpNvis+o=",
+      "page": "https://www.steamgriddb.com/grid/312160",
+      "author": "alextiley",
+      "width": 920,
+      "height": 430
+    },
+    "hero": {
+      "url": "https://cdn2.steamgriddb.com/hero/d2564438802df90e3128b9f5837120a8.png",
+      "hash": "sha256-oWx5SrZ8z8tV6Og9YI/17LbHpmXHDEN24NNCUvW7nMg=",
+      "page": "https://www.steamgriddb.com/hero/136575",
+      "author": "SnarlyDig It",
+      "width": 3840,
+      "height": 1240
+    },
+    "logo": {
+      "url": "https://cdn2.steamgriddb.com/logo/c828b4e93bd75e8f7307dbddedea6480.png",
+      "hash": "sha256-zHCvFALcyX250ervB2Jewe2DmCGXEq0+RUHNFN6FqVg=",
+      "page": "https://www.steamgriddb.com/logo/42284",
+      "author": "Crimroxs",
+      "width": 1440,
+      "height": 220
+    }
+  },
+  "chrome": {
+    "portrait": {
+      "url": "https://cdn2.steamgriddb.com/grid/4c68da7df3e0aa6467d00c73314ebeb0.png",
+      "hash": "sha256-RuIIm3Am91BkUkM3KQPEoHWgl+1RYopmogq5rt9IZRE=",
+      "page": "https://www.steamgriddb.com/grid/201400",
+      "author": "CarJem Generations",
+      "width": 600,
+      "height": 900
+    },
+    "landscape": {
+      "url": "https://cdn2.steamgriddb.com/grid/e3ad01979fd4661ecb626a60f65884ca.png",
+      "hash": "sha256-wzVg47r9BFa/BAynWSlgMMESv7eIMD8w9jm3lKEszrs=",
+      "page": "https://www.steamgriddb.com/grid/201401",
+      "author": "CarJem Generations",
+      "width": 920,
+      "height": 430
+    },
+    "hero": {
+      "url": "https://cdn2.steamgriddb.com/hero/c8fcd3fb8ac2645797d096c8993e066c.png",
+      "hash": "sha256-8tpt26uSwGJsZdgoDS5QNyiSYT04Znt6KAXqNbq5k68=",
+      "page": "https://www.steamgriddb.com/hero/61049",
+      "author": "W.H.",
+      "width": 1920,
+      "height": 620
+    },
+    "logo": {
+      "url": "https://cdn2.steamgriddb.com/logo/56189b78e3869de4694b890698fcdab3.png",
+      "hash": "sha256-eEyCQ4eS43OamrtVYiMAOIXgAld/1f0duPOtl++6IDU=",
+      "page": "https://www.steamgriddb.com/logo/56327",
+      "author": "CarJem Generations",
+      "width": 523,
+      "height": 80
+    }
+  },
+  "moonlight": {
+    "portrait": {
+      "url": "https://cdn2.steamgriddb.com/grid/aa9e728e6567b6cbca834ff1c109c318.png",
+      "hash": "sha256-pu1FNe6NjR+34LXhOiV0Io/cnZrOUa1FrhL8q4NZ/yM=",
+      "page": "https://www.steamgriddb.com/grid/476215",
+      "author": "OmniDeath",
+      "width": 600,
+      "height": 900
+    },
+    "landscape": {
+      "url": "https://cdn2.steamgriddb.com/grid/d60db38168e2e3c6b85e15b9bc3d2227.png",
+      "hash": "sha256-ATWuenGve9O8cY2IUkrXXOEjD4ypPci/U20gr0xEEEs=",
+      "page": "https://www.steamgriddb.com/grid/476216",
+      "author": "OmniDeath",
+      "width": 920,
+      "height": 430
+    },
+    "hero": {
+      "url": "https://cdn2.steamgriddb.com/hero/5e95d762abe2737f80f836f2c9cb82bb.png",
+      "hash": "sha256-wnZjuQHDuLMNbJg/YetS96Cbuxhtm+p62XHAaDNdzoA=",
+      "page": "https://www.steamgriddb.com/hero/114704",
+      "author": "OmniDeath",
+      "width": 3840,
+      "height": 1240
+    },
+    "logo": {
+      "url": "https://cdn2.steamgriddb.com/logo/e7667bd5a7241d1ae45bd2974729fc19.png",
+      "hash": "sha256-lr4Ma1Tksyfcb/7A4fHhwnZtzl0qRzA2PlB6RnQLsIM=",
+      "page": "https://www.steamgriddb.com/logo/120057",
+      "author": "OmniDeath",
+      "width": 925,
+      "height": 258
+    }
+  },
+  "chiaki": {
+    "portrait": {
+      "url": "https://cdn2.steamgriddb.com/grid/346cf5bb8dff3e90e2c4df81a83701cf.png",
+      "hash": "sha256-M3Ts/NEtb3gqE5Oitnlka0eM9MoP/MonzMNIiRHXYgQ=",
+      "page": "https://www.steamgriddb.com/grid/470068",
+      "author": "LXVI",
+      "width": 600,
+      "height": 900
+    },
+    "landscape": {
+      "url": "https://cdn2.steamgriddb.com/grid/9111ec4aae8cd54acf89f011eee3c164.png",
+      "hash": "sha256-P5fiBaf2mxsE+wKcMPMOKq1fQrisRZA+D0T3wp/JLQA=",
+      "page": "https://www.steamgriddb.com/grid/470069",
+      "author": "LXVI",
+      "width": 920,
+      "height": 430
+    },
+    "hero": {
+      "url": "https://cdn2.steamgriddb.com/hero/9884dfd73a2471545e0c3f8c14177a04.png",
+      "hash": "sha256-xhlruBvQ7zXm/6biw9NWu3fXCluN0OostBD+4AjVO5o=",
+      "page": "https://www.steamgriddb.com/hero/113041",
+      "author": "LXVI",
+      "width": 3840,
+      "height": 1240
+    },
+    "logo": {
+      "url": "https://cdn2.steamgriddb.com/logo/fdd3817fb0cf38c24dd377286b1d7e41.png",
+      "hash": "sha256-j6yMnku1Noe2ffEAzuk80WDqxwLfy8lYQpesymWDpcY=",
+      "page": "https://www.steamgriddb.com/logo/118373",
+      "author": "LXVI",
+      "width": 2044,
+      "height": 1215
+    }
+  }
+}

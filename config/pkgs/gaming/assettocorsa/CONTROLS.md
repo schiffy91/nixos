@@ -4,7 +4,7 @@ Target: original AC with CM/CSP, Logitech PRO PS/PC wheel, pedals and
 H-shifter. A predictable wheel-operated driving/session experience is the
 goal; writing a binding or passing an isolated test does not complete it.
 
-The host binding records live in `config/hosts/x86_64/FRACTAL-NORTH/pkgs/assettocorsa.nix`.
+The shared binding records live in `logitech-pro-playstation.nix`; FRACTAL-NORTH selects that wheel profile in its `pkgs/default.nix`.
 The writable calibrated preset on FRACTAL-NORTH lives in `~/Drive/media/Games/Assetto Corsa/Controls`.
 The README contains the current button map. Do not restore the obsolete
 L2/Share modifier map: Options must remain pause, Cross selects, and Circle

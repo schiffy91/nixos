@@ -13,25 +13,26 @@ let
         ../../../config/pkgs/gaming/sunshine/virtual-display
         ../../../config/pkgs/gaming/slopsmith/src
         ../../../config/lib/BackgroundProcess.btrc
-        ./Contracts.btrc
+        ./. ../../lib
       ];
     };
     programs = {
       contracts = "tests/gaming/runtime/Contracts.btrc";
+      integration = "tests/gaming/runtime/Integration.btrc";
+      login-server = "tests/gaming/runtime/LoginServer.btrc";
+      command-fixture = "tests/gaming/runtime/CommandFixture.btrc";
       credentials = "config/pkgs/gaming/sunshine/credentials/src/Main.btrc";
       virtual-display = "config/pkgs/gaming/sunshine/virtual-display/Main.btrc";
       slopsmith-runtime = "config/pkgs/gaming/slopsmith/src/Main.btrc";
     };
+    buildInputs = [ pkgs.openssl ];
+    linkFlags = [ "-lssl" "-lcrypto" ];
   };
   ssh = import ../../../config/pkgs/gaming/sunshine/ssh-login/package.nix { inherit pkgs inputs; };
-  icon = pkgs.runCommand "artwork-test-icon.png" { nativeBuildInputs = [ pkgs.imagemagick ]; } ''
-    magick -size 16x16 xc:cyan "$out"
-  '';
-  artwork = import ../../../config/pkgs/gaming/steam/artwork/package.nix { inherit pkgs icon; name = "A & <B> \"C\" 'D'"; };
 in pkgs.runCommand "gaming-runtime-contracts" {
-  nativeBuildInputs = [ pkgs.python3 pkgs.openssl pkgs.openssh pkgs.coreutils pkgs.bash pkgs.curl ];
+  nativeBuildInputs = [ pkgs.openssl pkgs.openssh pkgs.coreutils pkgs.bash pkgs.curl ];
 } ''
   ${tools}/bin/contracts
-  python3 ${./test.py} ${tools}/bin ${ssh}/bin/sunshine-ssh-login ${artwork}
+  ${tools}/bin/integration ${tools}/bin ${ssh}/bin/sunshine-ssh-login
   touch "$out"
 ''

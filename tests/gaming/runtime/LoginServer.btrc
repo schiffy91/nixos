@@ -1,0 +1,39 @@
+import Library.CLI;
+import Library.JSON;
+import Library.FileSystem;
+import ./TLS.btrc;
+import ../../lib/CommandLog.btrc;
+
+int main(int argc, char** argv) {
+    var root = CLIArgs(argc, argv).require(0, "fixture directory");
+    var server = TLSListener(PathTools.join(root, "tls.crt"), PathTools.join(root, "tls.key"));
+    var origin = f"https://127.0.0.1:{server.port}";
+    Check.that(FileSystem.writeText(PathTools.join(root, "origin"), origin), "publish TLS fixture origin");
+    while (true) {
+        var connection = server.accept();
+        if (connection == null) { continue; }
+        var request = connection.request();
+        if (request == null) { continue; }
+        var document = JSONValue.parse(request.body);
+        CommandLog.append(PathTools.join(root, "requests"), [request.path, document.stringify()]);
+        var identifier = document.get("challenge").asString();
+        var message = f"Sunshine Web UI login\nOrigin: {origin}\nChallenge: {identifier}\n";
+        var mode = Path.readAll(PathTools.join(root, "mode"));
+        var body = "";
+        if (request.path.equals("/api/ssh/challenge")) {
+            var response = JSONValue.makeObject();
+            response.set("challenge", JSONValue.makeString(mode.equals("wrong-id") ? Strings.repeat("b", 64) : identifier));
+            response.set("namespace", JSONValue.makeString(mode.equals("wrong-purpose") ? "different-purpose" : "sunshine-web-login"));
+            response.set("message", JSONValue.makeString(mode.equals("wrong-origin") ? message.replace(origin, "https://attacker.invalid") : message));
+            body = mode.equals("oversized") ? Strings.repeat(" ", 20001) : response.stringify();
+        } else {
+            Check.equal(request.path, "/api/ssh/complete", "login completion path");
+            var signature = PathTools.join(root, "login.sig");
+            Check.that(FileSystem.writeText(signature, document.get("signature").asString()), "save SSH signature");
+            Check.exited(ChildProcess.run("ssh-keygen", ["-Y", "verify", "-f", PathTools.join(root, "allowed_signers"), "-I", "test", "-n", "sunshine-web-login", "-s", signature], stdinData=message, timeoutMilliseconds=10000));
+            body = "{\"status\":true}";
+        }
+        connection.respond(mode.equals("redirect") ? 302 : 200, body);
+    }
+    return 0;
+}

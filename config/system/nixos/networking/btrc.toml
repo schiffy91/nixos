@@ -2,12 +2,22 @@ manifest-version = 1
 
 [package]
 name = "nixos_trusted_connections"
-exports = ["TrustedConnections"]
+exports = ["TrustedConnections", "NetworkPrefix", "TrustedFirewall"]
 
 [[native.bindings]]
-module = "TrustedConnections"
+module = "NetworkPrefix"
 header = "native.h"
 language = "c"
 standard = "c11"
-symbols = ["inet_pton", "inet_ntop", "AF_INET", "AF_INET6"]
-read-only-borrows = ["inet_pton.__cp"]
+symbols = ["NetworkPrefixHandle", "networkPrefixParse", "networkPrefixRelease", "networkPrefixText"]
+owned-results = ["networkPrefixParse"]
+read-only-borrows = ["networkPrefixParse.address"]
+borrowed-parameters = ["networkPrefixText.prefix"]
+
+[native.bindings.resources.NetworkPrefixHandle]
+ownership = "unique"
+release = "networkPrefixRelease"
+
+[native.bindings.copied-results.networkPrefixText]
+kind = "string"
+owner = "prefix"

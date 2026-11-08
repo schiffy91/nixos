@@ -2,14 +2,14 @@ manifest-version = 1
 
 [package]
 name = "nixos_sleep_native"
-exports = ["Posix", "Authentication", "Authenticate", "Display", "Blank"]
+exports = ["Posix", "Console", "Authentication", "Authenticate", "Display", "Blank"]
 
 [[native.bindings]]
 module = "Posix"
 header = "posix.h"
 language = "c"
 standard = "c11"
-symbols = ["VT_GETSTATE", "VT_ACTIVATE", "VT_WAITACTIVE", "VT_LOCKSWITCH", "VT_UNLOCKSWITCH", "MCL_CURRENT", "MCL_FUTURE", "PR_SET_PDEATHSIG", "PR_SET_DUMPABLE", "vt_stat", "rlimit", "dirent", "scandir", "alphasort"]
+symbols = ["VT_GETSTATE", "VT_ACTIVATE", "VT_WAITACTIVE", "VT_LOCKSWITCH", "VT_UNLOCKSWITCH", "MCL_CURRENT", "MCL_FUTURE", "PR_SET_PDEATHSIG", "PR_SET_DUMPABLE", "vt_stat", "rlimit"]
 
 [[native.bindings]]
 module = "Authentication"

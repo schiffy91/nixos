@@ -1,3 +1,4 @@
+import Library.Console;
 import ./Capture.btrc;
 import ./Sources.btrc;
 
@@ -115,5 +116,5 @@ int main(int argc, char** argv) {
         else if (mode.equals("make")) { tools.make(arguments); }
         else { throw f"Unknown tool: {mode}"; }
         return 0;
-    } catch (string error) { fprintf(stderr, "proton-custom: %s\n", error); return 1; }
+    } catch (string error) { Console.error(f"proton-custom: {error}"); return 1; }
 }

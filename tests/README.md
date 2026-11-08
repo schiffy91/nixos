@@ -18,25 +18,45 @@ make gaming
 
 `make lint` uses the pinned tools in `ci/tools.nix`. It checks every owned Nix
 and BTRC source with the language parser/compiler and the actual language servers,
-then runs Python syntax/Ruff/Pyright, ShellCheck, JavaScript/Lua parsing, workflow
+then runs ShellCheck, JavaScript/Lua parsing, workflow
 and manifest checks, native builds/unit suites, and flake evaluation. The native
 C check includes Linux helpers, kernel modules and Windows fixtures; its source
 inventory must match the repository. Vendored Proton sources and generated build
 outputs are outside this inventory. Error diagnostics fail the command; advisory
 warnings remain visible in `build/lint/`.
 
-Editor settings live in `.vscode/`; Pyright's CLI configuration lives under `ci/`.
-The editor uses the same pinned Python environment and BTRC compiler sources as
-the checks. The Nix server has a narrow upstream fix for flake builtins, with a
-regression test that still rejects misspelled builtins. VM Python scripts declare
-the test driver's injected names through type-only imports from `nixos_test.pyi`;
-the production driver continues to supply those names at runtime.
-The imports carry a narrow `ty` annotation because that driver's isolated build
-does not contain the editor stub; its own generated prelude supplies the types.
+Editor settings live in `.vscode/` and use the pinned BTRC and Nix language
+servers. The Nix server has a narrow upstream fix for flake builtins, with a
+regression test that still rejects misspelled builtins.
+The BTRC compiler and language server share the pinned compatibility fixes in
+`config/pkgs/dev/btrc/compat.nix`: libjpeg-turbo's versioned initialization macro
+and authenticated stdlib origins for copied native bytes. Editor protocol tests
+accept the real `Library.Bytes` and reject a user-defined substitute.
+
+`vm/` builds NixOS nodes with the pinned Nixpkgs test modules, then runs compiled
+BTRC scenarios. `Lab` owns guests and virtual networks; `Guest` drives the serial
+shell and QMP with bounded commands and framed output. There is no generated
+Python test script or Python VM driver. Initrd, reboot and multi-machine tests
+use the same implementation. Native Gamescope tests capture QEMU's actual EGL
+framebuffer through a typed libvncclient resource, then use BTRC image operations
+and Tesseract for observations. Artifacts retain raw PPM images and guest logs.
+
+`lib/` contains checked process results, temporary fixtures, owned children,
+PTY sessions, HTTPS observations and independent credential digest checks.
+Executable command fixtures are compiled BTRC programs. Native headers expose
+bounded TLS transport, CPU affinity, process/signal primitives and framebuffer
+bytes; scenario policy and assertions stay in BTRC.
 
 The layout check covers public output names, installer host selection and the
-single Mac Home Manager declaration. The package check covers independent group
-switches and shared settings with hardware-specific overrides.
+single Mac Home Manager declaration. The app-hierarchy check covers inherited
+defaults, explicit parent/child conflicts, nested and dynamically named apps,
+and sibling dependencies. The package check verifies real package, service,
+persistence and taskbar behavior for valid off configurations, and rejects an
+invalid host at system evaluation. Run these with:
+
+```sh
+nix build .#checks.x86_64-linux.app-hierarchy .#checks.x86_64-linux.package-groups .#checks.x86_64-linux.persistence-ownership --no-link
+```
 
 Run scenarios through the graph so parents and source hashes are checked:
 
@@ -68,9 +88,9 @@ The graph source hash includes BTRC, Nix, scenario data, shell scripts, native
 headers and the compiled runner. Do not run individual specs directly or
 reuse a ready VM after changing its source without going through the graph.
 
-`initrd-touch-unlock` runs the pinned NixOS VM test driver through a graph host
+`initrd-touch-unlock` runs the BTRC VM driver through a graph host
 operation. It reuses the production touch-keyboard module, boots an encrypted
-root, delays initrd drivers, injects a failed agent start, and clicks the visible
+root, delays initrd drivers, rejects a wrong passphrase, and clicks the visible
 keyboard to unlock. Its absolute USB tablet input verifies the graphical keys;
 it does not emulate the Steam Deck's I2C digitizer or AMD GPU. Run it with:
 

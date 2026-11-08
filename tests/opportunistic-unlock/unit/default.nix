@@ -46,14 +46,13 @@ import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
   postInstall = ''
   ./policy-tests
   ./memory-tests
-  # This process must not acquire a managed string/ARC heap or runtime threads.
-  # Its raw mmap buffer is never registered, retained, copied or destroyed by BTRC.
-  if grep -Eq '__btrc_(string|arc|cleanup|throw)|pthread_create|pthread_mutex' worker-contract.c; then
-    echo 'unexpected managed or threaded runtime in the secret-bearing worker' >&2
+  # Metadata uses normal classes/collections; secret storage stays native and
+  # the process must remain single-threaded until each worker forks.
+  if grep -q 'pthread_create' worker-contract.c; then
+    echo 'unexpected runtime thread creation in the unlock coordinator' >&2
     exit 1
   fi
-  grep -q 'explicit_bzero(secret, secretBytes)' worker-contract.c
-  grep -q 'explicit_bzero(secret, passwordLimit)' worker-contract.c
+  grep -q 'explicit_bzero(self->memory, self->capacity)' worker-contract.c
   nm -D worker-contract | grep -q explicit_bzero
   printf fixture-password > passphrase
   for format in luks1 luks2; do
@@ -64,9 +63,9 @@ import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
   truncate -s 32M argon.img
   cryptsetup luksFormat --batch-mode --type luks2 --pbkdf argon2id --pbkdf-memory 8192 --pbkdf-parallel 1 --pbkdf-force-iterations 4 --key-file passphrase argon.img
   ./header-tests argon.img 1
-  truncate -s 32M unsupported.img
-  cryptsetup luksFormat --batch-mode --type luks1 --cipher aes-cbc-plain64 --key-size 256 --pbkdf pbkdf2 --iter-time 1 --key-file passphrase unsupported.img
-  ./header-tests unsupported.img 0
+  truncate -s 32M alternate-cipher.img
+  cryptsetup luksFormat --batch-mode --type luks1 --cipher aes-cbc-plain64 --key-size 256 --pbkdf pbkdf2 --iter-time 1 --key-file passphrase alternate-cipher.img
+  ./header-tests alternate-cipher.img 1
   truncate -s 32M malformed.img
   printf 'LUKS\272\276\000\002' > malformed.img
   ./header-tests malformed.img 0

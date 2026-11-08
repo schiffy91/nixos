@@ -1,0 +1,35 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        lab.startAll();
+        var machine = lab.guest("machine"); var client = lab.guest("client");
+        for unit in ["NetworkManager.service", "firewall.service", "sshd.service", "http-8080.service", "http-8081.service"] { machine.waitForUnit(unit); }
+        client.waitForUnit("network.target");
+        machine.succeed("nmcli device set eth1 managed yes");
+        machine.succeed("nmcli connection add type ethernet ifname eth1 con-name trusted connection.uuid 11111111-1111-4111-8111-111111111111 connection.autoconnect no ipv4.method manual ipv4.addresses 10.55.1.1/24 ipv6.method disabled");
+        machine.succeed("nmcli connection add type ethernet ifname eth1 con-name untrusted connection.uuid 22222222-2222-4222-8222-222222222222 connection.autoconnect no ipv4.method manual ipv4.addresses 10.55.1.1/24 ipv6.method disabled");
+        print("Trusted profile opens only configured ports on its subnet");
+        machine.succeed("nmcli connection up trusted");
+        machine.waitUntil("iptables -C nixos-trusted -i eth1 -s 10.55.1.0/24 -p tcp --dport 22 -j nixos-fw-accept");
+        client.waitUntil("nc -z -w 2 10.55.1.1 22");
+        client.succeed("nc -z -w 2 10.55.1.1 8080"); client.fail("nc -z -w 2 10.55.1.1 8081");
+        print("Failed configuration revokes grants and releases reconciliation lock");
+        machine.succeed("printf '[' > /run/invalid-trusted-connections.json"); machine.fail("trusted-connections /run/invalid-trusted-connections.json");
+        client.fail("nc -z -w 2 10.55.1.1 22"); client.fail("nc -z -w 2 10.55.1.1 8080");
+        machine.succeed("systemctl restart firewall.service"); client.waitUntil("nc -z -w 2 10.55.1.1 22"); client.succeed("nc -z -w 2 10.55.1.1 8080");
+        print("Untrusted profile on the same interface and subnet loses access");
+        machine.succeed("nmcli connection up untrusted"); machine.waitUntil("test -z \"$(iptables -S nixos-trusted | sed -n '/^-A /p')\"");
+        client.fail("nc -z -w 2 10.55.1.1 22"); client.fail("nc -z -w 2 10.55.1.1 8080");
+        print("Trusted profile follows a changed subnet without stale grants");
+        machine.succeed("nmcli connection modify trusted ipv4.addresses 10.77.2.1/24"); client.succeed("ip address add 10.77.2.2/24 dev eth1");
+        machine.succeed("nmcli connection up trusted"); machine.waitUntil("iptables -C nixos-trusted -i eth1 -s 10.77.2.0/24 -p tcp --dport 22 -j nixos-fw-accept");
+        machine.fail("iptables -C nixos-trusted -i eth1 -s 10.55.1.0/24 -p tcp --dport 22 -j nixos-fw-accept");
+        client.waitUntil("nc -z -w 2 10.77.2.1 22"); client.succeed("nc -z -w 2 10.77.2.1 8080");
+        print("Firewall restart reconciles the active profile"); machine.succeed("systemctl restart firewall.service"); client.waitUntil("nc -z -w 2 10.77.2.1 22");
+        print("Disconnect removes access before interface reuse"); machine.succeed("nmcli connection down trusted"); machine.waitUntil("test -z \"$(iptables -S nixos-trusted | sed -n '/^-A /p')\"");
+        lab.close(); print("PASS: trusted connection roaming and fail-closed firewall reconciliation"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

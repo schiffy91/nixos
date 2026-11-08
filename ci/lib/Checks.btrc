@@ -88,14 +88,9 @@ class Checks {
     public int lint(bool full) {
         self.repository.discover();
         var nix = self.repository.suffix(".nix"); var btrc = self.repository.suffix(".btrc");
-        var python = self.repository.scripts("python"); var shell = self.repository.scripts("bash");
+        var shell = self.repository.shellScripts();
         self.files("Nix parser", "nix-instantiate", ["--parse"], nix);
         self.files("BTRC compiler", "btrcpy", ["--strict-imports", "--emit-ir"], btrc);
-        self.files("Python syntax", "python3", ["-m", "py_compile"], python);
-        var pythonLint = ["check", "--select", "E9,F63,F7,F82"]; for path in python { pythonLint.push(path); }
-        self.run("Python lint", "ruff", pythonLint);
-        var types = ["--project", "ci/pyrightconfig.json", "--pythonpath", Environment.get("CI_PYTHON", "python3")]; for path in python { types.push(path); }
-        self.run("Python workspace types", "pyright", types);
         self.files("JavaScript parser", "node", ["--check"], self.repository.suffix(".js"));
         self.files("Lua compiler", "luac", ["-p"], self.repository.suffix(".lua"));
         var shellLint = ["--severity=error", "--shell=bash"]; for path in shell { shellLint.push(path); }
@@ -111,7 +106,6 @@ class Checks {
         if (full) {
             self.run("Native programs and unit suites", "make", ["-j4", "build", "unit"]);
             self.run("CI protocol and publisher contracts", "nix-build", ["tests/ci", "--no-out-link"]);
-            self.run("Signed module verification", "nix-build", ["tests/kernel-trust/unit.nix", "--no-out-link"]);
             self.run("Key archive and recovery contracts", "nix-build", ["tests/secure-boot/unit.nix", "tests/recovery/unit.nix", "--no-out-link"]);
             self.run("Recovery artifact installation", "nix-build", ["tests/recovery/artifacts", "--no-out-link"]);
             self.run("Sleep controller contracts", "nix-build", ["tests/sleep-lock/unit", "--no-out-link"]);

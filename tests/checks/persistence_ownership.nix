@@ -6,17 +6,11 @@ let
     (lib.head configurations) configurations).configuration;
   hostPath = "/var/lib/persistence-host-extra";
   fixture = overrides: (base.extendModules {
-    modules = [{
+    modules = [({ config, ... }: {
       settings = lib.recursiveUpdate {
         apps = {
           enable = lib.mkForce true;
-          utils.enable = lib.mkForce true;
-          gaming.enable = lib.mkForce true;
-          desktop.enable = lib.mkForce true;
-          rclone.enable = lib.mkForce true;
-          chrome.enable = lib.mkForce true;
-          sunshine.enable = lib.mkForce true;
-          mullvad.enable = lib.mkForce true;
+          utils.desktop.enable = lib.mkDefault config.settings.apps.utils.enable;
         };
         desktop.enable = lib.mkForce true;
         users.admin.homeManager.enable = lib.mkForce true;
@@ -29,7 +23,7 @@ let
           };
         };
       } overrides;
-    }];
+    })];
   }).config;
   enabled = fixture {};
   home = enabled.settings.users.admin.homeDirectory;
@@ -46,19 +40,19 @@ let
     ".local/share/applications" ".local/share/icons" ".local/share/desktop-directories"
     ".local/share/flatpak/db" ".config/dconf/user" ".config/kdeglobals"
   ];
-  noRclone = fixture { apps.rclone.enable = lib.mkForce false; };
+  noRclone = fixture { apps.utils.rclone.enable = lib.mkForce false; };
   noUtils = fixture { apps.utils.enable = lib.mkForce false; };
   noGaming = fixture { apps.gaming.enable = lib.mkForce false; };
   noApps = fixture { apps.enable = lib.mkForce false; };
   noDesktopApps = fixture {
-    apps.chrome.enable = lib.mkForce false;
-    apps.sunshine.enable = lib.mkForce false;
+    apps.utils.chrome.enable = lib.mkForce false;
+    apps.gaming.sunshine.enable = lib.mkForce false;
   };
   noAgent = fixture { users.agent.enable = lib.mkForce false; };
   customHome = "/srv/persistence-admin";
   relocated = fixture { users.admin.homeDirectory = lib.mkForce customHome; };
   retained = fixture {
-    apps.rclone.enable = lib.mkForce false;
+    apps.utils.rclone.enable = lib.mkForce false;
     disk.immutability.persist.paths = [ hostPath rclonePath ];
   };
   persistenceOnly = fixture { disk.immutability.enable = lib.mkForce false; };

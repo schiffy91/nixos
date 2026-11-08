@@ -1,0 +1,29 @@
+import Library.Process;
+import ./TrustedConnections.btrc;
+
+class TrustedFirewall {
+    public UnixShell shell = UnixShell();
+
+    public void replace(TrustedRules rules) {
+        for command in ["iptables", "ip6tables"] {
+            if (!self.shell.run(f"{command} --wait -S nixos-fw", logFailure=false).ok()) { continue; }
+            var installed = self.shell.run(f"{command} --wait -C nixos-fw -j nixos-trusted", logFailure=false).ok();
+            var entries = command.equals("iptables") ? rules.ipv4 : rules.ipv6;
+            self.shell.run(f"{command}-restore --wait --noflush", stdin=TrustedRules.restore(entries), throwOnFailure=true);
+            if (!installed) { self.shell.run(f"{command} --wait -I nixos-fw 1 -j nixos-trusted", throwOnFailure=true); }
+        }
+    }
+
+    public void remove() {
+        for command in ["iptables", "ip6tables"] {
+            if (!self.shell.run(f"{command} --wait -S nixos-fw", logFailure=false).ok()) { continue; }
+            if (self.shell.run(f"{command} --wait -C nixos-fw -j nixos-trusted", logFailure=false).ok()) {
+                self.shell.run(f"{command} --wait -D nixos-fw -j nixos-trusted", throwOnFailure=true);
+            }
+            if (self.shell.run(f"{command} --wait -S nixos-trusted", logFailure=false).ok()) {
+                self.shell.run(f"{command} --wait -F nixos-trusted", throwOnFailure=true);
+                self.shell.run(f"{command} --wait -X nixos-trusted", throwOnFailure=true);
+            }
+        }
+    }
+}

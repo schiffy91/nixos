@@ -1,0 +1,89 @@
+import ./Fixture.btrc;
+
+class SunshineCredentialsTests {
+    private string directory = "/srv/operator/.config/sunshine";
+    private string credentials = "/srv/operator/.config/sunshine/credentials.json";
+    private string state = "/srv/operator/.config/sunshine/sunshine_state.json";
+
+    private HTTPObservation api(string password = "first-password", string endpoint = "/api/config", JSONValue? payload = null) {
+        return HTTPProbe.fixture("https://localhost:47990" + endpoint, payload, basic="admin:" + password);
+    }
+    private void start(string password = "first-password") {
+        SunshineFixture.user(["systemctl", "--user", "reset-failed"]); SunshineFixture.user(["systemctl", "--user", "start", "sunshine"]);
+        var deadline = MonotonicClock.deadlineAfter(20000);
+        while (MonotonicClock.before(deadline)) { if (self.api(password).status == 200) { return; } Timer.sleepMillis(500); }
+        throw SunshineFixture.user(["journalctl", "--user", "-u", "sunshine", "--no-pager"]).stdout();
+    }
+    private void provision(string password = "first-password") { SunshineFixture.user(["nixosctl", "sunshine", "provision"], SunshineFixture.password(password).stringify()); }
+
+    public void check(bool reboot) {
+        if (reboot) {
+            self.start("updated-password"); Check.that(self.api("first-password").status == 401, "old password remains revoked after reboot");
+            Check.equal(JSONValue.readFile(self.state).get("root").stringify(), JSONValue.readFile("/var/tmp/pairing.json").stringify(), "offline pairing persistence"); return;
+        }
+        SunshineFixture.user(["systemctl", "--user", "start", "sunshine"], success=false); SunshineFixture.noPort();
+        var rejected = SunshineFixture.user(["sunshine", "capture=x11", "encoder=software", "system_tray=disabled"], success=false);
+        Check.that((rejected.stdout() + rejected.stderr()).contains("credentials are missing or invalid"), "direct launch fails closed"); SunshineFixture.noPort();
+        SunshineFixture.user(["mkdir", "-p", self.directory]);
+        var legacy = JSONValue.makeObject(); legacy.set("username", JSONValue.makeString("admin")); legacy.set("salt", JSONValue.makeString("0123456789abcdef")); legacy.set("password", JSONValue.makeString(CredentialDigest.hash("first-password", "0123456789abcdef")));
+        SunshineFixture.write(self.state, legacy.stringify()); SunshineFixture.owned(self.state);
+        var original = Path.readAll(self.state); SunshineFixture.user(["nixosctl-sunshine", "prepare"]);
+        Check.equal(Path.readAll(self.state), original, "legacy state remains byte-identical");
+        var migrated = JSONValue.readFile(self.credentials);
+        for field in ["username", "salt", "password"] { Check.equal(migrated.get(field).asString(), legacy.get(field).asString(), "legacy authentication migration"); }
+        self.start(); Check.that(self.api("wrong-password").status == 401, "wrong password rejected");
+        var pairing = OwnedProcess("runuser", SunshineFixture.arguments(["moonlight", "pair", "localhost", "--pin", "1234"]), "/var/tmp/moonlight-pair.log");
+        try {
+            var deadline = MonotonicClock.deadlineAfter(20000);
+            var pending = JSONValue.makeArray();
+            while (MonotonicClock.before(deadline)) {
+                var response = self.api(endpoint="/api/pin"); Check.that(response.status == 200, "read pending pairings");
+                pending = response.json().get("pairings"); if (pending.size() > 0) { break; } Timer.sleepMillis(500);
+            }
+            Check.that(pending.size() > 0, "real Moonlight pairing request: " + Path.readAll("/var/tmp/moonlight-pair.log"));
+            var approval = JSONValue.parse("{\"pin\":\"1234\",\"name\":\"test-client\"}"); approval.set("pairing_id", pending.at(0).get("id"));
+            var accepted = self.api(endpoint="/api/pin", payload=approval);
+            Check.that(accepted.status == 200 && accepted.json().get("status").asBool(), "accept real Moonlight pairing");
+            deadline = MonotonicClock.deadlineAfter(30000);
+            var paired = JSONValue.makeArray();
+            while (MonotonicClock.before(deadline)) {
+                if (FileSystem.exists(self.state)) { paired = JSONValue.readFile(self.state).get("root").get("named_devices"); }
+                if (paired.size() > 0) { break; } Timer.sleepMillis(500);
+            }
+            Check.that(paired.size() > 0 && paired.at(0).get("cert").asString().contains("BEGIN CERTIFICATE"), "persist paired client certificate");
+        } finally { pairing.close(); }
+        SunshineFixture.user(["systemctl", "--user", "stop", "sunshine"]);
+        var pairedState = Path.readAll(self.state); var pairedRoot = JSONValue.parse(pairedState).get("root").stringify(); SunshineFixture.write("/var/tmp/pairing.json", pairedRoot);
+        var concurrent = TestDirectory("sunshine-provision");
+        concurrent.json("input", SunshineFixture.password("updated-password"));
+        // The root caller supplies stdin before switching to the unprivileged user.
+        ParallelCommands.run("runuser", SunshineFixture.arguments(["nixosctl", "sunshine", "provision"]), concurrent.path("input"), concurrent.path(), 8);
+        Check.equal(Path.readAll(self.state), pairedState, "rotation preserves pairing bytes");
+        var protected = Path.readAll(self.credentials); self.provision("updated-password"); Check.equal(Path.readAll(self.credentials), protected, "idempotent rotation");
+        Check.equal(Check.exited(ChildProcess.run("stat", ["-c", "%u:%a", self.credentials])).trimmed(), "1000:600", "credential ownership");
+        Check.equal(Check.exited(ChildProcess.run("stat", ["-c", "%a", self.directory])).trimmed(), "700", "credential directory mode");
+        SunshineFixture.user(["nixosctl", "sunshine", "sync"], success=false); Check.equal(Path.readAll(self.credentials), protected, "failed vault lookup preserves offline credentials");
+        for kind in ["symlink", "hardlink", "public", "owner", "malformed"] {
+            SunshineFixture.command(["rm", self.credentials]); SunshineFixture.write(self.credentials, protected); SunshineFixture.owned(self.credentials);
+            if (kind.equals("symlink")) { SunshineFixture.command(["rm", self.credentials]); SunshineFixture.command(["ln", "-s", self.state, self.credentials]); }
+            if (kind.equals("hardlink")) { SunshineFixture.command(["ln", self.credentials, self.directory + "/alias"]); }
+            if (kind.equals("public")) { SunshineFixture.command(["chmod", "644", self.credentials]); }
+            if (kind.equals("owner")) { SunshineFixture.command(["chown", "0:0", self.credentials]); }
+            if (kind.equals("malformed")) { SunshineFixture.write(self.credentials, "{invalid"); }
+            SunshineFixture.user(["nixosctl", "sunshine", "provision"], SunshineFixture.password("never-used").stringify(), false);
+            Check.equal(Path.readAll(self.state), pairedState, "unsafe credential target cannot change pairing state");
+            if (kind.equals("hardlink")) { SunshineFixture.command(["rm", self.directory + "/alias"]); }
+        }
+        SunshineFixture.command(["rm", self.credentials]); SunshineFixture.write(self.credentials, "{\"username\":\"\",\"password\":\"\",\"salt\":\"\"}"); SunshineFixture.owned(self.credentials);
+        rejected = SunshineFixture.user(["sunshine", "capture=x11", "encoder=software", "system_tray=disabled"], success=false);
+        Check.that((rejected.stdout() + rejected.stderr()).contains("credentials are missing or invalid"), "empty credentials rejected"); SunshineFixture.noPort();
+        SunshineFixture.write(self.credentials, protected); self.start("updated-password");
+        Check.that(self.api("first-password").status == 401, "old password revoked"); Check.equal(JSONValue.readFile(self.state).get("root").stringify(), pairedRoot, "pairings survive rotation");
+        concurrent.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try { SunshineCredentialsTests().check(CLIArgs(argc, argv).count() > 0); print("PASS: actual HTTP authentication, Moonlight pairing, atomic credentials, hostile files and offline restart"); return 0; }
+    catch (string error) { print(error); return 1; }
+}

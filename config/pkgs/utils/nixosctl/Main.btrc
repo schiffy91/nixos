@@ -56,7 +56,6 @@ class NixosCtl {
                "Format/mount disk and run nixos-install. --force-upgrade updates the flake lock first, ignoring any closure baked into the installer.");
         help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
         help.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
-        help.item("sudo <enable --for 8h|status|disable>", "Manage an expiring, account-wide passwordless sudo grant.");
         help.item("sunshine <sync|provision|status>", "Sync web credentials from 1Password; provision accepts JSON on stdin.");
 
         help.section("Disk + immutability");
@@ -70,8 +69,8 @@ class NixosCtl {
                "Inspect or prepare the next boot reset while running.");
 
         help.section("Boot + crypto");
-        help.item("secure-boot <enable|disable|status> [--microsoft] [--no-reboot]",
-               "Manage Lanzaboote / Secure Boot enrollment.");
+        help.item("secure-boot <prepare|enable|disable|status> [--no-reboot]",
+               "Prepare signed images; enroll or remove our platform key.");
         help.item("secure-boot keys <export|import|verify> /absolute/bundle/path",
                "Transfer existing PK/KEK/db keys privately on stdin/stdout; never overwrite.");
         help.item("tpm2 <enable|disable|status>", "Manage TPM2 LUKS keyslot.");
@@ -189,20 +188,6 @@ class NixosCtl {
             }
             return UnixShell().run(f"/run/current-system/sw/bin/nixosctl-sunshine {ShellWords.quote(action)}",
                 stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true).code;
-        }
-
-        if (command.equals("sudo")) {
-            var invocation = "/run/current-system/sw/bin/nixosctl-sudo";
-            Vector<string> values = [];
-            for (var index = 1; index < args.count(); index++) {
-                values.push(args.get(index));
-            }
-            // This is delegation, so preserve the caller's process group and tty.
-            var child = ChildProcessArguments.build(invocation, values);
-            if (child == NULL) { throw "Cannot allocate sudo helper arguments"; }
-            execv(child[0], child);
-            CStringArray.freeAll(child);
-            throw "Cannot execute sudo helper";
         }
 
         if (command.equals("eval")) {
@@ -323,7 +308,7 @@ class NixosCtl {
         }
 
         if (command.equals("secure-boot")) {
-            var action = self.requireAction(args, "Usage: nixosctl secure-boot <enable|disable|status>");
+            var action = self.requireAction(args, "Usage: nixosctl secure-boot <prepare|enable|disable|status>");
             if (action.equals("keys")) {
                 if (args.count() != 4) { NixosLog.fatal("Usage: nixosctl secure-boot keys <export|import|verify> /absolute/bundle/path"); }
                 // Preserve the actual pipe/terminal descriptors; never collect secret stdout.
@@ -333,11 +318,18 @@ class NixosCtl {
                 CStringArray.freeAll(child);
                 throw "Cannot execute Secure Boot key helper";
             }
+            if (line.has("--microsoft")) { throw "This configuration enrolls only its own keys; --microsoft is unsupported"; }
+            for (int index = 2; index < args.count(); index++) {
+                if (!args.get(index).equals("--no-reboot") || (!action.equals("enable") && !action.equals("disable"))) {
+                    throw f"Unexpected Secure Boot argument: {args.get(index)}";
+                }
+            }
             var manager = SecureBootManager(self.config);
-            if (action.equals("enable")) { manager.enable(line.has("--microsoft"), !line.has("--no-reboot")); return 0; }
-            if (action.equals("disable")) { manager.disable(); return 0; }
+            if (action.equals("prepare")) { manager.prepare(); return 0; }
+            if (action.equals("enable")) { manager.enable(!line.has("--no-reboot")); return 0; }
+            if (action.equals("disable")) { manager.disable(!line.has("--no-reboot")); return 0; }
             if (action.equals("status")) { return manager.status() ? 0 : 1; }
-            NixosLog.fatal("Usage: nixosctl secure-boot <enable|disable|status>");
+            NixosLog.fatal("Usage: nixosctl secure-boot <prepare|enable|disable|status>");
         }
 
         if (command.equals("tpm2")) {

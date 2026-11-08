@@ -3,7 +3,72 @@ import ../../config/pkgs/utils/nixosctl/lib/hardware/SecureBootVerification.btrc
 
 #include <assert.h>
 
+void little32(Bytes bytes, int offset, long value) {
+    for (int index = 0; index < 4; index++) { bytes.set(offset + index, (int)((value >> (index * 8)) & 255L)); }
+}
+
+Bytes database(Vector<string> certificates, bool x509 = true, int header = 0) {
+    var bytes = Bytes();
+    int size = 28 + header + certificates.len * 19;
+    for (int index = 0; index < size + 4; index++) { bytes.append(0); }
+    little32(bytes, 0, 0x27L);
+    Vector<int> type = [0xa1, 0x59, 0xc0, 0xa5, 0xe4, 0x94, 0xa7, 0x4a, 0x87, 0xb5, 0xab, 0x15, 0x5c, 0x2b, 0xf0, 0x72];
+    for (int index = 0; index < 16; index++) { bytes.set(4 + index, type.get(index)); }
+    if (!x509) { bytes.set(4, 0xff); }
+    little32(bytes, 20, (long)size); little32(bytes, 24, (long)header); little32(bytes, 28, 19L);
+    for (int index = 0; index < certificates.len; index++) {
+        assert(certificates.get(index).length() == 3);
+        for (int byte = 0; byte < 3; byte++) { bytes.set(4 + 28 + header + index * 19 + 16 + byte, (int)certificates.get(index)[byte]); }
+    }
+    return bytes;
+}
+
+bool invalidDatabase(Bytes bytes) {
+    try { SecureBootVerification.database(bytes); return false; } catch (string error) { return true; }
+}
+
 int main() {
+    var expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    var owned = database(["abc"]);
+    assert(SecureBootVerification.owns(SecureBootVerification.database(owned), expected.toUpper()));
+    assert(SecureBootVerification.database(Bytes()).isEmpty());
+    // Certificate bytes establish ownership, never owner GUID or subject labels.
+    owned.set(32, 0x42);
+    assert(SecureBootVerification.owns(SecureBootVerification.database(owned), expected));
+    for foreign in [database(["xyz"]), database(["abc", "abc"]), database(["abc", "xyz"]), database(["abc"], false), database(["abc"], true, 1)] {
+        assert(!SecureBootVerification.owns(SecureBootVerification.database(foreign), expected));
+    }
+    var multiple = database(["abc"]); var extra = database(["xyz"]);
+    multiple.appendBytes(extra.slice(4, extra.len));
+    assert(SecureBootVerification.database(multiple).len == 2);
+    assert(!SecureBootVerification.owns(SecureBootVerification.database(multiple), expected));
+    for size in [1, 2, 3, 4, 5, 16, 31, owned.len - 1] { assert(invalidDatabase(owned.slice(0, size))); }
+    for offset in [0, 20, 28] {
+        var corrupt = owned.slice(0, owned.len); little32(corrupt, offset, 0L); assert(invalidDatabase(corrupt));
+        corrupt = owned.slice(0, owned.len); little32(corrupt, offset, 4294967295L);
+        if (offset != 0) { assert(invalidDatabase(corrupt)); }
+    }
+    var badHeader = owned.slice(0, owned.len); little32(badHeader, 24, 4294967295L); assert(invalidDatabase(badHeader));
+    var trailing = owned.slice(0, owned.len); trailing.append(0); assert(invalidDatabase(trailing));
+    assert(SecureBootVerification.generation("nixos-generation-12-abcdef.efi").equals("12"));
+    for invalid in ["", "nixos-generation--a.efi", "nixos-generation-../a.efi", "nixos-generation-x-a.efi", "nixos-generation-1-a.conf", "other-generation-1-a.efi"] {
+        var rejected = false;
+        try { SecureBootVerification.generation(invalid); } catch (string error) { rejected = true; }
+        assert(rejected);
+    }
+    assert(SecureBootVerification.enrollmentOff("# secure-boot-enroll force\n default nixos-*\nsecure-boot-enroll\t off\n"));
+    for invalid in ["", "# secure-boot-enroll off\n", "secure-boot-enroll force\n", "secure-boot-enroll manual\n", "secure-boot-enroll off\nsecure-boot-enroll off\n", "secure-boot-enroll off extra\n"] {
+        assert(!SecureBootVerification.enrollmentOff(invalid));
+    }
+    var recovery = "title NixOS Recovery\nsort-key recovery\nefi\t/EFI/recovery/nixos-recovery.efi\n";
+    assert(SecureBootVerification.recoveryEntry(recovery));
+    for invalid in ["", "title Recovery\n", "efi /EFI/other.efi\n", "EFI /EFI/recovery/nixos-recovery.efi\n",
+        recovery + "efi /EFI/recovery/nixos-recovery.efi\n",
+        recovery + "options\tinit=/nix/store/foreign/init\n",
+        recovery + "linux\t/foreign/kernel\n", recovery + "initrd\t/foreign/initrd\n",
+        recovery + "architecture x64\n", "efi /EFI/recovery/nixos-recovery.efi extra\n"] {
+        assert(!SecureBootVerification.recoveryEntry(invalid));
+    }
     Vector<string> required = ["/boot/good.efi", "/boot/bad.efi", "/boot/missing.efi"];
     var output = "[{\"file_name\":\"/boot/good.efi\",\"is_signed\":1},{\"file_name\":\"/boot/bad.efi\",\"is_signed\":0},{\"file_name\":\"/boot/missing.efi\",\"is_signed\":-1}]";
     var failures = SecureBootVerification.failures(output, required);
@@ -29,6 +94,6 @@ int main() {
         try { SecureBootVerification.defaultImage(invalid, "/boot"); } catch (string error) { rejected = true; }
         assert(rejected);
     }
-    print("PASS: real sbctl schema, unsigned/missing/omitted records, malformed output, default boot selection");
+    print("PASS: EFI ownership, malformed databases, enrollment guards, signed-image verification and boot selection");
     return 0;
 }

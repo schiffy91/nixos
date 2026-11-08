@@ -1,0 +1,42 @@
+import Library.CLI;
+import ../../lib/TestDirectory.btrc;
+import ./ProcessTree.btrc;
+
+class TimeoutTests {
+    class void check(string executable, string root, string mode) {
+        var fixture = TestDirectory("nixos-host-timeout");
+        var marker = fixture.path("pids.json");
+        var spec = JSONValue.parse("{\"name\":\"timeout-probe\",\"state\":\"timeout-probe\",\"operations\":[]}");
+        spec.set("stateMaterial", JSONValue.makeString(fixture.path()));
+        spec.set("workDir", JSONValue.makeString(fixture.path("state")));
+        var operation = JSONValue.parse("{\"op\":\"host\",\"timeout\":1}");
+        operation.set("command", JSONValue.makeString(f"{ShellWords.quote(executable)} --blocked {ShellWords.quote(marker)} {ShellWords.quote(mode)}"));
+        spec.get("operations").push(operation);
+        fixture.json("probe.json", spec);
+        fixture.write("graph.json", "{\"name\":\"timeout-probe\",\"default\":[\"probe\"],\"nodes\":[{\"id\":\"probe\",\"spec\":\"probe.json\"}]}");
+        try {
+            var started = MonotonicClock.milliseconds();
+            var result = ChildProcess.run(PathTools.join(root, "build/nixosctl"), ["graph", fixture.path("graph.json"), "run", "probe"], timeoutMilliseconds=10000);
+            var elapsed = MonotonicClock.milliseconds() - started;
+            Check.that(FileSystem.exists(marker) != 0, f"command started: {result.stdout()} {result.stderr()}");
+            Check.that(!result.timedOut && result.code != 0 && (result.stdout() + result.stderr()).contains("host command failed"), "graph rejects timed-out command");
+            Check.that(elapsed >= 800 && elapsed < 8000, "honor host timeout");
+            var processes = ProcessTree.read(marker);
+            var deadline = MonotonicClock.deadlineAfter(2000);
+            while (ProcessTree.running(processes) && MonotonicClock.before(deadline)) { Timer.sleepMillis(50); }
+            Check.that(!ProcessTree.running(processes), "no timed-out command descendants survive");
+        } finally {
+            for process in ProcessTree.read(marker) { process.stop(); }
+        }
+        fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.command().equals("--blocked")) { ProcessTree.block(args.require(1, "Supply PID marker"), args.get(2).equals("stubborn")); return 0; }
+        for mode in ["ordinary", "stubborn"] { TimeoutTests.check(PathTools.absolute(args.program), Platform.currentDirectory(), mode); }
+        print("PASS: host deadlines stop commands and their children"); return 0;
+    } catch (string error) { print(error); return 1; }
+}
