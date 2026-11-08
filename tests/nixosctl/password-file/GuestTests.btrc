@@ -1,4 +1,5 @@
 import Library.CLI;
+import nixosctl.lib.PasswordManager;
 import ../../lib/TerminalSession.btrc;
 import ../../lib/TestDirectory.btrc;
 import ../../lib/ParallelCommands.btrc;
@@ -17,6 +18,22 @@ class PasswordFileTests {
     private void unchanged(string original) { Check.equal(Path.readAll(self.target), original, "protected hash unchanged"); }
     private void write(string path, string text) { Check.that(FileSystem.writeText(path, text), "write password-file fixture"); }
 
+    public void recover() {
+        var directory = TestDirectory("password-recovery");
+        FileSystem.mkdirp(PathTools.join(directory.path(), "config/hosts"));
+        var config = NixosConfig(directory.path());
+        config.reset(PathTools.join(directory.path(), "config/hosts/admin/default.nix"), "Standard-Boot");
+        config.cache.put(f"{config.flakeRef()}:config.settings.users.admin.username:raw-string", "admin");
+        var manager = PasswordManager(config);
+        Check.that(manager.accountAccepts(""), "recovery starts with an empty password");
+        manager.convergeAccountPassword("testpass123");
+        Check.that(manager.accountAccepts("testpass123"), "recovered password authenticates");
+        Check.that(!manager.accountAccepts(""), "recovery rejects the empty password");
+        var hash = manager.secrets.hashPassword("testpass123");
+        Check.that(manager.hashAccepts(hash, "testpass123") && !manager.hashAccepts(hash, ""), "hashing preserves password input");
+        directory.close();
+    }
+
     public void check(bool reboot) {
         Check.that(Platform.isRoot(), "password-file contracts run in guest");
         if (reboot) {
@@ -25,6 +42,10 @@ class PasswordFileTests {
             Check.equal(self.run(f"stat -c '%u:%g:%a' {self.target}"), "0:0:600", "credential file after reboot"); return;
         }
         self.authenticate("testpass123"); Check.that(!FileSystem.exists(self.target), "legacy profile has no protected hash yet");
+        self.run("printf '\\n' | mkpasswd -m sha-512 -s | sed 's/^/admin:/' | chpasswd -e");
+        var recovered = self.run("password-file-contracts recover </dev/null");
+        Check.that(!recovered.contains("Enter current password"), "empty-password recovery needs no current-password prompt");
+        self.authenticate("testpass123");
         self.run("chown admin:users /etc/nixos"); Check.equal(self.run("stat -c '%u:%g:%a' /etc/nixos/secrets"), "0:0:700", "legacy secret permissions");
         self.run("runuser -u admin -- cat /etc/nixos/secrets/hashed_password.txt", false);
         self.run("runuser -u admin -- sh -c 'mv /etc/nixos/secrets /etc/nixos/secrets-original; mkdir -m 700 /etc/nixos/secrets; echo attacker | mkpasswd -m sha-512 -s > /etc/nixos/secrets/hashed_password.txt'");
@@ -71,6 +92,11 @@ class PasswordFileTests {
 }
 
 int main(int argc, char** argv) {
-    try { PasswordFileTests().check(CLIArgs(argc, argv).count() > 0); print("PASS: password migration, authentication, concurrency, permissions and activation failures"); return 0; }
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.count() > 0 && args.get(0).equals("recover")) { PasswordFileTests().recover(); }
+        else { PasswordFileTests().check(args.count() > 0); }
+        print("PASS: password migration, authentication, concurrency, permissions and activation failures"); return 0;
+    }
     catch (string error) { print(error); return 1; }
 }

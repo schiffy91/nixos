@@ -9,6 +9,8 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   nodes.machine = { ... }: {
     imports = [ ../../../config/settings.nix ../../../config/pkgs/utils/1password.nix ];
     security.polkit.enable = true;
+    security.pam.sshAgentAuth.enable = true;
+    programs.zsh.enable = true;
     settings.users.admin = {
       username = "operator";
       homeDirectory = "/srv/operator";
@@ -17,6 +19,8 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
       isNormalUser = true;
       home = "/srv/operator";
       createHome = true;
+      extraGroups = [ "wheel" ];
+      hashedPassword = "!";
     };
     virtualisation.memorySize = 1024;
   };

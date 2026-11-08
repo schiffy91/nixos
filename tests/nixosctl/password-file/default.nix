@@ -13,7 +13,8 @@ let
     name = "password-file-contracts";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ../../../config/lib/BackgroundProcess.btrc ./GuestTests.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../../lib ../../../config/lib/BackgroundProcess.btrc
+        ../../../config/pkgs/utils/nixosctl ./GuestTests.btrc ./btrc.toml ./btrc.lock ];
     };
     programs.password-file-contracts = "tests/nixosctl/password-file/GuestTests.btrc";
     linkFlags = [ "-lutil" ];
@@ -46,7 +47,7 @@ in assert import ./storage.nix { inherit inputs system; };
       imports = [ ../../../config/system/nixos/users/password.nix ];
     };
     security.sudo.extraConfig = "Defaults passwd_tries=1";
-    environment.systemPackages = [ nixosctl contracts pkgs.mkpasswd ];
+    environment.systemPackages = [ nixosctl contracts pkgs.mkpasswd pkgs.perl ];
     virtualisation.memorySize = 1024;
     virtualisation.useBootLoader = true;
   };

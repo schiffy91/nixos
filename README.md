@@ -540,6 +540,10 @@ configuration; retain their legacy file until those generations are retired.
 
 Administration uses ordinary sudo authentication, including the configured
 1Password SSH agent. The separate agent account has no administrative access.
+Local admin shells select 1Password's socket through `SSH_AUTH_SOCK`, which
+sudo's PAM module needs independently of SSH's `IdentityAgent` setting.
+SSH sessions retain their forwarded agent. For a terminal opened before this
+configuration was activated, run `export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"`.
 
 Sunshine supports administration with the SSH keys held in your local 1Password
 agent. Enable `settings.apps.gaming.sunshine.sshLogin.enable`; its public keys default
