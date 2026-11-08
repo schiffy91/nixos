@@ -76,6 +76,28 @@
     },
     {
       "op": "guest",
+      "command": "set -e\n. /var/tmp/e2e-crypt.sh\ninstall -m 600 /var/lib/nixos/credentials/password-hash /var/tmp/e2e-authority-before-failure\nmkdir -p /var/tmp/e2e-password-failure\nprintf '#!/bin/sh\ncat >/dev/null\nexit 73\n' > /var/tmp/e2e-password-failure/mkpasswd\nchmod 755 /var/tmp/e2e-password-failure/mkpasswd\n# Use the same installed CLI binary, without its PATH wrapper, to inject a\n# hash-generation failure after the real passwd/PAM operation has succeeded.\nctl=$(readlink -f \"$(command -v nixosctl)\")\nctl=\"${ctl%/*}/.nixosctl-wrapped\"\ntest -x \"$ctl\"\nif PATH=\"/var/tmp/e2e-password-failure:$PATH\" NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 \"$ctl\" change-password > /tmp/e2e-partial-change.log 2>&1; then\n  echo 'expected injected hash-generation failure'; exit 1\nfi\ngrep -F 'The account uses the new password, but its persistent update failed.' /tmp/e2e-partial-change.log\ngrep -F 'mkpasswd failed' /tmp/e2e-partial-change.log\nif grep -F -e testpass123 -e newpass456 /tmp/e2e-partial-change.log; then exit 1; fi\naccepts newpass456\ncmp /var/tmp/e2e-authority-before-failure /var/lib/nixos/credentials/password-hash\nprintf %s newpass456 | cryptsetup open --test-passphrase \"$(cat /var/tmp/e2e-root)\"\nprintf partial-change-known-states\n",
+      "expect": "partial-change-known-states",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "(sync; systemctl reboot) >/dev/null 2>&1 &",
+      "timeout": 15
+    },
+    {
+      "op": "unlock-luks",
+      "command": "newpass456",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
+      "command": ". /var/tmp/e2e-crypt.sh && accepts testpass123 && ! accepts newpass456 && cmp /var/tmp/e2e-authority-before-failure /var/lib/nixos/credentials/password-hash && printf %s newpass456 | cryptsetup open --test-passphrase \"$(cat /var/tmp/e2e-root)\" && printf partial-change-reboot-recoverable",
+      "expect": "partial-change-reboot-recoverable",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password > /tmp/e2e-both.log 2>&1 && grep -F 'LUKS already unlocks' /tmp/e2e-both.log && accepts newpass456 && test \"$(printf %s newpass456 | crypt)\" = \"$(cat /var/lib/nixos/credentials/password-hash)\" && printf converged-both || { cat /tmp/e2e-both.log; exit 1; }",
       "expect": "converged-both",
       "timeout": 600

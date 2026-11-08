@@ -27,6 +27,12 @@ assert !(valid {
   settings.users.admin.hashedPasswordFile = "/srv/private/password-hash";
   fileSystems."/srv" = { device = "none"; fsType = "tmpfs"; };
 });
+assert !(valid {
+  fileSystems."/var/lib/nixos/credentials/password-hash" = { device = "/fixture/hash"; fsType = "none"; options = [ "bind" ]; };
+});
+assert !(valid {
+  fileSystems."/var/lib/nixos/credentials/password-hash" = { device = "/fixture/hash"; fsType = "none"; options = [ "bind" ]; neededForBoot = true; };
+});
 assert valid {
   settings.disk.immutability.enable = true;
   settings.users.admin.hashedPasswordFile = "/etc/private/password-hash";

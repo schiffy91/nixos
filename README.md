@@ -413,6 +413,12 @@ root snapshot keeps the current password from persistent storage.
 Use `nixosctl change-password` for persistent password changes. A direct `passwd`
 changes the running account only; with immutable users, activation restores the
 authoritative hash on rebuild or boot.
+Disk, running-account and persistent-password changes are separate operations.
+If saving the persistent hash fails after the account changes, the CLI explains
+that reboot may restore the previous account password while keeping a completed
+disk-password change. Rerun `change-password` with the intended new password to
+finish; it skips components that already accept that password. If only the final
+rebuild fails, the new hash is already saved and `nixosctl update` retries activation.
 
 The installer uses `/run/nixosctl-install/passphrase` for the temporary LUKS
 passphrase. It creates the directory as root-only `0700` and the file as `0600`

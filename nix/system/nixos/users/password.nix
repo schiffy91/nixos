@@ -1,7 +1,8 @@
 { config, inputs, lib, pkgs, utils, ... }:
 let
   admin = config.settings.users.admin;
-  containsPassword = path: path == "/" || lib.hasPrefix "${lib.removeSuffix "/" path}/" admin.hashedPasswordFile;
+  containsPassword = path: path == "/" || path == admin.hashedPasswordFile
+    || lib.hasPrefix "${lib.removeSuffix "/" path}/" admin.hashedPasswordFile;
   passwordVolumes = lib.sort (a: b: builtins.stringLength a.mountPoint > builtins.stringLength b.mountPoint)
     (lib.filter (volume: containsPassword volume.mountPoint) config.settings.disk.subvolumes.volumes);
   resetPassword = passwordVolumes != [] && (builtins.head passwordVolumes).resetOnBoot;
@@ -11,6 +12,10 @@ let
   };
 in {
   assertions = [
+    {
+      assertion = !(builtins.hasAttr admin.hashedPasswordFile config.fileSystems);
+      message = "settings.users.admin.hashedPasswordFile must not itself be a filesystem mountpoint: password updates require atomic file replacement. Mount its parent directory instead.";
+    }
     {
       assertion = lib.all utils.fsNeededForBoot
         (lib.filter (fs: containsPassword fs.mountPoint) (builtins.attrValues config.fileSystems));
