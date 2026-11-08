@@ -56,6 +56,12 @@
     },
     {
       "op": "guest",
+      "command": "set -e\n. /var/tmp/e2e-crypt.sh\nboundary=$(perl -e 'print \"A7!z\" x 127, \"A7!\"')\nif NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=\"${boundary}x\" nixosctl change-password --user-account-only > /tmp/e2e-password-limit.log 2>&1; then exit 1; fi\ngrep -F 'Passwords must not exceed 511 bytes' /tmp/e2e-password-limit.log\naccepts testpass123\nfileaccepts testpass123\nNIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=\"$boundary\" nixosctl change-password --user-account-only > /tmp/e2e-password-boundary.log 2>&1 || { cat /tmp/e2e-password-boundary.log; exit 1; }\naccepts \"$boundary\"\nfileaccepts \"$boundary\"\nprintf '%s\\0' \"$boundary\" | unix_chkpwd \"$(cat /var/tmp/e2e-user)\" nullok\nNIXOS_OLD_PASSWORD=\"$boundary\" NIXOS_NEW_PASSWORD=testpass123 nixosctl change-password --user-account-only > /tmp/e2e-password-boundary-reset.log 2>&1 || { cat /tmp/e2e-password-boundary-reset.log; exit 1; }\naccepts testpass123\nfileaccepts testpass123\nprintf password-byte-boundary-verified\n",
+      "expect": "password-byte-boundary-verified",
+      "timeout": 1800
+    },
+    {
+      "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --user-account-only > /tmp/e2e-change.log 2>&1 && ! grep -F -e newpass456 -e testpass123 /tmp/e2e-change.log && ! grep -F 'PAM password change failed' /tmp/e2e-change.log && journalctl -b -q --no-pager | grep -F \"pam_unix(passwd:chauthtok): password changed for $(cat /var/tmp/e2e-user)\" && accepts newpass456 && fileaccepts newpass456 && test \"$(stat -c %a /var/lib/nixos/credentials/password-hash)\" = 600 && printf account-changed || { diag; exit 1; }",
       "expect": "account-changed",
       "timeout": 1800

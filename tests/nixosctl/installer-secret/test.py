@@ -83,6 +83,21 @@ actual = subprocess.run(['mkpasswd', '-m', 'sha-512', '-S', hashed.split('$')[2]
                         input='testpass123\n', text=True, capture_output=True, check=True)
 assert actual.stdout.strip() == hashed
 
+# The shared account/disk password must fit libxcrypt and the unlock PAM conversation.
+path = root / 'boundary' / 'passphrase'
+path.parent.mkdir(mode=0o700)
+path.touch(mode=0o600)
+boundary = b'A7!z' * 127 + b'A7!'
+assert len(boundary) == 511
+path.write_bytes(boundary)
+child = spawn(path, prompt=False)
+finish(child)
+assert path.read_bytes() == boundary
+hashed = (hash_root / 'boundary').read_text().strip()
+actual = subprocess.run(['mkpasswd', '-m', 'sha-512', '-S', hashed.split('$')[2], '-s'],
+                        input=boundary + b'\n', capture_output=True, check=True)
+assert actual.stdout.decode().strip() == hashed
+
 for kind in ['public', 'owner', 'symlink', 'hardlink', 'parent', 'parent-link', 'leaf-owner', 'empty', 'nul', 'newline', 'carriage-return', 'oversize']:
     path = root / kind / 'passphrase'
     path.parent.mkdir(mode=0o700)
@@ -104,7 +119,7 @@ for kind in ['public', 'owner', 'symlink', 'hardlink', 'parent', 'parent-link', 
     if kind == 'nul': path.write_bytes(b'testpass123\0extra')
     if kind == 'newline': path.write_bytes(b'testpass123\nextra')
     if kind == 'carriage-return': path.write_bytes(b'testpass123\rextra')
-    if kind == 'oversize': path.write_bytes(b'a' * 4097)
+    if kind == 'oversize': path.write_bytes(b'a' * 512)
     result = subprocess.run(['installer-secret-test', str(path), str(hash_root / kind), 'ok'],
                             input='', text=True, capture_output=True, timeout=10)
     assert result.returncode != 0, kind

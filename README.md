@@ -432,8 +432,11 @@ pre-provided file is preserved for its caller. Custom
 `settings.disk.encryption.plainTextPasswordFile` paths must meet the same ownership
 and permission rules; shared writable directories such as `/tmp` are rejected.
 Supplied files must contain the exact passphrase bytes, without a trailing
-newline, CR, or NUL, and at most 4096 bytes. A supplied file takes precedence over
-a hash left by an earlier installer attempt so disk and account passwords agree.
+newline, CR, or NUL, and at most 511 bytes (the account-hash limit, also within
+the unlock PAM limit). A supplied file takes precedence over a hash left by an
+earlier installer attempt so disk and account passwords agree.
+The limit applies to new passwords; a longer existing LUKS passphrase can still
+be supplied to `change-password` when rotating it to a supported new password.
 
 On the first upgrade, the helper preserves the effective password from
 `/etc/shadow` if the new file does not yet exist. It does not trust the legacy

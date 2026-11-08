@@ -47,6 +47,18 @@
     },
     {
       "op": "guest",
+      "command": "set -e\n. /var/tmp/e2e-crypt.sh\ninstall -m 600 /var/lib/nixos/credentials/password-hash /var/tmp/e2e-before-password-limit\noversize=$(perl -e 'print \"A7!z\" x 128')\nif NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=\"$oversize\" nixosctl change-password > /tmp/e2e-password-limit.log 2>&1; then exit 1; fi\ngrep -F 'Passwords must not exceed 511 bytes' /tmp/e2e-password-limit.log\naccepts testpass123\ncmp /var/tmp/e2e-before-password-limit /var/lib/nixos/credentials/password-hash\nprintf %s testpass123 | cryptsetup open --test-passphrase \"$(cat /var/tmp/e2e-root)\"\nprintf oversized-password-preserved-both\n",
+      "expect": "oversized-password-preserved-both",
+      "timeout": 120
+    },
+    {
+      "op": "guest",
+      "command": "set -e\n. /var/tmp/e2e-crypt.sh\nroot=$(cat /var/tmp/e2e-root)\nlegacy=$(perl -e 'print \"A7!z\" x 128, \"x\"')\nprintf '%s\\n%s\\n' testpass123 \"$legacy\" | cryptsetup luksChangeKey \"$root\"\nprintf %s \"$legacy\" | cryptsetup open --test-passphrase \"$root\"\nNIXOS_OLD_PASSWORD=\"$legacy\" NIXOS_NEW_PASSWORD=testpass123 nixosctl change-password --full-disk-encryption-only > /tmp/e2e-long-old-password.log 2>&1 || { cat /tmp/e2e-long-old-password.log; exit 1; }\nprintf %s testpass123 | cryptsetup open --test-passphrase \"$root\"\nif printf %s \"$legacy\" | cryptsetup open --test-passphrase \"$root\"; then exit 1; fi\naccepts testpass123\ncmp /var/tmp/e2e-before-password-limit /var/lib/nixos/credentials/password-hash\nprintf longer-existing-luks-password-rotated\n",
+      "expect": "longer-existing-luks-password-rotated",
+      "timeout": 300
+    },
+    {
+      "op": "guest",
       "command": "set -e; . /var/tmp/e2e-crypt.sh; root=$(cat /var/tmp/e2e-root); if NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=unapplied456 nixosctl change-password --update-tpm2 > /tmp/e2e-tpm-preflight.log 2>&1; then cat /tmp/e2e-tpm-preflight.log; exit 1; fi; grep -F \"Managed TPM enrollment is unavailable; no passwords changed\" /tmp/e2e-tpm-preflight.log; printf %s testpass123 | cryptsetup open --test-passphrase \"$root\"; if printf %s unapplied456 | cryptsetup open --test-passphrase \"$root\"; then exit 1; fi; accepts testpass123; if accepts unapplied456; then exit 1; fi; printf tpm-preflight-preserved-both",
       "expect": "tpm-preflight-preserved-both",
       "timeout": 300
