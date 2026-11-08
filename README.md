@@ -420,7 +420,8 @@ If saving the persistent hash fails after the account changes, the CLI explains
 that reboot may restore the previous account password while keeping a completed
 disk-password change. Rerun `change-password` with the intended new password to
 finish; it skips components that already accept that password. If only the final
-rebuild fails, the new hash is already saved and `nixosctl update` retries activation.
+rebuild fails, the new hash is already saved; run `nixosctl update` before rebooting
+so the booted generation uses that authority rather than a legacy repository hash.
 
 The installer uses `/run/nixosctl-install/passphrase` for the temporary LUKS
 passphrase. It creates the directory as root-only `0700` and the file as `0600`
