@@ -72,6 +72,9 @@ hub, no Ethernet and no `git clone`.
 
 ## Secure Boot preparation
 
+See [firmware settings](BIOS.md) for the observed BIOS state, how to enter Setup
+Utility, and the separate firmware and kernel requirements for IOMMU.
+
 The audited OLED F7G0114 firmware was in Setup Mode with Secure Boot disabled.
 That does not establish a recovery toggle in its firmware interface. Before
 `sudo nixosctl secure-boot enable`, prepare unique keys, independently back them
