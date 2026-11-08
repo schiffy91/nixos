@@ -119,10 +119,10 @@ class PasswdPromptClassifier {
     /* True means this chunk ends at an exact candidate plus optional
      * horizontal whitespace and complete SGR decoration. State is bounded to
      * 128 visible bytes, 192 total raw bytes, and 16 escape-parameter bytes. */
-    public bool feedRaw(char* bytes, int length) {
-        if (bytes == null || length <= 0 || self.complete()) { return false; }
-        for (int i = 0; i < length; i++) {
-            unsigned char value = (unsigned char)bytes[i];
+    public bool feedBytes(Bytes bytes) {
+        if (bytes == null || bytes.isEmpty() || self.complete()) { return false; }
+        for (int i = 0; i < bytes.length(); i++) {
+            unsigned char value = (unsigned char)bytes.get(i);
             if (value == (unsigned char)'\r' || value == (unsigned char)'\n') {
                 self.resetLine();
                 continue;
@@ -177,7 +177,7 @@ class PasswdPromptClassifier {
         return self.acceptPending();
     }
 
-    public bool feedChunk(string text) { return text != null && self.feedRaw((char*)text, text.len()); }
+    public bool feedChunk(string text) { return text != null && self.feedBytes(Bytes.fromString(text)); }
 
     public int matchedResponses() { return self.matched; }
 

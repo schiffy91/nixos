@@ -1,10 +1,11 @@
+import Library.Bytes;
 import Library.Strings;
+import Library.Terminal.PTYProcess;
+import Library.Timer;
 import Library.Vector;
-import ../core/PtyChild.btrc;
 import ./PasswdPromptClassifier.btrc;
 
 #include <pwd.h>
-#include <poll.h>
 #include <unistd.h>
 
 class PasswdDriver {
@@ -16,27 +17,33 @@ class PasswdDriver {
         return "";
     }
 
-    class bool answer(PtyChild child, Vector<string> responses, long long deadline) {
+    class bool safeResponse(string? text) { return text != null && text.len() <= 4096 && !text.contains("\n") && !text.contains("\r"); }
+
+    class bool answer(PTYProcess child, Vector<string> responses, long long deadline) {
+        for response in responses {
+            if (!PasswdDriver.safeResponse(response)) { return false; }
+        }
         var classifier = PasswdPromptClassifier(responses.len);
-        int sent = 0;
-        char buffer[4096];
-        while (PtyChild.now() < deadline && sent < responses.len) {
-            int ready = child.pollUntil(POLLIN, deadline, 1000);
-            if (ready < 0 || (ready != 0 && (ready & POLLIN) == 0)) { return false; }
-            if (ready == 0) { continue; }
-            int count = child.readSome(buffer, 4096);
-            if (count < 0) { return false; }
-            if (count == 0) { continue; }
-            bool complete = classifier.feedRaw(buffer, count);
-            if (!complete && !classifier.incompleteCandidate()) { continue; }
-            int trailing = child.pollUntil(POLLIN, deadline, 250);
-            if (trailing != 0) {
-                if (trailing < 0 || (trailing & POLLIN) == 0) { return false; }
+        var sent = 0;
+        var output = child.readUntil(deadline);
+        while (MonotonicClock.before(deadline) && sent < responses.len) {
+            if (output == null) { return false; }
+            if (output.isEmpty()) {
+                output = child.readUntil(deadline);
                 continue;
             }
+            var complete = classifier.feedBytes(output);
+            if (!complete && !classifier.incompleteCandidate()) {
+                output = child.readUntil(deadline);
+                continue;
+            }
+            output = child.readUntil(deadline, 250);
+            if (output == null) { return false; }
+            if (!output.isEmpty()) { continue; }
             if (!complete || !child.echoDisabled() || !classifier.acceptPending()) { return false; }
-            if (!child.writeUntil(responses.get(sent), true, deadline)) { return false; }
+            if (!child.writeUntil(Bytes.fromString(f"{responses.get(sent)}\n"), deadline)) { return false; }
             sent++;
+            if (sent < responses.len) { output = child.readUntil(deadline); }
         }
         return sent == responses.len && classifier.complete();
     }
@@ -55,11 +62,11 @@ class PasswdDriver {
         if (root) { args.push(name); }
         Vector<string> env = ["PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin", "LC_ALL=C", "LANG=C", "HOME=" + Strings.copy(found->pw_dir), "USER=" + name, "LOGNAME=" + name];
         Vector<string> responses = root ? [newPassword, newPassword] : [oldPassword, newPassword, newPassword];
-        var child = PtyChild();
-        if (!child.start(path, args, env)) { return false; }
-        long long deadline = PtyChild.deadlineAfter(30000);
+        var child = PTYProcess.start(path, args, env);
+        if (child == null) { return false; }
+        long long deadline = MonotonicClock.deadlineAfter(30000);
         if (!PasswdDriver.answer(child, responses, deadline)) {
-            child.terminate();
+            child.close();
             return false;
         }
         return child.waitExitUntil(deadline) == 0;

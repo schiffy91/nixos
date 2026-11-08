@@ -1,24 +1,25 @@
 #include <assert.h>
 #include <string.h>
 
+import Library.Terminal.PTYProcess;
+import Library.Timer;
 import Library.Vector;
-import ../../btrc/core/PtyChild.btrc;
 import ../../btrc/nixosctl/PasswdPromptClassifier.btrc;
 import ../../btrc/nixosctl/PasswdDriver.btrc;
 
 Vector<string> env() { return ["PATH=/run/current-system/sw/bin:/usr/bin:/bin", "LC_ALL=C"]; }
 
-PtyChild fakeChild(string script) {
-    var child = PtyChild();
-    assert(child.start("/bin/sh", ["/bin/sh", "-c", script], env()));
+PTYProcess fakeChild(string script) {
+    var child = PTYProcess.start("/bin/sh", ["/bin/sh", "-c", script], env());
+    if (child == null) { throw "Cannot start PTY fixture"; }
     return child;
 }
 
 bool drive(string script, Vector<string> responses, int* exitCode) {
     var child = fakeChild(script);
-    long long deadline = PtyChild.deadlineAfter(10000);
+    long long deadline = MonotonicClock.deadlineAfter(10000);
     bool answered = PasswdDriver.answer(child, responses, deadline);
-    if (!answered) { child.terminate(); *exitCode = -1; return false; }
+    if (!answered) { child.close(); *exitCode = -1; return false; }
     *exitCode = child.waitExitUntil(deadline);
     return true;
 }
@@ -55,20 +56,25 @@ int main() {
     /* Echo left on: the secret must never be sent. */
     int echoed = 0;
     assert(!drive("printf 'New password: '; sleep 5", ["s3cret", "s3cret"], &echoed));
+    /* Trailing bytes must be classified before any response, including NUL. */
+    assert(!drive("stty -echo; printf 'New password: '; sleep 0.05; printf 'spoof'; sleep 2", ["secret", "secret"], &code));
+    assert(!drive("stty -echo; printf 'New password: \\000'; sleep 2", ["secret", "secret"], &code));
     /* A prompt that never comes, and a stalled child, are bounded and reaped. */
     var silent = fakeChild("sleep 60");
-    assert(!PasswdDriver.answer(silent, ["x", "x"], PtyChild.deadlineAfter(1500)));
-    silent.terminate();
-    assert(silent.pid == (pid_t)0);
+    assert(!PasswdDriver.answer(silent, ["x", "x"], MonotonicClock.deadlineAfter(1500)));
+    silent.close();
+    assert(silent.readUntil(MonotonicClock.deadlineAfter(10)) == null);
     var stalled = fakeChild("sleep 60");
-    long long started = PtyChild.now();
-    assert(stalled.waitExitUntil(PtyChild.deadlineAfter(800)) == -1);
-    assert(PtyChild.now() - started < 5000LL);
-    assert(stalled.pid == (pid_t)0);
+    long long started = MonotonicClock.milliseconds();
+    assert(stalled.waitExitUntil(MonotonicClock.deadlineAfter(800)) == -1);
+    assert(MonotonicClock.milliseconds() - started < 5000LL);
+    assert(stalled.readUntil(MonotonicClock.deadlineAfter(10)) == null);
     /* Secrets with newlines are refused before they touch the pty. */
     var guard = fakeChild("sleep 5");
-    assert(!guard.writeUntil("a\nb", true, PtyChild.deadlineAfter(500)));
-    guard.terminate();
+    assert(!PasswdDriver.answer(guard, ["a\nb", "a\nb"], MonotonicClock.deadlineAfter(500)));
+    assert(!PasswdDriver.safeResponse("a\rb"));
+    assert(!PasswdDriver.safeResponse(null));
+    guard.close();
 
     print("PASS: passwd prompt classifier and pty driver (2/3 prompts, echo guard, deadlines, reaping)");
     return 0;
