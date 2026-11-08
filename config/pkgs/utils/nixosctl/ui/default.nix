@@ -1,6 +1,6 @@
 { pkgs, config, lib, inputs, ... }:
 let
-  inherit (import ./tray/lib.nix { inherit pkgs inputs; }) btrcpy;
+  inherit (inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}) btrcpy;
   nixosctlBin = import ../package.nix {
     inherit pkgs lib;
     btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;

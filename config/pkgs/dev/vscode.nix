@@ -3,7 +3,7 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   user = config.settings.users.admin.username;
   btrc = inputs.btrc.packages.${system};
-  inherit (import ../utils/nixosctl/ui/tray/lib.nix { inherit pkgs inputs; }) btrc-lsp;
+  inherit (btrc) btrc-lsp;
 in lib.mkIf (config.settings.apps.enable && config.settings.apps.dev.enable && config.settings.apps.vscode.enable) {
   settings.disk.immutability.persist.paths = [
     "${config.settings.users.admin.homeDirectory}/.config/Code"

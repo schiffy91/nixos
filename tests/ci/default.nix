@@ -17,7 +17,7 @@ let
     };
   };
   nixd = pkgs.callPackage ../../config/pkgs/dev/nixd/package.nix {};
-  btrc-lsp = (import ../../config/pkgs/utils/nixosctl/ui/tray/lib.nix { inherit pkgs; inputs.btrc = compiler; }).btrc-lsp;
+  inherit (compiler.packages.${system}) btrc-lsp;
 in pkgs.runCommand "ci-contract-check" { nativeBuildInputs = [ pkgs.python3 pkgs.coreutils ]; } ''
   ${programs}/bin/frames-test
   ${programs}/bin/pipes-test

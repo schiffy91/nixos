@@ -131,8 +131,8 @@ $(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 
 # Library.Tray's Linux provider binds libdbus, so its typed header import
 # needs pkg-config at transpile time and dbus-1 at link time.
-$(BUILD_DIR)/tray-compiler: config/pkgs/utils/nixosctl/ui/tray/lib.nix config/pkgs/utils/nixosctl/ui/tray/submenus.patch config/pkgs/dev/btrc/native-lsp.patch flake.lock | dirs
-	nix build --no-warn-dirty --impure --out-link "$@" --expr 'let f = builtins.getFlake "git+file://$(CURDIR)"; pkgs = import f.inputs.nixpkgs { system = builtins.currentSystem; }; in (import ./config/pkgs/utils/nixosctl/ui/tray/lib.nix { inherit pkgs; inherit (f) inputs; }).btrcpy'
+$(BUILD_DIR)/tray-compiler: flake.lock | dirs
+	nix build --no-warn-dirty --inputs-from . btrc\#btrcpy --out-link "$@"
 
 $(TRAY_C_OUT): $(SOURCES) $(BUILD_DIR)/tray-compiler | dirs
 	$(TRAY_BTRC) --strict-imports "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
