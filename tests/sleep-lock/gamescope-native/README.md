@@ -19,7 +19,8 @@ Choose the explicit graph node for the property being tested:
 | Node | Contract |
 | --- | --- |
 | `sleep-gamescope-native-control` | Direct scanout, selected Steam window, actual pixels, and physical-console keyboard input |
-| `sleep-gamescope-native-lock` | Production root lock, wrong password, VT escape denial, touch unlock, failed sleep backend, keyboard unlock, and same-process game rendering/input restoration |
+| `sleep-gamescope-native-lock` | Gaming-only root lock, complex touch/keyboard password, cancellation/VT escape denial, failed sleep, controller recovery, overlapping requests, Sunshine service stop/restore, and same-process game rendering/input restoration |
+| `sleep-gamescope-native-lock-without-sunshine` | Same Gaming lock with Sunshine absent; missing units do not prevent locking or unlock |
 | `sleep-gamescope-native-suspend-control` | Unlocked real kernel s2idle and original game rendering/input after ACPI wake |
 | `sleep-gamescope-native-resume-lock` | All lock checks plus real s2idle, password rejection after resume, and authenticated original game rendering/input restoration |
 
@@ -27,6 +28,8 @@ The real-suspend gates are separate from the backend-injection gate. Failure
 of a real-suspend gate must remain visible; a passing injected backend does
 not prove GPU power-management recovery. These tests do not establish Steam
 Deck hardware behavior or concealment of Gamescope's PipeWire capture stream.
+The Gaming policy stops the configured Sunshine services; arbitrary capture
+clients are outside that service boundary.
 
 The runner requires exactly one accessible AMD `amdgpu` render node and KVM.
 It refuses ambiguous AMD selection and does not change host permissions or
@@ -51,7 +54,45 @@ Relevant pinned sources:
 - [Gamescope Steam focus selection and X11 properties](https://github.com/ValveSoftware/gamescope/blob/3.17.0/src/steamcompmgr.cpp)
 - [Linux virtio GPU freeze/restore](https://github.com/torvalds/linux/blob/v7.3/drivers/gpu/drm/virtio/virtgpu_drv.c)
 
-## Recorded results (2026-11-07)
+## Gaming-only policy results (2026-11-07)
+
+The production Gaming-only controller passed `sleep-gamescope-native-lock`
+run `872d6db09483` (93.49 seconds) and the absent-Sunshine variant
+`da7b79e1a6ab` (93.73 seconds). Both drivers completed cleanup. These runs used
+Git tree `bcaf0b3f7bf8b809c510a4a72469f1d9b6681b9a`; subsequent edits adjusted
+only the separate stock-Plasma regression fixture, documentation, graph gate,
+and whitespace/comments in the Gamescope fixture.
+
+The public fixture password is `aB3! z`. Touch input exercises Shift, digits,
+punctuation, space, and backspace; wrong passwords and cancellation leave the
+console locked. A failed backend and controller restart require fresh password
+input before restoring the same compositor and interactive client. Overlapping
+requests invalidate an earlier authentication attempt. A new logind Plasma
+session appearing during the lock does not depend on custom KDE methods.
+
+Real systemd user units run harmless fixture processes for the two configured
+Sunshine names. Both are stopped before readiness, ordinary starts are skipped
+while locked, and only previously active units are restored after authentication.
+The second variant has no Sunshine units at all. No paired-stream behavior is
+claimed by these service tests.
+
+The portable `sleep-gaming-plasma` regression also passed (`fdd8ee85937f`):
+using tree `7e7727456628a6c1f1d3dc2cc94d153444c16318`. Ordinary Plasma
+sleep stays on its original console, the stock KDE greeter
+rejects a wrong password and accepts the complex account password, and no root
+Gaming lock or Sunshine marker is created. It is part of the required graph;
+the AMD-native Gamescope nodes remain explicit opt-in tests.
+
+The existing full-policy `sleep-lock-authentication` regression also passed
+(`e189a7e14188`, 358.86 seconds; cleanup at 359.35 seconds) using that same tree,
+including its existing s2idle, interrupted request, and expired-account checks.
+Its unlocked sleep-control dependency passed as `1e3d9d2e0379`.
+
+No new Gamescope real-suspend test passed. The earlier GPU power-management limitation
+below remains. Physical OLED touch rotation, Steam controls, suspend/resume,
+and game preservation need acceptance on the actual Deck.
+
+## Earlier full-policy results (2026-11-07)
 
 | Run | Result and evidence |
 | --- | --- |

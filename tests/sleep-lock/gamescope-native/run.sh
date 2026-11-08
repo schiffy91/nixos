@@ -5,9 +5,10 @@ nix_args=()
 case ${2:-control} in
   control) fixture=tests/sleep-lock/gamescope-native ;;
   lock) fixture=tests/sleep-lock/gamescope-native-lock ;;
+  lock-without-sunshine) fixture=tests/sleep-lock/gamescope-native-lock; nix_args=(--arg withSunshine false) ;;
   resume-lock) fixture=tests/sleep-lock/gamescope-native-lock; nix_args=(--arg realSuspend true) ;;
   suspend-control) fixture=tests/sleep-lock/gamescope-native-suspend-control ;;
-  *) echo 'Expected control, lock, resume-lock, or suspend-control fixture.' >&2; exit 1 ;;
+  *) echo 'Expected control, lock, lock-without-sunshine, resume-lock, or suspend-control fixture.' >&2; exit 1 ;;
 esac
 [[ $EUID != 0 && $(uname -m) == x86_64 ]]
 unset SSH_AUTH_SOCK

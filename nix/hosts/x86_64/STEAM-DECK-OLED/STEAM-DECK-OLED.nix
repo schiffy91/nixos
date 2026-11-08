@@ -57,6 +57,7 @@ in {
       # The Valve kernel explicitly rejects s2idle on Jupiter/Galileo.
       suspendMode = "deep";
       hibernateOnSuspend = true;
+      lockGamingSession = true;
     };
     disk = {
       inherit (disk) device;
@@ -91,7 +92,7 @@ in {
     };
     users.admin = {
       autoLogin.enable = true;
-      autoLock.enable = false;  # every wake already asks for the LUKS passphrase
+      autoLock.enable = true;
     };
     apps = {
       nixosctl.caffeine.enable = false;

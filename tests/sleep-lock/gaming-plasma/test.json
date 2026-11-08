@@ -1,0 +1,16 @@
+{
+  "name": "sleep-gaming-plasma",
+  "state": "sleep-gaming-plasma",
+  "stateMaterial": "sleep-gaming-plasma:{{arch}}:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/sleep-lock/gaming-plasma --no-out-link --cores 2 --max-jobs 1 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -120 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "timeout": 1800
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}

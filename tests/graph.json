@@ -1135,6 +1135,14 @@
       "spec": "sleep-lock/gamescope-native-lock/test.json"
     },
     {
+      "id": "sleep-gamescope-native-lock-without-sunshine",
+      "spec": "sleep-lock/gamescope-native-lock/without-sunshine.json"
+    },
+    {
+      "id": "sleep-gaming-plasma",
+      "spec": "sleep-lock/gaming-plasma/test.json"
+    },
+    {
       "id": "sleep-gamescope-native-resume-lock",
       "spec": "sleep-lock/gamescope-native-lock/resume.json"
     },
@@ -1154,6 +1162,7 @@
     "sd-unlock",
     "secure-boot-backup",
     "sleep-lock-authentication",
+    "sleep-gaming-plasma",
     "cli-parity",
     "spec-toml",
     "spec-yaml",

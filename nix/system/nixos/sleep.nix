@@ -1,5 +1,6 @@
 { config, lib, pkgs, ... }:
 let
+  gamingOnly = config.settings.sleep.lockGamingSession && !config.settings.sleep.lockSession;
   blank = pkgs.runCommandCC "sleep-lock-blank" {
     nativeBuildInputs = [ pkgs.pkg-config ];
     buildInputs = [ pkgs.libdrm ];
@@ -20,24 +21,24 @@ let
     (builtins.readFile ./sleep/plasma.py));
   controller = pkgs.writeScript "sleep-lock" ("#!${pkgs.python3}/bin/python3\n" +
     builtins.replaceStrings
-      [ "@plasma@" "@blank@" "@native@" "@plymouth@" "@plymouthd@" "@systemctl@" "@user@" ]
+      [ "@plasma@" "@blank@" "@native@" "@plymouth@" "@plymouthd@" "@systemctl@" "@user@" "@gamingOnly@" ]
       [ "${plasma}" "${blank}/bin/sleep-lock-blank" "${native}/bin/sleep-lock-native" "${config.boot.plymouth.package}/bin/plymouth"
         "${config.boot.plymouth.package}/bin/plymouthd" "${config.systemd.package}/bin/systemctl"
-        config.settings.users.admin.username ]
+        config.settings.users.admin.username (if gamingOnly then "True" else "False") ]
       (builtins.readFile ./sleep/lock.py));
   sleepServices = [ "systemd-suspend" "systemd-hibernate" "systemd-hybrid-sleep" "systemd-suspend-then-hibernate" ];
-in lib.mkIf config.settings.sleep.lockSession {
+in lib.mkIf (config.settings.sleep.lockSession || config.settings.sleep.lockGamingSession) {
   # Session brokers admit their owner by default. The native lock API checks
   # the real sender UID, so explicitly admit root without impersonating the
   # desktop account or opening the bus to any other user.
-  services.dbus.packages = [ (pkgs.writeTextDir "share/dbus-1/session.d/nixos-sleep-lock.conf" ''
+  services.dbus.packages = lib.optionals config.settings.sleep.lockSession [ (pkgs.writeTextDir "share/dbus-1/session.d/nixos-sleep-lock.conf" ''
     <busconfig>
       <policy context="mandatory">
         <allow user="root"/>
       </policy>
     </busconfig>
   '') ];
-  nixpkgs.overlays = [ (_: previous: {
+  nixpkgs.overlays = lib.optionals config.settings.sleep.lockSession [ (_: previous: {
     kdePackages = previous.kdePackages.overrideScope (_: kdePrevious: {
       kscreenlocker = kdePrevious.kscreenlocker.overrideAttrs (old: {
         patches = (old.patches or [ ]) ++ [ ./sleep/kscreenlocker-fail-closed.patch ];
@@ -52,6 +53,8 @@ in lib.mkIf config.settings.sleep.lockSession {
     });
   }) ];
   assertions = [
+    { assertion = !(config.settings.sleep.lockSession && config.settings.sleep.lockGamingSession);
+      message = "Choose either all-session locking or Gaming Mode locking."; }
     { assertion = config.boot.plymouth.enable; message = "Session locking requires Plymouth."; }
     { assertion = !config.services.physlock.enable; message = "Use one owner for the session console lock."; }
     { assertion = builtins.match "[a-zA-Z_][a-zA-Z0-9_-]*" config.settings.users.admin.username != null;
@@ -64,12 +67,22 @@ in lib.mkIf config.settings.sleep.lockSession {
   # Native Plasma locking also conceals software/virtual outputs. A no-password
   # screensaver or grace-time dismissal cannot serve as this boundary. These
   # keys do not change the separately configured automatic idle-lock policy.
-  environment.etc."xdg/kscreenlockerrc".text = ''
+  environment.etc = lib.optionalAttrs config.settings.sleep.lockSession {
+    "xdg/kscreenlockerrc".text = ''
     [Daemon]
     Lock[$i]=true
     LockGrace[$i]=0
     RequirePassword[$i]=true
-  '';
+    '';
+  };
+  # Normal service starts/restarts cannot reopen a stream while Gaming Mode is
+  # locked. The root controller stops existing instances before acknowledging
+  # the sleep request and only restores instances which were running before it.
+  systemd.user.services = lib.optionalAttrs (gamingOnly && config.services.sunshine.enable)
+    (lib.genAttrs [ "sunshine" "app-dev.lizardbyte.app.Sunshine" ] (_: {
+      unitConfig.ConditionPathExists = "!/run/nixos-gaming-locked";
+      serviceConfig.KillMode = "control-group";
+    }));
   systemd.services = lib.genAttrs sleepServices (_: {
     serviceConfig = {
       ExecStartPre = lib.mkBefore [ "${controller} prepare %n" ];

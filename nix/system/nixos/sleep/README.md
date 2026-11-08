@@ -1,9 +1,57 @@
 # Sleep password authentication
 
-`settings.sleep.lockSession` is **disabled by default**. The final implementation
-passed the VM gates below. Neither physical host has been enabled or accepted
-against the hardware rollout gates; publishing this stage changes no running
-host's sleep protection.
+## Gaming Mode sleep password
+
+`settings.sleep.lockGamingSession` uses the existing Plymouth touchscreen keyboard
+and Linux-account PAM authentication for sleep requested while the configured
+user has a Gamescope session. The Deck enables this policy; Fractal does not.
+`settings.sleep.lockSession` remains disabled on both hosts. The two policies are
+mutually exclusive.
+
+The game keeps running in its existing session. Sleep preparation switches to a
+locked console and hides the game's scanout before allowing the sleep backend.
+After wake, enter the Linux account password with touch or a physical keyboard.
+The keyboard supports letters, Shift/Caps, digits, punctuation, spaces and
+backspace. Wrong input, Escape, a cancelled attempt, an interrupted controller,
+and a failed sleep backend do not release the console.
+
+Desktop Mode keeps native Plasma idle and resume locking. The Gaming Mode policy
+neither patches KDE nor routes ordinary Plasma sleep through the console UI.
+If a desktop session appears while a Gaming lock is already held, fresh account
+password authentication still gates return to the physical console.
+
+Configured Sunshine services are stopped before sleep is admitted. Their start
+condition prevents normal restarts while locked. After password authentication,
+only services that were previously running are restarted. Consequently an active
+stream disconnects on sleep; reconnect after local unlock. This boundary covers
+the configured `sunshine.service` and desktop-app service, not arbitrary same-user
+capture programs or manually launched binaries.
+
+These hooks cover suspend, hibernate, hybrid sleep and suspend-then-hibernate.
+They do not add a Steam menu/manual or Gaming Mode idle-lock action. Steam's own
+PIN lock is separate. The Deck's existing `hibernateOnSuspend` setting is retained;
+hibernation can therefore require boot LUKS unlock followed by this account prompt.
+
+Direct Gamescope VM tests use the real compositor, DRM, Xwayland and kernel input,
+with an interactive terminal standing in for the signed-in Steam application.
+They verify `aB3! z` entered through touchscreen Shift, number/symbol keys, space,
+and backspace, plus physical-keyboard authentication and return to the same
+running compositor/client. Service tests exercise actual systemd user-unit
+stop/start conditions with harmless fixture processes, not a paired stream.
+Real Steam controller/UI behavior, OLED touch rotation and real hardware suspend
+still need physical validation. The existing native-context VM GPU loses state
+on real suspend even in its unlocked control; no new passing suspend claim is made.
+
+The host configuration enables the Gaming policy on the next deployment. It has
+not been activated or accepted on the physical Deck by this change. Native
+Plasma automatic locking is also enabled in the Deck's account configuration.
+
+## Existing full-session policy
+
+`settings.sleep.lockSession` remains **disabled by default** and is disabled on
+both physical hosts. The implementation below includes native Plasma integration
+and its earlier VM evidence. Its KDE patches and root user-bus policy are not
+installed by the Gaming-only option.
 
 The root controller reserves VT63 before any of the four systemd sleep units
 can run their backend. It disables keyboard SysRq temporarily, verifies the
