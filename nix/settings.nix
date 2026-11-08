@@ -258,7 +258,6 @@ in {
     ##### TPM ##### 
     settings.tpm.device = mkSetting str "/dev/tpmrm0";
     settings.tpm.versionPath = mkSetting str "/sys/class/tpm/tpm0/tpm_version_major";
-    settings.tpm.managedPolicy.enable = mkSetting bool false;
     ##### Desktop #####
     settings.desktop.enable = mkSetting bool true;
     settings.desktop.defaultSession = mkSetting str "plasma";

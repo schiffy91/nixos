@@ -59,12 +59,6 @@
     },
     {
       "op": "guest",
-      "command": "set -e; . /var/tmp/e2e-crypt.sh; root=$(cat /var/tmp/e2e-root); if NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=unapplied456 nixosctl change-password --update-tpm2 > /tmp/e2e-tpm-preflight.log 2>&1; then cat /tmp/e2e-tpm-preflight.log; exit 1; fi; grep -F \"Managed TPM enrollment is unavailable; no passwords changed\" /tmp/e2e-tpm-preflight.log; printf %s testpass123 | cryptsetup open --test-passphrase \"$root\"; if printf %s unapplied456 | cryptsetup open --test-passphrase \"$root\"; then exit 1; fi; accepts testpass123; if accepts unapplied456; then exit 1; fi; printf tpm-preflight-preserved-both",
-      "expect": "tpm-preflight-preserved-both",
-      "timeout": 300
-    },
-    {
-      "op": "guest",
       "command": ". /var/tmp/e2e-crypt.sh && root=$(cat /var/tmp/e2e-root) && NIXOS_OLD_PASSWORD=testpass123 NIXOS_NEW_PASSWORD=newpass456 nixosctl change-password --full-disk-encryption-only > /tmp/e2e-luks.log 2>&1 && printf %s newpass456 | cryptsetup open --test-passphrase \"$root\" && ! printf %s testpass123 | cryptsetup open --test-passphrase \"$root\" && accepts testpass123 && printf luks-changed || { cat /tmp/e2e-luks.log; exit 1; }",
       "expect": "luks-changed",
       "timeout": 300

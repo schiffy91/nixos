@@ -1076,16 +1076,6 @@
       "spec": "kernel-trust/host.json"
     },
     {
-      "id": "tpm-managed-policy",
-      "after": [],
-      "spec": "tpm2/managed/test.json"
-    },
-    {
-      "id": "tpm-managed-reset",
-      "after": [],
-      "spec": "tpm2/managed/reset.json"
-    },
-    {
       "id": "sleep-gamescope-native-control",
       "spec": "sleep-lock/gamescope-native/test.json"
     },
@@ -1153,8 +1143,6 @@
     "install-encrypted",
     "install-nixosctl",
     "tpm2-enroll",
-    "tpm-managed-policy",
-    "tpm-managed-reset",
     "immutability-hibernate",
     "secure-boot-aarch64",
     "password-change",
