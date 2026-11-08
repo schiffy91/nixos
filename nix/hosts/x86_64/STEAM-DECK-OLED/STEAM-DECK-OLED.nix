@@ -107,6 +107,7 @@ in {
         };
       };
       sunshine = {
+        sshLogin.enable = true;
         capture = "auto";  # KWin virtual display in Plasma; KMS in Gaming Mode
         virtualDisplay = {
           enable = true;

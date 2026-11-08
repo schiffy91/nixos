@@ -442,7 +442,15 @@ processes or undo changes they made. The separate agent account does not gain
 administrative access. The only permanent passwordless command is the helper's
 read-only `status` operation, which reads the protected grant metadata.
 
-Sunshine administration credentials are declared with
+Sunshine supports administration with the SSH keys held in your local 1Password
+agent. Enable `settings.apps.sunshine.sshLogin.enable`; its public keys default
+to `settings.users.admin.authorizedKeys`. Existing Sunshine passwords keep
+working, and a new instance needs no shared password. Sign in by running the
+browser's displayed helper command and approving the agent signature. See
+[Sunshine administration](nix/apps/gaming/sunshine/README.md) for public-key
+files, certificate trust, exact commands, session limits and VM checks.
+
+For password login, Sunshine administration credentials are declared with
 `settings.apps.sunshine.credentials.usernameReference` and `passwordReference`.
 Defaults reference the `username` and `password` fields of `Sunshine HOSTNAME` in
 1Password's `Private` vault. Enable 1Password's Developer → Integrate with
@@ -459,9 +467,10 @@ verifier is stored atomically in the user's private
 `.config/sunshine/credentials.json`, allowing offline startup. Existing valid
 credentials are imported from `sunshine_state.json` on first service start;
 Moonlight pairings, host identity, and certificates stay in their original files.
-Updating credentials does not rewrite that pairing state. Missing or invalid
-credentials prevent Sunshine from opening its first-run administration interface,
-including when launched directly.
+Updating credentials does not rewrite that pairing state. Without SSH keys,
+missing or invalid credentials prevent Sunshine from opening its first-run
+administration interface, including when launched directly. Configured SSH keys
+protect first-run account creation by requiring SSH authentication.
 
 For remote provisioning, `nixosctl sunshine provision` accepts a JSON object with
 `username` and `password` through stdin. Feed it through a private pipe from the

@@ -1029,6 +1029,10 @@
       "spec": "boot/fallback/test.json"
     },
     {
+      "id": "sunshine-ssh-login",
+      "spec": "nixosctl/sunshine-ssh/test.json"
+    },
+    {
       "id": "sunshine-credentials",
       "spec": "nixosctl/sunshine/test.json"
     },
@@ -1231,6 +1235,7 @@
     "nixosctl-sudo",
     "boot-fallback",
     "sunshine-credentials",
+    "sunshine-ssh-login",
     "onepassword-integration",
     "password-file",
     "installer-secret",

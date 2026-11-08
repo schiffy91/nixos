@@ -148,6 +148,10 @@ def main():
             if validate(legacy):
                 current = {key: legacy[key] for key in ("username", "salt", "password")}
                 store.write(current)
+        if current is None and config.get("publicKeys"):
+            if action == "status":
+                print("Sunshine SSH-key administration is configured.")
+            return
         if not validate(current):
             raise CredentialError("Sunshine credentials are not provisioned; run nixosctl sunshine sync")
     if action != "prepare":

@@ -372,6 +372,8 @@ in {
       };
     }))) {};
     settings.apps.sunshine.enable = mkSetting bool true;
+    settings.apps.sunshine.sshLogin.enable = mkSetting bool false;
+    settings.apps.sunshine.sshLogin.publicKeys = mkSetting (listOf str) config.settings.users.admin.authorizedKeys;
     settings.apps.sunshine.credentials.usernameReference = mkSetting str "op://Private/Sunshine ${config.networking.hostName}/username";
     settings.apps.sunshine.credentials.passwordReference = mkSetting str "op://Private/Sunshine ${config.networking.hostName}/password";
     settings.apps.sunshine.capture = mkSetting (enum [ "kms" "kwin" "auto" ]) "kms";

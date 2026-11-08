@@ -95,6 +95,7 @@ in {
       primary     = true;
     }];
     apps.sunshine = {
+      sshLogin.enable = true;
       capture = "kwin";
       cuda.enable = true;
       virtualDisplay = {

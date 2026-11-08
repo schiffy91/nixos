@@ -1,7 +1,7 @@
-{ pkgs, user, home, usernameReference, passwordReference }:
+{ pkgs, user, home, usernameReference, passwordReference, publicKeys ? [] }:
 let
   configuration = pkgs.writeText "sunshine-credential-references.json" (builtins.toJSON {
-    inherit user home usernameReference passwordReference;
+    inherit user home usernameReference passwordReference publicKeys;
   });
 in pkgs.writeShellApplication {
   name = "nixosctl-sunshine";

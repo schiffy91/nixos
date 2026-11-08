@@ -2,12 +2,22 @@
 let
   enabled = config.settings.apps.enable && config.settings.apps.gaming.enable && config.settings.apps.sunshine.enable;
   capture = config.settings.apps.sunshine.capture;
+  sshLogin = config.settings.apps.sunshine.sshLogin;
+  sshKeys = lib.optionals sshLogin.enable sshLogin.publicKeys;
   automatic = capture == "auto";
   credentials = import ./credentials/package.nix {
     inherit pkgs;
     user = config.settings.users.admin.username;
     home = config.settings.users.admin.homeDirectory;
+    publicKeys = sshKeys;
     inherit (config.settings.apps.sunshine.credentials) usernameReference passwordReference;
+  };
+  sshLoginHelper = pkgs.writeShellApplication {
+    name = "sunshine-ssh-login";
+    runtimeInputs = [ pkgs.openssh ];
+    text = ''
+      exec ${pkgs.python3}/bin/python3 ${config.services.sunshine.package}/libexec/sunshine-ssh-login.py "$@"
+    '';
   };
   desktopConfig = (pkgs.formats.keyValue {}).generate "sunshine-desktop.conf" config.services.sunshine.settings;
   gamingApps = (pkgs.formats.json {}).generate "sunshine-gaming-apps.json" {
@@ -30,7 +40,17 @@ in {
       # Protect every entry point, including manual and desktop launches, without
       # wrapping the executable that KWin checks for capture permission.
       sunshine = prev.sunshine.overrideAttrs (old: {
-        patches = (old.patches or []) ++ [ ./require-credentials.patch ];
+        patches = (old.patches or []) ++ [ ./ssh-login.patch ./require-credentials.patch ];
+        ui = old.ui.overrideAttrs (ui: {
+          patches = (ui.patches or []) ++ [ ./ssh-login.patch ];
+          postPatch = (ui.postPatch or "") + ''
+            substituteInPlace src_assets/common/assets/web/SshLogin.vue \
+              --replace-fail "python3 sunshine-ssh-login.py" "sunshine-ssh-login"
+          '';
+        });
+        postInstall = (old.postInstall or "") + ''
+          install -Dm644 ../tools/sunshine-ssh-login.py "$out/libexec/sunshine-ssh-login.py"
+        '';
       });
     })
   ++ lib.optional (enabled && config.settings.apps.sunshine.cuda.enable)
@@ -77,8 +97,22 @@ in {
     settings.capture = if automatic then "kwin" else capture;
     settings.credentials_file = "${config.settings.users.admin.homeDirectory}/.config/sunshine/credentials.json";
     settings.origin_web_ui_allowed = "lan";
+    settings.web_ui_ssh_keys = lib.concatStringsSep "," sshKeys;
   };
-  environment.systemPackages = lib.optional enabled credentials;
+  assertions = lib.optional (enabled && sshLogin.enable) {
+    assertion = sshKeys != [] && lib.all (key:
+      builtins.match "(ssh-ed25519|ssh-rsa) [A-Za-z0-9+/=]+( .*)?" key != null
+      && !lib.hasInfix "," key && !lib.hasInfix "\n" key
+    ) sshKeys;
+    message = "Sunshine SSH login requires plain Ed25519 or RSA public-key lines without commas or newlines.";
+  };
+  environment.systemPackages = lib.optionals enabled [ credentials sshLoginHelper ];
+  environment.etc = lib.mkIf enabled (lib.listToAttrs (lib.imap1 (index: key:
+    lib.nameValuePair "sunshine/ssh-keys/key-${toString index}.pub" {
+      text = key + "\n";
+      mode = "0444";
+    }
+  ) sshKeys));
   settings.networking.ports = lib.mkIf enabled {
     tcp = [ 47984 47989 47990 48010 ];
     udp = (lib.range 47998 48000) ++ (lib.range 8000 8010);
@@ -92,12 +126,14 @@ in {
       unitConfig.ConditionUser = config.settings.users.admin.username;
       environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
       serviceConfig.ExecStartPre = "${credentials}/bin/nixosctl-sunshine prepare";
+      serviceConfig.UMask = "0077";
       serviceConfig.ExecStart = lib.mkIf automatic (lib.mkForce (lib.getExe sessionLauncher));
     };
     "app-dev.lizardbyte.app.Sunshine" = {
       unitConfig.ConditionUser = config.settings.users.admin.username;
       environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
       serviceConfig.ExecStartPre = "${credentials}/bin/nixosctl-sunshine prepare";
+      serviceConfig.UMask = "0077";
     };
   };
 }
