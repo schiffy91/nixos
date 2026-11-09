@@ -14,6 +14,6 @@ in {
     settings.desktop.plasma.iconTheme = mkSetting str "Papirus-Dark";
     settings.desktop.plasma.iconThemePackage = mkSetting package pkgs.papirus-icon-theme;
     settings.desktop.plasma.accentColor = mkSetting str "40,40,40";
-    settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Next/contents/images_dark/5120x2880.png";
+    settings.desktop.plasma.wallpaper = mkSetting str "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images_dark/5120x2880.png";
   };
 }

@@ -119,6 +119,7 @@ in {
       serviceConfig.ExecStart = lib.mkIf automatic (lib.mkForce (lib.getExe sessionLauncher));
     };
     "app-dev.lizardbyte.app.Sunshine" = {
+      overrideStrategy = "asDropin";
       unitConfig.ConditionUser = config.settings.users.admin.username;
       environment.LD_LIBRARY_PATH = "/run/opengl-driver/lib";
       serviceConfig.ExecStartPre = "${credentials}/bin/nixosctl-sunshine prepare";

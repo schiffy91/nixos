@@ -32,6 +32,10 @@ in lib.mkIf config.settings.desktop.enable {
     "${homeDirectory}/.config/Trolltech.conf"
     "${homeDirectory}/.gtkrc-2.0"
     "${homeDirectory}/.local/share/kactivitymanagerd"
+    # Keep the applied-script hashes with the layout so login does not rebuild
+    # unchanged panels and restart plasmashell after every home reset.
+    "${homeDirectory}/.local/share/plasma-manager/last_run_desktop_script_panels"
+    "${homeDirectory}/.local/share/plasma-manager/last_run_desktop_script_wallpaper_picture"
     "${homeDirectory}/.local/share/recently-used.xbel"
     "${homeDirectory}/.local/state/konsolestaterc"
     "${homeDirectory}/.local/state/systemsettingsstaterc"

@@ -8,6 +8,7 @@ in {
   imports = [
     inputs.home-manager.nixosModules.home-manager
     ./users/password.nix
+    ./users/ssh-agent-auth.nix
   ];
 
   settings.disk.immutability.persist.paths = [

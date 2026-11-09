@@ -44,7 +44,7 @@ describe enrollment activating enforcement without a BIOS switch. That project
 ships shared keys; this repository uses its own unique keys instead.
 
 Follow the existing [Secure Boot preparation](README.md#secure-boot-preparation):
-the independent key backup and signed recovery image have been prepared, but a
-physical external-recovery boot has not been verified. Keep automatic enrollment
-off until that check and a usable key-removal route are established. Neither a
+the independent key backup and signed external recovery boot were verified on
+2026-11-08, including unlocking and mounting the installed SSD from the USB.
+Keep automatic enrollment off and use the explicit enrollment/removal commands. Neither a
 BIOS reset nor a firmware update has been verified to clear enrolled keys here.

@@ -27,6 +27,7 @@ in {
             enable = true;
             wayland.enable = true;
             theme = "breeze";  # Plasma 6 Breeze SDDM theme; autofocuses password on single-user systems
+            settings.Theme.CursorTheme = config.settings.desktop.cursor.theme;
           };
           defaultSession = config.settings.desktop.defaultSession;
         };

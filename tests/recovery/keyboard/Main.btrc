@@ -1,0 +1,45 @@
+import Library.CLI;
+import Library.Image.Pixels;
+import ../../vm/Lab.btrc;
+
+void tap(Guest machine, int x, int y) {
+    machine.succeed(f"echo 'down {x * 32767 / 1280} {y * 32767 / 800}' > /run/test-input");
+    Timer.sleepMillis(150);
+    machine.succeed("echo up > /run/test-input");
+    Timer.sleepMillis(150);
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor"));
+        var machine = lab.guest("machine");
+        machine.waitForUnit("multi-user.target");
+        machine.succeed("test -c /dev/fb0; test -c /dev/uinput; systemctl start test-input; chvt 1");
+        machine.waitForUnit("buffyboard.service");
+        Timer.sleepMillis(2000);
+        var path = lab.artifact("keyboard.ppm");
+        machine.screenshot(path);
+        var frame = ImageIO.loadPpm(path);
+        Check.that(frame.ok(), "read keyboard screenshot");
+        var image = frame.image;
+        Check.that(image.width == 1280 && image.height == 800, "expected console dimensions");
+        int visible = 0;
+        for (int y = 400; y < 800; y++) { for (int x = 0; x < 1280; x++) {
+            var pixel = image.pixel(x, y);
+            if (pixel.red > 20 && pixel.green > 20 && pixel.blue > 20) { visible++; }
+        } }
+        Check.that(visible > 1280 * 200, "keyboard visible automatically at boot");
+        machine.succeed("test $(stty -F /dev/tty1 size | cut -d' ' -f1) -lt 30; systemctl start keyboard-read");
+        Timer.sleepMillis(500);
+        // Independently observed key centers: a, Shift, b, Shift, Space, z, Enter.
+        tap(machine, 75, 600); tap(machine, 96, 680); tap(machine, 767, 680);
+        tap(machine, 96, 680);
+        tap(machine, 510, 760); tap(machine, 255, 680); tap(machine, 1154, 760);
+        machine.waitUntil("test -f /run/touch-typed", 10);
+        Check.that(machine.succeed("cat /run/touch-typed").equals("aB z"), "touch types uppercase, spaces and Enter into the console");
+        machine.screenshot(lab.artifact("typed.ppm"));
+        lab.close();
+        print("PASS: recovery keyboard renders at boot and types through touchscreen, libinput, uinput and console");
+        return 0;
+    } catch (string error) { print(error); return 1; }
+}

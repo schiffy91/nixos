@@ -11,6 +11,7 @@ let
   installerSystem = lib.nixosSystem {
     inherit system;
     modules = [
+      ./touch-console.nix
       "${inputs.nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
       (import ./environment.nix {
         inherit authorizedKeys stateVersion;

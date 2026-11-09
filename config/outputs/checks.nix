@@ -9,6 +9,7 @@ let
   };
   mkHostChecks = map (path: lib.callPackageWith { inherit lib inputs; } path {}) [
     ../../tests/checks/home_tmpfiles.nix
+    ../../tests/checks/plasma_startup.nix
     ../../tests/checks/own_keys_only.nix
     ../../tests/checks/quiet_boot.nix
     ../../tests/checks/initrd_units.nix

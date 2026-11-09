@@ -16,6 +16,12 @@ int main(int argc, char** argv) {
         machine.succeed("runuser --pty -u operator -- env SSH_AUTH_SOCK=/wrong-agent zsh -ic 'test \"$SSH_AUTH_SOCK\" = /srv/operator/.1password/agent.sock; sudo -k -S id -u </dev/null | grep -x 0'");
         machine.succeed("runuser --pty -u operator -- env SSH_CONNECTION='192.0.2.1 1234 192.0.2.2 22' SSH_AUTH_SOCK=/forwarded-agent zsh -ic 'test \"$SSH_AUTH_SOCK\" = /forwarded-agent'");
         machine.succeed("env -u __NIXOS_SET_ENVIRONMENT_DONE SSH_AUTH_SOCK=/invoking-agent bash -lc 'test \"$SSH_AUTH_SOCK\" = /invoking-agent'");
+        // A crashed agent leaves a socket that passes stat() but refuses connect().
+        machine.succeed("pkill -KILL -u operator -x ssh-agent; test -S /srv/operator/.1password/agent.sock");
+        machine.succeed("sudo-password-fallback /srv/operator/.1password/agent.sock --wrong-password");
+        machine.succeed("sudo-password-fallback /srv/operator/.1password/agent.sock");
+        machine.succeed("test $(stat -c %u /root/sudo-password-fallback) -eq 0");
+        machine.succeed("sudo-password-fallback /missing-agent");
         machine.reboot(); machine.waitForShutdown(); machine.start(); machine.waitForUnit("multi-user.target");
         machine.succeed("runuser -u operator -- op --version; test $(stat -c %U:%G:%a /run/wrappers/bin/op) = root:onepassword-cli:2511");
         machine.succeed("runuser -u operator -- env -u __NIXOS_SET_ENVIRONMENT_DONE SSH_AUTH_SOCK=/wrong-agent bash -lc 'test \"$SSH_AUTH_SOCK\" = /srv/operator/.1password/agent.sock'");

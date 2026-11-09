@@ -52,6 +52,7 @@ in {
         General.AccentColor = settings.desktop.plasma.accentColor;
       };
       kwinrc = {
+        Compositing.AllowTearing = false;
         Xwayland.Scale = primaryScale;
         Windows.Placement = "UnderMouse";
         Wayland = {

@@ -8,7 +8,10 @@ let
       initrd = config.boot.initrd;
       touchHost = config.settings.boot.touchKeyboard;
       usesKeyboard = config.boot.plymouth.enable && (config.boot.plymouth.package.touchKeyboard or false);
-      recoveryTypable = config.system.build.recoverySystem.config.services.buffyboard.enable or false;
+      recovery = config.system.build.recoverySystem.config;
+      recoveryTypable = (recovery.services.buffyboard.enable or false)
+        && lib.elem "uinput" recovery.boot.kernelModules
+        && lib.elem "dev-fb0.device" recovery.systemd.services.buffyboard.after;
       agentWired = lib.elem config.boot.plymouth.package initrd.systemd.packages;
       waitsForDrivers = lib.elem "systemd-modules-load.service"
         (initrd.systemd.services.plymouth-start.after or [ ]);

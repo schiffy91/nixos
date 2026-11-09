@@ -94,14 +94,35 @@ supported; `--microsoft` and publicly shared private keys are excluded.
 uses root-only `nixosctl secure-boot keys` transfers and verifies restoration on
 Fractal North's separate encrypted disk without enrolling or rotating keys.
 
-Preparation verified on 2026-11-07: the Deck has unique keys in `/var/lib/sbctl`,
-with an independently verified backup and restoration on Fractal North under
-`/var/lib/nixos/secureboot-backups/STEAM-DECK-OLED`. A recovery UKI signed by
-those keys is prepared on Fractal at
-`/var/lib/nixos/recovery/STEAM-DECK-OLED/nixos-recovery.efi`; its signature was
-verified, but it has not been booted from a physical recovery USB. The Deck
-remains in Setup Mode with Secure Boot disabled. External recovery and firmware
-enrollment/removal checks remain required before enabling it.
+On 2026-11-08 the Deck was updated to `26.11.20261107.f4a03c0` and booted its
+signed configuration into Gaming Mode. Its source tree now uses `config/hosts/`
+and the current repository layout. Steam, Gamescope and Sunshine were running;
+the live-switch Plymouth failure cleared on reboot, and `mem_sleep` selected
+`deep`. The non-SDC panel skips Valve's SDC-only mura calibration; its helper
+reports that deliberate skip as a failed user service.
+
+The unique keys in `/var/lib/sbctl` still match the independently verified backup
+and restoration copy on Fractal North under
+`/var/lib/nixos/secureboot-backups/STEAM-DECK-OLED`. Required system and recovery
+images passed signature verification after reboot. The updated signed recovery
+UKI on Fractal is
+`/var/lib/nixos/recovery/STEAM-DECK-OLED/nixos-recovery-2026-11-08-keyboard.efi`.
+The Samsung Flash Drive FIT (serial ending `6577`) was prepared as `DECKRESCUE`
+with that image at `EFI/BOOT/BOOTX64.EFI`. Its readback checksum, signature and
+FAT filesystem check passed. After repairing the console keyboard, the Deck
+booted that USB on 2026-11-08. SSH inspection confirmed the USB's partition and
+image checksum, successful LUKS unlock, and all recovery mounts under `/mnt`.
+The installed certificates still match the independent backup. External recovery
+is verified; the Deck remains in Setup Mode with Secure Boot disabled and
+PK/KEK/db absent. Firmware enrollment/removal checks remain pending.
+
+The recovery console and installer use Buffyboard; the installed LUKS prompt
+uses Plymouth's keyboard. Their shared touch-console module loads `uinput`,
+waits for the framebuffer, and redraws the console keyboard when the login shell
+is ready. Without that handoff, login can clear the keyboard's first drawing.
+The `recovery-touch-keyboard` graph test checks the boot screenshot and enters
+mixed-case text, spaces and Enter through a virtual touchscreen into the real
+console. The physical Deck's display and touch alignment still need verification.
 
 `nixosctl secure-boot disable` now uses the current private platform key to
 authenticate PK-only removal, retaining KEK/db and signed boot/recovery images.

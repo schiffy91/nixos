@@ -22,6 +22,7 @@ let
   recoverySystem = lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
     modules = [
+      ./images/touch-console.nix
       "${inputs.nixpkgs}/nixos/modules/profiles/minimal.nix"
       "${inputs.nixpkgs}/nixos/modules/profiles/installation-device.nix"
       "${inputs.nixpkgs}/nixos/modules/installer/netboot/netboot.nix"

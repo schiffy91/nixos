@@ -979,6 +979,11 @@
       }
     },
     {
+      "id": "recovery-touch-keyboard",
+      "spec": "recovery/keyboard/test.json",
+      "after": []
+    },
+    {
       "id": "initrd-touch-unlock",
       "spec": "boot-touch/test.json",
       "after": []
@@ -1255,7 +1260,8 @@
     "immutability-feature-disable",
     "gaming-runtime",
     "sleep-lock-state",
-    "recovery-artifacts"
+    "recovery-artifacts",
+    "recovery-touch-keyboard"
   ],
   "workspaceRoot": ".."
 }

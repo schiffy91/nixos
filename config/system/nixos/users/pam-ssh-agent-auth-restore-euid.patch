@@ -1,0 +1,67 @@
+--- a/authfd.c
++++ b/authfd.c
+@@ -108,17 +108,19 @@
+ 	int sock;
+ 	struct sockaddr_un sunaddr;
+     struct stat sock_st;
++    uid_t saved_euid = geteuid();
++    int connect_result, connect_errno;
+ 
+ 	authsocket = getenv(SSH_AUTHSOCKET_ENV_NAME);
+ 	if (!authsocket)
+ 		return -1;
+ 
+     /* Advisory only; seteuid ensures no race condition; but will only log if we see EACCES */
+-    if( stat(authsocket,&sock_st) == 0) {
+-        if(uid != 0 && sock_st.st_uid != uid) {
+-            pamsshagentauth_fatal("uid %lu attempted to open an agent socket owned by uid %lu", (unsigned long) uid, (unsigned long) sock_st.st_uid);
+-            return -1;
+-        }
++    if (stat(authsocket, &sock_st) < 0)
++        return -1;
++    if (uid != 0 && sock_st.st_uid != uid) {
++        pamsshagentauth_fatal("uid %lu attempted to open an agent socket owned by uid %lu", (unsigned long) uid, (unsigned long) sock_st.st_uid);
++        return -1;
+     }
+ 
+     /* 
+@@ -146,19 +148,29 @@
+     errno = 0; 
+     /* To ensure a race condition is not used to circumvent the stat
+        above, we will temporarily drop UID to the caller */
+-    if (seteuid(uid) < 0)
++    if (seteuid(uid) < 0) {
++        connect_errno = errno;
++        close(sock);
++        errno = connect_errno;
+         return -1;
+-
+-	if (connect(sock, (struct sockaddr *)&sunaddr, sizeof sunaddr) < 0) {
+-		close(sock);
+-        if(errno == EACCES)
++    }
++
++    connect_result = connect(sock, (struct sockaddr *)&sunaddr, sizeof sunaddr);
++    connect_errno = errno;
++
++    /* Restore the caller's credentials even when the agent is unavailable.
++     * Otherwise later PAM modules and sudo continue with the user's euid. */
++    if (seteuid(saved_euid) < 0)
++        pamsshagentauth_fatal("unable to restore effective uid %lu: %s",
++            (unsigned long) saved_euid, strerror(errno));
++
++    if (connect_result < 0) {
++        close(sock);
++        errno = connect_errno;
++        if (errno == EACCES)
+             pamsshagentauth_fatal("MAJOR SECURITY WARNING: uid %lu made a deliberate and malicious attempt to open an agent socket owned by another user", (unsigned long) uid);
+-		return -1;
+-	}
+-
+-    /* we now continue the regularly scheduled programming */
+-    if (seteuid(0) < 0)
+         return -1;
++    }
+ 
+ 	agent_present = 1;
+ 	return sock;

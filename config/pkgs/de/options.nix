@@ -14,7 +14,7 @@ in {
         primary = mkSetting bool false;
       };
     })) [];
-    settings.desktop.cursor.theme = mkSetting str "Breeze";
+    settings.desktop.cursor.theme = mkSetting str "breeze_cursors";
     settings.desktop.cursor.package = mkSetting package pkgs.kdePackages.breeze;
     settings.desktop.cursor.path = mkSetting str "${config.settings.desktop.cursor.package}/share/icons/breeze_cursors";
     settings.desktop.cursor.defaultPackage = mkSetting package (pkgs.runCommandLocal "breeze-cursor-default-theme" { } ''

@@ -3,6 +3,7 @@
 let
   generic = (mkInstaller system [ ]).config;
   prebuilt = (mkInstaller system [ prebuiltHost ]).config;
+  touchInstaller = if touchHost == null then null else (mkInstaller system [ touchHost ]).config;
   repositoryScript = generic.systemd.services.installer-repository.script or "";
   manifestOf = cfg: builtins.fromJSON (builtins.unsafeDiscardStringContext
     cfg.environment.etc."nixos-installer/prebuilt.json".text);
@@ -25,7 +26,9 @@ let
     ++ lib.optional (manifestOf generic != { }) "the generic ISO must advertise no prebuilt system"
     ++ lib.optional (generic.services.buffyboard.enable)
          "the generic ISO draws an on-screen keyboard over a console that does not need one"
-    ++ lib.optional (touchHost != null && !(mkInstaller system [ touchHost ]).config.services.buffyboard.enable)
+    ++ lib.optional (touchHost != null && !(touchInstaller.services.buffyboard.enable
+         && lib.elem "uinput" touchInstaller.boot.kernelModules
+         && lib.elem "dev-fb0.device" touchInstaller.systemd.services.buffyboard.after))
          "${if touchHost == null then "" else hostOutputName touchHost} unlocks by touch but its installer has no on-screen keyboard, so installing needs a USB keyboard";
 in {
   name = "installer-contract";
