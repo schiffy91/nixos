@@ -76,8 +76,12 @@ class SecureBootScenario {
         var recovery = self.recoveryEntry(recoveryGeneration);
         var recoveryPaths = ["/boot/EFI/recovery/nixos-recovery.efi", self.recoveryRoot + "/EFI/recovery/nixos-recovery.efi", f"{self.recoveryRoot}/EFI/BOOT/BOOT{self.architecture.toUpper()}.EFI"];
         for path in recoveryPaths { machine.succeed("install -Dm644 " + ShellWords.quote(recovery.get("path").asString()) + " " + ShellWords.quote(path)); }
+        // Match the real recovery partition: two UKIs and a systemd-boot fallback.
+        machine.succeed(f"cp /boot/EFI/systemd/systemd-boot{self.architecture}.efi " + ShellWords.quote(recoveryPaths.get(2)));
         self.write("/boot/loader/entries/nixos-recovery.conf", "title NixOS Recovery\nsort-key recovery\nefi /EFI/recovery/nixos-recovery.efi\n"); self.configure(true);
         var recoveryHashes = self.hashes(recoveryPaths); self.cli("status");
+        machine.succeed("mv " + ShellWords.quote(recoveryPaths.get(2)) + " /var/lib/temporarily-missing-loader.efi"); self.cli("enable --no-reboot", false); machine.succeed("test ! -e " + self.pk);
+        machine.succeed("mv /var/lib/temporarily-missing-loader.efi " + ShellWords.quote(recoveryPaths.get(2)));
         machine.succeed("mv " + ShellWords.quote(recoveryPaths.get(0)) + " /var/lib/temporarily-missing-recovery.efi"); self.cli("enable --no-reboot", false); machine.succeed("test ! -e " + self.pk);
         machine.succeed("mv /var/lib/temporarily-missing-recovery.efi " + ShellWords.quote(recoveryPaths.get(0))); self.cli("enable --no-reboot"); machine.succeed("test -s " + self.pk);
         Check.equal(self.keyHashes(), originalKeys, "enable preserves keys"); Check.equal(self.hashes(recoveryPaths), recoveryHashes, "enable preserves recovery"); self.reboot("maintenance"); self.firmware(1, 0); self.cli("status");

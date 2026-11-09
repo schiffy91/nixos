@@ -155,8 +155,9 @@ class SecureBootManager {
             }
             if (self.config.evalBool("config.settings.disk.recovery.enable")) {
                 var recovery = self.config.evalString("config.settings.disk.recovery.mountPoint");
-                var arch = self.config.evalString("pkgs.stdenv.hostPlatform.efiArch");
-                for image in [boot + "/EFI/recovery/nixos-recovery.efi", recovery + "/EFI/recovery/nixos-recovery.efi", f"{recovery}/EFI/BOOT/BOOT{arch.toUpper()}.EFI"] {
+                // The fallback is a signed systemd-boot loader, not a UKI with
+                // an embedded init command. verify() checks its signature.
+                for image in [boot + "/EFI/recovery/nixos-recovery.efi", recovery + "/EFI/recovery/nixos-recovery.efi"] {
                     self.requireSafeGeneration(self.imageSystem(image, scratch.path()));
                 }
             }
