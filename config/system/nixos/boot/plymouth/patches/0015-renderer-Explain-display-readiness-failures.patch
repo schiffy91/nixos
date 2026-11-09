@@ -1,0 +1,160 @@
+--- a/src/daemon/plymouthd-devices.c
++++ b/src/daemon/plymouthd-devices.c
+@@ -10,6 +10,7 @@
+ 
+ #include "plymouthd-devices-private.h"
+ 
++#include <syslog.h>
+ #include <stdlib.h>
+ 
+ #include "ply-device-manager.h"
+@@ -324,6 +325,9 @@
+ bool
+ plymouthd_devices_has_safe_displays (plymouthd_devices_t *devices)
+ {
+-        return plymouthd_devices_has_active_vt (devices) &&
+-               ply_device_manager_has_safe_displays (devices->device_manager);
+-}
++        if (!plymouthd_devices_has_active_vt (devices)) {
++                syslog (LOG_WARNING, "Display readiness: Plymouth does not own an active VT");
++                return false;
++        }
++        return ply_device_manager_has_safe_displays (devices->device_manager);
++}
+--- a/src/libply-splash-core/ply-device-manager.c
++++ b/src/libply-splash-core/ply-device-manager.c
+@@ -20,6 +20,7 @@
+ #include "ply-device-manager.h"
+ #include "ply-renderer.h"
+ 
++#include <syslog.h>
+ #include <assert.h>
+ #include <linux/input-event-codes.h>
+ #include <stdbool.h>
+@@ -1497,6 +1498,7 @@
+                 fd = open (cards.gl_pathv[i], O_RDWR | O_CLOEXEC | O_NOFOLLOW);
+                 resources = fd >= 0 ? drmModeGetResources (fd) : NULL;
+                 if (resources == NULL) {
++                        syslog (LOG_WARNING, "Display readiness: cannot query %s: %m", cards.gl_pathv[i]);
+                         safe = false;
+                         if (fd >= 0)
+                                 close (fd);
+@@ -1526,8 +1528,13 @@
+                         continue;
+                 found = true;
+                 renderer = ply_hashtable_lookup (manager->renderers, cards.gl_pathv[i]);
+-                if (renderer == NULL || !ply_renderer_has_safe_displays (renderer))
++                if (renderer == NULL) {
++                        syslog (LOG_WARNING, "Display readiness: no renderer for %s", cards.gl_pathv[i]);
+                         safe = false;
++                } else if (!ply_renderer_has_safe_displays (renderer)) {
++                        syslog (LOG_WARNING, "Display readiness: uncovered output on %s", cards.gl_pathv[i]);
++                        safe = false;
++                }
+         }
+         globfree (&cards);
+         return safe && found;
+--- a/src/libply-splash-core/ply-renderer.c
++++ b/src/libply-splash-core/ply-renderer.c
+@@ -25,6 +25,7 @@
+ #include "ply-renderer.h"
+ #include "ply-renderer-private.h"
+ 
++#include <syslog.h>
+ #include <assert.h>
+ #include <errno.h>
+ #include <stdint.h>
+@@ -558,7 +559,12 @@
+ bool
+ ply_renderer_has_safe_displays (ply_renderer_t *renderer)
+ {
+-        return renderer->is_mapped && renderer->is_active &&
+-               renderer->plugin_interface->has_safe_displays != NULL &&
+-               renderer->plugin_interface->has_safe_displays (renderer->backend);
+-}
++        if (!renderer->is_mapped || !renderer->is_active ||
++            renderer->plugin_interface->has_safe_displays == NULL) {
++                syslog (LOG_WARNING, "Display readiness: renderer mapped=%d active=%d supports-query=%d",
++                           renderer->is_mapped, renderer->is_active,
++                           renderer->plugin_interface->has_safe_displays != NULL);
++                return false;
++        }
++        return renderer->plugin_interface->has_safe_displays (renderer->backend);
++}
+--- a/src/plugins/renderers/drm/plugin.c
++++ b/src/plugins/renderers/drm/plugin.c
+@@ -25,6 +25,7 @@
+  *             Hans de Goede <hdegoede@redhat.com>
+  */
+ 
++#include <syslog.h>
+ #include <arpa/inet.h>
+ #include <assert.h>
+ #include <errno.h>
+@@ -2489,16 +2490,21 @@
+         bool safe = true, found = false;
+         int i;
+ 
+-        if (!backend->is_active || backend->activation_failed || drmIsMaster (backend->device_fd) != 1)
+-                return false;
++        if (!backend->is_active || backend->activation_failed || drmIsMaster (backend->device_fd) != 1) {
++                syslog (LOG_WARNING, "Display readiness: DRM active=%d activation-failed=%d master=%d",
++                           backend->is_active, backend->activation_failed, drmIsMaster (backend->device_fd));
++                return false;
++        }
+         resources = drmModeGetResources (backend->device_fd);
+         if (resources == NULL)
+                 return false;
+         for (node = ply_list_get_first_node (backend->heads); node != NULL;
+              node = ply_list_get_next_node (backend->heads, node)) {
+                 ply_renderer_head_t *head = ply_list_node_get_data (node);
+-                if (head->scan_out_buffer_id == 0)
++                if (head->scan_out_buffer_id == 0) {
++                        syslog (LOG_WARNING, "Display readiness: head has no scanout buffer");
+                         safe = false;
++                }
+         }
+         for (i = 0; i < resources->count_crtcs; i++) {
+                 drmModeCrtc *crtc = drmModeGetCrtc (backend->device_fd, resources->crtcs[i]);
+@@ -2507,8 +2513,11 @@
+                 } else {
+                         uint32_t expected = buffer_for_controller (backend, crtc->crtc_id);
+                         if ((crtc->mode_valid || crtc->buffer_id != 0) &&
+-                            (!crtc->mode_valid || expected == 0 || crtc->buffer_id != expected))
++                            (!crtc->mode_valid || expected == 0 || crtc->buffer_id != expected)) {
++                                syslog (LOG_WARNING, "Display readiness: CRTC %u valid=%d buffer=%u expected=%u",
++                                           crtc->crtc_id, crtc->mode_valid, crtc->buffer_id, expected);
+                                 safe = false;
++                        }
+                         drmModeFreeCrtc (crtc);
+                 }
+         }
+@@ -2523,8 +2532,13 @@
+                                 drmModeGetCrtc (backend->device_fd, encoder->crtc_id) : NULL;
+                         uint32_t expected = crtc != NULL ? buffer_for_controller (backend, crtc->crtc_id) : 0;
+                         found = true;
+-                        if (crtc == NULL || !crtc->mode_valid || expected == 0 || crtc->buffer_id != expected)
++                        if (crtc == NULL || !crtc->mode_valid || expected == 0 || crtc->buffer_id != expected) {
++                                syslog (LOG_WARNING, "Display readiness: connector %u CRTC=%u valid=%d buffer=%u expected=%u",
++                                           connector->connector_id, crtc != NULL ? crtc->crtc_id : 0,
++                                           crtc != NULL ? crtc->mode_valid : 0,
++                                           crtc != NULL ? crtc->buffer_id : 0, expected);
+                                 safe = false;
++                        }
+                         if (crtc != NULL)
+                                 drmModeFreeCrtc (crtc);
+                         if (encoder != NULL)
+@@ -2545,8 +2559,12 @@
+                         safe = false;
+                 } else {
+                         if (plane->fb_id != 0 && (plane->crtc_id == 0 ||
+-                            plane->fb_id != buffer_for_controller (backend, plane->crtc_id)))
++                            plane->fb_id != buffer_for_controller (backend, plane->crtc_id))) {
++                                syslog (LOG_WARNING, "Display readiness: plane %u CRTC=%u buffer=%u expected=%u",
++                                           plane->plane_id, plane->crtc_id, plane->fb_id,
++                                           buffer_for_controller (backend, plane->crtc_id));
+                                 safe = false;
++                        }
+                         drmModeFreePlane (plane);
+                 }
+         }

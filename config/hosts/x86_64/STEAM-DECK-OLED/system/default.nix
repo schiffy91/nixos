@@ -4,7 +4,16 @@ let
   apps = config.settings.apps;
   steamEnabled = apps.gaming.steam.enable;
 in {
-  imports = [ inputs.jovian.nixosModules.default ./session.nix ./touch-keyboard.nix ];
+  imports = [
+    inputs.jovian.nixosModules.default ./session.nix ./touch-keyboard.nix
+    {
+      # Keep Jovian's other tuning, but let Linux initialize the firmware IOMMU.
+      # Firmware must expose IVRS; removing this flag alone cannot enable it.
+      options.boot.kernelParams = lib.mkOption {
+        apply = lib.filter (parameter: parameter != "amd_iommu=off");
+      };
+    }
+  ];
 
   # The Deck's horizontal UEFI console is mode 5. "max" selects the
   # highest-numbered firmware mode, not necessarily the highest resolution.
@@ -43,7 +52,7 @@ in {
     sleep = {
       # The Valve kernel explicitly rejects s2idle on Jupiter/Galileo.
       suspendMode = "deep";
-      hibernateOnSuspend = true;
+      hibernateOnSuspend = false;
       lockGamingSession = steamEnabled;
     };
     disk = {

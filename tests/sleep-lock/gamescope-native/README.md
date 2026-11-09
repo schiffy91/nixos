@@ -158,3 +158,23 @@ Every run's QEMU, driver, timeout, and virtual network child exited, and its
 private scratch was removed. The passing control and non-PM lock completed
 cleanup at 35.08 and 57.25 seconds respectively. No test or build is left
 running by this fixture work.
+
+## Deck color-state handoff (2026-11-08)
+
+The physical Deck exposed a gap not covered by virtio's color properties:
+Gamescope's AMD plane degamma survives scanout disable, while Plymouth's legacy
+CRTC gamma enables another degamma stage. AMDGPU rejected the new modeset with
+`EINVAL` and `doesn't support plane and CRTC degamma at the same time`.
+Resetting rotation alone reproduced the failure; clearing plane degamma and
+CRTC regamma made readiness pass, and the owner verified touch-password unlock
+back to Gaming Mode without rebooting.
+
+The helper now resets supported color/HDR and rotation properties atomically
+only after confirming all scanout is blank, then verifies their readback. The
+helper/state graph node passed (`f1ceb9cb0cd7`), as did the complete native lock
+regressions with Sunshine (`bdec80faf846`) and without it (`c6e197b3de33`).
+Both retained password rejection, touch input, controller-recovery and original
+compositor/client restoration checks. These VM runs validate the shared lock
+lifecycle; virtio does not reproduce the Deck's AMD-specific color properties.
+Physical deployment and deep-suspend acceptance are still pending SSH-agent
+authentication. The earlier real-s2idle VM limitations remain unchanged.

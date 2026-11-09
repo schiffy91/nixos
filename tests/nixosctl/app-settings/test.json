@@ -152,19 +152,24 @@
       "expect": "mem_sleep_default=deep"
     },
     {
+      "op": "host",
+      "command": "for method in Standard-Boot Secure-Boot; do nix eval --json \"git+file://$PWD#nixosConfigurations.STEAM-DECK-OLED-${method}.config\" --apply 'config: assert !(builtins.elem \"amd_iommu=off\" config.boot.kernelParams); assert builtins.all (p: builtins.elem p config.boot.kernelParams) [ \"amdgpu.lockup_timeout=5000,10000,10000,5000\" \"ttm.pages_min=2097152\" \"log_buf_len=4M\" \"audit=0\" \"spi_amd.speed_dev=1\" \"mem_sleep_default=deep\" ]; assert !(config.systemd.services.systemd-suspend.serviceConfig ? ExecStart); true' || exit; done",
+      "expect": "true"
+    },
+    {
       "op": "nix-eval",
       "command": "nixosConfigurations.FRACTAL-NORTH-Standard-Boot.config.boot.kernelParams",
       "expect": "mem_sleep_default=s2idle"
     },
     {
       "op": "nix-eval",
-      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.systemd.services.systemd-suspend.serviceConfig.ExecStart",
-      "expect": "systemd-sleep hibernate"
+      "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.settings.sleep.hibernateOnSuspend",
+      "expect": "false"
     },
     {
       "op": "nix-eval",
       "command": "nixosConfigurations.STEAM-DECK-OLED-Standard-Boot.config.systemd.sleep.settings.Sleep.AllowHibernation",
-      "expect": "\"yes\""
+      "expect": "\"no\""
     },
     {
       "op": "nix-eval",

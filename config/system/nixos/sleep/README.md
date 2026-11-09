@@ -33,8 +33,11 @@ capture programs or manually launched binaries.
 
 These hooks cover suspend, hibernate, hybrid sleep and suspend-then-hibernate.
 They do not add a Steam menu/manual or Gaming Mode idle-lock action. Steam's own
-PIN lock is separate. The Deck's existing `hibernateOnSuspend` setting is retained;
-hibernation can therefore require boot LUKS unlock followed by this account prompt.
+PIN lock is separate. The Deck selects ordinary deep suspend rather than
+redirecting suspend to hibernation. Its 2026-11-08 display-readiness failure was
+traced to AMD plane degamma conflicting with Plymouth's legacy CRTC gamma.
+The display-state reset below fixes that handoff; physical sleep/wake acceptance
+still requires deployment and a real suspend test.
 
 Direct Gamescope VM tests use the real compositor, DRM, Xwayland and kernel input,
 with an interactive terminal standing in for the signed-in Steam application.
@@ -46,9 +49,12 @@ Real Steam controller/UI behavior, OLED touch rotation and real hardware suspend
 still need physical validation. The existing native-context VM GPU loses state
 on real suspend even in its unlocked control; no new passing suspend claim is made.
 
-The host configuration enables the Gaming policy on the next deployment. It has
-not been activated or accepted on the physical Deck by this change. Native
-Plasma automatic locking is also enabled in the Deck's account configuration.
+The Gaming policy is deployed on the physical Deck. The owner verified touch
+password authentication and return to Gaming Mode after the conflicting AMD
+color settings were manually reset. The automatic reset has passed the native
+Gamescope VM regressions; its physical deployment and real suspend test remain
+pending authentication. Readiness failures are logged through syslog without
+tracing password input. Native Plasma automatic locking is also enabled.
 
 ## Controller boundary
 
@@ -66,6 +72,14 @@ JSON is only its persistence format. The controller uses standard-library
 filesystem leases, process execution and timers. `LockedConsole` and
 `DisplayCard` own the native resources; closing either never authorizes unlock.
 The remaining native boundary is VT ioctls, DRM blank/readback and PAM.
+
+After every CRTC and plane is confirmed blank, `DisplayCard` resets supported
+color/HDR and rotation properties in a single atomic commit and verifies their
+values. Disabling scanout alone leaves these properties behind: on the Deck,
+Gamescope's AMD plane degamma conflicts with Plymouth's legacy gamma setup and
+causes the driver to reject its modeset. Unknown and immutable properties are
+left alone. This reset never restores the game's framebuffer or authorizes an
+unlock; Gamescope restores its own output after authenticated VT release.
 
 `PasswordResponse` owns a fixed standard-library buffer that is wiped on close.
 `PamResponses` owns native responses until PAM accepts them. The password is

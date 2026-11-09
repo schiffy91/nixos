@@ -18,9 +18,22 @@ absent option needs investigation rather than an assumed hidden-menu procedure.
 
 The firmware change alone is insufficient: our pinned
 [Jovian SteamOS defaults](https://github.com/Jovian-Experiments/Jovian-NixOS/blob/6d21db8ad755a73cc5df076e80fa80b714f555a6/modules/steamos/boot.nix)
-also pass `amd_iommu=off`. A subsequent NixOS change must remove that flag while
-preserving the other Deck defaults. Merely appending a contradictory flag is
-not a reliable fix.
+also pass `amd_iommu=off`. The host module now filters that flag from the merged
+kernel parameters while preserving the other Deck defaults. This change needs
+a new boot; the running generation checked on 2026-11-08 still had the flag,
+no IVRS table and no IOMMU groups. It has not yet been validated on hardware.
+
+A first-hand [report in Valve's tracker](https://github.com/ValveSoftware/SteamOS/issues/2077)
+shows IOMMU enabled alongside Secure Boot. It does not identify LCD versus OLED
+or provide a NixOS configuration, so it establishes a working Deck report rather
+than proof for this firmware/kernel combination.
+
+There are also [Steam Deck enablement scripts](https://github.com/Smalls1652/steamdeck-iommu-fix)
+and [owner configuration notes](https://github.com/lwbt/docs-steamdeck-notes/blob/main/FAQ.adoc#can-i-enable-iommu).
+The script repository was last pushed in October 2022, before OLED. Its author
+requires both a kernel-command-line change and the firmware IOMMU setting.
+Those examples also select `iommu=pt`; this host does not copy that choice,
+because [passthrough bypasses DMA translation](https://docs.kernel.org/admin-guide/kernel-parameters.html).
 
 After firmware setup and a boot without that flag, check that `IVRS` exists,
 Linux creates IOMMU groups, and the kernel reports translated DMA domains.

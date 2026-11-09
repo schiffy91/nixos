@@ -1,4 +1,5 @@
 import Library.Console;
+import Library.Strings;
 import ./Posix.btrc;
 
 // Own DRM master and its enumerations only while clearing this card. Nothing
@@ -37,6 +38,63 @@ class DisplayCard {
         return cleared && blank;
     }
 
+    // Plymouth uses legacy CRTC gamma. Gamescope's AMD per-plane degamma
+    // survives disabling scanout and conflicts with it (atomic check: EINVAL).
+    // Reset only display transforms, after every scanout has been concealed.
+    class long long neutralValue(string name) {
+        if (name.equals("rotation")) { return (long long)DRM_MODE_ROTATE_0; }
+        if (name.equals("AMD_PLANE_HDR_MULT")) { return 4294967296LL; }
+        if (["DEGAMMA_LUT", "CTM", "GAMMA_LUT", "HDR_OUTPUT_METADATA", "Colorspace",
+             "AMD_CRTC_REGAMMA_TF", "AMD_PLANE_DEGAMMA_LUT", "AMD_PLANE_DEGAMMA_TF",
+             "AMD_PLANE_CTM", "AMD_PLANE_SHAPER_LUT", "AMD_PLANE_SHAPER_TF",
+             "AMD_PLANE_LUT3D", "AMD_PLANE_BLEND_LUT", "AMD_PLANE_BLEND_TF"].contains(name)) { return 0; }
+        return -1;
+    }
+
+    private bool neutralProperties(uint32_t object, uint32_t type, drmModeAtomicReq* request) {
+        var properties = drmModeObjectGetProperties(self.descriptor, object, type);
+        if (properties == NULL) { return false; }
+        bool safe = true;
+        for (uint32_t index = 0; index < properties->count_props; index++) {
+            var property = drmModeGetProperty(self.descriptor, properties->props[index]);
+            if (property == NULL) { safe = false; continue; }
+            long long value = DisplayCard.neutralValue(Strings.copy(property->name));
+            if (value >= 0 && (property->flags & DRM_MODE_PROP_IMMUTABLE) == 0
+                && properties->prop_values[index] != (uint64_t)value) {
+                if (request == NULL || drmModeAtomicAddProperty(request, object, property->prop_id, (uint64_t)value) < 0) { safe = false; }
+            }
+            drmModeFreeProperty(property);
+        }
+        drmModeFreeObjectProperties(properties);
+        return safe;
+    }
+
+    private bool neutralTransforms(drmModeAtomicReq* request) {
+        bool safe = true;
+        for (int index = 0; index < self.resources->count_crtcs; index++) {
+            if (!self.neutralProperties(self.resources->crtcs[index], DRM_MODE_OBJECT_CRTC, request)) { safe = false; }
+        }
+        for (uint32_t index = 0; index < self.planes->count_planes; index++) {
+            if (!self.neutralProperties(self.planes->planes[index], DRM_MODE_OBJECT_PLANE, request)) { safe = false; }
+        }
+        for (int index = 0; index < self.resources->count_connectors; index++) {
+            if (!self.neutralProperties(self.resources->connectors[index], DRM_MODE_OBJECT_CONNECTOR, request)) { safe = false; }
+        }
+        return safe;
+    }
+
+    private bool resetTransforms() {
+        if (drmSetClientCap(self.descriptor, DRM_CLIENT_CAP_ATOMIC, 1) != 0) { return false; }
+        var request = drmModeAtomicAlloc();
+        if (request == NULL) { return false; }
+        bool safe = self.neutralTransforms(request);
+        if (safe && drmModeAtomicGetCursor(request) > 0) {
+            safe = drmModeAtomicCommit(self.descriptor, request, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL) == 0;
+        }
+        drmModeAtomicFree(request);
+        return safe && self.neutralTransforms(NULL);
+    }
+
     public bool blank() {
         if (self.descriptor < 0) { return false; }
         self.resources = drmModeGetResources(self.descriptor);
@@ -55,7 +113,7 @@ class DisplayCard {
         for (uint32_t index = 0; index < self.planes->count_planes; index++) {
             if (!self.clearPlane(self.planes->planes[index])) { safe = false; }
         }
-        return safe;
+        return safe && self.resetTransforms();
     }
 
     public bool close() {

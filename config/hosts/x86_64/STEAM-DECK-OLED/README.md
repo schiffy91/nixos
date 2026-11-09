@@ -182,12 +182,30 @@ preserving its requested height so the bottom row stays visible.
 
 ## Sleep and firmware
 
-Steam and Plasma ask logind to suspend, and `settings.sleep.hibernateOnSuspend`
-turns that into hibernation. With the current Deck configuration, a successful
-hibernation resume asks for the LUKS passphrase; an aborted request still needs
-a session lock. Valve [disabled Deck hibernation in the SteamOS 3.9.4 beta](https://steamcommunity.com/ogg/1675200/announcements/detail/694275728822242440)
-(October 2026), citing driver bugs. Switching `settings.sleep.hibernateOnSuspend`
-to `false` uses ordinary suspend and requires a working password lock first.
+Steam and Plasma ask logind to suspend. The Deck now sets
+`settings.sleep.hibernateOnSuspend = false` for ordinary suspend-to-RAM.
+Valve [disabled Deck hibernation in the SteamOS 3.9.4 beta](https://steamcommunity.com/ogg/1675200/announcements/detail/694275728822242440)
+(October 2026), citing driver bugs. A working session password lock is required
+before this policy can be accepted on the physical device.
+
+The 2026-11-08 failed Power-button attempt never entered a sleep backend:
+Plymouth's display-readiness check failed, the controller restarted repeatedly,
+and suspend preparation timed out. Kernel DRM tracing identified the cause:
+Gamescope's AMD plane degamma survived blanking and conflicted with Plymouth's
+legacy CRTC gamma setup. The driver rejected the modeset with `EINVAL` and
+`doesn't support plane and CRTC degamma at the same time`. Resetting rotation
+alone did not fix it. Clearing the plane degamma and CRTC regamma settings let
+Plymouth light the display; the owner then unlocked with the touchscreen
+keyboard and returned to Gaming Mode without rebooting.
+
+The blank helper now resets the supported color/HDR and rotation transforms in
+one atomic commit after concealing all scanout, then verifies the properties by
+readback. It preserves the console lock if a reset fails. Readiness diagnostics
+use syslog because Plymouth redirects standard error to `/dev/null`; general
+keyboard tracing remains disabled. The helper tests and direct Gamescope lock
+tests with and without Sunshine passed. The final system built successfully,
+but deployment and actual deep-suspend/wake acceptance are pending SSH-agent
+authentication; the manual display recovery is not a physical suspend test.
 
 The Deck selects `settings.sleep.suspendMode = "deep"`. The pinned Valve
 kernel [explicitly rejects s2idle on Jupiter/Galileo](https://github.com/Jovian-Experiments/linux/blob/7.2.10-valve1/kernel/power/suspend.c),
@@ -195,7 +213,7 @@ even when a forced `mem_sleep_default=s2idle` makes it appear selected in sysfs.
 Other hosts retain their s2idle default. This corrects the suspend selection;
 it does not establish reliable deep suspend on the physical Deck. Keep the
 known-booted fallback and verify wake, input, graphics, audio and networking
-before changing the daily hibernation policy.
+before accepting the new suspend policy.
 
 Read-only journal inspection on 2026-11-07 confirmed both successful physical
 hibernation/resume and prior failures: a freezer abort, and image writes aborted
