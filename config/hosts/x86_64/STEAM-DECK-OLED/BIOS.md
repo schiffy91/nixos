@@ -37,7 +37,7 @@ of the [F7G0114 firmware-menu modification](https://www.stanto.com/steam-deck/un
 documents that Valve hides that menu. Flashing a modified BIOS is not part of
 this configuration.
 
-The Deck is already in Setup Mode. The applicable route is signing the NixOS
+The Deck was in Setup Mode during preparation. The applicable route is signing the NixOS
 boot images with this device's own keys and deliberately enrolling those keys
 from Linux. The [DeckSecureBoot author's implementation notes](https://github.com/HiSkyZen/DeckSecureBoot#how-this-works)
 describe enrollment activating enforcement without a BIOS switch. That project
@@ -48,3 +48,6 @@ the independent key backup and signed external recovery boot were verified on
 2026-11-08, including unlocking and mounting the installed SSD from the USB.
 Keep automatic enrollment off and use the explicit enrollment/removal commands. Neither a
 BIOS reset nor a firmware update has been verified to clear enrolled keys here.
+
+The explicit enrollment command successfully installed this Deck's own db, KEK
+and PK on 2026-11-08. Post-reboot enforcement verification is pending.

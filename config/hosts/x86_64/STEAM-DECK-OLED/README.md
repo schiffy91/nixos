@@ -113,8 +113,11 @@ FAT filesystem check passed. After repairing the console keyboard, the Deck
 booted that USB on 2026-11-08. SSH inspection confirmed the USB's partition and
 image checksum, successful LUKS unlock, and all recovery mounts under `/mnt`.
 The installed certificates still match the independent backup. External recovery
-is verified; the Deck remains in Setup Mode with Secure Boot disabled and
-PK/KEK/db absent. Firmware enrollment/removal checks remain pending.
+is verified. On 2026-11-08, `nixosctl secure-boot enable --no-reboot` installed
+the updated signed generation and successfully enrolled this Deck's own db,
+KEK and PK. The Deck was restarted; post-boot enforcement verification is
+pending disk unlock and reconnection. Physical firmware key removal has not
+been exercised.
 
 The recovery console and installer use Buffyboard; the installed LUKS prompt
 uses Plymouth's keyboard. Their shared touch-console module loads `uinput`,
