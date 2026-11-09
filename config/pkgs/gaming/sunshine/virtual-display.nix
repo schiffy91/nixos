@@ -45,11 +45,6 @@ in lib.mkIf enabled {
   services.sunshine = {
     settings.output_name = virtualOutput;
     applications = {
-      env.PATH = lib.makeBinPath (with pkgs; [
-        coreutils
-        steam
-        util-linux
-      ]);
       apps = [
         {
           name = "Desktop";
