@@ -178,8 +178,16 @@ compositor/client restoration checks. These VM runs validate the shared lock
 lifecycle; virtio does not reproduce the Deck's AMD-specific color properties.
 The new helper was then deployed to the physical Deck and automatically
 recovered another held lock with safe-display readiness, preserving the
-Gamescope process. A real suspend test armed RTC wake for 60 seconds, but the
-Deck did not reconnect over Wi-Fi after the alarm deadline. Physical resume
-acceptance remains unresolved pending local observation and the persistent
-logs under `/var/log/nixos-deck-sleep-fix/`. The earlier real-s2idle VM
+Gamescope process. Two physical deep-suspend cycles subsequently passed:
+Power-button wake followed by the owner's touchscreen password unlock, and
+a 60-second RTC wake with the boot ID and Gamescope PID unchanged, Wi-Fi
+restored, and the password display ready. Kernel suspend counters reported
+two successes and zero failures; no system units were failed.
+
+The initial RTC harness cancelled its alarm prematurely because
+`systemctl suspend` returns after queueing the operation. The corrected test
+waited for the kernel success counter to advance and the service to finish
+before cancelling the alarm. Persistent evidence is under
+`/var/log/nixos-deck-sleep-fix/`. Audible playback, extended gameplay and the
+new IOMMU boot configuration were not exercised. The earlier real-s2idle VM
 limitations remain unchanged.

@@ -209,22 +209,31 @@ tests with and without Sunshine passed. The final system was installed on
 process remained alive. Secure Boot ownership and system/recovery signatures
 were verified again after activation.
 
-A real suspend test then armed RTC wake for 60 seconds and requested ordinary
-suspend. The Deck became unreachable over Wi-Fi and did not reconnect after
-the alarm deadline. Resume is not yet verified: without the device's local
-screen or post-test journal, this cannot distinguish a wake failure from a
-network-resume failure. The test's persistent evidence is under
-`/var/log/nixos-deck-sleep-fix/`; inspect it when access returns before choosing
-another driver or firmware change. The display recovery is verified, but the
-complete physical sleep/wake path has not passed.
+Two physical deep-suspend cycles then completed. In the first, a short Power
+press woke the Deck and the owner unlocked back to the original Gaming Mode
+session. The initial test script mistakenly cancelled its RTC alarm immediately
+after `systemctl suspend` returned: that command queues sleep asynchronously.
+The missing automatic wake was a test error, not evidence of a firmware or
+Wi-Fi failure.
+
+The corrected test waited for the kernel suspend-success counter to advance
+and the suspend service to finish before cancelling the alarm. The Deck entered
+deep sleep at 23:58:57 on 2026-11-08 and resumed automatically at 23:59:57.
+Wi-Fi returned, the password display became ready, and the boot ID and Gamescope
+PID were unchanged. The kernel reported two successful suspends and zero
+failures; no system units were failed. The second cycle left the session locked
+for the owner. Both ALSA sound cards remained present; audible playback and
+extended gameplay after resume were not tested. Persistent logs are under
+`/var/log/nixos-deck-sleep-fix/`.
 
 The Deck selects `settings.sleep.suspendMode = "deep"`. The pinned Valve
 kernel [explicitly rejects s2idle on Jupiter/Galileo](https://github.com/Jovian-Experiments/linux/blob/7.2.10-valve1/kernel/power/suspend.c),
 even when a forced `mem_sleep_default=s2idle` makes it appear selected in sysfs.
-Other hosts retain their s2idle default. This corrects the suspend selection;
-it does not establish reliable deep suspend on the physical Deck. Keep the
-known-booted fallback and verify wake, input, graphics, audio and networking
-before accepting the new suspend policy.
+Other hosts retain their s2idle default. The physical checks above establish
+Power-button wake, touch-password unlock and automatic wake on this boot;
+they do not establish long-term reliability or every peripheral's behavior.
+The running kernel still has the old IOMMU command line. Repeat hardware
+acceptance after enabling IOMMU in firmware and booting the new command line.
 
 Read-only journal inspection on 2026-11-07 confirmed both successful physical
 hibernation/resume and prior failures: a freezer abort, and image writes aborted
