@@ -176,5 +176,10 @@ regressions with Sunshine (`bdec80faf846`) and without it (`c6e197b3de33`).
 Both retained password rejection, touch input, controller-recovery and original
 compositor/client restoration checks. These VM runs validate the shared lock
 lifecycle; virtio does not reproduce the Deck's AMD-specific color properties.
-Physical deployment and deep-suspend acceptance are still pending SSH-agent
-authentication. The earlier real-s2idle VM limitations remain unchanged.
+The new helper was then deployed to the physical Deck and automatically
+recovered another held lock with safe-display readiness, preserving the
+Gamescope process. A real suspend test armed RTC wake for 60 seconds, but the
+Deck did not reconnect over Wi-Fi after the alarm deadline. Physical resume
+acceptance remains unresolved pending local observation and the persistent
+logs under `/var/log/nixos-deck-sleep-fix/`. The earlier real-s2idle VM
+limitations remain unchanged.

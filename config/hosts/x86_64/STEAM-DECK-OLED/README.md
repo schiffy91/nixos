@@ -203,9 +203,20 @@ one atomic commit after concealing all scanout, then verifies the properties by
 readback. It preserves the console lock if a reset fails. Readiness diagnostics
 use syslog because Plymouth redirects standard error to `/dev/null`; general
 keyboard tracing remains disabled. The helper tests and direct Gamescope lock
-tests with and without Sunshine passed. The final system built successfully,
-but deployment and actual deep-suspend/wake acceptance are pending SSH-agent
-authentication; the manual display recovery is not a physical suspend test.
+tests with and without Sunshine passed. The final system was installed on
+2026-11-08. Its new controller recovered another held lock automatically:
+`ready=true`, safe-display verification passed, and the original Gamescope
+process remained alive. Secure Boot ownership and system/recovery signatures
+were verified again after activation.
+
+A real suspend test then armed RTC wake for 60 seconds and requested ordinary
+suspend. The Deck became unreachable over Wi-Fi and did not reconnect after
+the alarm deadline. Resume is not yet verified: without the device's local
+screen or post-test journal, this cannot distinguish a wake failure from a
+network-resume failure. The test's persistent evidence is under
+`/var/log/nixos-deck-sleep-fix/`; inspect it when access returns before choosing
+another driver or firmware change. The display recovery is verified, but the
+complete physical sleep/wake path has not passed.
 
 The Deck selects `settings.sleep.suspendMode = "deep"`. The pinned Valve
 kernel [explicitly rejects s2idle on Jupiter/Galileo](https://github.com/Jovian-Experiments/linux/blob/7.2.10-valve1/kernel/power/suspend.c),

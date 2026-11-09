@@ -36,8 +36,8 @@ They do not add a Steam menu/manual or Gaming Mode idle-lock action. Steam's own
 PIN lock is separate. The Deck selects ordinary deep suspend rather than
 redirecting suspend to hibernation. Its 2026-11-08 display-readiness failure was
 traced to AMD plane degamma conflicting with Plymouth's legacy CRTC gamma.
-The display-state reset below fixes that handoff; physical sleep/wake acceptance
-still requires deployment and a real suspend test.
+The display-state reset below fixes that handoff. It is deployed and recovered
+the physical Deck's held lock; full sleep/wake acceptance remains unresolved.
 
 Direct Gamescope VM tests use the real compositor, DRM, Xwayland and kernel input,
 with an interactive terminal standing in for the signed-in Steam application.
@@ -52,9 +52,13 @@ on real suspend even in its unlocked control; no new passing suspend claim is ma
 The Gaming policy is deployed on the physical Deck. The owner verified touch
 password authentication and return to Gaming Mode after the conflicting AMD
 color settings were manually reset. The automatic reset has passed the native
-Gamescope VM regressions; its physical deployment and real suspend test remain
-pending authentication. Readiness failures are logged through syslog without
-tracing password input. Native Plasma automatic locking is also enabled.
+Gamescope VM regressions and recovered a held lock on the physical Deck after
+activation. A subsequent real suspend test armed a 60-second RTC wake alarm,
+but Wi-Fi did not return after the deadline. Local screen inspection and the
+persistent test log are still needed to distinguish wake failure from network
+failure; this is not a passing physical suspend result. Readiness failures are
+logged through syslog without tracing password input. Native Plasma automatic
+locking is also enabled.
 
 ## Controller boundary
 
