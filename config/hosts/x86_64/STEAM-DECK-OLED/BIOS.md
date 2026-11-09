@@ -50,4 +50,6 @@ Keep automatic enrollment off and use the explicit enrollment/removal commands. 
 BIOS reset nor a firmware update has been verified to clear enrolled keys here.
 
 The explicit enrollment command successfully installed this Deck's own db, KEK
-and PK on 2026-11-08. Post-reboot enforcement verification is pending.
+and PK on 2026-11-08. After reboot, `SecureBoot=1`, `SetupMode=0`, and the kernel
+reported `Secure boot enabled`. The signed installed generation reached Gaming
+Mode; `nixosctl secure-boot status` verified key ownership and boot signatures.

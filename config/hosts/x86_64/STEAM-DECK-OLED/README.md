@@ -115,9 +115,11 @@ image checksum, successful LUKS unlock, and all recovery mounts under `/mnt`.
 The installed certificates still match the independent backup. External recovery
 is verified. On 2026-11-08, `nixosctl secure-boot enable --no-reboot` installed
 the updated signed generation and successfully enrolled this Deck's own db,
-KEK and PK. The Deck was restarted; post-boot enforcement verification is
-pending disk unlock and reconnection. Physical firmware key removal has not
-been exercised.
+KEK and PK. After reboot, firmware reported `SecureBoot=1` and `SetupMode=0`,
+the kernel logged `Secure boot enabled`, and `nixosctl secure-boot status`
+confirmed ownership of all three firmware databases and valid system/recovery
+signatures. The updated generation reached Gaming Mode with no failed system
+services. Physical firmware key removal has not been exercised.
 
 The recovery console and installer use Buffyboard; the installed LUKS prompt
 uses Plymouth's keyboard. Their shared touch-console module loads `uinput`,
