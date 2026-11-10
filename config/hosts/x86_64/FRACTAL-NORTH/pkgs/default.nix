@@ -11,7 +11,10 @@
     ];
     utils.desktop.enable = true;
     dev.lmstudio.enable = true;
-    utils.chrome.renderNode = "/dev/dri/by-path/pci-${host.pci.nvidiaGpu}-render";
+    utils.chrome.flags = [
+      "--enable-features=VaapiOnNvidiaGPUs,WaylandWindowDecorations"  # NVDEC decode; restates the wrapper's feature
+      "--disable-features=WaylandWpColorManagerV1"  # Chrome blows out HDR video here
+    ];
     gaming.steam.extraEnv = host.nvidiaOffloadEnv;
     gaming.sunshine = {
       capture = "kwin";
