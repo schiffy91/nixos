@@ -1,0 +1,15 @@
+--- a/src/nvidia-modeset/src/nvkms-evo.c	2026-11-10 09:11:37.431745239 -0800
++++ b/src/nvidia-modeset/src/nvkms-evo.c	2026-11-10 09:11:37.444645006 -0800
+@@ -9846,6 +9846,12 @@
+         return FALSE;
+     }
+ 
++    /* A single head cannot DSC-encode a picture wider than 5120, while
++     * 2Heads1OR can; without it such a mode silently loses DSC. */
++    if (nvDPDpyIsDscPossible(pDpyEvo) && (nvEvoVisibleWidth(pTimings) > 5120)) {
++        return TRUE;
++    }
++
+     /* Use 2Heads1OR mode only if the required pixel clock is greater than the
+      * maximum pixel clock support by a head. */
+     return (pTimings->pixelClock > pHeadCaps->maxPClkKHz);

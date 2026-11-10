@@ -16,7 +16,11 @@
     nvidia = {
       open = true;
       modesetting.enable = true;
-      package = config.boot.kernelPackages.nvidiaPackages.latest;
+      package = let latest = config.boot.kernelPackages.nvidiaPackages.latest; in latest // {
+        open = latest.open.overrideAttrs (old: {
+          patches = (old.patches or []) ++ [ ./nvidia-dsc-wide-modes-use-two-heads.patch ];  # XDR 6K needs DSC on two heads
+        });
+      };
       nvidiaSettings = true;
       powerManagement.enable = true;
       prime = {

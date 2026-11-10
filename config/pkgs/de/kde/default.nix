@@ -16,13 +16,6 @@ in {
       };
     }
     (lib.mkIf config.settings.desktop.enable {
-      nixpkgs.overlays = [ (_final: prev: {
-        kdePackages = prev.kdePackages.overrideScope (_kdeFinal: kdePrev: {
-          kwin = kdePrev.kwin.overrideAttrs (old: {
-            patches = (old.patches or []) ++ [ ./kwin-retry-without-wide-gamut.patch ];  # XDR at 6K on the 4090
-          });
-        });
-      }) ];
       hardware.graphics.enable = true;
       programs.dconf.enable = true;
       programs.kde-pim.enable = false;
