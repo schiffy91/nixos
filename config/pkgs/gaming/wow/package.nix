@@ -11,7 +11,7 @@
     wrapProgram "$out/bin/wow-addons-lock" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.curl pkgs.nix pkgs.git pkgs.coreutils ]}
     ${pkgs.lib.optionalString (settings != null) ''
       wrapProgram "$out/bin/wow-addons-install" --add-flags ${pkgs.lib.escapeShellArg (toString settings)}
-      wrapProgram "$out/bin/wow-settings" --add-flags ${pkgs.lib.escapeShellArg (toString settings)}
+      wrapProgram "$out/bin/wow-settings" --append-flags ${pkgs.lib.escapeShellArg (toString settings)}
     ''}
   '';
 }
