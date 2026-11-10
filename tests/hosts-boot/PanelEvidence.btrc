@@ -39,7 +39,7 @@ class PanelEvidence {
             if (self.black > 0.5) { throw "FAIL: unl0kr is not drawing its keyboard"; }
         } else if (agent.equals("plymouth") || agent.equals("console-silent")) {
             if (agent.equals("plymouth") && self.black < 0.5) { throw "FAIL: panel is not plymouth's dark splash"; }
-            if (self.bright > 0.02) { throw "FAIL: panel top band contains bright console text"; }
+            if (self.black > 0.5 && self.bright > 0.02) { throw "FAIL: panel top band contains bright console text"; }  // a drawn session is not a console
         } else { throw f"No panel expectation defined for {agent}"; }
     }
 

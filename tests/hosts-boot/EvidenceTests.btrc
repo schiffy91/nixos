@@ -17,6 +17,12 @@ int main() {
         rejected = false;
         try { PanelEvidence(noisy).verify("console-silent"); } catch (string error) { rejected = true; }
         Check.that(rejected, "bright console band fails");
+        var session = Image(100, 100);
+        session.fill(RGBA(60, 90, 160));
+        PanelEvidence(session).verify("console-silent");
+        rejected = false;
+        try { PanelEvidence(session).verify("plymouth"); } catch (string error) { rejected = true; }
+        Check.that(rejected, "a drawn session is not the splash");
         var typed = dark.crop(0, 0, 100, 100);
         typed.fillRect(0, 60, 40, 1, RGBA(13, 0, 0));
         PanelEvidence.responds(dark, typed, "fixture");
