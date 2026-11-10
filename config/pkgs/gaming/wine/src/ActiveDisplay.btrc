@@ -1,0 +1,23 @@
+import Library.JSON;
+import Library.Process;
+
+class ActiveDisplay {
+    class int dpi(string inventory, int declared) {
+        var outputs = JSONValue.parse(inventory).get("outputs");
+        if (!outputs.isArray()) { return declared; }
+        var first = 0;
+        var scale = 0.0;
+        for output in outputs.elements() {
+            var priority = output.get("priority");
+            if (!output.get("enabled").asBool() || !priority.isInt() || priority.asInt() < 1 || !output.get("scale").isNumber()) { continue; }
+            if (first == 0 || priority.asInt() < first) { first = priority.asInt(); scale = output.get("scale").asFloat(); }
+        }
+        var live = (int)(96.0 * scale + 0.5);
+        return first == 0 || live < 48 || live > 768 ? declared : live;
+    }
+
+    class int current(int declared) {
+        var doctor = ChildProcess.run("kscreen-doctor", ["--json"], environment=["QT_QPA_PLATFORM=wayland"], timeoutMilliseconds=3000);
+        return doctor.ok() ? ActiveDisplay.dpi(doctor.stdout(), declared) : declared;  // no Plasma session: keep the declared value
+    }
+}

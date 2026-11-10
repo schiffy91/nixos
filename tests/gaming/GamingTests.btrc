@@ -8,6 +8,7 @@ import Library.Platform;
 import Library.Process;
 import ../../config/pkgs/gaming/steam/src/SteamConfiguration.btrc;
 import ../../config/pkgs/gaming/steam/src/SteamShortcuts.btrc;
+import ../../config/pkgs/gaming/wine/src/ActiveDisplay.btrc;
 import ../../config/pkgs/gaming/wine/src/WinePrefix.btrc;
 import assetto.Assetto;
 import assetto.GameSettings;
@@ -298,7 +299,16 @@ class GamingTests {
         var result = shell.run(f"WINEPREFIX={ShellWords.quote(prefix)} {ShellWords.quote(self.tools)}/wine-prefix-dpi exec --dpi 192 -- sh -c 'printf %s \"$1\"' sh 'argument with spaces'", throwOnFailure=true);
         assert(result.stdout().equals("argument with spaces"));
         assert(WinePrefix(prefix).dpi() == 192);
-        print("PASS: shared DPI CLI, registry preservation, exec arguments");
+        var desk = "{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":true,\"priority\":1,\"scale\":2.5},{\"name\":\"HDMI-A-1\",\"enabled\":true,\"priority\":2,\"scale\":1.75}]}";
+        var stream = "{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":false,\"priority\":0,\"scale\":2.5},{\"name\":\"Virtual-sunshine-vmon\",\"enabled\":true,\"priority\":1,\"scale\":1}]}";
+        assert(ActiveDisplay.dpi(desk, 96) == 240);
+        assert(ActiveDisplay.dpi(stream, 240) == 96);
+        assert(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":false,\"priority\":1,\"scale\":1}]}", 240) == 240);
+        assert(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":true,\"priority\":1,\"scale\":40}]}", 240) == 240);
+        assert(ActiveDisplay.dpi("not json", 240) == 240);
+        result = shell.run(f"env -u WAYLAND_DISPLAY -u DISPLAY WINEPREFIX={ShellWords.quote(prefix)} {ShellWords.quote(self.tools)}/wine-prefix-dpi exec --dpi 144 --follow-display -- true", throwOnFailure=true);
+        assert(WinePrefix(prefix).dpi() == 144);
+        print("PASS: shared DPI CLI, registry preservation, exec arguments, live display scale with declared fallback");
     }
 
     public void mods() {

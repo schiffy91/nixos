@@ -55,7 +55,7 @@ let
           fi
         done
 
-        wine-prefix-dpi set --dpi ${toString winePrefixDpi.dpi} "$prefix"
+        wine-prefix-dpi set --dpi ${toString winePrefixDpi.dpi} --follow-display -- "$prefix"  # a stream has its own scale
         cd "$HOME"
         EXTRA_ARGS=()  # CEF reads the prefix DPI like any Windows app; no scale flags
         # ENABLE_HDR_WSI=1 (vk_hdr_layer) intentionally absent: nvidia 610 does HDR natively and the

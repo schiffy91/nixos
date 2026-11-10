@@ -1,4 +1,4 @@
-# All Wine launchers share the primary display's declared scale.
+# Wine launchers follow the display in use and fall back to the declared primary scale.
 { config, pkgs, lib, inputs, ... }:
 let
   primary = lib.findFirst (output: output.primary) null config.settings.desktop.outputs;
@@ -10,7 +10,7 @@ in lib.mkMerge [
     _module.args.winePrefixDpi = {
       package = tool;
       inherit dpi;
-      launchPrefix = "${tool}/bin/wine-prefix-dpi exec --dpi ${toString dpi} --";
+      launchPrefix = "${tool}/bin/wine-prefix-dpi exec --dpi ${toString dpi} --follow-display --";
     };
   }
   (lib.mkIf (config.settings.apps.gaming.enable) {
