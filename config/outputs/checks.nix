@@ -15,6 +15,7 @@ let
     ../../tests/checks/initrd_units.nix
     ../../tests/checks/unlock_agent.nix
     ../../tests/checks/package_groups.nix
+    ../../tests/checks/graphics_layouts.nix
     ../../tests/checks/app_hierarchy.nix
     ../../tests/checks/persistence_ownership.nix
   ];

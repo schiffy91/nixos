@@ -4,6 +4,7 @@
     ./system/nixos/boot.nix
     ./pkgs/de/kde
     ./system/nixos/disk.nix
+    ./system/nixos/graphics.nix
     ./system/nixos/locale.nix
     ./system/nixos/networking.nix
     ./system/nixos/nix.nix

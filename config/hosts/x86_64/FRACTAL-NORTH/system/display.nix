@@ -1,13 +1,17 @@
 { config, host, lib, pkgs, ... }:
 let
-  # The XDR exposes a second, 640x480 connector. Match the desktop's physical
-  # outputs without importing saved virtual displays or other monitors.
+  graphics = config.settings.graphics;
+  ports = graphics.connectors.${graphics.display}.DP;
+  xdr = builtins.head ports;
+  tunneled = graphics.display == "integrated";  # its USB4 path adds a 640x480 connector
+  # Match the desktop's physical outputs without importing saved virtual
+  # displays or other monitors.
   greeterOutputs = (pkgs.formats.json {}).generate "sddm-kwinoutputconfig.json" [
     {
       name = "outputs";
       data = [
         {
-          connectorName = host.display.primary.name;
+          connectorName = xdr;
           edidHash = "6a115673828eb7a99d4101a0041d68a7";
           edidIdentifier = "APP 44590 923665417 1 2019 0";
           scale = host.display.primary.scaleFactor;
@@ -42,14 +46,13 @@ let
           rgbRange = "Automatic";
           vrrPolicy = "Automatic";
         }
-        {
-          connectorName = "DP-2";
-          edidHash = "e944598217cde35ab667c55081ecbaf8";
-          edidIdentifier = "APP 44590 923665417 1 2019 0";
-          scale = 1;
-          transform = "Normal";
-        }
-      ];
+      ] ++ lib.optional tunneled {
+        connectorName = builtins.elemAt ports 1;
+        edidHash = "e944598217cde35ab667c55081ecbaf8";
+        edidIdentifier = "APP 44590 923665417 1 2019 0";
+        scale = 1;
+        transform = "Normal";
+      };
     }
     {
       name = "setups";
@@ -57,8 +60,7 @@ let
         lidClosed = false;
         outputs = [
           { outputIndex = 0; enabled = true; priority = 1; position = { x = 0; y = 0; }; }
-          { outputIndex = 1; enabled = false; priority = 2; position = { x = 1920; y = 0; }; }
-        ];
+        ] ++ lib.optional tunneled { outputIndex = 1; enabled = false; priority = 2; position = { x = 1920; y = 0; }; };
       }];
     }
   ];
@@ -70,7 +72,7 @@ let
   greeterHome = config.users.users.sddm.home;
 in {
   settings.desktop.outputs = [{
-    name = host.display.primary.name;
+    name = xdr;
     scaleFactor = host.display.primary.scaleFactor;
     primary = true;
   }];

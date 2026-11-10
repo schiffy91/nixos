@@ -7,6 +7,7 @@ in {
     ./storage/options.nix
     ./storage/immutability/options.nix
     ./nixos/boot/options.nix
+    ./nixos/graphics/options.nix
     ./nixos/sleep/options.nix
     ./nixos/networking/options.nix
     ./darwin/options.nix

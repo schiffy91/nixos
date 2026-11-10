@@ -1,4 +1,9 @@
-{ pkgs, host, ... }: {
+{ config, pkgs, ... }:
+let
+  graphics = config.settings.graphics;
+  xdr = builtins.head graphics.connectors.${graphics.display}.DP;
+  tv = builtins.head graphics.connectors.nvidia."HDMI-A";
+in {
   imports = [ ./desktop.nix ];
   settings.apps = {
     dev.packages = with pkgs; [ python3 ];
@@ -15,11 +20,10 @@
       "--enable-features=VaapiOnNvidiaGPUs,WaylandWindowDecorations"  # NVDEC decode; restates the wrapper's feature
       "--disable-features=WaylandWpColorManagerV1"  # Chrome blows out HDR video here
     ];
-    gaming.steam.extraEnv = host.nvidiaOffloadEnv;
+    gaming.steam.extraEnv = graphics.environment;
     gaming.sunshine = {
       capture = "kwin";
       cuda.enable = true;
-      virtualDisplay.primaryOutput = host.display.primary.name;
     };
     gaming.simracing.enable = true;
     gaming.assettocorsa = {
@@ -31,8 +35,8 @@
       wheelMenu.enable = true;
     };
     utils.nixosctl.settings = {
-      displays = { "DP-1" = "ProXDR"; "HDMI-A-2" = "S89C"; };
-      layout = [{ display = "HDMI-A-2"; position = "left-of"; relative_to = "DP-1"; }];
+      displays = { ${xdr} = "ProXDR"; ${tv} = "S89C"; };
+      layout = [{ display = tv; position = "left-of"; relative_to = xdr; }];
       audio = [
         {
           label = "Kanto TUK";

@@ -1,17 +1,13 @@
-{ config, pkgs, host, lib, ... }: {
-  settings.boot.plymouth.drmDevice = lib.mkDefault "/dev/dri/by-path/pci-${host.pci.amdGpu}-card";
-  # KWIN_DRM_DEVICES splits on ':' with no escape — by-path symlinks contain colons.
-  services.udev.extraRules = ''
-    SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.nvidiaGpu}", SYMLINK+="dri/nvidia-card"
-    SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="pci-${host.pci.amdGpu}", SYMLINK+="dri/amd-card"
-  '';
+{ config, pkgs, host, ... }: {
+  settings.graphics = {
+    inherit (host) gpus;
+    display = "nvidia";
+  };
   boot = {
-    kernelParams = [ "amdgpu.dc=1" ];
     consoleLogLevel = 0;  # silences MSFT8000 i2c spam
     kernelModules = [ "i2c-dev" ];
   };
   hardware = {
-    amdgpu.initrd.enable = true;
     i2c.enable = true;
     nvidia = {
       open = true;
@@ -23,12 +19,6 @@
       };
       nvidiaSettings = true;
       powerManagement.enable = true;
-      prime = {
-        offload.enable = true;
-        offload.enableOffloadCmd = true;
-        amdgpuBusId = host.pci.amdPrimeBus;
-        nvidiaBusId = host.pci.nvidiaPrimeBus;
-      };
     };
     graphics = {
       enable32Bit = true;
@@ -46,9 +36,5 @@
         libvdpau-va-gl
       ];
     };
-  };
-  services.xserver.videoDrivers = [ "amdgpu" "nvidia" ];  # AMD scans out, NVIDIA renders via PRIME
-  environment.sessionVariables = host.nvidiaOffloadEnv // {
-    KWIN_DRM_DEVICES = host.display.driCards;
   };
 }

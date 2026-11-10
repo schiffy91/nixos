@@ -1,11 +1,8 @@
 _:
 let
-  pci = {
-    nvidiaGpu      = "0000:01:00.0";
-    nvidiaAudio    = "0000:01:00.1";
-    amdGpu         = "0000:6b:00.0";
-    nvidiaPrimeBus = "PCI:1:0:0";
-    amdPrimeBus    = "PCI:107:0:0";
+  gpus = {
+    nvidia     = { driver = "nvidia"; pci = "0000:01:00.0"; audioPci = "0000:01:00.1"; connectors = { DP = 3; HDMI-A = 1; }; };
+    integrated = { driver = "amdgpu"; pci = "0000:6b:00.0"; connectors = { DP = 2; HDMI-A = 1; }; enable = false; };  # off in firmware so the 4090 shows the boot menu
   };
   disk = {
     device         = "/dev/nvme0n1";
@@ -23,11 +20,7 @@ let
     };
   };
   display = {
-    primary = {
-      name        = "DP-1";
-      scaleFactor = 2.5;
-    };
-    driCards  = "/dev/dri/nvidia-card:/dev/dri/amd-card";  # KWIN_DRM_DEVICES; symlinks from system/gpu.nix udev
+    primary.scaleFactor = 2.5;
   };
   network = {
     primaryInterface = "eno2";  # onboard NIC; TB ethernet (eth0) deprioritized
@@ -40,21 +33,13 @@ let
     quadCortexOutputPattern    = "~alsa_output.*Neural_DSP_Quad_Cortex.*";
     samsungTvName             = "Samsung TV";
     samsungTvAlsaName         = "QCQ90S";
-    samsungTvOutputPattern    = "~alsa_output.pci-${builtins.replaceStrings [ ":" ] [ "_" ] pci.nvidiaAudio}.*";
+    samsungTvOutputPattern    = "~alsa_output.pci-${builtins.replaceStrings [ ":" ] [ "_" ] gpus.nvidia.audioPci}.*";
     logitechCameraInputPattern = "~alsa_input.*Logi_4K_Pro.*";
-  };
-  nvidiaOffloadEnv = {
-    __NV_PRIME_RENDER_OFFLOAD          = "1";
-    __NV_PRIME_RENDER_OFFLOAD_PROVIDER = "NVIDIA-G0";
-    __VK_LAYER_NV_optimus              = "NVIDIA_only";
-    __GLX_VENDOR_LIBRARY_NAME          = "nvidia";
-    LIBVA_DRIVER_NAME                  = "nvidia";
-    VDPAU_DRIVER                       = "nvidia";
   };
 in {
   imports = [ ./system ./pkgs ];
   _module.args.host = {
-    inherit pci disk tpm input display network audio nvidiaOffloadEnv;
+    inherit gpus disk tpm input display network audio;
   };
   networking.hostName = "FRACTAL-NORTH";
 }
