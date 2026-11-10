@@ -11,6 +11,10 @@
     "hash": "sha256-ifK6Yju21pGUhD6iarfq/6w2jcUfhd32FMiBwrYI8bE=",
     "url": "https://github.com/BigWigsMods/BigWigs/releases/download/v427.9/BigWigs-v427.9.zip"
   },
+  "consolePort": {
+    "hash": "sha256-VImUpZzFSPU8JuZTATcEkSkUHxOMmNaZ94+r6fBwN9I=",
+    "url": "https://github.com/seblindfors/ConsolePort/releases/download/3.3.13/ConsolePort-3.3.13.zip"
+  },
   "details": {
     "hash": "sha256-FD43/nyTeFVELwuB3oTYFz5ByNjCRCGj8MStBLs8s24=",
     "url": "https://edge.forgecdn.net/files/9447/255/Details-Details.20261104.15400.172.zip"
