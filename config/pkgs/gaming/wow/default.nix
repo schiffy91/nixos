@@ -5,6 +5,8 @@ let
   settings = pkgs.writeText "wow-settings.json" (builtins.toJSON {
     inherit (config.settings.apps.gaming.wow) directory;
     inherit addons;
+    settings = lib.optionalString (builtins.pathExists ./settings) "${./settings}";  # absent until the first capture
+    excluded = config.settings.apps.gaming.wow.settingsExcluded;
   });
 in lib.mkIf config.settings.apps.gaming.wow.enable {
   environment.systemPackages = [ tools ];
@@ -16,7 +18,7 @@ in lib.mkIf config.settings.apps.gaming.wow.enable {
     unitConfig.ConditionUser = config.settings.users.admin.username;
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${tools}/bin/wow-addons-install";
+      ExecStart = [ "${tools}/bin/wow-addons-install" "${tools}/bin/wow-settings apply" ];
       UMask = "0022";
     };
   };

@@ -48,9 +48,21 @@ against garbage collection. Unrelated whole-directory symlinks are left untouche
 and reported as conflicts. Disabling WoW stops reconciliation and leaves installed
 files alone; use an empty addon selection before disabling to remove managed links.
 
-WoW and its addons own all account settings and SavedVariables. The installer
-does not seed profiles or access the `WTF` directory. The Details addon remains
-available as a package, with its settings managed in-game.
+The installer does not seed profiles or access the `WTF` directory. UI layout and
+addon settings travel between machines through `settings/` instead. Run
+`wow-settings capture` with the game closed to copy the account's key bindings,
+Edit Mode layout and the account-wide SavedVariables of every managed addon into
+`settings/`, then commit. `settingsExcluded` names addons to leave out, by default
+the Details combat history. Per-character files, macros and unmanaged addons are
+never captured, and `Config.wtf` stays per machine so each display keeps its own
+graphics. Captured files can contain character names; this repository is public.
+
+`wow-settings apply` runs after the installer. When the `settings/` version in the
+system differs from the one last applied and the game is closed, it writes the
+files into every account, keeps each replaced file under
+`WTF/.nixos-wow-settings-backup`, and records the version in
+`WTF/.nixos-wow-settings`. In-game changes made after that stay until the next
+captured version arrives, so capture before rebuilding to keep them.
 
 Run the isolated contract checks without installing or updating real addons:
 

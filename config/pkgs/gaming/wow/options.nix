@@ -21,5 +21,10 @@
       default = builtins.attrValues config.settings.apps.gaming.wow.addonPackages;
       description = "Addon archives to install. Each package contains top-level addon directories. Use mkForce to replace the default selection.";
     };
+    settingsExcluded = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "Details_DataStorage" ];
+      description = "Managed addon directories whose SavedVariables `wow-settings capture` leaves out, such as combat history.";
+    };
   };
 }

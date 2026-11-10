@@ -1,0 +1,77 @@
+import Library.CLI;
+import ../../../ci/lib/PipeProcess.btrc;
+import ../../lib/TestDirectory.btrc;
+
+class SettingsTests {
+    private TestDirectory fixture;
+    private string tool;
+
+    public SettingsTests(string tool) { self.fixture = TestDirectory("wow-settings"); self.tool = tool; }
+
+    private string read(string relative) { return Path.readAll(self.fixture.path(relative)); }
+
+    private ExecResult run(string verb, string game, string store, bool success = true) {
+        var settings = JSONValue.makeObject();
+        var excluded = JSONValue.makeArray(); excluded.push(JSONValue.makeString("Details_DataStorage"));
+        settings.set("directory", JSONValue.makeString(self.fixture.path(game)));
+        settings.set("addons", JSONValue.makeString(self.fixture.path("bundle")));
+        settings.set("settings", JSONValue.makeString(store));
+        settings.set("capture", JSONValue.makeString(self.fixture.path("repository/settings")));
+        settings.set("excluded", excluded);
+        self.fixture.json("settings.json", settings);
+        var result = ChildProcess.run(self.tool, [verb, self.fixture.path("settings.json")], timeoutMilliseconds=10000);
+        Check.that(!result.timedOut && !result.captureFailed && (result.code == 0) == success, f"{verb} status: {result.stderr()}");
+        return result;
+    }
+
+    public void check() {
+        var store = self.fixture.path("repository/settings");
+        self.fixture.write("bundle/Details/toc", ""); self.fixture.write("bundle/Details_DataStorage/toc", "");
+        self.fixture.write("desktop/WTF/Config.wtf", "desktop graphics");
+        self.fixture.write("desktop/WTF/Account/SavedVariables/SavedVariables/Blizzard.lua", "shared");
+        self.fixture.write("desktop/WTF/Account/FIRST/bindings-cache.wtf", "bindings");
+        self.fixture.write("desktop/WTF/Account/FIRST/macros-cache.txt", "macros");
+        self.fixture.write("desktop/WTF/Account/FIRST/SavedVariables/Details.lua", "layout");
+        self.fixture.write("desktop/WTF/Account/FIRST/SavedVariables/Details_DataStorage.lua", "history");
+        self.fixture.write("desktop/WTF/Account/FIRST/SavedVariables/Manual.lua", "unmanaged");
+        self.fixture.write("desktop/WTF/Account/FIRST/91/Character/SavedVariables/Details.lua", "character");
+        self.fixture.write("repository/settings/SavedVariables/Stale.lua", "stale");
+        self.run("capture", "desktop", "");
+        Check.equal(self.read("repository/settings/bindings-cache.wtf"), "bindings", "capture layout");
+        Check.equal(self.read("repository/settings/SavedVariables/Details.lua"), "layout", "capture managed addon");
+        Check.that(FileSystem.listDir(store).len == 2 && FileSystem.listDir(PathTools.join(store, "SavedVariables")).len == 1, "capture only layout and managed addons");
+
+        self.fixture.write("deck/WTF/Config.wtf", "deck graphics");
+        self.fixture.write("deck/WTF/Account/SECOND/SavedVariables/Details.lua", "deck layout");
+        self.fixture.write("deck/WTF/Account/SECOND/SavedVariables/Manual.lua", "deck manual");
+        self.run("apply", "deck", store);
+        Check.equal(self.read("deck/WTF/Account/SECOND/SavedVariables/Details.lua"), "layout", "apply managed addon");
+        Check.equal(self.read("deck/WTF/Account/SECOND/bindings-cache.wtf"), "bindings", "apply layout");
+        Check.equal(self.read("deck/WTF/.nixos-wow-settings-backup/SECOND/SavedVariables/Details.lua"), "deck layout", "back up replaced settings");
+        Check.equal(self.read("deck/WTF/Config.wtf"), "deck graphics", "graphics stay per machine");
+        Check.equal(self.read("deck/WTF/Account/SECOND/SavedVariables/Manual.lua"), "deck manual", "unmanaged settings stay");
+        self.fixture.write("deck/WTF/Account/SECOND/SavedVariables/Details.lua", "in-game edit");
+        self.run("apply", "deck", store);
+        Check.equal(self.read("deck/WTF/Account/SECOND/SavedVariables/Details.lua"), "in-game edit", "one version applies once");
+
+        self.fixture.write("fresh/WTF/Config.wtf", "fresh");
+        self.run("apply", "fresh", store);
+        Check.that(!FileSystem.exists(self.fixture.path("fresh/WTF/.nixos-wow-settings")), "wait for the first account");
+        self.fixture.write("fresh/WTF/Account/LATER/SavedVariables/Other.lua", "");
+        self.run("apply", "fresh", store);
+        Check.equal(self.read("fresh/WTF/Account/LATER/SavedVariables/Details.lua"), "layout", "apply to a later account");
+        self.run("apply", "deck", "");
+        self.fixture.write("desktop/WTF/Account/THIRD/SavedVariables/Details.lua", "ambiguous");
+        Check.that(self.run("capture", "desktop", "", false).stderr().contains("exactly one account"), "refuse ambiguous capture");
+        Check.equal(self.read("repository/settings/SavedVariables/Details.lua"), "layout", "failed capture keeps the repository");
+        self.fixture.close();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        SettingsTests(args.require(0, "Supply wow-settings")).check();
+        print("PASS: capture allowlist, apply once, backups, per-machine graphics, late accounts and ambiguous capture"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

@@ -1,0 +1,122 @@
+import ./Files.btrc;
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Regex;
+import Library.Strings;
+import Library.Vector;
+
+class AddonSettings {
+    private string bundle;
+    private string store;
+    private string destination;
+    private string accounts;
+    private string backups;
+    private string marker;
+    private Vector<string> excluded;
+
+    public AddonSettings(JSONValue settings) {
+        var directory = settings.get("directory").asString();
+        self.bundle = settings.get("addons").asString();
+        self.store = settings.get("settings").asString();
+        self.destination = settings.get("capture").asString();
+        if (!PathTools.isAbsolute(directory) || !PathTools.isAbsolute(self.bundle)) {
+            throw "WoW directory and addon bundle must be absolute paths";
+        }
+        if (self.destination.isEmpty()) {
+            self.destination = Environment.get("NIXOS_CONFIG_ROOT", "/etc/nixos") + "/config/pkgs/gaming/wow/settings";
+        }
+        var wtf = PathTools.join(directory, "WTF");
+        self.accounts = PathTools.join(wtf, "Account");
+        self.backups = PathTools.join(wtf, ".nixos-wow-settings-backup");
+        self.marker = PathTools.join(wtf, ".nixos-wow-settings");
+        self.excluded = [];
+        for name in settings.get("excluded").elements() { self.excluded.push(name.asString()); }
+    }
+
+    private bool gameRunning() {
+        for name in FileSystem.listDir("/proc") {
+            if (!Regex.matches("^[0-9]+$", name)) { continue; }
+            if (FileSystem.readText(f"/proc/{name}/comm").trim().equals("Wow.exe")) { return true; }
+        }
+        return false;
+    }
+
+    private Vector<string> accountNames() {
+        Vector<string> result = [];
+        if (!FileSystem.isDir(self.accounts)) { return result; }
+        for name in FileSystem.listDir(self.accounts).sorted() {
+            if (name.equals("SavedVariables")) { continue; }  // shared Blizzard state, not an account
+            if (FileSystem.isDir(PathTools.join(PathTools.join(self.accounts, name), "SavedVariables"))) { result.push(name); }
+        }
+        return result;
+    }
+
+    private Vector<string> tracked() {
+        Vector<string> result = ["bindings-cache.wtf", "edit-mode-cache-account.txt"];
+        if (!FileSystem.isDir(self.bundle)) { throw f"Missing addon bundle: {self.bundle}"; }
+        for name in FileSystem.listDir(self.bundle).sorted() {
+            if (!self.excluded.contains(name)) { result.push(f"SavedVariables/{name}.lua"); }
+        }
+        return result;
+    }
+
+    private void collect(string root, string relative, Vector<string> result) {
+        var directory = root;
+        if (!relative.isEmpty()) { directory = PathTools.join(root, relative); }
+        for name in FileSystem.listDir(directory).sorted() {
+            var child = name;
+            if (!relative.isEmpty()) { child = PathTools.join(relative, name); }
+            if (FileSystem.isDir(PathTools.join(root, child))) { self.collect(root, child, result); }
+            else { result.push(child); }
+        }
+    }
+
+    private void copy(string source, string target) {
+        if (FileSystem.mkdirp(PathTools.dirname(target)) != 0) { throw f"Cannot create parent of {target}"; }
+        var staging = target + ".nixos-staging";
+        if (!FileSystem.writeText(staging, FileSystem.readText(source)) || !AddonFiles.move(staging, target)) {
+            throw f"Cannot write {target}";
+        }
+    }
+
+    public void capture() {
+        if (self.gameRunning()) { throw "Quit World of Warcraft first; it rewrites its settings on exit"; }
+        var names = self.accountNames();
+        if (names.len != 1) { throw f"Expected exactly one account in {self.accounts}"; }
+        var account = PathTools.join(self.accounts, names.get(0));
+        if (FileSystem.exists(self.destination) && FileSystem.removeRecursive(self.destination) != 0) {
+            throw f"Cannot replace {self.destination}";
+        }
+        for relative in self.tracked() {
+            var source = PathTools.join(account, relative);
+            if (!FileSystem.isFile(source)) { continue; }
+            self.copy(source, PathTools.join(self.destination, relative));
+            Console.error(f"captured {relative}");
+        }
+    }
+
+    public void apply() {
+        if (self.store.isEmpty() || !FileSystem.isDir(self.store)) { return; }
+        if (FileSystem.readText(self.marker).trim().equals(self.store)) { return; }
+        if (self.gameRunning()) { return; }
+        Vector<string> files = [];
+        self.collect(self.store, "", files);
+        var names = self.accountNames();
+        for name in names {
+            var account = PathTools.join(self.accounts, name);
+            for relative in files {
+                var source = PathTools.join(self.store, relative);
+                var target = PathTools.join(account, relative);
+                if (FileSystem.isFile(target)) {
+                    if (FileSystem.readText(target).equals(FileSystem.readText(source))) { continue; }
+                    self.copy(target, PathTools.join(PathTools.join(self.backups, name), relative));
+                }
+                self.copy(source, target);
+                Console.error(f"applied {name}/{relative}");
+            }
+        }
+        if (!names.isEmpty() && !FileSystem.writeText(self.marker, self.store)) { throw f"Cannot record {self.marker}"; }  // no marker until an account exists
+    }
+}

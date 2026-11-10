@@ -1,0 +1,16 @@
+import Library.CLI;
+import Library.Console;
+import Library.JSON;
+import ./Settings.btrc;
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        if (args.count() != 2) { throw "Usage: wow-settings <apply|capture> SETTINGS.json"; }
+        var settings = AddonSettings(JSONValue.readFile(args.get(1)));
+        if (args.get(0).equals("apply")) { settings.apply(); }
+        else if (args.get(0).equals("capture")) { settings.capture(); }
+        else { throw "Usage: wow-settings <apply|capture> SETTINGS.json"; }
+        return 0;
+    } catch (string error) { Console.error(f"wow-settings: {error}"); return 1; }
+}
