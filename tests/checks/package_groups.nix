@@ -98,10 +98,11 @@ let
       "LM Studio's feature switch must control the shared Linux installation."
     ++ check (!(builtins.elem "google-chrome" (names noUtils)) && !noUtils.services.mullvad-vpn.enable)
       "Disabling utils must disable Chrome and the shared desktop utility services."
-    ++ check (desktop.config.settings.apps.utils.chrome.flags == handheld.settings.apps.utils.chrome.flags
-      && desktop.config.settings.apps.utils.chrome.renderNode == "/dev/dri/by-path/pci-0000:01:00.0-render"
+    ++ check (desktop.config.settings.apps.utils.chrome.flags == [
+        "--enable-features=VaapiOnNvidiaGPUs,WaylandWindowDecorations" "--disable-features=WaylandWpColorManagerV1" ]
+      && desktop.config.settings.apps.utils.chrome.renderNode == null
       && handheld.settings.apps.utils.chrome.renderNode == null)
-      "Chrome must share common flags while keeping the NVIDIA renderer on FRACTAL-NORTH."
+      "FRACTAL-NORTH's Chrome must run on native Wayland with NVDEC decode and no render-node override."
     ++ check (lib.all (case:
       case.config.settings.desktop.plasma.taskbarLaunchers == lib.subtractLists case.removed expectedLaunchers)
       launcherCases)
