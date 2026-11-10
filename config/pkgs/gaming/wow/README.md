@@ -50,12 +50,17 @@ files alone; use an empty addon selection before disabling to remove managed lin
 
 The installer does not seed profiles or access the `WTF` directory. UI layout and
 addon settings travel between machines through `settings/` instead. Run
-`wow-settings capture` with the game closed to copy the account's key bindings,
+`nixosctl apps wow settings-capture` with the game closed to copy the account's key bindings,
 Edit Mode layout and the account-wide SavedVariables of every managed addon into
 `settings/`, then commit. `settingsExcluded` names addons to leave out, by default
 the Details combat history. Per-character files, macros and unmanaged addons are
 never captured, and `Config.wtf` stays per machine so each display keeps its own
 graphics. Captured files can contain character names; this repository is public.
+
+`nixosctl apps wow` lists the module's commands with tab completion:
+`addons-install`, `addons-refresh`, `settings-apply` and `settings-capture`.
+`nixosctl upgrade` runs the addon refresh unless a host sets
+`upgradeAddons = false`; it never captures settings.
 
 `wow-settings apply` runs after the installer. When the `settings/` version in the
 system differs from the one last applied and the game is closed, it writes the

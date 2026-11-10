@@ -21,6 +21,8 @@ let
     apps.gaming.battlenet.prefix = "/external/games/Battle.net";
     apps.gaming.wow.addons = lib.mkForce [];
   };
+  pinned = evaluate { apps.gaming.wow.upgradeAddons = false; };
+  hook = evaluated: evaluated.environment.etc ? "${evaluated.settings.apps.utils.nixosctl.upgradeHooksDir}/wow-addons";
   otherClient = evaluate {
     apps.gaming.wow.directory = "/external/WoW/_retail_";
     apps.gaming.wow.enable = lib.mkForce false;
@@ -38,4 +40,8 @@ assert !(defaults.system.activationScripts ? wowAddons);
 assert otherClient.settings.apps.gaming.wow.directory == "/external/WoW/_retail_";
 assert !(otherClient.systemd.user.services ? wow-addons);
 assert !(otherClient.systemd.user.timers ? wow-addons);
+assert hook defaults && !(hook pinned) && !(hook otherClient);
+assert builtins.attrNames defaults.settings.apps.utils.nixosctl.apps.wow.commands == [ "addons-install" "addons-refresh" "settings-apply" "settings-capture" ];
+assert pinned.settings.apps.utils.nixosctl.apps.wow.commands ? addons-refresh;
+assert !(otherClient.settings.apps.utils.nixosctl.apps ? wow);
 true

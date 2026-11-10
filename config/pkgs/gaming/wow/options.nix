@@ -21,6 +21,11 @@
       default = builtins.attrValues config.settings.apps.gaming.wow.addonPackages;
       description = "Addon archives to install. Each package contains top-level addon directories. Use mkForce to replace the default selection.";
     };
+    upgradeAddons = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Refresh the addon release pins during `nixosctl upgrade`. Turn off on hosts that take the pins another host committed.";
+    };
     settingsExcluded = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "Details_DataStorage" ];

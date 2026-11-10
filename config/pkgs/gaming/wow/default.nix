@@ -10,7 +10,18 @@ let
   });
 in lib.mkIf config.settings.apps.gaming.wow.enable {
   environment.systemPackages = [ tools ];
-  environment.etc."${config.settings.apps.utils.nixosctl.upgradeHooksDir}/wow-addons".source = "${tools}/bin/wow-addons-lock";
+  environment.etc."${config.settings.apps.utils.nixosctl.upgradeHooksDir}/wow-addons" = lib.mkIf config.settings.apps.gaming.wow.upgradeAddons {
+    source = "${tools}/bin/wow-addons-lock";
+  };
+  settings.apps.utils.nixosctl.apps.wow = {
+    description = "World of Warcraft addons and settings";
+    commands = {
+      addons-install = { description = "Link the configured addons into the game now."; run = "${tools}/bin/wow-addons-install"; };
+      addons-refresh = { description = "Refresh the addon release pins in the repository."; run = "${tools}/bin/wow-addons-lock"; };
+      settings-apply = { description = "Write the committed layout and addon settings into the game."; run = "${pkgs.writeShellScript "wow-settings-apply" ''exec ${tools}/bin/wow-settings apply''}"; };
+      settings-capture = { description = "Copy the game's layout and addon settings into the repository."; run = "${pkgs.writeShellScript "wow-settings-capture" ''exec ${tools}/bin/wow-settings capture''}"; };
+    };
+  };
 
   systemd.user.services.wow-addons = {
     description = "Install configured World of Warcraft addons";
