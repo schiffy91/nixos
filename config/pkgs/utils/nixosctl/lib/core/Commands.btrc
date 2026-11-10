@@ -1,0 +1,119 @@
+import Library.CLI;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
+import Library.Strings;
+import Library.Vector;
+
+class CommandEntry {
+    public string name;
+    public string description;
+    public Vector<string> words;
+
+    public CommandEntry(string name, string description, Vector<string> words) {
+        self.name = name; self.description = description; self.words = words;
+    }
+}
+
+class CommandCatalog {
+    class Vector<CommandEntry> commands() {
+        var rebuild = ["--clean", "--upgrade", "--rebuild-filesystem", "--reboot"];
+        Vector<CommandEntry> result = [];
+        result.push(CommandEntry("update", "Rebuild and switch the current system.", rebuild));
+        result.push(CommandEntry("upgrade", "Refresh flake inputs, then rebuild and switch.", rebuild));
+        result.push(CommandEntry("install", "Format/mount disk and run nixos-install.", ["--format", "--yes", "--collect-garbage", "--debug", "--force-upgrade"]));
+        result.push(CommandEntry("fix-permissions", "Re-apply secure-tree ownership/modes.", []));
+        result.push(CommandEntry("eval", "Evaluate a NixOS config attribute as raw text.", []));
+        result.push(CommandEntry("sunshine", "Sync Sunshine web credentials from 1Password.", ["sync", "provision", "status"]));
+        result.push(CommandEntry("apps", "List or run the commands applications register.", []));
+        result.push(CommandEntry("diff", "Show files diverged from the CLEAN snapshot.", ["--recent", "--pattern", "--depth", "--show-symlinks", "--show-persist-paths", "--show-children", "--diffignore"]));
+        result.push(CommandEntry("persistence", "Copy persisted paths back into their reset subvolumes.", ["materialize", "--dry-run", "--refresh-clean"]));
+        result.push(CommandEntry("immutability", "Inspect or prepare the next boot reset.", ["plan", "prepare", "--dry-run"]));
+        result.push(CommandEntry("secure-boot", "Prepare signed images; enroll or remove our platform key.", ["prepare", "enable", "disable", "status", "keys", "--no-reboot"]));
+        result.push(CommandEntry("tpm2", "Manage the TPM2 LUKS keyslot.", ["enable", "disable", "status"]));
+        result.push(CommandEntry("change-password", "Converge LUKS, account and hashed file to one new password.", ["--update-tpm2", "--full-disk-encryption-only", "--user-account-only"]));
+        result.push(CommandEntry("displays", "List and arrange displays.", ["list", "layout", "enable", "disable", "primary", "dpms"]));
+        result.push(CommandEntry("audio", "List and select audio sinks.", ["list", "current", "set"]));
+        result.push(CommandEntry("caffeine", "Keep the system awake.", ["status", "enable", "disable", "toggle"]));
+        result.push(CommandEntry("power", "Select an available system power profile.", ["list", "current", "set", "is"]));
+        result.push(CommandEntry("vm", "Boot the host config in a QEMU VM.", []));
+        result.push(CommandEntry("e2e", "Run end-to-end test scenarios.", []));
+        result.push(CommandEntry("graph", "Inspect / render the test-scenario graph.", []));
+        result.push(CommandEntry("help", "Show this help.", []));
+        return result;
+    }
+}
+
+class AppRegistry {
+    private JSONValue apps;
+
+    public AppRegistry() {
+        var path = Environment.get("NIXOSCTL_APPS", "/etc/nixosctl/apps.json");
+        self.apps = JSONValue.makeObject();
+        if (FileSystem.isFile(path)) {
+            var parsed = JSONValue.readFile(path);
+            if (parsed.isObject()) { self.apps = parsed; }
+        }
+    }
+
+    public Vector<string> names() { return self.apps.keys().sorted(); }
+    public bool has(string app) { return self.apps.has(app); }
+    public string description(string app) { return self.apps.get(app).get("description").asString(); }
+
+    public Vector<string> commands(string app) {
+        var commands = self.apps.get(app).get("commands");
+        if (!commands.isObject()) { return []; }
+        return commands.keys().sorted();
+    }
+
+    private JSONValue command(string app, string name) { return self.apps.get(app).get("commands").get(name); }
+    public string commandDescription(string app, string name) { return self.command(app, name).get("description").asString(); }
+    public string executable(string app, string name) { return self.command(app, name).get("run").asString(); }
+
+    public string help(string app = "") {
+        var help = CLIHelp();
+        if (app.isEmpty()) {
+            help.line("Usage: nixosctl apps <app> <command> [arguments]");
+            help.section("Applications");
+            for name in self.names() { help.item(name, self.description(name)); }
+            if (self.names().isEmpty()) { help.line("  No application on this host registers commands."); }
+            return help.render();
+        }
+        help.line(f"Usage: nixosctl apps {app} <command> [arguments]");
+        help.section(self.description(app));
+        for name in self.commands(app) { help.item(name, self.commandDescription(app, name)); }
+        return help.render();
+    }
+}
+
+class Completion {
+    class Vector<string> candidates(Vector<string> words, AppRegistry registry) {
+        Vector<string> result = [];
+        var current = "";
+        if (!words.isEmpty()) { current = words.get(words.len - 1); }
+        if (words.len <= 1) {
+            for entry in CommandCatalog.commands() { Completion.offer(result, current, entry.name, entry.description); }
+            return result;
+        }
+        var command = words.get(0);
+        if (command.equals("apps")) {
+            if (words.len == 2) { for app in registry.names() { Completion.offer(result, current, app, registry.description(app)); } }
+            if (words.len == 3) {
+                var app = words.get(1);
+                for name in registry.commands(app) { Completion.offer(result, current, name, registry.commandDescription(app, name)); }
+            }
+            return result;
+        }
+        for entry in CommandCatalog.commands() {
+            if (!entry.name.equals(command)) { continue; }
+            for word in entry.words {
+                if (word.startsWith("--") || words.len == 2) { Completion.offer(result, current, word, ""); }  // actions only directly after the command
+            }
+        }
+        return result;
+    }
+
+    class void offer(Vector<string> result, string current, string word, string description) {
+        if (word.startsWith(current)) { result.push(f"{word}\t{description}"); }
+    }
+}

@@ -14,6 +14,7 @@ in {
     }
     (lib.mkIf (config.settings.apps.utils.nixosctl.enable) {
       environment.systemPackages = [ nixosctlBin ];
+      environment.etc."nixosctl/apps.json".text = builtins.toJSON config.settings.apps.utils.nixosctl.apps;
       # Rebuilds run as root, but fix-permissions gives this repository to the admin.
       # Root's mutable Git config disappears when the immutable root is reset.
       programs.git = {

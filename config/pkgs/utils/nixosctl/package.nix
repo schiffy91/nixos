@@ -4,7 +4,7 @@ in pkgs.stdenv.mkDerivation {
   name = "nixosctl";
   src = lib.fileset.toSource {
     root = ../../../..;
-    fileset = lib.fileset.unions [ ./Main.btrc ./lib ./btrc.toml ./btrc.lock ];
+    fileset = lib.fileset.unions [ ./Main.btrc ./lib ./completions ./btrc.toml ./btrc.lock ];
   };
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
   dontConfigure = true;
@@ -22,6 +22,8 @@ in pkgs.stdenv.mkDerivation {
     cp nixosctl $out/bin/nixosctl
     cp nixosctl-password-file $out/bin/nixosctl-password-file
     ln -s ${secureBootKeys}/bin/nixosctl-secure-boot-keys $out/bin/nixosctl-secure-boot-keys
+    install -Dm644 config/pkgs/utils/nixosctl/completions/_nixosctl $out/share/zsh/site-functions/_nixosctl
+    install -Dm644 config/pkgs/utils/nixosctl/completions/nixosctl.bash $out/share/bash-completion/completions/nixosctl
     wrapProgram $out/bin/nixosctl \
       ${lib.optionalString (configPath != "") "--set NIXOS_CONFIG ${lib.escapeShellArg configPath}"} \
       --prefix PATH : ${lib.makeBinPath (with pkgs; [

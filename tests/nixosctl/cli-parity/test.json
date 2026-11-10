@@ -27,6 +27,11 @@
          "op" : "host"
       },
       {
+         "command" : "set -e; apps={{workDir}}/apps.json; printf '%s\\n' '#!/bin/sh' 'printf \"ran %s\\n\" \"$*\"; exit 7' > {{workDir}}/app-command; chmod +x {{workDir}}/app-command; printf '{\"demo\":{\"description\":\"Demo application\",\"commands\":{\"show-args\":{\"description\":\"Print the arguments.\",\"run\":\"%s\"}}}}' \"$PWD/{{workDir}}/app-command\" > $apps; for name in $(./build/nixosctl complete '' | cut -f1); do ./build/nixosctl help | grep -qE \"^  $name( |$)\" || { echo \"help omits $name\"; exit 1; }; done; test \"$(./build/nixosctl complete up | cut -f1 | tr '\\n' ' ')\" = 'update upgrade '; test \"$(./build/nixosctl complete update --re | cut -f1 | tr '\\n' ' ')\" = '--rebuild-filesystem --reboot '; test -z \"$(./build/nixosctl complete displays list '')\"; test \"$(NIXOSCTL_APPS=$apps ./build/nixosctl complete apps '')\" = \"$(printf 'demo\\tDemo application')\"; test \"$(NIXOSCTL_APPS=$apps ./build/nixosctl complete apps demo sh)\" = \"$(printf 'show-args\\tPrint the arguments.')\"; NIXOSCTL_APPS=$apps ./build/nixosctl apps | grep -q 'demo  *Demo application'; NIXOSCTL_APPS=$apps ./build/nixosctl apps demo | grep -q 'show-args  *Print the arguments.'; status=0; output=$(NIXOSCTL_APPS=$apps ./build/nixosctl apps demo show-args one 'two words') || status=$?; test $status -eq 7; test \"$output\" = 'ran one two words'; if NIXOSCTL_APPS=$apps ./build/nixosctl apps demo missing 2>/dev/null; then exit 1; fi; NIXOSCTL_APPS={{workDir}}/absent.json ./build/nixosctl apps | grep -q 'No application'; printf apps-commands-ok",
+         "expect" : "apps-commands-ok",
+         "op" : "host"
+      },
+      {
          "op" : "record-state"
       }
    ],

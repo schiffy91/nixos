@@ -6,6 +6,7 @@ import Library.Process;
 import Library.Strings;
 import ./lib/core/Interactive.btrc;
 import ./lib/core/NixosLog.btrc;
+import ./lib/core/Commands.btrc;
 import ./lib/NixosConfig.btrc;
 import ./lib/SecretsManager.btrc;
 import ./lib/PermissionsManager.btrc;
@@ -57,6 +58,8 @@ class NixosCtl {
         help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
         help.item("eval <attribute>", "Evaluate a NixOS config attribute as raw text.");
         help.item("sunshine <sync|provision|status>", "Sync web credentials from 1Password; provision accepts JSON on stdin.");
+        help.item("apps [app] [command] [arguments]", "List or run the commands applications register.");
+        help.item("help", "Show this help.");
 
         help.section("Disk + immutability");
         help.item("diff [--recent] [--pattern <p>] [--depth <n>]",
@@ -94,7 +97,8 @@ class NixosCtl {
 
         help.blank();
         help.line("Privileged commands auto-elevate via sudo. Set NIXOS_CONFIG_ROOT to point");
-        help.line("at a tree other than /etc/nixos.");
+        help.line("at a tree other than /etc/nixos. Tab completion covers commands, their");
+        help.line("actions and options, and registered applications.");
         help.print();
     }
 
@@ -159,6 +163,19 @@ class NixosCtl {
         return result.code;
     }
 
+    public int runApp(CLIArgs args) {
+        var registry = AppRegistry();
+        if (args.count() == 1) { Console.log(registry.help()); return 0; }
+        var app = args.get(1);
+        if (!registry.has(app)) { NixosLog.fatal(f"Unknown application '{app}'. Run: nixosctl apps"); }
+        if (args.count() == 2 || args.get(2).equals("--help") || args.get(2).equals("help")) { Console.log(registry.help(app)); return 0; }
+        var executable = registry.executable(app, args.get(2));
+        if (executable.isEmpty()) { NixosLog.fatal(f"Unknown command '{args.get(2)}'. Run: nixosctl apps {app}"); }
+        var invocation = ShellWords.quote(executable);
+        for (int index = 3; index < args.count(); index++) { invocation = f"{invocation} {ShellWords.quote(args.get(index))}"; }
+        return UnixShell().run(invocation, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false, foreground=true).code;
+    }
+
     public int run(CLIArgs args) {
         var line = CLICommandLine.parse(args);  // options moved off CLIArgs
         if (args.count() == 0) {
@@ -170,6 +187,15 @@ class NixosCtl {
         if (command.equals("--help") || command.equals("-h") || command.equals("help")) {
             self.usage();
             return 0;
+        }
+        if (command.equals("complete")) {
+            Vector<string> words = [];
+            for (int index = 1; index < args.count(); index++) { words.push(args.get(index)); }
+            for candidate in Completion.candidates(words, AppRegistry()) { Console.log(candidate); }
+            return 0;
+        }
+        if (command.equals("apps")) {
+            return self.runApp(args);
         }
         if (self.needsTestShell(args)) {
             return self.nixShellSelf(args);

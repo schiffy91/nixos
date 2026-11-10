@@ -1,0 +1,12 @@
+#compdef nixosctl
+local -a candidates
+candidates=("${(@f)$(nixosctl complete "${(@)words[2,CURRENT]}" 2>/dev/null)}")
+candidates=("${(@)candidates:#}")
+if (( ${#candidates} )); then
+  candidates=("${(@)candidates//:/\\:}")
+  candidates=("${(@)candidates/$'\t'/:}")
+  candidates=("${(@)candidates%:}")
+  _describe -t commands 'nixosctl' candidates
+else
+  _files
+fi
