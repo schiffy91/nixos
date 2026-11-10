@@ -204,7 +204,8 @@ class Guest {
         self.shellChannel().write("systemctl reboot --no-block </dev/null\n", MonotonicClock.deadlineAfter(10000));
     }
     public void crash() {
-        Check.exited(ChildProcess.run("sh", ["-c", "kill -KILL \"$1\"", "crash-fixture", f"{self.runningProcess().pid()}"]));
+        var script = "for child in $(cat /proc/\"$1\"/task/*/children 2>/dev/null); do case \"$(cat /proc/\"$child\"/comm)\" in qemu-system*) kill -KILL \"$child\"; emulator=1;; esac; done; test -n \"$emulator\" || kill -KILL \"$1\"";
+        Check.exited(ChildProcess.run("sh", ["-c", script, "crash-fixture", f"{self.runningProcess().pid()}"]));  // QEMU runs under the virtiofsd launcher
         self.waitForShutdown();
     }
     public void switchRoot() {

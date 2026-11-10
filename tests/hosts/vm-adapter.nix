@@ -28,7 +28,7 @@ let
     printf 'E2E-SIGNED %s\n' "$(sbctl verify 2>&1 | grep -E "$signable" | grep -c 'is signed' || echo 0)"
     printf 'E2E-VENDORKEYS %s\n' "$(sbctl list-enrolled-keys 2>/dev/null | grep -ci 'microsoft' || echo 0)"
     printf 'E2E-CMDLINE-QUIET %s\n' "$(grep -c -E '(^| )quiet( |$)' /proc/cmdline || echo 0)"
-    printf 'E2E-CMDLINE-LOGLEVEL %s\n' "$(tr ' ' '\n' < /proc/cmdline | grep -c '^loglevel=3$' || echo 0)"
+    printf 'E2E-CMDLINE-LOGLEVEL %s\n' "$(tr ' ' '\n' < /proc/cmdline | grep '^loglevel=' | tail -n 1 | grep -c '^loglevel=[0-3]$' || echo 0)"
     printf 'E2E-SECUREBOOT %s\n' "$(${pkgs.systemd}/bin/bootctl status 2>/dev/null | grep -i 'secure boot' | head -1 | tr -s ' ' | tr -d '\n' || true)"
     printf 'E2E-SNAPSHOTS %s\n' "$(${pkgs.btrfs-progs}/bin/btrfs subvolume list / 2>/dev/null | grep -c CLEAN || true)"
     printf 'E2E-SWAP %s\n' "$(${pkgs.util-linux}/bin/swapon --noheadings --show=NAME 2>/dev/null | tr '\n' ' ' || true)"

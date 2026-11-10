@@ -58,7 +58,7 @@ class BootHealth {
         if (requireEnforced && Strings.toInt(self.value("SIGNED", "0")) < 3) { failures.push("expected three signed EFI binaries"); }
         if (!self.value("VENDORKEYS", "0").equals("0")) { failures.push("Microsoft keys are enrolled"); }
         if (self.value("CMDLINE-QUIET", "0").equals("0")) { failures.push("quiet is not in effect"); }
-        if (self.value("CMDLINE-LOGLEVEL", "0").equals("0")) { failures.push("loglevel=3 is not in effect"); }
+        if (self.value("CMDLINE-LOGLEVEL", "0").equals("0")) { failures.push("the effective loglevel is above 3"); }
         if (requireEnforced && !self.value("SBCTL").equals("0") && !self.value("SBCTL").equals("unavailable")) {
             failures.push(f"sbctl reports unsigned: {self.unsignedFiles.join("; ")}");
         }

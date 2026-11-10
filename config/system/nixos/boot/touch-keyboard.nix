@@ -35,7 +35,6 @@ in {
       XKB_CONFIG_ROOT = "${pkgs.xkeyboard-config}/share/X11/xkb";
       XLOCALEDIR = "${pkgs.libx11}/share/X11/locale";
     };
-    wants = [ "systemd-modules-load.service" ];
-    after = [ "systemd-modules-load.service" ];
+    after = [ "systemd-modules-load.service" ];  # order only: a Wants keeps it alive across switch-root
   };
 }

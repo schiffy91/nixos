@@ -18,7 +18,7 @@ Nodes: `host-boot-{STEAM-DECK-OLED,FRACTAL-NORTH}-VM-{standard,secure}`.
 | Install leaves a resettable system | every reset volume has a published read-only `CLEAN`, with no leftover `CLEAN.tmp.*` |
 | Unlock | the unlock agent the host declares actually ran (`unl0kr` or `plymouth`), and the passphrase is typed as USB key events, never over the serial line |
 | Clean boot | `is-system-running` = `running`, zero failed units, zero units systemd refused, `home-manager-<user>.service` active |
-| Quiet boot | `quiet` and `loglevel=3` are in effect on `/proc/cmdline`, and the panel capture is not a text console |
+| Quiet boot | `quiet` and an effective `loglevel` of 3 or lower are in effect on `/proc/cmdline`, and the panel capture is not a text console |
 | Secure Boot | the fallback loader, systemd-boot and the UKI are signed; no Microsoft key is enrolled; where the host enrols its own keys, the firmware reports `enabled` |
 | Hibernate | the system hibernates once per installation, resumes behind the passphrase, and reports `E2E-RESUMED` |
 | Immutability | a `CLEAN` snapshot survives every boot, and swap is active |

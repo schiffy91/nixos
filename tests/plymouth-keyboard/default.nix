@@ -38,6 +38,7 @@ in (import ../vm/test.nix { inherit pkgs inputs; }) {
     };
     boot.loader.systemd-boot.enable = true;
     boot.initrd.kernelModules = [ "virtio_gpu" "uinput" ];
+    boot.kernelModules = [ "dummy" ];  # nothing else loads it after the initrd
     boot.kernelParams = [ "console=tty0" "plymouth.ignore-serial-consoles"
       "plymouth.debug=stream:/run/plymouth-test.log" "plymouth.debug-key-events" ]
       ++ lib.optionals rotate [ "fbcon=rotate:1" "video=Virtual-1:800x1280,panel_orientation=right_side_up" ];

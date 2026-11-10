@@ -106,6 +106,7 @@ class PlymouthScenario {
         Check.that(trace.count("Processing input") == physicalTraces, "touch input excluded from raw key tracing"); Check.that(!trace.contains(passphrase), "passphrase absent from diagnostics"); self.key("RTRN");
         try { machine.waitUntil("test -b /dev/mapper/cryptroot", 30); } catch (string error) { print(machine.execute("cat /run/plymouth-test.log; systemctl show plymouth-start.service -p Environment").output); throw error; }
         machine.switchRoot(); machine.waitForUnit("multi-user.target"); machine.succeed("findmnt -n -o SOURCE / | grep -Fx /dev/mapper/cryptroot");
-        print("PASS: real LUKS touch unlock, layout, input ownership and display lifecycle");
+        machine.waitUntil("test -d /sys/module/dummy", 30);  // the booted system loads its own kernel modules
+        print("PASS: real LUKS touch unlock, layout, input ownership, display lifecycle and booted-system modules");
     }
 }
