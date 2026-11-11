@@ -9,6 +9,7 @@ import ./BluetoothLink.btrc;
 import ./Control.btrc;
 import ./Controller.btrc;
 import ./DeckPad.btrc;
+import ./Doctor.btrc;
 import ./GadgetLink.btrc;
 import ./Host.btrc;
 import ./NetworkLink.btrc;
@@ -35,11 +36,14 @@ class Deckpad {
             "  deckpad forget FINGERPRINT        stop trusting a host\n" +
             "  deckpad stop                      stop the service\n" +
             "  deckpad release                   give the built-in controller and the USB port back after a crash\n" +
+            "  deckpad check [SECONDS] [--bluetooth ADAPTER]\n" +
+            "                                    read the built-in controller for a while and say which links can work\n" +
             "On the PC:\n" +
             "  deckpad pair HOST [--yes]         trust the controller at HOST (open pairing on the Deck first)\n" +
             "  deckpad attach HOST [--watch]     attach the paired controller through vhci_hcd\n" +
             "  deckpad detach                    detach it again\n" +
             "  deckpad trust-local KEYLINE       trust a controller by its public key line, without pairing\n" +
+            "  deckpad measure [SECONDS]         read the attached controller and say how steadily its reports arrive\n" +
             "On either:\n" +
             "  deckpad key                       print this machine's public key line\n" +
             "Common options: [--port PORT] [--identity FILE] [--state DIR] [--runtime DIR] [--control-port PORT]";
@@ -155,6 +159,8 @@ class Deckpad {
             Deckpad.host(options).run(watch);
         }
         else if (command.equals("detach")) { print(f"detached {ControllerHost.detach()} controller(s)"); }
+        else if (command.equals("check")) { return Doctor.check(Deckpad.number(options.operand(1, "3"), "seconds"), options.option("--bluetooth", "hci0")); }
+        else if (command.equals("measure")) { return Doctor.measure(Deckpad.number(options.operand(1, "5"), "seconds")); }
         else if (command.equals("trust-local") && options.operandCount() >= 2) {
             string state = Deckpad.state(options);
             FileSystem.mkdirp(state);

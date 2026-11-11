@@ -40,6 +40,8 @@ deckpad trust KEYLINE          trust a host by its public key line
 deckpad forget FINGERPRINT     stop trusting a host
 deckpad key                    this machine's public key line
 deckpad release                give the pad and the USB port back after a crash
+deckpad check [SECONDS]        on the Deck: read the pad for a while; say which links can work
+deckpad measure [SECONDS]      on the PC: how steadily the attached controller's reports arrive
 ```
 
 ## How it works
@@ -131,10 +133,35 @@ networks may connect at all. The host role loads `vhci-hcd` and keeps trying
   reports, which the kernel's `hid-steam` binds as it does the real one):
   the service takes it from the kernel, puts it in gamepad mode, its held
   buttons arrive on the PC as the controller's, reading it does not cancel
-  transfers, and the kernel gets it back when the host leaves.
+  transfers, and the kernel gets it back when the host leaves. `deckpad
+  check` passes on that pad and `deckpad measure` on the PC counts no lost
+  report.
 - The standard library's own tests cover the layers underneath: USB/IP, the
   gadget at high speed and SuperSpeed, Bluetooth pairing rules, the secure
   channel and OpenSSH key formats.
+
+## Checking the real hardware
+
+No test here has a Deck, so the first run on one should be these, as root:
+
+1. On the Deck, with no host attached: `deckpad check 5`. It takes the pad
+   from the kernel as the service does, reads it for five seconds and gives
+   it back. `pad: PASS` needs at least 100 reports a second and no tenth of a
+   second without one; the pad should send about 250. `usb cable` says whether the port can be a device (it
+   cannot until the BIOS option *USB Dual Role Device* is `DRD`), and
+   `bluetooth` whether the adapter and its HID channels are free.
+2. On the PC, with the Deck attached over any link:
+   `deckpad measure 10`. It reads the controller's hidraw node as Steam does.
+   `controller: PASS` needs the same pace, and no report held up by 25 ms or
+   more beyond the quickest one. That figure comes from the Deck's own
+   timestamp in each report, so it is the link's jitter; the reports' counter
+   gives the number lost. Bluetooth skips a report on purpose when the radio
+   is behind, so some loss there is expected.
+3. In Steam on the PC: Settings, Controller should list a Steam Controller,
+   and its test screen should follow the Deck's sticks, pads and gyro.
+
+Both commands exit non-zero when they fail, and the VM test runs them against
+the emulated pad.
 
 Not verified without hardware: the real pad's firmware (the emulated one
 answers the same requests but is not it), the Deck's port in device mode, a

@@ -139,6 +139,12 @@ in pkgs.testers.runNixOSTest {
         pad = deck.succeed("basename $(dirname $(grep -lx FAKEDECK0001 /sys/bus/usb/devices/*/serial))").strip()
         driver = f"basename $(readlink /sys/bus/usb/devices/{pad}:1.2/driver)"
         deck.wait_until_succeeds(f"test $({driver}) = usbhid", timeout=60)
+        # The hardware check reads the pad as the service does and gives it
+        # back; dummy_hcd is the device controller it finds for the cable.
+        checked = deck.succeed("deckpad check 3")
+        print(checked)
+        assert "pad:        PASS" in checked and "usb cable:  ready" in checked, checked
+        deck.wait_until_succeeds(f"test $({driver}) = usbhid", timeout=60)
         deck.succeed(": > /run/fake-deck/commands")
         deck.succeed("systemctl start deckpad-deck.service")
         deck.wait_for_open_port(3240)
@@ -152,6 +158,13 @@ in pkgs.testers.runNixOSTest {
         pc.wait_until_succeeds("ls /sys/bus/hid/devices | grep -qi ':28DE:1302\\.'", timeout=120)
         node = pc.wait_until_succeeds("basename /sys/bus/hid/devices/*28DE:1302*/hidraw/hidraw*", timeout=120).strip()
         pc.wait_until_succeeds(f"timeout 10 head -c 54 /dev/{node} | od -An -tx1 -w54 | grep -q '^ 42 .. 01 20 00 00'", timeout=60)
+        # The PC reads the controller as Steam does: no report is lost, they
+        # keep the pad's pace and none is held up on the way.
+        measured = pc.succeed("deckpad measure 5")
+        print(measured)
+        assert "controller: PASS" in measured and ", 0 lost," in measured, measured
+        # The pad is the service's now, and the check says so.
+        assert "is the service serving a host" in deck.fail("deckpad check 1")
         # Reading the pad does not keep cancelling transfers that are about
         # to complete. Counted over five seconds of steady reading: a short
         # wait cancelled about fifty a second.
@@ -198,5 +211,10 @@ in pkgs.testers.runNixOSTest {
         assert status == 0 and result.endswith("PASS: deckpad paired and served over Bluetooth\n"), result
         deck.succeed("journalctl -u deckpad-bluetooth --no-pager | grep -q 'attached over Bluetooth'")
         deck.succeed("systemctl stop deckpad-bluetooth.service")
+        # With the service stopped the check finds the adapter and its HID
+        # channels free. There is no pad on this machine any more.
+        checked = deck.fail("deckpad check 1")
+        print(checked)
+        assert "bluetooth:  ready  adapter 00:AA:01" in checked, checked
   '';
 }

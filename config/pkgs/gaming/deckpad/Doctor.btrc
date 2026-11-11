@@ -1,0 +1,196 @@
+import Library.Bluetooth;
+import Library.FileSystem;
+import Library.Strings;
+import Library.Timer;
+import Library.USB.USBGadget;
+import Library.USB.USBHost;
+import Library.Vector;
+import ./DeckPad.btrc;
+import ./PadSource.btrc;
+import ./PadState.btrc;
+import ./SteamController.btrc;
+import ./Wire.btrc;
+
+#include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>
+
+// How evenly reports arrive: their count and the gaps between them.
+class ReportPace {
+    public int count = 0;
+    public int lost = 0;
+    public int late = 0;
+    public long long longest = 0LL;
+    private long long last = 0LL;
+    private bool stamped = false;
+    private long long earliest = 0LL;
+    private long long latest = 0LL;
+
+    public void arrived() { self.arrivedAt(MonotonicClock.nanoseconds() / 1000LL); }
+
+    // A report arrived at this time, in microseconds. A gap over 20 ms is
+    // five of the pad's periods.
+    public void arrivedAt(long long now) {
+        if (self.last != 0LL) {
+            long long gap = now - self.last;
+            if (gap > self.longest) { self.longest = gap; }
+            if (gap > 20000LL) { self.late++; }
+        }
+        self.last = now;
+        self.count++;
+    }
+
+    // The report that just arrived carries the sender's clock in microseconds,
+    // 32 bits wide. The two clocks are unrelated, so the difference says
+    // nothing by itself, but how much it varies is how much the delivery time
+    // varies: every report beyond the quickest one was late by that much.
+    public void sent(long long stamp) {
+        long long travel = (self.last - stamp) & 0xFFFFFFFFLL;
+        if (!self.stamped) {
+            self.stamped = true;
+            self.earliest = travel;
+            self.latest = travel;
+            return;
+        }
+        // Compare around the first value, so a wrapping clock stays in order.
+        long long offset = (travel - self.earliest) & 0xFFFFFFFFLL;
+        if (offset >= 0x80000000LL) { self.earliest = travel; }
+        else if (offset > ((self.latest - self.earliest) & 0xFFFFFFFFLL)) { self.latest = travel; }
+    }
+
+    // The most a report was delayed beyond the quickest one, in microseconds.
+    public long long jitter() { return (self.latest - self.earliest) & 0xFFFFFFFFLL; }
+
+    public string summary(int seconds) { return f"{self.count / (seconds > 0 ? seconds : 1)} reports/s, longest gap {(int)(self.longest / 1000LL)} ms, {self.late} gaps over 20 ms"; }
+
+    // Steady enough to play with: at least 100 reports a second, and never a
+    // tenth of a second without one.
+    public bool steady(int seconds) { return self.count >= 100 * seconds && self.longest < 100000LL; }
+}
+
+// Checks to run on the real machines, where no test can stand in for the
+// hardware: `deckpad check` on the Deck and `deckpad measure` on whatever
+// plays with the controller. Each line says PASS, FAIL or what is missing.
+class Doctor {
+    class string verdict(bool passed) { return passed ? "PASS" : "FAIL"; }
+
+    // Take the Deck's pad as the service does, read it for a while, give it back.
+    class bool pad(int seconds) {
+        if (!USBHost.present(DeckPad.vendor(), DeckPad.product())) {
+            print("pad:        FAIL  no Steam Deck controller (28de:1205) on this machine");
+            return false;
+        }
+        DeckPad pad = DeckPad();
+        try { pad.open(); } catch (string error) {
+            print(f"pad:        FAIL  {error} (is the service serving a host right now?)");
+            return false;
+        }
+        ReportPace pace = ReportPace();
+        int unanswered = 0;
+        long long deadline = MonotonicClock.deadlineAfter((long long)seconds * 1000LL);
+        try {
+            while (MonotonicClock.before(deadline)) {
+                struct PadState state;
+                if (pad.read(&state, 100)) { pace.arrived(); }
+                else { unanswered++; }
+            }
+        } catch (string error) {
+            pad.close();
+            print(f"pad:        FAIL  {error}");
+            return false;
+        }
+        pad.close();
+        bool passed = pace.steady(seconds);
+        print(f"pad:        {Doctor.verdict(passed)}  {pace.summary(seconds)}, {unanswered} reads unanswered");
+        return passed;
+    }
+
+    class void cable() {
+        if (!USBGadget.supported()) {
+            print("usb cable:  unavailable  this system cannot act as a USB device");
+            return;
+        }
+        Vector<string> controllers = USBGadget.controllers();
+        if (controllers.len == 0) { print("usb cable:  unavailable  no USB device controller; set the BIOS option USB Dual Role Device to DRD"); }
+        else { print(f"usb cable:  ready  device controller {controllers.get(0)}"); }
+    }
+
+    class void bluetooth(string name) {
+        if (!BluetoothAdapter.supported() || !L2CAP.supported()) {
+            print("bluetooth:  unavailable  this system has no Bluetooth");
+            return;
+        }
+        BluetoothPairingWindow window = BluetoothPairingWindow();
+        try {
+            BluetoothAdapter adapter = BluetoothAdapter.open(name, window);
+            string address = adapter.address().toString();
+            bool free = true;
+            try { L2CAPListener.listen(adapter.address(), BLUETOOTH_HID_CONTROL).close(); } catch (string error) { free = false; }
+            adapter.close();
+            if (free) { print(f"bluetooth:  ready  adapter {address}"); }
+            else { print(f"bluetooth:  unavailable  adapter {address}, but the HID channels are held (the service, or BlueZ's input plugin)"); }
+        } catch (string error) { print(f"bluetooth:  unavailable  {error}"); }
+    }
+
+    // On the Deck: can the pad be read steadily, and which links can work?
+    class int check(int seconds, string adapter) {
+        bool passed = Doctor.pad(seconds);
+        Doctor.cable();
+        Doctor.bluetooth(adapter);
+        return passed ? 0 : 1;
+    }
+
+    // The hidraw node of an attached Steam Controller, wired or Bluetooth;
+    // empty when there is none.
+    class string controllerNode() {
+        string root = "/sys/class/hidraw";
+        if (!FileSystem.isDir(root)) { return ""; }
+        Vector<string> names = FileSystem.listDir(root);
+        names.sort();
+        for name in names {
+            string identity = "";
+            try { identity = Path.readAll(f"{root}/{name}/device/uevent").toUpper(); } catch (string error) { identity = ""; }
+            if (identity.contains(":000028DE:00001302") || identity.contains(":000028DE:00001303")) { return name; }
+        }
+        return "";
+    }
+
+    // On the machine that plays: read the attached controller as Steam does
+    // and say how steadily its reports arrive and whether any went missing.
+    // Over Bluetooth a report is skipped on purpose when the radio is behind.
+    class int measure(int seconds) {
+        string node = Doctor.controllerNode();
+        if (node.isEmpty()) {
+            print("controller: FAIL  no Steam Controller (28de:1302 or 28de:1303) is attached here");
+            return 1;
+        }
+        int descriptor = open(f"/dev/{node}", (int)O_RDONLY);
+        if (descriptor < 0) {
+            print(f"controller: FAIL  cannot read /dev/{node} (run as root)");
+            return 1;
+        }
+        ReportPace pace = ReportPace();
+        int last = -1;
+        unsigned char report[128];
+        long long deadline = MonotonicClock.deadlineAfter((long long)seconds * 1000LL);
+        while (MonotonicClock.before(deadline)) {
+            struct pollfd waiting;
+            waiting.fd = descriptor;
+            waiting.events = POLLIN;
+            waiting.revents = 0;
+            if (poll(&waiting, (nfds_t)1, 100) <= 0) { continue; }
+            int length = (int)read(descriptor, report, (size_t)128);
+            if (length < 2) { break; }
+            if ((int)report[0] != STEAM_REPORT_STATE && (int)report[0] != STEAM_REPORT_STATE_BLUETOOTH) { continue; }
+            if (last >= 0) { pace.lost += (((int)report[1] - last - 1) & 0xFF); }
+            last = (int)report[1];
+            pace.arrived();
+            if (length >= 34) { pace.sent(Wire.u32le(report, 30)); }
+        }
+        close(descriptor);
+        // A report delayed by more than 25 ms is one a player can feel.
+        bool passed = pace.steady(seconds) && pace.jitter() < 25000LL;
+        print(f"controller: {Doctor.verdict(passed)}  {pace.summary(seconds)}, {pace.lost} lost, delivery varies by {(int)(pace.jitter() / 1000LL)}.{(int)(pace.jitter() / 100LL % 10LL)} ms ({node})");
+        return passed ? 0 : 1;
+    }
+}

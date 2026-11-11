@@ -2,4 +2,4 @@ manifest-version = 1
 
 [package]
 name = "nixos_deckpad"
-exports = ["Wire", "PadState", "PadSource", "DeckPad", "SteamController", "Controller", "ControllerUSB", "Link", "Protocol", "Trust", "SecureRelay", "NetworkLink", "GadgetLink", "BluetoothLink", "Service", "Control", "Host"]
+exports = ["Wire", "PadState", "PadSource", "DeckPad", "SteamController", "Controller", "ControllerUSB", "Link", "Protocol", "Trust", "SecureRelay", "NetworkLink", "GadgetLink", "BluetoothLink", "Service", "Control", "Host", "Doctor"]

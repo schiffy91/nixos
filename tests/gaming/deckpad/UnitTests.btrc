@@ -12,6 +12,7 @@ import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
 import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
 import ../../../config/pkgs/gaming/deckpad/Controller.btrc;
 import ../../../config/pkgs/gaming/deckpad/ControllerUSB.btrc;
+import ../../../config/pkgs/gaming/deckpad/Doctor.btrc;
 import ../../../config/pkgs/gaming/deckpad/Link.btrc;
 import ../../../config/pkgs/gaming/deckpad/Service.btrc;
 import ../../../config/pkgs/gaming/deckpad/Trust.btrc;
@@ -419,6 +420,43 @@ class DeckpadUnitTests {
         forwarding.input(&report);
         Check.that(forwarding.input(&report) && DeckpadUnitTests.buttons(&report) == (PAD_B | PAD_QUICK_ACCESS), "... can be forwarded");
     }
+
+    // What `deckpad check` and `deckpad measure` conclude from report times.
+    class void pace() {
+        // 250 reports a second for two seconds, each 3 ms in transit, on a
+        // sender's clock that wraps in the middle.
+        ReportPace even = ReportPace();
+        long long sender = 0xFFFFFFFFLL - 1000000LL;
+        for (int index = 0; index < 500; index++) {
+            even.arrivedAt(5000000LL + (long long)index * 4000LL + 3000LL);
+            even.sent((sender + (long long)index * 4000LL) & 0xFFFFFFFFLL);
+        }
+        Check.that(even.count == 500 && even.longest == 4000LL && even.late == 0, "even reports have even gaps");
+        Check.that(even.jitter() == 0LL && even.steady(2), "even delivery has no jitter and is steady");
+
+        // The same, with one report 30 ms late, the ones behind it arriving
+        // in a bunch, and one report 2 ms quicker than the rest.
+        ReportPace uneven = ReportPace();
+        long long previous = 0LL;
+        for (int index = 0; index < 500; index++) {
+            long long delay = index == 100 ? 33000LL : (index == 300 ? 1000LL : 3000LL);
+            long long arrival = 5000000LL + (long long)index * 4000LL + delay;
+            if (arrival < previous) { arrival = previous; }
+            previous = arrival;
+            uneven.arrivedAt(arrival);
+            uneven.sent((sender + (long long)index * 4000LL) & 0xFFFFFFFFLL);
+        }
+        Check.that(uneven.jitter() == 32000LL, "jitter spans the quickest and the slowest report");
+        Check.that(uneven.late == 1 && uneven.longest == 34000LL && uneven.steady(2), "one late report is counted");
+
+        // Too few reports, or a stall, is not steady.
+        ReportPace slow = ReportPace();
+        for (int index = 0; index < 100; index++) { slow.arrivedAt((long long)index * 20000LL); }
+        Check.that(!slow.steady(2), "50 reports a second is too few");
+        ReportPace stalled = ReportPace();
+        for (int index = 0; index < 500; index++) { stalled.arrivedAt((long long)index * 4000LL + (index >= 250 ? 150000LL : 0LL)); }
+        Check.that(!stalled.steady(2) && stalled.longest == 154000LL, "a stall of 150 ms is not steady");
+    }
 }
 
 int main() {
@@ -434,6 +472,7 @@ int main() {
     DeckpadUnitTests.pairing();
     DeckpadUnitTests.links();
     DeckpadUnitTests.stopChord();
-    print("PASS: deckpad reports, descriptors, feature commands, haptics, USB and Bluetooth views, pairing, shared links and stop chord");
+    DeckpadUnitTests.pace();
+    print("PASS: deckpad reports, descriptors, feature commands, haptics, USB and Bluetooth views, pairing, shared links, stop chord and report pace");
     return 0;
 }
