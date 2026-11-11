@@ -1,16 +1,23 @@
 ConsolePortSettings = {
     ["bindingShowExtraBars"] = false,
+    ["crosshairEnable"] = false,
+    ["interactButton"] = "none",
+    ["interactCondition"] = "nil",
     ["keyboardButtonVersion"] = 2,
     ["layersDoubleBar"] = false,
     ["moduleStateCharacters"] = {
         ["Player-6932-009919BF"] = 2,
     },
     ["moduleStateVersion"] = 1,
+    ["mouseAlwaysCentered"] = false,
+    ["mouseFreeCursorReticle"] = 1,
+    ["mouseHandlingEnabled"] = false,
     ["mouseHideCursorOnMovement"] = true,
+    ["mouseShowCenterTooltip"] = false,
     ["trgtEnemy"] = 1,
     ["trgtForce"] = 0,
     ["trgtFriend"] = 1,
-    ["trgtMatchLocked"] = 1,
+    ["trgtMatchLocked"] = 0,
     ["tutorialState"] = 14,
 }
 ConsolePortDevices = {
@@ -771,7 +778,7 @@ ConsolePortShared = {
                 ["SHIFT-"] = "TARGETNEARESTENEMY",
             },
             ["PADRSTICK"] = {
-                [""] = "INTERACTTARGET",
+                [""] = "CLICK FlareUISoftTarget:LeftButton",
                 ["CTRL-"] = "INTERACTTARGET",
                 ["CTRL-SHIFT-"] = "INTERACTTARGET",
                 ["SHIFT-"] = "INTERACTTARGET",

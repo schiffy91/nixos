@@ -84,13 +84,19 @@ The shoulder and trigger
 indicators are anchored around the cluster center so narrowing the bar does not
 make them overlap.
 Enemy and friendly soft targeting follow the camera while using a gamepad;
-explicitly selected targets stay locked. Forced hard targeting remains off.
+explicitly selected targets stay locked while soft candidates can change.
+`SoftTargetMatchLocked=0` and `SoftTargetWithLocked=2` allow aiming at another
+candidate without clearing the current target. Forced hard targeting remains off.
 Friendly soft targets can receive healing spells before being explicitly selected.
 The existing FlareUI integration supplies the secure `FlareUISoftTarget` button;
 its `displayLayout.softTargetUnit` condition is editable in SavedVariables and
 the R3 binding lives in the normal bindings cache. No personal macro is required.
 These preferences are saved in ConsolePort and the shared profile CVars,
 so switching display or input profiles retains the same targeting behavior.
+ConsolePort's crosshair, centered-cursor tooltip and click override are disabled.
+The profiles also disable cursor centering and centered mouse-click emulation;
+ground-targeted spells use the free cursor. Soft targeting and normal UI cursor
+navigation remain available without a crosshair.
 The FlareUI display profiles carry the trigger modifier and action-camera CVars
 in editable SavedVariables. They apply when the profile loads. Without those
 profiles, set the modifiers in ConsolePort or run:

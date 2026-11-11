@@ -2,7 +2,6 @@
 ConsolePort_BarPresets = {
 }
 ConsolePort_BarSharedLayout = {
-["visibility"] = "[petbattle] hide; show",
 ["name"] = "Default",
 ["children"] = {
 ["VehicleL"] = {
@@ -65,16 +64,16 @@ ConsolePort_BarSharedLayout = {
 ["x"] = -240,
 },
 },
-["PADLSHOULDER"] = {
+["PADRTRIGGER"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
-["dir"] = "UP",
+["dir"] = "DOWN",
 ["size"] = 64,
 ["pos"] = {
-["y"] = 70,
+["y"] = -10,
 ["relPoint"] = "CENTER",
 ["point"] = "CENTER",
-["x"] = -72,
+["x"] = 72,
 },
 },
 ["PADLTRIGGER"] = {
@@ -101,18 +100,6 @@ ConsolePort_BarSharedLayout = {
 ["x"] = 240,
 },
 },
-["PADDLEFT"] = {
-["showFlyouts"] = true,
-["type"] = "ClusterHandle",
-["dir"] = "LEFT",
-["size"] = 64,
-["pos"] = {
-["y"] = 40,
-["relPoint"] = "LEFT",
-["point"] = "LEFT",
-["x"] = 176,
-},
-},
 ["PADRSHOULDER"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
@@ -123,6 +110,18 @@ ConsolePort_BarSharedLayout = {
 ["relPoint"] = "CENTER",
 ["point"] = "CENTER",
 ["x"] = 72,
+},
+},
+["PAD4"] = {
+["showFlyouts"] = true,
+["type"] = "ClusterHandle",
+["dir"] = "UP",
+["size"] = 64,
+["pos"] = {
+["y"] = 84,
+["relPoint"] = "RIGHT",
+["point"] = "RIGHT",
+["x"] = -240,
 },
 },
 ["PAD2"] = {
@@ -161,28 +160,28 @@ ConsolePort_BarSharedLayout = {
 ["x"] = -306,
 },
 },
-["PAD4"] = {
+["PADDLEFT"] = {
+["showFlyouts"] = true,
+["type"] = "ClusterHandle",
+["dir"] = "LEFT",
+["size"] = 64,
+["pos"] = {
+["y"] = 40,
+["relPoint"] = "LEFT",
+["point"] = "LEFT",
+["x"] = 176,
+},
+},
+["PADLSHOULDER"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
 ["dir"] = "UP",
 ["size"] = 64,
 ["pos"] = {
-["y"] = 84,
-["relPoint"] = "RIGHT",
-["point"] = "RIGHT",
-["x"] = -240,
-},
-},
-["PADRTRIGGER"] = {
-["showFlyouts"] = true,
-["type"] = "ClusterHandle",
-["dir"] = "DOWN",
-["size"] = 64,
-["pos"] = {
-["y"] = -10,
+["y"] = 70,
 ["relPoint"] = "CENTER",
 ["point"] = "CENTER",
-["x"] = 72,
+["x"] = -72,
 },
 },
 },
@@ -208,6 +207,50 @@ ConsolePort_BarSharedLayout = {
 ["level"] = 2,
 ["x"] = 0,
 ["offsetscale"] = false,
+},
+},
+["Watchbar"] = {
+["type"] = "Watchbar",
+["castbar"] = {
+["enabled"] = true,
+},
+["width"] = 700,
+["totem"] = {
+["enabled"] = true,
+["hidden"] = false,
+["pos"] = {
+["y"] = 18,
+["relPoint"] = "BOTTOM",
+["point"] = "BOTTOM",
+["x"] = 0,
+},
+},
+["pos"] = {
+["y"] = 0,
+["relPoint"] = "BOTTOM",
+["point"] = "BOTTOM",
+["x"] = 0,
+},
+},
+["Toolbar"] = {
+["type"] = "Toolbar",
+["notch"] = {
+["show"] = false,
+},
+["menu"] = {
+["eye"] = true,
+["scale"] = 1.5,
+["micromenu"] = true,
+},
+["bags"] = {
+["enabled"] = true,
+},
+["open"] = "Hover",
+["pos"] = {
+["y"] = 0,
+["relPoint"] = "BOTTOM",
+["point"] = "BOTTOM",
+["x"] = 0,
 },
 },
 ["VehicleR"] = {
@@ -237,61 +280,18 @@ ConsolePort_BarSharedLayout = {
 ["offsetscale"] = false,
 },
 },
-["Toolbar"] = {
-["type"] = "Toolbar",
-["notch"] = {
-["show"] = false,
 },
-["menu"] = {
-["eye"] = true,
-["scale"] = 1.5,
-["micromenu"] = true,
-},
-["bags"] = {
-["enabled"] = true,
-},
-["open"] = "Hover",
-["pos"] = {
-["y"] = 0,
-["relPoint"] = "BOTTOM",
-["point"] = "BOTTOM",
-["x"] = 0,
-},
-},
-["Watchbar"] = {
-["type"] = "Watchbar",
-["castbar"] = {
-["enabled"] = true,
-},
-["width"] = 700,
-["totem"] = {
-["enabled"] = true,
-["hidden"] = false,
-["pos"] = {
-["y"] = 18,
-["relPoint"] = "BOTTOM",
-["point"] = "BOTTOM",
-["x"] = 0,
-},
-},
-["pos"] = {
-["y"] = 0,
-["relPoint"] = "BOTTOM",
-["point"] = "BOTTOM",
-["x"] = 0,
-},
-},
-},
+["visibility"] = "[petbattle] hide; show",
 ["desc"] = "A cluster bar with a toolbar below it.",
 }
 ConsolePort_BarSharedDB = {
-["clusterShowAll"] = false,
-["LABhideElementsMacro"] = true,
 ["xpBarColor"] = "ffff97c5",
+["tintEnable"] = false,
+["clusterShowAll"] = false,
 ["fadeXPBar"] = true,
 ["clusterShowFlyoutIcons"] = true,
 ["showMainIcons"] = false,
-["tintEnable"] = false,
+["LABhideElementsMacro"] = true,
 ["showCooldownText"] = true,
 }
 ConsolePort_BarShareAll = true
