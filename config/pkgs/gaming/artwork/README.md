@@ -19,6 +19,14 @@ composition and resolution; no generic icon-to-banner generator remains.
 | Moonlight | [Moonlight Game Streaming](https://www.steamgriddb.com/game/5323697) | Coordinated OmniDeath lunar covers, starfield hero and title |
 | chiaki-ng | [chiaki-ng](https://www.steamgriddb.com/game/5441527) | Coordinated LXVI lime/controller-symbol set and white title |
 
+Deck as Controller (deckpad) is the exception: SteamGridDB has no art of a Deck
+acting as a Steam Controller. `deckpad/compose.py` builds its set from the
+pictures on [Valve's Steam Controller page](https://store.steampowered.com/hardware/steamcontroller):
+the controller on kraft paper for the hero, the product photograph placed on
+the same paper for both covers, and Valve's controller glyph for the logo and
+the icon. The five PNGs it writes are committed in `deckpad/`, because Valve
+replaces the files behind that page; run the script to redo them.
+
 Steam games such as Assetto Corsa and Rocksmith already receive their library
 artwork from Steam. They do not need duplicate non-Steam shortcuts.
 
@@ -46,7 +54,7 @@ The tools serve different workflows:
   SteamGridDB from its plugin store. This repository does not install that plugin.
 - [Steam ROM Manager](https://github.com/SteamGridDB/steam-rom-manager) imports
   individual ROMs and manages their Steam art. Our existing Semu shortcut opens
-  the whole library, so SRM is not needed to populate these five launchers.
+  the whole library, so SRM is not needed to populate these launchers.
 - Inside ES-DE, use its [scraper and theme
   downloader](https://gitlab.com/es-de/emulationstation-de/-/blob/master/USERGUIDE.md).
   ScreenScraper/TheGamesDB media and ES-DE themes are independent of Steam art.
@@ -70,5 +78,5 @@ To update the defaults, select and visually review a complete set on SteamGridDB
 then update the corresponding entries in `sources.json` with the original PNG
 download URLs and hashes (`nix store prefetch-file --json URL`). Keep the source
 page and artist attribution. `tests/gaming/artwork.nix` validates all 20 downloaded
-images; the Steam installer tests cover upgrades, legacy migration and custom-art
+images and the four composed for deckpad; the Steam installer tests cover upgrades, legacy migration and custom-art
 preservation.

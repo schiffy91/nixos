@@ -3,19 +3,26 @@ let
   settings = config.settings.apps.gaming.deckpad;
   user = config.settings.users.admin.username;
   programs = import ./package.nix { inherit pkgs inputs; };
+  artwork = import ../artwork/package.nix { inherit pkgs inputs; };
   deckpad = "${programs.deckpad}/bin/deckpad";
   trust = lib.concatMapStringsSep " " (line: "--trust ${lib.escapeShellArg line}") settings.trustedKeys;
+  # The service writes its control token once it answers requests.
+  awaitService = "${pkgs.coreutils}/bin/timeout 10 ${pkgs.bash}/bin/sh -c 'until [ -e /run/deckpad/token ]; do ${pkgs.coreutils}/bin/sleep 0.1; done'";
   toggle = pkgs.writeShellScriptBin "deckpad-toggle" ''
     if ${pkgs.systemd}/bin/systemctl is-active --quiet deckpad.service; then
       exec ${pkgs.systemd}/bin/systemctl stop deckpad.service
     fi
-    exec ${pkgs.systemd}/bin/systemctl start deckpad.service
+    ${pkgs.systemd}/bin/systemctl start deckpad.service || exit 1
+    # A Deck that trusts no host yet lets the first one pair, so Game Mode
+    # needs only this one shortcut.
+    ${awaitService} || exit 0
+    if ${deckpad} status | ${pkgs.jq}/bin/jq -e '.trusted | length == 0' > /dev/null; then exec ${deckpad} pairing 120; fi
   '';
   # Start the service if it is not running, then let new hosts pair for two
-  # minutes. The service writes its control token once it answers requests.
+  # minutes.
   pair = pkgs.writeShellScriptBin "deckpad-pair" ''
     ${pkgs.systemd}/bin/systemctl is-active --quiet deckpad.service || ${pkgs.systemd}/bin/systemctl start deckpad.service
-    ${pkgs.coreutils}/bin/timeout 10 ${pkgs.bash}/bin/sh -c 'until [ -e /run/deckpad/token ]; do ${pkgs.coreutils}/bin/sleep 0.1; done' || exit 1
+    ${awaitService} || exit 1
     exec ${deckpad} pairing 120
   '';
   tray = pkgs.symlinkJoin {
@@ -24,7 +31,7 @@ let
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram $out/bin/deckpad-tray \
-        --set DECKPAD_TRAY_ICON ${pkgs.kdePackages.oxygen-icons}/share/icons/oxygen/base/64x64/devices/input-gaming.png \
+        --set DECKPAD_TRAY_ICON ${artwork.deckpad.icon} \
         --prefix PATH : ${lib.makeBinPath [ toggle pair pkgs.systemd ]}
     '';
   };
@@ -46,7 +53,7 @@ in {
       boot.kernelModules = lib.mkIf settings.usb [ "libcomposite" "usb_f_fs" ];
       systemd.services.deckpad = {
         description = "Steam Deck controls as a Steam Controller";
-        after = lib.optional settings.bluetooth "bluetooth.service";
+        after = [ "jupiter-controller-update.service" ] ++ lib.optional settings.bluetooth "bluetooth.service";
         wants = lib.optional settings.bluetooth "bluetooth.service";
         serviceConfig = {
           ExecStart = lib.concatStringsSep " " ([
@@ -67,6 +74,13 @@ in {
           RestartSec = 2;
         };
       };
+      # Jovian's firmware check for the Deck's controller runs at boot and on
+      # every switch, and talks to the pad this service takes from the kernel.
+      # A check in progress holds the service back (`after` above), and while
+      # the service runs the check is skipped until the next boot or switch.
+      systemd.services.jupiter-controller-update = lib.mkIf (config.jovian.devices.steamdeck.autoUpdate or false) {
+        serviceConfig.ExecCondition = "${pkgs.runtimeShell} -c '! ${pkgs.systemd}/bin/systemctl is-active --quiet deckpad.service'";
+      };
       # As a Bluetooth controller the Deck must look like one, and BlueZ's own
       # HID host must not hold the channels a controller serves.
       hardware.bluetooth = lib.mkIf settings.bluetooth {
@@ -84,9 +98,8 @@ in {
         });
       '';
       settings.apps.gaming.steam.shortcuts = lib.mkIf config.settings.apps.gaming.steam.enable {
-        # Stable paths: Steam derives the app IDs from them.
-        "Deck as Controller" = lib.mkDefault "/run/current-system/sw/bin/deckpad-toggle";
-        "Deck as Controller: Pair" = lib.mkDefault "/run/current-system/sw/bin/deckpad-pair";
+        # A stable path: Steam derives the app ID from it.
+        "Deck as Controller" = lib.mkDefault ({ exe = "/run/current-system/sw/bin/deckpad-toggle"; } // artwork.deckpad);
       };
       systemd.user.services.deckpad-tray = lib.mkIf config.settings.desktop.enable {
         description = "Deck as Controller tray switch";

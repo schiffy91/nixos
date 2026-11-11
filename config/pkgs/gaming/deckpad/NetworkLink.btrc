@@ -31,6 +31,7 @@ class NetworkLink implements IControllerLink {
     private USBIPExport? exported = null;
     private SecureRelay? relay = null;
     private string host = "";
+    private string turnedAway = "";  // the last refusal logged; a host that keeps asking is logged once
 
     public NetworkLink(VirtualController controller, SigningKey identity, Pairing pairing, string address, int port, Vector<string> allowed) {
         self.gate = ControllerPort(controller);
@@ -86,10 +87,13 @@ class NetworkLink implements IControllerLink {
         if (!self.pairing.admits(channel.peer(), label, channel.pairingCode())) { answer = NetworkProtocol.refusedUnpaired(); }
         else if (self.gate.busyElsewhere()) { answer = NetworkProtocol.refusedBusy(); }
         if (!channel.send(Bytes.fromString(answer), 1500) || !answer.equals(NetworkProtocol.accepted())) {
-            Console.error(f"deckpad: turned away {label} ({channel.peer().fingerprint()}): {answer}");
+            string refusal = f"deckpad: turned away {label} ({channel.peer().fingerprint()}): {answer}";
+            if (!refusal.equals(self.turnedAway)) { Console.error(refusal); }
+            self.turnedAway = refusal;
             channel.close();
             return null;
         }
+        self.turnedAway = "";
         self.host = label;
         return channel;
     }

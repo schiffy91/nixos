@@ -22,8 +22,10 @@ Mode) or the tray checkbox (Plasma). The Deck keeps its own controls until a
 host attaches, and gets them back when the host leaves, the service stops, or
 you hold **⋯** for two seconds.
 
-A new host has to be let in once. Start **Deck as Controller: Pair** on the
-Deck, which opens a two-minute pairing window, and then:
+A new host has to be let in once, during a two-minute pairing window. A Deck
+that trusts no host yet opens one by itself when the service starts; for a
+further host, open one from the tray's **Pair a new host** or with
+`deckpad-pair`. Then:
 
 - **Network:** on the PC run `sudo deckpad pair STEAM-DECK-OLED.local`. Both
   sides show a six-digit code (`deckpad status` on the Deck); if they match,
@@ -88,6 +90,22 @@ loop turn each link sends the newest state; a link that is behind skips a
 report instead of sending a stale one. Over the network that is one pad
 report per 4 ms with Nagle off.
 
+**Firmware updates.** Steam's hardware updater offers a Steam Controller
+firmware when its build time is not that of the firmware Steam ships
+(`bin/hardwareupdater/IBEX_FW_<time>.fw`), and leaves boards older than
+revision 68 alone. This controller cannot take firmware, and an offer that is
+accepted fails. So it reports board revision 67 and the build time of the
+firmware current in November 2026, and
+`hardwareupdater.x86_64 --check-for-updates` lists nothing for it. Of what a
+host sends, only rumble and haptics reach the Deck's own controller; an
+update attempt cannot touch its firmware.
+
+The Deck's own controller firmware is checked by Jovian's
+`jupiter-controller-update` at boot and on every `nixosctl update`. It and
+this service never hold the pad at once: the service waits for a check in
+progress, and a check that comes up while the service runs is skipped, since
+without the pad it could only fail, and fail the update with it.
+
 ## Configuration
 
 ```nix
@@ -147,7 +165,8 @@ networks may connect at all. The host role loads `vhci-hcd` and keeps trying
 
 ## Checking the real hardware
 
-No test here has a Deck, so the first run on one should be these, as root:
+No test here has a Deck, so a new Deck or PC should be checked with these, as
+root:
 
 1. On the Deck, with no host attached: `deckpad check 5`. It takes the pad
    from the kernel as the service does, reads it for five seconds and gives
@@ -168,14 +187,19 @@ No test here has a Deck, so the first run on one should be these, as root:
 Both commands exit non-zero when they fail, and the VM test runs them against
 the emulated pad.
 
-Not verified without hardware: the real pad's firmware (the emulated one
-answers the same requests but is not it), the Deck's port in device mode, a
-real Bluetooth radio, and how the Steam client itself treats the controller
-on each link. The report layouts follow SDL and `hid-steam`, and SDL's driver
-reads them in the VM test; the Steam client has only been shown accepting a
-Deck as this controller over Bluetooth, by the project credited below. On Linux 6.18 `hid-generic` binds `28de:1302`: that
-kernel's `hid-steam` does not know it yet, so there is no kernel gamepad
-without Steam, which reads hidraw itself.
+Run on a Steam Deck OLED and FRACTAL-NORTH on 2026-11-11: step 1 read 250
+reports a second; step 2 passed over the USB-C cable (249 a second, none
+lost, under 2 ms of jitter) and over Wi-Fi (221 to 238 a second, none lost,
+under 8 ms); the Steam client opened the controller on both links and
+offered it no firmware. The PC's kernel (7.3) binds `28de:1302` with
+`hid-steam`; an older kernel leaves it to `hid-generic`, and Steam reads
+hidraw itself either way.
+
+Still not verified: step 3 by hand (sticks, pads, gyro and rumble as felt in
+Steam's test screen), and a real Bluetooth radio; the Steam client has only
+been shown accepting a Deck as this controller over Bluetooth by the project
+credited below. The report layouts follow SDL and `hid-steam`, and SDL's
+driver reads them in the VM test.
 
 The network channel's construction (SIGMA-I over libsodium) has not been
 audited.

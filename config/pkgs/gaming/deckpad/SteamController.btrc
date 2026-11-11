@@ -15,7 +15,12 @@ enum {
     STEAM_OUT_TONE = 0x83, STEAM_OUT_SWEEP = 0x84, STEAM_OUT_SCRIPT = 0x85,
     STEAM_GET_ATTRIBUTES = 0x83, STEAM_SET_SETTINGS = 0x87, STEAM_GET_SETTINGS = 0x89,
     STEAM_HAPTIC_PULSE = 0x8F, STEAM_GET_STRING = 0xAE, STEAM_RUMBLE = 0xEB,
-    STEAM_SERIAL_LENGTH = 20
+    STEAM_SERIAL_LENGTH = 20,
+    // Steam's hardware updater offers firmware to a controller whose build
+    // time is not that of the firmware it ships (IBEX_FW_<time>.fw), unless
+    // its board is older than revision 68. This controller cannot take
+    // firmware, so it is an older board, running the firmware of November 2026.
+    STEAM_BOARD_REVISION = 67, STEAM_FIRMWARE_TIME = 0x6AE90BC5
 };
 
 enum { HOST_EFFECT_NONE, HOST_EFFECT_RUMBLE, HOST_EFFECT_HAPTIC };
@@ -143,8 +148,7 @@ class SteamController {
         Wire.putU32le(out, offset + 1, value);
     }
 
-    // The reply to the last command, as a real controller answers. The firmware
-    // build time is far in the future so Steam never offers a firmware update.
+    // The reply to the last command, as a real controller answers.
     public int getFeature(unsigned char* out) {
         memset(out, 0, (size_t)STEAM_FEATURE_LENGTH);
         out[0] = (unsigned char)STEAM_REPORT_FEATURE;
@@ -155,8 +159,8 @@ class SteamController {
             self.attribute(out, 3, 1, (long long)STEAM_PRODUCT);
             self.attribute(out, 8, 2, 0LL);
             self.attribute(out, 13, 10, 0x68D2F92ELL);
-            self.attribute(out, 18, 4, 0x7FFFFFFFLL);
-            self.attribute(out, 23, 9, 72LL);
+            self.attribute(out, 18, 4, (long long)STEAM_FIRMWARE_TIME);
+            self.attribute(out, 23, 9, (long long)STEAM_BOARD_REVISION);
             out[2] = (unsigned char)25;
         } else if (command == STEAM_GET_STRING && arguments >= 1) {
             out[3] = self.memory.command[2];

@@ -170,7 +170,7 @@ class DeckpadUnitTests {
         DeckpadUnitTests.command(request, STEAM_GET_ATTRIBUTES, 0);
         controller.setFeature(request, 64);
         controller.getFeature(reply);
-        Check.that((int)reply[2] == 25 && (int)reply[3] == 1 && Wire.u16le(reply, 4) == STEAM_PRODUCT && (int)reply[18] == 4 && (int)reply[22] == 0x7F, "attributes name the product and a future firmware");
+        Check.that((int)reply[2] == 25 && (int)reply[3] == 1 && Wire.u16le(reply, 4) == STEAM_PRODUCT && (int)reply[18] == 4 && Wire.u32le(reply, 19) == STEAM_FIRMWARE_TIME && (int)reply[23] == 9 && Wire.u32le(reply, 24) == STEAM_BOARD_REVISION && STEAM_BOARD_REVISION < 68, "attributes name the product, the current firmware and a board Steam's updater leaves alone");
         DeckpadUnitTests.command(request, STEAM_SET_SETTINGS, 6);
         request[3] = (unsigned char)9; request[4] = (unsigned char)0;
         request[6] = (unsigned char)48; request[7] = (unsigned char)0x18;

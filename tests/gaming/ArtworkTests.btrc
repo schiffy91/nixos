@@ -13,7 +13,7 @@ class ArtworkTests {
     }
 
     class void check(string root) {
-        Check.equal(FileSystem.listDir(root).sorted().join(","), "battlenet,chiaki,chrome,moonlight,semu", "artwork applications");
+        Check.equal(FileSystem.listDir(root).sorted().join(","), "battlenet,chiaki,chrome,deckpad,moonlight,semu", "artwork applications");
         for app in FileSystem.listDir(root) {
             var directory = PathTools.join(root, app);
             for name in ["p", "landscape", "_hero"] {
@@ -43,6 +43,6 @@ class ArtworkTests {
 int main(int argc, char** argv) {
     try {
         ArtworkTests.check(CLIArgs(argc, argv).require(0, "Supply artwork directory"));
-        print("All five apps have valid portrait, landscape, hero and transparent logo assets"); return 0;
+        print("All six apps have valid portrait, landscape, hero and transparent logo assets"); return 0;
     } catch (string error) { print(error); return 1; }
 }

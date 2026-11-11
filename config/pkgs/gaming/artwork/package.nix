@@ -13,4 +13,7 @@ in pkgs.lib.mapAttrs (name: assets: {
     '') assets)}
     cp ${pkgs.writeText "${name}-legacy-artwork.json" (builtins.toJSON legacy.${name})} "$out/legacy.json"
   '';
-}) sources
+}) sources // {
+  # Nobody has drawn the Deck as a Steam Controller, so deckpad/compose.py made this set from Valve's pictures.
+  deckpad = { icon = "${./deckpad/icon.png}"; artwork = ./deckpad; };
+}

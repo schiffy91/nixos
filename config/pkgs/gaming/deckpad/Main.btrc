@@ -137,12 +137,18 @@ class Deckpad {
 
     // Attach, and with `watch` keep coming back whenever the controller is
     // offered again. Each try reads the trusted keys afresh, so a controller
-    // paired in the meantime is attached without a restart.
+    // paired in the meantime is attached without a restart. A reason for not
+    // attaching is logged once, not on every try.
     class void attach(CLICommandLine options, bool watch) {
+        string logged = "";
         while (true) {
-            try { Deckpad.host(options).attach(); } catch (string error) {
+            try {
+                Deckpad.host(options).attach();
+                logged = "";
+            } catch (string error) {
                 if (!watch) { throw error; }
-                Console.error(f"deckpad: {error}");
+                if (!error.equals(logged)) { Console.error(f"deckpad: {error}"); }
+                logged = error;
             }
             if (!watch) { return; }
             Timer.sleepMillis(3000);
