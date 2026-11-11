@@ -106,16 +106,22 @@ class ControllerHost {
         return SecureChannel.connect(stream, self.identity, 5000);
     }
 
-    // Ask to attach; the controller's refusal is thrown as it said it.
-    private void greet(SecureChannel channel) {
+    // Ask to attach and hear the controller's answer.
+    private string ask(SecureChannel channel) {
         Bytes answer = Bytes();
         if (!channel.send(Bytes.fromString(NetworkProtocol.greeting() + self.label), 5000) || channel.receive(answer, 5000) <= 0) {
             channel.close();
             throw f"{self.host} did not answer";
         }
-        if (!answer.toString().equals(NetworkProtocol.accepted())) {
+        return answer.toString();
+    }
+
+    // Ask to attach; the controller's refusal is thrown as it said it.
+    private void greet(SecureChannel channel) {
+        string answer = self.ask(channel);
+        if (!answer.equals(NetworkProtocol.accepted())) {
             channel.close();
-            throw f"{self.host} {answer.toString()}";
+            throw f"{self.host} {answer}";
         }
     }
 
@@ -141,8 +147,11 @@ class ControllerHost {
                 throw "Not paired";
             }
         }
-        self.greet(channel);
+        string answer = self.ask(channel);
         channel.close();
+        // A controller in use over another link has taken this host in all
+        // the same: it checks the pairing before it says it is busy.
+        if (!answer.equals(NetworkProtocol.accepted()) && !answer.equals(NetworkProtocol.refusedBusy())) { throw f"{self.host} {answer}"; }
         self.trusted.add(peer, self.host);
         print(f"Paired with {self.host}");
     }
@@ -180,19 +189,6 @@ class ControllerHost {
         USBIPAttachment.detachDevice(NetworkProtocol.deviceId());
         if (!attached) { throw f"Cannot attach the controller at {self.host}"; }
         Console.error(f"deckpad: the controller at {self.host} is gone");
-    }
-
-    // Attach, and with `watch` keep coming back whenever the controller is
-    // offered again.
-    public void run(bool watch) {
-        while (true) {
-            try { self.attach(); } catch (string error) {
-                if (!watch) { throw error; }
-                Console.error(f"deckpad: {error}");
-            }
-            if (!watch) { return; }
-            Timer.sleepMillis(3000);
-        }
     }
 
     // Detach a controller an earlier process attached; the number detached.

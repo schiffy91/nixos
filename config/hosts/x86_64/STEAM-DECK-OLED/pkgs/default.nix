@@ -7,7 +7,7 @@ in {
     gaming.packages = with pkgs; [ protonup-qt ];
     gaming.moonlight.enable = true;
     gaming.chiaki.enable = true;
-    gaming.deckpad = { enable = true; role = "controller"; };  # this Deck's controls as a Steam Controller for FRACTAL-NORTH
+    gaming.deckpad = { enable = true; role = "controller"; usb = true; };  # this Deck's controls as a Steam Controller for FRACTAL-NORTH; usb needs the BIOS port in DRD mode
     utils.desktop.enable = true;
     utils.nixosctl.caffeine.enable = false;
     gaming.steam.protonCustom.enable = true;

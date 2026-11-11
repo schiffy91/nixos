@@ -62,7 +62,7 @@ in {
           RuntimeDirectoryMode = "0750";
           StateDirectory = "deckpad";
           StateDirectoryMode = "0700";
-          Group = "users";
+          Group = config.users.users.${user}.group;
           Restart = "on-failure";
           RestartSec = 2;
         };
