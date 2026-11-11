@@ -82,7 +82,7 @@ class Doctor {
         }
         DeckPad pad = DeckPad();
         try { pad.open(); } catch (string error) {
-            print(f"pad:        FAIL  {error} (is the service serving a host right now?)");
+            print(f"pad:        FAIL  {error}");
             return false;
         }
         ReportPace pace = ReportPace();

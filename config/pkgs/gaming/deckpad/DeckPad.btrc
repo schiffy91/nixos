@@ -34,7 +34,7 @@ class DeckPad implements IPadSource {
             if (!pad.claim(number)) {
                 for (int taken = 0; taken <= number; taken++) { pad.unclaim(taken); }
                 pad.close();
-                throw "Cannot take the Steam Deck controller from the kernel";
+                throw "Cannot take the Steam Deck controller: another program holds it (is the service serving a host?)";
             }
         }
         self.device = pad;

@@ -163,8 +163,15 @@ in pkgs.testers.runNixOSTest {
         measured = pc.succeed("deckpad measure 5")
         print(measured)
         assert "controller: PASS" in measured and ", 0 lost," in measured, measured
-        # The pad is the service's now, and the check says so.
+        # The pad is the service's now. The check says so and leaves it
+        # there: the service keeps serving and the PC loses no report.
+        pc.succeed("(deckpad measure 8 > /tmp/measured 2>&1; echo finished >> /tmp/measured) > /dev/null 2>&1 &")
         assert "is the service serving a host" in deck.fail("deckpad check 1")
+        deck.succeed("systemctl is-active deckpad-deck.service")
+        pc.wait_until_succeeds("grep -qx finished /tmp/measured", timeout=60)
+        measured = pc.succeed("cat /tmp/measured")
+        print(measured)
+        assert "controller: PASS" in measured and ", 0 lost," in measured, measured
         # Reading the pad does not keep cancelling transfers that are about
         # to complete. Counted over five seconds of steady reading: a short
         # wait cancelled about fifty a second.
