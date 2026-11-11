@@ -18,6 +18,10 @@ class Wire {
 
     class int u16be(unsigned char* data, int offset) { return ((int)data[offset] << 8) | (int)data[offset + 1]; }
 
+    class long long u32le(unsigned char* data, int offset) {
+        return (long long)data[offset] | ((long long)data[offset + 1] << 8) | ((long long)data[offset + 2] << 16) | ((long long)data[offset + 3] << 24);
+    }
+
     class long long u32be(unsigned char* data, int offset) {
         long long value = 0LL;
         for (int index = 0; index < 4; index++) { value = (value << 8) | (long long)data[offset + index]; }

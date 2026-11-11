@@ -1,0 +1,63 @@
+import Library.Bluetooth.BluetoothPairing;
+import Library.Console;
+import Library.Crypto;
+import Library.FileSystem;
+
+// Who this machine is to other machines: an Ed25519 key in OpenSSH's format.
+// The SSH host key serves, so a machine is known to deckpad by the same key
+// it is known to SSH by.
+class MachineIdentity {
+    class string hostKey() { return "/etc/ssh/ssh_host_ed25519_key"; }
+
+    // The key in the file at `path`. When there is none and `create` is set, a
+    // new one is written there for next time.
+    class SigningKey load(string path, bool create) {
+        if (FileSystem.isFile(path)) {
+            SigningKey? key = SigningKey.fromOpenSSH(Path.readAll(path));
+            if (key == null) { throw f"{path} is not an unencrypted Ed25519 OpenSSH key"; }
+            return key;
+        }
+        if (!create) { throw f"No identity key at {path}"; }
+        SigningKey fresh = SigningKey.generate();
+        if (!Path.writeAll(path, fresh.toOpenSSH("deckpad")) || FileSystem.chmod(path, 384) != 0) { throw f"Cannot keep a new identity key at {path}"; }
+        return fresh;
+    }
+}
+
+// Which hosts may use the controller, and how a new one gets in.
+//
+// A host is trusted by its key, kept as an OpenSSH line. A new host is taken
+// in only while the pairing window is open, which someone at the Deck opens:
+// the same window lets a Bluetooth host pair, and a USB cable needs neither.
+class Pairing {
+    private TrustedKeys keys;
+    private BluetoothPairingWindow opening;
+    private string lastCode = "";
+    private string lastLabel = "";
+
+    public Pairing(string path) {
+        self.keys = TrustedKeys(path);
+        self.opening = BluetoothPairingWindow();
+    }
+
+    public TrustedKeys trusted() { return self.keys; }
+
+    public BluetoothPairingWindow window() { return self.opening; }
+
+    // The code shown for the newest pairing, to compare with the host's.
+    public string code() { return self.lastCode; }
+
+    public string codeLabel() { return self.lastLabel; }
+
+    // Whether the host with this key may attach. An unknown host is trusted
+    // from now on when the pairing window is open.
+    public bool admits(PublicKey peer, string label, string code) {
+        if (self.keys.contains(peer)) { return true; }
+        if (!self.opening.isOpen()) { return false; }
+        self.keys.add(peer, label);
+        self.lastCode = code;
+        self.lastLabel = label;
+        Console.error(f"deckpad: paired with {label} ({peer.fingerprint()}), code {code}");
+        return true;
+    }
+}

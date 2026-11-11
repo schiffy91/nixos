@@ -7,15 +7,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1794129651,
-        "narHash": "sha256-ah2gkSAOINGEmRXhSSBtl0Rosgt0GeGCER6l5h7AhxM=",
+        "lastModified": 1794371839,
+        "narHash": "sha256-52JYfq/w1E9FI/K+sqhAdLqWRRVlF6ziXRlhc2W0qnk=",
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "f80c15cfb8cb8a0345fe4980a88a0cc87916f1cc",
+        "rev": "47ce3279070a81bba1ff29cac22d7366081a5e8b",
         "type": "github"
       },
       "original": {
         "owner": "schiffy91",
+        "ref": "claude/dazzling-einstein-fg9e06",
         "repo": "btrc",
         "type": "github"
       }

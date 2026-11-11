@@ -1,31 +1,48 @@
 import Library.CLI;
 import Library.Console;
+import Library.Crypto;
 import Library.FileSystem;
 import Library.Strings;
+import Library.USB.USBGadget;
 import Library.Vector;
+import ./BluetoothLink.btrc;
+import ./Control.btrc;
 import ./Controller.btrc;
 import ./DeckPad.btrc;
-import ./LanHost.btrc;
+import ./GadgetLink.btrc;
+import ./Host.btrc;
+import ./NetworkLink.btrc;
 import ./PadSource.btrc;
-import ./Pairing.btrc;
 import ./Service.btrc;
 import ./SteamController.btrc;
-import ./UsbHid.btrc;
-import ./UsbIpLink.btrc;
+import ./Trust.btrc;
+
+#include <unistd.h>
 
 class Deckpad {
     class string usage() {
         return "Usage:\n" +
-            "  deckpad serve [--source deck|demo] [--listen ADDRESS] [--port PORT] [--allow ADDRESS[/BITS]]...\n" +
+            "On the Deck:\n" +
+            "  deckpad serve [--source deck|demo] [--listen ADDRESS] [--port PORT] [--allow NETWORK]...\n" +
+            "                [--no-network] [--usb] [--bluetooth ADAPTER] [--trust KEYLINE]...\n" +
+            "                [--identity FILE] [--state DIR] [--runtime DIR] [--control-port PORT]\n" +
             "                [--serial TEXT] [--send-quick-access]\n" +
-            "      On the Deck: offer its controls as a Steam Controller to hosts on the network.\n" +
-            "      Hold the ... button for two seconds to stop.\n" +
-            "  deckpad attach HOST [--port PORT] [--watch]\n" +
-            "      On the PC: attach the Deck's controller through vhci_hcd.\n" +
-            "  deckpad detach\n" +
-            "      On the PC: detach it again.\n" +
-            "  deckpad release\n" +
-            "      On the Deck: give the built-in controller back after a crash.";
+            "      Offer the Deck's controls as a Steam Controller: over the network, over the\n" +
+            "      USB-C cable (--usb) and over Bluetooth (--bluetooth hci0). Hold ... two seconds to stop.\n" +
+            "  deckpad pairing [SECONDS | off]   let new hosts pair for a while (default 120 seconds)\n" +
+            "  deckpad status                    the links, the pairing window and the trusted hosts\n" +
+            "  deckpad trust KEYLINE             trust a host by its public key line\n" +
+            "  deckpad forget FINGERPRINT        stop trusting a host\n" +
+            "  deckpad stop                      stop the service\n" +
+            "  deckpad release                   give the built-in controller and the USB port back after a crash\n" +
+            "On the PC:\n" +
+            "  deckpad pair HOST [--yes]         trust the controller at HOST (open pairing on the Deck first)\n" +
+            "  deckpad attach HOST [--watch]     attach the paired controller through vhci_hcd\n" +
+            "  deckpad detach                    detach it again\n" +
+            "  deckpad trust-local KEYLINE       trust a controller by its public key line, without pairing\n" +
+            "On either:\n" +
+            "  deckpad key                       print this machine's public key line\n" +
+            "Common options: [--port PORT] [--identity FILE] [--state DIR] [--runtime DIR] [--control-port PORT]";
     }
 
     // A serial that stays the same on one machine, in the controller's format.
@@ -34,7 +51,7 @@ class Deckpad {
         try { identity = Path.readAll("/etc/machine-id").trim(); } catch (string error) { identity = ""; }
         int number = 0;
         for (int index = 0; index < identity.length(); index++) { number = (number * 31 + (int)identity[index]) % 100000000; }
-        var digits = f"{number}";
+        string digits = f"{number}";
         while (digits.length() < 8) { digits = "0" + digits; }
         return "FXDK" + digits;
     }
@@ -44,67 +61,118 @@ class Deckpad {
         return Strings.toInt(text);
     }
 
-    class string value(CLIArgs args, int index) {
-        if (index >= args.count()) { throw f"{args.get(index - 1)} needs a value"; }
-        return args.get(index);
+    class string hostName() {
+        char name[256];
+        memset(name, 0, sizeof(name));
+        if (gethostname(name, (size_t)255) != 0 || name[0] == '\0') { return "host"; }
+        return Strings.copy(name);
     }
 
-    class void serve(CLIArgs args) {
-        string source = "deck";
-        string address = "127.0.0.1";
-        string serial = Deckpad.serial();
-        int port = 3240;
-        bool sendQuickAccess = false;
-        Vector<string> allowed = [];
-        for (int index = 1; index < args.count(); index++) {
-            var option = args.get(index);
-            if (option.equals("--send-quick-access")) { sendQuickAccess = true; continue; }
-            var value = Deckpad.value(args, index + 1);
-            index++;
-            if (option.equals("--source")) { source = value; }
-            else if (option.equals("--listen")) { address = value; }
-            else if (option.equals("--port")) { port = Deckpad.number(value, "port"); }
-            else if (option.equals("--allow")) { allowed.push(value); }
-            else if (option.equals("--serial")) { serial = value; }
-            else { throw f"Unknown option {option}\n{Deckpad.usage()}"; }
-        }
+    // The machine's key: the file named, else the SSH host key when it can be
+    // read, else a key of deckpad's own kept in the state directory.
+    class SigningKey identity(CLICommandLine options, string state) {
+        string named = options.option("--identity", "");
+        if (!named.isEmpty()) { return MachineIdentity.load(named, false); }
+        if (access(MachineIdentity.hostKey(), (int)R_OK) == 0) { return MachineIdentity.load(MachineIdentity.hostKey(), false); }
+        FileSystem.mkdirp(state);
+        return MachineIdentity.load(state + "/identity", true);
+    }
+
+    class string state(CLICommandLine options) { return options.option("--state", "/var/lib/deckpad"); }
+
+    class string tokenPath(CLICommandLine options) { return options.option("--runtime", "/run/deckpad") + "/token"; }
+
+    class int controlPort(CLICommandLine options) { return Deckpad.number(options.option("--control-port", "3241"), "control port"); }
+
+    // A flag takes no value; if the parser gave it one, that was the next operand.
+    class bool flag(CLICommandLine options, string name) {
+        string value = options.option(name, "false");
+        if (!value.equals("true") && !value.equals("false")) { options.operands.push(value); }
+        return !value.equals("false");
+    }
+
+    class void serve(CLICommandLine options) {
+        string source = options.option("--source", "deck");
+        string state = Deckpad.state(options);
+        string runtime = options.option("--runtime", "/run/deckpad");
+        bool sendQuickAccess = Deckpad.flag(options, "--send-quick-access");
+        bool network = !Deckpad.flag(options, "--no-network");
+        bool cable = Deckpad.flag(options, "--usb");
         IPadSource pad = ScriptedPad();
         if (source.equals("deck")) { pad = DeckPad(); }
         else if (!source.equals("demo")) { throw "Expected --source deck or demo"; }
-        // One controller, any number of links to it. The network is the only
-        // link so far; a USB gadget and Bluetooth are added here.
-        var controller = VirtualController(pad, SteamController(serial), sendQuickAccess);
-        var service = ControllerService(controller);
-        service.add(UsbIpLink(UsbHidDevice(controller), AddressPairing(allowed), address, port));
-        Console.error(f"deckpad: serving a Steam Controller on {address}:{port}");
+        FileSystem.mkdirp(state);
+        FileSystem.mkdirp(runtime);
+        SigningKey identity = Deckpad.identity(options, state);
+        Pairing pairing = Pairing(state + "/trusted");
+        for line in options.values("--trust") {
+            if (!pairing.trusted().addLine(line)) { throw f"Not an ssh-ed25519 public key line: {line}"; }
+        }
+        // One controller, and a link for each way a host can reach it.
+        VirtualController controller = VirtualController(pad, SteamController(options.option("--serial", Deckpad.serial())), sendQuickAccess);
+        ControllerService service = ControllerService(controller);
+        if (network) { service.add(NetworkLink(controller, identity, pairing, options.option("--listen", "0.0.0.0"), Deckpad.number(options.option("--port", "3240"), "port"), options.values("--allow"))); }
+        if (cable) { service.add(GadgetLink(controller)); }
+        if (options.has("--bluetooth")) { service.add(BluetoothLink(controller, pairing, options.option("--bluetooth", "hci0"), state + "/bluetooth-host")); }
+        service.attend(ControlInterface(service, pairing, identity, Deckpad.controlPort(options), runtime + "/token"));
+        Console.error(f"deckpad: serving a Steam Controller as {identity.publicKey().fingerprint()}");
         service.run();
     }
 
-    class void attach(CLIArgs args) {
-        string host = "";
-        int port = 3240;
-        bool watch = false;
-        for (int index = 1; index < args.count(); index++) {
-            var option = args.get(index);
-            if (option.equals("--watch")) { watch = true; }
-            else if (option.equals("--port")) { port = Deckpad.number(Deckpad.value(args, index + 1), "port"); index++; }
-            else if (option.startsWith("--") || !host.isEmpty()) { throw f"Unknown option {option}\n{Deckpad.usage()}"; }
-            else { host = option; }
+    class string control(CLICommandLine options, string method, string target, string body) {
+        return ControlClient.request(method, target, body, Deckpad.controlPort(options), Deckpad.tokenPath(options));
+    }
+
+    class ControllerHost host(CLICommandLine options) {
+        if (options.operandCount() < 2) { throw Deckpad.usage(); }
+        string state = Deckpad.state(options);
+        FileSystem.mkdirp(state);
+        return ControllerHost(options.operand(1), Deckpad.number(options.option("--port", "3240"), "port"), Deckpad.identity(options, state), TrustedKeys(state + "/trusted"), options.option("--label", Deckpad.hostName()));
+    }
+
+    class int run(CLIArgs args) {
+        CLICommandLine options = CLICommandLine.parseFrom(args, 0);
+        string command = options.operand(0, "help");
+        if (command.equals("serve")) { Deckpad.serve(options); }
+        else if (command.equals("pairing")) {
+            string wanted = options.operand(1, "120");
+            Console.write(Deckpad.control(options, "POST", wanted.equals("off") ? "/pairing/close" : f"/pairing/open?seconds={Deckpad.number(wanted, "seconds")}", ""));
         }
-        if (host.isEmpty()) { throw Deckpad.usage(); }
-        LanHost(host, port).run(watch);
+        else if (command.equals("status")) { Console.write(Deckpad.control(options, "GET", "/status", "")); }
+        else if (command.equals("trust") && options.operandCount() >= 2) { Console.write(Deckpad.control(options, "POST", "/trust", options.operand(1))); }
+        else if (command.equals("forget") && options.operandCount() >= 2) { Console.write(Deckpad.control(options, "POST", "/forget?fingerprint=" + options.operand(1).replace("+", "%2B"), "")); }
+        else if (command.equals("stop")) { Console.write(Deckpad.control(options, "POST", "/stop", "")); }
+        else if (command.equals("release")) {
+            DeckPad.giveBack();
+            USBGadget.remove(GadgetLink.gadgetName());
+        }
+        else if (command.equals("pair")) {
+            bool yes = Deckpad.flag(options, "--yes");
+            Deckpad.host(options).pair(yes);
+        }
+        else if (command.equals("attach")) {
+            bool watch = Deckpad.flag(options, "--watch");
+            Deckpad.host(options).run(watch);
+        }
+        else if (command.equals("detach")) { print(f"detached {ControllerHost.detach()} controller(s)"); }
+        else if (command.equals("trust-local") && options.operandCount() >= 2) {
+            string state = Deckpad.state(options);
+            FileSystem.mkdirp(state);
+            if (!TrustedKeys(state + "/trusted").addLine(options.operand(1))) { throw f"Not an ssh-ed25519 public key line: {options.operand(1)}"; }
+        }
+        else if (command.equals("key")) { print(Deckpad.identity(options, Deckpad.state(options)).publicKey().toOpenSSH(Deckpad.hostName())); }
+        else {
+            Console.error(Deckpad.usage());
+            return command.equals("help") || command.equals("--help") ? 0 : 2;
+        }
+        return 0;
     }
 }
 
 int main(int argc, char** argv) {
-    try {
-        var args = CLIArgs(argc, argv);
-        var command = args.command();
-        if (command.equals("serve")) { Deckpad.serve(args); }
-        else if (command.equals("attach")) { Deckpad.attach(args); }
-        else if (command.equals("detach")) { print(f"detached {LanHost.detach()} controller(s)"); }
-        else if (command.equals("release")) { DeckPad.rebind(); }
-        else { Console.error(Deckpad.usage()); return command.equals("help") || command.equals("--help") ? 0 : 2; }
-        return 0;
-    } catch (string error) { Console.error(f"deckpad: {error}"); return 1; }
+    try { return Deckpad.run(CLIArgs(argc, argv)); } catch (string error) {
+        Console.error(f"deckpad: {error}");
+        return 1;
+    }
+    return 1;
 }

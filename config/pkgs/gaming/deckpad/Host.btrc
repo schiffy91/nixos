@@ -1,0 +1,200 @@
+import Library.Bytes;
+import Library.Console;
+import Library.Crypto;
+import Library.Network;
+import Library.Timer;
+import Library.USB.USBHost;
+import Library.USB.USBIP;
+import ./Protocol.btrc;
+import ./SecureRelay.btrc;
+
+#include <poll.h>
+#include <signal.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+// The controller's USB/IP stream in the clear, at one end of a socket pair. A
+// process of its own carries it to the controller and back through the secure
+// channel, so whoever holds the plain end -- the kernel's virtual host
+// controller, or a USB/IP host in a program -- needs to know nothing of it.
+class ControllerTunnel {
+    private TCPStream local;
+    private pid_t child;
+
+    private ControllerTunnel(TCPStream local, pid_t child) {
+        self.local = local;
+        self.child = child;
+    }
+
+    class void relay(SecureChannel channel, int descriptor, pid_t parent) {
+        SecureRelay relay = SecureRelay(channel, TCPStream.adopt(descriptor, IPv4Address.loopback()));
+        while (relay.step() && (pid_t)getppid() == parent) {
+            struct pollfd waiting[2];
+            int count = relay.watch(waiting, 2);
+            poll(waiting, (nfds_t)count, 1000);
+        }
+        relay.close();
+    }
+
+    class ControllerTunnel open(SecureChannel channel) {
+        int pair[2];
+        if (socketpair((int)AF_UNIX, (int)SOCK_STREAM, 0, pair) != 0) {
+            channel.close();
+            throw "Cannot create a socket pair";
+        }
+        fflush(stdout);
+        fflush(stderr);
+        pid_t parent = getpid();
+        pid_t child = fork();
+        if (child < (pid_t)0) {
+            channel.close();
+            throw "Cannot start the relay";
+        }
+        if (child == (pid_t)0) {
+            close(pair[0]);
+            try { ControllerTunnel.relay(channel, pair[1], parent); } catch (string error) {}
+            _exit(0);
+        }
+        close(pair[1]);
+        /* The relay carries the channel on; let go of this copy. */
+        channel.abandon();
+        return ControllerTunnel(TCPStream.adopt(pair[0], IPv4Address.loopback()), child);
+    }
+
+    // The plain end.
+    public TCPStream plain() { return self.local; }
+
+    // Wait until the relay ends: the controller left, or the plain end closed.
+    public void wait() {
+        int status = 0;
+        if (self.child > (pid_t)0) { waitpid(self.child, &status, 0); }
+        self.child = (pid_t)0;
+    }
+
+    public void close() {
+        self.local.close();
+        if (self.child > (pid_t)0) { kill(self.child, (int)SIGTERM); }
+        self.wait();
+    }
+}
+
+// The machine that plays: it reaches the controller over the network, checks
+// its key, and hands the controller to the kernel's virtual USB host
+// controller, which presents it like a controller on a cable.
+class ControllerHost {
+    private string host;
+    private int port;
+    private SigningKey identity;
+    private TrustedKeys trusted;
+    private string label;
+
+    public ControllerHost(string host, int port, SigningKey identity, TrustedKeys trusted, string label) {
+        self.host = host;
+        self.port = port;
+        self.identity = identity;
+        self.trusted = trusted;
+        self.label = label;
+    }
+
+    // Connect and prove keys both ways.
+    private SecureChannel dial() {
+        TCPStream stream = TCPStream.connectHost(self.host, self.port, 5000);
+        stream.setNoDelay(true);
+        stream.setKeepAlive(true);
+        return SecureChannel.connect(stream, self.identity, 5000);
+    }
+
+    // Ask to attach; the controller's refusal is thrown as it said it.
+    private void greet(SecureChannel channel) {
+        Bytes answer = Bytes();
+        if (!channel.send(Bytes.fromString(NetworkProtocol.greeting() + self.label), 5000) || channel.receive(answer, 5000) <= 0) {
+            channel.close();
+            throw f"{self.host} did not answer";
+        }
+        if (!answer.toString().equals(NetworkProtocol.accepted())) {
+            channel.close();
+            throw f"{self.host} {answer.toString()}";
+        }
+    }
+
+    class bool confirmed() {
+        char line[16];
+        memset(line, 0, sizeof(line));
+        fflush(stdout);
+        return fgets(line, 16, stdin) != NULL && (line[0] == 'y' || line[0] == 'Y');
+    }
+
+    // Trust the controller's key from now on. The Deck takes this host in only
+    // while its pairing window is open; the code is the same on both sides
+    // unless someone sits between them.
+    public void pair(bool assumeYes) {
+        SecureChannel channel = self.dial();
+        PublicKey peer = channel.peer();
+        print(f"Controller key: {peer.fingerprint()}");
+        print(f"Pairing code:   {channel.pairingCode()}");
+        if (!assumeYes) {
+            Console.write("Does the Deck show the same code? [y/N] ");
+            if (!ControllerHost.confirmed()) {
+                channel.close();
+                throw "Not paired";
+            }
+        }
+        self.greet(channel);
+        channel.close();
+        self.trusted.add(peer, self.host);
+        print(f"Paired with {self.host}");
+    }
+
+    // Reach the paired controller and ask to attach: the channel USB/IP will
+    // run in. Throws why not: unknown key, unpaired, busy, unreachable.
+    public SecureChannel connect() {
+        SecureChannel channel = self.dial();
+        if (!self.trusted.contains(channel.peer())) {
+            string fingerprint = channel.peer().fingerprint();
+            channel.close();
+            throw f"{self.host} is not a paired controller (its key is {fingerprint}); pair first with `deckpad pair {self.host}`";
+        }
+        self.greet(channel);
+        return channel;
+    }
+
+    // Attach once and stay until the controller or the attachment is gone.
+    public void attach() {
+        ControllerTunnel tunnel = ControllerTunnel.open(self.connect());
+        bool attached = false;
+        try {
+            USBIPHost importer = USBIPHost(tunnel.plain(), 5000);
+            USBIPDevice device = importer.importDevice("1-1");
+            USBIPAttachment.attach(importer, device);
+            attached = true;
+            Console.error(f"deckpad: attached the controller at {self.host}");
+        } catch (string error) { Console.error(f"deckpad: {error}"); }
+        /* The kernel holds the stream now; let go of this copy without
+         * shutting the connection down under it. */
+        int handed = tunnel.plain().detach();
+        if (handed >= 0) { close(handed); }
+        if (!attached) { tunnel.close(); }
+        else { tunnel.wait(); }
+        USBIPAttachment.detachDevice(NetworkProtocol.deviceId());
+        if (!attached) { throw f"Cannot attach the controller at {self.host}"; }
+        Console.error(f"deckpad: the controller at {self.host} is gone");
+    }
+
+    // Attach, and with `watch` keep coming back whenever the controller is
+    // offered again.
+    public void run(bool watch) {
+        while (true) {
+            try { self.attach(); } catch (string error) {
+                if (!watch) { throw error; }
+                Console.error(f"deckpad: {error}");
+            }
+            if (!watch) { return; }
+            Timer.sleepMillis(3000);
+        }
+    }
+
+    // Detach a controller an earlier process attached; the number detached.
+    class int detach() { return USBIPAttachment.detachDevice(NetworkProtocol.deviceId()); }
+}

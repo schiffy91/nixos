@@ -1,35 +1,30 @@
-import ./Native.btrc;
+import ./Controller.btrc;
 
-// Who is asking for the controller, as the link that carries them knows them:
-// a network address today, a key or a Bluetooth address on other links.
-class Peer {
-    public string link;
-    public string identity;
+#include <poll.h>
 
-    public Peer(string link, string identity) {
-        self.link = link;
-        self.identity = identity;
-    }
-}
-
-// Whether a peer may have the controller. A link asks before it hands over the
-// pad; how trust was established (a cable, a bond, a confirmed key) is the
-// pairing's business, not the link's.
-interface IPairing {
-    bool trusts(Peer peer);
-}
-
-// One way for a host to reach the controller. The service waits on every open
-// link at once; a link takes the controller when its host attaches and gives it
-// back when the host leaves.
+// One way a host reaches the controller: the network, a USB cable, Bluetooth.
+// A link owns its transport and how a host comes to be trusted on it; the
+// service only waits on what the link gives it and lets it take its turn.
 interface IControllerLink {
     string name();
+
+    // Bring the link up, or throw why it cannot work on this machine.
     void open();
-    // The descriptors to wait on while idle, written to `descriptors`; their count.
+
+    // Fill `descriptors` with what to wait on before the next step; the number filled.
     int watch(struct pollfd* descriptors, int capacity);
-    // Do whatever is ready: admit a host, answer its requests, deliver reports.
+
+    // Do what is due without blocking.
     void step();
-    // Whether a host holds the controller through this link.
+
+    // Whether a host is using the controller through this link right now.
     bool attached();
+
+    // The controller as this link presents it.
+    ControllerPort port();
+
+    // One line about the link's state, for people.
+    string status();
+
     void close();
 }

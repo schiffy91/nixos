@@ -1,0 +1,17 @@
+import Library.USB.USBDescriptors;
+import Library.USB.USBHID;
+import Library.USB.USBVirtualDevice;
+import ./Controller.btrc;
+import ./SteamController.btrc;
+
+// The controller as a USB device: one HID interface with an interrupt
+// endpoint each way, polled every millisecond, under the wired Steam
+// Controller's identity. The network and the cable present the same device.
+class ControllerUSB {
+    class USBVirtualDevice device(ControllerPort port) {
+        SteamController identity = port.hid().personality();
+        USBHIDFunction behavior = USBHIDFunction(port, 0x81, 0x01);
+        USBDeviceDescription description = USBDeviceDescription(identity.vendor(), identity.product(), 0x0100).named(identity.manufacturer(), identity.name(), identity.serial()).add(behavior.describe(0, 64, 1));
+        return USBVirtualDevice(description, behavior);
+    }
+}

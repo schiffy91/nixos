@@ -1,63 +1,141 @@
+import Library.Console;
+import Library.Timer;
 import Library.Vector;
 import ./Controller.btrc;
 import ./Link.btrc;
-import ./Native.btrc;
 
-// Runs the controller behind every open link. While no host is attached it
-// sleeps on the links' descriptors; once one attaches, each turn reads the pad
-// and lets the links move reports. The first host to attach, on any link, holds
-// the controller until it leaves.
+#include <errno.h>
+#include <poll.h>
+#include <signal.h>
+#include <string.h>
+
+// Something else the service's loop looks after between turns, such as the
+// control interface.
+interface IServiceTask {
+    int watch(struct pollfd* descriptors, int capacity);
+    void step();
+    void close();
+}
+
+// Runs the controller behind every link that came up. While no host is
+// attached it sleeps on the links' descriptors; once one attaches, each turn
+// reads the pad and lets the links move reports. The first host to attach, on
+// any link, holds the controller until it leaves; then the next one may.
 class ControllerService {
     private VirtualController controller;
     private Vector<IControllerLink> links = [];
-    private int signals = -1;
+    private Vector<IServiceTask> tasks = [];
+    private int holder = -1;
+    private long long retryAt = 0LL;
+    private bool stopped = false;
 
     public ControllerService(VirtualController controller) { self.controller = controller; }
 
     public void add(IControllerLink link) { self.links.push(link); }
 
-    public void open() { for link in self.links { link.open(); } }
+    public void attend(IServiceTask task) { self.tasks.push(task); }
+
+    public Vector<IControllerLink> all() { return self.links; }
+
+    // The link whose host holds the controller; empty when none does.
+    public string holding() { return self.holder >= 0 ? self.links.get(self.holder).name() : ""; }
+
+    public void stop() { self.stopped = true; }
+
+    // Bring up every link that can work here. One that cannot says why and is
+    // left out; the service needs at least one.
+    public void open() {
+        Vector<IControllerLink> up = [];
+        for link in self.links {
+            try {
+                link.open();
+                up.push(link);
+            } catch (string error) { Console.error(f"deckpad: no {link.name()} link: {error}"); }
+        }
+        self.links = up;
+        if (up.len == 0) { throw "No link to serve the controller on"; }
+    }
 
     public void close() {
+        self.letGo();
         for link in self.links { link.close(); }
-        if (self.signals >= 0) { close(self.signals); self.signals = -1; }
+        for task in self.tasks { task.close(); }
     }
 
-    // Stop signals arrive as readable data instead of interrupting a transfer.
-    private void watchSignals() {
+    private void letGo() {
+        if (self.holder < 0) { return; }
+        self.links.get(self.holder).port().hold(false);
+        self.controller.detach();
+        self.holder = -1;
+    }
+
+    // Take the Deck's controls for the host; when they cannot be taken yet,
+    // try again every second while the host stays.
+    private void take() {
+        if (self.controller.attached() || MonotonicClock.milliseconds() < self.retryAt) { return; }
+        try { self.controller.attach(); } catch (string error) {
+            Console.error(f"deckpad: {error}");
+            self.retryAt = MonotonicClock.milliseconds() + 1000LL;
+        }
+    }
+
+    private void arbitrate() {
+        if (self.holder >= 0 && !self.links.get(self.holder).attached()) { self.letGo(); }
+        for (int index = 0; index < self.links.len && self.holder < 0; index++) {
+            if (!self.links.get(index).attached()) { continue; }
+            self.holder = index;
+            self.retryAt = 0LL;
+            self.links.get(index).port().hold(true);
+            Console.error(f"deckpad: the {self.links.get(index).name()} link holds the controller");
+        }
+        if (self.holder >= 0) { self.take(); }
+    }
+
+    // Stop signals are held back and looked for each turn, so one never cuts
+    // a transfer short.
+    private void blockSignals() {
         sigset_t stopping;
         sigemptyset(&stopping);
-        sigaddset(&stopping, SIGINT);
-        sigaddset(&stopping, SIGTERM);
-        if (sigprocmask((int)SIG_BLOCK, &stopping, NULL) != 0) { throw "Cannot block stop signals"; }
-        self.signals = signalfd(-1, &stopping, (int)SFD_NONBLOCK | (int)SFD_CLOEXEC);
-        if (self.signals < 0) { throw "Cannot watch stop signals"; }
+        sigaddset(&stopping, (int)SIGINT);
+        sigaddset(&stopping, (int)SIGTERM);
+        if (sigprocmask((int)SIG_BLOCK, &stopping, NULL) != 0) { throw "Cannot hold back stop signals"; }
     }
 
-    // One turn. False once a stop signal has arrived.
+    private bool signalled() {
+        sigset_t pending;
+        sigemptyset(&pending);
+        return sigpending(&pending) == 0 && (sigismember(&pending, (int)SIGINT) == 1 || sigismember(&pending, (int)SIGTERM) == 1);
+    }
+
+    // One turn. False once the service should stop.
     public bool turn(int idleMilliseconds) {
-        // Read the pad first: the host's next request arrives while this waits,
-        // so each fresh state leaves in the same turn.
-        self.controller.pump(8);
-        struct pollfd watched[32];
+        // Read the pad first: the host's next request arrives while this
+        // waits, so each fresh state leaves in the same turn.
+        self.controller.pump(4);
+        struct pollfd watched[48];
         memset(watched, 0, sizeof(watched));
         int count = 0;
-        if (self.signals >= 0) { watched[0].fd = self.signals; watched[0].events = POLLIN; count = 1; }
-        for link in self.links { count += link.watch(watched + count, 32 - count); }
+        for link in self.links { count += link.watch(watched + count, 48 - count); }
+        for task in self.tasks { count += task.watch(watched + count, 48 - count); }
         int ready = poll(watched, (nfds_t)count, self.controller.attached() ? 0 : idleMilliseconds);
         if (ready < 0 && errno != EINTR) { throw "Cannot wait for hosts"; }
-        if (ready > 0 && self.signals >= 0 && ((int)watched[0].revents & POLLIN) != 0) { return false; }
         for link in self.links { link.step(); }
-        return true;
+        for task in self.tasks { task.step(); }
+        self.arbitrate();
+        return !self.stopped && !self.signalled() && !self.controller.stopRequested();
     }
 
-    // Serve until a stop signal arrives or the Deck's stop chord is held.
+    // Serve until a stop signal arrives, the control interface says stop, or
+    // the Deck's stop chord is held.
     public void run() {
-        self.watchSignals();
+        self.blockSignals();
         try {
             self.open();
-            while (!self.controller.stopRequested() && self.turn(500)) {}
-        } catch (string error) { self.close(); throw error; }
+            while (self.turn(250)) {}
+        } catch (string error) {
+            self.close();
+            throw error;
+        }
         self.close();
     }
 }

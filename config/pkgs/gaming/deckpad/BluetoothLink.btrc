@@ -1,0 +1,119 @@
+import Library.Bluetooth;
+import Library.Console;
+import Library.FileSystem;
+import ./Controller.btrc;
+import ./Link.btrc;
+import ./SteamController.btrc;
+import ./Trust.btrc;
+
+#include <poll.h>
+
+// The controller over Bluetooth, as a HID device a host pairs with like any
+// gamepad. Bluetooth does its own pairing; this only decides when: while the
+// pairing window is open the adapter is discoverable and lets hosts pair, and
+// a host that paired before reconnects at any time.
+//
+// The system's Bluetooth daemon must run without its own HID host (the input
+// plugin), which otherwise holds the channels a HID device serves.
+class BluetoothLink implements IControllerLink {
+    private ControllerPort gate;
+    private Pairing pairing;
+    private string adapterName;
+    private string remembered;
+    private BluetoothAdapter? adapter = null;
+    private BluetoothHIDDevice? pad = null;
+    private bool pairingOn = false;
+    private string host = "";
+
+    // `remembered` is a file that keeps the last host's address, so the
+    // controller can go back to it when the service starts.
+    public BluetoothLink(VirtualController controller, Pairing pairing, string adapterName, string remembered) {
+        self.gate = ControllerPort(controller, STEAM_REPORT_STATE_BLUETOOTH, STEAM_STATE_LENGTH_BLUETOOTH);
+        self.pairing = pairing;
+        self.adapterName = adapterName;
+        self.remembered = remembered;
+    }
+
+    public string name() { return "bluetooth"; }
+
+    public ControllerPort port() { return self.gate; }
+
+    public void open() {
+        if (!BluetoothAdapter.supported() || !L2CAP.supported()) { throw "this system has no Bluetooth"; }
+        BluetoothAdapter adapter = BluetoothAdapter.open(self.adapterName, self.pairing.window());
+        SteamController identity = self.gate.hid().personality();
+        BluetoothHIDRecord record = BluetoothHIDRecord(identity.name(), self.gate.reportDescriptor()).identified(identity.vendor(), STEAM_PRODUCT_BLUETOOTH, 0x0100).described("Game Controller", identity.manufacturer());
+        if (!adapter.setPowered(true) || !adapter.publish("00001124-0000-1000-8000-00805f9b34fb", record.xml())) {
+            adapter.close();
+            throw "the Bluetooth daemon refused the controller's service record";
+        }
+        adapter.setAlias(identity.name());
+        adapter.allowPairing(false);
+        adapter.setDiscoverable(false);
+        BluetoothHIDDevice pad = BluetoothHIDDevice.open(adapter.address(), self.gate, BluetoothBondedPeers(adapter));
+        self.adapter = adapter;
+        self.pad = pad;
+        /* Go back to the host from last time, as a controller does when it wakes. */
+        BluetoothAddress? last = FileSystem.isFile(self.remembered) ? BluetoothAddress.parse(Path.readAll(self.remembered).trim()) : null;
+        if (last != null && pad.reconnect(last, 3000)) { self.host = last.toString(); }
+    }
+
+    public int watch(struct pollfd* descriptors, int capacity) {
+        BluetoothAdapter? adapter = self.adapter;
+        BluetoothHIDDevice? pad = self.pad;
+        if (adapter == null || pad == null || capacity < 5) { return 0; }
+        int count = adapter.watch(descriptors, 1);
+        return count + pad.watch(descriptors + count, 4);
+    }
+
+    public void step() {
+        BluetoothAdapter? adapter = self.adapter;
+        BluetoothHIDDevice? pad = self.pad;
+        if (adapter == null || pad == null) { return; }
+        bool open = self.pairing.window().isOpen();
+        if (open != self.pairingOn) {
+            adapter.allowPairing(open);
+            adapter.setDiscoverable(open);
+            self.pairingOn = open;
+        }
+        adapter.step();
+        pad.step();
+        BluetoothAddress? peer = pad.peer();
+        if (pad.connected() && peer != null && !self.host.equals(peer.toString())) {
+            self.host = peer.toString();
+            Path.writeAll(self.remembered, self.host + "\n");
+            Console.error(f"deckpad: {self.host} attached over Bluetooth");
+        }
+        if (pad.unplugged() && !self.host.isEmpty()) {
+            /* The host dropped the pairing: drop it here too. */
+            BluetoothAddress? gone = BluetoothAddress.parse(self.host);
+            if (gone != null) { adapter.forget(gone); }
+            FileSystem.removeRecursive(self.remembered);
+            self.host = "";
+        }
+    }
+
+    public bool attached() {
+        BluetoothHIDDevice? pad = self.pad;
+        return pad != null && pad.connected();
+    }
+
+    public string status() {
+        if (self.pad == null) { return "closed"; }
+        if (self.attached()) { return f"attached to {self.host}"; }
+        return self.pairingOn ? "discoverable, waiting for a host to pair" : "waiting for a paired host";
+    }
+
+    public void close() {
+        BluetoothHIDDevice? pad = self.pad;
+        BluetoothAdapter? adapter = self.adapter;
+        if (pad != null) { pad.close(); }
+        if (adapter != null) {
+            adapter.allowPairing(false);
+            adapter.setDiscoverable(false);
+            adapter.close();
+        }
+        self.pad = null;
+        self.adapter = null;
+    }
+}

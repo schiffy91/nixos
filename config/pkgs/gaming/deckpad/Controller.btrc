@@ -1,7 +1,8 @@
+import Library.Bytes;
 import Library.FileSystem;
+import Library.HID;
 import Library.Strings;
 import Library.Timer;
-import ./Native.btrc;
 import ./PadSource.btrc;
 import ./PadState.btrc;
 import ./SteamController.btrc;
@@ -40,8 +41,8 @@ class DeckBattery {
 
 // The emulated controller, in HID terms only: input reports out, output and
 // feature reports in. It knows nothing about how a host reaches it; every link
-// (USB/IP, a USB gadget, Bluetooth) talks to this one object.
-class VirtualController {
+// (the network, a USB gadget, Bluetooth) presents this one object.
+class VirtualController implements IHIDDevice {
     private IPadSource source;
     private SteamController identity;
     private PadLatch latch;
@@ -167,5 +168,84 @@ class VirtualController {
     // The host reads a feature report: its length, or -1 when there is no such report.
     public int feature(int report, unsigned char* out) {
         return report == STEAM_REPORT_FEATURE ? self.identity.getFeature(out) : -1;
+    }
+
+    // The same four things as Library.HID's contract, which every bus speaks.
+    public Bytes reportDescriptor() {
+        unsigned char raw[256];
+        int length = self.identity.reportDescriptor(raw);
+        return Bytes.fromRaw((char*)raw, length);
+    }
+
+    public bool getReport(int kind, int id, Bytes report) {
+        unsigned char raw[64];
+        if (kind != HID_REPORT_FEATURE) { return false; }
+        int length = self.feature(id, raw);
+        if (length < 0) { return false; }
+        report.appendRaw((char*)raw, length);
+        return true;
+    }
+
+    public bool setReport(int kind, int id, Bytes report) {
+        unsigned char raw[64];
+        int length = report.length() > 64 ? 64 : report.length();
+        memset(raw, 0, sizeof(raw));
+        if (length > 0) { memcpy(raw, report.data, (size_t)length); }
+        if (kind == HID_REPORT_FEATURE) { return self.setFeature(raw, length); }
+        if (kind != HID_REPORT_OUTPUT) { return false; }
+        self.output(raw, length);
+        return true;
+    }
+
+    public bool nextInput(Bytes report) {
+        struct HidReport next;
+        if (!self.input(&next)) { return false; }
+        report.appendRaw((char*)next.bytes, next.length);
+        return true;
+    }
+}
+
+// One link's view of the controller. Every link can answer a host's questions,
+// but input reports go only to the link that holds the controller, so two
+// hosts never split one stream of reports between them.
+class ControllerPort implements IHIDDevice {
+    private VirtualController controller;
+    private bool live = false;
+    private int stateReport;
+    private int stateLength;
+
+    // The state report travels under another ID and length on some buses:
+    // Bluetooth carries it as report 0x45, without the trailing orientation.
+    public ControllerPort(VirtualController controller, int stateReport = STEAM_REPORT_STATE, int stateLength = STEAM_STATE_LENGTH) {
+        self.controller = controller;
+        self.stateReport = stateReport;
+        self.stateLength = stateLength;
+    }
+
+    public VirtualController hid() { return self.controller; }
+
+    // Whether another link's host holds the controller.
+    public bool busyElsewhere() { return self.controller.attached() && !self.live; }
+
+    public void hold(bool live) { self.live = live; }
+
+    public bool holding() { return self.live; }
+
+    public Bytes reportDescriptor() { return self.controller.reportDescriptor(); }
+
+    public bool getReport(int kind, int id, Bytes report) { return self.controller.getReport(kind, id, report); }
+
+    public bool setReport(int kind, int id, Bytes report) { return self.controller.setReport(kind, id, report); }
+
+    public bool nextInput(Bytes report) {
+        if (!self.live) { return false; }
+        Bytes next = Bytes();
+        if (!self.controller.nextInput(next)) { return false; }
+        if (next.get(0) == STEAM_REPORT_STATE && self.stateReport != STEAM_REPORT_STATE) {
+            next.set(0, self.stateReport);
+            next = next.slice(0, self.stateLength);
+        }
+        report.appendBytes(next);
+        return true;
     }
 }

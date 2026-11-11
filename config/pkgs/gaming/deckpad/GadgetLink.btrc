@@ -1,0 +1,63 @@
+import Library.USB.USBGadget;
+import Library.USB.USBVirtualDevice;
+import ./Controller.btrc;
+import ./ControllerUSB.btrc;
+import ./Link.btrc;
+
+#include <poll.h>
+
+// The controller over a USB cable: the Deck's USB-C port acting as a device.
+// Whatever the cable reaches sees a wired Steam Controller. The cable is the
+// pairing: there is nothing to confirm.
+//
+// It needs the port in device mode. On a Steam Deck that is the BIOS setting
+// "USB Dual Role Device" = DRD; without it the machine has no device
+// controller and this link stays down while the others work.
+class GadgetLink implements IControllerLink {
+    private ControllerPort gate;
+    private USBVirtualDevice device;
+    private USBGadget? gadget = null;
+
+    public GadgetLink(VirtualController controller) {
+        self.gate = ControllerPort(controller);
+        self.device = ControllerUSB.device(self.gate);
+    }
+
+    class string gadgetName() { return "deckpad"; }
+
+    public string name() { return "usb"; }
+
+    public ControllerPort port() { return self.gate; }
+
+    public void open() {
+        if (!USBGadget.supported()) { throw "this system cannot act as a USB device"; }
+        if (USBGadget.controllers().len == 0) { throw "no USB device controller (on a Steam Deck, set the BIOS option USB Dual Role Device to DRD)"; }
+        self.gadget = USBGadget.open(self.device, GadgetLink.gadgetName());
+    }
+
+    public int watch(struct pollfd* descriptors, int capacity) {
+        USBGadget? gadget = self.gadget;
+        return gadget != null ? gadget.watch(descriptors, capacity) : 0;
+    }
+
+    public void step() {
+        USBGadget? gadget = self.gadget;
+        if (gadget != null) { gadget.step(); }
+    }
+
+    public bool attached() {
+        USBGadget? gadget = self.gadget;
+        return gadget != null && gadget.connected();
+    }
+
+    public string status() {
+        if (self.gadget == null) { return "closed"; }
+        return self.attached() ? "attached to the host on the cable" : "waiting for a host on the cable";
+    }
+
+    public void close() {
+        USBGadget? gadget = self.gadget;
+        if (gadget != null) { gadget.close(); }
+        self.gadget = null;
+    }
+}

@@ -15,8 +15,13 @@ let
       deckpad-unit-tests = "tests/gaming/deckpad/UnitTests.btrc";
       deckpad-server-tests = "tests/gaming/deckpad/ServerTests.btrc";
     };
+    buildInputs = [ pkgs.dbus pkgs.libsodium ];
+    env.NIX_CFLAGS_COMPILE = "-I${pkgs.lib.getDev pkgs.dbus}/include/dbus-1.0 -I${pkgs.lib.getLib pkgs.dbus}/lib/dbus-1.0/include";
+    linkFlags = [ "-ldbus-1" "-lsodium" ];
   };
-# The server test plays the USB/IP host against the real program over loopback.
+# The server test is a host for the real program over loopback: it pairs,
+# attaches through the encrypted tunnel and drives the controller with a
+# USB/IP host of its own. The kernel's side of each link is in kernel.nix.
 in pkgs.runCommand "deckpad-check" {} ''
   ${tests}/bin/deckpad-unit-tests
   ${tests}/bin/deckpad-server-tests ${programs.deckpad}/bin/deckpad

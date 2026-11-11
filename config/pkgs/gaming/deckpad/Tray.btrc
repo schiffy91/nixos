@@ -9,6 +9,7 @@ int main() {
     if (!icon.isEmpty()) { tray.icon(icon); }
     tray.tip("Use this Deck as a Steam Controller")
         .checkItem("Use this Deck as a controller", "deckpad-toggle", "systemctl is-active --quiet deckpad.service")
+        .item("Pair a new host (two minutes)", "deckpad-pair")
         .item("Quit tray", TraySignal.quit());
     try {
         tray.show();

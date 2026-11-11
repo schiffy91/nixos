@@ -1,4 +1,3 @@
-import ./Native.btrc;
 import ./PadState.btrc;
 import ./Wire.btrc;
 

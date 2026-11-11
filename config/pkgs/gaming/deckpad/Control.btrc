@@ -1,0 +1,158 @@
+import Library.Bytes;
+import Library.Crypto;
+import Library.FileSystem;
+import Library.HTTP;
+import Library.Map;
+import Library.Network;
+import Library.Strings;
+import Library.Vector;
+import ./Link.btrc;
+import ./Service.btrc;
+import ./Trust.btrc;
+
+#include <poll.h>
+
+// The service's control interface: HTTP on the loopback address, for the
+// `deckpad` command, the tray and scripts. A request must carry the token the
+// service wrote when it started, so only who can read that file can ask.
+//
+//   GET  /status                   the links, the pairing window, the keys
+//   POST /pairing/open?seconds=N   let new hosts pair for a while
+//   POST /pairing/close
+//   POST /trust                    body: an OpenSSH public key line
+//   POST /forget?fingerprint=F     stop trusting a key
+//   POST /stop                     stop the service
+class ControlInterface implements IServiceTask {
+    private HTTPServer server;
+    private ControllerService service;
+    private Pairing pairing;
+    private SigningKey identity;
+    private string token;
+    private string tokenPath;
+
+    public ControlInterface(ControllerService service, Pairing pairing, SigningKey identity, int port, string tokenPath) {
+        self.service = service;
+        self.pairing = pairing;
+        self.identity = identity;
+        self.tokenPath = tokenPath;
+        self.server = HTTPServer(port);
+        self.server.timeoutSecs = 2;
+        self.server.maxBodyBytes = 4096;
+        unsigned char random[24];
+        Sodium.require();
+        Sodium.random(random, 24);
+        self.token = Base64.encode(Bytes.fromRaw((char*)random, 24), false).replace("+", "-").replace("/", "_");
+        if (!Path.writeAll(tokenPath, self.token + "\n") || FileSystem.chmod(tokenPath, 416) != 0) { throw f"Cannot write the control token to {tokenPath}"; }
+        if (!self.server.start()) { throw f"Cannot listen for control requests on port {port}"; }
+    }
+
+    class string quoted(string text) { return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\""; }
+
+    private string status() {
+        Vector<string> links = [];
+        for link in self.service.all() { links.push(f"{{\"name\": {ControlInterface.quoted(link.name())}, \"attached\": {link.attached() ? "true" : "false"}, \"status\": {ControlInterface.quoted(link.status())}}}"); }
+        Vector<string> trusted = [];
+        for entry in self.pairing.trusted().list() { trusted.push(f"{{\"label\": {ControlInterface.quoted(entry.label)}, \"fingerprint\": {ControlInterface.quoted(entry.key.fingerprint())}}}"); }
+        string body = "{\n";
+        body = body + f"  \"holder\": {ControlInterface.quoted(self.service.holding())},\n";
+        body = body + f"  \"links\": [{Strings.join(links, ", ")}],\n";
+        body = body + f"  \"pairing\": {{\"open\": {self.pairing.window().isOpen() ? "true" : "false"}, \"code\": {ControlInterface.quoted(self.pairing.code())}, \"host\": {ControlInterface.quoted(self.pairing.codeLabel())}}},\n";
+        body = body + f"  \"identity\": {{\"key\": {ControlInterface.quoted(self.identity.publicKey().toOpenSSH())}, \"fingerprint\": {ControlInterface.quoted(self.identity.publicKey().fingerprint())}}},\n";
+        body = body + f"  \"trusted\": [{Strings.join(trusted, ", ")}]\n";
+        return body + "}\n";
+    }
+
+    private HTTPResponse forget(string fingerprint) {
+        for entry in self.pairing.trusted().list() {
+            if (entry.key.fingerprint().equals(fingerprint)) {
+                self.pairing.trusted().remove(entry.key);
+                return HTTPResponse.text("forgotten\n");
+            }
+        }
+        return HTTPResponse.error(404, "no trusted key has that fingerprint\n");
+    }
+
+    private HTTPResponse answer(HTTPRequest request) {
+        if (!request.valid) { return HTTPResponse.error(400, request.error + "\n"); }
+        if (!request.header("authorization").equals("Bearer " + self.token)) { return HTTPResponse.error(401, "the control token is missing or wrong\n"); }
+        Map<string, string> query = request.queryParams();
+        if (request.isGet() && request.path.equals("/status")) { return HTTPResponse.json(self.status()); }
+        if (!request.isPost()) { return HTTPResponse.notFound(); }
+        if (request.path.equals("/pairing/open")) {
+            string seconds = query.has("seconds") ? query.get("seconds") : "120";
+            if (seconds.isEmpty() || !seconds.isDigit() || seconds.length() > 4) { return HTTPResponse.error(400, "seconds must be a number\n"); }
+            self.pairing.window().open(Strings.toInt(seconds));
+            return HTTPResponse.text(f"pairing is open for {seconds} seconds\n");
+        }
+        if (request.path.equals("/pairing/close")) {
+            self.pairing.window().close();
+            return HTTPResponse.text("pairing is closed\n");
+        }
+        if (request.path.equals("/trust")) {
+            if (!self.pairing.trusted().addLine(request.body.trim())) { return HTTPResponse.error(400, "the body is not an ssh-ed25519 public key line\n"); }
+            return HTTPResponse.text("trusted\n");
+        }
+        if (request.path.equals("/forget")) { return self.forget(query.has("fingerprint") ? query.get("fingerprint") : ""); }
+        if (request.path.equals("/stop")) {
+            self.service.stop();
+            return HTTPResponse.text("stopping\n");
+        }
+        return HTTPResponse.notFound();
+    }
+
+    public int watch(struct pollfd* descriptors, int capacity) {
+        if (capacity < 1 || self.server.fd < 0) { return 0; }
+        descriptors[0].fd = self.server.fd;
+        descriptors[0].events = POLLIN;
+        descriptors[0].revents = 0;
+        return 1;
+    }
+
+    // Answer one waiting request. Requests are local and small, so serving
+    // one inside a turn costs the controller nothing it would notice.
+    public void step() {
+        struct pollfd waiting;
+        waiting.fd = self.server.fd;
+        waiting.events = POLLIN;
+        waiting.revents = 0;
+        if (self.server.fd < 0 || poll(&waiting, (nfds_t)1, 0) <= 0) { return; }
+        int connection = self.server.acceptConn();
+        if (connection < 0) { return; }
+        HTTPResponse response = HTTPResponse.error(400, "bad request\n");
+        try { response = self.answer(self.server.readRequest(connection)); } catch (string error) { response = HTTPResponse.error(500, error + "\n"); }
+        self.server.respond(connection, response);
+        self.server.closeConn(connection);
+    }
+
+    public void close() {
+        self.server.stop();
+        FileSystem.removeRecursive(self.tokenPath);
+    }
+}
+
+// The other end of the control interface, for the `deckpad` command.
+class ControlClient {
+    // Send one request; the response body, or throw what went wrong.
+    class string request(string method, string target, string body, int port, string tokenPath) {
+        if (!FileSystem.isFile(tokenPath)) { throw "The deckpad service is not running here (no control token)"; }
+        string token = Path.readAll(tokenPath).trim();
+        TCPStream stream = TCPStream.connect(IPv4Address.loopback(), port, 2000);
+        string head = f"{method} {target} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\nContent-Length: {body.length()}\r\nConnection: close\r\n\r\n";
+        if (!stream.writeBytes(Bytes.fromString(head + body), 2000)) { throw "The deckpad service did not take the request"; }
+        Bytes reply = Bytes();
+        unsigned char buffer[4096];
+        while (true) {
+            int count = stream.read(buffer, 4096, 5000);
+            if (count <= 0) { break; }
+            reply.appendRaw((char*)buffer, count);
+        }
+        stream.close();
+        string text = reply.toStringLossy();
+        int split = text.indexOf("\r\n\r\n");
+        Vector<string> first = Strings.split(text, " ");
+        if (split < 0 || first.len < 2) { throw "The deckpad service sent no answer"; }
+        string answer = text.substring(split + 4, text.length() - split - 4);
+        if (!first.get(1).equals("200")) { throw answer.trim(); }
+        return answer;
+    }
+}

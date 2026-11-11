@@ -1,0 +1,11 @@
+// What the two sides say inside the secure channel before USB/IP starts: the
+// host names itself and asks to attach, and the controller answers.
+class NetworkProtocol {
+    class string greeting() { return "deckpad 1 attach "; }
+    class string accepted() { return "ok"; }
+    class string refusedUnpaired() { return "refused: this host is not paired with the controller; open pairing on the Deck, then run `deckpad pair`"; }
+    class string refusedBusy() { return "refused: the controller is in use over another link"; }
+
+    // The device id USB/IP gives the controller: bus 1, device 2.
+    class long long deviceId() { return 0x10002LL; }
+}

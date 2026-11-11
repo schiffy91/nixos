@@ -1,0 +1,170 @@
+import Library.Bytes;
+import Library.Console;
+import Library.Crypto;
+import Library.Network;
+import Library.USB.USBIP;
+import Library.USB.USBVirtualDevice;
+import Library.Vector;
+import ./Controller.btrc;
+import ./ControllerUSB.btrc;
+import ./Link.btrc;
+import ./Protocol.btrc;
+import ./SecureRelay.btrc;
+import ./Trust.btrc;
+
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+// The controller over the network. A host connects, both sides prove their
+// keys and the host is checked against the trusted ones; then USB/IP runs
+// inside the encrypted channel, and the host's kernel sees a wired controller.
+class NetworkLink implements IControllerLink {
+    private ControllerPort gate;
+    private USBVirtualDevice device;
+    private SigningKey identity;
+    private Pairing pairing;
+    private Vector<IPv4Network> allowed = [];
+    private IPv4Address address;
+    private int portNumber;
+    private TCPListener? listener = null;
+    private USBIPExport? exported = null;
+    private SecureRelay? relay = null;
+    private string host = "";
+
+    public NetworkLink(VirtualController controller, SigningKey identity, Pairing pairing, string address, int port, Vector<string> allowed) {
+        self.gate = ControllerPort(controller);
+        self.device = ControllerUSB.device(self.gate);
+        self.identity = identity;
+        self.pairing = pairing;
+        IPv4Address? parsed = IPv4Address.parse(address);
+        if (parsed == null) { throw f"Invalid listen address: {address}"; }
+        self.address = parsed;
+        self.portNumber = port;
+        for entry in allowed {
+            IPv4Network? network = IPv4Network.parse(entry);
+            if (network == null) { throw f"Invalid network: {entry}"; }
+            self.allowed.push(network);
+        }
+    }
+
+    public string name() { return "network"; }
+
+    public ControllerPort port() { return self.gate; }
+
+    public void open() { self.listener = TCPListener.listen(self.address, self.portNumber); }
+
+    private bool reachable(IPv4Address peer) {
+        if (self.allowed.len == 0) { return true; }
+        for network in self.allowed {
+            if (network.contains(peer)) { return true; }
+        }
+        return false;
+    }
+
+    private void drop() {
+        USBIPExport? exported = self.exported;
+        SecureRelay? relay = self.relay;
+        if (exported != null) { exported.close(); }
+        if (relay != null) { relay.close(); }
+        if (!self.host.isEmpty()) { Console.error(f"deckpad: {self.host} left the network link"); }
+        self.exported = null;
+        self.relay = null;
+        self.host = "";
+    }
+
+    // Prove keys with the host, hear what it wants and decide. Null turns it away.
+    private SecureChannel? admit(TCPStream stream) {
+        SecureChannel channel = SecureChannel.accept(stream, self.identity, 1500);
+        Bytes hello = Bytes();
+        if (channel.receive(hello, 1500) <= 0 || !hello.toString().startsWith(NetworkProtocol.greeting())) {
+            channel.close();
+            return null;
+        }
+        string label = hello.toString().substring(NetworkProtocol.greeting().length(), hello.length() - NetworkProtocol.greeting().length()).trim();
+        string answer = NetworkProtocol.accepted();
+        if (!self.pairing.admits(channel.peer(), label, channel.pairingCode())) { answer = NetworkProtocol.refusedUnpaired(); }
+        else if (self.gate.busyElsewhere()) { answer = NetworkProtocol.refusedBusy(); }
+        if (!channel.send(Bytes.fromString(answer), 1500) || !answer.equals(NetworkProtocol.accepted())) {
+            Console.error(f"deckpad: turned away {label} ({channel.peer().fingerprint()}): {answer}");
+            channel.close();
+            return null;
+        }
+        self.host = label;
+        return channel;
+    }
+
+    private void arrive(TCPStream stream) {
+        if (!self.reachable(stream.peer())) {
+            stream.close();
+            return;
+        }
+        stream.setNoDelay(true);
+        stream.setKeepAlive(true);
+        SecureChannel? channel = null;
+        try { channel = self.admit(stream); } catch (string error) { Console.error(f"deckpad: {stream.peer().toString()}: {error}"); }
+        if (channel == null) { return; }
+        int pair[2];
+        if (socketpair((int)AF_UNIX, (int)SOCK_STREAM, 0, pair) != 0) {
+            channel.close();
+            return;
+        }
+        self.exported = USBIPExport(self.device, TCPStream.adopt(pair[0], stream.peer()));
+        self.relay = SecureRelay(channel, TCPStream.adopt(pair[1], stream.peer()));
+        Console.error(f"deckpad: {self.host} attached over the network");
+    }
+
+    public int watch(struct pollfd* descriptors, int capacity) {
+        TCPListener? listener = self.listener;
+        SecureRelay? relay = self.relay;
+        USBIPExport? exported = self.exported;
+        int count = 0;
+        if (relay != null && exported != null && capacity >= 4) {
+            count = relay.watch(descriptors, capacity);
+            descriptors[count].fd = exported.handle();
+            descriptors[count].events = POLLIN;
+            descriptors[count].revents = 0;
+            count++;
+        }
+        if (listener == null || capacity < count + 1) { return count; }
+        descriptors[count].fd = listener.handle();
+        descriptors[count].events = POLLIN;
+        descriptors[count].revents = 0;
+        return count + 1;
+    }
+
+    public void step() {
+        TCPListener? listener = self.listener;
+        SecureRelay? relay = self.relay;
+        USBIPExport? exported = self.exported;
+        TCPStream? stream = listener != null ? listener.accept(0) : null;
+        if (relay != null && exported != null) {
+            /* One host at a time: another is hung up on at once, so it never
+             * costs the attached host a turn. */
+            if (stream != null) { stream.close(); }
+            /* The relay feeds the export and carries what it answers. */
+            if (!relay.step() || !exported.step() || !relay.step()) { self.drop(); }
+            return;
+        }
+        if (stream != null) { self.arrive(stream); }
+    }
+
+    public bool attached() {
+        USBIPExport? exported = self.exported;
+        return exported != null && exported.imported();
+    }
+
+    public string status() {
+        TCPListener? listener = self.listener;
+        if (listener == null) { return "closed"; }
+        if (self.attached()) { return f"attached to {self.host}"; }
+        return f"listening on {self.address.toString()}:{self.portNumber}";
+    }
+
+    public void close() {
+        self.drop();
+        TCPListener? listener = self.listener;
+        if (listener != null) { listener.close(); }
+        self.listener = null;
+    }
+}
