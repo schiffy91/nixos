@@ -79,6 +79,11 @@ remain on Bars 2–4. LB uses Target Scan Enemy, RB cycles enemy targets, and R3
 uses Interact With Target on all four modifier layers. The shoulder and trigger
 indicators are anchored around the cluster center so narrowing the bar does not
 make them overlap.
+Enemy soft targeting follows the camera while using a gamepad; explicitly
+selected targets stay locked. Friendly soft targeting and forced soft-target
+priority are off. Gamepad soft interaction supports R3 for nearby objects and
+NPCs. These preferences are saved in ConsolePort and the shared profile CVars,
+so switching display or input profiles retains the same targeting behavior.
 The FlareUI display profiles carry the trigger modifier and action-camera CVars
 in editable SavedVariables. They apply when the profile loads. Without those
 profiles, set the modifiers in ConsolePort or run:
@@ -128,10 +133,13 @@ Open `/fui` and select a profile in its existing profile dropdown:
 Accept the reload prompt after switching. The small DisplayLayout integration
 inside the packaged FlareUI coordinates its global UI scale and ConsolePort_Bar
 with the selected profile. ConsolePort's input and bindings remain installed in
-both modes. On login or a physical display-size change, it picks the display
-profile while preserving the current input mode (height ≤1000: Handheld;
-height ≥2800: Desk; otherwise TV). It defers changes during combat and Edit Mode.
-A manual selection lasts until the next login or physical display change.
+both modes. A physical display-size change picks the display profile while
+preserving the current input mode (height ≤1000: Handheld; height ≥2800: Desk;
+otherwise TV). It defers changes during combat and Edit Mode. The last observed
+resolution is saved, so manual selections survive UI reloads and game restarts
+at the same resolution. A display change while the game is closed is detected
+on login. Fresh Default profiles select their initial display automatically;
+existing profiles retain their choice when no previous resolution was saved.
 
 The profile's `displayLayout` table is normal saved data: scale, input, chat
 geometry and the shared gameplay CVars. The integration contains no generated

@@ -181,8 +181,20 @@ local function ApplyProfile()
     end
 end
 
--- Display changes keep the chosen input mode. Manual profile choices stay until
--- the next display change/login. Native Edit Mode selection and saving belong
+local function RememberDisplay(width, height)
+    screenWidth, screenHeight = width, height
+    ns.db.global.displayLayoutScreen = {width = width, height = height}
+end
+
+local function ApplyChosenProfile()
+    local width, height = GetPhysicalScreenSize()
+    if width and height and width > 0 and height > 0 then RememberDisplay(width, height) end
+    ApplyProfile()
+end
+
+-- Persist the observed resolution so a reload is not mistaken for a display
+-- change. Explicit profile choices survive reloads and restarts at that size.
+-- Native Edit Mode selection and saving belong
 -- to Blizzard; calling SaveLayouts here can crash the Forever client.
 local function FollowDisplay()
     local settings = Settings()
@@ -190,7 +202,13 @@ local function FollowDisplay()
     if InCombatLockdown() or editMode:IsInEditMode() then pending = true; return end
     local width, height = GetPhysicalScreenSize()
     if not width or not height or width <= 0 or height <= 0 then return end
-    screenWidth, screenHeight = width, height
+    local previous = ns.db.global.displayLayoutScreen
+    local changed = previous and (previous.width ~= width or previous.height ~= height)
+    -- Existing profiles keep their selection on the first run of this code.
+    -- A fresh character using Default still gets an appropriate initial layout.
+    if not previous then changed = ns.db:GetCurrentProfile() == "Default" end
+    RememberDisplay(width, height)
+    if not changed then ApplyProfile(); return end
     local display = height <= 1000 and "Handheld" or height >= 2800 and "Desk" or "TV"
     local name = display .. " / " .. (settings.input == "controller" and "Controller" or "Keyboard")
     local profile = ns.db.sv.profiles[name]
@@ -222,9 +240,9 @@ frame:SetScript("OnEvent", function(_, event)
     if not ns.db then return end
     if event == "PLAYER_LOGIN" then
         loggedIn = true
-        ns.db.RegisterCallback(frame, "OnProfileChanged", ApplyProfile)
-        ns.db.RegisterCallback(frame, "OnProfileCopied", ApplyProfile)
-        ns.db.RegisterCallback(frame, "OnProfileReset", ApplyProfile)
+        ns.db.RegisterCallback(frame, "OnProfileChanged", ApplyChosenProfile)
+        ns.db.RegisterCallback(frame, "OnProfileCopied", ApplyChosenProfile)
+        ns.db.RegisterCallback(frame, "OnProfileReset", ApplyChosenProfile)
         C_Timer.After(0, FollowDisplay)
     elseif not loggedIn then
         return
