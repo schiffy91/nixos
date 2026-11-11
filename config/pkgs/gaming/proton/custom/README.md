@@ -89,6 +89,11 @@ the Battle.net launcher sets it on its prefix before each start, and the Steam
 default launch options run every game through `wine-prefix-dpi exec`, which
 writes it into that game's prefix.
 
+Battle.net follows the active KScreen output, including Sunshine's virtual
+display. When that output's scale changes, the launcher restarts after any
+running game closes, because Wine caches system DPI at process startup.
+It waits for the previous prefix session to exit before changing the registry.
+
 ## Development
 
 `make shell` enters the dev shell; `make setup` seeds `src/wine` from the

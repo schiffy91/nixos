@@ -138,8 +138,8 @@ class ProtonRuntime {
         var c = self.context; FileSystem.mkdirp(c.prefix());
         var wrapper = ChildProcessExecutable.resolve("battlenet", "", [], []);
         if (!wrapper.isEmpty()) {
-            var match = Regex.first("wine-prefix-dpi set --dpi [0-9]+", Path.readAll(wrapper));
-            if (!match.isEmpty()) { var parts = Strings.split(match, " "); c.execute("wine-prefix-dpi", ["set", "--dpi", parts.get(parts.len - 1), c.prefix()]); }
+            var match = Regex.first("(follow_display |wine-prefix-dpi set --dpi )[0-9]+", Path.readAll(wrapper));
+            if (!match.isEmpty()) { var parts = Strings.split(match, " "); c.execute("wine-prefix-dpi", ["set", "--dpi", parts.get(parts.len - 1), "--follow-display", c.prefix()]); }
         }
     }
     public void resetLog() { unlink(self.context.log()); unlink(self.context.home + "/steam-battlenet.log"); }

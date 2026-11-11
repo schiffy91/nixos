@@ -25,13 +25,14 @@ in pkgs.stdenv.mkDerivation {
     $CC -std=c11 -O2 gaming-tests.c -lm -lpthread -llzf -lz -o gaming-tests
   '';
   doCheck = true;
-  nativeCheckInputs = [ pkgs.coreutils pkgs.procps pkgs.libarchive ];
+  nativeCheckInputs = [ pkgs.coreutils pkgs.procps pkgs.libarchive pkgs.bash pkgs.gnugrep pkgs.util-linux ];
   checkPhase = ''
     export GAMING_TOOLS=${tools}/bin
     ./gaming-tests steam
     ./gaming-tests wine
     ./gaming-tests assetto
     ./gaming-tests integration
+    bash ${./battlenet-session.sh} ${../../config/pkgs/gaming/battlenet/session.sh}
   '';
   installPhase = ''
     mkdir -p "$out"

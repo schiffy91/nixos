@@ -16,6 +16,9 @@ int main() {
     assert(restored.contains("output.DP-1.wcg.disable"));
     assert(restored.contains("output.DP-1.priority.2"));
     assert(!restored.join(" ").contains("old-id"));
+    // KScreen leaves enabled=true out of the JSON inventory.
+    state.get("outputs").at(0).set("enabled", JSONValue.makeNull());
+    assert(SunshineDisplay.snapshot(state, "DP-1", "Virtual-Sunshine").get("outputs").size() == 1);
     var config = JSONValue.parse("{\"name\":\"Sunshine\",\"primary\":\"DP-1\",\"scale\":\"1.25\",\"position\":\"0,0\",\"disablePrimaryOnStream\":true}");
     var enabled = SunshineDisplay.configure(config, 2560, 1440, 120, true);
     assert(enabled.contains("output.Virtual-Sunshine.mode.2560x1440@120"));
