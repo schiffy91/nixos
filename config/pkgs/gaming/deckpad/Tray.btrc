@@ -1,0 +1,21 @@
+import Library.Console;
+import Library.Process;
+import Library.Tray;
+
+// The desktop switch for the service: one checkbox in the system tray.
+int main() {
+    var tray = SystemTray("Deckpad");
+    var icon = Environment.get("DECKPAD_TRAY_ICON", "");
+    if (!icon.isEmpty()) { tray.icon(icon); }
+    tray.tip("Use this Deck as a Steam Controller")
+        .checkItem("Use this Deck as a controller", "deckpad-toggle", "systemctl is-active --quiet deckpad.service")
+        .item("Quit tray", TraySignal.quit());
+    try {
+        tray.show();
+    } catch (string error) {  // headless session or no StatusNotifierWatcher
+        Console.error(f"deckpad-tray: no native tray available ({error}).");
+        return 0;
+    }
+    tray.run();
+    return 0;
+}

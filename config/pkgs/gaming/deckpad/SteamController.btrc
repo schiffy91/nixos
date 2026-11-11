@@ -1,0 +1,271 @@
+import ./PadSource.btrc;
+import ./PadState.btrc;
+import ./Wire.btrc;
+
+// The wired 2026 Steam Controller as the host sees it: one vendor HID interface.
+// Report IDs and layouts follow SDL's Steam Controller driver and hid-steam.c;
+// the Deck-to-controller mapping follows jmedina21/deck-as-controller (MIT).
+enum {
+    STEAM_VENDOR = 0x28DE, STEAM_PRODUCT = 0x1302,
+    STEAM_REPORT_STATE = 0x42, STEAM_REPORT_BATTERY = 0x43, STEAM_REPORT_FEATURE = 0x01,
+    STEAM_STATE_LENGTH = 54, STEAM_BATTERY_LENGTH = 15, STEAM_FEATURE_LENGTH = 64,
+    STEAM_OUT_RUMBLE = 0x80, STEAM_OUT_PULSE = 0x81, STEAM_OUT_COMMAND = 0x82,
+    STEAM_OUT_TONE = 0x83, STEAM_OUT_SWEEP = 0x84, STEAM_OUT_SCRIPT = 0x85,
+    STEAM_GET_ATTRIBUTES = 0x83, STEAM_SET_SETTINGS = 0x87, STEAM_GET_SETTINGS = 0x89,
+    STEAM_HAPTIC_PULSE = 0x8F, STEAM_GET_STRING = 0xAE, STEAM_RUMBLE = 0xEB,
+    STEAM_SERIAL_LENGTH = 20
+};
+
+enum { HOST_EFFECT_NONE, HOST_EFFECT_RUMBLE, HOST_EFFECT_HAPTIC };
+
+// What a host write asks of the controller: motor speeds, or a trackpad haptic
+// already translated into the Deck controller's own command.
+struct HostEffect {
+    int kind;
+    int left;
+    int right;
+    struct PadCommand command;
+};
+
+struct SteamControllerMemory {
+    unsigned char command[64];
+    int settings[256];
+};
+
+class SteamController {
+    private string serial;
+    private struct SteamControllerMemory memory;
+    private int sequence = 0;
+
+    public SteamController(string serial) {
+        if (serial.isEmpty() || serial.length() > STEAM_SERIAL_LENGTH) { throw "Controller serial must be 1 to 20 characters"; }
+        self.serial = serial;
+        memset(&self.memory, 0, sizeof(self.memory));
+    }
+
+    class int vendorReports(unsigned char* out, int offset, int item, int identifier, int length) {
+        out[offset] = (unsigned char)0x85; out[offset + 1] = (unsigned char)identifier;
+        out[offset + 2] = (unsigned char)0x09; out[offset + 3] = (unsigned char)0x01;
+        out[offset + 4] = (unsigned char)0x95; out[offset + 5] = (unsigned char)length;
+        out[offset + 6] = (unsigned char)item; out[offset + 7] = (unsigned char)0x02;
+        return offset + 8;
+    }
+
+    // One vendor collection of byte arrays, like the real controller's. Lengths
+    // exclude the report ID; hid-steam requires the feature report to be 63.
+    public int reportDescriptor(unsigned char* out) {
+        int header[14] = {0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08};
+        for (int index = 0; index < 14; index++) { out[index] = (unsigned char)header[index]; }
+        int end = 14;
+        end = SteamController.vendorReports(out, end, 0x81, STEAM_REPORT_STATE, 53);
+        end = SteamController.vendorReports(out, end, 0x81, STEAM_REPORT_BATTERY, 14);
+        end = SteamController.vendorReports(out, end, 0x81, 0x45, 45);
+        end = SteamController.vendorReports(out, end, 0x81, 0x47, 45);
+        end = SteamController.vendorReports(out, end, 0x81, 0x79, 1);
+        end = SteamController.vendorReports(out, end, 0x91, STEAM_OUT_RUMBLE, 9);
+        end = SteamController.vendorReports(out, end, 0x91, STEAM_OUT_PULSE, 7);
+        end = SteamController.vendorReports(out, end, 0x91, STEAM_OUT_COMMAND, 3);
+        end = SteamController.vendorReports(out, end, 0x91, STEAM_OUT_TONE, 9);
+        end = SteamController.vendorReports(out, end, 0x91, STEAM_OUT_SWEEP, 8);
+        end = SteamController.vendorReports(out, end, 0x91, STEAM_OUT_SCRIPT, 3);
+        end = SteamController.vendorReports(out, end, 0x91, 0x86, 3);
+        end = SteamController.vendorReports(out, end, 0x91, 0x87, 63);
+        end = SteamController.vendorReports(out, end, 0x91, 0x88, 63);
+        end = SteamController.vendorReports(out, end, 0x91, 0x89, 63);
+        end = SteamController.vendorReports(out, end, 0xB1, STEAM_REPORT_FEATURE, 63);
+        out[end] = (unsigned char)0xC0;
+        return end + 1;
+    }
+
+    public int deviceDescriptor(unsigned char* out) {
+        int bytes[18] = {18, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 64, 0xDE, 0x28, 0x02, 0x13, 0x00, 0x01, 1, 2, 3, 1};
+        for (int index = 0; index < 18; index++) { out[index] = (unsigned char)bytes[index]; }
+        return 18;
+    }
+
+    // Configuration, interface, HID, then interrupt IN 0x81 and OUT 0x01 at 1 ms.
+    public int configurationDescriptor(unsigned char* out) {
+        unsigned char report[256];
+        int reportLength = self.reportDescriptor(report);
+        int bytes[41] = {
+            9, 0x02, 41, 0, 1, 1, 0, 0x80, 250,
+            9, 0x04, 0, 0, 2, 0x03, 0, 0, 0,
+            9, 0x21, 0x11, 0x01, 0, 1, 0x22, 0, 0,
+            7, 0x05, 0x81, 0x03, 64, 0, 1,
+            7, 0x05, 0x01, 0x03, 64, 0, 1
+        };
+        for (int index = 0; index < 41; index++) { out[index] = (unsigned char)bytes[index]; }
+        Wire.putU16le(out, 25, reportLength);
+        return 41;
+    }
+
+    public int hidDescriptor(unsigned char* out) {
+        unsigned char configuration[64];
+        self.configurationDescriptor(configuration);
+        memcpy(out, configuration + 18, (size_t)9);
+        return 9;
+    }
+
+    // 0 is the language table; 1 manufacturer, 2 product, 3 serial number.
+    public int stringDescriptor(int index, unsigned char* out) {
+        if (index == 0) { out[0] = (unsigned char)4; out[1] = (unsigned char)0x03; out[2] = (unsigned char)0x09; out[3] = (unsigned char)0x04; return 4; }
+        string text = index == 1 ? "Valve Software" : (index == 2 ? "Steam Controller" : (index == 3 ? self.serial : ""));
+        if (text.isEmpty()) { return 0; }
+        int length = text.length();
+        out[0] = (unsigned char)(2 + 2 * length);
+        out[1] = (unsigned char)0x03;
+        for (int position = 0; position < length; position++) {
+            out[2 + 2 * position] = (unsigned char)text[position];
+            out[3 + 2 * position] = (unsigned char)0;
+        }
+        return 2 + 2 * length;
+    }
+
+    public int encodeState(struct PadState* state, long long microseconds, unsigned char* out) {
+        memset(out, 0, (size_t)STEAM_STATE_LENGTH);
+        out[0] = (unsigned char)STEAM_REPORT_STATE;
+        out[1] = (unsigned char)self.sequence;
+        self.sequence = (self.sequence + 1) & 0xFF;
+        Wire.putU32le(out, 2, (long long)state->buttons);
+        Wire.putU16le(out, 6, state->leftTrigger);
+        Wire.putU16le(out, 8, state->rightTrigger);
+        Wire.putU16le(out, 10, state->leftStickX);
+        Wire.putU16le(out, 12, state->leftStickY);
+        Wire.putU16le(out, 14, state->rightStickX);
+        Wire.putU16le(out, 16, state->rightStickY);
+        Wire.putU16le(out, 18, state->leftPadX);
+        Wire.putU16le(out, 20, state->leftPadY);
+        Wire.putU16le(out, 22, state->leftPadPressure);
+        Wire.putU16le(out, 24, state->rightPadX);
+        Wire.putU16le(out, 26, state->rightPadY);
+        Wire.putU16le(out, 28, state->rightPadPressure);
+        Wire.putU32le(out, 30, microseconds);
+        Wire.putU16le(out, 34, state->accelX);
+        Wire.putU16le(out, 36, state->accelY);
+        Wire.putU16le(out, 38, state->accelZ);
+        Wire.putU16le(out, 40, state->gyroX);
+        Wire.putU16le(out, 42, state->gyroY);
+        Wire.putU16le(out, 44, state->gyroZ);
+        return STEAM_STATE_LENGTH;
+    }
+
+    // Charge state 1 discharging, 2 charging, 4 full; voltages and currents stay zero.
+    public int encodeBattery(int percent, bool charging, unsigned char* out) {
+        memset(out, 0, (size_t)STEAM_BATTERY_LENGTH);
+        out[0] = (unsigned char)STEAM_REPORT_BATTERY;
+        int level = Wire.clamp(percent, 0, 100);
+        out[1] = (unsigned char)(charging ? (level >= 100 ? 4 : 2) : 1);
+        out[2] = (unsigned char)level;
+        return STEAM_BATTERY_LENGTH;
+    }
+
+    // The host wrote feature report 1: a command, answered by the next read.
+    public void setFeature(unsigned char* data, int length) {
+        if (length < 3 || (int)data[0] != STEAM_REPORT_FEATURE) { return; }
+        memset(self.memory.command, 0, (size_t)64);
+        memcpy(self.memory.command, data + 1, (size_t)(length - 1 > 63 ? 63 : length - 1));
+        if ((int)self.memory.command[0] != STEAM_SET_SETTINGS) { return; }
+        // <register> <value: u16>, repeated. The daemon already runs the Deck's
+        // controller the way Steam asks for here, so the values are only kept.
+        int count = Wire.clamp((int)self.memory.command[1], 0, 60);
+        for (int index = 0; index + 2 < count; index += 3) {
+            self.memory.settings[(int)self.memory.command[2 + index]] = Wire.u16le(self.memory.command, 3 + index);
+        }
+    }
+
+    private void attribute(unsigned char* out, int offset, int tag, long long value) {
+        out[offset] = (unsigned char)tag;
+        Wire.putU32le(out, offset + 1, value);
+    }
+
+    // The reply to the last command, as a real controller answers. The firmware
+    // build time is far in the future so Steam never offers a firmware update.
+    public int getFeature(unsigned char* out) {
+        memset(out, 0, (size_t)STEAM_FEATURE_LENGTH);
+        out[0] = (unsigned char)STEAM_REPORT_FEATURE;
+        int command = (int)self.memory.command[0];
+        int arguments = Wire.clamp((int)self.memory.command[1], 0, 60);
+        out[1] = (unsigned char)command;
+        if (command == STEAM_GET_ATTRIBUTES) {
+            self.attribute(out, 3, 1, (long long)STEAM_PRODUCT);
+            self.attribute(out, 8, 2, 0LL);
+            self.attribute(out, 13, 10, 0x68D2F92ELL);
+            self.attribute(out, 18, 4, 0x7FFFFFFFLL);
+            self.attribute(out, 23, 9, 72LL);
+            out[2] = (unsigned char)25;
+        } else if (command == STEAM_GET_STRING && arguments >= 1) {
+            out[3] = self.memory.command[2];
+            for (int index = 0; index < self.serial.length(); index++) { out[4 + index] = (unsigned char)self.serial[index]; }
+            out[2] = (unsigned char)(1 + STEAM_SERIAL_LENGTH);
+        } else if (command == STEAM_GET_SETTINGS) {
+            int length = 0;
+            for (int index = 0; index < arguments && length + 3 <= 60; index += 3) {
+                int setting = (int)self.memory.command[2 + index];
+                out[3 + length] = (unsigned char)setting;
+                Wire.putU16le(out, 4 + length, self.memory.settings[setting]);
+                length += 3;
+            }
+            out[2] = (unsigned char)length;
+        } else {
+            memcpy(out + 1, self.memory.command, (size_t)63);
+        }
+        return STEAM_FEATURE_LENGTH;
+    }
+
+    class int signedByte(unsigned char value) { return (int)value >= 128 ? (int)value - 256 : (int)value; }
+
+    // The controller's haptic sides also count its grip motors; the Deck only has
+    // trackpads. Pulses use the legacy numbering: 0 right, 1 left, 2 both.
+    class int pulsePad(int side) { return side == 0 || side == 4 ? 0 : (side == 1 || side == 3 ? 1 : 2); }
+    class int hapticPad(int side) { return side == 0 || side == 3 ? 0 : (side == 1 || side == 4 ? 1 : 2); }
+
+    // Steam sets a click's strength as a gain here (-9 dB low, -3 dB high); the
+    // Deck's controller takes an intensity level instead.
+    class int clickIntensity(int gain) { return gain <= -8 ? 1 : (gain <= -5 ? 2 : (gain <= 0 ? 3 : 4)); }
+
+    // An output report from the host, starting with its report ID.
+    public void outputEffect(unsigned char* data, int length, struct HostEffect* effect) {
+        effect->kind = HOST_EFFECT_NONE;
+        if (length < 4) { return; }
+        int report = (int)data[0];
+        int side = (int)data[1];
+        if (report == STEAM_OUT_RUMBLE && length >= 10) {
+            effect->kind = HOST_EFFECT_RUMBLE;
+            effect->left = Wire.u16le(data, 4);
+            effect->right = Wire.u16le(data, 7);
+            return;
+        }
+        effect->kind = HOST_EFFECT_HAPTIC;
+        if (report == STEAM_OUT_PULSE && length >= 8) {
+            DeckCommand.pulse(&effect->command, SteamController.pulsePad(side), Wire.u16le(data, 2), Wire.u16le(data, 4), Wire.u16le(data, 6));
+        } else if (report == STEAM_OUT_COMMAND) {
+            int kind = (int)data[2] > 2 ? 2 : (int)data[2];
+            DeckCommand.haptic(&effect->command, SteamController.hapticPad(side), kind, SteamController.clickIntensity(SteamController.signedByte(data[3])), 0, 0, 0, 0, 0, 0, 0, 0);
+        } else if (report == STEAM_OUT_TONE && length >= 10) {
+            DeckCommand.haptic(&effect->command, SteamController.hapticPad(side), DECK_HAPTIC_TONE, 0, SteamController.signedByte(data[2]),
+                Wire.u16le(data, 3), Wire.u16le(data, 5), Wire.u16le(data, 7), (int)data[9], 0, 0, 0);
+        } else if (report == STEAM_OUT_SWEEP && length >= 9) {
+            DeckCommand.haptic(&effect->command, SteamController.hapticPad(side), DECK_HAPTIC_SWEEP, 0, SteamController.signedByte(data[2]),
+                0, Wire.u16le(data, 3), 0, 0, 0, Wire.u16le(data, 5), Wire.u16le(data, 7));
+        } else if (report == STEAM_OUT_SCRIPT) {
+            DeckCommand.haptic(&effect->command, SteamController.hapticPad(side), DECK_HAPTIC_SCRIPT, 0, SteamController.signedByte(data[3]),
+                0, 0, 0, 0, (int)data[2], 0, 0);
+        } else {
+            effect->kind = HOST_EFFECT_NONE;
+        }
+    }
+
+    // Rumble and pulses can also arrive as feature commands, as on older controllers.
+    public void featureEffect(unsigned char* data, int length, struct HostEffect* effect) {
+        effect->kind = HOST_EFFECT_NONE;
+        if (length < 10 || (int)data[0] != STEAM_REPORT_FEATURE) { return; }
+        if ((int)data[1] == STEAM_RUMBLE) {
+            effect->kind = HOST_EFFECT_RUMBLE;
+            effect->left = Wire.u16le(data, 6);
+            effect->right = Wire.u16le(data, 8);
+        } else if ((int)data[1] == STEAM_HAPTIC_PULSE) {
+            effect->kind = HOST_EFFECT_HAPTIC;
+            DeckCommand.pulse(&effect->command, (int)data[3] > 2 ? 2 : (int)data[3], Wire.u16le(data, 4), Wire.u16le(data, 6), Wire.u16le(data, 8));
+        }
+    }
+}

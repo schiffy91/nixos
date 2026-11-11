@@ -1,0 +1,106 @@
+import Library.CLI;
+import Library.Console;
+import Library.FileSystem;
+import Library.Strings;
+import Library.Vector;
+import ./DeckPad.btrc;
+import ./PadSource.btrc;
+import ./SteamController.btrc;
+import ./UsbDevice.btrc;
+import ./UsbIpServer.btrc;
+import ./VhciAttach.btrc;
+
+class Deckpad {
+    class string usage() {
+        return "Usage:\n" +
+            "  deckpad serve [--source deck|demo] [--listen ADDRESS] [--port PORT] [--allow ADDRESS[/BITS]]...\n" +
+            "                [--serial TEXT] [--send-quick-access]\n" +
+            "      On the Deck: offer its controls as a Steam Controller over USB/IP.\n" +
+            "      Hold the ... button for two seconds to stop.\n" +
+            "  deckpad attach HOST [--port PORT] [--watch]\n" +
+            "      On the PC: attach the Deck's controller through vhci_hcd.\n" +
+            "  deckpad detach\n" +
+            "      On the PC: detach it again.\n" +
+            "  deckpad release\n" +
+            "      On the Deck: give the built-in controller back after a crash.";
+    }
+
+    // A serial that stays the same on one machine, in the controller's format.
+    class string serial() {
+        string identity = "";
+        try { identity = Path.readAll("/etc/machine-id").trim(); } catch (string error) { identity = ""; }
+        int number = 0;
+        for (int index = 0; index < identity.length(); index++) { number = (number * 31 + (int)identity[index]) % 100000000; }
+        var digits = f"{number}";
+        while (digits.length() < 8) { digits = "0" + digits; }
+        return "FXDK" + digits;
+    }
+
+    class int number(string text, string name) {
+        if (text.isEmpty() || !text.isDigit() || text.length() > 5 || Strings.toInt(text) > 65535) { throw f"Invalid {name}: {text}"; }
+        return Strings.toInt(text);
+    }
+
+    class string value(CLIArgs args, int index) {
+        if (index >= args.count()) { throw f"{args.get(index - 1)} needs a value"; }
+        return args.get(index);
+    }
+
+    class void serve(CLIArgs args) {
+        string source = "deck";
+        string address = "127.0.0.1";
+        string serial = Deckpad.serial();
+        int port = 3240;
+        bool sendQuickAccess = false;
+        Vector<string> allowed = [];
+        for (int index = 1; index < args.count(); index++) {
+            var option = args.get(index);
+            if (option.equals("--send-quick-access")) { sendQuickAccess = true; continue; }
+            var value = Deckpad.value(args, index + 1);
+            index++;
+            if (option.equals("--source")) { source = value; }
+            else if (option.equals("--listen")) { address = value; }
+            else if (option.equals("--port")) { port = Deckpad.number(value, "port"); }
+            else if (option.equals("--allow")) {
+                if (UsbIpWire.prefix(value) < 0) { throw f"Invalid --allow address or network: {value}"; }
+                allowed.push(value);
+            }
+            else if (option.equals("--serial")) { serial = value; }
+            else { throw f"Unknown option {option}\n{Deckpad.usage()}"; }
+        }
+        IPadSource pad = ScriptedPad();
+        if (source.equals("deck")) { pad = DeckPad(); }
+        else if (!source.equals("demo")) { throw "Expected --source deck or demo"; }
+        var server = UsbIpServer(UsbDevice(pad, SteamController(serial), sendQuickAccess), address, port, allowed);
+        Console.error(f"deckpad: serving a Steam Controller on {address}:{server.port()}");
+        server.run();
+    }
+
+    class void attach(CLIArgs args) {
+        string host = "";
+        int port = 3240;
+        bool watch = false;
+        for (int index = 1; index < args.count(); index++) {
+            var option = args.get(index);
+            if (option.equals("--watch")) { watch = true; }
+            else if (option.equals("--port")) { port = Deckpad.number(Deckpad.value(args, index + 1), "port"); index++; }
+            else if (option.startsWith("--") || !host.isEmpty()) { throw f"Unknown option {option}\n{Deckpad.usage()}"; }
+            else { host = option; }
+        }
+        if (host.isEmpty()) { throw Deckpad.usage(); }
+        VhciAttach.run(host, port, watch);
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var args = CLIArgs(argc, argv);
+        var command = args.command();
+        if (command.equals("serve")) { Deckpad.serve(args); }
+        else if (command.equals("attach")) { Deckpad.attach(args); }
+        else if (command.equals("detach")) { print(f"detached {VhciAttach.detach()} controller(s)"); }
+        else if (command.equals("release")) { DeckPad.rebind(); }
+        else { Console.error(Deckpad.usage()); return command.equals("help") || command.equals("--help") ? 0 : 2; }
+        return 0;
+    } catch (string error) { Console.error(f"deckpad: {error}"); return 1; }
+}

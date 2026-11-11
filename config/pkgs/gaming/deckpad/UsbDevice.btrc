@@ -1,0 +1,207 @@
+import Library.FileSystem;
+import Library.Strings;
+import Library.Timer;
+import ./Native.btrc;
+import ./PadSource.btrc;
+import ./PadState.btrc;
+import ./SteamController.btrc;
+import ./Wire.btrc;
+
+enum { USB_STALL = -1 };
+
+struct UsbReport {
+    unsigned char bytes[64];
+    int length;
+};
+
+// The first battery the kernel reports; a host without one reads as full.
+class DeckBattery {
+    class string attribute(string path) {
+        try { return Path.readAll(path).trim(); } catch (string error) { return ""; }
+    }
+
+    class string find() {
+        var root = "/sys/class/power_supply";
+        if (!FileSystem.isDir(root)) { return ""; }
+        for name in FileSystem.listDir(root) {
+            if (DeckBattery.attribute(f"{root}/{name}/type").equals("Battery")) { return f"{root}/{name}"; }
+        }
+        return "";
+    }
+
+    class int percent(string battery) {
+        var text = battery.isEmpty() ? "" : DeckBattery.attribute(battery + "/capacity");
+        return text.isEmpty() || !text.isDigit() ? 100 : Strings.toInt(text);
+    }
+
+    class bool charging(string battery) {
+        var status = battery.isEmpty() ? "" : DeckBattery.attribute(battery + "/status");
+        return status.equals("Charging") || status.equals("Full");
+    }
+}
+
+// The emulated controller behind any transport: it answers control transfers,
+// produces interrupt IN reports and takes the host's output reports. The same
+// object serves USB/IP today and a USB gadget later.
+class UsbDevice {
+    private IPadSource source;
+    private SteamController controller;
+    private PadLatch latch;
+    private bool sendQuickAccess;
+    private bool active = false;
+    private bool stop = false;
+    private long long quickAccessSince = 0LL;
+    private int wantedLeft = 0;
+    private int wantedRight = 0;
+    private int appliedLeft = 0;
+    private int appliedRight = 0;
+    private long long rumbleSentAt = 0LL;
+    private long long rumbleExpiresAt = 0LL;
+    private long long batteryDueAt = 0LL;
+    private bool batteryPending = false;
+    private string battery = "";
+
+    public UsbDevice(IPadSource source, SteamController controller, bool sendQuickAccess) {
+        self.source = source;
+        self.controller = controller;
+        self.latch = PadLatch();
+        self.sendQuickAccess = sendQuickAccess;
+    }
+
+    public bool attached() { return self.active; }
+
+    // Holding the Deck's ... button for two seconds asks the service to stop.
+    public bool stopRequested() { return self.stop; }
+
+    // A host attached: take the controller.
+    public void attach() {
+        if (self.active) { return; }
+        self.source.open();
+        self.active = true;
+        self.battery = DeckBattery.find();
+        self.batteryDueAt = 0LL;
+        self.quickAccessSince = 0LL;
+        self.wantedLeft = 0; self.wantedRight = 0; self.appliedLeft = 0; self.appliedRight = 0;
+    }
+
+    // The host left: give the controller back.
+    public void detach() {
+        if (!self.active) { return; }
+        self.active = false;
+        self.source.close();
+    }
+
+    // Read the controller for at most the timeout and run the rumble and battery timers.
+    public void pump(int timeoutMilliseconds) {
+        if (!self.active) { return; }
+        struct PadState state;
+        long long now = MonotonicClock.milliseconds();
+        if (self.source.read(&state, timeoutMilliseconds)) {
+            now = MonotonicClock.milliseconds();
+            if ((state.buttons & PAD_QUICK_ACCESS) != 0) {
+                if (self.quickAccessSince == 0LL) { self.quickAccessSince = now; }
+                else if (now - self.quickAccessSince >= 2000LL) { self.stop = true; }
+            } else { self.quickAccessSince = 0LL; }
+            if (!self.sendQuickAccess) { state.buttons &= ~PAD_QUICK_ACCESS; }
+            self.latch.update(&state);
+        }
+        if (self.rumbleExpiresAt != 0LL && now >= self.rumbleExpiresAt) {
+            self.wantedLeft = 0; self.wantedRight = 0; self.rumbleExpiresAt = 0LL;
+        }
+        // The controller gets overloaded by rapid rumble commands; Steam and the
+        // kernel driver throttle them to 20 Hz, always applying the latest values.
+        if ((self.wantedLeft != self.appliedLeft || self.wantedRight != self.appliedRight) && now - self.rumbleSentAt >= 50LL) {
+            struct PadCommand command;
+            DeckCommand.rumble(&command, self.wantedLeft, self.wantedRight);
+            self.source.command(&command);
+            self.appliedLeft = self.wantedLeft; self.appliedRight = self.wantedRight; self.rumbleSentAt = now;
+        }
+        if (now >= self.batteryDueAt) { self.batteryPending = true; self.batteryDueAt = now + 5000LL; }
+    }
+
+    // The next interrupt IN report, when one is due. The battery report goes
+    // first: it is due every five seconds, and a state is nearly always waiting.
+    public bool input(struct UsbReport* report) {
+        if (self.batteryPending) {
+            self.batteryPending = false;
+            report->length = self.controller.encodeBattery(DeckBattery.percent(self.battery), DeckBattery.charging(self.battery), report->bytes);
+            return true;
+        }
+        if (!self.latch.pending()) { return false; }
+        struct PadState state;
+        self.latch.take(&state);
+        report->length = self.controller.encodeState(&state, MonotonicClock.nanoseconds() / 1000LL, report->bytes);
+        return true;
+    }
+
+    private void apply(struct HostEffect* effect) {
+        if (effect->kind == HOST_EFFECT_RUMBLE) {
+            self.wantedLeft = effect->left;
+            self.wantedRight = effect->right;
+            // The real controller stops about 50 ms after the last rumble report
+            // and hosts repeat it while it should run; allow for network jitter.
+            self.rumbleExpiresAt = effect->left != 0 || effect->right != 0 ? MonotonicClock.milliseconds() + 500LL : 0LL;
+        } else if (effect->kind == HOST_EFFECT_HAPTIC && self.active) {
+            self.source.command(&effect->command);
+        }
+    }
+
+    // An output report from the interrupt OUT endpoint or SET_REPORT(output).
+    public void output(unsigned char* data, int length) {
+        struct HostEffect effect;
+        self.controller.outputEffect(data, length, &effect);
+        self.apply(&effect);
+    }
+
+    private int descriptor(int kind, int index, unsigned char* out) {
+        if (kind == 0x01) { return self.controller.deviceDescriptor(out); }
+        if (kind == 0x02) { return self.controller.configurationDescriptor(out); }
+        if (kind == 0x03) { int length = self.controller.stringDescriptor(index, out); return length > 0 ? length : USB_STALL; }
+        if (kind == 0x21) { return self.controller.hidDescriptor(out); }
+        if (kind == 0x22) { return self.controller.reportDescriptor(out); }
+        return USB_STALL;
+    }
+
+    private int answer(unsigned char* data, int capacity, unsigned char* reply, int length) {
+        if (length < 0) { return USB_STALL; }
+        int count = length < capacity ? length : capacity;
+        memcpy(data, reply, (size_t)count);
+        return count;
+    }
+
+    // One control transfer. For device-to-host requests the reply is written to
+    // data (at most `length` bytes) and its size returned; for host-to-device
+    // requests data holds `length` bytes. USB_STALL refuses the request.
+    public int control(unsigned char* setup, unsigned char* data, int length) {
+        int kind = (int)setup[0];
+        int request = (int)setup[1];
+        int value = Wire.u16le(setup, 2);
+        unsigned char reply[256];
+        memset(reply, 0, sizeof(reply));
+        if ((kind == 0x80 || kind == 0x81) && request == 0x06) { return self.answer(data, length, reply, self.descriptor(value >> 8, value & 0xFF, reply)); }
+        if (kind == 0x80 && request == 0x08) { reply[0] = (unsigned char)1; return self.answer(data, length, reply, 1); }
+        if ((kind == 0x80 || kind == 0x81 || kind == 0x82) && request == 0x00) { return self.answer(data, length, reply, 2); }
+        if (kind == 0x81 && request == 0x0A) { return self.answer(data, length, reply, 1); }
+        if (kind == 0x00 && request == 0x09) { return 0; }
+        if ((kind == 0x01 && request == 0x0B) || (kind == 0x02 && request == 0x01)) { return 0; }
+        if (kind == 0x21 && (request == 0x0A || request == 0x0B)) { return 0; }
+        if (kind == 0xA1 && request == 0x02) { return self.answer(data, length, reply, 1); }
+        if (kind == 0xA1 && request == 0x03) { reply[0] = (unsigned char)1; return self.answer(data, length, reply, 1); }
+        if (kind == 0xA1 && request == 0x01) {
+            if (value == 0x0300 + STEAM_REPORT_FEATURE) { return self.answer(data, length, reply, self.controller.getFeature(reply)); }
+            return USB_STALL;
+        }
+        if (kind == 0x21 && request == 0x09) {
+            if (value == 0x0300 + STEAM_REPORT_FEATURE) {
+                struct HostEffect effect;
+                self.controller.setFeature(data, length);
+                self.controller.featureEffect(data, length, &effect);
+                self.apply(&effect);
+                return length;
+            }
+            if ((value >> 8) == 0x02) { self.output(data, length); return length; }
+            return USB_STALL;
+        }
+        return USB_STALL;
+    }
+}

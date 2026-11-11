@@ -10,6 +10,7 @@ in {
     gaming.packages = with pkgs; [ protonup-qt ];
     dev.distrobox.enable = true;
     gaming.moonlight.enable = true;
+    gaming.deckpad.enable = true;  # attaches the Deck's controller whenever the Deck offers it
     utils.packages = with pkgs; [
       tcpdump ethtool pciutils usbutils sbctl fwupd mesa-demos
       vulkan-tools vdpauinfo libva-utils nvtopPackages.full

@@ -1,0 +1,1 @@
+{"manifest-hash":"bbef1291809724426577bd193b59752b6a01331b441b7741150fd203c6e27ec1","packages":[{"dependencies":{},"manifest-hash":"2983bdc4b870f8b8f36e62e0398e3826c64a0b2f2ccc08a637d3bd853880cb39","name":"nixos_deckpad","source":{"path":"."}}],"root":"nixos_deckpad","schema":3}

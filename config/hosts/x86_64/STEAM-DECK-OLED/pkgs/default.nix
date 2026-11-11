@@ -7,6 +7,7 @@ in {
     gaming.packages = with pkgs; [ protonup-qt ];
     gaming.moonlight.enable = true;
     gaming.chiaki.enable = true;
+    gaming.deckpad = { enable = true; role = "controller"; };  # this Deck's controls as a Steam Controller for FRACTAL-NORTH
     utils.desktop.enable = true;
     utils.nixosctl.caffeine.enable = false;
     gaming.steam.protonCustom.enable = true;

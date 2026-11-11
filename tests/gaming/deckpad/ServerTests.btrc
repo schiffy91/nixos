@@ -1,0 +1,232 @@
+import Library.CLI;
+import Library.Strings;
+import Library.Timer;
+import ../../../config/lib/BackgroundProcess.btrc;
+import ../../../config/pkgs/gaming/deckpad/Native.btrc;
+import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
+import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbIpServer.btrc;
+import ../../../config/pkgs/gaming/deckpad/VhciAttach.btrc;
+import ../../../config/pkgs/gaming/deckpad/Wire.btrc;
+import ../../lib/Check.btrc;
+
+struct HostReply {
+    long long command;
+    long long sequence;
+    int status;
+    int length;
+    unsigned char data[1024];
+};
+
+// A USB/IP host in miniature: what vhci_hcd and usbhid send to the server.
+class UsbIpHost {
+    private int socket = -1;
+    private long long sequence = 0LL;
+
+    public UsbIpHost(int port) { self.socket = VhciAttach.connectTo("127.0.0.1", port); }
+
+    public void close() { if (self.socket >= 0) { close(self.socket); self.socket = -1; } }
+    public void __del__() { self.close(); }
+
+    public bool exchange(unsigned char* request, int requestLength, unsigned char* reply, int replyLength) {
+        return VhciAttach.exchange(self.socket, request, requestLength, reply, replyLength);
+    }
+
+    public bool importController(unsigned char* device) {
+        unsigned char request[40];
+        unsigned char reply[8];
+        memset(request, 0, sizeof(request));
+        UsbIpWire.operation(request, USBIP_REQUEST_IMPORT, 0);
+        memcpy(request + 8, UsbIpWire.busId(), (size_t)UsbIpWire.busId().length());
+        return self.exchange(request, 40, reply, 8) && Wire.u32be(reply, 4) == 0LL && self.exchange(request, 0, device, USBIP_DEVICE);
+    }
+
+    public long long submit(bool incoming, int endpoint, unsigned char* setup, unsigned char* data, int length) {
+        unsigned char request[USBIP_HEADER + 1024];
+        memset(request, 0, sizeof(request));
+        self.sequence++;
+        Wire.putU32be(request, 0, (long long)USBIP_SUBMIT);
+        Wire.putU32be(request, 4, self.sequence);
+        Wire.putU32be(request, 8, 0x00010002LL);
+        Wire.putU32be(request, 12, incoming ? 1LL : 0LL);
+        Wire.putU32be(request, 16, (long long)endpoint);
+        Wire.putU32be(request, 24, (long long)length);
+        if (setup != NULL) { memcpy(request + 40, setup, (size_t)8); }
+        if (!incoming && length > 0) { memcpy(request + USBIP_HEADER, data, (size_t)length); }
+        Check.that(self.exchange(request, USBIP_HEADER + (incoming ? 0 : length), request, 0), "request sent");
+        return self.sequence;
+    }
+
+    public long long unlink(long long target) {
+        unsigned char request[USBIP_HEADER];
+        memset(request, 0, sizeof(request));
+        self.sequence++;
+        Wire.putU32be(request, 0, (long long)USBIP_UNLINK);
+        Wire.putU32be(request, 4, self.sequence);
+        Wire.putU32be(request, 20, target);
+        Check.that(self.exchange(request, USBIP_HEADER, request, 0), "unlink sent");
+        return self.sequence;
+    }
+
+    // The next reply; `incoming` says whether data follows a successful submit.
+    public void reply(struct HostReply* reply, bool incoming) {
+        unsigned char header[USBIP_HEADER];
+        Check.that(self.exchange(header, 0, header, USBIP_HEADER), "reply header received");
+        reply->command = Wire.u32be(header, 0);
+        reply->sequence = Wire.u32be(header, 4);
+        long long status = Wire.u32be(header, 20);
+        reply->status = (int)(status >= 0x80000000LL ? status - 0x100000000LL : status);
+        reply->length = (int)Wire.u32be(header, 24);
+        if (incoming && reply->command == (long long)USBIP_SUBMIT_REPLY && reply->length > 0) {
+            Check.that(reply->length <= 1024 && self.exchange(header, 0, reply->data, reply->length), "reply data received");
+        }
+    }
+
+    public void controlIn(int kind, int request, int value, int length, struct HostReply* reply) {
+        unsigned char setup[8];
+        setup[0] = (unsigned char)kind; setup[1] = (unsigned char)request;
+        Wire.putU16le(setup, 2, value); Wire.putU16le(setup, 4, 0); Wire.putU16le(setup, 6, length);
+        self.submit(true, 0, setup, NULL, length);
+        self.reply(reply, true);
+    }
+
+    public int controlOut(int kind, int request, int value, unsigned char* data, int length) {
+        unsigned char setup[8];
+        struct HostReply reply;
+        setup[0] = (unsigned char)kind; setup[1] = (unsigned char)request;
+        Wire.putU16le(setup, 2, value); Wire.putU16le(setup, 4, 0); Wire.putU16le(setup, 6, length);
+        self.submit(false, 0, setup, data, length);
+        self.reply(&reply, false);
+        return reply.status;
+    }
+
+    public void interruptIn(struct HostReply* reply) {
+        self.submit(true, 1, NULL, NULL, 64);
+        self.reply(reply, true);
+    }
+}
+
+class DeckpadServerTests {
+    class UsbIpHost connect(int port) {
+        long long deadline = MonotonicClock.deadlineAfter(5000LL);
+        while (true) {
+            try { return UsbIpHost(port); } catch (string error) {
+                if (!MonotonicClock.before(deadline)) { throw "FAIL: server did not start listening"; }
+            }
+            Timer.sleepMillis(20);
+        }
+        throw "FAIL: unreachable";
+    }
+
+    class void listing(int port) {
+        unsigned char request[8];
+        unsigned char reply[328];
+        var host = DeckpadServerTests.connect(port);
+        UsbIpWire.operation(request, USBIP_REQUEST_DEVICES, 0);
+        Check.that(host.exchange(request, 8, reply, 328), "device list answered");
+        Check.that(Wire.u16be(reply, 2) == USBIP_REPLY_DEVICES && Wire.u32be(reply, 8) == 1LL, "one exported device");
+        Check.that(Wire.u16be(reply, 312) == STEAM_VENDOR && Wire.u16be(reply, 314) == STEAM_PRODUCT && (int)reply[324] == 3, "a Steam Controller with one HID interface");
+        host.close();
+    }
+
+    class void enumeration(UsbIpHost host) {
+        struct HostReply reply;
+        unsigned char feature[64];
+        host.controlIn(0x80, 0x06, 0x0100, 18, &reply);
+        Check.that(reply.status == 0 && reply.length == 18 && Wire.u16le(reply.data, 8) == STEAM_VENDOR, "device descriptor");
+        host.controlIn(0x80, 0x06, 0x0200, 255, &reply);
+        Check.that(reply.length == 41 && (int)reply.data[14] == 3, "configuration with a HID interface");
+        host.controlIn(0x81, 0x06, 0x2200, 512, &reply);
+        Check.that(reply.length == 143, "report descriptor");
+        host.controlIn(0x80, 0x06, 0x0600, 10, &reply);
+        Check.that(reply.status == USBIP_STALLED && reply.length == 0, "unsupported requests stall");
+        Check.that(host.controlOut(0x00, 0x09, 1, feature, 0) == 0, "set configuration");
+        memset(feature, 0, sizeof(feature));
+        feature[0] = (unsigned char)STEAM_REPORT_FEATURE; feature[1] = (unsigned char)STEAM_GET_STRING; feature[2] = (unsigned char)0x15; feature[3] = (unsigned char)1;
+        Check.that(host.controlOut(0x21, 0x09, 0x0301, feature, 64) == 0, "feature command accepted");
+        host.controlIn(0xA1, 0x01, 0x0301, 64, &reply);
+        Check.that(reply.length == 64 && (int)reply.data[1] == STEAM_GET_STRING && (int)reply.data[4] == 'F' && (int)reply.data[15] == '7', "serial number read back");
+    }
+
+    class void reports(UsbIpHost host) {
+        struct HostReply reply;
+        int states = 0;
+        int last = -1;
+        bool pressed = false;
+        bool released = false;
+        bool battery = false;
+        long long deadline = MonotonicClock.deadlineAfter(1500LL);
+        while (MonotonicClock.before(deadline)) {
+            host.interruptIn(&reply);
+            Check.that(reply.status == 0, "interrupt IN succeeds");
+            if ((int)reply.data[0] == STEAM_REPORT_BATTERY) { battery = reply.length == 15; continue; }
+            Check.that((int)reply.data[0] == STEAM_REPORT_STATE && reply.length == 54, "state reports are 54 bytes");
+            if (last >= 0) { Check.that((int)reply.data[1] == ((last + 1) & 0xFF), "no state report is lost or repeated"); }
+            last = (int)reply.data[1];
+            if ((Wire.u16le(reply.data, 2) & PAD_A) != 0) { pressed = true; } else { released = true; }
+            states++;
+        }
+        Check.that(states >= 150, f"reports keep the pad's pace ({states} in 1.5 s)");
+        Check.that(pressed && released && battery, "button changes and the battery report arrive");
+    }
+
+    class void outputs(UsbIpHost host) {
+        struct HostReply reply;
+        unsigned char rumble[10];
+        memset(rumble, 0, sizeof(rumble));
+        rumble[0] = (unsigned char)STEAM_OUT_RUMBLE;
+        Wire.putU16le(rumble, 4, 0x1234);
+        host.submit(false, 1, NULL, rumble, 10);
+        host.reply(&reply, false);
+        Check.that(reply.command == (long long)USBIP_SUBMIT_REPLY && reply.status == 0 && reply.length == 10, "interrupt OUT accepted");
+        // Cancel a waiting IN request. The report may already be on its way.
+        long long waiting = host.submit(true, 1, NULL, NULL, 64);
+        long long cancel = host.unlink(waiting);
+        host.reply(&reply, true);
+        if (reply.command == (long long)USBIP_SUBMIT_REPLY) {
+            Check.that(reply.sequence == waiting, "the report that won the race");
+            host.reply(&reply, false);
+            Check.that(reply.status == 0, "nothing left to unlink");
+        } else { Check.that(reply.status == USBIP_UNLINKED, "waiting request unlinked"); }
+        Check.that(reply.command == (long long)USBIP_UNLINK_REPLY && reply.sequence == cancel, "unlink answered");
+    }
+
+    class void scenario(int port) {
+        unsigned char device[USBIP_DEVICE];
+        unsigned char scratch[8];
+        DeckpadServerTests.listing(port);
+        var host = DeckpadServerTests.connect(port);
+        Check.that(host.importController(device) && Wire.u32be(device, 296) == (long long)USBIP_SPEED_FULL, "import succeeds at full speed");
+        DeckpadServerTests.enumeration(host);
+        DeckpadServerTests.reports(host);
+        DeckpadServerTests.outputs(host);
+        var intruder = DeckpadServerTests.connect(port);
+        Check.that(!intruder.importController(device), "a second host cannot take the controller");
+        intruder.close();
+        host.close();
+        Timer.sleepMillis(600);
+        var returning = DeckpadServerTests.connect(port);
+        Check.that(returning.importController(device), "the controller can be attached again after a host leaves");
+        DeckpadServerTests.reports(returning);
+        returning.close();
+        UsbIpWire.operation(scratch, 0x7777, 0);
+        var confused = DeckpadServerTests.connect(port);
+        Check.that(!confused.exchange(scratch, 8, scratch, 8), "an unknown operation is dropped");
+        confused.close();
+    }
+
+    class void run(string program, int port) {
+        var server = BackgroundProcess.start(program, ["serve", "--source", "demo", "--port", f"{port}", "--serial", "FXDK00000007"]);
+        try { DeckpadServerTests.scenario(port); } catch (string error) { server.stop(); throw error; }
+        server.stop();
+        Check.that(server.code() == 0, "the server stops cleanly on SIGTERM");
+    }
+}
+
+int main(int argc, char** argv) {
+    var args = CLIArgs(argc, argv);
+    Check.that(args.count() == 1, "expected the deckpad program");
+    DeckpadServerTests.run(args.get(0), 32417);
+    print("PASS: deckpad USB/IP enumeration, reports, outputs and reconnection over localhost");
+    return 0;
+}

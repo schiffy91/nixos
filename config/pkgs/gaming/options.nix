@@ -2,7 +2,7 @@
 let
   mkSetting = type: defaultValue: lib.mkOption { inherit type; default = defaultValue; };
 in {
-  imports = [ ./assettocorsa/options.nix ./steam/options.nix ./sunshine/options.nix ./semu/options.nix ./rocksmith/options.nix ./battlenet/options.nix ./wow/options.nix ];
+  imports = [ ./assettocorsa/options.nix ./deckpad/options.nix ./steam/options.nix ./sunshine/options.nix ./semu/options.nix ./rocksmith/options.nix ./battlenet/options.nix ./wow/options.nix ];
   options = with lib.types; {
     settings.apps.gaming.enable = mkSetting bool config.settings.apps.enable;
     settings.apps.gaming.packages = mkSetting (listOf package) [];

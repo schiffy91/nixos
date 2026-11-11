@@ -16,6 +16,11 @@ Other shortcuts and custom artwork are left alone. See
 [application artwork](../../../pkgs/gaming/artwork/README.md) for the curated
 sets, KDE icons, SGDBoop and the SteamGridDB Decky plugin.
 
+The **Deck as Controller** shortcut (and a tray checkbox in Plasma) hands the
+Deck's controls to FRACTAL-NORTH as a Steam Controller over the network; hold
+**⋯** for two seconds to take them back. See
+[deckpad](../../../pkgs/gaming/deckpad/README.md).
+
 Both physical hosts enable `settings.apps.utils.desktop.enable` for the shared desktop
 packages and services under `config/pkgs`: Cider, mpv, the development CLIs, zsh,
 Mullvad, OpenVPN 3, Discord, Solaar and Logitech receiver support. Racing-wheel

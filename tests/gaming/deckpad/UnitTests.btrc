@@ -1,0 +1,272 @@
+import Library.Timer;
+import ../../../config/pkgs/gaming/deckpad/PadSource.btrc;
+import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
+import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbDevice.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbIpServer.btrc;
+import ../../../config/pkgs/gaming/deckpad/Wire.btrc;
+import ../../lib/Check.btrc;
+
+// A controller whose ... button never lets go.
+class HeldPad implements IPadSource {
+    public bool opened = false;
+
+    public void open() { self.opened = true; }
+
+    public bool read(struct PadState* state, int timeoutMilliseconds) {
+        Timer.sleepMillis(4);
+        memset(state, 0, sizeof(struct PadState));
+        state->buttons = PAD_QUICK_ACCESS | PAD_B;
+        return true;
+    }
+
+    public void command(struct PadCommand* command) {}
+    public void close() { self.opened = false; }
+}
+
+class DeckpadUnitTests {
+    class void deckSample(unsigned char* report) {
+        memset(report, 0, (size_t)64);
+        report[0] = (unsigned char)0x01; report[2] = (unsigned char)0x09; report[3] = (unsigned char)0x40;
+        report[8] = (unsigned char)0x80;   // A
+        report[9] = (unsigned char)0x80;   // L5
+        report[10] = (unsigned char)0x08;  // left pad touched
+        report[11] = (unsigned char)0x04;  // right stick click
+        report[13] = (unsigned char)0x02;  // L4
+        report[14] = (unsigned char)0x04;  // quick access
+        Wire.putU16le(report, 16, 1000); Wire.putU16le(report, 18, -2000);
+        Wire.putU16le(report, 28, 16384); Wire.putU16le(report, 30, -5);
+        Wire.putU16le(report, 44, 12345); Wire.putU16le(report, 46, 40000);
+        Wire.putU16le(report, 48, -32768); Wire.putU16le(report, 50, 32767);
+        Wire.putU16le(report, 52, 100); Wire.putU16le(report, 54, -100);
+        Wire.putU16le(report, 56, 500); Wire.putU16le(report, 58, 600);
+    }
+
+    class void deckReport() {
+        unsigned char report[64];
+        struct PadState state;
+        DeckpadUnitTests.deckSample(report);
+        Check.that(DeckReport.parse(report, 64, &state), "Deck state report parses");
+        Check.that(state.buttons == (PAD_A | PAD_L5 | PAD_LEFT_PAD_TOUCH | PAD_RIGHT_STICK | PAD_L4 | PAD_QUICK_ACCESS), "Deck buttons map to controller bits");
+        Check.that(state.leftPadX == 1000 && state.leftPadY == -2000 && state.accelZ == 16384 && state.gyroX == -5, "pads and IMU keep Deck units");
+        Check.that(state.leftTrigger == 12345 && state.rightTrigger == 32767, "triggers clamp to the controller range");
+        Check.that(state.leftStickX == -32767 && state.leftStickY == 32767 && state.rightStickX == 100 && state.rightStickY == -100, "sticks clamp symmetrically");
+        Check.that(state.leftPadPressure == 500 && state.rightPadPressure == 600, "pad pressure");
+        Check.that(!DeckReport.parse(report, 40, &state), "short report rejected");
+        report[2] = (unsigned char)0x04;
+        Check.that(!DeckReport.parse(report, 64, &state), "non-state report rejected");
+    }
+
+    class void stateReport() {
+        unsigned char report[64];
+        unsigned char out[64];
+        struct PadState state;
+        DeckpadUnitTests.deckSample(report);
+        DeckReport.parse(report, 64, &state);
+        var controller = SteamController("FXDK00000042");
+        Check.that(controller.encodeState(&state, 0x01020304LL, out) == 54 && (int)out[0] == 0x42 && (int)out[1] == 0, "wired state report is 54 bytes");
+        Check.that(Wire.u16le(out, 2) == (state.buttons & 0xFFFF) && Wire.u16le(out, 4) == (state.buttons >> 16), "buttons at offset 2");
+        Check.that(Wire.u16le(out, 6) == 12345 && Wire.u16le(out, 8) == 32767, "triggers at 6 and 8");
+        Check.that(Wire.s16le(out, 10) == -32767 && Wire.s16le(out, 12) == 32767 && Wire.s16le(out, 14) == 100 && Wire.s16le(out, 16) == -100, "sticks at 10..17");
+        Check.that(Wire.s16le(out, 18) == 1000 && Wire.s16le(out, 20) == -2000 && Wire.u16le(out, 22) == 500 && Wire.u16le(out, 28) == 600, "pads at 18..29");
+        Check.that((int)out[30] == 0x04 && (int)out[33] == 0x01, "IMU timestamp at 30");
+        Check.that(Wire.s16le(out, 38) == 16384 && Wire.s16le(out, 40) == -5, "IMU at 34..45");
+        controller.encodeState(&state, 0LL, out);
+        Check.that((int)out[1] == 1, "sequence number advances");
+        Check.that(controller.encodeBattery(87, true, out) == 15 && (int)out[0] == 0x43 && (int)out[1] == 2 && (int)out[2] == 87, "battery report");
+        Check.that(controller.encodeBattery(100, true, out) == 15 && (int)out[1] == 4, "full battery state");
+    }
+
+    class void latch() {
+        struct PadState state;
+        struct PadState taken;
+        var latch = PadLatch();
+        Check.that(!latch.pending(), "nothing pending at start");
+        memset(&state, 0, sizeof(state));
+        state.buttons = PAD_A | PAD_LEFT_PAD_TOUCH;
+        latch.update(&state);
+        state.buttons = 0;
+        latch.update(&state);
+        latch.take(&taken);
+        Check.that(taken.buttons == PAD_A, "a tap survives until sent; a lifted touch does not");
+        Check.that(!latch.pending(), "taken state is no longer pending");
+        latch.update(&state);
+        latch.take(&taken);
+        Check.that(taken.buttons == 0, "latched press is sent once");
+    }
+
+    class void descriptors() {
+        unsigned char out[256];
+        var controller = SteamController("FXDK00000042");
+        int length = controller.reportDescriptor(out);
+        Check.that(length == 143 && (int)out[0] == 0x06 && (int)out[2] == 0xFF && (int)out[length - 1] == 0xC0, "vendor report descriptor");
+        Check.that((int)out[15] == 0x42 && (int)out[19] == 53, "state report is 53 bytes after its ID");
+        Check.that((int)out[length - 8] == 0x01 && (int)out[length - 4] == 63 && (int)out[length - 3] == 0xB1, "feature report 1 is 63 bytes, as hid-steam requires");
+        Check.that(controller.deviceDescriptor(out) == 18 && Wire.u16le(out, 8) == STEAM_VENDOR && Wire.u16le(out, 10) == STEAM_PRODUCT, "device identity");
+        Check.that(controller.configurationDescriptor(out) == 41 && Wire.u16le(out, 2) == 41 && Wire.u16le(out, 25) == 143, "configuration names the report descriptor");
+        Check.that((int)out[29] == 0x81 && (int)out[36] == 0x01, "interrupt IN and OUT endpoints");
+        Check.that(controller.stringDescriptor(3, out) == 26 && (int)out[2] == 'F' && (int)out[24] == '2', "serial string");
+        Check.that(controller.stringDescriptor(9, out) == 0, "unknown string");
+    }
+
+    class void command(unsigned char* out, int identifier, int length) {
+        memset(out, 0, (size_t)64);
+        out[0] = (unsigned char)STEAM_REPORT_FEATURE; out[1] = (unsigned char)identifier; out[2] = (unsigned char)length;
+    }
+
+    class void features() {
+        unsigned char request[64];
+        unsigned char reply[64];
+        var controller = SteamController("FXDK00000042");
+        DeckpadUnitTests.command(request, STEAM_GET_STRING, 0x15);
+        request[3] = (unsigned char)1;
+        controller.setFeature(request, 64);
+        Check.that(controller.getFeature(reply) == 64 && (int)reply[1] == STEAM_GET_STRING && (int)reply[2] == 21 && (int)reply[3] == 1, "serial reply header");
+        Check.that((int)reply[4] == 'F' && (int)reply[15] == '2' && (int)reply[16] == 0, "serial reply text");
+        DeckpadUnitTests.command(request, STEAM_GET_ATTRIBUTES, 0);
+        controller.setFeature(request, 64);
+        controller.getFeature(reply);
+        Check.that((int)reply[2] == 25 && (int)reply[3] == 1 && Wire.u16le(reply, 4) == STEAM_PRODUCT && (int)reply[18] == 4 && (int)reply[22] == 0x7F, "attributes name the product and a future firmware");
+        DeckpadUnitTests.command(request, STEAM_SET_SETTINGS, 6);
+        request[3] = (unsigned char)9; request[4] = (unsigned char)0;
+        request[6] = (unsigned char)48; request[7] = (unsigned char)0x18;
+        controller.setFeature(request, 64);
+        DeckpadUnitTests.command(request, STEAM_GET_SETTINGS, 6);
+        request[3] = (unsigned char)48; request[6] = (unsigned char)9;
+        controller.setFeature(request, 64);
+        controller.getFeature(reply);
+        Check.that((int)reply[2] == 6 && (int)reply[3] == 48 && Wire.u16le(reply, 4) == 0x18 && (int)reply[6] == 9 && Wire.u16le(reply, 7) == 0, "settings read back");
+        DeckpadUnitTests.command(request, 0xC5, 1);
+        request[3] = (unsigned char)7;
+        controller.setFeature(request, 64);
+        controller.getFeature(reply);
+        Check.that((int)reply[1] == 0xC5 && (int)reply[3] == 7, "unknown commands echo");
+    }
+
+    class void effects() {
+        struct HostEffect effect;
+        unsigned char report[64];
+        var controller = SteamController("FXDK00000042");
+        memset(report, 0, sizeof(report));
+        report[0] = (unsigned char)STEAM_OUT_RUMBLE;
+        Wire.putU16le(report, 4, 0x1234); Wire.putU16le(report, 7, 0x5678);
+        controller.outputEffect(report, 10, &effect);
+        Check.that(effect.kind == HOST_EFFECT_RUMBLE && effect.left == 0x1234 && effect.right == 0x5678, "rumble output report");
+        memset(report, 0, sizeof(report));
+        report[0] = (unsigned char)STEAM_OUT_PULSE; report[1] = (unsigned char)3;
+        Wire.putU16le(report, 2, 1200); Wire.putU16le(report, 6, 2);
+        controller.outputEffect(report, 8, &effect);
+        Check.that(effect.kind == HOST_EFFECT_HAPTIC && (int)effect.command.bytes[0] == DECK_HAPTIC_PULSE && (int)effect.command.bytes[2] == 1, "left grip pulse goes to the left pad");
+        Check.that(Wire.u16le(effect.command.bytes, 3) == 1200 && Wire.u16le(effect.command.bytes, 7) == 2 && effect.command.length == 10, "pulse timing");
+        memset(report, 0, sizeof(report));
+        report[0] = (unsigned char)STEAM_OUT_COMMAND; report[1] = (unsigned char)1; report[2] = (unsigned char)1; report[3] = (unsigned char)0xF7;
+        controller.outputEffect(report, 4, &effect);
+        Check.that((int)effect.command.bytes[0] == DECK_HAPTIC && effect.command.length == 15 && (int)effect.command.bytes[2] == 1 && (int)effect.command.bytes[3] == 1 && (int)effect.command.bytes[4] == 1, "a -9 dB click is the Deck's low intensity");
+        memset(report, 0, sizeof(report));
+        report[0] = (unsigned char)STEAM_OUT_SWEEP; report[1] = (unsigned char)2; report[2] = (unsigned char)0xFA;
+        Wire.putU16le(report, 3, 250); Wire.putU16le(report, 5, 80); Wire.putU16le(report, 7, 320);
+        controller.outputEffect(report, 9, &effect);
+        Check.that(effect.command.length == 21 && (int)effect.command.bytes[3] == DECK_HAPTIC_SWEEP && (int)effect.command.bytes[5] == 0xFA && Wire.u16le(effect.command.bytes, 8) == 250 && Wire.u16le(effect.command.bytes, 17) == 80 && Wire.u16le(effect.command.bytes, 19) == 320, "sweep keeps gain, duration and range");
+        report[0] = (unsigned char)0x99;
+        controller.outputEffect(report, 9, &effect);
+        Check.that(effect.kind == HOST_EFFECT_NONE, "unknown output report ignored");
+        DeckpadUnitTests.command(report, STEAM_RUMBLE, 9);
+        Wire.putU16le(report, 6, 300); Wire.putU16le(report, 8, 400);
+        controller.featureEffect(report, 64, &effect);
+        Check.that(effect.kind == HOST_EFFECT_RUMBLE && effect.left == 300 && effect.right == 400, "rumble as a feature command");
+    }
+
+    class void setup(unsigned char* setup, int kind, int request, int value, int length) {
+        setup[0] = (unsigned char)kind; setup[1] = (unsigned char)request;
+        Wire.putU16le(setup, 2, value); Wire.putU16le(setup, 4, 0); Wire.putU16le(setup, 6, length);
+    }
+
+    class void device() {
+        unsigned char setup[8];
+        unsigned char data[256];
+        struct UsbReport report;
+        var pad = ScriptedPad();
+        var device = UsbDevice(pad, SteamController("FXDK00000042"), false);
+        DeckpadUnitTests.setup(setup, 0x80, 0x06, 0x0100, 18);
+        Check.that(device.control(setup, data, 18) == 18 && (int)data[1] == 0x01, "device descriptor");
+        Check.that(device.control(setup, data, 8) == 8, "short reads are truncated");
+        DeckpadUnitTests.setup(setup, 0x81, 0x06, 0x2200, 255);
+        Check.that(device.control(setup, data, 255) == 143, "report descriptor over the interface");
+        DeckpadUnitTests.setup(setup, 0x80, 0x06, 0x0600, 10);
+        Check.that(device.control(setup, data, 10) == USB_STALL, "no device qualifier at full speed");
+        DeckpadUnitTests.setup(setup, 0x00, 0x09, 1, 0);
+        Check.that(device.control(setup, data, 0) == 0, "set configuration");
+        Check.that(!device.input(&report), "no reports before a host attaches");
+        device.attach();
+        device.pump(8);
+        Check.that(device.input(&report) && report.length == 15 && (int)report.bytes[0] == 0x43, "battery report after attach");
+        Check.that(device.input(&report) && report.length == 54 && (int)report.bytes[0] == 0x42, "state report follows");
+        Check.that(!device.input(&report), "nothing more until the pad reports again");
+        memset(data, 0, sizeof(data));
+        data[0] = (unsigned char)STEAM_OUT_RUMBLE;
+        Wire.putU16le(data, 4, 1000); Wire.putU16le(data, 7, 2000);
+        device.output(data, 10);
+        Timer.sleepMillis(60);
+        device.pump(8);
+        Check.that(pad.commands == 1 && (int)pad.last.bytes[0] == DECK_RUMBLE && Wire.u16le(pad.last.bytes, 5) == 1000 && Wire.u16le(pad.last.bytes, 7) == 2000, "rumble reaches the pad");
+        Wire.putU16le(data, 4, 3000);
+        device.output(data, 10);
+        device.pump(8);
+        Check.that(pad.commands == 1, "rumble is throttled to 20 Hz");
+        Timer.sleepMillis(60);
+        device.pump(8);
+        Check.that(pad.commands == 2 && Wire.u16le(pad.last.bytes, 5) == 3000, "the latest rumble is applied");
+        Timer.sleepMillis(560);
+        device.pump(8);
+        Check.that(pad.commands == 3 && Wire.u16le(pad.last.bytes, 5) == 0, "rumble stops when the host stops repeating it");
+        DeckpadUnitTests.command(data, STEAM_HAPTIC_PULSE, 7);
+        data[3] = (unsigned char)1;
+        DeckpadUnitTests.setup(setup, 0x21, 0x09, 0x0301, 64);
+        Check.that(device.control(setup, data, 64) == 64 && pad.commands == 4 && (int)pad.last.bytes[0] == DECK_HAPTIC_PULSE, "feature pulse reaches the pad at once");
+        device.detach();
+        Check.that(!device.attached(), "detach releases the pad");
+    }
+
+    class void allowList() {
+        long long deck = UsbIpWire.address("192.168.50.23");
+        Check.that(deck == 0xC0A83217LL && UsbIpWire.address("192.168.50") < 0LL && UsbIpWire.address("192.168.50.256") < 0LL, "dotted addresses");
+        Check.that(UsbIpWire.within(deck, "192.168.50.23") && !UsbIpWire.within(deck, "192.168.50.24"), "exact address");
+        Check.that(UsbIpWire.within(deck, "192.168.50.0/24") && !UsbIpWire.within(deck, "192.168.51.0/24") && UsbIpWire.within(deck, "0.0.0.0/0"), "networks");
+        Check.that(!UsbIpWire.within(deck, "192.168.50.0/33") && !UsbIpWire.within(deck, "192.168.50.0/") && !UsbIpWire.within(deck, "all"), "malformed entries match nothing");
+    }
+
+    class int buttons(struct UsbReport* report) { return Wire.u16le(report->bytes, 2) | (Wire.u16le(report->bytes, 4) << 16); }
+
+    class void stopChord() {
+        struct UsbReport report;
+        var pad = HeldPad();
+        var device = UsbDevice(pad, SteamController("FXDK00000042"), false);
+        device.attach();
+        Check.that(pad.opened, "attach takes the pad");
+        long long started = MonotonicClock.milliseconds();
+        while (!device.stopRequested() && MonotonicClock.milliseconds() - started < 4000LL) { device.pump(8); }
+        long long held = MonotonicClock.milliseconds() - started;
+        Check.that(device.stopRequested() && held >= 1900LL && held < 3500LL, "holding ... for two seconds asks to stop");
+        Check.that(device.input(&report) && (int)report.bytes[0] == STEAM_REPORT_BATTERY, "battery report is due first");
+        Check.that(device.input(&report) && DeckpadUnitTests.buttons(&report) == PAD_B, "... is kept from the host by default");
+        var forwarding = UsbDevice(HeldPad(), SteamController("FXDK00000042"), true);
+        forwarding.attach();
+        forwarding.pump(8);
+        forwarding.input(&report);
+        Check.that(forwarding.input(&report) && DeckpadUnitTests.buttons(&report) == (PAD_B | PAD_QUICK_ACCESS), "... can be forwarded");
+    }
+}
+
+int main() {
+    DeckpadUnitTests.deckReport();
+    DeckpadUnitTests.stateReport();
+    DeckpadUnitTests.latch();
+    DeckpadUnitTests.descriptors();
+    DeckpadUnitTests.features();
+    DeckpadUnitTests.effects();
+    DeckpadUnitTests.device();
+    DeckpadUnitTests.allowList();
+    DeckpadUnitTests.stopChord();
+    print("PASS: deckpad reports, descriptors, feature commands, haptics, allow list and stop chord");
+    return 0;
+}

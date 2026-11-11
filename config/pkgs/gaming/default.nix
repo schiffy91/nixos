@@ -4,6 +4,7 @@
     ./battlenet
     ./btrsmith
     ./chiaki.nix
+    ./deckpad
     ./game-run
     ./moonlight.nix
     ./proton

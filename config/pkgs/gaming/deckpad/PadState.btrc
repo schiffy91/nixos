@@ -1,0 +1,108 @@
+import ./Wire.btrc;
+
+// Button bits as the 2026 Steam Controller reports them. The Deck has the same
+// controls, so its state is kept in this layout from the moment it is read.
+enum {
+    PAD_A = 0x00000001, PAD_B = 0x00000002, PAD_X = 0x00000004, PAD_Y = 0x00000008,
+    PAD_QUICK_ACCESS = 0x00000010, PAD_RIGHT_STICK = 0x00000020, PAD_MENU = 0x00000040, PAD_R4 = 0x00000080,
+    PAD_R5 = 0x00000100, PAD_R1 = 0x00000200, PAD_DOWN = 0x00000400, PAD_RIGHT = 0x00000800,
+    PAD_LEFT = 0x00001000, PAD_UP = 0x00002000, PAD_VIEW = 0x00004000, PAD_LEFT_STICK = 0x00008000,
+    PAD_STEAM = 0x00010000, PAD_L4 = 0x00020000, PAD_L5 = 0x00040000, PAD_L1 = 0x00080000,
+    PAD_RIGHT_STICK_TOUCH = 0x00100000, PAD_RIGHT_PAD_TOUCH = 0x00200000, PAD_RIGHT_PAD_CLICK = 0x00400000, PAD_R2 = 0x00800000,
+    PAD_LEFT_STICK_TOUCH = 0x01000000, PAD_LEFT_PAD_TOUCH = 0x02000000, PAD_LEFT_PAD_CLICK = 0x04000000, PAD_L2 = 0x08000000
+};
+
+// Sticks, trackpads and the IMU keep the Deck's own units and axes (+y up).
+struct PadState {
+    int buttons;
+    int leftTrigger;
+    int rightTrigger;
+    int leftStickX;
+    int leftStickY;
+    int rightStickX;
+    int rightStickY;
+    int leftPadX;
+    int leftPadY;
+    int leftPadPressure;
+    int rightPadX;
+    int rightPadY;
+    int rightPadPressure;
+    int accelX;
+    int accelY;
+    int accelZ;
+    int gyroX;
+    int gyroY;
+    int gyroZ;
+};
+
+// The Deck's built-in controller state report: 64 bytes, 01 00 09 at the start.
+// Offsets and bits follow drivers/hid/hid-steam.c (steam_do_deck_input_event).
+class DeckReport {
+    class int flag(unsigned char* data, int offset, int bit, int button) { return ((int)data[offset] & (1 << bit)) != 0 ? button : 0; }
+
+    class bool parse(unsigned char* data, int length, struct PadState* state) {
+        if (length < 60 || (int)data[0] != 0x01 || (int)data[2] != 0x09) { return false; }
+        int buttons = 0;
+        buttons |= DeckReport.flag(data, 8, 0, PAD_R2) | DeckReport.flag(data, 8, 1, PAD_L2);
+        buttons |= DeckReport.flag(data, 8, 2, PAD_R1) | DeckReport.flag(data, 8, 3, PAD_L1);
+        buttons |= DeckReport.flag(data, 8, 4, PAD_Y) | DeckReport.flag(data, 8, 5, PAD_B);
+        buttons |= DeckReport.flag(data, 8, 6, PAD_X) | DeckReport.flag(data, 8, 7, PAD_A);
+        buttons |= DeckReport.flag(data, 9, 0, PAD_UP) | DeckReport.flag(data, 9, 1, PAD_RIGHT);
+        buttons |= DeckReport.flag(data, 9, 2, PAD_LEFT) | DeckReport.flag(data, 9, 3, PAD_DOWN);
+        buttons |= DeckReport.flag(data, 9, 4, PAD_VIEW) | DeckReport.flag(data, 9, 5, PAD_STEAM);
+        buttons |= DeckReport.flag(data, 9, 6, PAD_MENU) | DeckReport.flag(data, 9, 7, PAD_L5);
+        buttons |= DeckReport.flag(data, 10, 0, PAD_R5) | DeckReport.flag(data, 10, 1, PAD_LEFT_PAD_CLICK);
+        buttons |= DeckReport.flag(data, 10, 2, PAD_RIGHT_PAD_CLICK) | DeckReport.flag(data, 10, 3, PAD_LEFT_PAD_TOUCH);
+        buttons |= DeckReport.flag(data, 10, 4, PAD_RIGHT_PAD_TOUCH) | DeckReport.flag(data, 10, 6, PAD_LEFT_STICK);
+        buttons |= DeckReport.flag(data, 11, 2, PAD_RIGHT_STICK);
+        buttons |= DeckReport.flag(data, 13, 1, PAD_L4) | DeckReport.flag(data, 13, 2, PAD_R4);
+        buttons |= DeckReport.flag(data, 13, 6, PAD_LEFT_STICK_TOUCH) | DeckReport.flag(data, 13, 7, PAD_RIGHT_STICK_TOUCH);
+        buttons |= DeckReport.flag(data, 14, 2, PAD_QUICK_ACCESS);
+        state->buttons = buttons;
+        state->leftPadX = Wire.s16le(data, 16);
+        state->leftPadY = Wire.s16le(data, 18);
+        state->rightPadX = Wire.s16le(data, 20);
+        state->rightPadY = Wire.s16le(data, 22);
+        state->accelX = Wire.s16le(data, 24);
+        state->accelY = Wire.s16le(data, 26);
+        state->accelZ = Wire.s16le(data, 28);
+        state->gyroX = Wire.s16le(data, 30);
+        state->gyroY = Wire.s16le(data, 32);
+        state->gyroZ = Wire.s16le(data, 34);
+        state->leftTrigger = Wire.clamp(Wire.u16le(data, 44), 0, 32767);
+        state->rightTrigger = Wire.clamp(Wire.u16le(data, 46), 0, 32767);
+        state->leftStickX = Wire.clamp(Wire.s16le(data, 48), -32767, 32767);
+        state->leftStickY = Wire.clamp(Wire.s16le(data, 50), -32767, 32767);
+        state->rightStickX = Wire.clamp(Wire.s16le(data, 52), -32767, 32767);
+        state->rightStickY = Wire.clamp(Wire.s16le(data, 54), -32767, 32767);
+        state->leftPadPressure = Wire.u16le(data, 56);
+        state->rightPadPressure = Wire.u16le(data, 58);
+        return true;
+    }
+}
+
+// Keeps the newest state for a host that polls slower than the Deck reports.
+// Presses stay latched until sent, so a tap shorter than one host poll still
+// arrives. Trackpad touches are not latched: a lifted finger has no position.
+class PadLatch {
+    private struct PadState latest;
+    private int latched = 0;
+    private bool fresh = false;
+
+    public PadLatch() { memset(&self.latest, 0, sizeof(self.latest)); }
+
+    public void update(struct PadState* state) {
+        memcpy(&self.latest, state, sizeof(self.latest));
+        self.latched |= state->buttons & ~(PAD_LEFT_PAD_TOUCH | PAD_RIGHT_PAD_TOUCH);
+        self.fresh = true;
+    }
+
+    public bool pending() { return self.fresh; }
+
+    public void take(struct PadState* state) {
+        memcpy(state, &self.latest, sizeof(self.latest));
+        state->buttons |= self.latched;
+        self.latched = 0;
+        self.fresh = false;
+    }
+}

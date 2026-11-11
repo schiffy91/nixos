@@ -1,0 +1,17 @@
+manifest-version = 1
+
+[package]
+name = "nixos_deckpad"
+exports = ["Native", "Wire", "PadState", "PadSource", "DeckPad", "SteamController", "UsbDevice", "UsbIpServer", "VhciAttach"]
+
+[[native.bindings]]
+module = "Native"
+header = "native.h"
+language = "c"
+standard = "c11"
+symbols = [
+  "deckpadUsbControl", "deckpadUsbBulk", "deckpadUsbClaim", "deckpadUsbRelease",
+  "usbdevfs_ctrltransfer", "usbdevfs_bulktransfer",
+  "signalfd", "signalfd_siginfo", "SFD_NONBLOCK", "SFD_CLOEXEC",
+  "TCP_NODELAY", "IPPROTO_TCP", "MSG_NOSIGNAL", "O_CLOEXEC",
+]

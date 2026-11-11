@@ -14,6 +14,7 @@ in pkgs.linkFarm "gaming-tests" [
   { name = "sunshine-session"; path = import ./sunshine-session.nix { inherit pkgs; }; }
   { name = "proton-session"; path = import ./proton-session.nix { inherit pkgs; }; }
   { name = "affinity"; path = import ./affinity.nix { inherit pkgs inputs; }; }
+  { name = "deckpad"; path = import ./deckpad { inherit pkgs inputs; }; }
   { name = "tools"; path = import ./tools.nix { inherit pkgs inputs; }; }
   { name = "wheel-menu"; path = import ../../config/pkgs/gaming/assettocorsa/wheel-menu/package.nix { inherit pkgs; }; }
 ]

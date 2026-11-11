@@ -1,0 +1,37 @@
+// Byte-order helpers. USB and Valve's reports are little-endian; USB/IP is big-endian.
+class Wire {
+    class int u16le(unsigned char* data, int offset) { return (int)data[offset] | ((int)data[offset + 1] << 8); }
+
+    class int s16le(unsigned char* data, int offset) {
+        int value = Wire.u16le(data, offset);
+        return value >= 32768 ? value - 65536 : value;
+    }
+
+    class void putU16le(unsigned char* data, int offset, int value) {
+        data[offset] = (unsigned char)(value & 0xFF);
+        data[offset + 1] = (unsigned char)((value >> 8) & 0xFF);
+    }
+
+    class void putU32le(unsigned char* data, int offset, long long value) {
+        for (int index = 0; index < 4; index++) { data[offset + index] = (unsigned char)((value >> (8 * index)) & 0xFFLL); }
+    }
+
+    class int u16be(unsigned char* data, int offset) { return ((int)data[offset] << 8) | (int)data[offset + 1]; }
+
+    class long long u32be(unsigned char* data, int offset) {
+        long long value = 0LL;
+        for (int index = 0; index < 4; index++) { value = (value << 8) | (long long)data[offset + index]; }
+        return value;
+    }
+
+    class void putU16be(unsigned char* data, int offset, int value) {
+        data[offset] = (unsigned char)((value >> 8) & 0xFF);
+        data[offset + 1] = (unsigned char)(value & 0xFF);
+    }
+
+    class void putU32be(unsigned char* data, int offset, long long value) {
+        for (int index = 0; index < 4; index++) { data[offset + index] = (unsigned char)((value >> (8 * (3 - index))) & 0xFFLL); }
+    }
+
+    class int clamp(int value, int low, int high) { return value < low ? low : (value > high ? high : value); }
+}

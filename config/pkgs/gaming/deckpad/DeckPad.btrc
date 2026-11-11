@@ -1,0 +1,135 @@
+import Library.FileSystem;
+import Library.Strings;
+import ./Native.btrc;
+import ./PadSource.btrc;
+import ./PadState.btrc;
+
+// The Steam Deck's built-in controller, read over usbfs.
+//
+// While open, usbhid is unbound from the controller's HID interfaces so Steam
+// and the desktop on the Deck stop seeing it, and the gamepad interface is read
+// directly. close() and DeckPad.rebind() hand it back.
+class DeckPad implements IPadSource {
+    private int device = -1;
+
+    class string usbhid() { return "/sys/bus/usb/drivers/usbhid"; }
+
+    // Sysfs attributes need one plain write; an atomic replace does not work there.
+    class bool writeAttribute(string path, string value) {
+        int descriptor = open(path, (int)O_WRONLY | (int)O_CLOEXEC);
+        if (descriptor < 0) { return false; }
+        int length = value.length();
+        bool written = (int)write(descriptor, value, (size_t)length) == length;
+        close(descriptor);
+        return written;
+    }
+
+    class string attribute(string path) {
+        try { return Path.readAll(path).trim(); } catch (string error) { return ""; }
+    }
+
+    // The controller's USB device directory, such as /sys/bus/usb/devices/3-3.
+    class string find() {
+        var root = "/sys/bus/usb/devices";
+        for name in FileSystem.listDir(root) {
+            var path = f"{root}/{name}";
+            if (DeckPad.attribute(path + "/idVendor").equals("28de") && DeckPad.attribute(path + "/idProduct").equals("1205")) { return path; }
+        }
+        return "";
+    }
+
+    // Keyboard, mouse and gamepad interfaces.
+    class string interfaceName(string path, int number) { return f"{PathTools.basename(path)}:1.{number}"; }
+
+    // Give every controller interface back to usbhid. Safe to call at any time.
+    class void rebind() {
+        var path = DeckPad.find();
+        if (path.isEmpty()) { return; }
+        for (int number = 0; number < 3; number++) {
+            var name = DeckPad.interfaceName(path, number);
+            if (FileSystem.exists(f"/sys/bus/usb/devices/{name}") && !FileSystem.exists(f"{DeckPad.usbhid()}/{name}")) {
+                DeckPad.writeAttribute(DeckPad.usbhid() + "/bind", name);
+            }
+        }
+    }
+
+    class string padded(string digits) {
+        var text = digits;
+        while (text.length() < 3) { text = "0" + text; }
+        return text;
+    }
+
+    public void open() {
+        var path = DeckPad.find();
+        if (path.isEmpty()) { throw "Steam Deck controller not found"; }
+        for (int number = 0; number < 3; number++) {
+            var name = DeckPad.interfaceName(path, number);
+            if (FileSystem.exists(f"{DeckPad.usbhid()}/{name}") && !DeckPad.writeAttribute(DeckPad.usbhid() + "/unbind", name)) {
+                DeckPad.rebind();
+                throw "Cannot take the Steam Deck controller from usbhid";
+            }
+        }
+        var node = f"/dev/bus/usb/{DeckPad.padded(DeckPad.attribute(path + "/busnum"))}/{DeckPad.padded(DeckPad.attribute(path + "/devnum"))}";
+        self.device = open(node, (int)O_RDWR | (int)O_CLOEXEC);
+        unsigned int gamepad = 2u;
+        if (self.device < 0 || ioctl(self.device, deckpadUsbClaim, &gamepad) != 0) {
+            self.close();
+            throw f"Cannot open the Steam Deck controller at {node}";
+        }
+        struct PadCommand command;
+        DeckCommand.clearMappings(&command);
+        self.command(&command);
+        DeckCommand.gamepadSettings(&command);
+        self.command(&command);
+    }
+
+    // One state report from interrupt endpoint 0x83, or false when none arrived in time.
+    public bool read(struct PadState* state, int timeoutMilliseconds) {
+        unsigned char report[64];
+        usbdevfs_bulktransfer transfer;
+        memset(&transfer, 0, sizeof(transfer));
+        transfer.ep = 0x83u;
+        transfer.len = 64u;
+        transfer.timeout = (unsigned int)(timeoutMilliseconds > 0 ? timeoutMilliseconds : 1);
+        transfer.data = (void*)report;
+        int received = ioctl(self.device, deckpadUsbBulk, &transfer);
+        if (received < 0) {
+            if (errno == ETIMEDOUT || errno == EINTR) { return false; }
+            throw "The Steam Deck controller stopped answering";
+        }
+        return DeckReport.parse(report, received, state);
+    }
+
+    // SET_REPORT, feature report 0, on the gamepad interface.
+    public void command(struct PadCommand* command) {
+        if (self.device < 0) { return; }
+        unsigned char report[64];
+        memset(report, 0, sizeof(report));
+        memcpy(report, command->bytes, (size_t)command->length);
+        usbdevfs_ctrltransfer transfer;
+        memset(&transfer, 0, sizeof(transfer));
+        transfer.bRequestType = (uint8_t)0x21;
+        transfer.bRequest = (uint8_t)0x09;
+        transfer.wValue = (uint16_t)0x0300;
+        transfer.wIndex = (uint16_t)2;
+        transfer.wLength = (uint16_t)64;
+        transfer.timeout = 500u;
+        transfer.data = (void*)report;
+        ioctl(self.device, deckpadUsbControl, &transfer);
+    }
+
+    public void close() {
+        if (self.device >= 0) {
+            struct PadCommand quiet;
+            DeckCommand.rumble(&quiet, 0, 0);
+            self.command(&quiet);
+            unsigned int gamepad = 2u;
+            ioctl(self.device, deckpadUsbRelease, &gamepad);
+            close(self.device);
+            self.device = -1;
+        }
+        DeckPad.rebind();
+    }
+
+    public void __del__() { self.close(); }
+}
