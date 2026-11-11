@@ -1,0 +1,49 @@
+import ./Wire.btrc;
+
+// USB/IP (Documentation/usb/usbip_protocol.rst): a host's vhci_hcd attaches an
+// exported device as a real USB device. Everything on the wire is big-endian.
+enum {
+    USBIP_VERSION = 0x0111,
+    USBIP_REQUEST_DEVICES = 0x8005, USBIP_REPLY_DEVICES = 0x0005,
+    USBIP_REQUEST_IMPORT = 0x8003, USBIP_REPLY_IMPORT = 0x0003,
+    USBIP_SUBMIT = 1, USBIP_UNLINK = 2, USBIP_SUBMIT_REPLY = 3, USBIP_UNLINK_REPLY = 4,
+    USBIP_HEADER = 48, USBIP_DEVICE = 312, USBIP_SPEED_FULL = 2,
+    USBIP_BUS = 1, USBIP_ADDRESS = 2, USBIP_PAYLOAD_LIMIT = 1024,
+    USBIP_STALLED = -32, USBIP_UNLINKED = -104
+};
+
+// The messages both ends build: the exporting link and the importing host.
+class UsbIpWire {
+    class string busId() { return "1-1"; }
+
+    // struct usbip_usb_device: path, bus id, numbers, speed, then the identity.
+    class void device(unsigned char* out, int vendor, int product) {
+        memset(out, 0, (size_t)USBIP_DEVICE);
+        var path = "/sys/devices/platform/deckpad/usb1/1-1";
+        memcpy(out, path, (size_t)path.length());
+        memcpy(out + 256, UsbIpWire.busId(), (size_t)UsbIpWire.busId().length());
+        Wire.putU32be(out, 288, (long long)USBIP_BUS);
+        Wire.putU32be(out, 292, (long long)USBIP_ADDRESS);
+        Wire.putU32be(out, 296, (long long)USBIP_SPEED_FULL);
+        Wire.putU16be(out, 300, vendor);
+        Wire.putU16be(out, 302, product);
+        Wire.putU16be(out, 304, 0x0100);
+        out[309] = (unsigned char)1;
+        out[310] = (unsigned char)1;
+        out[311] = (unsigned char)1;
+    }
+
+    class void operation(unsigned char* out, int code, int status) {
+        Wire.putU16be(out, 0, USBIP_VERSION);
+        Wire.putU16be(out, 2, code);
+        Wire.putU32be(out, 4, (long long)status);
+    }
+
+    class void reply(unsigned char* out, int command, long long sequence, int status, int length) {
+        memset(out, 0, (size_t)USBIP_HEADER);
+        Wire.putU32be(out, 0, (long long)command);
+        Wire.putU32be(out, 4, sequence);
+        Wire.putU32be(out, 20, (long long)status);
+        Wire.putU32be(out, 24, (long long)length);
+    }
+}

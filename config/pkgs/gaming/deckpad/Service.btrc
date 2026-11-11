@@ -1,0 +1,63 @@
+import Library.Vector;
+import ./Controller.btrc;
+import ./Link.btrc;
+import ./Native.btrc;
+
+// Runs the controller behind every open link. While no host is attached it
+// sleeps on the links' descriptors; once one attaches, each turn reads the pad
+// and lets the links move reports. The first host to attach, on any link, holds
+// the controller until it leaves.
+class ControllerService {
+    private VirtualController controller;
+    private Vector<IControllerLink> links = [];
+    private int signals = -1;
+
+    public ControllerService(VirtualController controller) { self.controller = controller; }
+
+    public void add(IControllerLink link) { self.links.push(link); }
+
+    public void open() { for link in self.links { link.open(); } }
+
+    public void close() {
+        for link in self.links { link.close(); }
+        if (self.signals >= 0) { close(self.signals); self.signals = -1; }
+    }
+
+    // Stop signals arrive as readable data instead of interrupting a transfer.
+    private void watchSignals() {
+        sigset_t stopping;
+        sigemptyset(&stopping);
+        sigaddset(&stopping, SIGINT);
+        sigaddset(&stopping, SIGTERM);
+        if (sigprocmask((int)SIG_BLOCK, &stopping, NULL) != 0) { throw "Cannot block stop signals"; }
+        self.signals = signalfd(-1, &stopping, (int)SFD_NONBLOCK | (int)SFD_CLOEXEC);
+        if (self.signals < 0) { throw "Cannot watch stop signals"; }
+    }
+
+    // One turn. False once a stop signal has arrived.
+    public bool turn(int idleMilliseconds) {
+        // Read the pad first: the host's next request arrives while this waits,
+        // so each fresh state leaves in the same turn.
+        self.controller.pump(8);
+        struct pollfd watched[32];
+        memset(watched, 0, sizeof(watched));
+        int count = 0;
+        if (self.signals >= 0) { watched[0].fd = self.signals; watched[0].events = POLLIN; count = 1; }
+        for link in self.links { count += link.watch(watched + count, 32 - count); }
+        int ready = poll(watched, (nfds_t)count, self.controller.attached() ? 0 : idleMilliseconds);
+        if (ready < 0 && errno != EINTR) { throw "Cannot wait for hosts"; }
+        if (ready > 0 && self.signals >= 0 && ((int)watched[0].revents & POLLIN) != 0) { return false; }
+        for link in self.links { link.step(); }
+        return true;
+    }
+
+    // Serve until a stop signal arrives or the Deck's stop chord is held.
+    public void run() {
+        self.watchSignals();
+        try {
+            self.open();
+            while (!self.controller.stopRequested() && self.turn(500)) {}
+        } catch (string error) { self.close(); throw error; }
+        self.close();
+    }
+}

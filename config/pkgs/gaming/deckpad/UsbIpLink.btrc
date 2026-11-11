@@ -1,22 +1,12 @@
 import Library.Console;
 import Library.IO;
 import Library.Strings;
-import Library.Vector;
+import ./Link.btrc;
 import ./Native.btrc;
-import ./UsbDevice.btrc;
+import ./Pairing.btrc;
+import ./UsbHid.btrc;
+import ./UsbIp.btrc;
 import ./Wire.btrc;
-
-// USB/IP (Documentation/usb/usbip_protocol.rst): the host's vhci_hcd attaches
-// the controller as a real USB device. Everything on the wire is big-endian.
-enum {
-    USBIP_VERSION = 0x0111,
-    USBIP_REQUEST_DEVICES = 0x8005, USBIP_REPLY_DEVICES = 0x0005,
-    USBIP_REQUEST_IMPORT = 0x8003, USBIP_REPLY_IMPORT = 0x0003,
-    USBIP_SUBMIT = 1, USBIP_UNLINK = 2, USBIP_SUBMIT_REPLY = 3, USBIP_UNLINK_REPLY = 4,
-    USBIP_HEADER = 48, USBIP_DEVICE = 312, USBIP_SPEED_FULL = 2,
-    USBIP_BUS = 1, USBIP_ADDRESS = 2, USBIP_PAYLOAD_LIMIT = 1024,
-    USBIP_STALLED = -32, USBIP_UNLINKED = -104
-};
 
 struct UsbIpBuffer {
     unsigned char bytes[4096];
@@ -29,154 +19,92 @@ struct UsbIpPending {
     int count;
 };
 
-class UsbIpWire {
-    class string busId() { return "1-1"; }
-
-    // A dotted IPv4 address as a host-order number, or -1.
-    class long long address(string text) {
-        var parts = Strings.split(text, ".");
-        if (parts.len != 4) { return -1LL; }
-        long long value = 0LL;
-        for part in parts {
-            if (part.isEmpty() || part.length() > 3 || !part.isDigit() || Strings.toInt(part) > 255) { return -1LL; }
-            value = (value << 8) | (long long)Strings.toInt(part);
-        }
-        return value;
-    }
-
-    // struct usbip_usb_device: path, bus id, numbers, speed, then the identity.
-    // The prefix length of "a.b.c.d" (32) or "a.b.c.d/bits"; -1 when malformed.
-    class int prefix(string entry) {
-        var parts = Strings.split(entry, "/");
-        if (parts.len < 1 || parts.len > 2 || UsbIpWire.address(parts.get(0)) < 0LL) { return -1; }
-        if (parts.len == 1) { return 32; }
-        var bits = parts.get(1);
-        return bits.isEmpty() || bits.length() > 2 || !bits.isDigit() || Strings.toInt(bits) > 32 ? -1 : Strings.toInt(bits);
-    }
-
-    // Whether a host-order address is the entry's address or inside its network.
-    class bool within(long long host, string entry) {
-        int bits = UsbIpWire.prefix(entry);
-        if (bits < 0) { return false; }
-        long long network = UsbIpWire.address(Strings.split(entry, "/").get(0));
-        long long mask = bits == 0 ? 0LL : (0xFFFFFFFFLL << (32 - bits)) & 0xFFFFFFFFLL;
-        return (host & mask) == (network & mask);
-    }
-
-    class void device(unsigned char* out) {
-        memset(out, 0, (size_t)USBIP_DEVICE);
-        var path = "/sys/devices/platform/deckpad/usb1/1-1";
-        memcpy(out, path, (size_t)path.length());
-        memcpy(out + 256, UsbIpWire.busId(), (size_t)UsbIpWire.busId().length());
-        Wire.putU32be(out, 288, (long long)USBIP_BUS);
-        Wire.putU32be(out, 292, (long long)USBIP_ADDRESS);
-        Wire.putU32be(out, 296, (long long)USBIP_SPEED_FULL);
-        Wire.putU16be(out, 300, STEAM_VENDOR);
-        Wire.putU16be(out, 302, STEAM_PRODUCT);
-        Wire.putU16be(out, 304, 0x0100);
-        out[309] = (unsigned char)1;
-        out[310] = (unsigned char)1;
-        out[311] = (unsigned char)1;
-    }
-
-    class void operation(unsigned char* out, int code, int status) {
-        Wire.putU16be(out, 0, USBIP_VERSION);
-        Wire.putU16be(out, 2, code);
-        Wire.putU32be(out, 4, (long long)status);
-    }
-
-    class void reply(unsigned char* out, int command, long long sequence, int status, int length) {
-        memset(out, 0, (size_t)USBIP_HEADER);
-        Wire.putU32be(out, 0, (long long)command);
-        Wire.putU32be(out, 4, sequence);
-        Wire.putU32be(out, 20, (long long)status);
-        Wire.putU32be(out, 24, (long long)length);
-    }
-}
-
-class UsbIpServer {
-    private UsbDevice device;
-    private Vector<string> allowed;
+// The network link: a USB/IP server on a TCP port, for hosts on the LAN and on
+// this machine. One host at a time holds the controller through it.
+class UsbIpLink implements IControllerLink {
+    private UsbHidDevice device;
+    private IPairing pairing;
+    private string address;
+    private int port;
     private int listener = -1;
     private int client = -1;
-    private int signals = -1;
     private bool imported = false;
     private struct UsbIpBuffer received;
     private struct UsbIpPending pending;
 
-    // Loopback clients are always accepted; others must match an address or
-    // network in `allowed`. USB/IP itself has no authentication.
-    public UsbIpServer(UsbDevice device, string address, int port, Vector<string> allowed) {
+    public UsbIpLink(UsbHidDevice device, IPairing pairing, string address, int port) {
+        if (port < 0 || port > 65535 || IPv4.address(address) < 0LL) { throw f"Invalid listen address {address}:{port}"; }
         self.device = device;
-        self.allowed = allowed;
+        self.pairing = pairing;
+        self.address = address;
+        self.port = port;
         self.received.length = 0;
         self.pending.count = 0;
+    }
+
+    public string name() { return "lan"; }
+
+    public bool attached() { return self.imported; }
+
+    public void open() {
         struct sockaddr_in local;
         memset(&local, 0, sizeof(local));
         local.sin_family = AF_INET;
-        local.sin_port = htons((unsigned short)port);
-        long long host = UsbIpWire.address(address);
-        if (port < 0 || port > 65535 || host < 0LL) { throw f"Invalid listen address {address}:{port}"; }
-        local.sin_addr.s_addr = htonl((uint32_t)host);
+        local.sin_port = htons((unsigned short)self.port);
+        local.sin_addr.s_addr = htonl((uint32_t)IPv4.address(self.address));
         self.listener = socket(AF_INET, SOCK_STREAM, 0);
         int yes = 1;
         if (self.listener < 0 || !DescriptorFlags.configure(self.listener, true) ||
             setsockopt(self.listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0 ||
             bind(self.listener, (struct sockaddr*)&local, sizeof(local)) != 0 || listen(self.listener, 4) != 0) {
             self.close();
-            throw f"Cannot listen on {address}:{port}";
+            throw f"Cannot listen on {self.address}:{self.port}";
         }
     }
 
-    public int port() {
+    // The port in use: the one the system chose when the link was opened on port 0.
+    public int boundPort() {
         struct sockaddr_in local;
         memset(&local, 0, sizeof(local));
         socklen_t length = sizeof(local);
         return getsockname(self.listener, (struct sockaddr*)&local, &length) == 0 ? (int)ntohs(local.sin_port) : -1;
     }
 
-    // Stop signals arrive as readable data instead of interrupting a transfer.
-    private void watchSignals() {
-        sigset_t stopping;
-        sigemptyset(&stopping);
-        sigaddset(&stopping, SIGINT);
-        sigaddset(&stopping, SIGTERM);
-        if (sigprocmask((int)SIG_BLOCK, &stopping, NULL) != 0) { throw "Cannot block stop signals"; }
-        self.signals = signalfd(-1, &stopping, (int)SFD_NONBLOCK | (int)SFD_CLOEXEC);
-        if (self.signals < 0) { throw "Cannot watch stop signals"; }
+    public int watch(struct pollfd* descriptors, int capacity) {
+        int count = 0;
+        if (self.listener >= 0 && count < capacity) { descriptors[count].fd = self.listener; descriptors[count].events = POLLIN; count++; }
+        if (self.client >= 0 && count < capacity) { descriptors[count].fd = self.client; descriptors[count].events = POLLIN; count++; }
+        return count;
     }
 
     private void drop() {
         if (self.client >= 0) { shutdown(self.client, SHUT_RDWR); close(self.client); self.client = -1; }
-        self.imported = false;
         self.received.length = 0;
         self.pending.count = 0;
-        self.device.detach();
+        if (self.imported) {
+            self.imported = false;
+            self.device.hid().detach();
+            Console.error("deckpad: host detached");
+        }
     }
 
     public void close() {
         self.drop();
         if (self.listener >= 0) { close(self.listener); self.listener = -1; }
-        if (self.signals >= 0) { close(self.signals); self.signals = -1; }
-    }
-
-    private bool permitted(struct sockaddr_in* peer) {
-        long long host = (long long)ntohl(peer->sin_addr.s_addr);
-        if ((host >> 24) == 127LL) { return true; }
-        for entry in self.allowed { if (UsbIpWire.within(host, entry)) { return true; } }
-        Console.error(f"deckpad: refused {(int)((host >> 24) & 255LL)}.{(int)((host >> 16) & 255LL)}.{(int)((host >> 8) & 255LL)}.{(int)(host & 255LL)}");
-        return false;
     }
 
     private void admit() {
-        struct sockaddr_in peer;
-        memset(&peer, 0, sizeof(peer));
-        socklen_t length = sizeof(peer);
-        int descriptor = accept(self.listener, (struct sockaddr*)&peer, &length);
+        struct sockaddr_in remote;
+        memset(&remote, 0, sizeof(remote));
+        socklen_t length = sizeof(remote);
+        int descriptor = accept(self.listener, (struct sockaddr*)&remote, &length);
         if (descriptor < 0) { return; }
+        var peer = Peer(self.name(), IPv4.text((long long)ntohl(remote.sin_addr.s_addr)));
         int yes = 1;
         // One host at a time; a second connection never takes the controller away.
-        if (self.imported || !self.permitted(&peer) || !DescriptorFlags.configure(descriptor, true) ||
+        bool welcome = !self.imported && self.pairing.trusts(peer);
+        if (!welcome && !self.imported) { Console.error(f"deckpad: refused {peer.identity}"); }
+        if (!welcome || !DescriptorFlags.configure(descriptor, true) ||
             setsockopt(descriptor, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes)) != 0) {
             close(descriptor);
             return;
@@ -203,6 +131,7 @@ class UsbIpServer {
         return true;
     }
 
+    // Take in what the host sent. False when the connection is gone.
     private bool receive() {
         int room = 4096 - self.received.length;
         if (room <= 0) { return false; }
@@ -216,12 +145,17 @@ class UsbIpServer {
         self.received.length -= length;
     }
 
+    private void describe(unsigned char* out) {
+        var identity = self.device.hid().personality();
+        UsbIpWire.device(out, identity.vendor(), identity.product());
+    }
+
     private bool sendDevices() {
         unsigned char reply[328];
         memset(reply, 0, sizeof(reply));
         UsbIpWire.operation(reply, USBIP_REPLY_DEVICES, 0);
         Wire.putU32be(reply, 8, 1LL);
-        UsbIpWire.device(reply + 12);
+        self.describe(reply + 12);
         reply[324] = (unsigned char)0x03;
         return self.transmit(reply, 328);
     }
@@ -232,7 +166,7 @@ class UsbIpServer {
         memset(requested, 0, sizeof(requested));
         memcpy(requested, busId, (size_t)32);
         if (!Strings.copy(requested).equals(UsbIpWire.busId())) { return "unknown bus id"; }
-        try { self.device.attach(); } catch (string error) { return error; }
+        try { self.device.hid().attach(); } catch (string error) { return error; }
         return "";
     }
 
@@ -247,7 +181,7 @@ class UsbIpServer {
             return false;
         }
         UsbIpWire.operation(reply, USBIP_REPLY_IMPORT, 0);
-        UsbIpWire.device(reply + 8);
+        self.describe(reply + 8);
         self.imported = true;
         Console.error("deckpad: host attached");
         return self.transmit(reply, 320);
@@ -278,7 +212,7 @@ class UsbIpServer {
         int result = USB_STALL;
         if (endpoint == 0 && incoming) { result = self.device.control(setup, reply + USBIP_HEADER, length < USBIP_PAYLOAD_LIMIT ? length : USBIP_PAYLOAD_LIMIT); }
         else if (endpoint == 0) { result = self.device.control(setup, payload, length); }
-        else if (endpoint == 1) { self.device.output(payload, length); result = length; }
+        else if (endpoint == 1) { self.device.hid().output(payload, length); result = length; }
         if (result == USB_STALL) { UsbIpWire.reply(reply, USBIP_SUBMIT_REPLY, sequence, USBIP_STALLED, 0); return self.transmit(reply, USBIP_HEADER); }
         UsbIpWire.reply(reply, USBIP_SUBMIT_REPLY, sequence, 0, result);
         return self.transmit(reply, USBIP_HEADER + (incoming ? result : 0));
@@ -335,10 +269,10 @@ class UsbIpServer {
     }
 
     // Answer waiting interrupt IN requests with the reports that are due.
-    private bool flush() {
-        struct UsbReport report;
+    private bool deliver() {
+        struct HidReport report;
         unsigned char reply[USBIP_HEADER + 64];
-        while (self.pending.count > 0 && self.device.input(&report)) {
+        while (self.pending.count > 0 && self.device.hid().input(&report)) {
             UsbIpWire.reply(reply, USBIP_SUBMIT_REPLY, self.pending.sequence[0], 0, report.length);
             memcpy(reply + USBIP_HEADER, report.bytes, (size_t)report.length);
             for (int next = 1; next < self.pending.count; next++) { self.pending.sequence[next - 1] = self.pending.sequence[next]; }
@@ -348,29 +282,11 @@ class UsbIpServer {
         return true;
     }
 
-    // Serve until a stop signal arrives or the Deck's stop chord is held.
-    public void run() {
-        self.watchSignals();
-        while (!self.device.stopRequested()) {
-            // Read the controller first: the host's next request arrives while
-            // this waits, so each fresh state leaves in the same turn.
-            if (self.imported) { try { self.device.pump(8); } catch (string error) { self.close(); throw error; } }
-            struct pollfd watched[3];
-            memset(watched, 0, sizeof(watched));
-            watched[0].fd = self.signals; watched[0].events = POLLIN;
-            watched[1].fd = self.listener; watched[1].events = POLLIN;
-            watched[2].fd = self.client; watched[2].events = POLLIN;
-            int ready = poll(watched, (nfds_t)(self.client >= 0 ? 3 : 2), self.imported ? 0 : 500);
-            if (ready < 0 && errno != EINTR) { throw "Cannot wait for USB/IP clients"; }
-            if (ready > 0 && ((int)watched[0].revents & POLLIN) != 0) { break; }
-            if (ready > 0 && self.client >= 0 && (int)watched[2].revents != 0 && !(self.receive() && self.process())) {
-                if (self.imported) { Console.error("deckpad: host detached"); }
-                self.drop();
-            }
-            if (ready > 0 && ((int)watched[1].revents & POLLIN) != 0) { self.admit(); }
-            if (self.imported && !self.flush()) { Console.error("deckpad: host detached"); self.drop(); }
-        }
-        self.close();
+    // Both sockets are non-blocking, so a turn with nothing ready costs nothing.
+    public void step() {
+        if (self.client >= 0 && !(self.receive() && self.process())) { self.drop(); }
+        if (self.listener >= 0) { self.admit(); }
+        if (self.imported && !self.deliver()) { self.drop(); }
     }
 
     public void __del__() { self.close(); }

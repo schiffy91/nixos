@@ -1,0 +1,60 @@
+import Library.Console;
+import Library.Timer;
+import ./LanStream.btrc;
+import ./SteamController.btrc;
+import ./UsbIp.btrc;
+import ./VhciPort.btrc;
+import ./Wire.btrc;
+
+// The receiving end of the network link: import the controller from a deckpad
+// service and attach it through vhci_hcd. This is what `usbip attach` does,
+// without needing the usbip tools. USB and Bluetooth hosts need no helper.
+class LanHost {
+    private string host;
+    private int port;
+
+    public LanHost(string host, int port) {
+        self.host = host;
+        self.port = port;
+    }
+
+    // Import the controller and attach it; the vhci port it is on.
+    public int attach() {
+        var stream = LanStream(self.host, self.port);
+        unsigned char request[40];
+        unsigned char reply[320];
+        memset(request, 0, sizeof(request));
+        UsbIpWire.operation(request, USBIP_REQUEST_IMPORT, 0);
+        memcpy(request + 8, UsbIpWire.busId(), (size_t)UsbIpWire.busId().length());
+        bool answered = stream.exchange(request, 40, reply, 8) && Wire.u16be(reply, 2) == USBIP_REPLY_IMPORT &&
+            Wire.u32be(reply, 4) == 0LL && stream.exchange(request, 0, reply + 8, USBIP_DEVICE);
+        if (!answered || Wire.u16be(reply, 308) != STEAM_VENDOR || Wire.u16be(reply, 310) != STEAM_PRODUCT) {
+            throw f"{self.host}:{self.port} did not offer a controller";
+        }
+        // The kernel reads this socket from now on: no timeouts, no batching.
+        stream.timeouts(0);
+        stream.interactive();
+        long long deviceId = (Wire.u32be(reply, 296) << 16) | Wire.u32be(reply, 300);
+        return VhciPort.attach(stream.descriptor(), deviceId, (int)Wire.u32be(reply, 304));
+    }
+
+    // Detach every controller attached through vhci_hcd; how many.
+    class int detach() { return VhciPort.detach("28de", "1302"); }
+
+    // Attach once, or with `watch` keep the controller attached whenever the
+    // service offers it, retrying every two seconds.
+    public void run(bool watch) {
+        while (true) {
+            try {
+                int local = self.attach();
+                Console.error(f"deckpad: {self.host} attached on vhci port {local}");
+                if (!watch) { return; }
+                while (VhciPort.busy(local)) { Timer.sleepMillis(1000); }
+                Console.error(f"deckpad: {self.host} detached");
+            } catch (string error) {
+                if (!watch) { throw error; }
+            }
+            Timer.sleepMillis(2000);
+        }
+    }
+}

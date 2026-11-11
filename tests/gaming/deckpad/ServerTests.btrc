@@ -5,8 +5,8 @@ import ../../../config/lib/BackgroundProcess.btrc;
 import ../../../config/pkgs/gaming/deckpad/Native.btrc;
 import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
 import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
-import ../../../config/pkgs/gaming/deckpad/UsbIpServer.btrc;
-import ../../../config/pkgs/gaming/deckpad/VhciAttach.btrc;
+import ../../../config/pkgs/gaming/deckpad/LanStream.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbIp.btrc;
 import ../../../config/pkgs/gaming/deckpad/Wire.btrc;
 import ../../lib/Check.btrc;
 
@@ -20,16 +20,15 @@ struct HostReply {
 
 // A USB/IP host in miniature: what vhci_hcd and usbhid send to the server.
 class UsbIpHost {
-    private int socket = -1;
+    private LanStream stream;
     private long long sequence = 0LL;
 
-    public UsbIpHost(int port) { self.socket = VhciAttach.connectTo("127.0.0.1", port); }
+    public UsbIpHost(int port) { self.stream = LanStream("127.0.0.1", port); }
 
-    public void close() { if (self.socket >= 0) { close(self.socket); self.socket = -1; } }
-    public void __del__() { self.close(); }
+    public void close() { self.stream.close(); }
 
     public bool exchange(unsigned char* request, int requestLength, unsigned char* reply, int replyLength) {
-        return VhciAttach.exchange(self.socket, request, requestLength, reply, replyLength);
+        return self.stream.exchange(request, requestLength, reply, replyLength);
     }
 
     public bool importController(unsigned char* device) {

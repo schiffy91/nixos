@@ -18,9 +18,26 @@ The Deck keeps its controls until a host attaches, and gets them back when the
 host leaves, the service stops, or you hold **⋯** for two seconds. `deckpad
 release` (also the unit's `ExecStopPost`) rebinds `usbhid` after a crash.
 
-`UsbDevice` is the emulated controller and knows nothing about its transport;
-`UsbIpServer` is the only transport so far. A USB-C gadget transport would sit
-beside it and reuse `UsbDevice` unchanged.
+## Layers
+
+How a host reaches the controller is an implementation detail of one class.
+Everything above it is shared.
+
+| Layer | Class | Knows about |
+|---|---|---|
+| Input | `IPadSource` (`DeckPad`, `ScriptedPad`) | Where pad state comes from and where haptics go. |
+| Personality | `SteamController` | The Steam Controller's HID reports and feature commands. No transport. |
+| Controller | `VirtualController` | One pad behind one personality: input reports out, output and feature reports in, rumble timing, the stop chord. One host holds it at a time. |
+| USB framing | `UsbHidDevice` | USB descriptors and control transfers around the controller. Shared by every USB-shaped link. |
+| Link | `IControllerLink` (`UsbIpLink`) | One way for a host to arrive. It asks its pairing before admitting anyone. |
+| Pairing | `IPairing` (`AddressPairing`) | Whether a peer is trusted; how trust came about is not the link's concern. |
+| Service | `ControllerService` | Waits on every open link at once; the first host to attach, on any link, gets the controller. |
+
+The network is the only link so far. A USB gadget link would wrap the same
+`UsbHidDevice` and trust whoever holds the cable; a Bluetooth link would talk to
+`VirtualController` directly, since Bluetooth HID has no USB framing, and leave
+pairing to the Bluetooth stack. On the receiving side only the network needs a
+helper (`LanHost`, over `VhciPort`); USB and Bluetooth hosts need nothing.
 
 ## Configuration
 

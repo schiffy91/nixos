@@ -2,7 +2,9 @@ import ./PadSource.btrc;
 import ./PadState.btrc;
 import ./Wire.btrc;
 
-// The wired 2026 Steam Controller as the host sees it: one vendor HID interface.
+// The 2026 Steam Controller as a host sees it over HID: one vendor collection of
+// reports, the same on every link. How those reports travel (USB descriptors and
+// transfers, Bluetooth channels) belongs to the link, not here.
 // Report IDs and layouts follow SDL's Steam Controller driver and hid-steam.c;
 // the Deck-to-controller mapping follows jmedina21/deck-as-controller (MIT).
 enum {
@@ -33,13 +35,13 @@ struct SteamControllerMemory {
 };
 
 class SteamController {
-    private string serial;
+    private string serialNumber;
     private struct SteamControllerMemory memory;
     private int sequence = 0;
 
     public SteamController(string serial) {
         if (serial.isEmpty() || serial.length() > STEAM_SERIAL_LENGTH) { throw "Controller serial must be 1 to 20 characters"; }
-        self.serial = serial;
+        self.serialNumber = serial;
         memset(&self.memory, 0, sizeof(self.memory));
     }
 
@@ -77,49 +79,12 @@ class SteamController {
         return end + 1;
     }
 
-    public int deviceDescriptor(unsigned char* out) {
-        int bytes[18] = {18, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 64, 0xDE, 0x28, 0x02, 0x13, 0x00, 0x01, 1, 2, 3, 1};
-        for (int index = 0; index < 18; index++) { out[index] = (unsigned char)bytes[index]; }
-        return 18;
-    }
-
-    // Configuration, interface, HID, then interrupt IN 0x81 and OUT 0x01 at 1 ms.
-    public int configurationDescriptor(unsigned char* out) {
-        unsigned char report[256];
-        int reportLength = self.reportDescriptor(report);
-        int bytes[41] = {
-            9, 0x02, 41, 0, 1, 1, 0, 0x80, 250,
-            9, 0x04, 0, 0, 2, 0x03, 0, 0, 0,
-            9, 0x21, 0x11, 0x01, 0, 1, 0x22, 0, 0,
-            7, 0x05, 0x81, 0x03, 64, 0, 1,
-            7, 0x05, 0x01, 0x03, 64, 0, 1
-        };
-        for (int index = 0; index < 41; index++) { out[index] = (unsigned char)bytes[index]; }
-        Wire.putU16le(out, 25, reportLength);
-        return 41;
-    }
-
-    public int hidDescriptor(unsigned char* out) {
-        unsigned char configuration[64];
-        self.configurationDescriptor(configuration);
-        memcpy(out, configuration + 18, (size_t)9);
-        return 9;
-    }
-
-    // 0 is the language table; 1 manufacturer, 2 product, 3 serial number.
-    public int stringDescriptor(int index, unsigned char* out) {
-        if (index == 0) { out[0] = (unsigned char)4; out[1] = (unsigned char)0x03; out[2] = (unsigned char)0x09; out[3] = (unsigned char)0x04; return 4; }
-        string text = index == 1 ? "Valve Software" : (index == 2 ? "Steam Controller" : (index == 3 ? self.serial : ""));
-        if (text.isEmpty()) { return 0; }
-        int length = text.length();
-        out[0] = (unsigned char)(2 + 2 * length);
-        out[1] = (unsigned char)0x03;
-        for (int position = 0; position < length; position++) {
-            out[2 + 2 * position] = (unsigned char)text[position];
-            out[3 + 2 * position] = (unsigned char)0;
-        }
-        return 2 + 2 * length;
-    }
+    // Who the controller says it is, on any link.
+    public int vendor() { return STEAM_VENDOR; }
+    public int product() { return STEAM_PRODUCT; }
+    public string manufacturer() { return "Valve Software"; }
+    public string name() { return "Steam Controller"; }
+    public string serial() { return self.serialNumber; }
 
     public int encodeState(struct PadState* state, long long microseconds, unsigned char* out) {
         memset(out, 0, (size_t)STEAM_STATE_LENGTH);
@@ -195,7 +160,7 @@ class SteamController {
             out[2] = (unsigned char)25;
         } else if (command == STEAM_GET_STRING && arguments >= 1) {
             out[3] = self.memory.command[2];
-            for (int index = 0; index < self.serial.length(); index++) { out[4 + index] = (unsigned char)self.serial[index]; }
+            for (int index = 0; index < self.serialNumber.length(); index++) { out[4 + index] = (unsigned char)self.serialNumber[index]; }
             out[2] = (unsigned char)(1 + STEAM_SERIAL_LENGTH);
         } else if (command == STEAM_GET_SETTINGS) {
             int length = 0;

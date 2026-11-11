@@ -2,8 +2,14 @@ import Library.Timer;
 import ../../../config/pkgs/gaming/deckpad/PadSource.btrc;
 import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
 import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
-import ../../../config/pkgs/gaming/deckpad/UsbDevice.btrc;
-import ../../../config/pkgs/gaming/deckpad/UsbIpServer.btrc;
+import ../../../config/pkgs/gaming/deckpad/Controller.btrc;
+import ../../../config/pkgs/gaming/deckpad/LanStream.btrc;
+import ../../../config/pkgs/gaming/deckpad/Link.btrc;
+import ../../../config/pkgs/gaming/deckpad/Pairing.btrc;
+import ../../../config/pkgs/gaming/deckpad/Service.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbHid.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbIp.btrc;
+import ../../../config/pkgs/gaming/deckpad/UsbIpLink.btrc;
 import ../../../config/pkgs/gaming/deckpad/Wire.btrc;
 import ../../lib/Check.btrc;
 
@@ -102,11 +108,14 @@ class DeckpadUnitTests {
         Check.that(length == 143 && (int)out[0] == 0x06 && (int)out[2] == 0xFF && (int)out[length - 1] == 0xC0, "vendor report descriptor");
         Check.that((int)out[15] == 0x42 && (int)out[19] == 53, "state report is 53 bytes after its ID");
         Check.that((int)out[length - 8] == 0x01 && (int)out[length - 4] == 63 && (int)out[length - 3] == 0xB1, "feature report 1 is 63 bytes, as hid-steam requires");
-        Check.that(controller.deviceDescriptor(out) == 18 && Wire.u16le(out, 8) == STEAM_VENDOR && Wire.u16le(out, 10) == STEAM_PRODUCT, "device identity");
-        Check.that(controller.configurationDescriptor(out) == 41 && Wire.u16le(out, 2) == 41 && Wire.u16le(out, 25) == 143, "configuration names the report descriptor");
+        Check.that(controller.vendor() == 0x28DE && controller.product() == 0x1302 && controller.serial().equals("FXDK00000042"), "Steam Controller identity");
+        var device = UsbHidDevice(VirtualController(ScriptedPad(), controller, false));
+        Check.that(device.deviceDescriptor(out) == 18 && Wire.u16le(out, 8) == STEAM_VENDOR && Wire.u16le(out, 10) == STEAM_PRODUCT, "USB device identity");
+        Check.that(device.configurationDescriptor(out) == 41 && Wire.u16le(out, 2) == 41 && Wire.u16le(out, 25) == 143, "configuration names the report descriptor");
         Check.that((int)out[29] == 0x81 && (int)out[36] == 0x01, "interrupt IN and OUT endpoints");
-        Check.that(controller.stringDescriptor(3, out) == 26 && (int)out[2] == 'F' && (int)out[24] == '2', "serial string");
-        Check.that(controller.stringDescriptor(9, out) == 0, "unknown string");
+        Check.that(device.stringDescriptor(2, out) == 34 && (int)out[2] == 'S', "product string");
+        Check.that(device.stringDescriptor(3, out) == 26 && (int)out[2] == 'F' && (int)out[24] == '2', "serial string");
+        Check.that(device.stringDescriptor(9, out) == 0, "unknown string");
     }
 
     class void command(unsigned char* out, int identifier, int length) {
@@ -181,12 +190,58 @@ class DeckpadUnitTests {
         Wire.putU16le(setup, 2, value); Wire.putU16le(setup, 4, 0); Wire.putU16le(setup, 6, length);
     }
 
-    class void device() {
+    class bool attachRefused(VirtualController controller) {
+        try { controller.attach(); } catch (string error) { return true; }
+        return false;
+    }
+
+    // The controller in HID terms, with no transport around it.
+    class void controller() {
+        unsigned char data[64];
+        struct HidReport report;
+        var pad = ScriptedPad();
+        var controller = VirtualController(pad, SteamController("FXDK00000042"), false);
+        Check.that(!controller.input(&report), "no reports before a host attaches");
+        controller.attach();
+        Check.that(DeckpadUnitTests.attachRefused(controller), "only one host holds the controller");
+        controller.pump(8);
+        Check.that(controller.input(&report) && report.length == 15 && (int)report.bytes[0] == 0x43, "battery report after attach");
+        Check.that(controller.input(&report) && report.length == 54 && (int)report.bytes[0] == 0x42, "state report follows");
+        Check.that(!controller.input(&report), "nothing more until the pad reports again");
+        memset(data, 0, sizeof(data));
+        data[0] = (unsigned char)STEAM_OUT_RUMBLE;
+        Wire.putU16le(data, 4, 1000); Wire.putU16le(data, 7, 2000);
+        controller.output(data, 10);
+        Timer.sleepMillis(60);
+        controller.pump(8);
+        Check.that(pad.commands == 1 && (int)pad.last.bytes[0] == DECK_RUMBLE && Wire.u16le(pad.last.bytes, 5) == 1000 && Wire.u16le(pad.last.bytes, 7) == 2000, "rumble reaches the pad");
+        Wire.putU16le(data, 4, 3000);
+        controller.output(data, 10);
+        controller.pump(8);
+        Check.that(pad.commands == 1, "rumble is throttled to 20 Hz");
+        Timer.sleepMillis(60);
+        controller.pump(8);
+        Check.that(pad.commands == 2 && Wire.u16le(pad.last.bytes, 5) == 3000, "the latest rumble is applied");
+        Timer.sleepMillis(560);
+        controller.pump(8);
+        Check.that(pad.commands == 3 && Wire.u16le(pad.last.bytes, 5) == 0, "rumble stops when the host stops repeating it");
+        DeckpadUnitTests.command(data, STEAM_HAPTIC_PULSE, 7);
+        data[3] = (unsigned char)1;
+        Check.that(controller.setFeature(data, 64) && pad.commands == 4 && (int)pad.last.bytes[0] == DECK_HAPTIC_PULSE, "feature pulse reaches the pad at once");
+        Check.that(controller.feature(STEAM_REPORT_FEATURE, data) == 64 && (int)data[1] == STEAM_HAPTIC_PULSE, "the feature report reads back");
+        data[0] = (unsigned char)2;
+        Check.that(!controller.setFeature(data, 64) && controller.feature(2, data) < 0, "there is only feature report 1");
+        controller.detach();
+        Check.that(!controller.attached(), "detach releases the pad");
+    }
+
+    // The same controller wrapped as a USB device: descriptors and control transfers.
+    class void usbDevice() {
         unsigned char setup[8];
         unsigned char data[256];
-        struct UsbReport report;
         var pad = ScriptedPad();
-        var device = UsbDevice(pad, SteamController("FXDK00000042"), false);
+        var controller = VirtualController(pad, SteamController("FXDK00000042"), false);
+        var device = UsbHidDevice(controller);
         DeckpadUnitTests.setup(setup, 0x80, 0x06, 0x0100, 18);
         Check.that(device.control(setup, data, 18) == 18 && (int)data[1] == 0x01, "device descriptor");
         Check.that(device.control(setup, data, 8) == 8, "short reads are truncated");
@@ -196,51 +251,76 @@ class DeckpadUnitTests {
         Check.that(device.control(setup, data, 10) == USB_STALL, "no device qualifier at full speed");
         DeckpadUnitTests.setup(setup, 0x00, 0x09, 1, 0);
         Check.that(device.control(setup, data, 0) == 0, "set configuration");
-        Check.that(!device.input(&report), "no reports before a host attaches");
-        device.attach();
-        device.pump(8);
-        Check.that(device.input(&report) && report.length == 15 && (int)report.bytes[0] == 0x43, "battery report after attach");
-        Check.that(device.input(&report) && report.length == 54 && (int)report.bytes[0] == 0x42, "state report follows");
-        Check.that(!device.input(&report), "nothing more until the pad reports again");
-        memset(data, 0, sizeof(data));
-        data[0] = (unsigned char)STEAM_OUT_RUMBLE;
-        Wire.putU16le(data, 4, 1000); Wire.putU16le(data, 7, 2000);
-        device.output(data, 10);
-        Timer.sleepMillis(60);
-        device.pump(8);
-        Check.that(pad.commands == 1 && (int)pad.last.bytes[0] == DECK_RUMBLE && Wire.u16le(pad.last.bytes, 5) == 1000 && Wire.u16le(pad.last.bytes, 7) == 2000, "rumble reaches the pad");
-        Wire.putU16le(data, 4, 3000);
-        device.output(data, 10);
-        device.pump(8);
-        Check.that(pad.commands == 1, "rumble is throttled to 20 Hz");
-        Timer.sleepMillis(60);
-        device.pump(8);
-        Check.that(pad.commands == 2 && Wire.u16le(pad.last.bytes, 5) == 3000, "the latest rumble is applied");
-        Timer.sleepMillis(560);
-        device.pump(8);
-        Check.that(pad.commands == 3 && Wire.u16le(pad.last.bytes, 5) == 0, "rumble stops when the host stops repeating it");
-        DeckpadUnitTests.command(data, STEAM_HAPTIC_PULSE, 7);
+        controller.attach();
+        DeckpadUnitTests.command(data, STEAM_GET_STRING, 0x15);
         data[3] = (unsigned char)1;
         DeckpadUnitTests.setup(setup, 0x21, 0x09, 0x0301, 64);
-        Check.that(device.control(setup, data, 64) == 64 && pad.commands == 4 && (int)pad.last.bytes[0] == DECK_HAPTIC_PULSE, "feature pulse reaches the pad at once");
-        device.detach();
-        Check.that(!device.attached(), "detach releases the pad");
+        Check.that(device.control(setup, data, 64) == 64, "SET_REPORT carries a feature command");
+        DeckpadUnitTests.setup(setup, 0xA1, 0x01, 0x0301, 64);
+        Check.that(device.control(setup, data, 64) == 64 && (int)data[1] == STEAM_GET_STRING && (int)data[4] == 'F', "GET_REPORT carries its reply");
+        DeckpadUnitTests.setup(setup, 0xA1, 0x01, 0x0302, 64);
+        Check.that(device.control(setup, data, 64) == USB_STALL, "an unknown feature report stalls");
+        memset(data, 0, sizeof(data));
+        data[0] = (unsigned char)STEAM_OUT_PULSE; data[1] = (unsigned char)1;
+        DeckpadUnitTests.setup(setup, 0x21, 0x09, 0x0281, 8);
+        Check.that(device.control(setup, data, 8) == 8 && pad.commands == 1 && (int)pad.last.bytes[0] == DECK_HAPTIC_PULSE, "SET_REPORT carries an output report");
     }
 
-    class void allowList() {
-        long long deck = UsbIpWire.address("192.168.50.23");
-        Check.that(deck == 0xC0A83217LL && UsbIpWire.address("192.168.50") < 0LL && UsbIpWire.address("192.168.50.256") < 0LL, "dotted addresses");
-        Check.that(UsbIpWire.within(deck, "192.168.50.23") && !UsbIpWire.within(deck, "192.168.50.24"), "exact address");
-        Check.that(UsbIpWire.within(deck, "192.168.50.0/24") && !UsbIpWire.within(deck, "192.168.51.0/24") && UsbIpWire.within(deck, "0.0.0.0/0"), "networks");
-        Check.that(!UsbIpWire.within(deck, "192.168.50.0/33") && !UsbIpWire.within(deck, "192.168.50.0/") && !UsbIpWire.within(deck, "all"), "malformed entries match nothing");
+    class void pairing() {
+        long long deck = IPv4.address("192.168.50.23");
+        Check.that(deck == 0xC0A83217LL && IPv4.address("192.168.50") < 0LL && IPv4.address("192.168.50.256") < 0LL, "dotted addresses");
+        Check.that(IPv4.text(deck).equals("192.168.50.23"), "addresses print as they parse");
+        Check.that(IPv4.within(deck, "192.168.50.23") && !IPv4.within(deck, "192.168.50.24"), "exact address");
+        Check.that(IPv4.within(deck, "192.168.50.0/24") && !IPv4.within(deck, "192.168.51.0/24") && IPv4.within(deck, "0.0.0.0/0"), "networks");
+        Check.that(!IPv4.within(deck, "192.168.50.0/33") && !IPv4.within(deck, "192.168.50.0/") && !IPv4.within(deck, "all"), "malformed entries match nothing");
+        IPairing home = AddressPairing(["192.168.50.0/24"]);
+        Check.that(home.trusts(Peer("lan", "192.168.50.23")) && home.trusts(Peer("lan", "127.0.0.1")), "this machine and the listed network are trusted");
+        Check.that(!home.trusts(Peer("lan", "10.0.0.5")) && !home.trusts(Peer("lan", "somewhere")), "anyone else is not");
+        bool refused = false;
+        try { AddressPairing(["192.168.50.0/40"]); } catch (string error) { refused = true; }
+        Check.that(refused, "a malformed allow list is rejected up front");
     }
 
-    class int buttons(struct UsbReport* report) { return Wire.u16le(report->bytes, 2) | (Wire.u16le(report->bytes, 4) << 16); }
+    // Ask a link for the controller over a fresh connection, as a host does.
+    class bool importOver(LanStream stream, ControllerService service) {
+        unsigned char request[40];
+        unsigned char reply[8];
+        memset(request, 0, sizeof(request));
+        UsbIpWire.operation(request, USBIP_REQUEST_IMPORT, 0);
+        memcpy(request + 8, UsbIpWire.busId(), (size_t)UsbIpWire.busId().length());
+        Check.that(stream.exchange(request, 40, reply, 0), "import request sent");
+        for (int turn = 0; turn < 5; turn++) { service.turn(10); }
+        return stream.exchange(request, 0, reply, 8) && Wire.u32be(reply, 4) == 0LL;
+    }
+
+    // Two links share one controller: the first host to attach holds it.
+    class void links() {
+        var controller = VirtualController(ScriptedPad(), SteamController("FXDK00000042"), false);
+        var service = ControllerService(controller);
+        var first = UsbIpLink(UsbHidDevice(controller), AddressPairing([]), "127.0.0.1", 0);
+        var second = UsbIpLink(UsbHidDevice(controller), AddressPairing([]), "127.0.0.1", 0);
+        service.add(first);
+        service.add(second);
+        service.open();
+        var one = LanStream("127.0.0.1", first.boundPort());
+        Check.that(DeckpadUnitTests.importOver(one, service) && first.attached() && !second.attached() && controller.attached(), "the first host takes the controller");
+        var two = LanStream("127.0.0.1", second.boundPort());
+        Check.that(!DeckpadUnitTests.importOver(two, service) && first.attached() && !second.attached(), "a host on another link is refused while it is held");
+        one.close();
+        for (int turn = 0; turn < 5; turn++) { service.turn(10); }
+        Check.that(!first.attached() && !controller.attached(), "the controller is free once its host leaves");
+        var again = LanStream("127.0.0.1", second.boundPort());
+        Check.that(DeckpadUnitTests.importOver(again, service) && second.attached() && controller.attached(), "then any link may take it");
+        service.close();
+        Check.that(!second.attached() && !controller.attached(), "closing the service releases it");
+    }
+
+    class int buttons(struct HidReport* report) { return Wire.u16le(report->bytes, 2) | (Wire.u16le(report->bytes, 4) << 16); }
 
     class void stopChord() {
-        struct UsbReport report;
+        struct HidReport report;
         var pad = HeldPad();
-        var device = UsbDevice(pad, SteamController("FXDK00000042"), false);
+        var device = VirtualController(pad, SteamController("FXDK00000042"), false);
         device.attach();
         Check.that(pad.opened, "attach takes the pad");
         long long started = MonotonicClock.milliseconds();
@@ -249,7 +329,7 @@ class DeckpadUnitTests {
         Check.that(device.stopRequested() && held >= 1900LL && held < 3500LL, "holding ... for two seconds asks to stop");
         Check.that(device.input(&report) && (int)report.bytes[0] == STEAM_REPORT_BATTERY, "battery report is due first");
         Check.that(device.input(&report) && DeckpadUnitTests.buttons(&report) == PAD_B, "... is kept from the host by default");
-        var forwarding = UsbDevice(HeldPad(), SteamController("FXDK00000042"), true);
+        var forwarding = VirtualController(HeldPad(), SteamController("FXDK00000042"), true);
         forwarding.attach();
         forwarding.pump(8);
         forwarding.input(&report);
@@ -264,9 +344,11 @@ int main() {
     DeckpadUnitTests.descriptors();
     DeckpadUnitTests.features();
     DeckpadUnitTests.effects();
-    DeckpadUnitTests.device();
-    DeckpadUnitTests.allowList();
+    DeckpadUnitTests.controller();
+    DeckpadUnitTests.usbDevice();
+    DeckpadUnitTests.pairing();
+    DeckpadUnitTests.links();
     DeckpadUnitTests.stopChord();
-    print("PASS: deckpad reports, descriptors, feature commands, haptics, allow list and stop chord");
+    print("PASS: deckpad reports, descriptors, feature commands, haptics, pairing, shared links and stop chord");
     return 0;
 }

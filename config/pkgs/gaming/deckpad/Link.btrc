@@ -1,0 +1,35 @@
+import ./Native.btrc;
+
+// Who is asking for the controller, as the link that carries them knows them:
+// a network address today, a key or a Bluetooth address on other links.
+class Peer {
+    public string link;
+    public string identity;
+
+    public Peer(string link, string identity) {
+        self.link = link;
+        self.identity = identity;
+    }
+}
+
+// Whether a peer may have the controller. A link asks before it hands over the
+// pad; how trust was established (a cable, a bond, a confirmed key) is the
+// pairing's business, not the link's.
+interface IPairing {
+    bool trusts(Peer peer);
+}
+
+// One way for a host to reach the controller. The service waits on every open
+// link at once; a link takes the controller when its host attaches and gives it
+// back when the host leaves.
+interface IControllerLink {
+    string name();
+    void open();
+    // The descriptors to wait on while idle, written to `descriptors`; their count.
+    int watch(struct pollfd* descriptors, int capacity);
+    // Do whatever is ready: admit a host, answer its requests, deliver reports.
+    void step();
+    // Whether a host holds the controller through this link.
+    bool attached();
+    void close();
+}
