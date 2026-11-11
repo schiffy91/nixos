@@ -23,6 +23,10 @@
     "hash": "sha256-OZa4qXkuAwqVltmQWqDwyL96/ddAszH1762sdbzR4KQ=",
     "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-b/DialogueUI-1.0.7-b.zip"
   },
+  "foreverFadeChat": {
+    "hash": "sha256-t9+IWZzCHAjkY1RKMinshGAiHKgybGO6qZqri03SSMg=",
+    "url": "https://edge.forgecdn.net/files/8994/554/ForeverFadeChat.zip"
+  },
   "moveAny": {
     "hash": "sha256-qeEBAUa7ldE91FvWXEUDjjWEH3YBjFk9ihF6kYQJXtk=",
     "url": "https://github.com/d4kir92/MoveAny/releases/download/v1.14.13/MoveAny-v1.14.13-forever.zip"

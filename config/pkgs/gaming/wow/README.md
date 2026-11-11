@@ -69,6 +69,38 @@ files into every account, keeps each replaced file under
 `WTF/.nixos-wow-settings`. In-game changes made after that stay until the next
 captured version arrives, so capture before rebuilding to keep them.
 
+The captured controller bindings use ConsolePort's native eight-slot gamepad
+bars in the Forever client. Slots 1–8 are X, Y, B, A, D-pad left, right, up,
+down. No modifier selects Gamepad Bar 1; LT selects Bar 2; RT selects Bar 3;
+LT+RT selects Bar 4. The triggers must emulate Shift and Ctrl respectively.
+The current layout reserves unmodified A for Jump; its trigger-modified slots
+remain on Bars 2–4. LB uses Target Scan Enemy, RB cycles enemy targets, and R3
+uses Interact With Target on all four modifier layers. The shoulder and trigger
+indicators are anchored around the cluster center so narrowing the bar does not
+make them overlap.
+These client settings live in `Config.wtf`, outside the captured account files;
+on another machine, set them in ConsolePort's modifier settings or run:
+
+```text
+/console GamePadEnable 1
+/console GamePadEmulateShift PADLTRIGGER
+/console GamePadEmulateCtrl PADRTRIGGER
+/console GamePadEmulateAlt none
+```
+
+On 2026-11-10, applying an older captured `bindings-cache.wtf` removed the
+locally configured controller bindings. The pre-apply backup retained partial
+bindings; the four-bar mapping above was reconstructed from the requested
+layout. Capture again after future in-game binding changes and before rebuilding.
+The installed ConsolePort already provides `ConsolePortGamepadBar` buttons.
+
+ForeverFadeChat hides chat controls and decoration while leaving messages on
+their normal timed fade. Its packaged patch also reveals the controls while the
+chat input has focus. MoveAny owns the XP bar's position, width and hover alpha.
+[LyraelRayne's Gamepad Slots layouts](https://github.com/LyraelRayne/ConsolePort_GamepadSlots#action-bar-presets-presets)
+are a related four-modifier example, but that module uses a different slot
+arrangement and is not needed for these native bindings.
+
 Run the isolated contract checks without installing or updating real addons:
 
 ```sh

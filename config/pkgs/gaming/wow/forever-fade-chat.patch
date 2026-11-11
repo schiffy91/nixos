@@ -1,0 +1,11 @@
+--- a/ForeverFadeChat/ForeverFadeChat.lua
++++ b/ForeverFadeChat/ForeverFadeChat.lua
+@@ -95,6 +95,8 @@
+   if Over(GeneralDockManager) then return true end
+   for i = 1, NUM_CHAT_WINDOWS do
+     if Over(_G["ChatFrame" .. i]) then return true end
++    local editBox = _G["ChatFrame" .. i .. "EditBox"]
++    if editBox and editBox:HasFocus() then return true end
+   end
+   for _, item in ipairs(items) do
+     if Over(item.obj) then return true end
