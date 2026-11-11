@@ -42,8 +42,13 @@ class ControlInterface implements IServiceTask {
         Sodium.require();
         Sodium.random(random, 24);
         self.token = Base64.encode(Bytes.fromRaw((char*)random, 24), false).replace("+", "-").replace("/", "_");
-        if (!Path.writeAll(tokenPath, self.token + "\n") || FileSystem.chmod(tokenPath, 416) != 0) { throw f"Cannot write the control token to {tokenPath}"; }
         if (!self.server.start()) { throw f"Cannot listen for control requests on port {port}"; }
+        // The token appears once requests can be answered, so its presence
+        // tells a client the service is up.
+        if (!Path.writeAll(tokenPath, self.token + "\n") || FileSystem.chmod(tokenPath, 416) != 0) {
+            self.server.stop();
+            throw f"Cannot write the control token to {tokenPath}";
+        }
     }
 
     class string quoted(string text) { return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\""; }

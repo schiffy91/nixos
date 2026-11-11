@@ -11,14 +11,12 @@ let
     fi
     exec ${pkgs.systemd}/bin/systemctl start deckpad.service
   '';
-  # Start the service if it is not running, then let new hosts pair for two minutes.
+  # Start the service if it is not running, then let new hosts pair for two
+  # minutes. The service writes its control token once it answers requests.
   pair = pkgs.writeShellScriptBin "deckpad-pair" ''
     ${pkgs.systemd}/bin/systemctl is-active --quiet deckpad.service || ${pkgs.systemd}/bin/systemctl start deckpad.service
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
-      ${deckpad} pairing 120 && exit 0
-      sleep 0.5
-    done
-    exit 1
+    ${pkgs.coreutils}/bin/timeout 10 ${pkgs.bash}/bin/sh -c 'until [ -e /run/deckpad/token ]; do ${pkgs.coreutils}/bin/sleep 0.1; done' || exit 1
+    exec ${deckpad} pairing 120
   '';
   tray = pkgs.symlinkJoin {
     name = "deckpad-tray";
