@@ -4,7 +4,10 @@
 #   - the USB-C cable: the gadget sits on dummy_hcd, a device controller wired
 #     to a host controller in the same kernel, which enumerates it;
 #   - Bluetooth: BlueZ's btvirt gives the machine two controllers, one the
-#     controller's and one a host's, under the real stack and daemon.
+#     controller's and one a host's, under the real stack and daemon;
+#   - the Deck's own pad: an emulated Deck controller is attached to the
+#     serving machine, which takes it from the kernel, reads it and gives
+#     it back.
 # It boots VMs, so it stays out of the gaming check farm; run it with
 #   nix build --impure --expr 'let f = builtins.getFlake (toString ./.); in import ./tests/gaming/deckpad/kernel.nix { pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; inherit (f) inputs; }'
 { pkgs, inputs }:
@@ -24,11 +27,12 @@ let
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [
-        ./BluetoothHostTests.btrc ./btrc.toml ./btrc.lock ../../lib/Check.btrc
+        ./BluetoothHostTests.btrc ./FakeDeck.btrc ./btrc.toml ./btrc.lock ../../lib/Check.btrc
         (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.name == "btrc.toml" || file.name == "btrc.lock") ../../../config/pkgs/gaming/deckpad)
       ];
     };
     programs.deckpad-bluetooth-host = "tests/gaming/deckpad/BluetoothHostTests.btrc";
+    programs.deckpad-fake-deck = "tests/gaming/deckpad/FakeDeck.btrc";
     buildInputs = [ pkgs.dbus pkgs.libsodium ];
     env.NIX_CFLAGS_COMPILE = "-I${pkgs.lib.getDev pkgs.dbus}/include/dbus-1.0 -I${pkgs.lib.getLib pkgs.dbus}/lib/dbus-1.0/include";
     linkFlags = [ "-ldbus-1" "-lsodium" ];
@@ -47,7 +51,7 @@ in pkgs.testers.runNixOSTest {
   nodes.deck = {
     networking.firewall.allowedTCPPorts = [ 3240 ];
     services.openssh.enable = true;   # for the host key, the machine's identity
-    boot.kernelModules = [ "dummy_hcd" "libcomposite" "usb_f_fs" "hci_vhci" ];
+    boot.kernelModules = [ "dummy_hcd" "libcomposite" "usb_f_fs" "hci_vhci" "vhci-hcd" ];
     hardware.bluetooth = {
       enable = true;
       package = bluezVirtual;
@@ -59,6 +63,17 @@ in pkgs.testers.runNixOSTest {
     systemd.services.deckpad = service "deckpad" "--serial FXDK00000001";
     systemd.services.deckpad-usb = service "deckpad-usb" "--no-network --usb --serial FXDK00000002 --control-port 3242";
     systemd.services.deckpad-bluetooth = service "deckpad-bluetooth" "--no-network --bluetooth hci0 --serial FXDK00000003 --control-port 3243";
+    # The emulated Deck controller, and a service that reads it. The service
+    # shares the first one's state, so the PC it paired with is still trusted.
+    systemd.services.fake-deck.serviceConfig = {
+      ExecStart = "${tests}/bin/deckpad-fake-deck /run/fake-deck/commands";
+      RuntimeDirectory = "fake-deck";
+    };
+    systemd.services.deckpad-deck.serviceConfig = {
+      ExecStart = "${deckpad} serve --source deck --serial FXDK00000004 --control-port 3244 --runtime /run/deckpad-deck --state /var/lib/deckpad";
+      ExecStopPost = "${deckpad} release";
+      RuntimeDirectory = "deckpad-deck";
+    };
   };
   nodes.pc = {
     services.openssh.enable = true;
@@ -118,6 +133,38 @@ in pkgs.testers.runNixOSTest {
         pc.wait_until_fails(controller_present(pc, "FXDK00000001"), timeout=60)
         deck.succeed("systemctl stop deckpad.service")
 
+    with subtest("the Deck's pad: taken from the kernel, read, and given back"):
+        deck.succeed("systemctl start fake-deck.service")
+        deck.wait_until_succeeds("grep -qx FAKEDECK0001 /sys/bus/usb/devices/*/serial", timeout=120)
+        pad = deck.succeed("basename $(dirname $(grep -lx FAKEDECK0001 /sys/bus/usb/devices/*/serial))").strip()
+        driver = f"basename $(readlink /sys/bus/usb/devices/{pad}:1.2/driver)"
+        deck.wait_until_succeeds(f"test $({driver}) = usbhid", timeout=60)
+        deck.succeed(": > /run/fake-deck/commands")
+        deck.succeed("systemctl start deckpad-deck.service")
+        deck.wait_for_open_port(3240)
+        pc.succeed("systemctl start deckpad-attach.service")
+        pc.wait_until_succeeds(controller_present(pc, "FXDK00000004"), timeout=120)
+        # While a host holds the controller the pad's interface is deckpad's,
+        # not the kernel driver's, and the pad was told to be a plain gamepad.
+        deck.wait_until_succeeds(f"test $({driver}) = usbfs", timeout=60)
+        deck.wait_until_succeeds("grep -q 'interface 2 command 81' /run/fake-deck/commands && grep -q 'interface 2 command 87' /run/fake-deck/commands", timeout=60)
+        # The pad's A and d-pad up arrive on the PC as the controller's.
+        pc.wait_until_succeeds("ls /sys/bus/hid/devices | grep -qi ':28DE:1302\\.'", timeout=120)
+        node = pc.wait_until_succeeds("basename /sys/bus/hid/devices/*28DE:1302*/hidraw/hidraw*", timeout=120).strip()
+        pc.wait_until_succeeds(f"timeout 10 head -c 54 /dev/{node} | od -An -tx1 -w54 | grep -q '^ 42 .. 01 20 00 00'", timeout=60)
+        # Reading the pad does not keep cancelling transfers that are about
+        # to complete. Counted over five seconds of steady reading: a short
+        # wait cancelled about fifty a second.
+        cancelled = int(deck.succeed("dmesg | grep -c 'vhci_hcd: unlink' || true").strip())
+        deck.sleep(5)
+        after = int(deck.succeed("dmesg | grep -c 'vhci_hcd: unlink' || true").strip())
+        assert after - cancelled < 25, f"{after - cancelled} cancelled transfers in five seconds of reading the pad"
+        # The host leaves: the kernel's driver gets the pad back.
+        pc.succeed("systemctl stop deckpad-attach.service")
+        deck.wait_until_succeeds(f"test $({driver}) = usbhid", timeout=60)
+        deck.succeed("systemctl stop deckpad-deck.service fake-deck.service")
+        deck.wait_until_fails("grep -qx FAKEDECK0001 /sys/bus/usb/devices/*/serial", timeout=60)
+
     with subtest("the USB-C cable: the host on the cable sees a wired controller"):
         deck.succeed("systemctl start deckpad-usb.service")
         deck.wait_until_succeeds(controller_present(deck, "FXDK00000002"), timeout=120)
@@ -129,18 +176,16 @@ in pkgs.testers.runNixOSTest {
         deck.wait_until_succeeds("test ! -e /sys/kernel/config/usb_gadget/deckpad", timeout=60)
 
     with subtest("Bluetooth: a host pairs while pairing is open and reads the controller"):
-        def controllers():
-            return deck.succeed("btmgmt info 2>/dev/null | grep -c 'addr 00:AA:01' || true").strip()
-
-        for attempt in range(6):
-            deck.succeed("systemctl restart btvirt.service && systemctl start bluetooth.service")
-            for _ in range(20):
-                if controllers() == "2":
-                    break
-                deck.sleep(1)
-            if controllers() == "2":
-                break
-        assert controllers() == "2", deck.succeed("btmgmt info")
+        # The emulator creates its two controllers one after the other. The
+        # daemon is started only once both exist, and powers them on; a
+        # controller whose first power-on raced the emulator is powered on again.
+        deck.succeed("systemctl stop bluetooth.service; systemctl start btvirt.service")
+        deck.wait_until_succeeds("test -e /sys/class/bluetooth/hci0 && test -e /sys/class/bluetooth/hci1", timeout=120)
+        deck.succeed("systemctl start bluetooth.service")
+        deck.wait_until_succeeds(
+            "btmgmt --index 0 power on; btmgmt --index 1 power on; test $(btmgmt info | grep -c 'addr 00:AA:01') = 2",
+            timeout=180,
+        )
         deck.succeed("systemctl start deckpad-bluetooth.service")
         deck.wait_until_succeeds("test -e /run/deckpad-bluetooth/token", timeout=60)
         options = "--control-port 3243 --runtime /run/deckpad-bluetooth"

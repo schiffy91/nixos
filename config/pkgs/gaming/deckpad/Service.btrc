@@ -110,8 +110,11 @@ class ControllerService {
     // One turn. False once the service should stop.
     public bool turn(int idleMilliseconds) {
         // Read the pad first: the host's next request arrives while this
-        // waits, so each fresh state leaves in the same turn.
-        self.controller.pump(4);
+        // waits, so each fresh state leaves in the same turn. A report ends
+        // the wait at once, so its length only matters when the pad is
+        // late: several of the pad's 4 ms report periods, because a wait as
+        // short as one period cancels transfers that are about to complete.
+        self.controller.pump(20);
         struct pollfd watched[48];
         memset(watched, 0, sizeof(watched));
         int count = 0;

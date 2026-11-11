@@ -113,7 +113,24 @@ class DeckpadServerTests {
         rumble.append(STEAM_OUT_RUMBLE);
         for (int index = 0; index < 9; index++) { rumble.append(index == 3 ? 0x34 : (index == 4 ? 0x12 : 0)); }
         Check.that(host.transferOut(1, rumble) == 10, "interrupt OUT accepted");
-        Check.that(host.cancelIn(1, 64) || true, "a waiting IN request can be cancelled, or its report won the race");
+        // A driver that stops polling cancels its waiting request. Whether
+        // the request or its report wins that race, the export must answer
+        // in turn (cancelIn throws otherwise) and stay in step afterwards.
+        host.cancelIn(1, 64);
+        Bytes next = Bytes();
+        Check.that(host.transferIn(1, 64, next) > 0 && (next.get(0) == STEAM_REPORT_STATE || next.get(0) == STEAM_REPORT_BATTERY), "reports keep coming after a cancelled request");
+        Bytes feature = Bytes();
+        Check.that(host.controlIn(USBSetup(0xA1, 0x01, 0x0301, 0, 64), feature) == 64 && feature.get(0) == STEAM_REPORT_FEATURE, "and control transfers still answer");
+    }
+
+    // Wait for the service to say nobody holds the controller.
+    class bool free(int controlPort, string runtime) {
+        long long deadline = MonotonicClock.deadlineAfter(5000LL);
+        while (!DeckpadServerTests.control("GET", "/status", "", controlPort, runtime).contains("\"holder\": \"\"")) {
+            if (!MonotonicClock.before(deadline)) { return false; }
+            Timer.sleepMillis(20);
+        }
+        return true;
     }
 
     class void scenario(int port, int controlPort, string runtime) {
@@ -148,12 +165,11 @@ class DeckpadServerTests {
 
         // The host leaves and comes back: the controller is free in between.
         desk.leave();
-        Timer.sleepMillis(600);
-        Check.that(DeckpadServerTests.control("GET", "/status", "", controlPort, runtime).contains("\"holder\": \"\""), "the controller is free once its host leaves");
+        Check.that(DeckpadServerTests.free(controlPort, runtime), "the controller is free once its host leaves");
         USBIPHost returning = desk.attach();
         DeckpadServerTests.reports(returning);
         desk.leave();
-        Timer.sleepMillis(600);
+        Check.that(DeckpadServerTests.free(controlPort, runtime), "and free again after the second visit");
 
         // Forgetting the host shuts it out again.
         string fingerprint = "";

@@ -126,14 +126,19 @@ networks may connect at all. The host role loads `vhci-hcd` and keeps trying
   itself after the Deck's service restarts. The gadget is enumerated by a
   host controller wired to it in the same kernel, and a killed service leaves
   the port clean. Over two emulated Bluetooth controllers a host pairs during
-  the window and reads the controller.
+  the window and reads the controller. And the Deck's own pad is emulated
+  (`FakeDeck.btrc`: the pad's USB identity, three interfaces and state
+  reports, which the kernel's `hid-steam` binds as it does the real one):
+  the service takes it from the kernel, puts it in gamepad mode, its held
+  buttons arrive on the PC as the controller's, reading it does not cancel
+  transfers, and the kernel gets it back when the host leaves.
 - The standard library's own tests cover the layers underneath: USB/IP, the
   gadget at high speed and SuperSpeed, Bluetooth pairing rules, the secure
   channel and OpenSSH key formats.
 
-Not verified without hardware: reading the Deck's own pad, the Deck's port in
-device mode, a real Bluetooth radio, and how Steam treats the controller on
-each link. The report layouts follow SDL and `hid-steam`; the
+Not verified without hardware: the real pad's firmware (the emulated one
+answers the same requests but is not it), the Deck's port in device mode, a
+real Bluetooth radio, and how Steam treats the controller on each link. The report layouts follow SDL and `hid-steam`; the
 Deck-to-controller mapping has only been shown working over Bluetooth, by the
 project credited below. On Linux 6.18 `hid-generic` binds `28de:1302`: that
 kernel's `hid-steam` does not know it yet, so there is no kernel gamepad

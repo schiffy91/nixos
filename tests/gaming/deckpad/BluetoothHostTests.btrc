@@ -50,7 +50,8 @@ class DeckpadBluetoothHost {
         rumble.append(STEAM_OUT_RUMBLE);
         for (int index = 0; index < 9; index++) { rumble.append(0); }
         Check.that(interrupt.send(rumble, 2000), "output reports go out on the interrupt channel");
-        Timer.sleepMillis(500);
+        Bytes later = Bytes();
+        Check.that(interrupt.receive(later, 2000) > 0 && later.get(0) == 0xA1, "and input keeps coming after one");
         interrupt.close();
         control.close();
         host.close();
