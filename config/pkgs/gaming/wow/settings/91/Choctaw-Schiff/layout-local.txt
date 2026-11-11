@@ -1,0 +1,8 @@
+Version: 1
+Frame: BetterBagsBagBackpack
+FrameLevel: 500
+Anchor: RIGHT
+X: -207
+Y: 32
+W: 663
+H: 470

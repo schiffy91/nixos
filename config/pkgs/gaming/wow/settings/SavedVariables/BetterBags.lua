@@ -1,15 +1,15 @@
 
 BetterBagsDB = {
-["profileKeys"] = {
-["Choctaw Schiff"] = "Default",
-["Huntingyo Momma"] = "Default",
-["Holy Schiff"] = "Default",
-},
 ["global"] = {
 ["changelog"] = {
 ["autoOpen"] = false,
 ["lastSeen"] = 1793931336,
 },
+},
+["profileKeys"] = {
+["Choctaw Schiff"] = "Default",
+["Huntingyo Momma"] = "Default",
+["Holy Schiff"] = "Default",
 },
 ["profiles"] = {
 ["Default"] = {
@@ -22,8 +22,8 @@ BetterBagsDB = {
 ["name"] = "Bank",
 ["id"] = 1,
 ["kind"] = 1,
-["order"] = 1,
 ["isDefault"] = true,
+["order"] = 1,
 },
 },
 },
@@ -71,18 +71,18 @@ BetterBagsPerfDB = {
 ["nextId"] = 1,
 },
 ["settings"] = {
-["traceMaxCalls"] = 1000000,
-["traceCalls"] = true,
+["maxSessions"] = 10,
+["trackAllocations"] = false,
 ["excludedModules"] = "Debug, Localization",
 ["preset"] = "full",
-["maxSessions"] = 10,
+["traceMaxCalls"] = 1000000,
 ["maxDurationSec"] = 0,
-["trackAllocations"] = false,
-["calibrate"] = true,
-["maxNodes"] = 5000,
-["worstFrames"] = 10,
-["pauseGC"] = false,
+["traceCalls"] = true,
 ["timelineFrames"] = 18000,
+["pauseGC"] = false,
+["worstFrames"] = 10,
+["maxNodes"] = 5000,
+["calibrate"] = true,
 ["spikeThresholdMs"] = 16,
 ["traceArgs"] = true,
 },

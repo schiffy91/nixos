@@ -44,17 +44,17 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON8",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON12",
 },
-["PAD4"] = {
-[""] = "ACTIONBUTTON4",
-["SHIFT-"] = "ACTIONBUTTON7",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
-},
 ["PADDUP"] = {
 [""] = "ACTIONBUTTON10",
 ["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
+},
+["PAD4"] = {
+[""] = "ACTIONBUTTON4",
+["SHIFT-"] = "ACTIONBUTTON7",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
 },
 ["PAD2"] = {
 [""] = "ACTIONBUTTON5",
@@ -62,11 +62,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR1BUTTON5",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON8",
 },
-["PAD1"] = {
-[""] = "JUMP",
-["SHIFT-"] = "MULTIACTIONBAR1BUTTON9",
-["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
+["PADDRIGHT"] = {
+[""] = "ACTIONBUTTON11",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON3",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
 },
 ["PAD3"] = {
 [""] = "ACTIONBUTTON3",
@@ -80,11 +80,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
 },
-["PADDRIGHT"] = {
-[""] = "ACTIONBUTTON11",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON3",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
+["PAD1"] = {
+[""] = "JUMP",
+["SHIFT-"] = "MULTIACTIONBAR1BUTTON9",
+["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
 },
 },
 ["Center"] = {
@@ -158,17 +158,17 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON8",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON12",
 },
-["PAD3"] = {
-[""] = "ACTIONBUTTON3",
-["SHIFT-"] = "ACTIONBUTTON6",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON3",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON6",
+["PADDLEFT"] = {
+[""] = "ACTIONBUTTON9",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON1",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
 },
-["PAD4"] = {
-[""] = "ACTIONBUTTON4",
-["SHIFT-"] = "ACTIONBUTTON7",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
+["PADDUP"] = {
+[""] = "ACTIONBUTTON10",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
 },
 ["PAD2"] = {
 [""] = "ACTIONBUTTON5",
@@ -182,11 +182,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
 ["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
 },
-["PADDLEFT"] = {
-[""] = "ACTIONBUTTON9",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON1",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
+["PAD3"] = {
+[""] = "ACTIONBUTTON3",
+["SHIFT-"] = "ACTIONBUTTON6",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON3",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON6",
 },
 ["PADDRIGHT"] = {
 [""] = "ACTIONBUTTON11",
@@ -194,11 +194,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
 },
-["PADDUP"] = {
-[""] = "ACTIONBUTTON10",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
+["PAD4"] = {
+[""] = "ACTIONBUTTON4",
+["SHIFT-"] = "ACTIONBUTTON7",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
 },
 },
 ["Center"] = {
@@ -293,17 +293,17 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON8",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON12",
 },
-["PAD4"] = {
-[""] = "ACTIONBUTTON4",
-["SHIFT-"] = "ACTIONBUTTON7",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
-},
 ["PADDUP"] = {
 [""] = "ACTIONBUTTON10",
 ["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
+},
+["PAD4"] = {
+[""] = "ACTIONBUTTON4",
+["SHIFT-"] = "ACTIONBUTTON7",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
 },
 ["PAD2"] = {
 [""] = "ACTIONBUTTON5",
@@ -311,11 +311,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR1BUTTON5",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON8",
 },
-["PAD1"] = {
-[""] = "JUMP",
-["SHIFT-"] = "MULTIACTIONBAR1BUTTON9",
-["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
+["PADDRIGHT"] = {
+[""] = "ACTIONBUTTON11",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON3",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
 },
 ["PAD3"] = {
 [""] = "ACTIONBUTTON3",
@@ -329,11 +329,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
 },
-["PADDRIGHT"] = {
-[""] = "ACTIONBUTTON11",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON3",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
+["PAD1"] = {
+[""] = "JUMP",
+["SHIFT-"] = "MULTIACTIONBAR1BUTTON9",
+["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
 },
 },
 ["Center"] = {
@@ -406,17 +406,17 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON8",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON12",
 },
-["PAD3"] = {
-[""] = "ACTIONBUTTON3",
-["SHIFT-"] = "ACTIONBUTTON6",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON3",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON6",
+["PADDLEFT"] = {
+[""] = "ACTIONBUTTON9",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON1",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
 },
-["PAD4"] = {
-[""] = "ACTIONBUTTON4",
-["SHIFT-"] = "ACTIONBUTTON7",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
+["PADDUP"] = {
+[""] = "ACTIONBUTTON10",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
 },
 ["PAD2"] = {
 [""] = "ACTIONBUTTON5",
@@ -430,11 +430,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
 ["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
 },
-["PADDLEFT"] = {
-[""] = "ACTIONBUTTON9",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON1",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
+["PAD3"] = {
+[""] = "ACTIONBUTTON3",
+["SHIFT-"] = "ACTIONBUTTON6",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON3",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON6",
 },
 ["PADDRIGHT"] = {
 [""] = "ACTIONBUTTON11",
@@ -442,11 +442,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
 },
-["PADDUP"] = {
-[""] = "ACTIONBUTTON10",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
+["PAD4"] = {
+[""] = "ACTIONBUTTON4",
+["SHIFT-"] = "ACTIONBUTTON7",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
 },
 },
 ["Center"] = {
@@ -525,17 +525,17 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON8",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON12",
 },
-["PAD4"] = {
-[""] = "ACTIONBUTTON4",
-["SHIFT-"] = "ACTIONBUTTON7",
-["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
-},
 ["PADDUP"] = {
 [""] = "ACTIONBUTTON10",
 ["SHIFT-"] = "MULTIACTIONBAR2BUTTON2",
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON6",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON10",
+},
+["PAD4"] = {
+[""] = "ACTIONBUTTON4",
+["SHIFT-"] = "ACTIONBUTTON7",
+["CTRL-"] = "MULTIACTIONBAR1BUTTON4",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON7",
 },
 ["PAD2"] = {
 [""] = "ACTIONBUTTON5",
@@ -543,11 +543,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR1BUTTON5",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR1BUTTON8",
 },
-["PAD1"] = {
-[""] = "JUMP",
-["SHIFT-"] = "MULTIACTIONBAR1BUTTON9",
-["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
+["PADDRIGHT"] = {
+[""] = "ACTIONBUTTON11",
+["SHIFT-"] = "MULTIACTIONBAR2BUTTON3",
+["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
+["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
 },
 ["PAD3"] = {
 [""] = "ACTIONBUTTON3",
@@ -561,11 +561,11 @@ ConsolePortDevices = {
 ["CTRL-"] = "MULTIACTIONBAR2BUTTON5",
 ["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON9",
 },
-["PADDRIGHT"] = {
-[""] = "ACTIONBUTTON11",
-["SHIFT-"] = "MULTIACTIONBAR2BUTTON3",
-["CTRL-"] = "MULTIACTIONBAR2BUTTON7",
-["CTRL-SHIFT-"] = "MULTIACTIONBAR2BUTTON11",
+["PAD1"] = {
+[""] = "JUMP",
+["SHIFT-"] = "MULTIACTIONBAR1BUTTON9",
+["CTRL-"] = "CLICK ConsolePortQuickMenu:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortUtilityToggle:LeftButton",
 },
 },
 ["Center"] = {
@@ -636,11 +636,11 @@ ConsolePortShared = {
 [""] = "",
 ["CTRL-SHIFT-"] = "",
 },
-["PAD2"] = {
-["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot3:LeftButton",
-["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot3:LeftButton",
-[""] = "CLICK ConsolePortGamepadBar1Slot3:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot3:LeftButton",
+["PADLSTICKUP"] = {
+["CTRL-"] = "",
+["SHIFT-"] = "",
+[""] = "",
+["CTRL-SHIFT-"] = "",
 },
 ["PADPADDLE1"] = {
 ["CTRL-"] = "",
@@ -648,7 +648,7 @@ ConsolePortShared = {
 [""] = "",
 ["CTRL-SHIFT-"] = "",
 },
-["PADPADDLE4"] = {
+["PADSYSTEM"] = {
 ["CTRL-"] = "",
 ["SHIFT-"] = "",
 [""] = "",
@@ -660,10 +660,10 @@ ConsolePortShared = {
 [""] = "",
 ["CTRL-SHIFT-"] = "",
 },
-["PADLSTICKLEFT"] = {
+["PADFORWARD"] = {
 ["CTRL-"] = "",
 ["SHIFT-"] = "",
-[""] = "",
+[""] = "TOGGLEGAMEMENU",
 ["CTRL-SHIFT-"] = "",
 },
 ["PADRSTICKUP"] = {
@@ -678,11 +678,11 @@ ConsolePortShared = {
 [""] = "",
 ["CTRL-SHIFT-"] = "",
 },
-["PADLSTICKRIGHT"] = {
-["CTRL-"] = "",
-["SHIFT-"] = "",
-[""] = "",
-["CTRL-SHIFT-"] = "",
+["PADDDOWN"] = {
+["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot8:LeftButton",
+["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot8:LeftButton",
+[""] = "CLICK ConsolePortGamepadBar1Slot8:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot8:LeftButton",
 },
 ["PADRSTICKRIGHT"] = {
 ["CTRL-"] = "",
@@ -696,7 +696,7 @@ ConsolePortShared = {
 [""] = "CLICK ConsolePortGamepadBar1Slot2:LeftButton",
 ["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot2:LeftButton",
 },
-["PADLSTICKUP"] = {
+["PADSOCIAL"] = {
 ["CTRL-"] = "",
 ["SHIFT-"] = "",
 [""] = "",
@@ -708,13 +708,13 @@ ConsolePortShared = {
 [""] = "CLICK ConsolePortGamepadBar1Slot6:LeftButton",
 ["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot6:LeftButton",
 },
-["PAD3"] = {
-["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot1:LeftButton",
-["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot1:LeftButton",
-[""] = "CLICK ConsolePortGamepadBar1Slot1:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot1:LeftButton",
+["PADDLEFT"] = {
+["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot5:LeftButton",
+["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot5:LeftButton",
+[""] = "CLICK ConsolePortGamepadBar1Slot5:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot5:LeftButton",
 },
-["PADSYSTEM"] = {
+["PADLSTICKLEFT"] = {
 ["CTRL-"] = "",
 ["SHIFT-"] = "",
 [""] = "",
@@ -762,10 +762,10 @@ ConsolePortShared = {
 [""] = "",
 ["CTRL-SHIFT-"] = "",
 },
-["PADFORWARD"] = {
+["PADPADDLE4"] = {
 ["CTRL-"] = "",
 ["SHIFT-"] = "",
-[""] = "TOGGLEGAMEMENU",
+[""] = "",
 ["CTRL-SHIFT-"] = "",
 },
 ["PADRSTICKLEFT"] = {
@@ -804,19 +804,19 @@ ConsolePortShared = {
 [""] = "",
 ["CTRL-SHIFT-"] = "",
 },
-["PADDDOWN"] = {
-["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot8:LeftButton",
-["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot8:LeftButton",
-[""] = "CLICK ConsolePortGamepadBar1Slot8:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot8:LeftButton",
+["PAD3"] = {
+["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot1:LeftButton",
+["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot1:LeftButton",
+[""] = "CLICK ConsolePortGamepadBar1Slot1:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot1:LeftButton",
 },
-["PADDLEFT"] = {
-["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot5:LeftButton",
-["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot5:LeftButton",
-[""] = "CLICK ConsolePortGamepadBar1Slot5:LeftButton",
-["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot5:LeftButton",
+["PAD2"] = {
+["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot3:LeftButton",
+["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot3:LeftButton",
+[""] = "CLICK ConsolePortGamepadBar1Slot3:LeftButton",
+["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot3:LeftButton",
 },
-["PADSOCIAL"] = {
+["PADLSTICKRIGHT"] = {
 ["CTRL-"] = "",
 ["SHIFT-"] = "",
 [""] = "",

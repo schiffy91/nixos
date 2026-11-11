@@ -2,6 +2,7 @@
 ConsolePort_BarPresets = {
 }
 ConsolePort_BarSharedLayout = {
+["name"] = "Default",
 ["children"] = {
 ["VehicleL"] = {
 ["flyoutDirection"] = "UP",
@@ -21,7 +22,7 @@ ConsolePort_BarSharedLayout = {
 ["page"] = "override",
 ["visibility"] = "[vehicleui][overridebar] show; hide",
 ["pos"] = {
-["y"] = 54,
+["y"] = 94,
 ["strata"] = "MEDIUM",
 ["point"] = "BOTTOM",
 ["relPoint"] = "BOTTOM",
@@ -63,16 +64,16 @@ ConsolePort_BarSharedLayout = {
 ["x"] = -240,
 },
 },
-["PADRTRIGGER"] = {
+["PADLSHOULDER"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
-["dir"] = "DOWN",
+["dir"] = "UP",
 ["size"] = 64,
 ["pos"] = {
-["y"] = -10,
+["y"] = 70,
 ["relPoint"] = "CENTER",
 ["point"] = "CENTER",
-["x"] = 72,
+["x"] = -72,
 },
 },
 ["PADLTRIGGER"] = {
@@ -99,16 +100,16 @@ ConsolePort_BarSharedLayout = {
 ["x"] = 240,
 },
 },
-["PAD4"] = {
+["PADDLEFT"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
-["dir"] = "UP",
+["dir"] = "LEFT",
 ["size"] = 64,
 ["pos"] = {
-["y"] = 84,
-["relPoint"] = "RIGHT",
-["point"] = "RIGHT",
-["x"] = -240,
+["y"] = 40,
+["relPoint"] = "LEFT",
+["point"] = "LEFT",
+["x"] = 176,
 },
 },
 ["PADRSHOULDER"] = {
@@ -123,16 +124,16 @@ ConsolePort_BarSharedLayout = {
 ["x"] = 72,
 },
 },
-["PADLSHOULDER"] = {
+["PAD2"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
-["dir"] = "UP",
+["dir"] = "RIGHT",
 ["size"] = 64,
 ["pos"] = {
-["y"] = 70,
-["relPoint"] = "CENTER",
-["point"] = "CENTER",
-["x"] = -72,
+["y"] = 40,
+["relPoint"] = "RIGHT",
+["point"] = "RIGHT",
+["x"] = -176,
 },
 },
 ["PADDRIGHT"] = {
@@ -159,36 +160,53 @@ ConsolePort_BarSharedLayout = {
 ["x"] = -306,
 },
 },
-["PADDLEFT"] = {
+["PAD4"] = {
 ["showFlyouts"] = true,
 ["type"] = "ClusterHandle",
-["dir"] = "LEFT",
+["dir"] = "UP",
 ["size"] = 64,
 ["pos"] = {
-["y"] = 40,
-["relPoint"] = "LEFT",
-["point"] = "LEFT",
-["x"] = 176,
-},
-},
-["PAD2"] = {
-["showFlyouts"] = true,
-["type"] = "ClusterHandle",
-["dir"] = "RIGHT",
-["size"] = 64,
-["pos"] = {
-["y"] = 40,
+["y"] = 84,
 ["relPoint"] = "RIGHT",
 ["point"] = "RIGHT",
-["x"] = -176,
+["x"] = -240,
+},
+},
+["PADRTRIGGER"] = {
+["showFlyouts"] = true,
+["type"] = "ClusterHandle",
+["dir"] = "DOWN",
+["size"] = 64,
+["pos"] = {
+["y"] = -10,
+["relPoint"] = "CENTER",
+["point"] = "CENTER",
+["x"] = 72,
 },
 },
 },
 ["pos"] = {
-["y"] = 16,
+["y"] = 56,
 ["relPoint"] = "BOTTOM",
 ["point"] = "BOTTOM",
 ["x"] = 0,
+},
+},
+["Petring"] = {
+["type"] = "Petring",
+["fade"] = true,
+["scale"] = 0.75,
+["status"] = true,
+["vehicle"] = true,
+["visibility"] = "[pet] show; hide",
+["pos"] = {
+["y"] = 136,
+["strata"] = "MEDIUM",
+["point"] = "BOTTOM",
+["relPoint"] = "BOTTOM",
+["level"] = 2,
+["x"] = 0,
+["offsetscale"] = false,
 },
 },
 ["VehicleR"] = {
@@ -209,29 +227,12 @@ ConsolePort_BarSharedLayout = {
 ["page"] = "override",
 ["visibility"] = "[vehicleui][overridebar] show; hide",
 ["pos"] = {
-["y"] = 54,
+["y"] = 94,
 ["strata"] = "MEDIUM",
 ["point"] = "BOTTOM",
 ["relPoint"] = "BOTTOM",
 ["level"] = 2,
 ["x"] = 126,
-["offsetscale"] = false,
-},
-},
-["Petring"] = {
-["type"] = "Petring",
-["fade"] = true,
-["scale"] = 0.75,
-["status"] = true,
-["vehicle"] = true,
-["visibility"] = "[pet] show; hide",
-["pos"] = {
-["y"] = 90,
-["strata"] = "MEDIUM",
-["point"] = "BOTTOM",
-["relPoint"] = "BOTTOM",
-["level"] = 2,
-["x"] = 0,
 ["offsetscale"] = false,
 },
 },
@@ -250,7 +251,7 @@ ConsolePort_BarSharedLayout = {
 },
 ["open"] = "Hover",
 ["pos"] = {
-["y"] = 16,
+["y"] = 0,
 ["relPoint"] = "BOTTOM",
 ["point"] = "BOTTOM",
 ["x"] = 0,
@@ -281,14 +282,16 @@ ConsolePort_BarSharedLayout = {
 },
 },
 ["visibility"] = "[petbattle] hide; show",
-["name"] = "Default",
 ["desc"] = "A cluster bar with a toolbar below it.",
 }
 ConsolePort_BarSharedDB = {
 ["clusterShowAll"] = false,
-["xpBarColor"] = "ffff97c5",
-["tintEnable"] = false,
 ["LABhideElementsMacro"] = true,
+["xpBarColor"] = "ffff97c5",
+["fadeXPBar"] = true,
+["clusterShowFlyoutIcons"] = true,
+["showMainIcons"] = false,
+["tintEnable"] = false,
 ["showCooldownText"] = true,
 }
 ConsolePort_BarShareAll = true

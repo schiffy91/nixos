@@ -28,6 +28,8 @@ let
     };
   };
 in assert options; pkgs.runCommand "wow-contract-check" { nativeBuildInputs = [ pkgs.coreutils ]; } ''
+  ${pkgs.lua5_1}/bin/lua ${./DisplayLayoutTests.lua} ${../../../config/pkgs/gaming/wow/display-layout.lua}
+  ${pkgs.lua5_1}/bin/lua ${./LayoutGeometryTests.lua} ${../../../config/pkgs/gaming/wow/settings/SavedVariables/FlareUI.lua}
   ${programs}/bin/wow-lock-tests
   ${programs}/bin/wow-refresh-tests ${programs}/bin/wow-addons-lock ${programs}/bin/wow-refresh-fixture
   ${programs}/bin/wow-install-tests ${tools}/bin/wow-addons-install ${bundle} ${legacy}

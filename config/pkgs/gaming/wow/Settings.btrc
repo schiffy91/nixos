@@ -53,11 +53,25 @@ class AddonSettings {
         return result;
     }
 
-    private Vector<string> tracked() {
+    private Vector<string> tracked(string account) {
         Vector<string> result = ["bindings-cache.wtf", "edit-mode-cache-account.txt"];
         if (!FileSystem.isDir(self.bundle)) { throw f"Missing addon bundle: {self.bundle}"; }
         for name in FileSystem.listDir(self.bundle).sorted() {
             if (!self.excluded.contains(name)) { result.push(f"SavedVariables/{name}.lua"); }
+        }
+        for realm in FileSystem.listDir(account).sorted() {
+            var realmPath = PathTools.join(account, realm);
+            if (realm.equals("SavedVariables") || !FileSystem.isDir(realmPath)) { continue; }
+            for character in FileSystem.listDir(realmPath).sorted() {
+                var relative = PathTools.join(realm, character);
+                if (!FileSystem.isDir(PathTools.join(account, relative))) { continue; }
+                for name in ["AddOns.txt", "chat-cache.txt", "layout-local.txt", "edit-mode-cache-character.txt", "bindings-cache.wtf"] {
+                    result.push(f"{relative}/{name}");
+                }
+                for name in FileSystem.listDir(self.bundle).sorted() {
+                    if (!self.excluded.contains(name)) { result.push(f"{relative}/SavedVariables/{name}.lua"); }
+                }
+            }
         }
         return result;
     }
@@ -89,7 +103,7 @@ class AddonSettings {
         if (FileSystem.exists(self.destination) && FileSystem.removeRecursive(self.destination) != 0) {
             throw f"Cannot replace {self.destination}";
         }
-        for relative in self.tracked() {
+        for relative in self.tracked(account) {
             var source = PathTools.join(account, relative);
             if (!FileSystem.isFile(source)) { continue; }
             self.copy(source, PathTools.join(self.destination, relative));

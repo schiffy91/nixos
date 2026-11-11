@@ -36,11 +36,11 @@ SpokenQuestsSettings = {
 ["Creature-0-7067-2991-2-257554-ACEECED2AA"] = {
 ["126f193a"] = true,
 },
-["Creature-0-7067-2991-2-263113-ACEECED2AA"] = {
-["6fb686a1"] = true,
-},
 ["Creature-0-7067-2991-2-263664-ACEECED2AA"] = {
 ["4bc7b0db"] = true,
+},
+["Creature-0-7067-2991-2-263113-ACEECED2AA"] = {
+["6fb686a1"] = true,
 },
 ["Creature-0-7067-2991-2-254087-ACEECED2AA"] = {
 ["36007676"] = true,
@@ -48,11 +48,11 @@ SpokenQuestsSettings = {
 ["Creature-0-7067-2991-2-251903-ACEECED2AA"] = {
 ["210c9168"] = true,
 ["2f664be5"] = true,
-["18439689"] = true,
+["5526d668"] = true,
 ["1fddd4ea"] = true,
 ["6ba4abad"] = true,
-["5526d668"] = true,
 ["74aa16bd"] = true,
+["18439689"] = true,
 ["719d0f30"] = true,
 },
 ["Creature-0-7067-2991-2-251376-ACEECED2AA"] = {
@@ -75,29 +75,33 @@ SpokenQuestsSettings = {
 },
 ["Holy Schiff"] = {
 ["hasSeenGossipForNPC"] = {
-[246152] = {
-["271580fe"] = true,
+[1652] = {
+["3b668c0c"] = true,
 },
-[5688] = {
-["748c2a35"] = true,
+[244808] = {
+["03cd17a9"] = true,
+},
+[1745] = {
+["3b668c0c"] = true,
 },
 [276067] = {
 ["7576a14d"] = true,
 },
-[265812] = {
-["4bc7b0db"] = true,
-},
-[1652] = {
+[1496] = {
 ["3b668c0c"] = true,
+},
+[246152] = {
+["271580fe"] = true,
 },
 [246349] = {
 ["20c2c8e6"] = true,
 },
-[1515] = {
-["367c2f4e"] = true,
+[1500] = {
+["7c9fac83"] = true,
 },
-[244808] = {
-["03cd17a9"] = true,
+[246143] = {
+["48d792cb"] = true,
+["60a1fb8a"] = true,
 },
 [5725] = {
 ["3b668c0c"] = true,
@@ -105,22 +109,21 @@ SpokenQuestsSettings = {
 [6491] = {
 ["2b40c50f"] = true,
 },
-[1496] = {
-["3b668c0c"] = true,
-},
-[1500] = {
-["7c9fac83"] = true,
-},
-[1746] = {
-["3b668c0c"] = true,
-},
 [246389] = {
 ["74af10c5"] = true,
 ["4bbe72e5"] = true,
 },
-[246143] = {
-["48d792cb"] = true,
-["60a1fb8a"] = true,
+[1515] = {
+["367c2f4e"] = true,
+},
+[265812] = {
+["4bc7b0db"] = true,
+},
+[1746] = {
+["3b668c0c"] = true,
+},
+[5688] = {
+["748c2a35"] = true,
 },
 },
 },

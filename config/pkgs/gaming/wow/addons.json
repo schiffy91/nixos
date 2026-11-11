@@ -17,12 +17,12 @@
   "dialogueUI": {
     "repo": "Peterodox/YUI-Dialogue"
   },
+  "flareUI": {
+    "repo": "malkkav/FlareUI",
+    "flavour": "forever"
+  },
   "foreverFadeChat": {
     "url": "https://edge.forgecdn.net/files/8994/554/ForeverFadeChat.zip"
-  },
-  "moveAny": {
-    "flavour": "forever",
-    "repo": "d4kir92/MoveAny"
   },
   "questie": {
     "repo": "Questie/Questie",
