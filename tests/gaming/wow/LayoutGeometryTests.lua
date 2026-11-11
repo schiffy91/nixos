@@ -57,7 +57,7 @@ for name,p in pairs(FlareUI2_DB.profiles) do
                 local w=group=='party' and (tile.width or 200) or tile.width*8+(tile.groupSpacing or 2)*7
                 local h=group=='party' and (tile.height or 70)*5+(tile.spacing or 4)*4 or tile.height*5+(tile.spacing or 2)*4
                 boxes[group]=rect(24,H-80-h,w,h)
-                local b=uf.boss;local h=b.height*5+b.spacing*4+b.castHeight+4
+                local b=uf.boss;local h=b.height*5+(b.spacing or 14)*4+b.castHeight+4
                 boxes.boss=rect(W-310-b.width,H-24-h,b.width,h)
             end
             for key,a in pairs(boxes) do

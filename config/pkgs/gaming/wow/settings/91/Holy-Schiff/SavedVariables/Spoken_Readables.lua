@@ -1,8 +1,8 @@
 
 SpokenReadablesCharacter = {
-["found"] = {
-},
 ["read"] = {
+},
+["found"] = {
 },
 }
 SpokenBooksCharacter = nil
