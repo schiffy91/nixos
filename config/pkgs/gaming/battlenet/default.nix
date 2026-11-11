@@ -11,7 +11,8 @@ let
   '';
   launcher = pkgs.writeShellApplication {
     name = "battlenet";
-    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.curl pkgs.libnotify pkgs.umu-launcher winePrefixDpi.package ];
+    extraShellCheckFlags = [ "-x" ];
+    runtimeInputs = [ pkgs.coreutils pkgs.procps pkgs.gnugrep pkgs.curl pkgs.libnotify pkgs.util-linux pkgs.umu-launcher winePrefixDpi.package ];
     text = ''
         prefix=${lib.escapeShellArg prefix}
         mkdir -p "$prefix"
@@ -44,23 +45,12 @@ let
           EXE="$cache/Battle.net-Setup.exe"
         fi
 
-        # One session per prefix: a previous launch's Agent keeps a wineserver
-        # alive inside its own runtime container, where no host socket reaches
-        # it, and a second server on the same prefix clobbers the registry.
-        for pid in $(pgrep -u "$(id -u)"); do  # umu appends /pfx to the prefix it is given
-          if tr '\0' '\n' 2>/dev/null < "/proc/$pid/environ" | grep -qxF \
-            -e "WINEPREFIX=$prefix" -e "WINEPREFIX=$prefix/pfx" -e "WINEPREFIX=$prefix/pfx/" \
-            -e "STEAM_COMPAT_DATA_PATH=$prefix" -e "STEAM_COMPAT_DATA_PATH=$prefix/pfx" -e "STEAM_COMPAT_DATA_PATH=$prefix/pfx/"; then
-            kill "$pid" 2>/dev/null || true
-          fi
-        done
-
-        wine-prefix-dpi set --dpi ${toString winePrefixDpi.dpi} --follow-display -- "$prefix"  # a stream has its own scale
+        source ${./session.sh}
         cd "$HOME"
         EXTRA_ARGS=()  # CEF reads the prefix DPI like any Windows app; no scale flags
         # ENABLE_HDR_WSI=1 (vk_hdr_layer) intentionally absent: nvidia 610 does HDR natively and the
         # layer mis-tags winewayland's scRGB (D2R/WoW DX12 too dark). Re-add next to DXVK_HDR to undo.
-        exec ${gameLaunch.protonPrefix} \
+        follow_display ${toString winePrefixDpi.dpi} ${gameLaunch.protonPrefix} \
           WINEPREFIX="$prefix" \
           TMPDIR=/tmp \
           GAMEID=umu-battlenet \

@@ -1,0 +1,127 @@
+--- a/FlareUI/Modules/Auras.lua
++++ b/FlareUI/Modules/Auras.lua
+@@ -666,7 +666,15 @@
+     local step = (kdb.size or 30) + (kdb.spacing or 6)
+     holder.enchantShift = n
+     container:ClearAllPoints()
+-    container:SetPoint(corner, holder, corner, n * step * ((kdb.grow == "RIGHT") and 1 or -1), 0)
++    if kdb.center and holder.kind == "debuffs" then
++        -- The secure flow layout sizes the container to its visible icons.
++        -- Anchoring that container by its middle keeps the group centered,
++        -- including during combat, without reading protected aura counts.
++        local edge = kdb.wrap == "UP" and "BOTTOM" or "TOP"
++        container:SetPoint(edge, holder, edge, 0, 0)
++    else
++        container:SetPoint(corner, holder, corner, n * step * ((kdb.grow == "RIGHT") and 1 or -1), 0)
++    end
+     pcall(container.SetFlowLayoutMaximumLineSize, container, math_max(step, width - n * step))
+ end
+ 
+@@ -787,7 +795,15 @@
+     local store = GetLayoutStore(layoutName)
+     local pos = store and store[kind] or KINDS[kind].default
+     holder:ClearAllPoints()
+-    holder:SetPoint(pos.point or "CENTER", UIParent, pos.point or "CENTER", pos.x or 0, pos.y or 0)
++    local player = _G.FlareUI_UF_Player
++    if kind == "buffs" and pos.anchor == "playerHealth" and player and player.Health then
++        -- The Forever plate puts the name above the health fill. Clear both
++        -- while matching the health bar's left edge.
++        local top = player.PlateFrame and player.PlateFrame.NameBox or player.Health
++        holder:SetPoint("BOTTOMLEFT", top, "TOPLEFT", pos.x or 0, pos.y or 8)
++    else
++        holder:SetPoint(pos.point or "CENTER", UIParent, pos.point or "CENTER", pos.x or 0, pos.y or 0)
++    end
+ end
+ 
+ local function OnFrameMoved(holder, layoutName, point, x, y)
+@@ -850,6 +866,9 @@
+           get = get("max"), set = set("max") },
+         { name = L["Spacing"], kind = LEM.SettingType.Slider, default = defaults.spacing or 6, minValue = 0, maxValue = 20, valueStep = 1,
+           get = get("spacing"), set = set("spacing") },
++        { name = L["Center icons"], kind = LEM.SettingType.Checkbox, default = false,
++          hidden = function() return kind ~= "debuffs" end,
++          get = get("center"), set = set("center") },
+         { name = L["Growth"], kind = LEM.SettingType.Dropdown, default = defaults.grow or "LEFT", values = GROW_VALUES,
+           get = get("grow"), set = set("grow") },
+         { name = L["Wrap"], kind = LEM.SettingType.Dropdown, default = defaults.wrap or "DOWN", values = WRAP_VALUES,
+@@ -1146,6 +1165,9 @@
+         LayoutKind(kind)
+     end
+ 
++    -- UnitFrames and Auras initialize in an unspecified order.
++    C_Timer.After(0, function() ApplyPosition("buffs") end)
++
+     LEM:RegisterCallback("layout", function(layoutName)
+         for _, kind in ipairs(KIND_ORDER) do ApplyPosition(kind, layoutName) end
+     end)
+--- a/FlareUI/Modules/UnitFrames.lua
++++ b/FlareUI/Modules/UnitFrames.lua
+@@ -3608,7 +3608,9 @@
+         pos.y = math_floor(pos.y - UIParent:GetHeight() / scale + 0.5)
+     end
+     f:ClearAllPoints()
+-    f:SetPoint(pos.point or "CENTER", UIParent, pos.point or "CENTER", pos.x or 0, pos.y or 0)
++    local relative = pos.relativeUnit and frames[pos.relativeUnit]
++    f:SetPoint(pos.point or "CENTER", relative or UIParent,
++        relative and (pos.relativePoint or pos.point) or (pos.point or "CENTER"), pos.x or 0, pos.y or 0)
+ end
+ 
+ local function OnFrameMoved(f, layoutName, point, x, y)
+--- a/FlareUI/Modules/UnitFramesRing.lua
++++ b/FlareUI/Modules/UnitFramesRing.lua
+@@ -149,7 +149,7 @@
+                       raid = true, resource = true, styleStart = true, tileStyle = true, plateTiles = true,
+                       simplePet = true, simpleTargetOf = true, palette = true, visibility = true, classColor = true, fullNames = true,
+                       auraStyle = true, auraTimer = true, font = true, fontPower = true, fontCast = true, auraFont = true,
+-                      auraCountFont = true, auraCountFontSeeded = true, styleSavesThin = true }
++                      auraCountFont = true, auraCountFontSeeded = true, styleSavesThin = true, levelFont = true, levelScale = true }
+ -- a stored setup may lack these
+ local TILE_KEYS = { party = true, boss = true }
+ 
+@@ -905,12 +905,14 @@
+     if not ring then return end
+     g = g or Geometry(f)
+     local e = BLIZZ[Kind(f)].level
++    local settings = GetDb() or {}
++    local levelScale = settings.levelScale or LEVEL_SCALE
+     local placed = PlaceRegion(f, g, ring.Disc, e)
+     -- a little under its atlas size, round the same centre
+     local w, h = ring.Disc:GetSize()
+-    ring.Disc:SetSize(w * LEVEL_SCALE, h * LEVEL_SCALE)
++    ring.Disc:SetSize(w * levelScale, h * levelScale)
+     -- the skull and the number at the disc's own scale
+-    local k = g.D / BLIZZ[e.frame or Kind(f)].D * LEVEL_SCALE
++    local k = g.D / BLIZZ[e.frame or Kind(f)].D * levelScale
+     if SetAtlasSafe(ring.Skull, SKULL) then
+         local info = C_Texture.GetAtlasInfo(SKULL)
+         ring.Skull:SetSize(info.width * k, info.height * k)
+@@ -918,17 +920,24 @@
+     -- Show Level: the disc goes with the number
+     local udb = Db(f)
+     ring.Disc:SetShown(udb and udb.showLevel and true or false)
+-    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * LEVEL_SCALE)
++    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * levelScale)
+     local dx, dy, dw, dh = Place(f, g, e)
+-    if dx then PlaceHitButton(ring.DiscHit, f, g, dx, dy, dw, dh) end
++    if dx then PlaceHitButton(ring.DiscHit, f, g, dx, dy, dw * levelScale, dh * levelScale) end
+     ring.DiscHit:SetShown(dx and ring.Disc:IsShown() or false)
+     f.Level:SetParent(ring.Disc)
+     f.Level:ClearAllPoints()
+     f.Level:SetJustifyH("CENTER")
+     f.Level:SetPoint("CENTER", ring.Disc, "CENTER", 0, 0)
+-    f.Level:SetFont(LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
+-    f.Level:SetShadowOffset(1, -1)
+-    f.Level:SetShadowColor(0, 0, 0, 1)
++    if settings.levelFont then
++        -- Text follows the profile's typography, not the portrait atlas scale.
++        local font = settings.levelFont
++        ns.SetFont(f.Level, ns.GetFontPath(font.face or "Friz Quadrata TT"), font.size or 12, font.flags == "NONE" and "" or (font.flags or ""))
++        ns.ApplyShadow(f.Level, font)
++    else
++        f.Level:SetFont(LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
++        f.Level:SetShadowOffset(1, -1)
++        f.Level:SetShadowColor(0, 0, 0, 1)
++    end
+ end
+ 
+ --------------------------------------------------

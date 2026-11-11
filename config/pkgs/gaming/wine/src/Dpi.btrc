@@ -8,8 +8,10 @@ int main(int argc, char** argv) {
         var args = CLIArgs(argc, argv);
         var options = CLICommandLine.parseFrom(args, 1);
         var dpi = Strings.toInt(options.option("--dpi", "96"));
-        if (options.flag("--follow-display")) { dpi = ActiveDisplay.current(dpi); }
-        if (args.command().equals("exec")) {
+        if (options.flag("--follow-display") || args.command().equals("display")) { dpi = ActiveDisplay.current(dpi); }
+        if (args.command().equals("display")) {
+            print(f"{dpi}");
+        } else if (args.command().equals("exec")) {
             WinePrefix.fromEnvironment().setDpi(dpi);
             // Existing callers can put environment assignments before the command.
             Vector<string> command = ["env"];
@@ -22,7 +24,7 @@ int main(int argc, char** argv) {
                 if (args.command().equals("set")) { prefix.setDpi(dpi); }
                 print(f"{path}: {prefix.dpi()}");
             }
-        } else { throw "Usage: wine-prefix-dpi <get|set|exec> [--dpi N] [--follow-display] [--] PREFIX/COMMAND..."; }
+        } else { throw "Usage: wine-prefix-dpi <display|get|set|exec> [--dpi N] [--follow-display] [--] PREFIX/COMMAND..."; }
     } catch (string error) { Console.error(f"wine-prefix-dpi: {error}"); return 1; }
     return 0;
 }

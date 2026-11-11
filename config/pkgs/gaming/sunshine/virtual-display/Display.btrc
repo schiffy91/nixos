@@ -11,7 +11,8 @@ class SunshineDisplay {
         saved.set("primary", JSONValue.makeString(primary));
         var outputs = JSONValue.makeArray();
         for output in inventory.get("outputs").elements() {
-            if (!output.get("enabled").asBool() || output.get("name").asString().equals(virtualOutput)) { continue; }
+            var enabled = output.get("enabled");
+            if ((!enabled.isNull() && !enabled.asBool()) || output.get("name").asString().equals(virtualOutput)) { continue; }
             var state = JSONValue.makeObject();
             for field in ["name", "pos", "scale", "hdr", "wcg", "priority"] { state.set(field, output.get(field)); }
             state.set("mode", JSONValue.makeNull());

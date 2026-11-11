@@ -9,7 +9,9 @@ class ActiveDisplay {
         var scale = 0.0;
         for output in outputs.elements() {
             var priority = output.get("priority");
-            if (!output.get("enabled").asBool() || !priority.isInt() || priority.asInt() < 1 || !output.get("scale").isNumber()) { continue; }
+            // KScreen omits enabled=true; disabled outputs explicitly carry false.
+            var enabled = output.get("enabled");
+            if ((!enabled.isNull() && (!enabled.isBool() || !enabled.asBool())) || !priority.isInt() || priority.asInt() < 1 || !output.get("scale").isNumber()) { continue; }
             if (first == 0 || priority.asInt() < first) { first = priority.asInt(); scale = output.get("scale").asFloat(); }
         }
         var live = (int)(96.0 * scale + 0.5);

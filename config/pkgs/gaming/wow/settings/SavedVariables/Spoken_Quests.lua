@@ -36,11 +36,11 @@ SpokenQuestsSettings = {
 ["Creature-0-7067-2991-2-257554-ACEECED2AA"] = {
 ["126f193a"] = true,
 },
-["Creature-0-7067-2991-2-263113-ACEECED2AA"] = {
-["6fb686a1"] = true,
-},
 ["Creature-0-7067-2991-2-263664-ACEECED2AA"] = {
 ["4bc7b0db"] = true,
+},
+["Creature-0-7067-2991-2-263113-ACEECED2AA"] = {
+["6fb686a1"] = true,
 },
 ["Creature-0-7067-2991-2-254087-ACEECED2AA"] = {
 ["36007676"] = true,
@@ -48,11 +48,11 @@ SpokenQuestsSettings = {
 ["Creature-0-7067-2991-2-251903-ACEECED2AA"] = {
 ["210c9168"] = true,
 ["2f664be5"] = true,
-["74aa16bd"] = true,
+["5526d668"] = true,
 ["1fddd4ea"] = true,
 ["6ba4abad"] = true,
+["74aa16bd"] = true,
 ["18439689"] = true,
-["5526d668"] = true,
 ["719d0f30"] = true,
 },
 ["Creature-0-7067-2991-2-251376-ACEECED2AA"] = {
@@ -75,61 +75,55 @@ SpokenQuestsSettings = {
 },
 ["Holy Schiff"] = {
 ["hasSeenGossipForNPC"] = {
-["Creature-0-7069-0-2-5688-0CF195EFBD"] = {
-["748c2a35"] = true,
-},
-["Creature-0-6822-0-2-1496-0FC5616462"] = {
+[1652] = {
 ["3b668c0c"] = true,
 },
-["Creature-0-7065-0-2-244808-B4B6EDC7C0"] = {
+[244808] = {
 ["03cd17a9"] = true,
 },
-["Creature-0-6822-0-2-6491-EAC75D138B"] = {
-["2b40c50f"] = true,
-},
-["Creature-0-7069-0-2-265812-0CF195EFBD"] = {
-["4bc7b0db"] = true,
-},
-["Creature-0-7068-0-3-1515-A1901393B5"] = {
-["367c2f4e"] = true,
-},
-["Creature-0-6822-0-2-246389-0FC5616462"] = {
-["74af10c5"] = true,
-["4bbe72e5"] = true,
-},
-["Creature-0-6804-0-2-1652-08208D3CC4"] = {
+[1745] = {
 ["3b668c0c"] = true,
 },
-["Creature-0-7069-0-2-1652-D0257D1FF0"] = {
+[276067] = {
+["7576a14d"] = true,
+},
+[1496] = {
 ["3b668c0c"] = true,
 },
-["Creature-0-6827-0-2-265812-11BEA8EB45"] = {
-["4bc7b0db"] = true,
+[246152] = {
+["271580fe"] = true,
 },
-["Creature-0-7069-0-2-1496-D0257D1FF0"] = {
-["3b668c0c"] = true,
+[246349] = {
+["20c2c8e6"] = true,
 },
-["Creature-0-6822-0-2-1500-0FC5616462"] = {
+[1500] = {
 ["7c9fac83"] = true,
 },
-["Creature-0-7065-0-2-246143-5D24BC6D5F"] = {
+[246143] = {
 ["48d792cb"] = true,
 ["60a1fb8a"] = true,
 },
-["Creature-0-6822-0-2-246349-0FC5616462"] = {
-["20c2c8e6"] = true,
+[5725] = {
+["3b668c0c"] = true,
 },
-["Creature-0-6822-0-2-276067-0FC5616462"] = {
-["7576a14d"] = true,
+[6491] = {
+["2b40c50f"] = true,
 },
-["Creature-0-6827-0-2-244808-B0C940D01A"] = {
-["03cd17a9"] = true,
+[246389] = {
+["74af10c5"] = true,
+["4bbe72e5"] = true,
 },
-["Creature-0-7069-0-2-1515-D0257D1FF0"] = {
+[1515] = {
 ["367c2f4e"] = true,
 },
-["Creature-0-7069-0-2-1746-D0257D1FF0"] = {
+[265812] = {
+["4bc7b0db"] = true,
+},
+[1746] = {
 ["3b668c0c"] = true,
+},
+[5688] = {
+["748c2a35"] = true,
 },
 },
 },

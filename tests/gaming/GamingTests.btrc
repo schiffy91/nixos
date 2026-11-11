@@ -303,6 +303,9 @@ class GamingTests {
         var stream = "{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":false,\"priority\":0,\"scale\":2.5},{\"name\":\"Virtual-sunshine-vmon\",\"enabled\":true,\"priority\":1,\"scale\":1}]}";
         assert(ActiveDisplay.dpi(desk, 96) == 240);
         assert(ActiveDisplay.dpi(stream, 240) == 96);
+        // Real KScreen JSON omits enabled on the active virtual output.
+        assert(ActiveDisplay.dpi("{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":false,\"priority\":2,\"scale\":2.5},{\"name\":\"Virtual-sunshine-vmon\",\"connected\":true,\"priority\":1,\"scale\":1}]}", 240) == 96);
+        assert(ActiveDisplay.dpi("{\"outputs\":[{\"name\":\"DP-1\",\"connected\":true,\"priority\":1,\"scale\":2.5}]}", 96) == 240);
         assert(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":false,\"priority\":1,\"scale\":1}]}", 240) == 240);
         assert(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":true,\"priority\":1,\"scale\":40}]}", 240) == 240);
         assert(ActiveDisplay.dpi("not json", 240) == 240);

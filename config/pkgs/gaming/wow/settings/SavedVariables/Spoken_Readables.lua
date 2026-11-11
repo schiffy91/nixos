@@ -6,13 +6,13 @@ SpokenReadablesSettings = {
 ["compendiumVoicedOnly"] = false,
 ["autoplay"] = true,
 ["voiceLanguage"] = "auto",
-["unlockUnfound"] = false,
+["compendiumByZone"] = true,
 ["compendiumFoundOnly"] = true,
 ["readWholeBook"] = true,
 ["readOnce"] = false,
 ["closeWhenRead"] = false,
 ["debug"] = false,
 ["fallbackLanguage"] = "enUS",
-["compendiumByZone"] = true,
+["unlockUnfound"] = false,
 }
 SpokenBooksSettings = nil

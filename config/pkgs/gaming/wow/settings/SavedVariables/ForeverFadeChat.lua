@@ -1,0 +1,4 @@
+
+ForeverFadeChatDB = {
+["lineSeconds"] = 60,
+}

@@ -35,11 +35,18 @@ class SettingsTests {
         self.fixture.write("desktop/WTF/Account/FIRST/SavedVariables/Details_DataStorage.lua", "history");
         self.fixture.write("desktop/WTF/Account/FIRST/SavedVariables/Manual.lua", "unmanaged");
         self.fixture.write("desktop/WTF/Account/FIRST/91/Character/SavedVariables/Details.lua", "character");
+        self.fixture.write("desktop/WTF/Account/FIRST/91/Character/AddOns.txt", "Details: disabled");
+        self.fixture.write("desktop/WTF/Account/FIRST/91/Character/chat-cache.txt", "chat position");
+        self.fixture.write("desktop/WTF/Account/FIRST/91/Character/macros-cache.txt", "private macro");
+        self.fixture.write("desktop/WTF/Account/FIRST/91/Character/SavedVariables/Manual.lua", "character manual");
         self.fixture.write("repository/settings/SavedVariables/Stale.lua", "stale");
         self.run("capture", "desktop", "");
         Check.equal(self.read("repository/settings/bindings-cache.wtf"), "bindings", "capture layout");
         Check.equal(self.read("repository/settings/SavedVariables/Details.lua"), "layout", "capture managed addon");
-        Check.that(FileSystem.listDir(store).len == 2 && FileSystem.listDir(PathTools.join(store, "SavedVariables")).len == 1, "capture only layout and managed addons");
+        Check.that(FileSystem.listDir(store).len == 3 && FileSystem.listDir(PathTools.join(store, "SavedVariables")).len == 1, "capture only layout and managed addons");
+        Check.equal(self.read("repository/settings/91/Character/SavedVariables/Details.lua"), "character", "capture character addon settings");
+        Check.equal(self.read("repository/settings/91/Character/AddOns.txt"), "Details: disabled", "capture enabled addons");
+        Check.that(!FileSystem.exists(self.fixture.path("repository/settings/91/Character/macros-cache.txt")) && !FileSystem.exists(self.fixture.path("repository/settings/91/Character/SavedVariables/Manual.lua")), "exclude character macros and unmanaged addons");
 
         self.fixture.write("deck/WTF/Config.wtf", "deck graphics");
         self.fixture.write("deck/WTF/Account/SECOND/SavedVariables/Details.lua", "deck layout");
@@ -47,6 +54,8 @@ class SettingsTests {
         self.run("apply", "deck", store);
         Check.equal(self.read("deck/WTF/Account/SECOND/SavedVariables/Details.lua"), "layout", "apply managed addon");
         Check.equal(self.read("deck/WTF/Account/SECOND/bindings-cache.wtf"), "bindings", "apply layout");
+        Check.equal(self.read("deck/WTF/Account/SECOND/91/Character/AddOns.txt"), "Details: disabled", "sync enabled addons");
+        Check.equal(self.read("deck/WTF/Account/SECOND/91/Character/chat-cache.txt"), "chat position", "sync chat geometry");
         Check.equal(self.read("deck/WTF/.nixos-wow-settings-backup/SECOND/SavedVariables/Details.lua"), "deck layout", "back up replaced settings");
         Check.equal(self.read("deck/WTF/Config.wtf"), "deck graphics", "graphics stay per machine");
         Check.equal(self.read("deck/WTF/Account/SECOND/SavedVariables/Manual.lua"), "deck manual", "unmanaged settings stay");
