@@ -45,6 +45,12 @@ class FakeDeckPad implements IUSBFunction {
         fclose(file);
     }
 
+    // A 16-bit value, low byte first.
+    class void put(Bytes packet, int offset, int value) {
+        packet.set(offset, value & 0xFF);
+        packet.set(offset + 1, (value >> 8) & 0xFF);
+    }
+
     public int control(USBSetup setup, Bytes data) {
         if (setup.scope() == USB_REQUEST_STANDARD && setup.request == USB_REQUEST_GET_DESCRIPTOR && (setup.value >> 8) == USB_DESCRIPTOR_HID_REPORT) {
             Bytes descriptor = FakeDeckPad.reportDescriptor();
@@ -72,8 +78,20 @@ class FakeDeckPad implements IUSBFunction {
         packet.set(2, 0x09);
         packet.set(3, 0x40);
         packet.set(4, self.sequence & 0xFF);
+        // Held: A, d-pad up, a finger on the left pad at (1000, -2000) with
+        // pressure 500, one g on the accelerometer's Z, 100 on the gyro's X,
+        // the right trigger at 20000 and the left stick at (12000, -8000).
         packet.set(8, 0x80);
         packet.set(9, 0x01);
+        packet.set(10, 0x08);
+        FakeDeckPad.put(packet, 16, 1000);
+        FakeDeckPad.put(packet, 18, -2000);
+        FakeDeckPad.put(packet, 28, 16384);
+        FakeDeckPad.put(packet, 30, 100);
+        FakeDeckPad.put(packet, 46, 20000);
+        FakeDeckPad.put(packet, 48, 12000);
+        FakeDeckPad.put(packet, 50, -8000);
+        FakeDeckPad.put(packet, 56, 500);
         self.sequence++;
         return true;
     }

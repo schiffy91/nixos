@@ -135,7 +135,12 @@ networks may connect at all. The host role loads `vhci-hcd` and keeps trying
   buttons arrive on the PC as the controller's, reading it does not cancel
   transfers, and the kernel gets it back when the host leaves. `deckpad
   check` passes on that pad and `deckpad measure` on the PC counts no lost
-  report.
+  report. The PC also runs a host that shares no code with deckpad
+  (`SdlHost.c`): SDL's Steam Controller driver, the one games and Steam
+  Input build on. It takes the controller by its identity and reads the
+  held buttons, stick, trigger, pad touch, accelerometer, gyro and battery
+  that the emulated pad reports, at the pad's rate, and its rumble arrives
+  at the pad as the Deck's rumble command.
 - The standard library's own tests cover the layers underneath: USB/IP, the
   gadget at high speed and SuperSpeed, Bluetooth pairing rules, the secure
   channel and OpenSSH key formats.
@@ -165,9 +170,10 @@ the emulated pad.
 
 Not verified without hardware: the real pad's firmware (the emulated one
 answers the same requests but is not it), the Deck's port in device mode, a
-real Bluetooth radio, and how Steam treats the controller on each link. The report layouts follow SDL and `hid-steam`; the
-Deck-to-controller mapping has only been shown working over Bluetooth, by the
-project credited below. On Linux 6.18 `hid-generic` binds `28de:1302`: that
+real Bluetooth radio, and how the Steam client itself treats the controller
+on each link. The report layouts follow SDL and `hid-steam`, and SDL's driver
+reads them in the VM test; the Steam client has only been shown accepting a
+Deck as this controller over Bluetooth, by the project credited below. On Linux 6.18 `hid-generic` binds `28de:1302`: that
 kernel's `hid-steam` does not know it yet, so there is no kernel gamepad
 without Steam, which reads hidraw itself.
 

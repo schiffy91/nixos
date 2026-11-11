@@ -7,7 +7,8 @@
 #     controller's and one a host's, under the real stack and daemon;
 #   - the Deck's own pad: an emulated Deck controller is attached to the
 #     serving machine, which takes it from the kernel, reads it and gives
-#     it back.
+#     it back. On the PC, SDL's own Steam Controller driver reads what the
+#     pad holds through the whole chain and rumbles it.
 # It boots VMs, so it stays out of the gaming check farm; run it with
 #   nix build --impure --expr 'let f = builtins.getFlake (toString ./.); in import ./tests/gaming/deckpad/kernel.nix { pkgs = import f.inputs.nixpkgs { system = "x86_64-linux"; }; inherit (f) inputs; }'
 { pkgs, inputs }:
@@ -37,6 +38,11 @@ let
     env.NIX_CFLAGS_COMPILE = "-I${pkgs.lib.getDev pkgs.dbus}/include/dbus-1.0 -I${pkgs.lib.getLib pkgs.dbus}/lib/dbus-1.0/include";
     linkFlags = [ "-ldbus-1" "-lsodium" ];
   };
+  # A host that shares no code with deckpad: SDL's Steam Controller driver.
+  sdlHost = pkgs.runCommandCC "deckpad-sdl-host" { buildInputs = [ pkgs.sdl3 ]; } ''
+    mkdir -p $out/bin
+    $CC -O2 -Wall -Wextra -o $out/bin/deckpad-sdl-host ${./SdlHost.c} -lSDL3 -lm
+  '';
   # One service per link, so each is exercised alone.
   service = name: arguments: {
     serviceConfig = {
@@ -154,15 +160,25 @@ in pkgs.testers.runNixOSTest {
         # not the kernel driver's, and the pad was told to be a plain gamepad.
         deck.wait_until_succeeds(f"test $({driver}) = usbfs", timeout=60)
         deck.wait_until_succeeds("grep -q 'interface 2 command 81' /run/fake-deck/commands && grep -q 'interface 2 command 87' /run/fake-deck/commands", timeout=60)
-        # The pad's A and d-pad up arrive on the PC as the controller's.
+        # The pad's A, d-pad up and left pad touch arrive on the PC as the
+        # controller's.
         pc.wait_until_succeeds("ls /sys/bus/hid/devices | grep -qi ':28DE:1302\\.'", timeout=120)
         node = pc.wait_until_succeeds("basename /sys/bus/hid/devices/*28DE:1302*/hidraw/hidraw*", timeout=120).strip()
-        pc.wait_until_succeeds(f"timeout 10 head -c 54 /dev/{node} | od -An -tx1 -w54 | grep -q '^ 42 .. 01 20 00 00'", timeout=60)
+        pc.wait_until_succeeds(f"timeout 10 head -c 54 /dev/{node} | od -An -tx1 -w54 | grep -q '^ 42 .. 01 20 00 02'", timeout=60)
         # The PC reads the controller as Steam does: no report is lost, they
         # keep the pad's pace and none is held up on the way.
         measured = pc.succeed("deckpad measure 5")
         print(measured)
         assert "controller: PASS" in measured and ", 0 lost," in measured, measured
+        # SDL's Steam Controller driver, which shares no code with deckpad,
+        # takes the controller and sees what the Deck's pad holds: buttons,
+        # stick, trigger, pad touch, motion and battery. Its rumble reaches
+        # the pad as the Deck's rumble command.
+        deck.fail("grep -q 'interface 2 command eb' /run/fake-deck/commands")
+        status, seen = pc.execute("${sdlHost}/bin/deckpad-sdl-host 30 2>&1")
+        print(seen)
+        assert status == 0 and seen.endswith("PASS: SDL read the Deck as a Steam Controller\n"), seen
+        deck.wait_until_succeeds("grep -q 'interface 2 command eb' /run/fake-deck/commands", timeout=30)
         # The pad is the service's now. The check says so and leaves it
         # there: the service keeps serving and the PC loses no report.
         pc.succeed("(deckpad measure 8 > /tmp/measured 2>&1; echo finished >> /tmp/measured) > /dev/null 2>&1 &")
