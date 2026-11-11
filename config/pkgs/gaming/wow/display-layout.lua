@@ -151,10 +151,31 @@ local function PrepareTooltip()
     end)
 end
 
+local softTargetButton
+local function PrepareSoftTarget(driver)
+    if not driver and not softTargetButton then return end
+    if not softTargetButton then
+        softTargetButton = CreateFrame("Button", "FlareUISoftTarget", UIParent, "SecureActionButtonTemplate")
+        softTargetButton:RegisterForClicks("AnyDown", "AnyUp")
+        softTargetButton:SetAttribute("useOnKeyDown", true)
+        softTargetButton:SetAttribute("type", "target")
+        _G["BINDING_NAME_CLICK FlareUISoftTarget:LeftButton"] = "Select Soft Target (Enemy First)"
+    end
+    -- The secure driver can change units during combat. Selecting never starts
+    -- an attack or interacts; modified R3 retains the native Interact binding.
+    if driver then
+        RegisterAttributeDriver(softTargetButton, "unit", driver)
+    else
+        UnregisterAttributeDriver(softTargetButton, "unit")
+        softTargetButton:SetAttribute("unit", nil)
+    end
+end
+
 local function ApplyProfile()
     if InCombatLockdown() or editMode:IsInEditMode() then pending = true; return end
     pending = nil
     local settings = Settings()
+    PrepareSoftTarget(settings and settings.softTargetUnit)
     if not settings then return end
     for name, value in pairs(settings.cvars or {}) do
         if GetCVar(name) ~= nil and GetCVar(name) ~= value then SetCVar(name, value) end

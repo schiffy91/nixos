@@ -75,14 +75,21 @@ bars in the Forever client. Slots 1–8 are X, Y, B, A, D-pad left, right, up,
 down. No modifier selects Gamepad Bar 1; LT selects Bar 2; RT selects Bar 3;
 LT+RT selects Bar 4. The triggers must emulate Shift and Ctrl respectively.
 The current layout reserves unmodified A for Jump; its trigger-modified slots
-remain on Bars 2–4. LB uses Target Scan Enemy, RB cycles enemy targets, and R3
-uses Interact With Target on all four modifier layers. The shoulder and trigger
+remain on Bars 2–4. LB uses Target Scan Enemy and RB cycles enemy targets.
+Unmodified R3 selects the enemy soft target first, then a friendly soft target
+when no enemy is available; with neither, it leaves the current target alone.
+LT+R3, RT+R3 and LT+RT+R3 use Interact With Target for talking, looting and
+objects. Selecting a unit alone does not start an attack or interact with it.
+The shoulder and trigger
 indicators are anchored around the cluster center so narrowing the bar does not
 make them overlap.
-Enemy soft targeting follows the camera while using a gamepad; explicitly
-selected targets stay locked. Friendly soft targeting and forced soft-target
-priority are off. Gamepad soft interaction supports R3 for nearby objects and
-NPCs. These preferences are saved in ConsolePort and the shared profile CVars,
+Enemy and friendly soft targeting follow the camera while using a gamepad;
+explicitly selected targets stay locked. Forced hard targeting remains off.
+Friendly soft targets can receive healing spells before being explicitly selected.
+The existing FlareUI integration supplies the secure `FlareUISoftTarget` button;
+its `displayLayout.softTargetUnit` condition is editable in SavedVariables and
+the R3 binding lives in the normal bindings cache. No personal macro is required.
+These preferences are saved in ConsolePort and the shared profile CVars,
 so switching display or input profiles retains the same targeting behavior.
 The FlareUI display profiles carry the trigger modifier and action-camera CVars
 in editable SavedVariables. They apply when the profile loads. Without those

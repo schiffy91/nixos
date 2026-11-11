@@ -9,7 +9,7 @@ ConsolePortSettings = {
     ["mouseHideCursorOnMovement"] = true,
     ["trgtEnemy"] = 1,
     ["trgtForce"] = 0,
-    ["trgtFriend"] = 0,
+    ["trgtFriend"] = 1,
     ["trgtMatchLocked"] = 1,
     ["tutorialState"] = 14,
 }
