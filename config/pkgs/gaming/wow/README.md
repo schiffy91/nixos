@@ -76,10 +76,15 @@ down. No modifier selects Gamepad Bar 1; LT selects Bar 2; RT selects Bar 3;
 LT+RT selects Bar 4. The triggers must emulate Shift and Ctrl respectively.
 The current layout reserves unmodified A for Jump; its trigger-modified slots
 remain on Bars 2–4. LB uses Target Scan Enemy and RB cycles enemy targets.
-Unmodified R3 selects the enemy soft target first, then a friendly soft target
-when no enemy is available; with neither, it leaves the current target alone.
-LT+R3, RT+R3 and LT+RT+R3 use Interact With Target for talking, looting and
-objects. Selecting a unit alone does not start an attack or interact with it.
+R3 is bound to native Interact With Target. The FlareUI controller integration
+temporarily routes it to selection when necessary: a living enemy soft target
+has first priority and is selected and attacked in one press (Hunters also start
+Auto Shot). A friendly is selected when needed, then the next press interacts.
+An unobstructed NPC or object uses native interaction immediately. If an old
+hard target would steal object interaction, the first press clears it and the
+next interacts. During combat, friendly/object switches also clear a blocking
+target first because unit identity is restricted. Trigger-modified R3 retains
+native interaction, but talking and looting no longer require a trigger.
 The shoulder and trigger
 indicators are anchored around the cluster center so narrowing the bar does not
 make them overlap.
@@ -88,9 +93,14 @@ explicitly selected targets stay locked while soft candidates can change.
 `SoftTargetMatchLocked=0` and `SoftTargetWithLocked=2` allow aiming at another
 candidate without clearing the current target. Forced hard targeting remains off.
 Friendly soft targets can receive healing spells before being explicitly selected.
-The existing FlareUI integration supplies the secure `FlareUISoftTarget` button;
-its `displayLayout.softTargetUnit` condition is editable in SavedVariables and
-the R3 binding lives in the normal bindings cache. No personal macro is required.
+The existing FlareUI integration supplies secure action buttons and a binding
+driver, selected by the editable `displayLayout.softTargetKey` preference. The
+R3 binding lives in the normal bindings cache; rebinding it in-game releases
+the override. No personal macro or additional addon is required. This follows
+the supported native-interaction/secure-selection approach demonstrated by
+[InteractFix](https://github.com/Nicsilver/InteractFix), using soft units instead
+of mouseover. Protected NPC/object interaction cannot be appended to the
+selection macro, so some switches still require two presses of the same key.
 These preferences are saved in ConsolePort and the shared profile CVars,
 so switching display or input profiles retains the same targeting behavior.
 ConsolePort's crosshair, centered-cursor tooltip and click override are disabled.

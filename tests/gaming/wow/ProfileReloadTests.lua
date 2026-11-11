@@ -21,6 +21,7 @@ function db.RegisterCallback(_,event,fn)
     callbacks[event]=callbacks[event] or {};table.insert(callbacks[event],fn)
 end
 local editMode={RegisterCallback=db.RegisterCallback,IsInEditMode=function() return editing end}
+function ns.ApplyControllerTargeting() end
 function LibStub() return editMode end
 function InCombatLockdown() return combat end
 function GetPhysicalScreenSize() return width,height end

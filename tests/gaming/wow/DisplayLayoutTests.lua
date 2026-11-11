@@ -6,8 +6,7 @@ local cvars = { GamePadEmulateShift = 'none' }
 function GetCVar(name) return cvars[name] end
 function SetCVar(name, value) assert(cvars[name] ~= nil); cvars[name] = value end
 local current = 'Handheld / Controller'
-local targetDriver = '[@softenemy,exists] softenemy; [@softfriend,exists] softfriend; nil'
-local targetButton, targetDriverWrites = nil, 0
+local targetKey, targetWrites = nil, 0
 local profiles = {}
 for name, scale in pairs({ Handheld = .96, TV = 768/900, Desk = .64 }) do
     for _, input in ipairs({'Keyboard', 'Controller'}) do
@@ -15,7 +14,7 @@ for name, scale in pairs({ Handheld = .96, TV = 768/900, Desk = .64 }) do
             enabled = true, scale = scale, input = input:lower(),
             chat = {x = 24, y = 24, width = 320, height = 150},
             cvars = {GamePadEmulateShift='PADLTRIGGER', unavailable='1'},
-            softTargetUnit = targetDriver,
+            softTargetKey = 'PADRSTICK',
             tooltip = {gap=12,y=0},
             toolbar = input=='Controller' and {height=44,xpHeight=8,bottom=0,padding=2,minGap=4,iconWidth=28} or nil,
         } }
@@ -91,20 +90,10 @@ ChatFrame1 = {ClearAllPoints=function() end, SetPoint=function() end,
     SetSize=function() chatWrites=chatWrites+1 end, GetEffectiveScale=function() return 1 end,
     GetRect=function() return 30,40,310,140 end}
 function FCF_SavePositionAndDimensions() end
-function RegisterAttributeDriver(button, attribute, driver)
-    assert(not combat and button==targetButton and attribute=='unit')
-    button.driver=driver;targetDriverWrites=targetDriverWrites+1
+function ns.ApplyControllerTargeting(key)
+    assert(not combat);targetKey=key;targetWrites=targetWrites+1
 end
-function UnregisterAttributeDriver(button, attribute)
-    assert(not combat and button==targetButton and attribute=='unit');button.driver=nil
-end
-function CreateFrame(kind, name, parent, template)
-    if kind=='Button' then
-        assert(not combat and not targetButton and name=='FlareUISoftTarget' and parent==UIParent and template=='SecureActionButtonTemplate')
-        targetButton={attributes={},RegisterForClicks=function(self,...) self.clicks={...} end,
-            SetAttribute=function(self,key,value) assert(not combat);self.attributes[key]=value end}
-        return targetButton
-    end
+function CreateFrame()
     local frame={RegisterEvent=function() end, SetScript=function(self, _, fn) self.event=fn end}
     table.insert(frames,frame); return frame
 end
@@ -115,8 +104,7 @@ local function event(name) for _, f in ipairs(frames) do f:event(name) end; flus
 assert(loadfile(source))('FlareUI',ns)
 event('DISPLAY_SIZE_CHANGED'); assert(dialogs==0 and chatWrites==0)
 event('PLAYER_LOGIN'); assert(dialogs==0 and chatWrites==1)
-assert(targetButton.driver==targetDriver and targetButton.attributes.type=='target' and targetButton.attributes.useOnKeyDown==true)
-assert(targetButton.clicks[1]=='AnyDown' and targetButton.clicks[2]=='AnyUp')
+assert(targetKey=='PADRSTICK')
 assert(menu.width==355.25 and menu.height==33.5 and menu.anchor[2]==UIParent and menu.anchor[5]==0)
 local function assertMatchingBars()
     assert(math.abs(grid.width*grid.scale-menu.width)<.001 and grid.childXPadding==2, 'menu must fit its actual icon row')
@@ -167,17 +155,17 @@ local shown=dialogs
 event('DISPLAY_SIZE_CHANGED'); assert(dialogs==shown, 'repeated display events must not repeat the prompt')
 db:SetProfile('TV / Keyboard'); assert(not enabled, 'keyboard profile must disable only ConsolePort_Bar')
 combat=true; width,height=6016,3384
-local beforeDriverWrites=targetDriverWrites
+local beforeTargetWrites=targetWrites
 event('DISPLAY_SIZE_CHANGED'); assert(current=='TV / Keyboard', 'do not switch during combat')
-assert(targetDriverWrites==beforeDriverWrites, 'do not reconfigure protected targeting during combat')
+assert(targetWrites==beforeTargetWrites, 'do not reconfigure protected targeting during combat')
 combat=false; event('PLAYER_REGEN_ENABLED'); assert(current=='Desk / Keyboard' and db.global.uiScaleCustom==.64 and not enabled)
 editing=true; width,height=1280,800
 event('DISPLAY_SIZE_CHANGED'); assert(current=='Desk / Keyboard', 'defer switching until Edit Mode closes')
 editing=false; for _, fn in ipairs(callbacks.exit) do fn() end; flush()
 assert(current=='Handheld / Keyboard')
-profiles['Handheld / Keyboard'].displayLayout.softTargetUnit=nil
+profiles['Handheld / Keyboard'].displayLayout.softTargetKey=nil
 db:SetProfile('Handheld / Keyboard')
-assert(not targetButton.driver and not targetButton.attributes.unit, 'removing the preference must disable the custom target action')
+assert(targetKey==nil, 'removing the preference must release the targeting override')
 profiles.Unmanaged={};db:SetProfile('Unmanaged');shown=dialogs;width,height=3840,2160
 event('DISPLAY_SIZE_CHANGED');assert(current=='Unmanaged' and dialogs==shown,'unmanaged profiles opt out')
 print('PASS: display selection, input preservation, reload requests, combat/Edit Mode deferral and opt-out')

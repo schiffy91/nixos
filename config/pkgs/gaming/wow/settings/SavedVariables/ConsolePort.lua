@@ -778,7 +778,7 @@ ConsolePortShared = {
                 ["SHIFT-"] = "TARGETNEARESTENEMY",
             },
             ["PADRSTICK"] = {
-                [""] = "CLICK FlareUISoftTarget:LeftButton",
+                [""] = "INTERACTTARGET",
                 ["CTRL-"] = "INTERACTTARGET",
                 ["CTRL-SHIFT-"] = "INTERACTTARGET",
                 ["SHIFT-"] = "INTERACTTARGET",
