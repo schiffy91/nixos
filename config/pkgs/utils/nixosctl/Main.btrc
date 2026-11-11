@@ -117,6 +117,22 @@ class NixosCtl {
             || command.equals("tpm2");
     }
 
+    public bool asksForHelp(CLIArgs args) {
+        for (int index = 1; index < args.count(); index++) {
+            if (args.get(index).equals("--help") || args.get(index).equals("-h")) { return true; }
+        }
+        return false;
+    }
+
+    public void requireRebuildArguments(CLIArgs args) {  // a mistyped option must not rebuild the machine
+        for (int index = 1; index < args.count(); index++) {
+            var argument = args.get(index);
+            if (!argument.equals("--clean") && !argument.equals("--upgrade") && !argument.equals("--rebuild-filesystem") && !argument.equals("--reboot")) {
+                NixosLog.fatal(f"nixosctl {args.command()}: unknown argument '{argument}'. Run: nixosctl help");
+            }
+        }
+    }
+
     public int sudoSelf(CLIArgs args) {
         var command = f"sudo {ShellWords.quote(args.program)}";
         for value in args.values {
@@ -196,6 +212,13 @@ class NixosCtl {
         }
         if (command.equals("apps")) {
             return self.runApp(args);
+        }
+        if (self.asksForHelp(args)) {
+            self.usage();
+            return 0;
+        }
+        if (command.equals("update") || command.equals("upgrade")) {
+            self.requireRebuildArguments(args);
         }
         if (self.needsTestShell(args)) {
             return self.nixShellSelf(args);
