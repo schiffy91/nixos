@@ -690,13 +690,13 @@ profiles turn off whole groups:
 | `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |
 | `gaming/assettocorsa/default.nix` | Assetto Corsa content import, CM presets, control bindings, UI scale, and the CSP wheel menu |
 | `gaming/simracing/default.nix` | Enables the `logitech-trueforce` kernel module on x86_64 for wheel force feedback |
-| `gaming/semu/default.nix` | Installs `semu` from its flake input, sets `SEMU_TARGET`, writes the paths override, and runs the save-sync user service |
+| `gaming/semu/default.nix` | Installs `semu` from its flake input, sets `SEMU_TARGET` (and `SEMU_ROOT` when `root` is set), and declares the library as an rclone offline folder (`drive`) |
 | `gaming/btrsmith/default.nix` | Installs BTRSmith when an exact flake input provides it |
 | `gaming/wine/default.nix` | `wine-prefix-dpi`, which writes `LogPixels` into a prefix registry |
 | `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `utils/nixosctl/default.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `utils/nixosctl/ui/default.nix` | Packages the BTRC tray GUI for `nixosctl` |
-| `utils/rclone.nix` | Defines a user rclone mount for `~/Drive` |
+| `utils/rclone.nix` | Defines a user rclone mount for `~/Drive`, and an hourly two-way `rclone bisync` for each `settings.apps.utils.rclone.offline` folder |
 
 The custom Proton tree under `config/pkgs/gaming/proton/custom` is a
 large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that

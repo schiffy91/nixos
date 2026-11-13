@@ -46,5 +46,18 @@ in {
     settings.apps.utils.packages = mkSetting (listOf package) [];
     settings.apps.utils.onePassword.enable = mkSetting bool config.settings.apps.utils.enable;
     settings.apps.utils.rclone.enable = mkSetting bool config.settings.apps.utils.enable;
+    settings.apps.utils.rclone.offline = lib.mkOption {
+      default = {};
+      description = "Drive folders kept as full local copies by a two-way rclone bisync. The ~/Drive mount stays a remote view of everything else.";
+      type = attrsOf (submodule {
+        options = {
+          remote = lib.mkOption { type = str; description = "Folder inside the Drive, for example media/Games/Emulation."; };
+          local = lib.mkOption { type = strMatching "/.+"; description = "Absolute local folder."; };
+          marker = lib.mkOption { type = str; default = ""; description = "File that must exist in the local folder before a sync runs, so an unmounted card is never read as an emptied folder."; };
+          exclude = lib.mkOption { type = listOf str; default = []; description = "rclone filter patterns left out of the sync on both sides."; };
+          interval = lib.mkOption { type = str; default = "hourly"; description = "systemd calendar expression for the timer."; };
+        };
+      });
+    };
   };
 }

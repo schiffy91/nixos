@@ -88,8 +88,8 @@ let
     steamDefinitions = deck.configuration.options.programs.steam.package.definitionsWithLocations;
   in
     check (!noGaming.programs.steam.enable && !noGaming.services.sunshine.enable
-      && !(noGaming.systemd.user.services ? semu-sync))
-      "Disabling gaming must disable Steam, Sunshine and Semu services."
+      && !(noGaming.environment.sessionVariables ? SEMU_TARGET) && !(noGaming.systemd.user.services ? rclone-offline-emulation))
+      "Disabling gaming must disable Steam, Sunshine, Semu and its library sync."
     ++ check (!noDev.programs.zsh.enable && !(builtins.elem "claude-code" (names noDev))
       && !(builtins.elem "codex" (names noDev)) && !(builtins.elem "lmstudio" (names noDev)))
       "Disabling dev must disable its shell and shared development packages."
@@ -134,8 +134,14 @@ let
       && !(config.home-manager.users.${config.settings.users.admin.username}.systemd.user.services ? chrome-launchers))
       [ noApps noUtils (disabled "utils.chrome") ])
       "Disabling Chrome or its package groups must remove PWA installation policy and launcher watching."
-    ++ check (handheld.settings.apps.gaming.semu.paths.roms == "/run/media/alexanderschiffhauer/SD/Emulation/ES-DE/ES-DE/ROMs")
-      "The shared Semu root must preserve the Deck's SD-card ROM directory."
+    ++ check (handheld.environment.sessionVariables.SEMU_ROOT == "/run/media/alexanderschiffhauer/SD/Emulation"
+      && handheld.settings.apps.utils.rclone.offline.emulation.local == "/run/media/alexanderschiffhauer/SD/Emulation"
+      && !(desktop.config.environment.sessionVariables ? SEMU_ROOT)
+      && desktop.config.settings.apps.utils.rclone.offline.emulation.local == "${desktop.config.settings.users.admin.homeDirectory}/Games/Emulation"
+      && desktop.config.systemd.user.services ? rclone-offline-emulation && desktop.config.systemd.user.timers ? rclone-offline-emulation)
+      "Semu's library must be the Deck's SD card and the desktop's Games folder, each synced with the Drive."
+    ++ check (lib.all (path: !(lib.hasInfix "semu" path) && !(lib.hasSuffix "/ES-DE" path)) desktop.config.settings.disk.immutability.persist.paths)
+      "Semu must persist nothing of its own: every asset lives in its library and its state is disposable."
     ++ check (handheld.settings.apps.gaming.sunshine.capture == "auto" && desktop.config.settings.apps.gaming.sunshine.capture == "kwin")
       "Sunshine must preserve the Deck's automatic session capture and desktop KWin capture."
     ++ check (lib.length steamDefinitions == 1

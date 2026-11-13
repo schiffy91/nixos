@@ -10,7 +10,6 @@ in pkgs.linkFarm "gaming-tests" [
   { name = "proton-tools"; path = import ./proton/tools { inherit pkgs inputs; }; }
   { name = "runtime"; path = import ./runtime { inherit pkgs inputs; }; }
   { name = "package-boundaries"; path = import ./package-boundaries.nix { inherit pkgs inputs; }; }
-  { name = "semu-mods"; path = import ./semu-mods.nix { inherit inputs pkgs; }; }
   { name = "sunshine-session"; path = import ./sunshine-session.nix { inherit pkgs; }; }
   { name = "proton-session"; path = import ./proton-session.nix { inherit pkgs; }; }
   { name = "affinity"; path = import ./affinity.nix { inherit pkgs inputs; }; }
