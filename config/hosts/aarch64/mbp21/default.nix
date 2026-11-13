@@ -33,6 +33,7 @@ in {
     dev.lmstudio.enable = true;
     dev.agents.rules = true;
   };
+  settings.networking.forwardAgentHosts = [ "FRACTAL-NORTH" "FRACTAL-NORTH.local" "STEAM-DECK-OLED" "STEAM-DECK-OLED.local" ]; # sudo there signs with the forwarded agent
   # Permission intent is reviewed/applied through System Settings.
   settings.macos.permissions = {
     schemaVersion = 1;

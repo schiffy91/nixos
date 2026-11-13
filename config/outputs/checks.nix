@@ -3,6 +3,7 @@ let
   mkHostLayoutCheck = import ../../tests/checks/host_layout.nix {
     inherit lib hosts publicHosts systems diskOperations homes;
   };
+  mkSshTrustCheck = import ../../tests/checks/ssh_trust.nix { inherit lib hosts systems; };
   mkDiskoCheck = import ../../tests/checks/disko_contract.nix {
     inherit lib;
     inherit (diskOperations) mkDiskoSystem;
@@ -48,7 +49,7 @@ in lib.genAttrs hosts.systems (system:
       prebuiltHost = (lib.head systemHosts).module;
       touchHost = if touchHost == null then null else touchHost.module;
     };
-  in lib.listToAttrs (diskChecks ++ hostChecks ++ [ installerCheck (mkHostLayoutCheck { inherit pkgs; }) ]))
+  in lib.listToAttrs (diskChecks ++ hostChecks ++ [ installerCheck (mkHostLayoutCheck { inherit pkgs; }) (mkSshTrustCheck { inherit pkgs; }) ]))
 // lib.genAttrs (lib.unique (map (host: host.system) hosts.darwin)) (system:
   lib.listToAttrs (map (host:
     let username = systems.darwinConfigurations.${host.name}.config.settings.users.admin.username;

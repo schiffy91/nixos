@@ -1,6 +1,6 @@
 { config, inputs, ... }:
 {
-  imports = [ ./pkgs/darwin.nix ./system/darwin/security.nix inputs.home-manager-darwin.darwinModules.home-manager ];
+  imports = [ ./pkgs/darwin.nix ./system/darwin/security.nix ./system/darwin/ssh.nix inputs.home-manager-darwin.darwinModules.home-manager ];
   nix.enable = config.settings.macos.nix.enable;
   nixpkgs.config.allowUnfree = true;
   programs.zsh.enable = config.settings.apps.dev.zsh.enable;

@@ -545,6 +545,13 @@ sudo's PAM module needs independently of SSH's `IdentityAgent` setting.
 SSH sessions retain their forwarded agent. For a terminal opened before this
 configuration was activated, run `export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"`.
 
+Every host trusts one SSH key, the `SSH Key` item in 1Password's `Private`
+vault, declared once in `settings.users.admin.authorizedKeys`. The Mac declares
+the same key for Remote Login (`settings.macos.remoteLogin.enable`, public keys
+only), points `ssh` at 1Password's agent, and links launchd's `SSH_AUTH_SOCK` to
+that agent so programs that ignore `ssh_config` use it too. The `ssh-trust`
+check fails when a host trusts any other key or accepts passwords.
+
 Sunshine supports administration with the SSH keys held in your local 1Password
 agent. Enable `settings.apps.gaming.sunshine.sshLogin.enable`; its public keys default
 to `settings.users.admin.authorizedKeys`. Existing Sunshine passwords keep

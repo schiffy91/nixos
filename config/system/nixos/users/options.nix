@@ -13,8 +13,7 @@ in {
     settings.users.admin.autoLogin.enable = mkSetting bool false;
     settings.users.admin.autoLock.enable = mkSetting bool true;
     settings.users.admin.authorizedKeys = mkSetting (listOf str) [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINJsoluI1m5T4iwuCbpSdHvLVdemN3v7wMrqk4e+XJA0"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI"  # the 1Password agent's key
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI"  # 1Password "SSH Key", the only trusted key
     ];
     settings.users.admin.extraGroups = mkSetting (listOf str) [ "wheel" "networkmanager" ];
     settings.users.admin.homeManager.enable = mkSetting bool true;
