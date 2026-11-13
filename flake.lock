@@ -914,11 +914,11 @@
         "retroarch": "retroarch"
       },
       "locked": {
-        "lastModified": 1794552351,
-        "narHash": "sha256-7iT2L8qPlMid75iheNtjA/rz6+qEOZXMhta97WdIX5A=",
+        "lastModified": 1794558738,
+        "narHash": "sha256-PpGIozT0CGulTWYREHt1aXK1LSO7SsQ8ZQvf7ZoAVeM=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "52b2b679f08565a78fb878999e9ccb6917a8fa90",
+        "rev": "47612d93c884bffdd96c52baccbada3b4b3a3ff4",
         "type": "github"
       },
       "original": {

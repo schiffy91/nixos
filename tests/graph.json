@@ -1160,6 +1160,13 @@
       "spec": "immutability/feature-disable/test.json"
     },
     {
+      "after": [
+        "persistence-ownership"
+      ],
+      "id": "rclone-offline-folder",
+      "spec": "persistence/offline-folder/test.json"
+    },
+    {
       "id": "gaming-runtime",
       "spec": "gaming/runtime/test.json",
       "after": []
@@ -1258,6 +1265,7 @@
     "networking-roaming",
     "host-picker",
     "immutability-feature-disable",
+    "rclone-offline-folder",
     "gaming-runtime",
     "sleep-lock-state",
     "recovery-artifacts",

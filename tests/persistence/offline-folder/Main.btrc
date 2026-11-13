@@ -1,0 +1,115 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+class OfflineFolder {
+    private Guest machine;
+    private string local = "/fixture/user/Library";
+    private string drive = "/srv/drive/media/Library";
+    private string state = "/fixture/user/.cache/rclone/bisync/library";
+    private string unit = "rclone-offline-library.service";
+
+    public OfflineFolder(Guest machine) { self.machine = machine; }
+
+    private string asUser(string command) { return "su fixture -s /bin/sh -c " + ShellWords.quote("export XDG_RUNTIME_DIR=/run/user/1000; " + command); }
+
+    private string user(string command) { return self.machine.succeed(self.asUser(command)); }
+
+    private void sync() { self.user(f"systemctl --user start {self.unit}"); }
+
+    private void put(string path, string content, string time) {
+        self.user(f"mkdir -p {ShellWords.quote(PathTools.dirname(path))} && printf %s {ShellWords.quote(content)} > {ShellWords.quote(path)} && touch -d {ShellWords.quote(time)} {ShellWords.quote(path)}");
+    }
+
+    private void holds(string path, string expected, string what) { Check.equal(self.machine.succeed(f"cat {ShellWords.quote(path)}"), expected, what); }
+
+    private void absent(string path) { self.machine.fail(f"test -e {ShellWords.quote(path)}"); }
+
+    private int count(string root) { return Strings.toInt(self.machine.succeed(f"find {root} -type f | wc -l").trim()); }
+
+    public void check() {
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.waitForUnit("user@1000.service");
+        self.machine.succeed("mkdir -p /srv/drive/media/Library /fixture/user && chown -R fixture /srv/drive /fixture/user");
+        self.user("mkdir -p ~/.config/rclone ~/.config/systemd/user ~/Library && cp /etc/offline-folder/rclone.conf ~/.config/rclone/ && cp /etc/offline-folder/rclone-offline-library.* ~/.config/systemd/user/ && systemctl --user daemon-reload");
+        for (int index = 0; index < 40; index++) {  // a library large enough that one deleted file is far below the delete cap
+            self.put(f"{self.local}/media/art{index}.png", f"art {index}", "2025-01-01 10:00:00");
+            self.put(f"{self.drive}/media/art{index}.png", f"art {index}", "2025-01-01 10:00:00");
+        }
+        self.put(self.local + "/saves/desktop.srm", "played on this machine", "2026-01-01 10:00:00");
+        self.put(self.drive + "/saves/deck.srm", "played on another machine", "2026-01-02 10:00:00");
+        self.put(self.local + "/saves/card.ps2", "older card", "2026-01-01 10:00:00");
+        self.put(self.drive + "/saves/card.ps2", "newer card, played later", "2026-02-01 10:00:00");
+        self.put(self.local + "/_legacy/old.bin", "left out of the sync", "2024-01-01 10:00:00");
+
+        print("Without the marker (a card that is not mounted) nothing runs");
+        self.sync();
+        self.absent(self.drive + "/saves/desktop.srm");
+        self.absent(self.local + "/saves/deck.srm");
+        Check.equal(self.user(f"systemctl --user show -p ConditionResult --value {self.unit}").trim(), "no", "the unit's condition is unmet without the marker");
+
+        print("The first run copies what either side lacks, the newer file wins, nothing is deleted");
+        self.put(self.local + "/.semu-layout", "2\n", "2026-01-01 10:00:00");
+        self.sync();
+        self.holds(self.drive + "/saves/desktop.srm", "played on this machine", "a local save reaches the drive");
+        self.holds(self.local + "/saves/deck.srm", "played on another machine", "another machine's save arrives");
+        self.holds(self.local + "/saves/card.ps2", "newer card, played later", "the newer copy of a file both had wins locally");
+        self.holds(self.drive + "/saves/card.ps2", "newer card, played later", "and stays on the drive");
+        self.holds(self.drive + "/.semu-layout", "2\n", "the marker travels with the library");
+        self.absent(self.drive + "/_legacy");
+        self.holds(self.local + "/_legacy/old.bin", "left out of the sync", "an excluded folder stays where it is");
+        Check.that(self.count(self.local + "/media") == 40 && self.count(self.drive + "/media") == 40, "the first run deletes nothing");
+        self.machine.succeed(f"ls {self.state}/*.path1.lst {self.state}/*.path2.lst");
+
+        print("Later runs carry changes and deletions both ways");
+        self.put(self.local + "/saves/desktop.srm", "played again on this machine", "2026-03-01 10:00:00");
+        self.put(self.drive + "/saves/new.srm", "a new game elsewhere", "2026-03-02 10:00:00");
+        self.machine.succeed(f"rm {self.drive}/saves/deck.srm {self.drive}/media/art7.png");
+        self.sync();
+        self.holds(self.drive + "/saves/desktop.srm", "played again on this machine", "a changed save goes up");
+        self.holds(self.local + "/saves/new.srm", "a new game elsewhere", "a new save comes down");
+        self.absent(self.local + "/saves/deck.srm");
+        self.absent(self.local + "/media/art7.png");
+
+        print("A file changed on both sides keeps both versions; the newer one keeps the name");
+        self.put(self.local + "/saves/card.ps2", "changed here first", "2026-04-01 10:00:00");
+        self.put(self.drive + "/saves/card.ps2", "changed there afterwards", "2026-04-02 10:00:00");
+        self.sync();
+        self.holds(self.local + "/saves/card.ps2", "changed there afterwards", "the newer version wins the name locally");
+        self.holds(self.drive + "/saves/card.ps2", "changed there afterwards", "and on the drive");
+        var kept = self.machine.succeed(f"grep -l -r 'changed here first' {self.local}/saves").trim();
+        Check.that(!kept.isEmpty() && kept.contains("conflict"), "the losing version is kept beside it under a conflict name: " + kept);
+
+        print("A side that lost more than a tenth of its files stops the sync instead of deleting the other side");
+        self.machine.succeed(f"rm {self.local}/media/art1*.png {self.local}/media/art2*.png");
+        var before = self.count(self.drive);
+        self.machine.fail(self.asUser(f"systemctl --user start {self.unit}"));
+        Check.that(self.count(self.drive) == before, "the drive keeps every file after the refused run");
+        self.machine.fail(self.asUser(f"systemctl --user start {self.unit}"));
+        Check.that(self.count(self.drive) == before, "a second attempt is refused the same way");
+
+        print("Putting the files back lets the sync continue");
+        self.user(f"cp -p {self.drive}/media/art1*.png {self.drive}/media/art2*.png {self.local}/media/");
+        self.put(self.local + "/saves/after.srm", "saved after the recovery", "2026-05-01 10:00:00");
+        self.sync();
+        self.holds(self.drive + "/saves/after.srm", "saved after the recovery", "sync resumes once the files are back");
+        Check.that(self.count(self.drive) == before + 1, "nothing was deleted on the drive by the recovery");
+
+        print("An emptied folder without its marker is never synced");
+        self.machine.succeed(f"rm -rf {self.local}/media {self.local}/saves {self.local}/.semu-layout");
+        var full = self.count(self.drive);
+        self.sync();
+        Check.that(self.count(self.drive) == full, "the drive is untouched while the marker is missing");
+
+        print("The timer is hourly and catches up after downtime");
+        var timer = self.machine.succeed("cat /etc/offline-folder/rclone-offline-library.timer");
+        Check.that(timer.contains("OnCalendar=hourly") && timer.contains("Persistent=true"), "hourly, persistent timer");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        OfflineFolder(lab.guest("machine")).check(); lab.close();
+        print("PASS: offline folder first run, two-way changes, conflicts, delete cap and marker guard"); return 0;
+    } catch (string error) { print(error); return 1; }
+}
