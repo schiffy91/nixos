@@ -20,12 +20,46 @@ Enter setup with `Del` at POST or `systemctl reboot --firmware-setup`.
 | Thunderbolt / USB4 Security Level | Advanced → AMD PBS → Thunderbolt / USB4 Security Level | `No Security` (leave) | The board only offers `No Security` / `USB4 controller only`; the second may drop PCIe tunneling the XDR path needs. DMA protection comes from the OS IOMMU (see README) |
 | BIOS Image Rollback Support | Tool → BIOS Image Rollback Support | `Disabled` (optional) | NIST SP 800-147 flash policy. ASUS already blocks rollback below 3702 |
 
+## Curve Optimizer (Undervolt)
+
+Path: Ai Tweaker → Precision Boost Overdrive → Curve Optimizer (or Advanced →
+AMD Overclocking → Precision Boost Overdrive → Curve Optimizer; confirm on
+screen). Set `Curve Optimizer` to `Per Core`, sign `Negative` on every core.
+Change nothing else: PBO limits, scalar (1.0) and max CPU boost override (+0,
+5850 MHz) stay at their defaults, as tested.
+
+| Core | Linux CPUs | Magnitude |
+|---|---|---|
+| 0 | 0, 16 | 10 |
+| 1 | 1, 17 | 6 |
+| 2 | 2, 18 | 11 |
+| 3 | 3, 19 | 11 |
+| 4 | 4, 20 | 5 |
+| 5 | 5, 21 | 11 |
+| 6 | 6, 22 | 11 |
+| 7 | 7, 23 | 11 |
+| 8 | 8, 24 | 10 |
+| 9–15 | 9–15, 25–31 | 11 |
+
+Cores 0–7 are CCD0 and cores 8–15 are CCD1. If the BIOS lists each CCD as
+"Core 0–7", then CCD1 Core N is core N+8 here.
+
+Qualified at runtime (ryzen_smu) on 2026-11-11 to 2026-11-13. Per-core SSE and AVX2 sweeps,
+2 h + 2 h multicore SSE/AVX2, 60 load-transition blocks, 8 h idle, and 2 h of
+7-Zip/x265 output-checked load all passed. An interleaved stock comparison
+measured about +1.5% throughput and 1–3.7% less energy per operation. Not
+tested in a full WoW session. Evidence lives in
+`~/.cache/cpu-co-qualification-2026-11-12-r6-cont4`.
+
+If a crash, WHEA/MCE (`journalctl -k | grep -i mce`) or game instability shows
+up, move the weakest cores 2 toward zero first: 4, 1, 0, 8.
+
 ## Checklist After Every BIOS Flash
 
 ASUS resets AMD CBS (and sometimes Secure Boot) to defaults on flash. On
 2026-05-18 both Secure Boot and TSME dropped silently.
 
-1. Re-apply every row above, save, reboot.
+1. Re-apply every row above and the Curve Optimizer table, save, reboot.
 2. `sudo nixosctl secure-boot status` — expect enforcing with our keys.
 3. `sudo nixosctl tpm2 status` — re-enroll (`sudo nixosctl tpm2 enable`) if the
    keyslot no longer unlocks.

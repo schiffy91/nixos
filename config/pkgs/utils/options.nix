@@ -2,7 +2,7 @@
 let
   mkSetting = type: defaultValue: lib.mkOption { inherit type; default = defaultValue; };
 in {
-  imports = [ ./nixosctl/options.nix ];
+  imports = [ ./nixosctl/options.nix ./gpu-tuning/options.nix ./cpu-tuning/options.nix ];
   options = with lib.types; {
     settings.apps.utils.desktop.enable = mkSetting bool false;
     settings.apps.utils.chrome.enable = mkSetting bool config.settings.apps.utils.desktop.enable;

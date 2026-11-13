@@ -14,6 +14,10 @@ in {
         options.run = lib.mkOption { type = str; };  # executable behind `nixosctl apps <app> <command>`
       })) {};
     })) {};  # modules register their own commands; core only lists and runs them
+    # Extra tray entries, inserted above "Open /etc/nixos". Keys are labels, sorted; an
+    # attrset with `run` is an entry (kind = "item" | "check" | "radio"; `status` exits 0
+    # when checked), any other attrset is a submenu. Modules and hosts merge into it.
+    settings.apps.utils.nixosctl.tray.menu = mkSetting (pkgs.formats.json {}).type {};
     settings.apps.utils.nixosctl.caffeine.enable = mkSetting bool config.settings.apps.utils.nixosctl.enable;
   };
 }

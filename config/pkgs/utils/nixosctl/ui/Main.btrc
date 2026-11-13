@@ -1,6 +1,35 @@
+import Library.FileSystem;
+import Library.JSON;
+import Library.Platform;
 import Library.Tray;
 import ../lib/core/NixosPaths.btrc;
 import ../lib/desktop/PowerManager.btrc;
+
+class TrayMenu {
+    class void add(Tray menu, string label, JSONValue node) {
+        if (!node.has("run")) {
+            var submenu = Tray(label);
+            for key in node.keys().sorted() { TrayMenu.add(submenu, key, node.get(key)); }
+            if (submenu.items.len > 0) { menu.submenu(label, submenu); }
+            return;
+        }
+        var run = node.get("run").asString();
+        var kind = "item";
+        if (node.has("kind")) { kind = node.get("kind").asString(); }
+        var status = "";
+        if (node.has("status")) { status = node.get("status").asString(); }
+        if (kind.equals("radio")) { menu.radioItem(label, run, status); return; }
+        if (kind.equals("check")) { menu.checkItem(label, run, status); return; }
+        menu.item(label, run);
+    }
+
+    class void addFile(Tray menu, string path) {
+        if (path.isEmpty() || !FileSystem.isFile(path)) { return; }
+        var root = JSONValue.readFile(path);
+        if (!root.isObject()) { return; }
+        for key in root.keys().sorted() { TrayMenu.add(menu, key, root.get(key)); }
+    }
+}
 
 int main() {
     var iconPath = NixosPaths.trayIconPathFromEnv();
@@ -21,6 +50,7 @@ int main() {
             f"nixosctl power set {profile}", f"nixosctl power is {profile}");
     }
     if (cpu.items.len > 0) { tray.submenu("CPU", cpu); }
+    TrayMenu.addFile(tray.model, Environment.get("NIXOSCTL_TRAY_MENU", ""));  // host and module entries
     tray.item("Open /etc/nixos", "xdg-open /etc/nixos")
         .item("Quit tray", TraySignal.quit());
 
