@@ -29,7 +29,7 @@ in {
       nix-upgrade = "nix flake update nixpkgs-darwin home-manager-darwin nix-darwin --flake ${repoPath} && sudo darwin-rebuild switch --flake ${flake}";
     };
     dev.git.includes = [ "${config.settings.users.admin.homeDirectory}/.config/git/local-before-nix.gitconfig" ];
-    dev.gemini.enable = true;
+    dev.antigravity.enable = true;
     dev.lmstudio.enable = true;
     dev.agents.rules = true;
   };

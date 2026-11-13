@@ -12,7 +12,7 @@ in {
     settings.apps.dev.codex.enable = mkSetting bool config.settings.apps.dev.enable;
     settings.apps.dev.git.enable = mkSetting bool config.settings.apps.dev.enable;
     settings.apps.dev.git.includes = mkSetting (listOf str) [];
-    settings.apps.dev.gemini.enable = mkSetting bool false;
+    settings.apps.dev.antigravity.enable = mkSetting bool false;
     settings.apps.dev.lmstudio.enable = mkSetting bool false;
     settings.apps.dev.shell.aliases = mkSetting (attrsOf str) {}; # host extras; shared aliases live in shell.nix
     settings.apps.dev.zsh.enable = mkSetting bool (config.settings.apps.dev.enable && config.settings.desktop.enable);

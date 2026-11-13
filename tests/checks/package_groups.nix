@@ -18,6 +18,7 @@ let
     noDev = disabled "dev";
     noUtils = disabled "utils";
     noLmstudio = disabled "dev.lmstudio";
+    noAntigravity = disabled "dev.antigravity";
     noApps = (desktop.extendModules {
       modules = [{ settings.apps = disable desktop.config.settings.apps; }];
     }).config;
@@ -96,6 +97,13 @@ let
     ++ check (builtins.elem "lmstudio" (names desktop.config)
       && !(builtins.elem "lmstudio" (names noLmstudio)))
       "LM Studio's feature switch must control the shared Linux installation."
+    ++ check (lib.all (name: builtins.elem name (names desktop.config)
+        && !(builtins.elem name (names noAntigravity)) && !(builtins.elem name (names noDev)))
+        [ "antigravity-hub" "antigravity-cli" ]
+      && lib.all (path: builtins.elem path desktop.config.settings.disk.immutability.persist.paths
+        && !(builtins.elem path noAntigravity.settings.disk.immutability.persist.paths))
+        (map (path: "${desktop.config.settings.users.admin.homeDirectory}/${path}") [ ".gemini" ".config/Antigravity" ".config/antigravity" ]))
+      "Antigravity's feature switch must control its app, its CLI and the state both keep."
     ++ check (!(builtins.elem "google-chrome" (names noUtils)) && !noUtils.services.mullvad-vpn.enable)
       "Disabling utils must disable Chrome and the shared desktop utility services."
     ++ check (desktop.config.settings.apps.utils.chrome.flags == [

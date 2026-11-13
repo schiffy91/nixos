@@ -7,7 +7,7 @@ engineering-decomposition, taste, humanizer and project-structure-taste for
 every host, plus nixos-init on Linux. Hosts inherit this shared selection.
 Home Manager handles file linking and conflict backups.
 
-`settings.apps.dev.agents.rules` installs `rules.md` for Claude, Codex and Gemini.
+`settings.apps.dev.agents.rules` installs `rules.md` for Claude, Codex and Antigravity.
 The Mac turns it on. Cloud instruction exports and an LM Studio preset are not
 generated.
 

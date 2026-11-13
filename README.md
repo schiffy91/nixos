@@ -141,7 +141,7 @@ Application settings follow their category: `apps.dev.vscode`,
 there is no runtime enablement resolver.
 
 Default-on children inherit their parent's enablement. Optional tools such as
-LM Studio and Gemini default off. An explicit `true` under a disabled parent
+LM Studio and Antigravity default off. An explicit `true` under a disabled parent
 is an error, including `mkForce true`; either disable that child or enable its
 parent. Non-enable configuration (URLs, paths, preferences) may remain declared
 while an app is disabled. For example, this is rejected:

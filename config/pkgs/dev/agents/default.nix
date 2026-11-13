@@ -3,18 +3,18 @@ let
   clients = lib.optional settings.apps.dev.agents.enable "agents"
     ++ lib.optional settings.apps.dev.claude.enable "claude"
     ++ lib.optional settings.apps.dev.codex.enable "codex"
-    ++ lib.optional settings.apps.dev.gemini.enable "gemini";
+    ++ lib.optional settings.apps.dev.antigravity.enable "antigravity";
   skills = import ./skills.nix;
   directories = {
     agents = ".agents/skills";
     codex = ".codex/skills";
     claude = ".claude/skills";
-    gemini = ".gemini/config/skills";
+    antigravity = ".gemini/config/skills";
   };
   ruleFiles = {
     codex = ".codex/AGENTS.md";
     claude = ".claude/CLAUDE.md";
-    gemini = ".gemini/GEMINI.md";
+    antigravity = ".gemini/GEMINI.md";
   };
   skillFiles = lib.listToAttrs (lib.concatMap (client:
     map (name: lib.nameValuePair "${directories.${client}}/${name}" { source = skills.${name}; }) settings.apps.dev.agents.skills
