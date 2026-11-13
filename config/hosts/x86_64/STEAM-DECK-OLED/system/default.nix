@@ -19,6 +19,16 @@ in {
   # highest-numbered firmware mode, not necessarily the highest resolution.
   boot.loader.systemd-boot.consoleMode = lib.mkForce "5";
 
+  # vpower reads the battery's charge limit from hwmon3, but the number depends
+  # on the order the drivers loaded (hwmon6 here). Without the limit it takes
+  # a battery resting at 80% on the charger for a slow charger, and Steam warns
+  # about one every time the charge dips.
+  nixpkgs.overlays = lib.mkAfter [ (final: previous: {
+    jovianPackages = previous.jovianPackages.overrideScope (self: super: {
+      vpower = super.vpower.overrideAttrs (old: { patches = (old.patches or []) ++ [ ./vpower-charge-limit.patch ]; });
+    });
+  }) ];
+
   jovian = {
     devices.steamdeck = {
       enable = true;

@@ -29,7 +29,7 @@ let
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [
         ./BluetoothHostTests.btrc ./FakeDeck.btrc ./btrc.toml ./btrc.lock ../../lib/Check.btrc
-        (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.name == "btrc.toml" || file.name == "btrc.lock") ../../../config/pkgs/gaming/deckpad)
+        (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.hasExt "h" || file.name == "btrc.toml" || file.name == "btrc.lock") ../../../config/pkgs/gaming/deckpad)
       ];
     };
     programs.deckpad-bluetooth-host = "tests/gaming/deckpad/BluetoothHostTests.btrc";

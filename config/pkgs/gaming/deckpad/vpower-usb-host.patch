@@ -1,0 +1,16 @@
+--- a/main.rs
++++ c/main.rs
+@@ -783,7 +783,12 @@
+ 
+         // Write to /run/vpower/*
+         let dir_path = "/run/vpower";
+-        write_str(dir_path, "ac_status", ac_status);
++        // deckpad leaves this file while a computer holds the Deck's
++        // controller over the USB-C cable. A computer's port is expected to
++        // charge slowly, so Steam is not told about a slow charger until the
++        // file is gone. Everything else here still knows the charger is slow.
++        let ac_status_told = if ac_status == Some("Connected slow") && Path::new("/run/deckpad/usb-host").exists() { Some("Connected") } else { ac_status };
++        write_str(dir_path, "ac_status", ac_status_told);
+         write_f64(dir_path, "battery_percent", battery_percent);
+         write_str(dir_path, "battery_status", battery_status);
+ 

@@ -19,7 +19,7 @@ composition and resolution; no generic icon-to-banner generator remains.
 | Moonlight | [Moonlight Game Streaming](https://www.steamgriddb.com/game/5323697) | Coordinated OmniDeath lunar covers, starfield hero and title |
 | chiaki-ng | [chiaki-ng](https://www.steamgriddb.com/game/5441527) | Coordinated LXVI lime/controller-symbol set and white title |
 
-Deck as Controller (deckpad) is the exception: SteamGridDB has no art of a Deck
+Deck Pad (deckpad) is the exception: SteamGridDB has no art of a Deck
 acting as a Steam Controller. `deckpad/compose.py` builds its set from the
 pictures on [Valve's Steam Controller page](https://store.steampowered.com/hardware/steamcontroller):
 the controller on kraft paper for the hero, the product photograph placed on

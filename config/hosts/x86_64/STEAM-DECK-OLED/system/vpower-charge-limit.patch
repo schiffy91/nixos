@@ -1,0 +1,20 @@
+--- a/main.rs
++++ b/main.rs
+@@ -301,9 +301,15 @@
+ 
+     // MaxChargeLevel files
+     let maxchargelevel_path_std = path_bat.display().to_string() + "/charge_control_end_threshold";
++    // SteamDeck, LCD and OLED models. The hwmon number depends on the order
++    // the drivers loaded, so look for the file instead of naming hwmon3.
++    let maxchargelevel_path_deck = fs::read_dir("/sys/devices/pci0000:00/0000:00:14.3/PNP0C09:00/VLV0100:00/steamdeck-hwmon/hwmon")
++	.ok()
++	.and_then(|entries| entries.flatten().map(|entry| entry.path().join("max_battery_charge_level")).find(|path| path.exists()))
++	.map(|path| path.display().to_string())
++	.unwrap_or_default();
+     let maxchargelevel_filenames = vec![
+-	// SteamDeck, LCD and OLED models
+-	"/sys/devices/pci0000:00/0000:00:14.3/PNP0C09:00/VLV0100:00/steamdeck-hwmon/hwmon/hwmon3/max_battery_charge_level",
++	&maxchargelevel_path_deck,
+ 	// generic value supported by e.g. many consumer laptops
+ 	&maxchargelevel_path_std,
+     ];

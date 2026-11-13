@@ -63,6 +63,12 @@ in {
         fi
       '';
     })
+    # For a controller's Desktop Layout, Steam types and moves the pointer
+    # through the X server, and KWin asks the user whether it may. KWin keeps
+    # the answer in kwinrc, which plasma-manager rewrites, so it is given here.
+    (lib.mkIf (config.settings.apps.gaming.steam.enable && config.settings.desktop.enable && config.settings.users.admin.homeManager.enable) {
+      home-manager.users.${user}.programs.plasma.configFile.kwinrc.Xwayland.XwaylandEisNoPromptApps = "steam";
+    })
     (lib.mkIf (config.settings.apps.gaming.steam.enable && config.settings.apps.gaming.steam.shortcuts != {}) {
       systemd.services.steam-shortcuts = {
         description = "Declared non-Steam shortcuts";

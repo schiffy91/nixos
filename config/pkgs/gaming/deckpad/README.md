@@ -1,4 +1,4 @@
-# Deckpad: the Steam Deck as a Steam Controller
+# Deck Pad: the Steam Deck as a Steam Controller
 
 `deckpad` makes the Deck's built-in controls appear on another machine as a
 2026 Steam Controller. Steam there sees both sticks, both trackpads, the four
@@ -17,10 +17,17 @@ and encryption on the network) and libdbus (BlueZ, and the tray).
 
 ## Using it
 
-On the Deck, start the service with the **Deck as Controller** shortcut (Game
+On the Deck, start the service with the **Deck Pad** shortcut (Game
 Mode) or the tray checkbox (Plasma). The Deck keeps its own controls until a
 host attaches, and gets them back when the host leaves, the service stops, or
 you hold **⋯** for two seconds.
+
+While the service runs, the Deck's screen is black at its lowest brightness,
+and in Game Mode Steam shows the shortcut as running. A notice shows for a few
+seconds at the start, when a host arrives or leaves, and whenever the screen
+is touched. With a host it says how to stop: hold **⋯**, which the service
+sees only while a host holds the controller. Without one, a touch while the
+notice is up stops the service.
 
 A new host has to be let in once, during a two-minute pairing window. A Deck
 that trusts no host yet opens one by itself when the service starts; for a
@@ -46,6 +53,26 @@ deckpad check [SECONDS]        on the Deck: read the pad for a while; say which 
 deckpad measure [SECONDS]      on the PC: how steadily the attached controller's reports arrive
 ```
 
+### In games on the PC
+
+Steam on the PC treats the controller as it does a Deck's own controls, and
+uses the layouts saved for those.
+
+- A game started from Steam gets that game's layout.
+- Anything started outside Steam gets Steam's Desktop Layout, where the right
+  stick moves the pointer and A is Enter. Holding **☰** for a second switches
+  that layout to its Gamepad set, and back. It starts in the Desktop set again
+  each time the controller reconnects.
+- A Proton game started outside Steam sees the controller only through
+  Steam's virtual gamepad, which Proton ignores unless Steam launched the
+  game or `PROTON_NO_STEAMINPUT=0` is set. This repository's Proton launch
+  wrapper (`proton-session`) sets it for every game Steam did not start, so
+  one started from the desktop follows the Gamepad set.
+- For the Desktop Layout, Steam types and moves the pointer through the X
+  server, and KWin asks whether it may ("Steam is asking to control…"). The
+  Steam module declares the answer on Plasma hosts, because plasma-manager
+  rewrites `kwinrc`, where KWin keeps it.
+
 ## How it works
 
 One `VirtualController` turns the Deck's pad into the Steam Controller's HID
@@ -61,6 +88,8 @@ a class that presents that device over one bus and decides who may use it:
 | Trust | `Pairing`, `MachineIdentity` | Trusted keys and the pairing window that all links share. |
 | Service | `ControllerService` | Waits on every link at once. The first host to attach, on any link, holds the controller until it leaves; a link that cannot work on this machine is left out. |
 | Control | `ControlInterface` | Status and pairing over HTTP on the loopback address, for the `deckpad` command and the tray. |
+| Use | `PadUse`, `StayAwake` | Whether the pad is in someone's hands, and the pointer (`Awake.h`, uinput) that tells the Deck's own session so. |
+| Screen | `ControllerScreen` (`deckpad-screen`) | The Deck's dark screen and its notices: one X11 window (`Screen.h`) and the panel's brightness. It follows the service through the files in `/run/deckpad`. |
 
 **Network.** The host connects and both sides prove an Ed25519 key over
 `Library.Crypto`'s `SecureChannel`. A machine's key is its SSH host key, so
@@ -89,6 +118,29 @@ BlueZ's input plugin holds the channels a controller serves.
 loop turn each link sends the newest state; a link that is behind skips a
 report instead of sending a stale one. Over the network that is one pad
 report per 4 ms with Nagle off.
+
+**The Deck's screen.** The shortcut and the tray start `deckpad-screen` after
+the service, and it lasts until the service stops. While a host holds the
+controller the service leaves a file named for the host's link in
+`/run/deckpad` (`usb-host`, `network-host`, `bluetooth-host`); the screen
+reads those to choose its notice. It lowers the brightness only while it is
+black, and keeps the level to return to in the session's runtime directory,
+so a screen killed while dark is put right by the next one.
+
+**Keeping the Deck awake.** While a host holds the controller, the Deck's own
+session sees no input, and Steam there would show its screensaver over the
+dark screen and later put the Deck to sleep in the middle of a game. While the
+pad is in use (a button, trigger, stick or trackpad changed in the last
+minute; the motion sensors do not count) the service nudges a pointer of its
+own one step and back, at most every half minute, which the session takes for
+someone using the machine. A Deck that is put down is not nudged, and dims and
+sleeps as it always does.
+
+**Slow-charger warnings.** A computer's port often charges the Deck slowly,
+and Steam on the Deck warns about a slow charger whenever Jovian's `vpower`
+reports one. The module runs a `vpower` with one change: while `usb-host`
+exists, it reports the charger as a plain one. Any other time, and on any
+other charger, the warning shows as before.
 
 **Firmware updates.** Steam's hardware updater offers a Steam Controller
 firmware when its build time is not that of the firmware Steam ships
@@ -135,11 +187,15 @@ networks may connect at all. The host role loads `vhci-hcd` and keeps trying
 - `tests/gaming/deckpad` (in the gaming check farm): report parsing and
   encoding, descriptors, feature commands, haptic translation, rumble timing,
   the stop chord, the USB and Bluetooth views of the controller, trust and the
-  pairing window, and link arbitration. The server test runs the real program
+  pairing window, link arbitration, the files that name the holding link, and
+  what counts as the pad being in use. The server test runs the real program
   and is a host for it over loopback: refused before pairing, paired while the
   window is open, attached through the encrypted tunnel, then enumeration,
   250 reports a second in order with a bound on their age, outputs,
-  reconnecting, a second host turned away, and forgetting.
+  reconnecting, a second host turned away, and forgetting. The screen runs on
+  a virtual display beside a pretend service and backlight: its notices, the
+  dark screen at the lowest brightness, a touch with and without a host, the
+  brightness given back, and a level left dark by a killed screen put right.
 - `tests/gaming/deckpad/kernel.nix` (VMs, run by hand): each link against a
   real kernel. Two machines pair and the PC's `vhci_hcd` presents the
   controller, whose reports arrive on its hidraw node, and comes back by

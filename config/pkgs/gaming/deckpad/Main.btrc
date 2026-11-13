@@ -6,6 +6,7 @@ import Library.Strings;
 import Library.Timer;
 import Library.USB.USBGadget;
 import Library.Vector;
+import ./Awake.btrc;
 import ./BluetoothLink.btrc;
 import ./Control.btrc;
 import ./Controller.btrc;
@@ -116,6 +117,8 @@ class Deckpad {
         // One controller, and a link for each way a host can reach it.
         VirtualController controller = VirtualController(pad, SteamController(options.option("--serial", Deckpad.serial())), sendQuickAccess);
         ControllerService service = ControllerService(controller);
+        service.announceIn(runtime);
+        if (source.equals("deck")) { service.tell(StayAwake()); }
         if (network) { service.add(NetworkLink(controller, identity, pairing, options.option("--listen", "0.0.0.0"), Deckpad.number(options.option("--port", "3240"), "port"), options.values("--allow"))); }
         if (cable) { service.add(GadgetLink(controller)); }
         if (options.has("--bluetooth")) { service.add(BluetoothLink(controller, pairing, options.option("--bluetooth", "hci0"), state + "/bluetooth-host")); }

@@ -46,6 +46,7 @@ class VirtualController implements IHIDDevice {
     private IPadSource source;
     private SteamController identity;
     private PadLatch latch;
+    private PadUse use;
     private bool sendQuickAccess;
     private bool active = false;
     private bool stop = false;
@@ -64,6 +65,7 @@ class VirtualController implements IHIDDevice {
         self.source = source;
         self.identity = identity;
         self.latch = PadLatch();
+        self.use = PadUse();
         self.sendQuickAccess = sendQuickAccess;
     }
 
@@ -74,6 +76,9 @@ class VirtualController implements IHIDDevice {
 
     // Holding the Deck's ... button for two seconds asks the service to stop.
     public bool stopRequested() { return self.stop; }
+
+    // When someone last used the pad, on MonotonicClock; 0 while nobody has.
+    public long long usedAt() { return self.use.usedAt(); }
 
     // A host attached: take the pad. Only one link holds it at a time.
     public void attach() {
@@ -104,6 +109,7 @@ class VirtualController implements IHIDDevice {
                 if (self.quickAccessSince == 0LL) { self.quickAccessSince = now; }
                 else if (now - self.quickAccessSince >= 2000LL) { self.stop = true; }
             } else { self.quickAccessSince = 0LL; }
+            self.use.see(&state, now);
             if (!self.sendQuickAccess) { state.buttons &= ~PAD_QUICK_ACCESS; }
             self.latch.update(&state);
         }

@@ -16,11 +16,11 @@ Other shortcuts and custom artwork are left alone. See
 [application artwork](../../../pkgs/gaming/artwork/README.md) for the curated
 sets, KDE icons, SGDBoop and the SteamGridDB Decky plugin.
 
-The **Deck as Controller** shortcut (and a tray checkbox in Plasma) offers the
+The **Deck Pad** shortcut (and a tray checkbox in Plasma) offers the
 Deck's controls to another machine as a Steam Controller, over the network
 and, when enabled, the USB-C cable and Bluetooth; hold **⋯** for two seconds
-to take them back. **Deck as Controller: Pair** lets a new host in for two
-minutes. See [deckpad](../../../pkgs/gaming/deckpad/README.md).
+to take them back. Started on a Deck that trusts no host yet, it lets a new
+one in for two minutes. See [Deck Pad](../../../pkgs/gaming/deckpad/README.md).
 
 Both physical hosts enable `settings.apps.utils.desktop.enable` for the shared desktop
 packages and services under `config/pkgs`: Cider, mpv, the development CLIs, zsh,

@@ -13,6 +13,13 @@ pkgs.writeShellApplication {
       esac
     fi
     export PROTON_ENABLE_WAYLAND="''${PROTON_ENABLE_WAYLAND:-$wayland}"
+    # Proton reads Steam's virtual gamepad only in games Steam started, and
+    # ignores it in the rest. A Steam Controller, or a Deck serving as one, has
+    # no other gamepad on a PC, so a game started outside Steam reads that pad
+    # too, beside the controllers plugged in.
+    if [ -z "''${SteamGameId:-}" ]; then
+      export PROTON_NO_STEAMINPUT="''${PROTON_NO_STEAMINPUT:-0}"
+    fi
     exec "$@"
   '';
 }

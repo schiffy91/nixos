@@ -81,6 +81,36 @@ class DeckReport {
     }
 }
 
+// Whether the pad is in someone's hands: a button, trigger, stick or trackpad
+// has changed since the last change that counted. A stick or trigger has to
+// travel a tenth of its range, so one that rests off centre or shivers does
+// not count, and the motion sensors never do.
+class PadUse {
+    private struct PadState anchor;
+    private bool known = false;
+    private long long at = 0LL;
+
+    public PadUse() { memset(&self.anchor, 0, sizeof(self.anchor)); }
+
+    class bool moved(int now, int before) { return now - before > 3300 || before - now > 3300; }
+
+    public void see(struct PadState* state, long long now) {
+        bool used = !self.known || state->buttons != self.anchor.buttons
+            || PadUse.moved(state->leftTrigger, self.anchor.leftTrigger) || PadUse.moved(state->rightTrigger, self.anchor.rightTrigger)
+            || PadUse.moved(state->leftStickX, self.anchor.leftStickX) || PadUse.moved(state->leftStickY, self.anchor.leftStickY)
+            || PadUse.moved(state->rightStickX, self.anchor.rightStickX) || PadUse.moved(state->rightStickY, self.anchor.rightStickY)
+            || PadUse.moved(state->leftPadX, self.anchor.leftPadX) || PadUse.moved(state->leftPadY, self.anchor.leftPadY)
+            || PadUse.moved(state->rightPadX, self.anchor.rightPadX) || PadUse.moved(state->rightPadY, self.anchor.rightPadY);
+        if (!used) { return; }
+        memcpy(&self.anchor, state, sizeof(self.anchor));
+        if (self.known) { self.at = now; }  // the first state is where the pad rests, not a use of it
+        self.known = true;
+    }
+
+    // When the pad was last used, on MonotonicClock; 0 while it has not been.
+    public long long usedAt() { return self.at; }
+}
+
 // Keeps the newest state for a host that polls slower than the Deck reports.
 // Presses stay latched until sent, so a tap shorter than one host poll still
 // arrives. Trackpad touches are not latched: a lifted finger has no position.

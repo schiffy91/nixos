@@ -1,0 +1,32 @@
+import Library.Console;
+import ./Service.btrc;
+
+// While someone plays, the Deck itself sees no input: its controls belong to
+// the host. Steam on the Deck takes that for an idle machine, shows its
+// screensaver over the dark screen, and later puts the Deck to sleep in the
+// middle of a game.
+//
+// This is a pointer (`Awake.h`) that moves one step and back, at most every
+// half minute, while the pad is in use. To the Deck's session that is someone
+// using the machine. A pad nobody touches is not nudged, so a Deck that was
+// put down still dims and sleeps as it always does.
+class StayAwake implements IPadUseListener {
+    private int pointer;
+    private long long nudgedAt = 0LL;
+
+    public StayAwake() {
+        self.pointer = deckAwakeOpen("Deck Pad in use");
+        if (self.pointer < 0) { Console.error("deckpad: cannot make an input device (/dev/uinput), so the Deck may dim and sleep while it is played on"); }
+    }
+
+    public void used(long long now) {
+        if (self.pointer < 0 || (self.nudgedAt != 0LL && now - self.nudgedAt < 30000LL)) { return; }
+        deckAwakeNudge(self.pointer);
+        self.nudgedAt = now;
+    }
+
+    public void close() {
+        if (self.pointer >= 0) { deckAwakeClose(self.pointer); }
+        self.pointer = -1;
+    }
+}

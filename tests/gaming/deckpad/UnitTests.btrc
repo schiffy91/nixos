@@ -72,6 +72,14 @@ class HeldPad implements IPadSource {
     public void close() { self.opened = false; }
 }
 
+class CountingPlayer implements IPadUseListener {
+    public int told = 0;
+    public bool closed = false;
+
+    public void used(long long now) { self.told++; }
+    public void close() { self.closed = true; }
+}
+
 class DeckpadUnitTests {
     class void deckSample(unsigned char* report) {
         memset(report, 0, (size_t)64);
@@ -377,6 +385,8 @@ class DeckpadUnitTests {
     class void links() {
         var controller = VirtualController(ScriptedPad(), SteamController("FXDK00000042"), false);
         var service = ControllerService(controller);
+        string runtime = FileSystem.tempDir("deckpad-runtime");
+        service.announceIn(runtime);
         var first = SwitchedLink("first", controller, false);
         var second = SwitchedLink("second", controller, false);
         service.add(first);
@@ -388,16 +398,57 @@ class DeckpadUnitTests {
         Check.that(service.turn(5) && service.holding().isEmpty() && !controller.attached(), "nobody holds the controller before a host attaches");
         second.host = true;
         Check.that(service.turn(5) && service.holding().equals("second") && controller.attached() && second.port().holding(), "the first host to attach takes it");
+        Check.that(FileSystem.isFile(runtime + "/second-host") && !FileSystem.exists(runtime + "/first-host"), "a file in the runtime directory names the link whose host holds the controller");
         first.host = true;
         Check.that(service.turn(5) && service.holding().equals("second") && !first.port().holding() && first.port().busyElsewhere(), "a host on another link waits");
         second.host = false;
         Check.that(service.turn(5) && service.holding().equals("first") && first.port().holding() && !second.port().holding(), "and takes over when the holder leaves");
+        Check.that(FileSystem.isFile(runtime + "/first-host") && !FileSystem.exists(runtime + "/second-host"), "the file follows the controller to the next host");
         first.host = false;
         Check.that(service.turn(5) && service.holding().isEmpty() && !controller.attached(), "the pad goes back when the last host leaves");
+        Check.that(!FileSystem.exists(runtime + "/first-host"), "and the file goes with the last host");
+        FileSystem.removeRecursive(runtime);
         service.stop();
         Check.that(!service.turn(5), "the service stops when told");
         service.close();
         Check.that(!first.opened && !second.opened, "closing the service closes its links");
+    }
+
+    // The Deck is told someone is playing only while the pad is in use.
+    class int toldIn(IPadSource pad, int turns) {
+        var controller = VirtualController(pad, SteamController("FXDK00000042"), false);
+        var service = ControllerService(controller);
+        var player = CountingPlayer();
+        service.tell(player);
+        var link = SwitchedLink("only", controller, false);
+        service.add(link);
+        service.open();
+        link.host = true;
+        for (int turn = 0; turn < turns; turn++) { service.turn(5); }
+        service.close();
+        return player.closed ? player.told : -1;
+    }
+
+    class void use() {
+        struct PadState state;
+        memset(&state, 0, sizeof(state));
+        state.leftStickX = 5000;
+        var use = PadUse();
+        use.see(&state, 100LL);
+        Check.that(use.usedAt() == 0LL, "where the pad rests when first read is not a use of it");
+        state.gyroX = 900;
+        state.accelZ = 16000;
+        state.leftStickX = 6000;
+        use.see(&state, 200LL);
+        Check.that(use.usedAt() == 0LL, "the motion sensors and a shivering stick are not a use");
+        state.leftStickX = 9000;
+        use.see(&state, 300LL);
+        Check.that(use.usedAt() == 300LL, "a stick that travels is");
+        state.buttons = PAD_A;
+        use.see(&state, 400LL);
+        Check.that(use.usedAt() == 400LL, "and so is a button");
+        Check.that(DeckpadUnitTests.toldIn(ScriptedPad(), 60) > 0, "the service says so while a host's player uses the pad");
+        Check.that(DeckpadUnitTests.toldIn(HeldPad(), 30) == 0, "and says nothing for a pad that is only held");
     }
 
     class int buttons(struct HidReport* report) { return Wire.u16le(report->bytes, 2) | (Wire.u16le(report->bytes, 4) << 16); }
@@ -472,7 +523,8 @@ int main() {
     DeckpadUnitTests.pairing();
     DeckpadUnitTests.links();
     DeckpadUnitTests.stopChord();
+    DeckpadUnitTests.use();
     DeckpadUnitTests.pace();
-    print("PASS: deckpad reports, descriptors, feature commands, haptics, USB and Bluetooth views, pairing, shared links, stop chord and report pace");
+    print("PASS: deckpad reports, descriptors, feature commands, haptics, USB and Bluetooth views, pairing, shared links, stop chord, pad use and report pace");
     return 0;
 }

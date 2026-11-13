@@ -16,7 +16,10 @@ let
     # A Deck that trusts no host yet lets the first one pair, so Game Mode
     # needs only this one shortcut.
     ${awaitService} || exit 0
-    if ${deckpad} status | ${pkgs.jq}/bin/jq -e '.trusted | length == 0' > /dev/null; then exec ${deckpad} pairing 120; fi
+    if ${deckpad} status | ${pkgs.jq}/bin/jq -e '.trusted | length == 0' > /dev/null; then ${deckpad} pairing 120; fi
+    # The Deck's screen goes dark and stays so until the service stops. Steam
+    # shows the shortcut as running for that long.
+    exec ${programs.screen}/bin/deckpad-screen
   '';
   # Start the service if it is not running, then let new hosts pair for two
   # minutes.
@@ -32,9 +35,13 @@ let
     postBuild = ''
       wrapProgram $out/bin/deckpad-tray \
         --set DECKPAD_TRAY_ICON ${artwork.deckpad.icon} \
-        --prefix PATH : ${lib.makeBinPath [ toggle pair pkgs.systemd ]}
+        --prefix PATH : ${lib.makeBinPath [ toggle pair pkgs.systemd pkgs.util-linux ]}
     '';
   };
+  # Jovian's power daemon, which tells Steam on the Deck what the charger is.
+  # This one says nothing of a slow charger while the service's `usb-host`
+  # file exists.
+  vpower = pkgs.jovianPackages.vpower.overrideAttrs (old: { patches = (old.patches or []) ++ [ ./vpower-usb-host.patch ]; });
   controller = settings.enable && settings.role == "controller";
   host = settings.enable && settings.role == "host";
 in {
@@ -50,7 +57,8 @@ in {
     (lib.mkIf controller {
       environment.systemPackages = [ toggle pair ];
       settings.networking.ports.tcp = [ settings.port ];
-      boot.kernelModules = lib.mkIf settings.usb [ "libcomposite" "usb_f_fs" ];
+      # uinput: the pointer that tells the Deck's own session someone is playing.
+      boot.kernelModules = [ "uinput" ] ++ lib.optionals settings.usb [ "libcomposite" "usb_f_fs" ];
       systemd.services.deckpad = {
         description = "Steam Deck controls as a Steam Controller";
         after = [ "jupiter-controller-update.service" ] ++ lib.optional settings.bluetooth "bluetooth.service";
@@ -81,6 +89,13 @@ in {
       systemd.services.jupiter-controller-update = lib.mkIf (config.jovian.devices.steamdeck.autoUpdate or false) {
         serviceConfig.ExecCondition = "${pkgs.runtimeShell} -c '! ${pkgs.systemd}/bin/systemctl is-active --quiet deckpad.service'";
       };
+      # A computer's port charges the Deck slowly, and Steam on the Deck would
+      # warn about a slow charger again and again. While a computer holds the
+      # controller over the cable, the warning is held back; any other time,
+      # and on any other charger, it shows as before.
+      systemd.services.vpower = lib.mkIf (settings.usb && (config.jovian.steam.enable or false)) {
+        serviceConfig.ExecStart = [ "" "${vpower}/bin/vpower" ];
+      };
       # As a Bluetooth controller the Deck must look like one, and BlueZ's own
       # HID host must not hold the channels a controller serves.
       hardware.bluetooth = lib.mkIf settings.bluetooth {
@@ -99,10 +114,10 @@ in {
       '';
       settings.apps.gaming.steam.shortcuts = lib.mkIf config.settings.apps.gaming.steam.enable {
         # A stable path: Steam derives the app ID from it.
-        "Deck as Controller" = lib.mkDefault ({ exe = "/run/current-system/sw/bin/deckpad-toggle"; } // artwork.deckpad);
+        "Deck Pad" = lib.mkDefault ({ exe = "/run/current-system/sw/bin/deckpad-toggle"; } // artwork.deckpad);
       };
       systemd.user.services.deckpad-tray = lib.mkIf config.settings.desktop.enable {
-        description = "Deck as Controller tray switch";
+        description = "Deck Pad tray switch";
         wantedBy = [ "graphical-session.target" ];
         partOf = [ "graphical-session.target" ];
         after = [ "graphical-session.target" ];

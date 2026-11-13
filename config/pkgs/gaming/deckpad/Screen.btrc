@@ -1,0 +1,167 @@
+import Library.Bytes;
+import Library.Console;
+import Library.FileSystem;
+import Library.Process;
+import Library.Strings;
+import Library.Timer;
+import Library.Vector;
+
+#include <poll.h>
+#include <signal.h>
+
+// The Deck's own screen while it is a controller: black, at the lowest
+// brightness, so it neither glows in the player's hands nor takes a touch for
+// Steam. It runs as the shortcut's "game", so Steam shows the controller as
+// running, and ends with the service.
+//
+// A notice shows for a few seconds at the start, whenever the controller
+// changes hands, and on a touch: how to stop while a host holds the controller
+// (the service sees the ... button then), or that a touch stops it while none
+// does.
+
+// The panel's brightness. The level to return to is read each time the screen
+// goes dark and kept in a file meanwhile, so a screen that was killed while
+// dark does not leave the dark level behind as the normal one.
+class Backlight {
+    private string control = "";
+    private string kept;
+    private string level = "";
+    private bool dark = false;
+
+    public Backlight(string panels, string kept) {
+        self.kept = kept;
+        if (!FileSystem.isDir(panels)) { return; }
+        for name in FileSystem.listDir(panels) {
+            if (self.control.isEmpty() && FileSystem.isFile(f"{panels}/{name}/brightness")) { self.control = f"{panels}/{name}/brightness"; }
+        }
+        if (!self.control.isEmpty() && FileSystem.isFile(kept)) { Path.writeAll(self.control, Path.readAll(kept).trim()); }
+        FileSystem.removeRecursive(kept);
+    }
+
+    public void darken(bool dark) {
+        if (self.control.isEmpty() || dark == self.dark) { return; }
+        if (dark) {
+            self.level = Path.readAll(self.control).trim();
+            if (self.level.isEmpty() || !self.level.isDigit()) { return; }
+            Path.writeAll(self.kept, self.level + "\n");
+            Path.writeAll(self.control, "0");
+        } else {
+            Path.writeAll(self.control, self.level);
+            FileSystem.removeRecursive(self.kept);
+        }
+        self.dark = dark;
+    }
+}
+
+class ControllerScreen {
+    private DeckScreen* window;
+    private int held;
+    private int waiting;
+    private Backlight backlight;
+    private string runtime;
+
+    // The notices are grey levels, one byte a pixel, made when the system was built.
+    public ControllerScreen(string runtime, string notices, int width, int height, Backlight backlight) {
+        self.runtime = runtime;
+        self.window = deckScreenOpen("Deck Pad");
+        if (self.window == NULL) { throw "No display to show the controller's screen on"; }
+        self.held = self.notice(notices + "/held.grey", width, height);
+        self.waiting = self.notice(notices + "/waiting.grey", width, height);
+        self.backlight = backlight;
+    }
+
+    private int notice(string path, int width, int height) {
+        Bytes grey = FileSystem.readBytes(path);
+        if (width <= 0 || height <= 0 || grey.len != width * height) { return -1; }
+        return deckScreenAddNotice(self.window, grey.data, width, height);
+    }
+
+    // Whether a host holds the controller: the service leaves a file named for
+    // the host's link while one does.
+    private bool hosted() {
+        for link in ["usb", "network", "bluetooth"] {
+            if (FileSystem.exists(f"{self.runtime}/{link}-host")) { return true; }
+        }
+        return false;
+    }
+
+    private bool signalled() {
+        sigset_t pending;
+        sigemptyset(&pending);
+        return sigpending(&pending) == 0 && (sigismember(&pending, (int)SIGINT) == 1 || sigismember(&pending, (int)SIGTERM) == 1 || sigismember(&pending, (int)SIGHUP) == 1);
+    }
+
+    // Show the screen until the service is gone. True when the screen itself
+    // was told to go (a touch while no host held the controller, or a stop
+    // signal), which leaves the service to be stopped.
+    public bool run() {
+        sigset_t stopping;
+        sigemptyset(&stopping);
+        sigaddset(&stopping, (int)SIGINT);
+        sigaddset(&stopping, (int)SIGTERM);
+        sigaddset(&stopping, (int)SIGHUP);
+        sigprocmask((int)SIG_BLOCK, &stopping, NULL);
+        bool hosted = self.hosted();
+        bool shown = false;
+        bool painted = false;
+        bool asked = false;
+        long long showUntil = MonotonicClock.milliseconds() + (hosted ? 6000LL : 30000LL);
+        long long servedAt = MonotonicClock.milliseconds();
+        while (true) {
+            int events = deckScreenEvents(self.window);
+            bool touched = (events & 1) != 0;
+            bool damaged = (events & 2) != 0 || !painted;
+            long long now = MonotonicClock.milliseconds();
+            if (FileSystem.exists(self.runtime + "/token")) { servedAt = now; }
+            if (now - servedAt > 3000LL) { break; }
+            if (self.signalled()) { asked = true; break; }
+            bool hostedNow = self.hosted();
+            if (hostedNow != hosted) {
+                hosted = hostedNow;
+                damaged = true;
+                showUntil = now + (hosted ? 6000LL : 30000LL);
+            }
+            if (touched) {
+                // With a host, a touch only asks how to stop. Without one it
+                // stops, once the notice saying so is up.
+                if (!hosted && shown) { asked = true; break; }
+                showUntil = now + (hosted ? 6000LL : 30000LL);
+            }
+            bool show = now < showUntil;
+            if (show != shown || damaged) {
+                if (show) { self.backlight.darken(false); }
+                deckScreenPaint(self.window, show ? (hosted ? self.held : self.waiting) : -1);
+                if (!show) { self.backlight.darken(true); }
+                shown = show;
+                painted = true;
+            }
+            struct pollfd waiting;
+            waiting.fd = deckScreenDescriptor(self.window);
+            waiting.events = POLLIN;
+            waiting.revents = 0;
+            poll(&waiting, (nfds_t)1, 250);
+        }
+        self.backlight.darken(false);
+        deckScreenClose(self.window);
+        return asked;
+    }
+}
+
+// deckpad-screen NOTICES WIDTH HEIGHT: NOTICES holds held.grey and
+// waiting.grey, each WIDTH x HEIGHT grey levels.
+int main(int argc, char** argv) {
+    if (argc < 4) {
+        Console.error("Usage: deckpad-screen NOTICES WIDTH HEIGHT");
+        return 2;
+    }
+    try {
+        string kept = Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/deckpad-screen-brightness";
+        var backlight = Backlight(Environment.get("DECKPAD_BACKLIGHTS", "/sys/class/backlight"), kept);
+        var screen = ControllerScreen(Environment.get("DECKPAD_RUNTIME", "/run/deckpad"), Strings.copy(argv[1]), Strings.toInt(Strings.copy(argv[2])), Strings.toInt(Strings.copy(argv[3])), backlight);
+        if (screen.run()) { UnixShell().run("systemctl stop deckpad.service", logFailure=false); }
+    } catch (string error) {
+        Console.error(f"deckpad-screen: {error}");
+        return 1;
+    }
+    return 0;
+}

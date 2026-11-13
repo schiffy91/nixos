@@ -1,6 +1,6 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i python3 -p python3 imagemagick curl
-"""Compose the Steam artwork for the "Deck as Controller" shortcut from Valve's Steam Controller pictures."""
+"""Compose the Steam artwork for the "Deck Pad" shortcut from Valve's Steam Controller pictures."""
 import subprocess, sys, tempfile
 from pathlib import Path
 
@@ -47,13 +47,13 @@ class Artwork:
     def portrait(self):
         self.magick("paper.png", "-gravity", "center", "-crop", "600x900+0+0", "+repage", "-gravity", "NorthWest",
                     *self.controller(540, 30, 180),
-                    *self.text("DECK AS", 30, INK, "North", 0, 640, 6), *self.text("CONTROLLER", 62, INK, "North", 0, 682, 1),
+                    *self.text("DECK PAD", 84, INK, "North", 0, 650, 3),
                     self.out / "p.png")
 
     def landscape(self):
         self.magick("(", "paper.png", "-crop", "460x430+100+300", "+repage", ")", "(", "+clone", "-flop", ")", "+append", "-gravity", "NorthWest",
                     *self.controller(420, 26, 50),
-                    *self.text("DECK AS", 26, INK, "NorthWest", 482, 150, 5), *self.text("CONTROLLER", 52, INK, "NorthWest", 479, 186, 1),
+                    *self.text("DECK PAD", 64, INK, "NorthWest", 486, 166, 3),
                     self.out / "landscape.png")
 
     def hero(self):
@@ -62,7 +62,7 @@ class Artwork:
     def logo(self):
         self.magick("-size", "1500x260", "xc:none",
                     "(", "glyph.png", "-fill", "white", "-colorize", "100", "-resize", "x190", ")", "-geometry", "+20+35", "-composite",
-                    *self.text("DECK AS CONTROLLER", 92, "white", "West", 305, 0, 2),
+                    *self.text("DECK PAD", 92, "white", "West", 305, 0, 4),
                     "(", "+clone", "-background", "black", "-shadow", "55x7+0+4", ")", "+swap", "-background", "none", "-layers", "merge", "+repage", "-trim", "+repage",
                     self.out / "_logo.png")
 

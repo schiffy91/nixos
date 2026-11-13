@@ -4,11 +4,12 @@ import Library.Tray;
 
 // The desktop switch for the service: one checkbox in the system tray.
 int main() {
-    var tray = SystemTray("Deckpad");
+    var tray = SystemTray("Deck Pad");
     var icon = Environment.get("DECKPAD_TRAY_ICON", "");
     if (!icon.isEmpty()) { tray.icon(icon); }
     tray.tip("Use this Deck as a Steam Controller")
-        .checkItem("Use this Deck as a controller", "deckpad-toggle", "systemctl is-active --quiet deckpad.service")
+        // The switch runs on its own: turned on, it stays until the service stops.
+        .checkItem("Use this Deck as a controller", "setsid --fork deckpad-toggle > /dev/null 2>&1 < /dev/null", "systemctl is-active --quiet deckpad.service")
         .item("Pair a new host (two minutes)", "deckpad-pair")
         .item("Quit tray", TraySignal.quit());
     try {

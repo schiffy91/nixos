@@ -3,3 +3,27 @@ manifest-version = 1
 [package]
 name = "nixos_deckpad"
 exports = ["Wire", "PadState", "PadSource", "DeckPad", "SteamController", "Controller", "ControllerUSB", "Link", "Protocol", "Trust", "SecureRelay", "NetworkLink", "GadgetLink", "BluetoothLink", "Service", "Control", "Host", "Doctor"]
+
+[[native.pkg-config]]
+name = "x11"
+modules = ["Screen"]
+os = ["linux"]
+
+[[native.bindings]]
+module = "Screen"
+header = "Screen.h"
+language = "c"
+standard = "c11"
+symbols = ["DeckScreen", "deckScreenOpen", "deckScreenAddNotice", "deckScreenEvents", "deckScreenPaint", "deckScreenDescriptor", "deckScreenClose"]
+read-only-borrows = ["deckScreenOpen.title", "deckScreenAddNotice.grey"]
+os = ["linux"]
+
+
+[[native.bindings]]
+module = "Awake"
+header = "Awake.h"
+language = "c"
+standard = "c11"
+symbols = ["deckAwakeOpen", "deckAwakeNudge", "deckAwakeClose"]
+read-only-borrows = ["deckAwakeOpen.name"]
+os = ["linux"]
