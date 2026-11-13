@@ -7,11 +7,23 @@ let
   semu = packages.semu;
   # the bundle is SEMU_ASSET_ROOT, so its bin/ and share/ are every emulator's own
   # binaries and desktop entries; a profile should publish only semu's own two
-  launcher = name: pkgs.writeShellScript "semu-${name}" ''
+  environment = ''
     export SEMU_TARGET="''${SEMU_TARGET:-${settings.target}}"
     ${lib.optionalString (settings.root != null) ''export SEMU_ROOT="''${SEMU_ROOT:-${settings.root}}"''}
-    exec ${semu}/bin/${name} "$@"
   '';
+  # the hourly sync is too slow for "saved on the Deck, continue on the desktop": the frontend
+  # also asks for one as it opens (other machines' saves come in) and as it closes (these go out)
+  syncNow = lib.optionalString (settings.drive != null && config.settings.apps.utils.rclone.enable)
+    "${pkgs.systemd}/bin/systemctl --user start --no-block rclone-offline-emulation.service >/dev/null 2>&1 || true";
+  launcher = name: pkgs.writeShellScript "semu-${name}" (environment + (if name == "semu-es-de" then ''
+    ${syncNow}
+    ${semu}/bin/${name} "$@"
+    status=$?
+    ${syncNow}
+    exit $status
+  '' else ''
+    exec ${semu}/bin/${name} "$@"
+  ''));
   semuProfile = pkgs.runCommand "semu-profile" { meta.mainProgram = "semu"; } ''
     mkdir -p "$out/bin" "$out/share/applications"
     ln -s ${launcher "semu"} "$out/bin/semu"
