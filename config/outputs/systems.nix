@@ -1,7 +1,7 @@
 { inputs, self, lib, hosts }:
 let
   bootableTargets = [ "Standard-Boot" "Secure-Boot" ];
-  systemModuleFiles = [ ../nixos.nix ];
+  systemModuleFiles = [ ../system/nixos ../pkgs ../pkgs/de/kde ];
   mkSystem = hostFile: target: modules:
     let
       system = hosts.hostSystem hostFile;
@@ -35,7 +35,7 @@ in {
     value = inputs.nix-darwin.lib.darwinSystem {
       inherit (host) system;
       specialArgs = { inherit inputs; };
-      modules = [ ../settings.nix ../darwin.nix host.module ];
+      modules = [ ../settings.nix ../system/darwin ../pkgs/darwin.nix host.module ];
     };
   }) hosts.darwin);
 }

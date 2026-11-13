@@ -46,12 +46,13 @@ appear under `nixosConfigurations`.
 |---|---|
 | `flake.nix` | Pinned inputs and the entry point into `config/outputs/` |
 | `config/outputs/` | Host registry, system and home configurations, disk operations, installers, and checks |
-| `config/nixos.nix`, `config/darwin.nix`, `config/home.nix` | Explicit platform and Home Manager module composition |
+| `config/outputs/systems.nix` | Names the system and package modules each platform is built from |
+| `config/home.nix` | Home Manager module composition |
 | `shell.nix` | Direnv-friendly dev shell with `btrcpy`, `btrc-lsp`, Nix tooling, Git, and a C toolchain |
 | `config/settings.nix` | Entry point importing the system and package option catalogs |
 | `config/system/options.nix` | Shared core options and imports for domain-owned system schemas |
-| `config/system/nixos/` | NixOS system modules |
-| `config/system/darwin/` | nix-darwin modules applying Mac settings |
+| `config/system/nixos/` | NixOS system modules, listed in its `default.nix` |
+| `config/system/darwin/` | nix-darwin modules applying Mac settings, listed in its `default.nix` |
 | `config/pkgs/de/kde/home.nix` | Linux Plasma Home Manager integration |
 | `config/pkgs/dev/` | Shared development tools, shell/Git Home Manager settings, and agent configuration |
 | `config/pkgs/` | Explicit development, desktop environment, gaming, and utility module catalogs |
@@ -487,7 +488,8 @@ OpenSSH, SSH agent forwarding, and optional primary-interface enforcement.
 Firewall LAN allow rules are derived from shared service flags and
 `settings.networking.ports.{tcp,udp}`.
 
-`config/nixos.nix` explicitly composes system and package modules.
+`config/outputs/systems.nix` builds every Linux host from `config/system/nixos`,
+`config/pkgs` and `config/pkgs/de/kde`; `config/system/nixos/default.nix` lists the system modules.
 `config/system/nixos/users.nix` imports Home Manager and defines immutable users:
 the interactive admin account and
 an isolated agent account with its own Home Manager profile and tool set. User
@@ -983,7 +985,7 @@ The migration to BTRC is complete. Current state:
 The Mac configuration is in [mbp21](config/hosts/aarch64/mbp21/README.md).
 Its single `default.nix` contains host package selections, shell overrides,
 Home Manager configuration and permission intent. `config/outputs/hosts.nix`
-selects Darwin for this host, and `config/darwin.nix` composes its platform modules.
+selects Darwin for this host, and `config/system/darwin` holds its platform modules.
 The standalone Home Manager output reuses the Darwin system's user declaration.
 
 The two platforms pin separately on purpose. `nixosctl update --upgrade` passes

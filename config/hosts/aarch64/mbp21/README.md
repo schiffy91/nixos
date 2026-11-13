@@ -2,7 +2,7 @@
 
 The checkout is `~/Drive/dev/nixos`. `default.nix` holds this Mac's host settings,
 package selections, rebuild aliases, permission intent and Home Manager overrides.
-`config/darwin.nix` and `config/home.nix` compose shared system and user modules;
+`config/system/darwin` and `config/home.nix` compose shared system and user modules;
 `config/pkgs/` owns application implementations. The standalone Home Manager
 output reuses the same evaluated user configuration as the Darwin system.
 
