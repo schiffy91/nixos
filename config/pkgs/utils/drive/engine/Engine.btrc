@@ -329,6 +329,7 @@ class Engine {
             return "ok\n";
         }
         if (words.len == 1 && words.get(0).equals("evict")) { return self.evict(true) + "\n"; }
+        if (words.len == 1 && words.get(0).equals("verify")) { return self.store.verify() + "\n"; }
         if (words.len >= 3 && words.get(0).equals("answer")) {
             string key = Strings.join(words.slice(2, words.len), " ");
             if (!self.readers.decide(key, words.get(1))) { return "unknown decision\n"; }

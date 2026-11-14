@@ -372,6 +372,7 @@ class Drive {
         else if (command.equals("pin") || command.equals("unpin") || command.equals("place")) { Drive.pin(options, command); }
         else if (command.equals("pins")) { Drive.ask(options, "pins"); }
         else if (command.equals("evict")) { Drive.ask(options, "evict"); }
+        else if (command.equals("verify")) { Console.log(Drive.asked(options, "verify", 3600)); }
         else if (command.equals("adopt")) { Drive.adopt(options); }
         else { Console.log("usage: drive door|engine|remote ... [--credentials FILE | --rclone FILE [--remote NAME]] [--api URL]"); }
         return 0;

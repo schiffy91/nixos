@@ -1,0 +1,96 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// The engine is killed in the middle of things. A read that was waiting fails and never returns zeros, an upload
+// the Drive had already taken is not sent again, and a program working in a pinned folder never notices.
+class CrashScenario {
+    private DriveFixture drive;
+    private Guest machine;
+    private string mount;
+    private string engine = "--quiet 1 --budget-files 0 --pin Game";
+
+    public CrashScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+        self.mount = self.drive.mount;
+    }
+
+    private string count(string name) { return self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py {name} | grep -c ' False$' || true").trim(); }
+
+    private void restart() {
+        self.machine.succeed("systemctl reset-failed drive-engine.service 2>/dev/null || true");
+        self.drive.startEngine(self.engine);
+        self.drive.connected();
+    }
+
+    private void prepare() {
+        self.drive.prepare();
+        self.machine.succeed(f"head -c 2000000 /dev/urandom > {self.drive.source}/big && head -c 500000 /dev/urandom > {self.drive.source}/rom");
+        self.drive.startFake();
+        self.drive.put("root", "big.bin", "big");
+        self.drive.put(self.drive.folder("root", "Game"), "rom.bin", "rom");
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor();
+        self.machine.waitUntil(f"drive status --runtime {self.drive.runtime} | grep -q ' 0 to download' && cmp -s {self.drive.store}/tree/Game/rom.bin {self.drive.source}/rom");
+    }
+
+    private void duringFetch() {
+        print("Killed while a read waits for its range: the read fails, and what it got is the file's own bytes");
+        self.drive.control("stall?on=download&seconds=8");
+        self.machine.succeed(f"systemd-run --unit reader --collect /run/current-system/sw/bin/sh -c 'cat {self.mount}/big.bin > /tmp/read.out 2> /tmp/read.err; echo $? > /tmp/read.status'");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/log' | grep -q 'big\\|bytes='");
+        self.machine.succeed("sleep 1; systemctl kill --signal=KILL drive-engine.service");
+        self.machine.waitUntil("test -s /tmp/read.status", 60);
+        Check.that(!self.machine.succeed("cat /tmp/read.status").trim().equals("0"), "the read does not succeed");
+        self.machine.succeed(f"cmp -n $(stat -c %s /tmp/read.out) /tmp/read.out {self.drive.source}/big");  // whatever arrived before the stop is real
+        self.restart();
+        self.machine.succeed(f"cmp {self.mount}/big.bin {self.drive.source}/big");
+    }
+
+    private void duringUpload() {
+        print("Killed after the Drive took an upload and before the engine could note it: the file is not sent twice");
+        self.drive.control("stall?on=upload&seconds=8");
+        self.machine.succeed(f"echo 'first save' > {self.mount}/Game/save.dat");
+        self.machine.waitUntil(f"test \"$(curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py save.dat | grep -c ' False$')\" = 1", 60);
+        self.machine.succeed("systemctl kill --signal=KILL drive-engine.service; sleep 8");  // the fake finishes its wait with nobody listening
+        self.restart();
+        self.machine.waitUntil(f"test -n \"$(getfattr --absolute-names -n user.drive.id --only-values {self.drive.store}/tree/Game/save.dat 2>/dev/null)\" && drive status --runtime {self.drive.runtime} | grep -q ' 0 changes to send'");
+        self.machine.succeed("sleep 3");
+        Check.equal(self.count("save.dat"), "1", "the Drive holds the save once");
+        Check.equal(self.machine.succeed(f"ls {self.mount}/Game | grep -c save").trim(), "1", "and so does the folder");
+    }
+
+    private void whilePlaying() {
+        print("A program reading and saving in a pinned folder does not notice the engine going away and coming back");
+        self.machine.succeed(f"printf 'import hashlib, sys, time\\nrom, save, want = sys.argv[1], sys.argv[2], sys.argv[3]\\nend = time.time() + 14\\nturn = 0\\nwhile time.time() < end:\\n    turn += 1\\n    if hashlib.sha256(open(rom, \"rb\").read()).hexdigest() != want:\\n        sys.exit(\"the rom read wrong\")\\n    open(save, \"w\").write(\"save \" + str(turn))\\n    time.sleep(0.2)\\nprint(\"turns\", turn)\\n' > /tmp/game.py");
+        self.machine.succeed(f"systemd-run --unit game --collect /run/current-system/sw/bin/sh -c 'PATH=/run/current-system/sw/bin; python3 /tmp/game.py {self.mount}/Game/rom.bin {self.mount}/Game/save.dat $(sha256sum < {self.drive.source}/rom | cut -d\" \" -f1) > /tmp/game.out 2>&1; echo $? > /tmp/game.status'");
+        self.machine.succeed("sleep 3; systemctl kill --signal=KILL drive-engine.service; sleep 5");
+        self.restart();
+        self.machine.waitUntil("test -s /tmp/game.status", 60);
+        Check.equal(self.machine.succeed("cat /tmp/game.status").trim(), "0", f"every read and every save worked: {self.machine.succeed("cat /tmp/game.out")}");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py save.dat | grep -q \" $(sha256sum < {self.mount}/Game/save.dat | cut -d' ' -f1) False\"");
+        Check.equal(self.count("save.dat"), "1", "the last save is on the Drive, still as one file");
+    }
+
+    public void check() {
+        self.prepare();
+        self.duringFetch();
+        self.duringUpload();
+        self.whilePlaying();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        CrashScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: an engine killed mid-read or mid-upload costs nothing and duplicates nothing");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

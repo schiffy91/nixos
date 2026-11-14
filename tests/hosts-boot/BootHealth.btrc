@@ -51,6 +51,7 @@ class BootHealth {
             for line in self.trouble { failures.push(f"in the journal: {line}"); }  // what failed, when nothing is in the failed list any more
         }
         for unit in self.failed { failures.push(f"failed unit: {unit}"); }
+        if (self.values.has("DRIVE") && !self.value("DRIVE").equals("1")) { failures.push("the Drive is not mounted for the user after this boot"); }  // only hosts that run the Drive client report it
         for unit in self.refused { failures.push(f"systemd refused: {unit}"); }
         if (!self.value("HOMEMANAGER").equals("active")) { failures.push("home-manager is not active"); }
         if (!self.value("TEXTPROMPT", "0").equals("0")) { failures.push("passphrase was asked on a text console"); }

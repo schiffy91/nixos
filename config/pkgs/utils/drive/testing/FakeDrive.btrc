@@ -6,6 +6,7 @@ import Library.HTTP;
 import Library.JSON;
 import Library.Map;
 import Library.Strings;
+import Library.Timer;
 import Library.Vector;
 
 import ../remote/DriveFile.btrc;
@@ -41,6 +42,8 @@ class FakeDrive {
     private long long clock = 1767261600000LL;  // 2026-01-01T10:00:00Z, one second per change
     private int pageSize = 1000;
     private int lost = 0;  // uploads to carry out and then answer with an error, as when the answer never arrives
+    private string stallOn = "";  // "upload" or "download": the next one waits before it is answered, so a test can stop the client in the middle
+    private int stallSeconds = 0;
     private int failures = 0;
     private int failureStatus = 503;
     private int shortBytes = -1;  // next download returns only this many
@@ -203,6 +206,10 @@ class FakeDrive {
     }
 
     private HTTPResponse content(HTTPRequest request, FakeEntry entry) {
+        if (self.stallOn.equals("download")) {
+            self.stallOn = "";
+            Timer.sleepMillis(self.stallSeconds * 1000);
+        }
         long long size = (long long)entry.content.length();
         long long first = 0LL;
         long long last = size - 1LL;
@@ -281,6 +288,10 @@ class FakeDrive {
         self.apply(target, upload.metadata);
         self.fill(target, request.bodyBytes);
         self.changed(target);
+        if (self.stallOn.equals("upload")) {
+            self.stallOn = "";
+            Timer.sleepMillis(self.stallSeconds * 1000);
+        }
         if (self.lost > 0) {
             self.lost--;
             return self.refuse(400, "badRequest", "The fake did the upload and lost its answer");
@@ -299,6 +310,9 @@ class FakeDrive {
             self.tokens.clear();
         } else if (action.equals("short")) {
             self.shortBytes = query.getOrDefault("bytes", "0").toInt();
+        } else if (action.equals("stall")) {
+            self.stallOn = query.getOrDefault("on", "upload");
+            self.stallSeconds = query.getOrDefault("seconds", "5").toInt();
         } else if (action.equals("lose")) {
             self.lost = query.getOrDefault("count", "1").toInt();
         } else if (action.equals("page")) {

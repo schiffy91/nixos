@@ -116,6 +116,7 @@ class Uploader {
         self.follow();
         if (self.waiting() == 0 && FileSystem.exists(self.store.journal("work"))) {  // left by an engine that stopped
             for line in Strings.split(FileSystem.readText(self.store.journal("work")), "\n") { self.take(line.trim()); }
+            for path in self.paths { self.doubted.put(path, true); }  // the engine that left these may have been stopped between sending one and noting it
         }
         string taken = self.store.journal("taken");
         if (!FileSystem.exists(taken) && !StorePaths.rename(self.store.journal("journal"), taken)) { return; }

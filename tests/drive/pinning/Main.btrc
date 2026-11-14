@@ -115,11 +115,25 @@ class PinningScenario {
         Check.that(true, "an adopted file syncs like any other");
     }
 
+    // The id names are how the engine finds a file the Drive speaks of. `drive verify` rebuilds them from the tree.
+    private void verified() {
+        print("A damaged index of ids is put right from the tree");
+        string id = self.drive.id("Pinned/p2.bin");
+        string bucket = id.substring(id.len() - 2, 2);
+        self.machine.succeed(f"rm {self.drive.store}/ids/{bucket}/{id} && mkdir -p {self.drive.store}/ids/zz && echo stray > {self.drive.store}/ids/zz/nobody");
+        string report = self.drive.drive("verify");
+        Check.that(report.contains(" 1 id names repaired, 1 stray id names removed"), f"the missing name is made again and the stray one removed: {report}");
+        self.drive.change(id, "p4");
+        self.machine.waitUntil(f"cmp -s {self.drive.store}/tree/Pinned/p2.bin {self.drive.source}/p4");
+        Check.that(self.drive.drive("verify").contains(" 0 id names repaired, 0 stray id names removed"), "the engine finds the file by its id again, and a second look finds nothing to do");
+    }
+
     public void check() {
         self.prepare();
         self.pinned();
         self.givenBack();
         self.adopted();
+        self.verified();
     }
 }
 
