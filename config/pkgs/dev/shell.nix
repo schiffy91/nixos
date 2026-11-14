@@ -11,6 +11,7 @@ let
   };
 in {
   aliases = {
+    agyd = "agy --dangerously-skip-permissions";
     clauded = "claude --dangerously-skip-permissions";
     print-files = "${printFiles}/bin/print-files";
     extract-substring = "${extractSubstring}/bin/extract-substring";
