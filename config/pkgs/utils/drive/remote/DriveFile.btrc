@@ -1,0 +1,68 @@
+import Library.JSON;
+import Library.Vector;
+
+import ./Timestamp.btrc;
+
+class DriveFile {  // one entry of the Drive, as the API describes it
+    public string id = "";
+    public string name = "";
+    public string parent = "";  // empty: not in My Drive's tree
+    public string mimeType = "";
+    public long long size = 0LL;
+    public long long modified = 0LL;  // UTC milliseconds
+    public string sha256 = "";
+    public string revision = "";  // changes when the content does
+    public long long version = 0LL;  // changes on any change
+    public bool trashed = false;
+
+    class string fields() { return "id,name,parents,mimeType,size,modifiedTime,sha256Checksum,headRevisionId,version,trashed"; }
+
+    class string folderType() { return "application/vnd.google-apps.folder"; }
+
+    public bool isFolder() { return self.mimeType.equals(DriveFile.folderType()); }
+
+    public bool isDocument() { return !self.isFolder() && self.mimeType.startsWith("application/vnd.google-apps."); }  // Docs, Sheets: no bytes to fetch
+
+    class DriveFile? parse(JSONValue value) {
+        if (!value.isObject() || !value.get("id").isString()) { return null; }
+        DriveFile file = DriveFile();
+        file.id = value.get("id").asString();
+        file.name = value.get("name").asString();
+        JSONValue parents = value.get("parents");
+        if (parents.isArray() && parents.size() > 0) { file.parent = parents.at(0).asString(); }
+        file.mimeType = value.get("mimeType").asString();
+        file.size = value.get("size").asString().toLong();
+        long long modified = Timestamp.parse(value.get("modifiedTime").asString());
+        file.modified = modified < 0LL ? 0LL : modified;
+        file.sha256 = value.get("sha256Checksum").asString();
+        file.revision = value.get("headRevisionId").asString();
+        file.version = value.get("version").asString().toLong();
+        file.trashed = value.get("trashed").asBool();
+        return file;
+    }
+}
+
+class DriveChange {
+    public string id = "";
+    public bool removed = false;  // gone for good, or no longer visible
+    public DriveFile? file = null;
+}
+
+class DriveListing {
+    public Vector<DriveFile> files = [];
+    public string next = "";  // empty: last page
+}
+
+class DriveChanges {
+    public Vector<DriveChange> changes = [];
+    public string next = "";  // more to read now
+    public string resume = "";  // where to start next time
+}
+
+class DrivePatch {  // what a metadata update changes
+    public string name = "";
+    public string addParent = "";
+    public string removeParent = "";
+    public long long modified = -1LL;
+    public bool trash = false;
+}

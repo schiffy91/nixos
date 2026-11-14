@@ -1,0 +1,120 @@
+import Library.Console;
+import Library.Crypto;
+import Library.JSON;
+import Library.Strings;
+import Library.Timer;
+import Library.Vector;
+
+import ../remote/DriveApi.btrc;
+
+// Being told when the Drive changes: Google publishes Drive events to a Pub/Sub topic in the Cloud project that
+// owns the sign-in's client, and this machine waits on a subscription to that topic.
+class Push {
+    private DriveApi api;
+    private string project;
+    private string topic = "drive-events";
+    private string subscription;
+
+    public Push(DriveApi api, string project, string machine) {
+        self.api = api;
+        self.project = project;
+        self.subscription = f"drive-events-{machine.toLower()}";
+    }
+
+    private string topicName() { return f"projects/{self.project}/topics/{self.topic}"; }
+
+    private string subscriptionName() { return f"projects/{self.project}/subscriptions/{self.subscription}"; }
+
+    private string why() {
+        DriveError? failure = self.api.failure;
+        return failure == null ? "no reason given" : failure.describe();
+    }
+
+    private bool exists() {  // the last call failed only because the thing is already there
+        DriveError? failure = self.api.failure;
+        return failure != null && failure.status == 409;
+    }
+
+    private JSONValue text(string value) { return JSONValue.makeString(value); }
+
+    // Turn on the two services, make the topic Drive may publish to and this machine's subscription. Safe to repeat.
+    public void prepare() {
+        JSONValue services = JSONValue.makeObject();
+        JSONValue ids = JSONValue.makeArray();
+        ids.push(self.text("pubsub.googleapis.com"));
+        ids.push(self.text("workspaceevents.googleapis.com"));
+        services.set("serviceIds", ids);
+        if (self.api.request("POST", f"https://serviceusage.googleapis.com/v1/projects/{self.project}/services:batchEnable", services.stringify()) == null) { throw f"Cannot turn on Pub/Sub and Workspace Events in project {self.project}: {self.why()}"; }
+        Console.log("services: on");
+        bool made = false;
+        for (int attempt = 0; attempt < 20 && !made; attempt++) {  // a service just turned on takes a moment to answer
+            made = self.api.request("PUT", f"https://pubsub.googleapis.com/v1/{self.topicName()}", "{}") != null || self.exists();
+            if (!made) { Timer.sleepMillis(3000); }
+        }
+        if (!made) { throw f"Cannot make the topic: {self.why()}"; }
+        Console.log(f"topic: {self.topicName()}");
+        JSONValue binding = JSONValue.makeObject();
+        binding.set("role", self.text("roles/pubsub.publisher"));
+        JSONValue members = JSONValue.makeArray();
+        members.push(self.text("serviceAccount:drive-api-event-push@system.gserviceaccount.com"));
+        binding.set("members", members);
+        JSONValue bindings = JSONValue.makeArray();
+        bindings.push(binding);
+        JSONValue policy = JSONValue.makeObject();
+        policy.set("bindings", bindings);
+        JSONValue grant = JSONValue.makeObject();
+        grant.set("policy", policy);
+        if (self.api.request("POST", f"https://pubsub.googleapis.com/v1/{self.topicName()}:setIamPolicy", grant.stringify()) == null) { throw f"Cannot let Drive publish to the topic: {self.why()}"; }
+        Console.log("topic: Drive may publish");
+        JSONValue wanted = JSONValue.makeObject();
+        wanted.set("topic", self.text(self.topicName()));
+        wanted.set("ackDeadlineSeconds", JSONValue.makeInt(30));
+        wanted.set("messageRetentionDuration", self.text("600s"));  // a machine that was away reads the change feed instead
+        wanted.set("expirationPolicy", JSONValue.makeObject());  // never expires for lack of use
+        if (self.api.request("PUT", f"https://pubsub.googleapis.com/v1/{self.subscriptionName()}", wanted.stringify()) == null && !self.exists()) { throw f"Cannot make this machine's subscription: {self.why()}"; }
+        Console.log(f"subscription: {self.subscriptionName()}");
+    }
+
+    // Ask Drive to publish what happens to a folder and everything in it. What Google answers, for the record.
+    public string watch(string folder) {
+        JSONValue request = JSONValue.makeObject();
+        request.set("targetResource", self.text(f"//drive.googleapis.com/files/{folder}"));
+        JSONValue types = JSONValue.makeArray();
+        for kind in ["created", "moved", "contentChanged", "deleted", "trashed", "untrashed", "renamed"] { types.push(self.text(f"google.workspace.drive.file.v3.{kind}")); }
+        request.set("eventTypes", types);
+        JSONValue endpoint = JSONValue.makeObject();
+        endpoint.set("pubsubTopic", self.text(self.topicName()));
+        request.set("notificationEndpoint", endpoint);
+        JSONValue payload = JSONValue.makeObject();
+        payload.set("includeResource", JSONValue.makeBool(false));
+        request.set("payloadOptions", payload);
+        JSONValue drive = JSONValue.makeObject();
+        drive.set("includeDescendants", JSONValue.makeBool(true));
+        request.set("driveOptions", drive);
+        JSONValue? answer = self.api.request("POST", "https://workspaceevents.googleapis.com/v1/subscriptions", request.stringify());
+        return answer == null ? f"refused: {self.why()}" : answer.stringify();
+    }
+
+    public string watching() {  // the event subscriptions this sign-in has
+        JSONValue? answer = self.api.request("GET", "https://workspaceevents.googleapis.com/v1/subscriptions?filter=event_types%3A%22google.workspace.drive.file.v3.created%22");
+        return answer == null ? f"refused: {self.why()}" : answer.stringify();
+    }
+
+    // Wait for messages: how many arrived, each printed as its event type and subject; -1 when the wait itself failed.
+    public int pull() {
+        JSONValue? answer = self.api.request("POST", f"https://pubsub.googleapis.com/v1/{self.subscriptionName()}:pull", "{\"maxMessages\":20}");
+        if (answer == null) { return -1; }
+        JSONValue acknowledge = JSONValue.makeArray();
+        for received in answer.get("receivedMessages").elements() {
+            JSONValue attributes = received.get("message").get("attributes");
+            Console.log(f"event {attributes.get("ce-type").asString()} {attributes.get("ce-subject").asString()} at {attributes.get("ce-time").asString()}");
+            acknowledge.push(received.get("ackId"));
+        }
+        if (acknowledge.size() > 0) {
+            JSONValue done = JSONValue.makeObject();
+            done.set("ackIds", acknowledge);
+            self.api.request("POST", f"https://pubsub.googleapis.com/v1/{self.subscriptionName()}:acknowledge", done.stringify());
+        }
+        return acknowledge.size();
+    }
+}

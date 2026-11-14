@@ -1,0 +1,216 @@
+import Library.CLI;
+import Library.Console;
+import Library.Platform;
+import Library.Timer;
+
+#include <stdio.h>
+
+import Library.FileSystem;
+import Library.FileSystem.IUserspaceFileSystem;
+import Library.FileSystem.Userspace;
+
+import ./auth/Login.btrc;
+import ./door/Channel.btrc;
+import ./door/Door.btrc;
+import ./engine/Engine.btrc;
+import ./push/Push.btrc;
+import ./remote/DriveApi.btrc;
+import ./remote/DriveFile.btrc;
+import ./remote/Transport.btrc;
+import ./store/Store.btrc;
+
+class Drive {
+    class DriveApi api(CLICommandLine options) {
+        string home = Environment.get("HOME", "");
+        DriveCredentials? credentials = null;
+        if (options.has("--rclone")) { credentials = DriveCredentials.fromRclone(options.option("--rclone", ""), options.option("--remote", "gdrive")); }
+        else { credentials = DriveCredentials.load(options.option("--credentials", f"{home}/.config/drive/credentials.json")); }
+        if (credentials == null) { throw "No Drive sign-in found (see --credentials and --rclone)"; }
+        DriveApi api = DriveApi(Transport(options.option("--scratch", Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/drive-transport")), credentials);
+        if (options.has("--api")) {
+            api.apiBase = options.option("--api", "");
+            api.tokenUrl = api.apiBase + "/token";
+        }
+        return api;
+    }
+
+    class string why(DriveApi api) {
+        DriveError? failure = api.failure;
+        return failure == null ? "no reason given" : failure.describe();
+    }
+
+    // Read-only looks at the Drive, for checking a sign-in and timing the API.
+    class void remote(CLICommandLine options) {
+        DriveApi api = Drive.api(options);
+        string what = options.operand(1, "root");
+        long long started = MonotonicClock.milliseconds();
+        if (what.equals("root")) {
+            string? root = api.rootId();
+            if (root == null) { throw f"Cannot reach the Drive: {Drive.why(api)}"; }
+            Console.log(f"root folder {root}");
+        } else if (what.equals("list")) {
+            int pages = options.option("--pages", "0").toInt();
+            int files = 0;
+            int folders = 0;
+            int documents = 0;
+            int orphans = 0;
+            long long bytes = 0LL;
+            string token = "";
+            int read = 0;
+            while (pages == 0 || read < pages) {
+                DriveListing? page = api.list(token);
+                if (page == null) { throw f"The listing stopped: {Drive.why(api)}"; }
+                read++;
+                for file in page.files {
+                    if (file.parent.isEmpty()) { orphans++; }
+                    if (file.isFolder()) { folders++; }
+                    else if (file.isDocument()) { documents++; }
+                    else {
+                        files++;
+                        bytes += file.size;
+                    }
+                }
+                token = page.next;
+                if (token.isEmpty()) { break; }
+            }
+            Console.log(f"{read} pages: {files} files ({bytes} bytes), {folders} folders, {documents} Google documents, {orphans} outside the tree{token.isEmpty() ? "" : ", more to read"}");
+        } else if (what.equals("changes")) {
+            string? start = options.has("--from") ? options.option("--from", "") : api.startToken();
+            if (start == null) { throw f"The change feed gave no position: {Drive.why(api)}"; }
+            DriveChanges? page = api.changes(start);
+            if (page == null) { throw f"The change feed stopped: {Drive.why(api)}"; }
+            Console.log(f"from {start}: {page.changes.len} changes, resume at {page.resume.isEmpty() ? page.next : page.resume}");
+        } else {
+            throw "usage: drive remote root|list [--pages N]|changes [--from POSITION]";
+        }
+        Console.log(f"took {MonotonicClock.milliseconds() - started} ms");
+    }
+
+    class string runtime(CLICommandLine options) { return options.option("--runtime", Environment.get("XDG_RUNTIME_DIR", "/run") + "/drive"); }
+
+    // The mount: forwards to the store's tree and asks the engine for what is not downloaded.
+    class void door(CLICommandLine options) {
+        string store = options.option("--store", "");
+        string directory = options.option("--mount", "");
+        if (store.isEmpty() || directory.isEmpty()) { throw "usage: drive door --store DIR --mount DIR [--runtime DIR] [--allow-others]"; }
+        FileSystem.mkdirp(Drive.runtime(options));
+        Door door = Door(store + "/tree", Drive.runtime(options) + "/door.sock");
+        UserspaceOptions mounting = UserspaceOptions();
+        mounting.name = "drive";
+        mounting.passthrough = true;
+        mounting.allowOthers = options.has("--allow-others");
+        UserspaceMount mount = Userspace.mount(door, directory, mounting);
+        Console.log("READY");
+        fflush(stdout);
+        door.serve(mount);
+    }
+
+    // The part that talks to the Drive.
+    class void engine(CLICommandLine options) {
+        string store = options.option("--store", "");
+        if (store.isEmpty()) { throw "usage: drive engine --store DIR [--runtime DIR] [--chunk BYTES] [--follow SECONDS]"; }
+        Engine engine = Engine(Drive.api(options), Store(store), Drive.runtime(options) + "/door.sock");
+        engine.chunk = options.option("--chunk", "4194304").toLong();
+        engine.followSeconds = options.option("--follow", "30").toInt();
+        if (engine.chunk < 4096LL || engine.chunk % 4096LL != 0LL) { throw "--chunk must be a multiple of 4096"; }
+        engine.readers.budgetFiles = options.option("--budget-files", "20").toInt();
+        engine.readers.budgetBytes = options.option("--budget-bytes", "268435456").toLong();
+        for path in options.values("--deny-file") { engine.readers.deny(path); }
+        for name in options.values("--deny") { engine.readers.denied.push(name); }
+        engine.askCommand = options.option("--ask", "");
+        engine.askSeconds = options.option("--ask-seconds", "60").toInt();
+        Console.log("READY");
+        fflush(stdout);
+        engine.run();
+    }
+
+    // Sign in through a browser and keep the result. The OAuth client comes from an earlier sign-in or from rclone's.
+    class void auth(CLICommandLine options) {
+        string home = Environment.get("HOME", "");
+        string path = options.option("--credentials", f"{home}/.config/drive/credentials.json");
+        DriveCredentials? client = options.has("--rclone") ? DriveCredentials.fromRclone(options.option("--rclone", ""), options.option("--remote", "gdrive")) : DriveCredentials.load(path);
+        if (client == null) { throw "No OAuth client found: pass --rclone FILE to take rclone's"; }
+        Vector<string> scopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/pubsub"];
+        for extra in options.values("--scope") { scopes.push(extra); }
+        Transport transport = Transport(options.option("--scratch", Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/drive-transport"));
+        DriveCredentials granted = Login.run(client, scopes, transport, options.option("--port", "53683").toInt(), options.option("--wait", "300").toInt());
+        FileSystem.mkdirp(PathTools.dirname(path));
+        Login.save(granted, path);
+        Console.log(f"Signed in; kept in {path} (granted: {granted.scope})");
+    }
+
+    // Push: set it up in the Cloud project, ask Drive to publish a folder's events, or wait for them.
+    class void push(CLICommandLine options) {
+        DriveApi api = Drive.api(options);
+        string home = Environment.get("HOME", "");
+        DriveCredentials? credentials = options.has("--rclone") ? DriveCredentials.fromRclone(options.option("--rclone", ""), options.option("--remote", "gdrive")) : DriveCredentials.load(options.option("--credentials", f"{home}/.config/drive/credentials.json"));
+        if (credentials == null) { throw "No Drive sign-in found"; }
+        string project = options.option("--project", credentials.clientId.substring(0, credentials.clientId.indexOf("-")));
+        Push push = Push(api, project, options.option("--machine", Environment.get("HOSTNAME", "machine")));
+        string what = options.operand(1, "");
+        if (what.equals("prepare")) {
+            push.prepare();
+        } else if (what.equals("watch")) {
+            string? root = options.has("--folder") ? options.option("--folder", "") : api.rootId();
+            if (root == null) { throw f"Cannot find the folder to watch: {Drive.why(api)}"; }
+            Console.log(push.watch(root));
+        } else if (what.equals("watching")) {
+            Console.log(push.watching());
+        } else if (what.equals("pull")) {
+            long long until = MonotonicClock.milliseconds() + options.option("--seconds", "60").toLong() * 1000LL;
+            int total = 0;
+            while (MonotonicClock.milliseconds() < until) {
+                int arrived = push.pull();
+                if (arrived < 0) { throw f"Cannot wait on the subscription: {Drive.why(api)}"; }
+                total += arrived;
+            }
+            Console.log(f"{total} events");
+        } else {
+            throw "usage: drive push prepare|watch [--folder ID]|watching|pull [--seconds N]";
+        }
+    }
+
+    // Ask the running engine something and print what it says.
+    class void ask(CLICommandLine options, string message) {
+        Channel? engine = Channel.connect(Drive.runtime(options) + "/engine.sock");
+        if (engine == null || !engine.send(message)) { throw "The engine is not running"; }
+        Channel.wait(engine.handle(), -1, -1, 10000);
+        Console.write(engine.receive());
+    }
+
+    // Which programs may download: the list, or a decision for one of them.
+    class void readers(CLICommandLine options) {
+        string decision = options.operand(1, "");
+        if (decision.isEmpty()) {
+            Drive.ask(options, "readers");
+            return;
+        }
+        string key = options.operand(2, "");
+        if (key.isEmpty()) { throw "usage: drive readers [allow|block|once|forget READER]"; }
+        Drive.ask(options, f"answer {decision} {key}");
+    }
+
+    class int run(CLIArgs args) {
+        CLICommandLine options = CLICommandLine.parseFrom(args, 0);
+        string command = options.operand(0, "help");
+        if (command.equals("remote")) { Drive.remote(options); }
+        else if (command.equals("door")) { Drive.door(options); }
+        else if (command.equals("engine")) { Drive.engine(options); }
+        else if (command.equals("readers")) { Drive.readers(options); }
+        else if (command.equals("auth")) { Drive.auth(options); }
+        else if (command.equals("push")) { Drive.push(options); }
+        else if (command.equals("status")) { Drive.ask(options, "status"); }
+        else { Console.log("usage: drive door|engine|remote ... [--credentials FILE | --rclone FILE [--remote NAME]] [--api URL]"); }
+        return 0;
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        return Drive.run(CLIArgs(argc, argv));
+    } catch (string error) {
+        Console.error(f"drive: {error}");
+        return 1;
+    }
+    return 1;
+}

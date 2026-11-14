@@ -1,0 +1,226 @@
+import Library.Bytes;
+import Library.Console;
+import Library.FileSystem;
+import Library.FileSystem.IUserspaceFileSystem;
+import Library.FileSystem.Userspace;
+import Library.FileSystem.UserspaceForwarding;
+import Library.FileSystem.UserspaceRequest;
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
+
+import ../store/StoreFile.btrc;
+import ./Channel.btrc;
+
+#include <errno.h>
+#include <fcntl.h>
+
+class DoorOpen {  // one open file
+    public StoreFile file;
+    public string id;
+    public bool cloud;  // may still have ranges to fetch
+
+    public DoorOpen(StoreFile file, string id, bool cloud) {
+        self.file = file;
+        self.id = id;
+        self.cloud = cloud;
+    }
+}
+
+class DoorKnock {  // an open waiting for the engine to say whether its contents can be had
+    public UserspaceOpenReply reply;
+    public StoreFile file;
+
+    public DoorKnock(UserspaceOpenReply reply, StoreFile file) {
+        self.reply = reply;
+        self.file = file;
+    }
+}
+
+class DoorWait {  // a read waiting for the engine to fetch its range
+    public UserspaceDataReply reply;
+    public long handle;
+    public long long offset;
+    public int size;
+
+    public DoorWait(UserspaceDataReply reply, long handle, long long offset, int size) {
+        self.reply = reply;
+        self.handle = handle;
+        self.offset = offset;
+        self.size = size;
+    }
+}
+
+// The only way into the store: a mount that forwards to the real tree. Downloaded files are handed to the
+// kernel; a read of a range that is not downloaded waits while the engine fetches it. Nothing is changed here yet.
+class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
+    private UserspaceForwarding inner;
+    private Channel listener;
+    private Channel? engine = null;
+    private Map<long, DoorOpen> opens = {};
+    private Map<long, DoorWait> waits = {};
+    private Map<long, DoorKnock> knocks = {};
+    private long ticket = 0L;
+
+    public Door(string tree, string socket) {
+        self.inner = UserspaceForwarding(tree);
+        self.inner.attributeStore = false;  // Drive keeps none, and the store's own stay out of sight
+        Channel? listener = Channel.listen(socket);
+        if (listener == null) { throw f"Cannot listen for the engine at {socket}"; }
+        self.listener = listener;
+    }
+
+    private UserspaceError readOnly() { return UserspaceError.fromNative(EROFS); }
+
+    public void lookup(UserspaceEntryReply reply, long parent, string name) { self.inner.lookup(reply, parent, name); }
+
+    public void forget(long node, long count) { self.inner.forget(node, count); }
+
+    public void attributes(UserspaceAttributesReply reply, long node, long handle) { self.inner.attributes(reply, node, handle); }
+
+    public void open(UserspaceOpenReply reply, long node, int flags) {
+        if ((flags & (int)O_ACCMODE) != (int)O_RDONLY || (flags & (int)O_TRUNC) != 0) {
+            reply.fail(self.readOnly());
+            return;
+        }
+        StoreFile? opened = StoreFile.reopen(self.inner.descriptor(node));
+        if (opened == null) {
+            reply.fail(UserspaceError.fromNative(errno));
+            return;
+        }
+        if (!opened.attribute("state").equals("cloud")) {
+            long handle = (long)opened.handle();
+            self.opens.put(handle, DoorOpen(opened, opened.attribute("id"), false));
+            reply.passthrough(handle, opened.handle());
+            return;
+        }
+        // An open can refuse with the exact reason; a read that fails later can only say "I/O error". So ask first.
+        Channel? engine = self.engine;
+        self.ticket++;
+        if (engine == null || !engine.send(f"open {self.ticket} {opened.attribute("id")} {reply.caller().process}")) {
+            reply.fail(UserspaceError.unavailable());
+            return;
+        }
+        self.knocks.put(self.ticket, DoorKnock(reply, opened));
+    }
+
+    private void admitted(long ticket, string outcome) {
+        if (!self.knocks.has(ticket)) { return; }
+        DoorKnock knock = self.knocks.get(ticket);
+        self.knocks.remove(ticket);
+        if (!outcome.equals("ok")) {
+            knock.reply.fail(outcome.equals("denied") ? UserspaceError.notPermitted() : outcome.equals("offline") ? UserspaceError.unavailable() : UserspaceError.io());
+            return;
+        }
+        long handle = (long)knock.file.handle();
+        self.opens.put(handle, DoorOpen(knock.file, knock.file.attribute("id"), true));
+        knock.reply.opened(handle);
+    }
+
+    public void read(UserspaceDataReply reply, long node, long handle, long offset, int size) {
+        if (!self.opens.has(handle)) {
+            reply.fail(UserspaceError.stale());
+            return;
+        }
+        DoorOpen open = self.opens.get(handle);
+        long long length = open.file.size() - (long long)offset;
+        if (length > (long long)size) { length = (long long)size; }
+        if (length <= 0LL) {
+            reply.data(Bytes());
+            return;
+        }
+        if (!open.cloud || open.file.has((long long)offset, length)) {
+            reply.data(open.file.read((long long)offset, (int)length));
+            return;
+        }
+        Channel? engine = self.engine;
+        self.ticket++;
+        if (engine == null || !engine.send(f"fetch {self.ticket} {open.id} {offset} {length} {reply.caller().process}")) {
+            reply.fail(UserspaceError.unavailable());  // nobody to fetch it
+            return;
+        }
+        self.waits.put(self.ticket, DoorWait(reply, handle, (long long)offset, (int)length));
+    }
+
+    public void close(UserspaceDoneReply reply, long node, long handle) {
+        self.opens.remove(handle);  // dropping the file closes it
+        reply.done();
+    }
+
+    public void openDirectory(UserspaceOpenReply reply, long node) { self.inner.openDirectory(reply, node); }
+
+    public void list(UserspaceListReply reply, long node, long handle, long offset) { self.inner.list(reply, node, handle, offset); }
+
+    public void closeDirectory(UserspaceDoneReply reply, long node, long handle) { self.inner.closeDirectory(reply, node, handle); }
+
+    public void statistics(UserspaceStatisticsReply reply, long node) { self.inner.statistics(reply, node); }
+
+    public void readLink(UserspaceDataReply reply, long node) { self.inner.readLink(reply, node); }
+
+    public void symbolicLink(UserspaceEntryReply reply, long parent, string name, string target) { reply.fail(self.readOnly()); }
+
+    public void link(UserspaceEntryReply reply, long node, long newParent, string newName) { reply.fail(self.readOnly()); }
+
+    // A file that is not all here still reads as all data: the holes are the client's, not the file's.
+    public void seek(UserspaceOffsetReply reply, long node, long handle, long offset, bool toHole) {
+        if (!self.opens.has(handle) || !self.opens.get(handle).cloud) {
+            self.inner.seek(reply, node, handle, offset, toHole);
+            return;
+        }
+        long long size = self.opens.get(handle).file.size();
+        if ((long long)offset >= size) { reply.fail(UserspaceError.fromNative(ENXIO)); }
+        else { reply.offset(toHole ? (long)size : offset); }
+    }
+
+    // What the engine says of a fetch: the read is answered from the file, or fails the way the fetch did.
+    private void finished(long ticket, string outcome) {
+        if (!self.waits.has(ticket)) { return; }
+        DoorWait wait = self.waits.get(ticket);
+        self.waits.remove(ticket);
+        if (!outcome.equals("ok")) {
+            wait.reply.fail(outcome.equals("denied") ? UserspaceError.notPermitted() : outcome.equals("offline") ? UserspaceError.unavailable() : UserspaceError.io());
+        } else if (!self.opens.has(wait.handle)) {
+            wait.reply.fail(UserspaceError.stale());
+        } else {
+            wait.reply.data(self.opens.get(wait.handle).file.read(wait.offset, wait.size));
+        }
+    }
+
+    private void abandon() {  // the engine is gone: nothing it was fetching will arrive
+        for wait in self.waits.values() { wait.reply.fail(UserspaceError.unavailable()); }
+        self.waits.clear();
+        for knock in self.knocks.values() { knock.reply.fail(UserspaceError.unavailable()); }
+        self.knocks.clear();
+        self.engine = null;
+    }
+
+    private void hear() {
+        Channel? engine = self.engine;
+        while (engine != null && engine.isOpen()) {
+            string message = engine.receive();
+            if (message.isEmpty()) { break; }
+            Vector<string> words = Strings.split(message, " ");
+            if (words.len == 3 && words.get(0).equals("done")) { self.finished(words.get(1).toLong(), words.get(2)); }
+            if (words.len == 3 && words.get(0).equals("opened")) { self.admitted(words.get(1).toLong(), words.get(2)); }
+        }
+        if (engine != null && !engine.isOpen()) { self.abandon(); }
+    }
+
+    // Serve the mount and the engine until the mount is gone.
+    public void serve(UserspaceMount mount) {
+        while (true) {
+            Channel? engine = self.engine;
+            int ready = Channel.wait(mount.handle(), self.listener.handle(), engine == null ? -1 : engine.handle(), 1000);
+            if ((ready & 1) != 0 && !mount.step()) { break; }
+            if ((ready & 2) != 0) {
+                Channel? arrived = self.listener.accept();
+                if (arrived != null) {
+                    self.abandon();  // a new engine replaces one that went quiet
+                    self.engine = arrived;
+                }
+            }
+            if ((ready & 4) != 0) { self.hear(); }
+        }
+        self.abandon();
+    }
+}

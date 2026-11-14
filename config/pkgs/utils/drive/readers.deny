@@ -1,0 +1,35 @@
+# Programs that never cause a download. They still see names and sizes.
+# One name per line: a program's name, or interpreter:script for a script.
+# Indexers and desktop search
+baloo_file
+baloo_file_extractor
+baloo_fileindexer
+baloorunner
+tracker-extract-3
+tracker-miner-fs-3
+localsearch-3
+recollindex
+updatedb
+plocate
+# Thumbnails and previews
+kioworker:thumbnail
+ffmpegthumbnailer
+ffmpegthumbs
+gdk-pixbuf-thumbnailer
+tumblerd
+totem-video-thumbnailer
+evince-thumbnailer
+# Backup and other sync tools: they would copy the whole Drive back out
+restic
+borg
+kopia
+duplicity
+duplicacy
+rsnapshot
+syncthing
+rclone
+insync
+# Scanners
+clamscan
+clamd
+clamdscan

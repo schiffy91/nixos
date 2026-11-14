@@ -1,0 +1,151 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.IO;
+import Library.JSON;
+import Library.Map;
+import Library.Strings;
+import Library.Timer;
+import Library.Vector;
+
+import ../store/StoreFile.btrc;
+
+class Reader {  // who is asking for a file's contents
+    public string key;  // what decisions are remembered under
+    public string label;  // what a person is shown
+
+    public Reader(string key, string label) {
+        self.key = key;
+        self.label = label;
+    }
+}
+
+class ReaderUse {  // what one reader has asked for lately
+    public long long since;
+    public Vector<string> files = [];
+    public long long bytes = 0LL;
+    public bool once = false;  // allowed for this stretch only
+
+    public ReaderUse(long long since) { self.since = since; }
+}
+
+// Which programs may cause downloads. Listing never downloads; reading contents does, so a program gets a small
+// allowance of not-downloaded data and past it someone has to say yes. Indexers and the like are refused outright.
+class Readers {
+    private string path;
+    private Map<string, string> decisions = {};  // key -> allow | block
+    private Map<string, ReaderUse> uses = {};
+    public Vector<string> denied = [];  // from the deny file and --deny
+    public int budgetFiles = 20;  // 0: no allowance, nothing is ever asked
+    public long long budgetBytes = 268435456LL;
+    public int windowSeconds = 60;
+
+    public Readers(string path) {
+        self.path = path;
+        JSONValue stored = JSONValue.readFile(path);
+        for key in stored.keys() { self.decisions.put(key, stored.get(key).asString()); }
+    }
+
+    // Names from a file, one per line; lines starting with # are comments.
+    public void deny(string path) {
+        for line in Strings.split(FileSystem.readText(path), "\n") {
+            string name = line.trim();
+            if (!name.isEmpty() && !name.startsWith("#") && !self.denied.contains(name)) { self.denied.push(name); }
+        }
+    }
+
+    private void save() {
+        JSONValue stored = JSONValue.makeObject();
+        for key in self.decisions.keys().sorted() { stored.set(key, JSONValue.makeString(self.decisions.get(key))); }
+        string staged = self.path + ".new";
+        if (Path.writeAll(staged, stored.document())) { rename(staged, self.path); }
+    }
+
+    private Vector<string> arguments(int process) {
+        Vector<string> arguments = [];
+        Bytes raw = StorePaths.contents(f"/proc/{process}/cmdline");
+        Bytes word = Bytes();
+        for (int index = 0; index < raw.length(); index++) {
+            if (raw.get(index) != 0) {
+                word.append(raw.get(index));
+                continue;
+            }
+            arguments.push(word.toStringLossy());
+            word = Bytes();
+        }
+        return arguments;
+    }
+
+    // "python" for python3.13 and the like; empty for a program that is not an interpreter.
+    private string interpreter(string name) {
+        for prefix in ["python", "bash", "sh", "zsh", "dash", "node", "perl", "ruby", "lua", "php"] {
+            if (name.equals(prefix) || (name.startsWith(prefix) && Strings.isDigit(name.charAt(prefix.len())))) { return prefix; }
+        }
+        return "";
+    }
+
+    // A program is known by its name; a script by its interpreter and its own path, so allowing one script allows no other.
+    public Reader identify(int process) {
+        if (process <= 0) { return Reader("unknown", "a program this machine cannot identify"); }
+        string program = PathTools.basename(FileSystem.readLink(f"/proc/{process}/exe"));
+        if (program.isEmpty()) { return Reader("unknown", "a program this machine cannot identify"); }
+        if (program.startsWith(".") && program.endsWith("-wrapped")) { program = program.substring(1, program.len() - 9); }  // Nix wrappers
+        Vector<string> arguments = self.arguments(process);
+        if (["coreutils", "busybox", "toybox"].contains(program) && arguments.len > 0) {  // one binary under many names
+            string shebang = "--coreutils-prog-shebang=";
+            if (arguments.len > 1 && arguments.get(1).startsWith(shebang)) { program = arguments.get(1).substring(shebang.len(), arguments.get(1).len() - shebang.len()); }
+            else { program = PathTools.basename(arguments.get(0)); }
+        }
+        if (program.equals("kioworker") && arguments.len > 2) { return Reader(f"kioworker:{arguments.get(2)}", f"the file manager's {arguments.get(2)} helper"); }  // KDE runs previews and transfers through one program
+        string interpreter = self.interpreter(program);
+        if (interpreter.isEmpty()) { return Reader(program, program); }
+        program = interpreter;
+        for (int index = 1; index < arguments.len; index++) {
+            string argument = arguments.get(index);
+            if (argument.startsWith("-")) {
+                if (argument.equals("-c")) { break; }  // a one-line command, not a script
+                continue;
+            }
+            return Reader(f"{program}:{argument}", f"{PathTools.basename(argument)} (run by {program})");
+        }
+        return Reader(program, program);
+    }
+
+    private ReaderUse use(string key) {
+        long long now = MonotonicClock.milliseconds();
+        if (!self.uses.has(key) || now - self.uses.get(key).since > (long long)self.windowSeconds * 1000LL) { self.uses.put(key, ReaderUse(now)); }
+        return self.uses.get(key);
+    }
+
+    // Whether `who` may have `bytes` of the not-downloaded file `id`: "ok", "denied", or "ask".
+    public string verdict(Reader who, string id, long long bytes) {
+        string decision = self.decisions.getOrDefault(who.key, "");
+        if (decision.equals("allow")) { return "ok"; }
+        if (decision.equals("block") || self.denied.contains(who.key)) { return "denied"; }
+        if (self.budgetFiles <= 0) { return "ok"; }
+        ReaderUse use = self.use(who.key);
+        if (use.once) { return "ok"; }
+        if (!use.files.contains(id)) { use.files.push(id); }
+        use.bytes += bytes;
+        return use.files.len > self.budgetFiles || use.bytes > self.budgetBytes ? "ask" : "ok";
+    }
+
+    // What a person decided: allow, block, or once (for the current stretch only).
+    public bool decide(string key, string decision) {
+        if (decision.equals("once")) {
+            self.use(key).once = true;
+            return true;
+        }
+        if (decision.equals("forget")) { self.decisions.remove(key); }
+        else if (decision.equals("allow") || decision.equals("block")) { self.decisions.put(key, decision); }
+        else { return false; }
+        self.uses.remove(key);
+        self.save();
+        return true;
+    }
+
+    public string describe() {  // one line per remembered decision
+        Vector<string> lines = [];
+        for key in self.decisions.keys().sorted() { lines.push(f"{self.decisions.get(key)} {key}"); }
+        return Strings.join(lines, "\n");
+    }
+}

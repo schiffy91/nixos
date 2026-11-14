@@ -1,0 +1,103 @@
+import Library.Map;
+import Library.Vector;
+
+import ../remote/DriveApi.btrc;
+import ../remote/DriveFile.btrc;
+import ../store/Store.btrc;
+
+// Keeps the store's tree the shape of the Drive: all of it once, then what the change feed reports.
+class Mirror {
+    private DriveApi api;
+    private Store store;
+
+    public Mirror(DriveApi api, Store store) {
+        self.api = api;
+        self.store = store;
+    }
+
+    private string why() {
+        DriveError? failure = self.api.failure;
+        return failure == null ? "no reason given" : failure.describe();
+    }
+
+    // The whole Drive into an empty store. The feed position is taken first, so nothing that changes meanwhile is lost.
+    public void build() {
+        string? root = self.api.rootId();
+        string? start = self.api.startToken();
+        if (root == null || start == null) { throw f"Cannot reach the Drive: {self.why()}"; }
+        self.store.adoptRoot(root);
+        Map<string, Vector<DriveFile>> children = {};
+        string token = "";
+        while (true) {
+            DriveListing? page = self.api.list(token);
+            if (page == null) { throw f"The listing stopped: {self.why()}"; }
+            for file in page.files {
+                if (file.parent.isEmpty()) {
+                    self.store.skipped++;
+                    continue;
+                }
+                if (!children.has(file.parent)) { children.put(file.parent, []); }
+                children.get(file.parent).push(file);
+            }
+            token = page.next;
+            if (token.isEmpty()) { break; }
+        }
+        Vector<string> waiting = [root];  // folders whose contents are still to be made
+        int reached = 0;
+        while (waiting.len > 0) {
+            string folder = waiting.pop();
+            if (!children.has(folder)) { continue; }
+            for file in children.get(folder) {
+                if (self.store.knows(file.id)) { self.store.update(file); }  // a build that was interrupted carries on
+                else if (self.store.add(file)) { reached++; }
+                if (file.isFolder()) { waiting.push(file.id); }
+            }
+            children.remove(folder);
+        }
+        for orphans in children.values() { self.store.skipped += orphans.len; }  // under folders that are not in the tree
+        if (!self.store.setPosition(start)) { throw "Cannot record the change feed position"; }
+    }
+
+    // False when the entry is new and its folder is not here yet.
+    private bool apply(DriveChange change) {
+        DriveFile? file = change.file;
+        if (change.removed || file == null || file.trashed) {
+            if (self.store.knows(change.id)) { self.store.discard(change.id); }
+            return true;
+        }
+        if (self.store.knows(file.id)) {
+            self.store.update(file);
+            return true;
+        }
+        return !file.parent.isEmpty() && self.store.add(file);
+    }
+
+    // What changed on the Drive since last time. False leaves the position where it was, to try again.
+    public bool follow() {
+        string token = self.store.position();
+        if (token.isEmpty()) { throw "The store has no change feed position; build it first"; }
+        while (true) {
+            DriveChanges? page = self.api.changes(token);
+            if (page == null) { return false; }
+            Vector<DriveChange> waiting = [];  // a new folder's contents can be listed before the folder
+            for change in page.changes {
+                if (!self.apply(change)) { waiting.push(change); }
+            }
+            bool progress = true;
+            while (progress && waiting.len > 0) {
+                progress = false;
+                Vector<DriveChange> still = [];
+                for change in waiting {
+                    if (self.apply(change)) { progress = true; }
+                    else { still.push(change); }
+                }
+                waiting = still;
+            }
+            self.store.skipped += waiting.len;
+            token = page.next.isEmpty() ? page.resume : page.next;
+            if (!self.store.setPosition(token)) { throw "Cannot record the change feed position"; }
+            if (page.next.isEmpty()) { return true; }
+        }
+        return true;
+    }
+}

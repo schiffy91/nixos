@@ -1,0 +1,21 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+// The store keeps its facts in extended attributes and sparse files, which a build sandbox refuses, so a VM runs its contract.
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        Guest machine = lab.guest("machine");
+        machine.waitForUnit("multi-user.target");
+        machine.succeed("drive-fake 18474 > /tmp/fake.log 2>&1 &");
+        machine.waitUntil("grep -q READY /tmp/fake.log");
+        Check.equal(machine.succeed("mkdir -p /var/tmp/drive && drive-store-contract 18474 /var/tmp/drive", 300), "PASS: the store follows the Drive\n", "the store contract passes on a real filesystem");
+        lab.close();
+        print("PASS: the store follows the Drive");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

@@ -1,0 +1,244 @@
+import Library.Bytes;
+import Library.FileSystem;
+import Library.IO;
+import Library.JSON;
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
+
+import ../remote/DriveFile.btrc;
+import ./StoreFile.btrc;
+
+// The local copy of the Drive: a real tree of folders and files, each carrying
+// what the client knows about it. Files that are not downloaded are the right
+// size and hold no data. `ids/` names every file by its Drive id as well.
+class Store {
+    private string root;
+    private Map<string, string> folders = {};  // Drive id -> path in the tree
+    public int added = 0;
+    public int changed = 0;
+    public int removed = 0;
+    public int skipped = 0;  // not in My Drive's tree
+
+    public Store(string root) {
+        self.root = root;
+        for name in ["tree", "ids", "dirty", "trash", "tmp"] {
+            if (FileSystem.mkdirp(f"{root}/{name}") != 0 && !FileSystem.isDir(f"{root}/{name}")) { throw f"Cannot prepare the store at {root}"; }
+        }
+    }
+
+    public string tree() { return self.root + "/tree"; }
+
+    public string temporary(string name) { return f"{self.root}/tmp/{name}"; }
+
+    public string position() { return FileSystem.readText(self.root + "/position").trim(); }  // where the change feed was read to
+
+    public bool setPosition(string position) {
+        string staged = self.temporary("position");
+        return Path.writeAll(staged, position + "\n") && StorePaths.rename(staged, self.root + "/position");
+    }
+
+    private string linkPath(string id) {
+        string bucket = id.len() >= 2 ? id.substring(id.len() - 2, 2) : "__";
+        return f"{self.root}/ids/{bucket}/{id}";
+    }
+
+    public bool knows(string id) { return self.folders.has(id) || FileSystem.exists(self.linkPath(id)); }
+
+    public string folderPath(string id) { return self.folders.getOrDefault(id, ""); }
+
+    public int folderCount() { return self.folders.size(); }
+
+    public StoreFile? file(string id, bool write = false) { return StoreFile.open(self.linkPath(id), write); }
+
+    // Where a file is in the tree, from what it carries; empty when unknown.
+    public string filePath(string id) {
+        StoreFile? held = self.file(id);
+        if (held == null) { return ""; }
+        string parent = self.folderPath(held.attribute("parent"));
+        string name = held.attribute("local");
+        return parent.isEmpty() || name.isEmpty() ? "" : f"{parent}/{name}";
+    }
+
+    // A Drive name as a file name here: Drive allows names a folder cannot hold.
+    class string localName(string name) {
+        string local = name.replace("/", "∕");
+        if (local.isEmpty()) { local = "_"; }
+        if (local.equals(".") || local.equals("..")) { local = "_" + local; }
+        while (local.len() > 240) { local = local.substring(0, local.len() - 1); }
+        return local;
+    }
+
+    // `wanted`, or the first "name (2).ext" that is free in `folder`.
+    private string free(string folder, string wanted) {
+        if (!FileSystem.exists(f"{folder}/{wanted}") && !FileSystem.isSymlink(f"{folder}/{wanted}")) { return wanted; }
+        int dot = wanted.lastIndexOf(".");
+        string stem = dot > 0 ? wanted.substring(0, dot) : wanted;
+        string extension = dot > 0 ? wanted.substring(dot, wanted.len() - dot) : "";
+        for (int number = 2; number < 100000; number++) {
+            string candidate = f"{stem} ({number}){extension}";
+            if (!FileSystem.exists(f"{folder}/{candidate}")) { return candidate; }
+        }
+        throw f"Too many entries named {wanted} in {folder}";
+    }
+
+    private string documentLink(DriveFile file) {
+        JSONValue link = JSONValue.makeObject();
+        link.set("url", JSONValue.makeString(f"https://drive.google.com/open?id={file.id}"));
+        link.set("id", JSONValue.makeString(file.id));
+        link.set("type", JSONValue.makeString(file.mimeType));
+        return link.document();
+    }
+
+    private void describe(StoreFile held, DriveFile file, string local) {
+        held.setAttribute("id", file.id);
+        held.setAttribute("parent", file.parent);
+        held.setAttribute("name", file.name);
+        held.setAttribute("local", local);
+        held.setAttribute("version", f"{file.version}");
+        if (!file.isFolder()) { held.setAttribute("revision", file.isDocument() ? f"v{file.version}" : file.revision); }
+        if (!file.sha256.isEmpty()) { held.setAttribute("sha256", file.sha256); }
+    }
+
+    public void adoptRoot(string id) {  // My Drive itself
+        self.folders.put(id, self.tree());
+        StoreFile? held = StoreFile.open(self.tree());
+        if (held != null) { held.setAttribute("id", id); }
+    }
+
+    // Make the entry Drive describes. False when its folder is not here (yet).
+    public bool add(DriveFile file) {
+        string folder = self.folderPath(file.parent);
+        if (folder.isEmpty()) { return false; }
+        string wanted = Store.localName(file.name) + (file.isDocument() ? ".gdoc" : "");
+        string local = self.free(folder, wanted);
+        string path = f"{folder}/{local}";
+        if (file.isFolder()) {
+            if (FileSystem.mkdir(path, 493) != 0) { throw f"Cannot make the folder {path}"; }
+            StoreFile? made = StoreFile.open(path);
+            if (made == null) { throw f"Cannot open the folder {path}"; }
+            self.describe(made, file, local);
+            self.folders.put(file.id, path);
+            self.added++;
+            return true;
+        }
+        StoreFile? made = StoreFile.open(path, true, true);
+        if (made == null) { throw f"Cannot make the file {path}"; }
+        self.describe(made, file, local);
+        if (file.isDocument()) {
+            Path.writeAll(path, self.documentLink(file));
+            made.setAttribute("state", "local");
+        } else {
+            if (!made.resize(file.size)) { throw f"Cannot size the file {path}"; }
+            made.setAttribute("state", file.size == 0LL ? "local" : "cloud");
+        }
+        made.setModified(file.modified);
+        string link = self.linkPath(file.id);
+        FileSystem.mkdirp(PathTools.dirname(link));
+        if (!StorePaths.link(path, link)) { throw f"Cannot index the file {path}"; }
+        self.added++;
+        return true;
+    }
+
+    // Every folder under `path` leaves the index and every file its id name.
+    private void forgetBelow(string path) {
+        for name in FileSystem.listDir(path) {
+            string child = f"{path}/{name}";
+            if (FileSystem.isSymlink(child)) { continue; }
+            StoreFile? held = StoreFile.open(child);
+            if (held == null) { continue; }
+            string id = held.attribute("id");
+            if (FileSystem.isDir(child)) {
+                self.forgetBelow(child);
+                self.folders.remove(id);
+            } else if (!id.isEmpty()) {
+                StorePaths.remove(self.linkPath(id));
+            }
+        }
+    }
+
+    // Take an entry out of the tree into the trash, where it stays for a while.
+    public bool discard(string id) {
+        string path = self.folders.has(id) ? self.folderPath(id) : self.filePath(id);
+        if (path.isEmpty() || path.equals(self.tree())) { return false; }
+        string kept = self.free(self.root + "/trash", id);
+        if (self.folders.has(id)) {
+            self.forgetBelow(path);
+            self.folders.remove(id);
+        } else {
+            StorePaths.remove(self.linkPath(id));
+        }
+        if (!StorePaths.rename(path, f"{self.root}/trash/{kept}")) { throw f"Cannot move {path} to the trash"; }
+        self.removed++;
+        return true;
+    }
+
+    // Folders below a moved folder are known by their old paths; correct them.
+    private void moved(string from, string to) {
+        for id in self.folders.keys() {
+            string path = self.folders.get(id);
+            if (path.equals(from)) { self.folders.put(id, to); }
+            else if (path.startsWith(from + "/")) { self.folders.put(id, to + path.substring(from.len(), path.len() - from.len())); }
+        }
+    }
+
+    // Bring an entry the store has in line with what Drive now says of it.
+    public void update(DriveFile file) {
+        bool folder = self.folders.has(file.id);
+        string path = folder ? self.folderPath(file.id) : self.filePath(file.id);
+        if (path.isEmpty()) { return; }
+        StoreFile? opened = folder ? StoreFile.open(path) : self.file(file.id, true);
+        if (opened == null) { return; }
+        StoreFile held = opened;
+        bool touched = false;
+        if (!held.attribute("parent").equals(file.parent) || !held.attribute("name").equals(file.name)) {
+            string target = self.folderPath(file.parent);
+            if (target.isEmpty()) {  // moved out of the tree
+                held.close();
+                self.discard(file.id);
+                return;
+            }
+            string local = self.free(target, Store.localName(file.name) + (file.isDocument() ? ".gdoc" : ""));
+            if (!StorePaths.rename(path, f"{target}/{local}")) { throw f"Cannot move {path}"; }
+            if (folder) { self.moved(path, f"{target}/{local}"); }
+            held.setAttribute("parent", file.parent);
+            held.setAttribute("name", file.name);
+            held.setAttribute("local", local);
+            touched = true;
+        }
+        if (!folder && !file.isDocument() && !held.attribute("revision").equals(file.revision)) {
+            held.empty(file.size);  // what was downloaded is the old content
+            held.setAttribute("revision", file.revision);
+            held.setAttribute("sha256", file.sha256);
+            held.setAttribute("state", file.size == 0LL ? "local" : "cloud");
+            touched = true;
+        }
+        if (!folder && held.modified() != file.modified) {
+            held.setModified(file.modified);
+            touched = true;
+        }
+        held.setAttribute("version", f"{file.version}");
+        if (touched) { self.changed++; }
+    }
+
+    // Find the folders already in the tree, after a restart.
+    public void scan() {
+        self.folders.clear();
+        StoreFile? top = StoreFile.open(self.tree());
+        string id = top == null ? "" : top.attribute("id");
+        if (id.isEmpty()) { return; }
+        self.folders.put(id, self.tree());
+        self.scanBelow(self.tree());
+    }
+
+    private void scanBelow(string path) {
+        for name in FileSystem.listDir(path) {
+            string child = f"{path}/{name}";
+            if (FileSystem.isSymlink(child) || !FileSystem.isDir(child)) { continue; }
+            StoreFile? held = StoreFile.open(child);
+            string id = held == null ? "" : held.attribute("id");
+            if (!id.isEmpty()) { self.folders.put(id, child); }
+            self.scanBelow(child);
+        }
+    }
+}

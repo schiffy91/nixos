@@ -1,0 +1,131 @@
+import Library.CLI;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Strings;
+import Library.Vector;
+
+import ../../lib/Check.btrc;
+import ../../../config/pkgs/utils/drive/engine/Mirror.btrc;
+import ../../../config/pkgs/utils/drive/remote/DriveApi.btrc;
+import ../../../config/pkgs/utils/drive/remote/DriveFile.btrc;
+import ../../../config/pkgs/utils/drive/remote/Transport.btrc;
+import ../../../config/pkgs/utils/drive/store/Store.btrc;
+import ../../../config/pkgs/utils/drive/store/StoreFile.btrc;
+
+// The store against the fake Drive: the tree it builds, and how it follows what changes there.
+class StoreContract {
+    private string base;
+    private string scratch;
+    private Transport transport;
+    private DriveApi api;
+    private string folderType = "application%2Fvnd.google-apps.folder";
+
+    public StoreContract(string port, string scratch) {
+        self.base = f"http://127.0.0.1:{port}";
+        self.scratch = scratch;
+        self.transport = Transport(scratch + "/transport");
+        DriveCredentials credentials = DriveCredentials();
+        credentials.refreshToken = "refresh-ok";
+        self.api = DriveApi(self.transport, credentials);
+        self.api.apiBase = self.base;
+        self.api.tokenUrl = self.base + "/token";
+        self.api.backoffMilliseconds = 5;
+    }
+
+    // Another machine's doing: returns the id of what it made or changed.
+    private string remote(string action, string body = "") {
+        TransportResponse response = self.transport.send("POST", f"{self.base}/__control/{action}", [], body);
+        Check.that(response.ok(), f"the fake accepts {action}");
+        return JSONValue.parse(response.body).get("id").asString();
+    }
+
+    private string folder(string parent, string name) { return self.remote(f"put?parent={parent}&name={name}&type={self.folderType}"); }
+
+    private string file(string parent, string name, string content) { return self.remote(f"put?parent={parent}&name={name}", content); }
+
+    private StoreFile opened(string path) {
+        StoreFile? held = StoreFile.open(path);
+        if (held == null) { throw f"FAIL: {path} is in the store"; }
+        return held;
+    }
+
+    private void placeholder(string path, long long size, string what) {
+        StoreFile held = self.opened(path);
+        // On ext4 the attributes take a block of their own, so "no data" is asked of the file's extents, not of its block count.
+        Check.that(held.size() == size && held.firstPresent(0LL) == size && held.attribute("state").equals("cloud") && !held.complete(), f"{what} (size {held.size()}, data from {held.firstPresent(0LL)}, state '{held.attribute("state")}')");
+    }
+
+    public void run() {
+        string documents = self.folder("root", "Documents");
+        string taxes = self.folder(documents, "Taxes");
+        string report = self.file(taxes, "2025.pdf", "0123456789");
+        string notes = self.file(documents, "notes.txt", "some notes");
+        self.file(documents, "notes.txt", "a second file of the same name");
+        self.file("root", "a%2Fb", "a name no folder can hold");
+        self.file("root", "empty.txt", "");
+        self.remote("put?parent=root&name=Budget&type=application%2Fvnd.google-apps.spreadsheet");
+
+        Store store = Store(self.scratch + "/store");
+        Mirror mirror = Mirror(self.api, store);
+        mirror.build();
+        string tree = store.tree();
+        Check.that(FileSystem.isDir(tree + "/Documents/Taxes") && store.folderCount() == 3, "folders are made, parents before children");
+        self.placeholder(tree + "/Documents/Taxes/2025.pdf", 10LL, "a file is the right size and holds no data");
+        self.placeholder(tree + "/Documents/notes.txt", 10LL, "the first of two files with one name keeps the name");
+        self.placeholder(tree + "/Documents/notes (2).txt", 30LL, "the second gets a number");
+        self.placeholder(tree + "/a∕b", 25LL, "a slash in a name becomes a look-alike");
+        StoreFile empty = self.opened(tree + "/empty.txt");
+        Check.that(empty.size() == 0LL && empty.attribute("state").equals("local"), "an empty file has nothing to download");
+        Check.that(FileSystem.readText(tree + "/Budget.gdoc").contains("https://drive.google.com/open?id="), "a Google document is a link to it");
+        StoreFile listed = self.opened(tree + "/Documents/Taxes/2025.pdf");
+        Check.that(listed.attribute("id").equals(report) && listed.attribute("parent").equals(taxes) && listed.attribute("name").equals("2025.pdf") && !listed.attribute("revision").isEmpty(), "each file carries its Drive id, folder, name and revision");
+        Check.equal(store.filePath(report), tree + "/Documents/Taxes/2025.pdf", "a file is found by its Drive id");
+        StoreFile? byId = store.file(report);
+        Check.that(byId != null && byId.number() == listed.number(), "the id name is the same file, not a copy");
+        Check.that(store.added == 8 && store.skipped == 0 && !store.position().isEmpty(), "everything is counted and the feed position recorded");
+
+        Check.that(mirror.follow() && store.changed == 0 && store.removed == 0, "nothing changed means nothing to do");
+
+        string moved = self.folder("root", "Archive");
+        self.file(self.folder(moved, "Deep"), "inner.txt", "listed before its folder is known");
+        self.transportPatch(report, "final.pdf", moved, taxes);
+        self.remote(f"put?id={notes}", "longer notes than before");
+        Check.that(mirror.follow(), "the feed is followed");
+        Check.that(FileSystem.exists(tree + "/Archive/final.pdf") && !FileSystem.exists(tree + "/Documents/Taxes/2025.pdf"), "a rename and move on the Drive is a rename and move here");
+        Check.equal(store.filePath(report), tree + "/Archive/final.pdf", "and the file is still found by its id");
+        self.placeholder(tree + "/Documents/notes.txt", 24LL, "new content on the Drive gives a new size and no data");
+        self.placeholder(tree + "/Archive/Deep/inner.txt", 33LL, "a new folder and its file arrive together");
+
+        self.remote(f"delete?id={notes}");
+        DriveFile? trashed = self.api.trash(taxes);
+        Check.that(trashed != null && mirror.follow(), "a delete and a trashed folder are followed");
+        Check.that(!FileSystem.exists(tree + "/Documents/notes.txt") && !FileSystem.exists(tree + "/Documents/Taxes"), "what is gone on the Drive leaves the tree");
+        Check.that(!store.knows(notes) && !store.knows(taxes) && FileSystem.exists(self.scratch + f"/store/trash/{notes}") && FileSystem.isDir(self.scratch + f"/store/trash/{taxes}"), "and waits in the trash");
+
+        Store again = Store(self.scratch + "/store");
+        again.scan();
+        Check.that(again.folderCount() == store.folderCount() && again.folderPath(moved).equals(tree + "/Archive") && again.filePath(report).equals(tree + "/Archive/final.pdf"), "after a restart the store finds its folders and files again");
+        Check.that(Mirror(self.api, again).follow() && again.changed == 0, "and carries on from the recorded position");
+    }
+
+    private void transportPatch(string id, string name, string addParent, string removeParent) {
+        DrivePatch patch = DrivePatch();
+        patch.name = name;
+        patch.addParent = addParent;
+        patch.removeParent = removeParent;
+        Check.that(self.api.update(id, patch) != null, "a file is renamed and moved on the Drive");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        CLIArgs args = CLIArgs(argc, argv);
+        StoreContract(args.require(0, "usage: drive-store-contract PORT SCRATCH"), args.require(1, "usage: drive-store-contract PORT SCRATCH")).run();
+        print("PASS: the store follows the Drive");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

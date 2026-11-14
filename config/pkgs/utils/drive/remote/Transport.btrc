@@ -1,0 +1,119 @@
+import Library.FileSystem;
+import Library.Map;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+class TransportResponse {
+    public int status = 0;  // 0: no answer, see error
+    public string body = "";
+    public string error = "";
+    public Map<string, string> headers = {};  // names lower-cased
+
+    public bool answered() { return self.status != 0; }
+
+    public bool ok() { return self.status >= 200 && self.status < 300; }
+
+    public string header(string name) { return self.headers.getOrDefault(name.toLower(), ""); }
+}
+
+class Transport {  // one curl process per request
+    private string scratch;
+    private int sequence = 0;
+    public int timeoutSeconds = 120;
+    public int stallSeconds = 60;  // a transfer may stall this long
+
+    public Transport(string scratch) {
+        self.scratch = scratch;
+        FileSystem.mkdirp(scratch);
+    }
+
+    private string temporary(string kind) {
+        self.sequence++;
+        return f"{self.scratch}/{kind}-{self.sequence}";
+    }
+
+    private Vector<string> arguments(string method, string url, Vector<string> headers, string headerFile) {
+        Vector<string> arguments = ["-sS", "--proto", "=http,https", "--request", method, "--dump-header", headerFile, "--write-out", "%{http_code}", "--header", "Expect:"];  // send bodies at once, without asking first
+        for header in headers {
+            arguments.push("--header");
+            arguments.push(header);
+        }
+        return arguments;
+    }
+
+    private TransportResponse finish(ExecResult ran, string headerFile, string bodyFile, bool keepBody) {
+        TransportResponse response = TransportResponse();
+        if (ran.code != 0) {
+            response.error = ran.wasTimedOut() ? "the request timed out" : f"curl failed ({ran.code}): {ran.stderr().trim()}";
+        } else {
+            response.status = ran.stdout().trim().toInt();
+            if (response.status == 0) { response.error = "curl reported no HTTP status"; }
+        }
+        for line in Strings.split(FileSystem.readText(headerFile), "\n") {
+            string text = line.trim();
+            if (text.startsWith("HTTP/")) { response.headers.clear(); }  // keep the last answer's headers
+            int colon = text.indexOf(":");
+            if (colon > 0) { response.headers.put(text.substring(0, colon).toLower(), text.substring(colon + 1, text.len() - colon - 1).trim()); }
+        }
+        if (keepBody && FileSystem.exists(bodyFile)) { response.body = FileSystem.readText(bodyFile); }
+        unlink(headerFile);
+        if (keepBody) { unlink(bodyFile); }
+        return response;
+    }
+
+    public TransportResponse send(string method, string url, Vector<string> headers, string body = "") {
+        string headerFile = self.temporary("headers");
+        string bodyFile = self.temporary("body");
+        Vector<string> arguments = self.arguments(method, url, headers, headerFile);
+        arguments.push("--max-time");
+        arguments.push(Strings.fromInt(self.timeoutSeconds));
+        arguments.push("--output");
+        arguments.push(bodyFile);
+        if (!body.isEmpty() || method.equals("POST") || method.equals("PATCH") || method.equals("PUT")) {
+            arguments.push("--data-binary");
+            arguments.push("@-");
+        }
+        arguments.push("--");
+        arguments.push(url);
+        ExecResult ran = ChildProcess.run("curl", arguments, timeoutMilliseconds=(self.timeoutSeconds + 5) * 1000, stdinData=body);
+        return self.finish(ran, headerFile, bodyFile, true);
+    }
+
+    public TransportResponse download(string url, Vector<string> headers, string path) {  // check the status before trusting the file
+        string headerFile = self.temporary("headers");
+        Vector<string> arguments = self.arguments("GET", url, headers, headerFile);
+        arguments.push("--speed-limit");
+        arguments.push("1");
+        arguments.push("--speed-time");
+        arguments.push(Strings.fromInt(self.stallSeconds));
+        arguments.push("--output");
+        arguments.push(path);
+        arguments.push("--");
+        arguments.push(url);
+        ExecResult ran = ChildProcess.run("curl", arguments);
+        return self.finish(ran, headerFile, path, false);
+    }
+
+    public TransportResponse upload(string method, string url, Vector<string> headers, string path, long long offset = 0LL) {
+        string headerFile = self.temporary("headers");
+        string bodyFile = self.temporary("body");
+        Vector<string> arguments = self.arguments(method, url, headers, headerFile);
+        arguments.push("--speed-limit");
+        arguments.push("1");
+        arguments.push("--speed-time");
+        arguments.push(Strings.fromInt(self.stallSeconds));
+        arguments.push("--output");
+        arguments.push(bodyFile);
+        if (offset > 0LL) {
+            arguments.push("--continue-at");
+            arguments.push(f"{offset}");
+        }
+        arguments.push("--upload-file");
+        arguments.push(path);
+        arguments.push("--");
+        arguments.push(url);
+        ExecResult ran = ChildProcess.run("curl", arguments);
+        return self.finish(ran, headerFile, bodyFile, true);
+    }
+}

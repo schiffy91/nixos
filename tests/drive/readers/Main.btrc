@@ -1,0 +1,111 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// Who may cause downloads: a program gets a small allowance of not-downloaded files, and past it someone has to say yes.
+class ReadersScenario {
+    private DriveFixture drive;
+    private Guest machine;
+
+    public ReadersScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+    }
+
+    private void prepare() {
+        self.drive.prepare();
+        self.machine.succeed(f"for n in 1 2 3 4 5 6; do head -c 70000 /dev/urandom > {self.drive.source}/f$n.bin; done; cat {self.drive.source}/f*.bin | sha256sum > /tmp/all.sum");
+        self.drive.startFake();
+        for name in ["Quiet", "Asked", "Late", "Listed", "Free"] {
+            string folder = self.drive.folder("root", name);
+            for (int number = 1; number <= 6; number++) { self.drive.put(folder, f"f{number}.bin", f"f{number}.bin"); }
+        }
+        self.machine.succeed("printf 'import sys\\nfor name in sys.argv[1:]:\\n    open(name, \"rb\").read()\\nprint(\"read\", len(sys.argv) - 1)\\n' > /tmp/crawl.py && cp /tmp/crawl.py /tmp/other.py");
+    }
+
+    private int downloaded(string folder) { return Strings.toInt(self.machine.succeed(f"n=0; for f in {self.drive.store}/tree/{folder}/*.bin; do [ \"$(getfattr --absolute-names -n user.drive.state --only-values $f)\" = local ] && n=$((n+1)); done; echo $n").trim()); }
+
+    private void restart(string extra) {
+        self.drive.stop("drive-engine");
+        self.drive.startEngine(extra);
+        self.drive.connected();
+    }
+
+    private void nobodyToAsk() {
+        print("With nobody to ask, a program that reads past its allowance is stopped there");
+        self.drive.startEngine("--budget-files 3");
+        self.drive.startDoor();
+        string mount = self.drive.mount;
+        Check.equal(self.machine.succeed(f"ls {mount}/Quiet | wc -l").trim(), "6", "listing a folder costs nothing and is never refused");
+        Check.that(self.machine.fail(f"cat {mount}/Quiet/f*.bin 2>&1 >/dev/null").contains("Operation not permitted"), "the fourth not-downloaded file is refused");
+        Check.that(self.downloaded("Quiet") == 3, "three files arrived and three did not");
+        string listed = self.drive.drive("readers");
+        Check.that(listed.contains("stopped cat"), f"the program is listed as stopped (listed: {listed})");
+        self.machine.succeed(f"[ \"$(head -c 70000 {mount}/Quiet/f5.bin | sha256sum)\" = \"$(sha256sum < {self.drive.source}/f5.bin)\" ]");  // another program has its own allowance
+        self.drive.drive("readers allow cat");
+        self.machine.succeed(f"cat {mount}/Quiet/f*.bin | sha256sum | cmp - /tmp/all.sum");
+        Check.that(self.drive.drive("readers").contains("allow cat") && !self.drive.drive("readers").contains("stopped cat"), "once allowed it reads everything and the decision is remembered");
+    }
+
+    private void asked() {
+        print("With someone to ask, the reads wait for the answer");
+        self.restart("--budget-files 3 --ask /run/current-system/sw/bin/drive-test-ask --ask-seconds 4");
+        string mount = self.drive.mount;
+        Check.that(self.drive.drive("readers").contains("allow cat"), "a decision outlives the engine");
+        self.machine.succeed(f"systemd-run --unit crawl --collect sh -c '/run/current-system/sw/bin/python3 /tmp/crawl.py {mount}/Asked/f*.bin > /tmp/crawl.out 2>&1'");
+        self.machine.waitUntil("grep -q crawl.py /tmp/asked");
+        Check.equal(self.machine.succeed("cat /tmp/asked").trim(), "python:/tmp/crawl.py|crawl.py (run by python)", "the question names the script, not just its interpreter");
+        Check.that(self.downloaded("Asked") == 3 && self.drive.drive("readers").contains("waiting python:/tmp/crawl.py"), "the script is held at its fourth file");
+        self.drive.drive("readers once python:/tmp/crawl.py");
+        self.machine.waitUntil("grep -q 'read 6' /tmp/crawl.out");
+        Check.that(self.downloaded("Asked") == 6, "allowed once, it finishes");
+
+        print("No answer is a no");
+        self.machine.succeed("rm /tmp/asked");
+        Check.that(self.machine.fail(f"python3 /tmp/other.py {mount}/Late/f*.bin 2>&1").contains("Operation not permitted"), "a different script is asked about separately and fails when nobody answers");
+        Check.equal(self.machine.succeed("cat /tmp/asked").trim(), "python:/tmp/other.py|other.py (run by python)", "it was asked about under its own name");
+        Check.that(self.downloaded("Late") == 3, "and got no further than its allowance");
+        self.drive.drive("readers block python:/tmp/other.py");
+        Check.that(self.machine.fail(f"python3 /tmp/other.py {mount}/Late/f6.bin 2>&1").contains("Operation not permitted"), "a blocked program is refused without asking again");
+        self.machine.succeed("test \"$(wc -l < /tmp/asked)\" = 1");
+    }
+
+    private void listed() {
+        print("A program on the refused list sees names and sizes and no contents");
+        self.restart("--budget-files 3 --deny od");
+        string mount = self.drive.mount;
+        Check.that(self.machine.fail(f"od -c {mount}/Listed/f1.bin 2>&1").contains("Operation not permitted"), "its first read is refused");
+        Check.equal(self.machine.succeed(f"stat -c %s {mount}/Listed/f1.bin").trim(), "70000", "the size is still there to see");
+        Check.that(self.downloaded("Listed") == 0, "and nothing was downloaded for it");
+        self.machine.succeed(f"od -c {mount}/Quiet/f1.bin >/dev/null");  // a downloaded file is just a file
+    }
+
+    private void withoutTheRule() {
+        print("Without the allowance the same reading downloads everything");
+        self.restart("--budget-files 0");
+        self.machine.succeed(f"python3 /tmp/crawl.py {self.drive.mount}/Free/f*.bin | grep -q 'read 6'");
+        Check.that(self.downloaded("Free") == 6, "which is what the allowance is there to stop");
+    }
+
+    public void check() {
+        self.prepare();
+        self.nobodyToAsk();
+        self.asked();
+        self.listed();
+        self.withoutTheRule();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        ReadersScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: programs download within an allowance or with a yes");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

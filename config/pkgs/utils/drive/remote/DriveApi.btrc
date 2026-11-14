@@ -1,0 +1,303 @@
+import Library.FileSystem;
+import Library.HTTP;
+import Library.JSON;
+import Library.Strings;
+import Library.Timer;
+import Library.Vector;
+
+import ./DriveFile.btrc;
+import ./Timestamp.btrc;
+import ./Transport.btrc;
+
+enum DriveFailure {
+    DRIVE_NETWORK = 0,
+    DRIVE_UNAUTHORIZED = 1,
+    DRIVE_FORBIDDEN = 2,
+    DRIVE_NOT_FOUND = 3,
+    DRIVE_RATE_LIMITED = 4,
+    DRIVE_SERVER = 5,
+    DRIVE_INVALID = 6,
+    DRIVE_EXPIRED = 7
+};
+
+class DriveError {
+    public DriveFailure kind;
+    public int status;
+    public string message;
+
+    public DriveError(DriveFailure kind, int status, string message) {
+        self.kind = kind;
+        self.status = status;
+        self.message = message;
+    }
+
+    public bool transient() { return self.kind == DRIVE_NETWORK || self.kind == DRIVE_RATE_LIMITED || self.kind == DRIVE_SERVER; }
+
+    public string describe() { return self.status == 0 ? self.message : f"{self.message} (HTTP {self.status})"; }
+}
+
+class DriveCredentials {
+    public string clientId = "";
+    public string clientSecret = "";
+    public string refreshToken = "";
+    public string scope = "";  // what the sign-in was granted, when known
+
+    // The OAuth client and refresh token rclone keeps for one of its remotes.
+    class DriveCredentials? fromRclone(string path, string remote) {
+        DriveCredentials credentials = DriveCredentials();
+        bool inside = false;
+        for line in Strings.split(FileSystem.readText(path), "\n") {
+            string text = line.trim();
+            if (text.startsWith("[")) {
+                inside = text.equals(f"[{remote}]");
+                continue;
+            }
+            int equals = text.indexOf("=");
+            if (!inside || equals <= 0) { continue; }
+            string key = text.substring(0, equals).trim();
+            string value = text.substring(equals + 1, text.len() - equals - 1).trim();
+            if (key.equals("client_id")) { credentials.clientId = value; }
+            else if (key.equals("client_secret")) { credentials.clientSecret = value; }
+            else if (key.equals("token")) { credentials.refreshToken = JSONValue.parse(value).get("refresh_token").asString(); }
+        }
+        return credentials.clientId.isEmpty() || credentials.refreshToken.isEmpty() ? null : credentials;
+    }
+
+    class DriveCredentials? load(string path) {
+        JSONValue stored = JSONValue.readFile(path);
+        if (!stored.isObject() || !stored.get("refresh_token").isString()) { return null; }
+        DriveCredentials credentials = DriveCredentials();
+        credentials.clientId = stored.get("client_id").asString();
+        credentials.clientSecret = stored.get("client_secret").asString();
+        credentials.refreshToken = stored.get("refresh_token").asString();
+        credentials.scope = stored.get("scope").asString();
+        return credentials;
+    }
+}
+
+class DriveApi {
+    private Transport transport;
+    private DriveCredentials credentials;
+    private string accessToken = "";
+    private long long accessExpires = 0LL;  // monotonic milliseconds
+    public string apiBase = "https://www.googleapis.com";
+    public string tokenUrl = "https://oauth2.googleapis.com/token";
+    public int attempts = 6;
+    public int backoffMilliseconds = 500;  // doubles per attempt
+    public DriveError? failure = null;  // why the last call returned nothing
+
+    public DriveApi(Transport transport, DriveCredentials credentials) {
+        self.transport = transport;
+        self.credentials = credentials;
+    }
+
+    private bool fail(DriveFailure kind, int status, string message) {
+        self.failure = DriveError(kind, status, message);
+        return false;
+    }
+
+    private bool authorize() {
+        if (!self.accessToken.isEmpty() && MonotonicClock.milliseconds() < self.accessExpires) { return true; }
+        string form = f"client_id={HTTPUrl.encode(self.credentials.clientId)}&client_secret={HTTPUrl.encode(self.credentials.clientSecret)}&refresh_token={HTTPUrl.encode(self.credentials.refreshToken)}&grant_type=refresh_token";
+        TransportResponse response = self.transport.send("POST", self.tokenUrl, ["Content-Type: application/x-www-form-urlencoded"], form);
+        if (!response.answered()) { return self.fail(DRIVE_NETWORK, 0, response.error); }
+        JSONValue answer = JSONValue.parse(response.body);
+        if (!response.ok() || !answer.get("access_token").isString()) { return self.fail(response.status >= 500 ? DRIVE_SERVER : DRIVE_UNAUTHORIZED, response.status, "Google refused the stored sign-in"); }
+        self.accessToken = answer.get("access_token").asString();
+        long long lifetime = (long long)answer.get("expires_in").asFloat();
+        self.accessExpires = MonotonicClock.milliseconds() + (lifetime > 120LL ? lifetime - 60LL : 60LL) * 1000LL;
+        return true;
+    }
+
+    private DriveError classify(TransportResponse response) {
+        if (!response.answered()) { return DriveError(DRIVE_NETWORK, 0, response.error); }
+        string reason = "";
+        JSONValue errors = JSONValue.parse(response.body).get("error").get("errors");
+        if (errors.isArray() && errors.size() > 0) { reason = errors.at(0).get("reason").asString(); }
+        string message = JSONValue.parse(response.body).get("error").get("message").asString();
+        if (message.isEmpty()) { message = "Drive refused the request"; }
+        if (response.status == 401) { return DriveError(DRIVE_UNAUTHORIZED, 401, message); }
+        if (response.status == 404) { return DriveError(DRIVE_NOT_FOUND, 404, message); }
+        if (response.status == 410) { return DriveError(DRIVE_EXPIRED, 410, message); }
+        if (response.status == 429 || (response.status == 403 && reason.contains("ateLimitExceeded"))) { return DriveError(DRIVE_RATE_LIMITED, response.status, message); }
+        if (response.status == 403) { return DriveError(DRIVE_FORBIDDEN, 403, message); }
+        if (response.status >= 500) { return DriveError(DRIVE_SERVER, response.status, message); }
+        return DriveError(DRIVE_INVALID, response.status, message);
+    }
+
+    private void pause(int attempt, TransportResponse response) {
+        long long wait = (long long)self.backoffMilliseconds << attempt;
+        string asked = response.header("retry-after");
+        if (!asked.isEmpty() && asked.toLong() * 1000LL > wait) { wait = asked.toLong() * 1000LL; }
+        if (wait > 60000LL) { wait = 60000LL; }
+        Timer.sleepMillis((int)wait);
+    }
+
+    private Vector<string> headers(Vector<string> extra) {
+        Vector<string> headers = [f"Authorization: Bearer {self.accessToken}"];
+        headers.extend(extra);
+        return headers;
+    }
+
+    // kind: 0 text call, 1 download to path, 2 upload from path. Retries what is worth retrying.
+    private TransportResponse? exchange(int kind, string method, string url, Vector<string> extra, string body, string path, long long offset = 0LL) {
+        bool reauthorized = false;
+        for (int attempt = 0; attempt < self.attempts; attempt++) {
+            if (!self.authorize()) {
+                DriveError? refused = self.failure;
+                if (refused != null && refused.transient() && attempt + 1 < self.attempts) {
+                    self.pause(attempt, TransportResponse());
+                    continue;
+                }
+                return null;
+            }
+            TransportResponse response = kind == 0 ? self.transport.send(method, url, self.headers(extra), body) : kind == 1 ? self.transport.download(url, self.headers(extra), path) : self.transport.upload(method, url, self.headers(extra), path, offset);
+            if (response.ok() || response.status == 308) {
+                self.failure = null;
+                return response;
+            }
+            if (kind == 1 && response.answered()) { response.body = FileSystem.readText(path); }  // the error went to the file
+            DriveError error = self.classify(response);
+            self.failure = error;
+            if (error.kind == DRIVE_UNAUTHORIZED && !reauthorized) {
+                reauthorized = true;
+                self.accessToken = "";
+                continue;
+            }
+            if (!error.transient() || attempt + 1 >= self.attempts) { return null; }
+            self.pause(attempt, response);
+        }
+        return null;
+    }
+
+    // Any Google API with this sign-in: the answer as JSON, or null with `failure` set.
+    public JSONValue? request(string method, string url, string body = "") { return self.call(method, url, body); }
+
+    private JSONValue? call(string method, string url, string body = "") {
+        Vector<string> extra = body.isEmpty() ? [] : ["Content-Type: application/json; charset=UTF-8"];
+        TransportResponse? response = self.exchange(0, method, url, extra, body, "");
+        if (response == null) { return null; }
+        JSONValue answer = JSONValue.parse(response.body);
+        if (answer.isError()) {
+            self.fail(DRIVE_INVALID, response.status, "Drive answered with something that is not JSON");
+            return null;
+        }
+        return answer;
+    }
+
+    private DriveFile? described(JSONValue? answer) {
+        if (answer == null) { return null; }
+        DriveFile? file = DriveFile.parse(answer);
+        if (file == null) { self.fail(DRIVE_INVALID, 200, "Drive answered without a file"); }
+        return file;
+    }
+
+    private string files() { return f"{self.apiBase}/drive/v3/files"; }
+
+    public string? rootId() {
+        JSONValue? answer = self.call("GET", f"{self.files()}/root?fields=id");
+        return answer == null ? null : answer.get("id").asString();
+    }
+
+    public DriveFile? file(string id) { return self.described(self.call("GET", f"{self.files()}/{HTTPUrl.encode(id)}?fields={DriveFile.fields()}")); }
+
+    public DriveListing? list(string pageToken = "") {  // everything not trashed, a page at a time
+        string url = f"{self.files()}?pageSize=1000&spaces=drive&corpora=user&q={HTTPUrl.encode("trashed = false")}&fields={HTTPUrl.encode("nextPageToken,files(" + DriveFile.fields() + ")")}";
+        if (!pageToken.isEmpty()) { url = url + "&pageToken=" + HTTPUrl.encode(pageToken); }
+        JSONValue? answer = self.call("GET", url);
+        if (answer == null) { return null; }
+        DriveListing listing = DriveListing();
+        for value in answer.get("files").elements() {
+            DriveFile? file = DriveFile.parse(value);
+            if (file != null) { listing.files.push(file); }
+        }
+        listing.next = answer.get("nextPageToken").asString();
+        return listing;
+    }
+
+    public string? startToken() {
+        JSONValue? answer = self.call("GET", f"{self.apiBase}/drive/v3/changes/startPageToken");
+        return answer == null ? null : answer.get("startPageToken").asString();
+    }
+
+    public DriveChanges? changes(string pageToken) {
+        string url = f"{self.apiBase}/drive/v3/changes?pageToken={HTTPUrl.encode(pageToken)}&pageSize=1000&spaces=drive&restrictToMyDrive=true&includeRemoved=true&fields={HTTPUrl.encode("nextPageToken,newStartPageToken,changes(fileId,removed,file(" + DriveFile.fields() + "))")}";
+        JSONValue? answer = self.call("GET", url);
+        if (answer == null) { return null; }
+        DriveChanges page = DriveChanges();
+        for value in answer.get("changes").elements() {
+            DriveChange change = DriveChange();
+            change.id = value.get("fileId").asString();
+            change.removed = value.get("removed").asBool();
+            change.file = DriveFile.parse(value.get("file"));
+            if (!change.id.isEmpty()) { page.changes.push(change); }
+        }
+        page.next = answer.get("nextPageToken").asString();
+        page.resume = answer.get("newStartPageToken").asString();
+        return page;
+    }
+
+    // Bytes first..last of a file's content into `path`. False leaves `failure` set.
+    public bool download(string id, long long first, long long last, string path) {
+        for (int attempt = 0; attempt < self.attempts; attempt++) {
+            TransportResponse? response = self.exchange(1, "GET", f"{self.files()}/{HTTPUrl.encode(id)}?alt=media", [f"Range: bytes={first}-{last}"], "", path);
+            if (response == null) { return false; }
+            if ((long long)FileSystem.readBytes(path).length() == last - first + 1LL) { return true; }  // a cut-off transfer still answers 206
+            self.fail(DRIVE_NETWORK, response.status, "the transfer ended early");
+        }
+        return false;
+    }
+
+    public DriveFile? createFolder(string parent, string name) {
+        JSONValue body = JSONValue.makeObject();
+        body.set("name", JSONValue.makeString(name));
+        body.set("mimeType", JSONValue.makeString(DriveFile.folderType()));
+        JSONValue parents = JSONValue.makeArray();
+        parents.push(JSONValue.makeString(parent));
+        body.set("parents", parents);
+        return self.described(self.call("POST", f"{self.files()}?fields={DriveFile.fields()}", body.stringify()));
+    }
+
+    public DriveFile? update(string id, DrivePatch patch) {  // rename, move, set the time, or trash
+        JSONValue body = JSONValue.makeObject();
+        if (!patch.name.isEmpty()) { body.set("name", JSONValue.makeString(patch.name)); }
+        if (patch.modified >= 0LL) { body.set("modifiedTime", JSONValue.makeString(Timestamp.format(patch.modified))); }
+        if (patch.trash) { body.set("trashed", JSONValue.makeBool(true)); }
+        string url = f"{self.files()}/{HTTPUrl.encode(id)}?fields={DriveFile.fields()}";
+        if (!patch.addParent.isEmpty()) { url = url + "&addParents=" + HTTPUrl.encode(patch.addParent); }
+        if (!patch.removeParent.isEmpty()) { url = url + "&removeParents=" + HTTPUrl.encode(patch.removeParent); }
+        return self.described(self.call("PATCH", url, body.stringify()));
+    }
+
+    public DriveFile? trash(string id) {
+        DrivePatch patch = DrivePatch();
+        patch.trash = true;
+        return self.update(id, patch);
+    }
+
+    // Send a file's content: a new file under `parent`, or new content for `id`. One of the two is empty.
+    public DriveFile? upload(string id, string parent, string name, string path, long long modified) {
+        JSONValue body = JSONValue.makeObject();
+        if (modified >= 0LL) { body.set("modifiedTime", JSONValue.makeString(Timestamp.format(modified))); }
+        string url = f"{self.apiBase}/upload/drive/v3/files";
+        if (id.isEmpty()) {
+            body.set("name", JSONValue.makeString(name));
+            JSONValue parents = JSONValue.makeArray();
+            parents.push(JSONValue.makeString(parent));
+            body.set("parents", parents);
+        } else {
+            url = url + "/" + HTTPUrl.encode(id);
+        }
+        TransportResponse? opened = self.exchange(0, id.isEmpty() ? "POST" : "PATCH", f"{url}?uploadType=resumable&fields={DriveFile.fields()}", ["Content-Type: application/json; charset=UTF-8", "X-Upload-Content-Type: application/octet-stream"], body.stringify(), "");
+        if (opened == null) { return null; }
+        string session = opened.header("location");
+        if (session.isEmpty()) {
+            self.fail(DRIVE_INVALID, opened.status, "Drive opened no upload session");
+            return null;
+        }
+        TransportResponse? sent = self.exchange(2, "PUT", session, ["Content-Type: application/octet-stream"], "", path);
+        if (sent == null) { return null; }
+        JSONValue answer = JSONValue.parse(sent.body);
+        return self.described(answer.isError() ? null : answer);
+    }
+}

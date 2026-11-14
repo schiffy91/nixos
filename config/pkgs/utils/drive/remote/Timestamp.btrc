@@ -1,0 +1,39 @@
+import Library.DateTime;
+import Library.Strings;
+
+class Timestamp {  // Drive's "2026-01-02T10:00:00.000Z" as UTC milliseconds
+    class long long invalid() { return -1LL; }
+
+    class bool digits(string text, int start, int count) {
+        if (start + count > text.len()) { return false; }
+        for (int index = start; index < start + count; index++) {
+            if (!Strings.isDigit(text.charAt(index))) { return false; }
+        }
+        return true;
+    }
+
+    class long long parse(string text) {  // invalid() unless a UTC RFC 3339 time
+        if (text.len() < 20 || !Timestamp.digits(text, 0, 4) || !Timestamp.digits(text, 5, 2) || !Timestamp.digits(text, 8, 2) || !Timestamp.digits(text, 11, 2) || !Timestamp.digits(text, 14, 2) || !Timestamp.digits(text, 17, 2)) { return Timestamp.invalid(); }
+        if (text.charAt(4) != '-' || text.charAt(7) != '-' || text.charAt(10) != 'T' || text.charAt(13) != ':' || text.charAt(16) != ':') { return Timestamp.invalid(); }
+        long long seconds = DateTime(text.substring(0, 4).toInt(), text.substring(5, 2).toInt(), text.substring(8, 2).toInt(), text.substring(11, 2).toInt(), text.substring(14, 2).toInt(), text.substring(17, 2).toInt()).toUnix();
+        long long milliseconds = 0LL;
+        int at = 19;
+        if (text.charAt(at) == '.') {
+            at++;
+            int scale = 100;
+            while (at < text.len() && Strings.isDigit(text.charAt(at))) {
+                milliseconds += (long long)((int)text.charAt(at) - (int)'0') * (long long)scale;
+                scale = scale / 10;
+                at++;
+            }
+        }
+        if (at >= text.len() || text.charAt(at) != 'Z') { return Timestamp.invalid(); }
+        return seconds * 1000LL + milliseconds;
+    }
+
+    class string format(long long milliseconds) {
+        DateTime moment = DateTime.fromUnix(milliseconds / 1000LL);
+        string fraction = Strings.fromInt((int)(milliseconds % 1000LL)).zfill(3);
+        return f"{moment.dateString()}T{moment.timeString()}.{fraction}Z";
+    }
+}

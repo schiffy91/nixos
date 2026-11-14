@@ -1,0 +1,36 @@
+manifest-version = 1
+
+[package]
+name = "nixos_drive"
+
+[[native.bindings]]
+module = "store.StoreFile"
+header = "store/Native.h"
+language = "c"
+standard = "c11"
+symbols = [
+	"DriveStatus", "driveInspect", "driveOpen", "driveOpenAt", "driveReopen", "driveReadAt", "driveReadAll", "driveAttribute", "driveSetAttribute", "driveRemoveAttribute",
+	"driveResize", "driveSetModified", "driveRelease", "driveSeek", "driveCopyInto", "driveLink", "driveRename", "driveRemove",
+	"driveRemoveDirectory", "driveSynchronize"
+]
+read-only-borrows = [
+	"driveOpen.path", "driveOpenAt.name", "driveReadAll.path", "driveAttribute.name", "driveSetAttribute.name", "driveSetAttribute.value",
+	"driveRemoveAttribute.name", "driveLink.existing", "driveLink.created", "driveRename.from", "driveRename.to",
+	"driveRemove.path", "driveRemoveDirectory.path"
+]
+os = ["linux"]
+
+[[native.defines]]
+name = "_GNU_SOURCE"
+value = "1"
+modules = ["store.StoreFile", "door.Channel"]
+os = ["linux"]
+
+[[native.bindings]]
+module = "door.Channel"
+header = "door/Channel.h"
+language = "c"
+standard = "c11"
+symbols = ["driveChannelListen", "driveChannelAccept", "driveChannelConnect", "driveChannelSend", "driveChannelReceive", "driveChannelWait"]
+read-only-borrows = ["driveChannelListen.path", "driveChannelConnect.path", "driveChannelSend.message"]
+os = ["linux"]
