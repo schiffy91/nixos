@@ -599,6 +599,7 @@ class Store {
         StorePaths.remove(staged);
         bool moved = StorePaths.rename(source, staged);
         if (!moved && !self.copy(given, staged)) { return "error"; }
+        StorePaths.ownerWritable(staged);  // a read-only file (a git pack, say) could not be given the Drive's facts
         StoreFile? taken = StoreFile.open(staged, true);
         if (taken != null) {
             self.carry(there, taken);

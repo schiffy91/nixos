@@ -141,6 +141,13 @@ static inline int driveEvict(int descriptor) {
 // contents without a copy. 0, or -1 with errno.
 static inline int driveClone(int target, int source) { return ioctl(target, FICLONE, source); }
 
+// Let the file's owner write to it. 0, or -1.
+static inline int driveOwnerWritable(const char* path) {
+	struct stat status;
+	if (stat(path, &status) != 0) { return -1; }
+	return (status.st_mode & S_IWUSR) != 0 ? 0 : chmod(path, (status.st_mode & 07777) | S_IWUSR);
+}
+
 // Take a lock that lasts as long as this process: the descriptor, or -1 when another process holds it.
 static inline int driveLock(const char* path) {
 	int descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
