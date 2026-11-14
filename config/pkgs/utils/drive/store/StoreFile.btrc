@@ -149,6 +149,9 @@ class StorePaths {  // the calls on paths the store needs
         return length <= 0L ? Bytes() : Bytes.fromRaw((char*)buffer, (int)length);
     }
 
+    // Be the only process of its kind on a store, for as long as this process lives. False when another is.
+    class bool lock(string path) { return driveLock(path) >= 0; }
+
     class bool syncVolume(string path) { return driveSyncVolume(path) == 0; }
 
     class long long freeBytes(string path) { return (long long)driveFreeBytes(path); }

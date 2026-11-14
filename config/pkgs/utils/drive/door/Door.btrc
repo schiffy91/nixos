@@ -86,6 +86,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
         for name in ["tree", "ids", "dirty", "trash", "tmp"] {  // a new store: the door may be the first to see it
             if (FileSystem.mkdirp(f"{store}/{name}") != 0 && !FileSystem.isDir(f"{store}/{name}")) { throw f"Cannot prepare the store at {store}"; }
         }
+        if (!StorePaths.lock(store + "/door.lock")) { throw "Another door is already serving this store"; }
         self.volumes = Volumes(store);
         self.inner = UserspaceForwarding(self.tree);
         self.inner.attributeStore = false;  // Drive keeps none, and the store's own stay out of sight

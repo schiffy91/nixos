@@ -35,6 +35,8 @@ class WritesScenario {
         }
         self.drive.startEngine(self.engine);
         self.drive.startDoor();
+        Check.that(self.machine.fail(f"drive engine --store {self.drive.store} --runtime /run/drive-other --credentials /var/lib/drive-test/credentials.json --api {self.drive.fake} 2>&1").contains("Another engine is already working on this store"), "a second engine on the same store refuses to start: two would each send what the other sent");
+        Check.that(self.machine.fail(f"mkdir -p /mnt/other && drive door --store {self.drive.store} --mount /mnt/other --runtime /run/drive-other 2>&1").contains("Another door is already serving this store"), "and so does a second door");
     }
 
     private void restart(string options) {

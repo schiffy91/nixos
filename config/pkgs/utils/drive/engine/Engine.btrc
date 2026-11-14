@@ -392,6 +392,8 @@ class Engine {
     }
 
     public void run() {
+        // Two engines on one store would each send what the other already sent.
+        if (!StorePaths.lock(self.store.temporary("../engine.lock"))) { throw "Another engine is already working on this store"; }
         self.store.scan();
         self.loadPins();
         self.wantAll();

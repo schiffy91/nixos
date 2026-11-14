@@ -295,6 +295,19 @@ Every line is a VM scenario under `tests/drive/` unless it says otherwise. Each 
 - **M5 so far** `module`: the units the NixOS module generates mount the Drive for the user from boot with one capability, recover from either service being killed, and show the tree after a restart with no network.
 - **Real account, 2026-11-13, by hand, in `drive-client-scratch` only:** through a test mount beside the rclone one, a new folder, nested folder and files arrived on the Drive with the right checksums and times; an append went up as the same file's next version; a rename and move kept the file and its time; a delete was a trash; a change made on the Drive replaced the local file and was fetched when read; a file changed on both sides was kept twice; a trash on the Drive moved the local file to the local trash. The whole of My Drive was mirrored twice (398,957 entries each time: 1,110 s and 866 s).
 
+## The desktop's cutover (M5, FRACTAL-NORTH, 2026-11-13)
+
+Done, in this order:
+
+1. The whole of My Drive was mirrored into the real store, `/var/lib/drive/<user>`.
+2. A block-sharing copy of the library (`cp --reflink`, 1.2 s, no space) was adopted into it: 42,270 files adopted, 13 already there, none different, none left behind, 9 min 41 s, nothing transferred. The original `~/Games/Emulation` was never touched and nothing uses it any more.
+3. Before the switch, the build was compared with the running system: the only differences were the client's units in, rclone's out, and the reset-on-boot program rebuilt by the newer btrc. Because that program runs at every boot, the reset scenario and an install-and-boot of this host's configuration in a VM were run first; both pass.
+4. `nixosctl update`. `~/Drive` is the client's mount, the library is pinned and all of it is here, Semu resolves its root to `~/Drive/media/Games/Emulation` with no override and re-points its links as each emulator is next started, a file written and deleted through the mount was on the Drive and then in its trash.
+
+One thing went wrong, and it was mine: a test engine from before the switch was still running on the same store, so for a few minutes two engines each uploaded every new file and the Drive got two of each (five test files in the scratch folder, since trashed). The engine and the door now take a lock on their store and a second one refuses to start; the scenario checks it. Looking for the cause also turned up two real weaknesses, both fixed: the engine and the push listener kept their requests in one folder under the same numbered names, and a new file whose upload got no answer was simply sent again.
+
+The Deck has had nothing done to it. Until its card is encrypted it keeps the timer sync, which is why the rclone module is still in the repository.
+
 ## The mutation checks
 
 Each safety rule has a switch that takes it away, and a step in its scenario that shows the protected thing then goes wrong. A test that passed either way would prove nothing.
