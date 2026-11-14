@@ -110,6 +110,7 @@ Important setting groups:
 | `settings.apps.utils.nixosctl.*` | Structured display/audio settings, generated TOML config path, default-on idle inhibit |
 | `settings.apps.gaming.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
 | `settings.networking.forwardAgentHosts` | Explicitly trusted SSH agent-forwarding destinations |
+| `settings.networking.wifi.backgroundScan.*` | When a connected Wi-Fi device looks for a stronger access point: signal threshold, intervals, or never |
 
 ### Gaming CPU affinity and power profiles
 
@@ -487,6 +488,18 @@ their modules. The smaller Mac and QEMU hosts use one `default.nix` each.
 OpenSSH, SSH agent forwarding, and optional primary-interface enforcement.
 Firewall LAN allow rules are derived from shared service flags and
 `settings.networking.ports.{tcp,udp}`.
+
+While connected, wpa_supplicant leaves the channel to look for a stronger access
+point, and a sweep of every band stalls traffic for several seconds: a stream or
+a controller link stutters. NetworkManager decides when. For a network with
+several access points that is whenever the signal is under -65 dBm and every
+five minutes regardless, the defaults of `settings.networking.wifi.backgroundScan`.
+A host that changes `signalThreshold`, `weakSignalInterval` or `recurringInterval`
+(`null` for no recurring scan), or sets `enable = false`, has its policy given to
+wpa_supplicant after each connection, and on a switch to the connection that is
+up. NetworkManager has no setting of its own for this. Below the threshold a
+device scans every `weakSignalInterval` seconds for as long as the signal stays
+weak.
 
 `config/outputs/systems.nix` builds every Linux host from `config/system/nixos`,
 `config/pkgs` and `config/pkgs/de/kde`; `config/system/nixos/default.nix` lists the system modules.

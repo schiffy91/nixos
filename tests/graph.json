@@ -1133,6 +1133,13 @@
     },
     {
       "after": [
+        "networking-policy"
+      ],
+      "id": "networking-wifi-scan",
+      "spec": "networking/wifi-scan/test.json"
+    },
+    {
+      "after": [
         "quick"
       ],
       "id": "networking-policy",
@@ -1343,6 +1350,7 @@
     "password-file",
     "installer-secret",
     "networking-roaming",
+    "networking-wifi-scan",
     "host-picker",
     "immutability-feature-disable",
     "drive-remote",

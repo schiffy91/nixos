@@ -95,6 +95,7 @@ in {
     # Existing home Wi-Fi profile; trusted source subnets follow its DHCP routes.
     networking.trustedConnections = [ "8a75b161-7efd-40a7-9b4c-05f8a57232ff" ];
     networking.forwardAgentHosts = [ "FRACTAL-NORTH" "FRACTAL-NORTH.local" "192.168.50.67" ];
+    networking.wifi.backgroundScan = { signalThreshold = -76; recurringInterval = null; };  # a scan stalls streams and Deck Pad for seconds
     nix = {  # the desktop builds the emulators; a handheld should never compile them
       substituters = [ "http://FRACTAL-NORTH.local:8080" ];
       trustedPublicKeys = [

@@ -12,7 +12,10 @@ at boot, before Steam starts. The shared Steam module supplies complete artwork
 for enabled Battle.net, Semu, Chrome, Moonlight and chiaki-ng shortcuts. Entries
 can specify `{ exe = "..."; icon = "..."; artwork = /path/to/images; }`; artwork
 changes preserve existing shortcut IDs, tags, controller settings and play history.
-Other shortcuts and custom artwork are left alone. See
+Other shortcuts and custom artwork are left alone. While the desktop's Steam is
+online the Deck also lists the desktop's shortcuts, for streaming, beside its
+own. Steam keeps the two apart: a Deck shortcut given the ID of a desktop one
+is renumbered by Steam at its next start. See
 [application artwork](../../../pkgs/gaming/artwork/README.md) for the curated
 sets, KDE icons, SGDBoop and the SteamGridDB Decky plugin.
 
@@ -29,6 +32,10 @@ tools remain on FRACTAL-NORTH. Both use the same custom Proton package. Battle.n
 opens Blizzard's installer on first launch if its Windows client is absent.
 Proton launches use XWayland in Gaming Mode and native Wayland in a Wayland
 desktop session; Gamescope lacks the subcompositor protocol Wine requires.
+
+The Deck looks for a stronger Wi-Fi access point only below -76 dBm
+(`settings.networking.wifi.backgroundScan`), never on a timer: each look is a
+sweep of every band that stalls a stream or the Deck Pad link for seconds.
 
 Sunshine uses KMS in Gaming Mode and a KWin virtual display in Plasma. The virtual
 display follows the streaming client's resolution and restores the local display

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, inputs, ... }:
+{ config, lib, options, pkgs, inputs, ... }:
 let
   servicePorts = {
     tcp = lib.unique (lib.optional config.services.openssh.enable 22
@@ -21,6 +21,29 @@ let
         exec ${reconcile}
         ;;
     esac
+  '';
+  ##### Wi-Fi Background Scan #####
+  # A scan for a stronger access point stalls traffic for seconds. NetworkManager decides
+  # when and has no setting for it, so wpa_supplicant is told after each connection.
+  backgroundScan = config.settings.networking.wifi.backgroundScan;
+  backgroundScanChanged = backgroundScan != lib.mapAttrs (_: option: option.default) options.settings.networking.wifi.backgroundScan;
+  backgroundScanPolicy = lib.optionalString backgroundScan.enable (lib.concatMapStringsSep ":" toString [
+    "simple" backgroundScan.weakSignalInterval backgroundScan.signalThreshold
+    (if backgroundScan.recurringInterval == null then 31536000 else backgroundScan.recurringInterval)  # a year: the policy has no "never"
+  ]);
+  setBackgroundScan = pkgs.writeShellScript "wifi-background-scan" ''
+    supplicant=fi.w1.wpa_supplicant1
+    for device in ''${1:-$(ls /sys/class/net)}; do
+      [ -e "/sys/class/net/$device/phy80211" ] || continue
+      interface=$(${pkgs.systemd}/bin/busctl call $supplicant /fi/w1/wpa_supplicant1 $supplicant GetInterface s "$device" 2>/dev/null | cut -d'"' -f2)
+      [ -n "$interface" ] || continue
+      network=$(${pkgs.systemd}/bin/busctl get-property $supplicant "$interface" $supplicant.Interface CurrentNetwork | cut -d'"' -f2)
+      [ "$network" != / ] || continue
+      ${pkgs.systemd}/bin/busctl set-property $supplicant "$network" $supplicant.Network Properties 'a{sv}' 1 bgscan s ${lib.escapeShellArg backgroundScanPolicy}
+    done
+  '';
+  backgroundScanDispatcher = pkgs.writeShellScript "wifi-background-scan-dispatcher" ''
+    [ "$2" != up ] || exec ${setBackgroundScan} "$1"
   '';
   ##### Firewall Functions #####
   mkIptablesRule = { action, proto, port }: ''iptables -${action} nixos-fw -p ${proto} --dport ${toString port} -s ${config.settings.networking.lanSubnet} -j nixos-fw-accept${lib.optionalString (action == "D") " || true"}'';
@@ -45,7 +68,8 @@ in {
   networking = {
     networkmanager = {
       enable = true;
-      dispatcherScripts = lib.optionals roaming (map (type: { inherit type; source = dispatcher; }) [ "basic" "pre-up" "pre-down" ]);
+      dispatcherScripts = lib.optionals roaming (map (type: { inherit type; source = dispatcher; }) [ "basic" "pre-up" "pre-down" ])
+        ++ lib.optional backgroundScanChanged { type = "basic"; source = backgroundScanDispatcher; };
     };
     firewall = {
       enable = true;
@@ -88,7 +112,13 @@ in {
     extraConfig = import ../ssh-client.nix { inherit lib; inherit (config.settings.networking) identityAgent forwardAgentHosts; };
   };
   security.pam.sshAgentAuth.enable = true;
-  systemd.services = lib.optionalAttrs (config.settings.networking.primaryInterface != "") {
+  systemd.services = lib.optionalAttrs backgroundScanChanged {
+    wifi-background-scan = {  # the connection that is already up; later ones get it from the dispatcher
+      wantedBy = [ "multi-user.target" ];
+      after = [ "NetworkManager.service" ];
+      serviceConfig = { Type = "oneshot"; RemainAfterExit = true; ExecStart = setBackgroundScan; };
+    };
+  } // lib.optionalAttrs (config.settings.networking.primaryInterface != "") {
     disable-non-primary-eth = {
       wantedBy = [ "multi-user.target" ];
       wants = [ "NetworkManager.service" ];

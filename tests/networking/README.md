@@ -14,6 +14,12 @@ connection teardown. Undeclared ports remain closed.
 Malformed configuration also revokes existing grants, and the next valid
 reconciliation must acquire the same lock and restore the permitted access.
 
+The `networking-wifi-scan` graph node boots three machines, each a simulated
+home network of two access points and a device on it. Unset, NetworkManager
+gives wpa_supplicant its own background scan policy; a declared threshold with
+no recurring scan, and scanning switched off, reach wpa_supplicant on connect,
+on reconnect and on a switch.
+
 Fixed hosts may set `settings.networking.lanSubnet`. Roaming hosts instead list
 trusted NetworkManager profile UUIDs in `settings.networking.trustedConnections`.
 Only the active profile's directly connected global prefixes get the configured

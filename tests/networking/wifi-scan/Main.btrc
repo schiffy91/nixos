@@ -1,0 +1,47 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+// Joins each access point by address, so that NetworkManager has seen the
+// network has more than one, then joins the network as a device does.
+void join(Guest guest) {
+    for unit in ["NetworkManager.service", "hostapd.service"] { guest.waitForUnit(unit); }
+    guest.succeed("nmcli connection add type wifi ifname wlan1 con-name home ssid home connection.autoconnect no ipv4.method manual ipv4.addresses 10.9.0.2/24 ipv6.method disabled");
+    for address in ["02:00:00:00:00:00", "02:00:00:00:00:01"] {
+        guest.waitUntil(f"nmcli device wifi rescan ifname wlan1 2>/dev/null; nmcli -f BSSID device wifi list ifname wlan1 --rescan no | grep -qi {address}", 120);
+        guest.succeed(f"nmcli connection modify home wifi.bssid {address}");
+        guest.waitUntil("nmcli connection up home", 120);
+        guest.succeed("nmcli connection down home");
+    }
+    guest.succeed("nmcli connection modify home wifi.bssid '' && nmcli connection up home");
+}
+
+void holds(Guest guest, string policy) {
+    try { guest.waitUntil(f"test \"$(wifi-scan-policy)\" = {ShellWords.quote(policy)}", 60); }
+    catch (string error) { throw error + guest.execute("set +e; wifi-scan-policy; nmcli -f 802-11-wireless.seen-bssids connection show home").output; }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        lab.startAll();
+        var stock = lab.guest("stock"); var tuned = lab.guest("tuned"); var off = lab.guest("off");
+        var aggressive = "\"simple:30:-65:300\"";
+        var declared = "\"simple:30:-76:31536000\"";
+        print("Unset, NetworkManager scans a network of several access points below -65 dBm and every five minutes");
+        join(stock); holds(stock, aggressive);
+        stock.fail("systemctl cat wifi-background-scan.service");
+        print("A declared threshold and no recurring scan reach wpa_supplicant with the connection");
+        tuned.succeed("busctl set-property fi.w1.wpa_supplicant1 /fi/w1/wpa_supplicant1 fi.w1.wpa_supplicant1 DebugLevel s debug");
+        join(tuned); holds(tuned, declared);
+        tuned.waitUntil("journalctl -b --no-pager | grep -q 'bgscan simple: Signal strength threshold -76  Short bgscan interval 30  Long bgscan interval 31536000'", 30);
+        print("They come back with every new connection");
+        tuned.succeed("nmcli connection down home && nmcli connection up home"); holds(tuned, declared);
+        print("A switch gives them to the connection that is already up");
+        tuned.succeed(f"wifi-scan-policy set {ShellWords.quote("simple:30:-65:300")}"); holds(tuned, aggressive);
+        tuned.succeed("systemctl restart wifi-background-scan.service"); holds(tuned, declared);
+        print("Switched off, a connected device does not scan at all");
+        join(off); holds(off, "\"\"");
+        off.succeed("nmcli connection down home && nmcli connection up home"); holds(off, "\"\"");
+        lab.close(); print("PASS: Wi-Fi background scan settings reach wpa_supplicant on connect, reconnect and switch"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

@@ -17,6 +17,7 @@ let
   fixed = evaluate { lanSubnet = "192.168.50.0/24"; };
   roaming = evaluate { trustedConnections = [ "11111111-1111-4111-8111-111111111111" ]; ports.tcp = [ 8080 ]; };
   closed = evaluate {};
+  quiet = evaluate { wifi.backgroundScan = { signalThreshold = -76; recurringInterval = null; }; };
 in
 assert lib.hasInfix "-s 192.168.50.0/24" fixed.networking.firewall.extraCommands;
 assert fixed.networking.networkmanager.dispatcherScripts == [];
@@ -27,4 +28,7 @@ assert lib.hasInfix "trusted-connections" roaming.networking.firewall.extraComma
 assert lib.hasInfix "--stop" roaming.networking.firewall.extraStopCommands;
 assert !(lib.hasInfix "-j nixos-fw-accept" closed.networking.firewall.extraCommands);
 assert closed.networking.networkmanager.dispatcherScripts == [];
-{ staticSubnet = true; roamingProfiles = true; unconfiguredNetworksClosed = true; }
+assert !(closed.systemd.services ? wifi-background-scan);
+assert builtins.length quiet.networking.networkmanager.dispatcherScripts == 1;
+assert quiet.systemd.services ? wifi-background-scan;
+{ staticSubnet = true; roamingProfiles = true; unconfiguredNetworksClosed = true; wifiScanOnlyWhenDeclared = true; }
