@@ -70,6 +70,7 @@ in lib.mkIf settings.enable {
     description = "Apply the boot CPU Curve Optimizer mode";
     wantedBy = [ "multi-user.target" ];
     after = [ "systemd-modules-load.service" ];
+    unitConfig.ConditionVirtualization = "no";  # a VM of this host has no such CPU; the unit failed there and the boot counted as degraded
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;

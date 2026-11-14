@@ -52,9 +52,10 @@ in lib.mkIf settings.enable {
   settings.apps.utils.nixosctl.tray.menu.Tuning.GPU = { Stock = radio "stock"; Tuned = radio "tuned"; };
   systemd.services.gpu-tuning = {
     description = "Apply the boot GPU tuning through LACT";
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = [ "graphical.target" ];  # LACT's daemon starts after multi-user.target, so wanting this there was an ordering cycle; systemd broke it by dropping one of the two at boot
     requires = [ "lactd.service" ];
     after = [ "lactd.service" ];
+    unitConfig.ConditionVirtualization = "no";  # a VM of this host has no such GPU
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;

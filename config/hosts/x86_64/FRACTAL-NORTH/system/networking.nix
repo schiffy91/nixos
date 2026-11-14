@@ -19,7 +19,7 @@
   # packets that downstream gear silently drops. Force software segmentation instead.
   systemd.services.atlantic-tx-udp-seg-off = {
     description = "Disable tx-udp-segmentation on atlantic NIC (driver quirk)";
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = [ "sys-subsystem-net-devices-${host.network.primaryInterface}.device" ];  # when the NIC appears, not at boot: a boot without it (a VM of this host) waited 90 s for it and ended degraded
     after = [ "network-pre.target" "sys-subsystem-net-devices-${host.network.primaryInterface}.device" ];
     bindsTo = [ "sys-subsystem-net-devices-${host.network.primaryInterface}.device" ];
     serviceConfig = {

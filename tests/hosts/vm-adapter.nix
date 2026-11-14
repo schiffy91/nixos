@@ -14,6 +14,20 @@ let
     ${pkgs.systemd}/bin/systemctl --failed --no-legend --plain | while read -r unit _; do
       [ -n "$unit" ] && printf 'E2E-FAILED %s\n' "$unit"
     done
+    # A unit that fails and is started again leaves the system "degraded" for a moment with nothing in the
+    # failed list. The journal still names it.
+    ${pkgs.systemd}/bin/journalctl -b --no-pager -o cat 2>/dev/null | grep -E "Failed with result|Failed to (start|mount|activate)|[Pp]rocess exited, code=(exited, status=[1-9]|killed|dumped)" | tail -n 12 | while read -r line; do
+      printf 'E2E-TROUBLE %s\n' "$line"
+    done
+    ${pkgs.systemd}/bin/journalctl -b --no-pager -o cat 2>/dev/null | grep -E "ordering cycle|Dependency failed|timed out\\.|Timed out" | head -n 12 | while read -r line; do
+      printf 'E2E-TROUBLE %s\n' "$line"
+    done
+    ${pkgs.systemd}/bin/systemctl list-units --all --no-legend --plain 2>/dev/null | grep -Ev ' (active|inactive) ' | head -n 12 | while read -r line; do
+      printf 'E2E-TROUBLE unit: %s\n' "$line"
+    done
+    ${pkgs.systemd}/bin/journalctl -b --no-pager -o short-monotonic -p 3 2>/dev/null | grep -v 'Ignoring duplicate name' | tail -n 12 | while read -r line; do
+      printf 'E2E-TROUBLE error: %s\n' "$line"
+    done
     ${pkgs.systemd}/bin/journalctl -b --no-pager -o cat 2>/dev/null | grep 'Service has no ExecStart' | while read -r line; do
       printf 'E2E-REFUSED %s\n' "$line"
     done

@@ -75,6 +75,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
     private string store;
     private string tree;
     public bool readOnly = false;
+    public bool unguarded = false;  // hand a not-downloaded file to the kernel as if it were whole. Only for the test that shows what that does: zeros.
     public Volumes volumes;  // the folders kept on other volumes
     private Vector<int> showing = [];  // for each: 1 shown, 0 unavailable, -1 not looked at yet
     private long long looked = 0LL;
@@ -129,7 +130,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
             return;
         }
         StoreFile probe = probed;
-        bool cloud = probe.attribute("state").equals("cloud");
+        bool cloud = probe.attribute("state").equals("cloud") && !self.unguarded;
         long long today = (long long)time(NULL);
         if (today - probe.accessed() > 86400LL) { probe.setAccessed(today); }  // eviction takes the least recently opened; a day is fine enough
         if (writing) { self.note("changed", self.pathOf(node)); }
