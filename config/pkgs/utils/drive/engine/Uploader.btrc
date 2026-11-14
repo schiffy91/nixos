@@ -23,6 +23,7 @@ class Uploader {
     private Vector<string> paths = [];  // tree-relative, still to look at
     private Map<string, bool> listed = {};  // the same paths, to find one quickly
     private bool unsorted = false;
+    private Map<string, bool> doubted = {};  // paths whose first sending ended without an answer: it may have arrived all the same
     private Vector<string> later = [];  // looked at this round and not finished
     private Vector<string> removals = [];  // Drive ids deleted here
     private bool allowed = false;  // a person said the waiting deletions may go
@@ -191,6 +192,21 @@ class Uploader {
         return false;
     }
 
+    // A sending that ended without an answer may have succeeded. Before sending again, look: an entry of that
+    // name in that folder that the store does not hold, or holds only as the stand-in it made on hearing of it,
+    // and that matches what is here, is the one that was sent. Sending again would leave two.
+    private DriveFile? arrived(string path, string parent, string name, StoreFile held, bool folder) {
+        if (!self.doubted.has(path)) { return null; }
+        DriveListing? listing = self.api.named(parent, name);
+        if (listing == null) { return null; }
+        for file in listing.files {
+            bool same = file.isFolder();
+            if (!folder) { same = !file.isFolder() && file.size == held.size() && file.modified == held.modified(); }
+            if (same && (!self.store.knows(file.id) || (!folder && self.store.absorb(file.id)))) { return file; }
+        }
+        return null;
+    }
+
     // Bring the Drive in line with one entry. True when there is nothing more to do for it.
     private bool sync(string path) {
         if (self.local(path)) { return true; }
@@ -214,16 +230,26 @@ class Uploader {
         string id = held.attribute("id");
         bool folder = FileSystem.isDir(full);
         if (id.isEmpty() && folder) {
-            DriveFile? made = self.api.createFolder(parent, name);
-            if (made == null) { return self.fails(f"making the folder {path}"); }
+            DriveFile? made = self.arrived(path, parent, name, held, true);
+            if (made == null) { made = self.api.createFolder(parent, name); }
+            if (made == null) {
+                self.doubted.put(path, true);
+                return self.fails(f"making the folder {path}");
+            }
+            self.doubted.remove(path);
             self.store.adopt(full, made, local);
             return true;
         }
         if (!folder && (long long)time(NULL) * 1000LL - held.modified() < (long long)self.quietSeconds * 1000LL) { return false; }  // still being written
         if (id.isEmpty()) {
             string before = held.shape();
-            DriveFile? sent = self.api.upload("", parent, name, full, held.modified());
-            if (sent == null) { return self.fails(f"uploading {path}"); }
+            DriveFile? sent = self.arrived(path, parent, name, held, false);
+            if (sent == null) { sent = self.api.upload("", parent, name, full, held.modified()); }
+            if (sent == null) {
+                self.doubted.put(path, true);
+                return self.fails(f"uploading {path}");
+            }
+            self.doubted.remove(path);
             self.store.adopt(full, sent, local);
             held.setAttribute("synced", before);  // a write during the upload shows as a change next time
             self.uploaded++;

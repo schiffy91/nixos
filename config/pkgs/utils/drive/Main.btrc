@@ -8,6 +8,7 @@ import Library.Map;
 import Library.Timer;
 
 #include <stdio.h>
+#include <unistd.h>
 
 import Library.FileSystem;
 import Library.FileSystem.IUserspaceFileSystem;
@@ -25,13 +26,17 @@ import ./remote/Transport.btrc;
 import ./store/Store.btrc;
 
 class Drive {
+    // Where requests keep their headers and bodies while they run: a folder of this command's own, inside the
+    // client's runtime folder. A shared name under /tmp belonged to whoever made it first.
+    class string scratch(CLICommandLine options) { return options.option("--scratch", f"{Drive.runtime(options)}/requests-{options.operand(0, "drive")}-{(int)getpid()}"); }
+
     class DriveApi api(CLICommandLine options) {
         string home = Environment.get("HOME", "");
         DriveCredentials? credentials = null;
         if (options.has("--rclone")) { credentials = DriveCredentials.fromRclone(options.option("--rclone", ""), options.option("--remote", "gdrive")); }
         else { credentials = DriveCredentials.load(options.option("--credentials", f"{home}/.config/drive/credentials.json")); }
         if (credentials == null) { throw "No Drive sign-in found (see --credentials and --rclone)"; }
-        DriveApi api = DriveApi(Transport(options.option("--scratch", Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/drive-transport")), credentials);
+        DriveApi api = DriveApi(Transport(Drive.scratch(options)), credentials);
         if (options.has("--api")) {
             api.apiBase = options.option("--api", "");
             api.tokenUrl = api.apiBase + "/token";
@@ -179,7 +184,7 @@ class Drive {
         if (client == null) { throw "No OAuth client found: pass --rclone FILE to take rclone's"; }
         Vector<string> scopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/pubsub"];
         for extra in options.values("--scope") { scopes.push(extra); }
-        Transport transport = Transport(options.option("--scratch", Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/drive-transport"));
+        Transport transport = Transport(Drive.scratch(options));
         DriveCredentials granted = Login.run(client, scopes, transport, options.option("--port", "53683").toInt(), options.option("--wait", "300").toInt());
         FileSystem.mkdirp(PathTools.dirname(path));
         Login.save(granted, path);

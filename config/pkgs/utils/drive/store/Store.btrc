@@ -155,6 +155,18 @@ class Store {
 
     public string contents(string id) { return self.linkPath(id); }  // a file's bytes, whatever its name in the tree is now
 
+    // Drop the not-downloaded stand-in the store made for a Drive file, because a file here turns out to be that
+    // very file. False when the store's entry is anything else.
+    public bool absorb(string id) {
+        string path = self.filePath(id);
+        StoreFile? held = self.file(id);
+        if (path.isEmpty() || held == null || !held.attribute("state").equals("cloud")) { return false; }
+        self.unlink(id);
+        StorePaths.remove(path);
+        self.settle(PathTools.dirname(path));
+        return true;
+    }
+
     // Stop knowing a file by its Drive id; the file itself stays where it is.
     public void unlink(string id) {
         if (StorePaths.remove(self.linkPath(id))) { self.files--; }
