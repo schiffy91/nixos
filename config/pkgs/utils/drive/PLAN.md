@@ -243,6 +243,14 @@ Every concern, what handles it, and what proves it:
 
 Not decided by the plan: whether a measured slowdown is acceptable. The numbers are reported and you choose.
 
+**Built so far (2026-11-13), nothing done to the real card:** `settings.disk.sdCard` (`enable`, `label`, `mountPoint`, `keyFile`) and `config/system/nixos/sd-card.nix`. The Deck's host file does not turn it on yet; that is the first step of the Deck's cutover.
+
+- The card is opened with the key file by a unit that is asked for when the card's device appears, at boot or later, never by boot itself. The mount follows the opened container and is bound to the card's own device, with a lazy unmount, so a pulled card comes off `/sd` at once even while a program holds a file on it; the container closes when its last user lets go.
+- The container is given its label last when a card is prepared: a labelled card is opened the moment it is seen.
+- The Drive client is told the card's device (`placementDevices`), so it lets go as the card leaves rather than when reads start failing, and it flushes the card before it records how far it has read the change feed, so a pulled card is never behind what the client believes.
+- VM scenario `sd-card` (required graph node): a blank card in the slot neither delays nor fails the boot; a prepared card opens and mounts by itself and is there after a restart with nothing typed; pulled while a program holds a file on it, it comes off and its container closes, and put back it returns; a Drive folder placed on it is unavailable while it is out and carries on when it is back; with the key file lost the password opens it and a new key file can be added; a wiped header is restored from its copy.
+- Not built: the `nixosctl` command that prepares a card (checks, the explicit yes, format, both ways to open, header copy), suspend and resume in the VM, and everything in the table that says "on the Deck".
+
 ## M0 results
 
 In progress. Measured on FRACTAL-NORTH (kernel 7.3.3, btrfs on NVMe) on 2026-11-13 with the forwarding filesystem from `Library.FileSystem.Userspace`, run as root, passthrough on:

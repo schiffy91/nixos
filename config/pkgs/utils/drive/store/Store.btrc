@@ -37,7 +37,16 @@ class Store {
 
     public string position() { return FileSystem.readText(self.root + "/position").trim(); }  // where the change feed was read to
 
+    // What was put on other volumes reaches their disks before anything records that it was done. A card can
+    // be pulled at any moment; the position in the change feed must never be ahead of what the card holds.
+    public void secure() {
+        for (int index = 0; index < self.volumes.locations.len; index++) {
+            if (self.attached.get(index)) { StorePaths.syncVolume(self.volumes.locations.get(index)); }
+        }
+    }
+
     public bool setPosition(string position) {
+        self.secure();
         string staged = self.temporary("position");
         return Path.writeAll(staged, position + "\n") && StorePaths.rename(staged, self.root + "/position");
     }
@@ -553,6 +562,7 @@ class Store {
             if (self.folders.get(id).startsWith(stand + "/")) { self.folders.remove(id); }
         }
         self.attend();
+        self.secure();
         return "ok";
     }
 
@@ -589,6 +599,16 @@ class Store {
         if (!StorePaths.link(path, link)) { return "error"; }
         if (!moved) { StorePaths.remove(source); }
         return "adopted";
+    }
+
+    // Whether a file from outside is one the Drive holds at `path`: "same", "different", or "unknown" when the
+    // Drive has nothing there. Nothing is changed.
+    public string probe(string source, string path, string sha256) {
+        StoreFile? there = StoreFile.open(path);
+        if (there == null || there.attribute("id").isEmpty() || FileSystem.isDir(path)) { return "unknown"; }
+        StoreFile? given = StoreFile.open(source);
+        if (given == null) { return "unreadable"; }
+        return given.size() == there.size() && !sha256.isEmpty() && sha256.equals(there.attribute("sha256")) ? "same" : "different";
     }
 
     private bool copy(StoreFile from, string to) {  // sharing blocks where the filesystem can

@@ -1,0 +1,160 @@
+import Library.CLI;
+import Library.Process;
+import ../vm/Lab.btrc;
+import ../drive/Fixture.btrc;
+
+// The declared, encrypted card: opened with the key file whenever it is attached, at boot or later, and mounted;
+// never in the way of a boot without it; gone cleanly when pulled, and back when put in again.
+class SdCardScenario {
+    private Guest machine;
+    private DriveFixture drive;
+    private string card = "/dev/mmcblk0";
+    private string key = "/var/lib/nixos/sd-card/key";
+
+    public SdCardScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+    }
+
+    private void pull() {
+        self.machine.succeed("cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/unbind");
+        self.machine.waitUntil(f"test ! -e {self.card}");
+    }
+
+    private void insert() { self.machine.succeed("cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/bind"); }
+
+    private void mounted() { self.machine.waitUntil("mountpoint -q /sd && test -b /dev/mapper/sdcard", 60); }
+
+    private void gone() { self.machine.waitUntil("! mountpoint -q /sd && ! test -e /dev/mapper/sdcard", 60); }
+
+    private void boot() {
+        self.machine.start();
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.succeed("basename $(realpath /sys/class/mmc_host/mmc0/device) > /run/sd-controller");
+    }
+
+    private void prepared() {
+        print("A card that is not ours does not delay or fail the boot");
+        self.machine.waitUntil(f"test -b {self.card}");
+        Check.equal(self.machine.succeed("systemctl --failed --no-legend | wc -l").trim(), "0", "nothing failed with a blank card in the slot");
+        self.machine.fail("mountpoint -q /sd");
+        Check.that(Strings.toInt(self.machine.succeed("systemd-analyze | grep -o 'userspace) = [0-9.]*' | grep -o '[0-9]*' | head -1 || echo 0").trim()) < 60, "and the boot did not wait for one");
+
+        print("Prepared with a key file and a password, it opens and mounts by itself");
+        self.machine.succeed(f"install -d -m 700 /var/lib/nixos/sd-card && head -c 64 /dev/urandom > {self.key} && chmod 400 {self.key}");
+        self.machine.succeed(f"cryptsetup luksFormat --batch-mode --pbkdf pbkdf2 --iter-time 1 {self.card} {self.key}");  // no label yet: the system opens a labelled card at once
+        self.machine.succeed(f"printf 'boot password' > /run/password && cryptsetup luksAddKey --batch-mode --pbkdf pbkdf2 --iter-time 1 --key-file {self.key} {self.card} /run/password");
+        self.machine.succeed(f"cryptsetup open --key-file {self.key} {self.card} making && mkfs.ext4 -q -L SD -E root_owner=1000:100 /dev/mapper/making && cryptsetup close making");
+        self.machine.succeed(f"cryptsetup config --label SD-crypt {self.card} && udevadm trigger --action=change {self.card}");  // named last, when it is ready to be used
+        self.mounted();
+        self.machine.succeed("su - carduser -c 'echo kept > /sd/file'");
+        Check.equal(self.machine.succeed("findmnt -no SOURCE,FSTYPE /sd").trim(), "/dev/mapper/sdcard ext4", "it is the opened container that is mounted, at /sd, writable by the user");
+    }
+
+    private void acrossBoots() {
+        print("After a restart it is there with nothing typed");
+        self.machine.shutdown();
+        self.boot();
+        self.mounted();
+        Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "with what was written");
+        Check.equal(self.machine.succeed("systemctl --failed --no-legend | wc -l").trim(), "0", "and nothing failed");
+    }
+
+    private void pulled() {
+        print("Pulled while a program holds a file on it, it comes off at once; put back, it returns");
+        self.machine.succeed("systemd-run --unit hold --collect /run/current-system/sw/bin/sh -c 'exec 9< /sd/file; exec /run/current-system/sw/bin/sleep 900'");
+        self.machine.waitUntil("ls -l /proc/$(systemctl show -p MainPID --value hold.service)/fd | grep -q /sd/file");
+        self.pull();
+        self.machine.waitUntil("! mountpoint -q /sd", 30);
+        Check.equal(self.machine.succeed("ls -A /sd | wc -l").trim(), "0", "the mount point is empty, not a dead filesystem");
+        self.machine.succeed("systemctl stop hold.service");
+        self.gone();
+        self.insert();
+        self.mounted();
+        Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "the same card opens again by itself");
+    }
+
+    private void placement() {
+        print("A Drive folder kept on the card is unavailable while the card is out and back when it returns");
+        self.drive.prepare();
+        self.machine.succeed(f"head -c 100000 /dev/urandom > {self.drive.source}/a");
+        self.drive.startFake();
+        string library = self.drive.folder(self.drive.folder("root", "Games"), "Library");
+        self.drive.put(library, "a.bin", "a");
+        string place = "--place Games/Library=/sd/drive --place-device /sd/drive=/dev/disk/by-label/SD-crypt";
+        self.drive.startEngine(f"--quiet 1 --budget-files 0 --pin Games/Library {place}");
+        self.drive.startDoor(place);
+        self.machine.succeed("mkdir /sd/drive");
+        self.drive.drive("place Games/Library");
+        self.machine.waitUntil(f"cmp -s {self.drive.mount}/Games/Library/a.bin {self.drive.source}/a && test -e /sd/drive/tree/a.bin");
+        self.pull();
+        self.machine.waitUntil(f"(ls {self.drive.mount}/Games/Library 2>&1 || true) | grep -q 'No such device'");
+        self.gone();  // the client let go, so the card's container could close
+        self.machine.waitUntil(f"drive status --runtime {self.drive.runtime} | grep -q 'waiting for the volume of Games/Library'");
+        self.insert();
+        self.mounted();
+        try {
+            self.machine.waitUntil(f"cmp -s {self.drive.mount}/Games/Library/a.bin {self.drive.source}/a", 40);
+        } catch (string error) {
+            print(self.machine.succeed(f"(ls -la {self.drive.mount}/Games/Library 2>&1 || true); (cmp {self.drive.mount}/Games/Library/a.bin {self.drive.source}/a 2>&1 || true); drive status --runtime {self.drive.runtime}; ls -la /sd/drive/tree /dev/disk/by-label/ 2>&1 | head -20; getfattr --absolute-names -d /sd/drive/tree {self.drive.store}/tree/Games/Library 2>&1 | head -20; journalctl -u drive-door -u drive-engine --no-pager | tail -20"));
+            throw error;
+        }
+        self.machine.waitUntil(f"! drive status --runtime {self.drive.runtime} | grep -q 'waiting for the volume'");  // the engine carries on
+        self.drive.stop("drive-engine");
+        self.drive.stop("drive-door");
+        self.machine.succeed(f"umount -l {self.drive.mount} || true");
+    }
+
+    private void keys() {
+        print("With the key file lost the password still opens it, and a new key file can be added");
+        self.pull();
+        self.gone();
+        self.machine.succeed(f"mv {self.key} /run/old-key && printf 'boot password' > /run/password");
+        self.insert();
+        self.machine.waitUntil(f"test -b {self.card}");
+        self.machine.succeed("sleep 5; ! mountpoint -q /sd");
+        self.machine.succeed(f"systemctl reset-failed; cryptsetup open --key-file /run/password {self.card} sdcard");
+        self.mounted();
+        self.machine.succeed(f"head -c 64 /dev/urandom > {self.key} && chmod 400 {self.key} && cryptsetup luksAddKey --batch-mode --pbkdf pbkdf2 --iter-time 1 --key-file /run/password {self.card} {self.key}");
+        self.machine.succeed("umount /sd && cryptsetup close sdcard");
+        self.pull();
+        self.insert();
+        self.mounted();
+
+        print("A damaged header is put back from its copy");
+        self.machine.succeed(f"cryptsetup luksHeaderBackup {self.card} --header-backup-file /var/lib/nixos/sd-card/header");
+        self.pull();
+        self.gone();
+        self.insert();
+        self.mounted();
+        self.machine.succeed("umount /sd && cryptsetup close sdcard");
+        self.machine.succeed(f"dd if=/dev/zero of={self.card} bs=1M count=1 conv=fsync status=none && ! cryptsetup isLuks {self.card}");
+        self.machine.succeed(f"cryptsetup luksHeaderRestore --batch-mode {self.card} --header-backup-file /var/lib/nixos/sd-card/header && udevadm trigger --action=change {self.card}");
+        self.mounted();
+        Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "and the card's contents are intact");
+    }
+
+    public void check() {
+        Check.exited(ChildProcess.run("truncate", ["-s", "512M", self.machine.statePath("sdcard.raw")]));
+        self.boot();
+        self.prepared();
+        self.acrossBoots();
+        self.pulled();
+        self.placement();
+        self.keys();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        SdCardScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: the encrypted card opens when attached, stays out of a boot's way, and comes and goes cleanly");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

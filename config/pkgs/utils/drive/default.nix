@@ -7,7 +7,8 @@ let
   drive = "${programs.drive}/bin/drive";
   runtime = "/run/drive";
   credentials = "${home}/.config/drive/credentials.json";
-  places = lib.concatStringsSep " " (lib.mapAttrsToList (path: location: "--place ${lib.escapeShellArg "${path}=${location}"}") settings.placements);
+  places = lib.concatStringsSep " " (lib.mapAttrsToList (path: location: "--place ${lib.escapeShellArg "${path}=${location}"}") settings.placements
+    ++ lib.mapAttrsToList (location: device: "--place-device ${lib.escapeShellArg "${location}=${device}"}") settings.placementDevices);
   deny = pkgs.writeText "drive-readers.deny" (builtins.readFile ./readers.deny + lib.concatMapStrings (name: "${name}\n") settings.readers.deny);
   engine = lib.concatStringsSep " " ([
     "${drive} engine --store ${lib.escapeShellArg settings.store} --runtime ${runtime} --credentials ${lib.escapeShellArg credentials}"
@@ -80,7 +81,7 @@ in lib.mkIf settings.enable {
     wants = [ "network-online.target" ];
     unitConfig.ConditionPathExists = credentials;
     serviceConfig = {
-      ExecStart = "${drive} push listen --runtime ${runtime} --credentials ${lib.escapeShellArg credentials}";
+      ExecStart = "${drive} push listen --quiet --runtime ${runtime} --credentials ${lib.escapeShellArg credentials} --machine ${lib.escapeShellArg config.networking.hostName}";
       RestartSec = 30;
     };
   });

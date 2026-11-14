@@ -11,6 +11,7 @@ class Volumes {
     public string root;  // the main store
     public Vector<string> paths = [];
     public Vector<string> locations = [];
+    public Vector<string> devices = [];  // for each, a device that must exist for the volume to count as here; "" for none
 
     public Volumes(string root) { self.root = root; }
 
@@ -20,6 +21,17 @@ class Volumes {
         if (at <= 0 || at + 1 >= declared.len()) { return false; }
         self.paths.push(declared.substring(0, at));
         self.locations.push(declared.substring(at + 1, declared.len() - at - 1));
+        self.devices.push("");
+        return true;
+    }
+
+    // "LOCATION=DEVICE": the volume is gone the moment its device is, however long the kernel still answers
+    // from memory for a card that was pulled.
+    public bool require(string declared) {
+        int at = declared.indexOf("=");
+        int index = at <= 0 ? -1 : self.locations.indexOf(declared.substring(0, at));
+        if (index < 0 || at + 1 >= declared.len()) { return false; }
+        self.devices.set(index, declared.substring(at + 1, declared.len() - at - 1));
         return true;
     }
 
@@ -72,6 +84,7 @@ class Volumes {
     // Whether the folder's volume is here: its tree exists and says it is this folder. A card that is out, another
     // card, or a bare mount point all fail this.
     public bool present(int index) {
+        if (!self.devices.get(index).isEmpty() && !FileSystem.exists(self.devices.get(index))) { return false; }
         StoreFile? stand = StoreFile.open(self.stand(index));
         StoreFile? shown = StoreFile.open(self.shown(index));
         return stand != null && shown != null && !stand.attribute("id").isEmpty() && stand.attribute("id").equals(shown.attribute("id"));

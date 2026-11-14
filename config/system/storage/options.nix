@@ -53,5 +53,10 @@ in {
     settings.disk.encryption.enable = mkSetting bool true;
     settings.disk.encryption.opportunisticUnlock.enable = mkSetting bool false;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/run/nixosctl-install/passphrase";
+    # An encrypted removable card: opened with a key file whenever it is attached, at boot or later, and mounted.
+    settings.disk.sdCard.enable = mkSetting bool false;
+    settings.disk.sdCard.label = mkSetting str "SD"; # the filesystem's label; the encrypted container's is "<label>-crypt"
+    settings.disk.sdCard.mountPoint = mkSetting str "/sd";
+    settings.disk.sdCard.keyFile = mkSetting str "/var/lib/nixos/sd-card/key"; # on the encrypted system disk, persisted, root only
   };
 }

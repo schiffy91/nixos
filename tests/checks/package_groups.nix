@@ -89,7 +89,8 @@ let
     steamDefinitions = deck.configuration.options.programs.steam.package.definitionsWithLocations;
   in
     check (!noGaming.programs.steam.enable && !noGaming.services.sunshine.enable
-      && !(noGaming.environment.sessionVariables ? SEMU_TARGET) && !(noGaming.systemd.user.services ? rclone-offline-emulation))
+      && !(noGaming.environment.sessionVariables ? SEMU_TARGET) && !(noGaming.systemd.user.services ? rclone-offline-emulation)
+      && noGaming.settings.apps.utils.drive.pinned == [])
       "Disabling gaming must disable Steam, Sunshine, Semu and its library sync."
     ++ check (!noDev.programs.zsh.enable && !(builtins.elem "claude-code" (names noDev))
       && !(builtins.elem "codex" (names noDev)) && !(builtins.elem "lmstudio" (names noDev)))
@@ -144,10 +145,14 @@ let
       "Disabling Chrome or its package groups must remove PWA installation policy and launcher watching."
     ++ check (handheld.environment.sessionVariables.SEMU_ROOT == "/run/media/alexanderschiffhauer/SD/Emulation"
       && handheld.settings.apps.utils.rclone.offline.emulation.local == "/run/media/alexanderschiffhauer/SD/Emulation"
+      && handheld.systemd.user.timers ? rclone-offline-emulation
       && !(desktop.config.environment.sessionVariables ? SEMU_ROOT)
-      && desktop.config.settings.apps.utils.rclone.offline.emulation.local == "${desktop.config.settings.users.admin.homeDirectory}/Games/Emulation"
-      && desktop.config.systemd.user.services ? rclone-offline-emulation && desktop.config.systemd.user.timers ? rclone-offline-emulation)
-      "Semu's library must be the Deck's SD card and the desktop's Games folder, each synced with the Drive."
+      && desktop.config.settings.apps.utils.drive.enable && desktop.config.settings.apps.utils.drive.pinned == [ "media/Games/Emulation" ]
+      && desktop.config.systemd.services ? drive-door && desktop.config.systemd.services ? drive-engine
+      && !(desktop.config.systemd.services ? rclone-drive) && !(desktop.config.systemd.user.timers ? rclone-offline-emulation)
+      && lib.hasInfix "--ignore '*.semu-partial'" desktop.config.systemd.services.drive-engine.serviceConfig.ExecStart
+      && lib.hasInfix "--pin media/Games/Emulation" desktop.config.systemd.services.drive-engine.serviceConfig.ExecStart)
+      "Semu's library must be its Drive folder in place on the desktop, kept downloaded by the Drive client with no sync of its own, and for now the Deck's SD card synced by a timer."
     ++ check (lib.all (path: !(lib.hasInfix "semu" path) && !(lib.hasSuffix "/ES-DE" path)) desktop.config.settings.disk.immutability.persist.paths)
       "Semu must persist nothing of its own: every asset lives in its library and its state is disposable."
     ++ check (handheld.settings.apps.gaming.sunshine.capture == "auto" && desktop.config.settings.apps.gaming.sunshine.capture == "kwin")

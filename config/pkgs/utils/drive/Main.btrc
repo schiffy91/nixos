@@ -91,6 +91,12 @@ class Drive {
         Console.log(f"took {MonotonicClock.milliseconds() - started} ms");
     }
 
+    // This machine's name, for what is made in its name: its subscription, the copies it sets aside.
+    class string machine() {
+        string name = FileSystem.readText("/proc/sys/kernel/hostname").trim();
+        return name.isEmpty() ? "this-machine" : name;
+    }
+
     class string runtime(CLICommandLine options) { return options.option("--runtime", Environment.get("DRIVE_RUNTIME", Environment.get("XDG_RUNTIME_DIR", "/run") + "/drive")); }
 
     // The mount: forwards to the store's tree and asks the engine for what is not downloaded.
@@ -103,6 +109,9 @@ class Drive {
         door.readOnly = options.has("--read-only");
         for declared in options.values("--place") {
             if (!door.volumes.place(declared)) { throw f"--place wants PATH=LOCATION, not {declared}"; }
+        }
+        for declared in options.values("--place-device") {
+            if (!door.volumes.require(declared)) { throw f"--place-device wants LOCATION=DEVICE for a placed location, not {declared}"; }
         }
         UserspaceOptions mounting = UserspaceOptions();
         mounting.name = "drive";
@@ -144,10 +153,13 @@ class Drive {
         for declared in options.values("--place") {
             if (!engine.places(declared)) { throw f"--place wants PATH=LOCATION, not {declared}"; }
         }
+        for declared in options.values("--place-device") {
+            if (!engine.requires(declared)) { throw f"--place-device wants LOCATION=DEVICE for a placed location, not {declared}"; }
+        }
         for pin in options.values("--pin") { engine.pins.push(pin); }
         engine.cacheBytes = options.option("--cache-bytes", "0").toLong();
         engine.freeFloor = options.option("--free-floor", "0").toLong();
-        engine.uploader.machine = options.option("--machine", "this-machine");
+        engine.uploader.machine = options.option("--machine", Drive.machine());
         for pattern in options.values("--ignore") { engine.uploader.ignored.push(pattern); }
         engine.uploader.quietSeconds = options.option("--quiet", "5").toInt();
         engine.uploader.deleteLimit = options.option("--delete-limit", "50").toInt();
@@ -180,7 +192,7 @@ class Drive {
         DriveCredentials? credentials = options.has("--rclone") ? DriveCredentials.fromRclone(options.option("--rclone", ""), options.option("--remote", "gdrive")) : DriveCredentials.load(options.option("--credentials", f"{home}/.config/drive/credentials.json"));
         if (credentials == null) { throw "No Drive sign-in found"; }
         string project = options.option("--project", credentials.clientId.substring(0, credentials.clientId.indexOf("-")));
-        Push push = Push(api, project, options.option("--machine", Environment.get("HOSTNAME", "machine")));
+        Push push = Push(api, project, options.option("--machine", Drive.machine()));
         string what = options.operand(1, "");
         if (what.equals("prepare")) {
             push.prepare();
@@ -273,9 +285,9 @@ class Drive {
                 left.push(f"not read: {full}");
                 continue;
             }
-            string answer = Drive.asked(options, f"take\t{sums.get(full)}\t{full}\t{logical}", 3600);
+            string answer = Drive.asked(options, f"{options.has("--check") ? "probe" : "take"}\t{sums.get(full)}\t{full}\t{logical}", 3600);
             if (answer.equals("unknown") && options.has("--upload-new")) { answer = Drive.asked(options, f"bring\t{full}\t{logical}", 3600); }
-            if (answer.equals("adopted")) { counts.set(0, counts.get(0) + 1); }
+            if (answer.equals("adopted") || answer.equals("same")) { counts.set(0, counts.get(0) + 1); }
             else if (answer.equals("added")) { counts.set(1, counts.get(1) + 1); }
             else if (answer.equals("here")) { counts.set(2, counts.get(2) + 1); }
             else {
@@ -304,21 +316,27 @@ class Drive {
     class void adopt(CLICommandLine options) {
         string source = options.operand(1, "");
         string target = Drive.treePath(options, options.operand(2, ""));
-        if (source.isEmpty() || !FileSystem.isDir(source) || options.operand(2, "").isEmpty()) { throw "usage: drive adopt LOCAL-FOLDER DRIVE-FOLDER [--upload-new]"; }
+        if (source.isEmpty() || !FileSystem.isDir(source) || options.operand(2, "").isEmpty()) { throw "usage: drive adopt LOCAL-FOLDER DRIVE-FOLDER [--upload-new | --check]"; }
         while (source.len() > 1 && source.endsWith("/")) { source = source.substring(0, source.len() - 1); }
         Vector<int> counts = [0, 0, 0, 0, 0];
         Vector<string> left = [];
         Vector<string> batch = [];
-        Drive.asked(options, "pause", 10);  // nothing is downloaded that is about to be adopted
+        bool check = options.has("--check");  // only say whether every file here is on the Drive; change nothing
+        if (!check) { Drive.asked(options, "pause", 10); }  // nothing is downloaded that is about to be adopted
         try {
             Drive.adoptBelow(options, source, target, "", batch, counts, left);
             Drive.adoptBatch(options, source, target, batch, counts, left);
         } catch (string error) {
-            Drive.asked(options, "unpause", 10);
+            if (!check) { Drive.asked(options, "unpause", 10); }
             throw error;
         }
-        Drive.asked(options, "unpause", 10);
+        if (!check) { Drive.asked(options, "unpause", 10); }
         for line in left { Console.log(line); }
+        if (check) {
+            Console.log(f"{counts.get(0)} the same on the Drive, {counts.get(3)} different from the Drive, {counts.get(4)} not on the Drive or not read");
+            if (counts.get(3) + counts.get(4) > 0) { throw "Not everything here is on the Drive"; }
+            return;
+        }
         Console.log(f"{counts.get(0)} adopted, {counts.get(1)} new here and sent to the Drive, {counts.get(2)} already downloaded, {counts.get(3)} different from the Drive, {counts.get(4)} left alone");
     }
 

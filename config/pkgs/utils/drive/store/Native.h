@@ -140,6 +140,15 @@ static inline int driveEvict(int descriptor) {
 // contents without a copy. 0, or -1 with errno.
 static inline int driveClone(int target, int source) { return ioctl(target, FICLONE, source); }
 
+// Write everything the filesystem holding `path` has pending to its disk. 0, or -1.
+static inline int driveSyncVolume(const char* path) {
+	int descriptor = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (descriptor < 0) { return -1; }
+	int result = syncfs(descriptor);
+	close(descriptor);
+	return result;
+}
+
 // Bytes free for an ordinary user on the filesystem holding `path`, or -1.
 static inline long driveFreeBytes(const char* path) {
 	struct statvfs status;
