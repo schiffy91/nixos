@@ -257,7 +257,7 @@ class Drive {
         string measured = DriveUsage.measure(progress);
         if (!options.has("--save")) {
             for pin in progress.pins {
-                string held = f"{pin.files} files, {DriveSize.words(pin.onDisk)} here of {DriveSize.words(pin.inDrive)}";
+                string held = f"{DriveCount.words(pin.files)} files, {DriveSize.words(pin.onDisk)} here of {DriveSize.words(pin.inDrive)}";
                 Console.log(f"{pin.path}: {pin.here ? held : "its volume is not attached"}");
             }
             return;

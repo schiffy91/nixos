@@ -102,7 +102,7 @@ class StatusWindow implements IApplicationWork {
     private string size(DrivePin pin) {
         if (!pin.here) { return "Its volume is not attached."; }
         if (pin.free < 0LL) { return "Measuring..."; }
-        string files = f"{pin.files} {pin.files == 1 ? "file" : "files"}";
+        string files = f"{DriveCount.words(pin.files)} {pin.files == 1 ? "file" : "files"}";
         string free = f"{DriveSize.words(pin.free)} free on its disk";
         if (pin.onDisk >= pin.inDrive) { return f"{DriveSize.words(pin.inDrive)}, all here. {files}, {free}."; }
         return f"{DriveSize.words(pin.onDisk)} here of {DriveSize.words(pin.inDrive)}. {files}, {free}.";
@@ -116,7 +116,7 @@ class StatusWindow implements IApplicationWork {
         self.detail.setText(detail);
         for (int index = 0; index < self.sizes.len && index < progress.pins.len; index++) { self.sizes.get(index).setText(self.size(progress.pins.get(index))); }
         string limit = progress.cacheLimit > 0LL ? f" and given back beyond {DriveSize.words(progress.cacheLimit)}" : "";
-        self.other.setText(f"Other files are downloaded when a program opens them{limit}. {progress.folders} folders in the Drive, shown at {self.mount}.");
+        self.other.setText(f"Other files are downloaded when a program opens them{limit}. {DriveCount.words(progress.folders)} folders in the Drive, shown at {self.mount}.");
         self.pause.setTitle(progress.paused ? "Resume downloads" : "Pause downloads");
     }
 

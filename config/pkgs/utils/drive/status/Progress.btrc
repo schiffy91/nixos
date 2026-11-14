@@ -21,6 +21,18 @@ class DriveSize {
     }
 }
 
+class DriveCount {
+    class string words(int count) {  // "42,283"
+        string digits = f"{count}";
+        string grouped = "";
+        for (int index = 0; index < digits.len(); index++) {
+            if (index > 0 && (digits.len() - index) % 3 == 0) { grouped = grouped + ","; }
+            grouped = grouped + digits.substring(index, 1);
+        }
+        return grouped;
+    }
+}
+
 // One folder that is kept downloaded.
 class DrivePin {
     public string path;  // in the Drive
@@ -50,7 +62,7 @@ class DrivePin {
             long long size = file.size();
             self.files++;
             self.inDrive += size;
-            self.onDisk += size - file.lacking();
+            self.onDisk += file.attribute("state").equals("cloud") ? size - file.lacking() : size;  // a downloaded file may have holes of its own: runs of zeros
             file.close();
         }
     }
@@ -165,7 +177,7 @@ class DriveProgress {
         if (state.equals("attention")) { return "Its files are on a volume that is not attached; changes to it are held until it is back."; }
         Vector<string> parts = [];
         if (self.files > 0 && self.total > 0LL) { parts.push(f"{DriveSize.words(self.arrived)} of {DriveSize.words(self.total)}"); }
-        if (self.files > 0) { parts.push(f"{self.files} {self.files == 1 ? "file" : "files"} to download"); }
+        if (self.files > 0) { parts.push(f"{DriveCount.words(self.files)} {self.files == 1 ? "file" : "files"} to download"); }
         if (self.sending > 0) { parts.push(f"{self.sending} {self.sending == 1 ? "change" : "changes"} to send"); }
         if (self.behind) { parts.push("reading changes from the Drive"); }
         return Strings.join(parts, ", ");
