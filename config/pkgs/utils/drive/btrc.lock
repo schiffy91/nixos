@@ -1,1 +1,1 @@
-{"manifest-hash":"e1f92fdba73319c894de822fd2cd10e29f76fa0b04d6eec73485d4a10f665a15","packages":[{"dependencies":{},"manifest-hash":"67d36d08587266e21fa2b2914f6e499d39d3a6c823f381525899c25c69f7d209","name":"nixos_drive","source":{"path":"."}}],"root":"nixos_drive","schema":3}
+{"manifest-hash":"38e0cdbdb9ec7cd1619eb420f1e0cc5ce8c3de0144f93894917db9d32e4cbac4","packages":[{"dependencies":{},"manifest-hash":"794e362f9363b4c18efb80b9321f25c5a4020b794bafe7a8d425d7fa07341d84","name":"nixos_drive","source":{"path":"."}}],"root":"nixos_drive","schema":3}

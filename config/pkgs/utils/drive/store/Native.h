@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <linux/fs.h>
+#include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -139,6 +140,17 @@ static inline int driveEvict(int descriptor) {
 // Make `target` share `source`'s blocks, where the filesystem can: the
 // contents without a copy. 0, or -1 with errno.
 static inline int driveClone(int target, int source) { return ioctl(target, FICLONE, source); }
+
+// Take a lock that lasts as long as this process: the descriptor, or -1 when another process holds it.
+static inline int driveLock(const char* path) {
+	int descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+	if (descriptor < 0) { return -1; }
+	if (flock(descriptor, LOCK_EX | LOCK_NB) != 0) {
+		close(descriptor);
+		return -1;
+	}
+	return descriptor;
+}
 
 // Write everything the filesystem holding `path` has pending to its disk. 0, or -1.
 static inline int driveSyncVolume(const char* path) {
