@@ -212,7 +212,7 @@ Each ends with its tests passing and a short note of what was proved.
 
 ## Encrypting the Deck's SD card (before the Deck's cutover)
 
-Separate from the client, but it decides where the Deck's placement points, so it goes first. Not started; the card could not be inspected when this was written (the Deck was off).
+Separate from the client, but it decides where the Deck's placement points, so it was meant to go first. The mechanism is built and tested; the real card is not formatted, because that waits for a yes, so the Deck's library went onto the plain card instead (see "Built so far" and "The Deck's cutover").
 
 What exists: `settings.disk.encryption.opportunisticUnlock` is on for the Deck. After boot it tries the typed boot password on other attached LUKS volumes and opens the ones that match. It does not mount anything, does not run when a card is inserted later, and does not run on a boot that needed no typed password.
 
@@ -252,13 +252,14 @@ Not decided by the plan: whether a measured slowdown is acceptable. The numbers 
 - The Drive client is told the card's device (`placementDevices`), so it lets go as the card leaves rather than when reads start failing, and it flushes the card before it records how far it has read the change feed, so a pulled card is never behind what the client believes.
 - VM scenario `sd-card` (required graph node): a blank card in the slot neither delays nor fails the boot; a prepared card opens and mounts by itself and is there after a restart with nothing typed; it stays open across a sleep; pulled while a program holds a file on it, it comes off and its container closes, and put back it returns; a Drive folder placed on it is unavailable while it is out and carries on when it is back; with the key file lost the password opens it and a new key file can be added; a wiped header is restored from its copy.
 - `nixosctl sd-card prepare DEVICE` formats a card for the machine. It refuses a device that is in use anywhere but a desktop's automount, a card that holds anything but the library folder, and a card with a file the Drive does not have (it reads every file and compares it with the Drive's checksum, changing nothing). Then it asks "Format DEVICE?" and stops unless the answer is yes. It makes the key file, encrypts, makes the filesystem owned by the user, saves a copy of the header beside the key file, and names the card last. `nixosctl sd-card password DEVICE` adds the password as the second way in, `open` opens a card by hand with it, `key` gives a machine that lost its key file a new one, `status` says where things stand. The scenario runs all of these, the refusals included.
-- Suspend and resume are in the scenario too: the machine sleeps, is woken, and the card is still open and mounted with nothing opened again. (The test machine needs a store image of its own for this; one shared with the host cannot be frozen.)
+- Suspend and resume are in the scenario too: the machine sleeps, is woken, and the card is still open and mounted with nothing opened again. (The test machine needs a store image of its own for this; one shared with the host cannot be frozen.) It sleeps a second time under a program that opens and reads a file through `~/Drive` in a tight loop: the machine goes to sleep at the first attempt (a program stuck waiting for a frozen door would have kept it awake), and after the wake the program is still reading and has seen no error.
 - **The Deck's configuration** (`config/hosts/x86_64/STEAM-DECK-OLED/card.nix`): the library is `~/Drive`'s folder there too, kept by the Drive client in a folder of its own on the card and tied to the card's device. Until the card is encrypted that is the plain card where Jovian mounts it; `settings.disk.sdCard.enable` is the one switch that moves it to the encrypted card at `/sd`. The package-groups check evaluates both states.
-- Still to do, all of it on the Deck itself: the speed measurements, the sign-in, preparing the card (which asks before it formats), placing and refilling the library, Game Mode's reaction to the card, and then flipping the switch.
+- Done on the Deck since (2026-11-14): the sign-in, the speed measurements, and placing and adopting the library on the plain card (see "The Deck's cutover").
+- **Waiting for a yes: formatting the card.** `nixosctl sd-card prepare` has not been run on the real card, because it erases it and that needs to be said at that moment. The card also holds a Steam library (`steamapps`, `libraryfolder.vdf`) and a `Migration` folder, so `prepare` would refuse it as it stands; those have to be moved off or given up first. After the format: place and refill the library, look at Game Mode's reaction to the card, then turn on `settings.disk.sdCard.enable`.
 
 ## M0 results
 
-In progress. Measured on FRACTAL-NORTH (kernel 7.3.3, btrfs on NVMe) on 2026-11-13 with the forwarding filesystem from `Library.FileSystem.Userspace`, run as root, passthrough on:
+Measured on FRACTAL-NORTH (kernel 7.3.3, btrfs on NVMe) on 2026-11-13 with the forwarding filesystem from `Library.FileSystem.Userspace`, run as root, passthrough on:
 
 | Question | Result |
 |---|---|
@@ -283,7 +284,32 @@ Measured since, on the same machine:
 
 **Decision: go**, taken 2026-11-13 on the numbers above. A dead server fails closed, files handed to the kernel read at the disk's own speed, and a scan of 370,000 files through the mount costs seconds, not minutes. Everything since was built on that, and each property is now also a scenario that runs on every change (`door`, `module`).
 
-ext4 has been covered in VMs only: the `placement` and `sd-card` scenarios keep their placed folder on ext4, and the forwarding filesystem's own check in btrc compares it with ext4 over thousands of random operations. **Not measured: the Deck itself** (kernel 7.2.10-valve1, ext4 on its real SD card: scan and read speed). That is the first thing to do there before its cutover; if the scan through the mount is slow on the card, the remedy is longer cache times for names in the door, which only the door changes.
+ext4 was first covered in VMs: the `placement` and `sd-card` scenarios keep their placed folder on ext4, and the forwarding filesystem's own check in btrc compares it with ext4 over thousands of random operations.
+
+Measured on the Deck itself on 2026-11-14 (kernel 7.2.10-valve1, the library placed on its SD card, ext4, 42,283 files in about 1,700 folders):
+
+| Question | Result |
+|---|---|
+| Building the tree | the whole of My Drive over Wi-Fi: 931 s. The engine holds 412 MB afterwards |
+| Scanning the library, names only | cold 1.4 s bare, 5.2 s through the mount; warm 0.08 s bare, 0.5 s through the mount |
+| Scanning the library with `stat` | warm 3.5 s bare, 1.0 s through the mount (the kernel keeps what the door told it) |
+| Reading 128 MiB of a game, cold | 2.7 MB/s bare, 3.1 MB/s through the mount: the mount costs nothing, the card is the limit |
+| Moving the library's 42,283 placeholders to the card | 72 s |
+
+**The card itself is slow where the library is, and that is not the client.** Read straight from the device, with nothing else using it:
+
+| What is read | Speed |
+|---|---|
+| Parts of the card that hold the library (copied onto it in bulk in early November) | 2 to 5 MB/s, about 3 ms for every 4 KiB |
+| A part that was never written | 97 MB/s |
+| Steam files written in October | 25 to 55 MB/s |
+| A 256 MiB file written tonight, read back at once and again half an hour later | 93 MB/s both times |
+| A 64 MiB file the client downloaded tonight | 92 MB/s, the same as a plain copy of it |
+| A plain copy of one of the slow files | 93 MB/s |
+
+So the reader, the bus (SDR104 at 200 MHz, no errors counted), the kernel and the client's way of writing are all fine, and the card can read at full speed; what is slow is particular stretches of it, and writing a slow file again makes it fast. One file the client downloaded during the adoption, while 42,000 files were being renamed and labelled on the card, landed in such a stretch and is as slow as its neighbours; why those stretches are slow is not known. The contents are right regardless: a sample of 5,084 files (the firmware, the saves and four systems' games, 2 GB) was read through the mount and every one matched the Drive's checksum.
+
+What follows from it: until the library is written again, a large game loads slowly from this card, as it did before the cutover. Writing it again is what the format for encryption brings anyway (the library is refilled from the Drive afterwards), and the numbers above say the refilled files should read at the card's full speed; that is to be measured then, not assumed. Reading all 892 GB off the card to check or to rewrite it in place would take over three days at this speed, which is why the adoption went by size and time.
 
 ## What each milestone proved
 
@@ -313,6 +339,22 @@ One thing went wrong, and it was mine: a test engine from before the switch was 
 
 The rclone mount, the sync timer, the launcher hooks and their module are gone from the repository; every machine with the utilities group runs the Drive client.
 
+## The Deck's cutover (M5, STEAM-DECK-OLED, 2026-11-14)
+
+Done without a restart, with the screen off and sleep held off, in this order:
+
+1. The Deck's system was built on the desktop from the Deck's own tree and copied over; `nixosctl update` there compiled nothing. Compared with what was running, the differences were the client in, rclone out, and the programs rebuilt by the newer btrc. Of those only the reset-on-boot program is in the boot image; everything that asks for the disk's password is byte for byte what the Deck booted with.
+2. The engine mirrored the whole of My Drive (931 s) and then waited, as it should, for the library's volume: the folder was unavailable, not empty.
+3. `drive place media/Games/Emulation` moved the library's placeholders into the client's folder on the card (`drive/` beside the old `Emulation/`).
+4. `drive adopt … --match-times` took the card's existing library as the placeholders' contents by renaming within the card: 42,258 adopted in 87 s, nothing read and nothing transferred. Size and time were the test because the card is too slow to read end to end (above); every one of the 42,283 files had the desktop's path, size and time beforehand, and the desktop's copy had been adopted by checksum. A sample of 5,084 files was then checked by contents and all match.
+5. 25 files were fetched from the Drive rather than adopted (99 MB): 21 small ones the engine had already downloaded before the adoption started, and 4 read-only files of a git checkout inside a theme, which could not be given their attributes. Adoption now makes such a file writable by its owner first, and `drive pause` exists as a command so downloads can be held while placing and adopting. The 25 originals are still in the old `Emulation/` folder on the card, identical to the client's copies; nothing was deleted.
+6. Steam, and the user's service manager it runs under, still carried the old `SEMU_ROOT` from when they started, so Semu started from Game Mode would have looked in the old folder. With nothing being played, the user's service manager and Game Mode were restarted (no restart of the Deck); Steam's environment now has no root override, and Semu started from its Steam tile shows the library (172 games for the 3DS, read through `~/Drive`).
+7. Checked afterwards: the Deck's library seen through `~/Drive` is the desktop's, file for file (path, size, time: 42,283 of 42,283); Semu resolves its root to `~/Drive/media/Games/Emulation` with no override; a file made on the desktop was on the Deck 14 s later, the Deck's change to it was on the desktop 14 s after that, and its deletion on the Deck reached the desktop in 8 s, each through the real Drive and its push messages.
+
+The Deck's configuration was also installed and booted in a VM from this tree, by hand: it takes the password, reaches "running" with the Drive mounted for the user, and the boot test's own health judgement passes. The required node for it (`host-boot-STEAM-DECK-OLED-VM-secure`) still fails, at a step before the password that has nothing to do with the Drive: it expects the unlock screen to draw a typed key, and in that VM the screen stays black until the session starts. The node had been asking for the unlock program the Deck stopped using on 2026-11-07, which is corrected; why nothing is drawn there was not found. The touch keyboard's own scenarios (`initrd-touch-unlock`, also rotated) pass on this tree, and the part of the Deck's boot image that asks for the password is unchanged from the one it last booted with.
+
+Not done, and why: the card is not encrypted (formatting waits for a yes), so the library is on the plain card and not at `/sd`. The Deck has not been restarted on the new system; its boot image differs from the one it booted only in the reset-on-boot program, which the reset scenarios and the desktop's own boots cover.
+
 ## The mutation checks
 
 Each safety rule has a switch that takes it away, and a step in its scenario that shows the protected thing then goes wrong. A test that passed either way would prove nothing.
@@ -330,7 +372,9 @@ Each safety rule has a switch that takes it away, and a step in its scenario tha
 - `trash/` is never emptied yet (the 30 days are not enforced).
 - Eviction looks only at the main store, not at placed volumes.
 - Google's change feed hands out about 50 changes a page for this account, one request each, so a store that is far behind catches up slowly: 411,000 changes (a day in which another sync tool rewrote every file's time) would have taken over an hour. The engine stays usable meanwhile, since it reads one page between looks at the door, but a fresh listing is quicker past roughly 100,000 changes; the client does not switch to one by itself yet.
-- Root cannot look inside `~/Drive` (as with the rclone mount today).
+- Root cannot look inside `~/Drive` (as the rclone mount behaved).
+- `drive adopt --match-times` trusts size and time. It is for a copy that cannot be read end to end; `drive verify FOLDER` is the check by contents to run afterwards, on all of it or a sample.
+- The engine keeps the whole Drive's tree in memory: about 400 MB for 400,000 entries, on the Deck too.
 
 ## Not in version 1
 

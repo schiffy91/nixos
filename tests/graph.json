@@ -696,7 +696,7 @@
         "name": "host-install-STEAM-DECK-OLED-VM-standard",
         "state": "host-installed-STEAM-DECK-OLED-VM-standard",
         "sshPort": "2256",
-        "unlockAgent": "unl0kr",
+        "unlockAgent": "plymouth",
         "enablesSecureBoot": "false",
         "reenrollsKeys": "false"
       }
@@ -722,7 +722,7 @@
         "state": "host-booted-STEAM-DECK-OLED-VM-standard",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
         "sshPort": "2256",
-        "unlockAgent": "unl0kr",
+        "unlockAgent": "plymouth",
         "enablesSecureBoot": "false",
         "reenrollsKeys": "false"
       }
@@ -748,7 +748,7 @@
         "state": "host-hibernateed-STEAM-DECK-OLED-VM-standard",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
         "sshPort": "2266",
-        "unlockAgent": "unl0kr",
+        "unlockAgent": "plymouth",
         "enablesSecureBoot": "false",
         "reenrollsKeys": "false"
       }
@@ -771,7 +771,7 @@
         "name": "host-install-STEAM-DECK-OLED-VM-secure",
         "state": "host-installed-STEAM-DECK-OLED-VM-secure",
         "sshPort": "2258",
-        "unlockAgent": "unl0kr",
+        "unlockAgent": "plymouth",
         "enablesSecureBoot": "false",
         "reenrollsKeys": "false"
       }
@@ -797,7 +797,7 @@
         "state": "host-booted-STEAM-DECK-OLED-VM-secure",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
         "sshPort": "2258",
-        "unlockAgent": "unl0kr",
+        "unlockAgent": "plymouth",
         "enablesSecureBoot": "false",
         "reenrollsKeys": "true"
       }
@@ -823,7 +823,7 @@
         "state": "host-hibernateed-STEAM-DECK-OLED-VM-secure",
         "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
         "sshPort": "2268",
-        "unlockAgent": "unl0kr",
+        "unlockAgent": "plymouth",
         "enablesSecureBoot": "false",
         "reenrollsKeys": "false"
       }
