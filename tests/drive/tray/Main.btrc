@@ -50,10 +50,9 @@ class TrayScenario {
         self.machine.succeed(f"systemd-run --unit drive-engine --collect {as} drive engine --store {self.drive.store} --runtime {self.drive.runtime} --credentials /var/lib/drive-test/credentials.json --api {self.drive.fake} --chunk 65536 --follow 1");
         self.drive.connected();
         self.machine.waitUntil(f"test -e {self.drive.mount}/Kept/film4.bin && test -S /run/user/1000/wayland-0 && su - fixture -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment' | grep -q WAYLAND_DISPLAY");
-        string environment = f"--setenv=DRIVE_RUNTIME={self.drive.runtime} --setenv=DRIVE_MOUNT={self.drive.mount}";
+        string environment = f"--setenv=DRIVE_RUNTIME={self.drive.runtime} --setenv=DRIVE_MOUNT={self.drive.mount}";  // as the module's unit has them; the session itself knows neither
         self.machine.succeed(self.session("systemd-run --user --unit tray-host --collect tray-host"));
         self.machine.waitUntil(self.session("busctl --user list --no-legend") + " | grep -q org.kde.StatusNotifierWatcher");
-        self.machine.succeed(self.session(f"systemctl --user set-environment DRIVE_RUNTIME={self.drive.runtime} DRIVE_MOUNT={self.drive.mount}"));
         self.machine.succeed(self.session(f"systemd-run --user --unit drive-tray --collect {environment} drive-tray"));
         self.machine.waitUntil("test -s /tmp/tray-items");
     }

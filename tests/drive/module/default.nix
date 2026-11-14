@@ -45,7 +45,8 @@ let
   }).config;
   unit = name: "${profile.systemd.units.${name}.unit}/${name}";
   tray = profile.systemd.user.services.drive-tray;
-in assert tray.wantedBy == [ "graphical-session.target" ] && pkgs.lib.hasSuffix "/bin/drive-tray" tray.serviceConfig.ExecStart;  # the tray's icon starts with the desktop session
+in assert tray.wantedBy == [ "graphical-session.target" ] && pkgs.lib.hasSuffix "/bin/drive-tray" tray.serviceConfig.ExecStart
+  && tray.environment.DRIVE_RUNTIME == "/run/drive" && tray.environment.DRIVE_MOUNT == "${home}/Drive";  # the tray's icon starts with the desktop session and is told where the engine is
 (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "drive-module";
   nodes.machine = { ... }: {

@@ -79,6 +79,7 @@ in lib.mkIf settings.enable {
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];
     unitConfig.ConditionUser = user;
+    environment = { DRIVE_RUNTIME = runtime; DRIVE_MOUNT = settings.mountPoint; };  # a session that began before the client was installed has neither
     serviceConfig = {
       ExecStart = "${programs.tray}/bin/drive-tray";
       Restart = "on-failure";

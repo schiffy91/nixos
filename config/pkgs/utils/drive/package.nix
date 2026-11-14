@@ -52,7 +52,9 @@ let
     noDisplay = true;
   };
   showStatus = pkgs.writeShellScript "drive-show-status" ''
-    exec ${pkgs.systemd}/bin/systemd-run --user --collect --quiet --unit=drive-status ${status}/bin/drive-status  # one window: a click while it is open does nothing
+    # One window: a click while it is open does nothing. It is told where the engine is by the tray, not by the session.
+    exec ${pkgs.systemd}/bin/systemd-run --user --collect --quiet --unit=drive-status \
+      ''${DRIVE_RUNTIME:+--setenv=DRIVE_RUNTIME="$DRIVE_RUNTIME"} ''${DRIVE_MOUNT:+--setenv=DRIVE_MOUNT="$DRIVE_MOUNT"} ${status}/bin/drive-status
   '';
 in {
   inherit ask drive icons status statusEntry;
