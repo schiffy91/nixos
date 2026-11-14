@@ -1,5 +1,7 @@
 import Library.CLI;
 import Library.Process;
+import Library.Timer;
+import Library.JSON;
 import ../vm/Lab.btrc;
 import ../drive/Fixture.btrc;
 
@@ -151,11 +153,22 @@ class SdCardScenario {
         Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "and the card's contents are intact");
     }
 
+    private void asleep() {
+        print("Asleep and awake again, the card is still open and mounted");
+        self.machine.succeed("systemctl reset-failed; systemctl suspend --no-block");
+        Timer.sleepMillis(10000);
+        self.machine.qmp("system_powerdown", JSONValue.makeObject());  // the power button wakes it
+        self.machine.waitUntil("journalctl -b -k --no-pager | grep -q 'PM: suspend exit' && test \"$(systemctl show -p Result --value systemd-suspend.service)\" = success", 90);
+        Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "a file on it reads after the wake");
+        Check.equal(self.machine.succeed("findmnt -no SOURCE /sd; systemctl is-active sd.mount").trim(), "/dev/mapper/sdcard\nactive", "and nothing had to be opened again");
+    }
+
     public void check() {
         Check.exited(ChildProcess.run("truncate", ["-s", "512M", self.machine.statePath("sdcard.raw")]));
         self.boot();
         self.prepared();
         self.acrossBoots();
+        self.asleep();
         self.pulled();
         self.placement();
         self.keys();

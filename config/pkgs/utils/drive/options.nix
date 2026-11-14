@@ -1,6 +1,6 @@
 { lib, config, ... }: with lib.types; {
   options.settings.apps.utils.drive = {
-    enable = lib.mkOption { type = bool; default = false; description = "Serve Google Drive at the mount point with the BTRC client: every file in place, downloaded when opened, pinned folders kept whole."; };
+    enable = lib.mkOption { type = bool; default = config.settings.apps.utils.enable; description = "Serve Google Drive at the mount point with the BTRC client: every file in place, downloaded when opened, pinned folders kept whole."; };
     mountPoint = lib.mkOption { type = strMatching "/.+"; default = "${config.settings.users.admin.homeDirectory}/Drive"; description = "Where the Drive appears."; };
     store = lib.mkOption { type = strMatching "/.+"; default = "/var/lib/drive/${config.settings.users.admin.username}"; description = "The real tree behind the mount. Persisted; reached only through the mount."; };
     pinned = lib.mkOption { type = listOf str; default = []; description = "Folders kept downloaded, by their path in the Drive. Declare the same ones on every machine."; };

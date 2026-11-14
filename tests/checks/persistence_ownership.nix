@@ -32,7 +32,7 @@ let
   includes = expected: config: lib.all (path: lib.elem path (paths config)) expected;
   excludes = expected: config: lib.all (path: !(lib.elem path (paths config))) expected;
   core = [ "/etc/nixos" "/etc/machine-id" hostPath ];
-  rclonePath = "${home}/.config/rclone";
+  drivePath = "${home}/.config/drive";
   chromePath = "${home}/.config/google-chrome";
   sunshinePath = "${home}/.config/sunshine";
   mullvadPaths = [ "/etc/mullvad-vpn/" "${home}/.config/Mullvad VPN" ];
@@ -40,7 +40,7 @@ let
     ".local/share/applications" ".local/share/icons" ".local/share/desktop-directories"
     ".local/share/flatpak/db" ".config/dconf/user" ".config/kdeglobals"
   ];
-  noRclone = fixture { apps.utils.rclone.enable = lib.mkForce false; };
+  noDrive = fixture { apps.utils.drive.enable = lib.mkForce false; };
   noUtils = fixture { apps.utils.enable = lib.mkForce false; };
   noGaming = fixture { apps.gaming.enable = lib.mkForce false; };
   noApps = fixture { apps.enable = lib.mkForce false; };
@@ -52,23 +52,23 @@ let
   customHome = "/srv/persistence-admin";
   relocated = fixture { users.admin.homeDirectory = lib.mkForce customHome; };
   retained = fixture {
-    apps.utils.rclone.enable = lib.mkForce false;
-    disk.immutability.persist.paths = [ hostPath rclonePath ];
+    apps.utils.drive.enable = lib.mkForce false;
+    disk.immutability.persist.paths = [ hostPath drivePath ];
   };
   persistenceOnly = fixture { disk.immutability.enable = lib.mkForce false; };
   check = condition: message: lib.optional (!condition) message;
   failures =
     check (base.options.settings.disk.immutability.persist.paths.default == [])
       "The persistence schema must have an empty default; contributors own the paths."
-    ++ check (includes (core ++ [ rclonePath chromePath sunshinePath ] ++ mullvadPaths) enabled)
+    ++ check (includes (core ++ [ drivePath chromePath sunshinePath ] ++ mullvadPaths) enabled)
       "Core, enabled packages and a host contribution must all survive the list merge."
-    ++ check (includes core noRclone && excludes [ rclonePath ] noRclone)
-      "Disabling rclone must remove its state without removing core or host state."
-    ++ check (includes core noUtils && excludes ([ rclonePath chromePath ] ++ mullvadPaths) noUtils)
+    ++ check (includes core noDrive && excludes [ drivePath ] noDrive)
+      "Disabling the Drive client must remove its state without removing core or host state."
+    ++ check (includes core noUtils && excludes ([ drivePath chromePath ] ++ mullvadPaths) noUtils)
       "Disabling utils must remove its package state while retaining core and host state."
     ++ check (includes core noGaming && excludes [ sunshinePath ] noGaming)
       "Disabling gaming must remove Sunshine state while retaining core and host state."
-    ++ check (includes core noApps && excludes ([ rclonePath chromePath sunshinePath ] ++ mullvadPaths) noApps)
+    ++ check (includes core noApps && excludes ([ drivePath chromePath sunshinePath ] ++ mullvadPaths) noApps)
       "Disabling apps must remove all package contributions while retaining core and host state."
     ++ check (includes sharedDesktop noDesktopApps && excludes [ chromePath sunshinePath ] noDesktopApps)
       "Shared desktop state must survive disabling Chrome and Sunshine."
@@ -78,13 +78,13 @@ let
       && excludes enabled.settings.users.agent.persist.paths noAgent)
       "Agent enablement must control the agent's persistence contribution."
     ++ check (includes [
-      "${customHome}/Downloads" "${customHome}/.config/rclone"
+      "${customHome}/Downloads" "${customHome}/.config/drive"
       "${customHome}/.config/sunshine" "${customHome}/.config/google-chrome"
       "${customHome}/.config/Mullvad VPN" "${customHome}/.local/share/applications"
     ] relocated && !(lib.any (lib.hasPrefix "${home}/") (paths relocated)))
       "Admin persistence must follow homeDirectory, including shared desktop and package paths."
-    ++ check (includes (core ++ [ rclonePath ]) retained
-      && !(retained.systemd.services ? rclone-drive))
+    ++ check (includes (core ++ [ drivePath ]) retained
+      && !(retained.systemd.services ? drive-door))
       "A host can explicitly retain state after disabling the owning feature."
     ++ check (paths persistenceOnly == paths enabled
       && lib.elem "local-fs.target" persistenceOnly.systemd.services.persistence-mounts.wantedBy

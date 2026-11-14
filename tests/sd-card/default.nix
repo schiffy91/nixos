@@ -22,6 +22,13 @@ in (import ../vm/test.nix { inherit pkgs inputs; }) {
     ];
     environment.systemPackages = [ cli programs.drive programs.fake pkgs.cryptsetup pkgs.curl pkgs.attr pkgs.python3 ];
     virtualisation.memorySize = 4096;  # opening the container derives its key in memory
+    # The machine must be able to sleep: a store shared with the host cannot be frozen, so it gets an image of its own.
+    virtualisation.useNixStoreImage = true;
+    virtualisation.writableStore = true;
+    virtualisation.sharedDirectories = pkgs.lib.mkForce { };
+    systemd.sleep.settings.Sleep.MemorySleepMode = "s2idle";
+    services.logind.settings.Login.HandlePowerKey = "ignore";  # the power button is how the test wakes it
+    boot.kernelParams = [ "no_console_suspend" ];
     virtualisation.cores = 2;
   };
   scenario = ./Main.btrc;

@@ -1160,13 +1160,6 @@
       "spec": "immutability/feature-disable/test.json"
     },
     {
-      "after": [
-        "persistence-ownership"
-      ],
-      "id": "rclone-offline-folder",
-      "spec": "persistence/offline-folder/test.json"
-    },
-    {
       "after": [],
       "id": "drive-remote",
       "spec": "drive/remote/test.json"
@@ -1352,7 +1345,6 @@
     "networking-roaming",
     "host-picker",
     "immutability-feature-disable",
-    "rclone-offline-folder",
     "drive-remote",
     "drive-store",
     "drive-planner",

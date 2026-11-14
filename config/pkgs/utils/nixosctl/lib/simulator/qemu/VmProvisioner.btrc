@@ -121,7 +121,7 @@ class VmProvisioner {
             "  settings.apps.gaming.enable = false;",
             "  settings.apps.utils.enable = true;",
             "  settings.apps.utils.onePassword.enable = false;",
-            "  settings.apps.utils.rclone.enable = false;",
+            "  settings.apps.utils.drive.enable = false;",
             "  settings.apps.utils.nixosctl.enable = true;",
             "  settings.networking.identityAgent = \"none\";",
             "  settings.networking.lanSubnet = \"10.0.2.0/24\";",

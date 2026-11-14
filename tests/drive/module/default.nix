@@ -16,7 +16,6 @@ let
       ../../../config/system/storage/immutability
       {
         settings = {
-          apps.utils.rclone.enable = false;
           apps.utils.drive = {
             enable = true;
             api = "http://127.0.0.1:18475";
