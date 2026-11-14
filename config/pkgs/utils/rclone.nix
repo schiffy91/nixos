@@ -44,15 +44,18 @@ in lib.mkIf (config.settings.apps.utils.rclone.enable) (lib.mkMerge [ {
   settings.disk.immutability.persist.paths = [ "${home}/.config/rclone" ];
   users.users.${user}.packages = [ pkgs.rclone ];
 
-  systemd.user.services.rclone-drive = {
+  # A system unit, not a user one: sleep freezes user.slice first, and a program waiting on
+  # a mount whose rclone is already frozen can never freeze, so every suspend failed.
+  systemd.services.rclone-drive = {
     description = "rclone mount: Google Drive at ~/Drive";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    wantedBy = [ "default.target" ];
-    unitConfig.ConditionUser = user;
+    wantedBy = [ "multi-user.target" ];
     unitConfig.ConditionPathExists = configFile; # skip until `rclone config` is done
+    unitConfig.RequiresMountsFor = [ home (dirOf configFile) ];
     environment.PATH = lib.mkForce "/run/wrappers/bin"; # need setuid fusermount3
     serviceConfig = {
+      User = user;
       Type = "notify";
       ExecStartPre = "${prepareMount}";
       ExecStart = ''

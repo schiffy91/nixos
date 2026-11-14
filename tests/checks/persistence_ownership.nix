@@ -84,7 +84,7 @@ let
     ] relocated && !(lib.any (lib.hasPrefix "${home}/") (paths relocated)))
       "Admin persistence must follow homeDirectory, including shared desktop and package paths."
     ++ check (includes (core ++ [ rclonePath ]) retained
-      && !(retained.systemd.user.services ? rclone-drive))
+      && !(retained.systemd.services ? rclone-drive))
       "A host can explicitly retain state after disabling the owning feature."
     ++ check (paths persistenceOnly == paths enabled
       && lib.elem "local-fs.target" persistenceOnly.systemd.services.persistence-mounts.wantedBy
