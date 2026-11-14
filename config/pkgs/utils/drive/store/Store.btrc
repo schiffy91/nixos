@@ -115,7 +115,9 @@ class Store {
         return index >= 0 && !self.attached.get(index);
     }
 
-    public string real(string path) { return self.volumes.real(path); }
+    // Where a path in the tree really is. A folder whose volume is not here answers with what the main tree
+    // holds of it: the names and facts from before it was placed, which is what a check against the Drive needs.
+    public string real(string path) { return self.unavailable(path) ? (path.isEmpty() ? self.tree() : f"{self.tree()}/{path}") : self.volumes.real(path); }
 
     public string logical(string real) { return self.volumes.logical(real); }
 

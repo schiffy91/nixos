@@ -1,0 +1,138 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+import ../core/Interactive.btrc;
+import ../core/NixosLog.btrc;
+
+/* The declared, encrypted card (settings.disk.sdCard): preparing one, opening it by hand with the
+ * password, and giving it a new key file. The system opens and mounts a prepared card by itself;
+ * nothing here is needed for everyday use. */
+class SdCardManager {
+    public UnixShell shell;
+    public string label = "";
+    public string mountPoint = "";
+    public string keyFile = "";
+    public string library = "";  // the only folder a card may hold and still be formatted
+    public string driveFolder = "";  // where that folder is on the Drive
+    public string owner = "root";  // whose card it is: the top of its filesystem belongs to them
+
+    public SdCardManager() {
+        self.shell = UnixShell();
+        Vector<string> lines = Strings.split(FileSystem.readText("/etc/nixos-sd-card"), "\n");
+        if (lines.len < 3 || lines.get(0).trim().isEmpty()) { throw "This machine declares no encrypted card (settings.disk.sdCard)."; }
+        self.label = lines.get(0).trim();
+        self.mountPoint = lines.get(1).trim();
+        self.keyFile = lines.get(2).trim();
+        self.library = lines.len > 3 ? lines.get(3).trim() : "";
+        self.driveFolder = lines.len > 4 ? lines.get(4).trim() : "";
+        if (lines.len > 5 && !lines.get(5).trim().isEmpty()) { self.owner = lines.get(5).trim(); }
+    }
+
+    private string container() { return f"/dev/disk/by-label/{self.label}-crypt"; }
+
+    private string header() { return PathTools.dirname(self.keyFile) + "/header"; }
+
+    private bool quiet(string command) { return self.shell.run(command, logFailure=false).ok(); }
+
+    private void must(string command, string what) {
+        if (!self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false).ok()) { throw f"Could not {what}."; }
+    }
+
+    private string output(string command) { return self.shell.run(command, logFailure=false).out.trim(); }
+
+    public int status() {
+        bool attached = FileSystem.exists(self.container());
+        bool mounted = self.quiet(f"mountpoint -q {ShellWords.quote(self.mountPoint)}");
+        Console.log(f"card: {attached ? "attached" : "not attached"}");
+        Console.log(f"opened: {FileSystem.exists("/dev/mapper/sdcard") ? "yes" : "no"}");
+        Console.log(f"mounted at {self.mountPoint}: {mounted ? "yes" : "no"}");
+        Console.log(f"key file: {FileSystem.exists(self.keyFile) ? "present" : "missing"}");
+        Console.log(f"header copy: {FileSystem.exists(self.header()) ? "present" : "missing"}");
+        return mounted ? 0 : 1;
+    }
+
+    // Never the disk the system runs from, never anything in use beyond a desktop's automount.
+    private void removable(string device) {
+        if (!self.quiet(f"test -b {ShellWords.quote(device)}")) { throw f"{device} is not a block device."; }
+        string mounts = self.output(f"lsblk -nro MOUNTPOINTS {ShellWords.quote(device)}");
+        for mount in Strings.split(mounts, "\n") {
+            if (!mount.trim().isEmpty() && !mount.trim().startsWith("/run/media/")) { throw f"{device} is in use at {mount.trim()}; it is not a card to format."; }
+        }
+        string disk = self.output(f"lsblk -ndo PKNAME {ShellWords.quote(device)}");
+        string whole = disk.isEmpty() ? device : "/dev/" + disk;
+        if (!self.output(f"lsblk -nro MOUNTPOINTS {ShellWords.quote(whole)} | grep -v '^/run/media/' | grep -c . || true").equals("0")) { throw f"{whole} holds a mounted filesystem; it is not a card to format."; }
+    }
+
+    // What is on the card now, and whether all of it is safe to lose: only the library, and all of it on the Drive.
+    private void expendable(string device) {
+        string mount = self.output(f"lsblk -nro MOUNTPOINTS {ShellWords.quote(device)} | head -1");
+        if (mount.isEmpty()) {
+            if (self.quiet(f"blkid -o value -s TYPE {ShellWords.quote(device)} | grep -q .")) { throw f"{device} has a filesystem that is not mounted; mount it so its contents can be checked, or wipe it yourself."; }
+            return;  // blank
+        }
+        Vector<string> foreign = [];
+        for name in FileSystem.listDir(mount) {
+            if (!name.equals(self.library) && !name.equals("lost+found") && !name.startsWith(".Trash")) { foreign.push(name); }
+        }
+        if (foreign.len > 0) { throw f"The card holds more than {self.library}: {Strings.join(foreign.sorted(), ", ")}. Move it off the card first."; }
+        if (self.library.isEmpty() || !FileSystem.isDir(f"{mount}/{self.library}")) { return; }
+        NixosLog.info(f"Checking that everything in {mount}/{self.library} is on the Drive (every file is read once)...");
+        if (!self.shell.run(f"drive adopt {ShellWords.quote(mount + "/" + self.library)} {ShellWords.quote(self.driveFolder)} --check", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false).ok()) {
+            throw "The card holds files that are not on the Drive. They would be lost; nothing was changed.";
+        }
+    }
+
+    public int prepare(string device) {
+        string owner = self.owner;
+        self.removable(device);
+        self.expendable(device);
+        if (!Interactive().confirm(f"Format {device}? Everything on it will be erased")) {
+            NixosLog.info("Nothing was changed.");
+            return 1;
+        }
+        string quoted = ShellWords.quote(device);
+        string key = ShellWords.quote(self.keyFile);
+        self.quiet(f"for mount in $(lsblk -nro MOUNTPOINTS {quoted}); do umount \"$mount\"; done");
+        self.quiet(f"wipefs -a {quoted}");
+        self.must(f"install -d -m 700 {ShellWords.quote(PathTools.dirname(self.keyFile))} && test -s {key} || (umask 077 && head -c 64 /dev/urandom > {key} && chmod 400 {key})", "make the key file");
+        self.must(f"cryptsetup luksFormat --batch-mode --type luks2 {quoted} {key}", "encrypt the card");  // no label yet: a labelled card is opened at once
+        self.must(f"cryptsetup open --key-file {key} {quoted} sdcard-new", "open the new container");
+        bool made = self.shell.run(f"mkfs.ext4 -q -L {ShellWords.quote(self.label)} -E root_owner=$(id -u {ShellWords.quote(owner)}):$(id -g {ShellWords.quote(owner)}) /dev/mapper/sdcard-new", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false).ok();
+        self.quiet("cryptsetup close sdcard-new");
+        if (!made) { throw "Could not make the filesystem."; }
+        self.must(f"rm -f {ShellWords.quote(self.header())} && cryptsetup luksHeaderBackup {quoted} --header-backup-file {ShellWords.quote(self.header())} && chmod 400 {ShellWords.quote(self.header())}", "save a copy of the header");
+        self.must(f"cryptsetup config --label {ShellWords.quote(self.label + "-crypt")} {quoted} && udevadm trigger --action=change {quoted}", "name the card");
+        if (!self.quiet(f"for attempt in $(seq 1 60); do mountpoint -q {ShellWords.quote(self.mountPoint)} && exit 0; sleep 0.5; done; exit 1")) { throw f"The card was prepared but did not mount at {self.mountPoint}."; }
+        NixosLog.info(f"The card is encrypted and mounted at {self.mountPoint}. Only the key file on this machine opens it so far:");
+        NixosLog.info(f"run 'nixosctl sd-card password {device}' to let the boot password open it too, and keep a copy of {self.header()} on another machine.");
+        return 0;
+    }
+
+    // A second way in: a password, so the card can be opened by hand anywhere and after this machine is reinstalled.
+    private void fed(string command, string secret, string what) {  // a command given a password on its input, never on its command line
+        if (!self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false, stdin=secret).ok()) { throw f"Could not {what}."; }
+    }
+
+    public int password(string device) {
+        string password = Interactive().askPasswordConfirmed("Password that should open the card (the boot password, so it opens with it)");
+        self.fed(f"cryptsetup luksAddKey --batch-mode --key-file {ShellWords.quote(self.keyFile)} {ShellWords.quote(device)}", password, "add the password");
+        self.must(f"rm -f {ShellWords.quote(self.header())} && cryptsetup luksHeaderBackup {ShellWords.quote(device)} --header-backup-file {ShellWords.quote(self.header())} && chmod 400 {ShellWords.quote(self.header())}", "save a copy of the header");
+        return 0;
+    }
+
+    // Open with the password; the system mounts it once it is open.
+    public int open(string device) {
+        self.fed(f"cryptsetup open {ShellWords.quote(device)} sdcard", Interactive().askPassword("The card's password"), "open the card");
+        return 0;
+    }
+
+    // A new key file, for a machine that lost its own; asks for the password.
+    public int key(string device) {
+        string key = ShellWords.quote(self.keyFile);
+        self.fed(f"install -d -m 700 {ShellWords.quote(PathTools.dirname(self.keyFile))} && rm -f {key}.new && (umask 077 && head -c 64 /dev/urandom > {key}.new) && cryptsetup luksAddKey --batch-mode {ShellWords.quote(device)} {key}.new && chmod 400 {key}.new && mv {key}.new {key}", Interactive().askPassword("The card's password"), "add a new key file");
+        self.must(f"rm -f {ShellWords.quote(self.header())} && cryptsetup luksHeaderBackup {ShellWords.quote(device)} --header-backup-file {ShellWords.quote(self.header())} && chmod 400 {ShellWords.quote(self.header())}", "save a copy of the header");
+        return 0;
+    }
+}

@@ -6,6 +6,9 @@ let
 in {
   config = lib.mkIf card.enable {
     environment.systemPackages = [ pkgs.cryptsetup ];
+    # What `nixosctl sd-card` needs to know: the labels and paths above, and the one folder a
+    # card may hold and still be formatted, with where that folder is on the Drive.
+    environment.etc."nixos-sd-card".text = lib.concatStringsSep "\n" [ card.label card.mountPoint card.keyFile card.library card.driveFolder config.settings.users.admin.username ] + "\n";
     # Opened with the key file and never at boot's request: a card that is not there costs
     # boot nothing. The rule below asks for it whenever the card appears, at boot or later.
     environment.etc.crypttab.text = "${name} ${container} ${card.keyFile} luks,noauto,nofail\n";
