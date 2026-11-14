@@ -126,6 +126,13 @@ class PinningScenario {
         self.drive.change(id, "p4");
         self.machine.waitUntil(f"cmp -s {self.drive.store}/tree/Pinned/p2.bin {self.drive.source}/p4");
         Check.that(self.drive.drive("verify").contains(" 0 id names repaired, 0 stray id names removed"), "the engine finds the file by its id again, and a second look finds nothing to do");
+
+        print("Contents can be checked against the Drive's checksums, and a file matched by size and time alone is caught if it lied");
+        Check.that(self.drive.drive(f"verify Pinned --mount {self.mount}").contains(" 0 differ"), "every downloaded file under the folder is what the Drive holds");
+        string local = "/var/lib/drive-test/timed";
+        self.machine.succeed(f"mkdir -p {local} && head -c 100000 /dev/urandom > {local}/z.bin && touch -r {self.drive.store}/tree/Adopt/z.bin {local}/z.bin");  // z.bin: right size and time, wrong contents
+        Check.that(self.drive.drive(f"adopt {local} Adopt --match-times").contains("1 adopted"), "size and time are enough for an adoption that asks for no reading");
+        Check.that(self.machine.fail(f"drive verify Adopt --mount {self.mount} --runtime {self.drive.runtime} 2>&1").contains("differs from the Drive: " + self.mount + "/Adopt/z.bin"), "and the check by contents names the file whose contents are not the Drive's");
     }
 
     public void check() {

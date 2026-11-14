@@ -588,7 +588,11 @@ class Store {
         if (!there.attribute("state").equals("cloud")) { return "here"; }
         StoreFile? given = StoreFile.open(source);
         if (given == null) { return "unreadable"; }
-        if (given.size() != there.size() || sha256.isEmpty() || !sha256.equals(there.attribute("sha256"))) { return "different"; }
+        // "time" in place of a checksum: the same size and the same modification time, to the second, is taken as the
+        // same file. That is what a sync that compares sizes and times has already been trusting.
+        bool same = !sha256.isEmpty() && sha256.equals(there.attribute("sha256"));
+        if (sha256.equals("time")) { same = given.modified() / 1000LL == there.modified() / 1000LL; }
+        if (given.size() != there.size() || !same) { return "different"; }
         string id = there.attribute("id");
         string home = self.volumes.home(path);
         string staged = f"{home}/tmp/take-{id}";
@@ -668,6 +672,14 @@ class Store {
             }
         }
         return f"{self.checked} files checked, {self.repaired} id names repaired, {orphans} stray id names removed";
+    }
+
+    // What the Drive says a file's contents are, and whether they are here: "CHECKSUM STATE", or "" for none.
+    public string expected(string path) {
+        StoreFile? there = StoreFile.open(path);
+        if (there == null || there.attribute("id").isEmpty() || FileSystem.isDir(path)) { return ""; }
+        bool clean = there.attribute("synced").equals(there.shape());
+        return f"{there.attribute("sha256")} {there.attribute("state")}{clean ? "" : "-changed"}";
     }
 
     // Whether a file from outside is one the Drive holds at `path`: "same", "different", or "unknown" when the
