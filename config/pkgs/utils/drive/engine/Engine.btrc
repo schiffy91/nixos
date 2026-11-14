@@ -42,6 +42,7 @@ class Engine {
     public Uploader uploader;
     public Mirror following() { return self.mirror; }
     public bool places(string declared) { return self.store.place(declared); }
+    public bool requires(string declared) { return self.store.volumes.require(declared); }
     public string askCommand = "";  // run with a reader's key and label to ask a person; empty: nobody to ask
     public int askSeconds = 60;
     private Vector<EngineHeld> held = [];
@@ -292,6 +293,7 @@ class Engine {
     private string command(Channel? door, string message) {
         Vector<string> fields = Strings.split(message, "\t");
         if (fields.len == 4 && fields.get(0).equals("take")) { return self.store.take(fields.get(2), self.store.real(fields.get(3)), fields.get(1)) + "\n"; }
+        if (fields.len == 4 && fields.get(0).equals("probe")) { return self.store.probe(fields.get(2), self.store.real(fields.get(3)), fields.get(1)) + "\n"; }
         if (fields.len == 3 && fields.get(0).equals("bring")) {
             string outcome = self.store.unavailable(fields.get(2)) ? "unavailable" : self.store.bring(fields.get(1), self.store.real(fields.get(2)));
             if (outcome.equals("added")) { self.uploader.queue(fields.get(2)); }

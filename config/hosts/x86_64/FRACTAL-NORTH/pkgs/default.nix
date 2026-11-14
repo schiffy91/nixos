@@ -5,6 +5,7 @@ let
   tv = builtins.head graphics.connectors.nvidia."HDMI-A";
 in {
   imports = [ ./desktop.nix ];
+  settings.disk.immutability.persist.paths = [ "${config.settings.users.admin.homeDirectory}/.config/rclone" ];  # the old sync's sign-in, kept until every machine is on the Drive client
   settings.apps = {
     dev.packages = with pkgs; [ python3 ];
     gaming.packages = with pkgs; [ protonup-qt ];
@@ -16,6 +17,8 @@ in {
       vulkan-tools vdpauinfo libva-utils nvtopPackages.full
     ];
     utils.desktop.enable = true;
+    utils.drive = { enable = true; push = true; };  # ~/Drive: every file in place, the emulation library kept downloaded
+    utils.rclone.enable = false;
     dev.lmstudio.enable = true;
     dev.antigravity.enable = true;  # the Antigravity app and the agy CLI
     utils.chrome.flags = [

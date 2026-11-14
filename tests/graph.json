@@ -1240,6 +1240,13 @@
       "spec": "drive/dialog/test.json"
     },
     {
+      "after": [
+        "drive-placement"
+      ],
+      "id": "sd-card",
+      "spec": "sd-card/test.json"
+    },
+    {
       "id": "gaming-runtime",
       "spec": "gaming/runtime/test.json",
       "after": []
@@ -1350,6 +1357,7 @@
     "drive-placement",
     "drive-module",
     "drive-dialog",
+    "sd-card",
     "gaming-runtime",
     "sleep-lock-state",
     "recovery-artifacts",
