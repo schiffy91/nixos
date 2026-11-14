@@ -1,49 +1,30 @@
-import Library.FileSystem;
-import Library.Platform;
 import Library.Process;
-import Library.Strings;
 
+/* The idle inhibitor runs as its own user unit, so it outlives whatever turned it on
+ * (a tray that restarts would otherwise take the inhibitor down with it). */
 class CaffeineManager {
     public UnixShell shell;
-    public string pidFile;
 
     public CaffeineManager() {
         self.shell = UnixShell();
-        var runtime = Environment.get("XDG_RUNTIME_DIR", "/tmp");
-        self.pidFile = PathTools.join(runtime, "nixos-caffeine.pid");
     }
 
-    public int pid() {
-        if (!FileSystem.exists(self.pidFile)) { return 0; }
-        var existing = Strings.toInt(Path.readAll(self.pidFile).trim());
-        if (existing <= 0) {
-            FileSystem.removeRecursive(self.pidFile);
-            return 0;
-        }
-        var alive = self.shell.run(f"kill -0 {existing}", logFailure=false);
-        if (!alive.ok()) {
-            FileSystem.removeRecursive(self.pidFile);
-            return 0;
-        }
-        return existing;
-    }
+    class string unit() { return "nixos-caffeine-inhibitor.service"; }
 
     public bool enabled() {
-        return self.pid() > 0;
+        return self.shell.run(f"systemctl --user is-active --quiet {CaffeineManager.unit()}", logFailure=false).ok();
     }
 
     public void enable() {
         if (self.enabled()) { return; }
-        var command = f"systemd-inhibit --what=idle --who=nixos --why='User disabled sleep' sleep infinity >/dev/null 2>&1 & echo $! > {ShellWords.quote(self.pidFile)}";
+        self.shell.run(f"systemctl --user reset-failed {CaffeineManager.unit()}", logFailure=false);
+        var command = f"systemd-run --user --quiet --unit={CaffeineManager.unit()} --description='Caffeine: keep the session awake' "
+            + "systemd-inhibit --what=idle --who=nixos --why='User disabled sleep' sleep infinity";
         self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, throwOnFailure=true);
     }
 
     public void disable() {
-        var existing = self.pid();
-        if (existing > 0) {
-            self.shell.run(f"kill {existing}", logFailure=false);
-        }
-        FileSystem.removeRecursive(self.pidFile);
+        self.shell.run(f"systemctl --user stop {CaffeineManager.unit()}", logFailure=false);
     }
 
     public void toggle() {

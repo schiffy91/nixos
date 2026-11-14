@@ -63,6 +63,8 @@ in {
         };
       };
       kcminputrc = miceConfig;
+      # A Baloo read stuck on the rclone mount cannot be frozen, so every suspend fails.
+      baloofilerc.General."exclude folders" = lib.mkIf settings.apps.utils.rclone.enable { value = "$HOME/Drive/"; shellExpand = true; };
     };
     ##### Start Menu #####
     panels = [
