@@ -1,0 +1,137 @@
+import Library.CLI;
+import ../../vm/Framebuffer.btrc;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// The Drive in the system tray: its picture and words follow what the engine is doing, a click opens the
+// window that says which folders are kept and how much they hold, and the window closes cleanly.
+class TrayScenario {
+    private Lab lab;
+    private DriveFixture drive;
+    private Guest machine;
+    private string user = "su - fixture -c 'XDG_RUNTIME_DIR=/run/user/1000 ";
+
+    public TrayScenario(Lab lab, Guest machine) {
+        self.lab = lab;
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+    }
+
+    private string session(string command) { return f"{self.user}{command}'"; }
+
+    private string item() { return self.machine.succeed(self.session("busctl --user list --no-legend") + " | grep -o 'org.kde.StatusNotifierItem-[0-9-]*' | head -1").trim(); }
+
+    private string property(string name) { return self.machine.succeed(self.session(f"busctl --user get-property {self.item()} /StatusNotifierItem org.kde.StatusNotifierItem {name}")).trim(); }
+
+    // Wait for the tray to show a picture and say something; both are read the way a panel reads them.
+    private void shows(string picture, string words, string what) {
+        string icon = f"busctl --user get-property {self.item()} /StatusNotifierItem org.kde.StatusNotifierItem IconName";
+        string tip = f"busctl --user get-property {self.item()} /StatusNotifierItem org.kde.StatusNotifierItem ToolTip";
+        try {
+            self.machine.waitUntil(self.session(icon) + f" | grep -q '/{picture}.svg\"' && " + self.session(tip) + f" | grep -q '{words}'", 60);
+        } catch (string error) {
+            print(self.machine.succeed(self.session(icon) + "; " + self.session(tip) + f"; drive progress --runtime {self.drive.runtime}; journalctl --no-pager -n 20 _UID=1000 | tail -20 || true"));
+            throw f"{what}: {error}";
+        }
+        Check.that(true, what);
+    }
+
+    private void prepare() {
+        self.drive.prepare();
+        self.machine.succeed(f"head -c 1000000 /dev/urandom > {self.drive.source}/megabyte && head -c 3000 /dev/urandom > {self.drive.source}/note");
+        self.drive.startFake();
+        string kept = self.drive.folder("root", "Kept");
+        for (int number = 1; number <= 4; number++) { self.drive.put(kept, f"film{number}.bin", "megabyte"); }
+        self.drive.put(self.drive.folder("root", "Other"), "note.txt", "note");
+        self.machine.succeed(f"install -d -o fixture {self.drive.store} {self.drive.runtime} && chown fixture /var/lib/drive-test/credentials.json");
+        string as = f"--uid=fixture --setenv=DRIVE_RUNTIME={self.drive.runtime} -p AmbientCapabilities=CAP_SYS_ADMIN";
+        self.machine.succeed(f"systemd-run --unit drive-door --collect {as} drive door --store {self.drive.store} --mount {self.drive.mount} --runtime {self.drive.runtime} --allow-others");
+        self.machine.waitUntil(f"mountpoint -q {self.drive.mount}");
+        self.machine.succeed(f"systemd-run --unit drive-engine --collect {as} drive engine --store {self.drive.store} --runtime {self.drive.runtime} --credentials /var/lib/drive-test/credentials.json --api {self.drive.fake} --chunk 65536 --follow 1");
+        self.drive.connected();
+        self.machine.waitUntil(f"test -e {self.drive.mount}/Kept/film4.bin && test -S /run/user/1000/wayland-0 && su - fixture -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment' | grep -q WAYLAND_DISPLAY");
+        string environment = f"--setenv=DRIVE_RUNTIME={self.drive.runtime} --setenv=DRIVE_MOUNT={self.drive.mount}";
+        self.machine.succeed(self.session("systemd-run --user --unit tray-host --collect tray-host"));
+        self.machine.waitUntil(self.session("busctl --user list --no-legend") + " | grep -q org.kde.StatusNotifierWatcher");
+        self.machine.succeed(self.session(f"systemctl --user set-environment DRIVE_RUNTIME={self.drive.runtime} DRIVE_MOUNT={self.drive.mount}"));
+        self.machine.succeed(self.session(f"systemd-run --user --unit drive-tray --collect {environment} drive-tray"));
+        self.machine.waitUntil("test -s /tmp/tray-items");
+    }
+
+    public void check() {
+        self.prepare();
+        var screen = Framebuffer(self.machine.statePath("screen.vnc"));
+
+        print("With nothing to do the tray shows the Drive's mark alone");
+        self.shows("synced", "Up to date", "the mark, and 'Up to date'");
+        Check.equal(self.property("ItemIsMenu"), "b false", "a click is the tray's own, not the menu's");
+        Check.equal(self.property("Title"), "s \"Google Drive\"", "it is named for what it is");
+
+        print("A folder to keep: the first file is on its way");
+        self.drive.control("stall?on=download&seconds=6");
+        self.drive.drive("pin Kept");
+        self.shows("syncing-000", "Syncing, 0%", "the mark with an empty measure while the first bytes are awaited");
+
+        print("Held by hand, it says so and how much is left");
+        self.drive.drive("pause");
+        self.shows("paused", "3 files to download", "paused, with three of the four still to come");
+
+        print("Let go again: a quarter is here, and the picture and the words agree");
+        self.drive.control("stall?on=download&seconds=8");
+        self.drive.drive("unpause");
+        self.shows("syncing-025", "Syncing, 25%: 1.0 MB of 4.0 MB, 3 files to download", "a quarter filled, in bytes and in files");
+
+        print("All of it here");
+        self.shows("synced", "Up to date", "back to the mark alone");
+        Check.that(self.drive.state("Kept/film4.bin").trim().equals("local"), "and the files are on this machine");
+        self.machine.waitUntil("test -s /run/user/1000/drive-usage");
+        Check.that(self.machine.succeed("cat /run/user/1000/drive-usage").contains("pin\there\t4\t4000000\t4000000\t"), "the kept folder was measured once things had settled: four files, four megabytes, all here");
+
+        print("A click opens the window that says more");
+        self.machine.succeed(self.session(f"busctl --user call {self.item()} /StatusNotifierItem org.kde.StatusNotifierItem Activate ii 0 0"));
+        try {
+            screen.waitForText("Kept on this computer", self.lab.artifact("status.ppm"), 120);
+            screen.waitForText("Up to date", self.lab.artifact("status.ppm"), 30);
+            screen.waitForText("all here", self.lab.artifact("status.ppm"), 60);
+            screen.waitForText("4 files", self.lab.artifact("status.ppm"), 30);
+        } catch (string error) {
+            print(self.machine.succeed("journalctl --no-pager _UID=1000 | tail -30 || true"));
+            throw error;
+        }
+        Check.that(true, "the state, the kept folder, its size and its files are on the screen");
+
+        print("The window follows the engine while it is open");
+        self.drive.drive("pause");
+        self.drive.put(self.drive.id("Kept"), "film5.bin", "megabyte");
+        screen.waitForText("Paused", self.lab.artifact("status-paused.ppm"), 60);
+        screen.waitForText("Resume downloads", self.lab.artifact("status-paused.ppm"), 30);
+        Check.that(true, "a new file in the kept folder, held: the window says paused and offers to resume");
+        self.drive.drive("unpause");
+        screen.waitForText("Up to date", self.lab.artifact("status-resumed.ppm"), 60);
+
+        print("Escape closes it, and the program ends");
+        self.machine.sendKey("esc");
+        self.machine.waitUntil("! pgrep -x .drive-status-w && ! pgrep -x drive-status", 30);
+        Check.that(self.machine.succeed("journalctl --no-pager | grep -c -E 'drive-status.*(dumped core|terminated abnormally)' || true").trim().equals("0"), "without a crash");
+
+        print("The Drive out of reach, then the engine gone");
+        self.drive.stop("drive-fake");
+        self.shows("offline", "Offline", "faded, and 'Offline'");
+        self.drive.stop("drive-engine");
+        self.shows("offline", "Not running", "an engine that does not answer is said to be not running");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        TrayScenario(lab, lab.guest("machine")).check();
+        lab.close();
+        print("PASS: the tray shows what the Drive is doing, and its window says more");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

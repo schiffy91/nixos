@@ -718,7 +718,7 @@ profiles turn off whole groups:
 | `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `utils/nixosctl/default.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `utils/nixosctl/ui/default.nix` | Packages the BTRC tray GUI for `nixosctl` |
-| `utils/drive/default.nix` | The BTRC Google Drive client: `~/Drive` served from a real tree behind a FUSE door, an engine that syncs it both ways, pinned folders kept downloaded, folders placed on another volume, and the push listener; its plan and measurements are in `utils/drive/PLAN.md` |
+| `utils/drive/default.nix` | The BTRC Google Drive client: `~/Drive` served from a real tree behind a FUSE door, an engine that syncs it both ways, pinned folders kept downloaded, folders placed on another volume, the push listener, and on a desktop a tray icon that shows how far a sync is with a window behind it (`tray`); its plan and measurements are in `utils/drive/PLAN.md` |
 
 The custom Proton tree under `config/pkgs/gaming/proton/custom` is a
 large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that

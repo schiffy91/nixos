@@ -95,7 +95,8 @@ planner     pure function: (agreed version, local, remote) -> actions; all sync 
 engine      runs the planner's actions; transfer queue; retries; brakes
 readers     who is asking for content: identity, budgets, consent
 policy      pinned folders, eviction, placement on other volumes
-control     local socket for the CLI and tray: status, pin, unpin, allow, pause, log
+control     local socket for the CLI: status, pin, unpin, allow, pause, log; the same facts in a file for the tray
+status      the tray's icon and the window behind it: what is going on, what is kept, how much it holds
 ```
 
 File states: `cloud` (nothing or part downloaded), `local` (complete, may be evicted when clean), `pinned` (complete, never evicted), `dirty` (changed locally, waiting to upload).
@@ -354,6 +355,18 @@ Done without a restart, with the screen off and sleep held off, in this order:
 The Deck's configuration is also installed and booted in a VM from this tree by its required node, `host-boot-STEAM-DECK-OLED-VM-secure`, which passes: the unlock screen draws and shows a typed key, the password unlocks, both boots reach "running" with the Drive mounted for the user, and Secure Boot is enforced on the second. Three things in the test, none in the Deck, kept it from passing before. It asked for the unlock program the Deck stopped using on 2026-11-07. It expected the Deck to enrol its keys again by itself after the firmware loses them, which no host does since the same date. And the VM's screen stayed black before the password: the Deck's kernel sets up no console on the VM's display, so nothing had asked that display what was plugged in, and Plymouth draws only on outputs already known to be connected. The VM adapter now asks before Plymouth starts (`probe-virtual-display` in `tests/hosts/vm-adapter.nix`); the real panel is probed by its own driver. The touch keyboard's own scenarios (`initrd-touch-unlock`, also rotated) pass on this tree, and the part of the Deck's boot image that asks for the password is unchanged from the one it last booted with.
 
 Not done, and why: the card is not encrypted (formatting waits for a yes), so the library is on the plain card and not at `/sd`. The Deck has not been restarted on the new system; its boot image differs from the one it booted only in the reset-on-boot program, which the reset scenarios and the desktop's own boots cover.
+
+## The tray icon and its window (2026-11-14)
+
+On a desktop the Drive sits in the system tray (`settings.apps.utils.drive.tray`, on wherever there is a desktop; in Game Mode there is no tray and the program ends quietly).
+
+- **The icon** is the Drive's mark, taken from the Papirus icon theme when the package is built. Alone, everything in the kept folders is here. With a disc in its corner it is at work: the disc fills as the bytes of the kept folders arrive (in steps of 5%), or shows two arrows when what is going on has no size (changes being sent, the change feed being read). A pause sign means downloading was paused by hand, an exclamation mark that deletions wait for `drive resume` or a volume is away, and a faded mark that the Drive cannot be reached or the engine is not running. The tooltip says the same in words: "Syncing, 25%: 1.0 MB of 4.0 MB, 3 files to download".
+- **A click** opens a small window: the state, each kept folder with how much of it is on this computer, how many files it holds and how much room its disk has left, what happens to everything else, and buttons to open the folder, pause or resume downloading, and close. It follows the engine while it is open. The menu on the other click has the same actions.
+- **How it knows.** While a transfer runs the engine answers no questions, so it keeps what `drive status` says, one fact to a line, in the file `progress` beside its sockets and rewrites it whenever a fact changes; `drive progress` prints the same. The tray and the window read that file. An engine that is gone leaves a file whose writer is no longer there, which reads as "not running".
+- **Sizes** need a walk over every kept file, so they are measured by `drive usage --save`, a separate process started when things settle and when the window opens, and kept in the user's runtime folder.
+- **In btrc.** `Library.Tray` gained what a tray that reports a state needs: `setIcon` and `setTip` on a shown tray, and `onClick` for a click on the icon itself (the menu then opens on the other click).
+
+The scenario `tray` runs the real tray program against a stand-in for the desktop's tray host and the fake Drive: the mark alone; an empty measure while the first bytes are awaited; paused with three of four files to come; a quarter filled, in bytes and files; done; a click that opens the window, read off the screen; the window following a pause; Escape ending it without a crash; then offline, and not running. On FRACTAL-NORTH the icon was seen in Plasma's tray in both states and the window was opened and closed against a scratch engine.
 
 ## The mutation checks
 

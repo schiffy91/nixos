@@ -1,0 +1,152 @@
+import Library.App;
+import Library.Callback;
+import Library.FileSystem;
+import Library.GUI;
+import Library.GUI.IButton;
+import Library.GUI.ILabel;
+import Library.GUI.IWindow;
+import Library.Platform;
+import Library.Process;
+import Library.Vector;
+
+import ./Progress.btrc;
+
+class StatusRun implements IButtonAction {  // a button that runs a command; the window stays
+    private string command;
+
+    public StatusRun(string command) { self.command = command; }
+
+    public void invoke() { UnixShell().run(self.command, logFailure=false); }
+}
+
+class StatusClose implements IButtonAction {
+    private IWindow window;
+
+    public StatusClose(IWindow window) { self.window = window; }
+
+    public void invoke() { self.window.close(); }
+}
+
+class StatusKeys implements IWindowKeyHandler {
+    private IWindow window;
+
+    public StatusKeys(IWindow window) { self.window = window; }
+
+    public bool key(AppKeyboardEvent event) {
+        if (event.action != APP_KEY_PRESSED || event.key != APP_KEY_ESCAPE) { return false; }
+        self.window.close();
+        return true;
+    }
+}
+
+// The window behind the tray's icon: what the Drive is doing, which folders are kept on this computer and
+// how much they hold. It asks the engine once a second for as long as it is open.
+class StatusWindow implements IApplicationWork {
+    private string runtime;
+    private string mount;
+    private IWindow window;
+    private ILabel headline;
+    private ILabel detail;
+    private Vector<ILabel> sizes = [];
+    private ILabel other;
+    private IButton pause;
+    private ICallbackRegistration? timer = null;
+
+    public StatusWindow(string runtime, string mount, CallbackScope actions) {
+        self.runtime = runtime;
+        self.mount = mount;
+        DriveProgress progress = DriveProgress.read(runtime);
+        self.window = GUI.createWindow("Google Drive", 560.0, 250.0 + 62.0 * (double)progress.pins.len);
+        var content = GUI.createColumn(10.0);
+        content.setPadding(24.0, 24.0, 24.0, 24.0);
+        self.window.attachRoot(content);
+        self.headline = GUI.createLabel("");
+        self.headline.setFont(18.0, true);
+        self.detail = GUI.createLabel("");
+        self.detail.setSecondary(true);
+        self.detail.setWrapping(true);
+        content.attach(self.headline);
+        content.attach(self.detail);
+        var kept = GUI.createLabel(progress.pins.len == 0 ? "No folder is kept on this computer" : "Kept on this computer");
+        kept.setFont(14.0, true);
+        content.attach(kept);
+        for pin in progress.pins {
+            var name = GUI.createLabel(pin.path.isEmpty() ? "The whole Drive" : pin.path);
+            var size = GUI.createLabel("");
+            size.setSecondary(true);
+            size.setWrapping(true);
+            content.attach(name);
+            content.attach(size);
+            self.sizes.push(size);
+        }
+        self.other = GUI.createLabel("");
+        self.other.setSecondary(true);
+        self.other.setWrapping(true);
+        content.attach(self.other);
+        var buttons = GUI.createRow(10.0);
+        var open = GUI.createButton("Open the folder");
+        self.pause = GUI.createButton("Pause downloads");
+        var close = GUI.createButton("Close (Esc)");
+        content.attach(buttons);
+        buttons.attach(open);
+        buttons.attach(self.pause);
+        buttons.attach(close);
+        open.onAction(StatusRun("setsid --fork xdg-open " + ShellWords.quote(mount) + " > /dev/null 2>&1 < /dev/null"), actions);
+        self.pause.onAction(StatusRun("if drive progress | grep -q '^paused yes'; then drive unpause; else drive pause; fi > /dev/null 2>&1"), actions);
+        close.onAction(StatusClose(self.window), actions);
+        self.window.onKey(StatusKeys(self.window), actions);
+        self.show(progress);
+        UnixShell().run("setsid --fork drive usage --save > /dev/null 2>&1 < /dev/null", logFailure=false);  // the sizes take a walk of every kept file
+    }
+
+    private string size(DrivePin pin) {
+        if (!pin.here) { return "Its volume is not attached."; }
+        if (pin.free < 0LL) { return "Measuring..."; }
+        string files = f"{pin.files} {pin.files == 1 ? "file" : "files"}";
+        string free = f"{DriveSize.words(pin.free)} free on its disk";
+        if (pin.onDisk >= pin.inDrive) { return f"{DriveSize.words(pin.inDrive)}, all here. {files}, {free}."; }
+        return f"{DriveSize.words(pin.onDisk)} here of {DriveSize.words(pin.inDrive)}. {files}, {free}.";
+    }
+
+    private void show(DriveProgress progress) {
+        DriveUsage.apply(progress, FileSystem.readText(DriveUsage.file()));
+        self.headline.setText(progress.headline());
+        string detail = progress.detail();
+        if (detail.isEmpty()) { detail = "Everything in the kept folders is on this computer."; }
+        self.detail.setText(detail);
+        for (int index = 0; index < self.sizes.len && index < progress.pins.len; index++) { self.sizes.get(index).setText(self.size(progress.pins.get(index))); }
+        string limit = progress.cacheLimit > 0LL ? f" and given back beyond {DriveSize.words(progress.cacheLimit)}" : "";
+        self.other.setText(f"Other files are downloaded when a program opens them{limit}. {progress.folders} folders in the Drive, shown at {self.mount}.");
+        self.pause.setTitle(progress.paused ? "Resume downloads" : "Pause downloads");
+    }
+
+    public void open() {
+        self.window.show();
+        self.timer = GUI.postAfter(1.0, self);
+    }
+
+    public void run() {
+        if (!self.window.isOpen()) {  // closed by its button, a key or the desktop
+            GUI.requestQuit();
+            return;
+        }
+        self.show(DriveProgress.read(self.runtime));
+        self.timer = GUI.postAfter(1.0, self);
+    }
+}
+
+int main() {
+    string runtime = Environment.get("DRIVE_RUNTIME", Environment.get("XDG_RUNTIME_DIR", "/run") + "/drive");
+    string mount = Environment.get("DRIVE_MOUNT", Environment.get("HOME", "") + "/Drive");
+    GUI.initialize();
+    var actions = CallbackScope();
+    try {
+        var status = StatusWindow(runtime, mount, actions);
+        status.open();
+        GUI.run();
+    } finally {
+        actions.cancel();
+        GUI.close();
+    }
+    return 0;
+}

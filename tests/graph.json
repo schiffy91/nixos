@@ -1241,6 +1241,13 @@
     },
     {
       "after": [
+        "drive-pinning"
+      ],
+      "id": "drive-tray",
+      "spec": "drive/tray/test.json"
+    },
+    {
+      "after": [
         "drive-writes"
       ],
       "id": "drive-crashes",
@@ -1364,6 +1371,7 @@
     "drive-placement",
     "drive-module",
     "drive-dialog",
+    "drive-tray",
     "drive-crashes",
     "sd-card",
     "gaming-runtime",

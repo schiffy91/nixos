@@ -42,7 +42,7 @@ let
     };
   } extra;
 in lib.mkIf settings.enable {
-  environment.systemPackages = [ programs.drive ];
+  environment.systemPackages = [ programs.drive ] ++ lib.optional settings.tray programs.statusEntry;
   settings.apps.utils.drive.ignore = [ "*.part" "*.crdownload" "*.kate-swp" ".~lock.*" ".goutputstream-*" ".#*" ];  # other modules add their programs' names
   environment.sessionVariables = { DRIVE_RUNTIME = runtime; DRIVE_MOUNT = settings.mountPoint; };
   settings.disk.immutability.persist.paths = [ "/var/lib/drive" "${home}/.config/drive" ];
@@ -69,6 +69,20 @@ in lib.mkIf settings.enable {
     serviceConfig = {
       ExecStart = engine;
       Nice = 5;
+    };
+  };
+
+  # The tray's icon belongs to the desktop session; where there is no tray to show it in (Game Mode) it ends quietly.
+  systemd.user.services.drive-tray = lib.mkIf settings.tray {
+    description = "Drive: the icon in the system tray";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    unitConfig.ConditionUser = user;
+    serviceConfig = {
+      ExecStart = "${programs.tray}/bin/drive-tray";
+      Restart = "on-failure";
+      RestartSec = 3;
     };
   };
 

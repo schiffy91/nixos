@@ -1,5 +1,6 @@
 import Library.CLI;
 import Library.Console;
+import Library.IO;
 import Library.Platform;
 import Library.Vector;
 import Library.Strings;
@@ -18,6 +19,7 @@ import ./auth/Login.btrc;
 import ./door/Channel.btrc;
 import ./door/Door.btrc;
 import ./engine/Engine.btrc;
+import ./status/Progress.btrc;
 import ./engine/Mirror.btrc;
 import ./push/Push.btrc;
 import ./remote/DriveApi.btrc;
@@ -248,7 +250,23 @@ class Drive {
         Console.write(engine.receive());
     }
 
-    // Which programs may download: the list, or a decision for one of them.
+    // How much each kept folder holds, by walking it; `--save` leaves the numbers where the status window reads them.
+    class void usage(CLICommandLine options) {
+        DriveProgress progress = DriveProgress.read(Drive.runtime(options));
+        if (!progress.running) { throw "The engine is not running"; }
+        string measured = DriveUsage.measure(progress);
+        if (!options.has("--save")) {
+            for pin in progress.pins {
+                string held = f"{pin.files} files, {DriveSize.words(pin.onDisk)} here of {DriveSize.words(pin.inDrive)}";
+                Console.log(f"{pin.path}: {pin.here ? held : "its volume is not attached"}");
+            }
+            return;
+        }
+        string part = DriveUsage.file() + ".part";
+        Path.writeAll(part, measured);
+        StorePaths.rename(part, DriveUsage.file());
+    }
+
     class string asked(CLICommandLine options, string message, int seconds) {
         Channel? engine = Channel.connect(Drive.runtime(options) + "/engine.sock");
         if (engine == null || !engine.send(message)) { throw "The engine is not running"; }
@@ -427,6 +445,8 @@ class Drive {
         else if (command.equals("auth")) { Drive.auth(options); }
         else if (command.equals("push")) { Drive.push(options); }
         else if (command.equals("status")) { Drive.ask(options, "status"); }
+        else if (command.equals("progress")) { Drive.ask(options, "progress"); }  // the same, one fact to a line
+        else if (command.equals("usage")) { Drive.usage(options); }
         else if (command.equals("resume")) { Drive.ask(options, "resume"); }
         else if (command.equals("pin") || command.equals("unpin") || command.equals("place")) { Drive.pin(options, command); }
         else if (command.equals("pins")) { Drive.ask(options, "pins"); }

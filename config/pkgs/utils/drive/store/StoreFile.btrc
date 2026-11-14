@@ -139,6 +139,19 @@ class StoreFile {
 
     public bool complete() { return self.firstMissing(0LL) < 0LL; }
 
+    public long long lacking() {  // how many of its bytes are not downloaded
+        long long size = self.size();
+        long long lacking = 0LL;
+        long long at = 0LL;
+        while (at < size) {
+            long long missing = self.firstMissing(at);
+            if (missing < 0LL) { break; }
+            at = self.firstPresent(missing);
+            lacking += at - missing;
+        }
+        return lacking;
+    }
+
     // Put the first `length` bytes of the file `source` at `offset`.
     public bool fill(long long offset, StoreFile source, long long length) { return driveCopyInto(self.descriptor, (long)offset, source.handle(), (long)length) == 0; }
 

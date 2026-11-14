@@ -23,6 +23,7 @@ let
             followSeconds = 1;
             quietSeconds = 1;
             readers.deny = [ "never-reads" ];
+            tray = true;
             freeFloorBytes = 0; # the test disk is small; with the default floor everything not pinned would be given back
           };
           users.admin = { username = "fixture"; homeDirectory = home; };
@@ -43,7 +44,9 @@ let
     ];
   }).config;
   unit = name: "${profile.systemd.units.${name}.unit}/${name}";
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+  tray = profile.systemd.user.services.drive-tray;
+in assert tray.wantedBy == [ "graphical-session.target" ] && pkgs.lib.hasSuffix "/bin/drive-tray" tray.serviceConfig.ExecStart;  # the tray's icon starts with the desktop session
+(import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "drive-module";
   nodes.machine = { ... }: {
     boot.kernelModules = [ "fuse" ];

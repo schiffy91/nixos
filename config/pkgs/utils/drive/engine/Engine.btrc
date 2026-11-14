@@ -3,6 +3,7 @@ import Library.Digest;
 import Library.FileSystem;
 import Library.IO;
 import Library.Map;
+import Library.Platform;
 import Library.Process;
 import Library.Strings;
 import Library.Timer;
@@ -54,6 +55,10 @@ class Engine {
     public long long cacheBytes = 0LL;  // how much content outside pinned folders may stay downloaded; 0: all of it
     public long long freeFloor = 0LL;  // give content back when the disk has less than this free
     private long long fetched = 0LL;  // bytes downloaded since content was last given back
+    private long long received = 0LL;  // bytes downloaded since the engine started
+    private long long queuedBytes = 0LL;  // what the pinned files in `wanted` lacked when they were listed
+    private long long arrivedBytes = 0LL;  // how much of that has come
+    private string told = "";  // what the progress file last said
     private long long evictDue = 0LL;
     private string waitingFor = "";  // what was last said about volumes that are not here
     private bool behind = false;  // more of the change feed is waiting to be read
@@ -110,6 +115,7 @@ class Engine {
             if (fetched == null || !file.fill(missing, fetched, end - missing)) { return self.broken(id, "what was fetched could not be stored"); }
             file.setModified(modified);  // the Drive's time, not the time of the download
             self.fetched += end - missing;
+            self.received += end - missing;
             at = end;
         }
         if (file.attribute("state").equals("cloud") && file.complete()) {
@@ -148,13 +154,35 @@ class Engine {
                 continue;
             }
             StoreFile? held = StoreFile.open(child);
-            if (held != null && held.attribute("state").equals("cloud") && !held.attribute("id").isEmpty()) { self.wanted.push(held.attribute("id")); }
+            if (held != null && held.attribute("state").equals("cloud") && !held.attribute("id").isEmpty()) { self.queue(held.attribute("id"), held); }
         }
+    }
+
+    private void queue(string id, StoreFile file) {  // a pinned file to download, and how much of it is not here
+        self.wanted.push(id);
+        self.queuedBytes += file.lacking();
+    }
+
+    private void taken() {  // the first wanted file is done with; with the last one the count starts over
+        self.wanted.remove(0);
+        if (self.wanted.len > 0) { return; }
+        self.queuedBytes = 0LL;
+        self.arrivedBytes = 0LL;
+    }
+
+    private bool whole(string id) {
+        StoreFile? file = self.store.file(id);
+        if (file == null) { return true; }
+        bool here = !file.attribute("state").equals("cloud");
+        file.close();
+        return here;
     }
 
     // Everything in the pinned folders that is not downloaded.
     private void wantAll() {
         self.wanted.clear();
+        self.queuedBytes = 0LL;
+        self.arrivedBytes = 0LL;
         self.store.fresh.clear();
         for pin in self.pins {
             if (!self.store.unavailable(pin) && FileSystem.isDir(self.store.real(pin))) { self.want(self.store.real(pin)); }
@@ -165,7 +193,11 @@ class Engine {
     private void wantFresh() {
         for id in self.store.fresh {
             string path = self.store.filePath(id);
-            if (!path.isEmpty() && self.pinned(self.store.logical(path)) && !self.wanted.contains(id)) { self.wanted.push(id); }
+            if (path.isEmpty() || !self.pinned(self.store.logical(path)) || self.wanted.contains(id)) { continue; }
+            StoreFile? file = self.store.file(id);
+            if (file == null) { continue; }
+            self.queue(id, file);
+            file.close();
         }
         self.store.fresh.clear();
     }
@@ -176,13 +208,15 @@ class Engine {
             string id = self.wanted.get(0);
             StoreFile? file = self.store.file(id);
             if (file == null || !file.attribute("state").equals("cloud")) {
-                self.wanted.remove(0);
+                self.taken();
                 continue;
             }
             long long missing = file.firstMissing(0LL);
             file.close();
+            long long before = self.received;
             string outcome = self.fetch(id, missing < 0LL ? 0LL : missing, missing < 0LL ? 1LL : self.piece);
-            if (outcome.equals("error")) { self.wanted.remove(0); }  // said in the log; tried again when it next changes or the engine starts
+            self.arrivedBytes += self.received - before;
+            if (outcome.equals("error") || self.whole(id)) { self.taken(); }  // a failure is said in the log; tried again when it next changes or the engine starts
             return outcome.equals("ok");
         }
         return false;
@@ -356,11 +390,48 @@ class Engine {
             self.due = 0LL;
             return "ok\n";
         }
+        if (words.len == 1 && words.get(0).equals("progress")) { return self.progress(door != null && door.isOpen()); }
         if (words.len == 1 && words.get(0).equals("status")) {
             Vector<string> missing = self.store.missing();
             return f"{self.online ? "online" : "offline"}, door {door != null && door.isOpen() ? "connected" : "absent"}, {self.store.folderCount()} folders, {self.held.len} waiting, {self.uploader.waiting()} changes to send{self.behind ? " (catching up with the Drive)" : ""}, {self.wanted.len} to download{self.paused ? " (paused)" : ""}{self.uploader.braked || self.mirror.braked ? ", deletions held" : ""}{missing.len > 0 ? ", waiting for the volume of " + Strings.join(missing, ", ") : ""}\n";
         }
         return "unknown command\n";
+    }
+
+    // What `status` says, one fact to a line, for the tray and the status window to read.
+    private string progress(bool door) {
+        Vector<string> lines = [];
+        lines.push(f"engine {Platform.pid()}");
+        lines.push(f"online {self.online ? "yes" : "no"}");
+        lines.push(f"door {door ? "connected" : "absent"}");
+        lines.push(f"paused {self.paused ? "yes" : "no"}");
+        lines.push(f"behind {self.behind ? "yes" : "no"}");
+        lines.push(f"folders {self.store.folderCount()}");
+        long long arrived = self.arrivedBytes > self.queuedBytes ? self.queuedBytes : self.arrivedBytes;
+        lines.push(f"download {self.wanted.len} {arrived} {self.queuedBytes}");
+        lines.push(f"upload {self.uploader.waiting()}");
+        lines.push(f"asking {self.held.len}");
+        lines.push(f"deletions {self.uploader.braked || self.mirror.braked ? "held" : "free"}");
+        Vector<string> missing = self.store.missing();
+        if (missing.len > 0) { lines.push("missing " + Strings.join(missing, ", ")); }
+        if (self.wanted.len > 0) {
+            string path = self.store.filePath(self.wanted.get(0));
+            if (!path.isEmpty()) { lines.push("current " + self.store.logical(path)); }
+        }
+        lines.push("store " + self.store.tree());
+        lines.push(f"limits {self.cacheBytes} {self.freeFloor}");
+        for pin in self.pins.sorted() { lines.push(f"pin {self.store.unavailable(pin) ? "away" : "here"} {self.store.real(pin)}\t{pin}"); }
+        return Strings.join(lines, "\n") + "\n";
+    }
+
+    // The same facts in a file beside the sockets, rewritten when they change. In the middle of a transfer the
+    // engine answers nobody, and the tray should still know what it is doing.
+    private void tell(bool door) {
+        string facts = self.progress(door);
+        if (facts.equals(self.told)) { return; }
+        string file = self.socket.replace("door.sock", "progress");
+        Path.writeAll(file + ".part", facts);
+        if (StorePaths.rename(file + ".part", file)) { self.told = facts; }
     }
 
     private bool current() {  // the tree as the Drive is now; false when the Drive cannot be reached
@@ -439,6 +510,7 @@ class Engine {
                 self.uploader.offline = false;
                 self.online = false;  // tried again when the feed is next read
             }
+            self.tell(door != null && door.isOpen());
             if (busy && ready == 0) { self.download(); }
             if (MonotonicClock.milliseconds() >= self.evictDue) {
                 self.evict(false);

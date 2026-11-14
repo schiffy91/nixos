@@ -14,6 +14,7 @@
     quietSeconds = lib.mkOption { type = ints.positive; default = 5; description = "How long a changed file must be left alone before it is uploaded."; };
     followSeconds = lib.mkOption { type = ints.positive; default = 60; description = "How often the Drive's change feed is read when nothing announces a change."; };
     push = lib.mkOption { type = bool; default = false; description = "Wait on the account's Pub/Sub topic and read the change feed as soon as the Drive announces a change. Needs `drive auth` and `drive push prepare` once."; };
+    tray = lib.mkOption { type = bool; default = config.settings.desktop.enable; description = "Show the Drive in the desktop's system tray: its mark when everything is here, how far along it is while files come and go, and a click for the window that says which folders are kept and how much they hold."; };
     api = lib.mkOption { type = nullOr str; default = null; description = "Another address for the Drive API. Tests point this at the fake."; };
   };
 }
