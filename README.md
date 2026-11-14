@@ -167,9 +167,9 @@ settings.apps.dev.bash.enable = true;
 settings.apps.gaming.battlenet.enable = true;
 settings.apps.dev.claude.enable = true;
 settings.apps.dev.codex.enable = true;
+settings.apps.utils.drive.enable = true;
 settings.apps.dev.git.enable = true;
 settings.apps.utils.nixosctl.enable = true;
-settings.apps.utils.rclone.enable = true;
 settings.apps.gaming.rocksmith.enable = true;
 settings.apps.gaming.steam.enable = true;
 settings.apps.gaming.sunshine.enable = true;
@@ -699,13 +699,13 @@ profiles turn off whole groups:
 | `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |
 | `gaming/assettocorsa/default.nix` | Assetto Corsa content import, CM presets, control bindings, UI scale, and the CSP wheel menu |
 | `gaming/simracing/default.nix` | Enables the `logitech-trueforce` kernel module on x86_64 for wheel force feedback |
-| `gaming/semu/default.nix` | Installs `semu` from its flake input, sets `SEMU_TARGET` (and `SEMU_ROOT` when `root` is set), and declares the library as an rclone offline folder (`drive`) |
+| `gaming/semu/default.nix` | Installs `semu` from its flake input, sets `SEMU_TARGET` (and `SEMU_ROOT` when `root` is set), and has the Drive client keep the library's folder (`drive`) downloaded, leaving Semu's unfinished files out of the sync |
 | `gaming/btrsmith/default.nix` | Installs BTRSmith when an exact flake input provides it |
 | `gaming/wine/default.nix` | `wine-prefix-dpi`, which writes `LogPixels` into a prefix registry |
 | `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `utils/nixosctl/default.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `utils/nixosctl/ui/default.nix` | Packages the BTRC tray GUI for `nixosctl` |
-| `utils/rclone.nix` | Defines a user rclone mount for `~/Drive`, and an hourly two-way `rclone bisync` for each `settings.apps.utils.rclone.offline` folder |
+| `utils/drive/default.nix` | The BTRC Google Drive client: `~/Drive` served from a real tree behind a FUSE door, an engine that syncs it both ways, pinned folders kept downloaded, folders placed on another volume, and the push listener; its plan and measurements are in `utils/drive/PLAN.md` |
 
 The custom Proton tree under `config/pkgs/gaming/proton/custom` is a
 large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that

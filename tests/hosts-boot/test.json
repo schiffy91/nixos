@@ -10,7 +10,7 @@
     "secureBoot": "false",
     "requireEnforced": "false",
     "assertPanel": "true",
-    "unlockAgent": "unl0kr",
+    "unlockAgent": "plymouth",
     "enablesSecureBoot": "false",
     "reenrollsKeys": "false"
   },
