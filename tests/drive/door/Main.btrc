@@ -28,8 +28,8 @@ class DoorScenario {
         self.machine.succeed(f"systemd-run --unit drive-engine --collect drive engine --store {self.store} --runtime /run/drive-test --credentials /var/lib/drive-test/credentials.json --api {self.fake} --chunk 65536 --follow 1");
     }
 
-    private void startDoor() {
-        self.machine.succeed(f"systemd-run --unit drive-door --collect drive door --store {self.store} --mount {self.mount} --runtime /run/drive-test --allow-others --read-only");
+    private void startDoor(string extra = "") {
+        self.machine.succeed(f"systemd-run --unit drive-door --collect drive door --store {self.store} --mount {self.mount} --runtime /run/drive-test --allow-others --read-only {extra}");
         self.machine.waitUntil(f"mountpoint -q {self.mount}");
     }
 
@@ -117,11 +117,27 @@ class DoorScenario {
         Check.that(self.machine.fail(f"head -c 10 {self.mount}/Media/third.bin 2>&1").contains("No route to host"), "and still does once the engine has found there is no Drive to reach");
     }
 
+    // The guard is what makes a not-downloaded file wait for the engine instead of being handed to the kernel.
+    // Taken away, the read that failed above succeeds with zeros: the check a failing-open design cannot pass.
+    private void unguarded() {
+        print("With the guard off, the same file reads as zeros");
+        string far = f"dd if={self.mount}/Media/third.bin bs=1 skip=200000 count=16 status=none | od -An -tx1 | tr -d ' \\n'";
+        self.stop("drive-door");
+        self.startDoor("--unguarded");
+        Check.equal(self.machine.succeed(far), "00000000000000000000000000000000", "a door that hands a not-downloaded file straight to the kernel returns zeros for it");
+        self.stop("drive-door");
+        self.startDoor();
+        self.machine.waitUntil(f"drive status --runtime /run/drive-test | grep -q 'door connected'");
+        string real = self.machine.succeed(f"dd if={self.source}/third.bin bs=1 skip=200000 count=16 status=none | od -An -tx1 | tr -d ' \\n'");
+        Check.equal(self.machine.succeed(far), real, "with the guard back the same read waits for the engine and returns the file's real bytes");
+    }
+
     public void check() {
         self.prepare();
         self.ranges();
         self.engineGone();
         self.doorGone();
+        self.unguarded();
         self.offline();
     }
 }

@@ -107,6 +107,7 @@ class Drive {
         FileSystem.mkdirp(Drive.runtime(options));
         Door door = Door(store, Drive.runtime(options) + "/door.sock");
         door.readOnly = options.has("--read-only");
+        door.unguarded = options.has("--unguarded");
         for declared in options.values("--place") {
             if (!door.volumes.place(declared)) { throw f"--place wants PATH=LOCATION, not {declared}"; }
         }

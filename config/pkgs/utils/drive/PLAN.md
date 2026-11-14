@@ -176,6 +176,8 @@ The setup is scripted, with one step only a person can do:
 - An event reached this machine 4 to 10 seconds after the change (three measurements: 4.0, 10.1 and 10.2 s).
 - A subscription lasts seven days and then has to be renewed.
 
+**Checked end to end, 2026-11-13, real account:** `drive push listen` beside the real engine, whose own timer was set to 60 s. Three files made on the Drive (by a script standing in for another machine) were in the local tree 3.3, 7.7 and 7.8 s later. The first attempt failed because the listener looked for a subscription named after a machine called "machine"; the name now comes from the system's hostname, and the NixOS unit passes it.
+
 So the trigger is: one subscription per folder directly in My Drive, each with its descendants, renewed before it expires; a listener waits on the topic and tells the engine to read the change feed. Files that sit directly in My Drive, and anything a subscription misses, are covered by a slow timer (once a minute), which is also what runs when the listener cannot reach Pub/Sub.
 
 ## Where things live
@@ -277,7 +279,9 @@ Measured since, on the same machine:
 |---|---|
 | Building the real tree (M2) | the whole of My Drive, 398,957 entries (363,989 files in 34,969 folders; 10,484 entries outside the tree were skipped): 1,110 s, nearly all of it Google's listing, 355 MB of memory at the peak. The placeholders take 436 KB beyond their folder entries |
 
-Still to measure before the go or no-go: the Deck's kernel (7.2.10-valve1) and ext4 on its SD card.
+**Decision: go**, taken 2026-11-13 on the numbers above. A dead server fails closed, files handed to the kernel read at the disk's own speed, and a scan of 370,000 files through the mount costs seconds, not minutes. Everything since was built on that, and each property is now also a scenario that runs on every change (`door`, `module`).
+
+ext4 has been covered in VMs only: the `placement` and `sd-card` scenarios keep their placed folder on ext4, and the forwarding filesystem's own check in btrc compares it with ext4 over thousands of random operations. **Not measured: the Deck itself** (kernel 7.2.10-valve1, ext4 on its real SD card: scan and read speed). That is the first thing to do there before its cutover; if the scan through the mount is slow on the card, the remedy is longer cache times for names in the door, which only the door changes.
 
 ## What each milestone proved
 
@@ -290,6 +294,17 @@ Every line is a VM scenario under `tests/drive/` unless it says otherwise. Each 
 - **M2, the window** `dialog`: in a VM with a real compositor the window appears with the program's name (read off the screen), each of its three answers does what it says, and with no desktop session the program is stopped at once and listed.
 - **M5 so far** `module`: the units the NixOS module generates mount the Drive for the user from boot with one capability, recover from either service being killed, and show the tree after a restart with no network.
 - **Real account, 2026-11-13, by hand, in `drive-client-scratch` only:** through a test mount beside the rclone one, a new folder, nested folder and files arrived on the Drive with the right checksums and times; an append went up as the same file's next version; a rename and move kept the file and its time; a delete was a trash; a change made on the Drive replaced the local file and was fetched when read; a file changed on both sides was kept twice; a trash on the Drive moved the local file to the local trash. The whole of My Drive was mirrored twice (398,957 entries each time: 1,110 s and 866 s).
+
+## The mutation checks
+
+Each safety rule has a switch that takes it away, and a step in its scenario that shows the protected thing then goes wrong. A test that passed either way would prove nothing.
+
+| Rule | Taken away with | What the scenario then sees |
+|---|---|---|
+| A not-downloaded file is never handed to the kernel as it is | door `--unguarded` | the read that failed returns zeros (`door`) |
+| A program reads only so much without a yes | `--budget-files 0` | the same crawl downloads everything (`readers`) |
+| A file changed on both sides is kept twice | `--overwrite-conflicts` | one of the two versions is gone, here and on the Drive (`writes`) |
+| Many deletions wait for a yes, in both directions | `--delete-limit 0` | the same batch goes straight through (`writes`) |
 
 ## Known limits
 

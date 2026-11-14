@@ -6,6 +6,7 @@ class BootHealth {
     private Map<string, string> values = {};
     private Vector<string> failed = [];
     private Vector<string> refused = [];
+    private Vector<string> trouble = [];
     private Vector<string> unsignedFiles = [];
 
     public BootHealth(string text, int bootIndex) {
@@ -35,6 +36,7 @@ class BootHealth {
             var value = line.substring(space + 1, line.len() - space - 1).trim();
             if (tag.equals("FAILED")) { self.failed.push(value); }
             if (tag.equals("REFUSED")) { self.refused.push(value); }
+            if (tag.equals("TROUBLE")) { self.trouble.push(value); }
             if (tag.equals("UNSIGNED")) { self.unsignedFiles.push(value); }
             if (!self.values.has(tag)) { self.values.put(tag, value); }
         }
@@ -44,7 +46,10 @@ class BootHealth {
 
     public void verify(bool requireEnforced) {
         Vector<string> failures = [];
-        if (!self.value("STATE").equals("running")) { failures.push(f"system state: {self.value("STATE")}"); }
+        if (!self.value("STATE").equals("running")) {
+            failures.push(f"system state: {self.value("STATE")}");
+            for line in self.trouble { failures.push(f"in the journal: {line}"); }  // what failed, when nothing is in the failed list any more
+        }
         for unit in self.failed { failures.push(f"failed unit: {unit}"); }
         for unit in self.refused { failures.push(f"systemd refused: {unit}"); }
         if (!self.value("HOMEMANAGER").equals("active")) { failures.push("home-manager is not active"); }
