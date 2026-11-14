@@ -1,0 +1,138 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// Pinned folders stay downloaded, content outside them is given back when there is too much of it, and an
+// existing local copy becomes the Drive's copy without being transferred.
+class PinningScenario {
+    private DriveFixture drive;
+    private Guest machine;
+    private string mount;
+    private string engine = "--quiet 1 --budget-files 0 --pin Pinned --cache-bytes 250000";
+
+    public PinningScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+        self.mount = self.drive.mount;
+    }
+
+    private void random(string name, int bytes) { self.machine.succeed(f"head -c {bytes} /dev/urandom > {self.drive.source}/{name}"); }
+
+    // "0" when none of the file's contents are on disk. (Its attributes may still take a block.)
+    private string blocks(string path) { return self.machine.succeed(f"python3 -c 'import os, sys\ntry:\n    os.lseek(os.open(sys.argv[1], os.O_RDONLY), 0, os.SEEK_DATA); print(1)\nexcept OSError:\n    print(0)' {self.drive.store}/tree/{path}").trim(); }
+
+    private void prepare() {
+        self.drive.prepare();
+        for name in ["p1", "p2", "p3", "p4", "l1", "l2", "l3", "x", "y", "z", "z-local"] { self.random(name, 100000); }
+        self.machine.succeed(f"head -c 100000 /dev/urandom > {self.drive.source}/p1-next");
+        self.drive.startFake();
+        string pinned = self.drive.folder("root", "Pinned");
+        string deep = self.drive.folder(pinned, "Deep");
+        self.drive.put(pinned, "p1.bin", "p1");
+        self.drive.put(pinned, "p2.bin", "p2");
+        self.drive.put(deep, "p3.bin", "p3");
+        string loose = self.drive.folder("root", "Loose");
+        for name in ["l1", "l2", "l3"] { self.drive.put(loose, name + ".bin", name); }
+        string adopt = self.drive.folder("root", "Adopt");
+        string sub = self.drive.folder(adopt, "Sub");
+        self.drive.put(adopt, "x.bin", "x");
+        self.drive.put(sub, "y.bin", "y");
+        self.drive.put(adopt, "z.bin", "z");
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor();
+    }
+
+    private void pinned() {
+        print("A pinned folder is downloaded without anyone reading it");
+        self.machine.waitUntil(f"drive status --runtime {self.drive.runtime} | grep -q ' 0 to download'");
+        for path in ["Pinned/p1.bin", "Pinned/p2.bin", "Pinned/Deep/p3.bin"] { Check.equal(self.drive.state(path), "local", f"{path} is downloaded"); }
+        Check.equal(self.drive.state("Loose/l1.bin"), "cloud", "and nothing outside it is");
+        Check.equal(self.blocks("Loose/l1.bin"), "0", "a file that is not downloaded takes no room");
+        self.machine.succeed(f"cmp {self.mount}/Pinned/Deep/p3.bin {self.drive.source}/p3");
+        Check.equal(self.machine.succeed(f"stat -c %Y {self.mount}/Pinned/p1.bin").trim(), self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 -c 'import json, sys, datetime; print(int(datetime.datetime.fromisoformat([e for e in json.load(sys.stdin) if e[\"name\"] == \"p1.bin\"][0][\"modifiedTime\"].replace(\"Z\", \"+00:00\")).timestamp()))'").trim(), "a downloaded file has the Drive's time, not the time it was fetched");
+
+        print("What the Drive adds or changes in it is downloaded too");
+        self.drive.put(self.drive.id("Pinned"), "p4.bin", "p4");
+        self.drive.change(self.drive.id("Pinned/p1.bin"), "p1-next");
+        self.machine.waitUntil(f"cmp -s {self.drive.store}/tree/Pinned/p4.bin {self.drive.source}/p4 && cmp -s {self.drive.store}/tree/Pinned/p1.bin {self.drive.source}/p1-next");
+        Check.equal(self.drive.state("Pinned/p4.bin") + self.drive.state("Pinned/p1.bin"), "locallocal", "both are complete");
+
+        print("A folder pinned by hand stays pinned across a restart");
+        self.drive.drive(f"pin {self.mount}/Adopt/Sub --mount {self.mount}");
+        self.machine.waitUntil(f"test \"$(getfattr --absolute-names -n user.drive.state --only-values {self.drive.store}/tree/Adopt/Sub/y.bin)\" = local");
+        self.drive.stop("drive-engine");
+        self.drive.startEngine(self.engine);
+        self.drive.connected();
+        Check.that(self.drive.drive("pins").contains("Adopt/Sub") && self.drive.drive("pins").contains("Pinned"), "the declared and the hand-made pin are both listed");
+        self.drive.drive("unpin Adopt/Sub");
+        Check.that(!self.drive.drive("pins").contains("Adopt/Sub"), "and unpinning removes it");
+    }
+
+    private void givenBack() {
+        print("Content outside pinned folders is given back, oldest first, never a file that is open");
+        string tree = self.drive.store + "/tree";
+        self.machine.succeed(f"cat {self.mount}/Loose/l1.bin > /dev/null");
+        self.machine.succeed(f"systemd-run --unit hold --collect /run/current-system/sw/bin/sh -c 'exec 9< {self.mount}/Loose/l1.bin; exec /run/current-system/sw/bin/sleep 900'");
+        self.machine.waitUntil("ls -l /proc/$(systemctl show -p MainPID --value hold.service)/fd | grep -q l1.bin");
+        self.machine.succeed(f"touch -a -d '2001-01-01' {tree}/Loose/l1.bin && touch -a -d '2002-01-01' {tree}/Adopt/Sub/y.bin");
+        self.machine.succeed(f"cat {self.mount}/Loose/l2.bin > /dev/null && touch -a -d '2003-01-01' {tree}/Loose/l2.bin");
+        self.machine.succeed(f"cat {self.mount}/Loose/l3.bin > /dev/null");  // about 400 kB downloaded outside the pinned folder, 250 kB allowed
+        self.drive.drive("evict");
+        Check.equal(self.drive.state("Loose/l1.bin"), "local", "the oldest file is open, so it keeps its contents");
+        self.machine.succeed(f"cmp {tree}/Loose/l1.bin {self.drive.source}/l1");
+        Check.equal(self.drive.state("Adopt/Sub/y.bin") + self.blocks("Adopt/Sub/y.bin"), "cloud0", "the next oldest goes instead, and takes no room");
+        Check.equal(self.drive.state("Loose/l2.bin") + self.blocks("Loose/l2.bin"), "cloud0", "then the one after");
+        Check.equal(self.drive.state("Loose/l3.bin"), "local", "and no more than needed");
+        Check.equal(self.drive.state("Pinned/p2.bin"), "local", "pinned files are never given back");
+        self.drive.stop("hold");
+        self.machine.succeed(f"cat {self.mount}/Loose/l2.bin > /dev/null");
+        self.machine.succeed(f"touch -a -d '2001-01-01' {self.drive.store}/tree/Loose/l1.bin");
+        self.drive.drive("evict");
+        Check.equal(self.drive.state("Loose/l1.bin") + self.blocks("Loose/l1.bin"), "cloud0", "once closed it can go");
+        self.machine.succeed(f"cmp {self.mount}/Loose/l1.bin {self.drive.source}/l1");
+        Check.equal(self.drive.state("Loose/l1.bin"), "local", "and reading it brings it back whole");
+    }
+
+    private void adopted() {
+        print("A local copy becomes the Drive's copy without a transfer");
+        string local = "/var/lib/drive-test/local";
+        self.machine.succeed(f"mkdir -p {local}/Sub {local}/Fresh && cp {self.drive.source}/x {local}/x.bin && cp {self.drive.source}/y {local}/Sub/y.bin && cp {self.drive.source}/z-local {local}/z.bin && echo only here > {local}/Fresh/new.txt");
+        string inode = self.machine.succeed(f"stat -c %i {local}/x.bin").trim();
+        self.drive.asked();
+        string report = self.drive.drive(f"adopt {local} Adopt --upload-new");
+        Check.that(report.contains("2 adopted, 1 new here and sent to the Drive, 0 already downloaded, 1 different from the Drive"), f"the report says what happened: {report}");
+        Check.equal(self.drive.asked(), "", "nothing was downloaded");
+        Check.equal(self.drive.state("Adopt/x.bin") + self.drive.state("Adopt/Sub/y.bin"), "locallocal", "the matching files are downloaded files now");
+        Check.equal(self.machine.succeed(f"stat -c %i {self.drive.store}/tree/Adopt/x.bin").trim(), inode, "on one filesystem the file itself moved in: nothing was copied");
+        self.machine.succeed(f"cmp {self.mount}/Adopt/x.bin {self.drive.source}/x && cmp {self.mount}/Adopt/Sub/y.bin {self.drive.source}/y && ! test -e {local}/x.bin && ! test -e {local}/Sub/y.bin");
+        Check.that(report.contains(f"differs from the Drive: {local}/z.bin"), "a file that differs is named");
+        self.machine.succeed(f"cmp {local}/z.bin {self.drive.source}/z-local");
+        Check.equal(self.drive.state("Adopt/z.bin"), "cloud", "and is left where it was, with the Drive's version untouched");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py new.txt | grep -q ' False$'");
+        Check.that(self.drive.onDrive("new.txt", self.drive.sha(f"{self.mount}/Adopt/Fresh/new.txt")), "a file the Drive did not have is uploaded in its folder");
+        self.machine.succeed(f"echo edit >> {self.mount}/Adopt/x.bin");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py x.bin | grep -q \" $(sha256sum < {self.mount}/Adopt/x.bin | cut -d' ' -f1) False\"");
+        Check.that(true, "an adopted file syncs like any other");
+    }
+
+    public void check() {
+        self.prepare();
+        self.pinned();
+        self.givenBack();
+        self.adopted();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        PinningScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: pinned folders stay downloaded, room is given back safely, local copies are adopted");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

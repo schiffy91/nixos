@@ -1,5 +1,7 @@
 import Library.Console;
 import Library.Digest;
+import Library.FileSystem;
+import Library.IO;
 import Library.Map;
 import Library.Process;
 import Library.Strings;
@@ -12,6 +14,7 @@ import ../store/Store.btrc;
 import ../store/StoreFile.btrc;
 import ./Mirror.btrc;
 import ./Readers.btrc;
+import ./Uploader.btrc;
 
 class EngineHeld {  // a request waiting for someone to say whether its reader may download
     public string key;
@@ -34,11 +37,25 @@ class Engine {
     public long long chunk = 4194304LL;  // fetch at least this much around a read; a multiple of 4096
     public int followSeconds = 30;
     private bool online = true;  // whether the Drive answered last time
+    private long long due = 0LL;  // when the change feed is read next
     public Readers readers;
+    public Uploader uploader;
+    public Mirror following() { return self.mirror; }
+    public bool places(string declared) { return self.store.place(declared); }
     public string askCommand = "";  // run with a reader's key and label to ask a person; empty: nobody to ask
     public int askSeconds = 60;
     private Vector<EngineHeld> held = [];
     private Map<string, string> stopped = {};  // readers refused for lack of an answer: key -> label
+    public Vector<string> pins = [];  // folders kept downloaded, by their path in the tree
+    private Vector<string> wanted = [];  // ids of their files still to download
+    public long long piece = 33554432LL;  // how much of a pinned file is fetched between looks at the door
+    public bool paused = false;  // pinned folders are not being downloaded for now
+    public long long cacheBytes = 0LL;  // how much content outside pinned folders may stay downloaded; 0: all of it
+    public long long freeFloor = 0LL;  // give content back when the disk has less than this free
+    private long long fetched = 0LL;  // bytes downloaded since content was last given back
+    private long long evictDue = 0LL;
+    private string waitingFor = "";  // what was last said about volumes that are not here
+    private bool behind = false;  // more of the change feed is waiting to be read
 
     public Engine(DriveApi api, Store store, string socket) {
         self.api = api;
@@ -46,6 +63,8 @@ class Engine {
         self.mirror = Mirror(api, store);
         self.socket = socket;
         self.readers = Readers(store.temporary("../readers.json"));
+        self.uploader = Uploader(api, store);
+        self.mirror.uploader = self.uploader;
     }
 
     private string failed(string id) {
@@ -86,17 +105,121 @@ class Engine {
             if (end > last) { end = last; }
             if (!self.api.download(id, missing, end - 1LL, part)) { return self.failed(id); }
             StoreFile? fetched = StoreFile.open(part);
+            long long modified = file.modified();
             if (fetched == null || !file.fill(missing, fetched, end - missing)) { return self.broken(id, "what was fetched could not be stored"); }
+            file.setModified(modified);  // the Drive's time, not the time of the download
+            self.fetched += end - missing;
             at = end;
         }
         if (file.attribute("state").equals("cloud") && file.complete()) {
             if (!self.verified(file)) {
                 file.empty(size);  // not what the Drive holds: start over
+                self.due = 0LL;  // most likely the file changed on the Drive: read the feed now
                 return self.broken(id, "the downloaded file does not match the Drive's checksum");
             }
             file.setAttribute("state", "local");
+            file.setAttribute("synced", file.shape());
         }
         return "ok";
+    }
+
+    private string pinsFile() { return self.store.temporary("../pins"); }
+
+    public void loadPins() {  // the ones added by hand, beside the declared ones
+        for line in Strings.split(FileSystem.readText(self.pinsFile()), "\n") {
+            if (!line.trim().isEmpty() && !self.pins.contains(line.trim())) { self.pins.push(line.trim()); }
+        }
+    }
+
+    private bool pinned(string path) {
+        for pin in self.pins {
+            if (path.equals(pin) || path.startsWith(pin + "/")) { return true; }
+        }
+        return false;
+    }
+
+    private void want(string folder) {
+        for name in FileSystem.listDir(folder) {
+            string child = f"{folder}/{name}";
+            if (FileSystem.isSymlink(child)) { continue; }
+            if (FileSystem.isDir(child)) {
+                self.want(child);
+                continue;
+            }
+            StoreFile? held = StoreFile.open(child);
+            if (held != null && held.attribute("state").equals("cloud") && !held.attribute("id").isEmpty()) { self.wanted.push(held.attribute("id")); }
+        }
+    }
+
+    // Everything in the pinned folders that is not downloaded.
+    private void wantAll() {
+        self.wanted.clear();
+        self.store.fresh.clear();
+        for pin in self.pins {
+            if (!self.store.unavailable(pin) && FileSystem.isDir(self.store.real(pin))) { self.want(self.store.real(pin)); }
+        }
+    }
+
+    // Files the Drive just added or changed: the ones in pinned folders are downloaded too.
+    private void wantFresh() {
+        for id in self.store.fresh {
+            string path = self.store.filePath(id);
+            if (!path.isEmpty() && self.pinned(self.store.logical(path)) && !self.wanted.contains(id)) { self.wanted.push(id); }
+        }
+        self.store.fresh.clear();
+    }
+
+    // Fetch a piece of the next pinned file. False when there is nothing to do or the Drive cannot be reached.
+    private bool download() {
+        while (self.wanted.len > 0) {
+            string id = self.wanted.get(0);
+            StoreFile? file = self.store.file(id);
+            if (file == null || !file.attribute("state").equals("cloud")) {
+                self.wanted.remove(0);
+                continue;
+            }
+            long long missing = file.firstMissing(0LL);
+            file.close();
+            string outcome = self.fetch(id, missing < 0LL ? 0LL : missing, missing < 0LL ? 1LL : self.piece);
+            if (outcome.equals("error")) { self.wanted.remove(0); }  // said in the log; tried again when it next changes or the engine starts
+            return outcome.equals("ok");
+        }
+        return false;
+    }
+
+    // Give content back when there is more of it than allowed, or too little disk left: the files outside pinned
+    // folders that were opened longest ago, and never one that is open.
+    private string evict(bool now) {
+        if (self.cacheBytes <= 0LL && self.freeFloor <= 0LL && !now) { return "no limit is set"; }
+        long long free = StorePaths.freeBytes(self.store.tree());
+        long long lacking = self.freeFloor > 0LL && free >= 0LL && free < self.freeFloor ? self.freeFloor - free : 0LL;
+        if (!now && lacking == 0LL && (self.cacheBytes <= 0LL || self.fetched == 0LL)) { return "nothing to do"; }  // the walk is only worth it when something may have to go
+        self.fetched = 0LL;
+        Vector<string> kept = [];
+        long long total = 0LL;
+        for candidate in self.store.evictable() {
+            Vector<string> parts = Strings.split(candidate, "/");
+            string path = self.store.filePath(parts.get(2));
+            if (path.isEmpty() || self.pinned(self.store.logical(path))) { continue; }
+            kept.push(candidate);
+            total += parts.get(1).toLong();
+        }
+        long long excess = self.cacheBytes > 0LL && total > self.cacheBytes ? total - self.cacheBytes : 0LL;
+        if (now && self.cacheBytes <= 0LL) { excess = total; }
+        if (lacking > excess) { excess = lacking; }
+        int given = 0;
+        long long bytes = 0LL;
+        for candidate in kept {
+            if (bytes >= excess) { break; }
+            Vector<string> parts = Strings.split(candidate, "/");
+            StoreFile? file = self.store.file(parts.get(2), true);
+            if (file != null && file.evict()) {
+                given++;
+                bytes += parts.get(1).toLong();
+            }
+        }
+        if (given > 0) { Console.error(f"drive: gave back {given} files, {bytes} bytes"); }
+        return f"{given} files, {bytes} bytes";
     }
 
     // Whether a file's contents can be had now: "ok", or "offline" when the Drive cannot be reached.
@@ -133,8 +256,14 @@ class Engine {
             for waiting in self.held {
                 if (waiting.key.equals(who.key)) { asking = true; }
             }
+            // The command returns once the question is on its way to a person, or fails when nobody can be asked
+            // (no desktop session): then the read fails now instead of waiting for an answer that cannot come.
+            if (!asking && ChildProcess.run(self.askCommand, [who.key, who.label], timeoutMilliseconds=5000).code != 0) {
+                self.stopped.put(who.key, who.label);
+                self.refuse(door, words);
+                return;
+            }
             self.held.push(EngineHeld(who.key, message, MonotonicClock.milliseconds()));
-            if (!asking) { ChildProcess.run("setsid", ["--fork", self.askCommand, who.key, who.label]); }
         }
     }
 
@@ -161,7 +290,43 @@ class Engine {
 
     // One line from the command line: what it asks, and the answer.
     private string command(Channel? door, string message) {
+        Vector<string> fields = Strings.split(message, "\t");
+        if (fields.len == 4 && fields.get(0).equals("take")) { return self.store.take(fields.get(2), self.store.real(fields.get(3)), fields.get(1)) + "\n"; }
+        if (fields.len == 3 && fields.get(0).equals("bring")) {
+            string outcome = self.store.unavailable(fields.get(2)) ? "unavailable" : self.store.bring(fields.get(1), self.store.real(fields.get(2)));
+            if (outcome.equals("added")) { self.uploader.queue(fields.get(2)); }
+            return outcome + "\n";
+        }
+        if (fields.len == 2 && (fields.get(0).equals("pin") || fields.get(0).equals("unpin"))) {
+            string path = fields.get(1);
+            if (fields.get(0).equals("pin")) {
+                if (!FileSystem.isDir(self.store.real(path))) { return "that is not a folder in the Drive\n"; }
+                if (!self.pins.contains(path)) { self.pins.push(path); }
+            } else {
+                self.pins.removeAll(path);
+            }
+            Vector<string> byHand = [];
+            for line in Strings.split(FileSystem.readText(self.pinsFile()), "\n") {
+                if (!line.trim().isEmpty() && !line.trim().equals(path)) { byHand.push(line.trim()); }
+            }
+            if (fields.get(0).equals("pin")) { byHand.push(path); }
+            Path.writeAll(self.pinsFile(), byHand.len == 0 ? "" : Strings.join(byHand, "\n") + "\n");
+            self.wantAll();
+            return "ok\n";
+        }
+        if (fields.len == 2 && fields.get(0).equals("place")) {
+            string outcome = "";
+            try { outcome = self.store.transplant(fields.get(1)); } catch (string error) { outcome = error; }
+            self.wantAll();
+            return outcome + "\n";
+        }
         Vector<string> words = Strings.split(message, " ");
+        if (words.len == 1 && words.get(0).equals("pins")) { return self.pins.len == 0 ? "\n" : Strings.join(self.pins.sorted(), "\n") + "\n"; }
+        if (words.len == 1 && (words.get(0).equals("pause") || words.get(0).equals("unpause"))) {
+            self.paused = words.get(0).equals("pause");
+            return "ok\n";
+        }
+        if (words.len == 1 && words.get(0).equals("evict")) { return self.evict(true) + "\n"; }
         if (words.len >= 3 && words.get(0).equals("answer")) {
             string key = Strings.join(words.slice(2, words.len), " ");
             if (!self.readers.decide(key, words.get(1))) { return "unknown decision\n"; }
@@ -177,14 +342,39 @@ class Engine {
             for key in self.stopped.keys().sorted() { lines.push(f"stopped {key}"); }
             return Strings.join(lines, "\n") + "\n";
         }
-        if (words.len == 1 && words.get(0).equals("status")) { return f"{self.online ? "online" : "offline"}, door {door != null && door.isOpen() ? "connected" : "absent"}, {self.store.folderCount()} folders, {self.held.len} waiting\n"; }
+        if (words.len == 1 && words.get(0).equals("changed")) {  // something changed on the Drive: read the feed now
+            self.due = 0LL;
+            return "ok\n";
+        }
+        if (words.len == 1 && words.get(0).equals("resume")) {  // the waiting deletions may go, in both directions
+            self.uploader.resume();
+            self.mirror.allowDeletions = true;
+            self.due = 0LL;
+            return "ok\n";
+        }
+        if (words.len == 1 && words.get(0).equals("status")) {
+            Vector<string> missing = self.store.missing();
+            return f"{self.online ? "online" : "offline"}, door {door != null && door.isOpen() ? "connected" : "absent"}, {self.store.folderCount()} folders, {self.held.len} waiting, {self.uploader.waiting()} changes to send{self.behind ? " (catching up with the Drive)" : ""}, {self.wanted.len} to download{self.paused ? " (paused)" : ""}{self.uploader.braked || self.mirror.braked ? ", deletions held" : ""}{missing.len > 0 ? ", waiting for the volume of " + Strings.join(missing, ", ") : ""}\n";
+        }
         return "unknown command\n";
     }
 
     private bool current() {  // the tree as the Drive is now; false when the Drive cannot be reached
         try {
-            if (self.store.position().isEmpty()) { self.mirror.build(); }
-            bool reached = self.mirror.follow();
+            if (self.store.position().isEmpty()) {
+                self.mirror.build();
+                self.store.attend();
+            }
+            string missing = Strings.join(self.store.missing(), ", ");
+            if (!missing.equals(self.waitingFor)) {
+                Console.error(missing.isEmpty() ? "drive: every volume is here" : f"drive: waiting for the volume of {missing}; changes from the Drive are held until it is back");
+                self.waitingFor = missing;
+            }
+            if (!missing.isEmpty()) { return self.online; }  // what the Drive says of that folder could not be applied, and must not be skipped
+            int more = self.mirror.step();  // one page at a time: the door is answered between pages, however far behind the store is
+            bool reached = more != -1;
+            self.behind = more == 1;
+            self.wantFresh();
             if (reached != self.online) {
                 DriveError? failure = self.api.failure;
                 Console.error(reached ? "drive: the Drive answers again" : f"drive: the Drive cannot be reached: {failure == null ? "no reason given" : failure.describe()}");
@@ -201,19 +391,25 @@ class Engine {
 
     public void run() {
         self.store.scan();
+        self.loadPins();
+        self.wantAll();
         Channel? control = Channel.listen(self.socket.replace("door.sock", "engine.sock"));
         if (control == null) { throw "Cannot listen for commands"; }
         Channel listener = control;
         Channel? door = null;
-        long long due = 0LL;
         while (true) {
             if (door == null || !door.isOpen()) { door = Channel.connect(self.socket); }
-            if (MonotonicClock.milliseconds() >= due) {
-                self.current();
-                due = MonotonicClock.milliseconds() + (long long)self.followSeconds * 1000LL;
+            if (self.store.attend()) {  // a volume came or went
+                self.wantAll();
+                self.due = 0LL;
             }
-            long long wait = due - MonotonicClock.milliseconds();
-            int ready = Channel.wait(door == null ? -1 : door.handle(), listener.handle(), -1, door == null ? 500 : wait < 0LL ? 0 : wait > 1000LL ? 1000 : (int)wait);
+            if (MonotonicClock.milliseconds() >= self.due) {
+                self.current();
+                self.due = self.behind ? 0LL : MonotonicClock.milliseconds() + (long long)self.followSeconds * 1000LL;
+            }
+            long long wait = self.due - MonotonicClock.milliseconds();
+            bool busy = self.online && !self.paused && self.wanted.len > 0;  // pinned files to fetch: only look, do not wait
+            int ready = Channel.wait(door == null ? -1 : door.handle(), listener.handle(), -1, busy ? 0 : door == null ? 500 : wait < 0LL ? 0 : wait > 1000LL ? 1000 : (int)wait);
             if ((ready & 1) != 0 && door != null) {
                 while (door.isOpen()) {
                     string message = door.receive();
@@ -231,6 +427,17 @@ class Engine {
                 }
             }
             if (self.held.len > 0) { self.settle(door, "", true); }
+            self.uploader.collect();
+            if (self.online) { self.uploader.work(); }
+            if (self.uploader.offline) {
+                self.uploader.offline = false;
+                self.online = false;  // tried again when the feed is next read
+            }
+            if (busy && ready == 0) { self.download(); }
+            if (MonotonicClock.milliseconds() >= self.evictDue) {
+                self.evict(false);
+                self.evictDue = MonotonicClock.milliseconds() + 30000LL;
+            }
         }
     }
 }

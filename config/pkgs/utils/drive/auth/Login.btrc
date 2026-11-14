@@ -1,6 +1,6 @@
 import Library.Bytes;
 import Library.Console;
-import Library.Crypto;
+import Library.Crypto.Base64;
 import Library.Digest;
 import Library.HTTP;
 import Library.IO;

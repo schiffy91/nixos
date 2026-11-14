@@ -215,6 +215,17 @@ class DriveApi {
         return listing;
     }
 
+    public DriveListing? folders(string parent) {  // the folders directly inside one folder
+        JSONValue? answer = self.call("GET", f"{self.files()}?pageSize=1000&q={HTTPUrl.encode("'" + parent + "' in parents and mimeType = '" + DriveFile.folderType() + "' and trashed = false")}&fields={HTTPUrl.encode("files(" + DriveFile.fields() + ")")}");
+        if (answer == null) { return null; }
+        DriveListing listing = DriveListing();
+        for value in answer.get("files").elements() {
+            DriveFile? file = DriveFile.parse(value);
+            if (file != null) { listing.files.push(file); }
+        }
+        return listing;
+    }
+
     public string? startToken() {
         JSONValue? answer = self.call("GET", f"{self.apiBase}/drive/v3/changes/startPageToken");
         return answer == null ? null : answer.get("startPageToken").asString();

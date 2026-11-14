@@ -1,0 +1,59 @@
+import ../../lib/Check.btrc;
+import ../../../config/pkgs/utils/drive/engine/Planner.btrc;
+
+// Every sync rule as a table: what each side did since they last agreed, and what must happen.
+class PlannerContract {
+    class string name(PlanAction action) {
+        if (action == PLAN_NOTHING) { return "nothing"; }
+        if (action == PLAN_UPLOAD_NEW) { return "upload as new"; }
+        if (action == PLAN_UPLOAD) { return "upload"; }
+        if (action == PLAN_TAKE_REMOTE) { return "take the Drive's"; }
+        if (action == PLAN_KEEP_BOTH) { return "keep both"; }
+        if (action == PLAN_TRASH_REMOTE) { return "trash on the Drive"; }
+        if (action == PLAN_TRASH_LOCAL) { return "trash here"; }
+        return "restore from the Drive";
+    }
+
+    class void rule(PlanSide local, PlanSide remote, string expected, string what) { Check.equal(PlannerContract.name(Planner.decide(local, remote)), expected, what); }
+
+    class void run() {
+        PlannerContract.rule(SIDE_ABSENT, SIDE_ABSENT, "nothing", "nothing anywhere");
+        PlannerContract.rule(SIDE_CHANGED, SIDE_ABSENT, "upload as new", "a file made here");
+        PlannerContract.rule(SIDE_SAME, SIDE_ABSENT, "upload as new", "a file here the Drive has never had");
+        PlannerContract.rule(SIDE_DELETED, SIDE_ABSENT, "nothing", "made and deleted here before the Drive saw it");
+        PlannerContract.rule(SIDE_ABSENT, SIDE_CHANGED, "take the Drive's", "a file made on the Drive");
+        PlannerContract.rule(SIDE_ABSENT, SIDE_SAME, "take the Drive's", "a file on the Drive this machine has never had");
+        PlannerContract.rule(SIDE_ABSENT, SIDE_DELETED, "nothing", "made and deleted on the Drive before this machine saw it");
+        PlannerContract.rule(SIDE_SAME, SIDE_SAME, "nothing", "nothing changed");
+        PlannerContract.rule(SIDE_SAME, SIDE_CHANGED, "take the Drive's", "changed only on the Drive");
+        PlannerContract.rule(SIDE_CHANGED, SIDE_SAME, "upload", "changed only here");
+        PlannerContract.rule(SIDE_CHANGED, SIDE_CHANGED, "keep both", "changed on both sides: neither is overwritten");
+        PlannerContract.rule(SIDE_DELETED, SIDE_SAME, "trash on the Drive", "deleted here");
+        PlannerContract.rule(SIDE_SAME, SIDE_DELETED, "trash here", "deleted on the Drive");
+        PlannerContract.rule(SIDE_DELETED, SIDE_CHANGED, "restore from the Drive", "deleted here but changed on the Drive: the change wins");
+        PlannerContract.rule(SIDE_CHANGED, SIDE_DELETED, "upload as new", "changed here but deleted on the Drive: the change wins");
+        PlannerContract.rule(SIDE_DELETED, SIDE_DELETED, "nothing", "deleted on both sides");
+
+        Check.that(!Planner.tooManyDeletions(3, 1000, 50, 10), "a few deletions go through");
+        Check.that(Planner.tooManyDeletions(51, 100000, 50, 10), "more deletions than the limit stop");
+        Check.that(Planner.tooManyDeletions(30, 200, 50, 10), "a large share of a small tree stops");
+        Check.that(!Planner.tooManyDeletions(3, 4, 50, 10), "a handful is never a large share");
+        Check.that(!Planner.tooManyDeletions(5000, 6000, 0, 10), "a limit of zero means no brake");
+
+        Check.equal(Planner.conflictName("notes.txt", "FRACTAL-NORTH", "2026-11-13"), "notes (conflict FRACTAL-NORTH 2026-11-13).txt", "a conflict name keeps the extension");
+        Check.equal(Planner.conflictName("Makefile", "DECK", "2026-11-13"), "Makefile (conflict DECK 2026-11-13)", "a name without an extension gets the note at the end");
+        Check.equal(Planner.conflictName(".hidden", "DECK", "2026-11-13"), ".hidden (conflict DECK 2026-11-13)", "a leading dot is not an extension");
+    }
+}
+
+int main() {
+    try {
+        PlannerContract.run();
+        print("PASS: the sync rules");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

@@ -1,0 +1,84 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// Two machines on one Drive, both changing files at once: they must end with the same tree, the Drive with it too,
+// and nothing either of them wrote in its own folder may be missing.
+class ConvergenceScenario {
+    private Guest machine;
+    private DriveFixture one;
+    private DriveFixture two;
+
+    public ConvergenceScenario(Guest machine) {
+        self.machine = machine;
+        self.one = DriveFixture(machine);
+        self.two = DriveFixture(machine);
+        self.two.store = "/var/lib/drive-test/second/store";
+        self.two.mount = "/mnt/drive-second";
+        self.two.runtime = "/run/drive-second";
+        self.two.unit = "second";
+    }
+
+    private string listing(string root) { return self.machine.succeed(f"cd {root} && find . -type f -exec sha256sum {{}} + | sort -k2"); }
+
+    private string quiet(DriveFixture client) { return f"drive status --runtime {client.runtime} | grep -q ' 0 changes to send'"; }
+
+    public void check() {
+        self.one.prepare();
+        self.two.prepare();
+        self.one.startFake();
+        string options = "--quiet 1 --machine ONE --delete-limit 0 --budget-files 0";
+        self.one.startEngine(options);
+        self.one.startDoor();
+        self.two.startEngine(options.replace("ONE", "TWO"));
+        self.two.startDoor();
+
+        for seed in ["20261113", "7", "424242"] {
+            print(f"Two clients change the same Drive at random, seed {seed}");
+            self.machine.succeed(f"python3 /etc/drive-test/operations.py {seed} 120 {self.one.mount} {self.two.mount} /tmp/expected", 600);
+            self.agree();
+        }
+    }
+
+    private void agree() {
+        print("They settle on one tree");
+        string settled = f"{self.quiet(self.one)} && {self.quiet(self.two)} && [ \"$(cd {self.one.mount} && find . -type f -exec sha256sum {{}} + | sort -k2 | sha256sum)\" = \"$(cd {self.two.mount} && find . -type f -exec sha256sum {{}} + | sort -k2 | sha256sum)\" ]";
+        try {
+            self.machine.waitUntil(f"{settled} && sleep 5 && {settled}", 240);
+        } catch (string error) {
+            print(self.machine.succeed(f"drive status --runtime {self.one.runtime}; drive status --runtime {self.two.runtime}; cd {self.one.mount} && find . -type f -exec sha256sum {{}} + | sort -k2 > /tmp/one.list; cd {self.two.mount} && find . -type f -exec sha256sum {{}} + | sort -k2 > /tmp/two.list; diff /tmp/one.list /tmp/two.list | head -30 || true"));
+            print(self.machine.succeed(f"journalctl -u drive-engine.service -u second-engine.service --no-pager | grep 'drive:' | tail -30 || true; echo ---; cat {self.one.store}/dirty/work 2>/dev/null | head -20 || true; echo ---; cat {self.two.store}/dirty/work 2>/dev/null | head -20 || true"));
+            throw error;
+        }
+        string first = self.listing(self.one.mount);
+        Check.equal(first, self.listing(self.two.mount), "both mounts hold the same files with the same contents");
+        Check.that(first.contains("only-a-") && first.contains("only-b-") && first.contains("shared-"), "and it is not an empty agreement");
+
+        print("The Drive holds the same tree");
+        self.machine.succeed(f"curl -sS -X POST '{self.one.fake}/__control/dump' > /tmp/dump.json && python3 /etc/drive-test/tree.py < /tmp/dump.json > /tmp/remote.list");
+        self.machine.succeed(f"cd {self.one.mount} && find . -type f -exec sha256sum {{}} + | sed 's|  \\./| |' | LC_ALL=C sort -k2 > /tmp/local.list; LC_ALL=C sort -k2 -o /tmp/remote.list /tmp/remote.list");
+        string difference = self.machine.succeed("diff /tmp/remote.list /tmp/local.list | cut -c1-12,60-160 || true");
+        if (!difference.isEmpty()) {
+            print(difference);
+            print(self.machine.succeed("python3 -c 'import json; [print(e[\"id\"], (e.get(\"parents\") or [\"-\"])[0], e[\"trashed\"], e[\"name\"]) for e in json.load(open(\"/tmp/dump.json\"))]' | grep -v ' True ' | head -80; for s in /var/lib/drive-test/store /var/lib/drive-test/second/store; do cd $s/tree; find shared-* -type f | while read f; do echo \"$f $(getfattr --absolute-names -n user.drive.id --only-values \"$f\" 2>/dev/null)\"; done; done"));
+        }
+        Check.equal(difference, "", "what is on the Drive is what is on both machines");
+
+        print("Nothing a machine wrote in its own folder is missing or different");
+        Check.equal(self.machine.succeed(f"cd {self.one.mount} && find only-* -type f -exec sha256sum {{}} + | awk '{{print $2, $1}}' | sort"), self.machine.succeed("sort /tmp/expected"), "each side's own folder ends exactly as that side left it");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        ConvergenceScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: two clients converge and lose nothing");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

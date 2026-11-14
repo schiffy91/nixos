@@ -1,0 +1,89 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// The units the NixOS module generates: the Drive is mounted for the user at boot, the two services recover from
+// being killed, and after a restart with no network the whole tree is still there.
+class ModuleScenario {
+    private DriveFixture drive;
+    private Guest machine;
+    private string mount = "/fixture/user/Drive";
+    private string store = "/var/lib/drive/fixture";
+
+    public ModuleScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+        self.drive.store = self.store;
+        self.drive.mount = self.mount;
+        self.drive.runtime = "/run/drive";
+    }
+
+    private string asUser(string command) { return self.machine.succeed(f"su - fixture -c \"{command}\""); }
+
+    public void check() {
+        self.drive.mount = "/tmp/not-the-mount";  // the real one is the user's alone: root cannot even look at it
+        self.drive.prepare();
+        self.drive.mount = self.mount;
+        for name in ["a", "p"] { self.machine.succeed(f"head -c 100000 /dev/urandom > {self.drive.source}/{name}"); }
+        self.drive.startFake();
+        string docs = self.drive.folder("root", "Docs");
+        self.drive.put(docs, "a.bin", "a");
+        self.drive.put(self.drive.folder("root", "Pinned"), "p.bin", "p");
+
+        print("The door is up from boot, as the user, with one capability");
+        try {
+            self.machine.waitUntil(f"systemctl is-active --quiet drive-door.service && su - fixture -c 'mountpoint -q {self.mount}'", 60);
+        } catch (string error) {
+            print(self.machine.succeed("systemctl status drive-door.service 2>&1 | head -30 || true; journalctl -u drive-door.service --no-pager 2>&1 | tail -30 || true"));
+            throw error;
+        }
+        Check.equal(self.machine.succeed("systemctl show -p ActiveState --value drive-engine.service").trim(), "inactive", "the engine waits for a sign-in");
+        Check.equal(self.machine.succeed("ps -o user= -p $(systemctl show -p MainPID --value drive-door.service)").trim(), "fixture", "the door runs as the user");
+        Check.that(self.machine.succeed("getpcaps $(systemctl show -p MainPID --value drive-door.service) 2>&1").contains("cap_sys_admin") && !self.machine.succeed("getpcaps $(systemctl show -p MainPID --value drive-door.service) 2>&1").contains("cap_dac"), "holding only what mounting needs");
+
+        print("After a sign-in the engine fills the tree and keeps the pinned folder");
+        self.machine.succeed("install -d -o fixture -g users -m 700 /fixture/user/.config/drive && install -o fixture -g users -m 600 /var/lib/drive-test/credentials.json /fixture/user/.config/drive/credentials.json");
+        self.machine.succeed("systemctl start drive-engine.service");
+        self.machine.waitUntil(f"su - fixture -c 'test -e {self.mount}/Docs/a.bin && drive status' | grep -q ' 0 to download'");
+        Check.equal(self.asUser(f"cmp {self.mount}/Docs/a.bin {self.drive.source}/a && echo same").trim(), "same", "the user reads a file that was not downloaded");
+        Check.equal(self.machine.succeed(f"getfattr --absolute-names -n user.drive.state --only-values {self.store}/tree/Pinned/p.bin"), "local", "the declared pin is downloaded");
+        Check.that(self.asUser("drive pins").contains("Pinned"), "the command line reaches the engine without options");
+        self.asUser(f"echo mine > {self.mount}/Docs/note.txt");
+        Check.equal(self.machine.succeed(f"stat -c %U {self.store}/tree/Docs/note.txt").trim(), "fixture", "what the user makes is the user's");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py note.txt | grep -q ' False$'");
+        Check.that(self.machine.fail(f"ls {self.mount} 2>&1").contains("denied"), "the mount is the user's alone: even root is refused");
+        Check.equal(self.machine.succeed(f"stat -c %a {self.store}").trim(), "700", "the store is closed to everyone else");
+
+        print("Either service can be killed and comes back");
+        self.machine.succeed("systemctl kill --signal=KILL drive-engine.service");
+        self.machine.waitUntil("su - fixture -c 'drive status' 2>/dev/null | grep -q 'door connected'");
+        self.machine.succeed("systemctl kill --signal=KILL drive-door.service");
+        self.machine.waitUntil(f"su - fixture -c 'mountpoint -q {self.mount} && cmp -s {self.mount}/Pinned/p.bin {self.drive.source}/p'");
+        self.machine.waitUntil("su - fixture -c 'drive status' 2>/dev/null | grep -q 'door connected'");
+
+        print("After a restart with no network the tree is there");
+        self.machine.reboot();
+        self.machine.waitForShutdown();
+        self.machine.start();
+        self.machine.waitForUnit("drive-door.service");
+        self.machine.waitUntil(f"su - fixture -c 'mountpoint -q {self.mount} && test -e {self.mount}/Docs/note.txt'");
+        Check.equal(self.asUser(f"cmp {self.mount}/Pinned/p.bin {self.drive.source}/p && cat {self.mount}/Docs/note.txt").trim(), "mine", "pinned and written files are there with their contents");
+        self.machine.waitUntil("systemctl is-active --quiet drive-engine.service && su - fixture -c 'drive status' 2>/dev/null | grep -q 'door connected'");  // it starts once the network target is reached, with or without a network
+        Check.that(self.asUser("drive status").contains("offline"), "the engine says it cannot reach the Drive");
+        self.asUser(f"cmp {self.mount}/Docs/a.bin {self.drive.source}/a");  // downloaded before the restart
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        ModuleScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: the module's units serve the Drive from boot and recover");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

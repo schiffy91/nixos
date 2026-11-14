@@ -21,7 +21,16 @@ class StoreFile {
         return descriptor < 0 ? null : StoreFile(descriptor);
     }
 
+    // The same, opened the way a program asked for: to write, to append, emptied.
+    class StoreFile? reopenAs(int pathDescriptor, int flags) {
+        int descriptor = driveReopenFlags(pathDescriptor, flags);
+        return descriptor < 0 ? null : StoreFile(descriptor);
+    }
+
     public int handle() { return self.descriptor; }
+
+    // The size and time as one value: what a file looked like when both sides last agreed on it.
+    public string shape() { return f"{self.size()}:{self.modified()}"; }
 
     // Give the descriptor to someone who will close it.
     public int detach() {
@@ -77,6 +86,19 @@ class StoreFile {
         return driveInspect(self.descriptor, &status) == 0 ? (long long)status.modified * 1000LL + (long long)status.modifiedNanoseconds / 1000000LL : -1LL;
     }
 
+    public long long accessed() {  // seconds
+        struct DriveStatus status;
+        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.accessed : -1LL;
+    }
+
+    public bool setAccessed(long long seconds) { return driveSetAccessed(self.descriptor, (long)seconds) == 0; }
+
+    // Give back the file's blocks and mark it not downloaded. False, and nothing done, while anything has it open.
+    public bool evict() { return driveEvict(self.descriptor) == 0; }
+
+    // Take `source`'s contents without copying them, where the filesystem can share blocks.
+    public bool cloneFrom(StoreFile source) { return driveClone(self.descriptor, source.handle()) == 0; }
+
     public bool resize(long long size) { return driveResize(self.descriptor, (long)size) == 0; }
 
     public bool setModified(long long milliseconds) { return driveSetModified(self.descriptor, (long)(milliseconds / 1000LL), (long)(milliseconds % 1000LL) * 1000000L) == 0; }
@@ -119,11 +141,15 @@ class StoreFile {
 }
 
 class StorePaths {  // the calls on paths the store needs
+    class bool append(string path, string line) { return driveAppend(path, line + "\n") == 0; }
+
     class Bytes contents(string path) {  // a small file that does not say how long it is
         unsigned char buffer[8192];
         long length = driveReadAll(path, buffer, 8192UL);
         return length <= 0L ? Bytes() : Bytes.fromRaw((char*)buffer, (int)length);
     }
+
+    class long long freeBytes(string path) { return (long long)driveFreeBytes(path); }
 
     class bool link(string existing, string created) { return driveLink(existing, created) == 0; }
 

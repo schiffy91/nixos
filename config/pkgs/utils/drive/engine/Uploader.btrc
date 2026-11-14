@@ -1,0 +1,337 @@
+import Library.Console;
+import Library.DateTime;
+import Library.FileSystem;
+import Library.IO;
+import Library.Map;
+import Library.Strings;
+import Library.Timer;
+import Library.Vector;
+
+import ../remote/DriveApi.btrc;
+import ../remote/DriveFile.btrc;
+import ../store/Store.btrc;
+import ../store/StoreFile.btrc;
+import ./Planner.btrc;
+
+#include <time.h>
+
+// Sends what changed here to the Drive. The door writes each change to the journal before it happens; this reads
+// the journal, waits until a file has been quiet for a moment, and does what the planner says.
+class Uploader {
+    private DriveApi api;
+    private Store store;
+    private Vector<string> paths = [];  // tree-relative, still to look at
+    private Map<string, bool> listed = {};  // the same paths, to find one quickly
+    private bool unsorted = false;
+    private Vector<string> later = [];  // looked at this round and not finished
+    private Vector<string> removals = [];  // Drive ids deleted here
+    private bool allowed = false;  // a person said the waiting deletions may go
+    public string machine = "this-machine";
+    public Vector<string> ignored = [];  // names kept here and never sent: "*.part", ".~lock.*", an exact name
+    public int quietSeconds = 5;
+    public int deleteLimit = 50;  // 0: no brake
+    public int deletePercent = 10;
+    public bool overwriteConflicts = false;  // the conflict rule switched off: the last writer wins
+    public bool braked = false;
+    public int uploaded = 0;
+    public int conflicts = 0;
+    public int trashed = 0;
+
+    public Uploader(DriveApi api, Store store) {
+        self.api = api;
+        self.store = store;
+    }
+
+    private void add(string path) {
+        if (self.listed.has(path)) { return; }
+        self.listed.put(path, true);
+        self.paths.push(path);
+        self.unsorted = true;
+    }
+
+    public void queue(string path) {  // look at this path in the tree
+        self.add(path);
+        self.remember();
+    }
+
+    public int waiting() { return self.paths.len + self.later.len + self.removals.len; }
+
+    public void resume() {
+        self.allowed = true;
+        self.braked = false;
+    }
+
+    private void take(string line) {
+        int space = line.indexOf(" ");
+        if (space <= 0) { return; }
+        string kind = line.substring(0, space);
+        string subject = line.substring(space + 1, line.len() - space - 1);
+        if (kind.equals("removed")) {
+            if (!self.removals.contains(subject)) { self.removals.push(subject); }
+        } else if (!subject.isEmpty()) {
+            self.add(subject);
+        }
+    }
+
+    private Vector<string> renamed(Vector<string> paths, string from, string to) {
+        Vector<string> result = [];
+        for path in paths {
+            if (path.equals(from)) { result.push(to); }
+            else if (path.startsWith(from + "/")) { result.push(to + path.substring(from.len(), path.len() - from.len())); }
+            else { result.push(path); }
+        }
+        return result;
+    }
+
+    // The store renames entries (a change from the Drive, or two entries of one name): follow them.
+    private void follow() {
+        if (self.store.renamedFrom.len == 0) { return; }
+        for (int index = 0; index < self.store.renamedFrom.len; index++) {
+            self.paths = self.renamed(self.paths, self.store.renamedFrom.get(index), self.store.renamedTo.get(index));
+            self.later = self.renamed(self.later, self.store.renamedFrom.get(index), self.store.renamedTo.get(index));
+        }
+        self.store.renamedFrom.clear();
+        self.store.renamedTo.clear();
+        self.listed.clear();
+        for path in self.paths { self.listed.put(path, true); }
+        self.unsorted = true;
+    }
+
+    private void remember() {  // what is still to do, kept where a restart finds it
+        Vector<string> lines = [];
+        for path in self.paths { lines.push(f"changed {path}"); }
+        for id in self.removals { lines.push(f"removed {id}"); }
+        string work = self.store.journal("work");
+        if (lines.len == 0) {
+            StorePaths.remove(work);
+            return;
+        }
+        string staged = self.store.journal("work.new");
+        if (Path.writeAll(staged, Strings.join(lines, "\n") + "\n")) { StorePaths.rename(staged, work); }
+    }
+
+    // Read what the door has written since last time.
+    public void collect() {
+        self.follow();
+        if (self.waiting() == 0 && FileSystem.exists(self.store.journal("work"))) {  // left by an engine that stopped
+            for line in Strings.split(FileSystem.readText(self.store.journal("work")), "\n") { self.take(line.trim()); }
+        }
+        string taken = self.store.journal("taken");
+        if (!FileSystem.exists(taken) && !StorePaths.rename(self.store.journal("journal"), taken)) { return; }
+        for line in Strings.split(FileSystem.readText(taken), "\n") { self.take(line.trim()); }
+        self.remember();
+        StorePaths.remove(taken);
+    }
+
+    public bool offline = false;  // the last attempt could not reach the Drive
+
+    private bool fails(string what) {
+        DriveError? failure = self.api.failure;
+        if (failure != null && !failure.transient()) { Console.error(f"drive: {what}: {failure.describe()}"); }
+        else { self.offline = true; }
+        return false;
+    }
+
+    private bool missing() {
+        DriveError? failure = self.api.failure;
+        return failure != null && failure.kind == DRIVE_NOT_FOUND;
+    }
+
+    private string folderId(string full) {
+        StoreFile? folder = StoreFile.open(full);
+        return folder == null ? "" : folder.attribute("id");
+    }
+
+    private void detach(StoreFile held) {  // the file stops being the Drive's file of that id
+        self.store.unlink(held.attribute("id"));
+        for name in ["id", "revision", "version", "sha256", "synced", "parent", "name"] { held.removeAttribute(name); }
+    }
+
+    // Both sides changed the file: this one gets a name of its own and goes up as new; the Drive's keeps the name.
+    private void conflict(string path, DriveFile remote) {
+        string full = self.store.real(path);
+        StoreFile? held = StoreFile.open(full);
+        if (held == null) { return; }
+        string folder = PathTools.dirname(path);
+        string date = DateTime.fromUnix((long long)time(NULL)).dateString();
+        string name = Planner.conflictName(PathTools.basename(path), self.machine, date);
+        string kept = folder.isEmpty() || folder.equals(".") ? name : f"{folder}/{name}";
+        for (int number = 2; FileSystem.exists(self.store.real(kept)) || FileSystem.isSymlink(self.store.real(kept)); number++) {  // a second conflict on one day must not replace the first
+            name = Planner.conflictName(PathTools.basename(path), self.machine, f"{date} {number}");
+            kept = folder.isEmpty() || folder.equals(".") ? name : f"{folder}/{name}";
+        }
+        self.detach(held);
+        if (!StorePaths.rename(full, self.store.real(kept))) { throw f"Cannot set {path} aside as {kept}"; }
+        self.store.add(remote);
+        self.add(kept);
+        self.conflicts++;
+    }
+
+    // The same for a change that arrives from the Drive while the file here has changes waiting.
+    public void collide(string id, DriveFile remote) {
+        string path = self.store.filePath(id);
+        if (path.isEmpty()) { return; }
+        self.conflict(self.store.logical(path), remote);
+    }
+
+    private bool matches(string name, string pattern) {
+        if (pattern.startsWith("*")) { return name.endsWith(pattern.substring(1, pattern.len() - 1)); }
+        if (pattern.endsWith("*")) { return name.startsWith(pattern.substring(0, pattern.len() - 1)); }
+        return name.equals(pattern);
+    }
+
+    // Whether a path is, or is inside, something that stays on this machine: the names programs give their
+    // unfinished and scratch files. They are sent once they are renamed to a real name.
+    public bool local(string path) {
+        for name in Strings.split(path, "/") {
+            for pattern in self.ignored {
+                if (self.matches(name, pattern)) { return true; }
+            }
+        }
+        return false;
+    }
+
+    // Bring the Drive in line with one entry. True when there is nothing more to do for it.
+    private bool sync(string path) {
+        if (self.local(path)) { return true; }
+        if (self.store.unavailable(path)) { return false; }  // on a volume that is not here: it waits
+        string full = self.store.real(path);
+        if (FileSystem.isSymlink(full) || !FileSystem.exists(full)) { return true; }
+        StoreFile? opened = StoreFile.open(full);
+        if (opened == null) { return true; }
+        StoreFile held = opened;
+        string above = PathTools.dirname(path);
+        if (above.equals(".")) { above = ""; }
+        string parentFull = self.store.real(above);
+        string parent = self.folderId(parentFull);
+        if (parent.isEmpty()) {  // the folder it is in is new too
+            if (above.isEmpty() || !self.sync(above)) { return false; }
+            parent = self.folderId(parentFull);
+            if (parent.isEmpty()) { return false; }
+        }
+        string local = PathTools.basename(path);
+        string name = local.replace("∕", "/");
+        string id = held.attribute("id");
+        bool folder = FileSystem.isDir(full);
+        if (id.isEmpty() && folder) {
+            DriveFile? made = self.api.createFolder(parent, name);
+            if (made == null) { return self.fails(f"making the folder {path}"); }
+            self.store.adopt(full, made, local);
+            return true;
+        }
+        if (!folder && (long long)time(NULL) * 1000LL - held.modified() < (long long)self.quietSeconds * 1000LL) { return false; }  // still being written
+        if (id.isEmpty()) {
+            string before = held.shape();
+            DriveFile? sent = self.api.upload("", parent, name, full, held.modified());
+            if (sent == null) { return self.fails(f"uploading {path}"); }
+            self.store.adopt(full, sent, local);
+            held.setAttribute("synced", before);  // a write during the upload shows as a change next time
+            self.uploaded++;
+            return before.equals(held.shape());
+        }
+        if (!held.attribute("parent").equals(parent) || !held.attribute("local").equals(local)) {
+            DrivePatch patch = DrivePatch();
+            patch.name = name;
+            if (!folder) { patch.modified = held.modified(); }  // the Drive would stamp the move as a modification; the file's own time is kept
+            if (!held.attribute("parent").equals(parent)) {
+                patch.addParent = parent;
+                patch.removeParent = held.attribute("parent");
+            }
+            DriveFile? moved = self.api.update(id, patch);
+            if (moved == null) { return self.fails(f"moving {path}"); }
+            string left = self.store.folderPath(held.attribute("parent"));
+            held.setAttribute("parent", parent);
+            held.setAttribute("name", name);
+            held.setAttribute("local", local);
+            held.setAttribute("version", f"{moved.version}");
+            if (folder) { self.store.relocated(id, self.store.folderPath(id), full); }
+            int renames = self.store.renamedFrom.len;
+            if (!left.isEmpty() && FileSystem.isDir(left)) { self.store.settle(left); }
+            self.store.settle(parentFull);
+            if (self.store.renamedFrom.len != renames) { return false; }  // names changed under this path: look again
+            if (!folder && !moved.revision.equals(held.attribute("revision")) && !self.store.changedHere(id)) {  // new content arrived while the move was waiting
+                self.store.update(moved);
+                return true;
+            }
+        }
+        if (folder || !held.attribute("state").equals("local") || held.attribute("synced").equals(held.shape())) { return true; }
+        DriveFile? remote = self.api.file(id);
+        if (remote == null && !self.missing()) { return self.fails(f"looking at {path} on the Drive"); }
+        PlanSide theirs = remote == null || remote.trashed ? SIDE_DELETED : remote.revision.equals(held.attribute("revision")) ? SIDE_SAME : SIDE_CHANGED;
+        PlanAction action = Planner.decide(SIDE_CHANGED, theirs);
+        if (action == PLAN_KEEP_BOTH && self.overwriteConflicts) { action = PLAN_UPLOAD; }
+        if (action == PLAN_UPLOAD_NEW) {  // deleted on the Drive, changed here: the change is kept as a new file
+            self.detach(held);
+            return self.sync(path);
+        }
+        if (action == PLAN_KEEP_BOTH && remote != null) {
+            self.conflict(path, remote);
+            return true;
+        }
+        string before = held.shape();
+        DriveFile? sent = self.api.upload(id, "", "", self.store.contents(id), held.modified());
+        if (sent == null) { return self.fails(f"uploading {path}"); }
+        held.setAttribute("revision", sent.revision);
+        held.setAttribute("version", f"{sent.version}");
+        held.setAttribute("sha256", sent.sha256);
+        held.setAttribute("synced", before);
+        self.uploaded++;
+        return before.equals(held.shape());
+    }
+
+    // Trash on the Drive what was deleted here. True when there is nothing more to do for it.
+    private bool remove(string id) {
+        string kept = self.store.trashed(id);
+        StoreFile? held = StoreFile.open(kept);
+        DriveFile? remote = self.api.file(id);
+        if (remote == null && !self.missing()) { return self.fails(f"looking at a deleted entry on the Drive"); }
+        bool folder = FileSystem.isDir(kept);
+        PlanSide theirs = remote == null || remote.trashed ? SIDE_DELETED : folder || held == null || remote.revision.equals(held.attribute("revision")) ? SIDE_SAME : SIDE_CHANGED;
+        PlanAction action = Planner.decide(SIDE_DELETED, theirs);
+        if (action == PLAN_TRASH_REMOTE) {
+            if (self.api.trash(id) == null) { return self.fails("trashing an entry on the Drive"); }
+            self.trashed++;
+        }
+        self.store.released(id, kept);
+        if (action == PLAN_RESTORE && remote != null) { self.store.add(remote); }  // changed there since: it comes back
+        return true;
+    }
+
+    // Do what is ready. Deletions first, so a name that was freed is free on the Drive before something takes it;
+    // then paths, shallowest first, so a new folder exists before what is in it.
+    public void work() {
+        if (self.waiting() == 0) { return; }
+        self.follow();
+        if (!self.allowed && Planner.tooManyDeletions(self.removals.len, self.store.entryCount() + self.removals.len, self.deleteLimit, self.deletePercent)) {
+            if (!self.braked) { Console.error(f"drive: {self.removals.len} deletions are waiting for 'drive resume'"); }
+            self.braked = true;
+        } else {
+            Vector<string> waiting = [];
+            for id in self.removals {
+                bool done = false;
+                try { done = self.remove(id); } catch (string error) { Console.error(f"drive: {error}"); }
+                self.follow();
+                if (!done) { waiting.push(id); }
+            }
+            self.removals = waiting;
+            if (waiting.len == 0) { self.allowed = false; }
+        }
+        while (self.paths.len > 0) {  // a conflict adds a path while this runs
+            if (self.unsorted) {  // kept last-first, so the next one is taken off the end
+                self.paths.sort();
+                self.paths.reverse();
+                self.unsorted = false;
+            }
+            string path = self.paths.pop();
+            self.listed.remove(path);
+            bool done = false;
+            try { done = self.sync(path); } catch (string error) { Console.error(f"drive: {error}"); }
+            if (!done) { self.later.push(path); }
+            self.follow();
+        }
+        Vector<string> unfinished = self.later;
+        self.later = [];
+        for path in unfinished { self.add(path); }
+        self.remember();
+    }
+}
