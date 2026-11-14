@@ -58,5 +58,7 @@ in {
     settings.disk.sdCard.label = mkSetting str "SD"; # the filesystem's label; the encrypted container's is "<label>-crypt"
     settings.disk.sdCard.mountPoint = mkSetting str "/sd";
     settings.disk.sdCard.keyFile = mkSetting str "/var/lib/nixos/sd-card/key"; # on the encrypted system disk, persisted, root only
+    settings.disk.sdCard.library = mkSetting str "Emulation"; # the only folder an unprepared card may hold and still be formatted
+    settings.disk.sdCard.driveFolder = mkSetting str "media/Games/Emulation"; # where that folder is on the Drive: formatting needs every file to be there
   };
 }

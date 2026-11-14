@@ -33,6 +33,12 @@ class SdCardScenario {
         self.machine.succeed("basename $(realpath /sys/class/mmc_host/mmc0/device) > /run/sd-controller");
     }
 
+    private string place = "--place Games/Library=/sd/drive --place-device /sd/drive=/dev/disk/by-label/SD-crypt";
+
+    private void plainCard(string extra) {  // the card as it is before any of this: one plain filesystem, automounted
+        self.machine.succeed(f"mkfs.ext4 -q -F -L OLD {self.card} && mkdir -p /run/media/carduser/OLD && mount {self.card} /run/media/carduser/OLD && mkdir /run/media/carduser/OLD/Library && cp {self.drive.source}/a /run/media/carduser/OLD/Library/a.bin {extra}");
+    }
+
     private void prepared() {
         print("A card that is not ours does not delay or fail the boot");
         self.machine.waitUntil(f"test -b {self.card}");
@@ -40,15 +46,30 @@ class SdCardScenario {
         self.machine.fail("mountpoint -q /sd");
         Check.that(Strings.toInt(self.machine.succeed("systemd-analyze | grep -o 'userspace) = [0-9.]*' | grep -o '[0-9]*' | head -1 || echo 0").trim()) < 60, "and the boot did not wait for one");
 
-        print("Prepared with a key file and a password, it opens and mounts by itself");
-        self.machine.succeed(f"install -d -m 700 /var/lib/nixos/sd-card && head -c 64 /dev/urandom > {self.key} && chmod 400 {self.key}");
-        self.machine.succeed(f"cryptsetup luksFormat --batch-mode --pbkdf pbkdf2 --iter-time 1 {self.card} {self.key}");  // no label yet: the system opens a labelled card at once
-        self.machine.succeed(f"printf 'boot password' > /run/password && cryptsetup luksAddKey --batch-mode --pbkdf pbkdf2 --iter-time 1 --key-file {self.key} {self.card} /run/password");
-        self.machine.succeed(f"cryptsetup open --key-file {self.key} {self.card} making && mkfs.ext4 -q -L SD -E root_owner=1000:100 /dev/mapper/making && cryptsetup close making");
-        self.machine.succeed(f"cryptsetup config --label SD-crypt {self.card} && udevadm trigger --action=change {self.card}");  // named last, when it is ready to be used
+        self.drive.prepare();
+        self.machine.succeed(f"head -c 100000 /dev/urandom > {self.drive.source}/a");
+        self.drive.startFake();
+        self.drive.put(self.drive.folder(self.drive.folder("root", "Games"), "Library"), "a.bin", "a");
+        self.drive.startEngine(f"--quiet 1 --budget-files 0 --pin Games/Library {self.place}");
+        self.drive.startDoor(self.place);
+
+        print("A card is only formatted when everything on it is the library and all of that is on the Drive");
+        self.plainCard("&& mkdir /run/media/carduser/OLD/Photos");
+        string refused = self.machine.fail(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card} 2>&1");
+        Check.that(refused.contains("holds more than Library: Photos"), f"something else on the card stops it: {refused}");
+        self.machine.succeed("rmdir /run/media/carduser/OLD/Photos && echo 'only on the card' > /run/media/carduser/OLD/Library/save.dat");
+        Check.that(self.machine.fail(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card} 2>&1").contains("save.dat"), "a file the Drive does not have stops it, by name");
+        self.machine.succeed("rm /run/media/carduser/OLD/Library/save.dat");
+        self.machine.fail(f"echo n | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card}");
+        self.machine.succeed(f"cmp /run/media/carduser/OLD/Library/a.bin {self.drive.source}/a");  // a no leaves the card as it was
+
+        print("With a yes it is encrypted, opens with the key file, and mounts by itself");
+        self.machine.succeed(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card}");
         self.mounted();
-        self.machine.succeed("su - carduser -c 'echo kept > /sd/file'");
+        self.machine.succeed(f"printf 'boot password\\nboot password\\n' | nixosctl sd-card password {self.card}");
+        self.machine.succeed("nixosctl sd-card status | grep -q 'header copy: present' && su - carduser -c 'echo kept > /sd/file'");
         Check.equal(self.machine.succeed("findmnt -no SOURCE,FSTYPE /sd").trim(), "/dev/mapper/sdcard ext4", "it is the opened container that is mounted, at /sd, writable by the user");
+        Check.equal(self.machine.succeed(f"stat -c %a {self.key}; cryptsetup luksDump {self.card} | grep -c 'luks2$'").trim(), "400\n2", "the key file is root's alone, and the card has two ways in");
     }
 
     private void acrossBoots() {
@@ -76,14 +97,11 @@ class SdCardScenario {
 
     private void placement() {
         print("A Drive folder kept on the card is unavailable while the card is out and back when it returns");
-        self.drive.prepare();
-        self.machine.succeed(f"head -c 100000 /dev/urandom > {self.drive.source}/a");
-        self.drive.startFake();
-        string library = self.drive.folder(self.drive.folder("root", "Games"), "Library");
-        self.drive.put(library, "a.bin", "a");
-        string place = "--place Games/Library=/sd/drive --place-device /sd/drive=/dev/disk/by-label/SD-crypt";
-        self.drive.startEngine(f"--quiet 1 --budget-files 0 --pin Games/Library {place}");
-        self.drive.startDoor(place);
+        self.drive.startFake();  // the Drive as it was is gone with the restart; a new one, and a store to match
+        self.machine.succeed(f"rm -rf {self.drive.store} && mkdir -p {self.drive.runtime} {self.drive.mount}");
+        self.drive.put(self.drive.folder(self.drive.folder("root", "Games"), "Library"), "a.bin", "a");
+        self.drive.startEngine(f"--quiet 1 --budget-files 0 --pin Games/Library {self.place}");
+        self.drive.startDoor(self.place);
         self.machine.succeed("mkdir /sd/drive");
         self.drive.drive("place Games/Library");
         self.machine.waitUntil(f"cmp -s {self.drive.mount}/Games/Library/a.bin {self.drive.source}/a && test -e /sd/drive/tree/a.bin");
@@ -109,20 +127,19 @@ class SdCardScenario {
         print("With the key file lost the password still opens it, and a new key file can be added");
         self.pull();
         self.gone();
-        self.machine.succeed(f"mv {self.key} /run/old-key && printf 'boot password' > /run/password");
+        self.machine.succeed(f"mv {self.key} /run/old-key");
         self.insert();
         self.machine.waitUntil(f"test -b {self.card}");
         self.machine.succeed("sleep 5; ! mountpoint -q /sd");
-        self.machine.succeed(f"systemctl reset-failed; cryptsetup open --key-file /run/password {self.card} sdcard");
+        self.machine.succeed(f"systemctl reset-failed; printf 'boot password\\n' | nixosctl sd-card open {self.card}");
         self.mounted();
-        self.machine.succeed(f"head -c 64 /dev/urandom > {self.key} && chmod 400 {self.key} && cryptsetup luksAddKey --batch-mode --pbkdf pbkdf2 --iter-time 1 --key-file /run/password {self.card} {self.key}");
+        self.machine.succeed(f"printf 'boot password\\n' | nixosctl sd-card key {self.card} && test -s {self.key}");
         self.machine.succeed("umount /sd && cryptsetup close sdcard");
         self.pull();
         self.insert();
         self.mounted();
 
         print("A damaged header is put back from its copy");
-        self.machine.succeed(f"cryptsetup luksHeaderBackup {self.card} --header-backup-file /var/lib/nixos/sd-card/header");
         self.pull();
         self.gone();
         self.insert();

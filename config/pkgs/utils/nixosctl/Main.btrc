@@ -21,6 +21,7 @@ import ./lib/core/NixosPaths.btrc;
 import ./lib/desktop/HardwareConfig.btrc;
 import ./lib/desktop/AudioManager.btrc;
 import ./lib/desktop/CaffeineManager.btrc;
+import ./lib/hardware/SdCardManager.btrc;
 import ./lib/desktop/DisplayManager.btrc;
 import ./lib/desktop/PowerManager.btrc;
 import ./lib/Installer.btrc;
@@ -88,6 +89,7 @@ class NixosCtl {
         help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
         help.item("audio <list|current|set> [sink]", "");
         help.item("caffeine <status|enable|disable|toggle>", "");
+        help.item("sd-card <status|prepare|password|open|key> [device]", "Encrypt a card for this machine, or open one by hand.");
         help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
 
         help.section("Testing");
@@ -114,6 +116,7 @@ class NixosCtl {
             || command.equals("immutability")
             || command.equals("fix-permissions")
             || command.equals("secure-boot")
+            || command.equals("sd-card")
             || command.equals("tpm2");
     }
 
@@ -443,6 +446,17 @@ class NixosCtl {
                 power.set(profile);
                 return 0;
             }
+        }
+
+        if (command.equals("sd-card")) {
+            var action = self.requireAction(args, "Usage: nixosctl sd-card <status|prepare|password|open|key> [device]");
+            var card = SdCardManager();
+            if (action.equals("status")) { return card.status(); }
+            var device = self.requireArg(args, 2, f"Usage: nixosctl sd-card {action} <device>");
+            if (action.equals("prepare")) { return card.prepare(device); }
+            if (action.equals("password")) { return card.password(device); }
+            if (action.equals("open")) { return card.open(device); }
+            if (action.equals("key")) { return card.key(device); }
         }
 
         if (command.equals("caffeine")) {

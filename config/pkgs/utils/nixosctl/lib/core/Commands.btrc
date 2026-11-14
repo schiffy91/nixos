@@ -35,6 +35,7 @@ class CommandCatalog {
         result.push(CommandEntry("displays", "List and arrange displays.", ["list", "layout", "enable", "disable", "primary", "dpms"]));
         result.push(CommandEntry("audio", "List and select audio sinks.", ["list", "current", "set"]));
         result.push(CommandEntry("caffeine", "Keep the system awake.", ["status", "enable", "disable", "toggle"]));
+        result.push(CommandEntry("sd-card", "Encrypt a card for this machine, or open one by hand.", ["status", "prepare", "password", "open", "key"]));
         result.push(CommandEntry("power", "Select an available system power profile.", ["list", "current", "set", "is"]));
         result.push(CommandEntry("vm", "Boot the host config in a QEMU VM.", []));
         result.push(CommandEntry("e2e", "Run end-to-end test scenarios.", []));
