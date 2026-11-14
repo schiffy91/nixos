@@ -79,6 +79,7 @@ class DrivePin {
 // What the engine says of itself, one fact to a line: the answer to `progress`, and the file it keeps.
 class DriveProgress {
     public bool running = false;  // the engine that wrote this is alive
+    public bool starting = false;  // it is still reading what is on this machine
     public bool online = false;
     public bool door = false;
     public bool paused = false;
@@ -105,6 +106,7 @@ class DriveProgress {
             string value = line.substring(space + 1, line.len() - space - 1);
             Vector<string> words = Strings.split(value, " ");
             if (name.equals("engine")) { progress.running = FileSystem.isDir(f"/proc/{value}"); }
+            else if (name.equals("starting")) { progress.starting = value.equals("yes"); }
             else if (name.equals("online")) { progress.online = value.equals("yes"); }
             else if (name.equals("door")) { progress.door = value.equals("connected"); }
             else if (name.equals("paused")) { progress.paused = value.equals("yes"); }
@@ -136,6 +138,7 @@ class DriveProgress {
 
     public string state() {
         if (!self.running) { return "stopped"; }
+        if (self.starting) { return "syncing"; }
         if (!self.online) { return "offline"; }
         if (self.held || !self.missing.isEmpty()) { return "attention"; }
         if (self.files > 0 && self.paused) { return "paused"; }
@@ -165,6 +168,7 @@ class DriveProgress {
         if (state.equals("paused")) { return "Paused"; }
         if (state.equals("synced")) { return "Up to date"; }
         if (state.equals("attention")) { return self.held ? "Deletions are waiting for a yes" : f"Waiting for {self.missing}"; }
+        if (self.starting) { return "Starting"; }
         int percent = self.percent();
         return percent < 0 ? "Syncing" : f"Syncing, {percent}%";
     }
@@ -175,6 +179,7 @@ class DriveProgress {
         if (state.equals("offline")) { return "Changes are sent and fetched when the Drive can be reached again."; }
         if (state.equals("attention") && self.held) { return "Many files were deleted at once. `drive resume` lets the deletions through."; }
         if (state.equals("attention")) { return "Its files are on a volume that is not attached; changes to it are held until it is back."; }
+        if (self.starting) { return "Reading what is already on this computer."; }
         Vector<string> parts = [];
         if (self.files > 0 && self.total > 0LL) { parts.push(f"{DriveSize.words(self.arrived)} of {DriveSize.words(self.total)}"); }
         if (self.files > 0) { parts.push(f"{DriveCount.words(self.files)} {self.files == 1 ? "file" : "files"} to download"); }

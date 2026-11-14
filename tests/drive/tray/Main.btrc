@@ -118,6 +118,10 @@ class TrayScenario {
         self.shows("offline", "Offline", "faded, and 'Offline'");
         self.drive.stop("drive-engine");
         self.shows("offline", "Not running", "an engine that does not answer is said to be not running");
+
+        print("An engine that has only just started says so");
+        self.machine.succeed(f"printf 'engine 1\\nstarting yes\\n' > {self.drive.runtime}/progress");
+        self.shows("syncing", "Starting", "at work without a measure, and 'Starting'");
     }
 }
 

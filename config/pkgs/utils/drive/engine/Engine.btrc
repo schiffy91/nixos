@@ -467,6 +467,7 @@ class Engine {
     public void run() {
         // Two engines on one store would each send what the other already sent.
         if (!StorePaths.lock(self.store.temporary("../engine.lock"))) { throw "Another engine is already working on this store"; }
+        Path.writeAll(self.socket.replace("door.sock", "progress"), f"engine {Platform.pid()}\nstarting yes\n");  // the scan takes a while on a slow disk
         self.store.scan();
         self.loadPins();
         self.wantAll();
