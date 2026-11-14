@@ -98,6 +98,19 @@ in
   };
   boot.loader.timeout = lib.mkForce 0;
   settings.boot.plymouth.drmDevice = lib.mkForce "";
+  boot.initrd.systemd.services.probe-virtual-display = {
+    description = "Ask the virtual display what is plugged in";  # the Deck's kernel never does; Plymouth only reads
+    wantedBy = [ "sysinit.target" ];
+    after = [ "systemd-modules-load.service" ];
+    before = [ "plymouth-start.service" ];
+    unitConfig.DefaultDependencies = false;
+    serviceConfig.Type = "oneshot";
+    script = ''
+      for status in /sys/class/drm/card*-Virtual-*/status; do
+        if [ -e "$status" ]; then echo detect > "$status"; fi
+      done
+    '';
+  };
 
   systemd.services.e2e-health-report = {
     description = "Launch the e2e health reporter outside the boot transaction";

@@ -798,8 +798,8 @@
         "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
         "sshPort": "2258",
         "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "true"
+        "enablesSecureBoot": "true",
+        "reenrollsKeys": "false"
       }
     },
     {
