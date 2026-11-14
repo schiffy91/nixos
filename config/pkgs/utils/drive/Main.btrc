@@ -276,12 +276,16 @@ class Drive {
 
     class void adoptBatch(CLICommandLine options, string source, string target, Vector<string> batch, Vector<int> counts, Vector<string> left) {
         if (batch.len == 0) { return; }
-        Vector<string> arguments = ["--"];
-        for relative in batch { arguments.push(f"{source}/{relative}"); }
-        ExecResult summed = ChildProcess.run("sha256sum", arguments, timeoutMilliseconds=86400000);
         Map<string, string> sums = {};
-        for line in Strings.split(summed.out, "\n") {
-            if (line.len() > 66 && !line.startsWith("\\")) { sums.put(line.substring(66, line.len() - 66), line.substring(0, 64)); }
+        if (options.has("--match-times")) {  // no reading: size and time decide
+            for relative in batch { sums.put(f"{source}/{relative}", "time"); }
+        } else {
+            Vector<string> arguments = ["--"];
+            for relative in batch { arguments.push(f"{source}/{relative}"); }
+            ExecResult summed = ChildProcess.run("sha256sum", arguments, timeoutMilliseconds=86400000);
+            for line in Strings.split(summed.out, "\n") {
+                if (line.len() > 66 && !line.startsWith("\\")) { sums.put(line.substring(66, line.len() - 66), line.substring(0, 64)); }
+            }
         }
         for relative in batch {
             string full = f"{source}/{relative}";
@@ -322,7 +326,7 @@ class Drive {
     class void adopt(CLICommandLine options) {
         string source = options.operand(1, "");
         string target = Drive.treePath(options, options.operand(2, ""));
-        if (source.isEmpty() || !FileSystem.isDir(source) || options.operand(2, "").isEmpty()) { throw "usage: drive adopt LOCAL-FOLDER DRIVE-FOLDER [--upload-new | --check]"; }
+        if (source.isEmpty() || !FileSystem.isDir(source) || options.operand(2, "").isEmpty()) { throw "usage: drive adopt LOCAL-FOLDER DRIVE-FOLDER [--upload-new | --check] [--match-times]"; }
         while (source.len() > 1 && source.endsWith("/")) { source = source.substring(0, source.len() - 1); }
         Vector<int> counts = [0, 0, 0, 0, 0];
         Vector<string> left = [];
@@ -344,6 +348,61 @@ class Drive {
             return;
         }
         Console.log(f"{counts.get(0)} adopted, {counts.get(1)} new here and sent to the Drive, {counts.get(2)} already downloaded, {counts.get(3)} different from the Drive, {counts.get(4)} left alone");
+    }
+
+    class void auditBelow(CLICommandLine options, string mount, string folder, Vector<string> batch, Vector<int> counts) {
+        for name in FileSystem.listDir(f"{mount}/{folder}").sorted() {
+            string child = f"{folder}/{name}";
+            if (FileSystem.isSymlink(f"{mount}/{child}")) { continue; }
+            if (FileSystem.isDir(f"{mount}/{child}")) { Drive.auditBelow(options, mount, child, batch, counts); }
+            else { batch.push(child); }
+            if (batch.len >= 64) { Drive.auditBatch(options, mount, batch, counts); }
+        }
+    }
+
+    class void auditBatch(CLICommandLine options, string mount, Vector<string> batch, Vector<int> counts) {
+        Vector<string> wanted = [];
+        Vector<string> arguments = ["--"];
+        Map<string, string> expected = {};
+        for relative in batch {
+            Vector<string> known = Strings.split(Drive.asked(options, f"expect\t{relative}", 60), " ");
+            if (known.len != 2 || !known.get(1).equals("local") || known.get(0).isEmpty()) {  // not downloaded, changed here, or nothing to compare with
+                counts.set(2, counts.get(2) + 1);
+                continue;
+            }
+            expected.put(f"{mount}/{relative}", known.get(0));
+            arguments.push(f"{mount}/{relative}");
+        }
+        batch.clear();
+        if (arguments.len == 1) { return; }
+        ExecResult summed = ChildProcess.run("sha256sum", arguments, timeoutMilliseconds=86400000);
+        for line in Strings.split(summed.out, "\n") {
+            if (line.len() <= 66 || line.startsWith("\\")) { continue; }
+            string path = line.substring(66, line.len() - 66);
+            if (!expected.has(path)) { continue; }
+            if (expected.get(path).equals(line.substring(0, 64))) { counts.set(0, counts.get(0) + 1); }
+            else {
+                counts.set(1, counts.get(1) + 1);
+                Console.log(f"differs from the Drive: {path}");
+            }
+        }
+    }
+
+    // `drive verify`: the store's own bookkeeping. `drive verify FOLDER`: read every downloaded file under a folder
+    // and compare it with the checksum the Drive gives for it. Nothing is changed.
+    class void verify(CLICommandLine options) {
+        string folder = Drive.treePath(options, options.operand(1, ""));
+        if (options.operand(1, "").isEmpty()) {
+            Console.log(Drive.asked(options, "verify", 3600));
+            return;
+        }
+        string mount = options.option("--mount", Environment.get("DRIVE_MOUNT", Environment.get("HOME", "") + "/Drive"));
+        Vector<int> counts = [0, 0, 0];
+        Vector<string> batch = [];
+        Drive.auditBelow(options, mount, folder, batch, counts);
+        Drive.auditBatch(options, mount, batch, counts);
+        Console.log(f"{counts.get(0)} files are what the Drive holds, {counts.get(1)} differ, {counts.get(2)} not compared (not downloaded, or changed here and not sent yet)");
+        if (counts.get(1) > 0) { throw "Some files differ from the Drive"; }
     }
 
     class void readers(CLICommandLine options) {
@@ -372,7 +431,7 @@ class Drive {
         else if (command.equals("pin") || command.equals("unpin") || command.equals("place")) { Drive.pin(options, command); }
         else if (command.equals("pins")) { Drive.ask(options, "pins"); }
         else if (command.equals("evict")) { Drive.ask(options, "evict"); }
-        else if (command.equals("verify")) { Console.log(Drive.asked(options, "verify", 3600)); }
+        else if (command.equals("verify")) { Drive.verify(options); }
         else if (command.equals("adopt")) { Drive.adopt(options); }
         else { Console.log("usage: drive door|engine|remote ... [--credentials FILE | --rclone FILE [--remote NAME]] [--api URL]"); }
         return 0;

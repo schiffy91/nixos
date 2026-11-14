@@ -293,6 +293,7 @@ class Engine {
     private string command(Channel? door, string message) {
         Vector<string> fields = Strings.split(message, "\t");
         if (fields.len == 4 && fields.get(0).equals("take")) { return self.store.take(fields.get(2), self.store.real(fields.get(3)), fields.get(1)) + "\n"; }
+        if (fields.len == 2 && fields.get(0).equals("expect")) { return self.store.expected(self.store.real(fields.get(1))) + "\n"; }
         if (fields.len == 4 && fields.get(0).equals("probe")) { return self.store.probe(fields.get(2), self.store.real(fields.get(3)), fields.get(1)) + "\n"; }
         if (fields.len == 3 && fields.get(0).equals("bring")) {
             string outcome = self.store.unavailable(fields.get(2)) ? "unavailable" : self.store.bring(fields.get(1), self.store.real(fields.get(2)));
