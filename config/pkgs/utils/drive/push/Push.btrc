@@ -1,5 +1,4 @@
 import Library.Console;
-import Library.Crypto;
 import Library.JSON;
 import Library.Strings;
 import Library.Timer;
@@ -100,14 +99,35 @@ class Push {
         return answer == null ? f"refused: {self.why()}" : answer.stringify();
     }
 
+    // Watch every folder directly in My Drive, which cannot be watched itself; renew the watches that exist. How many are now watched.
+    public int watchAll() {
+        DriveListing? top = self.api.folders("root");
+        JSONValue? current = self.api.request("GET", "https://workspaceevents.googleapis.com/v1/subscriptions?filter=event_types%3A%22google.workspace.drive.file.v3.created%22");
+        if (top == null || current == null) { throw f"Cannot read what is watched: {self.why()}"; }
+        int watched = 0;
+        for folder in top.files {
+            string target = f"//drive.googleapis.com/files/{folder.id}";
+            string existing = "";
+            for held in current.get("subscriptions").elements() {
+                if (held.get("targetResource").asString().equals(target)) { existing = held.get("name").asString(); }
+            }
+            if (existing.isEmpty()) {
+                if (!self.watch(folder.id).startsWith("refused")) { watched++; }
+            } else if (self.api.request("PATCH", f"https://workspaceevents.googleapis.com/v1/{existing}?updateMask=ttl", "{\"ttl\":\"604800s\"}") != null) {
+                watched++;  // good for another week
+            }
+        }
+        return watched;
+    }
+
     // Wait for messages: how many arrived, each printed as its event type and subject; -1 when the wait itself failed.
-    public int pull() {
+    public int pull(bool quiet = false) {
         JSONValue? answer = self.api.request("POST", f"https://pubsub.googleapis.com/v1/{self.subscriptionName()}:pull", "{\"maxMessages\":20}");
         if (answer == null) { return -1; }
         JSONValue acknowledge = JSONValue.makeArray();
         for received in answer.get("receivedMessages").elements() {
             JSONValue attributes = received.get("message").get("attributes");
-            Console.log(f"event {attributes.get("ce-type").asString()} {attributes.get("ce-subject").asString()} at {attributes.get("ce-time").asString()}");
+            if (!quiet) { Console.log(f"event {attributes.get("ce-type").asString()} {attributes.get("ce-subject").asString()} at {attributes.get("ce-time").asString()}"); }
             acknowledge.push(received.get("ackId"));
         }
         if (acknowledge.size() > 0) {

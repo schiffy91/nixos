@@ -7,18 +7,22 @@ import Library.FileSystem.UserspaceForwarding;
 import Library.FileSystem.UserspaceRequest;
 import Library.Map;
 import Library.Strings;
+import Library.Timer;
 import Library.Vector;
 
 import ../store/StoreFile.btrc;
+import ../store/Volumes.btrc;
 import ./Channel.btrc;
 
 #include <errno.h>
 #include <fcntl.h>
+#include <time.h>
 
 class DoorOpen {  // one open file
     public StoreFile file;
     public string id;
     public bool cloud;  // may still have ranges to fetch
+    public bool writing = false;
 
     public DoorOpen(StoreFile file, string id, bool cloud) {
         self.file = file;
@@ -27,13 +31,19 @@ class DoorOpen {  // one open file
     }
 }
 
-class DoorKnock {  // an open waiting for the engine to say whether its contents can be had
+class DoorKnock {  // an open waiting for the engine: to be let in, or for the whole file before it is written to
     public UserspaceOpenReply reply;
     public StoreFile file;
+    public long node;
+    public int flags;
+    public bool writing;
 
-    public DoorKnock(UserspaceOpenReply reply, StoreFile file) {
+    public DoorKnock(UserspaceOpenReply reply, StoreFile file, long node, int flags, bool writing) {
         self.reply = reply;
         self.file = file;
+        self.node = node;
+        self.flags = flags;
+        self.writing = writing;
     }
 }
 
@@ -52,8 +62,9 @@ class DoorWait {  // a read waiting for the engine to fetch its range
 }
 
 // The only way into the store: a mount that forwards to the real tree. Downloaded files are handed to the
-// kernel; a read of a range that is not downloaded waits while the engine fetches it. Nothing is changed here yet.
-class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
+// kernel; a read of a range that is not downloaded waits while the engine fetches it. Every change is written
+// to the store's journal before it happens, so the engine never has to discover one afterwards.
+class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, IUserspaceSeeker {
     private UserspaceForwarding inner;
     private Channel listener;
     private Channel? engine = null;
@@ -61,16 +72,28 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
     private Map<long, DoorWait> waits = {};
     private Map<long, DoorKnock> knocks = {};
     private long ticket = 0L;
+    private string store;
+    private string tree;
+    public bool readOnly = false;
+    public Volumes volumes;  // the folders kept on other volumes
+    private Vector<int> showing = [];  // for each: 1 shown, 0 unavailable, -1 not looked at yet
+    private long long looked = 0LL;
 
-    public Door(string tree, string socket) {
-        self.inner = UserspaceForwarding(tree);
+    public Door(string store, string socket) {
+        self.store = store;
+        self.tree = store + "/tree";
+        for name in ["tree", "ids", "dirty", "trash", "tmp"] {  // a new store: the door may be the first to see it
+            if (FileSystem.mkdirp(f"{store}/{name}") != 0 && !FileSystem.isDir(f"{store}/{name}")) { throw f"Cannot prepare the store at {store}"; }
+        }
+        self.volumes = Volumes(store);
+        self.inner = UserspaceForwarding(self.tree);
         self.inner.attributeStore = false;  // Drive keeps none, and the store's own stay out of sight
         Channel? listener = Channel.listen(socket);
         if (listener == null) { throw f"Cannot listen for the engine at {socket}"; }
         self.listener = listener;
     }
 
-    private UserspaceError readOnly() { return UserspaceError.fromNative(EROFS); }
+    private UserspaceError readOnlyError() { return UserspaceError.fromNative(EROFS); }
 
     public void lookup(UserspaceEntryReply reply, long parent, string name) { self.inner.lookup(reply, parent, name); }
 
@@ -78,30 +101,67 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
 
     public void attributes(UserspaceAttributesReply reply, long node, long handle) { self.inner.attributes(reply, node, handle); }
 
+    // Where a node is in the tree, relative to its top; "" for the top itself.
+    private string pathOf(long node) {
+        return self.volumes.logical(FileSystem.readLink(f"/proc/self/fd/{self.inner.descriptor(node)}"));
+    }
+
+    private string below(long parent, string name) {
+        string path = self.pathOf(parent);
+        return path.isEmpty() ? name : f"{path}/{name}";
+    }
+
+    // Tell the engine what is about to change. Written first: a change the journal lacks would never be uploaded.
+    private void note(string kind, string subject) {
+        if (!StorePaths.append(self.store + "/dirty/journal", f"{kind} {subject}")) { Console.error(f"drive: cannot record that {subject} {kind}"); }
+    }
+
     public void open(UserspaceOpenReply reply, long node, int flags) {
-        if ((flags & (int)O_ACCMODE) != (int)O_RDONLY || (flags & (int)O_TRUNC) != 0) {
-            reply.fail(self.readOnly());
+        bool truncating = (flags & (int)O_TRUNC) != 0;
+        bool writing = (flags & (int)O_ACCMODE) != (int)O_RDONLY || truncating;
+        if (writing && self.readOnly) {
+            reply.fail(self.readOnlyError());
             return;
         }
-        StoreFile? opened = StoreFile.reopen(self.inner.descriptor(node));
+        StoreFile? probed = StoreFile.reopen(self.inner.descriptor(node));
+        if (probed == null) {
+            reply.fail(UserspaceError.fromNative(errno));
+            return;
+        }
+        StoreFile probe = probed;
+        bool cloud = probe.attribute("state").equals("cloud");
+        long long today = (long long)time(NULL);
+        if (today - probe.accessed() > 86400LL) { probe.setAccessed(today); }  // eviction takes the least recently opened; a day is fine enough
+        if (writing) { self.note("changed", self.pathOf(node)); }
+        if (!cloud || truncating) {
+            self.admit(reply, node, flags, writing, cloud);
+            return;
+        }
+        // An open can refuse with the exact reason; a read that fails later can only say "I/O error". So ask first.
+        // An open for writing needs the whole file here before a byte of it changes.
+        Channel? engine = self.engine;
+        self.ticket++;
+        string request = writing ? f"fetch {self.ticket} {probe.attribute("id")} 0 {probe.size()} {reply.caller().process}" : f"open {self.ticket} {probe.attribute("id")} {reply.caller().process}";
+        if (engine == null || !engine.send(request)) {
+            reply.fail(UserspaceError.unavailable());
+            return;
+        }
+        self.knocks.put(self.ticket, DoorKnock(reply, probe, node, flags, writing));
+    }
+
+    // Open a file whose contents are here (or about to be replaced) and hand it to the kernel.
+    private void admit(UserspaceOpenReply reply, long node, int flags, bool writing, bool emptied) {
+        StoreFile? opened = writing ? StoreFile.reopenAs(self.inner.descriptor(node), flags) : StoreFile.reopen(self.inner.descriptor(node));
         if (opened == null) {
             reply.fail(UserspaceError.fromNative(errno));
             return;
         }
-        if (!opened.attribute("state").equals("cloud")) {
-            long handle = (long)opened.handle();
-            self.opens.put(handle, DoorOpen(opened, opened.attribute("id"), false));
-            reply.passthrough(handle, opened.handle());
-            return;
-        }
-        // An open can refuse with the exact reason; a read that fails later can only say "I/O error". So ask first.
-        Channel? engine = self.engine;
-        self.ticket++;
-        if (engine == null || !engine.send(f"open {self.ticket} {opened.attribute("id")} {reply.caller().process}")) {
-            reply.fail(UserspaceError.unavailable());
-            return;
-        }
-        self.knocks.put(self.ticket, DoorKnock(reply, opened));
+        if (emptied) { opened.setAttribute("state", "local"); }  // emptied on open: nothing of the old content is needed
+        long handle = (long)opened.handle();
+        DoorOpen open = DoorOpen(opened, opened.attribute("id"), false);
+        open.writing = writing;
+        self.opens.put(handle, open);
+        reply.passthrough(handle, opened.handle());
     }
 
     private void admitted(long ticket, string outcome) {
@@ -112,14 +172,23 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
             knock.reply.fail(outcome.equals("denied") ? UserspaceError.notPermitted() : outcome.equals("offline") ? UserspaceError.unavailable() : UserspaceError.io());
             return;
         }
+        if (knock.writing) {
+            StoreFile? fetched = StoreFile.reopen(self.inner.descriptor(knock.node));
+            if (fetched == null || fetched.attribute("state").equals("cloud")) {  // replaced on the Drive while it was being fetched: never hand a writer holes
+                knock.reply.fail(UserspaceError.stale());
+                return;
+            }
+            self.admit(knock.reply, knock.node, knock.flags, true, false);
+            return;
+        }
         long handle = (long)knock.file.handle();
         self.opens.put(handle, DoorOpen(knock.file, knock.file.attribute("id"), true));
         knock.reply.opened(handle);
     }
 
     public void read(UserspaceDataReply reply, long node, long handle, long offset, int size) {
-        if (!self.opens.has(handle)) {
-            reply.fail(UserspaceError.stale());
+        if (!self.opens.has(handle)) {  // a file made through the mount, opened by the forwarding below
+            self.inner.read(reply, node, handle, offset, size);
             return;
         }
         DoorOpen open = self.opens.get(handle);
@@ -143,6 +212,12 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
     }
 
     public void close(UserspaceDoneReply reply, long node, long handle) {
+        if (!self.opens.has(handle)) {
+            self.note("changed", self.pathOf(node));
+            self.inner.close(reply, node, handle);
+            return;
+        }
+        if (self.opens.get(handle).writing) { self.note("changed", self.pathOf(node)); }  // written and closed: the quiet period starts here
         self.opens.remove(handle);  // dropping the file closes it
         reply.done();
     }
@@ -157,9 +232,108 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
 
     public void readLink(UserspaceDataReply reply, long node) { self.inner.readLink(reply, node); }
 
-    public void symbolicLink(UserspaceEntryReply reply, long parent, string name, string target) { reply.fail(self.readOnly()); }
+    public void symbolicLink(UserspaceEntryReply reply, long parent, string name, string target) {  // kept here; Drive has no such thing
+        if (self.readOnly) { reply.fail(self.readOnlyError()); }
+        else { self.inner.symbolicLink(reply, parent, name, target); }
+    }
 
-    public void link(UserspaceEntryReply reply, long node, long newParent, string newName) { reply.fail(self.readOnly()); }
+    public void link(UserspaceEntryReply reply, long node, long newParent, string newName) { reply.fail(UserspaceError.notPermitted()); }  // one file under two names cannot be synced
+
+    public void create(UserspaceCreateReply reply, long parent, string name, int permissions, int flags) {
+        if (self.readOnly) {
+            reply.fail(self.readOnlyError());
+            return;
+        }
+        self.note("changed", self.below(parent, name));
+        self.inner.create(reply, parent, name, permissions, flags);
+    }
+
+    public void write(UserspaceWriteReply reply, long node, long handle, long offset, Bytes data) { self.inner.write(reply, node, handle, offset, data); }
+
+    public void change(UserspaceAttributesReply reply, long node, long handle, UserspaceChanges changes) {
+        if (self.readOnly) {
+            reply.fail(self.readOnlyError());
+            return;
+        }
+        if (changes.hasSize) {
+            StoreFile? probe = StoreFile.reopen(self.inner.descriptor(node));
+            if (probe != null && probe.attribute("state").equals("cloud")) {
+                if (changes.size != 0L) {  // cutting a file that is not here would need all of it first
+                    reply.fail(UserspaceError.unavailable());
+                    return;
+                }
+                probe.setAttribute("state", "local");
+            }
+        }
+        if (changes.hasSize || changes.hasModified) { self.note("changed", self.pathOf(node)); }
+        self.inner.change(reply, node, handle, changes);
+    }
+
+    public void makeDirectory(UserspaceEntryReply reply, long parent, string name, int permissions) {
+        if (self.readOnly) {
+            reply.fail(self.readOnlyError());
+            return;
+        }
+        self.note("made", self.below(parent, name));
+        self.inner.makeDirectory(reply, parent, name, permissions);
+    }
+
+    // An entry the Drive knows goes to the trash rather than away: the engine trashes it there too, and it can be brought back.
+    private bool discard(string path) {
+        string real = self.volumes.real(path);
+        StoreFile? target = StoreFile.open(real);
+        string id = target == null ? "" : target.attribute("id");
+        if (id.isEmpty()) { return false; }
+        string trash = self.volumes.home(real) + "/trash";
+        string kept = f"{trash}/{id}";
+        for (int number = 2; FileSystem.exists(kept); number++) { kept = f"{trash}/{id}.{number}"; }
+        self.note("removed", id);
+        return StorePaths.rename(real, kept);
+    }
+
+    public void remove(UserspaceDoneReply reply, long parent, string name) {
+        if (self.readOnly) { reply.fail(self.readOnlyError()); }
+        else if (self.discard(self.below(parent, name))) { reply.done(); }
+        else { self.inner.remove(reply, parent, name); }
+    }
+
+    public void removeDirectory(UserspaceDoneReply reply, long parent, string name) {
+        string path = self.below(parent, name);
+        if (self.readOnly) { reply.fail(self.readOnlyError()); }
+        else if (self.volumes.anchors(path)) { reply.fail(UserspaceError.fromNative(EBUSY)); }  // a folder kept on another volume, or one it is under
+        else if (FileSystem.isDir(self.volumes.real(path)) && FileSystem.listDir(self.volumes.real(path)).len > 0) { reply.fail(UserspaceError.notEmpty()); }
+        else if (self.discard(path)) { reply.done(); }
+        else { self.inner.removeDirectory(reply, parent, name); }
+    }
+
+    public void rename(UserspaceDoneReply reply, long parent, string name, long newParent, string newName, bool exclusive, bool exchange) {
+        if (self.readOnly) {
+            reply.fail(self.readOnlyError());
+            return;
+        }
+        string target = self.below(newParent, newName);
+        if (self.volumes.anchors(self.below(parent, name)) || self.volumes.anchors(target)) {
+            reply.fail(UserspaceError.fromNative(EBUSY));
+            return;
+        }
+        string full = self.volumes.real(target);
+        if (!exclusive && !exchange && FileSystem.exists(full)) {  // what the move replaces is a delete of its own
+            if (FileSystem.isDir(full) && FileSystem.listDir(full).len > 0) {
+                reply.fail(UserspaceError.notEmpty());
+                return;
+            }
+            self.discard(target);
+        }
+        self.note("moved", target);
+        if (exchange) { self.note("moved", self.below(parent, name)); }
+        self.inner.rename(reply, parent, name, newParent, newName, exclusive, exchange);
+    }
+
+    public void flush(UserspaceDoneReply reply, long node, long handle) { reply.done(); }
+
+    public void synchronize(UserspaceDoneReply reply, long node, long handle, bool dataOnly) { self.inner.synchronize(reply, node, handle, dataOnly); }
+
+    public void allocate(UserspaceDoneReply reply, long node, long handle, int mode, long offset, long length) { self.inner.allocate(reply, node, handle, mode, offset, length); }
 
     // A file that is not all here still reads as all data: the holes are the client's, not the file's.
     public void seek(UserspaceOffsetReply reply, long node, long handle, long offset, bool toHole) {
@@ -181,6 +355,8 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
             wait.reply.fail(outcome.equals("denied") ? UserspaceError.notPermitted() : outcome.equals("offline") ? UserspaceError.unavailable() : UserspaceError.io());
         } else if (!self.opens.has(wait.handle)) {
             wait.reply.fail(UserspaceError.stale());
+        } else if (!self.opens.get(wait.handle).file.has(wait.offset, (long long)wait.size)) {
+            wait.reply.fail(UserspaceError.stale());  // fetched into the file that replaced this one: never read a hole as data
         } else {
             wait.reply.data(self.opens.get(wait.handle).file.read(wait.offset, wait.size));
         }
@@ -200,15 +376,35 @@ class Door implements IUserspaceFileSystem, IUserspaceLinker, IUserspaceSeeker {
             string message = engine.receive();
             if (message.isEmpty()) { break; }
             Vector<string> words = Strings.split(message, " ");
-            if (words.len == 3 && words.get(0).equals("done")) { self.finished(words.get(1).toLong(), words.get(2)); }
+            if (words.len == 3 && words.get(0).equals("done") && self.knocks.has(words.get(1).toLong())) { self.admitted(words.get(1).toLong(), words.get(2)); }
+            else if (words.len == 3 && words.get(0).equals("done")) { self.finished(words.get(1).toLong(), words.get(2)); }
             if (words.len == 3 && words.get(0).equals("opened")) { self.admitted(words.get(1).toLong(), words.get(2)); }
         }
         if (engine != null && !engine.isOpen()) { self.abandon(); }
     }
 
     // Serve the mount and the engine until the mount is gone.
+    // Show each placed folder whose volume is here in place of its stand-in, and make the others unavailable.
+    // A volume that went away is let go of, so that it can be unmounted.
+    private void tend() {
+        while (self.showing.len < self.volumes.paths.len) { self.showing.push(-1); }
+        for (int index = 0; index < self.volumes.paths.len; index++) {
+            int now = self.volumes.present(index) ? 1 : 0;
+            if (now == self.showing.get(index)) { continue; }
+            string stand = self.volumes.stand(index);
+            if (now == 0) { self.inner.drop(stand); }
+            if (!self.inner.redirect(stand, now == 1 ? self.volumes.shown(index) : "")) { continue; }  // not in the tree yet
+            self.showing.set(index, now);
+            Console.error(f"drive: {self.volumes.paths.get(index)} is {now == 1 ? "on" : "waiting for"} {self.volumes.locations.get(index)}");
+        }
+    }
+
     public void serve(UserspaceMount mount) {
         while (true) {
+            if (self.volumes.paths.len > 0 && MonotonicClock.milliseconds() - self.looked >= 2000LL) {
+                self.tend();
+                self.looked = MonotonicClock.milliseconds();
+            }
             Channel? engine = self.engine;
             int ready = Channel.wait(mount.handle(), self.listener.handle(), engine == null ? -1 : engine.handle(), 1000);
             if ((ready & 1) != 0 && !mount.step()) { break; }

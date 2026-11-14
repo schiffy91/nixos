@@ -2,10 +2,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <linux/fs.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
@@ -20,6 +24,7 @@ struct DriveStatus {
 	unsigned long blocks;
 	long modified;
 	long modifiedNanoseconds;
+	long accessed;
 	unsigned int mode;
 	unsigned int links;
 };
@@ -33,6 +38,7 @@ static inline int driveInspect(int descriptor, struct DriveStatus* out) {
 	out->blocks = (unsigned long)status.st_blocks;
 	out->modified = (long)status.st_mtim.tv_sec;
 	out->modifiedNanoseconds = status.st_mtim.tv_nsec;
+	out->accessed = (long)status.st_atim.tv_sec;
 	out->mode = status.st_mode;
 	out->links = (unsigned int)status.st_nlink;
 	return 0;
@@ -55,6 +61,24 @@ static inline int driveReopen(int descriptor, int write) {
 	char name[40];
 	if (snprintf(name, sizeof(name), "/proc/self/fd/%d", descriptor) >= (int)sizeof(name)) { return -1; }
 	return open(name, (write ? O_RDWR : O_RDONLY) | O_CLOEXEC);
+}
+
+// The same, with the flags the caller asked for (append, truncate, write only).
+static inline int driveReopenFlags(int descriptor, int flags) {
+	char name[40];
+	if (snprintf(name, sizeof(name), "/proc/self/fd/%d", descriptor) >= (int)sizeof(name)) { return -1; }
+	return open(name, (flags & ~(O_NOFOLLOW | O_CREAT | O_EXCL)) | O_CLOEXEC);
+}
+
+// Add one line to the end of a file, creating it; 0, or -1.
+static inline int driveAppend(const char* path, const char* line) {
+	int descriptor = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
+	size_t length = strlen(line);
+	int written;
+	if (descriptor < 0) { return -1; }
+	written = write(descriptor, line, length) == (ssize_t)length ? 0 : -1;
+	close(descriptor);
+	return written;
 }
 
 // Read at an offset: the count, or a negative errno.
@@ -85,6 +109,42 @@ static inline int driveSetModified(int descriptor, long seconds, long nanosecond
 	times[1].tv_sec = (time_t)seconds;
 	times[1].tv_nsec = nanoseconds;
 	return futimens(descriptor, times);
+}
+
+// Set the access time and leave the modification time alone.
+static inline int driveSetAccessed(int descriptor, long seconds) {
+	struct timespec times[2];
+	times[0].tv_sec = (time_t)seconds;
+	times[0].tv_nsec = 0;
+	times[1].tv_sec = 0;
+	times[1].tv_nsec = UTIME_OMIT;
+	return futimens(descriptor, times);
+}
+
+// Give back all of a file's blocks and mark it not downloaded, but only if
+// nothing else has it open: a write lease is granted only then, and holds
+// off anyone opening it meanwhile. A file that is open, or mapped, keeps its
+// contents; emptying it would hand its reader zeros. 0, or -1 when in use.
+static inline int driveEvict(int descriptor) {
+	struct stat status;
+	signal(SIGIO, SIG_IGN);  // sent if someone opens the file while the lease is held
+	if (fstat(descriptor, &status) != 0 || fcntl(descriptor, F_SETLEASE, F_WRLCK) != 0) { return -1; }
+	int result = fsetxattr(descriptor, "user.drive.state", "cloud", 5, 0);
+	struct timespec times[2] = { status.st_atim, status.st_mtim };
+	if (result == 0) { result = ftruncate(descriptor, 0) != 0 || ftruncate(descriptor, status.st_size) != 0 || futimens(descriptor, times) != 0 ? -1 : 0; }
+	fcntl(descriptor, F_SETLEASE, F_UNLCK);
+	return result;
+}
+
+// Make `target` share `source`'s blocks, where the filesystem can: the
+// contents without a copy. 0, or -1 with errno.
+static inline int driveClone(int target, int source) { return ioctl(target, FICLONE, source); }
+
+// Bytes free for an ordinary user on the filesystem holding `path`, or -1.
+static inline long driveFreeBytes(const char* path) {
+	struct statvfs status;
+	if (statvfs(path, &status) != 0) { return -1; }
+	return (long)((unsigned long long)status.f_bavail * (unsigned long long)status.f_frsize);
 }
 
 // Give back the disk blocks of a range; the file keeps its size and reads

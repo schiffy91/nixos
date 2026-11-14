@@ -3,12 +3,23 @@ import Library.Vector;
 
 import ../remote/DriveApi.btrc;
 import ../remote/DriveFile.btrc;
+import Library.Console;
+
 import ../store/Store.btrc;
+import ../store/StoreFile.btrc;
+import ./Planner.btrc;
+import ./Uploader.btrc;
 
 // Keeps the store's tree the shape of the Drive: all of it once, then what the change feed reports.
 class Mirror {
     private DriveApi api;
     private Store store;
+    public Uploader? uploader = null;  // told when a change from the Drive meets a change made here
+    public int deleteLimit = 50;  // 0: no brake
+    public int deletePercent = 10;
+    public bool allowDeletions = false;  // a person said the waiting deletions may go
+    public bool braked = false;
+    private int streak = 0;  // deletions taken from the feed since the store was last current: a batch is counted whole, however many pages it comes in
 
     public Mirror(DriveApi api, Store store) {
         self.api = api;
@@ -66,38 +77,61 @@ class Mirror {
             return true;
         }
         if (self.store.knows(file.id)) {
-            self.store.update(file);
+            Uploader? uploader = self.uploader;
+            StoreFile? held = self.store.file(file.id);
+            if (uploader != null && !uploader.overwriteConflicts && held != null && self.store.changedHere(file.id) && !held.attribute("revision").equals(file.revision)) { uploader.collide(file.id, file); }  // changed on both sides
+            else { self.store.update(file); }
             return true;
         }
         return !file.parent.isEmpty() && self.store.add(file);
     }
 
-    // What changed on the Drive since last time. False leaves the position where it was, to try again.
-    public bool follow() {
+    // One page of what changed on the Drive since last time: 0 when the store is now current, 1 when there is
+    // more to read, -1 when the Drive could not be reached, -2 when deletions are held for a yes. Below 0 the
+    // position stays where it was.
+    public int step() {
         string token = self.store.position();
         if (token.isEmpty()) { throw "The store has no change feed position; build it first"; }
-        while (true) {
-            DriveChanges? page = self.api.changes(token);
-            if (page == null) { return false; }
-            Vector<DriveChange> waiting = [];  // a new folder's contents can be listed before the folder
-            for change in page.changes {
-                if (!self.apply(change)) { waiting.push(change); }
-            }
-            bool progress = true;
-            while (progress && waiting.len > 0) {
-                progress = false;
-                Vector<DriveChange> still = [];
-                for change in waiting {
-                    if (self.apply(change)) { progress = true; }
-                    else { still.push(change); }
-                }
-                waiting = still;
-            }
-            self.store.skipped += waiting.len;
-            token = page.next.isEmpty() ? page.resume : page.next;
-            if (!self.store.setPosition(token)) { throw "Cannot record the change feed position"; }
-            if (page.next.isEmpty()) { return true; }
+        DriveChanges? page = self.api.changes(token);
+        if (page == null) { return -1; }
+        int deletions = 0;
+        for change in page.changes {
+            DriveFile? file = change.file;
+            if ((change.removed || file == null || file.trashed) && self.store.knows(change.id)) { deletions += self.store.weight(change.id); }
         }
-        return true;
+        if (!self.allowDeletions && deletions > 0 && Planner.tooManyDeletions(self.streak + deletions, self.store.entryCount(), self.deleteLimit, self.deletePercent)) {
+            if (!self.braked) { Console.error(f"drive: the Drive reports {self.streak + deletions} deletions and counting; the rest are waiting for 'drive resume'"); }
+            self.braked = true;
+            return -2;  // the position stays, so nothing is skipped
+        }
+        Vector<DriveChange> waiting = [];  // a new folder's contents can be listed before the folder
+        for change in page.changes {
+            if (!self.apply(change)) { waiting.push(change); }
+        }
+        bool progress = true;
+        while (progress && waiting.len > 0) {
+            progress = false;
+            Vector<DriveChange> still = [];
+            for change in waiting {
+                if (self.apply(change)) { progress = true; }
+                else { still.push(change); }
+            }
+            waiting = still;
+        }
+        self.store.skipped += waiting.len;
+        if (!self.store.setPosition(page.next.isEmpty() ? page.resume : page.next)) { throw "Cannot record the change feed position"; }
+        self.braked = false;
+        self.streak += deletions;
+        if (!page.next.isEmpty()) { return 1; }
+        self.streak = 0;
+        self.allowDeletions = false;  // a yes covers the batch it was given for
+        return 0;
+    }
+
+    // Everything that changed, page after page. False when the Drive could not be reached or deletions are held.
+    public bool follow() {
+        int more = 1;
+        while (more == 1) { more = self.step(); }
+        return more == 0;
     }
 }

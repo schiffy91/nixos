@@ -1,0 +1,101 @@
+import Library.App;
+import Library.Callback;
+import Library.Console;
+import Library.GUI;
+import Library.GUI.IButton;
+import Library.GUI.ILabel;
+import Library.GUI.IWindow;
+import Library.Platform;
+
+import ../door/Channel.btrc;
+
+// The client's own window: a program has read as much as it may without a yes, and its reads are waiting.
+class AskAnswer implements IButtonAction {
+    private string socket;
+    private string reader;
+    private string decision;
+
+    public AskAnswer(string socket, string reader, string decision) {
+        self.socket = socket;
+        self.reader = reader;
+        self.decision = decision;
+    }
+
+    public void invoke() {
+        Channel? engine = Channel.connect(self.socket);
+        if (engine != null && engine.send(f"answer {self.decision} {self.reader}")) {
+            Channel.wait(engine.handle(), -1, -1, 5000);
+            engine.receive();
+        }
+        GUI.requestQuit();
+    }
+}
+
+class AskKeys implements IWindowKeyHandler {
+    private AskAnswer once;
+    private AskAnswer always;
+    private AskAnswer block;
+
+    public AskKeys(AskAnswer once, AskAnswer always, AskAnswer block) {
+        self.once = once;
+        self.always = always;
+        self.block = block;
+    }
+
+    public bool key(AppKeyboardEvent event) {
+        if (event.action != APP_KEY_PRESSED) { return false; }
+        if (event.key == APP_KEY_ENTER) { self.once.invoke(); }
+        else if (event.key == APP_KEY_A) { self.always.invoke(); }
+        else if (event.key == APP_KEY_D) { self.block.invoke(); }
+        else if (event.key == APP_KEY_ESCAPE) { GUI.requestQuit(); }  // no answer: the reads fail, and it asks again later
+        else { return false; }
+        return true;
+    }
+}
+
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        Console.error("usage: drive-ask READER LABEL");
+        return 2;
+    }
+    string reader = Strings.copy(argv[1]);
+    string label = Strings.copy(argv[2]);
+    string socket = Environment.get("DRIVE_RUNTIME", Environment.get("XDG_RUNTIME_DIR", "/run") + "/drive") + "/engine.sock";
+    GUI.initialize();
+    var actions = CallbackScope();
+    try {
+        var window = GUI.createWindow("Google Drive", 560.0, 230.0);
+        var content = GUI.createColumn(14.0);
+        content.setPadding(24.0, 24.0, 24.0, 24.0);
+        var question = GUI.createLabel(f"Allow {label} to download files from Google Drive?");
+        question.setFont(16.0, true);
+        question.setWrapping(true);
+        var detail = GUI.createLabel("It has opened more files that are not on this computer than a program may without asking. Its reads are waiting for your answer.");
+        detail.setSecondary(true);
+        detail.setWrapping(true);
+        var buttons = GUI.createRow(10.0);
+        var block = GUI.createButton("Block (D)");
+        var once = GUI.createButton("Allow once (Enter)");
+        var always = GUI.createButton("Always allow (A)");
+        var blocked = AskAnswer(socket, reader, "block");
+        var allowedOnce = AskAnswer(socket, reader, "once");
+        var allowed = AskAnswer(socket, reader, "allow");
+        window.attachRoot(content);
+        content.attach(question);
+        content.attach(detail);
+        content.attach(buttons);
+        buttons.attach(block);
+        buttons.attach(once);
+        buttons.attach(always);
+        block.onAction(blocked, actions);
+        once.onAction(allowedOnce, actions);
+        always.onAction(allowed, actions);
+        window.onKey(AskKeys(allowedOnce, allowed, blocked), actions);
+        window.show();
+        GUI.run();
+    } finally {
+        actions.cancel();
+        GUI.close();
+    }
+    return 0;
+}

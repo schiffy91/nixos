@@ -67,6 +67,7 @@ class StoreContract {
 
         Store store = Store(self.scratch + "/store");
         Mirror mirror = Mirror(self.api, store);
+        mirror.deleteLimit = 0;  // this checks what the feed does to the tree; the brake on many deletions has its own scenario
         mirror.build();
         string tree = store.tree();
         Check.that(FileSystem.isDir(tree + "/Documents/Taxes") && store.folderCount() == 3, "folders are made, parents before children");
@@ -99,7 +100,9 @@ class StoreContract {
         self.remote(f"delete?id={notes}");
         DriveFile? trashed = self.api.trash(taxes);
         Check.that(trashed != null && mirror.follow(), "a delete and a trashed folder are followed");
-        Check.that(!FileSystem.exists(tree + "/Documents/notes.txt") && !FileSystem.exists(tree + "/Documents/Taxes"), "what is gone on the Drive leaves the tree");
+        Check.that(store.filePath(notes).isEmpty() && !FileSystem.exists(tree + "/Documents/Taxes"), "what is gone on the Drive leaves the tree");
+        self.placeholder(tree + "/Documents/notes.txt", 30LL, "the second file of that name now has the name to itself");
+        Check.that(!FileSystem.exists(tree + "/Documents/notes (2).txt"), "and no longer carries a number");
         Check.that(!store.knows(notes) && !store.knows(taxes) && FileSystem.exists(self.scratch + f"/store/trash/{notes}") && FileSystem.isDir(self.scratch + f"/store/trash/{taxes}"), "and waits in the trash");
 
         Store again = Store(self.scratch + "/store");

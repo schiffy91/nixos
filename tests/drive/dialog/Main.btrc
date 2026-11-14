@@ -1,0 +1,101 @@
+import Library.CLI;
+import ../../vm/Framebuffer.btrc;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// The window that asks about a program: it appears in the desktop session with the program's name, its three
+// answers do what they say, and where no window can show the program is stopped at once.
+class DialogScenario {
+    private Lab lab;
+    private DriveFixture drive;
+    private Guest machine;
+    private string mount;
+
+    public DialogScenario(Lab lab, Guest machine) {
+        self.lab = lab;
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+        self.mount = self.drive.mount;
+    }
+
+    private void prepare() {
+        self.drive.prepare();
+        self.machine.succeed(f"head -c 20000 /dev/urandom > {self.drive.source}/photo");
+        self.machine.succeed("printf 'import sys\\nfor name in sys.argv[1:]:\\n    open(name, \"rb\").read()\\nprint(\"read\", len(sys.argv) - 1)\\n' > /tmp/reader.py && for name in backup index thumbs later; do cp /tmp/reader.py /tmp/$name.py; done");
+        self.drive.startFake();
+        for folder in ["One", "Two", "Three", "Four", "Five"] {
+            string id = self.drive.folder("root", folder);
+            for (int number = 1; number <= 6; number++) { self.drive.put(id, f"f{number}.bin", "photo"); }
+        }
+        self.machine.succeed(f"install -d -o fixture {self.drive.store} {self.drive.runtime} && chown fixture /var/lib/drive-test/credentials.json");
+        string as = f"--uid=fixture --setenv=DRIVE_RUNTIME={self.drive.runtime} -p AmbientCapabilities=CAP_SYS_ADMIN";
+        self.machine.succeed(f"systemd-run --unit drive-door --collect {as} drive door --store {self.drive.store} --mount {self.mount} --runtime {self.drive.runtime} --allow-others");
+        self.machine.waitUntil(f"mountpoint -q {self.mount}");
+        self.machine.succeed(f"systemd-run --unit drive-engine --collect {as} drive engine --store {self.drive.store} --runtime {self.drive.runtime} --credentials /var/lib/drive-test/credentials.json --api {self.drive.fake} --chunk 65536 --follow 1 --budget-files 3 --ask /run/current-system/sw/bin/drive-ask-session --ask-seconds 120");
+        self.drive.connected();
+        self.machine.waitUntil(f"test -e {self.mount}/Five/f6.bin && test -S /run/user/1000/wayland-0 && su - fixture -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment' | grep -q WAYLAND_DISPLAY");
+    }
+
+    private void crawl(string script, string folder) { self.machine.succeed(f"su - fixture -c 'python3 /tmp/{script}.py {self.mount}/{folder}/f*.bin > /tmp/{script}.out 2>&1 &'"); }
+
+    private void asks(Framebuffer screen, string script) {
+        try {
+            screen.waitForText(f"{script}.py", self.lab.artifact(f"asked-{script}.ppm"), 120);
+        } catch (string error) {
+            print(self.machine.succeed(f"cat /tmp/{script}.out; drive status --runtime {self.drive.runtime}; drive readers --runtime {self.drive.runtime}; journalctl -u drive-engine.service --no-pager | tail -15; journalctl _UID=1000 --no-pager | grep -v 'pam_unix\\|Started Session' | tail -40 || true"));
+            throw error;
+        }
+        screen.waitForText("Always allow", self.lab.artifact(f"asked-{script}.ppm"), 30);
+        Check.that(!self.machine.succeed(f"cat /tmp/{script}.out").contains("read"), "its reads are waiting while the question is up");
+    }
+
+    public void check() {
+        self.prepare();
+        var screen = Framebuffer(self.machine.statePath("screen.vnc"));
+
+        print("A program past its allowance brings up the client's own window, naming the program");
+        self.crawl("backup", "One");
+        self.asks(screen, "backup");
+        self.machine.sendKey("ret");
+        self.machine.waitUntil("grep -q 'read 6' /tmp/backup.out");
+        Check.that(true, "Allow once lets the waiting reads finish");
+        self.machine.waitUntil("! pgrep -x drive-ask");
+
+        print("Block refuses the program, now and afterwards");
+        self.crawl("index", "Two");
+        self.asks(screen, "index");
+        self.machine.sendKey("d");
+        self.machine.waitUntil("grep -q 'Operation not permitted' /tmp/index.out");
+        Check.that(self.machine.fail(f"su - fixture -c 'python3 /tmp/index.py {self.mount}/Three/f1.bin' 2>&1").contains("Operation not permitted"), "a blocked program is refused without another question");
+        Check.that(self.drive.drive("readers").contains("index.py"), "and is listed where it can be changed");
+
+        print("Always allow is remembered");
+        self.crawl("thumbs", "Three");
+        self.asks(screen, "thumbs");
+        self.machine.sendKey("a");
+        self.machine.waitUntil("grep -q 'read 6' /tmp/thumbs.out");
+        self.machine.waitUntil("! pgrep -x drive-ask");
+        Check.equal(self.machine.succeed(f"su - fixture -c 'python3 /tmp/thumbs.py {self.mount}/Four/f*.bin'").trim(), "read 6", "the program reads on without being asked again");
+
+        print("With no desktop session to show it in, the program is stopped at once");
+        self.machine.succeed("su - fixture -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user unset-environment WAYLAND_DISPLAY'");
+        string began = self.machine.succeed("date +%s").trim();
+        Check.that(self.machine.fail(f"su - fixture -c 'python3 /tmp/later.py {self.mount}/Five/f*.bin' 2>&1").contains("Operation not permitted"), "it fails rather than waiting");
+        Check.that(Strings.toInt(self.machine.succeed("date +%s").trim()) - Strings.toInt(began) < 30, "without waiting out the two minutes a person would have had");
+        Check.that(self.drive.drive("readers").contains("stopped python:/tmp/later.py"), "and it is listed as stopped, to be allowed from the command line");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        DialogScenario(lab, lab.guest("machine")).check();
+        lab.close();
+        print("PASS: the window asks, and its answers hold");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

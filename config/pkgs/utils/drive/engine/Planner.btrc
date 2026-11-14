@@ -1,0 +1,44 @@
+enum PlanAction {
+    PLAN_NOTHING = 0,
+    PLAN_UPLOAD_NEW = 1,  // send the local file as a new Drive file
+    PLAN_UPLOAD = 2,  // send the local content as the file's next version
+    PLAN_TAKE_REMOTE = 3,  // make the local entry what the Drive has
+    PLAN_KEEP_BOTH = 4,  // the local file gets a conflict name and goes up as new; the Drive's version keeps the name
+    PLAN_TRASH_REMOTE = 5,
+    PLAN_TRASH_LOCAL = 6,
+    PLAN_RESTORE = 7  // the local entry was deleted but the Drive's changed: bring it back
+};
+
+// One side of an entry, compared with what both sides last agreed on.
+enum PlanSide {
+    SIDE_ABSENT = 0,  // was never there
+    SIDE_SAME = 1,  // as agreed
+    SIDE_CHANGED = 2,
+    SIDE_DELETED = 3  // was agreed on, is gone
+};
+
+// Every rule of the sync, as one function of the two sides. Nothing here touches a file or the network.
+class Planner {
+    class PlanAction decide(PlanSide local, PlanSide remote) {
+        if (local == SIDE_ABSENT && remote == SIDE_ABSENT) { return PLAN_NOTHING; }
+        if (local == SIDE_ABSENT) { return remote == SIDE_DELETED ? PLAN_NOTHING : PLAN_TAKE_REMOTE; }  // a file this machine has never had
+        if (remote == SIDE_ABSENT) { return local == SIDE_DELETED ? PLAN_NOTHING : PLAN_UPLOAD_NEW; }  // a file the Drive has never had
+        if (local == SIDE_SAME) { return remote == SIDE_SAME ? PLAN_NOTHING : remote == SIDE_CHANGED ? PLAN_TAKE_REMOTE : PLAN_TRASH_LOCAL; }
+        if (local == SIDE_CHANGED) { return remote == SIDE_SAME ? PLAN_UPLOAD : remote == SIDE_CHANGED ? PLAN_KEEP_BOTH : PLAN_UPLOAD_NEW; }  // a change is never lost to a delete
+        return remote == SIDE_SAME ? PLAN_TRASH_REMOTE : remote == SIDE_CHANGED ? PLAN_RESTORE : PLAN_NOTHING;  // deleted here
+    }
+
+    // Whether a batch of deletions is too large to act on without a person: more than `limit`, or more than a share of what exists.
+    class bool tooManyDeletions(int deletions, int entries, int limit, int percent) {
+        if (limit <= 0) { return false; }  // no brake
+        return deletions > limit || (entries > 0 && deletions * 100 > entries * percent && deletions > 3);
+    }
+
+    // The name a file gets when both sides changed it: "notes (conflict MACHINE 2026-11-13).txt".
+    class string conflictName(string name, string machine, string date) {
+        int dot = name.lastIndexOf(".");
+        string stem = dot > 0 ? name.substring(0, dot) : name;
+        string extension = dot > 0 ? name.substring(dot, name.len() - dot) : "";
+        return f"{stem} (conflict {machine} {date}){extension}";
+    }
+}

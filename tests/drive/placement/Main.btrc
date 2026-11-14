@@ -1,0 +1,133 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// A folder kept on another volume appears in place. While the volume is away the folder is unavailable, never
+// empty and never deleted, and what the Drive says of it waits; when the volume returns everything carries on.
+class PlacementScenario {
+    private DriveFixture drive;
+    private Guest machine;
+    private string mount;
+    private string place = "--place Games/Library=/sd/drive";
+    private string engine = "--quiet 1 --budget-files 0 --delete-limit 0 --pin Games/Library --place Games/Library=/sd/drive";
+
+    public PlacementScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+        self.mount = self.drive.mount;
+    }
+
+    private void random(string name) { self.machine.succeed(f"head -c 100000 /dev/urandom > {self.drive.source}/{name}"); }
+
+    private string status() { return self.drive.drive("status"); }
+
+    private bool trashedOnDrive(string name) { return self.drive.remote(name).contains(" True"); }
+
+    private void prepare() {
+        self.drive.prepare();
+        for name in ["a", "b", "c", "d", "e"] { self.random(name); }
+        self.drive.startFake();
+        string games = self.drive.folder("root", "Games");
+        string library = self.drive.folder(games, "Library");
+        string sub = self.drive.folder(library, "Sub");
+        self.drive.put(library, "a.bin", "a");
+        self.drive.put(sub, "b.bin", "b");
+        string other = self.drive.folder("root", "Other");
+        self.drive.put(other, "c.bin", "c");
+        self.machine.succeed("mkdir -p /sd && truncate -s 300M /var/lib/sd.img && mkfs.ext4 -q /var/lib/sd.img");
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor(self.place);
+    }
+
+    private void away(string when) {
+        self.machine.waitUntil(f"(ls {self.mount}/Games/Library 2>&1 || true) | grep -q 'No such device'");
+        Check.equal(self.machine.succeed(f"ls {self.mount}/Games").trim(), "Library", f"{when}: the folder is still listed");
+        Check.that(self.machine.fail(f"cat {self.mount}/Games/Library/a.bin 2>&1").contains("No such device"), "and nothing in it can be opened: it is neither empty nor gone");
+        self.machine.waitUntil(f"drive status --runtime {self.drive.runtime} | grep -q 'waiting for the volume of Games/Library'");
+        self.machine.succeed(f"test ! -e {self.mount}/Other/c.bin || cmp {self.mount}/Other/c.bin {self.drive.source}/c; ls {self.mount}/Other > /dev/null");  // the rest of the Drive works
+        Check.that(self.machine.fail(f"mv {self.mount}/Games {self.mount}/Games2 2>&1").contains("busy"), "a folder it is under cannot be moved away meanwhile");
+    }
+
+    private void absentAtFirst() {
+        print("With no volume the folder is unavailable and nothing is downloaded for it");
+        self.away("before the volume has ever been there");
+        self.machine.succeed("sleep 3");
+        Check.equal(self.drive.state("Games/Library/a.bin") + self.drive.state("Games/Library/Sub/b.bin"), "cloudcloud", "the pinned folder is not downloaded onto the wrong disk");
+        Check.that(self.machine.fail(f"drive place Games/Library --runtime {self.drive.runtime} 2>&1").contains("/sd/drive does not exist"), "it cannot be placed on a bare mount point");
+        self.drive.put(self.drive.id("Games/Library"), "d.bin", "d");  // the Drive changes while the volume is away
+    }
+
+    private void placed() {
+        print("Once the volume is there the folder moves onto it and shows in place");
+        self.machine.succeed("mount -o loop /var/lib/sd.img /sd && mkdir /sd/drive");
+        self.drive.drive("place Games/Library");
+        self.machine.waitUntil(f"test -e {self.mount}/Games/Library/d.bin && drive status --runtime {self.drive.runtime} | grep -q ' 0 to download'");
+        Check.equal(self.machine.succeed(f"ls {self.mount}/Games/Library | LC_ALL=C sort | tr '\\n' ' '").trim(), "Sub a.bin d.bin", "what the Drive added meanwhile arrived too");
+        self.machine.succeed(f"cmp {self.mount}/Games/Library/a.bin {self.drive.source}/a && cmp {self.mount}/Games/Library/Sub/b.bin {self.drive.source}/b && cmp /sd/drive/tree/d.bin {self.drive.source}/d");
+        Check.equal(self.machine.succeed(f"ls -A {self.drive.store}/tree/Games/Library | wc -l").trim(), "0", "nothing of it is on the main disk");
+        Check.equal(self.machine.succeed("stat -c %d /sd/drive/tree/a.bin").trim(), self.machine.succeed("stat -c %d /sd").trim(), "its files are on the volume");
+        Check.that(!self.status().contains("waiting for the volume"), "and the engine is no longer waiting");
+
+        print("Changes there travel like anywhere else");
+        self.machine.succeed(f"echo made > {self.mount}/Games/Library/Sub/new.txt && rm {self.mount}/Games/Library/a.bin && mv {self.mount}/Other/c.bin {self.mount}/Games/Library/c.bin");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py new.txt | grep -q ' False$' && drive status --runtime {self.drive.runtime} | grep -q ' 0 changes to send'");
+        string sub = self.machine.succeed("getfattr --absolute-names -n user.drive.id --only-values /sd/drive/tree/Sub").trim();
+        Check.that(self.drive.remote("new.txt").contains(f" {sub} "), "a new file is uploaded into the right folder");
+        Check.that(self.trashedOnDrive("a.bin"), "a delete is a trash on the Drive");
+        Check.equal(self.machine.succeed("ls /sd/drive/trash | wc -l").trim(), "1", "and the file is kept in the volume's own trash");
+        string library = self.machine.succeed("getfattr --absolute-names -n user.drive.id --only-values /sd/drive/tree").trim();
+        Check.that(self.drive.remote("c.bin").contains(f" {library} ") && self.drive.remote("c.bin").contains(f" {self.drive.sha(self.drive.source + "/c")} False"), "a file moved in from the main disk ends up in the folder on the Drive");
+        Check.that(self.machine.fail(f"mv {self.mount}/Games/Library {self.mount}/Games/Elsewhere 2>&1").contains("busy"), "the placed folder itself stays where it is declared");
+    }
+
+    private void takenAway() {
+        print("The volume goes away while everything is running");
+        self.machine.succeed("umount -l /sd");
+        self.away("with the volume pulled");
+        self.machine.waitUntil("! losetup -a | grep -q sd.img");  // the door let go of it: it could really be removed
+        self.drive.put(self.machine.succeed("cat /tmp/library-id").trim(), "e.bin", "e");
+        self.drive.control(f"delete?id={self.machine.succeed("cat /tmp/d-id").trim()}");
+        self.machine.succeed("sleep 5");
+        Check.that(!self.trashedOnDrive("new.txt") && !self.trashedOnDrive("b.bin") && !self.trashedOnDrive("Library"), "nothing is deleted on the Drive because a volume is missing");
+    }
+
+    private void back() {
+        print("The volume returns and everything carries on");
+        self.machine.succeed("mount -o loop /var/lib/sd.img /sd");
+        self.machine.waitUntil(f"test -e {self.mount}/Games/Library/e.bin && ! test -e {self.mount}/Games/Library/d.bin && drive status --runtime {self.drive.runtime} | grep -q ' 0 to download'");
+        self.machine.succeed(f"cmp {self.mount}/Games/Library/e.bin {self.drive.source}/e && cmp {self.mount}/Games/Library/Sub/b.bin {self.drive.source}/b && test \"$(cat {self.mount}/Games/Library/Sub/new.txt)\" = made");
+        Check.equal(self.machine.succeed("ls /sd/drive/trash | wc -l").trim(), "2", "what the Drive deleted meanwhile went to the volume's trash");
+
+        print("And after both restart");
+        self.drive.stop("drive-engine");
+        self.drive.stop("drive-door");
+        self.machine.succeed(f"umount -l {self.mount} || true");
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor(self.place);
+        self.machine.waitUntil(f"cmp -s {self.mount}/Games/Library/e.bin {self.drive.source}/e");
+        Check.equal(self.machine.succeed(f"ls {self.mount}/Games/Library | LC_ALL=C sort | tr '\\n' ' '").trim(), "Sub c.bin e.bin", "the folder is in place again");
+    }
+
+    public void check() {
+        self.prepare();
+        self.absentAtFirst();
+        self.placed();
+        self.machine.succeed("getfattr --absolute-names -n user.drive.id --only-values /sd/drive/tree > /tmp/library-id; getfattr --absolute-names -n user.drive.id --only-values /sd/drive/tree/d.bin > /tmp/d-id");
+        self.takenAway();
+        self.back();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        PlacementScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: a folder on another volume is in place when the volume is there and unavailable when it is not");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

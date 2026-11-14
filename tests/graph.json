@@ -1179,6 +1179,67 @@
       "spec": "drive/store/test.json"
     },
     {
+      "after": [],
+      "id": "drive-planner",
+      "spec": "drive/planner/test.json"
+    },
+    {
+      "after": [
+        "drive-store"
+      ],
+      "id": "drive-door",
+      "spec": "drive/door/test.json"
+    },
+    {
+      "after": [
+        "drive-door"
+      ],
+      "id": "drive-readers",
+      "spec": "drive/readers/test.json"
+    },
+    {
+      "after": [
+        "drive-door"
+      ],
+      "id": "drive-writes",
+      "spec": "drive/writes/test.json"
+    },
+    {
+      "after": [
+        "drive-writes"
+      ],
+      "id": "drive-convergence",
+      "spec": "drive/convergence/test.json"
+    },
+    {
+      "after": [
+        "drive-writes"
+      ],
+      "id": "drive-pinning",
+      "spec": "drive/pinning/test.json"
+    },
+    {
+      "after": [
+        "drive-pinning"
+      ],
+      "id": "drive-placement",
+      "spec": "drive/placement/test.json"
+    },
+    {
+      "after": [
+        "drive-door"
+      ],
+      "id": "drive-module",
+      "spec": "drive/module/test.json"
+    },
+    {
+      "after": [
+        "drive-readers"
+      ],
+      "id": "drive-dialog",
+      "spec": "drive/dialog/test.json"
+    },
+    {
       "id": "gaming-runtime",
       "spec": "gaming/runtime/test.json",
       "after": []
@@ -1280,6 +1341,15 @@
     "rclone-offline-folder",
     "drive-remote",
     "drive-store",
+    "drive-planner",
+    "drive-door",
+    "drive-readers",
+    "drive-writes",
+    "drive-convergence",
+    "drive-pinning",
+    "drive-placement",
+    "drive-module",
+    "drive-dialog",
     "gaming-runtime",
     "sleep-lock-state",
     "recovery-artifacts",

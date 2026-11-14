@@ -1,0 +1,191 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// Changes made through the mount reach the Drive, and the reverse; a file changed on both sides is kept twice;
+// a large batch of deletions waits for a yes.
+class WritesScenario {
+    private DriveFixture drive;
+    private Guest machine;
+    private string mount;
+    private string engine = "--quiet 1 --machine TEST --delete-limit 3 --budget-files 0 --ignore '*.part' --ignore '.~lock.*'";
+
+    public WritesScenario(Guest machine) {
+        self.machine = machine;
+        self.drive = DriveFixture(machine);
+        self.mount = self.drive.mount;
+    }
+
+    private void file(string name, string content) { self.machine.succeed(f"printf '%s\\n' '{content}' > {self.drive.source}/{name}"); }
+
+    private void prepare() {
+        self.drive.prepare();
+        self.machine.succeed(f"head -c 70000 /dev/urandom > {self.drive.source}/cloud.bin");
+        self.file("text", "from the Drive");
+        self.file("theirs", "written on another machine");
+        self.drive.startFake();
+        self.drive.put("root", "cloud.bin", "cloud.bin");
+        self.drive.put("root", "replaced.bin", "cloud.bin");
+        self.drive.put("root", "both.txt", "text");
+        self.drive.put("root", "both2.txt", "text");
+        self.drive.put("root", "gone.txt", "text");
+        for folder in ["Bulk", "Theirs", "Unbraked", "Whole"] {
+            string id = self.drive.folder("root", folder);
+            for (int number = 1; number <= 5; number++) { self.drive.put(id, f"b{number}.txt", "text"); }
+        }
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor();
+    }
+
+    private void restart(string options) {
+        self.drive.stop("drive-engine");
+        self.drive.startEngine(options);
+        self.drive.connected();
+    }
+
+    private void goUp() {
+        print("What is made, changed and moved here reaches the Drive");
+        self.machine.succeed(f"echo hello > {self.mount}/new.txt && mkdir -p {self.mount}/Work/Deep && echo deep > {self.mount}/Work/Deep/a.txt");
+        self.machine.waitUntil(f"test -n \"$(getfattr --absolute-names -n user.drive.id --only-values {self.drive.store}/tree/Work/Deep/a.txt 2>/dev/null)\"");
+        Check.that(self.drive.onDrive("new.txt", self.drive.sha(self.mount + "/new.txt")), "a new file is uploaded whole");
+        string work = self.drive.id("Work");
+        string deep = self.drive.id("Work/Deep");
+        Check.that(self.drive.remote("Deep").contains(f"{deep} {work} "), "a new folder is made inside its new parent");
+        Check.that(self.drive.remote("a.txt").contains(f" {deep} "), "and its file inside it");
+        string id = self.drive.id("new.txt");
+
+        self.machine.succeed(f"echo more >> {self.mount}/new.txt");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py new.txt | grep -q \" $(sha256sum < {self.mount}/new.txt | cut -d' ' -f1) False\"");
+        Check.that(self.drive.remote("new.txt").startsWith(id + " "), "a change goes up as the same file's next version");
+
+        self.machine.succeed(f"mv {self.mount}/new.txt {self.mount}/Work/renamed.txt");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py renamed.txt | grep -q '^{id} {work} '");
+        Check.equal(self.drive.remote("new.txt"), "", "a rename and move is a rename and move on the Drive, not a second file");
+
+        print("An unfinished file stays here until it gets its real name");
+        self.machine.succeed(f"echo half > {self.mount}/Work/video.mkv.part && mkdir {self.mount}/Work/.~lock.cache && echo scratch > {self.mount}/Work/.~lock.cache/x && echo real > {self.mount}/Work/real.txt");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py real.txt | grep -q ' False$'");
+        Check.equal(self.drive.remote("video.mkv.part") + self.drive.remote(".~lock.cache") + self.drive.remote("x"), "", "a later file is on the Drive and the unfinished one and the scratch folder are not");
+        self.machine.succeed(f"echo whole >> {self.mount}/Work/video.mkv.part && mv {self.mount}/Work/video.mkv.part {self.mount}/Work/video.mkv");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py video.mkv | grep -q \" $(sha256sum < {self.mount}/Work/video.mkv | cut -d' ' -f1) False\"");
+
+        print("Writing into a file that is not downloaded fetches it first; replacing it does not");
+        self.drive.asked();
+        self.machine.succeed(f"printf X | dd of={self.mount}/cloud.bin bs=1 seek=10 conv=notrunc status=none && cp {self.drive.source}/cloud.bin /tmp/expected.bin && printf X | dd of=/tmp/expected.bin bs=1 seek=10 conv=notrunc status=none");
+        self.machine.succeed(f"cmp {self.mount}/cloud.bin /tmp/expected.bin");
+        Check.that(self.drive.asked().contains("bytes=0-"), "the file was fetched before the byte went in");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py cloud.bin | grep -q \" $(sha256sum < /tmp/expected.bin | cut -d' ' -f1) False\"");
+        self.machine.succeed(f"echo replaced > {self.mount}/replaced.bin");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py replaced.bin | grep -q \" $(echo replaced | sha256sum | cut -d' ' -f1) False\"");
+        Check.equal(self.drive.asked(), "", "a file that is replaced outright is never downloaded");
+    }
+
+    private void deletes() {
+        print("A delete here trashes on the Drive, and a delete there trashes here");
+        string id = self.drive.id("Work/Deep/a.txt");
+        self.machine.succeed(f"rm {self.mount}/Work/Deep/a.txt && rmdir {self.mount}/Work/Deep");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py Deep | grep -q ' True$'");
+        Check.that(self.drive.remote("a.txt").contains(" True"), "the file is in the Drive's trash, not gone");
+        self.machine.succeed(f"test -e {self.drive.store}/trash/{id}");
+        string gone = self.drive.id("gone.txt");
+        self.drive.control(f"delete?id={gone}");
+        self.machine.waitUntil(f"! test -e {self.mount}/gone.txt");
+        self.machine.succeed(f"test -e {self.drive.store}/trash/{gone}");
+    }
+
+    private void conflict(string name, string options, bool keptTwice) {
+        self.machine.succeed(f"cat {self.mount}/{name} > /dev/null");  // downloaded, so it can change here
+        string id = self.drive.id(name);
+        self.drive.stop("drive-engine");
+        self.drive.change(id, "theirs");
+        self.machine.succeed(f"echo 'written here' >> {self.mount}/{name}");
+        self.drive.startEngine(options);
+        self.drive.connected();
+        if (keptTwice) {
+            self.machine.waitUntil(f"ls {self.mount} | grep -q 'conflict TEST' && curl -sS -X POST '{self.drive.fake}/__control/dump' | grep -q 'conflict TEST'");
+            Check.equal(self.machine.succeed(f"cat {self.mount}/{name}"), "written on another machine\n", "the Drive's version keeps the name");
+            Check.equal(self.machine.succeed(f"cat {self.mount}/*conflict\\ TEST*"), "from the Drive\nwritten here\n", "the local version is kept beside it under a name that says so");
+            Check.that(self.drive.onDrive(name, self.drive.sha(self.drive.source + "/theirs")), "and both are on the Drive");
+        } else {
+            self.machine.waitUntil(f"test \"$(drive status --runtime /run/drive-test | grep -c '0 changes to send')\" = 1");
+            self.machine.succeed(f"sleep 3; ! ls {self.mount} | grep -q 'conflict TEST.*{name}'; test $(ls {self.mount} | grep -c both2) = 1");
+        }
+    }
+
+    private void conflicts() {
+        print("A file changed on both sides is kept twice");
+        self.conflict("both.txt", self.engine, true);
+        print("Without the rule one of the two versions is lost");
+        self.machine.succeed(f"rm -f {self.mount}/*conflict*");
+        self.conflict("both2.txt", self.engine + " --overwrite-conflicts", false);
+        Check.equal(self.machine.succeed(f"ls {self.mount} | grep -c both2 || true").trim(), "1", "which is what keeping both prevents: only one version of the file is left");
+        Check.equal(self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 -c 'import json, sys; print(sum(1 for e in json.load(sys.stdin) if \"both2\" in e[\"name\"] and not e[\"trashed\"]))'").trim(), "1", "on the Drive too");
+        self.restart(self.engine);
+    }
+
+    private int trashedOnDrive(string folder) { return Strings.toInt(self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 -c 'import json, sys; d = json.load(sys.stdin); f = [e[\"id\"] for e in d if e[\"name\"] == sys.argv[1]][0]; print(sum(1 for e in d if (e.get(\"parents\") or [\"\"])[0] == f and e[\"trashed\"]))' {folder}").trim()); }
+
+    private void brakes() {
+        print("Many deletions at once wait for a yes, here");
+        self.machine.succeed(f"rm {self.mount}/Bulk/b*.txt");
+        self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
+        Check.that(self.trashedOnDrive("Bulk") == 0, "nothing is trashed on the Drive meanwhile");
+        self.drive.drive("resume");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py b5.txt | grep -c ' True$' | grep -q '^1$'");
+        Check.that(self.trashedOnDrive("Bulk") == 5, "after the yes they all go");
+
+        print("And on the Drive, however few changes it reports at a time");
+        self.drive.control("page?size=2");  // the real feed comes in small pages; the batch is still one batch
+        for (int number = 1; number <= 5; number++) { self.drive.control(f"delete?id={self.drive.id(f"Theirs/b{number}.txt")}"); }
+        self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
+        Check.that(Strings.toInt(self.machine.succeed(f"ls {self.mount}/Theirs | wc -l").trim()) >= 2, "the brake stops the batch part-way; what went before it is in the trash, not gone");
+        self.drive.drive("resume");
+        self.machine.waitUntil(f"test \"$(ls {self.mount}/Theirs | wc -l)\" = 0");
+        self.drive.control("page?size=1000");
+
+        print("A folder trashed on the Drive counts for everything in it");
+        self.drive.control(f"delete?id={self.drive.id("Whole")}");
+        self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
+        Check.equal(self.machine.succeed(f"ls {self.mount}/Whole | wc -l").trim(), "5", "one change that removes six entries is held like six");
+        self.drive.drive("resume");
+        self.machine.waitUntil(f"! test -e {self.mount}/Whole");
+
+        print("Without the brake the same batch goes straight through");
+        self.restart("--quiet 1 --machine TEST --delete-limit 0 --budget-files 0");
+        self.machine.succeed(f"rm {self.mount}/Unbraked/b*.txt");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 -c 'import json, sys; d = json.load(sys.stdin); f = [e[\"id\"] for e in d if e[\"name\"] == \"Unbraked\"][0]; sys.exit(0 if sum(1 for e in d if (e.get(\"parents\") or [\"\"])[0] == f and e[\"trashed\"]) == 5 else 1)'");
+        Check.that(!self.drive.drive("status").contains("deletions held"), "which is what the brake is there to stop");
+    }
+
+    private void whileStopped() {
+        print("Changes made while the engine is stopped go up when it returns");
+        self.drive.stop("drive-engine");
+        self.machine.succeed(f"echo later > {self.mount}/later.txt && mkdir {self.mount}/Later && echo inside > {self.mount}/Later/inside.txt");
+        self.drive.startEngine(self.engine);
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py inside.txt | grep -q ' False$'");
+        Check.that(self.drive.onDrive("later.txt", self.drive.sha(self.mount + "/later.txt")), "nothing written meanwhile is lost");
+    }
+
+    public void check() {
+        self.prepare();
+        self.goUp();
+        self.deletes();
+        self.conflicts();
+        self.brakes();
+        self.whileStopped();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        WritesScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: changes travel both ways, conflicts keep both, deletions brake");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

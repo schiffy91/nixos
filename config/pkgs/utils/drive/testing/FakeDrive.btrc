@@ -37,7 +37,7 @@ class FakeDrive {
     private Vector<string> log = [];
     private int nextId = 1;
     private int nextToken = 1;
-    private string token = "";
+    private Vector<string> tokens = [];  // every sign-in still good
     private long long clock = 1767261600000LL;  // 2026-01-01T10:00:00Z, one second per change
     private int pageSize = 1000;
     private int failures = 0;
@@ -143,9 +143,10 @@ class FakeDrive {
 
     private HTTPResponse token(HTTPRequest request) {
         if (!request.body.contains("refresh_token=refresh-ok")) { return HTTPResponse(400, "application/json", "{\"error\":\"invalid_grant\"}"); }
-        self.token = f"access-{self.nextToken}";
+        string token = f"access-{self.nextToken}";
         self.nextToken++;
-        return HTTPResponse.json(f"{{\"access_token\":\"{self.token}\",\"expires_in\":3600,\"token_type\":\"Bearer\"}}");
+        self.tokens.push(token);
+        return HTTPResponse.json(f"{{\"access_token\":\"{token}\",\"expires_in\":3600,\"token_type\":\"Bearer\"}}");
     }
 
     private HTTPResponse list(HTTPRequest request) {
@@ -281,7 +282,7 @@ class FakeDrive {
             self.failureStatus = query.getOrDefault("status", "503").toInt();
             self.retryAfter = query.getOrDefault("retry-after", "0").toInt();
         } else if (action.equals("expire")) {
-            self.token = "";
+            self.tokens.clear();
         } else if (action.equals("short")) {
             self.shortBytes = query.getOrDefault("bytes", "0").toInt();
         } else if (action.equals("page")) {
@@ -330,7 +331,8 @@ class FakeDrive {
             if (self.retryAfter > 0) { refused.addHeader(f"Retry-After: {self.retryAfter}"); }
             return refused;
         }
-        if (self.token.isEmpty() || !request.header("authorization").equals(f"Bearer {self.token}")) { return self.refuse(401, "authError", "Invalid Credentials"); }
+        string bearer = request.header("authorization");
+        if (!bearer.startsWith("Bearer ") || !self.tokens.contains(bearer.substring(7, bearer.len() - 7))) { return self.refuse(401, "authError", "Invalid Credentials"); }
         string files = "/drive/v3/files";
         string uploads = "/upload/drive/v3/files";
         if (path.equals(files)) { return request.isGet() ? self.list(request) : self.make(request); }

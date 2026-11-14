@@ -9,14 +9,14 @@ header = "store/Native.h"
 language = "c"
 standard = "c11"
 symbols = [
-	"DriveStatus", "driveInspect", "driveOpen", "driveOpenAt", "driveReopen", "driveReadAt", "driveReadAll", "driveAttribute", "driveSetAttribute", "driveRemoveAttribute",
+	"DriveStatus", "driveInspect", "driveOpen", "driveOpenAt", "driveReopen", "driveReopenFlags", "driveAppend", "driveReadAt", "driveReadAll", "driveAttribute", "driveSetAttribute", "driveRemoveAttribute",
 	"driveResize", "driveSetModified", "driveRelease", "driveSeek", "driveCopyInto", "driveLink", "driveRename", "driveRemove",
-	"driveRemoveDirectory", "driveSynchronize"
+	"driveRemoveDirectory", "driveSynchronize", "driveSetAccessed", "driveEvict", "driveClone", "driveFreeBytes"
 ]
 read-only-borrows = [
-	"driveOpen.path", "driveOpenAt.name", "driveReadAll.path", "driveAttribute.name", "driveSetAttribute.name", "driveSetAttribute.value",
+	"driveOpen.path", "driveOpenAt.name", "driveReadAll.path", "driveAppend.path", "driveAppend.line", "driveAttribute.name", "driveSetAttribute.name", "driveSetAttribute.value",
 	"driveRemoveAttribute.name", "driveLink.existing", "driveLink.created", "driveRename.from", "driveRename.to",
-	"driveRemove.path", "driveRemoveDirectory.path"
+	"driveRemove.path", "driveRemoveDirectory.path", "driveFreeBytes.path"
 ]
 os = ["linux"]
 

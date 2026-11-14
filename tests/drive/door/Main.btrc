@@ -29,7 +29,7 @@ class DoorScenario {
     }
 
     private void startDoor() {
-        self.machine.succeed(f"systemd-run --unit drive-door --collect drive door --store {self.store} --mount {self.mount} --runtime /run/drive-test --allow-others");
+        self.machine.succeed(f"systemd-run --unit drive-door --collect drive door --store {self.store} --mount {self.mount} --runtime /run/drive-test --allow-others --read-only");
         self.machine.waitUntil(f"mountpoint -q {self.mount}");
     }
 
@@ -72,7 +72,7 @@ class DoorScenario {
         Check.equal(self.asked(), "", "reading it again asks the Drive for nothing");
         Check.equal(self.machine.succeed(f"cat {self.mount}/small.txt"), "small file\n", "a small file reads too");
         Check.equal(self.machine.succeed(f"getfattr -d {self.mount}/small.txt 2>/dev/null | grep -c drive || true").trim(), "0", "the client's own attributes do not show through the mount");
-        self.machine.fail(f"sh -c 'echo x > {self.mount}/new.txt'");  // nothing can be changed through the mount yet
+        self.machine.fail(f"sh -c 'echo x > {self.mount}/new.txt'");  // this door was started read-only: nothing can be changed through it
         self.machine.fail(f"sh -c 'echo x >> {self.mount}/small.txt'");
     }
 

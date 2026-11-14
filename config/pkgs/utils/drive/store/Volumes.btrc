@@ -1,0 +1,85 @@
+import Library.FileSystem;
+import Library.Strings;
+import Library.Vector;
+
+import ./StoreFile.btrc;
+
+// Folders of the tree that are kept on another volume, named by their path in the Drive. In the main tree each
+// is an empty folder standing in for the real one; the door shows the real one in its place. Each location is a
+// store of its own (tree/, ids/, trash/, tmp/), because a hard link cannot cross filesystems.
+class Volumes {
+    public string root;  // the main store
+    public Vector<string> paths = [];
+    public Vector<string> locations = [];
+
+    public Volumes(string root) { self.root = root; }
+
+    // "PATH=LOCATION"; false when it is not that.
+    public bool place(string declared) {
+        int at = declared.indexOf("=");
+        if (at <= 0 || at + 1 >= declared.len()) { return false; }
+        self.paths.push(declared.substring(0, at));
+        self.locations.push(declared.substring(at + 1, declared.len() - at - 1));
+        return true;
+    }
+
+    public string tree() { return self.root + "/tree"; }
+
+    public string shown(int index) { return self.locations.get(index) + "/tree"; }
+
+    public string stand(int index) { return f"{self.tree()}/{self.paths.get(index)}"; }
+
+    // Which placed folder a path in the tree is, or is inside; -1 for none.
+    public int holding(string path) {
+        for (int index = 0; index < self.paths.len; index++) {
+            if (path.equals(self.paths.get(index)) || path.startsWith(self.paths.get(index) + "/")) { return index; }
+        }
+        return -1;
+    }
+
+    // Whether a path in the tree is a placed folder or a folder one is under: it cannot be moved or removed here.
+    public bool anchors(string path) {
+        for placed in self.paths {
+            if (placed.equals(path) || placed.startsWith(path + "/")) { return true; }
+        }
+        return false;
+    }
+
+    // Where a path in the tree really is.
+    public string real(string path) {
+        int index = self.holding(path);
+        if (index >= 0) { return self.shown(index) + path.substring(self.paths.get(index).len(), path.len() - self.paths.get(index).len()); }
+        return path.isEmpty() ? self.tree() : f"{self.tree()}/{path}";
+    }
+
+    // The path in the tree of a real path; "" for the top.
+    public string logical(string real) {
+        for (int index = 0; index < self.paths.len; index++) {
+            string shown = self.shown(index);
+            if (real.equals(shown) || real.startsWith(shown + "/")) { return self.paths.get(index) + real.substring(shown.len(), real.len() - shown.len()); }
+        }
+        return real.len() > self.tree().len() ? real.substring(self.tree().len() + 1, real.len() - self.tree().len() - 1) : "";
+    }
+
+    // The store a real path belongs to.
+    public string home(string real) {
+        for location in self.locations {
+            if (real.startsWith(location + "/")) { return location; }
+        }
+        return self.root;
+    }
+
+    // Whether the folder's volume is here: its tree exists and says it is this folder. A card that is out, another
+    // card, or a bare mount point all fail this.
+    public bool present(int index) {
+        StoreFile? stand = StoreFile.open(self.stand(index));
+        StoreFile? shown = StoreFile.open(self.shown(index));
+        return stand != null && shown != null && !stand.attribute("id").isEmpty() && stand.attribute("id").equals(shown.attribute("id"));
+    }
+
+    // Whether the folder is in the tree at all; until the Drive has it there is nothing to place.
+    public bool declared(int index) {
+        StoreFile? stand = StoreFile.open(self.stand(index));
+        return stand != null && !stand.attribute("id").isEmpty();
+    }
+}

@@ -74,8 +74,8 @@ If the engine is down, local files work and placeholders fail to read with a cle
 |---|---|
 | A file's Drive id, its parent's id, the version last agreed with Drive, its state | extended attributes on the file itself; they move with it on rename |
 | Which ranges of a file are downloaded | the file's own extent map (data or hole), in whole 4 KiB blocks |
-| Find a file by Drive id | `ids/<id>` in the store: a hard link to the same inode for files, a stored directory handle for folders |
-| What is waiting to upload | `dirty/`: one entry per changed file, added by the door when a write begins |
+| Find a file by Drive id | `ids/<id>` in the store: a hard link to the same inode. Folders are found by walking the tree once when the engine starts (35,000 folders: under a second) |
+| What is waiting to upload | `dirty/journal`: the door appends one line per change (made, changed, moved, removed) before the change happens; the engine reads it and keeps what is still to do in `dirty/work` |
 | What was deleted locally | `trash/`: the door moves a deleted file here instead of unlinking it; the engine trashes it on Drive; it stays 30 days as an undo |
 | Position in Drive's change feed | one small file, replaced atomically |
 
@@ -104,15 +104,20 @@ File states: `cloud` (nothing or part downloaded), `local` (complete, may be evi
 
 - **Reading a placeholder:** the door asks for the range being read, rounded to chunks, with read-ahead when the reads are sequential. When the last hole is filled the file is checked against Drive's checksum and becomes `local`; later opens are passthrough. Offline, the read fails at once.
 - **Local change:** the door marks the file dirty when a write begins. The engine uploads after the file is closed and quiet for a few seconds, and checks it is unchanged before and after.
-- **Remote change:** a placeholder gets new metadata and its fetched ranges dropped. A downloaded file gets the new content written beside it and swapped in atomically; the door invalidates the kernel's cached view.
+- **Names that stay here:** unfinished and scratch files (`*.part`, `.~lock.*`, an emulator's `*.semu-partial`; the list is in the NixOS module) are never sent. A file is sent once it is renamed to a real name.
+- **Remote change:** a new, empty file with the new facts takes the name; the old one is left untouched for whoever still has it open. Emptying a file in place would hand a program that has it open zeros. A program still reading the old, partly fetched file gets "stale file" for the parts it had not read, never a hole.
 - **Both changed:** both are kept; the local one is renamed with the machine name and date.
 - **Delete:** local delete goes to `trash/`, then to Drive's trash, never a permanent delete. A remote delete moves the local file into `trash/`.
 - **Rename and move:** one operation at the door, sent to Drive as a rename.
-- **Brakes:** a batch that would delete more than a set share of the tree, an empty store, or an unmounted volume stops the engine and asks.
+- **Brakes:** a batch that would delete more than 50 entries or a tenth of the tree, in either direction, waits for `drive resume`. A folder whose volume is away holds everything the Drive says until the volume is back (below).
+- **Several entries of one name:** Drive allows them in one folder, a folder here does not. The names are a function of what the folder holds, so every machine arrives at the same ones: the entry with the smallest Drive id gets the name, the others get `name (2).ext`, `name (3).ext` in order.
 - **Pinning:** `drive pin PATH` downloads everything under it and keeps new remote files downloaded. `drive unpin PATH` makes its files evictable.
-- **Eviction:** clean, unpinned files get their blocks released, least recently opened first, when the cache budget or free-space floor is hit.
+- **Eviction:** clean, unpinned files get their blocks released, least recently opened first, when the cache budget or free-space floor is hit. A file is only emptied under a write lease, which the kernel grants only while nothing has the file open or mapped, so a running program never sees its file turn to zeros.
+- **Adoption:** `drive adopt LOCAL-FOLDER DRIVE-FOLDER` makes local files the contents of the same not-downloaded files: same size and the checksum the Drive reports. On one filesystem the file is moved in (the same inode); across subvolumes its blocks are shared; only otherwise is it copied. Files that differ are named and left where they are. With `--upload-new`, files the Drive does not have are moved in and uploaded.
 - **Placement:** every machine declares the same pinned folders by their Drive path; a machine may add where one of them is stored (the Deck: the SD card). It still appears in place under `~/Drive`. If the volume is absent the folder is "unavailable", not "deleted". The volume must be ext4 or btrfs (extended attributes, hard links, sparse files). A move across the boundary keeps the file's Drive id, so it stays a rename on Drive.
-- **How placement works:** the door holds every folder it has seen as an open handle to a real folder and performs each operation relative to a handle, never by building paths. A placement is one substitution: looking up that folder's name returns a handle to the other location. Everything beneath follows from the handles. Each location carries its own `ids/`, `dirty/` and `trash/`. If the location cannot be opened, the folder reports "unavailable". No mounts inside the store and no graph of our own; the kernel's directory tree is the graph.
+- **How placement works:** the door holds every folder it has seen as an open handle to a real folder and performs each operation relative to a handle, never by building paths. A placement is one substitution: looking up that folder's name returns a handle to the other location (`UserspaceForwarding.redirect` in btrc). Everything beneath follows from the handles. Each location carries its own `ids/`, `trash/` and `tmp/`; the journal stays in the main store. No mounts inside the store and no graph of our own; the kernel's directory tree is the graph.
+- **As built:** in the main tree the folder is an empty stand-in. The location counts as present only if its tree carries the stand-in's Drive id, so an unmounted card, another card or a bare mount point all read as absent. Absent means: listed by name, entering it fails with "no such device or address", the door lets go of everything it held there so the volume can be removed, nothing is downloaded for it, and the engine stops reading the change feed until it is back, so nothing the Drive says about it is skipped. `drive place FOLDER` moves a folder onto its volume once; the folder on the volume must already exist, so nothing is ever written to a bare mount point. A placed folder and the folders it is under cannot be renamed, moved or removed on this machine ("device or resource busy").
+- **Not built yet:** a move across the boundary is a copy and a delete (`mv` does it), so the Drive sees a new file and a trashed one rather than a rename. If another machine renames or trashes a placed folder or a folder above it, this machine holds until its declaration is changed.
 - **Encryption:** the client does not encrypt. Files are as protected as the volume they sit on: the system disk is encrypted, the Deck's SD card today is not.
 - **Google Docs, Sheets, Slides:** small link files that open in the browser.
 
@@ -126,6 +131,7 @@ The other systems do not fully prevent this either. On macOS a program that read
 - **Three classes.** `allow` (apps the user approved), `deny` (they see names and sizes, content reads fail with a distinct error), `ask` (everything else, including unknown).
 - **The deny list ships with the client** (`readers.deny`): indexers and desktop search, thumbnail and preview helpers, backup and other sync tools, virus scanners. The NixOS module adds to it; `drive readers block NAME` adds one by hand.
 - **Budget for `ask`.** Each application may read a small amount of not-downloaded data per window (bytes and distinct files): enough to open the handful of files a person opens, far too little for a crawl. Range fetching keeps type sniffing and header reads cheap.
+- **The dialog, as built.** `drive-ask` is a BTRC window (`Library.GUI`) started in the user's desktop session; Enter allows once, A always allows, D blocks, Escape leaves the question unanswered. The engine learns at once when there is no session to show it in, and stops the program there.
 - **The dialog.** Past the budget, that application's reads are held and the client's own window asks: "**backup.py** (started from Konsole) wants to download 1,240 files, 38 GB, from Google Drive", with Allow once, Always allow and Block. It is a BTRC window owned by the client, not a desktop notification that can be missed. Held reads continue on Allow and fail on Block or after a minute with no answer.
 - **Where no dialog can show** (Game Mode on the Deck, an SSH session, no display): the reads fail at the budget and `drive readers` shows what was stopped and lets it be allowed from the command line.
 - **Memory.** Answers are remembered per application; `drive readers` lists and changes them; defaults are declared in the NixOS module.
@@ -256,7 +262,33 @@ Findings that change the design:
 - The server holds one descriptor for every file the kernel remembers. The door has to run with a descriptor limit above the size of the tree, or hold nodes as file handles instead. Decide in M2 with the real tree.
 - BTRC work does not scale across threads (one lock guards all reference counts), so the door serves requests on one thread and answers slow ones later. The scan numbers above are from that one thread.
 
+Measured since, on the same machine:
+
+| Question | Result |
+|---|---|
+| Building the real tree (M2) | the whole of My Drive, 398,957 entries (363,989 files in 34,969 folders; 10,484 entries outside the tree were skipped): 1,110 s, nearly all of it Google's listing, 355 MB of memory at the peak. The placeholders take 436 KB beyond their folder entries |
+
 Still to measure before the go or no-go: the Deck's kernel (7.2.10-valve1) and ext4 on its SD card.
+
+## What each milestone proved
+
+Every line is a VM scenario under `tests/drive/` unless it says otherwise. Each scenario runs the real door and engine against the fake Drive.
+
+- **M1** `remote`: the API client against the fake (listing, change feed, ranges, resumable upload, token refresh, rate limits and server errors retried). Push confirmed on the real account (above).
+- **M2** `store`, `door`, `readers`: placeholders take no room; a read fetches only its range; a completed file is checked against the Drive's checksum; with the engine killed downloaded files work and others fail to open; **with the door killed nothing opens and no read returns zeros**; after a restart with no network the tree is there. A program past its allowance is stopped, asked about once, and remembered; a denied program is refused; removing the allowance makes the test fail.
+- **M3** `planner` (table of every rule, no VM), `writes`, `convergence`: new files and folders, changes, renames and moves reach the Drive as what they are; a write into a not-downloaded file fetches it first and an outright replacement does not; deletes become trash on both sides; a file changed on both sides is kept twice (with the rule off, one version is lost: the test fails); 5 deletions against a limit of 3 wait for `drive resume` in both directions (with the brake off they go through: the test fails); changes made while the engine was stopped go up afterwards. Two clients doing 360 random operations over three seeds end with identical trees, identical to the Drive's, with every file each wrote in its own folder present and unchanged.
+- **M4** `pinning`, `placement`: a pinned folder is downloaded without being read, including what the Drive adds or changes later, and keeps the Drive's file times; content outside pinned folders is given back oldest first and **never while a program has the file open**; adoption moves the local file in (same inode) and downloads nothing. A placed folder is unavailable before its volume has ever been there, in place once it is, unavailable again when the volume is pulled while running (and the volume can then really be removed), and back with everything the Drive changed meanwhile.
+- **M2, the window** `dialog`: in a VM with a real compositor the window appears with the program's name (read off the screen), each of its three answers does what it says, and with no desktop session the program is stopped at once and listed.
+- **M5 so far** `module`: the units the NixOS module generates mount the Drive for the user from boot with one capability, recover from either service being killed, and show the tree after a restart with no network.
+- **Real account, 2026-11-13, by hand, in `drive-client-scratch` only:** through a test mount beside the rclone one, a new folder, nested folder and files arrived on the Drive with the right checksums and times; an append went up as the same file's next version; a rename and move kept the file and its time; a delete was a trash; a change made on the Drive replaced the local file and was fetched when read; a file changed on both sides was kept twice; a trash on the Drive moved the local file to the local trash. The whole of My Drive was mirrored twice (398,957 entries each time: 1,110 s and 866 s).
+
+## Known limits
+
+- The engine does one thing at a time: a large upload or a 32 MiB piece of a pinned download delays another program's read of a not-downloaded file until it finishes.
+- `trash/` is never emptied yet (the 30 days are not enforced), and `drive verify` does not exist.
+- Eviction looks only at the main store, not at placed volumes.
+- Google's change feed hands out about 50 changes a page for this account, one request each, so a store that is far behind catches up slowly: 411,000 changes (a day in which another sync tool rewrote every file's time) would have taken over an hour. The engine stays usable meanwhile, since it reads one page between looks at the door, but a fresh listing is quicker past roughly 100,000 changes; the client does not switch to one by itself yet.
+- Root cannot look inside `~/Drive` (as with the rclone mount today).
 
 ## Not in version 1
 
