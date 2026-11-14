@@ -14,7 +14,10 @@
       modesetting.enable = true;
       package = let latest = config.boot.kernelPackages.nvidiaPackages.latest; in latest // {
         open = latest.open.overrideAttrs (old: {
-          patches = (old.patches or []) ++ [ ./nvidia-dsc-wide-modes-use-two-heads.patch ];  # XDR 6K needs DSC on two heads
+          patches = (old.patches or []) ++ [
+            ./nvidia-dsc-wide-modes-use-two-heads.patch  # XDR 6K needs DSC on two heads
+            ./nvidia-dsc-vesa-slice-height.patch         # VESA 108+ slice height (141 vs 1692 on 6K)
+          ];
         });
       };
       nvidiaSettings = true;

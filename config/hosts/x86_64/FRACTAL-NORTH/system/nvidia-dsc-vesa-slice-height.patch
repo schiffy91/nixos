@@ -1,0 +1,45 @@
+--- a/src/common/modeset/timing/nvt_dsc_pps.c
++++ b/src/common/modeset/timing/nvt_dsc_pps.c
+@@ -1795,15 +1795,38 @@
+     {
+         if(out->slice_height == 0)
+         {
+-            NvU32 i;
+-            for (i = 1 ; i <= 16; i++)
++            /*
++             * Per VESA DSC v1.2a Section 3.8, start from a minimum slice height
++             * of 108 lines (and 15000-pixel slice area) rather than pic_height.
++             * Giant slices (e.g. 1692 lines on 6016x3384) collapse U5.11
++             * bpg_offset precision, accumulate hundreds of bits of RC offset
++             * drift, and exceed sink TCON slice regimes used by DRM/macOS.
++             */
++            NvU32 min_slice_height = MAX(108U, (NvU32)NV_CEIL(15000U, out->slice_width));
++            NvU32 slice_height;
++
++            for (slice_height = min_slice_height; slice_height <= out->pic_height; slice_height++)
+             {
+-                out->slice_height = out->pic_height / i;
+-                if (out->pic_height != out->slice_height * i )
++                if ((out->pic_height % slice_height) != 0U)
+                     continue;
++                if (out->native_420 && ((slice_height % 2U) != 0U))
++                    continue;
++
++                out->slice_height = slice_height;
++                if (DSC_PpsCheckSliceHeight(out) == NVT_STATUS_SUCCESS)
++                    return NVT_STATUS_SUCCESS;
++            }
++
++            for (slice_height = MIN(min_slice_height - 1U, out->pic_height); slice_height >= 8U; slice_height--)
++            {
++                if ((out->pic_height % slice_height) != 0U)
++                    continue;
++                if (out->native_420 && ((slice_height % 2U) != 0U))
++                    continue;
+ 
++                out->slice_height = slice_height;
+                 if (DSC_PpsCheckSliceHeight(out) == NVT_STATUS_SUCCESS)
+                     return NVT_STATUS_SUCCESS;
+             }
+             // Error! can't find valid slice_height
+             return NVT_STATUS_PPS_SLICE_HEIGHT_ERROR;
