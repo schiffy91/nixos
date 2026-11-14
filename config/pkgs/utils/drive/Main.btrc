@@ -430,6 +430,7 @@ class Drive {
         else if (command.equals("resume")) { Drive.ask(options, "resume"); }
         else if (command.equals("pin") || command.equals("unpin") || command.equals("place")) { Drive.pin(options, command); }
         else if (command.equals("pins")) { Drive.ask(options, "pins"); }
+        else if (command.equals("pause") || command.equals("unpause")) { Drive.ask(options, command); }  // hold or let go the downloading of pinned folders
         else if (command.equals("evict")) { Drive.ask(options, "evict"); }
         else if (command.equals("verify")) { Drive.verify(options); }
         else if (command.equals("adopt")) { Drive.adopt(options); }

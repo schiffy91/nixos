@@ -96,12 +96,13 @@ class PinningScenario {
     private void adopted() {
         print("A local copy becomes the Drive's copy without a transfer");
         string local = "/var/lib/drive-test/local";
-        self.machine.succeed(f"mkdir -p {local}/Sub {local}/Fresh && cp {self.drive.source}/x {local}/x.bin && cp {self.drive.source}/y {local}/Sub/y.bin && cp {self.drive.source}/z-local {local}/z.bin && echo only here > {local}/Fresh/new.txt");
+        self.machine.succeed(f"mkdir -p {local}/Sub {local}/Fresh && cp {self.drive.source}/x {local}/x.bin && cp {self.drive.source}/y {local}/Sub/y.bin && chmod 444 {local}/Sub/y.bin && cp {self.drive.source}/z-local {local}/z.bin && echo only here > {local}/Fresh/new.txt");
         string inode = self.machine.succeed(f"stat -c %i {local}/x.bin").trim();
         self.drive.asked();
         string report = self.drive.drive(f"adopt {local} Adopt --upload-new");
         Check.that(report.contains("2 adopted, 1 new here and sent to the Drive, 0 already downloaded, 1 different from the Drive"), f"the report says what happened: {report}");
         Check.equal(self.drive.asked(), "", "nothing was downloaded");
+        Check.that(self.drive.drive("pause").contains("ok") && self.drive.drive("status").contains("(paused)") && self.drive.drive("unpause").contains("ok"), "downloading for pinned folders can be held and let go by hand");
         Check.equal(self.drive.state("Adopt/x.bin") + self.drive.state("Adopt/Sub/y.bin"), "locallocal", "the matching files are downloaded files now");
         Check.equal(self.machine.succeed(f"stat -c %i {self.drive.store}/tree/Adopt/x.bin").trim(), inode, "on one filesystem the file itself moved in: nothing was copied");
         self.machine.succeed(f"cmp {self.mount}/Adopt/x.bin {self.drive.source}/x && cmp {self.mount}/Adopt/Sub/y.bin {self.drive.source}/y && ! test -e {local}/x.bin && ! test -e {local}/Sub/y.bin");
