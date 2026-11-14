@@ -62,6 +62,14 @@ class WritesScenario {
         self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py renamed.txt | grep -q '^{id} {work} '");
         Check.equal(self.drive.remote("new.txt"), "", "a rename and move is a rename and move on the Drive, not a second file");
 
+        print("A sending whose answer is lost is not sent a second time");
+        self.drive.control("lose?count=1");
+        self.machine.succeed(f"echo once > {self.mount}/Work/once.txt");
+        self.machine.waitUntil(f"test -n \"$(getfattr --absolute-names -n user.drive.id --only-values {self.drive.store}/tree/Work/once.txt 2>/dev/null)\" && drive status --runtime /run/drive-test | grep -q ' 0 changes to send'");
+        self.machine.succeed("sleep 3");
+        Check.equal(self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py once.txt | grep -c ' False$' || true").trim(), "1", "the Drive holds the file once");
+        Check.equal(self.machine.succeed(f"ls {self.mount}/Work | grep -c once").trim(), "1", "and so does the folder here");
+
         print("An unfinished file stays here until it gets its real name");
         self.machine.succeed(f"echo half > {self.mount}/Work/video.mkv.part && mkdir {self.mount}/Work/.~lock.cache && echo scratch > {self.mount}/Work/.~lock.cache/x && echo real > {self.mount}/Work/real.txt");
         self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py real.txt | grep -q ' False$'");
