@@ -42,10 +42,6 @@ let
     };
   } extra;
 in lib.mkIf settings.enable {
-  assertions = [ {
-    assertion = !config.settings.apps.utils.rclone.enable;
-    message = "settings.apps.utils.drive and settings.apps.utils.rclone both serve ~/Drive; enable one.";
-  } ];
   environment.systemPackages = [ programs.drive ];
   settings.apps.utils.drive.ignore = [ "*.part" "*.crdownload" "*.kate-swp" ".~lock.*" ".goutputstream-*" ".#*" ];  # other modules add their programs' names
   environment.sessionVariables = { DRIVE_RUNTIME = runtime; DRIVE_MOUNT = settings.mountPoint; };

@@ -24,7 +24,7 @@ let
       && !rootOff.settings.apps.utils.nixosctl.caffeine.enable)
       "Defaults must follow a disabled root through every level."
     ++ check (failures groupsOff == [] && !groupsOff.settings.apps.dev.git.enable
-      && !groupsOff.settings.apps.gaming.sunshine.enable && !groupsOff.settings.apps.utils.rclone.enable)
+      && !groupsOff.settings.apps.gaming.sunshine.enable && !groupsOff.settings.apps.utils.drive.enable)
       "Disabling groups without explicit child overrides must be valid."
     ++ check (rejects "settings.apps.dev.vscode.enable" "settings.apps.dev.enable" [{
       settings.apps.dev = { enable = false; vscode.enable = true; };

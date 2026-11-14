@@ -1,7 +1,6 @@
 { config, pkgs, host, ... }:
 let
   user = config.settings.users.admin.username;
-  emulationRoot = "/run/media/${user}/${host.sdCard.label}/Emulation";
 in {
   settings.apps = {
     gaming.packages = with pkgs; [ protonup-qt ];
@@ -17,9 +16,6 @@ in {
     gaming.battlenet.enable = true;
     gaming.rocksmith.enable = false;
     gaming.assettocorsa.enable = false;
-    gaming.semu = {
-      target = "steam-deck";
-      root = emulationRoot;
-    };
+    gaming.semu.target = "steam-deck";
   };
 }

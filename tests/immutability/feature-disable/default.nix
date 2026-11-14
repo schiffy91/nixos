@@ -5,17 +5,21 @@ let
   pkgs = import inputs.nixpkgs { inherit system; };
   inherit (pkgs) lib;
   home = "/fixture/user";
-  featurePath = "${home}/.config/rclone";
+  featurePath = "${home}/.config/example";
   profile = enabled: retain: (inputs.nixpkgs.lib.nixosSystem {
     inherit system;
     specialArgs = { inherit inputs; };
     modules = [
       ../../../config/settings.nix
-      ../../../config/pkgs/utils/rclone.nix
+      # A feature as every package module is one: on, it contributes a path to keep; off, it contributes nothing.
+      ({ config, lib, ... }: {
+        options.settings.apps.utils.example.enable = lib.mkOption { type = lib.types.bool; default = false; };
+        config.settings.disk.immutability.persist.paths = lib.mkIf config.settings.apps.utils.example.enable [ featurePath ];
+      })
       ../../../config/system/storage/immutability
       {
         settings = {
-          apps.utils.rclone.enable = enabled;
+          apps.utils.example.enable = enabled;
           users.admin = { username = "fixture"; homeDirectory = home; };
           users.agent.enable = false;
           disk = {
@@ -56,7 +60,7 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
       }) profiles // {
       "persistence-features/profiles.json".text = builtins.toJSON
         (lib.mapAttrs (_: config: {
-          enabled = config.settings.apps.utils.rclone.enable;
+          enabled = config.settings.apps.utils.example.enable;
           paths = config.settings.disk.immutability.persist.paths;
         }) profiles);
     };

@@ -8,7 +8,7 @@ let
     label = "SD";  # Jovian automounts it at /run/media/<user>/<label>
   };
 in {
-  imports = [ ./system ./pkgs ];
+  imports = [ ./system ./pkgs ./card.nix ];
   _module.args.host = { inherit disk sdCard; };
   networking.hostName = "STEAM-DECK-OLED";
 }

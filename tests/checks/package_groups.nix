@@ -14,6 +14,7 @@ let
         (disable (lib.getAttrFromPath (lib.splitString "." path) desktop.config.settings.apps))) ]
         ++ lib.optional (path == "gaming.steam") { settings.apps.gaming.assettocorsa.wheelMenu.enable = lib.mkForce false; };
     }).config;
+    encrypted = (deck.configuration.extendModules { modules = [ { settings.disk.sdCard.enable = true; } ]; }).config;
     noGaming = disabled "gaming";
     noDev = disabled "dev";
     noUtils = disabled "utils";
@@ -89,8 +90,7 @@ let
     steamDefinitions = deck.configuration.options.programs.steam.package.definitionsWithLocations;
   in
     check (!noGaming.programs.steam.enable && !noGaming.services.sunshine.enable
-      && !(noGaming.environment.sessionVariables ? SEMU_TARGET) && !(noGaming.systemd.user.services ? rclone-offline-emulation)
-      && noGaming.settings.apps.utils.drive.pinned == [])
+      && !(noGaming.environment.sessionVariables ? SEMU_TARGET) && noGaming.settings.apps.utils.drive.pinned == [])
       "Disabling gaming must disable Steam, Sunshine, Semu and its library sync."
     ++ check (!noDev.programs.zsh.enable && !(builtins.elem "claude-code" (names noDev))
       && !(builtins.elem "codex" (names noDev)) && !(builtins.elem "lmstudio" (names noDev)))
@@ -143,16 +143,27 @@ let
       && !(config.home-manager.users.${config.settings.users.admin.username}.systemd.user.services ? chrome-launchers))
       [ noApps noUtils (disabled "utils.chrome") ])
       "Disabling Chrome or its package groups must remove PWA installation policy and launcher watching."
-    ++ check (handheld.environment.sessionVariables.SEMU_ROOT == "/run/media/alexanderschiffhauer/SD/Emulation"
-      && handheld.settings.apps.utils.rclone.offline.emulation.local == "/run/media/alexanderschiffhauer/SD/Emulation"
-      && handheld.systemd.user.timers ? rclone-offline-emulation
-      && !(desktop.config.environment.sessionVariables ? SEMU_ROOT)
-      && desktop.config.settings.apps.utils.drive.enable && desktop.config.settings.apps.utils.drive.pinned == [ "media/Games/Emulation" ]
-      && desktop.config.systemd.services ? drive-door && desktop.config.systemd.services ? drive-engine
-      && !(desktop.config.systemd.services ? rclone-drive) && !(desktop.config.systemd.user.timers ? rclone-offline-emulation)
-      && lib.hasInfix "--ignore '*.semu-partial'" desktop.config.systemd.services.drive-engine.serviceConfig.ExecStart
-      && lib.hasInfix "--pin media/Games/Emulation" desktop.config.systemd.services.drive-engine.serviceConfig.ExecStart)
-      "Semu's library must be its Drive folder in place on the desktop, kept downloaded by the Drive client with no sync of its own, and for now the Deck's SD card synced by a timer."
+    ++ check (lib.all (config:
+      !(config.environment.sessionVariables ? SEMU_ROOT)
+      && config.settings.apps.utils.drive.enable && config.settings.apps.utils.drive.pinned == [ "media/Games/Emulation" ]
+      && config.systemd.services ? drive-door && config.systemd.services ? drive-engine && config.systemd.services ? drive-push
+      && lib.hasInfix "--ignore '*.semu-partial'" config.systemd.services.drive-engine.serviceConfig.ExecStart
+      && lib.hasInfix "--pin media/Games/Emulation" config.systemd.services.drive-engine.serviceConfig.ExecStart
+      && lib.elem "/var/lib/drive" config.settings.disk.immutability.persist.paths)
+      [ desktop.config handheld encrypted ])
+      "Semu's library must be its Drive folder in place on every machine: no root of its own, kept downloaded by the Drive client, with no second copy and no sync beside it."
+    ++ check (desktop.config.settings.apps.utils.drive.placements == {}
+      && !handheld.settings.disk.sdCard.enable
+      && handheld.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/run/media/alexanderschiffhauer/SD/drive"; }
+      && lib.hasInfix "--place 'media/Games/Emulation=/run/media/alexanderschiffhauer/SD/drive'" handheld.systemd.services.drive-door.serviceConfig.ExecStart
+      && lib.hasInfix "--place-device '/run/media/alexanderschiffhauer/SD/drive=/dev/disk/by-label/SD'" handheld.systemd.services.drive-engine.serviceConfig.ExecStart
+      && encrypted.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/sd/drive"; }
+      && lib.hasInfix "--place 'media/Games/Emulation=/sd/drive'" encrypted.systemd.services.drive-door.serviceConfig.ExecStart
+      && lib.hasInfix "--place-device '/sd/drive=/dev/disk/by-label/SD-crypt'" encrypted.systemd.services.drive-engine.serviceConfig.ExecStart
+      && lib.hasInfix "/dev/disk/by-label/SD-crypt" encrypted.environment.etc.crypttab.text
+      && lib.any (mount: mount.where == "/sd") encrypted.systemd.mounts
+      && !(handheld.environment.etc ? crypttab))
+      "The Deck keeps the library on its card through the Drive client: on the plain card as Jovian mounts it, or, with settings.disk.sdCard.enable, on the encrypted card at /sd."
     ++ check (lib.all (path: !(lib.hasInfix "semu" path) && !(lib.hasSuffix "/ES-DE" path)) desktop.config.settings.disk.immutability.persist.paths)
       "Semu must persist nothing of its own: every asset lives in its library and its state is disposable."
     ++ check (handheld.settings.apps.gaming.sunshine.capture == "auto" && desktop.config.settings.apps.gaming.sunshine.capture == "kwin")

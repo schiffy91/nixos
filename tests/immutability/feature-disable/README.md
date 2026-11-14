@@ -7,7 +7,7 @@ nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph t
 ```
 
 The parent `persistence-ownership` node checks module merging and enable gates
-before this VM runs. The VM evaluates the real rclone and immutability modules
+before this VM runs. The VM evaluates a feature module and the real immutability module
 for enabled, disabled and explicitly retained configurations, then exercises
 their generated specifications with the production runtime on a Btrfs disk.
 
