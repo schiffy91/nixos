@@ -76,6 +76,11 @@ class StoreFile {
         return driveInspect(self.descriptor, &status) == 0 ? (long long)status.blocks : -1LL;
     }
 
+    public int links() {  // how many names the file has
+        struct DriveStatus status;
+        return driveInspect(self.descriptor, &status) == 0 ? (int)status.links : 0;
+    }
+
     public long long number() {
         struct DriveStatus status;
         return driveInspect(self.descriptor, &status) == 0 ? (long long)status.number : -1LL;

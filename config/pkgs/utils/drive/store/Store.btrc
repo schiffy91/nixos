@@ -615,6 +615,61 @@ class Store {
         return "adopted";
     }
 
+    private int repaired = 0;
+    private int checked = 0;
+
+    private void verifyBelow(string folder) {
+        for name in FileSystem.listDir(folder) {
+            string child = f"{folder}/{name}";
+            if (FileSystem.isSymlink(child)) { continue; }
+            if (FileSystem.isDir(child)) {
+                int placed = self.volumes.holding(self.logical(child));
+                if (!(placed >= 0 && child.equals(self.volumes.stand(placed)))) { self.verifyBelow(child); }
+                continue;
+            }
+            StoreFile? held = StoreFile.open(child);
+            string id = held == null ? "" : held.attribute("id");
+            if (held == null || id.isEmpty()) { continue; }
+            self.checked++;
+            string link = self.linkIn(self.volumes.home(child), id);
+            StoreFile? named = StoreFile.open(link);
+            if (named != null && named.number() == held.number()) { continue; }
+            StorePaths.remove(link);  // missing, or the name of some other file
+            FileSystem.mkdirp(PathTools.dirname(link));
+            if (StorePaths.link(child, link)) { self.repaired++; }
+        }
+    }
+
+    // Walk everything and put right what the tree itself can settle: every file the Drive knows is found by its
+    // id, and no id leads to a file that is not in the tree.
+    public string verify() {
+        self.repaired = 0;
+        self.checked = 0;
+        self.verifyBelow(self.tree());
+        Vector<string> homes = [self.root];
+        for (int index = 0; index < self.volumes.locations.len; index++) {
+            if (!self.attached.get(index)) { continue; }
+            self.verifyBelow(self.volumes.shown(index));
+            homes.push(self.volumes.locations.get(index));
+        }
+        int orphans = 0;
+        self.files = 0;
+        for home in homes {
+            for bucket in FileSystem.listDir(home + "/ids") {
+                for id in FileSystem.listDir(f"{home}/ids/{bucket}") {
+                    StoreFile? named = StoreFile.open(f"{home}/ids/{bucket}/{id}");
+                    if (named != null && named.links() < 2) {  // its only name: nothing in the tree is this file
+                        StorePaths.remove(f"{home}/ids/{bucket}/{id}");
+                        orphans++;
+                    } else {
+                        self.files++;
+                    }
+                }
+            }
+        }
+        return f"{self.checked} files checked, {self.repaired} id names repaired, {orphans} stray id names removed";
+    }
+
     // Whether a file from outside is one the Drive holds at `path`: "same", "different", or "unknown" when the
     // Drive has nothing there. Nothing is changed.
     public string probe(string source, string path, string sha256) {

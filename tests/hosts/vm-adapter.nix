@@ -28,6 +28,10 @@ let
     ${pkgs.systemd}/bin/journalctl -b --no-pager -o short-monotonic -p 3 2>/dev/null | grep -v 'Ignoring duplicate name' | tail -n 12 | while read -r line; do
       printf 'E2E-TROUBLE error: %s\n' "$line"
     done
+    ${lib.optionalString config.settings.apps.utils.drive.enable ''
+      # The Drive client's mount is the user's alone, so it is looked for in the mount table, not entered.
+      printf 'E2E-DRIVE %s\n' "$(grep -c ' ${config.settings.apps.utils.drive.mountPoint} fuse.drive ' /proc/self/mounts)"
+    ''}
     ${pkgs.systemd}/bin/journalctl -b --no-pager -o cat 2>/dev/null | grep 'Service has no ExecStart' | while read -r line; do
       printf 'E2E-REFUSED %s\n' "$line"
     done

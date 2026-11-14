@@ -1241,6 +1241,13 @@
     },
     {
       "after": [
+        "drive-writes"
+      ],
+      "id": "drive-crashes",
+      "spec": "drive/crashes/test.json"
+    },
+    {
+      "after": [
         "drive-placement"
       ],
       "id": "sd-card",
@@ -1357,6 +1364,7 @@
     "drive-placement",
     "drive-module",
     "drive-dialog",
+    "drive-crashes",
     "sd-card",
     "gaming-runtime",
     "sleep-lock-state",
