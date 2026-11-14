@@ -3,6 +3,7 @@ ConsolePortSettings = {
     ["crosshairEnable"] = false,
     ["interactButton"] = "none",
     ["interactCondition"] = "nil",
+    ["keyboardAlwaysShow"] = false,
     ["keyboardButtonVersion"] = 2,
     ["layersDoubleBar"] = false,
     ["moduleStateCharacters"] = {
@@ -15,8 +16,10 @@ ConsolePortSettings = {
     ["mouseHideCursorOnMovement"] = true,
     ["mouseShowCenterTooltip"] = false,
     ["trgtEnemy"] = 1,
+    ["trgtEnemyTooltip"] = true,
     ["trgtForce"] = 0,
     ["trgtFriend"] = 1,
+    ["trgtFriendTooltip"] = true,
     ["trgtMatchLocked"] = 0,
     ["tutorialState"] = 14,
 }
@@ -399,7 +402,7 @@ ConsolePortDevices = {
                 ["emulatePADPADDLE4"] = "F4",
                 ["gameMenuFontSize"] = 16,
                 ["gameMenuScale"] = 0.75,
-                ["keyboardAlwaysShow"] = true,
+                ["keyboardAlwaysShow"] = false,
             },
         },
         ["Generator"] = {
@@ -636,7 +639,7 @@ ConsolePortShared = {
             ["PAD1"] = {
                 [""] = "JUMP",
                 ["CTRL-"] = "CLICK ConsolePortGamepadBar3Slot4:LeftButton",
-                ["CTRL-SHIFT-"] = "CLICK ConsolePortGamepadBar4Slot4:LeftButton",
+                ["CTRL-SHIFT-"] = "SITORSTAND",
                 ["SHIFT-"] = "CLICK ConsolePortGamepadBar2Slot4:LeftButton",
             },
             ["PAD2"] = {
@@ -701,9 +704,9 @@ ConsolePortShared = {
             },
             ["PADFORWARD"] = {
                 [""] = "TOGGLEGAMEMENU",
-                ["CTRL-"] = "",
-                ["CTRL-SHIFT-"] = "",
-                ["SHIFT-"] = "",
+                ["CTRL-"] = "TOGGLEGAMEMENU",
+                ["CTRL-SHIFT-"] = "TOGGLEGAMEMENU",
+                ["SHIFT-"] = "TOGGLEGAMEMENU",
             },
             ["PADLSHOULDER"] = {
                 [""] = "TARGETSCANENEMY",

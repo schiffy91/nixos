@@ -1,0 +1,43 @@
+--- a/ConsolePort_Keyboard/Core/Observer.lua
++++ b/ConsolePort_Keyboard/Core/Observer.lua
+@@ -1,6 +1,24 @@
+ local Keyboard, GetCurrentKeyBoardFocus, bitbor = ConsolePortKeyboard, GetCurrentKeyBoardFocus, bit.bor;
+ local IsShiftKeyDown, IsControlKeyDown, IsAltKeyDown = IsShiftKeyDown, IsControlKeyDown, IsAltKeyDown;
+ local Observer, _, env = CreateFrame('Frame'), ...;
++
++-- Camera freelook can remain enabled while a physical keyboard is used.
++-- Observe input without consuming it; modifier keys may be emulated by LT/RT.
++local function PhysicalInput(self, key)
++	if key == 'LSHIFT' or key == 'RSHIFT' or key == 'LCTRL' or key == 'RCTRL'
++		or key == 'LALT' or key == 'RALT' or key:match('^PAD') then return end
++	Observer.keyboardInput = true;
++	Keyboard:OnFocusChanged(nil)
++end
++Observer:EnableKeyboard(true)
++Observer:EnableGamePadButton(true)
++Observer:SetPropagateKeyboardInput(true)
++Observer:SetScript('OnKeyDown', PhysicalInput)
++Observer:SetScript('OnGamePadButtonDown', function(self)
++	self.keyboardInput = false;
++	self.focusFrame = nil; -- Re-evaluate an edit box that is already focused.
++end)
++local observed = setmetatable({}, {__mode = 'k'});
+ 
+ function Observer:UpdateFocus()
+ 	local focus = self.forceFrame;
+@@ -14,10 +32,14 @@
+ 		and not focus:GetAttribute(env.Attributes.HideKeyboard);
+ 	local changed = focus ~= self.focusFrame;
+ 	if changed then
++		if valid and not observed[focus] then
++			focus:HookScript('OnChar', PhysicalInput)
++			observed[focus] = true;
++		end
+ 		self.focusFrame = focus;
+ 	end
+ 
+-	return focus, changed, valid;
++	return focus, changed, valid and not self.keyboardInput;
+ end
+ 
+ function Observer:OnUpdate(elapsed)

@@ -8,7 +8,11 @@ for name,p in pairs(FlareUI2_DB.profiles) do
     if display then
         local physical=assert(displays[display]);local H=768/p.displayLayout.scale;local W=H*physical[1]/physical[2]
         local chat=p.displayLayout.chat;local uf=p.unitframes;local positions=uf.layouts.Desktop
-        local r={chat=rect(chat.x,chat.y,chat.width,chat.height+28),actions=rect(W/2-280,0,560,p.actionbars.enabled and 174 or 220),minimap=rect(W-258,24,234,234)}
+        -- Only the center pet ring reaches 220; the controller's outer button
+        -- groups end below 180. Keep that shoulder clearance available to the
+        -- player pet and target-of-target frames on the short handheld canvas.
+        local r={chat=rect(chat.x,chat.y,chat.width,chat.height+28),actions=rect(W/2-280,0,560,p.actionbars.enabled and 174 or 180),minimap=rect(W-258,24,234,234)}
+        if not p.actionbars.enabled then r.petactions=rect(W/2-140,180,280,40) end
         if p.actionbars.enabled then
             local xp=p.actionbars.xpbar;local a=xp.layouts.Desktop
             r.xp=rect(W/2+a.x-xp.width/2,a.y,xp.width,xp.height)
@@ -33,12 +37,13 @@ for name,p in pairs(FlareUI2_DB.profiles) do
             r[key]=rect(W/2+a.x-cfg.width/2,a.y,cfg.width,cfg.height or 12)
         end
         r.totems=rect(W/2-70,uf.totemLayouts.Desktop.y,140,30)
-        r.focus=rect(W/2-(uf.units.focus.width or 160)/2,232,(uf.units.focus.width or 160),94)
+        r.focus=rect(W/2-(uf.units.focus.width or 160)/2,positions.focus.y-18,(uf.units.focus.width or 160),94)
         local q=p.objectivetracker;local qp=q.layouts.Desktop
         r.tracker=rect(W+qp.x-q.width,qp.y,q.width,q.maxHeight)
         assert(q.width==234 and qp.y==270 and (p.minimap.style or "square")=="square", "map/tracker column")
         for _,kind in ipairs({'buffs','debuffs'}) do
             local cfg=p.auras[kind];local a=p.auras.layouts.Desktop[kind]
+            -- AceDB removes values matching FlareUI's defaults on logout.
             local spacing=cfg.spacing or 4
             local w=cfg.perRow*cfg.size+(cfg.perRow-1)*spacing
             local rows=math.ceil(cfg.max/cfg.perRow);local h=rows*cfg.size+(rows-1)*spacing
@@ -47,7 +52,8 @@ for name,p in pairs(FlareUI2_DB.profiles) do
                 r[kind]=rect(r.player.x+4,r.player.y+r.player.h+4,w,h)
             else
                 assert(cfg.center, 'debuff group must remain centered')
-                r[kind]=rect(W/2+a.x-w/2,H+a.y-h,w,h)
+                assert(a.point=='BOTTOM' and (cfg.wrap or 'UP')=='UP' and a.y==232)
+                r[kind]=rect(W/2+a.x-w/2,a.y,w,h)
             end
         end
         for _,group in ipairs({'solo','party','raid'}) do

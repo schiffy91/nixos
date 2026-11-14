@@ -11,7 +11,7 @@ local function MacroButton(name, text)
 end
 
 local function Initialize()
-    local attack = "/stopmacro [@softenemy,noexists][@softenemy,noharm][@softenemy,dead]\n/target [@softenemy]\n/startattack [harm,nodead]"
+    local attack = "/stopmacro [@softinteract,dead][@softenemy,noexists][@softenemy,noharm][@softenemy,dead]\n/target [@softenemy]\n/startattack [harm,nodead]"
     if select(2, UnitClass("player")) == "HUNTER" then
         local spell = C_Spell.GetSpellName(75)
         if spell then attack = attack .. "\n/cast [harm,nodead] !" .. spell end
@@ -44,7 +44,7 @@ local function Initialize()
             elseif not self:GetAttribute("same") and (locked or not self:GetAttribute("interactable")) then
                 button = "FlareUISoftFriend"
             end
-        elseif candidate == "interact" and locked and (combat or not self:GetAttribute("same")) then
+        elseif (candidate == "loot" or candidate == "interact") and locked and (combat or not self:GetAttribute("same")) then
             button = "FlareUIClearInteractionTarget"
         end
         -- Releasing the override returns this key to Blizzard's INTERACTTARGET.
@@ -58,7 +58,9 @@ local function Initialize()
             end
         end
     ]])
-    RegisterAttributeDriver(driver, "state-candidate", "[@softenemy,harm,nodead] enemy; [@softfriend,exists] friend; [@softinteract,exists] interact; none")
+    -- A corpse highlighted for interaction must beat a living enemy behind it.
+    -- Keep this decision in secure conditions so it also updates in combat.
+    RegisterAttributeDriver(driver, "state-candidate", "[@softinteract,exists,dead] loot; [@softenemy,harm,nodead] enemy; [@softfriend,exists] friend; [@softinteract,exists] interact; none")
     RegisterAttributeDriver(driver, "state-locked", "[@target,exists] yes; no")
     RegisterAttributeDriver(driver, "state-combat", "[combat] yes; no")
     for _, event in ipairs({"PLAYER_SOFT_ENEMY_CHANGED", "PLAYER_SOFT_FRIEND_CHANGED", "PLAYER_SOFT_INTERACT_CHANGED"}) do
@@ -71,7 +73,8 @@ local function Refresh()
     -- Unit identity can be restricted in combat. The secure driver clears a
     -- blocking target there, then lets the next press use native interaction.
     local ok, same = pcall(function()
-        local unit = UnitExists("softfriend") and "softfriend" or "softinteract"
+        local unit = UnitExists("softinteract") and UnitIsDead("softinteract") and "softinteract"
+            or UnitExists("softfriend") and "softfriend" or "softinteract"
         return UnitIsUnit(unit, "target") and true or false
     end)
     driver:SetAttribute("same", ok and same or false)

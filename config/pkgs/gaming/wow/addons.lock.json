@@ -3,6 +3,10 @@
     "hash": "sha256-GJ/L0eUDPzEdU1nfyG3dpf3xIwsLSEnymgoXn9FWfyg=",
     "url": "https://github.com/Stanzilla/AdvancedInterfaceOptions/releases/download/2.1.14/AdvancedInterfaceOptions-2.1.14.zip"
   },
+  "auctionator": {
+    "hash": "sha256-pp2NbUyHo2JA2t6BQ9yO5BLG/Hu8NLi+VzKDp77R3Dw=",
+    "url": "https://edge.forgecdn.net/files/9572/997/Auctionator-346.zip"
+  },
   "betterBags": {
     "hash": "sha256-jIrygGCjIkhuNAc3ZASjvkInwTR52S9rCbHhrp1Ra/U=",
     "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.2/BetterBags-v0.9.2.zip"

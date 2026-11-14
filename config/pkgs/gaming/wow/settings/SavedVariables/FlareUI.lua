@@ -13,11 +13,14 @@ FlareUI2_DB = {
                     },
                 },
                 ["mailName"] = "Holy",
+                ["meterInstance"] = 2999,
+                ["meterLeftAt"] = 1794464626,
                 ["objectiveTracker"] = {
                     ["collapsedQuests"] = {
                     },
                     ["collapsedZones"] = {
                     },
+                    ["minimized"] = false,
                     ["pinned"] = {
                     },
                 },
@@ -25,6 +28,12 @@ FlareUI2_DB = {
                 ["realm"] = "CAMWOW US2 Realm 6 PvP",
                 ["sentHistory"] = {
                     [1] = "/fui",
+                    [2] = "my headset not working",
+                    [3] = "what u wanna do",
+                    [4] = "lemme turn in some quests",
+                    [5] = "then i'll get hte headset running",
+                    [6] = "aite gimme a few min",
+                    [7] = "/run print(\"BIND\",GetBindingAction(\"ESCAPE\",true),GetBindingAction(\"PADFORWARD\",true)); for _,n in pairs(UISpecialFrames) do local f=_G[n]; if f and f:IsShown() then print(\"SPECIAL\",n,f:IsVisible(),f:GetAlpha()) end end",
                 },
             },
         },
@@ -195,10 +204,10 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
                     ["spacing"] = 4,
-                    ["wrap"] = "DOWN",
+                    ["wrap"] = "UP",
                 },
                 ["enabled"] = true,
                 ["font"] = {
@@ -218,9 +227,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -231,9 +240,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -244,9 +253,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -257,9 +266,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -270,9 +279,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -349,6 +358,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -361,6 +371,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -587,7 +600,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -604,7 +617,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -614,7 +627,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -628,7 +641,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -645,7 +658,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -655,7 +668,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -669,7 +682,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -686,7 +699,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -696,7 +709,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -710,7 +723,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -727,7 +740,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -737,7 +750,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -751,7 +764,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -768,7 +781,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -778,7 +791,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -1178,9 +1191,8 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
-                    ["wrap"] = "DOWN",
                 },
                 ["enabled"] = true,
                 ["layouts"] = {
@@ -1192,9 +1204,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -1205,9 +1217,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -1218,9 +1230,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -1231,9 +1243,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -1244,9 +1256,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -1300,6 +1312,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -1312,6 +1325,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -1484,7 +1500,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -1520,7 +1536,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -1556,7 +1572,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -1592,7 +1608,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -1628,7 +1644,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -2073,9 +2089,10 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
-                    ["wrap"] = "DOWN",
+                    ["spacing"] = 4,
+                    ["wrap"] = "UP",
                 },
                 ["enabled"] = true,
                 ["font"] = {
@@ -2095,9 +2112,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -2108,9 +2125,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -2121,9 +2138,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -2134,9 +2151,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -2147,9 +2164,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -2223,6 +2240,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -2235,6 +2253,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -2459,7 +2480,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -2495,7 +2516,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -2531,7 +2552,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -2567,7 +2588,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -2603,7 +2624,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -3036,9 +3057,10 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
-                    ["wrap"] = "DOWN",
+                    ["spacing"] = 4,
+                    ["wrap"] = "UP",
                 },
                 ["enabled"] = true,
                 ["layouts"] = {
@@ -3050,9 +3072,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -3063,9 +3085,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -3076,9 +3098,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -3089,9 +3111,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -3102,9 +3124,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -3158,6 +3180,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -3170,6 +3193,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -3341,7 +3367,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -3353,7 +3379,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -3363,7 +3389,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -3377,7 +3403,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -3389,7 +3415,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -3399,7 +3425,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -3413,7 +3439,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -3425,7 +3451,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -3435,7 +3461,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -3449,7 +3475,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -3461,7 +3487,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -3471,7 +3497,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -3485,7 +3511,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["pet"] = {
                             ["point"] = "TOPLEFT",
@@ -3497,7 +3523,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -3507,7 +3533,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -3933,10 +3959,10 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
                     ["spacing"] = 4,
-                    ["wrap"] = "DOWN",
+                    ["wrap"] = "UP",
                 },
                 ["enabled"] = true,
                 ["font"] = {
@@ -3956,9 +3982,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -3969,9 +3995,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -3982,9 +4008,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -3995,9 +4021,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -4008,9 +4034,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -4087,6 +4113,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -4099,6 +4126,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -4317,7 +4347,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -4334,7 +4364,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -4344,7 +4374,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -4358,7 +4388,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -4375,7 +4405,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -4385,7 +4415,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -4399,7 +4429,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -4416,7 +4446,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -4426,7 +4456,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -4440,7 +4470,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -4457,7 +4487,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -4467,7 +4497,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -4481,7 +4511,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -4498,7 +4528,7 @@ FlareUI2_DB = {
                         ["player"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = -220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["playercastbar"] = {
                             ["point"] = "BOTTOM",
@@ -4508,7 +4538,7 @@ FlareUI2_DB = {
                         ["target"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 220,
-                            ["y"] = 365,
+                            ["y"] = 245,
                         },
                         ["targettarget"] = {
                             ["point"] = "TOPRIGHT",
@@ -4934,10 +4964,10 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
                     ["spacing"] = 4,
-                    ["wrap"] = "DOWN",
+                    ["wrap"] = "UP",
                 },
                 ["enabled"] = true,
                 ["font"] = {
@@ -4957,9 +4987,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -4970,9 +5000,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -4983,9 +5013,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -4996,9 +5026,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -5009,9 +5039,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -5088,6 +5118,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -5100,6 +5131,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -5326,7 +5360,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -5367,7 +5401,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -5408,7 +5442,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -5449,7 +5483,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -5490,7 +5524,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -5943,10 +5977,10 @@ FlareUI2_DB = {
                     ["center"] = true,
                     ["grow"] = "RIGHT",
                     ["max"] = 20,
-                    ["perRow"] = 10,
+                    ["perRow"] = 6,
                     ["size"] = 26,
                     ["spacing"] = 4,
-                    ["wrap"] = "DOWN",
+                    ["wrap"] = "UP",
                 },
                 ["enabled"] = true,
                 ["font"] = {
@@ -5966,9 +6000,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Desktop"] = {
@@ -5979,9 +6013,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Handheld"] = {
@@ -5992,9 +6026,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["Modern"] = {
@@ -6005,9 +6039,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                     ["SchiffyUI Handheld"] = {
@@ -6018,9 +6052,9 @@ FlareUI2_DB = {
                             ["y"] = 8,
                         },
                         ["debuffs"] = {
-                            ["point"] = "TOP",
+                            ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = -108,
+                            ["y"] = 232,
                         },
                     },
                 },
@@ -6097,6 +6131,7 @@ FlareUI2_DB = {
                     ["CameraKeepCharacterCentered"] = "0",
                     ["CursorFreelookCentering"] = "0",
                     ["CursorStickyCentering"] = "0",
+                    ["GamePadCursorAutoEnable"] = "0",
                     ["GamePadCursorCenteredEmulation"] = "0",
                     ["GamePadCursorCentering"] = "0",
                     ["GamePadCursorForTargeting"] = "1",
@@ -6109,6 +6144,9 @@ FlareUI2_DB = {
                     ["SoftTargetFriend"] = "1",
                     ["SoftTargetInteract"] = "1",
                     ["SoftTargetMatchLocked"] = "0",
+                    ["SoftTargetTooltipEnemy"] = "1",
+                    ["SoftTargetTooltipFriend"] = "1",
+                    ["SoftTargetTooltipInteract"] = "1",
                     ["SoftTargetWithLocked"] = "2",
                     ["rotateMinimap"] = "0",
                     ["test_cameraDynamicPitch"] = "1",
@@ -6327,7 +6365,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -6368,7 +6406,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -6409,7 +6447,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -6450,7 +6488,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",
@@ -6491,7 +6529,7 @@ FlareUI2_DB = {
                         ["focus"] = {
                             ["point"] = "BOTTOM",
                             ["x"] = 0,
-                            ["y"] = 250,
+                            ["y"] = 510,
                         },
                         ["focustarget"] = {
                             ["point"] = "BOTTOMRIGHT",

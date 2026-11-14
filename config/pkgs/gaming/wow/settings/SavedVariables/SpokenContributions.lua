@@ -166,5 +166,13 @@ SpokenContributionsDB = {
 ["key"] = "q:358:progress:1499",
 ["envelope"] = "!SPOKEN1 quests\naddon=SpokenQuests/3.8.4-beta.1\nbuild=1.60.1/70862\nlocale=enUS\npack=enUS\npackVersion=2.5.0\nquest=358\nevent=progress\nnpc=1499 Magistrate Sevren\nkind=creature\nmodel=959310\ndisplays=3514\nsex=2\ncreature=Humanoid\ntitle=Graverobbers\ntext<<\nIs your task complete?  Have you destroyed those dog-things and drained them of their ichor?\n>>\nsum=1514757703\n",
 },
+{
+["key"] = "q:96898:accept:267009",
+["envelope"] = "!SPOKEN1 quests\naddon=SpokenQuests/3.8.5\nbuild=1.60.1/70888\nlocale=enUS\npack=enUS\npackVersion=2.5.0\nquest=96898\nevent=accept\nnpc=267009 Hadric Harlson\nkind=creature\nmodel=959310\nsex=2\ncreature=Humanoid\ntitle=Remnants of War\ntext<<\nIt wasn't long ago that the citadel of Naxxramas bore down upon this city, intent on wiping the Forsaken off the map. Both the Forsaken and the Argent Dawn lost much that day to secure the future of the Forsaken.\n\nDuring the battle, the great necrotic focusing crystal mounted atop Naxxramas was shattered and its fragments were scattered all over this area. I suspect that is what the cultists are here for. Help me recover the fragments and deprive the Scourge of them.\n>>\nsum=1512019846\n",
+},
+{
+["key"] = "q:96898:progress:267009",
+["envelope"] = "!SPOKEN1 quests\naddon=SpokenQuests/3.8.5\nbuild=1.60.1/70888\nlocale=enUS\npack=enUS\npackVersion=2.5.0\nquest=96898\nevent=progress\nnpc=267009 Hadric Harlson\nkind=creature\nmodel=959310\ndisplays=146496\nsex=2\ncreature=Humanoid\ntitle=Remnants of War\ntext<<\nI'd advise you not come into too much physical contact with those crystals. Even shattered and spent, the lingering magic in these necrotic crystals is highly dangerous.\n>>\nsum=1343504549\n",
+},
 },
 }

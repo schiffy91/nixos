@@ -76,9 +76,20 @@ down. No modifier selects Gamepad Bar 1; LT selects Bar 2; RT selects Bar 3;
 LT+RT selects Bar 4. The triggers must emulate Shift and Ctrl respectively.
 The current layout reserves unmodified A for Jump; its trigger-modified slots
 remain on Bars 2–4. LB uses Target Scan Enemy and RB cycles enemy targets.
+Escape and Start use native Toggle Game Menu with no modifier, either trigger,
+or both triggers. Their modified combinations must not be saved as `NONE` in
+the binding cache or ConsolePort presets. Native Escape first closes a panel,
+cancels an action, or clears a target before opening the menu.
+`GamePadCursorAutoEnable=0` keeps native Escape from consuming the key to enter
+or leave controller cursor mode. ConsolePort normally sets this when its mouse
+handler is enabled; our crosshair-free setup disables that handler, so each
+display profile supplies the preference explicitly instead.
 R3 is bound to native Interact With Target. The FlareUI controller integration
-temporarily routes it to selection when necessary: a living enemy soft target
-has first priority and is selected and attacked in one press (Hunters also start
+temporarily routes it to selection when necessary. A corpse highlighted by
+soft interaction has first priority, ahead of a living enemy behind it. With
+no blocking hard target it uses native looting; otherwise the first press clears
+the target and the next loots. A living enemy soft target otherwise has priority
+and is selected and attacked in one press (Hunters also start
 Auto Shot). A friendly is selected when needed, then the next press interacts.
 An unobstructed NPC or object uses native interaction immediately. If an old
 hard target would steal object interaction, the first press clears it and the
@@ -104,6 +115,14 @@ selection macro, so some switches still require two presses of the same key.
 These preferences are saved in ConsolePort and the shared profile CVars,
 so switching display or input profiles retains the same targeting behavior.
 ConsolePort's crosshair, centered-cursor tooltip and click override are disabled.
+Native soft-target tooltips remain enabled for enemies, friends and interactables,
+using the normal tooltip anchor. Questie tooltip additions and drop rates are
+enabled; percentages require an item/NPC pair in its drop database and readable
+unit data, so they are not available for every objective or restricted tooltip.
+ConsolePort's keyboard observer tracks physical keys and edit-box character
+input, dismissing its virtual keyboard until another controller button is used.
+It always propagates input and ignores modifier-only presses, because LT/RT
+emulate those keys. The Steam Deck preset no longer forces the keyboard to show.
 The profiles also disable cursor centering and centered mouse-click emulation;
 ground-targeted spells use the free cursor. Soft targeting and normal UI cursor
 navigation remain available without a crosshair.
@@ -144,6 +163,8 @@ FlareUI 5.1.2 supplies the unit frames, chat, native damage-meter skin, minimap
 skin and quest tracker. Questie retains its map database and pins with its tracker
 disabled. BetterBags, AdvancedInterfaceOptions, ForeverFadeChat and Details are
 installed but disabled in each character's AddOns.txt; MoveAny is no longer installed.
+Auctionator is installed from a pinned CurseForge file and is not listed in any
+character's AddOns.txt.
 
 Open `/fui` and select a profile in its existing profile dropdown:
 
@@ -152,6 +173,11 @@ Open `/fui` and select a profile in its existing profile dropdown:
 | Pro Display XDR, 6016×3384 | Desk / Keyboard | Desk / Controller | 2133×1200 |
 | 77-inch TV, 3840×2160, 7–8 feet away | TV / Keyboard | TV / Controller | 1600×900 |
 | Steam Deck OLED, 1280×800 | Handheld / Keyboard | Handheld / Controller | 1280×800 |
+
+Player and target frames use a bottom offset of 245 on Handheld, versus 365 on
+Desk. Both sit about 30% of the canvas height above the bottom; using 365 on
+Handheld placed them too high relative to the character. Attached buffs, pet,
+target-of-target and target cast bar follow their parent frames.
 
 Accept the reload prompt after switching. The small DisplayLayout integration
 inside the packaged FlareUI coordinates its global UI scale and ConsolePort_Bar
@@ -194,14 +220,17 @@ saved screen position.
 The square, north-up minimap uses native Edit Mode at 90% (234 units) and sits
 bottom-right with the matching-width quest tracker above it. Quest text wraps.
 Default tooltips anchor just left of the minimap and grow upward and left;
-their gap is editable in `displayLayout.tooltip`. Focus uses the lower center;
+their gap is editable in `displayLayout.tooltip`. Focus sits above the central
+cast/resource/totem stack at bottom offset 510, leaving the lower center for debuffs;
 boss frames sit to the left of the map/quest column. Party and raid frames share the upper-left area. Raid
 frames use columns to leave room above the player frame on the handheld.
 Buffs anchor above the player health frame, bottom-left, filling right and
-wrapping upward (eight icons per row, two rows). Debuffs retain their top-center
-position, with their actual visible group centered as icons arrive or leave.
+wrapping upward (eight icons per row, two rows). Debuffs sit at bottom offset 232,
+above ConsolePort's center pet ring, and wrap upward in rows of six. This narrow
+column clears both unit frames and the player's buffs on Handheld. Their actual
+visible group remains centered as icons arrive or leave.
 The packaged FlareUI layout patch adds the center option and relative anchors;
-Blizzard's secure aura layout still owns aura contents and resizing. The two-row
+Blizzard's secure aura layout still owns aura contents and resizing. The
 debuff block is centered as a whole; a partially filled wrapped row remains
 left-aligned inside that block.
 

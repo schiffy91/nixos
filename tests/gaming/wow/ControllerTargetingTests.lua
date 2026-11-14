@@ -18,6 +18,10 @@ function InCombatLockdown() return combat end
 function UnitClass() return "Hunter", "HUNTER" end
 C_Spell = {GetSpellName=function(id) assert(id==75);return "Auto Shot" end}
 function UnitExists(unit) return units[unit]~=nil end
+function UnitIsDead(unit)
+    assert(not combat, 'never inspect death state in insecure combat code')
+    return units[unit] and units[unit].dead or false
+end
 function UnitIsUnit(a,b)
     assert(not combat, 'never inspect unit identity in combat')
     if identityRestricted then error('secret unit identity') end
@@ -183,5 +187,27 @@ ns.ApplyControllerTargeting(nil);assert(not next(overrides) and not next(claims)
 ns.ApplyControllerTargeting('PADRSTICK')
 bindings.PADRSTICK='TOGGLEAUTORUN';event('UPDATE_BINDINGS')
 assert(not next(overrides) and not next(claims),'an in-game rebind must not be overridden')
+bindings.PADRSTICK='INTERACTTARGET'
+local corpse={harm=true,dead=true}
+units.target=nil;units.softenemy=enemy;units.softfriend=npc;units.softinteract=corpse
+event('PLAYER_SOFT_INTERACT_CHANGED')
+before=attacks;press()
+assert(interactions[#interactions]==corpse and attacks==before,'loot the highlighted corpse instead of attacking a living enemy behind it')
+units.target=enemy;event('PLAYER_TARGET_CHANGED');press()
+assert(units.target==nil and attacks==before,'clear an unrelated hard target before looting')
+event('PLAYER_TARGET_CHANGED');press()
+assert(interactions[#interactions]==corpse and attacks==before,'the next press loots even while an enemy remains soft-targeted')
+units.target=corpse;event('PLAYER_TARGET_CHANGED');press()
+assert(interactions[#interactions]==corpse and units.target==corpse,'an already selected corpse interacts immediately despite a soft friendly')
+combat=true;units.target=enemy;event('PLAYER_REGEN_DISABLED');press()
+assert(units.target==nil and attacks==before,'combat loot priority does not use insecure unit identity')
+event('PLAYER_TARGET_CHANGED');press()
+assert(interactions[#interactions]==corpse and attacks==before,'loot wins in combat too')
+combat=false;units.target=nil;units.softinteract=nil;event('PLAYER_REGEN_ENABLED')
+units.softinteract=corpse;press()
+assert(attacks==before,'a corpse appearing before the state driver updates blocks a stale attack override')
+event('PLAYER_SOFT_INTERACT_CHANGED')
+units.softinteract=nil;event('PLAYER_SOFT_INTERACT_CHANGED');press()
+assert(units.target==enemy and attacks==before+1,'enemy targeting resumes when the loot candidate disappears')
 assert(managerEvents.PLAYER_SOFT_ENEMY_CHANGED and managerEvents.PLAYER_SOFT_FRIEND_CHANGED and managerEvents.PLAYER_SOFT_INTERACT_CHANGED)
-print('PASS: enemy priority, selection/attack, native NPC/object interaction, combat transitions, stale candidates, modifiers and user rebinding')
+print('PASS: corpse priority, selection/attack, native NPC/object interaction, combat transitions, stale candidates, modifiers and user rebinding')

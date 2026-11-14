@@ -1,7 +1,7 @@
 
 SpokenBossesCharacter = {
-["found"] = {
-},
 ["storiesRead"] = {
+},
+["found"] = {
 },
 }

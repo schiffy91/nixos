@@ -11,6 +11,7 @@ let
     printf old > "$out/Details/version"
   '';
   options = import ./options.nix { inherit pkgs inputs; };
+  consolePort = (import ../../../config/pkgs/gaming/wow/addons.nix { inherit pkgs; }).consolePort;
   tools = import ../../../config/pkgs/gaming/wow/package.nix { inherit pkgs inputs; };
   programs = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
     name = "wow-lock-contract-tests";
@@ -28,6 +29,7 @@ let
     };
   };
 in assert options; pkgs.runCommand "wow-contract-check" { nativeBuildInputs = [ pkgs.coreutils ]; } ''
+  ${pkgs.lua5_1}/bin/lua ${./KeyboardInputTests.lua} ${consolePort}/ConsolePort_Keyboard/Core/Observer.lua
   ${pkgs.lua5_1}/bin/lua ${./ControllerTargetingTests.lua} ${../../../config/pkgs/gaming/wow/controller-targeting.lua}
   ${pkgs.lua5_1}/bin/lua ${./DisplayLayoutTests.lua} ${../../../config/pkgs/gaming/wow/display-layout.lua}
   ${pkgs.lua5_1}/bin/lua ${./ProfileReloadTests.lua} ${../../../config/pkgs/gaming/wow/display-layout.lua}

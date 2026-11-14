@@ -10,6 +10,9 @@ in pkgs.lib.mapAttrs (name: pin: pkgs.runCommand "wow-addon-${name}" {
   ${pkgs.lib.optionalString (name == "foreverFadeChat") ''
     patch -p1 < ${./forever-fade-chat.patch}
   ''}
+  ${pkgs.lib.optionalString (name == "consolePort") ''
+    patch -p1 < ${./consoleport-keyboard.patch}
+  ''}
   ${pkgs.lib.optionalString (name == "flareUI") ''
     patch -p1 < ${./flareui-layout.patch}
     cp ${./controller-targeting.lua} FlareUI/ControllerTargeting.lua
