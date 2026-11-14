@@ -1,0 +1,87 @@
+import Library.Bytes;
+import Library.Console;
+import Library.Crypto;
+import Library.Digest;
+import Library.HTTP;
+import Library.IO;
+import Library.JSON;
+import Library.Strings;
+import Library.Vector;
+
+import ../remote/DriveApi.btrc;
+import ../remote/Transport.btrc;
+import ../store/StoreFile.btrc;
+
+#include <stdio.h>
+#include <sys/stat.h>
+
+// Signing in: Google's browser consent, answered to a listener on this machine, exchanged for a token that renews itself.
+class Login {
+    class string urlSafe(Bytes data) { return Base64.encode(data, false).replace("+", "-").replace("/", "_"); }
+
+    class string random(int count) {
+        Bytes all = StorePaths.contents("/dev/urandom");
+        if (all.length() < count) { throw "This machine gave no random bytes"; }
+        return Login.urlSafe(all.slice(0, count));
+    }
+
+    class Bytes fromHex(string hex) {
+        Bytes data = Bytes();
+        string digits = "0123456789abcdef";
+        for (int index = 0; index + 1 < hex.len(); index += 2) { data.append(digits.indexOf(hex.substring(index, 1)) * 16 + digits.indexOf(hex.substring(index + 1, 1))); }
+        return data;
+    }
+
+    // Ask for `scopes` with the client in `client`, wait for the browser, and return what Google granted.
+    class DriveCredentials run(DriveCredentials client, Vector<string> scopes, Transport transport, int port, int waitSeconds) {
+        string redirect = f"http://127.0.0.1:{port}/";
+        string verifier = Login.random(48);
+        string state = Login.random(18);
+        string challenge = Login.urlSafe(Login.fromHex(SHA256.digest(verifier)));
+        HTTPServer server = HTTPServer(port);
+        server.timeoutSecs = 2;
+        if (!server.start()) { throw f"Cannot listen on port {port} for Google's answer"; }
+        Console.log("Open this in a browser signed in to the Google account:");
+        Console.log(f"https://accounts.google.com/o/oauth2/v2/auth?client_id={HTTPUrl.encode(client.clientId)}&redirect_uri={HTTPUrl.encode(redirect)}&response_type=code&scope={HTTPUrl.encode(Strings.join(scopes, " "))}&access_type=offline&prompt=consent&state={state}&code_challenge={challenge}&code_challenge_method=S256");
+        fflush(stdout);
+        string code = "";
+        for (int waited = 0; waited < waitSeconds && code.isEmpty(); waited += 2) {
+            int connection = server.acceptConn();
+            if (connection < 0) { continue; }
+            HTTPRequest request = server.readRequest(connection);
+            Map<string, string> answer = request.queryParams();
+            bool ours = request.valid && answer.getOrDefault("state", "").equals(state);
+            if (ours && answer.has("code")) { code = answer.get("code"); }
+            server.respond(connection, HTTPResponse.text(ours && answer.has("code") ? "Signed in. You can close this tab.\n" : ours ? "Google did not grant access.\n" : "Not the answer this sign-in is waiting for.\n"));
+            server.closeConn(connection);
+            if (ours && !answer.has("code")) { throw f"Google did not grant access: {answer.getOrDefault("error", "no reason given")}"; }
+        }
+        server.stop();
+        if (code.isEmpty()) { throw "Nobody answered the sign-in in time"; }
+        string form = f"code={HTTPUrl.encode(code)}&client_id={HTTPUrl.encode(client.clientId)}&client_secret={HTTPUrl.encode(client.clientSecret)}&redirect_uri={HTTPUrl.encode(redirect)}&grant_type=authorization_code&code_verifier={verifier}";
+        TransportResponse response = transport.send("POST", "https://oauth2.googleapis.com/token", ["Content-Type: application/x-www-form-urlencoded"], form);
+        JSONValue granted = JSONValue.parse(response.body);
+        if (!response.ok() || !granted.get("refresh_token").isString()) { throw f"Google refused the sign-in: {granted.get("error_description").asString()}"; }
+        DriveCredentials credentials = DriveCredentials();
+        credentials.clientId = client.clientId;
+        credentials.clientSecret = client.clientSecret;
+        credentials.refreshToken = granted.get("refresh_token").asString();
+        credentials.scope = granted.get("scope").asString();
+        return credentials;
+    }
+
+    // Keep a sign-in where only its owner can read it.
+    class void save(DriveCredentials credentials, string path) {
+        JSONValue stored = JSONValue.makeObject();
+        stored.set("client_id", JSONValue.makeString(credentials.clientId));
+        stored.set("client_secret", JSONValue.makeString(credentials.clientSecret));
+        stored.set("refresh_token", JSONValue.makeString(credentials.refreshToken));
+        stored.set("scope", JSONValue.makeString(credentials.scope));
+        string staged = path + ".new";
+        unlink(staged);
+        mode_t before = umask((mode_t)63);  // no access for anyone else, from the first byte
+        bool written = Path.writeAll(staged, stored.document());
+        umask(before);
+        if (!written || rename(staged, path) != 0) { throw f"Cannot write {path}"; }
+    }
+}

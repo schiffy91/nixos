@@ -1,0 +1,141 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+
+// The read-only client on a real kernel: a mount whose files arrive as they are read, and what happens when its parts stop.
+class DoorScenario {
+    private Guest machine;
+    private string fake = "http://127.0.0.1:18475";
+    private string store = "/var/lib/drive-test/store";
+    private string mount = "/mnt/drive";
+    private string source = "/var/lib/drive-test/source";
+
+    public DoorScenario(Guest machine) { self.machine = machine; }
+
+    private string control(string action) { return self.machine.succeed(f"curl -sS -H Expect: -X POST '{self.fake}/__control/{action}'"); }
+
+    private void put(string parent, string name, string file) { self.machine.succeed(f"curl -sS -H Expect: -X POST '{self.fake}/__control/put?parent={parent}&name={name}' --data-binary @{self.source}/{file} -o /dev/null"); }
+
+    private string asked() { return self.machine.succeed(f"curl -sS -X POST '{self.fake}/__control/log?clear=1' | grep 'bytes=' || true"); }
+
+    private string state(string path) { return self.machine.succeed(f"getfattr --absolute-names -n user.drive.state --only-values {self.store}/tree/{path}"); }
+
+    private void startFake() {
+        self.machine.succeed("systemd-run --unit drive-fake --collect drive-fake 18475");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.fake}/__control/log' >/dev/null");
+    }
+
+    private void startEngine() {
+        self.machine.succeed(f"systemd-run --unit drive-engine --collect drive engine --store {self.store} --runtime /run/drive-test --credentials /var/lib/drive-test/credentials.json --api {self.fake} --chunk 65536 --follow 1");
+    }
+
+    private void startDoor() {
+        self.machine.succeed(f"systemd-run --unit drive-door --collect drive door --store {self.store} --mount {self.mount} --runtime /run/drive-test --allow-others");
+        self.machine.waitUntil(f"mountpoint -q {self.mount}");
+    }
+
+    private void stop(string unit) { self.machine.succeed(f"systemctl kill --signal=KILL {unit}.service || true; systemctl stop {unit}.service 2>/dev/null || true; systemctl reset-failed {unit}.service 2>/dev/null || true"); }
+
+    private void prepare() {
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.succeed(f"mkdir -p {self.source} {self.mount} /run/drive-test && head -c 3000000 /dev/urandom > {self.source}/big.bin && head -c 500000 /dev/urandom > {self.source}/other.bin && head -c 300000 /dev/urandom > {self.source}/third.bin && echo 'small file' > {self.source}/small.txt");
+        self.machine.succeed("echo '{\"client_id\":\"c\",\"client_secret\":\"s\",\"refresh_token\":\"refresh-ok\"}' > /var/lib/drive-test/credentials.json");
+        self.startFake();
+        string media = self.machine.succeed(f"curl -sS -X POST '{self.fake}/__control/put?parent=root&name=Media&type=application%2Fvnd.google-apps.folder' | grep -o '\"id\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4").trim();
+        self.put(media, "big.bin", "big.bin");
+        self.put(media, "other.bin", "other.bin");
+        self.put(media, "third.bin", "third.bin");
+        self.put("root", "small.txt", "small.txt");
+        self.startEngine();
+        self.machine.waitUntil(f"test -s {self.store}/position && test -e {self.store}/tree/Media/third.bin");
+        self.startDoor();
+        self.machine.waitUntil(f"cat {self.mount}/small.txt");  // the engine has found the door
+    }
+
+    private void ranges() {
+        print("The tree is whole before anything is downloaded");
+        Check.equal(self.machine.succeed(f"cd {self.mount} && find . | sort | tr '\\n' ' '"), ". ./Media ./Media/big.bin ./Media/other.bin ./Media/third.bin ./small.txt ", "every name is there");
+        Check.equal(self.machine.succeed(f"stat -c %s {self.mount}/Media/big.bin {self.mount}/small.txt | tr '\\n' ' '"), "3000000 11 ", "with its real size");
+        self.asked();
+
+        print("A read fetches its own range and nothing else");
+        self.machine.succeed(f"[ \"$(head -c 100 {self.mount}/Media/big.bin | sha256sum)\" = \"$(head -c 100 {self.source}/big.bin | sha256sum)\" ]");
+        Check.equal(self.asked().trim(), "GET /drive/v3/files/id2 bytes=0-65535", "the first hundred bytes cost one chunk");
+        self.machine.succeed(f"[ \"$(dd if={self.mount}/Media/big.bin bs=1 skip=1500000 count=1000 status=none | sha256sum)\" = \"$(dd if={self.source}/big.bin bs=1 skip=1500000 count=1000 status=none | sha256sum)\" ]");
+        Check.equal(self.asked().trim(), "GET /drive/v3/files/id2 bytes=1441792-1507327", "a read in the middle costs the chunk around it");
+        Check.equal(self.state("Media/big.bin"), "cloud", "a partly read file is still not downloaded");
+
+        print("A file read to the end is downloaded and checked, and then costs nothing");
+        self.machine.succeed(f"cmp {self.mount}/Media/big.bin {self.source}/big.bin");
+        Check.equal(self.state("Media/big.bin"), "local", "the whole file is here");
+        self.asked();
+        self.machine.succeed(f"cmp {self.mount}/Media/big.bin {self.source}/big.bin");
+        Check.equal(self.asked(), "", "reading it again asks the Drive for nothing");
+        Check.equal(self.machine.succeed(f"cat {self.mount}/small.txt"), "small file\n", "a small file reads too");
+        Check.equal(self.machine.succeed(f"getfattr -d {self.mount}/small.txt 2>/dev/null | grep -c drive || true").trim(), "0", "the client's own attributes do not show through the mount");
+        self.machine.fail(f"sh -c 'echo x > {self.mount}/new.txt'");  // nothing can be changed through the mount yet
+        self.machine.fail(f"sh -c 'echo x >> {self.mount}/small.txt'");
+    }
+
+    private void engineGone() {
+        print("Without the engine, what is downloaded works and what is not says so");
+        self.stop("drive-engine");
+        self.machine.succeed(f"cmp {self.mount}/Media/big.bin {self.source}/big.bin");
+        Check.that(self.machine.fail(f"head -c 10 {self.mount}/Media/other.bin 2>&1").contains("No route to host"), "a file that is not downloaded refuses to open, with the reason");
+        self.startEngine();
+        self.machine.waitUntil(f"cmp {self.mount}/Media/other.bin {self.source}/other.bin");
+    }
+
+    private void doorGone() {
+        print("Without the door, a file that is not downloaded cannot be read at all");
+        Check.that(self.machine.succeed(f"head -c 16 {self.store}/tree/Media/third.bin | od -An -tx1 | tr -d ' \\n'").equals("00000000000000000000000000000000"), "the file in the store really is empty: read behind the door it would be zeros");
+        self.stop("drive-door");
+        self.machine.succeed(f"head -c 16 {self.mount}/Media/third.bin > /tmp/behind 2> /tmp/behind.error || true; test ! -s /tmp/behind");
+        Check.that(self.machine.succeed("cat /tmp/behind.error").contains("Transport endpoint is not connected"), "the read fails; it does not return zeros");
+        Check.that(self.machine.fail(f"ls {self.mount} 2>&1").contains("Transport endpoint is not connected"), "and so does everything else under the mount");
+        self.startDoor();
+        self.machine.waitUntil(f"[ \"$(head -c 16 {self.mount}/Media/third.bin | sha256sum)\" = \"$(head -c 16 {self.source}/third.bin | sha256sum)\" ]");
+    }
+
+    private void offline() {
+        print("After a restart with no network the tree is all there");
+        self.machine.succeed(f"umount {self.mount} || true");
+        self.stop("drive-door");
+        self.stop("drive-engine");
+        self.stop("drive-fake");
+        self.machine.reboot();
+        self.machine.waitForShutdown();
+        self.machine.start();
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.succeed(f"mkdir -p {self.mount} /run/drive-test");
+        self.startEngine();
+        self.startDoor();
+        Check.equal(self.machine.succeed(f"cd {self.mount} && find . | sort | tr '\\n' ' '"), ". ./Media ./Media/big.bin ./Media/other.bin ./Media/third.bin ./small.txt ", "every name is there with no Drive to ask");
+        Check.equal(self.machine.succeed(f"stat -c %s {self.mount}/Media/third.bin").trim(), "300000", "sizes too");
+        self.machine.succeed(f"cmp {self.mount}/Media/big.bin {self.source}/big.bin");
+        Check.that(self.machine.fail(f"head -c 10 {self.mount}/Media/third.bin 2>&1").contains("No route to host"), "a file that is not downloaded refuses to open, with the reason");
+        self.machine.waitUntil("journalctl -u drive-engine.service | grep -q 'drive:'", 120);  // the engine has given up on the Drive for now
+        Check.that(self.machine.fail(f"head -c 10 {self.mount}/Media/third.bin 2>&1").contains("No route to host"), "and still does once the engine has found there is no Drive to reach");
+    }
+
+    public void check() {
+        self.prepare();
+        self.ranges();
+        self.engineGone();
+        self.doorGone();
+        self.offline();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        DoorScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: files arrive as they are read, and fail closed");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

@@ -1,0 +1,370 @@
+import Library.Bytes;
+import Library.CLI;
+import Library.Console;
+import Library.Digest;
+import Library.HTTP;
+import Library.JSON;
+import Library.Map;
+import Library.Strings;
+import Library.Vector;
+
+import ../remote/DriveFile.btrc;
+import ../remote/Timestamp.btrc;
+
+#include <stdio.h>
+
+class FakeEntry {
+    public DriveFile file = DriveFile();
+    public Bytes content = Bytes();
+    public bool gone = false;  // deleted for good
+}
+
+class FakeUpload {
+    public string id = "";  // empty: a new file
+    public JSONValue metadata = JSONValue.makeObject();
+}
+
+// The parts of the Drive API the client uses, served from memory, with faults on request.
+class FakeDrive {
+    private HTTPServer server;
+    private string base;
+    private Map<string, FakeEntry> entries = {};
+    private Vector<string> order = [];  // ids, oldest first
+    private Vector<string> feed = [];  // changed ids, oldest change first, each id once
+    private Vector<int> positions = [];  // the feed position of each change
+    private int position = 1;
+    private Map<string, FakeUpload> uploads = {};
+    private Vector<string> log = [];
+    private int nextId = 1;
+    private int nextToken = 1;
+    private string token = "";
+    private long long clock = 1767261600000LL;  // 2026-01-01T10:00:00Z, one second per change
+    private int pageSize = 1000;
+    private int failures = 0;
+    private int failureStatus = 503;
+    private int shortBytes = -1;  // next download returns only this many
+    private int retryAfter = 0;
+
+    public FakeDrive(int port) {
+        self.server = HTTPServer(port);
+        self.server.timeoutSecs = 10;
+        self.server.maxBodyBytes = 67108864;
+        self.server.maxRequestBytes = 67174400;
+        self.base = f"http://127.0.0.1:{port}";
+        FakeEntry root = FakeEntry();
+        root.file.id = "root";
+        root.file.name = "My Drive";
+        root.file.mimeType = DriveFile.folderType();
+        self.entries.put("root", root);
+    }
+
+    private JSONValue describe(FakeEntry entry) {
+        JSONValue value = JSONValue.makeObject();
+        value.set("id", JSONValue.makeString(entry.file.id));
+        value.set("name", JSONValue.makeString(entry.file.name));
+        value.set("mimeType", JSONValue.makeString(entry.file.mimeType));
+        if (!entry.file.parent.isEmpty()) {
+            JSONValue parents = JSONValue.makeArray();
+            parents.push(JSONValue.makeString(entry.file.parent));
+            value.set("parents", parents);
+        }
+        value.set("modifiedTime", JSONValue.makeString(Timestamp.format(entry.file.modified)));
+        value.set("version", JSONValue.makeString(f"{entry.file.version}"));
+        value.set("trashed", JSONValue.makeBool(entry.file.trashed));
+        if (!entry.file.isFolder()) {
+            value.set("size", JSONValue.makeString(f"{entry.file.size}"));
+            value.set("sha256Checksum", JSONValue.makeString(entry.file.sha256));
+            value.set("headRevisionId", JSONValue.makeString(entry.file.revision));
+        }
+        return value;
+    }
+
+    private void changed(FakeEntry entry) {
+        self.clock += 1000LL;
+        entry.file.version++;
+        int earlier = self.feed.indexOf(entry.file.id);
+        if (earlier >= 0) {  // Drive keeps only a file's latest change
+            self.feed.remove(earlier);
+            self.positions.remove(earlier);
+        }
+        self.feed.push(entry.file.id);
+        self.positions.push(self.position);
+        self.position++;
+    }
+
+    private void fill(FakeEntry entry, Bytes content) {
+        entry.content = content;
+        entry.file.size = (long long)content.length();
+        entry.file.sha256 = SHA256.digestBytes(content);
+        entry.file.revision = f"r{entry.file.version + 1LL}-{entry.file.id}";
+    }
+
+    private FakeEntry create(string parent, string name, string mimeType) {
+        FakeEntry entry = FakeEntry();
+        entry.file.id = f"id{self.nextId}";
+        self.nextId++;
+        entry.file.name = name;
+        entry.file.parent = parent;
+        entry.file.mimeType = mimeType;
+        entry.file.modified = self.clock;
+        self.entries.put(entry.file.id, entry);
+        self.order.push(entry.file.id);
+        return entry;
+    }
+
+    private HTTPResponse refuse(int status, string reason, string message) {
+        JSONValue error = JSONValue.makeObject();
+        error.set("code", JSONValue.makeInt(status));
+        error.set("message", JSONValue.makeString(message));
+        JSONValue errors = JSONValue.makeArray();
+        JSONValue first = JSONValue.makeObject();
+        first.set("reason", JSONValue.makeString(reason));
+        errors.push(first);
+        error.set("errors", errors);
+        JSONValue body = JSONValue.makeObject();
+        body.set("error", error);
+        return HTTPResponse(status, "application/json", body.stringify());
+    }
+
+    private HTTPResponse missing() { return self.refuse(404, "notFound", "File not found"); }
+
+    private FakeEntry? entry(string id) {
+        if (!self.entries.has(id)) { return null; }
+        FakeEntry found = self.entries.get(id);
+        return found.gone ? null : found;
+    }
+
+    private void apply(FakeEntry entry, JSONValue metadata) {
+        if (metadata.get("name").isString()) { entry.file.name = metadata.get("name").asString(); }
+        if (metadata.get("trashed").isBool()) { entry.file.trashed = metadata.get("trashed").asBool(); }
+        long long modified = Timestamp.parse(metadata.get("modifiedTime").asString());
+        entry.file.modified = modified >= 0LL ? modified : self.clock;
+    }
+
+    private HTTPResponse token(HTTPRequest request) {
+        if (!request.body.contains("refresh_token=refresh-ok")) { return HTTPResponse(400, "application/json", "{\"error\":\"invalid_grant\"}"); }
+        self.token = f"access-{self.nextToken}";
+        self.nextToken++;
+        return HTTPResponse.json(f"{{\"access_token\":\"{self.token}\",\"expires_in\":3600,\"token_type\":\"Bearer\"}}");
+    }
+
+    private HTTPResponse list(HTTPRequest request) {
+        Map<string, string> query = request.queryParams();
+        int start = query.getOrDefault("pageToken", "0").toInt();
+        JSONValue files = JSONValue.makeArray();
+        int index = start;
+        int taken = 0;
+        while (index < self.order.len && taken < self.pageSize) {
+            FakeEntry entry = self.entries.get(self.order.get(index));
+            index++;
+            if (entry.gone || entry.file.trashed) { continue; }
+            files.push(self.describe(entry));
+            taken++;
+        }
+        JSONValue body = JSONValue.makeObject();
+        body.set("files", files);
+        if (index < self.order.len) { body.set("nextPageToken", JSONValue.makeString(f"{index}")); }
+        return HTTPResponse.json(body.stringify());
+    }
+
+    private HTTPResponse changes(HTTPRequest request) {
+        int start = request.queryParams().getOrDefault("pageToken", "0").toInt();
+        if (start < 1 || start > self.position) { return self.refuse(410, "invalid", "The page token has expired"); }
+        JSONValue changes = JSONValue.makeArray();
+        int index = 0;
+        while (index < self.feed.len && self.positions.get(index) < start) { index++; }
+        int taken = 0;
+        while (index < self.feed.len && taken < self.pageSize) {
+            FakeEntry entry = self.entries.get(self.feed.get(index));
+            JSONValue change = JSONValue.makeObject();
+            change.set("fileId", JSONValue.makeString(entry.file.id));
+            change.set("removed", JSONValue.makeBool(entry.gone));
+            if (!entry.gone) { change.set("file", self.describe(entry)); }
+            changes.push(change);
+            index++;
+            taken++;
+        }
+        JSONValue body = JSONValue.makeObject();
+        body.set("changes", changes);
+        if (index < self.feed.len) { body.set("nextPageToken", JSONValue.makeString(f"{self.positions.get(index)}")); }
+        else { body.set("newStartPageToken", JSONValue.makeString(f"{self.position}")); }
+        return HTTPResponse.json(body.stringify());
+    }
+
+    private HTTPResponse content(HTTPRequest request, FakeEntry entry) {
+        long long size = (long long)entry.content.length();
+        long long first = 0LL;
+        long long last = size - 1LL;
+        string range = request.header("range");
+        bool partial = range.startsWith("bytes=");
+        if (partial) {
+            Vector<string> ends = Strings.split(range.substring(6, range.len() - 6), "-");
+            first = ends.get(0).toLong();
+            if (ends.len > 1 && !ends.get(1).isEmpty() && ends.get(1).toLong() < last) { last = ends.get(1).toLong(); }
+        }
+        if (first >= size && size > 0LL) { return self.refuse(416, "requestedRangeNotSatisfiable", "Requested range not satisfiable"); }
+        if (self.shortBytes >= 0 && (long long)self.shortBytes < last - first + 1LL) {
+            last = first + (long long)self.shortBytes - 1LL;
+            self.shortBytes = -1;
+        }
+        HTTPResponse response = HTTPResponse.bytes(partial ? 206 : 200, "application/octet-stream", size == 0LL ? Bytes() : entry.content.slice((int)first, (int)last + 1));
+        if (partial) { response.addHeader(f"Content-Range: bytes {first}-{last}/{size}"); }
+        return response;
+    }
+
+    private HTTPResponse file(HTTPRequest request, string id) {
+        FakeEntry? found = self.entry(id);
+        if (found == null) { return self.missing(); }
+        if (request.isGet()) {
+            if (request.queryParams().getOrDefault("alt", "").equals("media")) { return self.content(request, found); }
+            return HTTPResponse.json(self.describe(found).stringify());
+        }
+        if (!request.method.equals("PATCH")) { return self.refuse(405, "methodNotAllowed", "Method not allowed"); }
+        Map<string, string> query = request.queryParams();
+        string moved = query.getOrDefault("addParents", "");
+        if (!moved.isEmpty()) {
+            if (self.entry(moved) == null) { return self.missing(); }
+            found.file.parent = moved;
+        }
+        self.apply(found, JSONValue.parse(request.body));
+        self.changed(found);
+        return HTTPResponse.json(self.describe(found).stringify());
+    }
+
+    private HTTPResponse make(HTTPRequest request) {
+        JSONValue metadata = JSONValue.parse(request.body);
+        string parent = metadata.get("parents").at(0).asString();
+        if (parent.isEmpty()) { parent = "root"; }
+        if (self.entry(parent) == null) { return self.missing(); }
+        FakeEntry entry = self.create(parent, metadata.get("name").asString(), metadata.get("mimeType").asString());
+        self.apply(entry, metadata);
+        if (!entry.file.isFolder()) { self.fill(entry, Bytes()); }
+        self.changed(entry);
+        return HTTPResponse.json(self.describe(entry).stringify());
+    }
+
+    private HTTPResponse openUpload(HTTPRequest request, string id) {
+        if (!id.isEmpty() && self.entry(id) == null) { return self.missing(); }
+        FakeUpload upload = FakeUpload();
+        upload.id = id;
+        upload.metadata = JSONValue.parse(request.body);
+        string session = f"s{self.nextId}";
+        self.nextId++;
+        self.uploads.put(session, upload);
+        return HTTPResponse.json("{}").addHeader(f"Location: {self.base}/upload/session/{session}");
+    }
+
+    private HTTPResponse finishUpload(HTTPRequest request, string session) {
+        if (!self.uploads.has(session)) { return self.missing(); }
+        FakeUpload upload = self.uploads.get(session);
+        self.uploads.remove(session);
+        FakeEntry? target = null;
+        if (upload.id.isEmpty()) {
+            string parent = upload.metadata.get("parents").at(0).asString();
+            if (self.entry(parent) == null) { return self.missing(); }
+            target = self.create(parent, upload.metadata.get("name").asString(), "application/octet-stream");
+        } else {
+            target = self.entry(upload.id);
+        }
+        if (target == null) { return self.missing(); }
+        self.apply(target, upload.metadata);
+        self.fill(target, request.bodyBytes);
+        self.changed(target);
+        return HTTPResponse.json(self.describe(target).stringify());
+    }
+
+    // What a test asks of the fake itself; a real Drive has none of this.
+    private HTTPResponse control(HTTPRequest request, string action) {
+        Map<string, string> query = request.queryParams();
+        if (action.equals("fail")) {
+            self.failures = query.getOrDefault("count", "1").toInt();
+            self.failureStatus = query.getOrDefault("status", "503").toInt();
+            self.retryAfter = query.getOrDefault("retry-after", "0").toInt();
+        } else if (action.equals("expire")) {
+            self.token = "";
+        } else if (action.equals("short")) {
+            self.shortBytes = query.getOrDefault("bytes", "0").toInt();
+        } else if (action.equals("page")) {
+            self.pageSize = query.getOrDefault("size", "1000").toInt();
+        } else if (action.equals("log")) {
+            string lines = Strings.join(self.log, "\n");
+            if (query.has("clear")) { self.log.clear(); }
+            return HTTPResponse.text(lines + "\n");
+        } else if (action.equals("put")) {  // another machine writes a file
+            string parent = query.getOrDefault("parent", "root");
+            if (self.entry(parent) == null) { return self.missing(); }
+            FakeEntry? target = query.has("id") ? self.entry(query.get("id")) : null;
+            if (target == null) { target = self.create(parent, query.getOrDefault("name", "unnamed"), query.getOrDefault("type", "application/octet-stream")); }
+            if (!target.file.isFolder()) { self.fill(target, request.bodyBytes); }
+            target.file.modified = self.clock;
+            self.changed(target);
+            return HTTPResponse.json(self.describe(target).stringify());
+        } else if (action.equals("delete")) {  // gone for good, as after the trash is emptied
+            FakeEntry? target = self.entry(query.getOrDefault("id", ""));
+            if (target == null) { return self.missing(); }
+            target.gone = true;
+            self.changed(target);
+        } else if (action.equals("dump")) {
+            JSONValue all = JSONValue.makeArray();
+            for id in self.order {
+                FakeEntry entry = self.entries.get(id);
+                if (!entry.gone) { all.push(self.describe(entry)); }
+            }
+            return HTTPResponse.json(all.stringify());
+        } else {
+            return self.missing();
+        }
+        return HTTPResponse.text("ok\n");
+    }
+
+    private HTTPResponse answer(HTTPRequest request) {
+        if (!request.valid) { return HTTPResponse.error(400, "bad request\n"); }
+        string path = request.path;
+        if (path.startsWith("/__control/")) { return self.control(request, path.substring(11, path.len() - 11)); }
+        string range = request.header("range");
+        self.log.push(range.isEmpty() ? f"{request.method} {path}" : f"{request.method} {path} {range}");
+        if (path.equals("/token")) { return self.token(request); }
+        if (self.failures > 0) {
+            self.failures--;
+            HTTPResponse refused = self.refuse(self.failureStatus, self.failureStatus == 403 ? "userRateLimitExceeded" : "backendError", "The fake was told to fail");
+            if (self.retryAfter > 0) { refused.addHeader(f"Retry-After: {self.retryAfter}"); }
+            return refused;
+        }
+        if (self.token.isEmpty() || !request.header("authorization").equals(f"Bearer {self.token}")) { return self.refuse(401, "authError", "Invalid Credentials"); }
+        string files = "/drive/v3/files";
+        string uploads = "/upload/drive/v3/files";
+        if (path.equals(files)) { return request.isGet() ? self.list(request) : self.make(request); }
+        if (path.equals(f"{files}/root")) { return HTTPResponse.json("{\"id\":\"root\"}"); }
+        if (path.startsWith(f"{files}/")) { return self.file(request, HTTPUrl.decode(path.substring(files.len() + 1, path.len() - files.len() - 1))); }
+        if (path.equals("/drive/v3/changes/startPageToken")) { return HTTPResponse.json(f"{{\"startPageToken\":\"{self.position}\"}}"); }
+        if (path.equals("/drive/v3/changes")) { return self.changes(request); }
+        if (path.equals(uploads)) { return self.openUpload(request, ""); }
+        if (path.startsWith(f"{uploads}/")) { return self.openUpload(request, HTTPUrl.decode(path.substring(uploads.len() + 1, path.len() - uploads.len() - 1))); }
+        if (path.startsWith("/upload/session/")) { return self.finishUpload(request, path.substring(16, path.len() - 16)); }
+        return self.missing();
+    }
+
+    public void serve() {
+        if (!self.server.start()) { throw "The fake Drive cannot listen on its port"; }
+        Console.log("READY");
+        fflush(stdout);  // a test waits for this line
+        while (true) {
+            int connection = self.server.acceptConn();
+            if (connection < 0) { continue; }
+            HTTPResponse response = HTTPResponse.error(500, "the fake Drive failed\n");
+            try { response = self.answer(self.server.readRequest(connection)); } catch (string error) { response = HTTPResponse.error(500, error + "\n"); }
+            self.server.respond(connection, response);
+            self.server.closeConn(connection);
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        FakeDrive(CLIArgs(argc, argv).require(0, "usage: drive-fake PORT").toInt()).serve();
+    } catch (string error) {
+        Console.error(f"drive-fake: {error}");
+        return 1;
+    }
+    return 0;
+}

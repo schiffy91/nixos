@@ -1,0 +1,236 @@
+import Library.Console;
+import Library.Digest;
+import Library.Map;
+import Library.Process;
+import Library.Strings;
+import Library.Timer;
+import Library.Vector;
+
+import ../door/Channel.btrc;
+import ../remote/DriveApi.btrc;
+import ../store/Store.btrc;
+import ../store/StoreFile.btrc;
+import ./Mirror.btrc;
+import ./Readers.btrc;
+
+class EngineHeld {  // a request waiting for someone to say whether its reader may download
+    public string key;
+    public string message;
+    public long long since;
+
+    public EngineHeld(string key, string message, long long since) {
+        self.key = key;
+        self.message = message;
+        self.since = since;
+    }
+}
+
+// Everything that talks to the Drive: keeps the tree current and fetches the ranges the door asks for.
+class Engine {
+    private DriveApi api;
+    private Store store;
+    private Mirror mirror;
+    private string socket;
+    public long long chunk = 4194304LL;  // fetch at least this much around a read; a multiple of 4096
+    public int followSeconds = 30;
+    private bool online = true;  // whether the Drive answered last time
+    public Readers readers;
+    public string askCommand = "";  // run with a reader's key and label to ask a person; empty: nobody to ask
+    public int askSeconds = 60;
+    private Vector<EngineHeld> held = [];
+    private Map<string, string> stopped = {};  // readers refused for lack of an answer: key -> label
+
+    public Engine(DriveApi api, Store store, string socket) {
+        self.api = api;
+        self.store = store;
+        self.mirror = Mirror(api, store);
+        self.socket = socket;
+        self.readers = Readers(store.temporary("../readers.json"));
+    }
+
+    private string failed(string id) {
+        DriveError? failure = self.api.failure;
+        Console.error(f"drive: fetching {id}: {failure == null ? "no reason given" : failure.describe()}");
+        if (failure != null && failure.transient()) { self.online = false; }
+        return failure != null && failure.transient() ? "offline" : "error";
+    }
+
+    private string broken(string id, string what) {
+        Console.error(f"drive: fetching {id}: {what}");
+        return "error";
+    }
+
+    private bool verified(StoreFile file) {
+        string expected = file.attribute("sha256");
+        if (expected.isEmpty()) { return true; }
+        SHA256 digest = SHA256();
+        long long size = file.size();
+        for (long long at = 0LL; at < size; at += 1048576LL) { digest.appendBytes(file.read(at, 1048576)); }
+        return digest.finish().equals(expected);
+    }
+
+    // Download what is missing of the chunks around a read. "ok", or why not.
+    public string fetch(string id, long long offset, long long length) {
+        StoreFile? opened = self.store.file(id, true);
+        if (opened == null) { return self.broken(id, "it is not in the store"); }
+        StoreFile file = opened;
+        long long size = file.size();
+        long long last = (offset + length + self.chunk - 1LL) / self.chunk * self.chunk;
+        if (last > size) { last = size; }
+        long long at = offset / self.chunk * self.chunk;
+        string part = self.store.temporary("fetch");
+        while (at < last) {
+            long long missing = file.firstMissing(at);
+            if (missing < 0LL || missing >= last) { break; }
+            long long end = file.firstPresent(missing);
+            if (end > last) { end = last; }
+            if (!self.api.download(id, missing, end - 1LL, part)) { return self.failed(id); }
+            StoreFile? fetched = StoreFile.open(part);
+            if (fetched == null || !file.fill(missing, fetched, end - missing)) { return self.broken(id, "what was fetched could not be stored"); }
+            at = end;
+        }
+        if (file.attribute("state").equals("cloud") && file.complete()) {
+            if (!self.verified(file)) {
+                file.empty(size);  // not what the Drive holds: start over
+                return self.broken(id, "the downloaded file does not match the Drive's checksum");
+            }
+            file.setAttribute("state", "local");
+        }
+        return "ok";
+    }
+
+    // Whether a file's contents can be had now: "ok", or "offline" when the Drive cannot be reached.
+    public string admit(string id, int process) {
+        if (self.online) { return "ok"; }
+        int attempts = self.api.attempts;
+        self.api.attempts = 1;  // one quick look, not a wait
+        self.online = self.api.startToken() != null;
+        self.api.attempts = attempts;
+        return self.online ? "ok" : "offline";
+    }
+
+    // Carry out a request whose reader is allowed.
+    private void perform(Channel door, Vector<string> words) {
+        if (words.get(0).equals("open")) { door.send(f"opened {words.get(1)} {self.admit(words.get(2), words.get(3).toInt())}"); }
+        else { door.send(f"done {words.get(1)} {self.fetch(words.get(2), words.get(3).toLong(), words.get(4).toLong())}"); }
+    }
+
+    private void refuse(Channel door, Vector<string> words) { door.send(f"{words.get(0).equals("open") ? "opened" : "done"} {words.get(1)} denied"); }
+
+    private void answer(Channel door, string message) {
+        Vector<string> words = Strings.split(message, " ");
+        bool opening = words.len == 4 && words.get(0).equals("open");
+        if (!opening && !(words.len == 6 && words.get(0).equals("fetch"))) { return; }
+        Reader who = self.readers.identify(words.get(opening ? 3 : 5).toInt());
+        string verdict = self.readers.verdict(who, words.get(2), opening ? 0LL : words.get(4).toLong());
+        if (verdict.equals("ok")) {
+            self.perform(door, words);
+        } else if (verdict.equals("denied") || self.askCommand.isEmpty()) {
+            if (verdict.equals("ask")) { self.stopped.put(who.key, who.label); }
+            self.refuse(door, words);
+        } else {
+            bool asking = false;
+            for waiting in self.held {
+                if (waiting.key.equals(who.key)) { asking = true; }
+            }
+            self.held.push(EngineHeld(who.key, message, MonotonicClock.milliseconds()));
+            if (!asking) { ChildProcess.run("setsid", ["--fork", self.askCommand, who.key, who.label]); }
+        }
+    }
+
+    // Someone answered for a reader, or took too long: its waiting requests go ahead or fail.
+    private void settle(Channel? door, string key, bool timedOut) {
+        Vector<EngineHeld> still = [];
+        long long now = MonotonicClock.milliseconds();
+        for waiting in self.held {
+            bool late = now - waiting.since > (long long)self.askSeconds * 1000LL;
+            bool due = waiting.key.equals(key);
+            if (timedOut) { due = late; }
+            if (!due) {
+                still.push(waiting);
+                continue;
+            }
+            Vector<string> words = Strings.split(waiting.message, " ");
+            if (door == null) { continue; }
+            string decided = timedOut ? "denied" : self.readers.verdict(Reader(waiting.key, ""), words.get(2), 0LL);
+            if (decided.equals("ok")) { self.perform(door, words); }
+            else { self.refuse(door, words); }
+        }
+        self.held = still;
+    }
+
+    // One line from the command line: what it asks, and the answer.
+    private string command(Channel? door, string message) {
+        Vector<string> words = Strings.split(message, " ");
+        if (words.len >= 3 && words.get(0).equals("answer")) {
+            string key = Strings.join(words.slice(2, words.len), " ");
+            if (!self.readers.decide(key, words.get(1))) { return "unknown decision\n"; }
+            self.stopped.remove(key);
+            self.settle(door, key, false);
+            return "ok\n";
+        }
+        if (words.len == 1 && words.get(0).equals("readers")) {
+            Vector<string> lines = [];
+            string decided = self.readers.describe();
+            if (!decided.isEmpty()) { lines.push(decided); }
+            for waiting in self.held { lines.push(f"waiting {waiting.key}"); }
+            for key in self.stopped.keys().sorted() { lines.push(f"stopped {key}"); }
+            return Strings.join(lines, "\n") + "\n";
+        }
+        if (words.len == 1 && words.get(0).equals("status")) { return f"{self.online ? "online" : "offline"}, door {door != null && door.isOpen() ? "connected" : "absent"}, {self.store.folderCount()} folders, {self.held.len} waiting\n"; }
+        return "unknown command\n";
+    }
+
+    private bool current() {  // the tree as the Drive is now; false when the Drive cannot be reached
+        try {
+            if (self.store.position().isEmpty()) { self.mirror.build(); }
+            bool reached = self.mirror.follow();
+            if (reached != self.online) {
+                DriveError? failure = self.api.failure;
+                Console.error(reached ? "drive: the Drive answers again" : f"drive: the Drive cannot be reached: {failure == null ? "no reason given" : failure.describe()}");
+            }
+            self.online = reached;
+            return reached;
+        } catch (string error) {
+            Console.error(f"drive: {error}");
+            self.online = false;
+            return false;
+        }
+        return false;
+    }
+
+    public void run() {
+        self.store.scan();
+        Channel? control = Channel.listen(self.socket.replace("door.sock", "engine.sock"));
+        if (control == null) { throw "Cannot listen for commands"; }
+        Channel listener = control;
+        Channel? door = null;
+        long long due = 0LL;
+        while (true) {
+            if (door == null || !door.isOpen()) { door = Channel.connect(self.socket); }
+            if (MonotonicClock.milliseconds() >= due) {
+                self.current();
+                due = MonotonicClock.milliseconds() + (long long)self.followSeconds * 1000LL;
+            }
+            long long wait = due - MonotonicClock.milliseconds();
+            int ready = Channel.wait(door == null ? -1 : door.handle(), listener.handle(), -1, door == null ? 500 : wait < 0LL ? 0 : wait > 1000LL ? 1000 : (int)wait);
+            if ((ready & 1) != 0 && door != null) {
+                while (door.isOpen()) {
+                    string message = door.receive();
+                    if (message.isEmpty()) { break; }
+                    self.answer(door, message);
+                }
+            }
+            if ((ready & 2) != 0) {
+                Channel? asking = listener.accept();
+                if (asking != null) {
+                    Channel.wait(asking.handle(), -1, -1, 500);
+                    string message = asking.receive();
+                    if (!message.isEmpty()) { asking.send(self.command(door, message)); }
+                    asking.close();
+                }
+            }
+            if (self.held.len > 0) { self.settle(door, "", true); }
+        }
+    }
+}

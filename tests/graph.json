@@ -1167,6 +1167,18 @@
       "spec": "persistence/offline-folder/test.json"
     },
     {
+      "after": [],
+      "id": "drive-remote",
+      "spec": "drive/remote/test.json"
+    },
+    {
+      "after": [
+        "drive-remote"
+      ],
+      "id": "drive-store",
+      "spec": "drive/store/test.json"
+    },
+    {
       "id": "gaming-runtime",
       "spec": "gaming/runtime/test.json",
       "after": []
@@ -1266,6 +1278,8 @@
     "host-picker",
     "immutability-feature-disable",
     "rclone-offline-folder",
+    "drive-remote",
+    "drive-store",
     "gaming-runtime",
     "sleep-lock-state",
     "recovery-artifacts",

@@ -1,0 +1,135 @@
+import Library.Bytes;
+import Library.Strings;
+
+#include <stdlib.h>
+
+// One file or folder of the store, open. Everything the client knows about an
+// entry is kept on the entry itself, as attributes and as which ranges hold data.
+class StoreFile {
+    private int descriptor = -1;
+
+    private StoreFile(int descriptor) { self.descriptor = descriptor; }
+
+    class StoreFile? open(string path, bool write = false, bool create = false) {
+        int descriptor = driveOpen(path, create ? 2 : write ? 1 : 0);
+        return descriptor < 0 ? null : StoreFile(descriptor);
+    }
+
+    // The file a path descriptor names, such as one a forwarding filesystem holds.
+    class StoreFile? reopen(int pathDescriptor, bool write = false) {
+        int descriptor = driveReopen(pathDescriptor, write ? 1 : 0);
+        return descriptor < 0 ? null : StoreFile(descriptor);
+    }
+
+    public int handle() { return self.descriptor; }
+
+    // Give the descriptor to someone who will close it.
+    public int detach() {
+        int descriptor = self.descriptor;
+        self.descriptor = -1;
+        return descriptor;
+    }
+
+    public Bytes read(long long offset, int size) {
+        Bytes data = Bytes();
+        unsigned char* buffer = (unsigned char*)malloc((size_t)(size > 0 ? size : 1));
+        if (buffer == NULL) { return data; }
+        long length = driveReadAt(self.descriptor, buffer, (unsigned long)size, (long)offset);
+        if (length > 0L) { data.appendRaw((char*)buffer, (int)length); }
+        free(buffer);
+        return data;
+    }
+
+    public void close() {
+        if (self.descriptor >= 0) { close(self.descriptor); }
+        self.descriptor = -1;
+    }
+
+    public void __del__() { self.close(); }
+
+    public string attribute(string name) {  // empty when unset
+        char value[1024];
+        long length = driveAttribute(self.descriptor, f"user.drive.{name}", value, 1024UL);
+        return length <= 0L ? "" : Strings.copy(value);
+    }
+
+    public bool setAttribute(string name, string value) { return driveSetAttribute(self.descriptor, f"user.drive.{name}", value) == 0; }
+
+    public bool removeAttribute(string name) { return driveRemoveAttribute(self.descriptor, f"user.drive.{name}") == 0; }
+
+    public long long size() {
+        struct DriveStatus status;
+        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.size : -1LL;
+    }
+
+    public long long blocks() {  // 512-byte units actually on disk
+        struct DriveStatus status;
+        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.blocks : -1LL;
+    }
+
+    public long long number() {
+        struct DriveStatus status;
+        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.number : -1LL;
+    }
+
+    public long long modified() {  // milliseconds
+        struct DriveStatus status;
+        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.modified * 1000LL + (long long)status.modifiedNanoseconds / 1000000LL : -1LL;
+    }
+
+    public bool resize(long long size) { return driveResize(self.descriptor, (long)size) == 0; }
+
+    public bool setModified(long long milliseconds) { return driveSetModified(self.descriptor, (long)(milliseconds / 1000LL), (long)(milliseconds % 1000LL) * 1000000L) == 0; }
+
+    // Forget the downloaded bytes of a range. Only whole 4 KiB blocks can go; a punch that is not aligned would write zeros instead.
+    public bool drop(long long offset, long long length) {
+        long long first = (offset + 4095LL) / 4096LL * 4096LL;
+        long long last = (offset + length) / 4096LL * 4096LL;
+        return last <= first || driveRelease(self.descriptor, (long)first, (long)(last - first)) == 0;
+    }
+
+    // Forget everything downloaded and take a new size.
+    public bool empty(long long size) { return driveResize(self.descriptor, 0L) == 0 && driveResize(self.descriptor, (long)size) == 0; }
+
+    // The first byte at or after `offset` that is not downloaded, or -1 when the rest is.
+    public long long firstMissing(long long offset) {
+        long long size = self.size();
+        if (offset >= size) { return -1LL; }
+        long hole = driveSeek(self.descriptor, (long)offset, 1);
+        return hole < 0L || (long long)hole >= size ? -1LL : (long long)hole;
+    }
+
+    // Where the downloaded bytes at or after `offset` start, or the size when there are none.
+    public long long firstPresent(long long offset) {
+        long data = driveSeek(self.descriptor, (long)offset, 0);
+        return data < 0L ? self.size() : (long long)data;
+    }
+
+    public bool has(long long offset, long long length) {
+        long long missing = self.firstMissing(offset);
+        return missing < 0LL || missing >= offset + length;
+    }
+
+    public bool complete() { return self.firstMissing(0LL) < 0LL; }
+
+    // Put the first `length` bytes of the file `source` at `offset`.
+    public bool fill(long long offset, StoreFile source, long long length) { return driveCopyInto(self.descriptor, (long)offset, source.handle(), (long)length) == 0; }
+
+    public bool synchronize() { return driveSynchronize(self.descriptor) == 0; }
+}
+
+class StorePaths {  // the calls on paths the store needs
+    class Bytes contents(string path) {  // a small file that does not say how long it is
+        unsigned char buffer[8192];
+        long length = driveReadAll(path, buffer, 8192UL);
+        return length <= 0L ? Bytes() : Bytes.fromRaw((char*)buffer, (int)length);
+    }
+
+    class bool link(string existing, string created) { return driveLink(existing, created) == 0; }
+
+    class bool rename(string from, string to) { return driveRename(from, to) == 0; }
+
+    class bool remove(string path) { return driveRemove(path) == 0; }
+
+    class bool removeDirectory(string path) { return driveRemoveDirectory(path) == 0; }
+}

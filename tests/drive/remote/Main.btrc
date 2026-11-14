@@ -1,0 +1,216 @@
+import Library.Bytes;
+import Library.CLI;
+import Library.Digest;
+import Library.FileSystem;
+import Library.IO;
+import Library.Strings;
+import Library.Vector;
+
+import ../../lib/Check.btrc;
+import ../../../config/pkgs/utils/drive/remote/DriveApi.btrc;
+import ../../../config/pkgs/utils/drive/remote/DriveFile.btrc;
+import ../../../config/pkgs/utils/drive/remote/Timestamp.btrc;
+import ../../../config/pkgs/utils/drive/remote/Transport.btrc;
+
+// The Drive API client against the fake Drive: what it asks, what it understands, how it copes.
+class RemoteContract {
+    private string base;
+    private string scratch;
+    private Transport transport;
+    private DriveApi api;
+
+    public RemoteContract(string port, string scratch) {
+        self.base = f"http://127.0.0.1:{port}";
+        self.scratch = scratch;
+        self.transport = Transport(scratch + "/transport");
+        self.api = self.client("refresh-ok");
+    }
+
+    private DriveApi client(string refreshToken) {
+        DriveCredentials credentials = DriveCredentials();
+        credentials.clientId = "client";
+        credentials.clientSecret = "secret";
+        credentials.refreshToken = refreshToken;
+        DriveApi api = DriveApi(self.transport, credentials);
+        api.apiBase = self.base;
+        api.tokenUrl = self.base + "/token";
+        api.backoffMilliseconds = 5;
+        return api;
+    }
+
+    private string control(string action, string body = "") {
+        TransportResponse response = self.transport.send("POST", f"{self.base}/__control/{action}", [], body);
+        Check.that(response.ok(), f"the fake accepts {action}");
+        return response.body;
+    }
+
+    private string write(string name, string content) {
+        string path = f"{self.scratch}/{name}";
+        Check.that(File(path, "wb").writeBytes(Bytes.fromString(content)), f"wrote {name}");
+        return path;
+    }
+
+    private string why() {
+        DriveError? failure = self.api.failure;
+        return failure == null ? "" : ": " + failure.describe();
+    }
+
+    private DriveFile must(DriveFile? file, string what) {
+        if (file == null) { throw f"FAIL: {what}{self.why()}"; }
+        return file;
+    }
+
+    private DriveListing listed(string token) {
+        DriveListing? page = self.api.list(token);
+        if (page == null) { throw f"FAIL: a page of the listing arrives{self.why()}"; }
+        return page;
+    }
+
+    private DriveChanges fed(string token) {
+        DriveChanges? page = self.api.changes(token);
+        if (page == null) { throw f"FAIL: the feed is read from {token}{self.why()}"; }
+        return page;
+    }
+
+    private bool refused(DriveApi api, DriveFailure kind, bool transient) {
+        DriveError? failure = api.failure;
+        return failure != null && failure.kind == kind && failure.transient() == transient;
+    }
+
+    private void timestamps() {
+        Check.that(Timestamp.parse("2026-01-02T10:00:00.123Z") == 1767348000123LL, "a time with milliseconds parses");
+        Check.that(Timestamp.parse("2026-01-02T10:00:00Z") == 1767348000000LL, "a time without a fraction parses");
+        Check.that(Timestamp.parse("2026-01-02T10:00:00.123456Z") == 1767348000123LL, "finer fractions are cut to milliseconds");
+        Check.that(Timestamp.parse("2026-01-02 10:00:00") == Timestamp.invalid() && Timestamp.parse("") == Timestamp.invalid(), "anything else is refused");
+        Check.equal(Timestamp.format(1767348000123LL), "2026-01-02T10:00:00.123Z", "a time is written the way Drive writes it");
+    }
+
+    private void files() {
+        string? root = self.api.rootId();
+        Check.that(root != null && root.equals("root"), "the root folder is found");
+        DriveFile folder = self.must(self.api.createFolder("root", "Documents"), "a folder is made");
+        Check.that(folder.isFolder() && folder.parent.equals("root") && folder.name.equals("Documents"), "the folder is described as made");
+
+        string content = "0123456789 the quick brown fox";
+        DriveFile uploaded = self.must(self.api.upload("", folder.id, "notes.txt", self.write("notes.txt", content), 1700000000123LL), "a new file is uploaded");
+        Check.that(uploaded.size == (long long)content.len() && uploaded.sha256.equals(SHA256.digest(content)), "the upload arrives whole");
+        Check.that(uploaded.modified == 1700000000123LL && uploaded.parent.equals(folder.id) && !uploaded.isFolder(), "its time and place are the ones sent");
+
+        DriveFile replaced = self.must(self.api.upload(uploaded.id, "", "", self.write("notes2.txt", "shorter"), -1LL), "new content replaces the old");
+        Check.that(replaced.id.equals(uploaded.id) && replaced.size == 7LL && !replaced.revision.equals(uploaded.revision) && replaced.version > uploaded.version, "the file keeps its id and gets a new revision");
+
+        DriveFile big = self.must(self.api.upload("", "root", "range.bin", self.write("range.bin", content), -1LL), "a second file is uploaded");
+        self.control("log?clear=1");
+        string part = self.scratch + "/part";
+        Check.that(self.api.download(big.id, 11LL, 19LL, part), "a range downloads");
+        Check.equal(FileSystem.readText(part), "the quick", "the range holds exactly the bytes asked for");
+        Check.that(self.control("log").contains(f"GET /drive/v3/files/{big.id} bytes=11-19"), "only that range was asked of the Drive");
+
+        DrivePatch move = DrivePatch();
+        move.name = "renamed.bin";
+        move.addParent = folder.id;
+        move.removeParent = "root";
+        move.modified = 1600000000000LL;
+        DriveFile moved = self.must(self.api.update(big.id, move), "a file is renamed and moved");
+        Check.that(moved.name.equals("renamed.bin") && moved.parent.equals(folder.id) && moved.modified == 1600000000000LL, "name, folder and time changed together");
+        DriveFile again = self.must(self.api.file(big.id), "a file is read back by id");
+        Check.that(again.name.equals("renamed.bin") && again.sha256.equals(big.sha256), "and its content is untouched");
+        Check.that(self.api.file("no-such-id") == null && self.refused(self.api, DRIVE_NOT_FOUND, false), "a missing id is reported as missing");
+    }
+
+    private void listing() {
+        self.control("page?size=2");
+        Vector<string> names = [];
+        string token = "";
+        int pages = 0;
+        while (true) {
+            DriveListing page = self.listed(token);
+            for file in page.files { names.push(file.name); }
+            pages++;
+            token = page.next;
+            if (token.isEmpty()) { break; }
+        }
+        Check.equal(Strings.join(names.sorted(), ","), "Documents,notes.txt,renamed.bin", "every page of the listing is read");
+        Check.that(pages >= 2, "the listing came in more than one page");
+        self.control("page?size=1000");
+    }
+
+    private void changes() {
+        string? asked = self.api.startToken();
+        if (asked == null || asked.isEmpty()) { throw f"FAIL: the feed gives a position to start from{self.why()}"; }
+        string start = asked;
+        DriveFile added = self.must(self.api.upload("", "root", "later.txt", self.write("later.txt", "later"), -1LL), "a file is added after the position");
+        self.must(self.api.trash(added.id), "a file is trashed");
+        JSONValue other = JSONValue.parse(self.control("put?parent=root&name=elsewhere.txt", "written elsewhere"));
+        self.control(f"delete?id={other.get("id").asString()}");
+        DriveChanges page = self.fed(start);
+        Check.that(page.next.isEmpty() && !page.resume.isEmpty(), "the feed is read to its end");
+        Vector<string> seen = [];
+        for change in page.changes {
+            DriveFile? file = change.file;
+            seen.push(change.removed ? "removed" : file == null ? "?" : file.trashed ? "trashed " + file.name : file.name);
+        }
+        Check.equal(Strings.join(seen, ","), "trashed later.txt,removed", "each changed file arrives once, in its latest state");
+        DriveChanges quiet = self.fed(page.resume);
+        Check.that(quiet.changes.len == 0 && quiet.resume.equals(page.resume), "nothing new means an empty page at the same position");
+        self.control("page?size=1");
+        DriveChanges first = self.fed(start);
+        Check.that(first.changes.len == 1 && !first.next.isEmpty() && first.resume.isEmpty(), "a long feed comes a page at a time");
+        DriveChanges second = self.fed(first.next);
+        Check.that(second.changes.len == 1 && second.next.isEmpty() && second.resume.equals(page.resume), "and its last page says where to resume");
+        self.control("page?size=1000");
+        Check.that(self.api.changes("999999") == null && self.refused(self.api, DRIVE_EXPIRED, false), "a position the Drive no longer has is reported as expired");
+    }
+
+    private void faults() {
+        self.control("fail?count=2&status=503");
+        Check.that(self.api.rootId() != null, "two server errors are retried through");
+        self.control("fail?count=1&status=429&retry-after=1");
+        Check.that(self.api.rootId() != null, "a rate limit is waited out");
+        self.control("fail?count=1&status=403");
+        Check.that(self.api.rootId() != null, "a rate limit reported as forbidden is retried too");
+        self.api.attempts = 3;
+        self.control("fail?count=5&status=500");
+        Check.that(self.api.rootId() == null && self.refused(self.api, DRIVE_SERVER, true), "a server that keeps failing is given up on, as something to try again later");
+        self.control("fail?count=0");
+        self.api.attempts = 6;
+
+        self.control("expire");
+        Check.that(self.api.rootId() != null, "an expired sign-in is renewed without the caller noticing");
+        DriveApi stranger = self.client("refresh-wrong");
+        Check.that(stranger.rootId() == null && self.refused(stranger, DRIVE_UNAUTHORIZED, false), "a sign-in Google refuses is reported and not retried");
+
+        DriveFile file = self.must(self.api.upload("", "root", "cut.bin", self.write("cut.bin", "abcdefghijklmnopqrstuvwxyz"), -1LL), "a file to cut off is uploaded");
+        self.control("short?bytes=4");
+        string part = self.scratch + "/cut";
+        Check.that(self.api.download(file.id, 0LL, 25LL, part), "a transfer that ends early is fetched again");
+        Check.equal(FileSystem.readText(part), "abcdefghijklmnopqrstuvwxyz", "and what is kept is the whole range");
+
+        DriveApi nowhere = self.client("refresh-ok");
+        nowhere.apiBase = "http://127.0.0.1:9";
+        nowhere.tokenUrl = "http://127.0.0.1:9/token";
+        nowhere.attempts = 2;
+        Check.that(nowhere.rootId() == null && self.refused(nowhere, DRIVE_NETWORK, true), "no network is reported as something to try again later");
+    }
+
+    public void run() {
+        self.timestamps();
+        self.files();
+        self.listing();
+        self.changes();
+        self.faults();
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        CLIArgs args = CLIArgs(argc, argv);
+        RemoteContract(args.require(0, "usage: drive-remote-contract PORT SCRATCH"), args.require(1, "usage: drive-remote-contract PORT SCRATCH")).run();
+        print("PASS: the Drive API client");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

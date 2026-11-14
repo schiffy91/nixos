@@ -1,0 +1,50 @@
+import ../vm/Lab.btrc;
+
+// A guest running the fake Drive, the engine and the door, for the scenarios to act on.
+class DriveFixture {
+    public Guest machine;
+    public string fake = "http://127.0.0.1:18475";
+    public string store = "/var/lib/drive-test/store";
+    public string mount = "/mnt/drive";
+    public string source = "/var/lib/drive-test/source";
+
+    public DriveFixture(Guest machine) { self.machine = machine; }
+
+    public string control(string action) { return self.machine.succeed(f"curl -sS -H Expect: -X POST '{self.fake}/__control/{action}'"); }
+
+    public string folder(string parent, string name) { return self.machine.succeed(f"curl -sS -X POST '{self.fake}/__control/put?parent={parent}&name={name}&type=application%2Fvnd.google-apps.folder' | grep -o '\"id\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4").trim(); }
+
+    public void put(string parent, string name, string file) { self.machine.succeed(f"curl -sS -H Expect: -X POST '{self.fake}/__control/put?parent={parent}&name={name}' --data-binary @{self.source}/{file} -o /dev/null"); }
+
+    public string asked() { return self.machine.succeed(f"curl -sS -X POST '{self.fake}/__control/log?clear=1' | grep 'bytes=' || true"); }
+
+    public string state(string path) { return self.machine.succeed(f"getfattr --absolute-names -n user.drive.state --only-values {self.store}/tree/{path}"); }
+
+    public void prepare() {
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.succeed(f"mkdir -p {self.source} {self.mount} /run/drive-test");
+        self.machine.succeed("echo '{\"client_id\":\"c\",\"client_secret\":\"s\",\"refresh_token\":\"refresh-ok\"}' > /var/lib/drive-test/credentials.json");
+    }
+
+    public void startFake() {
+        self.machine.succeed("systemd-run --unit drive-fake --collect drive-fake 18475");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.fake}/__control/log' >/dev/null");
+    }
+
+    public void startEngine(string extra = "") {
+        self.machine.succeed(f"systemd-run --unit drive-engine --collect drive engine --store {self.store} --runtime /run/drive-test --credentials /var/lib/drive-test/credentials.json --api {self.fake} --chunk 65536 --follow 1 {extra}");
+        self.machine.waitUntil(f"test -s {self.store}/position && test -S /run/drive-test/engine.sock");
+    }
+
+    public void startDoor() {
+        self.machine.succeed(f"systemd-run --unit drive-door --collect drive door --store {self.store} --mount {self.mount} --runtime /run/drive-test --allow-others");
+        self.machine.waitUntil(f"mountpoint -q {self.mount}");
+        self.connected();
+    }
+
+    public void connected() { self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'door connected'"); }  // the engine has found the door
+
+    public void stop(string unit) { self.machine.succeed(f"systemctl kill --signal=KILL {unit}.service || true; systemctl stop {unit}.service 2>/dev/null || true; systemctl reset-failed {unit}.service 2>/dev/null || true"); }
+
+    public string drive(string command) { return self.machine.succeed(f"drive {command} --runtime /run/drive-test"); }
+}
