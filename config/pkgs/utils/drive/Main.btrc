@@ -165,6 +165,7 @@ class Drive {
             if (!engine.requires(declared)) { throw f"--place-device wants LOCATION=DEVICE for a placed location, not {declared}"; }
         }
         for pin in options.values("--pin") { engine.pins.push(pin); }
+        engine.several = options.option("--several", "8").toInt();
         engine.cacheBytes = options.option("--cache-bytes", "0").toLong();
         engine.freeFloor = options.option("--free-floor", "0").toLong();
         engine.uploader.machine = options.option("--machine", Drive.machine());

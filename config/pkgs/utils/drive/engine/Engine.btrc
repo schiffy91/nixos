@@ -51,6 +51,8 @@ class Engine {
     public Vector<string> pins = [];  // folders kept downloaded, by their path in the tree
     private Vector<string> wanted = [];  // ids of their files still to download
     public long long piece = 33554432LL;  // how much of a pinned file is fetched between looks at the door
+    public int several = 8;  // how many small pinned files are fetched at once; 1: one at a time
+    public long long small = 1048576LL;  // a file up to this size counts as small
     public bool paused = false;  // pinned folders are not being downloaded for now
     public long long cacheBytes = 0LL;  // how much content outside pinned folders may stay downloaded; 0: all of it
     public long long freeFloor = 0LL;  // give content back when the disk has less than this free
@@ -118,9 +120,14 @@ class Engine {
             self.received += end - missing;
             at = end;
         }
+        return self.finished(id, file);
+    }
+
+    // A file whose last piece has arrived is checked against the Drive's checksum and then counts as here.
+    private string finished(string id, StoreFile file) {
         if (file.attribute("state").equals("cloud") && file.complete()) {
             if (!self.verified(file)) {
-                file.empty(size);  // not what the Drive holds: start over
+                file.empty(file.size());  // not what the Drive holds: start over
                 self.due = 0LL;  // most likely the file changed on the Drive: read the feed now
                 return self.broken(id, "the downloaded file does not match the Drive's checksum");
             }
@@ -128,6 +135,60 @@ class Engine {
             file.setAttribute("synced", file.shape());
         }
         return "ok";
+    }
+
+    // The small files at the head of the queue, fetched together: thousands of them one request at a time is
+    // slow. 0 when the head of the queue is not such a run, or when none of them arrived; the caller then goes on
+    // one file at a time, which is also where a refusal is given its reason.
+    private int together() {
+        Vector<string> ids = [];
+        Vector<string> parts = [];
+        Vector<long long> sizes = [];
+        for (int index = 0; index < self.wanted.len && ids.len < self.several; index++) {
+            StoreFile? file = self.store.file(self.wanted.get(index));
+            if (file == null) { break; }
+            long long size = file.size();
+            bool whole = file.attribute("state").equals("cloud") && size > 0LL && size <= self.small && file.firstMissing(0LL) == 0LL && file.firstPresent(0LL) >= size;
+            file.close();
+            if (!whole) { break; }
+            ids.push(self.wanted.get(index));
+            parts.push(self.store.temporary(f"several-{ids.len}"));
+            sizes.push(size);
+        }
+        if (ids.len < 2) { return 0; }
+        Vector<bool> arrived = self.api.downloadWhole(ids, parts);
+        int came = 0;
+        for (int index = 0; index < ids.len; index++) {
+            if (arrived.get(index) && (long long)FileSystem.readBytes(parts.get(index)).length() == sizes.get(index)) { came++; }
+            else { arrived.set(index, false); }
+        }
+        if (came == 0) {
+            for part in parts { StorePaths.remove(part); }
+            return 0;
+        }
+        for (int index = 0; index < ids.len; index++) {  // in the queue's order: each one is the head when it is dealt with
+            string id = ids.get(index);
+            long long before = self.received;
+            if (arrived.get(index)) {
+                StoreFile? opened = self.store.file(id, true);
+                StoreFile? fetched = StoreFile.open(parts.get(index));
+                if (opened != null && fetched != null) {
+                    long long modified = opened.modified();
+                    if (opened.fill(0LL, fetched, sizes.get(index))) {
+                        opened.setModified(modified);  // the Drive's time, not the time of the download
+                        self.fetched += sizes.get(index);
+                        self.received += sizes.get(index);
+                        self.finished(id, opened);
+                    } else { self.broken(id, "what was fetched could not be stored"); }
+                }
+            } else {
+                self.fetch(id, 0LL, sizes.get(index));  // by itself and all of it, so that what went wrong is said
+            }
+            StorePaths.remove(parts.get(index));
+            self.arrivedBytes += self.received - before;
+            self.taken();
+        }
+        return came;
     }
 
     private string pinsFile() { return self.store.temporary("../pins"); }
@@ -205,6 +266,7 @@ class Engine {
     // Fetch a piece of the next pinned file. False when there is nothing to do or the Drive cannot be reached.
     private bool download() {
         while (self.wanted.len > 0) {
+            if (self.several > 1 && self.together() > 0) { return true; }
             string id = self.wanted.get(0);
             StoreFile? file = self.store.file(id);
             if (file == null || !file.attribute("state").equals("cloud")) {
@@ -354,6 +416,14 @@ class Engine {
         if (fields.len == 2 && fields.get(0).equals("place")) {
             string outcome = "";
             try { outcome = self.store.transplant(fields.get(1)); } catch (string error) { outcome = error; }
+            if (outcome.equals("empty")) {
+                // A blank volume in place of one that held the folder: its files were known only through the other
+                // volume. Reading the whole Drive again brings them back as not downloaded; nothing is removed.
+                Console.error(f"drive: {fields.get(1)} arrived on an empty volume; reading the Drive again to find its files");
+                self.store.setPosition("");
+                self.due = 0LL;
+                outcome = "ok";
+            }
             self.wantAll();
             return outcome + "\n";
         }

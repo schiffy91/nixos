@@ -23,6 +23,8 @@ class PlacementScenario {
 
     private bool trashedOnDrive(string name) { return self.drive.remote(name).contains(" True"); }
 
+    private string trashedNames() { return self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 -c 'import json, sys; print(\" \".join(sorted(e[\"id\"] + \":\" + e[\"name\"] for e in json.load(sys.stdin) if e[\"trashed\"])))'").trim(); }
+
     private void prepare() {
         self.drive.prepare();
         for name in ["a", "b", "c", "d", "e"] { self.random(name); }
@@ -108,6 +110,23 @@ class PlacementScenario {
         Check.equal(self.machine.succeed(f"ls {self.mount}/Games/Library | LC_ALL=C sort | tr '\\n' ' '").trim(), "Sub c.bin e.bin", "the folder is in place again");
     }
 
+    // A different, blank volume in the folder's place: the folder's files were known only through the volume
+    // that held them. Nothing is deleted anywhere; the engine reads the Drive again and fills the new volume.
+    private void replaced() {
+        print("A blank volume takes the folder's place");
+        string before = self.trashedNames();
+        self.machine.succeed("umount -l /sd");
+        self.away("with the volume pulled for good");
+        self.machine.waitUntil("! losetup -a | grep -q sd.img");
+        self.machine.succeed("truncate -s 300M /var/lib/sd2.img && mkfs.ext4 -q /var/lib/sd2.img && mount -o loop /var/lib/sd2.img /sd && mkdir /sd/drive");
+        self.drive.drive("place Games/Library");
+        self.machine.waitUntil(f"test -e {self.mount}/Games/Library/Sub/new.txt && drive status --runtime {self.drive.runtime} | grep -q ' 0 to download'", 180);
+        Check.equal(self.machine.succeed(f"cd {self.mount}/Games/Library && find . -type f | LC_ALL=C sort | tr '\\n' ' '").trim(), "./Sub/b.bin ./Sub/new.txt ./c.bin ./e.bin", "every file of the folder is back, on the new volume");
+        self.machine.succeed(f"cmp {self.mount}/Games/Library/e.bin {self.drive.source}/e && cmp {self.mount}/Games/Library/Sub/b.bin {self.drive.source}/b && cmp /sd/drive/tree/c.bin {self.drive.source}/c && test \"$(cat {self.mount}/Games/Library/Sub/new.txt)\" = made");
+        Check.equal(self.trashedNames(), before, "and nothing was deleted on the Drive for it: its trash holds what it held before");
+        Check.that(self.machine.succeed("journalctl -u drive-engine.service --no-pager").contains("arrived on an empty volume"), "the engine said why it read the Drive again");
+    }
+
     public void check() {
         self.prepare();
         self.absentAtFirst();
@@ -115,6 +134,7 @@ class PlacementScenario {
         self.machine.succeed("getfattr --absolute-names -n user.drive.id --only-values /sd/drive/tree > /tmp/library-id; getfattr --absolute-names -n user.drive.id --only-values /sd/drive/tree/d.bin > /tmp/d-id");
         self.takenAway();
         self.back();
+        self.replaced();
     }
 }
 

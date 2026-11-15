@@ -95,6 +95,30 @@ class Transport {  // one curl process per request
         return self.finish(ran, headerFile, path, false);
     }
 
+    // Several whole files at once, over one connection where the server allows it. The status of each, in the
+    // order given; 0 for one that got no answer. A file is only to be trusted when its status says so.
+    public Vector<int> downloadSeveral(Vector<string> urls, Vector<string> headers, Vector<string> paths) {
+        Vector<string> arguments = ["-sS", "--proto", "=http,https", "--parallel", "--parallel-max", Strings.fromInt(urls.len), "--write-out", "%{http_code} %{filename_effective}\n", "--speed-limit", "1", "--speed-time", Strings.fromInt(self.stallSeconds)];
+        for header in headers {
+            arguments.push("--header");
+            arguments.push(header);
+        }
+        for (int index = 0; index < urls.len; index++) {
+            arguments.push("--output");
+            arguments.push(paths.get(index));
+            arguments.push(urls.get(index));
+        }
+        ExecResult ran = ChildProcess.run("curl", arguments);
+        Map<string, int> answered = {};
+        for line in Strings.split(ran.stdout(), "\n") {
+            int space = line.indexOf(" ");
+            if (space > 0) { answered.put(line.substring(space + 1, line.len() - space - 1).trim(), line.substring(0, space).toInt()); }
+        }
+        Vector<int> statuses = [];
+        for path in paths { statuses.push(answered.getOrDefault(path, 0)); }
+        return statuses;
+    }
+
     public TransportResponse upload(string method, string url, Vector<string> headers, string path, long long offset = 0LL) {
         string headerFile = self.temporary("headers");
         string bodyFile = self.temporary("body");

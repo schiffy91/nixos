@@ -271,6 +271,20 @@ class DriveApi {
         return false;
     }
 
+    // The whole content of several files, each into its path, in one go. True for each that arrived with a
+    // plain yes; the others are left to be asked for one at a time, which is where a refusal gets its reason.
+    public Vector<bool> downloadWhole(Vector<string> ids, Vector<string> paths) {
+        Vector<bool> arrived = [];
+        if (!self.authorize()) {
+            for id in ids { arrived.push(false); }
+            return arrived;
+        }
+        Vector<string> urls = [];
+        for id in ids { urls.push(f"{self.files()}/{HTTPUrl.encode(id)}?alt=media"); }
+        for status in self.transport.downloadSeveral(urls, self.headers([]), paths) { arrived.push(status == 200); }
+        return arrived;
+    }
+
     public DriveFile? createFolder(string parent, string name) {
         JSONValue body = JSONValue.makeObject();
         body.set("name", JSONValue.makeString(name));

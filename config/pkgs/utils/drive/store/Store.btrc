@@ -567,6 +567,7 @@ class Store {
         string shown = self.volumes.shown(index);
         if (FileSystem.listDir(shown).len > 0) { return f"{location} already holds another folder"; }
         string stand = self.volumes.stand(index);
+        bool empty = FileSystem.listDir(stand).len == 0;  // nothing to bring: the folder's files are not known here
         self.transfer(stand, shown, location);
         StoreFile? from = StoreFile.open(stand);
         StoreFile? to = StoreFile.open(shown);
@@ -577,7 +578,7 @@ class Store {
         }
         self.attend();
         self.secure();
-        return "ok";
+        return empty ? "empty" : "ok";
     }
 
     // Make a file from outside the contents of the not-downloaded file at `path`, if it is the same file: same

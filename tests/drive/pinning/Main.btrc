@@ -68,6 +68,33 @@ class PinningScenario {
         Check.that(!self.drive.drive("pins").contains("Adopt/Sub"), "and unpinning removes it");
     }
 
+    // Thousands of small files one request at a time is slow, so the small ones at the head of the queue are
+    // asked for together. One that the Drive refuses in such a run is asked for again by itself.
+    private void together() {
+        print("Small pinned files arrive several at a time, and one the Drive refuses still arrives");
+        self.drive.drive("pause");
+        string many = self.drive.folder(self.drive.id("Pinned"), "Many");
+        for (int number = 1; number <= 20; number++) { self.drive.put(many, f"s{number}.bin", number % 2 == 0 ? "p2" : "p3"); }
+        self.machine.waitUntil(f"test -e {self.mount}/Pinned/Many/s20.bin");
+        self.drive.asked();
+        self.drive.control("fail?count=1&status=503");
+        self.drive.drive("unpause");
+        self.machine.waitUntil(f"drive status --runtime {self.drive.runtime} | grep -q ' 0 to download'");
+        for (int number = 1; number <= 20; number++) {
+            Check.equal(self.drive.state(f"Pinned/Many/s{number}.bin"), "local", f"s{number}.bin is downloaded");
+            self.machine.succeed(f"cmp {self.mount}/Pinned/Many/s{number}.bin {self.drive.source}/{number % 2 == 0 ? "p2" : "p3"}");
+        }
+        string log = self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/log?clear=1'");
+        int whole = 0;
+        int ranged = 0;
+        for line in Strings.split(log, "\n") {
+            if (!line.startsWith("GET /drive/v3/files/id") || line.contains("fields=")) { continue; }
+            if (line.contains("bytes=")) { ranged++; } else { whole++; }
+        }
+        Check.that(whole >= 19, f"they were asked for whole, in runs ({whole} whole, {ranged} by range)");
+        Check.that(ranged <= 3, f"and at most the refused one was asked for again by itself ({ranged} by range)");
+    }
+
     private void givenBack() {
         print("Content outside pinned folders is given back, oldest first, never a file that is open");
         string tree = self.drive.store + "/tree";
@@ -139,6 +166,7 @@ class PinningScenario {
     public void check() {
         self.prepare();
         self.pinned();
+        self.together();
         self.givenBack();
         self.adopted();
         self.verified();

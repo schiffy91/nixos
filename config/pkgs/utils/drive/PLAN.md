@@ -269,7 +269,7 @@ Not decided by the plan: whether a measured slowdown is acceptable. The numbers 
   - The 2 TB card held an `Emulation` folder from an older setup (113 GB, newest file from August 2025). Its large files are in the Drive under the same names and sizes; the other 480 files (2.6 GB) were copied to a folder on the desktop before anything was erased.
   - `settings.disk.sdCard.enable` went on for the Deck, the system was switched without a restart, and `nixosctl sd-card prepare /dev/mmcblk0p1` formatted the card: LUKS2, opened by the key file, ext4 owned by the user, mounted at `/sd`, a copy of the header beside the key file and a second copy on the desktop (`/var/lib/nixos/sd-card-headers`).
   - Found on the way: `prepare` could not make the filesystem on the Deck, which has no ext4 of its own and so no `mkfs.ext4`; the test machine has one. The card module now brings `e2fsprogs`, and the package-groups check requires it.
-  - The library was placed on the card (`drive place`) and is being filled from the Drive. A card that arrives empty in place of one that held the folder shows an empty folder: the engine knew those files only through the old card. It was made to read the whole Drive again (its feed position was removed and it was restarted), after which all 42,283 files appeared as not-downloaded and the pinned download began.
+  - The library was placed on the card (`drive place`) and is being filled from the Drive. A card that arrives empty in place of one that held the folder shows an empty folder: the engine knew those files only through the old card. It was made to read the whole Drive again (its feed position was removed and it was restarted), after which all 42,283 files appeared as not-downloaded and the pinned download began. The client now does this by itself: placing a folder on a volume that brings nothing with it makes the engine read the Drive again, and the `placement` scenario replaces the volume with a blank one and requires every file back and the Drive's trash unchanged.
   - Still to do with the owner: add the boot password as the second way in (`nixosctl sd-card password /dev/mmcblk0p1` asks for it), look at what Game Mode says about a card it cannot read, add `/sd` as a Steam library if wanted, and restart the Deck once to see the card open at boot.
 
 ## M0 results
@@ -409,6 +409,7 @@ Run on 2026-11-14: all five runs failed, each in its step; the node's report nam
 
 ## Known limits
 
+- Small pinned files (up to 1 MiB) are fetched several at a time, eight by default (`--several`), in one request run; one that is refused in such a run is asked for again by itself. Before this the Deck filled its card at a little over one small file a second (2026-11-14, 34,000 files under 1 MB); the `pinning` scenario covers the run and the refusal.
 - The engine does one thing at a time: a large upload or a 32 MiB piece of a pinned download delays another program's read of a not-downloaded file until it finishes.
 - `trash/` is never emptied yet (the 30 days are not enforced).
 - Eviction looks only at the main store, not at placed volumes.

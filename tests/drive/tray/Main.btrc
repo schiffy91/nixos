@@ -47,7 +47,7 @@ class TrayScenario {
         string as = f"--uid=fixture --setenv=DRIVE_RUNTIME={self.drive.runtime} -p AmbientCapabilities=CAP_SYS_ADMIN";
         self.machine.succeed(f"systemd-run --unit drive-door --collect {as} drive door --store {self.drive.store} --mount {self.drive.mount} --runtime {self.drive.runtime} --allow-others");
         self.machine.waitUntil(f"mountpoint -q {self.drive.mount}");
-        self.machine.succeed(f"systemd-run --unit drive-engine --collect {as} drive engine --store {self.drive.store} --runtime {self.drive.runtime} --credentials /var/lib/drive-test/credentials.json --api {self.drive.fake} --chunk 65536 --follow 1");
+        self.machine.succeed(f"systemd-run --unit drive-engine --collect {as} drive engine --store {self.drive.store} --runtime {self.drive.runtime} --credentials /var/lib/drive-test/credentials.json --api {self.drive.fake} --chunk 65536 --follow 1 --several 1");  // one file at a time, so the measure can be read part-way
         self.drive.connected();
         self.machine.waitUntil(f"test -e {self.drive.mount}/Kept/film4.bin && test -S /run/user/1000/wayland-0 && su - fixture -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user show-environment' | grep -q WAYLAND_DISPLAY");
         string environment = f"--setenv=DRIVE_RUNTIME={self.drive.runtime} --setenv=DRIVE_MOUNT={self.drive.mount}";  // as the module's unit has them; the session itself knows neither
