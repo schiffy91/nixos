@@ -21,7 +21,7 @@ in {
   };
   settings.apps = {
     gaming.enable = false;
-    dev.packages = with pkgs; [ direnv gh git-lfs glfw nodejs podman python313 qemu wgpu-native ];
+    dev.packages = with pkgs; [ direnv gh git-lfs glfw nodejs podman python313 qemu wgpu-native ] ++ [ (import ../../../pkgs/dev/ci-local/package.nix { inherit pkgs; }) ];
     utils.packages = with pkgs; [ _1password-cli coreutils imagemagick qpdf ];
     dev.zsh.enable = true;
     dev.shell.aliases = {

@@ -1,0 +1,16 @@
+{
+  "jobs": {
+    "lint": {
+      "platform": "linux-x86_64",
+      "run": "make lint"
+    },
+    "checks": {
+      "platform": "linux-x86_64",
+      "run": "ci/checks.sh"
+    },
+    "graph": {
+      "platform": "linux-x86_64",
+      "run": "make graph-required"
+    }
+  }
+}
