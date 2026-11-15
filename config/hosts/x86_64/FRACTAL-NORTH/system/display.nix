@@ -85,6 +85,8 @@ in {
     ${pkgs.coreutils}/bin/install -m 0600 -o sddm -g sddm ${greeterKwin} ${lib.escapeShellArg "${greeterHome}/.config/kwinrc"}
   '';
 
+  boot.extraModprobeConfig = "options nvidia-modeset debug=1";  # logs the DP link while the XDR's resets are unexplained
+
   # The XDR's internal control device exposes a serial interface; keep ModemManager from probing it.
   services.udev.extraRules = ''
     SUBSYSTEM=="tty", ATTRS{idVendor}=="05ac", ATTRS{idProduct}=="9243", ENV{ID_MM_DEVICE_IGNORE}="1"
