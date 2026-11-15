@@ -57,7 +57,7 @@ in {
             format = "vfat";
             extraArgs = [ "-n" config.settings.disk.recovery.filesystemLabel ];
             mountpoint = config.settings.disk.recovery.mountPoint;
-            mountOptions = [ "umask=0077" "nofail" "x-systemd.device-timeout=5s" ];
+            mountOptions = [ "umask=0077" "nofail" "x-systemd.device-timeout=${config.settings.disk.recovery.deviceTimeout}" ];
           };
         };
       } // mkRootVolume { ##### Root Partition #####

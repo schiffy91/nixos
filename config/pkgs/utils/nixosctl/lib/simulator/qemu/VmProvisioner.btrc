@@ -79,6 +79,7 @@ class VmProvisioner {
         var recoverySize = self.spec.args.getOrDefault("recoverySize", "4G");
         var luksPass = "testpass123";
         var secureBootTarget = bootTargetName.equals("Secure-Boot");
+        var recoveryTimeout = VmSpecArgs.hostArch().equals(self.spec.arch) ? "5s" : "90s";  // an emulated machine sees its disks late
         var serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
         var initrdModules = self.spec.arch.equals("aarch64")
             ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
@@ -128,6 +129,7 @@ class VmProvisioner {
             "  settings.disk.device = \"/dev/vda\";",
             f"  settings.disk.recovery.enable = {recovery};",
             f"  settings.disk.recovery.size = \"{recoverySize}\";",
+            f"  settings.disk.recovery.deviceTimeout = \"{recoveryTimeout}\";",
             f"  settings.disk.encryption.enable = {encryption};",
             f"  settings.disk.immutability.enable = {enabled};",
             f"  settings.disk.immutability.mode = \"{mode}\";",
