@@ -383,6 +383,15 @@ On a desktop the Drive sits in the system tray (`settings.apps.utils.drive.tray`
 
 The scenario `tray` runs the real tray program against a stand-in for the desktop's tray host and the fake Drive: the mark alone; an empty measure while the first bytes are awaited; paused with three of four files to come; a quarter filled, in bytes and files; done; a click that opens the window, read off the screen; the window following a pause; Escape ending it without a crash; then offline, and not running. On FRACTAL-NORTH the icon was seen in Plasma's tray in both states and the window was opened and closed against a scratch engine.
 
+## A file open twice (found in use, 2026-11-15)
+
+The first night of real use on the Deck found a defect no scenario covered: Azahar reported Ocarina of Time 3D as unreadable ("encrypted", its word for any image it cannot load). The image was whole and the same on the Deck, the desktop and the Drive. The cause was the door on both machines: a file opened through `~/Drive` while it was already open failed with an I/O error, and Azahar opens its image again while the first open is still there.
+
+- The kernel keeps one backing file per file for as long as any open of it is handed over (passthrough), and refuses an open that names another backing file or none. `Library.FileSystem.Userspace` registered a new one for every open.
+- The mirror case failed the same way: a file a reader held open from before it was downloaded could not be opened again once it was here.
+- Fixed in btrc (84b8330f): the opens of a file share one backing file, released with the last of them, and a file the door is serving itself stays served that way while such an open remains.
+- Tests: btrc's `userspace-filesystem` check opens one file three times at once and reads and writes through all of them (it fails with the I/O error without the change). The `door` scenario opens a downloaded file twice at once, and opens a file again while a reader from before its download still holds it.
+
 ## The mutation checks
 
 Each safety rule is checked twice. A test that passed either way would prove nothing.
