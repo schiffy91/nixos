@@ -14,7 +14,7 @@ let
         (disable (lib.getAttrFromPath (lib.splitString "." path) desktop.config.settings.apps))) ]
         ++ lib.optional (path == "gaming.steam") { settings.apps.gaming.assettocorsa.wheelMenu.enable = lib.mkForce false; };
     }).config;
-    encrypted = (deck.configuration.extendModules { modules = [ { settings.disk.sdCard.enable = true; } ]; }).config;
+    plain = (deck.configuration.extendModules { modules = [ { settings.disk.sdCard.enable = lib.mkForce false; } ]; }).config;  # a Deck whose card is not encrypted
     noGaming = disabled "gaming";
     noDev = disabled "dev";
     noUtils = disabled "utils";
@@ -150,20 +150,20 @@ let
       && lib.hasInfix "--ignore '*.semu-partial'" config.systemd.services.drive-engine.serviceConfig.ExecStart
       && lib.hasInfix "--pin media/Games/Emulation" config.systemd.services.drive-engine.serviceConfig.ExecStart
       && lib.elem "/var/lib/drive" config.settings.disk.immutability.persist.paths)
-      [ desktop.config handheld encrypted ])
+      [ desktop.config handheld plain ])
       "Semu's library must be its Drive folder in place on every machine: no root of its own, kept downloaded by the Drive client, with no second copy and no sync beside it."
     ++ check (desktop.config.settings.apps.utils.drive.placements == {}
-      && !handheld.settings.disk.sdCard.enable
-      && handheld.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/run/media/alexanderschiffhauer/SD/drive"; }
-      && lib.hasInfix "--place 'media/Games/Emulation=/run/media/alexanderschiffhauer/SD/drive'" handheld.systemd.services.drive-door.serviceConfig.ExecStart
-      && lib.hasInfix "--place-device '/run/media/alexanderschiffhauer/SD/drive=/dev/disk/by-label/SD'" handheld.systemd.services.drive-engine.serviceConfig.ExecStart
-      && encrypted.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/sd/drive"; }
-      && lib.hasInfix "--place 'media/Games/Emulation=/sd/drive'" encrypted.systemd.services.drive-door.serviceConfig.ExecStart
-      && lib.hasInfix "--place-device '/sd/drive=/dev/disk/by-label/SD-crypt'" encrypted.systemd.services.drive-engine.serviceConfig.ExecStart
-      && lib.hasInfix "/dev/disk/by-label/SD-crypt" encrypted.environment.etc.crypttab.text
-      && lib.any (mount: mount.where == "/sd") encrypted.systemd.mounts
-      && !(handheld.environment.etc ? crypttab))
-      "The Deck keeps the library on its card through the Drive client: on the plain card as Jovian mounts it, or, with settings.disk.sdCard.enable, on the encrypted card at /sd."
+      && handheld.settings.disk.sdCard.enable
+      && handheld.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/sd/drive"; }
+      && lib.hasInfix "--place 'media/Games/Emulation=/sd/drive'" handheld.systemd.services.drive-door.serviceConfig.ExecStart
+      && lib.hasInfix "--place-device '/sd/drive=/dev/disk/by-label/SD-crypt'" handheld.systemd.services.drive-engine.serviceConfig.ExecStart
+      && lib.hasInfix "/dev/disk/by-label/SD-crypt" handheld.environment.etc.crypttab.text
+      && lib.any (mount: mount.where == "/sd") handheld.systemd.mounts
+      && plain.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/run/media/alexanderschiffhauer/SD/drive"; }
+      && lib.hasInfix "--place 'media/Games/Emulation=/run/media/alexanderschiffhauer/SD/drive'" plain.systemd.services.drive-door.serviceConfig.ExecStart
+      && lib.hasInfix "--place-device '/run/media/alexanderschiffhauer/SD/drive=/dev/disk/by-label/SD'" plain.systemd.services.drive-engine.serviceConfig.ExecStart
+      && !(plain.environment.etc ? crypttab))
+      "The Deck keeps the library on its card through the Drive client: on the encrypted card at /sd, or, without settings.disk.sdCard.enable, on the plain card as Jovian mounts it."
     ++ check (lib.all (path: !(lib.hasInfix "semu" path) && !(lib.hasSuffix "/ES-DE" path)) desktop.config.settings.disk.immutability.persist.paths)
       "Semu must persist nothing of its own: every asset lives in its library and its state is disposable."
     ++ check (handheld.settings.apps.gaming.sunshine.capture == "auto" && desktop.config.settings.apps.gaming.sunshine.capture == "kwin")

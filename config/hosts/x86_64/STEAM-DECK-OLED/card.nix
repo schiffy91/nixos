@@ -9,9 +9,9 @@ let
 in {
   # The library is ~/Drive's folder like on every machine; the Drive client keeps it on the
   # card, in a folder of its own there, and it is unavailable (not empty) while the card is out.
-  # `settings.disk.sdCard.enable` moves it to the encrypted card: turn it on only together with
-  # preparing the card (`nixosctl sd-card prepare`), which formats it.
-  settings.disk.sdCard.label = host.sdCard.label;
+  # `settings.disk.sdCard.enable` moves it to the encrypted card. It went on with the card that
+  # was prepared (`nixosctl sd-card prepare`, which formats) on 2026-11-14.
+  settings.disk.sdCard = { enable = true; label = host.sdCard.label; };
   settings.apps.utils.drive = {
     push = true;
     placements.${library} = "${mount}/drive";
