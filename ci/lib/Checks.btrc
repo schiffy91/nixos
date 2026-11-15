@@ -119,7 +119,10 @@ class Checks {
             Vector<string> actual = self.repository.suffix(".c"); for path in self.repository.suffix(".h") { actual.push(path); }
             Vector<string> declared = []; for entry in covered.elements() { declared.push(entry.asString()); }
             if (!coverage.ok() || !covered.isArray() || !actual.sorted().join("\n").equals(declared.sorted().join("\n"))) { self.failures.push("Native source coverage"); print("Native C/header inventory does not match ci/native.nix"); }
-            self.run("Flake configuration checks", "nix", ["flake", "check", "--no-build", "--all-systems"]);
+            var outputs = ChildProcess.run("nix", ["eval", "--json", "--impure", "--expr", "import ./ci/outputs.nix (builtins.getFlake (\"git+file://\" + toString ./. + \"?shallow=1\"))"], cwd=self.repository.root);  // the git fetcher: a path copy trips on a socket under .git
+            var attributes = JSONValue.parse(outputs.stdout());
+            if (!outputs.ok() || !attributes.isArray()) { self.failures.push("Flake outputs"); print("Cannot list flake outputs:\n" + outputs.stderr()); }
+            else { for attribute in attributes.elements() { self.run("Flake output " + attribute.asString(), "nix", ["eval", ".#" + attribute.asString()]); } }  // one evaluator each bounds memory
         }
         if (!self.failures.isEmpty()) { print("Failed checks: " + self.failures.join(", ")); return 1; }
         print("All compiler and workspace error checks passed."); return 0;

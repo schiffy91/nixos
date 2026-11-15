@@ -16,7 +16,9 @@ let
 in {
   inherit package;
   shell = (import ../shell.nix { inherit system; }).overrideAttrs (old: {
-    nativeBuildInputs = [ package pkgs.shellcheck pkgs.nodejs pkgs.lua pkgs.actionlint pkgs.taplo pkgs.yq-go pkgs.darkhttpd ]
+    nativeBuildInputs = [ package pkgs.shellcheck pkgs.nodejs pkgs.lua5_1 pkgs.actionlint pkgs.taplo pkgs.yq-go pkgs.darkhttpd ]  # WoW and CSP run Lua 5.1
       ++ old.nativeBuildInputs;
+    buildInputs = old.buildInputs
+      ++ [ pkgs.libsodium pkgs.libx11 pkgs.xorgproto pkgs.sdl3 pkgs.fontconfig pkgs.freetype compiler.packages.${system}.wgpu-native ];  # headers deckpad and drive bind
   });
 }

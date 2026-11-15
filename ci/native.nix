@@ -22,9 +22,14 @@ let
     "config/pkgs/utils/nixosctl/lib/credentials.h"
     "config/pkgs/gaming/sunshine/ssh-login/native.h"
     "config/pkgs/gaming/assettocorsa/src/compression.h"
+    "config/pkgs/gaming/deckpad/Awake.h"
+    "config/pkgs/gaming/deckpad/Screen.h"
+    "config/pkgs/utils/drive/door/Channel.h"
+    "config/pkgs/utils/drive/store/Native.h"
     "config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c"
     "config/pkgs/gaming/sunshine/hdr-screencast-test/probe.c"
     "tests/plymouth-keyboard/input.c"
+    "tests/gaming/deckpad/SdlHost.c"
     "tests/ci/native-fixture/native.h"
     "tests/ci/process-probe.h"
     "tests/gaming/affinity/cpu-set.h"
@@ -39,12 +44,13 @@ let
   ];
   helpers = pkgs.runCommandCC "native-source-helpers" {
     nativeBuildInputs = [ pkgs.pkg-config ];
-    buildInputs = [ pkgs.glib pkgs.cryptsetup pkgs.liblzf pkgs.zlib pkgs.openssl pkgs.curl pkgs.pam pkgs.libdrm pkgs.libvncserver ];
+    buildInputs = [ pkgs.glib pkgs.cryptsetup pkgs.liblzf pkgs.zlib pkgs.openssl pkgs.curl pkgs.pam pkgs.libdrm pkgs.libvncserver pkgs.libx11 pkgs.xorgproto pkgs.sdl3 ];
   } ''
     mkdir -p "$out/bin"
     $CC -O2 -Wall -Werror ${../config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c} \
       $(pkg-config --cflags --libs gio-2.0 gio-unix-2.0 glib-2.0) -o "$out/bin/battlenet-capture-window"
     $CC -Wall -Wextra -Werror ${../tests/plymouth-keyboard/input.c} -o "$out/bin/plymouth-test-input"
+    $CC -Wall -Wextra -Werror ${../tests/gaming/deckpad/SdlHost.c} -lSDL3 -lm -o "$out/bin/deckpad-sdl-host"
     for source in ${./native.h} \
       ${../config/system/nixos/opportunistic-unlock/native.h} \
       ${../config/system/nixos/networking/native.h} \
@@ -59,6 +65,10 @@ let
       ${../config/system/nixos/sleep/helpers/drm.h} \
       ${../config/pkgs/gaming/sunshine/ssh-login/native.h} \
       ${../config/pkgs/gaming/assettocorsa/src/compression.h} \
+      ${../config/pkgs/gaming/deckpad/Awake.h} \
+      ${../config/pkgs/gaming/deckpad/Screen.h} \
+      ${../config/pkgs/utils/drive/door/Channel.h} \
+      ${../config/pkgs/utils/drive/store/Native.h} \
       ${../tests/ci/process-probe.h} \
       ${../tests/gaming/affinity/cpu-set.h} \
       ${../tests/gaming/runtime/tls.h} \
