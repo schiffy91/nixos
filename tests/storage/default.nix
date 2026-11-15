@@ -6,19 +6,24 @@ let
   programs = import ../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
   cli = import ../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs; inherit (inputs.btrc.packages.${system}) btrcpy; lib = pkgs.lib; };
 in (import ../vm/test.nix { inherit pkgs inputs; }) {
-  name = "sd-card";
+  name = "storage";
   nodes.machine = { ... }: {
     _module.args.inputs = inputs;
-    imports = [ ../../config/settings.nix ../../config/system/nixos/sd-card.nix ];
-    settings.disk.sdCard = { enable = true; library = "Library"; driveFolder = "Games/Library"; };
+    imports = [ ../../config/settings.nix ../../config/system/nixos/storage.nix ];
+    # Two volumes of two kinds: a card that may hold a library and is checked against the Drive, and a plain USB drive.
+    settings.disk.storage.sdcard = { label = "SD"; mountPoint = "/sd"; library = "Library"; driveFolder = "Games/Library"; };
+    settings.disk.storage.usb = { label = "USB"; };
     settings.users.admin.username = "carduser";
     users.users.carduser = { isNormalUser = true; uid = 1000; };
-    boot.kernelModules = [ "sdhci_pci" "mmc_block" "fuse" ];
+    boot.kernelModules = [ "sdhci_pci" "mmc_block" "fuse" "xhci_pci" "usb_storage" "sd_mod" ];
     virtualisation.qemu.options = [
       "-device sdhci-pci,id=sdhci"
       "-blockdev driver=file,node-name=sdfile,filename=sdcard.raw"
       "-blockdev driver=raw,node-name=sdcard,file=sdfile"
       "-device sd-card,drive=sdcard,bus=sd-bus,id=sdcard-device"
+      "-device qemu-xhci,id=storage-usb"
+      "-drive if=none,id=usbdrive,file=usbdrive.raw,format=raw"
+      "-device usb-storage,bus=storage-usb.0,drive=usbdrive,serial=STORAGE"
     ];
     environment.systemPackages = [ cli programs.drive programs.fake pkgs.cryptsetup pkgs.curl pkgs.attr pkgs.python3 ];
     virtualisation.memorySize = 4096;  # opening the container derives its key in memory

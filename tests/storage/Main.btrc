@@ -5,15 +5,16 @@ import Library.JSON;
 import ../vm/Lab.btrc;
 import ../drive/Fixture.btrc;
 
-// The declared, encrypted card: opened with the key file whenever it is attached, at boot or later, and mounted;
-// never in the way of a boot without it; gone cleanly when pulled, and back when put in again.
-class SdCardScenario {
+// Declared, encrypted external storage, a card and a USB drive: each opened with its key file whenever it is
+// attached, at boot or later, and mounted; never in the way of a boot without it; gone cleanly when pulled, and
+// back when put in again.
+class StorageScenario {
     private Guest machine;
     private DriveFixture drive;
     private string card = "/dev/mmcblk0";
-    private string key = "/var/lib/nixos/sd-card/key";
+    private string key = "/var/lib/nixos/storage/sdcard/key";
 
-    public SdCardScenario(Guest machine) {
+    public StorageScenario(Guest machine) {
         self.machine = machine;
         self.drive = DriveFixture(machine);
     }
@@ -57,21 +58,43 @@ class SdCardScenario {
 
         print("A card is only formatted when everything on it is the library and all of that is on the Drive");
         self.plainCard("&& mkdir /run/media/carduser/OLD/Photos");
-        string refused = self.machine.fail(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card} 2>&1");
+        string refused = self.machine.fail(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl storage prepare sdcard {self.card} 2>&1");
         Check.that(refused.contains("holds more than Library: Photos"), f"something else on the card stops it: {refused}");
         self.machine.succeed("rmdir /run/media/carduser/OLD/Photos && echo 'only on the card' > /run/media/carduser/OLD/Library/save.dat");
-        Check.that(self.machine.fail(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card} 2>&1").contains("save.dat"), "a file the Drive does not have stops it, by name");
+        Check.that(self.machine.fail(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl storage prepare sdcard {self.card} 2>&1").contains("save.dat"), "a file the Drive does not have stops it, by name");
         self.machine.succeed("rm /run/media/carduser/OLD/Library/save.dat");
-        self.machine.fail(f"echo n | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card}");
+        self.machine.fail(f"echo n | DRIVE_RUNTIME={self.drive.runtime} nixosctl storage prepare sdcard {self.card}");
         self.machine.succeed(f"cmp /run/media/carduser/OLD/Library/a.bin {self.drive.source}/a");  // a no leaves the card as it was
 
         print("With a yes it is encrypted, opens with the key file, and mounts by itself");
-        self.machine.succeed(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl sd-card prepare {self.card}");
+        self.machine.succeed(f"echo y | DRIVE_RUNTIME={self.drive.runtime} nixosctl storage prepare sdcard {self.card}");
         self.mounted();
-        self.machine.succeed(f"printf 'boot password\\nboot password\\n' | nixosctl sd-card password {self.card}");
-        self.machine.succeed("nixosctl sd-card status | grep -q 'header copy: present' && su - carduser -c 'echo kept > /sd/file'");
+        self.machine.succeed(f"printf 'boot password\\nboot password\\n' | nixosctl storage password sdcard {self.card}");
+        self.machine.succeed("nixosctl storage status sdcard | grep -q 'header copy: present' && su - carduser -c 'echo kept > /sd/file'");
         Check.equal(self.machine.succeed("findmnt -no SOURCE,FSTYPE /sd").trim(), "/dev/mapper/sdcard ext4", "it is the opened container that is mounted, at /sd, writable by the user");
         Check.equal(self.machine.succeed(f"stat -c %a {self.key}; cryptsetup luksDump {self.card} | grep -c 'luks2$'").trim(), "400\n2", "the key file is root's alone, and the card has two ways in");
+    }
+
+    // The same command and the same module serve a second volume of another kind, by its name.
+    private void second() {
+        print("A USB drive is a second volume: named on the command line, with a key file and a mount point of its own");
+        string usb = self.machine.succeed("readlink -f /dev/disk/by-id/usb-*STORAGE* | head -1").trim();
+        Check.that(usb.startsWith("/dev/sd"), f"the USB drive is there: {usb}");
+        string unnamed = self.machine.fail(f"echo y | nixosctl storage prepare {usb} 2>&1");
+        Check.that(unnamed.contains("name one: sdcard, usb"), f"with two volumes declared a device alone is not enough: {unnamed}");
+        Check.that(self.machine.fail(f"echo y | nixosctl storage prepare other {usb} 2>&1").contains("no volume named other"), "and a name that is not declared is refused");
+        self.machine.succeed(f"mkfs.ext4 -q -F -L OLDUSB {usb} && mkdir -p /run/media/carduser/OLDUSB && mount {usb} /run/media/carduser/OLDUSB && echo mine > /run/media/carduser/OLDUSB/notes.txt");
+        Check.that(self.machine.fail(f"echo y | nixosctl storage prepare usb {usb} 2>&1").contains("holds files: notes.txt"), "a drive with files on it is not formatted: this volume has no folder that may be lost");
+        self.machine.succeed("rm /run/media/carduser/OLDUSB/notes.txt");
+        self.machine.succeed(f"echo y | nixosctl storage prepare usb {usb}");
+        self.machine.waitUntil("mountpoint -q /usb && test -b /dev/mapper/usb", 60);
+        self.machine.succeed("su - carduser -c 'echo there > /usb/file'");
+        Check.equal(self.machine.succeed("findmnt -no SOURCE,FSTYPE /usb; stat -c %a /var/lib/nixos/storage/usb/key; test -s /var/lib/nixos/storage/usb/header && echo header").trim(), "/dev/mapper/usb ext4\n400\nheader", "it is mounted at /usb from its own container, with its own key file and header copy");
+        Check.that(!self.machine.succeed(f"cmp {self.key} /var/lib/nixos/storage/usb/key 2>&1 || true").trim().isEmpty(), "and the two volumes do not share a key");
+        string both = self.machine.succeed("nixosctl storage status");
+        Check.that(both.contains("sdcard: attached") && both.contains("usb: attached") && both.contains("mounted at /sd: yes") && both.contains("mounted at /usb: yes"), f"the status names both: {both}");
+        self.machine.fail("nixosctl storage status other");
+        Check.equal(self.machine.succeed("findmnt -no SOURCE /sd").trim(), "/dev/mapper/sdcard", "and the card is untouched by it");
     }
 
     private void acrossBoots() {
@@ -80,6 +103,8 @@ class SdCardScenario {
         self.boot();
         self.mounted();
         Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "with what was written");
+        self.machine.waitUntil("mountpoint -q /usb && test -b /dev/mapper/usb", 60);
+        Check.equal(self.machine.succeed("cat /usb/file").trim(), "there", "and the USB drive too, with its own");
         Check.equal(self.machine.succeed("systemctl --failed --no-legend | wc -l").trim(), "0", "and nothing failed");
     }
 
@@ -152,9 +177,9 @@ class SdCardScenario {
         self.insert();
         self.machine.waitUntil(f"test -b {self.card}");
         self.machine.succeed("sleep 5; ! mountpoint -q /sd");
-        self.machine.succeed(f"systemctl reset-failed; printf 'boot password\\n' | nixosctl sd-card open {self.card}");
+        self.machine.succeed(f"systemctl reset-failed; printf 'boot password\\n' | nixosctl storage open sdcard {self.card}");
         self.mounted();
-        self.machine.succeed(f"printf 'boot password\\n' | nixosctl sd-card key {self.card} && test -s {self.key}");
+        self.machine.succeed(f"printf 'boot password\\n' | nixosctl storage key sdcard {self.card} && test -s {self.key}");
         self.machine.succeed("umount /sd && cryptsetup close sdcard");
         self.pull();
         self.insert();
@@ -167,7 +192,7 @@ class SdCardScenario {
         self.mounted();
         self.machine.succeed("umount /sd && cryptsetup close sdcard");
         self.machine.succeed(f"dd if=/dev/zero of={self.card} bs=1M count=1 conv=fsync status=none && ! cryptsetup isLuks {self.card}");
-        self.machine.succeed(f"cryptsetup luksHeaderRestore --batch-mode {self.card} --header-backup-file /var/lib/nixos/sd-card/header && udevadm trigger --action=change {self.card}");
+        self.machine.succeed(f"cryptsetup luksHeaderRestore --batch-mode {self.card} --header-backup-file /var/lib/nixos/storage/sdcard/header && udevadm trigger --action=change {self.card}");
         self.mounted();
         Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "and the card's contents are intact");
     }
@@ -184,8 +209,10 @@ class SdCardScenario {
 
     public void check() {
         Check.exited(ChildProcess.run("truncate", ["-s", "512M", self.machine.statePath("sdcard.raw")]));
+        Check.exited(ChildProcess.run("truncate", ["-s", "256M", self.machine.statePath("usbdrive.raw")]));
         self.boot();
         self.prepared();
+        self.second();
         self.acrossBoots();
         self.asleep();
         self.pulled();
@@ -197,9 +224,9 @@ class SdCardScenario {
 int main(int argc, char** argv) {
     try {
         var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
-        SdCardScenario(lab.guest("machine")).check();
+        StorageScenario(lab.guest("machine")).check();
         lab.close();
-        print("PASS: the encrypted card opens when attached, stays out of a boot's way, and comes and goes cleanly");
+        print("PASS: encrypted external storage opens when attached, stays out of a boot's way, and comes and goes cleanly");
         return 0;
     } catch (string error) {
         print(error);

@@ -14,7 +14,8 @@ let
         (disable (lib.getAttrFromPath (lib.splitString "." path) desktop.config.settings.apps))) ]
         ++ lib.optional (path == "gaming.steam") { settings.apps.gaming.assettocorsa.wheelMenu.enable = lib.mkForce false; };
     }).config;
-    plain = (deck.configuration.extendModules { modules = [ { settings.disk.sdCard.enable = lib.mkForce false; } ]; }).config;  # a Deck whose card is not encrypted
+    plain = (deck.configuration.extendModules { modules = [ { settings.disk.storage = lib.mkForce { }; } ]; }).config;  # a Deck whose card is not encrypted
+    withDrive = (desktop.extendModules { modules = [ { settings.disk.storage.backup = { label = "BACKUP"; }; } ]; }).config;  # any machine can declare a volume
     noGaming = disabled "gaming";
     noDev = disabled "dev";
     noUtils = disabled "utils";
@@ -123,10 +124,20 @@ let
       in lib.filter (entry: lib.elem entry there) here == lib.filter (entry: lib.elem entry here) there
         && lib.filter (entry: lib.elem entry pinned) there == pinned)
       "The Deck's taskbar must pin 1Password, VS Code, Konsole, Battle.net and Steam, with the apps both hosts pin in FRACTAL-NORTH's order."
-    ++ check (let unit = handheld.systemd.services.sd-card-steam-library.serviceConfig; in
+    ++ check (let unit = handheld.systemd.services.storage-steam-library-sdcard.serviceConfig; in
         lib.hasInfix "/sd/steam" unit.ExecStartPre && lib.hasInfix "steam://addlibraryfolder/%2Fsd%2Fsteam" unit.ExecStart
-        && !(unit ? ExecStop) && !(plain.systemd.services ? sd-card-steam-library))
+        && !(unit ? ExecStop) && !(plain.systemd.services ? storage-steam-library-sdcard))
       "The Deck's card must carry a folder for Steam, and a running Steam must be told when the card arrives."
+    ++ check (handheld.environment.etc.crypttab.text == "sdcard /dev/disk/by-label/SD-crypt /var/lib/nixos/sd-card/key luks,noauto,nofail\n"
+        && handheld.environment.etc."nixos-storage".text == "sdcard\tSD\t/sd\t/var/lib/nixos/sd-card/key\tEmulation\tmedia/Games/Emulation\talexanderschiffhauer\n")
+      "The Deck's card is the storage volume sdcard and keeps the container name, label, key file and mount point it was prepared with."
+    ++ check (!(desktop.config.environment.etc ? crypttab) && !(desktop.config.environment.etc ? "nixos-storage")
+        && withDrive.environment.etc.crypttab.text == "backup /dev/disk/by-label/BACKUP-crypt /var/lib/nixos/storage/backup/key luks,noauto,nofail\n"
+        && lib.any (mount: mount.where == "/backup" && mount.what == "/dev/mapper/backup") withDrive.systemd.mounts
+        && lib.hasInfix "systemd-cryptsetup@backup.service" withDrive.services.udev.extraRules
+        && !(withDrive.systemd.services ? storage-steam-library-backup)
+        && lib.elem "/var/lib/nixos" withDrive.settings.disk.immutability.persist.paths)
+      "External storage is any machine's to declare: a volume on FRACTAL-NORTH gets its container, its mount and a key file in a persisted folder, and no machine has any of it undeclared."
     ++ check (lib.all (case: lib.all (entry: entry.assertion) case.config.assertions) launcherCases
       && lib.all (config: lib.all (entry: entry.assertion) config.assertions) disabledDecks)
       "Package-switch fixtures must satisfy the hierarchy and dependency assertions."
@@ -164,7 +175,7 @@ let
       [ desktop.config handheld plain ])
       "Semu's library must be its Drive folder in place on every machine: no root of its own, kept downloaded by the Drive client, with no second copy and no sync beside it."
     ++ check (desktop.config.settings.apps.utils.drive.placements == {}
-      && handheld.settings.disk.sdCard.enable
+      && handheld.settings.disk.storage ? sdcard
       && handheld.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/sd/drive"; }
       && lib.hasInfix "--place 'media/Games/Emulation=/sd/drive'" handheld.systemd.services.drive-door.serviceConfig.ExecStart
       && lib.hasInfix "--place-device '/sd/drive=/dev/disk/by-label/SD-crypt'" handheld.systemd.services.drive-engine.serviceConfig.ExecStart
@@ -175,7 +186,7 @@ let
       && lib.hasInfix "--place 'media/Games/Emulation=/run/media/alexanderschiffhauer/SD/drive'" plain.systemd.services.drive-door.serviceConfig.ExecStart
       && lib.hasInfix "--place-device '/run/media/alexanderschiffhauer/SD/drive=/dev/disk/by-label/SD'" plain.systemd.services.drive-engine.serviceConfig.ExecStart
       && !(plain.environment.etc ? crypttab))
-      "The Deck keeps the library on its card through the Drive client: on the encrypted card at /sd, or, without settings.disk.sdCard.enable, on the plain card as Jovian mounts it."
+      "The Deck keeps the library on its card through the Drive client: on the encrypted card at /sd, or, without the volume settings.disk.storage.sdcard, on the plain card as Jovian mounts it."
     ++ check (lib.all (path: !(lib.hasInfix "semu" path) && !(lib.hasSuffix "/ES-DE" path)) desktop.config.settings.disk.immutability.persist.paths)
       "Semu must persist nothing of its own: every asset lives in its library and its state is disposable."
     ++ check (handheld.settings.apps.gaming.sunshine.capture == "auto" && desktop.config.settings.apps.gaming.sunshine.capture == "kwin")

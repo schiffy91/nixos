@@ -325,6 +325,37 @@ passphrase is consumed from a short-lived kernel key; TPM-only/keyfile boots and
 later hotplug do not trigger attempts. See the [policy and boot regression
 gates](tests/opportunistic-unlock/README.md) for eligibility and resource limits.
 
+### External storage
+
+`settings.disk.storage.<name>` declares an encrypted external volume: an SD
+card, a USB drive, on any host. `config/system/nixos/storage.nix` gives each one
+a LUKS2 container opened by a key file whenever the device appears, at boot or
+later, and an ext4 filesystem mounted at its mount point; a volume that is not
+attached costs boot nothing, and a pulled one comes off its mount point at once.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `label` | the name | The filesystem's label; the container's is `<label>-crypt` |
+| `mountPoint` | `/<name>` | Where it is mounted |
+| `keyFile` | `/var/lib/nixos/storage/<name>/key` | Root-only key on the system disk, in a persisted folder; a copy of the LUKS header is kept beside it |
+| `library`, `driveFolder` | empty | The one folder an unprepared device may hold and still be formatted, and where that folder is on the Drive; every file must be there |
+| `steamLibrary` | `false` | Where there is a Steam: a folder `steam` on the volume, which a running Steam is told about when the volume arrives |
+
+`nixosctl storage` works on a declared volume by its name; the name may be left
+out on a machine that declares one:
+
+```bash
+nixosctl storage status                        # every declared volume
+sudo nixosctl storage prepare usb /dev/sda1    # format, encrypt, mount; asks first, refuses a device with files it may not lose
+sudo nixosctl storage password usb /dev/sda1   # a second way in, for other machines and a reinstall
+sudo nixosctl storage open usb /dev/sda1       # by hand, with the password
+sudo nixosctl storage key usb /dev/sda1        # a new key file for a machine that lost its own
+```
+
+The Steam Deck's card is the volume `sdcard` (label `SD`, mounted at `/sd`,
+holding the emulation library through the Drive client, with a Steam library
+beside it). The `storage` VM scenario runs a card and a USB drive side by side.
+
 ### Immutability
 
 `config/system/storage/immutability/default.nix` drives the BTRC **immutability**, the

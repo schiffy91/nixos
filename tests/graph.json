@@ -1276,8 +1276,8 @@
       "after": [
         "drive-placement"
       ],
-      "id": "sd-card",
-      "spec": "sd-card/test.json"
+      "id": "storage",
+      "spec": "storage/test.json"
     },
     {
       "id": "gaming-runtime",
@@ -1394,7 +1394,7 @@
     "drive-tray",
     "drive-crashes",
     "drive-mutations",
-    "sd-card",
+    "storage",
     "gaming-runtime",
     "sleep-lock-state",
     "recovery-artifacts",

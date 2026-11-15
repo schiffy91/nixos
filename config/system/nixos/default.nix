@@ -9,7 +9,7 @@
     ./packages.nix
     ./recovery.nix
     ./opportunistic-unlock.nix
-    ./sd-card.nix
+    ./storage.nix
     ./sleep.nix
     ./sound.nix
     ./users.nix

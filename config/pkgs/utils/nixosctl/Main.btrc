@@ -21,7 +21,7 @@ import ./lib/core/NixosPaths.btrc;
 import ./lib/desktop/HardwareConfig.btrc;
 import ./lib/desktop/AudioManager.btrc;
 import ./lib/desktop/CaffeineManager.btrc;
-import ./lib/hardware/SdCardManager.btrc;
+import ./lib/hardware/StorageManager.btrc;
 import ./lib/desktop/DisplayManager.btrc;
 import ./lib/desktop/PowerManager.btrc;
 import ./lib/Installer.btrc;
@@ -89,7 +89,7 @@ class NixosCtl {
         help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
         help.item("audio <list|current|set> [sink]", "");
         help.item("caffeine <status|enable|disable|toggle>", "");
-        help.item("sd-card <status|prepare|password|open|key> [device]", "Encrypt a card for this machine, or open one by hand.");
+        help.item("storage <status|prepare|password|open|key> [volume] [device]", "Encrypt an external volume (SD card, USB drive) for this machine, or open one by hand.");
         help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
 
         help.section("Testing");
@@ -116,7 +116,7 @@ class NixosCtl {
             || command.equals("immutability")
             || command.equals("fix-permissions")
             || command.equals("secure-boot")
-            || command.equals("sd-card")
+            || command.equals("storage")
             || command.equals("tpm2");
     }
 
@@ -448,15 +448,17 @@ class NixosCtl {
             }
         }
 
-        if (command.equals("sd-card")) {
-            var action = self.requireAction(args, "Usage: nixosctl sd-card <status|prepare|password|open|key> [device]");
-            var card = SdCardManager();
-            if (action.equals("status")) { return card.status(); }
-            var device = self.requireArg(args, 2, f"Usage: nixosctl sd-card {action} <device>");
-            if (action.equals("prepare")) { return card.prepare(device); }
-            if (action.equals("password")) { return card.password(device); }
-            if (action.equals("open")) { return card.open(device); }
-            if (action.equals("key")) { return card.key(device); }
+        if (command.equals("storage")) {
+            var action = self.requireAction(args, "Usage: nixosctl storage <status|prepare|password|open|key> [volume] [device]");
+            if (action.equals("status")) { return args.count() > 2 ? StorageManager(args.get(2)).status() : StorageManager.overview(); }
+            // The volume's name may be left out on a machine that declares one volume: a device is a path.
+            bool named = args.count() > 2 && !args.get(2).startsWith("/");
+            var volume = named ? StorageManager(args.get(2)) : StorageManager();
+            var device = self.requireArg(args, named ? 3 : 2, f"Usage: nixosctl storage {action} [volume] <device>");
+            if (action.equals("prepare")) { return volume.prepare(device); }
+            if (action.equals("password")) { return volume.password(device); }
+            if (action.equals("open")) { return volume.open(device); }
+            if (action.equals("key")) { return volume.key(device); }
         }
 
         if (command.equals("caffeine")) {

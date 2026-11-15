@@ -53,12 +53,17 @@ in {
     settings.disk.encryption.enable = mkSetting bool true;
     settings.disk.encryption.opportunisticUnlock.enable = mkSetting bool false;
     settings.disk.encryption.plainTextPasswordFile = mkSetting str "/run/nixosctl-install/passphrase";
-    # An encrypted removable card: opened with a key file whenever it is attached, at boot or later, and mounted.
-    settings.disk.sdCard.enable = mkSetting bool false;
-    settings.disk.sdCard.label = mkSetting str "SD"; # the filesystem's label; the encrypted container's is "<label>-crypt"
-    settings.disk.sdCard.mountPoint = mkSetting str "/sd";
-    settings.disk.sdCard.keyFile = mkSetting str "/var/lib/nixos/sd-card/key"; # on the encrypted system disk, persisted, root only
-    settings.disk.sdCard.library = mkSetting str "Emulation"; # the only folder an unprepared card may hold and still be formatted
-    settings.disk.sdCard.driveFolder = mkSetting str "media/Games/Emulation"; # where that folder is on the Drive: formatting needs every file to be there
+    # Encrypted external storage, by name: an SD card, a USB drive. Each volume is opened with its key file
+    # whenever it is attached, at boot or later, and mounted. The name is also the opened container's.
+    settings.disk.storage = mkSetting (attrsOf (submodule ({ name, ... }: {
+      options = {
+        label = mkSetting str name; # the filesystem's label; the encrypted container's is "<label>-crypt"
+        mountPoint = mkSetting str "/${name}";
+        keyFile = mkSetting str "/var/lib/nixos/storage/${name}/key"; # on the encrypted system disk, persisted, root only
+        library = mkSetting str ""; # the only folder an unprepared device may hold and still be formatted
+        driveFolder = mkSetting str ""; # where that folder is on the Drive: formatting needs every file to be there
+        steamLibrary = mkSetting bool false; # where there is a Steam, it keeps a library on the volume
+      };
+    }))) { };
   };
 }
