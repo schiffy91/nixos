@@ -702,7 +702,7 @@ profiles turn off whole groups:
 | Path | Behavior |
 |---|---|
 | `dev/zsh.nix` | Makes zsh the admin login shell when `settings.apps.dev.zsh.enable` is set, leaving compinit to Home Manager |
-| `dev/git.nix` | Enables system Git; per-user identities live in Home Manager |
+| `dev/git.nix` | Enables system Git and GitHub's `gh`, and persists `gh`'s sign-in (`~/.config/gh`); per-user identities live in Home Manager |
 | `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-locked BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.gaming.steam.protonCustom.enable` is set |
