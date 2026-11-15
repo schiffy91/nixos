@@ -1,6 +1,6 @@
 --- a/FlareUI/Modules/Auras.lua
 +++ b/FlareUI/Modules/Auras.lua
-@@ -666,7 +666,15 @@
+@@ -717,7 +717,15 @@
      local step = (kdb.size or 30) + (kdb.spacing or 6)
      holder.enchantShift = n
      container:ClearAllPoints()
@@ -17,7 +17,7 @@
      pcall(container.SetFlowLayoutMaximumLineSize, container, math_max(step, width - n * step))
  end
  
-@@ -787,7 +795,15 @@
+@@ -843,7 +851,15 @@
      local store = GetLayoutStore(layoutName)
      local pos = store and store[kind] or KINDS[kind].default
      holder:ClearAllPoints()
@@ -34,7 +34,7 @@
  end
  
  local function OnFrameMoved(holder, layoutName, point, x, y)
-@@ -850,6 +866,9 @@
+@@ -908,6 +924,9 @@
            get = get("max"), set = set("max") },
          { name = L["Spacing"], kind = LEM.SettingType.Slider, default = defaults.spacing or 6, minValue = 0, maxValue = 20, valueStep = 1,
            get = get("spacing"), set = set("spacing") },
@@ -44,7 +44,7 @@
          { name = L["Growth"], kind = LEM.SettingType.Dropdown, default = defaults.grow or "LEFT", values = GROW_VALUES,
            get = get("grow"), set = set("grow") },
          { name = L["Wrap"], kind = LEM.SettingType.Dropdown, default = defaults.wrap or "DOWN", values = WRAP_VALUES,
-@@ -1146,6 +1165,9 @@
+@@ -1236,6 +1255,9 @@
          LayoutKind(kind)
      end
  
@@ -56,7 +56,7 @@
      end)
 --- a/FlareUI/Modules/UnitFrames.lua
 +++ b/FlareUI/Modules/UnitFrames.lua
-@@ -3608,7 +3608,9 @@
+@@ -4197,7 +4197,9 @@
          pos.y = math_floor(pos.y - UIParent:GetHeight() / scale + 0.5)
      end
      f:ClearAllPoints()
@@ -69,16 +69,16 @@
  local function OnFrameMoved(f, layoutName, point, x, y)
 --- a/FlareUI/Modules/UnitFramesRing.lua
 +++ b/FlareUI/Modules/UnitFramesRing.lua
-@@ -149,7 +149,7 @@
-                       raid = true, resource = true, styleStart = true, tileStyle = true, plateTiles = true,
-                       simplePet = true, simpleTargetOf = true, palette = true, visibility = true, classColor = true, fullNames = true,
+@@ -162,7 +162,7 @@
                        auraStyle = true, auraTimer = true, font = true, fontPower = true, fontCast = true, auraFont = true,
--                      auraCountFont = true, auraCountFontSeeded = true, styleSavesThin = true }
-+                      auraCountFont = true, auraCountFontSeeded = true, styleSavesThin = true, levelFont = true, levelScale = true }
+                       auraCountFont = true, auraCountFontSeeded = true, styleSavesThin = true,
+                       -- (frameFonts, each frame's fonts, is NOT shared: every style keeps its own)
+-                      frameFontsSeeded = true, castTimeSeeded = true }
++                      frameFontsSeeded = true, castTimeSeeded = true, levelFont = true, levelScale = true }
  -- a stored setup may lack these
  local TILE_KEYS = { party = true, boss = true }
  
-@@ -905,12 +905,14 @@
+@@ -989,12 +989,14 @@
      if not ring then return end
      g = g or Geometry(f)
      local e = BLIZZ[Kind(f)].level
@@ -95,21 +95,24 @@
      if SetAtlasSafe(ring.Skull, SKULL) then
          local info = C_Texture.GetAtlasInfo(SKULL)
          ring.Skull:SetSize(info.width * k, info.height * k)
-@@ -918,17 +920,24 @@
+@@ -1002,10 +1004,10 @@
      -- Show Level: the disc goes with the number
      local udb = Db(f)
      ring.Disc:SetShown(udb and udb.showLevel and true or false)
 -    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * LEVEL_SCALE)
 +    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * levelScale)
      local dx, dy, dw, dh = Place(f, g, e)
--    if dx then PlaceHitButton(ring.DiscHit, f, g, dx, dy, dw, dh) end
-+    if dx then PlaceHitButton(ring.DiscHit, f, g, dx, dy, dw * levelScale, dh * levelScale) end
-     ring.DiscHit:SetShown(dx and ring.Disc:IsShown() or false)
+     if ring.DiscHit then
+-        if dx then SetHit(ring.DiscHit, ring.Disc:IsShown(), f, g, dx, dy, dw, dh)
++        if dx then SetHit(ring.DiscHit, ring.Disc:IsShown(), f, g, dx, dy, dw * levelScale, dh * levelScale)
+         else SetHit(ring.DiscHit, false) end
+     end
      f.Level:SetParent(ring.Disc)
-     f.Level:ClearAllPoints()
-     f.Level:SetJustifyH("CENTER")
+@@ -1014,9 +1016,16 @@
      f.Level:SetPoint("CENTER", ring.Disc, "CENTER", 0, 0)
--    f.Level:SetFont(LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
+     -- (11-14) through FlareUI's font setter: a file not loaded yet falls back to the client's font and
+     -- retries; a raw SetFont left the party tiles' level (no font of its own) blank
+-    ns.SetFontUnscaled(f.Level, LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
 -    f.Level:SetShadowOffset(1, -1)
 -    f.Level:SetShadowColor(0, 0, 0, 1)
 +    if settings.levelFont then
@@ -118,7 +121,7 @@
 +        ns.SetFont(f.Level, ns.GetFontPath(font.face or "Friz Quadrata TT"), font.size or 12, font.flags == "NONE" and "" or (font.flags or ""))
 +        ns.ApplyShadow(f.Level, font)
 +    else
-+        f.Level:SetFont(LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
++        ns.SetFontUnscaled(f.Level, LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
 +        f.Level:SetShadowOffset(1, -1)
 +        f.Level:SetShadowColor(0, 0, 0, 1)
 +    end

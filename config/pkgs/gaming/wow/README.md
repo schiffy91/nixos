@@ -159,7 +159,7 @@ nix build --impure --no-link --expr 'let inputs = (builtins.getFlake "git+file:/
 
 ## Display and input profiles
 
-FlareUI 5.1.2 supplies the unit frames, chat, native damage-meter skin, minimap
+FlareUI 6.7 supplies the unit frames, chat, native damage-meter skin, minimap
 skin and quest tracker. Questie retains its map database and pins with its tracker
 disabled. BetterBags, AdvancedInterfaceOptions, ForeverFadeChat and Details are
 installed but disabled in each character's AddOns.txt; MoveAny is no longer installed.

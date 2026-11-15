@@ -24,24 +24,24 @@
     "url": "https://edge.forgecdn.net/files/9447/255/Details-Details.20261104.15400.172.zip"
   },
   "dialogueUI": {
-    "hash": "sha256-OZa4qXkuAwqVltmQWqDwyL96/ddAszH1762sdbzR4KQ=",
-    "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-b/DialogueUI-1.0.7-b.zip"
+    "hash": "sha256-XY9AcpgedqEJr6KUi/RfafCcj45Zx29ll/LrgpxSKf0=",
+    "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-c/DialogueUI-1.0.7-c.zip"
+  },
+  "flareUI": {
+    "hash": "sha256-p+1Io3rSGat1YZmzVSRffOYpMPCfMazZcDZ79P+i0/s=",
+    "url": "https://github.com/malkkav/FlareUI/releases/download/6.7/FlareUI-6.7-forever.zip"
   },
   "foreverFadeChat": {
     "hash": "sha256-t9+IWZzCHAjkY1RKMinshGAiHKgybGO6qZqri03SSMg=",
     "url": "https://edge.forgecdn.net/files/8994/554/ForeverFadeChat.zip"
   },
-  "flareUI": {
-    "hash": "sha256-3PPL1NB14W09pyi6ufVoGJeX+4Jhl9m96wblN74CMZE=",
-    "url": "https://github.com/malkkav/FlareUI/releases/download/5.1.2/FlareUI-5.1.2-forever.zip"
-  },
   "questie": {
-    "hash": "sha256-R8mQWHlQyZd68uwaTxyc8EFLvkAOq87bikUJImyxvHY=",
-    "url": "https://github.com/Questie/Questie/releases/download/bundle%2Fv12.6.4%2Bv1.0.12/Questie-v12.6.4+v1.0.12.zip"
+    "hash": "sha256-nGElNHE7dcBkicwtmzhCS0v/M1ARkQEd0zqgDus/tsc=",
+    "url": "https://github.com/Questie/Questie/releases/download/bundle%2Fv12.9.0%2Bv1.1.1/Questie-v12.9.0+v1.1.1.zip"
   },
   "spoken": {
-    "hash": "sha256-k/x3Py+0TEm120sHEotzSWba+DRKwm9RVMQtseXVqBo=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken%2Fv3.8.5/Spoken-3.8.5.zip"
+    "hash": "sha256-85A7MFeBtECZmQOT2B7Xf224CRtEBJlDqgF5waTIP0E=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken%2Fv3.9.0/Spoken-3.9.0.zip"
   },
   "spokenBossesAudio": {
     "hash": "sha256-nQI9kju/eJTQ+S/sAl/5m7+2TLpCuG0WWYdPQi4ecdY=",

@@ -1,1 +1,1 @@
-{"manifest-hash":"80142c586d96e2b6e84246e3b40058f01a7a95b2a119ffd6796188bc2fc5618a","packages":[{"dependencies":{},"manifest-hash":"8a6c5882b2bd7f198c386cb723f369bd2d9c599eb75aeece3da93af0315d627c","name":"nixos_sleep_native","source":{"path":"."}}],"root":"nixos_sleep_native","schema":3}
+{"manifest-hash":"a3044d93f8c6a05ad5cb152910bfdaffb4b81b4d1d1e84991bb7bd1c1a6e2b72","packages":[{"dependencies":{},"manifest-hash":"f701f2c8c83b7d66048419f379f8992ec099d3ef8277913a705f4d0aab2bc97a","name":"nixos_sleep_native","source":{"path":"."}}],"root":"nixos_sleep_native","schema":3}
