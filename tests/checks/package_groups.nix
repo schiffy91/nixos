@@ -123,6 +123,10 @@ let
       in lib.filter (entry: lib.elem entry there) here == lib.filter (entry: lib.elem entry here) there
         && lib.filter (entry: lib.elem entry pinned) there == pinned)
       "The Deck's taskbar must pin 1Password, VS Code, Konsole, Battle.net and Steam, with the apps both hosts pin in FRACTAL-NORTH's order."
+    ++ check (let unit = handheld.systemd.services.sd-card-steam-library.serviceConfig; in
+        lib.hasInfix "/sd/steam" unit.ExecStartPre && lib.hasInfix "steam://addlibraryfolder/%2Fsd%2Fsteam" unit.ExecStart
+        && !(unit ? ExecStop) && !(plain.systemd.services ? sd-card-steam-library))
+      "The Deck's card must carry a folder for Steam, and a running Steam must be told when the card arrives."
     ++ check (lib.all (case: lib.all (entry: entry.assertion) case.config.assertions) launcherCases
       && lib.all (config: lib.all (entry: entry.assertion) config.assertions) disabledDecks)
       "Package-switch fixtures must satisfy the hierarchy and dependency assertions."

@@ -3,6 +3,9 @@ let
   card = config.settings.disk.sdCard;
   name = "sdcard";
   container = "/dev/disk/by-label/${card.label}-crypt";
+  mount = "${utils.escapeSystemdPath card.mountPoint}.mount";
+  user = config.users.users.${config.settings.users.admin.username};
+  addLibrary = "-${config.programs.steam.package}/bin/steam -ifrunning steam://addlibraryfolder/${lib.strings.escapeURL "${card.mountPoint}/steam"}";
 in {
   config = lib.mkIf card.enable {
     environment.systemPackages = [ pkgs.cryptsetup pkgs.e2fsprogs ];  # preparing a card makes its filesystem; a machine with no ext4 of its own has no mkfs.ext4
@@ -38,5 +41,23 @@ in {
     # The boot password also opens the card (so any machine can, by hand). Let the key file go first.
     systemd.services.nixos-opportunistic-unlock.after = lib.mkIf config.settings.disk.encryption.opportunisticUnlock.enable [ "systemd-cryptsetup@${name}.service" ];
     systemd.tmpfiles.rules = [ "d ${card.mountPoint} 0755 root root -" ];
+    # Where there is a Steam it keeps a library on the card, in a folder of its own, and a running Steam is
+    # told when the card arrives, as SteamOS tells it about a card it mounts itself. Steam then lists the card
+    # under Storage and remembers it; it is not told when the card goes, so a restart does not make it forget.
+    systemd.services.sd-card-steam-library = lib.mkIf config.programs.steam.enable {
+      description = "Steam's library on the card";
+      wantedBy = [ mount ];
+      bindsTo = [ mount ];
+      after = [ mount ];
+      environment.XDG_RUNTIME_DIR = "/run/user/${toString user.uid}";
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = user.name;
+        TimeoutSec = 60;
+        ExecStartPre = "+${pkgs.coreutils}/bin/install -d -o ${user.name} -g ${user.group} -m 0755 ${card.mountPoint}/steam";  # as root: the card's top folder is root's
+        ExecStart = addLibrary;  # a Steam that is not running reads the folder from its own list when it starts
+      };
+    };
   };
 }

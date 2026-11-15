@@ -274,7 +274,9 @@ Not decided by the plan: whether a measured slowdown is acceptable. The numbers 
   - **What is proved on the real card, and what is not (2026-11-15).**
     - Proved: the card is LUKS2 with two ways in, the key file and the boot password (the owner added the password; `cryptsetup luksDump` shows two key slots). It is open and mounted at `/sd` since the format, through four system switches without a restart. The library on it matches the Drive by list. Games start from it: one game of each of the seventeen systems was started through Semu on the Deck and was still running thirty seconds later, and Ocarina of Time 3D loads in Azahar.
     - Not touched by the erase-on-boot root: only `/` and `/home` are reset at boot. The card is its own device, and its key file and header copy are on `/var`, which is kept.
-    - Not yet proved on the Deck itself, because each needs a restart or the owner: the card opening at boot from the key file with nothing typed (the `sd-card` scenario proves it in a VM), a real sleep and wake with the card in, what Game Mode says about a card it cannot read, and `/sd` as a Steam library.
+    - Proved at the owner's restart of the Deck (2026-11-15, 10:13): the card opened at boot from the key file with nothing typed and was mounted at `/sd` six seconds after the unit started; the Drive came up online on it.
+    - A Steam library on the card: Steam could not make one at `/sd`, whose top folder is root's, and did not list the card under Storage. The card module now makes `/sd/steam` for the user where there is a Steam and tells a running Steam about it when the card arrives (`sd-card-steam-library`); Steam's own list of libraries then holds `/sd/steam`. Whether the Storage page shows it is for the owner to see.
+    - Not yet proved on the Deck itself, because each needs the owner: a real sleep and wake with the card in, and what Game Mode says about a card it cannot read.
 
 ## M0 results
 
