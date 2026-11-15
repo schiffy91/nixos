@@ -1255,6 +1255,14 @@
     },
     {
       "after": [
+        "drive-readers",
+        "drive-crashes"
+      ],
+      "id": "drive-mutations",
+      "spec": "drive/mutations/test.json"
+    },
+    {
+      "after": [
         "drive-placement"
       ],
       "id": "sd-card",
@@ -1373,6 +1381,7 @@
     "drive-dialog",
     "drive-tray",
     "drive-crashes",
+    "drive-mutations",
     "sd-card",
     "gaming-runtime",
     "sleep-lock-state",

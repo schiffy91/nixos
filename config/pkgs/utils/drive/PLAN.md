@@ -179,6 +179,15 @@ The setup is scripted, with one step only a person can do:
 
 **Checked end to end, 2026-11-13, real account:** `drive push listen` beside the real engine, whose own timer was set to 60 s. Three files made on the Drive (by a script standing in for another machine) were in the local tree 3.3, 7.7 and 7.8 s later. The first attempt failed because the listener looked for a subscription named after a machine called "machine"; the name now comes from the system's hostname, and the NixOS unit passes it.
 
+**Checked in use, 2026-11-14, real account, both machines:** with the client in production on FRACTAL-NORTH and the Deck (each machine's own listener and subscription, the engine's timer at 60 s, 5 s of quiet before a file is sent), a file written in the scratch folder on one machine was timed until it was in the other's `~/Drive`. Four files each way, written at different seconds of the minute so that a timer could not explain them:
+
+| From | Seconds until the file was on the other machine |
+|---|---|
+| the Deck to FRACTAL-NORTH | 13.0, 17.9, 12.1, 12.1 |
+| FRACTAL-NORTH to the Deck | 12.7, 12.5, 12.1, 12.4 |
+
+A reader that only had its timer would have taken anything up to 65 s. Removing the eight files on FRACTAL-NORTH afterwards took them off the Deck within 25 s.
+
 So the trigger is: one subscription per folder directly in My Drive, each with its descendants, renewed before it expires; a listener waits on the topic and tells the engine to read the change feed. Files that sit directly in My Drive, and anything a subscription misses, are covered by a slow timer (once a minute), which is also what runs when the listener cannot reach Pub/Sub.
 
 ## Where things live
@@ -195,7 +204,7 @@ So the trigger is: one subscription per folder directly in My Drive, each with i
 - **Planner contracts:** table-driven cases for every rule; no root, no network.
 - **VM end-to-end** (graph nodes, required): offline boot shows the tree; a read fetches only its range; offline read fails cleanly; **door killed: a placeholder cannot be opened and never yields zeros**; engine killed: local files work, placeholders fail; a game-like workload on a pinned folder across an engine crash; crash during a range fetch and during an upload; conflict; delete to trash both ways; delete brake; reader budget, consent and deny; eviction under disk pressure; placement volume absent and present; adoption without transfers; reboot under the erase-on-boot root; `drive verify` repairs a damaged `ids/`.
 - **Two-machine convergence:** two clients against one fake Drive, random operations, both trees must end identical with no file lost.
-- **Mutation checks:** removing a brake, the conflict rule or the reader budget must make a test fail.
+- **Mutation checks:** removing a brake, the conflict rule or the reader budget must make a test fail (the node `drive-mutations`, below).
 - **Real Drive:** a scratch folder in the real account, run by hand before each cutover step.
 
 ## Milestones
@@ -370,7 +379,21 @@ The scenario `tray` runs the real tray program against a stand-in for the deskto
 
 ## The mutation checks
 
-Each safety rule has a switch that takes it away, and a step in its scenario that shows the protected thing then goes wrong. A test that passed either way would prove nothing.
+Each safety rule is checked twice. A test that passed either way would prove nothing.
+
+**The rule cut out of the source.** The node `drive-mutations` builds the client five times, each with one rule removed from its source, runs the rule's own scenario against it unchanged, and requires that run to fail in the step that is there for the rule. A cut that no longer matches the source stops the build, so the node cannot pass by cutting nothing.
+
+| Rule | Cut from | The scenario then fails at |
+|---|---|---|
+| A not-downloaded file is never handed to the kernel as it is | `door/Door.btrc` | `door`: the first hundred bytes of a file do not match (they are zeros) |
+| A program reads only so much without a yes | `engine/Readers.btrc` | `readers`: the fourth not-downloaded file is read instead of refused |
+| A file changed on both sides is kept twice | `engine/Uploader.btrc`, `engine/Mirror.btrc` | `writes`: no second copy ever appears |
+| Many deletions made here wait for a yes | `engine/Uploader.btrc` | `writes`: the batch is never held |
+| Many deletions made on the Drive wait for a yes | `engine/Mirror.btrc` | `writes`: the batch is never held |
+
+Run on 2026-11-14: all five runs failed, each in its step; the node's report names the step and the failing line for each.
+
+**The rule switched off.** Each rule also has a switch that takes it away, and a step in its passing scenario that shows what then goes wrong.
 
 | Rule | Taken away with | What the scenario then sees |
 |---|---|---|
