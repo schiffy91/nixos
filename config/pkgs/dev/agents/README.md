@@ -3,7 +3,7 @@
 `default.nix` applies the clients, rules and skills selected through
 `settings.apps.*` on every host. `skills.nix` indexes the skills under
 `skills/`; `settings.apps.dev.agents.skills` defaults in `options.nix` select
-engineering-decomposition, taste, humanizer and project-structure-taste for
+btrc, engineering-decomposition, taste, humanizer and project-structure-taste for
 every host, plus nixos-init on Linux. Hosts inherit this shared selection.
 Home Manager handles file linking and conflict backups.
 

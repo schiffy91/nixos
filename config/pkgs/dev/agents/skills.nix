@@ -1,4 +1,5 @@
 {
+  btrc = ./skills/btrc;
   engineering-decomposition = ./skills/engineering-decomposition;
   humanizer = ./skills/humanizer;
   nixos-init = ./skills/nixos-init;
