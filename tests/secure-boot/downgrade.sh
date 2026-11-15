@@ -28,7 +28,8 @@ before=$(boot_files)
 cp config.json /var/tmp/config-before-downgrade.json
 # Explicit Standard-Boot remains blocked; secure-boot disable now removes only
 # our owned PK while preserving signed boot and is covered by the lifecycle VM.
-jq '.target = "Standard-Boot"' config.json > /var/tmp/config-standard.json
+sed -E 's/("target"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"Standard-Boot"/' config.json > /var/tmp/config-standard.json  # the installed system has no jq
+grep -q '"target"[[:space:]]*:[[:space:]]*"Standard-Boot"' /var/tmp/config-standard.json
 cp /var/tmp/config-standard.json config.json
 if nixosctl update > /var/tmp/disable.log 2>&1; then
   cp /var/tmp/config-before-downgrade.json config.json
