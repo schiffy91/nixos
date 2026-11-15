@@ -102,6 +102,14 @@ static inline int driveRemoveAttribute(int descriptor, const char* name) { retur
 
 static inline int driveResize(int descriptor, long size) { return ftruncate(descriptor, (off_t)size); }
 
+// A moment as this machine's clock shows it, to the minute.
+static inline void driveLocalTime(long seconds, char* out, unsigned long capacity) {
+	time_t moment = (time_t)seconds;
+	struct tm parts;
+	out[0] = 0;
+	if (localtime_r(&moment, &parts) != NULL) { strftime(out, capacity, "%Y-%m-%d %H:%M", &parts); }
+}
+
 // Set the modification time and leave the access time alone.
 static inline int driveSetModified(int descriptor, long seconds, long nanoseconds) {
 	struct timespec times[2];

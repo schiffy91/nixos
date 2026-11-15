@@ -3,12 +3,15 @@ import Library.Callback;
 import Library.FileSystem;
 import Library.GUI;
 import Library.GUI.IButton;
+import Library.GUI.IGrid;
 import Library.GUI.ILabel;
+import Library.GUI.IScrollView;
 import Library.GUI.IWindow;
 import Library.Platform;
 import Library.Process;
 import Library.Vector;
 
+import ./Held.btrc;
 import ./Progress.btrc;
 
 class StatusRun implements IButtonAction {  // a button that runs a command; the window stays
@@ -51,12 +54,17 @@ class StatusWindow implements IApplicationWork {
     private ILabel other;
     private IButton pause;
     private ICallbackRegistration? timer = null;
+    private ILabel? waiting = null;  // the held deletions: how many, then the list that scrolls
+    private IScrollView? scroll = null;
+    private IGrid? table = null;
+    private string listed = "\n";  // the engine's list the table was last built from
+    private int ticks = 0;
 
     public StatusWindow(string runtime, string mount, CallbackScope actions) {
         self.runtime = runtime;
         self.mount = mount;
         DriveProgress progress = DriveProgress.read(runtime);
-        self.window = GUI.createWindow("Google Drive", 560.0, 250.0 + 62.0 * (double)progress.pins.len);
+        self.window = GUI.createWindow("Google Drive", progress.held ? 1000.0 : 560.0, 250.0 + 62.0 * (double)progress.pins.len + (progress.held ? 300.0 : 0.0));
         var content = GUI.createColumn(10.0);
         content.setPadding(24.0, 24.0, 24.0, 24.0);
         self.window.attachRoot(content);
@@ -67,6 +75,19 @@ class StatusWindow implements IApplicationWork {
         self.detail.setWrapping(true);
         content.attach(self.headline);
         content.attach(self.detail);
+        if (progress.held) {
+            var waiting = GUI.createLabel("");
+            waiting.setFont(14.0, true);
+            var scroll = GUI.createScrollView();
+            var frame = GUI.createGrid(1, 1);  // a hole of a fixed size for the list to scroll in
+            frame.setColumnWidth(0, 952.0);
+            frame.setRowHeight(0, 250.0);
+            frame.setChild(0, 0, scroll);
+            content.attach(waiting);
+            content.attach(frame);
+            self.waiting = waiting;
+            self.scroll = scroll;
+        }
         var kept = GUI.createLabel(progress.pins.len == 0 ? "No folder is kept on this computer" : "Kept on this computer");
         kept.setFont(14.0, true);
         content.attach(kept);
@@ -90,6 +111,11 @@ class StatusWindow implements IApplicationWork {
         content.attach(buttons);
         buttons.attach(open);
         buttons.attach(self.pause);
+        if (progress.held) {
+            var allow = GUI.createButton("Let the deletions through");
+            buttons.attach(allow);
+            allow.onAction(StatusRun("drive resume > /dev/null 2>&1"), actions);
+        }
         buttons.attach(close);
         open.onAction(StatusRun("setsid --fork xdg-open " + ShellWords.quote(mount) + " > /dev/null 2>&1 < /dev/null"), actions);
         self.pause.onAction(StatusRun("if drive progress | grep -q '^paused yes'; then drive unpause; else drive pause; fi > /dev/null 2>&1"), actions);
@@ -108,11 +134,71 @@ class StatusWindow implements IApplicationWork {
         return f"{DriveSize.words(pin.onDisk)} here of {DriveSize.words(pin.inDrive)}. {files}, {free}.";
     }
 
+    private ILabel cell(string text, bool heading) {
+        var label = GUI.createLabel(text);
+        label.setFont(13.0, heading);
+        label.setSecondary(!heading);
+        return label;
+    }
+
+    class string tail(string path, int most) {  // the end of a long path: the name matters more than where it starts
+        return path.len() <= most ? path : "..." + path.substring(path.len() - most + 3, most - 3);
+    }
+
+    // The held deletions as a table that scrolls: what each entry is, and what took its place, if anything did.
+    private void list(Vector<HeldEntry> entries) {
+        IScrollView? scroll = self.scroll;
+        if (scroll == null) { return; }
+        IGrid? old = self.table;
+        if (old != null) { scroll.detach(old); }
+        int shown = entries.len > 300 ? 300 : entries.len;
+        var table = GUI.createGrid(5, shown + (entries.len > shown ? 2 : 1), 14.0, 4.0);
+        Vector<string> headings = ["Path", "Modified", "Now modified", "Size", "Now size"];
+        Vector<double> widths = [430.0, 130.0, 130.0, 100.0, 100.0];
+        for (int column = 0; column < 5; column++) {
+            table.setColumnWidth(column, widths.get(column));
+            table.setChild(column, 0, self.cell(headings.get(column), true));
+        }
+        for (int row = 0; row < shown; row++) {
+            HeldEntry entry = entries.get(row);
+            table.setChild(0, row + 1, self.cell(StatusWindow.tail(entry.path, 60), false));
+            table.setChild(1, row + 1, self.cell(entry.wasWhen(), false));
+            table.setChild(2, row + 1, self.cell(entry.nowWhen(), false));
+            table.setChild(3, row + 1, self.cell(entry.wasHolds(), false));
+            table.setChild(4, row + 1, self.cell(entry.nowHolds(), false));
+        }
+        if (entries.len > shown) { table.setChild(0, shown + 1, self.cell(f"and {DriveCount.words(entries.len - shown)} more; `drive held` lists them all", false)); }
+        scroll.attach(table);
+        double height = table.fittingHeight();
+        table.arrange(0.0, 0.0, 946.0, height);
+        table.layout();
+        scroll.setContentSize(946.0, height);
+        scroll.scrollTo(0.0);
+        self.table = table;
+    }
+
+    private void held(DriveProgress progress) {
+        ILabel? waiting = self.waiting;
+        if (waiting == null) { return; }
+        if (self.ticks % 20 == 0) { UnixShell().run("setsid --fork drive held > /dev/null 2>&1 < /dev/null", logFailure=false); }  // the engine reads the Drive's feed to list them
+        self.ticks++;
+        string text = FileSystem.readText(HeldList.file(self.runtime));
+        if (text.equals(self.listed)) { return; }
+        self.listed = text;
+        Vector<HeldEntry> entries = HeldList.read(self.runtime);
+        self.list(entries);
+        if (!progress.held) { waiting.setText("The deletions went through."); }
+        else if (entries.len == 0) { waiting.setText("Listing the deletions that are waiting..."); }
+        else { waiting.setText(f"{DriveCount.words(entries.len)} {entries.len == 1 ? "deletion is" : "deletions are"} waiting for a yes"); }
+    }
+
     private void show(DriveProgress progress) {
+        self.held(progress);
         DriveUsage.apply(progress, FileSystem.readText(DriveUsage.file()));
         self.headline.setText(progress.headline());
         string detail = progress.detail();
         if (detail.isEmpty()) { detail = "Everything in the kept folders is on this computer."; }
+        if (progress.held && self.waiting != null) { detail = "Many entries were deleted at once, so none of the deletions has been carried out yet. The list shows each one and what took its place."; }
         self.detail.setText(detail);
         for (int index = 0; index < self.sizes.len && index < progress.pins.len; index++) { self.sizes.get(index).setText(self.size(progress.pins.get(index))); }
         string limit = progress.cacheLimit > 0LL ? f" and given back beyond {DriveSize.words(progress.cacheLimit)}" : "";

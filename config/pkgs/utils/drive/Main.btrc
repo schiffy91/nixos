@@ -20,6 +20,7 @@ import ./door/Channel.btrc;
 import ./door/Door.btrc;
 import ./engine/Engine.btrc;
 import ./status/Progress.btrc;
+import ./status/Held.btrc;
 import ./engine/Mirror.btrc;
 import ./push/Push.btrc;
 import ./remote/DriveApi.btrc;
@@ -268,6 +269,33 @@ class Drive {
         StorePaths.rename(part, DriveUsage.file());
     }
 
+    class string padded(string text, int width, bool right = false) {
+        string gap = width > text.len() ? " ".repeat(width - text.len()) : "";
+        return right ? gap + text : text + gap;
+    }
+
+    class string row(string path, int widest, string was, string now, string size, string nowSize, string where) {
+        return f"{Drive.padded(path, widest)}  {Drive.padded(was, 16)}  {Drive.padded(now, 16)}  {Drive.padded(size, 12, true)}  {Drive.padded(nowSize, 12, true)}  {where}";
+    }
+
+    // The deletions waiting for `drive resume`: what each entry is where it still exists, and what took its place.
+    class void held(CLICommandLine options) {
+        string answer = Drive.asked(options, "held", 300);  // the engine reads the Drive's change feed on to its end
+        if (!answer.startsWith("ok")) { throw answer.isEmpty() ? "The engine did not answer in time" : answer; }
+        Vector<HeldEntry> entries = HeldList.read(Drive.runtime(options));
+        if (entries.len == 0) {
+            Console.log("No deletions are waiting.");
+            return;
+        }
+        int widest = 4;
+        for entry in entries {
+            if (entry.path.len() > widest) { widest = entry.path.len(); }
+        }
+        Console.log(Drive.row("path", widest, "modified", "now modified", "size", "now size", "deleted"));
+        for entry in entries { Console.log(Drive.row(entry.path, widest, entry.wasWhen(), entry.nowWhen(), entry.wasHolds(), entry.nowHolds(), entry.source.equals("here") ? "here" : "on the Drive")); }
+        Console.log(f"{entries.len} waiting; `drive resume` lets them through.");
+    }
+
     class string asked(CLICommandLine options, string message, int seconds) {
         Channel? engine = Channel.connect(Drive.runtime(options) + "/engine.sock");
         if (engine == null || !engine.send(message)) { throw "The engine is not running"; }
@@ -449,6 +477,7 @@ class Drive {
         else if (command.equals("progress")) { Drive.ask(options, "progress"); }  // the same, one fact to a line
         else if (command.equals("usage")) { Drive.usage(options); }
         else if (command.equals("resume")) { Drive.ask(options, "resume"); }
+        else if (command.equals("held")) { Drive.held(options); }  // what the delete brake is holding
         else if (command.equals("pin") || command.equals("unpin") || command.equals("place")) { Drive.pin(options, command); }
         else if (command.equals("pins")) { Drive.ask(options, "pins"); }
         else if (command.equals("pause") || command.equals("unpause")) { Drive.ask(options, command); }  // hold or let go the downloading of pinned folders

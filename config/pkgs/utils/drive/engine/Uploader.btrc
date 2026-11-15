@@ -11,6 +11,7 @@ import ../remote/DriveApi.btrc;
 import ../remote/DriveFile.btrc;
 import ../store/Store.btrc;
 import ../store/StoreFile.btrc;
+import ../status/Held.btrc;
 import ./Planner.btrc;
 
 #include <time.h>
@@ -56,6 +57,30 @@ class Uploader {
     }
 
     public int waiting() { return self.paths.len + self.later.len + self.removals.len; }
+
+    // What was deleted here and is still on the Drive while the brake holds; each is kept in the trash until it goes.
+    public Vector<HeldEntry> heldEntries() {
+        Vector<HeldEntry> entries = [];
+        if (!self.braked) { return entries; }
+        for id in self.removals {
+            string kept = self.store.trashed(id);
+            StoreFile? there = StoreFile.open(kept);
+            if (there == null) { continue; }
+            string folder = self.store.folderPath(there.attribute("parent"));
+            HeldEntry entry = HeldEntry();
+            entry.source = "here";
+            entry.path = (folder.isEmpty() ? "" : self.store.logical(folder) + "/") + there.attribute("local");
+            if (FileSystem.isDir(kept)) {
+                entry.path = entry.path + "/";
+                entry.entries = 1 + FileSystem.listDir(kept).len;
+            } else {
+                entry.wasModified = there.modified();
+                entry.wasSize = there.size();
+            }
+            entries.push(entry);
+        }
+        return entries;
+    }
 
     public void resume() {
         self.allowed = true;

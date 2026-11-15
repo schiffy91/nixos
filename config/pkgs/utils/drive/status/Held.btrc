@@ -1,0 +1,71 @@
+import Library.FileSystem;
+import Library.Strings;
+import Library.Vector;
+
+import ./Progress.btrc;
+
+// One deletion the brake is holding: what the entry is on the side that still has it, and what the other
+// side has under the same name now, if anything took its place.
+class HeldEntry {
+    public string source = "drive";  // "drive": deleted on the Drive, still here; "here": deleted here, still on the Drive
+    public string path = "";  // in the Drive
+    public long long wasModified = -1LL;  // milliseconds; -1 unknown
+    public long long wasSize = -1LL;
+    public long long nowModified = -1LL;  // -1: nothing took its place
+    public long long nowSize = -1LL;
+    public int entries = 0;  // a folder: how many entries go with it
+
+    public string line() { return f"{self.source}\t{self.wasModified}\t{self.wasSize}\t{self.nowModified}\t{self.nowSize}\t{self.entries}\t{self.path}"; }
+
+    class HeldEntry? parse(string text) {
+        Vector<string> fields = Strings.split(text, "\t");
+        if (fields.len < 7) { return null; }
+        HeldEntry entry = HeldEntry();
+        entry.source = fields.get(0);
+        entry.wasModified = fields.get(1).toLong();
+        entry.wasSize = fields.get(2).toLong();
+        entry.nowModified = fields.get(3).toLong();
+        entry.nowSize = fields.get(4).toLong();
+        entry.entries = fields.get(5).toInt();
+        entry.path = fields.get(6);
+        return entry;
+    }
+
+    class string moment(long long milliseconds, string none) {
+        if (milliseconds < 0LL) { return none; }
+        char text[32];
+        driveLocalTime((long)(milliseconds / 1000LL), text, 32UL);
+        return Strings.copy(text);
+    }
+
+    public string wasWhen() { return HeldEntry.moment(self.wasModified, ""); }
+
+    public string nowWhen() { return HeldEntry.moment(self.nowModified, "deleted"); }
+
+    public string wasHolds() {
+        if (self.entries > 0) { return f"{DriveCount.words(self.entries)} {self.entries == 1 ? "entry" : "entries"}"; }
+        return self.wasSize < 0LL ? "" : DriveSize.words(self.wasSize);
+    }
+
+    public string nowHolds() { return self.nowSize < 0LL ? "" : DriveSize.words(self.nowSize); }
+}
+
+// The held deletions as the engine last listed them, kept in a file beside its progress.
+class HeldList {
+    class string file(string runtime) { return runtime + "/held"; }
+
+    class Vector<HeldEntry> read(string runtime) {
+        Vector<HeldEntry> entries = [];
+        for line in Strings.split(FileSystem.readText(HeldList.file(runtime)), "\n") {
+            HeldEntry? entry = HeldEntry.parse(line);
+            if (entry != null) { entries.push(entry); }
+        }
+        return entries;
+    }
+
+    class string text(Vector<HeldEntry> entries) {
+        Vector<string> lines = [];
+        for entry in entries { lines.push(entry.line()); }
+        return lines.len == 0 ? "" : Strings.join(lines, "\n") + "\n";
+    }
+}

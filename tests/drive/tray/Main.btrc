@@ -43,6 +43,8 @@ class TrayScenario {
         string kept = self.drive.folder("root", "Kept");
         for (int number = 1; number <= 4; number++) { self.drive.put(kept, f"film{number}.bin", "megabyte"); }
         self.drive.put(self.drive.folder("root", "Other"), "note.txt", "note");
+        string archive = self.drive.folder("root", "Archive");
+        for (int number = 1; number <= 5; number++) { self.drive.put(archive, f"old{number}.txt", "note"); }
         self.machine.succeed(f"install -d -o fixture {self.drive.store} {self.drive.runtime} && chown fixture /var/lib/drive-test/credentials.json");
         string as = f"--uid=fixture --setenv=DRIVE_RUNTIME={self.drive.runtime} -p AmbientCapabilities=CAP_SYS_ADMIN";
         self.machine.succeed(f"systemd-run --unit drive-door --collect {as} drive door --store {self.drive.store} --mount {self.drive.mount} --runtime {self.drive.runtime} --allow-others");
@@ -112,6 +114,28 @@ class TrayScenario {
         self.machine.sendKey("esc");
         self.machine.waitUntil("! pgrep -x .drive-status-w && ! pgrep -x drive-status", 30);
         Check.that(self.machine.succeed("journalctl --no-pager | grep -c -E 'drive-status.*(dumped core|terminated abnormally)' || true").trim().equals("0"), "without a crash");
+
+        print("Many deletions at once wait for a yes: the tray says so and the window lists them");
+        self.drive.control(f"delete?id={self.drive.id("Archive")}");  // one change that takes six entries with it
+        self.shows("attention", "Deletions are waiting", "the mark with a warning, and what it is about");
+        self.machine.succeed(self.session(f"busctl --user call {self.item()} /StatusNotifierItem org.kde.StatusNotifierItem Activate ii 0 0"));
+        try {
+            screen.waitForText("1 deletion is waiting", self.lab.artifact("status-held.ppm"), 120);
+            screen.waitForText("Archive/", self.lab.artifact("status-held.ppm"), 60);
+            screen.waitForText("6 entries", self.lab.artifact("status-held.ppm"), 30);
+            screen.waitForText("Let the deletions through", self.lab.artifact("status-held.ppm"), 30);
+        } catch (string error) {
+            print(self.machine.succeed(f"drive held --runtime {self.drive.runtime}; journalctl --no-pager _UID=1000 | tail -30 || true"));
+            throw error;
+        }
+        Check.that(self.drive.drive("held").contains("Archive/"), "`drive held` lists the same entry");
+        Check.that(self.machine.succeed(f"ls {self.drive.mount}/Archive | wc -l").trim().equals("5"), "and nothing has been deleted here");
+        self.drive.drive("resume");
+        screen.waitForText("The deletions went through", self.lab.artifact("status-through.ppm"), 90);
+        self.machine.waitUntil(f"! test -e {self.drive.mount}/Archive", 30);
+        Check.that(true, "after the yes the folder is gone here too");
+        self.machine.sendKey("esc");
+        self.machine.waitUntil("! pgrep -x .drive-status-w && ! pgrep -x drive-status", 30);
 
         print("The Drive out of reach, then the engine gone");
         self.drive.stop("drive-fake");

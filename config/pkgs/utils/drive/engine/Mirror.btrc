@@ -7,6 +7,7 @@ import Library.Console;
 
 import ../store/Store.btrc;
 import ../store/StoreFile.btrc;
+import ../status/Held.btrc;
 import ./Planner.btrc;
 import ./Uploader.btrc;
 
@@ -126,6 +127,57 @@ class Mirror {
         self.streak = 0;
         self.allowDeletions = false;  // a yes covers the batch it was given for
         return 0;
+    }
+
+    // What the Drive deleted that is still here while the brake holds: the change feed read on from where the
+    // store stands, with nothing applied. Each entry says what is here, and what the Drive now has under the
+    // same name in the same folder, when something took its place.
+    public Vector<HeldEntry> heldEntries(int pages = 50) {
+        Vector<HeldEntry> entries = [];
+        Map<string, bool> gone = {};
+        Vector<string> order = [];
+        Map<string, DriveFile> arrived = {};  // "folder id, name": an entry the store does not have yet
+        string token = self.store.position();
+        for (int page = 0; page < pages && !token.isEmpty(); page++) {
+            DriveChanges? changes = self.api.changes(token);
+            if (changes == null) { break; }
+            for change in changes.changes {
+                DriveFile? file = change.file;
+                if (change.removed || file == null || file.trashed) {
+                    if (self.store.knows(change.id) && !gone.has(change.id)) {
+                        gone.put(change.id, true);
+                        order.push(change.id);
+                    }
+                } else if (!self.store.knows(file.id)) {
+                    arrived.put(f"{file.parent}\n{file.name}", file);
+                }
+            }
+            token = changes.next;
+        }
+        for id in order {
+            HeldEntry entry = HeldEntry();
+            string folder = self.store.folderPath(id);
+            if (!folder.isEmpty()) {
+                entry.path = self.store.logical(folder) + "/";
+                entry.entries = self.store.weight(id);
+                entries.push(entry);
+                continue;
+            }
+            StoreFile? here = self.store.file(id);
+            string path = self.store.filePath(id);
+            if (here == null || path.isEmpty()) { continue; }
+            entry.path = self.store.logical(path);
+            entry.wasModified = here.modified();
+            entry.wasSize = here.size();
+            string place = f"{here.attribute("parent")}\n{here.attribute("name")}";
+            if (arrived.has(place)) {
+                DriveFile taken = arrived.get(place);
+                entry.nowModified = taken.modified;
+                entry.nowSize = taken.isFolder() ? -1LL : taken.size;
+            }
+            entries.push(entry);
+        }
+        return entries;
     }
 
     // Everything that changed, page after page. False when the Drive could not be reached or deletions are held.

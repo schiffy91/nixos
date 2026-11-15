@@ -135,28 +135,45 @@ class WritesScenario {
 
     private int trashedOnDrive(string folder) { return Strings.toInt(self.machine.succeed(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 -c 'import json, sys; d = json.load(sys.stdin); f = [e[\"id\"] for e in d if e[\"name\"] == sys.argv[1]][0]; print(sum(1 for e in d if (e.get(\"parents\") or [\"\"])[0] == f and e[\"trashed\"]))' {folder}").trim()); }
 
+    private string row(string table, string path) {  // the line of `drive held` that starts with this path
+        for line in Strings.split(table, "\n") {
+            if (line.startsWith(path + " ")) { return line; }
+        }
+        return "";
+    }
+
     private void brakes() {
         print("Many deletions at once wait for a yes, here");
         self.machine.succeed(f"rm {self.mount}/Bulk/b*.txt");
         self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
         Check.that(self.trashedOnDrive("Bulk") == 0, "nothing is trashed on the Drive meanwhile");
+        string here = self.drive.drive("held");
+        Check.that(here.contains("Bulk/b1.txt") && here.contains("Bulk/b5.txt") && here.contains("5 waiting") && here.contains("  here\n") && !here.contains("on the Drive"), "`drive held` lists the five, each with where it was deleted");
+        Check.that(self.row(here, "Bulk/b3.txt").contains("15 bytes") && self.row(here, "Bulk/b3.txt").contains("deleted"), "and what each one was");
         self.drive.drive("resume");
         self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py b5.txt | grep -c ' True$' | grep -q '^1$'");
         Check.that(self.trashedOnDrive("Bulk") == 5, "after the yes they all go");
 
         print("And on the Drive, however few changes it reports at a time");
         self.drive.control("page?size=2");  // the real feed comes in small pages; the batch is still one batch
+        string theirs = self.drive.id("Theirs");
         for (int number = 1; number <= 5; number++) { self.drive.control(f"delete?id={self.drive.id(f"Theirs/b{number}.txt")}"); }
+        self.drive.put(theirs, "b5.txt", "theirs");  // another file takes the last one's name
         self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
         Check.that(Strings.toInt(self.machine.succeed(f"ls {self.mount}/Theirs | wc -l").trim()) >= 2, "the brake stops the batch part-way; what went before it is in the trash, not gone");
+        string there = self.drive.drive("held");
+        Check.that(self.row(there, "Theirs/b4.txt").contains("deleted") && self.row(there, "Theirs/b4.txt").contains("on the Drive"), "`drive held` lists what the Drive deleted and is still here, read from every page of the feed");
+        Check.that(self.row(there, "Theirs/b5.txt").contains("15 bytes") && self.row(there, "Theirs/b5.txt").contains("27 bytes") && !self.row(there, "Theirs/b5.txt").contains("deleted"), "and for a name another file has taken, what was here and what is there now");
         self.drive.drive("resume");
-        self.machine.waitUntil(f"test \"$(ls {self.mount}/Theirs | wc -l)\" = 0");
+        self.machine.waitUntil(f"test \"$(ls {self.mount}/Theirs)\" = b5.txt && cmp {self.mount}/Theirs/b5.txt {self.drive.source}/theirs");
+        Check.that(self.drive.drive("held").contains("No deletions are waiting"), "after the yes the list is empty");
         self.drive.control("page?size=1000");
 
         print("A folder trashed on the Drive counts for everything in it");
         self.drive.control(f"delete?id={self.drive.id("Whole")}");
         self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
         Check.equal(self.machine.succeed(f"ls {self.mount}/Whole | wc -l").trim(), "5", "one change that removes six entries is held like six");
+        Check.that(self.row(self.drive.drive("held"), "Whole/").contains("6 entries"), "and listed as the folder with what goes with it");
         self.drive.drive("resume");
         self.machine.waitUntil(f"! test -e {self.mount}/Whole");
 

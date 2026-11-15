@@ -13,6 +13,7 @@ import ../door/Channel.btrc;
 import ../remote/DriveApi.btrc;
 import ../store/Store.btrc;
 import ../store/StoreFile.btrc;
+import ../status/Held.btrc;
 import ./Mirror.btrc;
 import ./Readers.btrc;
 import ./Uploader.btrc;
@@ -459,6 +460,15 @@ class Engine {
             self.mirror.allowDeletions = true;
             self.due = 0LL;
             return "ok\n";
+        }
+        if (words.len == 1 && words.get(0).equals("held")) {  // list what the brake holds, in a file: it can be long
+            Vector<HeldEntry> entries = [];
+            if (self.mirror.braked) { entries = self.mirror.heldEntries(); }
+            for entry in self.uploader.heldEntries() { entries.push(entry); }
+            string file = self.socket.replace("door.sock", "held");
+            Path.writeAll(file + ".part", HeldList.text(entries));
+            if (!StorePaths.rename(file + ".part", file)) { return "cannot write the list\n"; }
+            return f"ok {entries.len}\n";
         }
         if (words.len == 1 && words.get(0).equals("progress")) { return self.progress(door != null && door.isOpen()); }
         if (words.len == 1 && words.get(0).equals("status")) {
