@@ -116,6 +116,13 @@ let
       case.config.settings.desktop.plasma.taskbarLaunchers == lib.subtractLists case.removed expectedLaunchers)
       launcherCases)
       "FRACTAL-NORTH's taskbar must preserve app order and Chrome identities while following package switches."
+    ++ check (let
+        here = desktop.config.settings.desktop.plasma.taskbarLaunchers;
+        there = handheld.settings.desktop.plasma.taskbarLaunchers;
+        pinned = [ "applications:com.onepassword.OnePassword.desktop" code "applications:org.kde.konsole.desktop" battlenet steam ];
+      in lib.filter (entry: lib.elem entry there) here == lib.filter (entry: lib.elem entry here) there
+        && lib.filter (entry: lib.elem entry pinned) there == pinned)
+      "The Deck's taskbar must pin 1Password, VS Code, Konsole, Battle.net and Steam, with the apps both hosts pin in FRACTAL-NORTH's order."
     ++ check (lib.all (case: lib.all (entry: entry.assertion) case.config.assertions) launcherCases
       && lib.all (config: lib.all (entry: entry.assertion) config.assertions) disabledDecks)
       "Package-switch fixtures must satisfy the hierarchy and dependency assertions."

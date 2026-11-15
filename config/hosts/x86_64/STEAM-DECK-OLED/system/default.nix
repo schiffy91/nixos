@@ -79,17 +79,16 @@ in {
       outputs = [{ name = "eDP-1"; scaleFactor = 1.35; primary = true; }];
       plasma = {
         virtualKeyboard.enable = true;
-        taskbarLaunchers = [
+        taskbarLaunchers = [  # the apps FRACTAL-NORTH also pins keep its order
           "applications:org.kde.dolphin.desktop"
-        ] ++ lib.optional apps.utils.chrome.enable "applications:google-chrome.desktop" ++ [
-          "applications:org.kde.konsole.desktop"
-        ] ++ lib.optionals steamEnabled [
-          "applications:steam.desktop"
-        ] ++ [
-          "applications:desktop-keyboard.desktop"
-        ] ++ lib.optionals steamEnabled [
-          "applications:return-to-gaming-mode.desktop"
-        ];
+        ] ++ lib.optional apps.utils.chrome.enable "applications:google-chrome.desktop"
+          ++ lib.optional apps.utils.onePassword.enable "applications:com.onepassword.OnePassword.desktop"  # sudo, git and SSH wait on it here
+          ++ lib.optional apps.dev.vscode.enable "applications:code.desktop"
+          ++ [ "applications:org.kde.konsole.desktop" ]
+          ++ lib.optional apps.gaming.battlenet.enable "applications:battlenet.desktop"
+          ++ lib.optional steamEnabled "applications:steam.desktop"
+          ++ [ "applications:desktop-keyboard.desktop" ]
+          ++ lib.optional steamEnabled "applications:return-to-gaming-mode.desktop";
       };
     };
     # Existing home Wi-Fi profile; trusted source subnets follow its DHCP routes.
