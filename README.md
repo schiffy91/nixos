@@ -811,8 +811,11 @@ make -C tests graph-full
 
 `tests/graph.json` is the authoritative node list: its `required` set names
 every node that guards a contract, and `make -C tests graph-status` prints each
-one with its state (`ready`, `stale`, `missing`) rather than repeating the list
-here. The families are `installer-*`, `install-*`, `immutability-*`,
+one with its state (`ready`, `stale`, `missing`, `disabled`) rather than repeating
+the list here. A node is switched off, not removed, by giving it a `disabled`
+field that says why: it stays in the graph and in `required`, a run skips it and
+prints the reason, and no node that still runs may come `after` it. The four
+`host-hibernate-*` nodes are off this way, because neither host hibernates. The families are `installer-*`, `install-*`, `immutability-*`,
 `recovery-*`, `secure-boot-*`, `tpm2-*`, `nixosctl-*`, `password-change*`,
 `qemu-host-*`, `qmp-probe` and the `spec-toml`/`spec-yaml` format checks.
 

@@ -1,0 +1,61 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/TestDirectory.btrc;
+
+// A node switched off with a reason is never run, stays in the required list, and is said to be off.
+class DisabledNodeTests {
+    private TestDirectory fixture;
+    private string root;
+    private string reason = "the host no longer does this";
+
+    public DisabledNodeTests(string root) {
+        self.fixture = TestDirectory("nixos-disabled-node"); self.root = root;
+        Check.that(FileSystem.mkdirp(self.fixture.path(".vm")) == 0, "create state directory");
+        for name in ["kept", "off"] {
+            var spec = JSONValue.parse(f"{{\"name\":\"{name}\",\"state\":\"{name}\",\"stateMaterial\":\"{name}:{{{{sourceHash}}}}\",\"operations\":[]}}");
+            spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
+            spec.set("workDir", JSONValue.makeString(self.fixture.path(f".vm/work-{name}")));
+            var host = JSONValue.parse("{\"op\":\"host\"}");
+            host.set("command", JSONValue.makeString(f"printf '{name}\\n' >> {ShellWords.quote(self.fixture.path(".vm/executions"))}"));
+            spec.get("operations").push(host); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
+            self.fixture.json(f"{name}.json", spec);
+        }
+    }
+
+    private void graph(string off, string dependent) {
+        self.fixture.write("graph.json", "{\"name\":\"disabled-node\",\"workspaceRoot\":\".\",\"required\":[\"kept\",\"off\"],\"nodes\":[{\"id\":\"kept\",\"spec\":\"kept.json\"" + dependent + "},{\"id\":\"off\",\"spec\":\"off.json\"" + off + "}]}");
+    }
+
+    private ExecResult run(Vector<string> arguments) {
+        Vector<string> command = ["graph", self.fixture.path("graph.json")];
+        for argument in arguments { command.push(argument); }
+        return ChildProcess.run(PathTools.join(self.root, "build/nixosctl"), command, cwd=self.fixture.path(), environment=[f"NIXOS_CONFIG_ROOT={self.root}"], timeoutMilliseconds=60000);
+    }
+
+    private string said(ExecResult result) { return result.stdout() + result.stderr(); }
+
+    public void check() {
+        self.graph(f",\"disabled\":\"{self.reason}\"", "");
+        var required = Check.exited(self.run(["run-required"]));
+        Check.equal(Path.readAll(self.fixture.path(".vm/executions")), "kept\n", "only the node that is still on ran");
+        Check.that(self.said(required).contains(f"disabled off: {self.reason}"), "the run says which node is off and why");
+        var direct = Check.exited(self.run(["run", "off"]));
+        Check.equal(Path.readAll(self.fixture.path(".vm/executions")), "kept\n", "asked for by name, it still does not run");
+        Check.that(self.said(direct).contains(f"disabled off: {self.reason}"), "and the reason is given again");
+        Check.that(self.said(Check.exited(self.run(["status"]))).contains("off disabled "), "its state reads disabled");
+        Check.that(self.said(Check.exited(self.run(["list"]))).contains(f"[disabled: {self.reason}]"), "the listing carries the reason");
+
+        self.graph(f",\"disabled\":\"{self.reason}\"", ",\"after\":[\"off\"]");
+        Check.that(self.said(Check.exited(self.run(["run-required"]), 1)).contains("Graph node kept depends on disabled node: off"), "a node that still runs may not follow one that is off");
+        self.graph(",\"disabled\":\" \"", "");
+        Check.that(self.said(Check.exited(self.run(["run-required"]), 1)).contains("Graph node off is disabled without a reason"), "switching a node off takes a reason");
+        self.fixture.close();
+    }
+}
+
+int main() {
+    try {
+        DisabledNodeTests(Platform.currentDirectory()).check();
+        print("PASS: a disabled node is skipped with its reason and stays required"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

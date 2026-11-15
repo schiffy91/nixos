@@ -144,6 +144,10 @@ $(BUILD_DIR)/source-hash-test: $(SOURCES) flake.lock | dirs
 	$(BTRC) --strict-imports tests/harness/source-hash/Main.btrc -o "$(BUILD_DIR)/source-hash-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/source-hash-test.c" -lm -lpthread -o "$@"
 
+$(BUILD_DIR)/disabled-node-test: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/harness/disabled/Main.btrc -o "$(BUILD_DIR)/disabled-node-test.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/disabled-node-test.c" -lm -lpthread -o "$@"
+
 $(BUILD_DIR)/host-timeout-test: $(SOURCES) flake.lock | dirs
 	$(BTRC) --strict-imports tests/harness/timeout/Main.btrc -o "$(BUILD_DIR)/host-timeout-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/host-timeout-test.c" -lm -lpthread -o "$@"

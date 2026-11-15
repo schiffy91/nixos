@@ -33,6 +33,13 @@
       "after": [
         "quick"
       ],
+      "id": "graph-disabled",
+      "spec": "harness/disabled/test.json"
+    },
+    {
+      "after": [
+        "quick"
+      ],
       "args": {
         "marker": "graph-default"
       },
@@ -729,6 +736,7 @@
     },
     {
       "id": "host-hibernate-STEAM-DECK-OLED-VM-standard",
+      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
       "spec": "hosts-hibernate/test.json",
       "after": [
         "host-install-STEAM-DECK-OLED-VM-standard"
@@ -804,6 +812,7 @@
     },
     {
       "id": "host-hibernate-STEAM-DECK-OLED-VM-secure",
+      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
       "spec": "hosts-hibernate/test.json",
       "after": [
         "host-install-STEAM-DECK-OLED-VM-secure"
@@ -879,6 +888,7 @@
     },
     {
       "id": "host-hibernate-FRACTAL-NORTH-VM-standard",
+      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
       "spec": "hosts-hibernate/test.json",
       "after": [
         "host-install-FRACTAL-NORTH-VM-standard"
@@ -954,6 +964,7 @@
     },
     {
       "id": "host-hibernate-FRACTAL-NORTH-VM-secure",
+      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
       "spec": "hosts-hibernate/test.json",
       "after": [
         "host-install-FRACTAL-NORTH-VM-secure"
@@ -1292,6 +1303,7 @@
   "required": [
     "host-timeout",
     "source-hash",
+    "graph-disabled",
     "opportunistic-unlock",
     "secure-boot-backup",
     "sleep-gaming-plasma",

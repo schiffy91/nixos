@@ -96,7 +96,9 @@ class VmGraphRunner {
         for node in self.graph.nodes {
             var spec = self.specFor(node);
             var recorded = "missing";
-            if (FileSystem.exists(spec.stateHashFile())) {
+            if (!node.enabled()) {
+                recorded = "disabled";
+            } else if (FileSystem.exists(spec.stateHashFile())) {
                 var saved = Path.readAll(spec.stateHashFile()).trim();
                 recorded = saved.equals(spec.stateHash) ? "ready" : "stale";
             }
@@ -113,6 +115,7 @@ class VmGraphRunner {
     public int operationCoverage() {
         Vector<string> covered = [];
         for node in self.graph.nodes {
+            if (!node.enabled()) { continue; }  // a node that never runs covers nothing
             var spec = VmSpecParser.readFile(self.graph.resolvedSpecPath(node));
             for op in spec.operations {
                 if (!op.kind.isEmpty() && !covered.contains(op.kind)) {
@@ -172,7 +175,8 @@ class VmGraphRunner {
         }
 
         Console.log("E2E operation coverage: " + Strings.fromInt(covered.len) + "/" + Strings.fromInt(VmOperationCatalog.all().len));
-        Console.log("E2E required graph nodes: " + Strings.fromInt(seenRequired.len) + "/" + Strings.fromInt(self.graph.required.len));
+        int disabled = self.graph.required.len - self.graph.enabledTargets(self.graph.required).len;
+        Console.log("E2E required graph nodes: " + Strings.fromInt(seenRequired.len) + "/" + Strings.fromInt(self.graph.required.len) + (disabled > 0 ? f", {disabled} disabled" : ""));
         return 0;
     }
 
@@ -243,7 +247,12 @@ class VmGraphRunner {
 
     public int run(Vector<string> targets) {
         var traversal = GraphTraversal(self.graph);
-        var selected = targets.isEmpty() ? self.hostDefaultTargets() : self.resolveHostTargets(targets);
+        var asked = targets.isEmpty() ? self.hostDefaultTargets() : self.resolveHostTargets(targets);
+        for id in asked {
+            if (self.hasNode(id) && !self.graph.node(id).enabled()) { NixosLog.info(f"graph {self.graph.name}: disabled {id}: {self.graph.node(id).disabled}"); }
+        }
+        var selected = self.graph.enabledTargets(asked);
+        if (selected.isEmpty()) { return 0; }  // an empty selection would otherwise mean the defaults
         var order = traversal.order(selected);
         if (!traversal.ok()) {
             NixosLog.fatal(traversal.error);

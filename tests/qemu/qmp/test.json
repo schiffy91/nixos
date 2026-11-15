@@ -16,6 +16,7 @@
     { "op": "boot-iso" },
     { "op": "sleep", "timeout": 3 },
     { "op": "qmp", "command": "{\"execute\":\"query-status\"}", "expect": "\"status\"" },
+    { "op": "send-keys", "command": "probe" },
     { "op": "record-state" },
     { "op": "stop" }
   ]
