@@ -5,7 +5,7 @@ let
   container = "/dev/disk/by-label/${card.label}-crypt";
 in {
   config = lib.mkIf card.enable {
-    environment.systemPackages = [ pkgs.cryptsetup ];
+    environment.systemPackages = [ pkgs.cryptsetup pkgs.e2fsprogs ];  # preparing a card makes its filesystem; a machine with no ext4 of its own has no mkfs.ext4
     # What `nixosctl sd-card` needs to know: the labels and paths above, and the one folder a
     # card may hold and still be formatted, with where that folder is on the Drive.
     environment.etc."nixos-sd-card".text = lib.concatStringsSep "\n" [ card.label card.mountPoint card.keyFile card.library card.driveFolder config.settings.users.admin.username ] + "\n";

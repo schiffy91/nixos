@@ -159,6 +159,7 @@ let
       && lib.hasInfix "--place-device '/sd/drive=/dev/disk/by-label/SD-crypt'" handheld.systemd.services.drive-engine.serviceConfig.ExecStart
       && lib.hasInfix "/dev/disk/by-label/SD-crypt" handheld.environment.etc.crypttab.text
       && lib.any (mount: mount.where == "/sd") handheld.systemd.mounts
+      && lib.elem pkgs.e2fsprogs handheld.environment.systemPackages && lib.elem pkgs.cryptsetup handheld.environment.systemPackages
       && plain.settings.apps.utils.drive.placements == { "media/Games/Emulation" = "/run/media/alexanderschiffhauer/SD/drive"; }
       && lib.hasInfix "--place 'media/Games/Emulation=/run/media/alexanderschiffhauer/SD/drive'" plain.systemd.services.drive-door.serviceConfig.ExecStart
       && lib.hasInfix "--place-device '/run/media/alexanderschiffhauer/SD/drive=/dev/disk/by-label/SD'" plain.systemd.services.drive-engine.serviceConfig.ExecStart
