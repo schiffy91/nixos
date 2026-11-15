@@ -72,8 +72,13 @@ class StorageManager {
     private string output(string command) { return self.shell.run(command, logFailure=false).out.trim(); }
 
     class int overview() {
+        Vector<string> names = StorageManager.names();
+        if (names.len == 0) {
+            Console.log("This machine declares no external storage (settings.disk.storage).");
+            return 1;
+        }
         int unmounted = 0;
-        for name in StorageManager.names() {
+        for name in names {
             if (StorageManager(name).status() != 0) { unmounted++; }
         }
         return unmounted == 0 ? 0 : 1;
