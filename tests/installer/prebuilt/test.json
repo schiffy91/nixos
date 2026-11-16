@@ -43,6 +43,9 @@
     },
     {
       "op": "stop"
+    },
+    {
+      "op": "record-state"
     }
   ]
 }

@@ -256,6 +256,9 @@
     },
     {
       "op": "stop"
+    },
+    {
+      "op": "record-state"
     }
   ],
   "parentState": "host-installed-{{hostName}}-{{target}}"

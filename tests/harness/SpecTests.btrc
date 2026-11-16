@@ -57,7 +57,14 @@ int main() {
     try { VmSpecParser.checked(VmSpecParser.parse("{\"operations\":[{\"op\":\"guest\",\"command\":\"set -e; ! grep gone list; printf ok\"}]}"), "fixture"); } catch (string error) { refused = error; }
     Expect.isTrue(refused.contains("fixture: `! grep gone list` does not stop the step"));
     var graph = GraphParser.readFile("tests/graph.json");
-    for node in graph.nodes { VmSpecParser.readFile(graph.resolvedSpecPath(node)); }  // throws on a spec with a bare negation
+    for node in graph.nodes {
+        var scenario = VmSpecParser.readFile(graph.resolvedSpecPath(node));  // throws on a spec with a bare negation
+        if (!node.enabled()) { continue; }
+        var records = false;
+        for op in scenario.operations { if (op.kind == "record-state") { records = true; } }
+        if (!records) { throw f"{node.id}: {node.specPath} never records its state, so the node would run again on every invocation"; }
+    }
     print(f"PASS: a `! command` statement whose status nothing uses is refused, and none of the graph's {graph.nodes.length} specs has one");
+    print("PASS: every node that runs records its state");
     return 0;
 }

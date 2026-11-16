@@ -73,6 +73,9 @@
       },
       {
          "op" : "stop"
+      },
+      {
+         "op" : "record-state"
       }
    ],
    "parentState" : "installer-ssh",
