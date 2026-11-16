@@ -14,6 +14,12 @@ passed; each running VM is given its own SSH port, so the `sshPort` in a spec is
 stops the nodes that depend on it and nothing else, and the run ends with a summary of what passed, was
 skipped, failed or was blocked. With more than one job each node writes `.vm/e2e/logs/<node>.log`.
 
+A node that is one Nix build names it in its spec's `derivation` (what `nix-instantiate` is given) and
+builds it with the `build-derivation` operation. The runner makes the `.drv` path the `{{derivation}}`
+argument, so the node's state is keyed on exactly what it builds: an edit that does not change the
+derivation leaves the node ready. The paths are kept in `.vm/inputs.json` for the tree as it stands (every
+file's path, size and time of change), so an unchanged tree is not evaluated again.
+
 The graph runner holds `.vm/graph.lock` for a run, so a second run or a collection in the same
 workspace is refused. `graph status` ends each line with how long the node's last pass took.
 `make graph-gc` deletes the work directories under `.vm/e2e` that no node's current state names,

@@ -22,6 +22,7 @@ class VmTestSpec {
     public string parentState;
     public string stateRoot;
     public string stateMaterial;
+    public string derivation;  /* what `nix-instantiate` is given; the runner makes its .drv path the {{derivation}} argument */
     public string parentHash;
     public string stateHash;
     public string stateHashShort;
@@ -44,6 +45,7 @@ class VmTestSpec {
         self.parentState = "root";
         self.stateRoot = ".vm/e2e/chain";
         self.stateMaterial = "";
+        self.derivation = "";
         self.parentHash = "root";
         self.stateHash = "";
         self.stateHashShort = "";

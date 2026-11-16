@@ -233,6 +233,47 @@ class GraphRunnerTests {
         held.close();
     }
 
+    // A node keyed on a derivation: its expression, and a node that builds it and counts its runs.
+    private void derived(string name, string expression) {
+        self.fixture.write(f"{name}.nix", expression);
+        var spec = JSONValue.parse(f"{{\"name\":\"{name}\",\"state\":\"{name}\",\"derivation\":\"{name}.nix\",\"operations\":[{{\"op\":\"build-derivation\"}}]}}");
+        spec.set("stateMaterial", JSONValue.makeString(name + ":{{derivation}}"));
+        spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
+        spec.set("workDir", JSONValue.makeString(self.fixture.path(".vm/" + name + "-{{stateHashShort}}")));
+        var count = JSONValue.parse("{\"op\":\"host\"}");
+        count.set("command", JSONValue.makeString(f"printf '{name}\\n' >> {ShellWords.quote(self.fixture.path("builds"))}"));
+        spec.get("operations").push(count); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
+        self.fixture.json(f"{name}.json", spec);
+    }
+
+    private string reading(string input) {
+        return "derivation { name = \"probe\"; system = builtins.currentSystem; builder = \"/bin/sh\"; args = [ \"-c\" \"echo ${builtins.hashString \"sha256\" (builtins.readFile ./" + input + ")} > $out\" ]; }\n";
+    }
+
+    public void derivations() {
+        self.fixture.write("left.txt", "one\n"); self.fixture.write("right.txt", "one\n");
+        self.derived("left", self.reading("left.txt")); self.derived("right", self.reading("right.txt"));
+        self.graph(self.entry("left") + "," + self.entry("right"));
+        var builds = self.fixture.path("builds");
+        Check.exited(self.run(["run", "left", "right"]));
+        Check.equal(Path.readAll(builds).trim().replace("\n", " ").length == 10 ? "both" : Path.readAll(builds), "both", "both derivations are built once");
+
+        self.fixture.write("Unrelated.btrc", "int unrelated = 1;\n");
+        var untouched = Check.exited(self.run(["run", "left", "right"]));
+        Check.that(untouched.stdout().contains("0 passed, 2 skipped"), f"a source neither derivation reads reruns nothing: {self.said(untouched)}");
+
+        self.fixture.write("left.txt", "two\n");
+        var one = Check.exited(self.run(["run", "left", "right"]));
+        Check.that(one.stdout().contains("1 passed, 1 skipped"), f"an input one derivation reads reruns that node alone: {self.said(one)}");
+        Check.that(Path.readAll(builds).endsWith("left\n"), "and it is the node whose input changed");
+        Check.that(Check.exited(self.run(["status"])).stdout().contains("left ready "), "status reads the same key");
+
+        self.derived("broken", "derivation { name = ");
+        self.graph(self.entry("left") + "," + self.entry("broken"));
+        var failed = Check.exited(self.run(["run", "left", "broken", "--arg", "jobs=2"]), 1);
+        Check.that(failed.stdout().contains("0 passed, 1 skipped, 1 failed") && self.said(failed).contains("syntax error"), f"an expression that does not evaluate fails its node with nix's reason: {self.said(failed)}");
+    }
+
     public void close() { self.fixture.close(); }
 }
 
@@ -245,6 +286,7 @@ int main() {
         tests.together();
         tests.inheritedKey();
         tests.occupiedPort();
+        tests.derivations();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }

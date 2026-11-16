@@ -38,6 +38,7 @@ class VmOperationCatalog {
         kinds.push("host");
         kinds.push("workspace-file");
         kinds.push("nix-eval");
+        kinds.push("build-derivation");
         kinds.push("qmp");
         kinds.push("copy-workspace");
         kinds.push("configure-vm-host");
@@ -91,6 +92,18 @@ class VmTestRunner {
             Console.error(result.trimmed());
             self.fail(label + " output did not contain expected text: " + expect);
         }
+    }
+
+    // Builds the derivation the node is keyed on, so what ran is exactly what the key names. The log
+    // stays in the work directory; a failure shows its last lines.
+    public string derivationBuild(string options) {
+        var derivation = self.spec.args.getOrDefault("derivation", "");
+        var workDir = ShellWords.quote(self.spec.workDir);
+        var log = ShellWords.quote(PathTools.join(self.spec.workDir, "test.log"));
+        if (!derivation.startsWith("/nix/store/")) {  // it did not evaluate: say why
+            return f"mkdir -p {workDir} && nix-instantiate {self.spec.derivation} > {log} 2>&1; tail -80 {log}; exit 1";
+        }
+        return f"mkdir -p {workDir} && nix-store --realise {ShellWords.quote(derivation)} {options} > {log} 2>&1 || {{ tail -80 {log}; exit 1; }}";
     }
 
     public void runOperation(VmOperation op) {
@@ -221,6 +234,11 @@ class VmTestRunner {
         if (op.kind.equals("nix-eval")) {
             var result = self.vm.nixEval(op.command, op.timeout);
             self.assertResult("nix eval " + op.command, result, op.expect);
+            return;
+        }
+        if (op.kind == "build-derivation") {
+            var result = self.vm.host(self.derivationBuild(op.command), false, op.timeout);
+            self.assertResult("derivation build", result, op.expect);
             return;
         }
         if (op.kind.equals("qmp")) {

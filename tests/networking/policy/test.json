@@ -1,10 +1,16 @@
 {
   "name": "networking-policy",
   "state": "networking-policy",
-  "stateMaterial": "networking-policy:{{arch}}:source={{sourceHash}}",
+  "stateMaterial": "networking-policy:{{arch}}:drv={{derivation}}",
+  "derivation": "tests/networking/policy",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
-    { "op": "host", "command": "nix-build tests/networking/policy --no-out-link", "timeout": 300 },
-    { "op": "record-state" }
+    {
+      "op": "build-derivation",
+      "timeout": 300
+    },
+    {
+      "op": "record-state"
+    }
   ]
 }

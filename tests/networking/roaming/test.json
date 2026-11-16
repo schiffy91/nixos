@@ -1,14 +1,17 @@
 {
   "name": "networking-roaming",
   "state": "networking-roaming",
-  "stateMaterial": "networking-roaming:{{arch}}:source={{sourceHash}}",
+  "stateMaterial": "networking-roaming:{{arch}}:drv={{derivation}}",
+  "derivation": "tests/networking/roaming",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     {
-      "op": "host",
-      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/networking/roaming --no-out-link --cores 4 --max-jobs 2 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "op": "build-derivation",
+      "command": "--cores 4 --max-jobs 2",
       "timeout": 1800
     },
-    { "op": "record-state" }
+    {
+      "op": "record-state"
+    }
   ]
 }

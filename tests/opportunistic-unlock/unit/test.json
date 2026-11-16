@@ -1,14 +1,16 @@
 {
   "name": "opportunistic-unlock-policy",
   "state": "opportunistic-unlock-policy",
-  "stateMaterial": "opportunistic-unlock-policy:{{arch}}:source={{sourceHash}}",
+  "stateMaterial": "opportunistic-unlock-policy:{{arch}}:drv={{derivation}}",
+  "derivation": "tests/opportunistic-unlock/unit",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     {
-      "op": "host",
-      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/opportunistic-unlock/unit --no-out-link > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -100 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "op": "build-derivation",
       "timeout": 300
     },
-    { "op": "record-state" }
+    {
+      "op": "record-state"
+    }
   ]
 }

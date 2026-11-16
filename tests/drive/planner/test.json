@@ -1,14 +1,17 @@
 {
   "name": "drive-planner",
   "state": "drive-planner",
-  "stateMaterial": "drive-planner:{{arch}}:source={{sourceHash}}",
+  "stateMaterial": "drive-planner:{{arch}}:drv={{derivation}}",
+  "derivation": "tests/drive/planner",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     {
-      "op": "host",
-      "command": "mkdir -p '.vm/e2e/{{state}}-{{stateHashShort}}' && nix-build tests/drive/planner --no-out-link --cores 4 --max-jobs 2 > '.vm/e2e/{{state}}-{{stateHashShort}}/test.log' 2>&1 || { tail -80 '.vm/e2e/{{state}}-{{stateHashShort}}/test.log'; exit 1; }",
+      "op": "build-derivation",
+      "command": "--cores 4 --max-jobs 2",
       "timeout": 900
     },
-    { "op": "record-state" }
+    {
+      "op": "record-state"
+    }
   ]
 }
