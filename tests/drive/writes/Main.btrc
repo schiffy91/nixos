@@ -29,7 +29,7 @@ class WritesScenario {
         self.drive.put("root", "both.txt", "text");
         self.drive.put("root", "both2.txt", "text");
         self.drive.put("root", "gone.txt", "text");
-        for folder in ["Bulk", "Theirs", "Unbraked", "Whole"] {
+        for folder in ["Bulk", "Back", "Theirs", "Unbraked", "Whole"] {
             string id = self.drive.folder("root", folder);
             for (int number = 1; number <= 5; number++) { self.drive.put(id, f"b{number}.txt", "text"); }
         }
@@ -153,6 +153,21 @@ class WritesScenario {
         self.drive.drive("resume");
         self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py b5.txt | grep -c ' True$' | grep -q '^1$'");
         Check.that(self.trashedOnDrive("Bulk") == 5, "after the yes they all go");
+
+        print("A no brings back what was deleted here, folder and all, and nothing goes on the Drive");
+        self.machine.succeed(f"rm -r {self.mount}/Back");
+        self.machine.waitUntil("drive status --runtime /run/drive-test | grep -q 'deletions held'");
+        Check.that(self.drive.drive("held").contains("6 waiting"), "the folder and its five files are held");
+        string kept = self.drive.drive("keep");
+        if (!kept.contains("6 entries are coming back")) { print(self.machine.succeed("journalctl --no-pager -n 40 | grep -i -E 'drive|engine' | tail -25 || true")); }
+        Check.that(kept.contains("6 entries are coming back"), f"`drive keep` says what it did: {kept}");
+        self.machine.waitUntil(f"test \"$(ls {self.mount}/Back | wc -l)\" = 5 && cmp {self.mount}/Back/b3.txt {self.drive.source}/text", 60);
+        Check.that(self.trashedOnDrive("Back") == 0, "nothing was trashed on the Drive");
+        Check.that(self.drive.drive("held").contains("No deletions are waiting") && !self.drive.drive("status").contains("deletions held"), "and nothing is held any more");
+        Check.that(self.drive.drive("keep").contains("Nothing deleted here is waiting"), "a second no has nothing to do");
+        self.machine.succeed(f"echo more > {self.mount}/Back/new.txt");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/dump' | python3 /var/lib/drive-test/entries.py new.txt | grep -c ' False$' | grep -q '^1$'", 60);
+        Check.that(true, "and the folder that came back takes new files like any other");
 
         print("And on the Drive, however few changes it reports at a time");
         self.drive.control("page?size=2");  // the real feed comes in small pages; the batch is still one batch

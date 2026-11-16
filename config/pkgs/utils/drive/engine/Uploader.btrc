@@ -85,6 +85,52 @@ class Uploader {
         self.braked = false;
     }
 
+    // The no to deletions made here that the brake is holding: each entry comes back as the Drive has it, and
+    // nothing is trashed there. A folder comes back before what was in it. Returns how many came back.
+    public int putBack() {
+        if (!self.braked) { return 0; }
+        int back = 0;
+        Map<string, bool> pending = {};  // still in the trash: nothing can be made inside one of these yet
+        for id in self.removals { pending.put(id, true); }
+        bool moved = true;
+        while (moved && self.removals.len > 0) {
+            moved = false;
+            Vector<string> waiting = [];
+            for id in self.removals {
+                int outcome = 0;
+                try { outcome = self.returned(id, pending); } catch (string error) { Console.error(f"drive: {error}"); }
+                if (outcome == 0) {
+                    waiting.push(id);
+                    continue;
+                }
+                pending.remove(id);
+                moved = true;
+                if (outcome == 1) { back++; }
+            }
+            self.removals = waiting;
+        }
+        if (self.removals.len == 0) { self.braked = false; }
+        self.allowed = false;
+        self.remember();
+        return back;
+    }
+
+    // One held deletion undone: 1 when the entry is back, 2 when the Drive no longer has it, 0 when it must wait.
+    private int returned(string id, Map<string, bool> pending) {
+        DriveFile? remote = self.api.file(id);
+        if (remote == null && !self.missing()) { return 0; }  // the Drive could not be asked: it stays held
+        string kept = self.store.trashed(id);
+        if (remote == null || remote.trashed) {  // gone there as well: there is nothing to bring back
+            self.store.released(id, kept);
+            return 2;
+        }
+        if (pending.has(remote.parent)) { return 0; }  // its folder is one of these and comes first
+        string folder = self.store.folderPath(remote.parent);
+        if (folder.isEmpty() || !FileSystem.isDir(folder)) { return 0; }
+        self.store.released(id, kept);
+        return self.store.add(remote) ? 1 : 0;
+    }
+
     private void take(string line) {
         int space = line.indexOf(" ");
         if (space <= 0) { return; }

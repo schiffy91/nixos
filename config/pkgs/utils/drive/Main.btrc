@@ -290,7 +290,17 @@ class Drive {
         }
         Console.log(Drive.row("path", widest, "modified", "now modified", "size", "now size", "deleted"));
         for entry in entries { Console.log(Drive.row(entry.path, widest, entry.wasWhen(), entry.nowWhen(), entry.wasHolds(), entry.nowHolds(), entry.source.equals("here") ? "here" : "on the Drive")); }
-        Console.log(f"{entries.len} waiting; `drive resume` lets them through.");
+        Console.log(f"{entries.len} waiting; `drive resume` lets them through, `drive keep` puts back what was deleted here.");
+    }
+
+    // Put back what was deleted here and is waiting: the opposite of `drive resume` for those.
+    class void putBack(CLICommandLine options) {
+        string answer = Drive.asked(options, "keep", 600);
+        if (!answer.startsWith("ok ")) {
+            Console.log(answer.isEmpty() ? "The engine did not answer." : answer);
+            return;
+        }
+        Console.log(f"{answer.substring(3, answer.len() - 3)} entries are coming back from the Drive; nothing was deleted there.");
     }
 
     class string asked(CLICommandLine options, string message, int seconds) {
@@ -474,6 +484,7 @@ class Drive {
         else if (command.equals("progress")) { Drive.ask(options, "progress"); }  // the same, one fact to a line
         else if (command.equals("usage")) { Drive.usage(options); }
         else if (command.equals("resume")) { Drive.ask(options, "resume"); }
+        else if (command.equals("keep")) { Drive.putBack(options); }  // the no to held deletions made here: they come back
         else if (command.equals("held")) { Drive.held(options); }  // what the delete brake is holding
         else if (command.equals("pin") || command.equals("unpin") || command.equals("place")) { Drive.pin(options, command); }
         else if (command.equals("pins")) { Drive.ask(options, "pins"); }

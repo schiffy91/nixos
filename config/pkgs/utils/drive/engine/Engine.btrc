@@ -461,6 +461,12 @@ class Engine {
             self.due = 0LL;
             return "ok\n";
         }
+        if (words.len == 1 && words.get(0).equals("keep")) {  // the no: what was deleted here and is held comes back from the Drive
+            if (!self.uploader.braked) { return "Nothing deleted here is waiting.\n"; }
+            int back = self.uploader.putBack();
+            self.due = 0LL;
+            return f"ok {back}\n";
+        }
         if (words.len == 1 && words.get(0).equals("held")) {  // list what the brake holds, in a file: it can be long
             Vector<HeldEntry> entries = [];
             if (self.mirror.braked) { entries = self.mirror.heldEntries(); }
