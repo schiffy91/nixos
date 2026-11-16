@@ -24,13 +24,13 @@
     },
     {
       "op": "guest",
-      "command": "set -e; grep -q AAAAC3NzaC1lZDI1NTE5AAAAINJsoluI1m5T4iwuCbpSdHvLVdemN3v7wMrqk4e+XJA0 /etc/ssh/authorized_keys.d/root && printf keys-ok",
+      "command": "set -e; grep -q AAAAC3NzaC1lZDI1NTE5AAAAIAOOxJXmhrSalqwuZKRncqzBgSuWDXiOhvSlS8pLDeFI /etc/ssh/authorized_keys.d/root && printf keys-ok",
       "expect": "keys-ok",
       "timeout": 120
     },
     {
       "op": "guest",
-      "command": "set -e; test -f /etc/nixos/flake.nix; test -d /etc/nixos/btrc; systemctl is-active --quiet installer-repository; touch /etc/nixos/.w && rm /etc/nixos/.w && printf repo-ok",
+      "command": "set -e; test -f /etc/nixos/flake.nix; test -d /etc/nixos/config; systemctl is-active --quiet installer-repository; touch /etc/nixos/.w && rm /etc/nixos/.w && printf repo-ok",
       "expect": "repo-ok",
       "timeout": 120
     },

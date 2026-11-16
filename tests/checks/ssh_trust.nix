@@ -12,6 +12,8 @@ let
   sshdConfig = host: host.config.environment.etc."ssh/sshd_config.d/100-nix-darwin.conf".text;
   failures =
     lib.optional (lib.length reference != 1) "the admin trusts ${toString (lib.length reference)} SSH keys instead of the one in 1Password"
+    ++ lib.optional (!(lib.hasInfix (lib.elemAt (lib.splitString " " (lib.head reference)) 1) (builtins.readFile ../installer/image/test.json)))
+      "the installer image scenario looks for a root key that is not the trusted one"
     ++ lib.concatMap (host:
       lib.optional (trusted host != reference) "${host.name}: trusted SSH keys differ from the other hosts"
       ++ lib.optional (installed host != reference) "${host.name}: the admin account's authorized keys are not the declared ones") (linux ++ darwin)

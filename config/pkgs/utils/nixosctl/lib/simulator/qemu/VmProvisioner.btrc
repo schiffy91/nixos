@@ -112,6 +112,7 @@ class VmProvisioner {
             "  services.openssh.enable = lib.mkForce true;",
             "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";",
             "  services.openssh.settings.UseDns = lib.mkForce false;",
+            "  security.sudo.wheelNeedsPassword = lib.mkForce false;",  // as on the QEMU hosts: no terminal or agent to answer sudo
             f"  settings.users.admin.authorizedKeys = lib.mkForce [ \"{pubkey}\" ];",
             "  settings.users.admin.autoUnlockWallet.enabled = false;",
             "  settings.users.admin.homeManager.enable = false;",
