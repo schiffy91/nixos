@@ -3,7 +3,7 @@ NIX_BUILD ?= nix-build
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
 
-.PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-early graph-installer-ssh graph-full chain clean-vms
+.PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
 	@printf '%s\n' 'Run these from the repo root as `make <target>`; `make -C tests` also works.'
@@ -15,6 +15,7 @@ help:
 	@printf '%s\n' '  graph-full        the graph REQUIRED set, not every node'
 	@printf '%s\n' '  graph-list        list nodes        graph-status   per-node state freshness'
 	@printf '%s\n' '  graph-coverage    which spec operations the graph exercises'
+	@printf '%s\n' '  graph-gc          delete VM state no current node references (GC_ARGS=--dry-run lists it)'
 	@printf '%s\n' ''
 	@printf '%s\n' 'One scenario at a time:'
 	@printf '%s\n' '  app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host'
@@ -97,6 +98,10 @@ graph-status: build
 
 graph-coverage: build
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json coverage'
+
+# GC_ARGS=--dry-run only lists what would go
+graph-gc: build
+	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json gc $(GC_ARGS)'
 
 graph-early: build
 	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run'

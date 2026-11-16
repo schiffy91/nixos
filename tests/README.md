@@ -7,6 +7,13 @@ Scenario specs live under their domain: `installer/`, `immutability/`,
 `core/`, `gaming/` and the `*Tests.btrc` files hold the native unit suites.
 BTRC modules use PascalCase filenames matching their primary class.
 
+The graph runner holds `.vm/graph.lock` for a run, so a second run or a collection in the same
+workspace is refused. `graph status` ends each line with how long the node's last pass took.
+`make graph-gc` deletes the work directories under `.vm/e2e` that no node's current state names,
+after printing them; `GC_ARGS=--dry-run` only prints. A directory another state's disk is a delta of
+is kept. A spec step written `! command` is refused by the parser when nothing uses its status: write
+`if command; then exit 1; fi`. Every node that runs must end in `record-state`.
+
 Start with focused configuration checks and native suites before VM scenarios:
 
 ```sh

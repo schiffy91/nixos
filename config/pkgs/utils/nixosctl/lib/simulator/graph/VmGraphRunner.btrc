@@ -3,6 +3,7 @@ import Library.FileSystem;
 import Library.Graph;
 import Library.Map;
 import Library.Process;
+import Library.Set;
 import Library.Strings;
 import Library.Timer;
 import Library.Vector;
@@ -256,7 +257,86 @@ class VmGraphRunner {
         return result;
     }
 
+    public string lockPath() {
+        return PathTools.join(PathTools.join(self.graph.resolvedWorkspaceRoot(), ".vm"), "graph.lock");
+    }
+
+    // A run and a collection both change the VM state under the workspace, so one holds it at a time.
+    public AdvisoryFileLock hold(string purpose) {
+        FileSystem.mkdirp(PathTools.dirname(self.lockPath()));
+        var locked = AdvisoryFileLock.acquire(self.lockPath());
+        if (!locked.ok()) {
+            NixosLog.fatal(f"graph {self.graph.name}: cannot {purpose} while another graph run or collection holds {self.lockPath()}");
+        }
+        return locked.value();
+    }
+
+    // A work directory is named for its state and the first twelve digits of that state's hash.
+    public bool stateDirectoryName(string name) {
+        if (name.length < 14 || name[name.length - 13] != '-') { return false; }
+        for (int index = name.length - 12; index < name.length; index++) {
+            char digit = name[index];
+            if (!((digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f'))) { return false; }
+        }
+        return true;
+    }
+
+    // A work directory in use, and every directory its disk is a delta of.
+    private void retain(Set<string> kept, string workDir) {
+        var path = FileSystem.realPath(workDir);
+        while (!path.isEmpty() && !kept.has(path)) {
+            kept.add(path);
+            var backing = PathTools.join(path, "backing-disk");
+            if (!FileSystem.exists(backing)) { break; }
+            path = FileSystem.realPath(PathTools.dirname(Path.readAll(backing).trim()));
+        }
+    }
+
+    private bool vmAlive(string workDir) {
+        var pidFile = PathTools.join(workDir, "vm.pid");
+        if (!FileSystem.exists(pidFile)) { return false; }
+        var pid = Path.readAll(pidFile).trim();
+        return !pid.isEmpty() && FileSystem.exists(f"/proc/{pid}");
+    }
+
+    // Deletes the work directories under the workspace's .vm that no node's current state names,
+    // after printing them. Each run with changed inputs leaves the directories of the states it replaced.
+    public int collect(bool dryRun) {
+        var lock = self.hold("collect state");
+        var boundary = FileSystem.realPath(PathTools.join(self.graph.resolvedWorkspaceRoot(), ".vm"));
+        Set<string> kept = {};
+        Vector<string> roots = [];
+        for node in self.graph.nodes {
+            var spec = self.specFor(node);
+            self.retain(kept, spec.workDir);
+            var root = FileSystem.realPath(PathTools.dirname(spec.workDir));
+            if (root.isEmpty() || boundary.isEmpty() || !(root == boundary || root.startsWith(boundary + "/"))) { continue; }
+            if (!roots.contains(root)) { roots.push(root); }
+        }
+        Vector<string> unreferenced = [];
+        for root in roots {
+            for name in FileSystem.listDir(root).sorted() {
+                var path = PathTools.join(root, name);
+                if (!self.stateDirectoryName(name) || FileSystem.isSymlink(path) || !FileSystem.isDir(path) || kept.has(path)) { continue; }
+                if (self.vmAlive(path)) { NixosLog.info(f"graph {self.graph.name}: left {path}: its VM is still running"); continue; }
+                unreferenced.push(path);
+            }
+        }
+        for path in unreferenced { Console.log(path); }
+        if (dryRun) {
+            Console.log(f"graph gc: {unreferenced.length} state directories that no current node references; nothing deleted");
+            return 0;
+        }
+        int failed = 0;
+        for path in unreferenced {
+            if (VmFiles.remove(path) != 0 || FileSystem.exists(path)) { failed++; NixosLog.error(f"could not delete {path}"); }
+        }
+        Console.log(f"graph gc: deleted {unreferenced.length - failed} state directories that no current node references");
+        return failed == 0 ? 0 : 1;
+    }
+
     public int run(Vector<string> targets) {
+        var lock = self.hold("run");
         var traversal = GraphTraversal(self.graph);
         var asked = targets.isEmpty() ? self.hostDefaultTargets() : self.resolveHostTargets(targets);
         for id in asked {

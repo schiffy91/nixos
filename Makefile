@@ -61,7 +61,7 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 	aarch64-qemu-host installer-download download install-system \
 	immutability-reset immutability-key-encoding installer-ssh password-change \
 	tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote \
-	graph-list graph-status graph-coverage graph-installer-ssh chain clean-vms
+	graph-list graph-status graph-coverage graph-gc graph-installer-ssh chain clean-vms
 
 .PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
 	check test gaming hdr-screencast install iso iso-write graph-required \

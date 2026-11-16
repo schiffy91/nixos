@@ -112,7 +112,7 @@ class E2eCli {
 
     public int runGraph(CLIArgs args) {
         if (args.count() < 3) {
-            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required> [node ...] [--arg key=value]");
+            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required|gc> [node ...] [--arg key=value] [--dry-run]");
         }
         var graph = GraphParser.readFile(args.get(1));
         var action = args.get(2);
@@ -142,7 +142,11 @@ class E2eCli {
             var code = runner.runRequired();
             return code;
         }
-        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required> [node ...] [--arg key=value]");
+        if (action.equals("gc")) {
+            var code = runner.collect(CLICommandLine.parse(args).has("--dry-run"));
+            return code;
+        }
+        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required|gc> [node ...] [--arg key=value] [--dry-run]");
         return 1;
     }
 

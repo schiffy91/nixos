@@ -1,8 +1,9 @@
 import Library.CLI;
 import Library.Platform;
+import ../../lib/OwnedProcess.btrc;
 import ../../lib/TestDirectory.btrc;
 
-// What the graph runner keeps and reports beyond pass or fail.
+// What the graph runner keeps, reports and clears beyond pass or fail.
 class GraphRunnerTests {
     private TestDirectory fixture;
     private string root;
@@ -12,20 +13,32 @@ class GraphRunnerTests {
         Check.that(FileSystem.mkdirp(self.fixture.path(".vm")) == 0, "create state directory");
     }
 
-    private void node(string name, string command) {
-        var spec = JSONValue.parse(f"{{\"name\":\"{name}\",\"state\":\"{name}\",\"stateMaterial\":\"{name}:{{{{sourceHash}}}}\",\"operations\":[]}}");
+    // A node keyed on the workspace's sources, or, with a parent, on its parent's state alone.
+    private void node(string name, string command, string parent = "") {
+        var material = parent.isEmpty() ? f"{name}:{{{{sourceHash}}}}" : name;
+        var spec = JSONValue.parse(f"{{\"name\":\"{name}\",\"state\":\"{name}\",\"operations\":[]}}");
+        spec.set("stateMaterial", JSONValue.makeString(material));
         spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
         spec.set("workDir", JSONValue.makeString(self.fixture.path(f".vm/{name}-{{{{stateHashShort}}}}")));
+        if (!parent.isEmpty()) { spec.set("parentState", JSONValue.makeString(parent)); }
         var host = JSONValue.parse("{\"op\":\"host\"}");
         host.set("command", JSONValue.makeString(command));
         spec.get("operations").push(host); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
         self.fixture.json(f"{name}.json", spec);
     }
 
-    private ExecResult run(Vector<string> arguments) {
+    private void graph(string nodes) {
+        self.fixture.write("graph.json", "{\"name\":\"graph-runner\",\"workspaceRoot\":\".\",\"nodes\":[" + nodes + "]}");
+    }
+
+    private Vector<string> command(Vector<string> arguments) {
         Vector<string> command = ["graph", self.fixture.path("graph.json")];
         for argument in arguments { command.push(argument); }
-        return ChildProcess.run(PathTools.join(self.root, "build/nixosctl"), command, cwd=self.fixture.path(), environment=[f"NIXOS_CONFIG_ROOT={self.root}"], timeoutMilliseconds=60000);
+        return command;
+    }
+
+    private ExecResult run(Vector<string> arguments) {
+        return ChildProcess.run(PathTools.join(self.root, "build/nixosctl"), self.command(arguments), cwd=self.fixture.path(), environment=[f"NIXOS_CONFIG_ROOT={self.root}"], timeoutMilliseconds=60000);
     }
 
     private string said(ExecResult result) { return result.stdout() + result.stderr(); }
@@ -42,7 +55,7 @@ class GraphRunnerTests {
 
     public void durations() {
         self.node("slow", "sleep 2"); self.node("fast", "true");
-        self.fixture.write("graph.json", "{\"name\":\"graph-runner\",\"workspaceRoot\":\".\",\"nodes\":[{\"id\":\"slow\",\"spec\":\"slow.json\"},{\"id\":\"fast\",\"spec\":\"fast.json\"}]}");
+        self.graph("{\"id\":\"slow\",\"spec\":\"slow.json\"},{\"id\":\"fast\",\"spec\":\"fast.json\"}");
         Check.equal(self.duration("slow"), "-", "a node that has not passed has no duration");
         var first = Check.exited(self.run(["run", "slow", "fast"]));
         Check.that(self.said(first).contains("pass slow in "), "the run says how long a node took");
@@ -54,13 +67,91 @@ class GraphRunnerTests {
         Check.that(fast == "0s" || fast == "1s", f"the fast node took no time: {fast}");
         Check.exited(self.run(["run", "slow", "fast"]));
         Check.equal(self.duration("slow"), slow, "a skipped node keeps the duration of its last pass");
-        self.fixture.close();
     }
+
+    // The work directories under .vm, by name.
+    private Vector<string> workDirs() {
+        Vector<string> found = [];
+        for name in FileSystem.listDir(self.fixture.path(".vm")).sorted() {
+            if (name.startsWith("base-") || name.startsWith("delta-")) { found.push(name); }
+        }
+        return found;
+    }
+
+    private string recorded(string state) { return Path.readAll(self.fixture.path(f".vm/chain/{state}/workDir")).trim(); }
+
+    private void base(string marker) {
+        self.node("base", f"mkdir -p {{{{workDirShell}}}} && printf 'base\\n' >> {ShellWords.quote(self.fixture.path(marker))}");
+    }
+
+    public void collection() {
+        var executions = self.fixture.path(".vm/executions");
+        self.base(".vm/executions");
+        // The delta's disk is recorded as backed by the base's, the way inherit-state records it.
+        self.node("delta", f"mkdir -p {{{{workDirShell}}}} && printf '%s/disk.qcow2\\n' \"$(cat {ShellWords.quote(self.fixture.path(".vm/chain/base/workDir"))})\" > {{{{workDirShell}}}}/backing-disk && printf 'delta\\n' >> {ShellWords.quote(executions)}", "base");
+        self.graph("{\"id\":\"base\",\"spec\":\"base.json\"},{\"id\":\"delta\",\"spec\":\"delta.json\",\"after\":[\"base\"]}");
+        self.fixture.write(".vm/iso/installer.iso", "an image, not a state\n");
+        self.fixture.write("Source.btrc", "int revision = 1;\n");
+
+        Check.exited(self.run(["run", "delta"]));
+        var first = self.workDirs();
+        Check.that(first.length == 2, f"a base and a delta directory: {first.join(" ")}");
+        Check.that(self.said(Check.exited(self.run(["gc"]))).contains("deleted 0 state directories"), "nothing to collect while every directory is current");
+        Check.equal(self.workDirs().join(" "), first.join(" "), "current directories are kept");
+
+        self.fixture.write("Source.btrc", "int revision = 2;\n");
+        Check.exited(self.run(["run", "delta"]));
+        Check.that(self.workDirs().length == 4, "a changed source leaves the replaced directories behind");
+        var listed = Check.exited(self.run(["gc", "--dry-run"]));
+        for name in first { Check.that(listed.stdout().contains(self.fixture.path(f".vm/{name}") + "\n"), f"the listing names {name}"); }
+        Check.that(listed.stdout().contains("2 state directories that no current node references; nothing deleted"), "a dry run counts and deletes nothing");
+        Check.that(self.workDirs().length == 4, "a dry run deletes nothing");
+
+        Check.that(self.said(Check.exited(self.run(["gc"]))).contains("deleted 2 state directories"), "the replaced directories are collected");
+        var current = self.workDirs();
+        Check.that(current.length == 2 && !current.contains(first.get(0)) && !current.contains(first.get(1)), "only the current directories are left");
+        Check.that(FileSystem.exists(self.fixture.path(".vm/iso/installer.iso")), "what is not a state directory is left alone");
+        Check.exited(self.run(["run", "delta"]));
+        Check.equal(Path.readAll(executions), "base\ndelta\nbase\ndelta\n", "collection leaves the current states ready");
+
+        // The base's inputs change and it is not run again: no node's current state names its
+        // directory any more, but the delta's disk is still a delta of it.
+        var backing = self.recorded("base");
+        self.base(".vm/other-executions");
+        var retained = self.said(Check.exited(self.run(["gc"])));
+        Check.that(retained.contains("deleted 0 state directories"), f"a directory another disk is backed by is kept: {retained}");
+        Check.that(FileSystem.isDir(backing), "the backing directory is still there");
+        Check.that(FileSystem.removeIfExists(PathTools.join(self.recorded("delta"), "backing-disk")), "drop the backing record");
+        Check.that(self.said(Check.exited(self.run(["gc"]))).contains("deleted 1 state directories"), "without the backing record it is collected");
+        Check.that(!FileSystem.exists(backing), "the stale directory is gone");
+    }
+
+    public void oneAtATime() {
+        self.node("held", "sleep 4");
+        self.graph("{\"id\":\"held\",\"spec\":\"held.json\"}");
+        var running = OwnedProcess(PathTools.join(self.root, "build/nixosctl"), self.command(["run", "held"]), self.fixture.path("held.log"), self.fixture.path(), [f"NIXOS_CONFIG_ROOT={self.root}"]);
+        try {
+            var deadline = MonotonicClock.deadlineAfter(3000);
+            while (!Path.readAll(self.fixture.path("held.log")).contains("run held") && MonotonicClock.before(deadline)) { Timer.sleepMillis(50); }
+            for action in ["gc", "run"] {
+                var refused = self.run([action, "held"]);
+                Check.that(refused.code != 0 && self.said(refused).contains("while another graph run or collection holds"), f"{action} is refused while a run holds the workspace: {self.said(refused)}");
+            }
+            Check.that(running.wait(MonotonicClock.deadlineAfter(20000)) == 0, "the run that held the workspace passes");
+        } finally { running.close(); }
+        Check.exited(self.run(["gc"]));
+    }
+
+    public void close() { self.fixture.close(); }
 }
 
 int main() {
     try {
-        GraphRunnerTests(Platform.currentDirectory()).durations();
-        print("PASS: the graph keeps how long each node took"); return 0;
+        var tests = GraphRunnerTests(Platform.currentDirectory());
+        tests.durations();
+        tests.collection();
+        tests.oneAtATime();
+        tests.close();
+        print("PASS: the graph keeps each node's duration, collects only unreferenced state, and runs one at a time"); return 0;
     } catch (string error) { print(error); return 1; }
 }

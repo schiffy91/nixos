@@ -8,7 +8,7 @@
       "op": "host",
       "command": "make build/graph-runner-test && ./build/graph-runner-test",
       "timeout": 180,
-      "expect": "PASS: the graph keeps how long each node took"
+      "expect": "PASS: the graph keeps each node's duration, collects only unreferenced state, and runs one at a time"
     },
     { "op": "record-state" }
   ]
