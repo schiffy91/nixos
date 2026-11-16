@@ -2,4 +2,8 @@ class ProcessProbe {
     class int readInputByte() { return testReadInputByte(); }
     class bool inputRemainsOpen(int milliseconds) { return testInputRemainsOpen(milliseconds) != 0; }
     class bool exists(int pid) { return testProcessExists(pid) != 0; }
+    class void ignoreBrokenPipe() { testIgnoreBrokenPipe(); }
+    class int openPrivateDescriptor() { return testOpenPrivateDescriptor(); }
+    class void closeDescriptor(int descriptor) { testCloseDescriptor(descriptor); }
+    class bool descriptorClosed(int descriptor) { return testDescriptorClosed(descriptor) != 0; }
 }

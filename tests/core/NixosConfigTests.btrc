@@ -1,14 +1,13 @@
-#include <assert.h>
-
 import Library.FileSystem;
+import Library.Testing;
 
 import ../../config/pkgs/utils/nixosctl/lib/NixosConfig.btrc;
 import ../../config/pkgs/utils/nixosctl/lib/Installer.btrc;
 import ../../config/pkgs/utils/nixosctl/lib/PasswordManager.btrc;
 
 void expectHost(string hostPath, string host, string architecture) {
-    assert(NixosConfig.hostOf(hostPath).equals(host));
-    assert(NixosConfig.architectureOf(hostPath).equals(architecture));
+    Expect.strEq(NixosConfig.hostOf(hostPath), host);
+    Expect.strEq(NixosConfig.architectureOf(hostPath), architecture);
 }
 
 int main() {
@@ -28,45 +27,39 @@ int main() {
     expectHost("nix/hosts/x86_64/FRACTAL-NORTH/FRACTAL-NORTH.nix", "FRACTAL-NORTH", "x86_64");
 
     /* locked and malformed shadow entries must never match a password */
-    assert(PasswordManager.hashUsable("$6$salt$hash"));
-    assert(PasswordManager.hashUsable("$y$j9T$salt$hash"));
+    Expect.isTrue(PasswordManager.hashUsable("$6$salt$hash"));
+    Expect.isTrue(PasswordManager.hashUsable("$y$j9T$salt$hash"));
     for locked in ["!", "*", "", "!!", "!$6$salt$hash", "x", "6$salt$hash"] {
-        assert(!PasswordManager.hashUsable(locked));
-        assert(!PasswordManager.verifyHash(locked, "testpass123"));
+        Expect.isFalse(PasswordManager.hashUsable(locked));
+        Expect.isFalse(PasswordManager.verifyHash(locked, "testpass123"));
     }
     var knownHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";
-    assert(PasswordManager.verifyHash(knownHash, "testpass123"));
-    assert(!PasswordManager.verifyHash(knownHash, "wrongpass"));
-    assert(!PasswordManager.verifyHash(knownHash, ""));
+    Expect.isTrue(PasswordManager.verifyHash(knownHash, "testpass123"));
+    Expect.isFalse(PasswordManager.verifyHash(knownHash, "wrongpass"));
+    Expect.isFalse(PasswordManager.verifyHash(knownHash, ""));
 
-    var hostsRoot = "/tmp/nixosctl-naming-test";
-    FileSystem.removeRecursive(hostsRoot);
-    FileSystem.mkdirp(f"{hostsRoot}/x86_64/QEMU");
-    FileSystem.writeText(f"{hostsRoot}/x86_64/QEMU/QEMU.nix", "{}");
-    FileSystem.mkdirp(f"{hostsRoot}/aarch64/QEMU");
-    FileSystem.writeText(f"{hostsRoot}/aarch64/QEMU/QEMU.nix", "{}");
-    FileSystem.writeText(f"{hostsRoot}/x86_64/FRACTAL-NORTH.nix", "{}");
+    var firstTree = TestDir("nixosctl-naming-");
+    firstTree.writeFile("x86_64/QEMU/QEMU.nix", "{}");
+    firstTree.writeFile("aarch64/QEMU/QEMU.nix", "{}");
+    firstTree.writeFile("x86_64/FRACTAL-NORTH.nix", "{}");
+    Expect.strEq(NixosConfig.outputNameOf(firstTree.path, firstTree.join("x86_64/QEMU/QEMU.nix")), "QEMU-x86_64");
+    Expect.strEq(NixosConfig.outputNameOf(firstTree.path, firstTree.join("aarch64/QEMU/QEMU.nix")), "QEMU-aarch64");
+    Expect.strEq(NixosConfig.outputNameOf(firstTree.path, firstTree.join("x86_64/FRACTAL-NORTH.nix")), "FRACTAL-NORTH");
 
-    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/x86_64/QEMU/QEMU.nix").equals("QEMU-x86_64"));
-    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/aarch64/QEMU/QEMU.nix").equals("QEMU-aarch64"));
-    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/x86_64/FRACTAL-NORTH.nix").equals("FRACTAL-NORTH"));
-    FileSystem.removeRecursive(hostsRoot);
-    FileSystem.mkdirp(f"{hostsRoot}/x86_64/QEMU");
-    FileSystem.mkdirp(f"{hostsRoot}/aarch64/QEMU");
-    FileSystem.writeText(f"{hostsRoot}/x86_64/QEMU/default.nix", "{}");
-    FileSystem.writeText(f"{hostsRoot}/aarch64/QEMU/default.nix", "{}");
-    assert(NixosConfig.outputNameOf(hostsRoot, "nix/hosts/x86_64/QEMU/QEMU.nix").equals("QEMU-x86_64"));
-    assert(NixosConfig.outputNameOf(hostsRoot, f"{hostsRoot}/aarch64/QEMU/default.nix").equals("QEMU-aarch64"));
-    FileSystem.removeRecursive(hostsRoot);
+    var defaultTree = TestDir("nixosctl-default-naming-");
+    defaultTree.writeFile("x86_64/QEMU/default.nix", "{}");
+    defaultTree.writeFile("aarch64/QEMU/default.nix", "{}");
+    Expect.strEq(NixosConfig.outputNameOf(defaultTree.path, "nix/hosts/x86_64/QEMU/QEMU.nix"), "QEMU-x86_64");
+    Expect.strEq(NixosConfig.outputNameOf(defaultTree.path, defaultTree.join("aarch64/QEMU/default.nix")), "QEMU-aarch64");
 
-    assert(Installer.memoryGigabytesIn("MemTotal:       16316884 kB\nSwapTotal: 0 kB") == 15);
-    assert(Installer.memoryGigabytesIn("MemTotal:      131726068 kB") == 125);
-    assert(Installer.memoryGigabytesIn("MemFree: 123 kB") == 0);
-    assert(Installer.memoryGigabytesIn("") == 0);
-    assert(Installer.jobsForMemory(15) == 1);
-    assert(Installer.jobsForMemory(0) == 1);
-    assert(Installer.jobsForMemory(125) == 15);
-    assert(Installer.jobsForMemory(64) == 8);
+    Expect.intEq(Installer.memoryGigabytesIn("MemTotal:       16316884 kB\nSwapTotal: 0 kB"), 15);
+    Expect.intEq(Installer.memoryGigabytesIn("MemTotal:      131726068 kB"), 125);
+    Expect.intEq(Installer.memoryGigabytesIn("MemFree: 123 kB"), 0);
+    Expect.intEq(Installer.memoryGigabytesIn(""), 0);
+    Expect.intEq(Installer.jobsForMemory(15), 1);
+    Expect.intEq(Installer.jobsForMemory(0), 1);
+    Expect.intEq(Installer.jobsForMemory(125), 15);
+    Expect.intEq(Installer.jobsForMemory(64), 8);
 
     print("PASS: host/arch derivation from host paths, locked shadow entries rejected, install jobs bounded by RAM");
     return 0;

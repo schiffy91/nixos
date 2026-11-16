@@ -1,38 +1,39 @@
+import Library.Testing;
 import proton.Capture;
-#include <assert.h>
 
 int main() {
     var options = ProtonOptions(["launch", "--seconds", "3", "--env", "VALUE=a=b", "--env", "OTHER=two words"]);
-    assert(options.number("--seconds", 0) == 3 && options.environment.len == 2);
-    assert(options.environment.get(0).equals("VALUE=a=b"));
+    Expect.intEq(options.number("--seconds", 0), 3);
+    Expect.intEq(options.environment.length, 2);
+    Expect.strEq(options.environment.get(0), "VALUE=a=b");
     var inlineOptions = ProtonOptions(["launch", "--seconds=3", "--env=VALUE=a=b"]);
-    assert(inlineOptions.number("--seconds", 0) == 3 && inlineOptions.environment.get(0).equals("VALUE=a=b"));
-    bool failed = false;
-    try { var missing = ProtonOptions(["launch", "--seconds"]); } catch (string error) { failed = true; }
-    assert(failed);
+    Expect.intEq(inlineOptions.number("--seconds", 0), 3);
+    Expect.strEq(inlineOptions.environment.get(0), "VALUE=a=b");
+    Expect.throws(() => { var missing = ProtonOptions(["launch", "--seconds"]); });
     var environment = ["FIRST=old", "SECOND=kept"];
     ProtonRuntime.set(environment, "FIRST", "new=value");
-    assert(environment.len == 2 && ProtonRuntime.value(environment, "FIRST").equals("new=value"));
+    Expect.intEq(environment.length, 2);
+    Expect.strEq(ProtonRuntime.value(environment, "FIRST"), "new=value");
     var bytes = Bytes.fromString("ONE=one"); bytes.append(0); bytes.appendBytes(Bytes.fromString("TWO=two words")); bytes.append(0);
-    assert(ProtonRuntime.environmentEntries(bytes).len == 2);
+    Expect.intEq(ProtonRuntime.environmentEntries(bytes).length, 2);
     // procfs reports size zero even though environ contains NUL-separated data.
     var current = ProtonRuntime.environmentEntries(ProtonRuntime.procBytes(f"/proc/{Platform.pid()}/environ"));
-    assert(current.len > 0);
-    assert(ProtonRuntime.value(current, "PATH").equals(Environment.get("PATH", "")));
-    assert(ProtonRuntime.procBytes("/proc/no-such-process/environ").length() == 0);
-    assert(ProtonRuntime.logDestination("/tmp/launch.wrapper.log").equals("/tmp/launch.proton.log"));
-    assert(ProtonRuntime.logDestination("/tmp/smoke.log").equals("/tmp/smoke.proton.log"));
+    Expect.isTrue(current.length > 0);
+    Expect.strEq(ProtonRuntime.value(current, "PATH"), Environment.get("PATH", ""));
+    Expect.intEq(ProtonRuntime.procBytes("/proc/no-such-process/environ").length, 0);
+    Expect.strEq(ProtonRuntime.logDestination("/tmp/launch.wrapper.log"), "/tmp/launch.proton.log");
+    Expect.strEq(ProtonRuntime.logDestination("/tmp/smoke.log"), "/tmp/smoke.proton.log");
     var artifacts = ProtonWine.artifacts(ProtonWine.targets());
-    assert(artifacts.len == 12);
-    assert(artifacts.get(0).relative.equals("x86_64-unix/ntdll.so"));
-    assert(ProtonWine.artifacts(["dlls/winewayland.drv/all"]).get(1).buildRelative.equals("dlls/winewayland.drv/x86_64-windows/winewayland.drv"));
-    failed = false; try { ProtonWine.artifacts(["unknown/all"]); } catch (string error) { failed = true; } assert(failed);
+    Expect.intEq(artifacts.length, 12);
+    Expect.strEq(artifacts.get(0).relative, "x86_64-unix/ntdll.so");
+    Expect.strEq(ProtonWine.artifacts(["dlls/winewayland.drv/all"]).get(1).buildRelative, "dlls/winewayland.drv/x86_64-windows/winewayland.drv");
+    Expect.throws(() => { ProtonWine.artifacts(["unknown/all"]); });
     var window = ProtonCapture.geometry("Position: -10.2,20.8\nGeometry: 800x600\n");
-    assert(window.x == -10 && window.y == 21 && window.width == 800 && window.height == 600);
+    Expect.isTrue(window.x == -10 && window.y == 21 && window.width == 800 && window.height == 600);
     var screen = ProtonCapture.screen("Output: 1\n enabled\n Geometry: 1920,0 800x600\nOutput: 2\n enabled\n Geometry: 0,0 1920x1080\n");
-    assert(screen.width == 1920 && screen.height == 1080);
-    assert(ProtonCapture.points("battle-net").len == 11 && ProtonCapture.points("chat").len == 8);
-    assert(ProtonContext.quote("a'b").equals("'a'\\''b'"));
+    Expect.isTrue(screen.width == 1920 && screen.height == 1080);
+    Expect.isTrue(ProtonCapture.points("battle-net").length == 11 && ProtonCapture.points("chat").length == 8);
+    Expect.strEq(ProtonContext.quote("a'b"), "'a'\\''b'");
     print("PASS: Proton options, environment, log paths, artifact mapping, geometry and capture profiles");
     return 0;
 }

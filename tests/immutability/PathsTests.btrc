@@ -1,15 +1,12 @@
-#include <assert.h>
-#include <string.h>
-
-import Library.IO;
+import Library.Testing;
 import ../../config/system/storage/immutability/src/lib/ImmutabilityConfig.btrc;
 import ../../config/system/storage/immutability/src/lib/ImmutabilityPaths.btrc;
 
 void expectKey(string path, string key) {
     var actual = ImmutabilityPaths.key(path);
-    assert(strcmp(actual, key) == 0);
-    assert(strcmp(ImmutabilityPaths.pathFromKey(actual), path) == 0);
-    assert(strcmp(ImmutabilityPaths.normAbs(path).path, path) == 0);
+    Expect.strEq(actual, key);
+    Expect.strEq(ImmutabilityPaths.pathFromKey(actual), path);
+    Expect.strEq(ImmutabilityPaths.normAbs(path).path, path);
 }
 
 int main() {
@@ -23,9 +20,9 @@ int main() {
     expectKey("/home/alex/name with spaces", "home!alex!name%20with%20spaces");
     expectKey("/home/alex/tab\tname", "home!alex!tab%09name");
     expectKey("/home/alex/new\nline", "home!alex!new%0Aline");
-    var specFile = "/tmp/immutability_paths_spec.toml";
-    Path.writeAll(
-        specFile,
+    var workspace = TestDir("immutability-paths-");
+    var specFile = workspace.writeFile(
+        "spec.toml",
         "[[keep]]\n" +
         "kind = \"auto\"\n" +
         "mountPoint = \"/\"\n" +
@@ -39,9 +36,9 @@ int main() {
         "volume = \"@root\"\n"
     );
     var specs = ImmutabilityConfig.readSpecs(specFile);
-    assert(specs.len == 2);
-    assert(strcmp(specs.get(0).absPath, "/opt/foo\"quote") == 0);
-    assert(strcmp(specs.get(1).absPath, "/opt/foo\\backslash") == 0);
+    Expect.intEq(specs.length, 2);
+    Expect.strEq(specs.get(0).absPath, "/opt/foo\"quote");
+    Expect.strEq(specs.get(1).absPath, "/opt/foo\\backslash");
 
     print("PASS: immutability_paths");
     return 0;

@@ -5,7 +5,7 @@ let
     name = "recovery-mount-tests";
     src = pkgs.lib.fileset.toSource {
       root = ../..;
-      fileset = pkgs.lib.fileset.unions [ ../../config/system/nixos/recovery/Main.btrc ../../config/system/nixos/recovery/Mount.btrc ../lib ./MountTests.btrc ./Driver.btrc ./MountFixture.btrc ./MountIntegration.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../../config/system/nixos/recovery/Main.btrc ../../config/system/nixos/recovery/Mount.btrc ../../config/system/nixos/recovery/Artifacts.btrc ../../config/system/nixos/recovery/signals.h ../../config/system/nixos/recovery/btrc.toml ../../config/system/nixos/recovery/btrc.lock ../lib ./btrc.toml ./btrc.lock ./MountTests.btrc ./Driver.btrc ./MountFixture.btrc ./MountIntegration.btrc ];
     };
     programs = {
       recovery-mount-tests = "tests/recovery/MountTests.btrc";

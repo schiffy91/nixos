@@ -1,6 +1,7 @@
 #ifndef NIXOS_TEST_PROCESS_PROBE_H
 #define NIXOS_TEST_PROCESS_PROBE_H
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <unistd.h>
@@ -20,5 +21,21 @@ static inline int testInputRemainsOpen(int milliseconds) {
 
 static inline int testProcessExists(int pid) {
     return kill((pid_t)pid, 0) == 0 || errno != ESRCH;
+}
+
+static inline void testIgnoreBrokenPipe(void) {
+    signal(SIGPIPE, SIG_IGN);
+}
+
+static inline int testOpenPrivateDescriptor(void) {
+    return open("/dev/null", O_RDONLY);
+}
+
+static inline void testCloseDescriptor(int descriptor) {
+    if (descriptor >= 0) close(descriptor);
+}
+
+static inline int testDescriptorClosed(int descriptor) {
+    return fcntl(descriptor, F_GETFD, 0) < 0 && errno == EBADF;
 }
 #endif

@@ -7,7 +7,7 @@ in import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
   name = "recovery-artifact-contracts";
   src = pkgs.lib.fileset.toSource {
     root = ../../..;
-    fileset = pkgs.lib.fileset.unions [ ./ArtifactsTests.btrc ../../../config/system/nixos/recovery/Artifacts.btrc ];
+    fileset = pkgs.lib.fileset.unions [ ./ArtifactsTests.btrc ./btrc.toml ./btrc.lock ../../../config/system/nixos/recovery/Artifacts.btrc ../../../config/system/nixos/recovery/Mount.btrc ../../../config/system/nixos/recovery/signals.h ../../../config/system/nixos/recovery/btrc.toml ../../../config/system/nixos/recovery/btrc.lock ];
   };
   programs.recovery-artifact-tests = "tests/recovery/artifacts/ArtifactsTests.btrc";
   nativeBuildInputs = [ pkgs.coreutils pkgs.util-linux pkgs.sbsigntool pkgs.openssl ];

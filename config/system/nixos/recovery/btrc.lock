@@ -1,0 +1,1 @@
+{"manifest-hash":"bf18aa66652ae8a57b332a986772bcec32c1770f085de8853f616d0055c5ac98","packages":[{"dependencies":{},"manifest-hash":"3abca152650f6b68863f3b5ea0ece2c9239b984498039b4ae39945c3882a79fb","name":"nixos_recovery","source":{"path":"."}}],"root":"nixos_recovery","schema":3}

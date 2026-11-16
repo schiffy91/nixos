@@ -8,7 +8,7 @@ class TLSConnection {
     public TLSConnection(TestTLSConnection connection) { self.connection = connection; }
     public HTTPRequest? request() {
         var bytes = Bytes();
-        while (bytes.length() < 65536) {
+        while (bytes.length < 65536) {
             if (testTLSRead(self.connection) <= 0) { return null; }
             var chunk = testTLSBytes(self.connection);
             if (chunk == null) { throw "Cannot copy TLS bytes"; }
@@ -17,7 +17,7 @@ class TLSConnection {
             if (end < 0) { continue; }
             var length = HTTPFraming.contentLength(bytes.slice(0, end).toStringLossy());
             Check.that(length >= 0 && length <= 32768, "bounded fixture HTTP request");
-            if (bytes.length() < end + 4 + length) { continue; }
+            if (bytes.length < end + 4 + length) { continue; }
             var request = HTTPServer(0).parseBytes(bytes);
             Check.that(request.valid, "valid fixture HTTP request");
             return request;
@@ -25,10 +25,10 @@ class TLSConnection {
         throw "Fixture HTTP headers exceeded limit";
     }
     public void respond(int status, string body) {
-        var bytes = Bytes.fromString(f"HTTP/1.1 {status} Fixture\r\nContent-Length: {Bytes.fromString(body).length()}\r\nConnection: close\r\n\r\n{body}");
+        var bytes = Bytes.fromString(f"HTTP/1.1 {status} Fixture\r\nContent-Length: {Bytes.fromString(body).length}\r\nConnection: close\r\n\r\n{body}");
         var offset = 0;
-        while (offset < bytes.length()) {
-            var count = testTLSWrite(self.connection, bytes.data, bytes.length(), offset);
+        while (offset < bytes.length) {
+            var count = testTLSWrite(self.connection, bytes.slice(offset, bytes.length).toHex());
             if (count <= 0) { return; } // Client may deliberately reject the response.
             offset += count;
         }

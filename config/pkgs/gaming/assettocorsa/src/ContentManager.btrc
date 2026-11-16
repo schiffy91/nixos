@@ -8,13 +8,29 @@ import ./AssettoMods.btrc;
 class ContentManager {
     // Values.data v2 is plain UTF-8, LZF (0x0b), or raw DEFLATE (0x00).
     class string decode(Bytes bytes) {
-        if (bytes.length() == 0) { throw "Empty Content Manager settings"; }
+        if (bytes.length == 0) { throw "Empty Content Manager settings"; }
         if (bytes.get(0) != 0 && bytes.get(0) != 11) { return bytes.toString(); }
-        var decoded = contentSettingsDecode(bytes.data, bytes.length());
+        var decoded = contentSettingsDecodeHex(bytes.toHex());
         if (decoded == null) { throw "Invalid or oversized compressed Content Manager settings"; }
         var content = contentSettingsText(decoded);
         if (content == null) { throw "Cannot read decoded Content Manager settings"; }
         return content;
+    }
+
+    class Bytes packLzf(string text) {
+        var packed = contentSettingsPackLzf(text);
+        if (packed == null) { throw "Cannot compress Content Manager LZF settings"; }
+        var bytes = contentSettingsBytes(packed);
+        if (bytes == null) { throw "Cannot copy Content Manager LZF settings"; }
+        return bytes;
+    }
+
+    class Bytes packDeflate(string text) {
+        var packed = contentSettingsPackDeflate(text);
+        if (packed == null) { throw "Cannot compress Content Manager DEFLATE settings"; }
+        var bytes = contentSettingsBytes(packed);
+        if (bytes == null) { throw "Cannot copy Content Manager DEFLATE settings"; }
+        return bytes;
     }
 
     class JSONValue entries(string text) {
@@ -23,7 +39,7 @@ class ContentManager {
         for line in Strings.split(text, "\n") {
             var tab = Strings.find(line, "\t", 0);
             if (tab < 0) { continue; }
-            result.set(line.substring(0, tab), JSONValue.makeString(line.substring(tab + 1, line.len() - tab - 1)));
+            result.set(line.substring(0, tab), JSONValue.makeString(line.substring(tab + 1, line.length - tab - 1)));
         }
         return result;
     }

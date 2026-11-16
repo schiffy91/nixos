@@ -17,11 +17,20 @@ module = "ContentManager"
 header = "compression.h"
 language = "c"
 standard = "c11"
-symbols = ["compress2", "cmZlibOk", "cmLzfCompress", "ContentSettingsHandle", "contentSettingsDecode", "contentSettingsRelease", "contentSettingsText"]
+symbols = [
+    "ContentSettingsHandle",
+    "contentSettingsDecodeHex",
+    "contentSettingsPackLzf",
+    "contentSettingsPackDeflate",
+    "contentSettingsRelease",
+    "contentSettingsText",
+    "contentSettingsBytes",
+    "contentSettingsLength"
+]
 
-owned-results = ["contentSettingsDecode"]
-read-only-borrows = ["contentSettingsDecode.input"]
-borrowed-parameters = ["contentSettingsText.settings"]
+owned-results = ["contentSettingsDecodeHex", "contentSettingsPackLzf", "contentSettingsPackDeflate"]
+read-only-borrows = ["contentSettingsDecodeHex.hex", "contentSettingsPackLzf.text", "contentSettingsPackDeflate.text"]
+borrowed-parameters = ["contentSettingsText.settings", "contentSettingsBytes.settings", "contentSettingsLength.settings"]
 
 [native.bindings.resources.ContentSettingsHandle]
 ownership = "unique"
@@ -30,3 +39,10 @@ release = "contentSettingsRelease"
 [native.bindings.copied-results.contentSettingsText]
 kind = "string"
 owner = "settings"
+
+[native.bindings.copied-results.contentSettingsBytes]
+kind = "bytes"
+owner = "settings"
+length-function = "contentSettingsLength"
+length-arguments = ["settings"]
+length-preserves-result = true

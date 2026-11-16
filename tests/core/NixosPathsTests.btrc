@@ -1,10 +1,8 @@
-#include <assert.h>
-#include <string.h>
-
+import Library.Testing;
 import ../../config/pkgs/utils/nixosctl/lib/core/NixosPaths.btrc;
 
 void expectJoin(string root, string path, string expected) {
-    assert(strcmp(NixosPaths.join(root, path), expected) == 0);
+    Expect.strEq(NixosPaths.join(root, path), expected);
 }
 
 int main() {

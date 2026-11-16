@@ -13,7 +13,7 @@ language = "c"
 standard = "c11"
 symbols = ["TestTLSListener", "TestTLSConnection", "testTLSListen", "testTLSListenerClose", "testTLSPort", "testTLSAccept", "testTLSConnectionClose", "testTLSRead", "testTLSBytes", "testTLSLength", "testTLSWrite"]
 owned-results = ["testTLSListen", "testTLSAccept"]
-read-only-borrows = ["testTLSListen.certificate", "testTLSListen.key", "testTLSWrite.bytes"]
+read-only-borrows = ["testTLSListen.certificate", "testTLSListen.key", "testTLSWrite.hex"]
 borrowed-parameters = ["testTLSPort.listener", "testTLSAccept.listener", "testTLSRead.connection", "testTLSBytes.connection", "testTLSLength.connection", "testTLSWrite.connection"]
 [native.bindings.resources.TestTLSListener]
 ownership = "unique"

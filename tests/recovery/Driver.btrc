@@ -1,6 +1,7 @@
 import Library.CLI;
+import Library.Console;
 import Library.JSON;
-import ../../config/system/nixos/recovery/Mount.btrc;
+import recovery.Mount;
 
 int main(int argc, char** argv) {
     try {
@@ -9,5 +10,5 @@ int main(int argc, char** argv) {
         recovery.top = args.get(2);
         recovery.run();
         return 0;
-    } catch (string error) { fprintf(stderr, "%s\n", error); return 1; }
+    } catch (string error) { Console.error(error); return 1; }
 }

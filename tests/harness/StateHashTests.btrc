@@ -1,5 +1,4 @@
-#include <assert.h>
-
+import Library.Testing;
 import ../../config/pkgs/utils/nixosctl/lib/simulator/spec/VmSpecParser.btrc;
 
 string materialFor(string stateMaterial) {
@@ -13,16 +12,16 @@ string materialFor(string stateMaterial) {
 
 int main() {
     /* plumbing, derived hashes and *Shell keys never describe what a node produces */
-    assert(materialFor("node:v2").equals("immutabilityMode=reset\nmemory=8G"));
+    Expect.strEq(materialFor("node:v2"), "immutabilityMode=reset\nmemory=8G");
 
     /* sourceHash only folds in when the node's own material opts into it */
-    assert(materialFor("node:{{sourceHash}}").equals("immutabilityMode=reset\nmemory=8G\nsourceHash=abc123"));
+    Expect.strEq(materialFor("node:{{sourceHash}}"), "immutabilityMode=reset\nmemory=8G\nsourceHash=abc123");
 
     var optedOut = VmSpecParser.parse("{\"name\":\"n\",\"stateMaterial\":\"n:{{memory}}\",\"operations\":[{\"op\":\"host\",\"command\":\"true\"}]}");
-    assert(optedOut.declaresArg("memory") && !optedOut.declaresArg("sourceHash"));
+    Expect.isTrue(optedOut.declaresArg("memory") && !optedOut.declaresArg("sourceHash"));
 
     var optedIn = VmSpecParser.parse("{\"name\":\"n\",\"stateMaterial\":\"n:source={{sourceHash}}\",\"operations\":[{\"op\":\"host\",\"command\":\"true\"}]}");
-    assert(optedIn.declaresArg("sourceHash"));
+    Expect.isTrue(optedIn.declaresArg("sourceHash"));
 
     print("PASS: state hash material excludes plumbing and folds sourceHash only when declared");
     return 0;

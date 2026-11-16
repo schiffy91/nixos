@@ -10,11 +10,10 @@ import ../../config/pkgs/gaming/steam/src/SteamConfiguration.btrc;
 import ../../config/pkgs/gaming/steam/src/SteamShortcuts.btrc;
 import ../../config/pkgs/gaming/wine/src/ActiveDisplay.btrc;
 import ../../config/pkgs/gaming/wine/src/WinePrefix.btrc;
+import Library.Testing;
 import assetto.Assetto;
 import assetto.GameSettings;
 import assetto.ControlBindings;
-
-#include <assert.h>
 
 class GamingTests {
     public string root;
@@ -23,18 +22,18 @@ class GamingTests {
     public GamingTests() {
         self.root = FileSystem.tempDir("gaming-tests-");
         self.tools = Environment.get("GAMING_TOOLS", "");
-        assert(!self.root.isEmpty());
+        Expect.isTrue(!self.root.isEmpty());
     }
 
     public void vdf() {
         var text = "// comment\n\"root\" { apps { \"244210\" { LaunchOptions \"path\\\\with\\\"quote\" } } empty \"\" }";
         var parsed = SteamVdf(text).object();
-        assert(parsed.get("root").get("apps").get("244210").get("LaunchOptions").asString().equals("path\\with\"quote"));
-        assert(SteamVdf(SteamVdf.render(parsed)).object().stringify().equals(parsed.stringify()));
+        Expect.isTrue(parsed.get("root").get("apps").get("244210").get("LaunchOptions").asString().equals("path\\with\"quote"));
+        Expect.isTrue(SteamVdf(SteamVdf.render(parsed)).object().stringify().equals(parsed.stringify()));
         for invalid in ["\"root\" {", "a \"unterminated", "a b }", "a b a c"] {
             var rejected = false;
             try { SteamVdf(invalid).object(); } catch (string error) { rejected = true; }
-            assert(rejected);
+            Expect.isTrue(rejected);
         }
         print("PASS: Steam VDF parsing, escapes, and malformed input");
     }
@@ -66,25 +65,25 @@ class GamingTests {
             command.flag("--steam-path", steam).flag("--default-tool", "unused").flag("--app-config", declaration).flag("--app-id", "244210");
             UnixShell().run(command.render(), throwOnFailure=true);
             var mapping = SteamVdf.at(SteamVdf.read(globalPath), ["InstallConfigStore", "Software", "Valve", "Steam", "CompatToolMapping"]);
-            assert(mapping.get("0").get("name").asString().equals("keep-default"));
-            assert(mapping.get("805550").get("name").asString().equals("keep-acc"));
-            assert(mapping.get("244210").get("name").asString().equals("proton-custom"));
+            Expect.isTrue(mapping.get("0").get("name").asString().equals("keep-default"));
+            Expect.isTrue(mapping.get("805550").get("name").asString().equals("keep-acc"));
+            Expect.isTrue(mapping.get("244210").get("name").asString().equals("proton-custom"));
             for user in ["1", "2"] {
                 var path = f"{steam}/userdata/{user}/config/localconfig.vdf";
                 var document = SteamVdf.read(path).get("UserLocalConfigStore");
-                assert(document.get("apps").get("244210").get("UseSteamControllerConfig").asString().equals(SteamConfiguration.inputValue(mode)));
-                assert(document.get("apps").get("244210").get("SteamControllerRumble").asString().equals("-1"));
-                assert(document.get("apps").get("805550").get("UseSteamControllerConfig").asString().equals("2"));
+                Expect.isTrue(document.get("apps").get("244210").get("UseSteamControllerConfig").asString().equals(SteamConfiguration.inputValue(mode)));
+                Expect.isTrue(document.get("apps").get("244210").get("SteamControllerRumble").asString().equals("-1"));
+                Expect.isTrue(document.get("apps").get("805550").get("UseSteamControllerConfig").asString().equals("2"));
                 var apps = SteamVdf.at(document, ["Software", "Valve", "Steam", "apps"]);
-                assert(apps.get("244210").get("LaunchOptions").asString().equals("dpi exec -- assetto launch -- %command%"));
-                assert(!apps.get("244210").has("UseSteamControllerConfig"));
-                assert(apps.get("805550").get("LaunchOptions").asString().equals("keep-acc"));
+                Expect.isTrue(apps.get("244210").get("LaunchOptions").asString().equals("dpi exec -- assetto launch -- %command%"));
+                Expect.isTrue(!apps.get("244210").has("UseSteamControllerConfig"));
+                Expect.isTrue(apps.get("805550").get("LaunchOptions").asString().equals("keep-acc"));
                 var before = Path.readAll(path);
                 UnixShell().run(command.render(), throwOnFailure=true);
-                assert(Path.readAll(path).equals(before));
+                Expect.isTrue(Path.readAll(path).equals(before));
             }
         }
-        assert(SteamLibrary(steam).game("244210").prefix().equals(f"{library}/steamapps/compatdata/244210/pfx"));
+        Expect.isTrue(SteamLibrary(steam).game("244210").prefix().equals(f"{library}/steamapps/compatdata/244210/pfx"));
         for options in ["MODE=test %command%", "dpi exec -- assetto launch -- %command%"] {
             app.set("launchOptions", JSONValue.makeString(options));
             ModTree.write(declaration, desired.stringify());
@@ -94,15 +93,15 @@ class GamingTests {
             for (int attempt = 0; attempt < 2; attempt++) {
                 UnixShell().run(command.render(), throwOnFailure=true);
                 var apps = SteamVdf.at(SteamVdf.read(f"{steam}/userdata/1/config/localconfig.vdf"), ["UserLocalConfigStore", "Software", "Valve", "Steam", "apps"]);
-                assert(apps.get("244210").get("LaunchOptions").asString().equals(f"game-run env {options}"));
-                assert(apps.get("805550").get("LaunchOptions").asString().equals("keep-acc"));
+                Expect.isTrue(apps.get("244210").get("LaunchOptions").asString().equals(f"game-run env {options}"));
+                Expect.isTrue(apps.get("805550").get("LaunchOptions").asString().equals("keep-acc"));
             }
         }
         print("PASS: Steam CLI, separate library, account casing, controller modes, ACC isolation, idempotence");
     }
 
     public void shortcuts() {
-        assert(SteamShortcuts.crc32("123456789") == 0xCBF43926L);
+        Expect.isTrue(SteamShortcuts.crc32("123456789") == 0xCBF43926L);
         var steam = f"{self.root}/Shortcuts Steam";
         ModTree.write(f"{steam}/userdata/1/config/localconfig.vdf", "UserLocalConfigStore { }");
         var foreign = SteamShortcut();
@@ -124,14 +123,14 @@ class GamingTests {
         command.flag("--steam-path", steam).flag("--shortcuts", declaration);
         UnixShell().run(command.render(), throwOnFailure=true);
         var entries = SteamShortcuts(ModTree.read(path)).entries();
-        assert(entries.len == 4);
-        assert(entries.get(0).body.equals(foreign.body));
-        assert(entries.get(1).body.equals(played.body));
-        assert(entries.get(2).name.equals("Moonlight") && entries.get(2).exe.equals("\"/run/current-system/sw/bin/moonlight\""));
-        assert(entries.get(3).body.equals(SteamShortcuts.create("Semu", "/run/current-system/sw/bin/semu-es-de").body));
+        Expect.isTrue(entries.len == 4);
+        Expect.isTrue(entries.get(0).body.equals(foreign.body));
+        Expect.isTrue(entries.get(1).body.equals(played.body));
+        Expect.isTrue(entries.get(2).name.equals("Moonlight") && entries.get(2).exe.equals("\"/run/current-system/sw/bin/moonlight\""));
+        Expect.isTrue(entries.get(3).body.equals(SteamShortcuts.create("Semu", "/run/current-system/sw/bin/semu-es-de").body));
         var before = ModTree.read(path);
         UnixShell().run(command.render(), throwOnFailure=true);
-        assert(ModTree.read(path).equals(before));
+        Expect.isTrue(ModTree.read(path).equals(before));
         var icons = JSONValue.parse(Path.readAll(declaration));
         var chrome = JSONValue.makeObject();
         chrome.set("exe", JSONValue.makeString("/run/current-system/sw/bin/google-chrome-stable"));
@@ -144,19 +143,19 @@ class GamingTests {
         ModTree.write(declaration, icons.stringify());
         UnixShell().run(command.render(), throwOnFailure=true);
         entries = SteamShortcuts(ModTree.read(path)).entries();
-        assert(entries.len == 5);
-        assert(entries.get(0).body.equals(foreign.body));
-        assert(entries.get(1).icon.equals("/icons/Chrome Icon.png"));
+        Expect.isTrue(entries.len == 5);
+        Expect.isTrue(entries.get(0).body.equals(foreign.body));
+        Expect.isTrue(entries.get(1).icon.equals("/icons/Chrome Icon.png"));
         SteamShortcuts.setIcon(entries.get(1), "");
-        assert(entries.get(1).body.equals(played.body)); // Every non-icon byte, including playtime, survived.
-        assert(entries.get(4).name.equals("New Game") && entries.get(4).icon.equals("/icons/new-game.png"));
+        Expect.isTrue(entries.get(1).body.equals(played.body)); // Every non-icon byte, including playtime, survived.
+        Expect.isTrue(entries.get(4).name.equals("New Game") && entries.get(4).icon.equals("/icons/new-game.png"));
         before = ModTree.read(path);
         UnixShell().run(command.render(), throwOnFailure=true);
-        assert(ModTree.read(path).equals(before));
+        Expect.isTrue(ModTree.read(path).equals(before));
         // Older/manual shortcuts can omit the icon field entirely.
         SteamShortcuts.setIcon(entries.get(0), "/icons/keep.png");
         var reparsed = SteamShortcuts(SteamShortcuts.render([entries.get(0)])).entries().get(0);
-        assert(reparsed.icon.equals("/icons/keep.png") && reparsed.name.equals("Keep"));
+        Expect.isTrue(reparsed.icon.equals("/icons/keep.png") && reparsed.name.equals("Keep"));
         var artwork = f"{self.root}/Chrome Artwork";
         for filename in ["p", "landscape", "_hero", "_logo"] {
             ModTree.write(f"{artwork}/{filename}.png", filename);
@@ -172,15 +171,15 @@ class GamingTests {
         var grid = f"{steam}/userdata/1/config/grid";
         ModTree.write(f"{grid}/2147483648_hero.jpg", "custom-hero");
         UnixShell().run(command.render(), throwOnFailure=true);
-        assert(ModTree.read(path).equals(before));
-        assert(Path.readAll(f"{grid}/2147483648p.png").equals("p"));
-        assert(Path.readAll(f"{grid}/2147483648.png").equals("landscape"));
-        assert(Path.readAll(f"{grid}/2147483648_logo.png").equals("_logo"));
-        assert(!FileSystem.exists(f"{grid}/2147483648_hero.png"));
+        Expect.isTrue(ModTree.read(path).equals(before));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648p.png").equals("p"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648.png").equals("landscape"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648_logo.png").equals("_logo"));
+        Expect.isTrue(!FileSystem.exists(f"{grid}/2147483648_hero.png"));
         // New curated defaults replace only files still matching our ownership record.
         ModTree.write(f"{artwork}/landscape.png", "new-landscape");
         UnixShell().run(command.render(), throwOnFailure=true);
-        assert(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
         // Recognize the exact old generator output even without an ownership record.
         ModTree.remove(f"{grid}/.nixos-artwork/2147483648_logo.sha256");
         var legacy = JSONValue.makeObject();
@@ -188,18 +187,18 @@ class GamingTests {
         ModTree.write(f"{artwork}/legacy.json", legacy.stringify());
         ModTree.write(f"{artwork}/_logo.png", "curated-logo");
         UnixShell().run(command.render(), throwOnFailure=true);
-        assert(Path.readAll(f"{grid}/2147483648_logo.png").equals("curated-logo"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648_logo.png").equals("curated-logo"));
         ModTree.write(f"{grid}/2147483648p.png", "custom-cover");
         ModTree.write(f"{grid}/2147483648.jpeg", "custom-landscape");
         ModTree.write(f"{artwork}/landscape.png", "third-landscape");
         UnixShell().run(command.render(), throwOnFailure=true);
-        assert(Path.readAll(f"{grid}/2147483648p.png").equals("custom-cover"));
-        assert(Path.readAll(f"{grid}/2147483648.jpeg").equals("custom-landscape"));
-        assert(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648p.png").equals("custom-cover"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648.jpeg").equals("custom-landscape"));
+        Expect.isTrue(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
         var unknown = Bytes.fromString("not a shortcuts file");
         ModTree.writeBytes(path, unknown);
-        assert(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
-        assert(ModTree.read(path).equals(unknown));
+        Expect.isTrue(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
+        Expect.isTrue(ModTree.read(path).equals(unknown));
         print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, icon updates preserve playtime, missing icon fields, idempotence, unknown format refusal");
     }
 
@@ -212,23 +211,23 @@ class GamingTests {
         declaration.set(name, JSONValue.makeString(saved));
         ModTree.write(local, "saved-settings");
         PresetLinks.apply(prefix, declaration);
-        assert(FileSystem.isSymlink(local) && FileSystem.readLink(local).equals(saved));
-        assert(Path.readAll(saved).equals("saved-settings"));
-        assert(Path.writeAll(local, "changed-in-CM"));
+        Expect.isTrue(FileSystem.isSymlink(local) && FileSystem.readLink(local).equals(saved));
+        Expect.isTrue(Path.readAll(saved).equals("saved-settings"));
+        Expect.isTrue(Path.writeAll(local, "changed-in-CM"));
         PresetLinks.apply(prefix, declaration);
-        assert(Path.readAll(saved).equals("changed-in-CM"));
+        Expect.isTrue(Path.readAll(saved).equals("changed-in-CM"));
         PresetLinks.apply(prefix, JSONValue.makeObject());
-        assert(!FileSystem.isSymlink(local) && Path.readAll(local).equals("changed-in-CM"));
-        assert(Path.readAll(saved).equals("changed-in-CM"));
+        Expect.isTrue(!FileSystem.isSymlink(local) && Path.readAll(local).equals("changed-in-CM"));
+        Expect.isTrue(Path.readAll(saved).equals("changed-in-CM"));
         ModTree.write(local, "different-local-settings");
         var rejected = false;
         try { PresetLinks.apply(prefix, declaration); } catch (string error) { rejected = error.contains("copies differ"); }
-        assert(rejected && Path.readAll(saved).equals("changed-in-CM") && Path.readAll(local).equals("different-local-settings"));
+        Expect.isTrue(rejected && Path.readAll(saved).equals("changed-in-CM") && Path.readAll(local).equals("different-local-settings"));
         var invalid = JSONValue.makeObject();
         invalid.set("../escape.cmpreset", JSONValue.makeString(saved));
         rejected = false;
         try { PresetLinks.apply(prefix, invalid); } catch (string error) { rejected = true; }
-        assert(rejected);
+        Expect.isTrue(rejected);
         var controls = "Controls/FRACTAL-NORTH.ini";
         var controlLocal = PresetLinks.path(prefix, controls);
         var controlSaved = f"{self.root}/Games/Assetto Corsa/Controls/FRACTAL-NORTH.ini";
@@ -236,10 +235,10 @@ class GamingTests {
         var controlDeclaration = JSONValue.makeObject();
         controlDeclaration.set(controls, JSONValue.makeString(controlSaved));
         PresetLinks.apply(prefix, controlDeclaration);
-        assert(FileSystem.isSymlink(controlLocal) && Path.readAll(controlSaved).contains("AXLE=0"));
-        assert(Path.writeAll(controlLocal, "[STEER]\nAXLE=1\n"));
+        Expect.isTrue(FileSystem.isSymlink(controlLocal) && Path.readAll(controlSaved).contains("AXLE=0"));
+        Expect.isTrue(Path.writeAll(controlLocal, "[STEER]\nAXLE=1\n"));
         PresetLinks.apply(prefix, JSONValue.makeObject());
-        assert(!FileSystem.isSymlink(controlLocal) && Path.readAll(controlLocal).contains("AXLE=1"));
+        Expect.isTrue(!FileSystem.isSymlink(controlLocal) && Path.readAll(controlLocal).contains("AXLE=1"));
         print("PASS: preset migration, writes through link, idempotence, disable, conflicts, traversal refusal");
     }
 
@@ -258,12 +257,12 @@ class GamingTests {
         UnixShell().run(Command("bsdtar").args(["--format=zip", "-cf", archive, "-C", fixture, "."]).render(), throwOnFailure=true);
         ModTree.copy(archive, f"{downloads}/duplicate.zip");
         var sources = ContentDirectory.sources(downloads, cache);
-        assert(sources.len == 1);
+        Expect.isTrue(sources.len == 1);
         AssettoMods.reconcileSources(game, sources);
-        assert(Path.readAll(f"{game}/content/cars/car/body.kn5").equals("car-model"));
-        assert(Path.readAll(f"{game}/content/tracks/track/layout/models.ini").equals("track-layout"));
-        assert(Path.readAll(f"{game}/content/tracks/track/extension/ext_config.ini").equals("track-shaders"));
-        assert(!FileSystem.exists(f"{game}/a mod.zip"));
+        Expect.isTrue(Path.readAll(f"{game}/content/cars/car/body.kn5").equals("car-model"));
+        Expect.isTrue(Path.readAll(f"{game}/content/tracks/track/layout/models.ini").equals("track-layout"));
+        Expect.isTrue(Path.readAll(f"{game}/content/tracks/track/extension/ext_config.ini").equals("track-shaders"));
+        Expect.isTrue(!FileSystem.exists(f"{game}/a mod.zip"));
         // A loose duplicate is also harmless. A conflicting version must fail
         // before touching either the game or its ownership manifest.
         ModTree.write(f"{downloads}/content/cars/car/body.kn5", "car-model");
@@ -272,15 +271,15 @@ class GamingTests {
         ModTree.write(f"{downloads}/content/cars/car/body.kn5", "other-version");
         var rejected = false;
         try { AssettoMods.reconcileSources(game, ContentDirectory.sources(downloads, cache)); } catch (string error) { rejected = error.contains("Conflicting mod versions"); }
-        assert(rejected);
-        assert(Path.readAll(f"{game}/content/cars/car/body.kn5").equals("car-model"));
-        assert(Path.readAll(f"{game}/.nix-assettocorsa/files.json").equals(before));
+        Expect.isTrue(rejected);
+        Expect.isTrue(Path.readAll(f"{game}/content/cars/car/body.kn5").equals("car-model"));
+        Expect.isTrue(Path.readAll(f"{game}/.nix-assettocorsa/files.json").equals(before));
         // Extraction must never follow a downloaded symlink into another tree.
-        assert(FileSystem.symlink("/tmp", f"{fixture}/link") == 0);
+        Expect.isTrue(FileSystem.symlink("/tmp", f"{fixture}/link") == 0);
         UnixShell().run(Command("bsdtar").args(["--format=zip", "-cf", f"{downloads}/unsafe.zip", "-C", fixture, "."]).render(), throwOnFailure=true);
         rejected = false;
         try { ContentDirectory.sources(downloads, cache); } catch (string error) { rejected = true; }
-        assert(rejected);
+        Expect.isTrue(rejected);
         print("PASS: automatic archive layouts, duplicate downloads, loose content, conflict atomicity, unsafe archive refusal");
     }
 
@@ -289,28 +288,28 @@ class GamingTests {
         ModTree.write(f"{prefix}/user.reg", "WINE REGISTRY Version 2\n\n[Control Panel\\\\Desktop] 123\n\"LogPixels\"=dword:00000060\n\"keep\"=\"value\"\n\n[Other] 456\n\"keep\"=\"other\"\n");
         ModTree.write(f"{prefix}/system.reg", "WINE REGISTRY Version 2\n");
         WinePrefix(prefix).setDpi(240);
-        assert(WinePrefix(prefix).dpi() == 240);
+        Expect.isTrue(WinePrefix(prefix).dpi() == 240);
         var before = Path.readAll(f"{prefix}/user.reg");
-        assert(before.contains("\"keep\"=\"value\""));
-        assert(before.contains("[Other] 456"));
+        Expect.isTrue(before.contains("\"keep\"=\"value\""));
+        Expect.isTrue(before.contains("[Other] 456"));
         WinePrefix(prefix).setDpi(240);
-        assert(Path.readAll(f"{prefix}/user.reg").equals(before));
+        Expect.isTrue(Path.readAll(f"{prefix}/user.reg").equals(before));
         var shell = UnixShell();
         var result = shell.run(f"WINEPREFIX={ShellWords.quote(prefix)} {ShellWords.quote(self.tools)}/wine-prefix-dpi exec --dpi 192 -- sh -c 'printf %s \"$1\"' sh 'argument with spaces'", throwOnFailure=true);
-        assert(result.stdout().equals("argument with spaces"));
-        assert(WinePrefix(prefix).dpi() == 192);
+        Expect.isTrue(result.stdout().equals("argument with spaces"));
+        Expect.isTrue(WinePrefix(prefix).dpi() == 192);
         var desk = "{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":true,\"priority\":1,\"scale\":2.5},{\"name\":\"HDMI-A-1\",\"enabled\":true,\"priority\":2,\"scale\":1.75}]}";
         var stream = "{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":false,\"priority\":0,\"scale\":2.5},{\"name\":\"Virtual-sunshine-vmon\",\"enabled\":true,\"priority\":1,\"scale\":1}]}";
-        assert(ActiveDisplay.dpi(desk, 96) == 240);
-        assert(ActiveDisplay.dpi(stream, 240) == 96);
+        Expect.isTrue(ActiveDisplay.dpi(desk, 96) == 240);
+        Expect.isTrue(ActiveDisplay.dpi(stream, 240) == 96);
         // Real KScreen JSON omits enabled on the active virtual output.
-        assert(ActiveDisplay.dpi("{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":false,\"priority\":2,\"scale\":2.5},{\"name\":\"Virtual-sunshine-vmon\",\"connected\":true,\"priority\":1,\"scale\":1}]}", 240) == 96);
-        assert(ActiveDisplay.dpi("{\"outputs\":[{\"name\":\"DP-1\",\"connected\":true,\"priority\":1,\"scale\":2.5}]}", 96) == 240);
-        assert(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":false,\"priority\":1,\"scale\":1}]}", 240) == 240);
-        assert(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":true,\"priority\":1,\"scale\":40}]}", 240) == 240);
-        assert(ActiveDisplay.dpi("not json", 240) == 240);
+        Expect.isTrue(ActiveDisplay.dpi("{\"outputs\":[{\"name\":\"DP-1\",\"enabled\":false,\"priority\":2,\"scale\":2.5},{\"name\":\"Virtual-sunshine-vmon\",\"connected\":true,\"priority\":1,\"scale\":1}]}", 240) == 96);
+        Expect.isTrue(ActiveDisplay.dpi("{\"outputs\":[{\"name\":\"DP-1\",\"connected\":true,\"priority\":1,\"scale\":2.5}]}", 96) == 240);
+        Expect.isTrue(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":false,\"priority\":1,\"scale\":1}]}", 240) == 240);
+        Expect.isTrue(ActiveDisplay.dpi("{\"outputs\":[{\"enabled\":true,\"priority\":1,\"scale\":40}]}", 240) == 240);
+        Expect.isTrue(ActiveDisplay.dpi("not json", 240) == 240);
         result = shell.run(f"env -u WAYLAND_DISPLAY -u DISPLAY WINEPREFIX={ShellWords.quote(prefix)} {ShellWords.quote(self.tools)}/wine-prefix-dpi exec --dpi 144 --follow-display -- true", throwOnFailure=true);
-        assert(WinePrefix(prefix).dpi() == 144);
+        Expect.isTrue(WinePrefix(prefix).dpi() == 144);
         print("PASS: shared DPI CLI, registry preservation, exec arguments, live display scale with declared fallback");
     }
 
@@ -322,7 +321,7 @@ class GamingTests {
             hashPaths.push(path);
         }
         var hashes = AssettoMods.digests(hashPaths);
-        for path in hashPaths { assert(hashes.get(path).asString().equals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")); }
+        for path in hashPaths { Expect.isTrue(hashes.get(path).asString().equals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")); }
         var game = f"{self.root}/game";
         var pack = f"{self.root}/pack";
         ModTree.write(f"{game}/font.ttf", "original");
@@ -333,58 +332,52 @@ class GamingTests {
         AssettoMods.reconcile(game, pack);
         ModTree.write(f"{pack}/extension/patch.ini", "v2");
         AssettoMods.reconcile(game, pack);
-        assert(Path.readAll(f"{game}/extension/patch.ini").equals("v2"));
+        Expect.isTrue(Path.readAll(f"{game}/extension/patch.ini").equals("v2"));
         ModTree.write(f"{game}/extension/patch.ini", "manual");
         ModTree.write(f"{pack}/new-file", "deploy");
         AssettoMods.reconcile(game, pack);
-        assert(Path.readAll(f"{game}/extension/patch.ini").equals("manual"));
-        assert(Path.readAll(f"{game}/new-file").equals("deploy"));
+        Expect.isTrue(Path.readAll(f"{game}/extension/patch.ini").equals("manual"));
+        Expect.isTrue(Path.readAll(f"{game}/new-file").equals("deploy"));
         var editedHash = AssettoMods.digest(f"{game}/extension/patch.ini");
         ModTree.write(f"{pack}/extension/patch.ini", "v3");
         AssettoMods.reconcile(game, pack);
-        assert(Path.readAll(f"{game}/extension/patch.ini").equals("v3"));
-        assert(Path.readAll(f"{game}/.nix-assettocorsa/edits/{editedHash}/extension/patch.ini").equals("manual"));
+        Expect.isTrue(Path.readAll(f"{game}/extension/patch.ini").equals("v3"));
+        Expect.isTrue(Path.readAll(f"{game}/.nix-assettocorsa/edits/{editedHash}/extension/patch.ini").equals("manual"));
         ModTree.write(f"{game}/font.ttf", "edited-font");
         var fontHash = AssettoMods.digest(f"{game}/font.ttf");
         AssettoMods.reconcile(game, "");
-        assert(Path.readAll(f"{game}/.nix-assettocorsa/edits/{fontHash}/font.ttf").equals("edited-font"));
-        assert(Path.readAll(f"{game}/font.ttf").equals("original"));
-        assert(Path.readAll(f"{game}/unmanaged.ini").equals("keep"));
-        assert(!FileSystem.exists(f"{game}/extension/patch.ini"));
+        Expect.isTrue(Path.readAll(f"{game}/.nix-assettocorsa/edits/{fontHash}/font.ttf").equals("edited-font"));
+        Expect.isTrue(Path.readAll(f"{game}/font.ttf").equals("original"));
+        Expect.isTrue(Path.readAll(f"{game}/unmanaged.ini").equals("keep"));
+        Expect.isTrue(!FileSystem.exists(f"{game}/extension/patch.ini"));
         ModTree.write(f"{game}/font.ttf", "steam-update");
         AssettoMods.reconcile(game, pack);
         AssettoMods.reconcile(game, "");
-        assert(Path.readAll(f"{game}/font.ttf").equals("steam-update"));
+        Expect.isTrue(Path.readAll(f"{game}/font.ttf").equals("steam-update"));
         var outside = f"{self.root}/outside";
         ModTree.directory(outside);
         FileSystem.removeRecursive(f"{game}/extension");
         FileSystem.symlink(outside, f"{game}/extension");
         var rejected = false;
         try { AssettoMods.reconcile(game, pack); } catch (string error) { rejected = error.contains("symlink"); }
-        assert(rejected && FileSystem.listDir(outside).len == 0);
+        Expect.isTrue(rejected && FileSystem.listDir(outside).len == 0);
         rejected = false;
         try { ModTree.inside(game, "../escape"); } catch (string error) { rejected = true; }
-        assert(rejected);
+        Expect.isTrue(rejected);
         ModTree.write(f"{self.root}/other/FONT.ttf", "collision");
         rejected = false;
         try { AssettoMods.merge(f"{self.root}/merged", [pack, f"{self.root}/other"]); } catch (string error) { rejected = error.contains("overlap"); }
-        assert(rejected);
+        Expect.isTrue(rejected);
         print("PASS: mod update/restore, runtime edits, upgrade/removal backups, originals, symlinks, traversal, collisions");
     }
 
     public void contentManager() {
         var text = "version: 2\nUserPreset\t";
         for (int i = 0; i < 50; i++) { text = text + "preserve-"; }
-        var raw = Bytes.fromString(text);
-        char output[4096];
-        unsigned int length = cmLzfCompress(raw.data, (unsigned int)raw.length(), output, 4096);
-        assert(length > 0);
-        var packed = Bytes(); packed.append(11); packed.appendRaw(output, (int)length);
-        assert(ContentManager.decode(packed).equals(text));
-        unsigned long compressedLength = 4096;
-        assert(compress2((unsigned char*)output, &compressedLength, (unsigned char*)raw.data, (unsigned long)raw.length(), 6) == cmZlibOk);
-        var deflated = Bytes(); deflated.append(0); deflated.appendRaw(output + 2, (int)compressedLength - 6);
-        assert(ContentManager.decode(deflated).equals(text));
+        var packed = ContentManager.packLzf(text);
+        Expect.strEq(ContentManager.decode(packed), text);
+        var deflated = ContentManager.packDeflate(text);
+        Expect.strEq(ContentManager.decode(deflated), text);
         var prefix = f"{self.root}/cm-prefix";
         var folder = f"{prefix}/drive_c/users/steamuser/AppData/Local/AcTools Content Manager";
         ModTree.write(f"{folder}/Values.data", text);
@@ -393,22 +386,22 @@ class GamingTests {
         ModTree.write(f"{game}/content/fonts/system/segoeui.ttf", "ui-font");
         ModTree.write(f"{game}/Content Manager.update.exe", "pending-update");
         ContentManager.configure(f"{self.root}/Steam", game, prefix);
-        assert(Path.readAll(f"{prefix}/drive_c/windows/Fonts/segoeui.ttf").equals("ui-font"));
-        assert(Path.readAll(f"{prefix}/system.reg").contains("\"dpiAwareness\"=dword:00000002"));
+        Expect.isTrue(Path.readAll(f"{prefix}/drive_c/windows/Fonts/segoeui.ttf").equals("ui-font"));
+        Expect.isTrue(Path.readAll(f"{prefix}/system.reg").contains("\"dpiAwareness\"=dword:00000002"));
         var configured = ContentManager.entries(Path.readAll(f"{folder}/Values.data"));
-        assert(configured.get("UserPreset").asString().equals(ContentManager.entries(text).get("UserPreset").asString()));
-        assert(configured.get("Settings.CommonSettings.UpdatePeriod").asString().equals("00:00:00"));
-        assert(configured.get("PatchUpdater.AutoUpdateMode").asString().equals("disabled"));
-        assert(FileSystem.exists(f"{folder}/Values.before-nix"));
-        assert(!FileSystem.exists(f"{game}/Content Manager.update.exe"));
+        Expect.isTrue(configured.get("UserPreset").asString().equals(ContentManager.entries(text).get("UserPreset").asString()));
+        Expect.isTrue(configured.get("Settings.CommonSettings.UpdatePeriod").asString().equals("00:00:00"));
+        Expect.isTrue(configured.get("PatchUpdater.AutoUpdateMode").asString().equals("disabled"));
+        Expect.isTrue(FileSystem.exists(f"{folder}/Values.before-nix"));
+        Expect.isTrue(!FileSystem.exists(f"{game}/Content Manager.update.exe"));
         var command = Assetto.launchCommand(["runtime", "proton", "waitforexitandrun", f"{game}/AssettoCorsa.exe", "argument with spaces"], game);
-        assert(command.get(0).equals("runtime") && command.get(1).equals("proton"));
-        assert(command.get(3).equals(f"{game}/Content Manager.exe") && command.get(4).equals("argument with spaces"));
-        assert(!Assetto.prerequisitesReady(prefix));
+        Expect.isTrue(command.get(0).equals("runtime") && command.get(1).equals("proton"));
+        Expect.isTrue(command.get(3).equals(f"{game}/Content Manager.exe") && command.get(4).equals("argument with spaces"));
+        Expect.isTrue(!Assetto.prerequisitesReady(prefix));
         ModTree.write(f"{prefix}/winetricks.log", "dotnet452\nd3dx11_43\nd3dcompiler_47\nwin10\n");
-        assert(!Assetto.prerequisitesReady(prefix));
+        Expect.isTrue(!Assetto.prerequisitesReady(prefix));
         ModTree.write(f"{prefix}/winetricks.log", "dotnet48\nd3dx11_43\nd3dcompiler_47\nwin10\n");
-        assert(Assetto.prerequisitesReady(prefix));
+        Expect.isTrue(Assetto.prerequisitesReady(prefix));
         print("PASS: CM plain/LZF/DEFLATE, settings preservation, updater isolation, launch arguments, relay prerequisite guard");
     }
 
@@ -426,7 +419,7 @@ class GamingTests {
         ModTree.write(f"{prefix}/system.reg", "WINE REGISTRY Version 2\n");
         var capture = f"{self.root}/capture";
         ModTree.write(capture, "#!/bin/sh\nprintf '%s\\n' \"$@\" \"$PROTON_ENABLE_WAYLAND\" \"$PROTON_ENABLE_HDR\" \"$WINEDLLOVERRIDES\" \"$WINE_DBGHELP_OLD_PDB\"\n");
-        FileSystem.chmod(capture, 0755);
+        FileSystem.chmod(capture, 0o755);
         var bindingFile = f"{self.root}/launch-bindings.json";
         ModTree.write(bindingFile, "[{\"action\":\"__CM_START_SESSION\",\"joystick\":0,\"button\":0,\"modifier\":null}]");
         var controls = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controls.ini";
@@ -441,21 +434,21 @@ class GamingTests {
         for value in tail { quotedTail.push(ShellWords.quote(value)); }
         var launch = launchPrefix + " " + quotedTail.join(" ");
         var result = UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
-        assert(result.stdout().equals(f"waitforexitandrun\n{game}/Content Manager.exe\nargument with spaces\n0\n0\ndwrite=n,b\n1\n"));
-        assert(WinePrefix(prefix).dpi() == 240);
-        assert(Path.readAll(controls).contains("[__CM_START_SESSION]\n") && Path.readAll(controls).contains("BUTTON=0\n"));
-        assert(Path.readAll(controls).contains("[BRAKES]\nAXLE=3\nGAMMA=1\n"));
-        assert(Path.readAll(f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension/gui.ini").contains("UI_SCALE=2"));
-        assert(Path.readAll(f"{game}/AssettoCorsa.exe").equals("stock-launcher"));
+        Expect.isTrue(result.stdout().equals(f"waitforexitandrun\n{game}/Content Manager.exe\nargument with spaces\n0\n0\ndwrite=n,b\n1\n"));
+        Expect.isTrue(WinePrefix(prefix).dpi() == 240);
+        Expect.isTrue(Path.readAll(controls).contains("[__CM_START_SESSION]\n") && Path.readAll(controls).contains("BUTTON=0\n"));
+        Expect.isTrue(Path.readAll(controls).contains("[BRAKES]\nAXLE=3\nGAMMA=1\n"));
+        Expect.isTrue(Path.readAll(f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension/gui.ini").contains("UI_SCALE=2"));
+        Expect.isTrue(Path.readAll(f"{game}/AssettoCorsa.exe").equals("stock-launcher"));
         ModTree.write(f"{game}/Content Manager.exe", "runtime-edit");
-        assert(UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true).ok());
-        assert(Path.readAll(f"{game}/Content Manager.exe").equals("runtime-edit"));
+        Expect.isTrue(UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true).ok());
+        Expect.isTrue(Path.readAll(f"{game}/Content Manager.exe").equals("runtime-edit"));
         ModTree.write(f"{prefix}/winetricks.log", "dotnet48\nd3dx11_43\nd3dcompiler_47\nwin10\n");
         ModTree.write(f"{self.root}/relay", "#!/bin/sh\nprintf 'relay-started\\n'\nexec \"$@\"\n");
-        FileSystem.chmod(f"{self.root}/relay", 0755);
-        assert(UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true).stdout().startsWith("relay-started\n"));
+        FileSystem.chmod(f"{self.root}/relay", 0o755);
+        Expect.isTrue(UnixShell().run(launch, stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true).stdout().startsWith("relay-started\n"));
         ModTree.write(f"{library}/steamapps/appmanifest_244210.acf", "AppState { StateFlags 1042 installdir assettocorsa }");
-        assert(!UnixShell().run(launch, logFailure=false).ok());
+        Expect.isTrue(!UnixShell().run(launch, logFailure=false).ok());
         print("PASS: real DPI → Assetto CLI → Steam command, relay launch, unfinished download refusal");
     }
 
@@ -466,19 +459,19 @@ class GamingTests {
         ModTree.write(path, original);
         GameSettings.configure(prefix, "2");
         var updated = Path.readAll(path);
-        assert(updated.contains("; keep comment\r\n") && updated.contains("SIMPLIFIED_RENDER=0\r\n"));
-        assert(updated.contains("UI_SCALE=2\r\n") && updated.contains("REPLACE_MAIN_MENU=1\r\n"));
-        assert(updated.contains("[NEW_PAUSE_MENU]\r\nENABLED=1\r\nSHIFT_CAMERA=0\r\n"));
-        assert(updated.contains("[OTHER]\r\nUI_SCALE=0.7\r\n") && !updated.contains("UI_SCALE=1.5"));
-        assert(Path.readAll(f"{path}.before-nix").equals(original));
+        Expect.isTrue(updated.contains("; keep comment\r\n") && updated.contains("SIMPLIFIED_RENDER=0\r\n"));
+        Expect.isTrue(updated.contains("UI_SCALE=2\r\n") && updated.contains("REPLACE_MAIN_MENU=1\r\n"));
+        Expect.isTrue(updated.contains("[NEW_PAUSE_MENU]\r\nENABLED=1\r\nSHIFT_CAMERA=0\r\n"));
+        Expect.isTrue(updated.contains("[OTHER]\r\nUI_SCALE=0.7\r\n") && !updated.contains("UI_SCALE=1.5"));
+        Expect.isTrue(Path.readAll(f"{path}.before-nix").equals(original));
         GameSettings.configure(prefix, "2");
-        assert(Path.readAll(path).equals(updated));
+        Expect.isTrue(Path.readAll(path).equals(updated));
         GameSettings.configure(prefix, "1.5");
-        assert(Path.readAll(path).contains("UI_SCALE=1.5\r\n"));
+        Expect.isTrue(Path.readAll(path).contains("UI_SCALE=1.5\r\n"));
         for invalid in ["0", "2.5", "invalid", "1\nBAD=1"] {
             var rejected = false;
             try { GameSettings.configure(prefix, invalid); } catch (string error) { rejected = true; }
-            assert(rejected);
+            Expect.isTrue(rejected);
         }
         print("PASS: in-game UI scale, unrelated INI preservation, duplicates, backup, repeat application, invalid scale");
     }
@@ -491,15 +484,15 @@ class GamingTests {
         var declared = JSONValue.parse("{\"video.ini\":{\"POST_PROCESS\":{\"FILTER\":\"PHOTOreal\"},\"VIDEO\":{\"VSYNC\":\"1\"}},\"extension/weather_fx.ini\":{\"BASIC\":{\"IMPLEMENTATION\":\"pure\"}}}");
         GameSettings.apply(prefix, declared);
         var updated = Path.readAll(f"{cfg}/video.ini");
-        assert(updated.contains("VSYNC=1\r\nWIDTH=3840\r\n") && updated.contains("FILTER=PHOTOreal\r\n"));
-        assert(Path.readAll(f"{cfg}/video.ini.before-nix").equals(video));
-        assert(Path.readAll(f"{cfg}/extension/weather_fx.ini").contains("[BASIC]\nIMPLEMENTATION=pure\n"));
+        Expect.isTrue(updated.contains("VSYNC=1\r\nWIDTH=3840\r\n") && updated.contains("FILTER=PHOTOreal\r\n"));
+        Expect.isTrue(Path.readAll(f"{cfg}/video.ini.before-nix").equals(video));
+        Expect.isTrue(Path.readAll(f"{cfg}/extension/weather_fx.ini").contains("[BASIC]\nIMPLEMENTATION=pure\n"));
         GameSettings.apply(prefix, declared);
-        assert(Path.readAll(f"{cfg}/video.ini").equals(updated));
+        Expect.isTrue(Path.readAll(f"{cfg}/video.ini").equals(updated));
         for invalid in ["{\"../x.ini\":{}}", "{\"/x.ini\":{}}", "{\"x.txt\":{}}", "{\"x.ini\":{\"A\":{\"K\":1}}}", "{\"x.ini\":{\"A\":{\"K\":\"1\\nBAD=1\"}}}"] {
             var rejected = false;
             try { GameSettings.apply(prefix, JSONValue.parse(invalid)); } catch (string error) { rejected = true; }
-            assert(rejected);
+            Expect.isTrue(rejected);
         }
         print("PASS: declared video/CSP INI keys, preservation, backup, repeat application, path/value validation");
     }
@@ -508,9 +501,9 @@ class GamingTests {
         var original = "[CONTROLLERS]\nCON0=Logitech PRO\n[STEER]\nAXLE=0\nFF_GAIN=0.4\n[__CM_TO_PITS]\nJOY=-1\nBUTTON=-1\nKEY=17\n";
         var bindings = JSONValue.parse("[{\"action\":\"__CM_TO_PITS\",\"joystick\":0,\"button\":2,\"modifier\":7}]");
         var updated = ControlBindings.update(original, bindings);
-        assert(updated.contains("AXLE=0\nFF_GAIN=0.4\n") && updated.contains("KEY=17\n"));
-        assert(updated.contains("JOY_MODIFICATOR=0") && updated.contains("BUTTON_MODIFICATOR=7"));
-        assert(ControlBindings.update(updated, bindings).equals(updated));
+        Expect.isTrue(updated.contains("AXLE=0\nFF_GAIN=0.4\n") && updated.contains("KEY=17\n"));
+        Expect.isTrue(updated.contains("JOY_MODIFICATOR=0") && updated.contains("BUTTON_MODIFICATOR=7"));
+        Expect.isTrue(ControlBindings.update(updated, bindings).equals(updated));
         var prefix = f"{self.root}/bindings-prefix";
         var active = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controls.ini";
         var local = PresetLinks.path(prefix, "Controls/test.ini");
@@ -519,42 +512,42 @@ class GamingTests {
         var presets = JSONValue.makeObject(); presets.set("Controls/test.ini", JSONValue.makeString(external));
         PresetLinks.apply(prefix, presets);
         ControlBindings.configure(prefix, bindings, presets);
-        assert(FileSystem.isSymlink(local) && Path.readAll(external).equals(updated));
-        assert(Path.readAll(active).equals(updated) && Path.readAll(f"{active}.before-nix-bindings").equals(original));
+        Expect.isTrue(FileSystem.isSymlink(local) && Path.readAll(external).equals(updated));
+        Expect.isTrue(Path.readAll(active).equals(updated) && Path.readAll(f"{active}.before-nix-bindings").equals(original));
         ControlBindings.configure(prefix, bindings, presets);
-        assert(Path.readAll(f"{external}.before-nix-bindings").equals(original));
+        Expect.isTrue(Path.readAll(f"{external}.before-nix-bindings").equals(original));
         bindings.push(bindings.at(0));
         var rejected = false;
         try { ControlBindings.configure(prefix, bindings, presets); } catch (string error) { rejected = true; }
-        assert(rejected && Path.readAll(active).equals(updated));
+        Expect.isTrue(rejected && Path.readAll(active).equals(updated));
         var extended = JSONValue.parse("[{\"action\":\"ABSUP\",\"joystick\":0,\"button\":null,\"modifier\":null},{\"action\":\"ABSDN\",\"joystick\":0,\"button\":null,\"modifier\":null},{\"action\":\"__EXT_WIPERS_MORE\",\"joystick\":0,\"button\":21,\"modifier\":7},{\"action\":\"ABS\",\"joystick\":0,\"button\":24,\"modifier\":7}]");
         ControlBindings.configure(prefix, extended, presets, "1");
         var configured = Path.readAll(active);
         var compact = configured.replace("\n\n", "\n");
-        assert(compact.contains("[ABSUP]\nJOY=-1\nBUTTON=-1") && compact.contains("[ABSDN]\nJOY=-1\nBUTTON=-1"));
-        assert(configured.contains("[BRAKES]\nGAMMA=1") && configured.contains("AXLE=0\nFF_GAIN=0.4"));
+        Expect.isTrue(compact.contains("[ABSUP]\nJOY=-1\nBUTTON=-1") && compact.contains("[ABSDN]\nJOY=-1\nBUTTON=-1"));
+        Expect.isTrue(configured.contains("[BRAKES]\nGAMMA=1") && configured.contains("AXLE=0\nFF_GAIN=0.4"));
         var general = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension/general.ini";
         var gui = f"{prefix}/drive_c/users/steamuser/Documents/Assetto Corsa/cfg/extension/gui.ini";
-        assert(Path.readAll(general).contains("BINARY_MODIFIERS_FILTERING2=1"));
-        assert(Path.readAll(gui).contains("CONTROLLER_INTEGRATION_PITS=1"));
-        assert(Path.readAll(gui).contains("CONTROLLER_INTEGRATION_REPLAY=1"));
-        assert(Path.readAll(external).equals(configured));
+        Expect.isTrue(Path.readAll(general).contains("BINARY_MODIFIERS_FILTERING2=1"));
+        Expect.isTrue(Path.readAll(gui).contains("CONTROLLER_INTEGRATION_PITS=1"));
+        Expect.isTrue(Path.readAll(gui).contains("CONTROLLER_INTEGRATION_REPLAY=1"));
+        Expect.isTrue(Path.readAll(external).equals(configured));
         for invalid in ["0", "6", "invalid", "1\nBAD=1"] {
             rejected = false;
             try { ControlBindings.configure(prefix, extended, presets, invalid); } catch (string error) { rejected = true; }
-            assert(rejected && Path.readAll(active).equals(configured));
+            Expect.isTrue(rejected && Path.readAll(active).equals(configured));
         }
         // A native AC action cannot acquire a modifier just by adding INI keys.
         var nativeModifier = JSONValue.parse("[{\"action\":\"GEARUP\",\"joystick\":0,\"button\":4,\"modifier\":7}]");
         rejected = false;
         try { ControlBindings.configure(prefix, nativeModifier, presets); } catch (string error) { rejected = true; }
-        assert(rejected && Path.readAll(active).equals(configured));
+        Expect.isTrue(rejected && Path.readAll(active).equals(configured));
         // A modifier must not fire a standalone action when first pressed.
         var conflict = JSONValue.parse("{\"action\":\"ACTION_HORN\",\"joystick\":0,\"button\":7,\"modifier\":null}");
         extended.push(conflict);
         rejected = false;
         try { ControlBindings.configure(prefix, extended, presets); } catch (string error) { rejected = true; }
-        assert(rejected && Path.readAll(active).equals(configured));
+        Expect.isTrue(rejected && Path.readAll(active).equals(configured));
         print("PASS: wheel bindings, modifiers, unbinding, brake gamma, CSP navigation, axis preservation, backups, preset links, conflict refusal");
     }
 }

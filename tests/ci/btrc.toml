@@ -1,6 +1,7 @@
 manifest-version = 1
 [package]
 name = "nixos_ci_tests"
+exports = ["ProcessProbe"]
 [dependencies]
 ci = { path = "../../ci" }
 
@@ -9,7 +10,15 @@ module = "ProcessProbe"
 header = "process-probe.h"
 language = "c"
 standard = "c11"
-symbols = ["testReadInputByte", "testInputRemainsOpen", "testProcessExists"]
+symbols = [
+    "testReadInputByte",
+    "testInputRemainsOpen",
+    "testProcessExists",
+    "testIgnoreBrokenPipe",
+    "testOpenPrivateDescriptor",
+    "testCloseDescriptor",
+    "testDescriptorClosed"
+]
 
 [[native.defines]]
 name = "_POSIX_C_SOURCE"

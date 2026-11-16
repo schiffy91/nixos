@@ -1,8 +1,7 @@
 import Library.Console;
+import Library.Testing;
 import unlock.Devices;
 import unlock.Secrets;
-
-#include <assert.h>
 
 class VolumeFixture {
     class BlockVolume range(string disk, long sequence, long start, long size) {
@@ -19,20 +18,20 @@ class VolumeFixture {
 
 int main() {
     var first = VolumeFixture.range("8:0", 10, 100, 100);
-    assert(first.overlaps(VolumeFixture.range("8:0", 10, 199, 100)));
-    assert(!first.overlaps(VolumeFixture.range("8:0", 10, 200, 100)));
-    assert(!first.overlaps(VolumeFixture.range("8:0", 11, 100, 100)));
-    assert(!first.overlaps(VolumeFixture.range("9:0", 10, 100, 100)));
-    assert(first.mapping().equals("opportunistic-8-1-10"));
-    assert(!first.mapping().equals(VolumeFixture.range("8:0", 11, 100, 100).mapping()));
-    assert(BootPassphrase.trustedDescription("user;0;0;003f0000;nixos:opportunistic-unlock"));
-    assert(BootPassphrase.trustedDescription("user;0;0;3f0000;nixos:opportunistic-unlock"));
-    assert(!BootPassphrase.trustedDescription("user;1000;0;003f0000;nixos:opportunistic-unlock"));
-    assert(!BootPassphrase.trustedDescription("user;0;0;3f3f0000;nixos:opportunistic-unlock"));
-    assert(!BootPassphrase.trustedDescription("user;0;0;003f0000;cryptsetup"));
-    assert(!BootPassphrase.trustedDescription("user;0;0;00000000;nixos:opportunistic-unlock"));
-    assert(!BootPassphrase.trustedDescription("user;0;0;003f0000;nixos:opportunistic-unlock;extra"));
-    assert(!BootPassphrase.trustedDescription("malformed"));
+    Expect.isTrue(first.overlaps(VolumeFixture.range("8:0", 10, 199, 100)));
+    Expect.isFalse(first.overlaps(VolumeFixture.range("8:0", 10, 200, 100)));
+    Expect.isFalse(first.overlaps(VolumeFixture.range("8:0", 11, 100, 100)));
+    Expect.isFalse(first.overlaps(VolumeFixture.range("9:0", 10, 100, 100)));
+    Expect.strEq(first.mapping(), "opportunistic-8-1-10");
+    Expect.strNe(first.mapping(), VolumeFixture.range("8:0", 11, 100, 100).mapping());
+    Expect.isTrue(BootPassphrase.trustedDescription("user;0;0;003f0000;nixos:opportunistic-unlock"));
+    Expect.isTrue(BootPassphrase.trustedDescription("user;0;0;3f0000;nixos:opportunistic-unlock"));
+    Expect.isFalse(BootPassphrase.trustedDescription("user;1000;0;003f0000;nixos:opportunistic-unlock"));
+    Expect.isFalse(BootPassphrase.trustedDescription("user;0;0;3f3f0000;nixos:opportunistic-unlock"));
+    Expect.isFalse(BootPassphrase.trustedDescription("user;0;0;003f0000;cryptsetup"));
+    Expect.isFalse(BootPassphrase.trustedDescription("user;0;0;00000000;nixos:opportunistic-unlock"));
+    Expect.isFalse(BootPassphrase.trustedDescription("user;0;0;003f0000;nixos:opportunistic-unlock;extra"));
+    Expect.isFalse(BootPassphrase.trustedDescription("malformed"));
     Console.log("PASS: volume identity, overlapping ranges and verified boot-handoff ownership");
     return 0;
 }

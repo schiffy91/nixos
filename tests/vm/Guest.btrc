@@ -1,5 +1,6 @@
 import Library.JSON;
 import Library.Bytes;
+import Library.Crypto.Base64;
 import Library.FileSystem;
 import Library.Regex;
 import ../lib/Check.btrc;
@@ -158,8 +159,9 @@ class Guest {
             }
             var status = line.substring(marker.len(), line.len() - marker.len()).trim();
             Check.that(Regex.matches("^[0-9]+$", status), "valid guest exit status");
-            var decoded = Check.exited(ChildProcess.run("base64", ["--decode"], stdinData=encoded.toStringLossy(), timeoutMilliseconds=10000, maxStdoutBytes=33554432));
-            return GuestResult(Strings.toInt(status), decoded.stdout());
+            var decoded = Base64.decode(encoded.toStringLossy());
+            if (decoded == null) { throw "Invalid base64 guest output frame"; }
+            return GuestResult(Strings.toInt(status), decoded.toStringLossy());
         }
         throw "Unreachable guest reply";
     }

@@ -1,97 +1,83 @@
+import Library.CLI;
 import Library.FileSystem;
 import Library.Platform;
 import Library.Process;
 import Library.Strings;
+import Library.Testing;
 import Library.Timer;
-#include <assert.h>
-#include <signal.h>
-#include <sys/wait.h>
-
-volatile sig_atomic_t terminated = 0;
-void terminate(int number) { terminated = (sig_atomic_t)number; }
 
 class ProcessTests {
     private string executable;
     public ProcessTests(string executable) { self.executable = executable; }
 
     public void descriptors() {
-        int original = open("/dev/null", O_RDONLY);
-        assert(original >= 0);
-        int descriptor = fcntl(original, F_DUPFD, 100);
-        close(original);
-        assert(descriptor >= 100 && fcntl(descriptor, F_GETFD, 0) == 0);
-        var child = BackgroundProcess.start(self.executable, ["--check-descriptor", f"{descriptor}"]);
-        assert(child.waitUntil(MonotonicClock.deadlineAfter(5000)) && child.code() == 0);
-        assert(fcntl(descriptor, F_GETFD, 0) == 0);
-        close(descriptor);
+        int descriptor = sleepTestOpenHighDescriptor();
+        Expect.isTrue(descriptor >= 100 && sleepTestDescriptorInheritable(descriptor));
+        try {
+            var child = BackgroundProcess.start(self.executable, ["--check-descriptor", f"{descriptor}"]);
+            Expect.isTrue(child.waitUntil(MonotonicClock.deadlineAfter(5000)) && child.code() == 0);
+            Expect.isTrue(sleepTestDescriptorInheritable(descriptor));
+        } finally {
+            sleepTestCloseDescriptor(descriptor);
+        }
     }
 
     public void arguments() {
         var child = BackgroundProcess.start(self.executable, ["--arguments", "", "spaces ' quotes $() ;"], ["BACKGROUND_PROCESS_TEST=literal value"]);
-        assert(child.waitUntil(MonotonicClock.deadlineAfter(5000)) && child.code() == 37);
+        Expect.isTrue(child.waitUntil(MonotonicClock.deadlineAfter(5000)) && child.code() == 37);
         child.stop(); child.stop();
-        assert(!child.running() && child.code() == 37);
-        int status = 0;
-        assert(waitpid((pid_t)child.pid(), &status, WNOHANG) == (pid_t)(-1) && errno == ECHILD);
+        Expect.isTrue(!child.running() && child.code() == 37);
+        Expect.isTrue(sleepTestChildReaped(child.pid()));
     }
 
     public void stopping(bool ignoreTerm) {
-        var directory = TemporaryDirectory.create("background-process-tests").value();
-        var ready = directory.path() + "/ready";
+        var directory = TestDir("background-process-tests-");
+        var ready = directory.join("ready");
         var child = BackgroundProcess.start(self.executable, [ignoreTerm ? "--ignore-term" : "--term", ready]);
         var deadline = MonotonicClock.deadlineAfter(5000);
         while (!FileSystem.isFile(ready) && child.running() && MonotonicClock.before(deadline)) { Timer.sleepMillis(10); }
-        assert(FileSystem.isFile(ready) && child.running() && child.code() == -1);
-        assert(!child.waitUntil(MonotonicClock.deadlineAfter(0)));
+        Expect.isTrue(FileSystem.isFile(ready) && child.running() && child.code() == -1);
+        Expect.isFalse(child.waitUntil(MonotonicClock.deadlineAfter(0)));
         child.stop(ignoreTerm ? 20 : 2000);
-        assert(!child.running() && child.code() == (ignoreTerm ? 137 : 42));
+        Expect.isTrue(!child.running() && child.code() == (ignoreTerm ? 137 : 42));
         child.stop();
-        int status = 0;
-        assert(waitpid((pid_t)child.pid(), &status, WNOHANG) == (pid_t)(-1) && errno == ECHILD);
-        directory.close();
+        Expect.isTrue(sleepTestChildReaped(child.pid()));
     }
 
     public void failedLaunches() {
-        var directory = TemporaryDirectory.create("background-process-failures").value();
-        var invalid = directory.path() + "/invalid";
-        Path.writeAll(invalid, "not an executable image\n");
-        assert(chmod(invalid, (mode_t)0700) == 0);
-        for command in [directory.path() + "/missing", invalid] {
+        var directory = TestDir("background-process-failures-");
+        var invalid = directory.writeFile("invalid", "not an executable image\n", 0o700);
+        for command in [directory.join("missing"), invalid] {
             bool failed = false;
             try { BackgroundProcess.start(command, []); }
             catch (string error) { failed = true; }
-            assert(failed);
+            Expect.isTrue(failed);
         }
         bool failed = false;
         try { BackgroundProcess.start(self.executable, [], ["invalid"]); }
         catch (string error) { failed = true; }
-        assert(failed);
-        directory.close();
+        Expect.isTrue(failed);
     }
 }
 
 int main(int argc, char** argv) {
-    if (argc == 3 && strcmp(argv[1], "--check-descriptor") == 0) {
-        int descriptor = atoi(argv[2]);
-        if (fcntl(descriptor, F_GETFD, 0) >= 0 || errno != EBADF) { return 1; }
-        for (int standard = 0; standard < 3; standard++) {
-            if (fcntl(standard, F_GETFD, 0) < 0) { return 2; }
-        }
-        return 0;
+    var args = CLIArgs(argc, argv);
+    if (args.count() == 2 && args.get(0) == "--check-descriptor") {
+        return sleepTestVerifyChildDescriptors(Strings.toInt(args.get(1)));
     }
-    if (argc == 4 && strcmp(argv[1], "--arguments") == 0) {
-        assert(strcmp(argv[2], "") == 0 && strcmp(argv[3], "spaces ' quotes $() ;") == 0);
-        assert(Environment.get("BACKGROUND_PROCESS_TEST", "").equals("literal value"));
+    if (args.count() == 3 && args.get(0) == "--arguments") {
+        Expect.strEq(args.get(1), "");
+        Expect.strEq(args.get(2), "spaces ' quotes $() ;");
+        Expect.strEq(Environment.get("BACKGROUND_PROCESS_TEST", ""), "literal value");
         return 37;
     }
-    if (argc == 3) {
-        if (strcmp(argv[1], "--ignore-term") == 0) { signal((int)SIGTERM, SIG_IGN); }
-        else { signal((int)SIGTERM, terminate); }
-        Path.writeAll(Strings.copy(argv[2]), "ready");
-        while (terminated == (sig_atomic_t)0) { Timer.sleepMillis(10); }
+    if (args.count() == 2) {
+        sleepTestConfigureTermSignal(args.get(0) == "--ignore-term");
+        Path.writeAll(args.get(1), "ready");
+        while (!sleepTestWasTerminated()) { Timer.sleepMillis(10); }
         return 42;
     }
-    var tests = ProcessTests(Strings.copy(argv[0]));
+    var tests = ProcessTests(args.program);
     tests.descriptors();
     tests.arguments();
     tests.stopping(false);

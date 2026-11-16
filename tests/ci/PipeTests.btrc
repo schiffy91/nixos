@@ -1,12 +1,17 @@
 import Library.Bytes;
+import Library.CLI;
 import Library.Process;
 import Library.Strings;
+import Library.Testing;
 import Library.Timer;
-#include <assert.h>
+import ./ProcessProbe.btrc;
 
 int main(int argc, char** argv) {
-    if (argc == 3 && strcmp(argv[1], "--check-fd") == 0) { return fcntl(atoi(argv[2]), F_GETFD, 0) < 0 ? 0 : 1; }
-    signal((int)SIGPIPE, SIG_IGN);
+    var args = CLIArgs(argc, argv);
+    if (args.count() == 2 && args.get(0) == "--check-fd") {
+        return ProcessProbe.descriptorClosed(Strings.toInt(args.get(1))) ? 0 : 1;
+    }
+    ProcessProbe.ignoreBrokenPipe();
     var child = PipeProcess("cat", []);
     var bytes = Bytes();
     bytes.append(0); bytes.append(10); bytes.append(13); bytes.append(255);
@@ -14,26 +19,26 @@ int main(int argc, char** argv) {
     child.closeInput();
     var read = child.read(MonotonicClock.deadlineAfter(1000));
     if (read == null) { throw "Child returned no bytes"; }
-    assert(read.length() == 4);
-    for (int i = 0; i < 4; i++) { assert(read.get(i) == bytes.get(i)); }
-    assert(child.read(MonotonicClock.deadlineAfter(1000)) == null);
-    assert(child.wait(MonotonicClock.deadlineAfter(1000)) == 0);
-    bool failed = false;
-    try { var missing = PipeProcess("/definitely/missing/ci-command", []); }
-    catch (string error) { failed = true; }
-    assert(failed);
+    Expect.bytesEq(read, bytes);
+    Expect.isTrue(child.read(MonotonicClock.deadlineAfter(1000)) == null);
+    Expect.intEq(child.wait(MonotonicClock.deadlineAfter(1000)), 0);
+    Expect.throws(() => { var missing = PipeProcess("/definitely/missing/ci-command", []); });
     var silent = PipeProcess("sleep", ["10"]);
-    failed = false;
+    bool failed = false;
     try { silent.read(MonotonicClock.deadlineAfter(20)); }
     catch (string error) { failed = true; }
-    assert(failed); silent.close();
-    int privateDescriptor = open("/dev/null", O_RDONLY);
-    assert(privateDescriptor >= 3);
-    var isolated = PipeProcess(Strings.copy(argv[0]), ["--check-fd", f"{privateDescriptor}"]);
-    isolated.closeInput();
-    assert(isolated.read(MonotonicClock.deadlineAfter(1000)) == null);
-    assert(isolated.wait(MonotonicClock.deadlineAfter(1000)) == 0);
-    close(privateDescriptor);
+    Expect.isTrue(failed);
+    silent.close();
+    int privateDescriptor = ProcessProbe.openPrivateDescriptor();
+    Expect.isTrue(privateDescriptor >= 3);
+    try {
+        var isolated = PipeProcess(args.program, ["--check-fd", f"{privateDescriptor}"]);
+        isolated.closeInput();
+        Expect.isTrue(isolated.read(MonotonicClock.deadlineAfter(1000)) == null);
+        Expect.intEq(isolated.wait(MonotonicClock.deadlineAfter(1000)), 0);
+    } finally {
+        ProcessProbe.closeDescriptor(privateDescriptor);
+    }
     print("PASS: child pipes, EOF, exit, spawn failure, deadlines and descriptor isolation");
     return 0;
 }

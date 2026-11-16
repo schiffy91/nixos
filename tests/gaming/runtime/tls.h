@@ -1,5 +1,6 @@
 #ifndef NIXOS_TEST_TLS_H
 #define NIXOS_TEST_TLS_H
+#include <openssl/crypto.h>
 #include <openssl/ssl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -55,8 +56,13 @@ static inline int testTLSRead(TestTLSConnection *connection) {
 }
 static inline const unsigned char *testTLSBytes(TestTLSConnection *connection) { return connection->bytes; }
 static inline int testTLSLength(TestTLSConnection *connection) { return connection->length > 0 ? connection->length : 0; }
-static inline int testTLSWrite(TestTLSConnection *connection, const char *bytes, int length, int offset) {
-    if (offset < 0 || offset >= length) return -1;
-    return SSL_write(connection->ssl, bytes + offset, length - offset);
+static inline int testTLSWrite(TestTLSConnection *connection, const char *hex) {
+    if (!hex || !hex[0]) return 0;
+    long decodedLength = 0;
+    unsigned char *decoded = OPENSSL_hexstr2buf(hex, &decodedLength);
+    if (!decoded || decodedLength <= 0) { OPENSSL_free(decoded); return -1; }
+    int written = SSL_write(connection->ssl, decoded, (int)decodedLength);
+    OPENSSL_free(decoded);
+    return written;
 }
 #endif

@@ -3,9 +3,8 @@ import Library.Console;
 import Library.FileSystem;
 import Library.FileSystem.FileSystemHandles;
 import Library.JSON;
+import Library.Platform;
 import ./Artifacts.btrc;
-
-#include <sys/stat.h>
 
 class RecoveryArtifactInstaller {
     private RecoveryArtifacts artifacts;
@@ -20,7 +19,7 @@ class RecoveryArtifactInstaller {
     }
 
     public void run() {
-        umask(0077);
+        Platform.setUmask(0o077);
         RecoveryArtifacts.handleInterruptions();
         if (FileSystem.mkdirp("/run/lock") != 0) { throw "Cannot create recovery lock directory"; }
         var acquired = AdvisoryFileLock.acquire("/run/lock/nixos-recovery.lock", wait=true);

@@ -1,20 +1,22 @@
+import Library.Testing;
 import ../../../config/pkgs/gaming/wow/Lock.btrc;
-#include <assert.h>
 
 int main() {
     var tags = AddonLock.feedTags("<a href=\"https://github.com/Org/Addon/releases/tag/bundle%2F10%2Bfix\"/><a href=\"releases/tag/old\"/>");
-    assert(tags.len == 2 && tags.get(0).equals("bundle/10+fix"));
+    Expect.intEq(tags.length, 2);
+    Expect.strEq(tags.get(0), "bundle/10+fix");
     var train = AddonLock.trainTags("hash\trefs/tags/bundle/2\nhash\trefs/tags/bundle/10\nhash\trefs/tags/bundle/10^{}\nhash\trefs/tags/bundle/nested/1\nhash\trefs/tags/other/3\n", "bundle");
-    assert(train.len == 2 && train.get(1).equals("bundle/10"));
+    Expect.intEq(train.length, 2);
+    Expect.strEq(train.get(1), "bundle/10");
     var assets = "<a href=\"/Org/Addon/releases/download/v1/Addon-1.zip\"/><a href=\"/Org/Addon/releases/download/v1/Addon-1-retail.zip\"/><a href=\"/Org/Addon/releases/download/v1/Addon-1-forever.zip\"/>";
-    assert(AddonLock.asset(assets, "Org/Addon", "").endsWith("Addon-1.zip"));
-    assert(AddonLock.asset(assets, "Org/Addon", "forever").endsWith("Addon-1-forever.zip"));
-    assert(AddonLock.asset(assets, "Org/Addon", "classic").isEmpty());
-    assert(AddonLock.asset(assets, "Other/Addon", "").isEmpty());
+    Expect.endsWith(AddonLock.asset(assets, "Org/Addon", ""), "Addon-1.zip");
+    Expect.endsWith(AddonLock.asset(assets, "Org/Addon", "forever"), "Addon-1-forever.zip");
+    Expect.isTrue(AddonLock.asset(assets, "Org/Addon", "classic").isEmpty());
+    Expect.isTrue(AddonLock.asset(assets, "Other/Addon", "").isEmpty());
     bool ambiguous = false;
     try { AddonLock.asset(assets + "<a href=\"/Org/Addon/releases/download/v1/Other.zip\"/>", "Org/Addon", ""); }
     catch (string error) { ambiguous = true; }
-    assert(ambiguous);
+    Expect.isTrue(ambiguous);
     print("PASS: addon feed decoding, train filtering and base/flavour asset selection");
     return 0;
 }

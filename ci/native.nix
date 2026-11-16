@@ -13,6 +13,7 @@ let
     "config/system/nixos/sleep/helpers/posix.h"
     "config/system/nixos/sleep/helpers/pam.h"
     "config/system/nixos/sleep/helpers/drm.h"
+    "config/system/nixos/recovery/signals.h"
     "config/system/nixos/opportunistic-unlock/handoff.h"
     "config/system/nixos/opportunistic-unlock/native.h"
     "config/system/nixos/networking/native.h"
@@ -42,6 +43,7 @@ let
     "tests/gaming/runtime/signals.h"
     "tests/harness/timeout/process-tree.h"
     "tests/secure-boot/alarm-state.h"
+    "tests/sleep-lock/unit/process-probe.h"
     "tests/vm/vnc.h"
     "tests/gaming/proton/pdb/Folded.c"
     "tests/gaming/proton/pdb/Public.c"
@@ -69,6 +71,7 @@ let
       ${../config/system/nixos/sleep/helpers/posix.h} \
       ${../config/system/nixos/sleep/helpers/pam.h} \
       ${../config/system/nixos/sleep/helpers/drm.h} \
+      ${../config/system/nixos/recovery/signals.h} \
       ${../config/pkgs/gaming/sunshine/ssh-login/native.h} \
       ${../config/pkgs/gaming/proton/custom/tools/native.h} \
       ${../config/pkgs/gaming/slopsmith/src/signals.h} \
@@ -83,6 +86,7 @@ let
       ${../tests/gaming/runtime/signals.h} \
       ${../tests/harness/timeout/process-tree.h} \
       ${../tests/secure-boot/alarm-state.h} \
+      ${../tests/sleep-lock/unit/process-probe.h} \
       ${../tests/vm/vnc.h} \
       ${../tests/ci/native-fixture/native.h}; do
       $CC -D_GNU_SOURCE=1 -Wall -Wextra -Werror -x c -fsyntax-only -I${../config/system/nixos/opportunistic-unlock} \

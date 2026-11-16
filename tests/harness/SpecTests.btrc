@@ -1,12 +1,13 @@
+import Library.Testing;
 import ../../config/pkgs/utils/nixosctl/lib/simulator/spec/VmSpecParser.btrc;
-
-#include <assert.h>
 
 int main() {
     var spec = VmSpecParser.parse("{\"name\":\"nested\",\"args\":{\"enabled\":true},\"operations\":[{\"op\":\"host\",\"command\":\"printf state\",\"expect\":\"state\"}]}");
-    assert(spec.name.equals("nested") && spec.state.equals("nested"));
-    assert(spec.args.get("enabled").equals("true"));
-    assert(spec.operations.len == 1 && spec.operations.get(0).timeout == 120);
+    Expect.strEq(spec.name, "nested");
+    Expect.strEq(spec.state, "nested");
+    Expect.strEq(spec.args.get("enabled"), "true");
+    Expect.intEq(spec.operations.length, 1);
+    Expect.intEq(spec.operations.get(0).timeout, 120);
     for invalid in ["", "{", "null", "[]", "{}", "{\"operations\":[]}",
         "{\"operations\":[{}]}", "{\"operations\":[\"host\"]}",
         "{\"operations\":[{\"op\":\"host\",\"timeout\":0}]}",
@@ -15,7 +16,7 @@ int main() {
     ] {
         var rejected = false;
         try { VmSpecParser.parse(invalid); } catch (string error) { rejected = true; }
-        assert(rejected);
+        Expect.isTrue(rejected);
     }
     print("PASS: structured scenario parser rejects malformed/empty operations and invalid field types");
     return 0;

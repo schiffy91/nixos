@@ -59,7 +59,7 @@ in
   name = "nixos-mount";
   src = lib.fileset.toSource {
     root = ./.;
-    fileset = lib.fileset.unions [ ./Main.btrc ./Mount.btrc ];
+    fileset = lib.fileset.unions [ ./Main.btrc ./Mount.btrc ./Artifacts.btrc ./signals.h ./btrc.toml ./btrc.lock ];
   };
   programs.nixos-mount = "Main.btrc";
   runtimeInputs = with pkgs; [ btrfs-progs coreutils cryptsetup util-linux ];

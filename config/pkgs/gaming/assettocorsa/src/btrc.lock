@@ -1,1 +1,1 @@
-{"manifest-hash":"3ce693e38f0c5ed331d72bed9c3b5fdbd8d8546089224fd8e0657ce6bf2ea441","packages":[{"dependencies":{},"manifest-hash":"8ecee1a7918a2457f489f19f4a9771dc4c615754bdbd7cc3102680df3077f7e4","name":"nixos_assettocorsa","source":{"path":"."}}],"root":"nixos_assettocorsa","schema":3}
+{"manifest-hash":"837c1e70fd5cf4a0ffe77153eb9b40fc6ba84de0a0e374a68ff3080314918f3b","packages":[{"dependencies":{},"manifest-hash":"3a4e351649bfb3986fa94b9a929ca0efe8e2b66cd8601ddf8306b07b186be7f4","name":"nixos_assettocorsa","source":{"path":"."}}],"root":"nixos_assettocorsa","schema":3}

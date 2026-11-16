@@ -31,7 +31,7 @@ class Framebuffer {
         var pixels = testVNCPixels(self.session);
         if (pixels == null) { throw "Cannot copy framebuffer pixels"; }
         var frame = Image(testVNCWidth(self.session), testVNCHeight(self.session));
-        Check.that(frame.tryCopyPackedRgba(pixels.data, (unsigned long long)pixels.length()), "complete RGBA framebuffer");
+        Check.that(frame.tryCopyPackedRgbaBytes(pixels), "complete RGBA framebuffer");
         return frame;
     }
     public Image save(string path) {

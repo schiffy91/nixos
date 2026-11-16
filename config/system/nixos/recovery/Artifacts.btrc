@@ -5,11 +5,6 @@ import Library.Process;
 import Library.Strings;
 import Library.Vector;
 
-#include <signal.h>
-
-volatile sig_atomic_t recoveryArtifactSignal = 0;
-void interruptRecoveryArtifacts(int number) { recoveryArtifactSignal = (sig_atomic_t)number; }
-
 class RecoveryArtifacts {
     public JSONValue plan;
     public Vector<string> staged = [];
@@ -46,13 +41,15 @@ class RecoveryArtifacts {
     }
 
     class void handleInterruptions() {
-        recoveryArtifactSignal = 0;
-        signal((int)SIGINT, interruptRecoveryArtifacts);
-        signal((int)SIGTERM, interruptRecoveryArtifacts);
+        recoveryArtifactsHandleInterruptions();
+    }
+
+    class int caughtSignal() {
+        return recoveryArtifactsCaughtSignal();
     }
 
     class void checkInterrupted() {
-        if (recoveryArtifactSignal != (sig_atomic_t)0) { throw "Recovery artifact installation interrupted"; }
+        if (recoveryArtifactsCaughtSignal() != 0) { throw "Recovery artifact installation interrupted"; }
     }
 
     class void require(string command) {
@@ -133,7 +130,7 @@ class RecoveryArtifacts {
             }
             // Every payload is staged and verified before any bootable file is
             // replaced. A signed UKI is complete within its single rename.
-            for (int i = 0; i < self.staged.len; i++) {
+            for (int i = 0; i < self.staged.length; i++) {
                 RecoveryArtifacts.require(f"mv -f {ShellWords.quote(self.staged.get(i))} {ShellWords.quote(self.targets.get(i))}");
             }
             RecoveryArtifacts.require(f"sync -f {ShellWords.quote(self.boot())}");
@@ -148,7 +145,7 @@ class RecoveryArtifacts {
             RecoveryArtifacts.require(f"install -m 0600 {ShellWords.quote(checksumsFile)} {ShellWords.quote(self.recovery() + "/.nixos-recovery-checksums")}");
             RecoveryArtifacts.require(f"install -m 0600 {ShellWords.quote(manifestFile)} {ShellWords.quote(self.recovery() + "/.nixos-recovery-artifacts.manifest")}");
         } finally {
-            for temporary in self.staged { unlink(temporary); }
+            for temporary in self.staged { FileSystem.removeIfExists(temporary); }
             scratch.close();
         }
     }

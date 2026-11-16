@@ -11,6 +11,7 @@ let
         ./btrc.toml ./btrc.lock
         ./StateTests.btrc
         ./ProcessTests.btrc
+        ./process-probe.h
         ../../../config/system/nixos/sleep/btrc.toml
         ../../../config/system/nixos/sleep/btrc.lock
         ../../../config/system/nixos/sleep/Main.btrc

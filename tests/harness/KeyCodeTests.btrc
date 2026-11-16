@@ -1,5 +1,4 @@
-#include <assert.h>
-
+import Library.Testing;
 import Library.Vector;
 import ../../config/pkgs/utils/nixosctl/lib/simulator/qemu/VmProvisioner.btrc;
 
@@ -8,21 +7,21 @@ int main() {
        the disk stays locked. Splitting on "" yields nothing, which is how this
        first shipped: only Enter was ever sent. */
     var codes = VmProvisioner.keyCodesFor("testpass123");
-    assert(codes.len == 11);
-    assert(codes.get(0).equals("t"));
-    assert(codes.get(4).equals("p"));
-    assert(codes.get(8).equals("1"));
-    assert(codes.get(10).equals("3"));
+    Expect.intEq(codes.length, 11);
+    Expect.strEq(codes.get(0), "t");
+    Expect.strEq(codes.get(4), "p");
+    Expect.strEq(codes.get(8), "1");
+    Expect.strEq(codes.get(10), "3");
 
-    assert(VmProvisioner.keyCodesFor("").len == 0);
-    assert(VmProvisioner.keyCodeFor("a").equals("a"));
-    assert(VmProvisioner.keyCodeFor("7").equals("7"));
-    assert(VmProvisioner.keyCodeFor("-").equals("minus"));
-    assert(VmProvisioner.keyCodeFor(" ").equals("spc"));
+    Expect.intEq(VmProvisioner.keyCodesFor("").length, 0);
+    Expect.strEq(VmProvisioner.keyCodeFor("a"), "a");
+    Expect.strEq(VmProvisioner.keyCodeFor("7"), "7");
+    Expect.strEq(VmProvisioner.keyCodeFor("-"), "minus");
+    Expect.strEq(VmProvisioner.keyCodeFor(" "), "spc");
 
     /* a character with no key code must be refused, never silently dropped */
-    assert(VmProvisioner.keyCodeFor("%").isEmpty());
-    assert(VmProvisioner.keyCodesFor("ab%cd").len == 0);
+    Expect.isTrue(VmProvisioner.keyCodeFor("%").isEmpty());
+    Expect.intEq(VmProvisioner.keyCodesFor("ab%cd").length, 0);
 
     print("PASS: every passphrase character becomes a key event");
     return 0;

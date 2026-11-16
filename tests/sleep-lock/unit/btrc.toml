@@ -5,3 +5,23 @@ name = "nixos_sleep_tests"
 
 [dependencies]
 sleep = { path = "../../../config/system/nixos/sleep" }
+
+[[native.bindings]]
+module = "ProcessTests"
+header = "process-probe.h"
+language = "c"
+standard = "c11"
+symbols = [
+    "sleepTestConfigureTermSignal",
+    "sleepTestWasTerminated",
+    "sleepTestOpenHighDescriptor",
+    "sleepTestDescriptorInheritable",
+    "sleepTestCloseDescriptor",
+    "sleepTestVerifyChildDescriptors",
+    "sleepTestChildReaped"
+]
+
+[[native.defines]]
+name = "_POSIX_C_SOURCE"
+value = "200809L"
+modules = ["ProcessTests"]
