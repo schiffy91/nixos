@@ -24,6 +24,8 @@ let
     "config/pkgs/utils/nixosctl/lib/credentials.h"
     "config/pkgs/utils/nixosctl/lib/password-hash.h"
     "config/pkgs/gaming/sunshine/ssh-login/native.h"
+    "config/pkgs/gaming/proton/custom/tools/native.h"
+    "config/pkgs/gaming/slopsmith/src/signals.h"
     "config/pkgs/gaming/assettocorsa/src/compression.h"
     "config/pkgs/gaming/deckpad/Awake.h"
     "config/pkgs/gaming/deckpad/Screen.h"
@@ -68,6 +70,8 @@ let
       ${../config/system/nixos/sleep/helpers/pam.h} \
       ${../config/system/nixos/sleep/helpers/drm.h} \
       ${../config/pkgs/gaming/sunshine/ssh-login/native.h} \
+      ${../config/pkgs/gaming/proton/custom/tools/native.h} \
+      ${../config/pkgs/gaming/slopsmith/src/signals.h} \
       ${../config/pkgs/gaming/assettocorsa/src/compression.h} \
       ${../config/pkgs/gaming/deckpad/Awake.h} \
       ${../config/pkgs/gaming/deckpad/Screen.h} \

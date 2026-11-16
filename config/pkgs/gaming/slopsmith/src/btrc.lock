@@ -1,0 +1,1 @@
+{"manifest-hash":"d4377ae11e39acfee69e32428d93ecb4bb3ac6c2ea844e9054179de67f5c8763","packages":[{"dependencies":{},"manifest-hash":"dcec0f35fabb66d7b830ff7c5f081cc0a503efcfdd7f8e66cb50c1acee042572","name":"nixos_slopsmith","source":{"path":"."}}],"root":"nixos_slopsmith","schema":3}

@@ -92,7 +92,7 @@ class SecureBootManager {
 
     public string imageSystem(string image, string scratch) {
         var section = scratch + "/cmdline";
-        unlink(section);
+        FileSystem.removeIfExists(section);
         self.shell.run(f"objcopy -O binary --only-section=.cmdline {ShellWords.quote(image)} {ShellWords.quote(section)}",
             stderr=COMMAND_OUTPUT_COLLECT, throwOnFailure=true);
         var opened = FileSystem.openRegularFileSnapshot(section, 65536LL);

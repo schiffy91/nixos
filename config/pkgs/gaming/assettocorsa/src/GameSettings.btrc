@@ -1,5 +1,5 @@
 import Library.JSON;
-import ../../lib/GamingFiles.btrc;
+import ../../lib/ModTree.btrc;
 
 class GameSettings {
     // AC/CSP INI values are not TOML. Preserve unrelated settings and comments.
@@ -35,7 +35,7 @@ class GameSettings {
             if (!file.endsWith(".ini") || file.startsWith("/") || file.contains("..") || file.contains("\\")) { throw f"Invalid game settings file: {file}"; }
             var sections = declared.get(file);
             if (!sections.isObject()) { throw f"Invalid game settings for {file}"; }
-            var path = GamingFiles.inside(root, file);
+            var path = ModTree.inside(root, file);
             var original = FileSystem.isFile(path) ? Path.readAll(path) : "";
             var updated = original;
             for section in sections.keys() {
@@ -48,8 +48,8 @@ class GameSettings {
                 }
             }
             if (!updated.equals(original)) {
-                if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix")) { GamingFiles.copy(path, f"{path}.before-nix"); }
-                GamingFiles.write(path, updated);
+                if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix")) { ModTree.copy(path, f"{path}.before-nix"); }
+                ModTree.write(path, updated);
             }
         }
     }
@@ -67,8 +67,8 @@ class GameSettings {
         updated = GameSettings.set(updated, "NEW_UI", "REPLACE_MAIN_MENU", "1");
         updated = GameSettings.set(updated, "NEW_PAUSE_MENU", "ENABLED", "1");
         if (!updated.equals(original)) {
-            if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix")) { GamingFiles.copy(path, f"{path}.before-nix"); }
-            GamingFiles.write(path, updated);
+            if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix")) { ModTree.copy(path, f"{path}.before-nix"); }
+            ModTree.write(path, updated);
         }
     }
 }

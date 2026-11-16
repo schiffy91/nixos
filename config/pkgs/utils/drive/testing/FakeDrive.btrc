@@ -12,8 +12,6 @@ import Library.Vector;
 import ../remote/DriveFile.btrc;
 import ../remote/Timestamp.btrc;
 
-#include <stdio.h>
-
 class FakeEntry {
     public DriveFile file = DriveFile();
     public Bytes content = Bytes();
@@ -379,7 +377,7 @@ class FakeDrive {
     public void serve() {
         if (!self.server.start()) { throw "The fake Drive cannot listen on its port"; }
         Console.log("READY");
-        fflush(stdout);  // a test waits for this line
+        Console.flush();  // a test waits for this line
         while (true) {
             int connection = self.server.acceptConn();
             if (connection < 0) { continue; }

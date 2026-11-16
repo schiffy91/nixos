@@ -8,7 +8,7 @@ let
   ]));
   package = (import ../config/lib/btrc.nix {
     inherit pkgs;
-    btrcpy = compiler.packages.${system}.btrcpy;
+    inherit (compiler.packages.${system}) btrcpy btrc-native-plan;
   }) {
     name = "repo-tools";
     src = pkgs.lib.fileset.toSource { root = ../.; fileset = pkgs.lib.fileset.unions [ ./Main.btrc ./lib ./native.h ./btrc.toml ./btrc.lock ]; };

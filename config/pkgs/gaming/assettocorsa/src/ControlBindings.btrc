@@ -80,8 +80,8 @@ class ControlBindings {
         for (int i = 0; i < paths.len; i++) {
             var path = paths[i];
             if (FileSystem.isFile(path) && updates[i].equals(Path.readAll(path))) { continue; }
-            if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix-bindings")) { GamingFiles.copy(path, f"{path}.before-nix-bindings"); }
-            GamingFiles.write(path, updates[i]);
+            if (FileSystem.isFile(path) && !FileSystem.exists(f"{path}.before-nix-bindings")) { ModTree.copy(path, f"{path}.before-nix-bindings"); }
+            ModTree.write(path, updates[i]);
         }
     }
 }

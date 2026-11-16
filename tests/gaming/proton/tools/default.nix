@@ -4,7 +4,7 @@ let
     name = "proton-tools-contract-tests";
     src = pkgs.lib.fileset.toSource {
       root = ../../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../../../config/pkgs/gaming/proton/custom/tools ../../../lib ./ToolsTests.btrc ./Integration.btrc ./CommandFixture.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../../../../config/pkgs/gaming/proton/custom/tools ../../../lib ./ToolsTests.btrc ./Integration.btrc ./CommandFixture.btrc ./btrc.toml ./btrc.lock ];
     };
     programs = {
       proton-custom-tools = "config/pkgs/gaming/proton/custom/tools/Main.btrc";

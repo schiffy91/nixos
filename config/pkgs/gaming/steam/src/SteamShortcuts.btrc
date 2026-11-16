@@ -4,7 +4,7 @@ import Library.FileSystem;
 import Library.JSON;
 import Library.Strings;
 import Library.Vector;
-import ../../lib/GamingFiles.btrc;
+import ../../lib/ModTree.btrc;
 import ./SteamLibrary.btrc;
 
 class SteamShortcut {
@@ -209,7 +209,7 @@ class SteamShortcuts {
     class void install(SteamLibrary library, JSONValue declared) {
         if (library.root.isEmpty() || !declared.isObject()) { throw "Required: --steam-path PATH --shortcuts JSON"; }
         for path in library.userShortcuts() {
-            var current = FileSystem.isFile(path) ? GamingFiles.read(path) : Bytes();
+            var current = FileSystem.isFile(path) ? ModTree.read(path) : Bytes();
             var desired = SteamShortcuts.declare(current, declared);
             for entry in SteamShortcuts(desired).entries() {
                 if (!declared.has(entry.name) || entry.id == 0) { continue; }
@@ -233,16 +233,16 @@ class SteamShortcuts {
                     }
                     if (custom) { continue; }
                     if (FileSystem.exists(f"{target}.png")) {
-                        var digest = SHA256.digestBytes(GamingFiles.read(f"{target}.png"));
+                        var digest = SHA256.digestBytes(ModTree.read(f"{target}.png"));
                         var previous = FileSystem.isFile(record) ? Path.readAll(record).trim() : "";
                         if (!digest.equals(previous) && !digest.equals(legacy.get(filename).asString())) { continue; }
-                        if (GamingFiles.read(source).equals(GamingFiles.read(f"{target}.png"))) { continue; }
+                        if (ModTree.read(source).equals(ModTree.read(f"{target}.png"))) { continue; }
                     }
-                    GamingFiles.copy(source, f"{target}.png");
-                    GamingFiles.write(record, SHA256.digestBytes(GamingFiles.read(source)));
+                    ModTree.copy(source, f"{target}.png");
+                    ModTree.write(record, SHA256.digestBytes(ModTree.read(source)));
                 }
             }
-            if (!desired.equals(current)) { GamingFiles.writeBytes(path, desired); }
+            if (!desired.equals(current)) { ModTree.writeBytes(path, desired); }
         }
     }
 }

@@ -4,5 +4,4 @@ import ../../../lib/btrc.nix { inherit pkgs inputs; } {
   src = ./.;
   programs.nixos-opportunistic-unlock = "Main.btrc";
   buildInputs = [ pkgs.cryptsetup ];
-  linkFlags = [ "-lcryptsetup" ];
 }

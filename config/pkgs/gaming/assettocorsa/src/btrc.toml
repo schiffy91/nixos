@@ -8,6 +8,10 @@ exports = ["Assetto", "AssettoMods", "ContentManager", "ContentDirectory", "Pres
 name = "zlib"
 modules = ["ContentManager"]
 
+[[native.libraries]]
+name = "lzf"
+modules = ["ContentManager"]
+
 [[native.bindings]]
 module = "ContentManager"
 header = "compression.h"

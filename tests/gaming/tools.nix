@@ -8,7 +8,7 @@ in pkgs.stdenv.mkDerivation {
       ../../config/pkgs/gaming/assettocorsa/src
       ../../config/pkgs/gaming/steam/src
       ../../config/pkgs/gaming/wine/src
-      ../../config/pkgs/gaming/lib/GamingFiles.btrc
+      ../../config/pkgs/gaming/lib/ModTree.btrc
       ./GamingTests.btrc
       ./btrc.toml
     ];

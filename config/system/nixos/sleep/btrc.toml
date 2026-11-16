@@ -2,6 +2,7 @@ manifest-version = 1
 
 [package]
 name = "nixos_sleep"
+exports = ["Controller", "State"]
 
 [dependencies]
 nixosctl = { path = "../../../pkgs/utils/nixosctl" }

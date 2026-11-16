@@ -13,7 +13,7 @@ class SteamGame {
     }
 
     public string directory() {
-        return GamingFiles.inside(f"{self.library}/steamapps/common", self.manifest.get("installdir").asString());
+        return ModTree.inside(f"{self.library}/steamapps/common", self.manifest.get("installdir").asString());
     }
 
     public string prefix() { return f"{self.library}/steamapps/compatdata/{self.id}/pfx"; }

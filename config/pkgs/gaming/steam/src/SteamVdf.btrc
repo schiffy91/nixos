@@ -2,7 +2,7 @@ import Library.FileSystem;
 import Library.JSON;
 import Library.Strings;
 import Library.Vector;
-import ../../lib/GamingFiles.btrc;
+import ../../lib/ModTree.btrc;
 
 // Steam's text KeyValues format. Binary shortcuts.vdf is a different format.
 class SteamVdf {
@@ -112,6 +112,6 @@ class SteamVdf {
     }
 
     class void saveChanged(string path, JSONValue document, string before) {
-        if (!document.stringify().equals(before)) { GamingFiles.write(path, SteamVdf.render(document)); }
+        if (!document.stringify().equals(before)) { ModTree.write(path, SteamVdf.render(document)); }
     }
 }

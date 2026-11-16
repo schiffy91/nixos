@@ -31,8 +31,6 @@ let
     inherit src;
     programs.drive-tray = "status/Tray.btrc";
     buildInputs = [ pkgs.dbus ];  # Library.Tray binds libdbus-1
-    env.NIX_CFLAGS_COMPILE = "-I${pkgs.lib.getDev pkgs.dbus}/include/dbus-1.0 -I${pkgs.lib.getLib pkgs.dbus}/lib/dbus-1.0/include";
-    linkFlags = [ "-ldbus-1" ];
   };
   status = build ({  # the window a click on that icon opens
     name = "drive-status";

@@ -1,0 +1,7 @@
+manifest-version = 1
+
+[package]
+name = "nixos_proton_tools_tests"
+
+[dependencies]
+proton = { path = "../../../../config/pkgs/gaming/proton/custom/tools" }

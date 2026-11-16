@@ -1,4 +1,4 @@
-import ../../../../config/pkgs/gaming/proton/custom/tools/Capture.btrc;
+import proton.Capture;
 #include <assert.h>
 
 int main() {

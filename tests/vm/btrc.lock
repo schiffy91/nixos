@@ -1,1 +1,1 @@
-{"manifest-hash":"fc0e133e2ea3cfa9e2ac1252d4bff5dd3403687554e292925c481c0171190df3","packages":[{"dependencies":{},"manifest-hash":"6324e8fc7a8b7e1cc4459bc7d3118c53d6f158806981c61654db3585649a6d70","name":"nixos_vm_tests","source":{"path":"."}}],"root":"nixos_vm_tests","schema":3}
+{"manifest-hash":"0d6ed2aeede6c5b7bb8f2d6a961539f42994866989acf6dab24dbc9e22e29d11","packages":[{"dependencies":{},"manifest-hash":"63c6f934953fc5b5ac0684c52d43b8969526ea9e746cc101afdf9c83f204e209","name":"nixos_vm_tests","source":{"path":"."}}],"root":"nixos_vm_tests","schema":3}

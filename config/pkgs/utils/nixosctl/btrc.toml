@@ -2,6 +2,23 @@ manifest-version = 1
 
 [package]
 name = "nixosctl"
+exports = [
+    "lib.Installer",
+    "lib.NixosConfig",
+    "lib.PasswordChange",
+    "lib.PasswordManager",
+    "lib.PasswordPrompts",
+    "lib.RootSecretFile",
+    "lib.SecretsManager",
+    "lib.accounts.UserAccount",
+    "lib.core.Interactive",
+    "lib.core.NixosLog",
+    "lib.core.NixosPaths",
+    "lib.desktop.PowerManager",
+    "lib.hardware.SecureBootVerification",
+    "lib.simulator.qemu.VmProvisioner",
+    "lib.simulator.spec.VmSpecParser"
+]
 
 [[native.bindings]]
 module = "lib.accounts.UserAccount"

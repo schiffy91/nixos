@@ -1,0 +1,1 @@
+{"manifest-hash":"160385a15ab0da7ed4c8ceda50989a16a84d8ce35174dc0f881d319ad9117437","packages":[{"dependencies":{},"manifest-hash":"8e5568629980870281d6dc9c53548daa0874a22dcd8744b572e3bf7e21be9106","name":"nixos_proton_custom_tools","source":{"path":"."}}],"root":"nixos_proton_custom_tools","schema":3}

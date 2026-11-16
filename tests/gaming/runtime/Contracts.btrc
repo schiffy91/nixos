@@ -1,6 +1,6 @@
 import ../../../config/pkgs/gaming/sunshine/credentials/src/Credentials.btrc;
 import ../../../config/pkgs/gaming/sunshine/virtual-display/Display.btrc;
-import ../../../config/pkgs/gaming/slopsmith/src/Slopsmith.btrc;
+import slopsmith.Slopsmith;
 #include <assert.h>
 
 int main() {

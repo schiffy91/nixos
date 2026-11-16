@@ -1,6 +1,10 @@
 manifest-version = 1
 [package]
 name = "nixos_gaming_runtime_tests"
+exports = ["Signals", "TLS"]
+
+[dependencies]
+slopsmith = { path = "../../../config/pkgs/gaming/slopsmith/src" }
 
 [[native.bindings]]
 module = "TLS"

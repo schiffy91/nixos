@@ -1,4 +1,5 @@
 import Library.Console;
+import Library.Math;
 import ./Runtime.btrc;
 
 class WindowGeometry {
@@ -18,7 +19,7 @@ class ProtonCapture {
         var position = Regex.findAll("-?[0-9]+([.][0-9]+)?", Regex.first("Position:[^\n]+", text));
         var size = Regex.findAll("[0-9]+([.][0-9]+)?", Regex.first("Geometry:[^\n]+", text));
         if (position.len != 2 || size.len != 2) { throw "Could not parse Battle.net window geometry: " + text; }
-        return WindowGeometry((int)round(atof(position.get(0))), (int)round(atof(position.get(1))), (int)round(atof(size.get(0))), (int)round(atof(size.get(1))));
+        return WindowGeometry(Math.round(position.get(0).toFloat()), Math.round(position.get(1).toFloat()), Math.round(size.get(0).toFloat()), Math.round(size.get(1).toFloat()));
     }
     public WindowGeometry window() { var args = ProtonCapture.windowQuery(); args.push("getwindowgeometry"); args.push("%1"); return ProtonCapture.geometry(self.context.execute("kdotool", args, true).stdout()); }
     class WindowGeometry screen(string text) {
@@ -46,11 +47,11 @@ class ProtonCapture {
     }
     public void move(int x, int y, WindowGeometry screen) {
         var current = self.mouse(); int dx = x - current.get(0); int dy = y - current.get(1);
-        int distance = abs(dx) > abs(dy) ? abs(dx) : abs(dy); int steps = distance / 90 + 1; if (steps > 18) { steps = 18; }
+        int distance = Math.abs(dx) > Math.abs(dy) ? Math.abs(dx) : Math.abs(dy); int steps = distance / 90 + 1; if (steps > 18) { steps = 18; }
         Vector<string> actions = [];
         for (int i = 1; i <= steps; i++) {
-            double px = round(current.get(0) + (double)dx * i / steps) / (screen.width > 1 ? screen.width - 1 : 1);
-            double py = round(current.get(1) + (double)dy * i / steps) / (screen.height > 1 ? screen.height - 1 : 1);
+            double px = (double)Math.round((float)(current.get(0) + (double)dx * i / steps)) / (screen.width > 1 ? screen.width - 1 : 1);
+            double py = (double)Math.round((float)(current.get(1) + (double)dy * i / steps)) / (screen.height > 1 ? screen.height - 1 : 1);
             if (px < 0) { px = 0; } if (px > 1) { px = 1; } if (py < 0) { py = 0; } if (py > 1) { py = 1; }
             actions.push(f"mouseto {px} {py}");
         }
@@ -71,7 +72,7 @@ class ProtonCapture {
         if (!locked.ok()) { throw "Cannot acquire screenshot lock"; }
         var lock = locked.value(); var detail = "";
         for (int attempt = 0; attempt < 3; attempt++) {
-            unlink(output); var result = ChildProcess.run("spectacle", ["-b", "-n", flags.get(index), "-o", output]);
+            FileSystem.removeIfExists(output); var result = ChildProcess.run("spectacle", ["-b", "-n", flags.get(index), "-o", output]);
             if (result.ok() && FileSystem.isFile(output) && FileSystem.readBytes(output).length() > 0) { lock.close(); return; }
             detail = result.stderr().isEmpty() ? result.stdout() : result.stderr(); Timer.sleepMillis(150);
         }
@@ -82,10 +83,10 @@ class ProtonCapture {
         int count = options.number("--count", options.command.equals("hover-frames") ? 48 : 24);
         var intervalText = options.get("--interval", options.command.equals("hover-frames") ? "0.08" : "0.15");
         if (!Regex.fullMatch("[0-9]+([.][0-9]+)?", intervalText)) { throw "--interval must be nonnegative"; }
-        int interval = (int)(atof(intervalText) * 1000); var extension = options.get("--format", "jpg");
+        int interval = (int)(intervalText.toDouble() * 1000); var extension = options.get("--format", "jpg");
         if (!["png", "jpg"].contains(extension)) { throw "--format must be png or jpg"; }
         FileSystem.mkdirp(directory);
-        for name in FileSystem.listDir(directory) { if (name.startsWith("frame-") && name.contains(".")) { unlink(directory + "/" + name); } }
+        for name in FileSystem.listDir(directory) { if (name.startsWith("frame-") && name.contains(".")) { FileSystem.removeIfExists(directory + "/" + name); } }
         for (int i = 0; i < count; i++) {
             var number = f"{i}"; while (number.len() < 3) { number = "0" + number; }
             self.screenshot(directory + "/frame-" + number + "." + extension, options.get("--mode", "active"));
@@ -96,15 +97,14 @@ class ProtonCapture {
     public void hover(ProtonOptions options) {
         self.focus(); var window = self.window(); var desktop = ProtonCapture.screen(self.context.execute("kscreen-doctor", ["-o"], true).stdout());
         var points = ProtonCapture.points(options.get("--profile", "battle-net"));
-        int motion = (int)fork(); if (motion < 0) { throw "Cannot start hover motion"; }
+        int motion = protonForkChild(); if (motion < 0) { throw "Cannot start hover motion"; }
         if (motion == 0) {
             try { while (true) { for point in points { self.move((int)(window.x + window.width * point.x), (int)(window.y + window.height * point.y), desktop); Timer.sleepMillis(point.dwell); } } }
             catch (string error) { Console.error(f"hover motion: {error}"); }
-            _exit(1);
+            protonExitChild(1);
         }
         try { self.frames(options); }
-        catch (string error) { kill(motion, SIGTERM); int status; while ((int)waitpid(motion, &status, 0) < 0 && errno == EINTR) { } throw error; }
-        kill(motion, SIGTERM); int status; while ((int)waitpid(motion, &status, 0) < 0 && errno == EINTR) { }
+        finally { protonStopChild(motion); }
     }
     public void launch(ProtonOptions options) {
         ProtonWine(self.context).use(); var runtime = ProtonRuntime(self.context); var environment = runtime.environment(options);

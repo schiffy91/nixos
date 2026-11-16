@@ -10,11 +10,11 @@ typedef struct TestCpuSetState {
     int capacity;
 } *TestCpuSet;
 
-static void testCpuSetDestroy(TestCpuSet set) {
+static inline void testCpuSetDestroy(TestCpuSet set) {
     if (set) { CPU_FREE(set->bits); free(set); }
 }
 
-static TestCpuSet testCpuSetCreate(void) {
+static inline TestCpuSet testCpuSetCreate(void) {
     TestCpuSet set = calloc(1, sizeof(*set));
     if (!set) return NULL;
     for (int capacity = 128; capacity <= 1048576; capacity *= 2) {
@@ -32,8 +32,8 @@ static TestCpuSet testCpuSetCreate(void) {
     return NULL;
 }
 
-static int testCpuSetCapacity(TestCpuSet set) { return set->capacity; }
-static int testCpuSetContains(TestCpuSet set, int cpu) {
+static inline int testCpuSetCapacity(TestCpuSet set) { return set->capacity; }
+static inline int testCpuSetContains(TestCpuSet set, int cpu) {
     return cpu >= 0 && cpu < set->capacity && CPU_ISSET_S(cpu, set->bytes, set->bits);
 }
 #endif

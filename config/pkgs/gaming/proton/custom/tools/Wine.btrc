@@ -114,7 +114,7 @@ class ProtonWine {
         if (!FileSystem.exists(c.source())) { c.execute("rsync", ["-a", "--delete", c.nixPath("passthru.wineSource") + "/", c.source() + "/"]); }
         c.execute("chmod", ["-R", "u+rwX", c.source()]);
         for rel in ["autogen.sh", "configure", "tools/make_requests"] { if (FileSystem.exists(c.source() + "/" + rel)) { c.execute("chmod", ["u+x", c.source() + "/" + rel]); } }
-        if (configure) { unlink(c.source() + "/configure"); }
+        if (configure) { FileSystem.removeIfExists(c.source() + "/configure"); }
         var workHome = c.devRoot + "/.home"; FileSystem.mkdirp(workHome);
         var environment = ["HOME=" + workHome];
         if (!FileSystem.exists(c.source() + "/configure")) {
@@ -126,7 +126,7 @@ class ProtonWine {
         self.gitBaseline("baseline: Valve Wine plus active Battle.net series");
         for target in ["64", "32"] {
             var build = c.build(target); var makefile = build + "/Makefile"; FileSystem.mkdirp(build);
-            if (FileSystem.exists(makefile) && (configure || !Path.readAll(makefile).contains(c.source()))) { unlink(makefile); }
+            if (FileSystem.exists(makefile) && (configure || !Path.readAll(makefile).contains(c.source()))) { FileSystem.removeIfExists(makefile); }
             if (!FileSystem.exists(makefile)) {
                 var args = [c.source() + "/configure", "--without-x", "--disable-tests", target.equals("64") ? "--enable-win64" : "--with-wine64=" + c.build("64")];
                 c.shell(args, target, build, environment);

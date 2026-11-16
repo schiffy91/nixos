@@ -7,54 +7,38 @@ class ProtonChild {
     public ProtonChild(string executable, Vector<string> arguments, Vector<string> environment, string directory, string log) {
         var resolved = ChildProcessExecutable.resolve(executable, directory, environment, []);
         if (resolved.isEmpty()) { throw f"{executable} is missing; enter the Battle.net development shell"; }
-        var argv = ChildProcessArguments.build(resolved, arguments);
-        var envp = ChildProcessEnvironment.build(environment, []);
-        char* cwd = CStringArray.copyEntry(directory);
         FileSystem.mkdirp(PathTools.dirname(log));
-        int output = open(log, ((int)O_WRONLY | (int)O_CREAT | (int)O_TRUNC | (int)O_CLOEXEC), (mode_t)0600);
-        int errors[2];
-        if (argv == null || envp == null || cwd == null || output < 0 || pipe(errors) != 0) {
-            CStringArray.freeAll(argv); CStringArray.freeAll(envp); free(cwd); if (output >= 0) { close(output); }
-            throw "Cannot prepare Battle.net launch";
+        var plan = protonLaunchCreate(resolved, directory, log);
+        if (plan == null) { throw "Cannot prepare Battle.net launch"; }
+        for argument in arguments {
+            if (!protonLaunchAddArg(plan, argument)) { throw "Cannot prepare Battle.net launch"; }
         }
-        if (ChildProcess.moveOutsideStandardStreams(&output) != 0 || ChildProcess.moveOutsideStandardStreams(&errors[0]) != 0 || ChildProcess.moveOutsideStandardStreams(&errors[1]) != 0) {
-            close(output); close(errors[0]); close(errors[1]); CStringArray.freeAll(argv); CStringArray.freeAll(envp); free(cwd);
-            throw "Cannot reserve child descriptors";
+        for entry in environment {
+            if (!protonLaunchAddEnv(plan, entry)) { throw "Cannot prepare Battle.net launch"; }
         }
-        fcntl(errors[1], F_SETFD, FD_CLOEXEC);
-        int descriptorBound = ChildProcess.descriptorCloseBound();
-        int pid = (int)fork();
-        if (pid == 0) {
-            close(errors[0]);
-            if ((int)setsid() >= 0 && chdir(cwd) == 0 && dup2(output, STDOUT_FILENO) >= 0 && dup2(output, STDERR_FILENO) >= 0) {
-                close(output);
-                // The same runtime close-range provider used by ChildProcess.run,
-                // retaining only the CLOEXEC startup-error pipe above stderr.
-                if (__btrc_close_descriptors_except(descriptorBound, errors[1]) == 0) { execve(argv[0], argv, envp); }
-            }
-            int failure = errno; int ignored = (int)write(errors[1], &failure, sizeof(failure)); _exit(ignored < 0 ? 126 : 127);
-        }
-        close(output); close(errors[1]); CStringArray.freeAll(argv); CStringArray.freeAll(envp); free(cwd);
-        int failure; int count = -1;
-        if (pid > 0) { do { count = (int)read(errors[0], &failure, sizeof(failure)); } while (count < 0 && errno == EINTR); }
-        close(errors[0]); self.pid = pid;
-        if (pid < 0 || count != 0) { self.stop(); throw "Cannot execute Battle.net launcher"; }
+        int pid = protonLaunchStart(plan, ChildProcess.descriptorCloseBound());
+        if (pid <= 0) { throw "Cannot execute Battle.net launcher"; }
+        self.pid = pid;
     }
     public bool wait(int milliseconds) {
         var deadline = MonotonicClock.deadlineAfter(milliseconds);
         do {
             if (self.pid <= 0) { return true; }
-            int status; var result = (int)waitpid(self.pid, &status, WNOHANG);
-            if (result == self.pid || (result < 0 && errno == ECHILD)) { self.pid = -1; return true; }
-            if (result < 0 && errno != EINTR) { throw "Cannot wait for Battle.net launcher"; }
+            var status = protonPollChild(self.pid);
+            if (status == 1) { self.pid = -1; return true; }
+            if (status < 0) { throw "Cannot wait for Battle.net launcher"; }
             Timer.sleepMillis(10);
         } while (MonotonicClock.before(deadline));
         return false;
     }
     public void stop() {
         if (self.pid > 0) {
-            kill(self.pid, SIGTERM);
-            if (!self.wait(1000)) { kill(self.pid, SIGKILL); int status; while ((int)waitpid(self.pid, &status, 0) < 0 && errno == EINTR) { } self.pid = -1; }
+            protonKillProcess(self.pid, false);
+            if (!self.wait(1000)) {
+                protonKillProcess(self.pid, true);
+                protonReapChild(self.pid);
+                self.pid = -1;
+            }
         }
     }
     public void detach() { self.pid = -1; }
@@ -97,7 +81,7 @@ class ProtonRuntime {
         var file = opened.value();
         while (data.length() < 1048576) {
             var chunk = file.readAt(data.length(), 8192);
-            if (!chunk.ok() && chunk.error().nativeCode() == EINTR) { continue; }
+            if (!chunk.ok() && protonIsInterrupted(chunk.error().nativeCode())) { continue; }
             if (chunk.kind() != FILE_READ_DATA) { break; }
             data.appendBytes(chunk.bytes());
         }
@@ -112,7 +96,7 @@ class ProtonRuntime {
         var c = self.context; Vector<int> result = [];
         for name in FileSystem.listDir("/proc") {
             if (!Regex.fullMatch("[0-9]+", name)) { continue; }
-            int pid = name.toInt(); if (pid == Platform.pid() || pid == (int)getppid()) { continue; }
+            int pid = name.toInt(); if (pid == Platform.pid() || pid == protonParentPid()) { continue; }
             var entries = ProtonRuntime.environmentEntries(ProtonRuntime.procBytes("/proc/" + name + "/environ"));
             bool matched = false;
             for entry in entries {
@@ -130,9 +114,9 @@ class ProtonRuntime {
         ProtonRuntime.set(environment, "WINEPREFIX", c.prefix());
         var server = c.devTool() + "/files/bin-wow64/wineserver";
         if (FileSystem.exists(server)) { c.execute(server, ["-k"], check=false, environment=environment); }
-        var pids = self.processes(); for pid in pids { kill(pid, SIGTERM); }
+        var pids = self.processes(); for pid in pids { protonKillProcess(pid, false); }
         if (!pids.isEmpty()) { Timer.sleepMillis(500); }
-        var remaining = self.processes(); for pid in remaining { if (pids.contains(pid)) { kill(pid, SIGKILL); } }
+        var remaining = self.processes(); for pid in remaining { if (pids.contains(pid)) { protonKillProcess(pid, true); } }
     }
     public void prepare() {
         var c = self.context; FileSystem.mkdirp(c.prefix());
@@ -142,7 +126,7 @@ class ProtonRuntime {
             if (!match.isEmpty()) { var parts = Strings.split(match, " "); c.execute("wine-prefix-dpi", ["set", "--dpi", parts.get(parts.len - 1), "--follow-display", c.prefix()]); }
         }
     }
-    public void resetLog() { unlink(self.context.log()); unlink(self.context.home + "/steam-battlenet.log"); }
+    public void resetLog() { FileSystem.removeIfExists(self.context.log()); FileSystem.removeIfExists(self.context.home + "/steam-battlenet.log"); }
     class string logDestination(string wrapper) {
         if (wrapper.endsWith(".wrapper.log")) { return wrapper.substring(0, wrapper.len() - 12) + ".proton.log"; }
         var basename = PathTools.basename(wrapper); int dot = -1;

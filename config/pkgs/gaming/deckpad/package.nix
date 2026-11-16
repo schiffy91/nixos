@@ -5,12 +5,6 @@ let
     root = ./.;
     fileset = pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.hasExt "h" || file.name == "btrc.toml" || file.name == "btrc.lock") ./.;
   };
-  # Library.Bluetooth and Library.Tray bind libdbus-1 for their Linux providers.
-  dbus = {
-    buildInputs = [ pkgs.dbus ];
-    env.NIX_CFLAGS_COMPILE = "-I${pkgs.lib.getDev pkgs.dbus}/include/dbus-1.0 -I${pkgs.lib.getLib pkgs.dbus}/lib/dbus-1.0/include";
-    linkFlags = [ "-ldbus-1" ];
-  };
   # What the Deck's screen says before it goes dark: the shortcut's logo over
   # one line, as grey levels (one byte a pixel) for deckpad-screen.
   notice = { width = 1100; height = 300; };
@@ -32,9 +26,7 @@ in {
     name = "deckpad";
     inherit src;
     programs.deckpad = "Main.btrc";
-    buildInputs = dbus.buildInputs ++ [ pkgs.libsodium ];
-    inherit (dbus) env;
-    linkFlags = dbus.linkFlags ++ [ "-lsodium" ];
+    buildInputs = [ pkgs.dbus pkgs.libsodium ];
   };
   # The Deck's screen while it is a controller: one plain X11 window. It
   # stops the service with whatever systemctl the session has, else this one.
@@ -43,13 +35,12 @@ in {
     inherit src;
     programs.deckpad-screen = "Screen.btrc";
     buildInputs = [ pkgs.libx11 pkgs.xorgproto ];
-    linkFlags = [ "-lX11" ];
     wrapperArgs = [ "--add-flags" "${notices} ${toString notice.width} ${toString notice.height}" "--suffix" "PATH" ":" "${pkgs.systemd}/bin" ];
   };
   tray = build {
     name = "deckpad-tray";
     inherit src;
     programs.deckpad-tray = "Tray.btrc";
-    inherit (dbus) buildInputs env linkFlags;
+    buildInputs = [ pkgs.dbus ];
   };
 }

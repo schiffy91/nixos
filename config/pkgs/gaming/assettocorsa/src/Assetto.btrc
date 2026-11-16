@@ -62,7 +62,7 @@ class Assetto {
         if (action.equals("status")) { print(f"Game: {game}\nPrefix: {prefix}\nMod pack: {payload}\nContent directory: {ContentDirectory.expand(content)}"); return; }
         var command = action.equals("launch") ? Assetto.launchCommand(options.operands, game) : options.operands;
         Assetto.idle();
-        var lockPath = GamingFiles.inside(game, ".nix-assettocorsa.lock");
+        var lockPath = ModTree.inside(game, ".nix-assettocorsa.lock");
         var acquired = AdvisoryFileLock.acquire(lockPath);
         if (!acquired.ok()) { throw "Assetto deployment is already running, or its lock cannot be opened"; }
         var lock = acquired.value();
@@ -90,14 +90,14 @@ class Assetto {
             }
         } finally { lock.close(); }
         if (!action.equals("launch")) { print(f"Assetto Corsa mods: {action} complete."); return; }
-        setenv("PROTON_ENABLE_WAYLAND", "0", 1);
-        setenv("PROTON_ENABLE_HDR", "0", 1);
-        setenv("DXVK_HDR", "0", 1);
-        setenv("WINEDLLOVERRIDES", "dwrite=n,b", 1);
+        Platform.setEnv("PROTON_ENABLE_WAYLAND", "0");
+        Platform.setEnv("PROTON_ENABLE_HDR", "0");
+        Platform.setEnv("DXVK_HDR", "0");
+        Platform.setEnv("WINEDLLOVERRIDES", "dwrite=n,b");
         // Wine's new PDB reader loses folded aliases/public symbols that CSP
         // needs to locate AC functions. Keep our shared Proton; select its
         // compatible reader only for AC and CM's child game process.
-        setenv("WINE_DBGHELP_OLD_PDB", "1", 1);
+        Platform.setEnv("WINE_DBGHELP_OLD_PDB", "1");
         var wrapper = Environment.get("ASSETTO_WHEEL_LAUNCHER", "");
         // Starting the relay during GE's prerequisite installers keeps Wine alive
         // and deadlocks their wineserver wait. The guard applies to any GE build.
@@ -106,6 +106,6 @@ class Assetto {
             for argument in command { wrapped.push(argument); }
             command = wrapped;
         }
-        GamingProcess.exec(command);
+        Process.exec(command);
     }
 }

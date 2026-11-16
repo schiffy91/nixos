@@ -3,7 +3,7 @@ let
   lock = (builtins.fromJSON (builtins.readFile ../../flake.lock)).nodes;
   pkgs = import (builtins.fetchTree { inherit (lock.nixpkgs.locked) type owner repo rev narHash; }) { inherit system; };
   compiler = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs lock.btrc.locked [ "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev" ]));
-  programs = (import ../../config/lib/btrc.nix { inherit pkgs; btrcpy = compiler.packages.${system}.btrcpy; }) {
+  programs = (import ../../config/lib/btrc.nix { inherit pkgs; inherit (compiler.packages.${system}) btrcpy btrc-native-plan; }) {
     name = "ci-contract-tests";
     src = pkgs.lib.fileset.toSource {
       root = ../..;

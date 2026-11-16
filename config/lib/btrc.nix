@@ -1,12 +1,15 @@
-{ pkgs, inputs ? null, btrcpy ? inputs.btrc.packages.${pkgs.stdenv.buildPlatform.system}.btrcpy }:
-# `linkPlan` builds through btrc's native plan, which a program needs once its imports bring
-# their own C sources and pkg-config packages (the GUI); `inputs` must then be given.
-{ name, src, programs, buildInputs ? [], runtimeInputs ? [], linkFlags ? [], linkPlan ? false
+{ pkgs, inputs ? null
+, btrcpy ? inputs.btrc.packages.${pkgs.stdenv.buildPlatform.system}.btrcpy
+, btrc-native-plan ? if inputs != null then inputs.btrc.packages.${pkgs.stdenv.buildPlatform.system}.btrc-native-plan else null }:
+# `linkPlan` builds through btrc's native plan so `[[native.pkg-config]]` and
+# `[[native.libraries]]` in `btrc.toml` drive compilation and linking directly.
+{ name, src, programs, buildInputs ? [], runtimeInputs ? [], linkFlags ? []
+, linkPlan ? (btrc-native-plan != null && linkFlags == [])
 , nativeBuildInputs ? [], env ? {}, wrapperArgs ? [], postInstall ? "" }:
 pkgs.stdenv.mkDerivation {
   inherit name src buildInputs env postInstall;
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper pkgs.pkg-config ] ++ nativeBuildInputs
-    ++ pkgs.lib.optional linkPlan inputs.btrc.packages.${pkgs.stdenv.buildPlatform.system}.btrc-native-plan;
+    ++ pkgs.lib.optional linkPlan btrc-native-plan;
   CPATH = pkgs.lib.makeSearchPath "include" (map pkgs.lib.getDev buildInputs);
   dontConfigure = true;
   buildPhase = ''

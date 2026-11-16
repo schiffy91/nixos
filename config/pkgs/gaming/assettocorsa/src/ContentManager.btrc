@@ -39,7 +39,7 @@ class ContentManager {
         var font = f"{game}/content/fonts/system/segoeui.ttf";
         var installedFont = f"{prefix}/drive_c/windows/Fonts/segoeui.ttf";
         if (FileSystem.isFile(font) && !FileSystem.exists(installedFont) && !FileSystem.isSymlink(installedFont)) {
-            GamingFiles.directory(PathTools.dirname(installedFont));
+            ModTree.directory(PathTools.dirname(installedFont));
             if (FileSystem.symlink(font, installedFont) != 0) { throw "Cannot install Content Manager's UI font"; }
         }
         var folder = f"{prefix}/drive_c/users/steamuser/AppData/Local/AcTools Content Manager";
@@ -49,20 +49,20 @@ class ContentManager {
         values.set("Settings.CommonSettings.UpdatePeriod", JSONValue.makeString("00:00:00"));
         values.set("PatchUpdater.AutoUpdateMode", JSONValue.makeString("disabled"));
         var backup = f"{folder}/Values.before-nix";
-        if (FileSystem.exists(path) && !FileSystem.exists(backup)) { GamingFiles.copy(path, backup); }
+        if (FileSystem.exists(path) && !FileSystem.exists(backup)) { ModTree.copy(path, backup); }
         var text = "version: 2\n";
         for key in values.keys() { text = text + key + "\t" + values.get(key).asString() + "\n"; }
-        GamingFiles.write(path, text);
+        ModTree.write(path, text);
         var login = f"{prefix}/drive_c/Program Files (x86)/Steam/config/loginusers.vdf";
         if (!FileSystem.exists(login) && !FileSystem.isSymlink(login) && FileSystem.exists(f"{steam}/config/loginusers.vdf")) {
-            GamingFiles.directory(PathTools.dirname(login));
+            ModTree.directory(PathTools.dirname(login));
             if (FileSystem.symlink(f"{steam}/config/loginusers.vdf", login) != 0) { throw "Cannot link Steam account discovery"; }
         }
         var pending = f"{game}/Content Manager.update.exe";
         if (FileSystem.isFile(pending)) {
-            var saved = GamingFiles.inside(game, f".nix-assettocorsa/disabled-updates/{AssettoMods.digest(pending)}.exe");
-            GamingFiles.directory(PathTools.dirname(saved));
-            if (rename(pending, saved) != 0) { throw "Cannot preserve pending Content Manager update"; }
+            var saved = ModTree.inside(game, f".nix-assettocorsa/disabled-updates/{AssettoMods.digest(pending)}.exe");
+            ModTree.directory(PathTools.dirname(saved));
+            if (FileSystem.rename(pending, saved) != 0) { throw "Cannot preserve pending Content Manager update"; }
         }
     }
 }

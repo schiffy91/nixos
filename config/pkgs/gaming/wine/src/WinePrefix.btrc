@@ -2,7 +2,7 @@ import Library.FileSystem;
 import Library.Platform;
 import Library.Strings;
 import Library.Vector;
-import ../../lib/GamingFiles.btrc;
+import ../../lib/ModTree.btrc;
 
 class WineRegistry {
     class string dword(int value) {
@@ -10,6 +10,20 @@ class WineRegistry {
         var result = "";
         for (int shift = 28; shift >= 0; shift = shift - 4) {
             result = result + digits.substring((value >> shift) & 15, 1);
+        }
+        return result;
+    }
+
+    class int parseHex(string digits) {
+        int result = 0;
+        for (int i = 0; i < digits.length; i++) {
+            char c = digits[i];
+            int nibble = -1;
+            if (c >= '0' && c <= '9') { nibble = (int)c - (int)'0'; }
+            else if (c >= 'a' && c <= 'f') { nibble = (int)c - (int)'a' + 10; }
+            else if (c >= 'A' && c <= 'F') { nibble = (int)c - (int)'A' + 10; }
+            else { break; }
+            result = (result << 4) | nibble;
         }
         return result;
     }
@@ -37,7 +51,7 @@ class WineRegistry {
         if (!foundSection) { result.push(header + " 0"); }
         if (!written) { result.push(desired); result.push(""); }
         var updated = result.join("\n");
-        if (!updated.equals(original)) { GamingFiles.write(path, updated); }
+        if (!updated.equals(original)) { ModTree.write(path, updated); }
     }
 }
 
@@ -64,7 +78,7 @@ class WinePrefix {
         for line in Strings.split(Path.readAll(f"{self.path}/user.reg"), "\n") {
             if (line.startsWith("\"LogPixels\"=dword:")) {
                 var digits = line.substring(18, line.len() - 18);
-                return (int)strtol(digits, NULL, 16);
+                return WineRegistry.parseHex(digits);
             }
         }
         return 0;

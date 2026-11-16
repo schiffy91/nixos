@@ -1,0 +1,12 @@
+manifest-version = 1
+
+[package]
+name = "nixos_slopsmith"
+exports = ["Slopsmith"]
+
+[[native.bindings]]
+module = "Slopsmith"
+header = "signals.h"
+language = "c"
+standard = "c11"
+symbols = ["slopsmithInstallSignals", "slopsmithStopRequested", "slopsmithSignalExitCode", "slopsmithLockContended"]

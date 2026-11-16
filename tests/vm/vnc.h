@@ -8,23 +8,23 @@
 /* libvncclient owns the RFB protocol. The copied raster has a fixed RGBA
  * format; no native pointer escapes into a test observation. */
 typedef struct TestVNC { rfbClient *client; int finished; } TestVNC;
-static int testVNCTag;
-static rfbBool testVNCAllocate(rfbClient *client) {
+static inline void *testVNCTagAddress(void) { static int testVNCTag; return &testVNCTag; }
+static inline rfbBool testVNCAllocate(rfbClient *client) {
     if (client->width <= 0 || client->height <= 0 || client->width > 8192 || client->height > 8192 || (uint64_t)client->width * client->height > 16777216) return FALSE;
     unsigned char *frame = calloc((size_t)client->width * client->height, 4);
     if (!frame) return FALSE;
     free(client->frameBuffer); client->frameBuffer = frame; return TRUE;
 }
-static void testVNCFinished(rfbClient *client) {
-    TestVNC *session = rfbClientGetClientData(client, &testVNCTag);
+static inline void testVNCFinished(rfbClient *client) {
+    TestVNC *session = rfbClientGetClientData(client, testVNCTagAddress());
     if (session) session->finished = 1;
 }
-static void testVNCClose(TestVNC *session) {
+static inline void testVNCClose(TestVNC *session) {
     if (!session) return;
     if (session->client) { free(session->client->frameBuffer); session->client->frameBuffer = NULL; rfbClientCleanup(session->client); }
     free(session);
 }
-static TestVNC *testVNCOpen(const char *path) {
+static inline TestVNC *testVNCOpen(const char *path) {
     TestVNC *session = calloc(1, sizeof(*session));
     if (!session) return NULL;
     rfbClient *client = rfbGetClient(8, 3, 4); session->client = client;
@@ -43,7 +43,7 @@ static TestVNC *testVNCOpen(const char *path) {
     client->format.bigEndian = FALSE; client->format.trueColour = TRUE;
     client->format.redMax = 255; client->format.greenMax = 255; client->format.blueMax = 255;
     client->format.redShift = 0; client->format.greenShift = 8; client->format.blueShift = 16;
-    rfbClientSetClientData(client, &testVNCTag, session);
+    rfbClientSetClientData(client, testVNCTagAddress(), session);
     if (!InitialiseRFBConnection(client)) { testVNCClose(session); return NULL; }
     client->width = client->si.framebufferWidth;
     client->height = client->si.framebufferHeight;
@@ -53,11 +53,11 @@ static TestVNC *testVNCOpen(const char *path) {
     if (!SetFormatAndEncodings(client) || !testVNCAllocate(client)) { testVNCClose(session); return NULL; }
     return session;
 }
-static int testVNCRequest(TestVNC *session) {
+static inline int testVNCRequest(TestVNC *session) {
     session->finished = 0;
     return SendFramebufferUpdateRequest(session->client, 0, 0, session->client->width, session->client->height, FALSE);
 }
-static int testVNCStep(TestVNC *session, int milliseconds) {
+static inline int testVNCStep(TestVNC *session, int milliseconds) {
     int ready = session->client->buffered > 0 ? 1 : WaitForMessage(session->client, milliseconds * 1000);
     if (ready < 0) return -1;
     if (!ready) return 0;
@@ -65,10 +65,10 @@ static int testVNCStep(TestVNC *session, int milliseconds) {
     if (!HandleRFBServerMessage(session->client)) return -1;
     return session->finished ? 2 : 1;
 }
-static int testVNCWidth(TestVNC *session) { return session->client->width; }
-static int testVNCHeight(TestVNC *session) { return session->client->height; }
-static int testVNCLength(TestVNC *session) { return session->client->width * session->client->height * 4; }
-static const unsigned char *testVNCPixels(TestVNC *session) {
+static inline int testVNCWidth(TestVNC *session) { return session->client->width; }
+static inline int testVNCHeight(TestVNC *session) { return session->client->height; }
+static inline int testVNCLength(TestVNC *session) { return session->client->width * session->client->height * 4; }
+static inline const unsigned char *testVNCPixels(TestVNC *session) {
     for (int i = 3; i < testVNCLength(session); i += 4) session->client->frameBuffer[i] = 255;
     return session->client->frameBuffer;
 }

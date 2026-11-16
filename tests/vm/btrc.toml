@@ -1,6 +1,7 @@
 manifest-version = 1
 [package]
 name = "nixos_vm_tests"
+exports = ["Channel", "Framebuffer", "Guest", "Keyboard", "Lab"]
 
 [[native.bindings]]
 module = "Framebuffer"

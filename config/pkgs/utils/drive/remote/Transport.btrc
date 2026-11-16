@@ -57,8 +57,8 @@ class Transport {  // one curl process per request
             if (colon > 0) { response.headers.put(text.substring(0, colon).toLower(), text.substring(colon + 1, text.len() - colon - 1).trim()); }
         }
         if (keepBody && FileSystem.exists(bodyFile)) { response.body = FileSystem.readText(bodyFile); }
-        unlink(headerFile);
-        if (keepBody) { unlink(bodyFile); }
+        FileSystem.removeIfExists(headerFile);
+        if (keepBody) { FileSystem.removeIfExists(bodyFile); }
         return response;
     }
 

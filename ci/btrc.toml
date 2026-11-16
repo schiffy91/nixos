@@ -1,6 +1,7 @@
 manifest-version = 1
 [package]
 name = "nixos_ci"
+exports = ["lib.Checks", "lib.Lsp", "lib.Publisher", "lib.Repository"]
 
 [[native.bindings]]
 module = "Main"

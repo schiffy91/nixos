@@ -2,6 +2,7 @@ manifest-version = 1
 
 [package]
 name = "nixos_wow"
+exports = ["Files", "Install", "Lock", "Settings"]
 
 [[native.bindings]]
 module = "Files"

@@ -5,11 +5,11 @@ class PresetLinks {
         var parent = PathTools.dirname(name);
         var leaf = PathTools.basename(name);
         if (parent.equals("Controls") && leaf.endsWith(".ini")) {
-            return PathTools.join(GamingFiles.inside(prefix, "drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controllers/savedsetups"), leaf);
+            return PathTools.join(ModTree.inside(prefix, "drive_c/users/steamuser/Documents/Assetto Corsa/cfg/controllers/savedsetups"), leaf);
         }
         if (!name.endsWith(".cmpreset") || parent.equals(".") || leaf.isEmpty()) { throw f"Expected a CM category and .cmpreset filename: {name}"; }
         var folder = f"{prefix}/drive_c/users/steamuser/AppData/Local/AcTools Content Manager/Presets";
-        return PathTools.join(GamingFiles.inside(folder, parent), leaf);
+        return PathTools.join(ModTree.inside(folder, parent), leaf);
     }
 
     class void apply(string prefix, JSONValue declared) {
@@ -51,16 +51,16 @@ class PresetLinks {
         for name in names {
             var local = PresetLinks.path(prefix, name);
             if (!desired.has(name)) {
-                if (FileSystem.isSymlink(local)) { GamingFiles.copy(local, local); }
+                if (FileSystem.isSymlink(local)) { ModTree.copy(local, local); }
                 continue;
             }
             var target = desired.get(name).asString();
-            if (!FileSystem.isFile(target)) { GamingFiles.copy(local, target); }
+            if (!FileSystem.isFile(target)) { ModTree.copy(local, target); }
             if (FileSystem.isSymlink(local) && FileSystem.readLink(local).equals(target)) { continue; }
-            GamingFiles.directory(PathTools.dirname(local));
+            ModTree.directory(PathTools.dirname(local));
             var temporary = f"{local}.nix-link";
-            if (FileSystem.symlink(target, temporary) != 0 || rename(temporary, local) != 0) { throw f"Cannot link preset: {local}"; }
+            if (FileSystem.symlink(target, temporary) != 0 || FileSystem.rename(temporary, local) != 0) { throw f"Cannot link preset: {local}"; }
         }
-        GamingFiles.write(manifest, desired.stringify() + "\n");
+        ModTree.write(manifest, desired.stringify() + "\n");
     }
 }

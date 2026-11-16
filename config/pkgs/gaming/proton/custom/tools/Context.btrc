@@ -121,8 +121,8 @@ class ProtonContext {
     }
     public void link(string target) {
         FileSystem.mkdirp(PathTools.dirname(self.tool()));
-        if (ProtonContext.exists(self.tool()) && unlink(self.tool()) != 0) { throw "Cannot replace active Proton symlink"; }
-        if (symlink(target, self.tool()) != 0) { throw "Cannot create active Proton symlink"; }
+        if (ProtonContext.exists(self.tool()) && FileSystem.removeFile(self.tool()) != 0) { throw "Cannot replace active Proton symlink"; }
+        if (FileSystem.symlink(target, self.tool()) != 0) { throw "Cannot create active Proton symlink"; }
         print(self.tool() + " -> " + FileSystem.realPath(self.tool()));
     }
     class Vector<string> lines(string text) {

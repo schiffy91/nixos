@@ -2,6 +2,16 @@ manifest-version = 1
 
 [package]
 name = "nixos_drive"
+exports = [
+	"engine.Mirror",
+	"engine.Planner",
+	"remote.DriveApi",
+	"remote.DriveFile",
+	"remote.Timestamp",
+	"remote.Transport",
+	"store.Store",
+	"store.StoreFile"
+]
 
 [[native.bindings]]
 module = "store.StoreFile"

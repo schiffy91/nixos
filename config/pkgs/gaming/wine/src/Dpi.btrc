@@ -1,5 +1,6 @@
 import Library.CLI;
 import Library.Console;
+import Library.Process;
 import ./ActiveDisplay.btrc;
 import ./WinePrefix.btrc;
 
@@ -16,7 +17,7 @@ int main(int argc, char** argv) {
             // Existing callers can put environment assignments before the command.
             Vector<string> command = ["env"];
             for value in options.operands { command.push(value); }
-            GamingProcess.exec(command);
+            Process.exec(command);
         } else if (args.command().equals("set") || args.command().equals("get")) {
             if (options.operandCount() == 0) { throw "Supply at least one Wine prefix"; }
             for path in options.operands {
