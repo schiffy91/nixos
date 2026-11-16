@@ -4,12 +4,101 @@ manifest-version = 1
 name = "nixos_secure_boot_keys"
 exports = ["Archive", "Files", "Crypto"]
 
+[[native.defines]]
+name = "_GNU_SOURCE"
+value = "1"
+modules = ["Files", "Main"]
+
+[[native.bindings]]
+module = "Main"
+header = "files.h"
+language = "c"
+standard = "c11"
+symbols = ["keyFilesDisableDumps"]
+
 [[native.bindings]]
 module = "Files"
 header = "files.h"
 language = "c"
 standard = "c11"
-symbols = ["RENAME_NOREPLACE", "PR_SET_DUMPABLE", "sigset_t", "sigprocmask"]
+symbols = [
+    "KeySignalGuardHandle",
+    "KeyBytesHandle",
+    "KeyTextHandle",
+    "keySignalGuardAcquire",
+    "keySignalGuardClose",
+    "keySignalGuardRelease",
+    "keyFilesStdinIsTty",
+    "keyFilesOpenInitialDirectory",
+    "keyFilesStepDirectory",
+    "keyFilesCloseDescriptor",
+    "keyBytesRelease",
+    "keyBytesData",
+    "keyBytesLength",
+    "keyBytesError",
+    "keyFilesReadStdin",
+    "keyFilesReadMember",
+    "keyFilesWriteStdoutHex",
+    "keyTextRelease",
+    "keyTextValue",
+    "keyFilesStagingName",
+    "keyFilesDestinationAbsent",
+    "keyFilesCreateStagingRoot",
+    "keyFilesWriteStagedMemberHex",
+    "keyFilesPublishStaged",
+    "keyFilesSyncDirectory",
+    "keyFilesRemoveStagedFile",
+    "keyFilesRemoveStagedDirectory"
+]
+owned-results = [
+    "keySignalGuardAcquire",
+    "keyFilesReadStdin",
+    "keyFilesReadMember",
+    "keyFilesStagingName"
+]
+read-only-borrows = [
+    "keyFilesStepDirectory.part",
+    "keyFilesReadMember.name",
+    "keyFilesWriteStdoutHex.hex",
+    "keyFilesDestinationAbsent.name",
+    "keyFilesCreateStagingRoot.staged",
+    "keyFilesWriteStagedMemberHex.name",
+    "keyFilesWriteStagedMemberHex.hex",
+    "keyFilesPublishStaged.staged",
+    "keyFilesPublishStaged.name",
+    "keyFilesRemoveStagedFile.member",
+    "keyFilesRemoveStagedDirectory.directory"
+]
+borrowed-parameters = [
+    "keySignalGuardClose.guard",
+    "keyBytesData.handle",
+    "keyBytesLength.handle",
+    "keyBytesError.handle",
+    "keyTextValue.handle"
+]
+
+[native.bindings.resources.KeySignalGuardHandle]
+ownership = "unique"
+release = "keySignalGuardRelease"
+
+[native.bindings.resources.KeyBytesHandle]
+ownership = "unique"
+release = "keyBytesRelease"
+
+[native.bindings.resources.KeyTextHandle]
+ownership = "unique"
+release = "keyTextRelease"
+
+[native.bindings.copied-results.keyBytesData]
+kind = "bytes"
+owner = "handle"
+length-function = "keyBytesLength"
+length-arguments = ["handle"]
+length-preserves-result = true
+
+[native.bindings.copied-results.keyTextValue]
+kind = "string"
+owner = "handle"
 
 [[native.pkg-config]]
 name = "libcrypto"

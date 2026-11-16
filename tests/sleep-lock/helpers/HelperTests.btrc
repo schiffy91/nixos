@@ -1,75 +1,43 @@
+import Library.CLI;
+import Library.Testing;
 import helpers.Authentication;
 import helpers.Display;
-import helpers.Posix;
 
-volatile int wipeCount = 0;
-void testWipe(void* buffer, size_t length) {
-    volatile unsigned char* wiping = (volatile unsigned char*)buffer;
-    for (size_t i = 0; i < length; i++) wiping[i] = 0;
-    unsigned char* bytes = (unsigned char*)buffer;
-    for (size_t i = 0; i < length; i++) assert(bytes[i] == 0);
-    wipeCount++;
-}
-
-void testCheckedWipe(void* buffer, size_t length, size_t bound) {
-    assert(length <= bound);
-    testWipe(buffer, length);
-}
-
-char* capturePassword(string label, string executable) {
-    var response = PasswordPrompt(executable, label).read();
-    if (response == null) { return NULL; }
-    char* answer = response.copyForPam(); response.close();
-    // The explicit close is idempotent when the owner leaves scope.
+bool checkPassword(string label, string executable, string expected, int expectedLength) {
+    PasswordResponse? maybeResponse = PasswordPrompt(executable, label).read();
+    if (maybeResponse == null) { return false; }
+    PasswordResponse response = maybeResponse;
+    bool ok = false;
+    if (expectedLength >= 0) {
+        ok = response.length() == expectedLength;
+    } else {
+        ok = response.matches(expected);
+    }
     response.close();
-    return answer;
+    // Explicit close is idempotent when the owner leaves scope.
+    response.close();
+    return ok;
 }
 
 int main(int argc, char** argv) {
-    assert(argc == 2);
-    testWipe(NULL, 0); testCheckedWipe(NULL, 0, 0); wipeCount = 0;
-    char* answer = capturePassword("success", argv[1]);
-    assert(answer != NULL && strcmp(answer, "fixture-password") == 0);
-    assert(wipeCount == 1);
-    explicit_bzero(answer, strlen(answer)); free(answer);
-    assert(capturePassword("empty", argv[1]) == NULL);
-    assert(capturePassword("nul", argv[1]) == NULL);
-    assert(capturePassword("failed", argv[1]) == NULL);
-    assert(capturePassword("overflow", argv[1]) == NULL);
-    assert(capturePassword("success", "/nonexistent-plymouth") == NULL);
-    assert(wipeCount == 7);
-    assert(PAM_MAX_RESP_SIZE == 512);
-    answer = capturePassword("maximum", argv[1]);
-    assert(answer != NULL && strlen(answer) == (size_t)512);
-    explicit_bzero(answer, strlen(answer)); free(answer);
+    var args = CLIArgs(argc, argv);
+    Expect.intEq(args.count(), 1);
+    var promptBinary = args.get(0);
+    testResetWipeCount();
+    Expect.isTrue(checkPassword("success", promptBinary, "fixture-password", -1));
+    Expect.intEq(testReadWipeCount(), 1);
+    Expect.isFalse(checkPassword("empty", promptBinary, "", -1));
+    Expect.isFalse(checkPassword("nul", promptBinary, "", -1));
+    Expect.isFalse(checkPassword("failed", promptBinary, "", -1));
+    Expect.isFalse(checkPassword("overflow", promptBinary, "", -1));
+    Expect.isFalse(checkPassword("success", "/nonexistent-plymouth", "", -1));
+    Expect.intEq(testReadWipeCount(), 6);
+    Expect.intEq(PasswordPrompt.maxResponseSize(), 512);
+    Expect.isTrue(checkPassword("maximum", promptBinary, "", 512));
+    Expect.intEq(testReadWipeCount(), 7);
 
-    char prompt[] = "success";
-    struct PasswordPromptData request = { prompt, argv[1] };
-    struct pam_message secret = { PAM_PROMPT_ECHO_OFF, "Password" };
-    struct pam_message info = { PAM_TEXT_INFO, "Info" };
-    struct pam_message rejected = { PAM_PROMPT_ECHO_ON, "Username" };
-    const struct pam_message* messages[2] = { &secret, &info };
-    struct pam_response* responses = NULL;
-    assert(converse(0, messages, &responses, &request) == PAM_CONV_ERR);
-    assert(converse(PAM_MAX_NUM_MSG + 1, messages, &responses, &request) == PAM_CONV_ERR);
-    assert(converse(2, messages, &responses, &request) == PAM_SUCCESS);
-    assert(responses != NULL && strcmp(responses[0].resp, "fixture-password") == 0);
-    assert(responses[1].resp == NULL);
-    explicit_bzero(responses[0].resp, strlen(responses[0].resp));
-    free(responses[0].resp); free(responses); responses = NULL;
-    const struct pam_message* rejectedMessages[2] = { &secret, &rejected };
-    int before = wipeCount;
-    assert(converse(2, rejectedMessages, &responses, &request) == PAM_CONV_ERR);
-    assert(responses == NULL && wipeCount == before + 2);
-
-    drmModeCrtc crtc = {0};
-    drmModePlane plane = {0};
-    assert(!DisplayCard.crtcBlank(NULL) && !DisplayCard.planeBlank(NULL));
-    assert(DisplayCard.crtcBlank(&crtc) && DisplayCard.planeBlank(&plane));
-    crtc.mode_valid = 1; assert(!DisplayCard.crtcBlank(&crtc));
-    crtc.mode_valid = 0; crtc.buffer_id = 42; assert(!DisplayCard.crtcBlank(&crtc));
-    plane.fb_id = 42; assert(!DisplayCard.planeBlank(&plane));
-    plane.fb_id = 0; plane.crtc_id = 42; assert(!DisplayCard.planeBlank(&plane));
-    puts("sleep helper contracts passed");
+    Expect.isTrue(testPamConversationContracts(promptBinary));
+    Expect.isTrue(testDrmBlankPredicates());
+    print("sleep helper contracts passed");
     return 0;
 }

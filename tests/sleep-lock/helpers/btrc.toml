@@ -1,5 +1,33 @@
 manifest-version = 1
+
 [package]
 name = "sleep_helper_tests"
+
 [dependencies]
 helpers = { path = "../../../config/system/nixos/sleep/helpers" }
+
+[[native.defines]]
+name = "_GNU_SOURCE"
+value = "1"
+modules = ["HelperTests"]
+
+[[native.libraries]]
+name = "pam"
+modules = ["HelperTests"]
+
+[[native.pkg-config]]
+name = "libdrm"
+modules = ["HelperTests"]
+
+[[native.bindings]]
+module = "HelperTests"
+header = "test-native.h"
+language = "c"
+standard = "c11"
+symbols = [
+    "testResetWipeCount",
+    "testReadWipeCount",
+    "testPamConversationContracts",
+    "testDrmBlankPredicates"
+]
+read-only-borrows = ["testPamConversationContracts.plymouth"]

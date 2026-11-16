@@ -1,14 +1,31 @@
-#include <unistd.h>
+import Library.Bytes;
+import Library.CLI;
+import Library.FileSystem;
 
 int main(int argc, char** argv) {
-    if (argc != 3 || strcmp(argv[1], "ask-for-password") != 0) return 1;
-    if (strcmp(argv[2], "success") == 0) { assert(write(1, "fixture-password", 16) == (ssize_t)16); return 0; }
-    if (strcmp(argv[2], "empty") == 0) return 0;
-    if (strcmp(argv[2], "failed") == 0) { assert(write(1, "fixture-password", 16) == (ssize_t)16); return 1; }
-    if (strcmp(argv[2], "nul") == 0) { char bytes[3] = { 'a', 0, 'b' }; assert(write(1, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes)); return 0; }
-    char bytes[4096];
-    memset(bytes, 'x', sizeof(bytes));
-    if (strcmp(argv[2], "maximum") == 0) { assert(write(1, bytes, 512) == (ssize_t)512); return 0; }
-    if (strcmp(argv[2], "overflow") == 0) { assert(write(1, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes)); return 0; }
+    var args = CLIArgs(argc, argv);
+    if (args.count() != 2 || args.get(0) != "ask-for-password") { return 1; }
+    var mode = args.get(1);
+    if (mode == "success") {
+        return FileSystem.writeBytes("/proc/self/fd/1", Bytes.fromString("fixture-password")) ? 0 : 1;
+    }
+    if (mode == "empty") { return 0; }
+    if (mode == "failed") {
+        FileSystem.writeBytes("/proc/self/fd/1", Bytes.fromString("fixture-password"));
+        return 1;
+    }
+    if (mode == "nul") {
+        var nulBytes = Bytes();
+        nulBytes.append('a');
+        nulBytes.append(0);
+        nulBytes.append('b');
+        return FileSystem.writeBytes("/proc/self/fd/1", nulBytes) ? 0 : 1;
+    }
+    if (mode == "maximum" || mode == "overflow") {
+        int count = mode == "maximum" ? 512 : 4096;
+        var payload = Bytes();
+        for (int index = 0; index < count; index++) { payload.append('x'); }
+        return FileSystem.writeBytes("/proc/self/fd/1", payload) ? 0 : 1;
+    }
     return 1;
 }

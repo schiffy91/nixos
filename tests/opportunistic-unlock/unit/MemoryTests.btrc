@@ -1,14 +1,10 @@
 import Library.Console;
+import Library.Testing;
 import unlock.Worker;
 
-#include <assert.h>
-
 class MemoryFixture {
-    class void fill(LockedSecret secret, int value) { memset(secret.borrow(), value, secret.capacity); }
-    class void expect(LockedSecret secret, int value) {
-        var bytes = secret.borrow();
-        for (int index = 0; index < secret.capacity; index++) { assert((unsigned char)bytes[index] == value); }
-    }
+    class void fill(LockedSecret secret, int value) { secret.fill(value); }
+    class void expect(LockedSecret secret, int value) { Expect.isTrue(secret.allEqual(value)); }
     class long lockedKiB() {
         for line in Strings.split(Path.readAll("/proc/self/status"), "\n") {
             if (!line.startsWith("VmLck:")) { continue; }
@@ -26,31 +22,31 @@ class MemoryFixture {
         var failed = false;
         try { MemoryFixture.failWithSecret(secret); }
         catch (string error) { failed = true; }
-        assert(failed);
+        Expect.isTrue(failed);
         MemoryFixture.expect(secret, 0);
     }
 }
 
 int main() {
-    assert(ProcessLimits.singleThreaded());
-    assert(ProcessLimits.protectSecrets());
+    Expect.isTrue(ProcessLimits.singleThreaded());
+    Expect.isTrue(ProcessLimits.protectSecrets());
     var passphrase = BootPassphrase();
     passphrase.length = 16;
     MemoryFixture.fill(passphrase.secret, 0x5a);
-    assert(MemoryFixture.lockedKiB() >= 4);
+    Expect.isTrue(MemoryFixture.lockedKiB() >= 4);
     var metadata = VolumeInventory.names("/proc/self/fd");
-    assert(!metadata.isEmpty());
-    var child = (int)fork();
-    assert(child >= 0);
+    Expect.isFalse(metadata.isEmpty());
+    var child = ProcessLimits.forkChild();
+    Expect.isTrue(child >= 0);
     if (child == 0) {
-        assert(MemoryFixture.lockedKiB() == 0);
-        assert(passphrase.secret.lockAfterFork());
-        assert(MemoryFixture.lockedKiB() >= 4);
+        Expect.intEq(MemoryFixture.lockedKiB(), 0);
+        Expect.isTrue(passphrase.secret.lockAfterFork());
+        Expect.isTrue(MemoryFixture.lockedKiB() >= 4);
         // Exercise actual managed allocation, iteration and filesystem access
         // after fork; no parent-owned descriptors or runtime threads survive it.
         var names = VolumeInventory.names("/proc/self/fd");
-        for name in names { assert(!f"/proc/self/fd/{name}".isEmpty()); }
-        assert(names.len == metadata.len);
+        for name in names { Expect.isFalse(f"/proc/self/fd/{name}".isEmpty()); }
+        Expect.intEq(names.length, metadata.length);
         var key = LockedSecret(64);
         MemoryFixture.fill(key, 0xa5);
         passphrase.secret.erase();
@@ -58,18 +54,17 @@ int main() {
         MemoryFixture.expect(key, 0xa5);
         key.close();
         passphrase.close();
-        assert(MemoryFixture.lockedKiB() == 0);
-        _exit(0);
+        Expect.intEq(MemoryFixture.lockedKiB(), 0);
+        ProcessLimits.exitChild(0);
     }
-    int status;
-    assert((int)waitpid((pid_t)child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    Expect.isTrue(ProcessLimits.waitChild(child));
     MemoryFixture.expect(passphrase.secret, 0x5a);
-    assert(passphrase.length == 16);
+    Expect.intEq(passphrase.length, 16);
     MemoryFixture.expectExceptionWipe(passphrase.secret);
     passphrase.close();
     passphrase.close();
-    assert(passphrase.secret.borrow() == NULL);
-    assert(MemoryFixture.lockedKiB() == 0);
+    Expect.isFalse(passphrase.secret.opened());
+    Expect.intEq(MemoryFixture.lockedKiB(), 0);
     Console.log("PASS: locked ownership, exception wipe, independent key lifetime, managed metadata after fork and child relocking");
     return 0;
 }

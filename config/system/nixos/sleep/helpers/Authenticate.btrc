@@ -1,15 +1,15 @@
 import Library.CLI;
 import Library.Console;
 import Library.Platform;
+import Library.Strings;
 import ./Console.btrc;
 import ./Authentication.btrc;
 
 int main(int argc, char** argv) {
     try {
-        if (!Platform.isRoot() || getuid() != (uid_t)0) { throw "Session locking requires root"; }
-        struct rlimit core = { 0, 0 };
-        LockedConsole.require(setrlimit(RLIMIT_CORE, &core), "disable core dumps");
-        LockedConsole.require(prctl(PR_SET_DUMPABLE, 0), "disable process dumps");
+        if (!Platform.isRoot() || Platform.uid() != 0) { throw "Session locking requires root"; }
+        LockedConsole.require(sleepDisableCoreDumps(), "disable core dumps");
+        LockedConsole.require(sleepDisableProcessDumps(), "disable process dumps");
         var args = CLIArgs(argc, argv);
         if (args.count() < 2) { throw "Missing session lock operation"; }
         var operation = args.get(1);

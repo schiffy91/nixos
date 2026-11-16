@@ -1,10 +1,12 @@
 #ifndef NIXOS_CREDENTIAL_STORAGE_H
 #define NIXOS_CREDENTIAL_STORAGE_H
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #if defined(__linux__)
 #include <shadow.h>
 #endif
@@ -13,6 +15,21 @@ static inline bool credentialRootDirectory(const char *path) {
     struct stat info;
     return lstat(path, &info) == 0 && S_ISDIR(info.st_mode)
         && info.st_uid == 0 && (info.st_mode & 0022) == 0;
+}
+
+static inline bool credentialPublicMarkerValid(const char *path) {
+    struct stat info;
+    return path && lstat(path, &info) == 0 && S_ISREG(info.st_mode)
+        && info.st_uid == 0 && (info.st_mode & 07777) == 0644 && info.st_nlink == 1;
+}
+
+static inline int credentialPublicMarkerCreate(const char *path) {
+    if (!path) return -1;
+    int marker = open(path, O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0644);
+    if (marker < 0) return -1;
+    int changed = fchmod(marker, 0644);
+    close(marker);
+    return changed == 0 ? 0 : -2;
 }
 
 typedef struct AccountHashStorage {

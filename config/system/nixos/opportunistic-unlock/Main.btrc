@@ -1,13 +1,14 @@
 import Library.CLI;
+import Library.Platform;
 import ./Worker.btrc;
 
 int main(int argc, char** argv) {
     var arguments = CLIArgs(argc, argv);
-    if (arguments.count() != 1 || getuid() != (uid_t)0 || geteuid() != (uid_t)0) { return 1; }
+    if (arguments.count() != 1 || Platform.uid() != 0 || !Platform.isRoot()) { return 1; }
     if (!ProcessLimits.protectSecrets()) { return 0; }
     var passphrase = BootPassphrase.consume();
     if (passphrase == null) { return 0; }
-    crypt_set_log_callback(NULL, quietCryptsetup, NULL);
+    unlockQuietCryptsetup();
     try { UnlockSession(passphrase).run(arguments.get(0)); }
     catch (string error) {} // Optional disks must never prevent the normal boot.
     finally { passphrase.close(); }

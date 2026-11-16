@@ -1,10 +1,11 @@
 import Library.CLI;
+import Library.Platform;
 import ./Controller.btrc;
 
 int main(int argc, char** argv) {
     try {
-        if (getuid() != (uid_t)0 || geteuid() != (uid_t)0) { throw "Session locking requires root"; }
-        umask((mode_t)0077);
+        if (!Platform.isRoot() || Platform.uid() != 0) { throw "Session locking requires root"; }
+        Platform.setUmask(0o077);
         var args = CLIArgs(argc, argv);
         if (args.count() < 2) { throw "Invalid sleep-lock operation"; }
         var controller = SleepController(JSONValue.readFile(args.get(0)));

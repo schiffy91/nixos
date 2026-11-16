@@ -1,7 +1,6 @@
 import Library.FileSystem;
 import Library.Strings;
 import Library.Vector;
-import ./Native.btrc;
 
 class BlockVolume {
     public string name;
@@ -11,12 +10,15 @@ class BlockVolume {
     public long start;
     public long size;
 
-    class string deviceNumber(dev_t device) { return f"{(unsigned)major(device)}:{(unsigned)minor(device)}"; }
+    class string formatNumber(long long encoded) {
+        if (encoded < 0LL) { return ""; }
+        int majorNumber = (int)((encoded >> 32) & 0xFFFFFFFFLL);
+        int minorNumber = (int)(encoded & 0xFFFFFFFFLL);
+        return f"{majorNumber}:{minorNumber}";
+    }
 
     class string numberAt(string path) {
-        struct stat status;
-        if (stat(path, &status) != 0 || !S_ISBLK(status.st_mode)) { return ""; }
-        return BlockVolume.deviceNumber(status.st_rdev);
+        return BlockVolume.formatNumber(unlockBlockDeviceAt(path));
     }
 
     class long readNumber(string path) {
@@ -41,7 +43,7 @@ class BlockVolume {
             volume.sequence = BlockVolume.readNumber(disk + "/diskseq");
             volume.start = partition ? BlockVolume.readNumber(path + "/start") : 0;
             volume.size = BlockVolume.readNumber(path + "/size");
-            if (volume.number.isEmpty() || volume.disk.isEmpty() || volume.sequence == 0 || volume.size == 0 || volume.start > (long)LONG_MAX - volume.size ||
+            if (volume.number.isEmpty() || volume.disk.isEmpty() || volume.sequence == 0 || volume.size == 0 || volume.start > unlockMaxOffset() - volume.size ||
                 FileStatus(volume.path()).isSymlink() || !BlockVolume.numberAt(volume.path()).equals(volume.number)) { return null; }
             return volume;
         } catch (string error) { return null; }
@@ -56,11 +58,9 @@ class BlockVolume {
     }
 
     public bool sameAttachment(int descriptor) {
-        struct stat status;
-        uint64_t sequence = 0;
-        if (fstat(descriptor, &status) != 0 || !S_ISBLK(status.st_mode) ||
-            !BlockVolume.deviceNumber(status.st_rdev).equals(self.number) ||
-            ioctl(descriptor, unlockDiskSequence, &sequence) != 0 || sequence != (uint64_t)self.sequence) { return false; }
+        var parts = Strings.split(self.number, ":");
+        if (parts.length != 2 || !parts.get(0).isDigit() || !parts.get(1).isDigit()) { return false; }
+        if (!unlockBlockFdMatches(descriptor, parts.get(0).toInt(), parts.get(1).toInt(), self.sequence)) { return false; }
         var current = BlockVolume.inspect(self.name);
         return current != null && current.number.equals(self.number) && current.disk.equals(self.disk) &&
             current.sequence == self.sequence && current.start == self.start && current.size == self.size;
@@ -123,7 +123,7 @@ class VolumeInventory {
             Vector<string> mounted = [];
             for line in Strings.split(mounts, "\n") {
                 var fields = Strings.split(line, " ");
-                if (fields.len >= 3) { mounted.push(fields.get(2)); }
+                if (fields.length >= 3) { mounted.push(fields.get(2)); }
             }
             for other in VolumeInventory.present() {
                 if (volume.overlaps(other) && other.inUse(mounted)) { return false; }

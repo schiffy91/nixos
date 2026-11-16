@@ -8,7 +8,7 @@ let
       fileset = pkgs.lib.fileset.unions [
         ../../config/pkgs/utils/nixosctl/secure-boot-keys
         ../../config/pkgs/utils/nixosctl/lib/hardware/SecureBootVerification.btrc
-        ../lib ./ArchiveTests.btrc ./CryptoTests.btrc ./CryptoIntegration.btrc ./AlarmState.btrc ./alarm-state.h ./VerificationTests.btrc ./btrc.toml
+        ../lib ./ArchiveTests.btrc ./CryptoTests.btrc ./CryptoIntegration.btrc ./AlarmState.btrc ./alarm-state.h ./VerificationTests.btrc ./btrc.toml ./btrc.lock
       ];
     };
     programs = {
@@ -18,7 +18,6 @@ let
       verification-tests = "tests/secure-boot/VerificationTests.btrc";
     };
     buildInputs = [ pkgs.openssl ];
-    linkFlags = [ "-lcrypto" ];
   };
 in pkgs.runCommand "secure-boot-key-contracts" {
   nativeBuildInputs = [ pkgs.openssl ];

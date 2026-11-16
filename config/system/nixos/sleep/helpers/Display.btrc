@@ -1,128 +1,23 @@
-import Library.Console;
-import Library.Strings;
-import ./Posix.btrc;
-
 // Own DRM master and its enumerations only while clearing this card. Nothing
 // saves the game's scanout or restores it on error; Plymouth redraws the lock.
 class DisplayCard {
-    private int descriptor;
-    private drmModeRes* resources;
-    private drmModePlaneRes* planes;
-    private bool master;
+    private DisplayCardHandle? handle = null;
 
     public DisplayCard(string path) {
-        self.resources = NULL; self.planes = NULL; self.master = false;
-        self.descriptor = open(path, (int)O_RDWR | (int)O_CLOEXEC | (int)O_NOFOLLOW);
-    }
-
-    class bool crtcBlank(const drmModeCrtc* state) { return state != NULL && state->mode_valid == 0 && state->buffer_id == 0; }
-    class bool planeBlank(const drmModePlane* state) { return state != NULL && state->fb_id == 0 && state->crtc_id == 0; }
-
-    private bool clearCrtc(uint32_t crtc) {
-        bool cleared = drmModeSetCrtc(self.descriptor, crtc, 0, 0, 0, NULL, 0, NULL) == 0;
-        var state = drmModeGetCrtc(self.descriptor, crtc);
-        bool blank = DisplayCard.crtcBlank(state);
-        if (state != NULL) { drmModeFreeCrtc(state); }
-        return cleared && blank;
-    }
-
-    private bool clearPlane(uint32_t id) {
-        var plane = drmModeGetPlane(self.descriptor, id);
-        if (plane == NULL) { return false; }
-        bool cleared = DisplayCard.planeBlank(plane)
-            || drmModeSetPlane(self.descriptor, id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) == 0;
-        drmModeFreePlane(plane);
-        plane = drmModeGetPlane(self.descriptor, id);
-        bool blank = DisplayCard.planeBlank(plane);
-        if (plane != NULL) { drmModeFreePlane(plane); }
-        return cleared && blank;
-    }
-
-    // Plymouth uses legacy CRTC gamma. Gamescope's AMD per-plane degamma
-    // survives disabling scanout and conflicts with it (atomic check: EINVAL).
-    // Reset only display transforms, after every scanout has been concealed.
-    class long long neutralValue(string name) {
-        if (name.equals("rotation")) { return (long long)DRM_MODE_ROTATE_0; }
-        if (name.equals("AMD_PLANE_HDR_MULT")) { return 4294967296LL; }
-        if (["DEGAMMA_LUT", "CTM", "GAMMA_LUT", "HDR_OUTPUT_METADATA", "Colorspace",
-             "AMD_CRTC_REGAMMA_TF", "AMD_PLANE_DEGAMMA_LUT", "AMD_PLANE_DEGAMMA_TF",
-             "AMD_PLANE_CTM", "AMD_PLANE_SHAPER_LUT", "AMD_PLANE_SHAPER_TF",
-             "AMD_PLANE_LUT3D", "AMD_PLANE_BLEND_LUT", "AMD_PLANE_BLEND_TF"].contains(name)) { return 0; }
-        return -1;
-    }
-
-    private bool neutralProperties(uint32_t object, uint32_t type, drmModeAtomicReq* request) {
-        var properties = drmModeObjectGetProperties(self.descriptor, object, type);
-        if (properties == NULL) { return false; }
-        bool safe = true;
-        for (uint32_t index = 0; index < properties->count_props; index++) {
-            var property = drmModeGetProperty(self.descriptor, properties->props[index]);
-            if (property == NULL) { safe = false; continue; }
-            long long value = DisplayCard.neutralValue(Strings.copy(property->name));
-            if (value >= 0 && (property->flags & DRM_MODE_PROP_IMMUTABLE) == 0
-                && properties->prop_values[index] != (uint64_t)value) {
-                if (request == NULL || drmModeAtomicAddProperty(request, object, property->prop_id, (uint64_t)value) < 0) { safe = false; }
-            }
-            drmModeFreeProperty(property);
-        }
-        drmModeFreeObjectProperties(properties);
-        return safe;
-    }
-
-    private bool neutralTransforms(drmModeAtomicReq* request) {
-        bool safe = true;
-        for (int index = 0; index < self.resources->count_crtcs; index++) {
-            if (!self.neutralProperties(self.resources->crtcs[index], DRM_MODE_OBJECT_CRTC, request)) { safe = false; }
-        }
-        for (uint32_t index = 0; index < self.planes->count_planes; index++) {
-            if (!self.neutralProperties(self.planes->planes[index], DRM_MODE_OBJECT_PLANE, request)) { safe = false; }
-        }
-        for (int index = 0; index < self.resources->count_connectors; index++) {
-            if (!self.neutralProperties(self.resources->connectors[index], DRM_MODE_OBJECT_CONNECTOR, request)) { safe = false; }
-        }
-        return safe;
-    }
-
-    private bool resetTransforms() {
-        if (drmSetClientCap(self.descriptor, DRM_CLIENT_CAP_ATOMIC, 1) != 0) { return false; }
-        var request = drmModeAtomicAlloc();
-        if (request == NULL) { return false; }
-        bool safe = self.neutralTransforms(request);
-        if (safe && drmModeAtomicGetCursor(request) > 0) {
-            safe = drmModeAtomicCommit(self.descriptor, request, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL) == 0;
-        }
-        drmModeAtomicFree(request);
-        return safe && self.neutralTransforms(NULL);
+        self.handle = displayCardOpen(path);
     }
 
     public bool blank() {
-        if (self.descriptor < 0) { return false; }
-        self.resources = drmModeGetResources(self.descriptor);
-        if (self.resources == NULL || drmSetMaster(self.descriptor) != 0) { return false; }
-        self.master = true;
-        if (drmIsMaster(self.descriptor) != 1) { return false; }
-        bool safe = true;
-        for (int index = 0; index < self.resources->count_crtcs; index++) {
-            if (!self.clearCrtc(self.resources->crtcs[index])) { safe = false; }
-        }
-        // Disabling CRTCs alone can leave cursor/overlay bindings behind.
-        if (drmSetClientCap(self.descriptor, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) == 0) {
-            self.planes = drmModeGetPlaneResources(self.descriptor);
-        }
-        if (self.planes == NULL) { return false; }
-        for (uint32_t index = 0; index < self.planes->count_planes; index++) {
-            if (!self.clearPlane(self.planes->planes[index])) { safe = false; }
-        }
-        return safe && self.resetTransforms();
+        return self.handle != null && displayCardBlank(self.handle);
     }
 
     public bool close() {
-        if (self.planes != NULL) { drmModeFreePlaneResources(self.planes); self.planes = NULL; }
-        if (self.resources != NULL) { drmModeFreeResources(self.resources); self.resources = NULL; }
-        bool dropped = !self.master || drmDropMaster(self.descriptor) == 0;
-        self.master = false;
-        if (self.descriptor >= 0) { close(self.descriptor); self.descriptor = -1; }
-        return dropped;
+        var current = self.handle;
+        if (current == null) { return true; }
+        bool closed = displayCardClose(current);
+        self.handle = null;
+        return closed;
     }
+
     public void __del__() { self.close(); }
 }

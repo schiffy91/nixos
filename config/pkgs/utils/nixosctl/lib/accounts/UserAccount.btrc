@@ -2,11 +2,15 @@ class UserAccount {
     public string name;
     public string homeDirectory;
     public bool current;
+    public int uid;
+    public int gid;
 
-    private UserAccount(string name, string homeDirectory, bool current) {
+    private UserAccount(string name, string homeDirectory, bool current, int uid, int gid) {
         self.name = name;
         self.homeDirectory = homeDirectory;
         self.current = current;
+        self.uid = uid;
+        self.gid = gid;
     }
 
     class UserAccount? find(string name) {
@@ -15,6 +19,6 @@ class UserAccount {
         var accountName = userAccountName(record);
         var homeDirectory = userAccountHome(record);
         if (accountName == null || homeDirectory == null) { return null; }
-        return UserAccount(accountName, homeDirectory, userAccountIsCurrent(record));
+        return UserAccount(accountName, homeDirectory, userAccountIsCurrent(record), userAccountUid(record), userAccountGid(record));
     }
 }

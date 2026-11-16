@@ -4,10 +4,9 @@ import Library.FileSystem;
 import Library.JSON;
 import Library.Process;
 import Library.Timer;
-import ../../../pkgs/utils/nixosctl/lib/RootSecretFile.btrc;
+import nixosctl.lib.RootSecretFile;
+import nixosctl.lib.accounts.UserAccount;
 import ./State.btrc;
-
-#include <pwd.h>
 
 // RootSecretFile delegates owner/mode/link checks and locking to the stdlib
 // PrivateDirectory and ExclusiveFileLease; only state decoding belongs here.
@@ -41,12 +40,12 @@ class SleepController {
     }
 
     public int accountUid() {
-        struct passwd account;
-        struct passwd* found = NULL;
-        char buffer[16384];
-        if (getpwnam_r(self.user, &account, buffer, sizeof(buffer), &found) != 0 || found == NULL
-            || (self.uid >= 0 && (int)account.pw_uid != self.uid)) { throw "The configured password account changed"; }
-        self.uid = (int)account.pw_uid; self.gid = (int)account.pw_gid;
+        var account = UserAccount.find(self.user);
+        if (account == null || (self.uid >= 0 && account.uid != self.uid)) {
+            throw "The configured password account changed";
+        }
+        self.uid = account.uid;
+        self.gid = account.gid;
         return self.uid;
     }
 
@@ -110,8 +109,7 @@ class SleepController {
 
     class bool streamStopped(JSONValue state) { return state.isNull() || (["inactive", "failed"].contains(state.get("ActiveState").asString()) && state.get("MainPID").asString().equals("0")); }
     class void marker() {
-        struct stat info;
-        if (lstat("/run/nixos-gaming-locked", &info) != 0 || !S_ISREG(info.st_mode) || info.st_uid != (uid_t)0 || (info.st_mode & (mode_t)07777) != (mode_t)0644 || info.st_nlink != (nlink_t)1) { throw "Unsafe gaming lock marker"; }
+        if (!RootSecretFile.publicMarkerValid("/run/nixos-gaming-locked")) { throw "Unsafe gaming lock marker"; }
     }
 
     public void verifyStreams() {
@@ -120,10 +118,9 @@ class SleepController {
     }
 
     public void stopStreams(SleepState state, SleepStore store) {
-        int marker = open("/run/nixos-gaming-locked", (int)O_WRONLY | (int)O_CREAT | (int)O_NOFOLLOW | (int)O_CLOEXEC, (mode_t)0644);
-        if (marker < 0) { throw "Cannot create gaming lock marker"; }
-        int changed = fchmod(marker, (mode_t)0644); close(marker);
-        if (changed != 0) { throw "Cannot secure gaming lock marker"; }
+        int created = RootSecretFile.createPublicMarker("/run/nixos-gaming-locked");
+        if (created == -1) { throw "Cannot create gaming lock marker"; }
+        if (created != 0) { throw "Cannot secure gaming lock marker"; }
         SleepController.marker();
         var statuses = JSONValue.makeObject();
         for unit in SleepState.streamUnits() { statuses.set(unit, self.streamState(unit)); }
@@ -140,7 +137,7 @@ class SleepController {
     }
 
     public void restoreStreams(SleepState state) {
-        if (unlink("/run/nixos-gaming-locked") != 0 && errno != ENOENT) { throw "Cannot remove gaming lock marker"; }
+        if (!FileSystem.removeIfExists("/run/nixos-gaming-locked")) { throw "Cannot remove gaming lock marker"; }
         for unit in state.sunshine {
             try { self.userService(["start", unit]); }
             catch (string error) { Console.error("Could not restart Sunshine after unlocking"); }

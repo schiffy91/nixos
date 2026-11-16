@@ -51,4 +51,12 @@ static inline bool userAccountIsCurrent(UserAccountRecord account) {
     return account->entry.pw_uid == geteuid();
 }
 
+static inline int userAccountUid(UserAccountRecord account) {
+    return (int)account->entry.pw_uid;
+}
+
+static inline int userAccountGid(UserAccountRecord account) {
+    return (int)account->entry.pw_gid;
+}
+
 #endif

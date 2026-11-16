@@ -79,7 +79,7 @@ class KeyArchive {
             var header = Bytes();
             for (int index = 0; index < 512; index++) { header.append(0); }
             KeyArchive.field(header, 0, name);
-            KeyArchive.number(header, 100, 8, 0600);
+            KeyArchive.number(header, 100, 8, 0o600);
             KeyArchive.number(header, 108, 8, 0);
             KeyArchive.number(header, 116, 8, 0);
             KeyArchive.number(header, 124, 12, files.get(name).len);

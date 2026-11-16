@@ -43,6 +43,7 @@ let
     "tests/gaming/runtime/signals.h"
     "tests/harness/timeout/process-tree.h"
     "tests/secure-boot/alarm-state.h"
+    "tests/sleep-lock/helpers/test-native.h"
     "tests/sleep-lock/unit/process-probe.h"
     "tests/vm/vnc.h"
     "tests/gaming/proton/pdb/Folded.c"
@@ -86,6 +87,13 @@ let
       ${../tests/gaming/runtime/signals.h} \
       ${../tests/harness/timeout/process-tree.h} \
       ${../tests/secure-boot/alarm-state.h} \
+      ${(pkgs.lib.fileset.toSource {
+        root = ../.;
+        fileset = pkgs.lib.fileset.unions [
+          ../config/system/nixos/sleep/helpers
+          ../tests/sleep-lock/helpers/test-native.h
+        ];
+      })}/tests/sleep-lock/helpers/test-native.h \
       ${../tests/sleep-lock/unit/process-probe.h} \
       ${../tests/vm/vnc.h} \
       ${../tests/ci/native-fixture/native.h}; do

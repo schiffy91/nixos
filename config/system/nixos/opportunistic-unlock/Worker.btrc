@@ -1,28 +1,25 @@
+import Library.Platform;
 import Library.Timer;
 import ./LuksVolume.btrc;
-
-void quietCryptsetup(int level, const char* message, void* data) {}
 
 class ProcessLimits {
     class bool singleThreaded() {
         var tasks = Directory("/proc/self/task");
         var names = tasks.entries();
-        return !tasks.failed() && names.len == 1;
+        return !tasks.failed() && names.length == 1;
     }
 
     class bool protectSecrets() {
-        struct rlimit limit;
-        limit.rlim_cur = 0;
-        limit.rlim_max = 0;
-        return ProcessLimits.singleThreaded() && setrlimit(RLIMIT_CORE, &limit) == 0 && prctl(PR_SET_DUMPABLE, 0) == 0;
+        return ProcessLimits.singleThreaded() && unlockDisableProcessDumps();
     }
 
-    class bool child(pid_t parent) {
-        struct rlimit memory;
-        memory.rlim_cur = 1536UL * 1024 * 1024;
-        memory.rlim_max = memory.rlim_cur;
-        return prctl(PR_SET_PDEATHSIG, SIGKILL) == 0 && (pid_t)getppid() == parent && setrlimit(RLIMIT_AS, &memory) == 0;
+    class bool child(int parent) {
+        return unlockPrepareChildLimits(parent);
     }
+
+    class int forkChild() { return unlockForkProcess(); }
+    class void exitChild(int code) { unlockExitProcess(code); }
+    class bool waitChild(int pid) { return unlockWaitChildSuccess(pid); }
 }
 
 class UnlockAttempt {
@@ -30,8 +27,8 @@ class UnlockAttempt {
     private long long deadline = 0;
 
     public void start(BlockVolume volume, VolumeInventory inventory, BootPassphrase passphrase) {
-        var parent = getpid();
-        self.process = (int)fork();
+        var parent = Platform.pid();
+        self.process = unlockForkProcess();
         if (self.process == 0) {
             // No runtime threads are started before fork. Managed metadata can
             // be used normally; the inherited secret mapping must be relocked.
@@ -41,7 +38,7 @@ class UnlockAttempt {
                 }
             } catch (string error) {}
             passphrase.close();
-            _exit(0);
+            unlockExitProcess(0);
         }
         if (self.process < 0) { self.process = 0; }
         self.deadline = MonotonicClock.deadlineAfter(8000);
@@ -49,15 +46,13 @@ class UnlockAttempt {
 
     public bool running() {
         if (self.process == 0) { return false; }
-        int status;
-        var exited = (int)waitpid((pid_t)self.process, &status, WNOHANG);
-        if (exited == self.process || (exited < 0 && errno != EINTR)) { self.process = 0; }
+        if (!unlockChildRunning(self.process)) { self.process = 0; }
         else if (self.deadline != 0 && !MonotonicClock.before(self.deadline)) { self.stop(); }
         return self.process != 0;
     }
 
     public void stop() {
-        if (self.process > 0) { kill((pid_t)self.process, SIGKILL); }
+        if (self.process > 0) { unlockKillProcess(self.process); }
         self.deadline = 0;
         // Keep the slot until waitpid reaps it. Stuck kernel I/O must not turn
         // one timed-out disk into an unbounded number of concurrent attempts.
@@ -81,15 +76,15 @@ class UnlockSession {
             while (MonotonicClock.before(self.deadline)) {
                 var running = false;
                 for attempt in attempts {
-                    if (!attempt.running() && next < inventory.volumes.len) {
+                    if (!attempt.running() && next < inventory.volumes.length) {
                         attempt.start(inventory.volumes.get(next), inventory, self.passphrase);
                         next++;
                     }
                     running = attempt.running() || running;
                 }
-                if (next == inventory.volumes.len) { self.passphrase.secret.erase(); }
-                if (!running && next == inventory.volumes.len) { break; }
-                Timer.sleep(0.01);
+                if (next == inventory.volumes.length) { self.passphrase.secret.erase(); }
+                if (!running && next == inventory.volumes.length) { break; }
+                Timer.sleepMillis(10);
             }
         } finally {
             self.passphrase.close();

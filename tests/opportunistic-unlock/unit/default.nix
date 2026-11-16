@@ -32,7 +32,7 @@ import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
   src = pkgs.lib.fileset.toSource {
     root = ../../..;
     fileset = pkgs.lib.fileset.unions [
-      ./btrc.toml ./Headers.btrc ./PolicyTests.btrc ./MemoryTests.btrc
+      ./btrc.toml ./btrc.lock ./Headers.btrc ./PolicyTests.btrc ./MemoryTests.btrc
       ../../../config/system/nixos/opportunistic-unlock
     ];
   };
@@ -44,7 +44,6 @@ import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
   };
   nativeBuildInputs = [ pkgs.cryptsetup ];
   buildInputs = [ pkgs.cryptsetup ];
-  linkFlags = [ "-lcryptsetup" ];
   postInstall = ''
   ./policy-tests
   ./memory-tests
@@ -54,7 +53,7 @@ import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
     echo 'unexpected runtime thread creation in the unlock coordinator' >&2
     exit 1
   fi
-  grep -q 'explicit_bzero(self->memory, self->capacity)' worker-contract.c
+  grep -q 'unlockSecretErase' worker-contract.c
   nm -D worker-contract | grep -q explicit_bzero
   printf fixture-password > passphrase
   for format in luks1 luks2; do

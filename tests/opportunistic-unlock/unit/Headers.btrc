@@ -9,9 +9,7 @@ int main(int argc, char** argv) {
         var volume = LuksVolume(arguments.get(0));
         var passphrase = BootPassphrase();
         try {
-            const char* fixture = "fixture-password";
-            passphrase.length = (int)strlen(fixture);
-            memcpy(passphrase.secret.borrow(), fixture, passphrase.length);
+            passphrase.loadFixture("fixture-password");
             var key = volume.verifiedKey(passphrase);
             unlocked = key.capacity > 0;
             key.close();

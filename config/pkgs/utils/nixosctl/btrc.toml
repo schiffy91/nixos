@@ -25,10 +25,10 @@ module = "lib.accounts.UserAccount"
 header = "lib/accounts/native.h"
 language = "c"
 standard = "c11"
-symbols = ["UserAccountRecord", "userAccountFind", "userAccountRelease", "userAccountName", "userAccountHome", "userAccountIsCurrent"]
+symbols = ["UserAccountRecord", "userAccountFind", "userAccountRelease", "userAccountName", "userAccountHome", "userAccountIsCurrent", "userAccountUid", "userAccountGid"]
 owned-results = ["userAccountFind"]
 read-only-borrows = ["userAccountFind.name"]
-borrowed-parameters = ["userAccountName.account", "userAccountHome.account", "userAccountIsCurrent.account"]
+borrowed-parameters = ["userAccountName.account", "userAccountHome.account", "userAccountIsCurrent.account", "userAccountUid.account", "userAccountGid.account"]
 
 [native.bindings.resources.UserAccountRecord]
 ownership = "unique"
@@ -69,8 +69,8 @@ module = "lib.RootSecretFile"
 header = "lib/credentials.h"
 language = "c"
 standard = "c11"
-symbols = ["credentialRootDirectory"]
-read-only-borrows = ["credentialRootDirectory.path"]
+symbols = ["credentialRootDirectory", "credentialPublicMarkerValid", "credentialPublicMarkerCreate"]
+read-only-borrows = ["credentialRootDirectory.path", "credentialPublicMarkerValid.path", "credentialPublicMarkerCreate.path"]
 
 [[native.bindings]]
 module = "lib.PasswordHashFile"
