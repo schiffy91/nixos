@@ -3,23 +3,22 @@ import Library.Bytes;
 import Library.Crypto;
 import Library.FileSystem;
 import Library.HID;
+import Library.Network;
+import Library.Testing;
 import Library.Timer;
 import Library.USB.USBDescriptors;
 import Library.USB.USBVirtualDevice;
 import Library.Vector;
-import ../../../config/pkgs/gaming/deckpad/PadSource.btrc;
-import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
-import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
-import ../../../config/pkgs/gaming/deckpad/Controller.btrc;
-import ../../../config/pkgs/gaming/deckpad/ControllerUSB.btrc;
-import ../../../config/pkgs/gaming/deckpad/Doctor.btrc;
-import ../../../config/pkgs/gaming/deckpad/Link.btrc;
-import ../../../config/pkgs/gaming/deckpad/Service.btrc;
-import ../../../config/pkgs/gaming/deckpad/Trust.btrc;
-import ../../../config/pkgs/gaming/deckpad/Wire.btrc;
-import ../../lib/Check.btrc;
-
-#include <poll.h>
+import deckpad.Controller;
+import deckpad.ControllerUSB;
+import deckpad.Doctor;
+import deckpad.Link;
+import deckpad.PadSource;
+import deckpad.PadState;
+import deckpad.Service;
+import deckpad.SteamController;
+import deckpad.Trust;
+import deckpad.Wire;
 
 // A link whose host comes and goes when the test says so.
 class SwitchedLink implements IControllerLink {
@@ -42,7 +41,7 @@ class SwitchedLink implements IControllerLink {
         self.opened = true;
     }
 
-    public int watch(struct pollfd* descriptors, int capacity) { return 0; }
+    public void watchIn(PollSet polls) {}
 
     public void step() {}
 
@@ -61,14 +60,14 @@ class HeldPad implements IPadSource {
 
     public void open() { self.opened = true; }
 
-    public bool read(struct PadState* state, int timeoutMilliseconds) {
+    public bool read(PadState state, int timeoutMilliseconds) {
         Timer.sleepMillis(4);
-        memset(state, 0, sizeof(struct PadState));
-        state->buttons = PAD_QUICK_ACCESS | PAD_B;
+        state.reset();
+        state.buttons = PAD_QUICK_ACCESS | PAD_B;
         return true;
     }
 
-    public void command(struct PadCommand* command) {}
+    public void command(PadCommand command) {}
     public void close() { self.opened = false; }
 }
 
@@ -81,156 +80,150 @@ class CountingPlayer implements IPadUseListener {
 }
 
 class DeckpadUnitTests {
-    class void deckSample(unsigned char* report) {
-        memset(report, 0, (size_t)64);
-        report[0] = (unsigned char)0x01; report[2] = (unsigned char)0x09; report[3] = (unsigned char)0x40;
-        report[8] = (unsigned char)0x80;   // A
-        report[9] = (unsigned char)0x80;   // L5
-        report[10] = (unsigned char)0x08;  // left pad touched
-        report[11] = (unsigned char)0x04;  // right stick click
-        report[13] = (unsigned char)0x02;  // L4
-        report[14] = (unsigned char)0x04;  // quick access
+    class Bytes deckSample() {
+        Bytes report = Wire.zeros(64);
+        report.set(0, 0x01); report.set(2, 0x09); report.set(3, 0x40);
+        report.set(8, 0x80);   // A
+        report.set(9, 0x80);   // L5
+        report.set(10, 0x08);  // left pad touched
+        report.set(11, 0x04);  // right stick click
+        report.set(13, 0x02);  // L4
+        report.set(14, 0x04);  // quick access
         Wire.putU16le(report, 16, 1000); Wire.putU16le(report, 18, -2000);
         Wire.putU16le(report, 28, 16384); Wire.putU16le(report, 30, -5);
         Wire.putU16le(report, 44, 12345); Wire.putU16le(report, 46, 40000);
         Wire.putU16le(report, 48, -32768); Wire.putU16le(report, 50, 32767);
         Wire.putU16le(report, 52, 100); Wire.putU16le(report, 54, -100);
         Wire.putU16le(report, 56, 500); Wire.putU16le(report, 58, 600);
+        return report;
     }
 
     class void deckReport() {
-        unsigned char report[64];
-        struct PadState state;
-        DeckpadUnitTests.deckSample(report);
-        Check.that(DeckReport.parse(report, 64, &state), "Deck state report parses");
-        Check.that(state.buttons == (PAD_A | PAD_L5 | PAD_LEFT_PAD_TOUCH | PAD_RIGHT_STICK | PAD_L4 | PAD_QUICK_ACCESS), "Deck buttons map to controller bits");
-        Check.that(state.leftPadX == 1000 && state.leftPadY == -2000 && state.accelZ == 16384 && state.gyroX == -5, "pads and IMU keep Deck units");
-        Check.that(state.leftTrigger == 12345 && state.rightTrigger == 32767, "triggers clamp to the controller range");
-        Check.that(state.leftStickX == -32767 && state.leftStickY == 32767 && state.rightStickX == 100 && state.rightStickY == -100, "sticks clamp symmetrically");
-        Check.that(state.leftPadPressure == 500 && state.rightPadPressure == 600, "pad pressure");
-        Check.that(!DeckReport.parse(report, 40, &state), "short report rejected");
-        report[2] = (unsigned char)0x04;
-        Check.that(!DeckReport.parse(report, 64, &state), "non-state report rejected");
+        Bytes report = DeckpadUnitTests.deckSample();
+        PadState state = PadState();
+        Expect.isTrue(DeckReport.parse(report, state));
+        Expect.intEq(state.buttons, PAD_A | PAD_L5 | PAD_LEFT_PAD_TOUCH | PAD_RIGHT_STICK | PAD_L4 | PAD_QUICK_ACCESS);
+        Expect.isTrue(state.leftPadX == 1000 && state.leftPadY == -2000 && state.accelZ == 16384 && state.gyroX == -5);
+        Expect.isTrue(state.leftTrigger == 12345 && state.rightTrigger == 32767);
+        Expect.isTrue(state.leftStickX == -32767 && state.leftStickY == 32767 && state.rightStickX == 100 && state.rightStickY == -100);
+        Expect.isTrue(state.leftPadPressure == 500 && state.rightPadPressure == 600);
+        Expect.isFalse(DeckReport.parse(report.slice(0, 40), state));
+        report.set(2, 0x04);
+        Expect.isFalse(DeckReport.parse(report, state));
     }
 
     class void stateReport() {
-        unsigned char report[64];
-        unsigned char out[64];
-        struct PadState state;
-        DeckpadUnitTests.deckSample(report);
-        DeckReport.parse(report, 64, &state);
+        Bytes report = DeckpadUnitTests.deckSample();
+        Bytes out = Wire.zeros(64);
+        PadState state = PadState();
+        DeckReport.parse(report, state);
         var controller = SteamController("FXDK00000042");
-        Check.that(controller.encodeState(&state, 0x01020304LL, out) == 54 && (int)out[0] == 0x42 && (int)out[1] == 0, "wired state report is 54 bytes");
-        Check.that(Wire.u16le(out, 2) == (state.buttons & 0xFFFF) && Wire.u16le(out, 4) == (state.buttons >> 16), "buttons at offset 2");
-        Check.that(Wire.u16le(out, 6) == 12345 && Wire.u16le(out, 8) == 32767, "triggers at 6 and 8");
-        Check.that(Wire.s16le(out, 10) == -32767 && Wire.s16le(out, 12) == 32767 && Wire.s16le(out, 14) == 100 && Wire.s16le(out, 16) == -100, "sticks at 10..17");
-        Check.that(Wire.s16le(out, 18) == 1000 && Wire.s16le(out, 20) == -2000 && Wire.u16le(out, 22) == 500 && Wire.u16le(out, 28) == 600, "pads at 18..29");
-        Check.that((int)out[30] == 0x04 && (int)out[33] == 0x01, "IMU timestamp at 30");
-        Check.that(Wire.s16le(out, 38) == 16384 && Wire.s16le(out, 40) == -5, "IMU at 34..45");
-        controller.encodeState(&state, 0LL, out);
-        Check.that((int)out[1] == 1, "sequence number advances");
-        Check.that(controller.encodeBattery(87, true, out) == 15 && (int)out[0] == 0x43 && (int)out[1] == 2 && (int)out[2] == 87, "battery report");
-        Check.that(controller.encodeBattery(100, true, out) == 15 && (int)out[1] == 4, "full battery state");
+        Expect.isTrue(controller.encodeState(state, 0x01020304LL, out) == 54 && out.get(0) == 0x42 && out.get(1) == 0);
+        Expect.isTrue(Wire.u16le(out, 2) == (state.buttons & 0xFFFF) && Wire.u16le(out, 4) == (state.buttons >> 16));
+        Expect.isTrue(Wire.u16le(out, 6) == 12345 && Wire.u16le(out, 8) == 32767);
+        Expect.isTrue(Wire.s16le(out, 10) == -32767 && Wire.s16le(out, 12) == 32767 && Wire.s16le(out, 14) == 100 && Wire.s16le(out, 16) == -100);
+        Expect.isTrue(Wire.s16le(out, 18) == 1000 && Wire.s16le(out, 20) == -2000 && Wire.u16le(out, 22) == 500 && Wire.u16le(out, 28) == 600);
+        Expect.isTrue(out.get(30) == 0x04 && out.get(33) == 0x01);
+        Expect.isTrue(Wire.s16le(out, 38) == 16384 && Wire.s16le(out, 40) == -5);
+        controller.encodeState(state, 0LL, out);
+        Expect.intEq(out.get(1), 1);
+        Expect.isTrue(controller.encodeBattery(87, true, out) == 15 && out.get(0) == 0x43 && out.get(1) == 2 && out.get(2) == 87);
+        Expect.isTrue(controller.encodeBattery(100, true, out) == 15 && out.get(1) == 4);
     }
 
     class void latch() {
-        struct PadState state;
-        struct PadState taken;
+        PadState state = PadState();
+        PadState taken = PadState();
         var latch = PadLatch();
-        Check.that(!latch.pending(), "nothing pending at start");
-        memset(&state, 0, sizeof(state));
+        Expect.isFalse(latch.pending());
         state.buttons = PAD_A | PAD_LEFT_PAD_TOUCH;
-        latch.update(&state);
+        latch.update(state);
         state.buttons = 0;
-        latch.update(&state);
-        latch.take(&taken);
-        Check.that(taken.buttons == PAD_A, "a tap survives until sent; a lifted touch does not");
-        Check.that(!latch.pending(), "taken state is no longer pending");
-        latch.update(&state);
-        latch.take(&taken);
-        Check.that(taken.buttons == 0, "latched press is sent once");
+        latch.update(state);
+        latch.take(taken);
+        Expect.intEq(taken.buttons, PAD_A);
+        Expect.isFalse(latch.pending());
+        latch.update(state);
+        latch.take(taken);
+        Expect.intEq(taken.buttons, 0);
     }
 
     class void descriptors() {
-        unsigned char out[256];
+        Bytes out = Bytes();
         var controller = SteamController("FXDK00000042");
         int length = controller.reportDescriptor(out);
-        Check.that(length == 143 && (int)out[0] == 0x06 && (int)out[2] == 0xFF && (int)out[length - 1] == 0xC0, "vendor report descriptor");
-        Check.that((int)out[15] == 0x42 && (int)out[19] == 53, "state report is 53 bytes after its ID");
-        Check.that((int)out[length - 8] == 0x01 && (int)out[length - 4] == 63 && (int)out[length - 3] == 0xB1, "feature report 1 is 63 bytes, as hid-steam requires");
-        Check.that(controller.vendor() == 0x28DE && controller.product() == 0x1302 && controller.serial().equals("FXDK00000042"), "Steam Controller identity");
+        Expect.isTrue(length == 143 && out.get(0) == 0x06 && out.get(2) == 0xFF && out.get(length - 1) == 0xC0);
+        Expect.isTrue(out.get(15) == 0x42 && out.get(19) == 53);
+        Expect.isTrue(out.get(length - 8) == 0x01 && out.get(length - 4) == 63 && out.get(length - 3) == 0xB1);
+        Expect.isTrue(controller.vendor() == 0x28DE && controller.product() == 0x1302 && controller.serial().equals("FXDK00000042"));
     }
 
-    class void command(unsigned char* out, int identifier, int length) {
-        memset(out, 0, (size_t)64);
-        out[0] = (unsigned char)STEAM_REPORT_FEATURE; out[1] = (unsigned char)identifier; out[2] = (unsigned char)length;
+    class void command(Bytes out, int identifier, int length) {
+        Wire.resetZeros(out, 64);
+        out.set(0, STEAM_REPORT_FEATURE);
+        out.set(1, identifier);
+        out.set(2, length);
     }
 
     class void features() {
-        unsigned char request[64];
-        unsigned char reply[64];
+        Bytes request = Wire.zeros(64);
+        Bytes reply = Wire.zeros(64);
         var controller = SteamController("FXDK00000042");
         DeckpadUnitTests.command(request, STEAM_GET_STRING, 0x15);
-        request[3] = (unsigned char)1;
-        controller.setFeature(request, 64);
-        Check.that(controller.getFeature(reply) == 64 && (int)reply[1] == STEAM_GET_STRING && (int)reply[2] == 21 && (int)reply[3] == 1, "serial reply header");
-        Check.that((int)reply[4] == 'F' && (int)reply[15] == '2' && (int)reply[16] == 0, "serial reply text");
+        request.set(3, 1);
+        controller.setFeature(request);
+        Expect.isTrue(controller.getFeature(reply) == 64 && reply.get(1) == STEAM_GET_STRING && reply.get(2) == 21 && reply.get(3) == 1);
+        Expect.isTrue(reply.get(4) == 'F' && reply.get(15) == '2' && reply.get(16) == 0);
         DeckpadUnitTests.command(request, STEAM_GET_ATTRIBUTES, 0);
-        controller.setFeature(request, 64);
+        controller.setFeature(request);
         controller.getFeature(reply);
-        Check.that((int)reply[2] == 25 && (int)reply[3] == 1 && Wire.u16le(reply, 4) == STEAM_PRODUCT && (int)reply[18] == 4 && Wire.u32le(reply, 19) == STEAM_FIRMWARE_TIME && (int)reply[23] == 9 && Wire.u32le(reply, 24) == STEAM_BOARD_REVISION && STEAM_BOARD_REVISION < 68, "attributes name the product, the current firmware and a board Steam's updater leaves alone");
+        Expect.isTrue(reply.get(2) == 25 && reply.get(3) == 1 && Wire.u16le(reply, 4) == STEAM_PRODUCT && reply.get(18) == 4 && Wire.u32le(reply, 19) == STEAM_FIRMWARE_TIME && reply.get(23) == 9 && Wire.u32le(reply, 24) == STEAM_BOARD_REVISION && STEAM_BOARD_REVISION < 68);
         DeckpadUnitTests.command(request, STEAM_SET_SETTINGS, 6);
-        request[3] = (unsigned char)9; request[4] = (unsigned char)0;
-        request[6] = (unsigned char)48; request[7] = (unsigned char)0x18;
-        controller.setFeature(request, 64);
+        request.set(3, 9); request.set(4, 0);
+        request.set(6, 48); request.set(7, 0x18);
+        controller.setFeature(request);
         DeckpadUnitTests.command(request, STEAM_GET_SETTINGS, 6);
-        request[3] = (unsigned char)48; request[6] = (unsigned char)9;
-        controller.setFeature(request, 64);
+        request.set(3, 48); request.set(6, 9);
+        controller.setFeature(request);
         controller.getFeature(reply);
-        Check.that((int)reply[2] == 6 && (int)reply[3] == 48 && Wire.u16le(reply, 4) == 0x18 && (int)reply[6] == 9 && Wire.u16le(reply, 7) == 0, "settings read back");
+        Expect.isTrue(reply.get(2) == 6 && reply.get(3) == 48 && Wire.u16le(reply, 4) == 0x18 && reply.get(6) == 9 && Wire.u16le(reply, 7) == 0);
         DeckpadUnitTests.command(request, 0xC5, 1);
-        request[3] = (unsigned char)7;
-        controller.setFeature(request, 64);
+        request.set(3, 7);
+        controller.setFeature(request);
         controller.getFeature(reply);
-        Check.that((int)reply[1] == 0xC5 && (int)reply[3] == 7, "unknown commands echo");
+        Expect.isTrue(reply.get(1) == 0xC5 && reply.get(3) == 7);
     }
 
     class void effects() {
-        struct HostEffect effect;
-        unsigned char report[64];
+        HostEffect effect = HostEffect();
+        Bytes report = Wire.zeros(64);
         var controller = SteamController("FXDK00000042");
-        memset(report, 0, sizeof(report));
-        report[0] = (unsigned char)STEAM_OUT_RUMBLE;
+        report.set(0, STEAM_OUT_RUMBLE);
         Wire.putU16le(report, 4, 0x1234); Wire.putU16le(report, 7, 0x5678);
-        controller.outputEffect(report, 10, &effect);
-        Check.that(effect.kind == HOST_EFFECT_RUMBLE && effect.left == 0x1234 && effect.right == 0x5678, "rumble output report");
-        memset(report, 0, sizeof(report));
-        report[0] = (unsigned char)STEAM_OUT_PULSE; report[1] = (unsigned char)3;
+        controller.outputEffect(report.slice(0, 10), effect);
+        Expect.isTrue(effect.kind == HOST_EFFECT_RUMBLE && effect.left == 0x1234 && effect.right == 0x5678);
+        Wire.resetZeros(report, 64);
+        report.set(0, STEAM_OUT_PULSE); report.set(1, 3);
         Wire.putU16le(report, 2, 1200); Wire.putU16le(report, 6, 2);
-        controller.outputEffect(report, 8, &effect);
-        Check.that(effect.kind == HOST_EFFECT_HAPTIC && (int)effect.command.bytes[0] == DECK_HAPTIC_PULSE && (int)effect.command.bytes[2] == 1, "left grip pulse goes to the left pad");
-        Check.that(Wire.u16le(effect.command.bytes, 3) == 1200 && Wire.u16le(effect.command.bytes, 7) == 2 && effect.command.length == 10, "pulse timing");
-        memset(report, 0, sizeof(report));
-        report[0] = (unsigned char)STEAM_OUT_COMMAND; report[1] = (unsigned char)1; report[2] = (unsigned char)1; report[3] = (unsigned char)0xF7;
-        controller.outputEffect(report, 4, &effect);
-        Check.that((int)effect.command.bytes[0] == DECK_HAPTIC && effect.command.length == 15 && (int)effect.command.bytes[2] == 1 && (int)effect.command.bytes[3] == 1 && (int)effect.command.bytes[4] == 1, "a -9 dB click is the Deck's low intensity");
-        memset(report, 0, sizeof(report));
-        report[0] = (unsigned char)STEAM_OUT_SWEEP; report[1] = (unsigned char)2; report[2] = (unsigned char)0xFA;
+        controller.outputEffect(report.slice(0, 8), effect);
+        Expect.isTrue(effect.kind == HOST_EFFECT_HAPTIC && effect.command.bytes.get(0) == DECK_HAPTIC_PULSE && effect.command.bytes.get(2) == 1);
+        Expect.isTrue(Wire.u16le(effect.command.bytes, 3) == 1200 && Wire.u16le(effect.command.bytes, 7) == 2 && effect.command.length == 10);
+        Wire.resetZeros(report, 64);
+        report.set(0, STEAM_OUT_COMMAND); report.set(1, 1); report.set(2, 1); report.set(3, 0xF7);
+        controller.outputEffect(report.slice(0, 4), effect);
+        Expect.isTrue(effect.command.bytes.get(0) == DECK_HAPTIC && effect.command.length == 15 && effect.command.bytes.get(2) == 1 && effect.command.bytes.get(3) == 1 && effect.command.bytes.get(4) == 1);
+        Wire.resetZeros(report, 64);
+        report.set(0, STEAM_OUT_SWEEP); report.set(1, 2); report.set(2, 0xFA);
         Wire.putU16le(report, 3, 250); Wire.putU16le(report, 5, 80); Wire.putU16le(report, 7, 320);
-        controller.outputEffect(report, 9, &effect);
-        Check.that(effect.command.length == 21 && (int)effect.command.bytes[3] == DECK_HAPTIC_SWEEP && (int)effect.command.bytes[5] == 0xFA && Wire.u16le(effect.command.bytes, 8) == 250 && Wire.u16le(effect.command.bytes, 17) == 80 && Wire.u16le(effect.command.bytes, 19) == 320, "sweep keeps gain, duration and range");
-        report[0] = (unsigned char)0x99;
-        controller.outputEffect(report, 9, &effect);
-        Check.that(effect.kind == HOST_EFFECT_NONE, "unknown output report ignored");
+        controller.outputEffect(report.slice(0, 9), effect);
+        Expect.isTrue(effect.command.length == 21 && effect.command.bytes.get(3) == DECK_HAPTIC_SWEEP && effect.command.bytes.get(5) == 0xFA && Wire.u16le(effect.command.bytes, 8) == 250 && Wire.u16le(effect.command.bytes, 17) == 80 && Wire.u16le(effect.command.bytes, 19) == 320);
+        report.set(0, 0x99);
+        controller.outputEffect(report.slice(0, 9), effect);
+        Expect.intEq(effect.kind, HOST_EFFECT_NONE);
         DeckpadUnitTests.command(report, STEAM_RUMBLE, 9);
         Wire.putU16le(report, 6, 300); Wire.putU16le(report, 8, 400);
-        controller.featureEffect(report, 64, &effect);
-        Check.that(effect.kind == HOST_EFFECT_RUMBLE && effect.left == 300 && effect.right == 400, "rumble as a feature command");
-    }
-
-    class void setup(unsigned char* setup, int kind, int request, int value, int length) {
-        setup[0] = (unsigned char)kind; setup[1] = (unsigned char)request;
-        Wire.putU16le(setup, 2, value); Wire.putU16le(setup, 4, 0); Wire.putU16le(setup, 6, length);
+        controller.featureEffect(report, effect);
+        Expect.isTrue(effect.kind == HOST_EFFECT_RUMBLE && effect.left == 300 && effect.right == 400);
     }
 
     class bool attachRefused(VirtualController controller) {
@@ -240,49 +233,49 @@ class DeckpadUnitTests {
 
     // The controller in HID terms, with no transport around it.
     class void controller() {
-        unsigned char data[64];
-        struct HidReport report;
+        Bytes data = Wire.zeros(64);
+        HidReport report = HidReport();
         var pad = ScriptedPad();
         var controller = VirtualController(pad, SteamController("FXDK00000042"), false);
-        Check.that(!controller.input(&report), "no reports before a host attaches");
+        Expect.isFalse(controller.input(report));
         controller.attach();
-        Check.that(DeckpadUnitTests.attachRefused(controller), "only one host holds the controller");
+        Expect.isTrue(DeckpadUnitTests.attachRefused(controller));
         controller.pump(8);
-        Check.that(controller.input(&report) && report.length == 15 && (int)report.bytes[0] == 0x43, "battery report after attach");
-        Check.that(controller.input(&report) && report.length == 54 && (int)report.bytes[0] == 0x42, "state report follows");
-        Check.that(!controller.input(&report), "nothing more until the pad reports again");
-        memset(data, 0, sizeof(data));
-        data[0] = (unsigned char)STEAM_OUT_RUMBLE;
+        Expect.isTrue(controller.input(report) && report.length == 15 && report.bytes.get(0) == 0x43);
+        Expect.isTrue(controller.input(report) && report.length == 54 && report.bytes.get(0) == 0x42);
+        Expect.isFalse(controller.input(report));
+        Wire.resetZeros(data, 64);
+        data.set(0, STEAM_OUT_RUMBLE);
         Wire.putU16le(data, 4, 1000); Wire.putU16le(data, 7, 2000);
-        controller.output(data, 10);
+        controller.output(data.slice(0, 10));
         Timer.sleepMillis(60);
         controller.pump(8);
-        Check.that(pad.commands == 1 && (int)pad.last.bytes[0] == DECK_RUMBLE && Wire.u16le(pad.last.bytes, 5) == 1000 && Wire.u16le(pad.last.bytes, 7) == 2000, "rumble reaches the pad");
+        Expect.isTrue(pad.commands == 1 && pad.last.bytes.get(0) == DECK_RUMBLE && Wire.u16le(pad.last.bytes, 5) == 1000 && Wire.u16le(pad.last.bytes, 7) == 2000);
         Wire.putU16le(data, 4, 3000);
-        controller.output(data, 10);
+        controller.output(data.slice(0, 10));
         controller.pump(8);
-        Check.that(pad.commands == 1, "rumble is throttled to 20 Hz");
+        Expect.intEq(pad.commands, 1);
         Timer.sleepMillis(60);
         controller.pump(8);
-        Check.that(pad.commands == 2 && Wire.u16le(pad.last.bytes, 5) == 3000, "the latest rumble is applied");
+        Expect.isTrue(pad.commands == 2 && Wire.u16le(pad.last.bytes, 5) == 3000);
         Timer.sleepMillis(560);
         controller.pump(8);
-        Check.that(pad.commands == 3 && Wire.u16le(pad.last.bytes, 5) == 0, "rumble stops when the host stops repeating it");
+        Expect.isTrue(pad.commands == 3 && Wire.u16le(pad.last.bytes, 5) == 0);
         DeckpadUnitTests.command(data, STEAM_HAPTIC_PULSE, 7);
-        data[3] = (unsigned char)1;
-        Check.that(controller.setFeature(data, 64) && pad.commands == 4 && (int)pad.last.bytes[0] == DECK_HAPTIC_PULSE, "feature pulse reaches the pad at once");
-        Check.that(controller.feature(STEAM_REPORT_FEATURE, data) == 64 && (int)data[1] == STEAM_HAPTIC_PULSE, "the feature report reads back");
-        data[0] = (unsigned char)2;
-        Check.that(!controller.setFeature(data, 64) && controller.feature(2, data) < 0, "there is only feature report 1");
+        data.set(3, 1);
+        Expect.isTrue(controller.setFeature(data) && pad.commands == 4 && pad.last.bytes.get(0) == DECK_HAPTIC_PULSE);
+        Expect.isTrue(controller.feature(STEAM_REPORT_FEATURE, data) == 64 && data.get(1) == STEAM_HAPTIC_PULSE);
+        data.set(0, 2);
+        Expect.isTrue(!controller.setFeature(data) && controller.feature(2, data) < 0);
         controller.detach();
-        Check.that(!controller.attached(), "detach releases the pad");
+        Expect.isFalse(controller.attached());
     }
 
     class Bytes feature(int command, int length, int argument) {
-        unsigned char raw[64];
+        Bytes raw = Wire.zeros(64);
         DeckpadUnitTests.command(raw, command, length);
-        raw[3] = (unsigned char)argument;
-        return Bytes.fromRaw((char*)raw, 64);
+        raw.set(3, argument);
+        return raw;
     }
 
     // The same controller as a USB device: Library.USB answers enumeration from
@@ -293,39 +286,39 @@ class DeckpadUnitTests {
         var port = ControllerPort(controller);
         USBVirtualDevice device = ControllerUSB.device(port);
         Bytes descriptor = Bytes();
-        Check.that(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0100, 0, 18), descriptor) == 18 && USBBytes.u16((unsigned char*)descriptor.data, 8) == STEAM_VENDOR && USBBytes.u16((unsigned char*)descriptor.data, 10) == STEAM_PRODUCT, "USB device identity");
-        Check.that(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0100, 0, 8), Bytes()) == 8, "short reads are truncated");
+        Expect.isTrue(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0100, 0, 18), descriptor) == 18 && Wire.u16le(descriptor, 8) == STEAM_VENDOR && Wire.u16le(descriptor, 10) == STEAM_PRODUCT);
+        Expect.intEq(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0100, 0, 8), Bytes()), 8);
         Bytes configuration = Bytes();
-        Check.that(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0200, 0, 255), configuration) == 41 && configuration.get(14) == 3 && configuration.get(25) == 143, "configuration names the HID interface and its report descriptor");
+        Expect.isTrue(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0200, 0, 255), configuration) == 41 && configuration.get(14) == 3 && configuration.get(25) == 143);
         Vector<USBEndpoint> endpoints = USBEndpoint.listed(configuration);
-        Check.that(endpoints.len == 2 && endpoints.get(0).address == 0x81 && endpoints.get(1).address == 0x01 && endpoints.get(0).interval == 1 && endpoints.get(0).maxPacket == 64, "interrupt IN and OUT endpoints, polled every millisecond");
+        Expect.isTrue(endpoints.len == 2 && endpoints.get(0).address == 0x81 && endpoints.get(1).address == 0x01 && endpoints.get(0).interval == 1 && endpoints.get(0).maxPacket == 64);
         Bytes product = Bytes();
-        Check.that(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0302, 0x0409, 255), product) == 34 && product.get(2) == 'S', "product string");
+        Expect.isTrue(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0302, 0x0409, 255), product) == 34 && product.get(2) == 'S');
         Bytes serial = Bytes();
-        Check.that(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0303, 0x0409, 255), serial) == 26 && serial.get(2) == 'F' && serial.get(24) == '2', "serial string");
-        Check.that(device.control(USBSetup(0x81, USB_REQUEST_GET_DESCRIPTOR, 0x2200, 0, 255), Bytes()) == 143, "report descriptor over the interface");
-        Check.that(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0600, 0, 10), Bytes()) == USB_CONTROL_STALL, "no device qualifier at full speed");
-        Check.that(device.control(USBSetup(0x00, USB_REQUEST_SET_CONFIGURATION, 1, 0, 0), Bytes()) == 0 && device.configured(), "set configuration");
+        Expect.isTrue(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0303, 0x0409, 255), serial) == 26 && serial.get(2) == 'F' && serial.get(24) == '2');
+        Expect.intEq(device.control(USBSetup(0x81, USB_REQUEST_GET_DESCRIPTOR, 0x2200, 0, 255), Bytes()), 143);
+        Expect.intEq(device.control(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0600, 0, 10), Bytes()), USB_CONTROL_STALL);
+        Expect.isTrue(device.control(USBSetup(0x00, USB_REQUEST_SET_CONFIGURATION, 1, 0, 0), Bytes()) == 0 && device.configured());
         controller.attach();
-        Check.that(device.control(USBSetup(0x21, 0x09, 0x0301, 0, 64), DeckpadUnitTests.feature(STEAM_GET_STRING, 0x15, 1)) == 64, "SET_REPORT carries a feature command");
+        Expect.intEq(device.control(USBSetup(0x21, 0x09, 0x0301, 0, 64), DeckpadUnitTests.feature(STEAM_GET_STRING, 0x15, 1)), 64);
         Bytes reply = Bytes();
-        Check.that(device.control(USBSetup(0xA1, 0x01, 0x0301, 0, 64), reply) == 64 && reply.get(1) == STEAM_GET_STRING && reply.get(4) == 'F', "GET_REPORT carries its reply");
-        Check.that(device.control(USBSetup(0xA1, 0x01, 0x0302, 0, 64), Bytes()) == USB_CONTROL_STALL, "an unknown feature report stalls");
+        Expect.isTrue(device.control(USBSetup(0xA1, 0x01, 0x0301, 0, 64), reply) == 64 && reply.get(1) == STEAM_GET_STRING && reply.get(4) == 'F');
+        Expect.intEq(device.control(USBSetup(0xA1, 0x01, 0x0302, 0, 64), Bytes()), USB_CONTROL_STALL);
         Bytes pulse = Bytes();
         pulse.append(STEAM_OUT_PULSE);
         pulse.append(1);
         for (int index = 0; index < 6; index++) { pulse.append(0); }
-        Check.that(device.control(USBSetup(0x21, 0x09, 0x0281, 0, 8), pulse) == 8 && pad.commands == 1 && (int)pad.last.bytes[0] == DECK_HAPTIC_PULSE, "SET_REPORT carries an output report");
+        Expect.isTrue(device.control(USBSetup(0x21, 0x09, 0x0281, 0, 8), pulse) == 8 && pad.commands == 1 && pad.last.bytes.get(0) == DECK_HAPTIC_PULSE);
         device.consume(0x01, pulse);
-        Check.that(pad.commands == 2, "so does the interrupt OUT endpoint");
+        Expect.intEq(pad.commands, 2);
         // Reports leave only through the link that holds the controller.
         controller.pump(8);
-        Check.that(!device.produce(0x81, Bytes()), "a link that does not hold the controller sends no input");
+        Expect.isFalse(device.produce(0x81, Bytes()));
         port.hold(true);
         Bytes battery = Bytes();
         Bytes state = Bytes();
-        Check.that(device.produce(0x81, battery) && battery.length() == 15 && battery.get(0) == STEAM_REPORT_BATTERY, "the holder gets the battery report");
-        Check.that(device.produce(0x81, state) && state.length() == 54 && state.get(0) == STEAM_REPORT_STATE && !device.produce(0x82, Bytes()), "then the state, on the IN endpoint only");
+        Expect.isTrue(device.produce(0x81, battery) && battery.length() == 15 && battery.get(0) == STEAM_REPORT_BATTERY);
+        Expect.isTrue(device.produce(0x81, state) && state.length() == 54 && state.get(0) == STEAM_REPORT_STATE && !device.produce(0x82, Bytes()));
     }
 
     // Over Bluetooth the same state travels as report 0x45, without the
@@ -339,15 +332,15 @@ class DeckpadUnitTests {
         controller.pump(8);
         Bytes battery = Bytes();
         Bytes state = Bytes();
-        Check.that(protocol.nextInput(battery) && battery.length() == 16 && battery.get(0) == 0xA1 && battery.get(1) == STEAM_REPORT_BATTERY, "the battery report is unchanged");
-        Check.that(protocol.nextInput(state) && state.length() == 47 && state.get(1) == STEAM_REPORT_STATE_BLUETOOTH, "the state is report 0x45, 46 bytes");
+        Expect.isTrue(protocol.nextInput(battery) && battery.length() == 16 && battery.get(0) == 0xA1 && battery.get(1) == STEAM_REPORT_BATTERY);
+        Expect.isTrue(protocol.nextInput(state) && state.length() == 47 && state.get(1) == STEAM_REPORT_STATE_BLUETOOTH);
         Bytes asked = Bytes();
         asked.append(0x43);
         asked.append(STEAM_REPORT_FEATURE);
-        Check.that(protocol.control(asked).length() == 65, "feature report 1 is read over the control channel");
+        Expect.intEq(protocol.control(asked).length(), 65);
         BluetoothHIDRecord record = BluetoothHIDRecord("Steam Controller", port.reportDescriptor()).identified(STEAM_VENDOR, STEAM_PRODUCT_BLUETOOTH, 0x0100);
-        Check.that(record.deviceID().equals("usb:28DE:1303:0100") && record.xml().contains("0600ff0901a101"), "the service record carries the identity and the report descriptor");
-        Check.that(HIDReportDescriptor.numbered(port.reportDescriptor()), "the reports are numbered");
+        Expect.isTrue(record.deviceID().equals("usb:28DE:1303:0100") && record.xml().contains("0600ff0901a101"));
+        Expect.isTrue(HIDReportDescriptor.numbered(port.reportDescriptor()));
     }
 
     class bool missingIdentity(string path) {
@@ -357,20 +350,20 @@ class DeckpadUnitTests {
 
     // Hosts are trusted by key; a new one gets in only while pairing is open.
     class void pairing() {
-        string directory = FileSystem.tempDir("deckpad-pairing");
+        var dir = TestDir("deckpad-pairing");
+        string directory = dir.path;
         var pairing = Pairing(directory + "/trusted");
         var desk = SigningKey.generate().publicKey();
         var other = SigningKey.generate().publicKey();
-        Check.that(!pairing.admits(desk, "desk", "123456") && pairing.trusted().count() == 0, "an unknown host is refused while pairing is shut");
+        Expect.isTrue(!pairing.admits(desk, "desk", "123456") && pairing.trusted().count() == 0);
         pairing.window().open(60);
-        Check.that(pairing.admits(desk, "desk", "123456") && pairing.code().equals("123456") && pairing.codeLabel().equals("desk"), "and taken in while it is open, with its code kept to show");
+        Expect.isTrue(pairing.admits(desk, "desk", "123456") && pairing.code().equals("123456") && pairing.codeLabel().equals("desk"));
         pairing.window().close();
-        Check.that(pairing.admits(desk, "desk", "654321") && !pairing.admits(other, "other", "111111") && pairing.code().equals("123456"), "a trusted host stays trusted; a new one waits for the next window");
-        Check.that(Pairing(directory + "/trusted").admits(desk, "desk", ""), "trust survives a restart");
+        Expect.isTrue(pairing.admits(desk, "desk", "654321") && !pairing.admits(other, "other", "111111") && pairing.code().equals("123456"));
+        Expect.isTrue(Pairing(directory + "/trusted").admits(desk, "desk", ""));
         var first = MachineIdentity.load(directory + "/identity", true);
         var again = MachineIdentity.load(directory + "/identity", false);
-        Check.that(first.publicKey().equals(again.publicKey()) && DeckpadUnitTests.missingIdentity(directory + "/absent"), "a machine keeps the identity it was given");
-        FileSystem.removeRecursive(directory);
+        Expect.isTrue(first.publicKey().equals(again.publicKey()) && DeckpadUnitTests.missingIdentity(directory + "/absent"));
     }
 
     class bool noLinks(VirtualController controller) {
@@ -385,7 +378,8 @@ class DeckpadUnitTests {
     class void links() {
         var controller = VirtualController(ScriptedPad(), SteamController("FXDK00000042"), false);
         var service = ControllerService(controller);
-        string runtime = FileSystem.tempDir("deckpad-runtime");
+        var dir = TestDir("deckpad-runtime");
+        string runtime = dir.path;
         service.announceIn(runtime);
         var first = SwitchedLink("first", controller, false);
         var second = SwitchedLink("second", controller, false);
@@ -393,25 +387,24 @@ class DeckpadUnitTests {
         service.add(SwitchedLink("broken", controller, true));
         service.add(second);
         service.open();
-        Check.that(service.all().len == 2 && first.opened && second.opened, "a link that cannot work here is left out; the rest serve");
-        Check.that(DeckpadUnitTests.noLinks(controller), "a service with no working link does not start");
-        Check.that(service.turn(5) && service.holding().isEmpty() && !controller.attached(), "nobody holds the controller before a host attaches");
+        Expect.isTrue(service.all().len == 2 && first.opened && second.opened);
+        Expect.isTrue(DeckpadUnitTests.noLinks(controller));
+        Expect.isTrue(service.turn(5) && service.holding().isEmpty() && !controller.attached());
         second.host = true;
-        Check.that(service.turn(5) && service.holding().equals("second") && controller.attached() && second.port().holding(), "the first host to attach takes it");
-        Check.that(FileSystem.isFile(runtime + "/second-host") && !FileSystem.exists(runtime + "/first-host"), "a file in the runtime directory names the link whose host holds the controller");
+        Expect.isTrue(service.turn(5) && service.holding().equals("second") && controller.attached() && second.port().holding());
+        Expect.isTrue(FileSystem.isFile(runtime + "/second-host") && !FileSystem.exists(runtime + "/first-host"));
         first.host = true;
-        Check.that(service.turn(5) && service.holding().equals("second") && !first.port().holding() && first.port().busyElsewhere(), "a host on another link waits");
+        Expect.isTrue(service.turn(5) && service.holding().equals("second") && !first.port().holding() && first.port().busyElsewhere());
         second.host = false;
-        Check.that(service.turn(5) && service.holding().equals("first") && first.port().holding() && !second.port().holding(), "and takes over when the holder leaves");
-        Check.that(FileSystem.isFile(runtime + "/first-host") && !FileSystem.exists(runtime + "/second-host"), "the file follows the controller to the next host");
+        Expect.isTrue(service.turn(5) && service.holding().equals("first") && first.port().holding() && !second.port().holding());
+        Expect.isTrue(FileSystem.isFile(runtime + "/first-host") && !FileSystem.exists(runtime + "/second-host"));
         first.host = false;
-        Check.that(service.turn(5) && service.holding().isEmpty() && !controller.attached(), "the pad goes back when the last host leaves");
-        Check.that(!FileSystem.exists(runtime + "/first-host"), "and the file goes with the last host");
-        FileSystem.removeRecursive(runtime);
+        Expect.isTrue(service.turn(5) && service.holding().isEmpty() && !controller.attached());
+        Expect.isFalse(FileSystem.exists(runtime + "/first-host"));
         service.stop();
-        Check.that(!service.turn(5), "the service stops when told");
+        Expect.isFalse(service.turn(5));
         service.close();
-        Check.that(!first.opened && !second.opened, "closing the service closes its links");
+        Expect.isTrue(!first.opened && !second.opened);
     }
 
     // The Deck is told someone is playing only while the pad is in use.
@@ -430,46 +423,45 @@ class DeckpadUnitTests {
     }
 
     class void use() {
-        struct PadState state;
-        memset(&state, 0, sizeof(state));
+        PadState state = PadState();
         state.leftStickX = 5000;
         var use = PadUse();
-        use.see(&state, 100LL);
-        Check.that(use.usedAt() == 0LL, "where the pad rests when first read is not a use of it");
+        use.see(state, 100LL);
+        Expect.intEq(use.usedAt(), 0LL);
         state.gyroX = 900;
         state.accelZ = 16000;
         state.leftStickX = 6000;
-        use.see(&state, 200LL);
-        Check.that(use.usedAt() == 0LL, "the motion sensors and a shivering stick are not a use");
+        use.see(state, 200LL);
+        Expect.intEq(use.usedAt(), 0LL);
         state.leftStickX = 9000;
-        use.see(&state, 300LL);
-        Check.that(use.usedAt() == 300LL, "a stick that travels is");
+        use.see(state, 300LL);
+        Expect.intEq(use.usedAt(), 300LL);
         state.buttons = PAD_A;
-        use.see(&state, 400LL);
-        Check.that(use.usedAt() == 400LL, "and so is a button");
-        Check.that(DeckpadUnitTests.toldIn(ScriptedPad(), 60) > 0, "the service says so while a host's player uses the pad");
-        Check.that(DeckpadUnitTests.toldIn(HeldPad(), 30) == 0, "and says nothing for a pad that is only held");
+        use.see(state, 400LL);
+        Expect.intEq(use.usedAt(), 400LL);
+        Expect.isTrue(DeckpadUnitTests.toldIn(ScriptedPad(), 60) > 0);
+        Expect.intEq(DeckpadUnitTests.toldIn(HeldPad(), 30), 0);
     }
 
-    class int buttons(struct HidReport* report) { return Wire.u16le(report->bytes, 2) | (Wire.u16le(report->bytes, 4) << 16); }
+    class int buttons(HidReport report) { return Wire.u16le(report.bytes, 2) | (Wire.u16le(report.bytes, 4) << 16); }
 
     class void stopChord() {
-        struct HidReport report;
+        HidReport report = HidReport();
         var pad = HeldPad();
         var device = VirtualController(pad, SteamController("FXDK00000042"), false);
         device.attach();
-        Check.that(pad.opened, "attach takes the pad");
+        Expect.isTrue(pad.opened);
         long long started = MonotonicClock.milliseconds();
         while (!device.stopRequested() && MonotonicClock.milliseconds() - started < 4000LL) { device.pump(8); }
         long long held = MonotonicClock.milliseconds() - started;
-        Check.that(device.stopRequested() && held >= 1900LL && held < 3500LL, "holding ... for two seconds asks to stop");
-        Check.that(device.input(&report) && (int)report.bytes[0] == STEAM_REPORT_BATTERY, "battery report is due first");
-        Check.that(device.input(&report) && DeckpadUnitTests.buttons(&report) == PAD_B, "... is kept from the host by default");
+        Expect.isTrue(device.stopRequested() && held >= 1900LL && held < 3500LL);
+        Expect.isTrue(device.input(report) && report.bytes.get(0) == STEAM_REPORT_BATTERY);
+        Expect.isTrue(device.input(report) && DeckpadUnitTests.buttons(report) == PAD_B);
         var forwarding = VirtualController(HeldPad(), SteamController("FXDK00000042"), true);
         forwarding.attach();
         forwarding.pump(8);
-        forwarding.input(&report);
-        Check.that(forwarding.input(&report) && DeckpadUnitTests.buttons(&report) == (PAD_B | PAD_QUICK_ACCESS), "... can be forwarded");
+        forwarding.input(report);
+        Expect.isTrue(forwarding.input(report) && DeckpadUnitTests.buttons(report) == (PAD_B | PAD_QUICK_ACCESS));
     }
 
     // What `deckpad check` and `deckpad measure` conclude from report times.
@@ -482,8 +474,8 @@ class DeckpadUnitTests {
             even.arrivedAt(5000000LL + (long long)index * 4000LL + 3000LL);
             even.sent((sender + (long long)index * 4000LL) & 0xFFFFFFFFLL);
         }
-        Check.that(even.count == 500 && even.longest == 4000LL && even.late == 0, "even reports have even gaps");
-        Check.that(even.jitter() == 0LL && even.steady(2), "even delivery has no jitter and is steady");
+        Expect.isTrue(even.count == 500 && even.longest == 4000LL && even.late == 0);
+        Expect.isTrue(even.jitter() == 0LL && even.steady(2));
 
         // The same, with one report 30 ms late, the ones behind it arriving
         // in a bunch, and one report 2 ms quicker than the rest.
@@ -497,16 +489,16 @@ class DeckpadUnitTests {
             uneven.arrivedAt(arrival);
             uneven.sent((sender + (long long)index * 4000LL) & 0xFFFFFFFFLL);
         }
-        Check.that(uneven.jitter() == 32000LL, "jitter spans the quickest and the slowest report");
-        Check.that(uneven.late == 1 && uneven.longest == 34000LL && uneven.steady(2), "one late report is counted");
+        Expect.intEq(uneven.jitter(), 32000LL);
+        Expect.isTrue(uneven.late == 1 && uneven.longest == 34000LL && uneven.steady(2));
 
         // Too few reports, or a stall, is not steady.
         ReportPace slow = ReportPace();
         for (int index = 0; index < 100; index++) { slow.arrivedAt((long long)index * 20000LL); }
-        Check.that(!slow.steady(2), "50 reports a second is too few");
+        Expect.isFalse(slow.steady(2));
         ReportPace stalled = ReportPace();
         for (int index = 0; index < 500; index++) { stalled.arrivedAt((long long)index * 4000LL + (index >= 250 ? 150000LL : 0LL)); }
-        Check.that(!stalled.steady(2) && stalled.longest == 154000LL, "a stall of 150 ms is not steady");
+        Expect.isTrue(!stalled.steady(2) && stalled.longest == 154000LL);
     }
 }
 

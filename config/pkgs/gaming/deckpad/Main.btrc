@@ -1,7 +1,9 @@
+import Library.Bytes;
 import Library.CLI;
 import Library.Console;
 import Library.Crypto;
 import Library.FileSystem;
+import Library.Platform;
 import Library.Strings;
 import Library.Timer;
 import Library.USB.USBGadget;
@@ -19,8 +21,6 @@ import ./PadSource.btrc;
 import ./Service.btrc;
 import ./SteamController.btrc;
 import ./Trust.btrc;
-
-#include <unistd.h>
 
 class Deckpad {
     class string usage() {
@@ -55,8 +55,9 @@ class Deckpad {
     class string serial() {
         string identity = "";
         try { identity = Path.readAll("/etc/machine-id").trim(); } catch (string error) { identity = ""; }
+        Bytes idBytes = Bytes.fromString(identity);
         int number = 0;
-        for (int index = 0; index < identity.length(); index++) { number = (number * 31 + (int)identity[index]) % 100000000; }
+        for (int index = 0; index < idBytes.length(); index++) { number = (number * 31 + idBytes.get(index)) % 100000000; }
         string digits = f"{number}";
         while (digits.length() < 8) { digits = "0" + digits; }
         return "FXDK" + digits;
@@ -68,10 +69,8 @@ class Deckpad {
     }
 
     class string hostName() {
-        char name[256];
-        memset(name, 0, sizeof(name));
-        if (gethostname(name, (size_t)255) != 0 || name[0] == '\0') { return "host"; }
-        return Strings.copy(name);
+        string name = Platform.hostname();
+        return name.isEmpty() ? "host" : name;
     }
 
     // The machine's key: the file named, else the SSH host key when it can be
@@ -79,7 +78,7 @@ class Deckpad {
     class SigningKey identity(CLICommandLine options, string state) {
         string named = options.option("--identity", "");
         if (!named.isEmpty()) { return MachineIdentity.load(named, false); }
-        if (access(MachineIdentity.hostKey(), (int)R_OK) == 0) { return MachineIdentity.load(MachineIdentity.hostKey(), false); }
+        if (deckReadableFile(MachineIdentity.hostKey())) { return MachineIdentity.load(MachineIdentity.hostKey(), false); }
         FileSystem.mkdirp(state);
         return MachineIdentity.load(state + "/identity", true);
     }

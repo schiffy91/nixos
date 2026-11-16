@@ -1,14 +1,12 @@
 import Library.Bytes;
 import Library.CLI;
+import Library.Console;
+import Library.FileSystem;
 import Library.Network;
+import Library.Testing;
 import Library.Timer;
 import Library.USB;
-import ../../lib/Check.btrc;
-
-#include <poll.h>
-#include <stdio.h>
-#include <sys/wait.h>
-#include <unistd.h>
+import deckpad.Host;
 
 // The Steam Deck's built-in controller, emulated: the same USB identity and
 // three HID interfaces, a state report every 4 ms on the gamepad interface
@@ -25,8 +23,9 @@ class FakeDeckPad implements IUSBFunction {
     // One vendor collection: a 64-byte input report and a 64-byte feature report.
     class Bytes reportDescriptor() {
         Bytes out = Bytes();
-        int items[25] = {0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x40, 0x09, 0x01, 0x81, 0x02, 0x09, 0x01, 0xB1, 0x02, 0xC0};
-        for (int index = 0; index < 25; index++) { out.append(items[index]); }
+        for item in [0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x40, 0x09, 0x01, 0x81, 0x02, 0x09, 0x01, 0xB1, 0x02, 0xC0] {
+            out.append(item);
+        }
         return out;
     }
 
@@ -39,10 +38,9 @@ class FakeDeckPad implements IUSBFunction {
     }
 
     private void note(int number, int command) {
-        FILE* file = fopen(self.log, "a");
-        if (file == NULL) { return; }
-        fprintf(file, "interface %d command %02x\n", number, command);
-        fclose(file);
+        Bytes one = Bytes();
+        one.append(command & 0xFF);
+        FileSystem.appendText(self.log, f"interface {number} command {one.toHex()}\n");
     }
 
     // A 16-bit value, low byte first.
@@ -100,16 +98,12 @@ class FakeDeckPad implements IUSBFunction {
 }
 
 class FakeDeck {
-    class void serve(TCPListener listener, string log, pid_t parent) {
+    class void serve(TCPListener listener, string log, int parent) {
         TCPStream? accepted = listener.accept(10000);
         if (accepted == null) { return; }
         USBIPExport exported = USBIPExport(USBVirtualDevice(FakeDeckPad.description(), FakeDeckPad(log)), accepted);
-        while (exported.step() && (pid_t)getppid() == parent) {
-            struct pollfd waiting;
-            waiting.fd = exported.handle();
-            waiting.events = POLLIN;
-            waiting.revents = 0;
-            poll(&waiting, (nfds_t)1, 2);
+        while (exported.step() && DeckProcess.parentAlive(parent)) {
+            PollSet.waitReadable(exported.handle(), 2);
         }
     }
 
@@ -118,29 +112,28 @@ class FakeDeck {
     class void run(string log) {
         TCPListener listener = TCPListener.listen(IPv4Address.loopback(), 0);
         int port = listener.port();
-        fflush(stdout);
-        pid_t parent = getpid();
-        pid_t child = fork();
-        Check.that(child >= (pid_t)0, "the pad's process starts");
-        if (child == (pid_t)0) {
+        Console.flush();
+        int parent = DeckProcess.parentPid();
+        int child = DeckProcess.fork();
+        Expect.isTrue(child >= 0);
+        if (child == 0) {
             try { FakeDeck.serve(listener, log, parent); } catch (string error) {}
-            _exit(0);
+            DeckProcess.exitNow(0);
         }
         listener.close();
         USBIPHost host = USBIPHost(TCPStream.connect(IPv4Address.loopback(), port, 5000), 5000);
         USBIPAttachment.attach(host, host.importDevice("1-1"));
         int handed = host.connection().detach();
-        if (handed >= 0) { close(handed); }
+        if (handed >= 0) { DeckProcess.closeDescriptor(handed); }
         print("the emulated Deck controller is attached");
-        fflush(stdout);
-        int status = 0;
-        waitpid(child, &status, 0);
+        Console.flush();
+        DeckProcess.wait(child);
     }
 }
 
 int main(int argc, char** argv) {
     var args = CLIArgs(argc, argv);
-    Check.that(args.count() == 1, "expected the command log's path");
+    Expect.intEq(args.count(), 1);
     FakeDeck.run(args.get(0));
     return 0;
 }

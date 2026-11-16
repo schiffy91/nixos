@@ -35,8 +35,6 @@ let
     programs.deckpad-bluetooth-host = "tests/gaming/deckpad/BluetoothHostTests.btrc";
     programs.deckpad-fake-deck = "tests/gaming/deckpad/FakeDeck.btrc";
     buildInputs = [ pkgs.dbus pkgs.libsodium ];
-    env.NIX_CFLAGS_COMPILE = "-I${pkgs.lib.getDev pkgs.dbus}/include/dbus-1.0 -I${pkgs.lib.getLib pkgs.dbus}/lib/dbus-1.0/include";
-    linkFlags = [ "-ldbus-1" "-lsodium" ];
   };
   # A host that shares no code with deckpad: SDL's Steam Controller driver.
   sdlHost = pkgs.runCommandCC "deckpad-sdl-host" { buildInputs = [ pkgs.sdl3 ]; } ''

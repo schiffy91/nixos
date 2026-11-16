@@ -2,18 +2,19 @@ import Library.Bytes;
 import Library.CLI;
 import Library.Crypto;
 import Library.FileSystem;
+import Library.Process;
 import Library.Strings;
+import Library.Testing;
 import Library.Timer;
 import Library.USB.USBDescriptors;
 import Library.USB.USBIP;
-import Library.Process;
 import Library.Vector;
-import ../../../config/pkgs/gaming/deckpad/Control.btrc;
-import ../../../config/pkgs/gaming/deckpad/Host.btrc;
-import ../../../config/pkgs/gaming/deckpad/PadState.btrc;
-import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
-import ../../../config/pkgs/gaming/deckpad/Wire.btrc;
-import ../../lib/Check.btrc;
+import deckpad.Control;
+import deckpad.Host;
+import deckpad.PadState;
+import deckpad.Protocol;
+import deckpad.SteamController;
+import deckpad.Wire;
 
 // A host as the PC is one, but with the USB/IP host in this program instead
 // of the kernel: the same pairing, the same encrypted tunnel, and transfers
@@ -44,7 +45,7 @@ class TestHost {
         ControllerTunnel tunnel = ControllerTunnel.open(self.machine.connect());
         USBIPHost transfers = USBIPHost(tunnel.plain(), 5000);
         USBIPDevice device = transfers.importDevice("1-1");
-        Check.that(device.vendor == STEAM_VENDOR && device.product == STEAM_PRODUCT && device.deviceId == NetworkProtocol.deviceId(), "the controller is imported as a wired Steam Controller");
+        Expect.isTrue(device.vendor == STEAM_VENDOR && device.product == STEAM_PRODUCT && device.deviceId == NetworkProtocol.deviceId());
         self.tunnel = tunnel;
         self.transfers = transfers;
         return transfers;
@@ -63,18 +64,20 @@ class DeckpadServerTests {
 
     class void enumeration(USBIPHost host) {
         Bytes device = Bytes();
-        Check.that(host.controlIn(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0100, 0, 18), device) == 18 && USBBytes.u16((unsigned char*)device.data, 8) == STEAM_VENDOR, "device descriptor");
+        Expect.isTrue(host.controlIn(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0100, 0, 18), device) == 18 && Wire.u16le(device, 8) == STEAM_VENDOR);
         Bytes configuration = Bytes();
-        Check.that(host.controlIn(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0200, 0, 255), configuration) == 41 && configuration.get(14) == 3, "configuration with a HID interface");
-        Check.that(host.controlIn(USBSetup(0x81, USB_REQUEST_GET_DESCRIPTOR, 0x2200, 0, 512), Bytes()) == 143, "report descriptor");
-        Check.that(host.controlIn(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0600, 0, 10), Bytes()) < 0, "unsupported requests stall");
-        Check.that(host.controlOut(USBSetup(0x00, USB_REQUEST_SET_CONFIGURATION, 1, 0, 0), Bytes()) == 0, "set configuration");
-        unsigned char raw[64];
-        memset(raw, 0, sizeof(raw));
-        raw[0] = (unsigned char)STEAM_REPORT_FEATURE; raw[1] = (unsigned char)STEAM_GET_STRING; raw[2] = (unsigned char)0x15; raw[3] = (unsigned char)1;
-        Check.that(host.controlOut(USBSetup(0x21, 0x09, 0x0301, 0, 64), Bytes.fromRaw((char*)raw, 64)) == 64, "feature command accepted");
+        Expect.isTrue(host.controlIn(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0200, 0, 255), configuration) == 41 && configuration.get(14) == 3);
+        Expect.intEq(host.controlIn(USBSetup(0x81, USB_REQUEST_GET_DESCRIPTOR, 0x2200, 0, 512), Bytes()), 143);
+        Expect.isTrue(host.controlIn(USBSetup(0x80, USB_REQUEST_GET_DESCRIPTOR, 0x0600, 0, 10), Bytes()) < 0);
+        Expect.intEq(host.controlOut(USBSetup(0x00, USB_REQUEST_SET_CONFIGURATION, 1, 0, 0), Bytes()), 0);
+        Bytes raw = Wire.zeros(64);
+        raw.set(0, STEAM_REPORT_FEATURE);
+        raw.set(1, STEAM_GET_STRING);
+        raw.set(2, 0x15);
+        raw.set(3, 1);
+        Expect.intEq(host.controlOut(USBSetup(0x21, 0x09, 0x0301, 0, 64), raw), 64);
         Bytes serial = Bytes();
-        Check.that(host.controlIn(USBSetup(0xA1, 0x01, 0x0301, 0, 64), serial) == 64 && serial.get(1) == STEAM_GET_STRING && serial.get(4) == 'F' && serial.get(15) == '7', "serial number read back");
+        Expect.isTrue(host.controlIn(USBSetup(0xA1, 0x01, 0x0301, 0, 64), serial) == 64 && serial.get(1) == STEAM_GET_STRING && serial.get(4) == 'F' && serial.get(15) == '7');
     }
 
     // Reports arrive at the pad's pace, in order, and soon after they were
@@ -91,40 +94,40 @@ class DeckpadServerTests {
         while (MonotonicClock.before(deadline)) {
             Bytes report = Bytes();
             int length = host.transferIn(1, 64, report);
-            Check.that(length > 0, "interrupt IN succeeds");
+            Expect.isTrue(length > 0);
             if (report.get(0) == STEAM_REPORT_BATTERY) { battery = length == 15; continue; }
-            Check.that(report.get(0) == STEAM_REPORT_STATE && length == 54, "state reports are 54 bytes");
-            if (last >= 0) { Check.that(report.get(1) == ((last + 1) & 0xFF), "no state report is lost or repeated"); }
+            Expect.isTrue(report.get(0) == STEAM_REPORT_STATE && length == 54);
+            if (last >= 0) { Expect.intEq(report.get(1), (last + 1) & 0xFF); }
             last = report.get(1);
-            if ((Wire.u16le((unsigned char*)report.data, 2) & PAD_A) != 0) { pressed = true; } else { released = true; }
-            long long age = ((MonotonicClock.nanoseconds() / 1000LL) & 0xFFFFFFFFLL) - Wire.u32le((unsigned char*)report.data, 30);
+            if ((Wire.u16le(report, 2) & PAD_A) != 0) { pressed = true; } else { released = true; }
+            long long age = ((MonotonicClock.nanoseconds() / 1000LL) & 0xFFFFFFFFLL) - Wire.u32le(report, 30);
             if (age < 0LL) { age += 0x100000000LL; }
             if (age > slowest) { slowest = age; }
             total += age;
             states++;
         }
-        Check.that(states >= 150, f"reports keep the pad's pace ({states} in 1.5 s)");
-        Check.that(pressed && released && battery, "button changes and the battery report arrive");
-        Check.that(total / (long long)states < 10000LL && slowest < 100000LL, f"a report reaches the host soon after it is made (mean {total / (long long)states} us, slowest {slowest} us)");
+        Expect.isTrue(states >= 150);
+        Expect.isTrue(pressed && released && battery);
+        Expect.isTrue(total / (long long)states < 10000LL && slowest < 100000LL);
     }
 
     class void outputs(USBIPHost host) {
         Bytes rumble = Bytes();
         rumble.append(STEAM_OUT_RUMBLE);
         for (int index = 0; index < 9; index++) { rumble.append(index == 3 ? 0x34 : (index == 4 ? 0x12 : 0)); }
-        Check.that(host.transferOut(1, rumble) == 10, "interrupt OUT accepted");
+        Expect.intEq(host.transferOut(1, rumble), 10);
         // A driver that stops polling cancels its waiting request. Whether
         // the request or its report wins that race, the export must answer
         // in turn (cancelIn throws otherwise) and stay in step afterwards.
         host.cancelIn(1, 64);
         Bytes next = Bytes();
-        Check.that(host.transferIn(1, 64, next) > 0 && (next.get(0) == STEAM_REPORT_STATE || next.get(0) == STEAM_REPORT_BATTERY), "reports keep coming after a cancelled request");
+        Expect.isTrue(host.transferIn(1, 64, next) > 0 && (next.get(0) == STEAM_REPORT_STATE || next.get(0) == STEAM_REPORT_BATTERY));
         Bytes feature = Bytes();
-        Check.that(host.controlIn(USBSetup(0xA1, 0x01, 0x0301, 0, 64), feature) == 64 && feature.get(0) == STEAM_REPORT_FEATURE, "and control transfers still answer");
+        Expect.isTrue(host.controlIn(USBSetup(0xA1, 0x01, 0x0301, 0, 64), feature) == 64 && feature.get(0) == STEAM_REPORT_FEATURE);
     }
 
     // Wait for the service to say nobody holds the controller.
-    class bool free(int controlPort, string runtime) {
+    class bool unheld(int controlPort, string runtime) {
         long long deadline = MonotonicClock.deadlineAfter(5000LL);
         while (!DeckpadServerTests.control("GET", "/status", "", controlPort, runtime).contains("\"holder\": \"\"")) {
             if (!MonotonicClock.before(deadline)) { return false; }
@@ -137,20 +140,20 @@ class DeckpadServerTests {
         var desk = TestHost("the desk", port);
         var stranger = TestHost("a stranger", port);
         string status = DeckpadServerTests.control("GET", "/status", "", controlPort, runtime);
-        Check.that(status.contains("\"name\": \"network\"") && status.contains("listening on 127.0.0.1") && status.contains("\"open\": false") && status.contains("\"trusted\": []"), "the service reports its links and that nobody is trusted yet");
+        Expect.isTrue(status.contains("\"name\": \"network\"") && status.contains("listening on 127.0.0.1") && status.contains("\"open\": false") && status.contains("\"trusted\": []"));
 
         // Pairing: refused while the window is shut, then granted, then remembered.
-        Check.that(desk.pairingRefusal().contains("not paired") && desk.trusted.count() == 0, "a host cannot pair while pairing is shut");
-        Check.that(desk.refusal().contains("not a paired controller"), "nor attach to a controller it has not paired with");
-        Check.that(DeckpadServerTests.control("POST", "/pairing/open?seconds=30", "", controlPort, runtime).contains("open for 30"), "pairing opens on request");
-        Check.that(desk.pairingRefusal().isEmpty() && desk.trusted.count() == 1, "then the host pairs, and trusts the controller's key");
+        Expect.isTrue(desk.pairingRefusal().contains("not paired") && desk.trusted.count() == 0);
+        Expect.contains(desk.refusal(), "not a paired controller");
+        Expect.contains(DeckpadServerTests.control("POST", "/pairing/open?seconds=30", "", controlPort, runtime), "open for 30");
+        Expect.isTrue(desk.pairingRefusal().isEmpty() && desk.trusted.count() == 1);
         status = DeckpadServerTests.control("GET", "/status", "", controlPort, runtime);
-        Check.that(status.contains("\"label\": \"the desk\"") && status.contains("\"host\": \"the desk\"") && !status.contains("\"code\": \"\""), "the controller trusts the host and shows the pairing code");
-        Check.that(DeckpadServerTests.control("POST", "/pairing/close", "", controlPort, runtime).contains("closed"), "pairing closes");
+        Expect.isTrue(status.contains("\"label\": \"the desk\"") && status.contains("\"host\": \"the desk\"") && !status.contains("\"code\": \"\""));
+        Expect.contains(DeckpadServerTests.control("POST", "/pairing/close", "", controlPort, runtime), "closed");
 
         // A host that knows the controller's key but never paired is refused.
         for entry in desk.trusted.list() { stranger.trusted.add(entry.key, "the controller"); }
-        Check.that(stranger.refusal().contains("not paired"), "the controller turns away a host it does not trust");
+        Expect.contains(stranger.refusal(), "not paired");
 
         // The paired host attaches through the encrypted tunnel.
         USBIPHost host = desk.attach();
@@ -158,37 +161,38 @@ class DeckpadServerTests {
         DeckpadServerTests.reports(host);
         DeckpadServerTests.outputs(host);
         status = DeckpadServerTests.control("GET", "/status", "", controlPort, runtime);
-        Check.that(status.contains("\"holder\": \"network\"") && status.contains("attached to the desk"), "the service says who holds the controller");
+        Expect.isTrue(status.contains("\"holder\": \"network\"") && status.contains("attached to the desk"));
         var second = TestHost("the desk again", port);
         for entry in desk.trusted.list() { second.trusted.add(entry.key, "the controller"); }
-        Check.that(!second.refusal().isEmpty(), "a second host cannot take the controller");
+        Expect.isFalse(second.refusal().isEmpty());
 
-        // The host leaves and comes back: the controller is free in between.
+        // The host leaves and comes back: the controller is unheld in between.
         desk.leave();
-        Check.that(DeckpadServerTests.free(controlPort, runtime), "the controller is free once its host leaves");
+        Expect.isTrue(DeckpadServerTests.unheld(controlPort, runtime));
         USBIPHost returning = desk.attach();
         DeckpadServerTests.reports(returning);
         desk.leave();
-        Check.that(DeckpadServerTests.free(controlPort, runtime), "and free again after the second visit");
+        Expect.isTrue(DeckpadServerTests.unheld(controlPort, runtime));
 
         // Forgetting the host shuts it out again.
         string fingerprint = "";
         for part in Strings.split(DeckpadServerTests.control("GET", "/status", "", controlPort, runtime), "\"") {
             if (part.startsWith("SHA256:")) { fingerprint = part; }
         }
-        Check.that(DeckpadServerTests.control("POST", "/forget?fingerprint=" + fingerprint.replace("+", "%2B"), "", controlPort, runtime).contains("forgotten"), "a host can be forgotten");
-        Check.that(desk.refusal().contains("not paired"), "and is then turned away");
+        Expect.contains(DeckpadServerTests.control("POST", "/forget?fingerprint=" + fingerprint.replace("+", "%2B"), "", controlPort, runtime), "forgotten");
+        Expect.contains(desk.refusal(), "not paired");
 
         // The control interface asks for its token.
         bool refused = false;
         string forged = runtime + "/forged";
         Path.writeAll(forged, "not-the-token\n");
         try { ControlClient.request("GET", "/status", "", controlPort, forged); } catch (string error) { refused = error.contains("token"); }
-        Check.that(refused, "the control interface refuses a request without its token");
+        Expect.isTrue(refused);
     }
 
     class void run(string program, int port, int controlPort) {
-        string directory = FileSystem.tempDir("deckpad-server");
+        var dir = TestDir("deckpad-server");
+        string directory = dir.path;
         var server = BackgroundProcess.start(program, ["serve", "--source", "demo", "--listen", "127.0.0.1", "--port", f"{port}", "--control-port", f"{controlPort}",
             "--state", directory + "/state", "--runtime", directory + "/run", "--serial", "FXDK00000007"]);
         long long deadline = MonotonicClock.deadlineAfter(5000LL);
@@ -198,15 +202,14 @@ class DeckpadServerTests {
             throw error;
         }
         server.stop();
-        Check.that(server.code() == 0, "the server stops cleanly on SIGTERM");
-        Check.that(!FileSystem.exists(directory + "/run/token"), "and takes its control token with it");
-        FileSystem.removeRecursive(directory);
+        Expect.intEq(server.code(), 0);
+        Expect.isFalse(FileSystem.exists(directory + "/run/token"));
     }
 }
 
 int main(int argc, char** argv) {
     var args = CLIArgs(argc, argv);
-    Check.that(args.count() == 1, "expected the deckpad program");
+    Expect.intEq(args.count(), 1);
     DeckpadServerTests.run(args.get(0), 32417, 32418);
     print("PASS: deckpad pairing, encrypted attach, enumeration, reports, latency, outputs, reconnection and forgetting over localhost");
     return 0;

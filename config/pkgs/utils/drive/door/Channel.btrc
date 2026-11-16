@@ -29,17 +29,19 @@ class Channel {
 
     // The next message, "" when none is waiting; closes itself when the other side is gone.
     public string receive() {
-        char message[4096];
-        long length = self.descriptor < 0 ? -1L : driveChannelReceive(self.descriptor, message, 4096UL);
-        if (length < 0L) {
+        if (self.descriptor < 0) { return ""; }
+        DriveMessageHandle? message = driveChannelReceiveMessage(self.descriptor);
+        if (message == null || driveMessageStatus(message) < 0L) {
             self.close();
             return "";
         }
-        return length == 0L ? "" : Strings.copy(message);
+        if (driveMessageStatus(message) == 0L) { return ""; }
+        string? out = driveMessageText(message);
+        return out == null ? "" : out;
     }
 
     public void close() {
-        if (self.descriptor >= 0) { close(self.descriptor); }
+        if (self.descriptor >= 0) { driveChannelClose(self.descriptor); }
         self.descriptor = -1;
     }
 

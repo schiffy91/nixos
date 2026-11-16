@@ -6,12 +6,17 @@ import Library.Timer;
 import ./PadSource.btrc;
 import ./PadState.btrc;
 import ./SteamController.btrc;
+import ./Wire.btrc;
 
 // One HID report, starting with its report ID.
-struct HidReport {
-    unsigned char bytes[64];
-    int length;
-};
+class HidReport {
+    public Bytes bytes;
+    public int length = 0;
+
+    public HidReport() {
+        self.bytes = Wire.zeros(64);
+    }
+}
 
 // The first battery the kernel reports; a host without one reads as full.
 class DeckBattery {
@@ -101,17 +106,17 @@ class VirtualController implements IHIDDevice {
     // Read the pad for at most the timeout and run the rumble and battery timers.
     public void pump(int timeoutMilliseconds) {
         if (!self.active) { return; }
-        struct PadState state;
+        PadState state = PadState();
         long long now = MonotonicClock.milliseconds();
-        if (self.source.read(&state, timeoutMilliseconds)) {
+        if (self.source.read(state, timeoutMilliseconds)) {
             now = MonotonicClock.milliseconds();
             if ((state.buttons & PAD_QUICK_ACCESS) != 0) {
                 if (self.quickAccessSince == 0LL) { self.quickAccessSince = now; }
                 else if (now - self.quickAccessSince >= 2000LL) { self.stop = true; }
             } else { self.quickAccessSince = 0LL; }
-            self.use.see(&state, now);
+            self.use.see(state, now);
             if (!self.sendQuickAccess) { state.buttons &= ~PAD_QUICK_ACCESS; }
-            self.latch.update(&state);
+            self.latch.update(state);
         }
         if (self.rumbleExpiresAt != 0LL && now >= self.rumbleExpiresAt) {
             self.wantedLeft = 0; self.wantedRight = 0; self.rumbleExpiresAt = 0LL;
@@ -119,9 +124,9 @@ class VirtualController implements IHIDDevice {
         // The pad gets overloaded by rapid rumble commands; Steam and the kernel
         // driver throttle them to 20 Hz, always applying the latest values.
         if ((self.wantedLeft != self.appliedLeft || self.wantedRight != self.appliedRight) && now - self.rumbleSentAt >= 50LL) {
-            struct PadCommand command;
-            DeckCommand.rumble(&command, self.wantedLeft, self.wantedRight);
-            self.source.command(&command);
+            PadCommand command = PadCommand();
+            DeckCommand.rumble(command, self.wantedLeft, self.wantedRight);
+            self.source.command(command);
             self.appliedLeft = self.wantedLeft; self.appliedRight = self.wantedRight; self.rumbleSentAt = now;
         }
         if (now >= self.batteryDueAt) { self.batteryPending = true; self.batteryDueAt = now + 5000LL; }
@@ -129,84 +134,84 @@ class VirtualController implements IHIDDevice {
 
     // The next input report, when one is due. The battery report goes first: it
     // is due every five seconds, and a state is nearly always waiting.
-    public bool input(struct HidReport* report) {
+    public bool input(HidReport report) {
         if (self.batteryPending) {
             self.batteryPending = false;
-            report->length = self.identity.encodeBattery(DeckBattery.percent(self.battery), DeckBattery.charging(self.battery), report->bytes);
+            report.length = self.identity.encodeBattery(DeckBattery.percent(self.battery), DeckBattery.charging(self.battery), report.bytes);
             return true;
         }
         if (!self.latch.pending()) { return false; }
-        struct PadState state;
-        self.latch.take(&state);
-        report->length = self.identity.encodeState(&state, MonotonicClock.nanoseconds() / 1000LL, report->bytes);
+        PadState state = PadState();
+        self.latch.take(state);
+        report.length = self.identity.encodeState(state, MonotonicClock.nanoseconds() / 1000LL, report.bytes);
         return true;
     }
 
-    private void apply(struct HostEffect* effect) {
-        if (effect->kind == HOST_EFFECT_RUMBLE) {
-            self.wantedLeft = effect->left;
-            self.wantedRight = effect->right;
+    private void apply(HostEffect effect) {
+        if (effect.kind == HOST_EFFECT_RUMBLE) {
+            self.wantedLeft = effect.left;
+            self.wantedRight = effect.right;
             // The real controller stops about 50 ms after the last rumble report
             // and hosts repeat it while it should run; allow for link jitter.
-            self.rumbleExpiresAt = effect->left != 0 || effect->right != 0 ? MonotonicClock.milliseconds() + 500LL : 0LL;
-        } else if (effect->kind == HOST_EFFECT_HAPTIC && self.active) {
-            self.source.command(&effect->command);
+            self.rumbleExpiresAt = effect.left != 0 || effect.right != 0 ? MonotonicClock.milliseconds() + 500LL : 0LL;
+        } else if (effect.kind == HOST_EFFECT_HAPTIC && self.active) {
+            self.source.command(effect.command);
         }
     }
 
     // An output report from the host.
-    public void output(unsigned char* data, int length) {
-        struct HostEffect effect;
-        self.identity.outputEffect(data, length, &effect);
-        self.apply(&effect);
+    public void output(Bytes data) {
+        HostEffect effect = HostEffect();
+        self.identity.outputEffect(data, effect);
+        self.apply(effect);
     }
 
     // The host wrote a feature report. False when the controller has no such report.
-    public bool setFeature(unsigned char* data, int length) {
-        if (length < 1 || (int)data[0] != STEAM_REPORT_FEATURE) { return false; }
-        struct HostEffect effect;
-        self.identity.setFeature(data, length);
-        self.identity.featureEffect(data, length, &effect);
-        self.apply(&effect);
+    public bool setFeature(Bytes data) {
+        if (data.length() < 1 || data.get(0) != STEAM_REPORT_FEATURE) { return false; }
+        HostEffect effect = HostEffect();
+        self.identity.setFeature(data);
+        self.identity.featureEffect(data, effect);
+        self.apply(effect);
         return true;
     }
 
     // The host reads a feature report: its length, or -1 when there is no such report.
-    public int feature(int report, unsigned char* out) {
+    public int feature(int report, Bytes out) {
         return report == STEAM_REPORT_FEATURE ? self.identity.getFeature(out) : -1;
     }
 
     // The same four things as Library.HID's contract, which every bus speaks.
     public Bytes reportDescriptor() {
-        unsigned char raw[256];
-        int length = self.identity.reportDescriptor(raw);
-        return Bytes.fromRaw((char*)raw, length);
+        Bytes out = Bytes();
+        self.identity.reportDescriptor(out);
+        return out;
     }
 
     public bool getReport(int kind, int id, Bytes report) {
-        unsigned char raw[64];
         if (kind != HID_REPORT_FEATURE) { return false; }
+        Bytes raw = Bytes();
         int length = self.feature(id, raw);
         if (length < 0) { return false; }
-        report.appendRaw((char*)raw, length);
+        report.appendBytes(raw.slice(0, length));
         return true;
     }
 
     public bool setReport(int kind, int id, Bytes report) {
-        unsigned char raw[64];
-        int length = report.length() > 64 ? 64 : report.length();
-        memset(raw, 0, sizeof(raw));
-        if (length > 0) { memcpy(raw, report.data, (size_t)length); }
-        if (kind == HID_REPORT_FEATURE) { return self.setFeature(raw, length); }
+        Bytes raw = report.length() > 64 ? report.slice(0, 64) : report.slice(0, report.length());
+        if (kind == HID_REPORT_FEATURE) {
+            while (raw.length() < 64) { raw.append(0); }
+            return self.setFeature(raw);
+        }
         if (kind != HID_REPORT_OUTPUT) { return false; }
-        self.output(raw, length);
+        self.output(raw);
         return true;
     }
 
     public bool nextInput(Bytes report) {
-        struct HidReport next;
-        if (!self.input(&next)) { return false; }
-        report.appendRaw((char*)next.bytes, next.length);
+        HidReport next = HidReport();
+        if (!self.input(next)) { return false; }
+        report.appendBytes(next.bytes.slice(0, next.length));
         return true;
     }
 }

@@ -25,7 +25,6 @@ let
       slopsmith-runtime = "config/pkgs/gaming/slopsmith/src/Main.btrc";
     };
     buildInputs = [ pkgs.openssl ];
-    linkFlags = [ "-lssl" "-lcrypto" ];
   };
   ssh = import ../../../config/pkgs/gaming/sunshine/ssh-login/package.nix { inherit pkgs inputs; };
 in pkgs.runCommand "gaming-runtime-contracts" {

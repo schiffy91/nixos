@@ -1,8 +1,6 @@
 import Library.Bytes;
 import Library.Strings;
 
-#include <stdlib.h>
-
 // One file or folder of the store, open. Everything the client knows about an
 // entry is kept on the entry itself, as attributes and as which ranges hold data.
 class StoreFile {
@@ -40,61 +38,41 @@ class StoreFile {
     }
 
     public Bytes read(long long offset, int size) {
-        Bytes data = Bytes();
-        unsigned char* buffer = (unsigned char*)malloc((size_t)(size > 0 ? size : 1));
-        if (buffer == NULL) { return data; }
-        long length = driveReadAt(self.descriptor, buffer, (unsigned long)size, (long)offset);
-        if (length > 0L) { data.appendRaw((char*)buffer, (int)length); }
-        free(buffer);
-        return data;
+        DriveBufferHandle? buffer = driveReadAtBytes(self.descriptor, size, offset);
+        if (buffer == null) { return Bytes(); }
+        Bytes? out = driveBufferBytes(buffer);
+        return out == null ? Bytes() : out;
     }
 
     public void close() {
-        if (self.descriptor >= 0) { close(self.descriptor); }
+        if (self.descriptor >= 0) { driveCloseDescriptor(self.descriptor); }
         self.descriptor = -1;
     }
 
     public void __del__() { self.close(); }
 
     public string attribute(string name) {  // empty when unset
-        char value[1024];
-        long length = driveAttribute(self.descriptor, f"user.drive.{name}", value, 1024UL);
-        return length <= 0L ? "" : Strings.copy(value);
+        DriveTextHandle? text = driveAttributeText(self.descriptor, f"user.drive.{name}");
+        if (text == null) { return ""; }
+        string? out = driveTextValue(text);
+        return out == null ? "" : out;
     }
 
     public bool setAttribute(string name, string value) { return driveSetAttribute(self.descriptor, f"user.drive.{name}", value) == 0; }
 
     public bool removeAttribute(string name) { return driveRemoveAttribute(self.descriptor, f"user.drive.{name}") == 0; }
 
-    public long long size() {
-        struct DriveStatus status;
-        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.size : -1LL;
-    }
+    public long long size() { return driveStatSize(self.descriptor); }
 
-    public long long blocks() {  // 512-byte units actually on disk
-        struct DriveStatus status;
-        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.blocks : -1LL;
-    }
+    public long long blocks() { return driveStatBlocks(self.descriptor); }  // 512-byte units actually on disk
 
-    public int links() {  // how many names the file has
-        struct DriveStatus status;
-        return driveInspect(self.descriptor, &status) == 0 ? (int)status.links : 0;
-    }
+    public int links() { return driveStatLinks(self.descriptor); }  // how many names the file has
 
-    public long long number() {
-        struct DriveStatus status;
-        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.number : -1LL;
-    }
+    public long long number() { return driveStatNumber(self.descriptor); }
 
-    public long long modified() {  // milliseconds
-        struct DriveStatus status;
-        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.modified * 1000LL + (long long)status.modifiedNanoseconds / 1000000LL : -1LL;
-    }
+    public long long modified() { return driveStatModifiedMs(self.descriptor); }  // milliseconds
 
-    public long long accessed() {  // seconds
-        struct DriveStatus status;
-        return driveInspect(self.descriptor, &status) == 0 ? (long long)status.accessed : -1LL;
-    }
+    public long long accessed() { return driveStatAccessedSec(self.descriptor); }  // seconds
 
     public bool setAccessed(long long seconds) { return driveSetAccessed(self.descriptor, (long)seconds) == 0; }
 
@@ -162,10 +140,32 @@ class StorePaths {  // the calls on paths the store needs
     class bool append(string path, string line) { return driveAppend(path, line + "\n") == 0; }
 
     class Bytes contents(string path) {  // a small file that does not say how long it is
-        unsigned char buffer[8192];
-        long length = driveReadAll(path, buffer, 8192UL);
-        return length <= 0L ? Bytes() : Bytes.fromRaw((char*)buffer, (int)length);
+        DriveBufferHandle? buffer = driveReadAllBytes(path);
+        if (buffer == null) { return Bytes(); }
+        Bytes? out = driveBufferBytes(buffer);
+        return out == null ? Bytes() : out;
     }
+
+    class string formatLocalTime(long long seconds) {
+        DriveTextHandle? text = driveFormatLocalTime(seconds);
+        if (text == null) { return ""; }
+        string? out = driveTextValue(text);
+        return out == null ? "" : out;
+    }
+
+    class long long nowSeconds() { return driveNowSeconds(); }
+
+    class int lastErrno() { return driveLastErrno(); }
+
+    class bool openTruncating(int flags) { return driveOpenTruncating(flags); }
+
+    class bool openWriting(int flags) { return driveOpenWriting(flags); }
+
+    class int errnoRofs() { return driveErrnoRofs(); }
+
+    class int errnoBusy() { return driveErrnoBusy(); }
+
+    class int errnoNxio() { return driveErrnoNxio(); }
 
     // Be the only process of its kind on a store, for as long as this process lives. False when another is.
     class bool lock(string path) { return driveLock(path) >= 0; }

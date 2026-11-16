@@ -19,7 +19,7 @@ class MachineIdentity {
         }
         if (!create) { throw f"No identity key at {path}"; }
         SigningKey fresh = SigningKey.generate();
-        if (!Path.writeAll(path, fresh.toOpenSSH("deckpad")) || FileSystem.chmod(path, 384) != 0) { throw f"Cannot keep a new identity key at {path}"; }
+        if (!Path.writeAll(path, fresh.toOpenSSH("deckpad")) || FileSystem.chmod(path, 0o600) != 0) { throw f"Cannot keep a new identity key at {path}"; }
         return fresh;
     }
 }

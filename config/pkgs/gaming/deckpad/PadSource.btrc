@@ -1,17 +1,33 @@
+import Library.Bytes;
+import Library.Timer;
 import ./PadState.btrc;
 import ./Wire.btrc;
 
 // A feature command for the Deck's own controller (see hid-steam.c's ID_* list).
-struct PadCommand {
-    unsigned char bytes[64];
-    int length;
-};
+class PadCommand {
+    public Bytes bytes;
+    public int length = 0;
+
+    public PadCommand() {
+        self.bytes = Wire.zeros(64);
+    }
+
+    public void reset() {
+        Wire.resetZeros(self.bytes, 64);
+        self.length = 0;
+    }
+
+    public void copyFrom(PadCommand other) {
+        self.bytes = other.bytes.slice(0, other.bytes.length());
+        self.length = other.length;
+    }
+}
 
 // Where controller state comes from, and where the host's haptics go.
 interface IPadSource {
     void open();
-    bool read(struct PadState* state, int timeoutMilliseconds);
-    void command(struct PadCommand* command);
+    bool read(PadState state, int timeoutMilliseconds);
+    void command(PadCommand command);
     void close();
 }
 
@@ -25,59 +41,59 @@ enum {
 
 // Builders for the commands the Deck's controller firmware accepts.
 class DeckCommand {
-    class void begin(struct PadCommand* command, int identifier, int length) {
-        memset(command, 0, sizeof(struct PadCommand));
-        command->bytes[0] = (unsigned char)identifier;
-        command->bytes[1] = (unsigned char)length;
-        command->length = length + 2;
+    class void begin(PadCommand command, int identifier, int length) {
+        command.reset();
+        command.bytes.set(0, identifier & 0xFF);
+        command.bytes.set(1, length & 0xFF);
+        command.length = length + 2;
     }
 
-    class void clearMappings(struct PadCommand* command) { DeckCommand.begin(command, DECK_CLEAR_DIGITAL_MAPPINGS, 0); command->length = 1; }
+    class void clearMappings(PadCommand command) { DeckCommand.begin(command, DECK_CLEAR_DIGITAL_MAPPINGS, 0); command.length = 1; }
 
     // Keyboard/mouse emulation and Steam's watchdog off; raw accelerometer and gyro on.
-    class void gamepadSettings(struct PadCommand* command) {
+    class void gamepadSettings(PadCommand command) {
         DeckCommand.begin(command, DECK_SET_SETTINGS, 9);
-        command->bytes[2] = (unsigned char)DECK_SETTING_LIZARD_MODE;
-        command->bytes[5] = (unsigned char)DECK_SETTING_WATCHDOG;
-        command->bytes[8] = (unsigned char)DECK_SETTING_IMU_MODE;
-        Wire.putU16le(command->bytes, 9, DECK_IMU_RAW_ACCEL_GYRO);
+        command.bytes.set(2, DECK_SETTING_LIZARD_MODE);
+        command.bytes.set(5, DECK_SETTING_WATCHDOG);
+        command.bytes.set(8, DECK_SETTING_IMU_MODE);
+        Wire.putU16le(command.bytes, 9, DECK_IMU_RAW_ACCEL_GYRO);
     }
 
     // Motor speeds 0..65535: left is the low-frequency motor, right the high one.
-    class void rumble(struct PadCommand* command, int left, int right) {
+    class void rumble(PadCommand command, int left, int right) {
         DeckCommand.begin(command, DECK_RUMBLE, 9);
-        Wire.putU16le(command->bytes, 5, left);
-        Wire.putU16le(command->bytes, 7, right);
-        command->bytes[9] = (unsigned char)2;
+        Wire.putU16le(command.bytes, 5, left);
+        Wire.putU16le(command.bytes, 7, right);
+        command.bytes.set(9, 2);
     }
 
     // Pads are swapped on this command for legacy reasons: 1 left, 0 right, 2 both.
-    class void pulse(struct PadCommand* command, int pad, int onMicroseconds, int offMicroseconds, int count) {
+    class void pulse(PadCommand command, int pad, int onMicroseconds, int offMicroseconds, int count) {
         DeckCommand.begin(command, DECK_HAPTIC_PULSE, 8);
-        command->bytes[2] = (unsigned char)pad;
-        Wire.putU16le(command->bytes, 3, onMicroseconds);
-        Wire.putU16le(command->bytes, 5, offMicroseconds);
-        Wire.putU16le(command->bytes, 7, count);
+        command.bytes.set(2, pad & 0xFF);
+        Wire.putU16le(command.bytes, 3, onMicroseconds);
+        Wire.putU16le(command.bytes, 5, offMicroseconds);
+        Wire.putU16le(command.bytes, 7, count);
     }
 
     // Trackpad haptic effects: pad 0 left, 1 right, 2 both. Without a script or
     // sweep the command stops after the LFO depth, the length Steam itself sends.
-    class void haptic(struct PadCommand* command, int pad, int kind, int intensity, int gain, int frequency, int duration,
+    class void haptic(PadCommand command, int pad, int kind, int intensity, int gain, int frequency, int duration,
                       int lfoFrequency, int lfoDepth, int script, int sweepStart, int sweepEnd) {
         bool extended = script != 0 || sweepStart != 0 || sweepEnd != 0;
         DeckCommand.begin(command, DECK_HAPTIC, extended ? 19 : 13);
-        command->bytes[2] = (unsigned char)pad;
-        command->bytes[3] = (unsigned char)kind;
-        command->bytes[4] = (unsigned char)intensity;
-        command->bytes[5] = (unsigned char)(Wire.clamp(gain, -24, 6) & 0xFF);
-        Wire.putU16le(command->bytes, 6, frequency);
-        Wire.putU16le(command->bytes, 8, Wire.clamp(duration, 0, 32767));
-        Wire.putU16le(command->bytes, 12, lfoFrequency);
-        command->bytes[14] = (unsigned char)lfoDepth;
+        command.bytes.set(2, pad & 0xFF);
+        command.bytes.set(3, kind & 0xFF);
+        command.bytes.set(4, intensity & 0xFF);
+        command.bytes.set(5, Wire.clamp(gain, -24, 6) & 0xFF);
+        Wire.putU16le(command.bytes, 6, frequency);
+        Wire.putU16le(command.bytes, 8, Wire.clamp(duration, 0, 32767));
+        Wire.putU16le(command.bytes, 12, lfoFrequency);
+        command.bytes.set(14, lfoDepth & 0xFF);
         if (extended) {
-            command->bytes[16] = (unsigned char)script;
-            Wire.putU16le(command->bytes, 17, sweepStart);
-            Wire.putU16le(command->bytes, 19, sweepEnd);
+            command.bytes.set(16, script & 0xFF);
+            Wire.putU16le(command.bytes, 17, sweepStart);
+            Wire.putU16le(command.bytes, 19, sweepEnd);
         }
     }
 }
@@ -87,34 +103,35 @@ class DeckCommand {
 class ScriptedPad implements IPadSource {
     private int step = 0;
     public int commands = 0;
-    public struct PadCommand last;
+    public PadCommand last;
 
-    public ScriptedPad() { memset(&self.last, 0, sizeof(self.last)); }
+    public ScriptedPad() { self.last = PadCommand(); }
 
-    class void stateAt(int step, struct PadState* state) {
-        memset(state, 0, sizeof(struct PadState));
+    class void stateAt(int step, PadState state) {
+        state.reset();
         int phase = step % 500;
-        if ((step / 125) % 2 == 1) { state->buttons = PAD_A; }
+        if ((step / 125) % 2 == 1) { state.buttons = PAD_A; }
         int quarter = (phase / 125) % 4;
         int travel = (phase % 125) * 262;
-        state->leftStickX = quarter == 0 ? travel : (quarter == 1 ? 32750 - travel : (quarter == 2 ? -travel : travel - 32750));
-        state->leftStickY = quarter == 0 ? 32750 - travel : (quarter == 1 ? -travel : (quarter == 2 ? travel - 32750 : travel));
-        state->leftTrigger = phase * 65;
-        state->accelZ = 16384;
+        state.leftStickX = quarter == 0 ? travel : (quarter == 1 ? 32750 - travel : (quarter == 2 ? -travel : travel - 32750));
+        state.leftStickY = quarter == 0 ? 32750 - travel : (quarter == 1 ? -travel : (quarter == 2 ? travel - 32750 : travel));
+        state.leftTrigger = phase * 65;
+        state.accelZ = 16384;
     }
 
     public void open() { self.step = 0; }
 
-    public bool read(struct PadState* state, int timeoutMilliseconds) {
-        poll(NULL, (nfds_t)0, timeoutMilliseconds < 4 ? timeoutMilliseconds : 4);
+    public bool read(PadState state, int timeoutMilliseconds) {
+        int delay = timeoutMilliseconds < 4 ? timeoutMilliseconds : 4;
+        if (delay > 0) { Timer.sleepMillis(delay); }
         if (timeoutMilliseconds < 4) { return false; }
         ScriptedPad.stateAt(self.step, state);
         self.step++;
         return true;
     }
 
-    public void command(struct PadCommand* command) {
-        memcpy(&self.last, command, sizeof(struct PadCommand));
+    public void command(PadCommand command) {
+        self.last.copyFrom(command);
         self.commands++;
     }
 

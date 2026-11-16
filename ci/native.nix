@@ -24,11 +24,13 @@ let
     "config/pkgs/utils/nixosctl/lib/accounts/native.h"
     "config/pkgs/utils/nixosctl/lib/credentials.h"
     "config/pkgs/utils/nixosctl/lib/password-hash.h"
+    "config/pkgs/gaming/sunshine/credentials/src/native.h"
     "config/pkgs/gaming/sunshine/ssh-login/native.h"
     "config/pkgs/gaming/proton/custom/tools/native.h"
     "config/pkgs/gaming/slopsmith/src/signals.h"
     "config/pkgs/gaming/assettocorsa/src/compression.h"
     "config/pkgs/gaming/deckpad/Awake.h"
+    "config/pkgs/gaming/deckpad/Posix.h"
     "config/pkgs/gaming/deckpad/Screen.h"
     "config/pkgs/utils/drive/door/Channel.h"
     "config/pkgs/utils/drive/store/Native.h"
@@ -73,11 +75,13 @@ let
       ${../config/system/nixos/sleep/helpers/pam.h} \
       ${../config/system/nixos/sleep/helpers/drm.h} \
       ${../config/system/nixos/recovery/signals.h} \
+      ${../config/pkgs/gaming/sunshine/credentials/src/native.h} \
       ${../config/pkgs/gaming/sunshine/ssh-login/native.h} \
       ${../config/pkgs/gaming/proton/custom/tools/native.h} \
       ${../config/pkgs/gaming/slopsmith/src/signals.h} \
       ${../config/pkgs/gaming/assettocorsa/src/compression.h} \
       ${../config/pkgs/gaming/deckpad/Awake.h} \
+      ${../config/pkgs/gaming/deckpad/Posix.h} \
       ${../config/pkgs/gaming/deckpad/Screen.h} \
       ${../config/pkgs/utils/drive/door/Channel.h} \
       ${../config/pkgs/utils/drive/store/Native.h} \

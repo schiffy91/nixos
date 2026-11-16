@@ -2,12 +2,15 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <linux/fs.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -19,31 +22,68 @@
 // What the store needs from Linux that BTRC cannot call directly: extended
 // attributes, sparse files and the calls whose constants are Linux-only.
 
-struct DriveStatus {
-	unsigned long device;
-	unsigned long number;
-	unsigned long size;
-	unsigned long blocks;
-	long modified;
-	long modifiedNanoseconds;
-	long accessed;
-	unsigned int mode;
-	unsigned int links;
-};
+typedef struct DriveBufferStorage {
+	unsigned char *bytes;
+	size_t length;
+} *DriveBufferHandle;
 
-static inline int driveInspect(int descriptor, struct DriveStatus* out) {
+typedef struct DriveTextStorage {
+	char text[1024];
+} *DriveTextHandle;
+
+static inline void driveBufferRelease(DriveBufferHandle handle) {
+	if (!handle) { return; }
+	free(handle->bytes);
+	free(handle);
+}
+
+static inline const unsigned char *driveBufferBytes(DriveBufferHandle handle) {
+	static const unsigned char empty = 0;
+	if (!handle || !handle->bytes) { return &empty; }
+	return handle->bytes;
+}
+
+static inline int driveBufferLength(DriveBufferHandle handle) {
+	return handle && handle->bytes ? (int)handle->length : 0;
+}
+
+static inline void driveTextRelease(DriveTextHandle handle) {
+	free(handle);
+}
+
+static inline const char *driveTextValue(DriveTextHandle handle) {
+	return handle ? handle->text : "";
+}
+
+static inline long long driveStatSize(int descriptor) {
 	struct stat status;
-	if (fstat(descriptor, &status) != 0) { return -1; }
-	out->device = (unsigned long)status.st_dev;
-	out->number = (unsigned long)status.st_ino;
-	out->size = (unsigned long)status.st_size;
-	out->blocks = (unsigned long)status.st_blocks;
-	out->modified = (long)status.st_mtim.tv_sec;
-	out->modifiedNanoseconds = status.st_mtim.tv_nsec;
-	out->accessed = (long)status.st_atim.tv_sec;
-	out->mode = status.st_mode;
-	out->links = (unsigned int)status.st_nlink;
-	return 0;
+	return fstat(descriptor, &status) == 0 ? (long long)status.st_size : -1LL;
+}
+
+static inline long long driveStatBlocks(int descriptor) {
+	struct stat status;
+	return fstat(descriptor, &status) == 0 ? (long long)status.st_blocks : -1LL;
+}
+
+static inline int driveStatLinks(int descriptor) {
+	struct stat status;
+	return fstat(descriptor, &status) == 0 ? (int)status.st_nlink : 0;
+}
+
+static inline long long driveStatNumber(int descriptor) {
+	struct stat status;
+	return fstat(descriptor, &status) == 0 ? (long long)status.st_ino : -1LL;
+}
+
+static inline long long driveStatModifiedMs(int descriptor) {
+	struct stat status;
+	if (fstat(descriptor, &status) != 0) { return -1LL; }
+	return (long long)status.st_mtim.tv_sec * 1000LL + (long long)status.st_mtim.tv_nsec / 1000000LL;
+}
+
+static inline long long driveStatAccessedSec(int descriptor) {
+	struct stat status;
+	return fstat(descriptor, &status) == 0 ? (long long)status.st_atim.tv_sec : -1LL;
 }
 
 // Open without following a final symbolic link; `mode` 0 a directory or file
@@ -72,6 +112,10 @@ static inline int driveReopenFlags(int descriptor, int flags) {
 	return open(name, (flags & ~(O_NOFOLLOW | O_CREAT | O_EXCL)) | O_CLOEXEC);
 }
 
+static inline void driveCloseDescriptor(int descriptor) {
+	if (descriptor >= 0) { close(descriptor); }
+}
+
 // Add one line to the end of a file, creating it; 0, or -1.
 static inline int driveAppend(const char* path, const char* line) {
 	int descriptor = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0600);
@@ -83,18 +127,28 @@ static inline int driveAppend(const char* path, const char* line) {
 	return written;
 }
 
-// Read at an offset: the count, or a negative errno.
-static inline long driveReadAt(int descriptor, unsigned char* buffer, unsigned long size, long offset) {
-	ssize_t length = pread(descriptor, buffer, size, (off_t)offset);
-	return length < 0 ? -(long)errno : (long)length;
+static inline DriveBufferHandle driveReadAtBytes(int descriptor, int size, long long offset) {
+	DriveBufferHandle handle = calloc(1, sizeof(*handle));
+	if (!handle || size <= 0 || descriptor < 0) { return handle; }
+	handle->bytes = malloc((size_t)size);
+	if (!handle->bytes) { return handle; }
+	ssize_t length = pread(descriptor, handle->bytes, (size_t)size, (off_t)offset);
+	if (length > 0) {
+		handle->length = (size_t)length;
+	}
+	return handle;
 }
 
-// An attribute's text into `value`: its length, or a negative errno.
-static inline long driveAttribute(int descriptor, const char* name, char* value, unsigned long capacity) {
-	ssize_t length = fgetxattr(descriptor, name, value, capacity - 1);
-	if (length < 0) { return -(long)errno; }
-	value[length] = 0;
-	return (long)length;
+static inline DriveTextHandle driveAttributeText(int descriptor, const char* name) {
+	DriveTextHandle handle = calloc(1, sizeof(*handle));
+	if (!handle || descriptor < 0 || !name) { return handle; }
+	ssize_t length = fgetxattr(descriptor, name, handle->text, sizeof(handle->text) - 1);
+	if (length > 0) {
+		handle->text[length] = '\0';
+	} else {
+		handle->text[0] = '\0';
+	}
+	return handle;
 }
 
 static inline int driveSetAttribute(int descriptor, const char* name, const char* value) { return fsetxattr(descriptor, name, value, strlen(value), 0) != 0 ? -errno : 0; }
@@ -104,12 +158,36 @@ static inline int driveRemoveAttribute(int descriptor, const char* name) { retur
 static inline int driveResize(int descriptor, long size) { return ftruncate(descriptor, (off_t)size); }
 
 // A moment as this machine's clock shows it, to the minute.
-static inline void driveLocalTime(long seconds, char* out, unsigned long capacity) {
+static inline DriveTextHandle driveFormatLocalTime(long long seconds) {
+	DriveTextHandle handle = calloc(1, sizeof(*handle));
+	if (!handle) { return NULL; }
 	time_t moment = (time_t)seconds;
 	struct tm parts;
-	out[0] = 0;
-	if (localtime_r(&moment, &parts) != NULL) { strftime(out, capacity, "%Y-%m-%d %H:%M", &parts); }
+	if (localtime_r(&moment, &parts) != NULL) {
+		strftime(handle->text, sizeof(handle->text), "%Y-%m-%d %H:%M", &parts);
+	}
+	return handle;
 }
+
+static inline long long driveNowSeconds(void) {
+	return (long long)time(NULL);
+}
+
+static inline int driveLastErrno(void) {
+	return errno;
+}
+
+static inline bool driveOpenTruncating(int flags) {
+	return (flags & O_TRUNC) != 0;
+}
+
+static inline bool driveOpenWriting(int flags) {
+	return (flags & O_ACCMODE) != O_RDONLY || (flags & O_TRUNC) != 0;
+}
+
+static inline int driveErrnoRofs(void) { return EROFS; }
+static inline int driveErrnoBusy(void) { return EBUSY; }
+static inline int driveErrnoNxio(void) { return ENXIO; }
 
 // Set the modification time and leave the access time alone.
 static inline int driveSetModified(int descriptor, long seconds, long nanoseconds) {
@@ -225,19 +303,25 @@ static inline int driveCopyInto(int target, long offset, int source, long length
 	return 0;
 }
 
-// Read a small file to its end: the count, or -1. For files that do not
-// say how long they are, such as those under /proc.
-static inline long driveReadAll(const char* path, unsigned char* buffer, unsigned long capacity) {
+// Read a small file to its end, for files that do not say how long they are,
+// such as those under /proc or /dev/urandom.
+static inline DriveBufferHandle driveReadAllBytes(const char* path) {
+	DriveBufferHandle handle = calloc(1, sizeof(*handle));
+	if (!handle || !path) { return handle; }
 	int descriptor = open(path, O_RDONLY | O_CLOEXEC);
-	unsigned long filled = 0;
-	if (descriptor < 0) { return -1; }
-	while (filled < capacity) {
-		ssize_t got = read(descriptor, buffer + filled, capacity - filled);
+	if (descriptor < 0) { return handle; }
+	handle->bytes = malloc(8192);
+	if (!handle->bytes) {
+		close(descriptor);
+		return handle;
+	}
+	while (handle->length < 8192) {
+		ssize_t got = read(descriptor, handle->bytes + handle->length, 8192 - handle->length);
 		if (got <= 0) { break; }
-		filled += (unsigned long)got;
+		handle->length += (size_t)got;
 	}
 	close(descriptor);
-	return (long)filled;
+	return handle;
 }
 
 static inline int driveLink(const char* existing, const char* created) { return link(existing, created); }

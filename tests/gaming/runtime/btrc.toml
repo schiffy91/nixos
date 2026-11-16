@@ -5,6 +5,7 @@ exports = ["Signals", "TLS"]
 
 [dependencies]
 slopsmith = { path = "../../../config/pkgs/gaming/slopsmith/src" }
+sunshine_credentials = { path = "../../../config/pkgs/gaming/sunshine/credentials/src" }
 
 [[native.bindings]]
 module = "TLS"

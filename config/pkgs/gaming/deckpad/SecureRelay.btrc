@@ -1,8 +1,6 @@
 import Library.Bytes;
 import Library.Crypto.SecureChannel;
-import Library.Network.TCPStream;
-
-#include <poll.h>
+import Library.Network;
 
 // Carries a local byte stream over a SecureChannel, both ways. USB/IP speaks
 // plain bytes to a socket; with one end of a socket pair here and the other
@@ -16,24 +14,19 @@ class SecureRelay {
         self.local = local;
     }
 
-    public int watch(struct pollfd* descriptors, int capacity) {
-        if (capacity < 2 || !self.channel.isOpen() || !self.local.isOpen()) { return 0; }
-        descriptors[0].fd = self.local.handle();
-        descriptors[0].events = POLLIN;
-        descriptors[0].revents = 0;
-        descriptors[1].fd = self.channel.handle();
-        descriptors[1].events = POLLIN;
-        descriptors[1].revents = 0;
-        return 2;
+    public void watchIn(PollSet polls) {
+        if (!self.channel.isOpen() || !self.local.isOpen() || polls.remaining() < 2) { return; }
+        polls.addReadable(self.local.handle());
+        polls.addReadable(self.channel.handle());
     }
 
     // Move what has arrived on either side. False when a side is gone.
     public bool step() {
-        unsigned char buffer[16384];
         for (int turn = 0; turn < 8; turn++) {
-            int count = self.local.read(buffer, 16384, 0);
+            Bytes chunk = Bytes();
+            int count = self.local.readInto(chunk, 16384, 0);
             if (count == TCP_STREAM_READ_TIMED_OUT) { break; }
-            if (count <= 0 || !self.channel.sendRaw(buffer, count, 1000)) { return false; }
+            if (count <= 0 || !self.channel.send(chunk, 1000)) { return false; }
         }
         for (int turn = 0; turn < 8; turn++) {
             Bytes message = Bytes();

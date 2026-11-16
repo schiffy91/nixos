@@ -1,6 +1,5 @@
+import Library.Network;
 import ./Controller.btrc;
-
-#include <poll.h>
 
 // One way a host reaches the controller: the network, a USB cable, Bluetooth.
 // A link owns its transport and how a host comes to be trusted on it; the
@@ -11,8 +10,8 @@ interface IControllerLink {
     // Bring the link up, or throw why it cannot work on this machine.
     void open();
 
-    // Fill `descriptors` with what to wait on before the next step; the number filled.
-    int watch(struct pollfd* descriptors, int capacity);
+    // Register descriptors to wait on before the next step.
+    void watchIn(PollSet polls);
 
     // Do what is due without blocking.
     void step();

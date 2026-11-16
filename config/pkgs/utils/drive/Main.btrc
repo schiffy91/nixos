@@ -8,9 +8,6 @@ import Library.Process;
 import Library.Map;
 import Library.Timer;
 
-#include <stdio.h>
-#include <unistd.h>
-
 import Library.FileSystem;
 import Library.FileSystem.IUserspaceFileSystem;
 import Library.FileSystem.Userspace;
@@ -31,7 +28,7 @@ import ./store/Store.btrc;
 class Drive {
     // Where requests keep their headers and bodies while they run: a folder of this command's own, inside the
     // client's runtime folder. A shared name under /tmp belonged to whoever made it first.
-    class string scratch(CLICommandLine options) { return options.option("--scratch", f"{Drive.runtime(options)}/requests-{options.operand(0, "drive")}-{(int)getpid()}"); }
+    class string scratch(CLICommandLine options) { return options.option("--scratch", f"{Drive.runtime(options)}/requests-{options.operand(0, "drive")}-{Platform.pid()}"); }
 
     class DriveApi api(CLICommandLine options) {
         string home = Environment.get("HOME", "");
@@ -128,7 +125,7 @@ class Drive {
         mounting.allowOthers = options.has("--allow-others");
         UserspaceMount mount = Userspace.mount(door, directory, mounting);
         Console.log("READY");
-        fflush(stdout);
+        Console.flush();
         door.serve(mount);
     }
 
@@ -176,7 +173,7 @@ class Drive {
         engine.uploader.overwriteConflicts = options.has("--overwrite-conflicts");
         engine.following().deleteLimit = engine.uploader.deleteLimit;
         Console.log("READY");
-        fflush(stdout);
+        Console.flush();
         engine.run();
     }
 

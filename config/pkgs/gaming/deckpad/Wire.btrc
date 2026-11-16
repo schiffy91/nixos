@@ -1,40 +1,69 @@
+import Library.Bytes;
+
 // Byte-order helpers. USB and Valve's reports are little-endian; USB/IP is big-endian.
 class Wire {
-    class int u16le(unsigned char* data, int offset) { return (int)data[offset] | ((int)data[offset + 1] << 8); }
+    class Bytes zeros(int count) {
+        return Bytes.zeros(count > 0 ? count : 0);
+    }
 
-    class int s16le(unsigned char* data, int offset) {
+    class void resetZeros(Bytes out, int count) {
+        out.resetZeros(count > 0 ? count : 0);
+    }
+
+    class void ensureSize(Bytes data, int needed) {
+        while (data.length() < needed) { data.append(0); }
+    }
+
+    class int u16le(Bytes data, int offset) {
+        return data.get(offset) | (data.get(offset + 1) << 8);
+    }
+
+    class int s16le(Bytes data, int offset) {
         int value = Wire.u16le(data, offset);
         return value >= 32768 ? value - 65536 : value;
     }
 
-    class void putU16le(unsigned char* data, int offset, int value) {
-        data[offset] = (unsigned char)(value & 0xFF);
-        data[offset + 1] = (unsigned char)((value >> 8) & 0xFF);
+    class void putU16le(Bytes data, int offset, int value) {
+        Wire.ensureSize(data, offset + 2);
+        data.set(offset, value & 0xFF);
+        data.set(offset + 1, (value >> 8) & 0xFF);
     }
 
-    class void putU32le(unsigned char* data, int offset, long long value) {
-        for (int index = 0; index < 4; index++) { data[offset + index] = (unsigned char)((value >> (8 * index)) & 0xFFLL); }
+    class void putU32le(Bytes data, int offset, long long value) {
+        Wire.ensureSize(data, offset + 4);
+        for (int index = 0; index < 4; index++) {
+            data.set(offset + index, (int)((value >> (8 * index)) & 0xFFLL));
+        }
     }
 
-    class int u16be(unsigned char* data, int offset) { return ((int)data[offset] << 8) | (int)data[offset + 1]; }
-
-    class long long u32le(unsigned char* data, int offset) {
-        return (long long)data[offset] | ((long long)data[offset + 1] << 8) | ((long long)data[offset + 2] << 16) | ((long long)data[offset + 3] << 24);
+    class int u16be(Bytes data, int offset) {
+        return (data.get(offset) << 8) | data.get(offset + 1);
     }
 
-    class long long u32be(unsigned char* data, int offset) {
+    class long long u32le(Bytes data, int offset) {
+        return (long long)data.get(offset)
+            | ((long long)data.get(offset + 1) << 8)
+            | ((long long)data.get(offset + 2) << 16)
+            | ((long long)data.get(offset + 3) << 24);
+    }
+
+    class long long u32be(Bytes data, int offset) {
         long long value = 0LL;
-        for (int index = 0; index < 4; index++) { value = (value << 8) | (long long)data[offset + index]; }
+        for (int index = 0; index < 4; index++) { value = (value << 8) | (long long)data.get(offset + index); }
         return value;
     }
 
-    class void putU16be(unsigned char* data, int offset, int value) {
-        data[offset] = (unsigned char)((value >> 8) & 0xFF);
-        data[offset + 1] = (unsigned char)(value & 0xFF);
+    class void putU16be(Bytes data, int offset, int value) {
+        Wire.ensureSize(data, offset + 2);
+        data.set(offset, (value >> 8) & 0xFF);
+        data.set(offset + 1, value & 0xFF);
     }
 
-    class void putU32be(unsigned char* data, int offset, long long value) {
-        for (int index = 0; index < 4; index++) { data[offset + index] = (unsigned char)((value >> (8 * (3 - index))) & 0xFFLL); }
+    class void putU32be(Bytes data, int offset, long long value) {
+        Wire.ensureSize(data, offset + 4);
+        for (int index = 0; index < 4; index++) {
+            data.set(offset + index, (int)((value >> (8 * (3 - index))) & 0xFFLL));
+        }
     }
 
     class int clamp(int value, int low, int high) { return value < low ? low : (value > high ? high : value); }

@@ -1,12 +1,11 @@
 import Library.Bluetooth;
 import Library.Console;
 import Library.FileSystem;
+import Library.Network;
 import ./Controller.btrc;
 import ./Link.btrc;
 import ./SteamController.btrc;
 import ./Trust.btrc;
-
-#include <poll.h>
 
 // The controller over Bluetooth, as a HID device a host pairs with like any
 // gamepad. Bluetooth does its own pairing; this only decides when: while the
@@ -58,12 +57,12 @@ class BluetoothLink implements IControllerLink {
         if (last != null && pad.reconnect(last, 3000)) { self.host = last.toString(); }
     }
 
-    public int watch(struct pollfd* descriptors, int capacity) {
+    public void watchIn(PollSet polls) {
         BluetoothAdapter? adapter = self.adapter;
         BluetoothHIDDevice? pad = self.pad;
-        if (adapter == null || pad == null || capacity < 5) { return 0; }
-        int count = adapter.watch(descriptors, 1);
-        return count + pad.watch(descriptors + count, 4);
+        if (adapter == null || pad == null || polls.remaining() < 5) { return; }
+        adapter.watchIn(polls);
+        pad.watchIn(polls);
     }
 
     public void step() {

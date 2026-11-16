@@ -19,16 +19,108 @@ header = "store/Native.h"
 language = "c"
 standard = "c11"
 symbols = [
-	"DriveStatus", "driveInspect", "driveOpen", "driveOpenAt", "driveReopen", "driveReopenFlags", "driveAppend", "driveReadAt", "driveReadAll", "driveAttribute", "driveSetAttribute", "driveRemoveAttribute",
-	"driveResize", "driveSetModified", "driveRelease", "driveSeek", "driveCopyInto", "driveLink", "driveRename", "driveRemove",
-	"driveRemoveDirectory", "driveSynchronize", "driveSetAccessed", "driveEvict", "driveClone", "driveFreeBytes", "driveSyncVolume", "driveLock", "driveOwnerWritable"
+	"DriveBufferHandle",
+	"DriveTextHandle",
+	"driveBufferRelease",
+	"driveBufferBytes",
+	"driveBufferLength",
+	"driveTextRelease",
+	"driveTextValue",
+	"driveStatSize",
+	"driveStatBlocks",
+	"driveStatLinks",
+	"driveStatNumber",
+	"driveStatModifiedMs",
+	"driveStatAccessedSec",
+	"driveOpen",
+	"driveOpenAt",
+	"driveReopen",
+	"driveReopenFlags",
+	"driveCloseDescriptor",
+	"driveAppend",
+	"driveReadAtBytes",
+	"driveReadAllBytes",
+	"driveAttributeText",
+	"driveFormatLocalTime",
+	"driveNowSeconds",
+	"driveLastErrno",
+	"driveOpenTruncating",
+	"driveOpenWriting",
+	"driveErrnoRofs",
+	"driveErrnoBusy",
+	"driveErrnoNxio",
+	"driveSetAttribute",
+	"driveRemoveAttribute",
+	"driveResize",
+	"driveSetModified",
+	"driveRelease",
+	"driveSeek",
+	"driveCopyInto",
+	"driveLink",
+	"driveRename",
+	"driveRemove",
+	"driveRemoveDirectory",
+	"driveSynchronize",
+	"driveSetAccessed",
+	"driveEvict",
+	"driveClone",
+	"driveFreeBytes",
+	"driveSyncVolume",
+	"driveLock",
+	"driveOwnerWritable"
+]
+owned-results = [
+	"driveReadAtBytes",
+	"driveReadAllBytes",
+	"driveAttributeText",
+	"driveFormatLocalTime"
 ]
 read-only-borrows = [
-	"driveOpen.path", "driveOpenAt.name", "driveReadAll.path", "driveAppend.path", "driveAppend.line", "driveAttribute.name", "driveSetAttribute.name", "driveSetAttribute.value",
-	"driveRemoveAttribute.name", "driveLink.existing", "driveLink.created", "driveRename.from", "driveRename.to",
-	"driveRemove.path", "driveRemoveDirectory.path", "driveFreeBytes.path", "driveSyncVolume.path", "driveLock.path", "driveOwnerWritable.path"
+	"driveOpen.path",
+	"driveOpenAt.name",
+	"driveReadAllBytes.path",
+	"driveAppend.path",
+	"driveAppend.line",
+	"driveAttributeText.name",
+	"driveSetAttribute.name",
+	"driveSetAttribute.value",
+	"driveRemoveAttribute.name",
+	"driveLink.existing",
+	"driveLink.created",
+	"driveRename.from",
+	"driveRename.to",
+	"driveRemove.path",
+	"driveRemoveDirectory.path",
+	"driveFreeBytes.path",
+	"driveSyncVolume.path",
+	"driveLock.path",
+	"driveOwnerWritable.path"
+]
+borrowed-parameters = [
+	"driveBufferBytes.handle",
+	"driveBufferLength.handle",
+	"driveTextValue.handle"
 ]
 os = ["linux"]
+
+[native.bindings.resources.DriveBufferHandle]
+ownership = "unique"
+release = "driveBufferRelease"
+
+[native.bindings.resources.DriveTextHandle]
+ownership = "unique"
+release = "driveTextRelease"
+
+[native.bindings.copied-results.driveBufferBytes]
+kind = "bytes"
+owner = "handle"
+length-function = "driveBufferLength"
+length-arguments = ["handle"]
+length-preserves-result = true
+
+[native.bindings.copied-results.driveTextValue]
+kind = "string"
+owner = "handle"
 
 [[native.defines]]
 name = "_GNU_SOURCE"
@@ -41,6 +133,35 @@ module = "door.Channel"
 header = "door/Channel.h"
 language = "c"
 standard = "c11"
-symbols = ["driveChannelListen", "driveChannelAccept", "driveChannelConnect", "driveChannelSend", "driveChannelReceive", "driveChannelWait"]
-read-only-borrows = ["driveChannelListen.path", "driveChannelConnect.path", "driveChannelSend.message"]
+symbols = [
+	"DriveMessageHandle",
+	"driveMessageRelease",
+	"driveMessageStatus",
+	"driveMessageText",
+	"driveChannelListen",
+	"driveChannelAccept",
+	"driveChannelConnect",
+	"driveChannelClose",
+	"driveChannelSend",
+	"driveChannelReceiveMessage",
+	"driveChannelWait"
+]
+owned-results = ["driveChannelReceiveMessage"]
+read-only-borrows = [
+	"driveChannelListen.path",
+	"driveChannelConnect.path",
+	"driveChannelSend.message"
+]
+borrowed-parameters = [
+	"driveMessageStatus.handle",
+	"driveMessageText.handle"
+]
 os = ["linux"]
+
+[native.bindings.resources.DriveMessageHandle]
+ownership = "unique"
+release = "driveMessageRelease"
+
+[native.bindings.copied-results.driveMessageText]
+kind = "string"
+owner = "handle"

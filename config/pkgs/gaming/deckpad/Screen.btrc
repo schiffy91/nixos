@@ -1,13 +1,12 @@
 import Library.Bytes;
+import Library.CLI;
 import Library.Console;
 import Library.FileSystem;
+import Library.Network;
 import Library.Process;
 import Library.Strings;
 import Library.Timer;
 import Library.Vector;
-
-#include <poll.h>
-#include <signal.h>
 
 // The Deck's own screen while it is a controller: black, at the lowest
 // brightness, so it neither glows in the player's hands nor takes a touch for
@@ -54,7 +53,7 @@ class Backlight {
 }
 
 class ControllerScreen {
-    private DeckScreen* window;
+    private DeckScreenHandle window;
     private int held;
     private int waiting;
     private Backlight backlight;
@@ -63,8 +62,9 @@ class ControllerScreen {
     // The notices are grey levels, one byte a pixel, made when the system was built.
     public ControllerScreen(string runtime, string notices, int width, int height, Backlight backlight) {
         self.runtime = runtime;
-        self.window = deckScreenOpen("Deck Pad");
-        if (self.window == NULL) { throw "No display to show the controller's screen on"; }
+        DeckScreenHandle? opened = deckScreenOpen("Deck Pad");
+        if (opened == null) { throw "No display to show the controller's screen on"; }
+        self.window = opened;
         self.held = self.notice(notices + "/held.grey", width, height);
         self.waiting = self.notice(notices + "/waiting.grey", width, height);
         self.backlight = backlight;
@@ -72,8 +72,8 @@ class ControllerScreen {
 
     private int notice(string path, int width, int height) {
         Bytes grey = FileSystem.readBytes(path);
-        if (width <= 0 || height <= 0 || grey.len != width * height) { return -1; }
-        return deckScreenAddNotice(self.window, grey.data, width, height);
+        if (width <= 0 || height <= 0 || grey.length() != width * height) { return -1; }
+        return deckScreenAddNoticeHex(self.window, grey.toHex(), width, height);
     }
 
     // Whether a host holds the controller: the service leaves a file named for
@@ -86,21 +86,14 @@ class ControllerScreen {
     }
 
     private bool signalled() {
-        sigset_t pending;
-        sigemptyset(&pending);
-        return sigpending(&pending) == 0 && (sigismember(&pending, (int)SIGINT) == 1 || sigismember(&pending, (int)SIGTERM) == 1 || sigismember(&pending, (int)SIGHUP) == 1);
+        return deckStopSignalled(true);
     }
 
     // Show the screen until the service is gone. True when the screen itself
     // was told to go (a touch while no host held the controller, or a stop
     // signal), which leaves the service to be stopped.
     public bool run() {
-        sigset_t stopping;
-        sigemptyset(&stopping);
-        sigaddset(&stopping, (int)SIGINT);
-        sigaddset(&stopping, (int)SIGTERM);
-        sigaddset(&stopping, (int)SIGHUP);
-        sigprocmask((int)SIG_BLOCK, &stopping, NULL);
+        deckBlockStopSignals(true);
         bool hosted = self.hosted();
         bool shown = false;
         bool painted = false;
@@ -135,14 +128,10 @@ class ControllerScreen {
                 shown = show;
                 painted = true;
             }
-            struct pollfd waiting;
-            waiting.fd = deckScreenDescriptor(self.window);
-            waiting.events = POLLIN;
-            waiting.revents = 0;
-            poll(&waiting, (nfds_t)1, 250);
+            PollSet.waitReadable(deckScreenDescriptor(self.window), 250);
         }
         self.backlight.darken(false);
-        deckScreenClose(self.window);
+        deckScreenShutdown(self.window);
         return asked;
     }
 }
@@ -150,14 +139,15 @@ class ControllerScreen {
 // deckpad-screen NOTICES WIDTH HEIGHT: NOTICES holds held.grey and
 // waiting.grey, each WIDTH x HEIGHT grey levels.
 int main(int argc, char** argv) {
-    if (argc < 4) {
+    var args = CLIArgs(argc, argv);
+    if (args.count() < 3) {
         Console.error("Usage: deckpad-screen NOTICES WIDTH HEIGHT");
         return 2;
     }
     try {
         string kept = Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/deckpad-screen-brightness";
         var backlight = Backlight(Environment.get("DECKPAD_BACKLIGHTS", "/sys/class/backlight"), kept);
-        var screen = ControllerScreen(Environment.get("DECKPAD_RUNTIME", "/run/deckpad"), Strings.copy(argv[1]), Strings.toInt(Strings.copy(argv[2])), Strings.toInt(Strings.copy(argv[3])), backlight);
+        var screen = ControllerScreen(Environment.get("DECKPAD_RUNTIME", "/run/deckpad"), args.get(0), Strings.toInt(args.get(1)), Strings.toInt(args.get(2)), backlight);
         if (screen.run()) { UnixShell().run("systemctl stop deckpad.service", logFailure=false); }
     } catch (string error) {
         Console.error(f"deckpad-screen: {error}");

@@ -8,59 +8,68 @@ import Library.USB.USBIP;
 import ./Protocol.btrc;
 import ./SecureRelay.btrc;
 
-#include <poll.h>
-#include <signal.h>
-#include <stdio.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <unistd.h>
+class DeckProcess {
+    class int parentPid() { return deckTunnelParentPid(); }
+    class int fork() { return deckTunnelFork(); }
+    class bool parentAlive(int parentPid) { return deckTunnelParentAlive(parentPid); }
+    class void exitNow(int code) { deckTunnelExit(code); }
+    class void wait(int childPid) { deckTunnelWait(childPid); }
+    class void terminate(int childPid) { deckTunnelTerminate(childPid); }
+    class void closeDescriptor(int descriptor) { deckCloseDescriptor(descriptor); }
+}
 
 // The controller's USB/IP stream in the clear, at one end of a socket pair. A
 // process of its own carries it to the controller and back through the secure
-// channel, so whoever holds the plain end -- the kernel's virtual host
-// controller, or a USB/IP host in a program -- needs to know nothing of it.
+// channel, so whoever holds the plain end, whether the kernel's virtual host
+// controller or a USB/IP host in a program, needs to know nothing of it.
 class ControllerTunnel {
     private TCPStream local;
-    private pid_t child;
+    private int child;
 
-    private ControllerTunnel(TCPStream local, pid_t child) {
+    private ControllerTunnel(TCPStream local, int child) {
         self.local = local;
         self.child = child;
     }
 
-    class void relay(SecureChannel channel, int descriptor, pid_t parent) {
-        SecureRelay relay = SecureRelay(channel, TCPStream.adopt(descriptor, IPv4Address.loopback()));
-        while (relay.step() && (pid_t)getppid() == parent) {
-            struct pollfd waiting[2];
-            int count = relay.watch(waiting, 2);
-            poll(waiting, (nfds_t)count, 1000);
+    class void relay(SecureChannel channel, TCPStream stream, int parent) {
+        SecureRelay relay = SecureRelay(channel, stream);
+        PollSet waiting = PollSet();
+        while (relay.step() && DeckProcess.parentAlive(parent)) {
+            waiting.clear();
+            relay.watchIn(waiting);
+            waiting.wait(1000);
         }
         relay.close();
     }
 
     class ControllerTunnel open(SecureChannel channel) {
-        int pair[2];
-        if (socketpair((int)AF_UNIX, (int)SOCK_STREAM, 0, pair) != 0) {
+        TCPStreamPair? maybePair = null;
+        try { maybePair = TCPStream.localPair(); } catch (string error) {
             channel.close();
             throw "Cannot create a socket pair";
         }
-        fflush(stdout);
-        fflush(stderr);
-        pid_t parent = getpid();
-        pid_t child = fork();
-        if (child < (pid_t)0) {
+        if (maybePair == null) {
+            channel.close();
+            throw "Cannot create a socket pair";
+        }
+        TCPStreamPair pair = maybePair;
+        int parent = DeckProcess.parentPid();
+        int child = DeckProcess.fork();
+        if (child < 0) {
+            pair.first.close();
+            pair.second.close();
             channel.close();
             throw "Cannot start the relay";
         }
-        if (child == (pid_t)0) {
-            close(pair[0]);
-            try { ControllerTunnel.relay(channel, pair[1], parent); } catch (string error) {}
-            _exit(0);
+        if (child == 0) {
+            DeckProcess.closeDescriptor(pair.first.detach());
+            try { ControllerTunnel.relay(channel, pair.second, parent); } catch (string error) {}
+            DeckProcess.exitNow(0);
         }
-        close(pair[1]);
+        DeckProcess.closeDescriptor(pair.second.detach());
         /* The relay carries the channel on; let go of this copy. */
         channel.abandon();
-        return ControllerTunnel(TCPStream.adopt(pair[0], IPv4Address.loopback()), child);
+        return ControllerTunnel(pair.first, child);
     }
 
     // The plain end.
@@ -68,14 +77,13 @@ class ControllerTunnel {
 
     // Wait until the relay ends: the controller left, or the plain end closed.
     public void wait() {
-        int status = 0;
-        if (self.child > (pid_t)0) { waitpid(self.child, &status, 0); }
-        self.child = (pid_t)0;
+        if (self.child > 0) { DeckProcess.wait(self.child); }
+        self.child = 0;
     }
 
     public void close() {
         self.local.close();
-        if (self.child > (pid_t)0) { kill(self.child, (int)SIGTERM); }
+        if (self.child > 0) { DeckProcess.terminate(self.child); }
         self.wait();
     }
 }
@@ -126,10 +134,7 @@ class ControllerHost {
     }
 
     class bool confirmed() {
-        char line[16];
-        memset(line, 0, sizeof(line));
-        fflush(stdout);
-        return fgets(line, 16, stdin) != NULL && (line[0] == 'y' || line[0] == 'Y');
+        return deckConfirmStdinYes();
     }
 
     // Trust the controller's key from now on. The Deck takes this host in only
@@ -183,7 +188,7 @@ class ControllerHost {
         /* The kernel holds the stream now; let go of this copy without
          * shutting the connection down under it. */
         int handed = tunnel.plain().detach();
-        if (handed >= 0) { close(handed); }
+        if (handed >= 0) { DeckProcess.closeDescriptor(handed); }
         if (!attached) { tunnel.close(); }
         else { tunnel.wait(); }
         USBIPAttachment.detachDevice(NetworkProtocol.deviceId());

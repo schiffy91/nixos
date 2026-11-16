@@ -12,10 +12,6 @@ import ./Protocol.btrc;
 import ./SecureRelay.btrc;
 import ./Trust.btrc;
 
-#include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 // The controller over the network. A host connects, both sides prove their
 // keys and the host is checked against the trusted ones; then USB/IP runs
 // inside the encrypted channel, and the host's kernel sees a wired controller.
@@ -108,33 +104,29 @@ class NetworkLink implements IControllerLink {
         SecureChannel? channel = null;
         try { channel = self.admit(stream); } catch (string error) { Console.error(f"deckpad: {stream.peer().toString()}: {error}"); }
         if (channel == null) { return; }
-        int pair[2];
-        if (socketpair((int)AF_UNIX, (int)SOCK_STREAM, 0, pair) != 0) {
+        TCPStreamPair? pair = null;
+        try { pair = TCPStream.localPair(); } catch (string error) {
             channel.close();
             return;
         }
-        self.exported = USBIPExport(self.device, TCPStream.adopt(pair[0], stream.peer()));
-        self.relay = SecureRelay(channel, TCPStream.adopt(pair[1], stream.peer()));
+        if (pair == null) {
+            channel.close();
+            return;
+        }
+        self.exported = USBIPExport(self.device, pair.first);
+        self.relay = SecureRelay(channel, pair.second);
         Console.error(f"deckpad: {self.host} attached over the network");
     }
 
-    public int watch(struct pollfd* descriptors, int capacity) {
+    public void watchIn(PollSet polls) {
         TCPListener? listener = self.listener;
         SecureRelay? relay = self.relay;
         USBIPExport? exported = self.exported;
-        int count = 0;
-        if (relay != null && exported != null && capacity >= 4) {
-            count = relay.watch(descriptors, capacity);
-            descriptors[count].fd = exported.handle();
-            descriptors[count].events = POLLIN;
-            descriptors[count].revents = 0;
-            count++;
+        if (relay != null && exported != null && polls.remaining() >= 3) {
+            relay.watchIn(polls);
+            polls.addReadable(exported.handle());
         }
-        if (listener == null || capacity < count + 1) { return count; }
-        descriptors[count].fd = listener.handle();
-        descriptors[count].events = POLLIN;
-        descriptors[count].revents = 0;
-        return count + 1;
+        if (listener != null) { polls.addReadable(listener.handle()); }
     }
 
     public void step() {

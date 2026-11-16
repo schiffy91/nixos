@@ -14,8 +14,6 @@ import ../store/StoreFile.btrc;
 import ../status/Held.btrc;
 import ./Planner.btrc;
 
-#include <time.h>
-
 // Sends what changed here to the Drive. The door writes each change to the journal before it happens; this reads
 // the journal, waits until a file has been quiet for a moment, and does what the planner says.
 class Uploader {
@@ -180,7 +178,7 @@ class Uploader {
         StoreFile? held = StoreFile.open(full);
         if (held == null) { return; }
         string folder = PathTools.dirname(path);
-        string date = DateTime.fromUnix((long long)time(NULL)).dateString();
+        string date = DateTime.fromUnix(StorePaths.nowSeconds()).dateString();
         string name = Planner.conflictName(PathTools.basename(path), self.machine, date);
         string kept = folder.isEmpty() || folder.equals(".") ? name : f"{folder}/{name}";
         for (int number = 2; FileSystem.exists(self.store.real(kept)) || FileSystem.isSymlink(self.store.real(kept)); number++) {  // a second conflict on one day must not replace the first
@@ -266,7 +264,7 @@ class Uploader {
             self.store.adopt(full, made, local);
             return true;
         }
-        if (!folder && (long long)time(NULL) * 1000LL - held.modified() < (long long)self.quietSeconds * 1000LL) { return false; }  // still being written
+        if (!folder && StorePaths.nowSeconds() * 1000LL - held.modified() < (long long)self.quietSeconds * 1000LL) { return false; }  // still being written
         if (id.isEmpty()) {
             string before = held.shape();
             DriveFile? sent = self.arrived(path, parent, name, held, false);

@@ -38,29 +38,29 @@ class DeckPad implements IPadSource {
             }
         }
         self.device = pad;
-        struct PadCommand command;
-        DeckCommand.clearMappings(&command);
-        self.command(&command);
-        DeckCommand.gamepadSettings(&command);
-        self.command(&command);
+        PadCommand command = PadCommand();
+        DeckCommand.clearMappings(command);
+        self.command(command);
+        DeckCommand.gamepadSettings(command);
+        self.command(command);
     }
 
     // One state report from interrupt endpoint 3, or false when none arrived in time.
-    public bool read(struct PadState* state, int timeoutMilliseconds) {
+    public bool read(PadState state, int timeoutMilliseconds) {
         USBHostDevice? pad = self.device;
         if (pad == null) { return false; }
         Bytes report = Bytes();
         int received = pad.transferIn(3, 64, report, timeoutMilliseconds > 0 ? timeoutMilliseconds : 1);
-        if (received == -ETIMEDOUT || received == -EINTR) { return false; }
+        if (deckTransferTimedOut(received)) { return false; }
         if (received < 0) { throw "The Steam Deck controller stopped answering"; }
-        return DeckReport.parse((unsigned char*)report.data, received, state);
+        return DeckReport.parse(report.slice(0, received), state);
     }
 
     // SET_REPORT, feature report 0, on the gamepad interface.
-    public void command(struct PadCommand* command) {
+    public void command(PadCommand command) {
         USBHostDevice? pad = self.device;
         if (pad == null) { return; }
-        Bytes report = Bytes.fromRaw((char*)command->bytes, command->length);
+        Bytes report = command.bytes.slice(0, command.length);
         while (report.length() < 64) { report.append(0); }
         pad.controlOut(USBSetup(0x21, 0x09, 0x0300, 2, 64), report, 500);
     }
@@ -68,9 +68,9 @@ class DeckPad implements IPadSource {
     public void close() {
         USBHostDevice? pad = self.device;
         if (pad == null) { return; }
-        struct PadCommand quiet;
-        DeckCommand.rumble(&quiet, 0, 0);
-        self.command(&quiet);
+        PadCommand quiet = PadCommand();
+        DeckCommand.rumble(quiet, 0, 0);
+        self.command(quiet);
         for (int number = 0; number < 3; number++) { pad.unclaim(number); }
         pad.close();
         self.device = null;

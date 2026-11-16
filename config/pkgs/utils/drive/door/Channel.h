@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -10,6 +11,23 @@
 
 // The door and the engine talk over one local socket that keeps message
 // boundaries and tells each side when the other is gone.
+
+typedef struct DriveMessageStorage {
+	char text[4096];
+	long status;
+} *DriveMessageHandle;
+
+static inline void driveMessageRelease(DriveMessageHandle handle) {
+	free(handle);
+}
+
+static inline long driveMessageStatus(DriveMessageHandle handle) {
+	return handle ? handle->status : -1;
+}
+
+static inline const char *driveMessageText(DriveMessageHandle handle) {
+	return handle && handle->status > 0 ? handle->text : "";
+}
 
 static inline int driveChannelAddress(struct sockaddr_un* address, const char* path) {
 	memset(address, 0, sizeof(*address));
@@ -53,17 +71,34 @@ static inline int driveChannelConnect(const char* path) {
 	return descriptor;
 }
 
+static inline void driveChannelClose(int descriptor) {
+	if (descriptor >= 0) { close(descriptor); }
+}
+
 // 0, or -1 when the other side is gone or not keeping up.
 static inline int driveChannelSend(int descriptor, const char* message) { return send(descriptor, message, strlen(message), MSG_NOSIGNAL | MSG_DONTWAIT) < 0 ? -1 : 0; }
 
-// One message into `message`: its length, 0 when none is waiting, or -1
-// when the other side is gone.
-static inline long driveChannelReceive(int descriptor, char* message, unsigned long capacity) {
-	ssize_t length = recv(descriptor, message, capacity - 1, MSG_DONTWAIT);
-	if (length < 0) { return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR ? 0 : -1; }
-	if (length == 0) { return -1; }
-	message[length] = 0;
-	return (long)length;
+// Receive one nonblocking message into a managed handle: status > 0 for message length,
+// 0 when none is waiting, or -1 when the other side is gone.
+static inline DriveMessageHandle driveChannelReceiveMessage(int descriptor) {
+	DriveMessageHandle handle = calloc(1, sizeof(*handle));
+	if (!handle) { return NULL; }
+	if (descriptor < 0) {
+		handle->status = -1;
+		return handle;
+	}
+	ssize_t length = recv(descriptor, handle->text, sizeof(handle->text) - 1, MSG_DONTWAIT);
+	if (length < 0) {
+		handle->status = (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? 0 : -1;
+		return handle;
+	}
+	if (length == 0) {
+		handle->status = -1;
+		return handle;
+	}
+	handle->text[length] = '\0';
+	handle->status = (long)length;
+	return handle;
 }
 
 // Wait until one of up to three descriptors can be read, at most

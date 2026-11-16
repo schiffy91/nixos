@@ -14,10 +14,6 @@ import ../store/StoreFile.btrc;
 import ../store/Volumes.btrc;
 import ./Channel.btrc;
 
-#include <errno.h>
-#include <fcntl.h>
-#include <time.h>
-
 class DoorOpen {  // one open file
     public StoreFile file;
     public string id;
@@ -95,7 +91,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
         self.listener = listener;
     }
 
-    private UserspaceError readOnlyError() { return UserspaceError.fromNative(EROFS); }
+    private UserspaceError readOnlyError() { return UserspaceError.fromNative(StorePaths.errnoRofs()); }
 
     public void lookup(UserspaceEntryReply reply, long parent, string name) { self.inner.lookup(reply, parent, name); }
 
@@ -119,20 +115,20 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
     }
 
     public void open(UserspaceOpenReply reply, long node, int flags) {
-        bool truncating = (flags & (int)O_TRUNC) != 0;
-        bool writing = (flags & (int)O_ACCMODE) != (int)O_RDONLY || truncating;
+        bool truncating = StorePaths.openTruncating(flags);
+        bool writing = StorePaths.openWriting(flags);
         if (writing && self.readOnly) {
             reply.fail(self.readOnlyError());
             return;
         }
         StoreFile? probed = StoreFile.reopen(self.inner.descriptor(node));
         if (probed == null) {
-            reply.fail(UserspaceError.fromNative(errno));
+            reply.fail(UserspaceError.fromNative(StorePaths.lastErrno()));
             return;
         }
         StoreFile probe = probed;
         bool cloud = probe.attribute("state").equals("cloud") && !self.unguarded;
-        long long today = (long long)time(NULL);
+        long long today = StorePaths.nowSeconds();
         if (today - probe.accessed() > 86400LL) { probe.setAccessed(today); }  // eviction takes the least recently opened; a day is fine enough
         if (writing) { self.note("changed", self.pathOf(node)); }
         if (!cloud || truncating) {
@@ -155,7 +151,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
     private void admit(UserspaceOpenReply reply, long node, int flags, bool writing, bool emptied) {
         StoreFile? opened = writing ? StoreFile.reopenAs(self.inner.descriptor(node), flags) : StoreFile.reopen(self.inner.descriptor(node));
         if (opened == null) {
-            reply.fail(UserspaceError.fromNative(errno));
+            reply.fail(UserspaceError.fromNative(StorePaths.lastErrno()));
             return;
         }
         if (emptied) { opened.setAttribute("state", "local"); }  // emptied on open: nothing of the old content is needed
@@ -302,7 +298,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
     public void removeDirectory(UserspaceDoneReply reply, long parent, string name) {
         string path = self.below(parent, name);
         if (self.readOnly) { reply.fail(self.readOnlyError()); }
-        else if (self.volumes.anchors(path)) { reply.fail(UserspaceError.fromNative(EBUSY)); }  // a folder kept on another volume, or one it is under
+        else if (self.volumes.anchors(path)) { reply.fail(UserspaceError.fromNative(StorePaths.errnoBusy())); }  // a folder kept on another volume, or one it is under
         else if (FileSystem.isDir(self.volumes.real(path)) && FileSystem.listDir(self.volumes.real(path)).len > 0) { reply.fail(UserspaceError.notEmpty()); }
         else if (self.discard(path)) { reply.done(); }
         else { self.inner.removeDirectory(reply, parent, name); }
@@ -315,7 +311,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
         }
         string target = self.below(newParent, newName);
         if (self.volumes.anchors(self.below(parent, name)) || self.volumes.anchors(target)) {
-            reply.fail(UserspaceError.fromNative(EBUSY));
+            reply.fail(UserspaceError.fromNative(StorePaths.errnoBusy()));
             return;
         }
         string full = self.volumes.real(target);
@@ -344,7 +340,7 @@ class Door implements IUserspaceFileSystem, IUserspaceWriter, IUserspaceLinker, 
             return;
         }
         long long size = self.opens.get(handle).file.size();
-        if ((long long)offset >= size) { reply.fail(UserspaceError.fromNative(ENXIO)); }
+        if ((long long)offset >= size) { reply.fail(UserspaceError.fromNative(StorePaths.errnoNxio())); }
         else { reply.offset(toHole ? (long)size : offset); }
     }
 

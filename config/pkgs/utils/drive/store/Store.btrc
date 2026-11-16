@@ -211,7 +211,7 @@ class Store {
     }
 
     // `wanted`, or the first "name (2).ext" that is free in `folder`.
-    private string free(string folder, string wanted) {
+    private string availableName(string folder, string wanted) {
         if (!FileSystem.exists(f"{folder}/{wanted}") && !FileSystem.isSymlink(f"{folder}/{wanted}")) { return wanted; }
         int dot = wanted.lastIndexOf(".");
         string stem = dot > 0 ? wanted.substring(0, dot) : wanted;
@@ -342,10 +342,10 @@ class Store {
         string folder = self.folderPath(file.parent);
         if (folder.isEmpty()) { return false; }
         string wanted = Store.localName(file.name) + (file.isDocument() ? ".gdoc" : "");
-        string local = self.free(folder, wanted);
+        string local = self.availableName(folder, wanted);
         string path = f"{folder}/{local}";
         if (file.isFolder()) {
-            if (FileSystem.mkdir(path, 493) != 0) { throw f"Cannot make the folder {path}"; }
+            if (FileSystem.mkdir(path, 0o755) != 0) { throw f"Cannot make the folder {path}"; }
             StoreFile? made = StoreFile.open(path);
             if (made == null) { throw f"Cannot open the folder {path}"; }
             self.describe(made, file, local);
@@ -404,7 +404,7 @@ class Store {
             path = self.standing(path);
         }
         string trash = self.volumes.home(path) + "/trash";
-        string kept = self.free(trash, id);
+        string kept = self.availableName(trash, id);
         if (self.folders.has(id)) {
             self.forgetBelow(path);
             self.folders.remove(id);
@@ -468,7 +468,7 @@ class Store {
             held.setAttribute("parent", file.parent);
             held.setAttribute("name", file.name);
             if (there != null && there.attribute("id").equals(file.id)) {  // otherwise it was moved here too, and that move is still to be sent
-                string local = self.free(target, Store.localName(file.name) + (file.isDocument() ? ".gdoc" : ""));
+                string local = self.availableName(target, Store.localName(file.name) + (file.isDocument() ? ".gdoc" : ""));
                 if (!self.rename(path, f"{target}/{local}")) { throw f"Cannot move {path}"; }
                 held.setAttribute("local", local);
                 self.settle(PathTools.dirname(path));

@@ -2,6 +2,7 @@ import Library.Bytes;
 import Library.Console;
 import Library.Crypto.Base64;
 import Library.Digest;
+import Library.FileSystem;
 import Library.HTTP;
 import Library.IO;
 import Library.JSON;
@@ -11,9 +12,6 @@ import Library.Vector;
 import ../remote/DriveApi.btrc;
 import ../remote/Transport.btrc;
 import ../store/StoreFile.btrc;
-
-#include <stdio.h>
-#include <sys/stat.h>
 
 // Signing in: Google's browser consent, answered to a listener on this machine, exchanged for a token that renews itself.
 class Login {
@@ -43,7 +41,7 @@ class Login {
         if (!server.start()) { throw f"Cannot listen on port {port} for Google's answer"; }
         Console.log("Open this in a browser signed in to the Google account:");
         Console.log(f"https://accounts.google.com/o/oauth2/v2/auth?client_id={HTTPUrl.encode(client.clientId)}&redirect_uri={HTTPUrl.encode(redirect)}&response_type=code&scope={HTTPUrl.encode(Strings.join(scopes, " "))}&access_type=offline&prompt=consent&state={state}&code_challenge={challenge}&code_challenge_method=S256");
-        fflush(stdout);
+        Console.flush();
         string code = "";
         for (int waited = 0; waited < waitSeconds && code.isEmpty(); waited += 2) {
             int connection = server.acceptConn();
@@ -77,11 +75,6 @@ class Login {
         stored.set("client_secret", JSONValue.makeString(credentials.clientSecret));
         stored.set("refresh_token", JSONValue.makeString(credentials.refreshToken));
         stored.set("scope", JSONValue.makeString(credentials.scope));
-        string staged = path + ".new";
-        unlink(staged);
-        mode_t before = umask((mode_t)63);  // no access for anyone else, from the first byte
-        bool written = Path.writeAll(staged, stored.document());
-        umask(before);
-        if (!written || rename(staged, path) != 0) { throw f"Cannot write {path}"; }
+        if (!FileSystem.writeAtomic(path, stored.document(), 0o600)) { throw f"Cannot write {path}"; }
     }
 }

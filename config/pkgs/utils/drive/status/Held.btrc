@@ -2,6 +2,7 @@ import Library.FileSystem;
 import Library.Strings;
 import Library.Vector;
 
+import ../store/StoreFile.btrc;
 import ./Progress.btrc;
 
 // One deletion the brake is holding: what the entry is on the side that still has it, and what the other
@@ -33,9 +34,7 @@ class HeldEntry {
 
     class string moment(long long milliseconds, string none) {
         if (milliseconds < 0LL) { return none; }
-        char text[32];
-        driveLocalTime((long)(milliseconds / 1000LL), text, 32UL);
-        return Strings.copy(text);
+        return StorePaths.formatLocalTime(milliseconds / 1000LL);
     }
 
     public string wasWhen() { return HeldEntry.moment(self.wasModified, ""); }

@@ -1,19 +1,15 @@
 import Library.Console;
 import Library.FileSystem;
+import Library.Network;
 import Library.Timer;
 import Library.Vector;
 import ./Controller.btrc;
 import ./Link.btrc;
 
-#include <errno.h>
-#include <poll.h>
-#include <signal.h>
-#include <string.h>
-
 // Something else the service's loop looks after between turns, such as the
 // control interface.
 interface IServiceTask {
-    int watch(struct pollfd* descriptors, int capacity);
+    void watchIn(PollSet polls);
     void step();
     void close();
 }
@@ -33,12 +29,16 @@ class ControllerService {
     private Vector<IControllerLink> links = [];
     private Vector<IServiceTask> tasks = [];
     private IPadUseListener? player = null;
+    private PollSet watched;
     private int holder = -1;
     private string runtime = "";
     private long long retryAt = 0LL;
     private bool stopped = false;
 
-    public ControllerService(VirtualController controller) { self.controller = controller; }
+    public ControllerService(VirtualController controller) {
+        self.controller = controller;
+        self.watched = PollSet();
+    }
 
     public void add(IControllerLink link) { self.links.push(link); }
 
@@ -121,17 +121,11 @@ class ControllerService {
     // Stop signals are held back and looked for each turn, so one never cuts
     // a transfer short.
     private void blockSignals() {
-        sigset_t stopping;
-        sigemptyset(&stopping);
-        sigaddset(&stopping, (int)SIGINT);
-        sigaddset(&stopping, (int)SIGTERM);
-        if (sigprocmask((int)SIG_BLOCK, &stopping, NULL) != 0) { throw "Cannot hold back stop signals"; }
+        if (!deckBlockStopSignals(false)) { throw "Cannot hold back stop signals"; }
     }
 
     private bool signalled() {
-        sigset_t pending;
-        sigemptyset(&pending);
-        return sigpending(&pending) == 0 && (sigismember(&pending, (int)SIGINT) == 1 || sigismember(&pending, (int)SIGTERM) == 1);
+        return deckStopSignalled(false);
     }
 
     // One turn. False once the service should stop.
@@ -147,13 +141,11 @@ class ControllerService {
             long long now = MonotonicClock.milliseconds();
             if (now - self.controller.usedAt() < 60000LL) { player.used(now); }
         }
-        struct pollfd watched[48];
-        memset(watched, 0, sizeof(watched));
-        int count = 0;
-        for link in self.links { count += link.watch(watched + count, 48 - count); }
-        for task in self.tasks { count += task.watch(watched + count, 48 - count); }
-        int ready = poll(watched, (nfds_t)count, self.controller.attached() ? 0 : idleMilliseconds);
-        if (ready < 0 && errno != EINTR) { throw "Cannot wait for hosts"; }
+        self.watched.clear();
+        for link in self.links { link.watchIn(self.watched); }
+        for task in self.tasks { task.watchIn(self.watched); }
+        int ready = self.watched.wait(self.controller.attached() ? 0 : idleMilliseconds);
+        if (ready < 0) { throw "Cannot wait for hosts"; }
         for link in self.links { link.step(); }
         for task in self.tasks { task.step(); }
         self.arbitrate();

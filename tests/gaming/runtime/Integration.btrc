@@ -31,7 +31,7 @@ class RuntimeTests {
     }
     public void credentials() {
         var directory = TestDirectory("runtime-credentials");
-        Check.that(FileSystem.mkdirp(directory.path("home")) == 0 && FileSystem.chmod(directory.path("home"), 0700) == 0, "private home");
+        Check.that(FileSystem.mkdirp(directory.path("home")) == 0 && FileSystem.chmod(directory.path("home"), 0o700) == 0, "private home");
         var config = JSONValue.makeObject();
         config.set("user", JSONValue.makeString(self.run("id", ["-un"]).trimmed()));
         config.set("home", JSONValue.makeString(directory.path("home"))); config.set("publicKeys", JSONValue.makeArray());
@@ -44,7 +44,7 @@ class RuntimeTests {
         var record = JSONValue.makeObject(); record.set("username", JSONValue.makeString("admin")); record.set("salt", JSONValue.makeString("0123456789abcdef"));
         record.set("password", JSONValue.makeString(CredentialDigest.hash("first-password", "0123456789abcdef")));
         var previous = JSONValue.parse(record.stringify()); previous.set("root", JSONValue.parse("{\"paired\":[\"client\"]}"));
-        Check.that(FileSystem.writeText(legacy, previous.stringify()) && FileSystem.chmod(legacy, 0644) == 0, "legacy pairing state");
+        Check.that(FileSystem.writeText(legacy, previous.stringify()) && FileSystem.chmod(legacy, 0o644) == 0, "legacy pairing state");
         var original = Path.readAll(legacy);
         self.run(self.tool("credentials"), [args.get(0), "prepare"]);
         var migrated = JSONValue.parse(Path.readAll(target));
@@ -72,13 +72,13 @@ class RuntimeTests {
             else if (kind.equals("fifo")) { self.command(["mkfifo", "-m", "600", target]); }
             else {
                 Check.that(FileSystem.writeText(target, kind.equals("malformed") ? "{invalid" : current), "unsafe credential fixture");
-                Check.that(FileSystem.chmod(target, kind.equals("public") ? 0644 : 0600) == 0, "fixture permission");
+                Check.that(FileSystem.chmod(target, kind.equals("public") ? 0o644 : 0o600) == 0, "fixture permission");
                 if (kind.equals("hardlink")) { self.command(["ln", target, directory.path("alias")]); }
             }
             self.run(self.tool("credentials"), [args.get(0), "provision"], payload, success=false);
             Check.equal(Path.readAll(legacy), original, "hostile credentials cannot alter pairing state");
             self.command(["rm", "-f", "--", target, directory.path("alias")]);
-            Check.that(FileSystem.writeText(target, current) && FileSystem.chmod(target, 0600) == 0, "restore fixture");
+            Check.that(FileSystem.writeText(target, current) && FileSystem.chmod(target, 0o600) == 0, "restore fixture");
         }
         print("Credential migration, Unicode hashing, concurrent writes and unsafe-file rejection passed");
     }

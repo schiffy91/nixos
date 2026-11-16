@@ -9,19 +9,26 @@
 /* One black, full-screen X11 window that can show a grey picture in its
  * middle. Xlib's event union and its macros are kept on this side; Screen.btrc
  * decides what to show and when. */
-typedef struct DeckScreen {
+typedef struct DeckScreenStorage {
 	Display* display;
 	Window window;
 	GC context;
 	XImage* notices[4];
 	int count;
-} DeckScreen;
+} *DeckScreenHandle;
+
+static inline int deckScreenHexDigit(char ch) {
+	if (ch >= '0' && ch <= '9') { return ch - '0'; }
+	if (ch >= 'a' && ch <= 'f') { return 10 + (ch - 'a'); }
+	if (ch >= 'A' && ch <= 'F') { return 10 + (ch - 'A'); }
+	return -1;
+}
 
 /* NULL when there is no display to open. */
-static inline DeckScreen* deckScreenOpen(const char* title) {
+static inline DeckScreenHandle deckScreenOpen(const char* title) {
 	Display* display = XOpenDisplay(NULL);
 	if (display == NULL) { return NULL; }
-	DeckScreen* screen = calloc(1, sizeof(DeckScreen));
+	DeckScreenHandle screen = calloc(1, sizeof(*screen));
 	if (screen == NULL) { XCloseDisplay(display); return NULL; }
 	int number = DefaultScreen(display);
 	screen->display = display;
@@ -44,15 +51,22 @@ static inline DeckScreen* deckScreenOpen(const char* title) {
 	return screen;
 }
 
-/* Keep a picture of width x height grey levels, one byte a pixel. Its number
- * for deckScreenPaint, or -1 when it cannot be shown here. */
-static inline int deckScreenAddNotice(DeckScreen* screen, const char* grey, int width, int height) {
+/* Keep a picture of width x height grey levels encoded as two hex digits per
+ * pixel. Its number for deckScreenPaint, or -1 when it cannot be shown here. */
+static inline int deckScreenAddNoticeHex(DeckScreenHandle screen, const char* hex, int width, int height) {
+	if (screen == NULL || screen->display == NULL || hex == NULL) { return -1; }
 	int number = DefaultScreen(screen->display);
 	if (screen->count >= 4 || width <= 0 || height <= 0 || DefaultDepth(screen->display, number) < 24) { return -1; }
-	char* pixels = malloc((size_t)width * (size_t)height * 4);
+	size_t count = (size_t)width * (size_t)height;
+	if (strlen(hex) < count * 2) { return -1; }
+	char* pixels = malloc(count * 4);
 	if (pixels == NULL) { return -1; }
-	for (size_t index = 0; index < (size_t)width * (size_t)height; index++) {
-		pixels[index * 4] = pixels[index * 4 + 1] = pixels[index * 4 + 2] = grey[index];
+	for (size_t index = 0; index < count; index++) {
+		int hi = deckScreenHexDigit(hex[index * 2]);
+		int lo = deckScreenHexDigit(hex[index * 2 + 1]);
+		if (hi < 0 || lo < 0) { free(pixels); return -1; }
+		char level = (char)((hi << 4) | lo);
+		pixels[index * 4] = pixels[index * 4 + 1] = pixels[index * 4 + 2] = level;
 		pixels[index * 4 + 3] = 0;
 	}
 	XImage* image = XCreateImage(screen->display, DefaultVisual(screen->display, number), (unsigned int)DefaultDepth(screen->display, number), ZPixmap, 0, pixels, (unsigned int)width, (unsigned int)height, 32, 0);
@@ -63,7 +77,8 @@ static inline int deckScreenAddNotice(DeckScreen* screen, const char* grey, int 
 
 /* Take what the server sent. Bit 1: the screen was touched or a key pressed;
  * bit 2: the window needs painting again. */
-static inline int deckScreenEvents(DeckScreen* screen) {
+static inline int deckScreenEvents(DeckScreenHandle screen) {
+	if (screen == NULL || screen->display == NULL) { return 0; }
 	int seen = 0;
 	while (XPending(screen->display) > 0) {
 		XEvent event;
@@ -75,7 +90,8 @@ static inline int deckScreenEvents(DeckScreen* screen) {
 }
 
 /* Black, with the numbered notice in the middle; any other number is black alone. */
-static inline void deckScreenPaint(DeckScreen* screen, int notice) {
+static inline void deckScreenPaint(DeckScreenHandle screen, int notice) {
+	if (screen == NULL || screen->display == NULL) { return; }
 	XClearWindow(screen->display, screen->window);
 	if (notice >= 0 && notice < screen->count) {
 		XImage* image = screen->notices[notice];
@@ -88,9 +104,19 @@ static inline void deckScreenPaint(DeckScreen* screen, int notice) {
 }
 
 /* The connection to wait on for the next event. */
-static inline int deckScreenDescriptor(DeckScreen* screen) { return ConnectionNumber(screen->display); }
+static inline int deckScreenDescriptor(DeckScreenHandle screen) {
+	return screen != NULL && screen->display != NULL ? ConnectionNumber(screen->display) : -1;
+}
 
-static inline void deckScreenClose(DeckScreen* screen) {
-	XCloseDisplay(screen->display);
+static inline void deckScreenShutdown(DeckScreenHandle screen) {
+	if (screen != NULL && screen->display != NULL) {
+		XCloseDisplay(screen->display);
+		screen->display = NULL;
+	}
+}
+
+static inline void deckScreenClose(DeckScreenHandle screen) {
+	if (screen == NULL) { return; }
+	deckScreenShutdown(screen);
 	free(screen);
 }

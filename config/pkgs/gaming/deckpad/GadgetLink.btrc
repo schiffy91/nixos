@@ -1,10 +1,9 @@
+import Library.Network;
 import Library.USB.USBGadget;
 import Library.USB.USBVirtualDevice;
 import ./Controller.btrc;
 import ./ControllerUSB.btrc;
 import ./Link.btrc;
-
-#include <poll.h>
 
 // The controller over a USB cable: the Deck's USB-C port acting as a device.
 // Whatever the cable reaches sees a wired Steam Controller. The cable is the
@@ -35,9 +34,9 @@ class GadgetLink implements IControllerLink {
         self.gadget = USBGadget.open(self.device, GadgetLink.gadgetName());
     }
 
-    public int watch(struct pollfd* descriptors, int capacity) {
+    public void watchIn(PollSet polls) {
         USBGadget? gadget = self.gadget;
-        return gadget != null ? gadget.watch(descriptors, capacity) : 0;
+        if (gadget != null) { gadget.watchIn(polls); }
     }
 
     public void step() {

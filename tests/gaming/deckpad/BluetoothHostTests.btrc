@@ -1,9 +1,9 @@
 import Library.Bluetooth;
 import Library.Bytes;
 import Library.CLI;
+import Library.Testing;
 import Library.Timer;
-import ../../../config/pkgs/gaming/deckpad/SteamController.btrc;
-import ../../lib/Check.btrc;
+import deckpad.SteamController;
 
 // A Bluetooth host for the served controller, on a second adapter of the same
 // machine: it pairs, opens the HID channels and reads the controller as a
@@ -15,10 +15,10 @@ class DeckpadBluetoothHost {
         BluetoothAdapter host = BluetoothAdapter.open(hostName, unused);
         BluetoothAdapter probe = BluetoothAdapter.open(deviceName, unused);
         BluetoothAddress device = probe.address();
-        Check.that(probe.alias().equals("Steam Controller"), "the adapter carries the controller's name");
+        Expect.strEq(probe.alias(), "Steam Controller");
         probe.close();
         // A host is a machine people pair things with.
-        Check.that(host.setPowered(true) && host.allowPairing(true), "the host adapter can pair");
+        Expect.isTrue(host.setPowered(true) && host.allowPairing(true));
         L2CAPChannel control = L2CAPChannel.connect(host.address(), device, BLUETOOTH_HID_CONTROL, L2CAP_SECURITY_ENCRYPTED, 30000);
         L2CAPChannel interrupt = L2CAPChannel.connect(host.address(), device, BLUETOOTH_HID_INTERRUPT, L2CAP_SECURITY_ENCRYPTED, 30000);
 
@@ -29,29 +29,29 @@ class DeckpadBluetoothHost {
         while (MonotonicClock.before(deadline)) {
             Bytes report = Bytes();
             int length = interrupt.receive(report, 2000);
-            Check.that(length > 0 && report.get(0) == 0xA1, "input reports arrive on the interrupt channel");
+            Expect.isTrue(length > 0 && report.get(0) == 0xA1);
             if (report.get(1) == STEAM_REPORT_BATTERY) { battery = length == 16; continue; }
-            Check.that(report.get(1) == STEAM_REPORT_STATE_BLUETOOTH && length == 1 + STEAM_STATE_LENGTH_BLUETOOTH, "the state travels as report 0x45");
+            Expect.isTrue(report.get(1) == STEAM_REPORT_STATE_BLUETOOTH && length == 1 + STEAM_STATE_LENGTH_BLUETOOTH);
             // Reports may be skipped when the radio is behind, never reordered.
             int sequence = report.get(2);
-            if (last >= 0) { Check.that(((sequence - last) & 0xFF) >= 1 && ((sequence - last) & 0xFF) < 128, "states arrive in order"); }
+            if (last >= 0) { Expect.isTrue(((sequence - last) & 0xFF) >= 1 && ((sequence - last) & 0xFF) < 128); }
             last = sequence;
             states++;
         }
-        Check.that(states >= 40 && battery, f"states and the battery report keep coming ({states} in 4 s)");
+        Expect.isTrue(states >= 40 && battery);
 
         Bytes ask = Bytes();
         ask.append(0x43);
         ask.append(STEAM_REPORT_FEATURE);
         Bytes feature = Bytes();
-        Check.that(control.send(ask, 2000) && control.receive(feature, 5000) == 65 && feature.get(0) == 0xA3 && feature.get(1) == STEAM_REPORT_FEATURE, "feature report 1 is read on the control channel");
+        Expect.isTrue(control.send(ask, 2000) && control.receive(feature, 5000) == 65 && feature.get(0) == 0xA3 && feature.get(1) == STEAM_REPORT_FEATURE);
         Bytes rumble = Bytes();
         rumble.append(0xA2);
         rumble.append(STEAM_OUT_RUMBLE);
         for (int index = 0; index < 9; index++) { rumble.append(0); }
-        Check.that(interrupt.send(rumble, 2000), "output reports go out on the interrupt channel");
+        Expect.isTrue(interrupt.send(rumble, 2000));
         Bytes later = Bytes();
-        Check.that(interrupt.receive(later, 2000) > 0 && later.get(0) == 0xA1, "and input keeps coming after one");
+        Expect.isTrue(interrupt.receive(later, 2000) > 0 && later.get(0) == 0xA1);
         interrupt.close();
         control.close();
         host.close();
@@ -60,7 +60,7 @@ class DeckpadBluetoothHost {
 
 int main(int argc, char** argv) {
     var args = CLIArgs(argc, argv);
-    Check.that(args.count() == 2, "expected the controller's adapter and the host's");
+    Expect.intEq(args.count(), 2);
     DeckpadBluetoothHost.run(args.get(0), args.get(1));
     print("PASS: deckpad paired and served over Bluetooth");
     return 0;
