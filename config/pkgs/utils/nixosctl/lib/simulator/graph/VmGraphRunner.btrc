@@ -2,6 +2,7 @@ import Library.Console;
 import Library.FileSystem;
 import Library.Graph;
 import Library.Map;
+import Library.Network;
 import Library.Process;
 import Library.Set;
 import Library.Strings;
@@ -358,10 +359,17 @@ class VmGraphRunner {
 
     // How many nodes run at once: `--arg jobs=N`, or one for every four processors, since a VM is given four.
     public int jobLimit() {
-        if (self.args.has("jobs")) { return Strings.toInt(self.args.get("jobs")) < 1 ? 1 : Strings.toInt(self.args.get("jobs")); }
-        var processors = UnixShell().run("nproc");
-        int count = processors.ok() ? Strings.toInt(processors.trimmed()) / 4 : 1;
-        return count < 1 ? 1 : count;
+        if (self.args.has("jobs")) {
+            int asked = Strings.toInt(self.args.get("jobs"));
+            return asked < 1 ? 1 : asked;
+        }
+        int processors = 0;
+        if (FileSystem.exists("/proc/cpuinfo")) {
+            for line in Strings.split(Path.readAll("/proc/cpuinfo"), "\n") {
+                if (line.startsWith("processor")) { processors++; }
+            }
+        }
+        return processors < 8 ? 1 : processors / 4;
     }
 
     // The memory the running nodes may be given together, in megabytes: `--arg memoryBudget=48G`,
@@ -372,6 +380,7 @@ class VmGraphRunner {
             asked.memory = self.args.get("memoryBudget");
             return asked.memoryMegabytes();
         }
+        if (!FileSystem.exists("/proc/meminfo")) { return 8192; }
         for line in Strings.split(Path.readAll("/proc/meminfo"), "\n") {
             if (!line.startsWith("MemTotal:")) { continue; }
             var fields = Strings.split(line.replace("MemTotal:", "").trim(), " ");
@@ -381,8 +390,12 @@ class VmGraphRunner {
     }
 
     private bool listening(int port) {
-        var probe = f"exec 3<>/dev/tcp/127.0.0.1/{port}";
-        return UnixShell().run(f"bash -c {ShellWords.quote(probe)} 2>/dev/null", logFailure=false).ok();
+        try {
+            TCPStream.connect(IPv4Address.loopback(), port, 200).close();
+            return true;
+        } catch (string refused) {
+            return false;
+        }
     }
 
     // A port no running node has and nothing on this machine answers on.
@@ -414,9 +427,9 @@ class VmGraphRunner {
             return GraphJob(node.id, BackgroundProcess.start(command.get(0), command.slice(1, command.length), killOnDrop=true), spec.memoryMegabytes(), port, log);
         }
         FileSystem.mkdirp(PathTools.dirname(log));
-        var script = "exec";
-        for word in command { script = script + " " + ShellWords.quote(word); }
-        script = script + f" > {ShellWords.quote(log)} 2>&1 < /dev/null";
+        Vector<string> words = ["exec"];
+        for word in command { words.push(ShellWords.quote(word)); }
+        var script = f"{words.join(" ")} > {ShellWords.quote(log)} 2>&1 < /dev/null";
         return GraphJob(node.id, BackgroundProcess.start("sh", ["-c", script], killOnDrop=true), spec.memoryMegabytes(), port, log);
     }
 
@@ -431,9 +444,10 @@ class VmGraphRunner {
         return result;
     }
 
-    private string tail(string path, int lines) {
-        var shown = UnixShell().run(f"tail -n {lines} {ShellWords.quote(path)}", logFailure=false);
-        return shown.ok() ? shown.stdout() : "";
+    private string tail(string path, int count) {
+        if (!FileSystem.exists(path)) { return ""; }
+        var lines = Strings.split(Path.readAll(path).trim(), "\n");
+        return lines.slice(lines.length > count ? lines.length - count : 0, lines.length).join("\n");
     }
 
     public int run(Vector<string> targets) {

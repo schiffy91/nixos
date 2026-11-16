@@ -142,11 +142,11 @@ class E2eCli {
             var code = runner.runRequired();
             return code;
         }
-        if (action.equals("run-node")) {  // one node, in a child the runner started
+        if (action == "run-node") {  // one node, in a child the runner started
             var code = runner.runNode(args.get(3));
             return code;
         }
-        if (action.equals("gc")) {
+        if (action == "gc") {
             var code = runner.collect(CLICommandLine.parse(args).has("--dry-run"));
             return code;
         }

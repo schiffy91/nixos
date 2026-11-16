@@ -243,7 +243,7 @@ class VmTestSpec {
             /* graph plumbing, not state: never affects what a node actually produces */
             if (key.equals("graphName") || key.equals("nodeId") || key.equals("workspaceRoot")) { continue; }
             /* how a run is scheduled, not what it produces: the port its VM answers on and the runner's own switches */
-            if (key.equals("sshPort") || key.equals("force") || key.equals("jobs") || key.equals("memoryBudget")) { continue; }
+            if (key == "sshPort" || key == "force" || key == "jobs" || key == "memoryBudget") { continue; }
             /* sourceHash covers the whole repo tree; only fold it in when a node's own
                material opts in, so unrelated nodes (e.g. installer-download) aren't
                invalidated by edits to code they never touch. Nodes that build from this
