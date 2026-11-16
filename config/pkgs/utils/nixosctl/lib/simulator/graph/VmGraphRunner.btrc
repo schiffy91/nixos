@@ -43,7 +43,7 @@ class VmGraphRunner {
         var root = self.graph.resolvedWorkspaceRoot();
         var hashPipeline = "cd " + ShellWords.quote(root)
             + " && find ."
-            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './secrets' -o -path './.agents' -o -path './.claude' -o -path './.codex' -o -path './.gemini' -o -path './result' \\) -prune"
+            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './secrets' -o -path './.agents' -o -path './.claude' -o -path './.codex' -o -path './.gemini' -o -path './result' -o -name '.btrc-cache' -o -name '__pycache__' \\) -prune"
             + " -o -type f"
             + " ! -name '.DS_Store'"
             + " ! -name '._*'"

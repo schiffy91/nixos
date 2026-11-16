@@ -48,6 +48,10 @@ class SourceHashTests {
         }
         for excluded in ["build", ".vm"] { self.fixture.write(f"{excluded}/generated.cpp", "constexpr int generated = 1;\n"); }
         Check.equal(self.run(self.extensions.len + 1), previous, "generated outputs excluded from source identity");
+        for cache in ["tests/suite/.btrc-cache/unit.c", "tests/suite/.btrc-cache/nested/manifest.json", "tools/__pycache__/helper.py"] { self.fixture.write(cache, "cached = 1\n"); }
+        Check.equal(self.run(self.extensions.len + 1), previous, "compiler and interpreter caches excluded from source identity");
+        self.fixture.write("tests/suite/Unit.btrc", "int main() { return 0; }\n");
+        Check.that(!self.run(self.extensions.len + 2).equals(previous), "a source beside a cache still counts");
         self.fixture.close();
     }
 }
@@ -55,6 +59,6 @@ class SourceHashTests {
 int main() {
     try {
         SourceHashTests(Platform.currentDirectory()).check();
-        print("PASS: C++ and JavaScript content invalidates graph cache; unchanged content reuses it"); return 0;
+        print("PASS: source content invalidates the graph cache; unchanged content, generated outputs and caches do not"); return 0;
     } catch (string error) { print(error); return 1; }
 }

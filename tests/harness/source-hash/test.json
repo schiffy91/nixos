@@ -8,7 +8,7 @@
       "op": "host",
       "command": "make build/source-hash-test && ./build/source-hash-test",
       "timeout": 120,
-      "expect": "PASS: C++ and JavaScript content invalidates graph cache; unchanged content reuses it"
+      "expect": "PASS: source content invalidates the graph cache; unchanged content, generated outputs and caches do not"
     },
     { "op": "record-state" }
   ]
