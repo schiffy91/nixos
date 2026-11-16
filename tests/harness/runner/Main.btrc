@@ -199,6 +199,19 @@ class GraphRunnerTests {
         Check.exited(self.run(["run", "m1", "m2", "--arg", "jobs=4", "--arg", "memoryBudget=16G", "--arg", "force=true"]), 1);
     }
 
+    // A state built on another takes over its SSH key; ssh will not use a private key that others can read.
+    public void inheritedKey() {
+        self.node("keyholder", "mkdir -p {{workDirShell}} && printf 'private\\n' > {{workDirShell}}/id_ed25519 && chmod 600 {{workDirShell}}/id_ed25519 && printf 'public\\n' > {{workDirShell}}/id_ed25519.pub");
+        var heir = JSONValue.parse("{\"name\":\"heir\",\"state\":\"heir\",\"stateMaterial\":\"heir\",\"parentState\":\"keyholder\",\"operations\":[{\"op\":\"inherit-state\"},{\"op\":\"host\",\"command\":\"stat -c '%a %n' {{workDirShell}}/id_ed25519 {{workDirShell}}/id_ed25519.pub | cut -d/ -f1 | tr -d '\\\\n'\",\"expect\":\"600 644 \"},{\"op\":\"record-state\"}]}");
+        heir.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
+        heir.set("workDir", JSONValue.makeString(self.fixture.path(".vm/heir-{{stateHashShort}}")));
+        heir.set("iso", JSONValue.makeString(self.fixture.path(".vm/iso/none.iso")));
+        self.fixture.json("heir.json", heir);
+        self.graph(self.entry("keyholder") + "," + self.entry("heir", "keyholder"));
+        var inherited = self.run(["run", "heir", "--arg", "jobs=1"]);
+        Check.that(inherited.code == 0, f"an inherited private key stays private: {self.said(inherited)}");
+    }
+
     public void close() { self.fixture.close(); }
 }
 
@@ -209,6 +222,7 @@ int main() {
         tests.collection();
         tests.oneAtATime();
         tests.together();
+        tests.inheritedKey();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }

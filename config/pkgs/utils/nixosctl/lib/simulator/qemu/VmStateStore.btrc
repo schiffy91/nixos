@@ -76,9 +76,9 @@ class VmStateStore {
         }
     }
 
-    public void copyIfExists(string source, string target) {
+    public void copyIfExists(string source, string target, int mode = 0o644) {
         if (!FileSystem.exists(source)) { return; }
-        if (!FileSystem.copyFile(source, target)) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
+        if (!FileSystem.copyFile(source, target, mode)) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
     }
 
     public void copyTreeIfExists(string source, string target) {
@@ -120,9 +120,9 @@ class VmStateStore {
             if (!result.ok()) { NixosLog.fatal("Failed to create qcow2 state delta for " + self.spec.state); }
             Path.writeAll(self.backingDiskFile(), backing + "\n");
         }
-        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519"), self.sshKeyPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519"), self.sshKeyPath(), 0o600);  // ssh refuses a private key that others can read
         self.copyIfExists(PathTools.join(parentWorkDir, "id_ed25519.pub"), self.sshPubKeyPath());
-        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmware.firmwareVarsPath());
+        self.copyIfExists(PathTools.join(parentWorkDir, "edk2-vars.fd"), self.firmware.firmwareVarsPath(), 0o600);
         self.copyTreeIfExists(PathTools.join(parentWorkDir, "tpm"), self.firmware.tpmDir());
     }
 
