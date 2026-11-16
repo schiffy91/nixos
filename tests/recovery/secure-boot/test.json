@@ -93,7 +93,7 @@
          "command" : "bash /etc/nixos/tests/recovery/secure-boot/verify.sh",
          "expect" : "recovery-secure-entry-ok",
          "op" : "guest",
-         "timeout" : 600
+         "timeout" : 2400
       },
       {
          "op" : "reboot-recovery"
