@@ -389,21 +389,24 @@ class VmGraphRunner {
         return 8192;
     }
 
-    private bool listening(int port) {
+    // Whether something already listens on the port, found by trying to take it. Connecting to it
+    // instead would reach another run's VM: its sshd counts a connection that never authenticates
+    // against this host and then refuses the next ones.
+    private bool occupied(int port) {
         try {
-            TCPStream.connect(IPv4Address.loopback(), port, 200).close();
-            return true;
-        } catch (string refused) {
+            TCPListener.listen(IPv4Address.any(), port).close();
             return false;
+        } catch (string inUse) {
+            return true;
         }
     }
 
-    // A port no running node has and nothing on this machine answers on.
+    // A port no running node has and nothing on this machine listens on.
     private int freePort(Vector<GraphJob> running) {
         for (int port = 22300; port < 22600; port++) {
             var taken = false;
             for job in running { if (job.port == port) { taken = true; } }
-            if (!taken && !self.listening(port)) { return port; }
+            if (!taken && !self.occupied(port)) { return port; }
         }
         NixosLog.fatal("No free port for a VM between 22300 and 22599");
         return 0;

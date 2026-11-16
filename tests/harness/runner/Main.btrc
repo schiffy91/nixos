@@ -1,4 +1,5 @@
 import Library.CLI;
+import Library.Network;
 import Library.Platform;
 import ../../lib/OwnedProcess.btrc;
 import ../../lib/TestDirectory.btrc;
@@ -128,7 +129,7 @@ class GraphRunnerTests {
     }
 
     public void oneAtATime() {
-        self.node("held", "sleep 4");
+        self.node("held", "sleep 12");
         self.graph("{\"id\":\"held\",\"spec\":\"held.json\"}");
         var running = OwnedProcess(PathTools.join(self.root, "build/nixosctl"), self.command(["run", "held"]), self.fixture.path("held.log"), self.fixture.path(), [f"NIXOS_CONFIG_ROOT={self.root}"]);
         try {
@@ -136,9 +137,10 @@ class GraphRunnerTests {
             while (!Path.readAll(self.fixture.path("held.log")).contains("run held") && MonotonicClock.before(deadline)) { Timer.sleepMillis(50); }
             for action in ["gc", "run"] {
                 var refused = self.run([action, "held"]);
+                Check.that(running.running(), f"the holding run ended before {action} could be tried against it");
                 Check.that(refused.code != 0 && self.said(refused).contains("while another graph run or collection holds"), f"{action} is refused while a run holds the workspace: {self.said(refused)}");
             }
-            Check.that(running.wait(MonotonicClock.deadlineAfter(20000)) == 0, "the run that held the workspace passes");
+            Check.that(running.wait(MonotonicClock.deadlineAfter(40000)) == 0, "the run that held the workspace passes");
         } finally { running.close(); }
         Check.exited(self.run(["gc"]));
     }
@@ -212,6 +214,25 @@ class GraphRunnerTests {
         Check.that(inherited.code == 0, f"an inherited private key stays private: {self.said(inherited)}");
     }
 
+    private TCPListener heldPort() {
+        for (int port = 22300; port < 22600; port++) {
+            try { return TCPListener.listen(IPv4Address.any(), port); } catch (string busy) {}
+        }
+        throw "FAIL: no port to hold";
+    }
+
+    // A port something else listens on is passed over without a connection to whatever holds it.
+    public void occupiedPort() {
+        var held = self.heldPort();
+        var given = self.fixture.path("given-port");
+        self.node("porter", f"printf '%s' {{{{sshPort}}}} > {ShellWords.quote(given)}");
+        self.graph(self.entry("porter"));
+        Check.exited(self.run(["run", "porter", "--arg", "jobs=2"]));
+        Check.that(Strings.toInt(Path.readAll(given)) > held.port(), f"the node is given a port past the one in use: {Path.readAll(given)} after {held.port()}");
+        Check.that(held.accept(300) == null, "nothing connected to the port in use");
+        held.close();
+    }
+
     public void close() { self.fixture.close(); }
 }
 
@@ -223,6 +244,7 @@ int main() {
         tests.oneAtATime();
         tests.together();
         tests.inheritedKey();
+        tests.occupiedPort();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }
