@@ -189,6 +189,7 @@ unit: $(UNIT_BINS) $(BUILD_DIR)/boot-evidence-test
 	@for test in $(UNIT_BINS); do ./$$test < /dev/null || exit 1; done  # closed stdin: prompts must not spin
 	./$(BUILD_DIR)/boot-evidence-test
 	bash tests/core/shell_tools.sh
+	bash tests/ci/checks_script.sh
 
 quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
