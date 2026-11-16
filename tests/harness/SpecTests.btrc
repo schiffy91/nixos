@@ -1,5 +1,7 @@
+import Library.Graph;
 import Library.Testing;
 import ../../config/pkgs/utils/nixosctl/lib/simulator/spec/VmSpecParser.btrc;
+import ../../config/pkgs/utils/nixosctl/lib/simulator/spec/ShellStatements.btrc;
 
 int main() {
     var spec = VmSpecParser.parse("{\"name\":\"nested\",\"args\":{\"enabled\":true},\"operations\":[{\"op\":\"host\",\"command\":\"printf state\",\"expect\":\"state\"}]}");
@@ -19,5 +21,43 @@ int main() {
         Expect.isTrue(rejected);
     }
     print("PASS: structured scenario parser rejects malformed/empty operations and invalid field types");
+
+    for swallowed in [
+        "set -e; ! grep -F gone list; printf ok",
+        "! grep -F gone list; printf ok",
+        "set -e\n! grep gone list\nprintf ok",
+        "set -e; if true; then ! grep gone list; fi; printf ok",
+        "set -e; for i in 1 2; do ! grep gone list; done; printf ok",
+        "set -e; { ! grep gone list; }; printf ok",
+        "set -e; ( ! grep gone list ); printf ok",
+        "set -e; quiet() { ! grep gone list; printf done; }; quiet",
+        "set -e; ! grep \"${name}\" list; printf ok"
+    ] {
+        Expect.isTrue(ShellStatements.bareNegation(swallowed) != null);
+    }
+    Expect.strEq(ShellStatements.bareNegation("set -e; ! grep -F gone list | head; printf ok") ?? "", "! grep -F gone list | head");
+    for sound in [
+        "set -e; if grep -F gone list; then exit 1; fi; printf ok",
+        "if ! grep gone list; then printf ok; fi",
+        "while ! test -e ready; do sleep 1; done",
+        "until ! pgrep qemu; do sleep 1; done",
+        "accepts new && ! accepts old && printf ok || { diag; exit 1; }",
+        "test ! -e /root/gone; [ ! -d /x ]; [[ ! -f /y ]]",
+        "printf '%s' 'a; ! b'; echo \"x; ! y\"",
+        "timeout 5 bash -c 'until ! grep -q busy log; do sleep 1; done'",
+        "echo done!; echo \\! x",
+        "test \"$a\" != \"$b\"; printf ok",
+        "set -e; printf '%s\n' \"$verify\"; ! printf '%s\n' \"$verify\" | grep -q 'is not signed'",
+        "quiet() { ! journalctl -b | grep -Fq failed; }; start && quiet && printf ok || exit 1",
+        "cat > helpers.sh <<'EOF'\nquiet() { ! grep -q failed log; }\nEOF"
+    ] {
+        Expect.isTrue(ShellStatements.bareNegation(sound) == null);
+    }
+    var refused = "";
+    try { VmSpecParser.checked(VmSpecParser.parse("{\"operations\":[{\"op\":\"guest\",\"command\":\"set -e; ! grep gone list; printf ok\"}]}"), "fixture"); } catch (string error) { refused = error; }
+    Expect.isTrue(refused.contains("fixture: `! grep gone list` does not stop the step"));
+    var graph = GraphParser.readFile("tests/graph.json");
+    for node in graph.nodes { VmSpecParser.readFile(graph.resolvedSpecPath(node)); }  // throws on a spec with a bare negation
+    print(f"PASS: a `! command` statement whose status nothing uses is refused, and none of the graph's {graph.nodes.length} specs has one");
     return 0;
 }

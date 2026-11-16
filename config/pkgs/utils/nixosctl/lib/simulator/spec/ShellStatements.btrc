@@ -1,0 +1,83 @@
+import Library.Strings;
+import Library.Vector;
+
+// A statement written `! command` does not stop a step: `set -e` ignores a negated command, so the script
+// goes on to print whatever the step expects. A check that something is absent is written
+// `if command; then exit 1; fi`. Left alone, because their status is used: conditions (`if ! x`,
+// `while ! x`), `a && ! b` chains, the last statement of the script and the last statement of a function.
+class ShellStatements {
+    class bool blank(char ch) { return ch == ' ' || ch == '\t'; }
+
+    class bool wordBefore(string command, int index, string word) {
+        int start = index - word.length;
+        if (start < 0 || command.substring(start, word.length) != word) { return false; }
+        if (start == 0) { return true; }
+        char before = command[start - 1];
+        return ShellStatements.blank(before) || before == '\n' || before == ';' || before == '(' || before == '{';
+    }
+
+    class bool opensFunction(string command, int brace) {
+        int index = brace - 1;
+        while (index >= 0 && ShellStatements.blank(command[index])) { index--; }
+        return index >= 1 && command[index] == ')' && command[index - 1] == '(';
+    }
+
+    // Where the statement that starts at `index` ends: its `;` or newline, a closing brace or bracket, or the end.
+    class int statementEnd(string command, int index) {
+        char quote = '\0';
+        for (int end = index; end < command.length; end++) {
+            char ch = command[end];
+            if (quote != '\0') {
+                if (ch == '\\' && quote == '"') { end++; continue; }
+                if (ch == quote) { quote = '\0'; }
+                continue;
+            }
+            if (ch == '\\') { end++; continue; }
+            if (ch == '\'' || ch == '"') { quote = ch; continue; }
+            if (ch == ';' || ch == '\n' || ch == '}' || ch == ')') { return end; }
+        }
+        return command.length;
+    }
+
+    class bool statusUsed(string command, int end, bool inFunction) {
+        int index = end;
+        while (index < command.length && (ShellStatements.blank(command[index]) || command[index] == ';' || command[index] == '\n')) { index++; }
+        if (index >= command.length) { return true; }
+        return inFunction && command[index] == '}';
+    }
+
+    class string? bareNegation(string command) {
+        bool statementStart = true;
+        char quote = '\0';
+        Vector<bool> braces = [];  // one entry for each open `{`: whether it is a function's body
+        for (int index = 0; index < command.length; index++) {
+            char ch = command[index];
+            if (quote != '\0') {
+                if (ch == '\\' && quote == '"') { index++; continue; }
+                if (ch == quote) { quote = '\0'; }
+                continue;
+            }
+            if (ch == '\\') { index++; statementStart = false; continue; }
+            if (ch == '\'' || ch == '"') { quote = ch; statementStart = false; continue; }
+            if (ch == '$' && index + 1 < command.length && command[index + 1] == '{') {
+                while (index < command.length && command[index] != '}') { index++; }
+                statementStart = false;
+                continue;
+            }
+            if (ShellStatements.blank(ch)) {
+                if (ShellStatements.wordBefore(command, index, "then") || ShellStatements.wordBefore(command, index, "do") || ShellStatements.wordBefore(command, index, "else")) { statementStart = true; }
+                continue;
+            }
+            if (ch == '{') { braces.push(ShellStatements.opensFunction(command, index)); statementStart = true; continue; }
+            if (ch == '}') { if (!braces.isEmpty()) { braces.pop(); } statementStart = false; continue; }
+            if (ch == ';' || ch == '\n' || ch == '(') { statementStart = true; continue; }
+            if (ch == '!' && statementStart && index + 1 < command.length && ShellStatements.blank(command[index + 1])) {
+                int end = ShellStatements.statementEnd(command, index);
+                bool inFunction = !braces.isEmpty() && braces.get(braces.length - 1);
+                if (!ShellStatements.statusUsed(command, end, inFunction)) { return command.substring(index, end - index).trim(); }
+            }
+            statementStart = false;
+        }
+        return null;
+    }
+}

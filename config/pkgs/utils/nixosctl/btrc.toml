@@ -17,6 +17,7 @@ exports = [
     "lib.desktop.PowerManager",
     "lib.hardware.SecureBootVerification",
     "lib.simulator.qemu.VmProvisioner",
+    "lib.simulator.spec.ShellStatements",
     "lib.simulator.spec.VmSpecParser"
 ]
 

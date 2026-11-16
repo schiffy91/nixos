@@ -32,7 +32,7 @@
     { "op": "reboot-disk" },
     { "op": "guest", "command": "set -e; echo DELTA > /root/gen; sync; printf delta-written", "expect": "delta-written" },
     { "op": "reboot-disk" },
-    { "op": "guest", "command": "set -e; test ! -e /root/gen; btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-4'; ! btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-5'; ! btrfs subvolume list / | grep -E 'path @snapshots/.*/[ABC]$'; printf four-generations-kept", "expect": "four-generations-kept" },
+    { "op": "guest", "command": "set -e; test ! -e /root/gen; btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-4'; if btrfs subvolume list / | grep -F 'path @snapshots/@root/generation-5'; then exit 1; fi; if btrfs subvolume list / | grep -E 'path @snapshots/.*/[ABC]$'; then exit 1; fi; printf four-generations-kept", "expect": "four-generations-kept" },
     { "op": "guest", "command": "set -e; host=/etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix; sed -i 's/\\.mode = \"[^\"]*\"/.mode = \"restore-generation\"/g' \"$host\"; sed -i '/nonPersistedGenerations =/a\\  settings.disk.immutability.restoreGeneration = 4;' \"$host\"; nixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot; printf restore-four-configured", "expect": "restore-four-configured", "timeout": 1800 },
     { "op": "reboot-disk" },
     { "op": "guest", "command": "cat /root/gen", "expect": "ALPHA" },
@@ -40,7 +40,7 @@
     { "op": "reboot-disk" },
     { "op": "guest", "command": "set -e; echo transient > /root/gone; sync; printf transient-written", "expect": "transient-written" },
     { "op": "reboot-disk" },
-    { "op": "guest", "command": "set -e; test ! -e /root/gone; ! btrfs subvolume list / | grep -E 'path @snapshots/.*/(generation-[0-9]+|[ABC])$'; printf no-generations-kept", "expect": "no-generations-kept" },
+    { "op": "guest", "command": "set -e; test ! -e /root/gone; if btrfs subvolume list / | grep -E 'path @snapshots/.*/(generation-[0-9]+|[ABC])$'; then exit 1; fi; printf no-generations-kept", "expect": "no-generations-kept" },
     { "op": "snapshot", "name": "generations-tested" },
     { "op": "record-state" },
     { "op": "stop" }

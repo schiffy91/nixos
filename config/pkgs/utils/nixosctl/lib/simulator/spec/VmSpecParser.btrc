@@ -8,6 +8,7 @@ import ../../core/NixosLog.btrc;
 import ./VmSpecArgs.btrc;
 import ./VmOperation.btrc;
 import ./VmTestSpec.btrc;
+import ./ShellStatements.btrc;
 
 class VmSpecParser {
     class string stringField(JSONValue object, string key, string fallback = "") {
@@ -225,10 +226,18 @@ class VmSpecParser {
         return spec;
     }
 
+    class VmTestSpec checked(VmTestSpec spec, string origin) {
+        for op in spec.operations {
+            string swallowed = ShellStatements.bareNegation(op.command) ?? "";
+            if (!swallowed.isEmpty()) { throw f"{origin}: `{swallowed}` does not stop the step; write it as `if ...; then exit 1; fi`"; }
+        }
+        return spec;
+    }
+
     class VmTestSpec readFile(string path) {
         var text = Path.readAll(path);
-        if (path.endsWith(".toml")) { return VmSpecParser.parseToml(text); }
-        if (path.endsWith(".yaml") || path.endsWith(".yml")) { return VmSpecParser.parseYaml(text); }
-        return VmSpecParser.parse(text);
+        if (path.endsWith(".toml")) { return VmSpecParser.checked(VmSpecParser.parseToml(text), path); }
+        if (path.endsWith(".yaml") || path.endsWith(".yml")) { return VmSpecParser.checked(VmSpecParser.parseYaml(text), path); }
+        return VmSpecParser.checked(VmSpecParser.parse(text), path);
     }
 }
