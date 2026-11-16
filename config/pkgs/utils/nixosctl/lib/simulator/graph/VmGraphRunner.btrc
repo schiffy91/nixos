@@ -4,6 +4,7 @@ import Library.Graph;
 import Library.Map;
 import Library.Process;
 import Library.Strings;
+import Library.Timer;
 import Library.Vector;
 import ../../core/NixosLog.btrc;
 import ../Spec.btrc;
@@ -102,8 +103,18 @@ class VmGraphRunner {
                 var saved = Path.readAll(spec.stateHashFile()).trim();
                 recorded = saved.equals(spec.stateHash) ? "ready" : "stale";
             }
-            Console.log(node.id + " " + recorded + " " + spec.stateHashShort + " " + spec.stateDir());
+            Console.log(node.id + " " + recorded + " " + spec.stateHashShort + " " + spec.stateDir() + " " + self.lastDuration(spec));
         }
+    }
+
+    public string durationFile(VmTestSpec spec) {
+        return PathTools.join(spec.stateDir(), "duration");
+    }
+
+    // How long the node's last pass took, kept beside its recorded state.
+    public string lastDuration(VmTestSpec spec) {
+        var path = self.durationFile(spec);
+        return FileSystem.exists(path) ? Path.readAll(path).trim() + "s" : "-";
     }
 
     public void resolve(Vector<string> targets) {
@@ -266,9 +277,13 @@ class VmGraphRunner {
                 continue;
             }
             NixosLog.info("graph " + self.graph.name + ": run " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
+            var started = MonotonicClock.milliseconds();
             var runner = VmTestRunner(spec);
             var result = runner.run();
+            var seconds = (MonotonicClock.milliseconds() - started + 500LL) / 1000LL;
             if (result != 0) { return result; }
+            if (FileSystem.isDir(spec.stateDir())) { Path.writeAll(self.durationFile(spec), f"{seconds}\n"); }
+            NixosLog.info(f"graph {self.graph.name}: pass {node.id} in {seconds}s");
         }
         return 0;
     }

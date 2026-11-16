@@ -1,0 +1,15 @@
+{
+  "name": "graph-runner",
+  "state": "graph-runner",
+  "stateMaterial": "graph-runner:source={{sourceHash}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "host",
+      "command": "make build/graph-runner-test && ./build/graph-runner-test",
+      "timeout": 180,
+      "expect": "PASS: the graph keeps how long each node took"
+    },
+    { "op": "record-state" }
+  ]
+}

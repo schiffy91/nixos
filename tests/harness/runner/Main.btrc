@@ -1,0 +1,66 @@
+import Library.CLI;
+import Library.Platform;
+import ../../lib/TestDirectory.btrc;
+
+// What the graph runner keeps and reports beyond pass or fail.
+class GraphRunnerTests {
+    private TestDirectory fixture;
+    private string root;
+
+    public GraphRunnerTests(string root) {
+        self.fixture = TestDirectory("nixos-graph-runner"); self.root = root;
+        Check.that(FileSystem.mkdirp(self.fixture.path(".vm")) == 0, "create state directory");
+    }
+
+    private void node(string name, string command) {
+        var spec = JSONValue.parse(f"{{\"name\":\"{name}\",\"state\":\"{name}\",\"stateMaterial\":\"{name}:{{{{sourceHash}}}}\",\"operations\":[]}}");
+        spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
+        spec.set("workDir", JSONValue.makeString(self.fixture.path(f".vm/{name}-{{{{stateHashShort}}}}")));
+        var host = JSONValue.parse("{\"op\":\"host\"}");
+        host.set("command", JSONValue.makeString(command));
+        spec.get("operations").push(host); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
+        self.fixture.json(f"{name}.json", spec);
+    }
+
+    private ExecResult run(Vector<string> arguments) {
+        Vector<string> command = ["graph", self.fixture.path("graph.json")];
+        for argument in arguments { command.push(argument); }
+        return ChildProcess.run(PathTools.join(self.root, "build/nixosctl"), command, cwd=self.fixture.path(), environment=[f"NIXOS_CONFIG_ROOT={self.root}"], timeoutMilliseconds=60000);
+    }
+
+    private string said(ExecResult result) { return result.stdout() + result.stderr(); }
+
+    // The last field of a node's status line: how long its last pass took.
+    private string duration(string id) {
+        for line in Strings.split(Check.exited(self.run(["status"])).stdout(), "\n") {
+            if (!line.startsWith(f"{id} ")) { continue; }
+            var fields = Strings.split(line.trim(), " ");
+            return fields.get(fields.length - 1);
+        }
+        throw f"FAIL: no status line for {id}";
+    }
+
+    public void durations() {
+        self.node("slow", "sleep 2"); self.node("fast", "true");
+        self.fixture.write("graph.json", "{\"name\":\"graph-runner\",\"workspaceRoot\":\".\",\"nodes\":[{\"id\":\"slow\",\"spec\":\"slow.json\"},{\"id\":\"fast\",\"spec\":\"fast.json\"}]}");
+        Check.equal(self.duration("slow"), "-", "a node that has not passed has no duration");
+        var first = Check.exited(self.run(["run", "slow", "fast"]));
+        Check.that(self.said(first).contains("pass slow in "), "the run says how long a node took");
+        var slow = self.duration("slow");
+        Check.that(slow.endsWith("s"), f"a duration is in seconds: {slow}");
+        int seconds = Strings.toInt(slow.substring(0, slow.length - 1));
+        Check.that(seconds >= 2 && seconds < 20, f"the slow node's two seconds are kept: {slow}");
+        var fast = self.duration("fast");
+        Check.that(fast == "0s" || fast == "1s", f"the fast node took no time: {fast}");
+        Check.exited(self.run(["run", "slow", "fast"]));
+        Check.equal(self.duration("slow"), slow, "a skipped node keeps the duration of its last pass");
+        self.fixture.close();
+    }
+}
+
+int main() {
+    try {
+        GraphRunnerTests(Platform.currentDirectory()).durations();
+        print("PASS: the graph keeps how long each node took"); return 0;
+    } catch (string error) { print(error); return 1; }
+}

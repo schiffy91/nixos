@@ -155,6 +155,10 @@ $(BUILD_DIR)/disabled-node-test: $(SOURCES) flake.lock | dirs
 	$(BTRC) --strict-imports tests/harness/disabled/Main.btrc -o "$(BUILD_DIR)/disabled-node-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/disabled-node-test.c" -lm -lpthread -o "$@"
 
+$(BUILD_DIR)/graph-runner-test: $(SOURCES) flake.lock | dirs
+	$(BTRC) --strict-imports tests/harness/runner/Main.btrc -o "$(BUILD_DIR)/graph-runner-test.c"
+	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/graph-runner-test.c" -lm -lpthread -o "$@"
+
 $(BUILD_DIR)/host-timeout-test: $(SOURCES) flake.lock | dirs
 	$(BTRC) --strict-imports tests/harness/timeout/Main.btrc -o "$(BUILD_DIR)/host-timeout-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/host-timeout-test.c" -lm -lpthread -o "$@"

@@ -40,6 +40,13 @@
       "after": [
         "quick"
       ],
+      "id": "graph-runner",
+      "spec": "harness/runner/test.json"
+    },
+    {
+      "after": [
+        "quick"
+      ],
       "args": {
         "marker": "graph-default"
       },
@@ -1304,6 +1311,7 @@
     "host-timeout",
     "source-hash",
     "graph-disabled",
+    "graph-runner",
     "opportunistic-unlock",
     "secure-boot-backup",
     "sleep-gaming-plasma",
