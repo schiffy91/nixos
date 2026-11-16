@@ -555,6 +555,36 @@ class VmGraphRunner {
         return result;
     }
 
+    // How long the rest of the run needs once this node starts: its own last duration and the longest
+    // chain of nodes that wait on it. A node that has never passed counts for a minute.
+    private long long remaining(string id, Vector<string> order, Map<string, long long> known) {
+        if (known.has(id)) { return known.get(id); }
+        var recorded = self.lastDuration(self.specFor(self.graph.node(id)));
+        long long own = recorded == "-" ? 60LL : (long long)Strings.toInt(recorded.substring(0, recorded.length - 1));
+        long long longest = 0LL;
+        for other in order {
+            if (!self.graph.node(other).after.contains(id)) { continue; }
+            var chain = self.remaining(other, order, known);
+            if (chain > longest) { longest = chain; }
+        }
+        known.put(id, own + longest);
+        return own + longest;
+    }
+
+    // The nodes to run, the one the most time waits behind first, so the longest chain starts at once
+    // and is not left for the end. Equal nodes keep the graph's order.
+    private Vector<string> longestFirst(Vector<string> order) {
+        Map<string, long long> known = {};
+        Vector<string> sorted = [];
+        for id in order {
+            var weight = self.remaining(id, order, known);
+            int position = sorted.length;
+            while (position > 0 && known.get(sorted.get(position - 1)) < weight) { position--; }
+            sorted.insert(position, id);
+        }
+        return sorted;
+    }
+
     private string tail(string path, int count) {
         if (!FileSystem.exists(path)) { return ""; }
         var lines = Strings.split(Path.readAll(path).trim(), "\n");
@@ -587,7 +617,7 @@ class VmGraphRunner {
         Vector<string> failed = [];
         Vector<string> blocked = [];
         Vector<GraphJob> running = [];
-        Vector<string> pending = order.copy();
+        Vector<string> pending = self.longestFirst(order);
         int passed = 0;
         int skipped = 0;
         while (!pending.isEmpty() || !running.isEmpty()) {

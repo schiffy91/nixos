@@ -274,6 +274,20 @@ class GraphRunnerTests {
         Check.that(failed.stdout().contains("0 passed, 1 skipped, 1 failed") && self.said(failed).contains("syntax error"), f"an expression that does not evaluate fails its node with nix's reason: {self.said(failed)}");
     }
 
+    // With durations known, the node the longest chain waits behind goes first.
+    public void longestChainFirst() {
+        var sequence = self.fixture.path("sequence");
+        for name in ["brief", "short", "head", "follower"] {
+            var seconds = name == "follower" ? "3" : "1";
+            self.node(name, f"printf '{name}\\n' >> {ShellWords.quote(sequence)}; sleep {seconds}", name == "follower" ? "head" : "");
+        }
+        self.graph(self.entry("brief") + "," + self.entry("short") + "," + self.entry("head") + "," + self.entry("follower", "head"));
+        Check.exited(self.run(["run", "brief", "short", "follower", "--arg", "jobs=1"]));
+        Check.equal(Path.readAll(sequence), "head\nbrief\nshort\nfollower\n", "with no duration known, a node others wait on goes first and the rest keep the graph's order");
+        Check.exited(self.run(["run", "brief", "short", "follower", "--arg", "jobs=1", "--arg", "force=true"]));
+        Check.equal(Path.readAll(sequence), "head\nbrief\nshort\nfollower\nhead\nfollower\nbrief\nshort\n", "once durations are known, the three-second follower outranks the one-second nodes");
+    }
+
     public void close() { self.fixture.close(); }
 }
 
@@ -287,6 +301,7 @@ int main() {
         tests.inheritedKey();
         tests.occupiedPort();
         tests.derivations();
+        tests.longestChainFirst();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }
