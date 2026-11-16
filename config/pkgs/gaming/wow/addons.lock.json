@@ -8,16 +8,16 @@
     "url": "https://edge.forgecdn.net/files/9572/997/Auctionator-346.zip"
   },
   "betterBags": {
-    "hash": "sha256-jIrygGCjIkhuNAc3ZASjvkInwTR52S9rCbHhrp1Ra/U=",
-    "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.2/BetterBags-v0.9.2.zip"
+    "hash": "sha256-xukuiPNxr/BPSJI+3M4Us+9YctVpQFfvmGrClsJ0/DA=",
+    "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.3/BetterBags-v0.9.3.zip"
   },
   "bigWigs": {
     "hash": "sha256-ifK6Yju21pGUhD6iarfq/6w2jcUfhd32FMiBwrYI8bE=",
     "url": "https://github.com/BigWigsMods/BigWigs/releases/download/v427.9/BigWigs-v427.9.zip"
   },
   "consolePort": {
-    "hash": "sha256-VImUpZzFSPU8JuZTATcEkSkUHxOMmNaZ94+r6fBwN9I=",
-    "url": "https://github.com/seblindfors/ConsolePort/releases/download/3.3.13/ConsolePort-3.3.13.zip"
+    "hash": "sha256-YEFMxK5K/QDgzBt+NPt0nSSxokZI1i+YgVARoEcJYjQ=",
+    "url": "https://github.com/seblindfors/ConsolePort/releases/download/3.3.14/ConsolePort-3.3.14.zip"
   },
   "details": {
     "hash": "sha256-FD43/nyTeFVELwuB3oTYFz5ByNjCRCGj8MStBLs8s24=",
@@ -28,8 +28,8 @@
     "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-c/DialogueUI-1.0.7-c.zip"
   },
   "flareUI": {
-    "hash": "sha256-p+1Io3rSGat1YZmzVSRffOYpMPCfMazZcDZ79P+i0/s=",
-    "url": "https://github.com/malkkav/FlareUI/releases/download/6.7/FlareUI-6.7-forever.zip"
+    "hash": "sha256-MSkvI/sU+rijdr7uUCGe+jhgc7eql/QVR2ZjvF2P0EQ=",
+    "url": "https://github.com/malkkav/FlareUI/releases/download/6.9/FlareUI-6.9-forever.zip"
   },
   "foreverFadeChat": {
     "hash": "sha256-t9+IWZzCHAjkY1RKMinshGAiHKgybGO6qZqri03SSMg=",

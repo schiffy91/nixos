@@ -99,6 +99,13 @@ help:
 	@printf '%s\n' 'Neither graph-required nor graph-full runs every node: both mean the'
 	@printf '%s\n' 'required set. Name a node explicitly for anything outside it.'
 
+# nixosctl checks password hashes with libxcrypt: the header reader needs crypt.h and the link needs libcrypt,
+# and a bare shell has a path to neither.
+LIBXCRYPT := nixpkgs\#libxcrypt^out
+LIBXCRYPT_ROOT := $(shell nix build --no-link --print-out-paths --inputs-from . $(LIBXCRYPT) 2>/dev/null)
+export CPATH := $(LIBXCRYPT_ROOT)/include$(if $(CPATH),:$(CPATH))
+export LIBRARY_PATH := $(LIBXCRYPT_ROOT)/lib$(if $(LIBRARY_PATH),:$(LIBRARY_PATH))
+
 dirs:
 	mkdir -p $(BUILD_DIR)
 

@@ -8,6 +8,7 @@ in pkgs.stdenv.mkDerivation {
   };
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
   buildInputs = [ pkgs.libxcrypt ];
+  CPATH = lib.makeSearchPath "include" (map lib.getDev [ pkgs.libxcrypt ]);  # the header reader parses password-hash.h, which needs crypt.h
   dontConfigure = true;
   buildPhase = ''
     export BTRC_CACHE_DIR="$TMPDIR/btrc-cache"
