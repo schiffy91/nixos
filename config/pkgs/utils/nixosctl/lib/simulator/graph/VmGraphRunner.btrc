@@ -174,8 +174,8 @@ class VmGraphRunner {
     public string treeState() {
         if (!self.treeStateValue.isEmpty()) { return self.treeStateValue; }
         var listing = f"cd {ShellWords.quote(self.graph.resolvedWorkspaceRoot())} && find ."
-            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './result' -o -name '.btrc-cache' -o -name '__pycache__' \\) -prune"
-            + " -o -type f -printf '%P\\t%s\\t%T@\\n' | LC_ALL=C sort | sha256sum | cut -d' ' -f1";
+            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './secrets' -o -path './.agents' -o -path './.claude' -o -path './.codex' -o -path './.gemini' -o -path './result' -o -name '.btrc-cache' -o -name '__pycache__' \\) -prune"
+            + " -o -type f -printf '%P\\t%s\\t%T@\\n' | LC_ALL=C sort | sha256sum | cut -d' ' -f1";  // the same places the source hash leaves out: output, agents' state and secrets no build may read
         var result = UnixShell().run(f"bash -o pipefail -c {ShellWords.quote(listing)}");
         if (!result.ok() || result.trimmed().isEmpty()) { NixosLog.fatal("Failed to read the workspace tree for " + self.graph.resolvedWorkspaceRoot()); }
         self.treeStateValue = result.trimmed();

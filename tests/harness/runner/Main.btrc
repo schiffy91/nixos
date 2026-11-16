@@ -259,7 +259,11 @@ class GraphRunnerTests {
         Check.equal(Path.readAll(builds).trim().replace("\n", " ").length == 10 ? "both" : Path.readAll(builds), "both", "both derivations are built once");
 
         self.fixture.write("Unrelated.btrc", "int unrelated = 1;\n");
-        var untouched = Check.exited(self.run(["run", "left", "right"]));
+        self.fixture.write("secrets/key", "not for any build\n");
+        Check.that(FileSystem.chmod(self.fixture.path("secrets"), 0o000) == 0, "close the secrets directory");
+        var untouched = self.run(["run", "left", "right"]);
+        Check.that(FileSystem.chmod(self.fixture.path("secrets"), 0o700) == 0, "reopen the secrets directory");
+        Check.exited(untouched);
         Check.that(untouched.stdout().contains("0 passed, 2 skipped"), f"a source neither derivation reads reruns nothing: {self.said(untouched)}");
 
         self.fixture.write("left.txt", "two\n");
