@@ -66,7 +66,7 @@ class ProtonIntegration {
         Check.equal(Path.readAll(wrapper), f"{self.development}\ntwo words=value\n", "child environment and descriptor isolation");
         Check.that(FileSystem.removeRecursivePath(self.fixture.path("bin/umu-run")) == 0, "replace command link");
         self.fixture.write("bin/umu-run", "#!/definitely/missing/interpreter\n");
-        Check.that(FileSystem.chmod(self.fixture.path("bin/umu-run"), 0755) == 0, "failed exec fixture");
+        Check.that(FileSystem.chmod(self.fixture.path("bin/umu-run"), 0o755) == 0, "failed exec fixture");
         self.run(["dev", "launch", "--seconds", "1", "--log", wrapper], false);
         self.fixture.close();
     }

@@ -39,7 +39,7 @@ class ImmutabilityRun {
         var line = f"{self.elapsed()} {message}";
         Console.error(line);
         if (!self.logFile.isEmpty()) {
-            self.shell.run(f"printf '%s\\n' {ShellWords.quote(line)} >> {ShellWords.quote(self.logFile)}", logFailure=false);
+            FileSystem.appendText(self.logFile, line + "\n");
         }
     }
 

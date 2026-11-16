@@ -1,4 +1,5 @@
 import Library.Console;
+import Library.Strings;
 import ./Repository.btrc;
 import ./Lsp.btrc;
 
@@ -6,6 +7,254 @@ class Checks {
     public Repository repository;
     private Vector<string> failures = [];
     public Checks(Repository repository) { self.repository = repository; }
+
+    class bool isIdentChar(char ch) {
+        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
+    }
+
+    class string stripStringsAndComments(string source) {
+        var out = StringBuilder();
+        int index = 0;
+        int total = source.length();
+        int mode = 0;  // 0=code, 1=string, 2=fstring, 3=block comment, 4=char
+        Vector<int> fstack = [];
+        while (index < total) {
+            char ch = source[index];
+            char next = index + 1 < total ? source[index + 1] : '\0';
+            if (mode == 0) {
+                if (ch == '/' && next == '/') {
+                    while (index < total && source[index] != '\n') {
+                        out.append(" ");
+                        index++;
+                    }
+                    continue;
+                }
+                if (ch == '/' && next == '*') {
+                    out.append("  ");
+                    index += 2;
+                    mode = 3;
+                    continue;
+                }
+                char prev = index > 0 ? source[index - 1] : '\0';
+                if (ch == 'f' && next == '"' && !Checks.isIdentChar(prev)) {
+                    out.append("  ");
+                    index += 2;
+                    mode = 2;
+                    continue;
+                }
+                if (ch == '"') {
+                    out.append(" ");
+                    index++;
+                    mode = 1;
+                    continue;
+                }
+                if (ch == '\'') {
+                    out.append(" ");
+                    index++;
+                    mode = 4;
+                    continue;
+                }
+                if (ch == '{' && !fstack.isEmpty()) {
+                    int top = fstack.len - 1;
+                    fstack.set(top, fstack.get(top) + 1);
+                    out.append("{");
+                    index++;
+                    continue;
+                }
+                if (ch == '}' && !fstack.isEmpty()) {
+                    int top = fstack.len - 1;
+                    int nextDepth = fstack.get(top) - 1;
+                    fstack.set(top, nextDepth);
+                    out.append("}");
+                    index++;
+                    if (nextDepth == 0) {
+                        fstack.pop();
+                        mode = 2;
+                    }
+                    continue;
+                }
+                out.append(source.substring(index, 1));
+                index++;
+            } else if (mode == 1) {
+                if (ch == '\\' && index + 1 < total) {
+                    out.append(ch == '\n' ? "\n" : " ");
+                    out.append(next == '\n' ? "\n" : " ");
+                    index += 2;
+                    continue;
+                }
+                if (ch == '"') {
+                    out.append(" ");
+                    index++;
+                    mode = 0;
+                    continue;
+                }
+                out.append(ch == '\n' ? "\n" : " ");
+                index++;
+            } else if (mode == 2) {
+                if (ch == '\\' && index + 1 < total) {
+                    out.append(ch == '\n' ? "\n" : " ");
+                    out.append(next == '\n' ? "\n" : " ");
+                    index += 2;
+                    continue;
+                }
+                if ((ch == '{' && next == '{') || (ch == '}' && next == '}')) {
+                    out.append("  ");
+                    index += 2;
+                    continue;
+                }
+                if (ch == '{') {
+                    fstack.push(1);
+                    out.append("{");
+                    index++;
+                    mode = 0;
+                    continue;
+                }
+                if (ch == '"') {
+                    out.append(" ");
+                    index++;
+                    mode = 0;
+                    continue;
+                }
+                out.append(ch == '\n' ? "\n" : " ");
+                index++;
+            } else if (mode == 3) {
+                if (ch == '*' && next == '/') {
+                    out.append("  ");
+                    index += 2;
+                    mode = 0;
+                    continue;
+                }
+                out.append(ch == '\n' ? "\n" : " ");
+                index++;
+            } else {
+                if (ch == '\\' && index + 1 < total) {
+                    out.append("  ");
+                    index += 2;
+                    continue;
+                }
+                if (ch == '\'') {
+                    out.append(" ");
+                    index++;
+                    mode = 0;
+                    continue;
+                }
+                out.append(ch == '\n' ? "\n" : " ");
+                index++;
+            }
+        }
+        return out.toString();
+    }
+
+    class bool hasToken(string line, string token) {
+        int length = line.length();
+        int tokenLen = token.length();
+        for (int index = 0; index + tokenLen <= length; index++) {
+            if (!line.substring(index, tokenLen).equals(token)) { continue; }
+            char before = index > 0 ? line[index - 1] : ' ';
+            char after = index + tokenLen < length ? line[index + tokenLen] : ' ';
+            if (!Checks.isIdentChar(before) && before != '.' && !Checks.isIdentChar(after)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    class bool hasCall(string line, string fn) {
+        int length = line.length();
+        int fnLen = fn.length();
+        for (int index = 0; index + fnLen < length; index++) {
+            if (!line.substring(index, fnLen).equals(fn)) { continue; }
+            char before = index > 0 ? line[index - 1] : ' ';
+            if (Checks.isIdentChar(before) || before == '.') { continue; }
+            int cursor = index + fnLen;
+            while (cursor < length && (line[cursor] == ' ' || line[cursor] == '\t')) { cursor++; }
+            if (cursor < length && line[cursor] == '(') { return true; }
+        }
+        return false;
+    }
+
+    class bool hasRawDataAccess(string line) {
+        int length = line.length();
+        for (int index = 0; index + 5 <= length; index++) {
+            if (!line.substring(index, 5).equals(".data")) { continue; }
+            char after = index + 5 < length ? line[index + 5] : ' ';
+            if (Checks.isIdentChar(after)) { continue; }
+            if (index >= 4 && line.substring(index - 4, 4).equals("self") && (index == 4 || !Checks.isIdentChar(line[index - 5]))) {
+                continue;
+            }
+            int cursor = index + 5;
+            while (cursor < length && (line[cursor] == ' ' || line[cursor] == '\t')) { cursor++; }
+            if (cursor < length && (line[cursor] == '(' || line[cursor] == '.')) { continue; }
+            return true;
+        }
+        return false;
+    }
+
+    class bool hasLegacyOctal(string line) {
+        int length = line.length();
+        for (int index = 0; index + 4 <= length; index++) {
+            if (line[index] != '0') { continue; }
+            char before = index > 0 ? line[index - 1] : ' ';
+            if (Checks.isIdentChar(before) || before == '.') { continue; }
+            int digits = 0;
+            while (index + 1 + digits < length && line[index + 1 + digits] >= '0' && line[index + 1 + digits] <= '7') {
+                digits++;
+            }
+            if ((digits == 3 || digits == 4) && (index + 1 + digits == length || !Checks.isIdentChar(line[index + 1 + digits]))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    class Vector<string> boundaryViolations(string path, string source) {
+        Vector<string> violations = [];
+        var stripped = Checks.stripStringsAndComments(source);
+        var lines = Strings.split(stripped, "\n");
+        for (int i = 0; i < lines.len; i++) {
+            var line = lines.get(i);
+            var trimmed = line.trim();
+            int lineNo = i + 1;
+            if (trimmed.startsWith("#include") || trimmed.startsWith("#define")) {
+                violations.push(f"{path}:{lineNo}: raw C preprocessor directive");
+                continue;
+            }
+            for keyword in ["extern", "struct", "typedef", "union", "NULL"] {
+                if (Checks.hasToken(line, keyword)) {
+                    violations.push(f"{path}:{lineNo}: raw C token '{keyword}'");
+                }
+            }
+            for call in ["malloc", "calloc", "realloc", "free", "strdup", "memcpy", "memset", "memcmp", "strcmp", "strncmp", "strlen"] {
+                if (Checks.hasCall(line, call)) {
+                    violations.push(f"{path}:{lineNo}: raw C call '{call}(...)'");
+                }
+            }
+            if (Checks.hasRawDataAccess(line)) {
+                violations.push(f"{path}:{lineNo}: raw .data backing pointer access");
+            }
+            if (Checks.hasLegacyOctal(line)) {
+                violations.push(f"{path}:{lineNo}: legacy C octal literal (use 0o...)");
+            }
+        }
+        return violations;
+    }
+
+    public bool btrcBoundaries(Vector<string> paths) {
+        print(f"\nBTRC native boundaries: {paths.len} files");
+        Vector<string> violations = [];
+        for path in paths {
+            var absolute = PathTools.join(self.repository.root, path);
+            for violation in Checks.boundaryViolations(path, Path.readAll(absolute)) {
+                violations.push(violation);
+            }
+        }
+        for violation in violations { print(violation); }
+        if (!violations.isEmpty()) {
+            self.failures.push("BTRC native boundaries");
+            return false;
+        }
+        return true;
+    }
 
     public bool run(string name, string executable, Vector<string> arguments, bool quiet = false) {
         if (!quiet) { print(f"\n{name}"); }
@@ -89,6 +338,7 @@ class Checks {
         self.repository.discover();
         var nix = self.repository.suffix(".nix"); var btrc = self.repository.suffix(".btrc");
         var shell = self.repository.shellScripts();
+        self.btrcBoundaries(btrc);
         self.files("Nix parser", "nix-instantiate", ["--parse"], nix);
         self.files("BTRC compiler", "btrcpy", ["--strict-imports", "--emit-ir"], btrc);
         self.files("JavaScript parser", "node", ["--check"], self.repository.suffix(".js"));

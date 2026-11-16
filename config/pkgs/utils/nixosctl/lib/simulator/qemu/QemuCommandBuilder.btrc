@@ -1,6 +1,7 @@
 import Library.FileSystem;
 import Library.Process;
 import Library.Strings;
+import Library.Vector;
 import ../../core/NixosLog.btrc;
 import ../Spec.btrc;
 import ./QemuFirmware.btrc;
@@ -23,10 +24,11 @@ class QemuCommandBuilder {
     public string qmpPath() { return PathTools.join(self.spec.workDir, "qmp.sock"); }
 
     public void ensureVmLaunchBinary() {
-        var command = f"set -e; bin=$(command -v {ShellWords.quote(self.firmware.qemuBinary())}); target={ShellWords.quote(self.spec.vmLaunchBinary())}; rm -f \"$target\"; cp \"$bin\" \"$target\"; chmod 755 \"$target\"";
-        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
-        if (!result.ok()) {
-            NixosLog.fatal(f"Failed to create isolated VM launcher {self.spec.vmLaunchBinary()}");
+        Vector<string> empty = [];
+        var bin = ChildProcessExecutable.resolve(self.firmware.qemuBinary(), "", empty, empty);
+        var target = self.spec.vmLaunchBinary();
+        if (bin.isEmpty() || !FileSystem.removeIfExists(target) || !FileSystem.copyFile(bin, target, 0o755)) {
+            NixosLog.fatal(f"Failed to create isolated VM launcher {target}");
         }
     }
 

@@ -86,7 +86,7 @@ class CaptureSession {
     class ExecResult run(string kwin, string probe, CaptureMode mode, int timeoutSeconds) {
         var directory = TemporaryDirectory.create("kwin-hdr-test").value();
         var inner = PathTools.join(directory.path(), "inner.sh");
-        if (!FileSystem.writeText(inner, f"#!/bin/sh\nexec {ShellWords.quote(probe)} {ShellWords.quote(mode.name)}\n") || FileSystem.chmod(inner, 0755) != 0) { throw "Cannot create capture session"; }
+        if (!FileSystem.writeText(inner, f"#!/bin/sh\nexec {ShellWords.quote(probe)} {ShellWords.quote(mode.name)}\n") || FileSystem.chmod(inner, 0o755) != 0) { throw "Cannot create capture session"; }
         Vector<string> environment = ["QT_FORCE_STDERR_LOGGING=1", "QT_LOGGING_RULES=kwin_screencast.debug=true;kwin_screencast.info=true", "LD_LIBRARY_PATH=/run/opengl-driver/lib", "__EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d"];
         for name in ["CONFIG", "DATA", "CACHE", "STATE"] {
             var path = PathTools.join(directory.path(), name.toLower());

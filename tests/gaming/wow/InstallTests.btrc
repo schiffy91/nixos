@@ -77,7 +77,7 @@ class InstallTests {
         self.selection = self.fixture.path("unreadable bundle");
         Check.that(FileSystem.mkdirp(self.selection) == 0 && FileSystem.chmod(self.selection, 0) == 0, "unreadable bundle fixture");
         try { self.run(false); self.installed("new", true); }
-        finally { Check.that(FileSystem.chmod(self.selection, 0700) == 0, "restore fixture permissions"); }
+        finally { Check.that(FileSystem.chmod(self.selection, 0o700) == 0, "restore fixture permissions"); }
         self.selection = self.bundle; self.run();
         var lock = AdvisoryFileLock.acquire(self.path("Interface/.nixos-wow.lock")).value();
         var child = PipeProcess(self.installer, [self.fixture.path("settings.json")], self.fixture.path("lock-error.log"));

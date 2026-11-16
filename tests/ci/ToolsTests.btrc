@@ -1,7 +1,8 @@
 import Library.Testing;
-import ../../ci/lib/Lsp.btrc;
-import ../../ci/lib/Repository.btrc;
-import ../../ci/lib/Publisher.btrc;
+import ci.lib.Checks;
+import ci.lib.Lsp;
+import ci.lib.Repository;
+import ci.lib.Publisher;
 
 int main() {
     var message = JSONValue.parse("{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":\"é雪\"}");
@@ -34,6 +35,20 @@ int main() {
     Expect.strEq(CachePublisher.attributes(targets, "x86_64-linux", false).join(","), "installer");
     Expect.isTrue(CachePublisher.attributes(targets, "aarch64-linux", false).isEmpty());
     Expect.strEq(CachePublisher.attributes(targets, "aarch64-linux", true).join(","), "desktop,deck");
-    print("PASS: fragmented/coalesced UTF-8 LSP framing, malformed frame rejection, Git path boundaries and cache target selection");
+
+    var cleanSource = "// #include <stdio.h> in comment\n/* struct Foo in block comment */\nclass Sample {\n    public int mode = 0o755;\n    public void run(Bytes data) {\n        self.data = data;\n        reply.data(data);\n        var msg = f\"chmod 0644 {self.name(\"struct NULL\")} Values.data\";\n    }\n}\n";
+    Expect.isTrue(Checks.boundaryViolations("Sample.btrc", cleanSource).isEmpty());
+
+    var leakySource = "#include <unistd.h>\nstruct Leaky { int fd; };\nvoid bad() {\n    void* p = malloc(16);\n    if (p == NULL) { return; }\n    int m = 0755;\n    var raw = buf.data;\n}\n";
+    var violations = Checks.boundaryViolations("Leaky.btrc", leakySource);
+    Expect.intEq(violations.length, 6);
+    Expect.contains(violations.get(0), "Leaky.btrc:1: raw C preprocessor directive");
+    Expect.contains(violations.get(1), "Leaky.btrc:2: raw C token 'struct'");
+    Expect.contains(violations.get(2), "Leaky.btrc:4: raw C call 'malloc(...)'");
+    Expect.contains(violations.get(3), "Leaky.btrc:5: raw C token 'NULL'");
+    Expect.contains(violations.get(4), "Leaky.btrc:6: legacy C octal literal");
+    Expect.contains(violations.get(5), "Leaky.btrc:7: raw .data backing pointer access");
+
+    print("PASS: fragmented/coalesced UTF-8 LSP framing, malformed frame rejection, Git path boundaries, cache target selection and BTRC native boundary checks");
     return 0;
 }

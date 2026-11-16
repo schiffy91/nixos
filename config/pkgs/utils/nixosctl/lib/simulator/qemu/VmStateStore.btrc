@@ -78,9 +78,7 @@ class VmStateStore {
 
     public void copyIfExists(string source, string target) {
         if (!FileSystem.exists(source)) { return; }
-        var command = f"cp {ShellWords.quote(source)} {ShellWords.quote(target)}";
-        var result = self.shell.run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
-        if (!result.ok()) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
+        if (!FileSystem.copyFile(source, target)) { NixosLog.fatal(f"Failed to copy state artifact {source}"); }
     }
 
     public void copyTreeIfExists(string source, string target) {

@@ -176,6 +176,8 @@ length-arguments = ["session"]
 length-preserves-result = true
 ```
 
+Note: `length-function` must return a signed `int` byte count (`static inline int testVNCLength(...)`), never `size_t`.
+
 ## 4. Nix and CI registration
 
 1. Build the binary through `config/lib/btrc.nix` with `linkPlan = true` so `btrc-native-plan` reads `[[native.pkg-config]]` and `[[native.libraries]]` directly from `btrc.toml`.
