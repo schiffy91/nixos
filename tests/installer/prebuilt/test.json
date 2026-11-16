@@ -37,7 +37,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; path=$(jq -r '.\"{{prebuiltHost}}-Secure-Boot\".system' /etc/nixos-installer/prebuilt.json); nix-store --query --requisites \"$path\" | grep -qE 'linux-[0-9.]+-valve2' && nix-store --query --requisites \"$path\" | wc -l | awk '$1 > 500 {print \"closure-complete\"}'",
+      "command": "set -e; path=$(jq -r '.\"{{prebuiltHost}}-Secure-Boot\".system' /etc/nixos-installer/prebuilt.json); nix-store --query --requisites \"$path\" | grep -qE 'linux-[0-9.]+-valve[0-9]+' && nix-store --query --requisites \"$path\" | wc -l | awk '$1 > 500 {print \"closure-complete\"}'",
       "expect": "closure-complete",
       "timeout": 900
     },
