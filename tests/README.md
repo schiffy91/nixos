@@ -7,6 +7,13 @@ Scenario specs live under their domain: `installer/`, `immutability/`,
 `core/`, `gaming/` and the `*Tests.btrc` files hold the native unit suites.
 BTRC modules use PascalCase filenames matching their primary class.
 
+The graph runner starts each node in a child of its own and runs as many together as fit: `--arg jobs=N`
+(by default one for every four processors) and `--arg memoryBudget=48G` (by default three quarters of the
+machine's memory, counted from each spec's `memory`). A node starts once every node it comes after has
+passed; each running VM is given its own SSH port, so the `sshPort` in a spec is only a default. A failure
+stops the nodes that depend on it and nothing else, and the run ends with a summary of what passed, was
+skipped, failed or was blocked. With more than one job each node writes `.vm/e2e/logs/<node>.log`.
+
 The graph runner holds `.vm/graph.lock` for a run, so a second run or a collection in the same
 workspace is refused. `graph status` ends each line with how long the node's last pass took.
 `make graph-gc` deletes the work directories under `.vm/e2e` that no node's current state names,

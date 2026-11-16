@@ -146,6 +146,16 @@ class VmTestSpec {
         }
     }
 
+    // The memory the node's VM is given, in megabytes: "8G", "512M", or a bare number of megabytes.
+    public int memoryMegabytes() {
+        var text = self.memory.trim();
+        if (text.isEmpty()) { return 0; }
+        var unit = text.substring(text.length - 1, 1);
+        if (unit == "G" || unit == "g") { return Strings.toInt(text.substring(0, text.length - 1)) * 1024; }
+        if (unit == "M" || unit == "m") { return Strings.toInt(text.substring(0, text.length - 1)); }
+        return Strings.toInt(text);
+    }
+
     public string stateDir() {
         return PathTools.join(self.stateRoot, self.state);
     }
@@ -232,6 +242,8 @@ class VmTestSpec {
             if (key.endsWith("Shell")) { continue; }
             /* graph plumbing, not state: never affects what a node actually produces */
             if (key.equals("graphName") || key.equals("nodeId") || key.equals("workspaceRoot")) { continue; }
+            /* how a run is scheduled, not what it produces: the port its VM answers on and the runner's own switches */
+            if (key.equals("sshPort") || key.equals("force") || key.equals("jobs") || key.equals("memoryBudget")) { continue; }
             /* sourceHash covers the whole repo tree; only fold it in when a node's own
                material opts in, so unrelated nodes (e.g. installer-download) aren't
                invalidated by edits to code they never touch. Nodes that build from this
@@ -245,7 +257,7 @@ class VmTestSpec {
     public string hashMaterial() {
         var material = self.stateMaterial;
         if (material.isEmpty()) {
-            material = f"{self.name}:{self.arch}:{self.isoUrl}:{self.diskSize}:{self.memory}:{self.cpus}:{self.sshPort}";
+            material = f"{self.name}:{self.arch}:{self.isoUrl}:{self.diskSize}:{self.memory}:{self.cpus}";
         }
         return f"parent={self.parentHash}\nstate={self.state}\nmaterial={material}\nargs=\n{self.argsMaterial()}\noperations=\n{self.operationsMaterial()}\n";
     }

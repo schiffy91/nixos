@@ -14,13 +14,14 @@ class GraphRunnerTests {
     }
 
     // A node keyed on the workspace's sources, or, with a parent, on its parent's state alone.
-    private void node(string name, string command, string parent = "") {
+    private void node(string name, string command, string parent = "", string memory = "") {
         var material = parent.isEmpty() ? f"{name}:{{{{sourceHash}}}}" : name;
         var spec = JSONValue.parse(f"{{\"name\":\"{name}\",\"state\":\"{name}\",\"operations\":[]}}");
         spec.set("stateMaterial", JSONValue.makeString(material));
         spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
         spec.set("workDir", JSONValue.makeString(self.fixture.path(f".vm/{name}-{{{{stateHashShort}}}}")));
         if (!parent.isEmpty()) { spec.set("parentState", JSONValue.makeString(parent)); }
+        if (!memory.isEmpty()) { spec.set("memory", JSONValue.makeString(memory)); }
         var host = JSONValue.parse("{\"op\":\"host\"}");
         host.set("command", JSONValue.makeString(command));
         spec.get("operations").push(host); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
@@ -142,6 +143,62 @@ class GraphRunnerTests {
         Check.exited(self.run(["gc"]));
     }
 
+    private string entry(string id, string after = "") {
+        var parents = after.isEmpty() ? "" : f",\"after\":[\"{after}\"]";
+        return f"{{\"id\":\"{id}\",\"spec\":\"{id}.json\"{parents}}}";
+    }
+
+    private long long elapsed(Vector<string> arguments, int code = 0) {
+        var started = MonotonicClock.milliseconds();
+        Check.exited(self.run(arguments), code);
+        return MonotonicClock.milliseconds() - started;
+    }
+
+    public void together() {
+        Vector<string> entries = [];
+        for name in ["w1", "w2", "w3", "w4"] { self.node(name, "sleep 2"); entries.push(self.entry(name)); }
+        self.graph(entries.join(","));
+        var together = self.elapsed(["run", "w1", "w2", "w3", "w4", "--arg", "jobs=4", "--arg", "force=true"]);
+        Check.that(together < 7000, f"four two-second nodes run together: {together} ms");
+        var inTurn = self.elapsed(["run", "w1", "w2", "w3", "w4", "--arg", "jobs=1", "--arg", "force=true"]);
+        Check.that(inTurn >= 8000, f"with one job they run in turn: {inTurn} ms");
+        var again = Check.exited(self.run(["run", "w1", "w2", "w3", "w4"]));
+        Check.that(again.stdout().contains("0 passed, 4 skipped, 0 failed, 0 blocked"), f"neither the job count nor force is part of a state: {self.said(again)}");
+
+        var marker = self.fixture.path("parent-done");
+        self.node("first", f"sleep 1 && touch {ShellWords.quote(marker)}");
+        self.node("second", f"test -e {ShellWords.quote(marker)}", "first");
+        self.graph(self.entry("first") + "," + self.entry("second", "first"));
+        Check.exited(self.run(["run", "second", "--arg", "jobs=4"]));
+
+        var survivor = self.fixture.path("survivor");
+        self.node("bad", "sleep 1; printf 'the reason\\n'; exit 1");
+        self.node("dependent", "true", "bad");
+        self.node("independent", f"sleep 2 && touch {ShellWords.quote(survivor)}");
+        self.graph(self.entry("bad") + "," + self.entry("dependent", "bad") + "," + self.entry("independent"));
+        var broken = Check.exited(self.run(["run", "dependent", "independent", "--arg", "jobs=4"]), 1);
+        Check.that(FileSystem.exists(survivor), "a failure does not stop a node that does not depend on it");
+        Check.that(broken.stdout().contains("1 passed, 0 skipped, 1 failed, 1 blocked"), f"the summary counts every outcome: {self.said(broken)}");
+        Check.that(broken.stdout().contains("  failed: bad (") && broken.stdout().contains("  blocked: dependent (waits on bad)"), "the summary names what failed and what it blocked");
+        Check.that(self.said(broken).contains("the reason"), "the failed node's own output is shown");
+
+        var ports = self.fixture.path("ports");
+        entries = [];
+        for name in ["p1", "p2", "p3"] { self.node(name, f"printf '%s\\n' {{{{sshPort}}}} >> {ShellWords.quote(ports)}; sleep 2"); entries.push(self.entry(name)); }
+        self.graph(entries.join(","));
+        Check.exited(self.run(["run", "p1", "p2", "p3", "--arg", "jobs=3"]));
+        var given = Strings.split(Path.readAll(ports).trim(), "\n");
+        Check.that(given.length == 3 && given.get(0) != given.get(1) && given.get(0) != given.get(2) && given.get(1) != given.get(2), f"nodes running together are given different ports: {given.join(" ")}");
+        Check.that(Check.exited(self.run(["run", "p1", "p2", "p3", "--arg", "jobs=1"])).stdout().contains("0 passed, 3 skipped"), "the port a node was given is not part of its state");
+
+        var busy = self.fixture.path("busy");
+        var alone = f"test ! -e {ShellWords.quote(busy)} && touch {ShellWords.quote(busy)} && sleep 1 && rm {ShellWords.quote(busy)}";
+        self.node("m1", alone, "", "8G"); self.node("m2", alone, "", "8G");
+        self.graph(self.entry("m1") + "," + self.entry("m2"));
+        Check.exited(self.run(["run", "m1", "m2", "--arg", "jobs=4", "--arg", "memoryBudget=8G"]));
+        Check.exited(self.run(["run", "m1", "m2", "--arg", "jobs=4", "--arg", "memoryBudget=16G", "--arg", "force=true"]), 1);
+    }
+
     public void close() { self.fixture.close(); }
 }
 
@@ -151,7 +208,8 @@ int main() {
         tests.durations();
         tests.collection();
         tests.oneAtATime();
+        tests.together();
         tests.close();
-        print("PASS: the graph keeps each node's duration, collects only unreferenced state, and runs one at a time"); return 0;
+        print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }
 }

@@ -12,6 +12,27 @@ import ../Spec.btrc;
 import ../VmTestRunner.btrc;
 import ../QemuE2eHarness.btrc;
 
+// One node being run by a child of the graph runner.
+class GraphJob {
+    public string id;
+    public BackgroundProcess process;
+    public long long started;
+    public int memory;
+    public int port;
+    public string log;
+
+    public GraphJob(string id, BackgroundProcess process, int memory, int port, string log) {
+        self.id = id;
+        self.process = process;
+        self.started = MonotonicClock.milliseconds();
+        self.memory = memory;
+        self.port = port;
+        self.log = log;
+    }
+
+    public long long seconds() { return (MonotonicClock.milliseconds() - self.started + 500LL) / 1000LL; }
+}
+
 class VmGraphRunner {
     public ExecutionGraph graph;
     public Map<string, string> args;
@@ -335,6 +356,86 @@ class VmGraphRunner {
         return failed == 0 ? 0 : 1;
     }
 
+    // How many nodes run at once: `--arg jobs=N`, or one for every four processors, since a VM is given four.
+    public int jobLimit() {
+        if (self.args.has("jobs")) { return Strings.toInt(self.args.get("jobs")) < 1 ? 1 : Strings.toInt(self.args.get("jobs")); }
+        var processors = UnixShell().run("nproc");
+        int count = processors.ok() ? Strings.toInt(processors.trimmed()) / 4 : 1;
+        return count < 1 ? 1 : count;
+    }
+
+    // The memory the running nodes may be given together, in megabytes: `--arg memoryBudget=48G`,
+    // or three quarters of what the machine has.
+    public int memoryBudget() {
+        if (self.args.has("memoryBudget")) {
+            var asked = VmTestSpec();
+            asked.memory = self.args.get("memoryBudget");
+            return asked.memoryMegabytes();
+        }
+        for line in Strings.split(Path.readAll("/proc/meminfo"), "\n") {
+            if (!line.startsWith("MemTotal:")) { continue; }
+            var fields = Strings.split(line.replace("MemTotal:", "").trim(), " ");
+            return Strings.toInt(fields.get(0)) / 1024 / 4 * 3;
+        }
+        return 8192;
+    }
+
+    private bool listening(int port) {
+        var probe = f"exec 3<>/dev/tcp/127.0.0.1/{port}";
+        return UnixShell().run(f"bash -c {ShellWords.quote(probe)} 2>/dev/null", logFailure=false).ok();
+    }
+
+    // A port no running node has and nothing on this machine answers on.
+    private int freePort(Vector<GraphJob> running) {
+        for (int port = 22300; port < 22600; port++) {
+            var taken = false;
+            for job in running { if (job.port == port) { taken = true; } }
+            if (!taken && !self.listening(port)) { return port; }
+        }
+        NixosLog.fatal("No free port for a VM between 22300 and 22599");
+        return 0;
+    }
+
+    public string logPath(VmTestSpec spec, string id) {
+        return PathTools.join(PathTools.join(PathTools.dirname(spec.stateRoot), "logs"), f"{id}.log");
+    }
+
+    // Runs one node in a child of its own, so several can run at once. With one job the child
+    // writes straight to this terminal; with more, each writes its own log.
+    private GraphJob start(GraphNode node, VmTestSpec spec, int port, bool streamed) {
+        Vector<string> command = [FileSystem.realPath("/proc/self/exe"), "graph", self.graph.path, "run-node", node.id];
+        for key, value in self.args {
+            if (key == "sshPort") { continue; }
+            command.push("--arg"); command.push(f"{key}={value}");
+        }
+        command.push("--arg"); command.push(f"sshPort={port}");
+        var log = streamed ? "" : self.logPath(spec, node.id);
+        if (streamed) {
+            return GraphJob(node.id, BackgroundProcess.start(command.get(0), command.slice(1, command.length), killOnDrop=true), spec.memoryMegabytes(), port, log);
+        }
+        FileSystem.mkdirp(PathTools.dirname(log));
+        var script = "exec";
+        for word in command { script = script + " " + ShellWords.quote(word); }
+        script = script + f" > {ShellWords.quote(log)} 2>&1 < /dev/null";
+        return GraphJob(node.id, BackgroundProcess.start("sh", ["-c", script], killOnDrop=true), spec.memoryMegabytes(), port, log);
+    }
+
+    // The node itself, in the child: its operations, then how long they took.
+    public int runNode(string id) {
+        var node = self.graph.node(id);
+        var spec = self.specFor(node);
+        var started = MonotonicClock.milliseconds();
+        var result = VmTestRunner(spec).run();
+        var seconds = (MonotonicClock.milliseconds() - started + 500LL) / 1000LL;
+        if (result == 0 && FileSystem.isDir(spec.stateDir())) { Path.writeAll(self.durationFile(spec), f"{seconds}\n"); }
+        return result;
+    }
+
+    private string tail(string path, int lines) {
+        var shown = UnixShell().run(f"tail -n {lines} {ShellWords.quote(path)}", logFailure=false);
+        return shown.ok() ? shown.stdout() : "";
+    }
+
     public int run(Vector<string> targets) {
         var lock = self.hold("run");
         var traversal = GraphTraversal(self.graph);
@@ -349,23 +450,70 @@ class VmGraphRunner {
             NixosLog.fatal(traversal.error);
         }
 
-        for id in order {
-            var node = self.graph.node(id);
-            var spec = self.specFor(node);
-            if (!self.force() && self.ready(spec)) {
-                NixosLog.info("graph " + self.graph.name + ": skip " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
-                continue;
+        int jobs = self.jobLimit();
+        int budget = self.memoryBudget();
+        var name = self.graph.name;
+        var began = MonotonicClock.milliseconds();
+        Map<string, string> outcome = {};  // passed, skipped, failed, or blocked by a parent that failed
+        Vector<string> failed = [];
+        Vector<string> blocked = [];
+        Vector<GraphJob> running = [];
+        Vector<string> pending = order.copy();
+        int passed = 0;
+        int skipped = 0;
+        while (!pending.isEmpty() || !running.isEmpty()) {
+            Vector<GraphJob> still = [];
+            for job in running {
+                if (job.process.running()) { still.push(job); continue; }
+                if (job.process.code() == 0) {
+                    outcome.put(job.id, "passed"); passed++;
+                    NixosLog.info(f"graph {name}: pass {job.id} in {job.seconds()}s");
+                    continue;
+                }
+                outcome.put(job.id, "failed");
+                failed.push(job.log.isEmpty() ? job.id : f"{job.id} ({job.log})");
+                NixosLog.error(f"graph {name}: FAIL {job.id} after {job.seconds()}s");
+                if (!job.log.isEmpty()) { Console.error(self.tail(job.log, 60)); }
             }
-            NixosLog.info("graph " + self.graph.name + ": run " + node.id + " -> " + spec.state + "@" + spec.stateHashShort);
-            var started = MonotonicClock.milliseconds();
-            var runner = VmTestRunner(spec);
-            var result = runner.run();
-            var seconds = (MonotonicClock.milliseconds() - started + 500LL) / 1000LL;
-            if (result != 0) { return result; }
-            if (FileSystem.isDir(spec.stateDir())) { Path.writeAll(self.durationFile(spec), f"{seconds}\n"); }
-            NixosLog.info(f"graph {self.graph.name}: pass {node.id} in {seconds}s");
+            running = still;
+
+            Vector<string> waiting = [];
+            for id in pending {
+                var node = self.graph.node(id);
+                var blocker = "";
+                var parentsDone = true;
+                for parent in node.after {
+                    if (!outcome.has(parent)) { parentsDone = false; continue; }
+                    var result = outcome.get(parent);
+                    if (result == "failed" || result == "blocked") { blocker = parent; }
+                }
+                if (!blocker.isEmpty()) {
+                    outcome.put(id, "blocked"); blocked.push(f"{id} (waits on {blocker})");
+                    NixosLog.error(f"graph {name}: blocked {id}: {blocker} did not pass");
+                    continue;
+                }
+                if (!parentsDone) { waiting.push(id); continue; }
+                var spec = self.specFor(node);  // only now: a state's hash takes in its parent's recorded hash
+                if (!self.force() && self.ready(spec)) {
+                    outcome.put(id, "skipped"); skipped++;
+                    NixosLog.info(f"graph {name}: skip {id} -> {spec.state}@{spec.stateHashShort}");
+                    continue;
+                }
+                int used = 0;
+                for job in running { used += job.memory; }
+                if (running.length >= jobs || (!running.isEmpty() && used + spec.memoryMegabytes() > budget)) { waiting.push(id); continue; }
+                NixosLog.info(f"graph {name}: run {id} -> {spec.state}@{spec.stateHashShort}");
+                running.push(self.start(node, spec, self.freePort(running), jobs == 1));
+            }
+            pending = waiting;
+            if (!running.isEmpty()) { Timer.sleepMillis(200); }
         }
-        return 0;
+
+        var seconds = (MonotonicClock.milliseconds() - began + 500LL) / 1000LL;
+        Console.log(f"graph {name}: {passed} passed, {skipped} skipped, {failed.length} failed, {blocked.length} blocked in {seconds}s");
+        for entry in failed { Console.log(f"  failed: {entry}"); }
+        for entry in blocked { Console.log(f"  blocked: {entry}"); }
+        return failed.isEmpty() && blocked.isEmpty() ? 0 : 1;
     }
 
     public int runRequired() {
