@@ -125,7 +125,7 @@ let
         && lib.filter (entry: lib.elem entry pinned) there == pinned)
       "The Deck's taskbar must pin 1Password, VS Code, Konsole, Battle.net and Steam, with the apps both hosts pin in FRACTAL-NORTH's order."
     ++ check (let unit = handheld.systemd.services.storage-steam-library-sdcard.serviceConfig; in
-        lib.hasInfix "/sd/steam" unit.ExecStartPre && lib.hasInfix "steam://addlibraryfolder/%2Fsd%2Fsteam" unit.ExecStart
+        lib.hasInfix "/sd/steam" unit.ExecStartPre && lib.hasSuffix " steam://addlibraryfolder/%%2Fsd%%2Fsteam" unit.ExecStart  # doubled: systemd takes a single % for a specifier
         && !(unit ? ExecStop) && !(plain.systemd.services ? storage-steam-library-sdcard))
       "The Deck's card must carry a folder for Steam, and a running Steam must be told when the card arrives."
     ++ check (handheld.environment.etc.crypttab.text == "sdcard /dev/disk/by-label/SD-crypt /var/lib/nixos/sd-card/key luks,noauto,nofail\n"

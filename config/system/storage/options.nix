@@ -23,6 +23,7 @@ in {
     settings.disk.recovery.size = mkSetting str "4G";
     settings.disk.recovery.mountPoint = mkSetting str "/recovery";
     settings.disk.recovery.filesystemLabel = mkSetting str "RECOVERY";
+    settings.disk.recovery.deviceTimeout = mkSetting str "5s"; # how long boot waits for the recovery partition before going on without it
     settings.disk.recovery.kernelPath = mkSetting str "EFI/recovery/kernel.efi";
     settings.disk.recovery.initrdPath = mkSetting str "EFI/recovery/initrd";
     settings.disk.recovery.entryPath = mkSetting str "loader/entries/nixos-recovery.conf";

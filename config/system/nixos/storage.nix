@@ -57,7 +57,8 @@ in {
           User = user.name;
           TimeoutSec = 60;
           ExecStartPre = "+${pkgs.coreutils}/bin/install -d -o ${user.name} -g ${user.group} -m 0755 ${volume.mountPoint}/steam";  # as root: the volume's top folder is root's
-          ExecStart = "-${config.programs.steam.package}/bin/steam -ifrunning steam://addlibraryfolder/${lib.strings.escapeURL "${volume.mountPoint}/steam"}";  # a Steam that is not running reads its own list when it starts
+          # A Steam that is not running reads its own list when it starts. Each % is doubled: systemd reads one as a specifier.
+          ExecStart = "-${config.programs.steam.package}/bin/steam -ifrunning steam://addlibraryfolder/${lib.replaceStrings [ "%" ] [ "%%" ] (lib.strings.escapeURL "${volume.mountPoint}/steam")}";
         };
       }) withSteam)
     ];
