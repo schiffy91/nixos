@@ -1,5 +1,6 @@
 import Library.CLI;
-import ../../../ci/lib/PipeProcess.btrc;
+import Library.Process;
+import Library.Timer;
 import ../../lib/TestDirectory.btrc;
 
 class InstallTests {

@@ -1,6 +1,7 @@
 import Library.FileSystem;
 import Library.Process;
 import Library.Strings;
+import Library.Timer;
 import ../../core/NixosLog.btrc;
 import ../Spec.btrc;
 
@@ -116,12 +117,11 @@ class QemuSerial {
 
     public void serialSend(string command) {
         var payload = f"{command}\n";
-        var write = f"printf %s {ShellWords.quote(payload)} > {ShellWords.quote(self.serialInPath())}";
         for (int attempt = 0; attempt < 60; attempt++) {
             self.ensureSerialReader();
-            var result = self.shell.run(f"timeout 2 sh -c {ShellWords.quote(write)}", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+            var result = Process.run("sh", ["-c", "cat > \"$1\"", "sh", self.serialInPath()], stdinData=payload, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, timeoutMilliseconds=2000);
             if (result.ok()) { return; }
-            self.shell.run("sleep 2", stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false);
+            Timer.sleepMillis(2000);
         }
         NixosLog.fatal(f"Failed to send command to VM serial console: {self.serialInPath()}");
     }

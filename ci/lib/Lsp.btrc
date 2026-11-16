@@ -1,8 +1,9 @@
 import Library.FileSystem;
 import Library.JSON;
 import Library.Platform;
+import Library.Process;
 import Library.Strings;
-import ./PipeProcess.btrc;
+import Library.Timer;
 
 class LspFrames {
     private Bytes pending = Bytes();

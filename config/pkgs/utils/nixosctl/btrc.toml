@@ -26,9 +26,26 @@ kind = "string"
 owner = "account"
 
 [[native.defines]]
+name = "_GNU_SOURCE"
+value = "1"
+modules = ["lib.RootSecretFile", "lib.PasswordHashFile", "lib.PasswordManager"]
+
+[[native.defines]]
 name = "_POSIX_C_SOURCE"
 value = "200809L"
-modules = ["lib.accounts.UserAccount", "lib.RootSecretFile", "lib.PasswordHashFile"]
+modules = ["lib.accounts.UserAccount", "lib.RootSecretFile", "lib.PasswordHashFile", "lib.PasswordManager"]
+
+[[native.libraries]]
+name = "crypt"
+modules = ["lib.PasswordManager"]
+
+[[native.bindings]]
+module = "lib.PasswordManager"
+header = "lib/password-hash.h"
+language = "c"
+standard = "c11"
+symbols = ["credentialHashMatches"]
+read-only-borrows = ["credentialHashMatches.hash", "credentialHashMatches.password"]
 
 [[native.bindings]]
 module = "lib.RootSecretFile"

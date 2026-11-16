@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -136,12 +137,25 @@ static inline int driveSetAccessed(int descriptor, long seconds) {
 // contents; emptying it would hand its reader zeros. 0, or -1 when in use.
 static inline int driveEvict(int descriptor) {
 	struct stat status;
-	signal(SIGIO, SIG_IGN);  // sent if someone opens the file while the lease is held
-	if (fstat(descriptor, &status) != 0 || fcntl(descriptor, F_SETLEASE, F_WRLCK) != 0) { return -1; }
+	sigset_t sigioSet;
+	sigset_t oldMask;
+	sigemptyset(&sigioSet);
+	sigaddset(&sigioSet, SIGIO);
+	// Block lease-break SIGIO on this thread only without mutating process signal dispositions.
+	if (pthread_sigmask(SIG_BLOCK, &sigioSet, &oldMask) != 0) { return -1; }
+	if (fstat(descriptor, &status) != 0 || fcntl(descriptor, F_SETLEASE, F_WRLCK) != 0) {
+		pthread_sigmask(SIG_SETMASK, &oldMask, NULL);
+		return -1;
+	}
 	int result = fsetxattr(descriptor, "user.drive.state", "cloud", 5, 0);
 	struct timespec times[2] = { status.st_atim, status.st_mtim };
 	if (result == 0) { result = ftruncate(descriptor, 0) != 0 || ftruncate(descriptor, status.st_size) != 0 || futimens(descriptor, times) != 0 ? -1 : 0; }
 	fcntl(descriptor, F_SETLEASE, F_UNLCK);
+	if (!sigismember(&oldMask, SIGIO)) {
+		struct timespec zero = { 0, 0 };
+		while (sigtimedwait(&sigioSet, NULL, &zero) >= 0) {}
+	}
+	pthread_sigmask(SIG_SETMASK, &oldMask, NULL);
 	return result;
 }
 

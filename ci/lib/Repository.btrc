@@ -3,7 +3,6 @@ import Library.JSON;
 import Library.Platform;
 import Library.Process;
 import Library.Strings;
-import ./PipeProcess.btrc;
 
 class Repository {
     public string root;

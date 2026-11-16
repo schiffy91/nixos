@@ -269,18 +269,15 @@ class NixosCtl {
             installer.bootstrapConfigIfMissing();
             var secrets = SecretsManager(self.config);
             var confirmed = line.has("--yes");
-            int prepareStatus = 0;
             try {
                 secrets.createIfMissing(installer.plainTextPasswordPath());
                 var formatPrompt = f"Format {self.config.diskDevice()}?";
                 var format = line.has("--format") || (!confirmed && installer.interactive.confirm(formatPrompt));
                 var prepared = installer.prepareDisk(format);
-                prepareStatus = prepared.code;
+                if (!prepared.ok()) { return prepared.code; }
             } finally {
                 secrets.releaseInstallerPassword();
             }
-            // The pinned compiler skips finally on early returns: return only after cleanup.
-            if (prepareStatus != 0) { return prepareStatus; }
             if (confirmed || installer.interactive.confirm("Install NixOS?")) {
                 var installed = installer.installNixos(forceUpgrade=line.has("--force-upgrade"));
                 if (!installed.ok()) { return installed.code; }
@@ -364,11 +361,7 @@ class NixosCtl {
             if (action.equals("keys")) {
                 if (args.count() != 4) { NixosLog.fatal("Usage: nixosctl secure-boot keys <export|import|verify> /absolute/bundle/path"); }
                 // Preserve the actual pipe/terminal descriptors; never collect secret stdout.
-                Vector<string> values = [args.get(2), args.get(3)];
-                var child = ChildProcessArguments.build("nixosctl-secure-boot-keys", values);
-                execvp(child[0], child);
-                CStringArray.freeAll(child);
-                throw "Cannot execute Secure Boot key helper";
+                Process.exec(["nixosctl-secure-boot-keys", args.get(2), args.get(3)]);
             }
             if (line.has("--microsoft")) { throw "This configuration enrolls only its own keys; --microsoft is unsupported"; }
             for (int index = 2; index < args.count(); index++) {

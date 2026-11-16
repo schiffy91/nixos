@@ -62,7 +62,7 @@ class ProtonWine {
         Path.writeAll(c.saved(), source + "\n");
         var vdf = destination + "/compatibilitytool.vdf";
         if (FileSystem.exists(vdf)) {
-            Path.writeAll(vdf, Path.readAll(vdf).replace("\"display_name\" \"proton-custom " + c.version + " (Wayland SNI)\"", "\"display_name\" \"proton-custom DEV " + c.version + " (Wayland SNI)\""));
+            Path.writeAll(vdf, Path.readAll(vdf).replace("\"display_name\" \"proton-custom " + c.version + " ", "\"display_name\" \"proton-custom DEV " + c.version + " "));
         }
         self.asio(); print(f"dev tool: {destination}\nstore base: {source}");
     }

@@ -3,7 +3,9 @@ let
   locked = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree { inherit (locked) type owner repo rev narHash; }) { inherit system; };
   inputs.btrc = let node = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.btrc.locked;
-    in builtins.getFlake "github:${node.owner}/${node.repo}/${node.rev}";
+    in builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs node [
+      "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+    ]));
   evaluate = enabled: (import "${pkgs.path}/nixos/lib/eval-config.nix" {
     inherit system;
     specialArgs = { inherit inputs; };

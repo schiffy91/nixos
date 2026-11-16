@@ -15,7 +15,6 @@ class NixosLog {
     }
 
     class void fatal(string message) {
-        Console.error(f"{NixosLog.red()}{message}{NixosLog.reset()}");
-        exit(1);
+        throw message;
     }
 }

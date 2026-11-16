@@ -2,7 +2,7 @@
 let
   lock = (builtins.fromJSON (builtins.readFile ../../flake.lock)).nodes;
   pkgs = import (builtins.fetchTree { inherit (lock.nixpkgs.locked) type owner repo rev narHash; }) { inherit system; };
-  compiler = builtins.getFlake "github:${lock.btrc.locked.owner}/${lock.btrc.locked.repo}/${lock.btrc.locked.rev}";
+  compiler = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs lock.btrc.locked [ "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev" ]));
   programs = (import ../../config/lib/btrc.nix { inherit pkgs; btrcpy = compiler.packages.${system}.btrcpy; }) {
     name = "ci-contract-tests";
     src = pkgs.lib.fileset.toSource {

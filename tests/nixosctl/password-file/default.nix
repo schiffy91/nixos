@@ -13,11 +13,12 @@ let
     name = "password-file-contracts";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ../../../config/lib/BackgroundProcess.btrc
+      fileset = pkgs.lib.fileset.unions [ ../../lib
         ../../../config/pkgs/utils/nixosctl ./GuestTests.btrc ./btrc.toml ./btrc.lock ];
     };
     programs.password-file-contracts = "tests/nixosctl/password-file/GuestTests.btrc";
-    linkFlags = [ "-lutil" ];
+    buildInputs = [ pkgs.libxcrypt ];
+    linkFlags = [ "-lutil" "-lcrypt" ];
   };
 in assert import ./storage.nix { inherit inputs system; };
 (import ../../vm/test.nix { inherit pkgs inputs; }) {

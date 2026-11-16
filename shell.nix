@@ -13,13 +13,15 @@ let
   # The packaged compiler carries the native header reader, sysroot and target
   # that typed native bindings (Library.Tray on libdbus) need; the raw source does not.
   btrcNode = lock.nodes.btrc.locked;
-  btrcFlake = builtins.getFlake "github:${btrcNode.owner}/${btrcNode.repo}/${btrcNode.rev}";
+  btrcFlake = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs btrcNode [
+    "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+  ]));
   inherit (import ./config/pkgs/dev/btrc/compat.nix {
     inherit pkgs;
     packages = btrcFlake.packages.${system};
   }) btrcpy btrc-lsp;
-  nativeLibraries = [ pkgs.liblzf pkgs.zlib pkgs.curl pkgs.openssl pkgs.glib ]
-    ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.cryptsetup pkgs.pam pkgs.libdrm pkgs.libvncserver pkgs.libpng pkgs.libjpeg_turbo ];
+  nativeLibraries = [ pkgs.liblzf pkgs.zlib pkgs.curl pkgs.openssl pkgs.glib pkgs.libsodium ]
+    ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.cryptsetup pkgs.libxcrypt pkgs.pam pkgs.libdrm pkgs.libvncserver pkgs.libpng pkgs.libjpeg_turbo pkgs.dbus ];
 in
 pkgs.mkShell {
   buildInputs = nativeLibraries;

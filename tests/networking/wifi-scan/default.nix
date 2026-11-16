@@ -3,7 +3,9 @@ let
   locked = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree { inherit (locked) type owner repo rev narHash; }) { inherit system; };
   btrc = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.btrc.locked;
-  inputs.btrc = builtins.getFlake "github:${btrc.owner}/${btrc.repo}/${btrc.rev}";
+  inputs.btrc = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs btrc [
+    "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+  ]));
   # The policy wpa_supplicant holds for the network wlan1 is connected to.
   policy = pkgs.writeShellApplication {
     name = "wifi-scan-policy";

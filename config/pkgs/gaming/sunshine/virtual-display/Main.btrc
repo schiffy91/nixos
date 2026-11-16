@@ -7,7 +7,7 @@ int main(int argc, char** argv) {
         if (args.count() != 2 || !["start", "stop"].contains(args.get(1))) { throw "Expected display configuration and start or stop"; }
         var configuration = JSONValue.readFile(args.get(0));
         var directory = Environment.get("XDG_RUNTIME_DIR", "/tmp") + "/sunshine-virtual-display";
-        if (FileSystem.mkdirp(directory) != 0) { throw "Cannot create virtual display state directory"; }
+        if (FileSystem.mkdirp(directory, 0o700) != 0) { throw "Cannot create virtual display state directory"; }
         if (args.get(1).equals("start")) { SunshineDisplay.start(configuration, directory); }
         else { SunshineDisplay.stop(configuration, directory); }
         return 0;

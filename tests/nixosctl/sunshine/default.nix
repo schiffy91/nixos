@@ -8,7 +8,7 @@ let
     name = "sunshine-credentials-contracts";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ../../../config/lib/BackgroundProcess.btrc ./GuestTests.btrc ./Fixture.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../../lib ./GuestTests.btrc ./Fixture.btrc ];
     };
     programs.sunshine-credentials-contracts = "tests/nixosctl/sunshine/GuestTests.btrc";
   };

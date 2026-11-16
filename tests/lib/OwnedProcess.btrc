@@ -1,4 +1,5 @@
-import ../../config/lib/BackgroundProcess.btrc;
+import Library.Process;
+import Library.Timer;
 
 // Unlike virtual-display launches, test children must end with their scope.
 class OwnedProcess {

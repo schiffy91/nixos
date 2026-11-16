@@ -3,7 +3,10 @@ let
   locked = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree { inherit (locked) type owner repo rev narHash; }) { inherit system; };
   btrc = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.btrc.locked;
-  inputs.btrc = builtins.getFlake "github:${btrc.owner}/${btrc.repo}/${btrc.rev}";
+  btrcFlake = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs btrc [
+    "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+  ]));
+  inputs.btrc = btrcFlake;
   listener = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
     name = "network-test-listener";
     src = pkgs.lib.fileset.toSource { root = ./.; fileset = ./Listener.btrc; };
@@ -13,8 +16,7 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "trusted-network-connections";
   nodes.machine = { lib, pkgs, inputs, ... }: {
     imports = [ ../../../config/settings.nix ../../../config/system/nixos/networking.nix ];
-    _module.args.inputs.btrc = let btrc = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.btrc.locked;
-      in builtins.getFlake "github:${btrc.owner}/${btrc.repo}/${btrc.rev}";
+    _module.args.inputs.btrc = btrcFlake;
     settings.networking = {
       trustedConnections = [ "11111111-1111-4111-8111-111111111111" ];
       ports.tcp = [ 8080 ];

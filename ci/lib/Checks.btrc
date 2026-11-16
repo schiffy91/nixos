@@ -40,7 +40,7 @@ class Checks {
                 if (child.wait(deadline) != 0) {
                     var path = paths.get(start + index); self.failures.push(path);
                     print(path + ":\n" + output.toStringLossy() + Path.readAll(errors.get(index)));
-                } else { unlink(errors.get(index)); }
+                } else { FileSystem.removeIfExists(errors.get(index)); }
             }
         }
     }

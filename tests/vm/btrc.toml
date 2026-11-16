@@ -1,8 +1,6 @@
 manifest-version = 1
 [package]
 name = "nixos_vm_tests"
-[dependencies]
-ci = { path = "../../ci" }
 
 [[native.bindings]]
 module = "Framebuffer"

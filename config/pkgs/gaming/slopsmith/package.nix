@@ -30,7 +30,7 @@ let
   });
   controller = (import ../lib/build-tools.nix { inherit pkgs inputs; }) {
     name = "slopsmith-runtime";
-    sources = [ ./src ../../../lib/BackgroundProcess.btrc ];
+    sources = [ ./src ];
     programs.slopsmith-runtime = "slopsmith/src/Main.btrc";
     runtimeInputs = with pkgs; [ bash coreutils curl podman podman-compose xdg-utils ];
   };

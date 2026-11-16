@@ -6,7 +6,9 @@ let
   evaluate = networking: (import (source + "/nixos/lib/eval-config.nix") {
     inherit system;
     specialArgs.inputs.btrc = let btrc = (builtins.fromJSON (builtins.readFile ../../flake.lock)).nodes.btrc.locked;
-      in builtins.getFlake "github:${btrc.owner}/${btrc.repo}/${btrc.rev}";
+      in builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs btrc [
+        "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+      ]));
     modules = [ ../../config/settings.nix ../../config/system/nixos/networking.nix {
       settings.networking = networking;
       networking.hostName = "networking-check";

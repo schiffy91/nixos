@@ -1,4 +1,7 @@
-import ../../ci/lib/PipeProcess.btrc;
+import Library.Bytes;
+import Library.Process;
+import Library.Strings;
+import Library.Timer;
 #include <assert.h>
 
 int main(int argc, char** argv) {

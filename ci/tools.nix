@@ -3,7 +3,9 @@ let
   locked = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree { inherit (locked) type owner repo rev narHash; }) { inherit system; };
   compilerLock = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.btrc.locked;
-  compiler = builtins.getFlake "github:${compilerLock.owner}/${compilerLock.repo}/${compilerLock.rev}";
+  compiler = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs compilerLock [
+    "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+  ]));
   package = (import ../config/lib/btrc.nix {
     inherit pkgs;
     btrcpy = compiler.packages.${system}.btrcpy;

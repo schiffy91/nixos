@@ -1,4 +1,5 @@
 #pragma once
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -26,18 +27,27 @@ static inline void secureBootPrivateKeyRelease(SecureBootPrivateKey key) {
     EVP_PKEY_free(key->key);
     free(key);
 }
-static inline SecureBootPrivateKey secureBootPrivateKeyRead(const char *bytes, int length) {
-    BIO *input = BIO_new_mem_buf(bytes, length);
-    if (!input) return NULL;
+static inline SecureBootPrivateKey secureBootPrivateKeyRead(const char *hex) {
+    if (!hex || !*hex) return NULL;
+    long rawLength = 0;
+    unsigned char *raw = OPENSSL_hexstr2buf(hex, &rawLength);
+    if (!raw || rawLength <= 0 || rawLength > 2147483647L) {
+        OPENSSL_free(raw);
+        return NULL;
+    }
+    int length = (int)rawLength;
+    BIO *input = BIO_new_mem_buf(raw, length);
+    if (!input) { OPENSSL_clear_free(raw, (size_t)rawLength); return NULL; }
     // An explicit empty password prevents OpenSSL from prompting on encrypted keys.
     EVP_PKEY *parsed = PEM_read_bio_PrivateKey(input, NULL, NULL, (void *)"");
     BIO_free(input);
     if (!parsed) {
-        input = BIO_new_mem_buf(bytes, length);
-        if (!input) return NULL;
+        input = BIO_new_mem_buf(raw, length);
+        if (!input) { OPENSSL_clear_free(raw, (size_t)rawLength); return NULL; }
         parsed = d2i_PrivateKey_bio(input, NULL);
         BIO_free(input);
     }
+    OPENSSL_clear_free(raw, (size_t)rawLength);
     if (!parsed) return NULL;
     SecureBootPrivateKey key = malloc(sizeof(*key));
     if (!key) { EVP_PKEY_free(parsed); return NULL; }
@@ -56,17 +66,26 @@ static inline void secureBootCertificateRelease(SecureBootCertificate certificat
     X509_free(certificate->certificate);
     free(certificate);
 }
-static inline SecureBootCertificate secureBootCertificateRead(const char *bytes, int length) {
-    BIO *input = BIO_new_mem_buf(bytes, length);
-    if (!input) return NULL;
+static inline SecureBootCertificate secureBootCertificateRead(const char *hex) {
+    if (!hex || !*hex) return NULL;
+    long rawLength = 0;
+    unsigned char *raw = OPENSSL_hexstr2buf(hex, &rawLength);
+    if (!raw || rawLength <= 0 || rawLength > 2147483647L) {
+        OPENSSL_free(raw);
+        return NULL;
+    }
+    int length = (int)rawLength;
+    BIO *input = BIO_new_mem_buf(raw, length);
+    if (!input) { OPENSSL_free(raw); return NULL; }
     X509 *parsed = PEM_read_bio_X509(input, NULL, NULL, NULL);
     BIO_free(input);
     if (!parsed) {
-        input = BIO_new_mem_buf(bytes, length);
-        if (!input) return NULL;
+        input = BIO_new_mem_buf(raw, length);
+        if (!input) { OPENSSL_free(raw); return NULL; }
         parsed = d2i_X509_bio(input, NULL);
         BIO_free(input);
     }
+    OPENSSL_free(raw);
     if (!parsed) return NULL;
     SecureBootCertificate certificate = malloc(sizeof(*certificate));
     if (!certificate) { X509_free(parsed); return NULL; }

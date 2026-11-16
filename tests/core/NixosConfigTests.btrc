@@ -32,7 +32,12 @@ int main() {
     assert(PasswordManager.hashUsable("$y$j9T$salt$hash"));
     for locked in ["!", "*", "", "!!", "!$6$salt$hash", "x", "6$salt$hash"] {
         assert(!PasswordManager.hashUsable(locked));
+        assert(!PasswordManager.verifyHash(locked, "testpass123"));
     }
+    var knownHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";
+    assert(PasswordManager.verifyHash(knownHash, "testpass123"));
+    assert(!PasswordManager.verifyHash(knownHash, "wrongpass"));
+    assert(!PasswordManager.verifyHash(knownHash, ""));
 
     var hostsRoot = "/tmp/nixosctl-naming-test";
     FileSystem.removeRecursive(hostsRoot);

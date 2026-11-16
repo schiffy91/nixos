@@ -4,4 +4,5 @@ class AlarmState {
     }
     class void wait() { testWaitForSignal(); }
     class int signal() { return testAlarmSignal(); }
+    class int remainingSeconds() { return testRemainingAlarmSeconds(); }
 }

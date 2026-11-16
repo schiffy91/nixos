@@ -447,8 +447,7 @@ class Immutability {
             immutability.runAll();
             return 0;
         } catch (string error) {
-            var message = f"{error}";
-            NixosLog.fatal(message);
+            NixosLog.error(error);
         }
         return 1;
     }

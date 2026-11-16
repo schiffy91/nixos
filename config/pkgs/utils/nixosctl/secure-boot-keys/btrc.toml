@@ -27,7 +27,7 @@ language = "c"
 standard = "c11"
 symbols = ["SecureBootPrivateKey", "SecureBootCertificate", "secureBootVerificationDeadline", "secureBootVerificationFinished", "secureBootPrivateKeyRead", "secureBootPrivateKeyRelease", "secureBootPrivateKeyValid", "secureBootCertificateRead", "secureBootCertificateRelease", "secureBootKeyMatches", "secureBootCertificateFingerprint"]
 owned-results = ["secureBootPrivateKeyRead", "secureBootCertificateRead"]
-read-only-borrows = ["secureBootPrivateKeyRead.bytes", "secureBootCertificateRead.bytes"]
+read-only-borrows = ["secureBootPrivateKeyRead.hex", "secureBootCertificateRead.hex"]
 borrowed-parameters = ["secureBootPrivateKeyValid.key", "secureBootKeyMatches.key", "secureBootKeyMatches.certificate", "secureBootCertificateFingerprint.certificate"]
 
 [native.bindings.resources.SecureBootPrivateKey]

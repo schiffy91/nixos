@@ -25,10 +25,10 @@ class KeyCrypto {
         // Untrusted key parameters must not make root spend unbounded CPU time.
         KeyCrypto.limitVerification();
         try {
-            var key = secureBootPrivateKeyRead(privateBytes.data, privateBytes.length());
+            var key = secureBootPrivateKeyRead(privateBytes.toHex());
             if (key == null) { throw "Invalid Secure Boot private key"; }
             if (!secureBootPrivateKeyValid(key)) { throw "Invalid Secure Boot private key"; }
-            var certificate = secureBootCertificateRead(certificateBytes.data, certificateBytes.length());
+            var certificate = secureBootCertificateRead(certificateBytes.toHex());
             if (certificate == null) { throw "Invalid Secure Boot certificate"; }
             if (!secureBootKeyMatches(key, certificate)) { throw "Secure Boot private key does not match its certificate"; }
             var fingerprint = secureBootCertificateFingerprint(certificate);

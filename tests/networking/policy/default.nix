@@ -2,7 +2,7 @@
 let
   lock = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes;
   pkgs = import (builtins.fetchTree { inherit (lock.nixpkgs.locked) type owner repo rev narHash; }) { inherit system; };
-  inputs.btrc = builtins.getFlake "github:${lock.btrc.locked.owner}/${lock.btrc.locked.repo}/${lock.btrc.locked.rev}";
+  inputs.btrc = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs lock.btrc.locked [ "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev" ]));
   tests = import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
     name = "trusted-network-policy-tests";
     src = pkgs.lib.fileset.toSource {

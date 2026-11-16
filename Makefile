@@ -8,7 +8,7 @@ CFLAGS ?= -std=c11 -pedantic
 # prebuilt stdlib archive (built by `--build-stdlib`); they include
 # btrc_stdlib.h and link libbtrc.a.
 TRANSPILER_FLAGS ?= --no-stdlib --strict-imports --stdlib "$(CURDIR)/$(STDLIB_DIR)"
-NIXOSCTL_LIBS ?= -lm -lpthread -lutil
+NIXOSCTL_LIBS ?= -lm -lpthread -lutil -lcrypt
 IMMUTABILITY_LIBS ?= -lm -lpthread
 TRAY_LIBS ?= $(shell pkg-config --cflags --libs dbus-1) -lm -lpthread
 

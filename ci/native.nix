@@ -3,7 +3,9 @@ let
   locked = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree { inherit (locked) type owner repo rev narHash; }) { inherit system; };
   compiler = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.btrc.locked;
-  inputs.btrc = builtins.getFlake "github:${compiler.owner}/${compiler.repo}/${compiler.rev}";
+  inputs.btrc = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs compiler [
+    "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+  ]));
   sleep = import ../config/system/nixos/sleep/packages.nix { inherit pkgs inputs; };
   # Keep this inventory explicit: repo-tools checks it against repository sources.
   coveredSources = [
@@ -20,6 +22,7 @@ let
     "config/pkgs/utils/nixosctl/secure-boot-keys/files.h"
     "config/pkgs/utils/nixosctl/lib/accounts/native.h"
     "config/pkgs/utils/nixosctl/lib/credentials.h"
+    "config/pkgs/utils/nixosctl/lib/password-hash.h"
     "config/pkgs/gaming/sunshine/ssh-login/native.h"
     "config/pkgs/gaming/assettocorsa/src/compression.h"
     "config/pkgs/gaming/deckpad/Awake.h"
@@ -44,7 +47,7 @@ let
   ];
   helpers = pkgs.runCommandCC "native-source-helpers" {
     nativeBuildInputs = [ pkgs.pkg-config ];
-    buildInputs = [ pkgs.glib pkgs.cryptsetup pkgs.liblzf pkgs.zlib pkgs.openssl pkgs.curl pkgs.pam pkgs.libdrm pkgs.libvncserver pkgs.libx11 pkgs.xorgproto pkgs.sdl3 ];
+    buildInputs = [ pkgs.glib pkgs.cryptsetup pkgs.libxcrypt pkgs.liblzf pkgs.zlib pkgs.openssl pkgs.curl pkgs.pam pkgs.libdrm pkgs.libvncserver pkgs.libx11 pkgs.xorgproto pkgs.sdl3 ];
   } ''
     mkdir -p "$out/bin"
     $CC -O2 -Wall -Werror ${../config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c} \
@@ -60,6 +63,7 @@ let
       ${../config/pkgs/utils/nixosctl/secure-boot-keys/files.h} \
       ${../config/pkgs/utils/nixosctl/lib/accounts/native.h} \
       ${../config/pkgs/utils/nixosctl/lib/credentials.h} \
+      ${../config/pkgs/utils/nixosctl/lib/password-hash.h} \
       ${../config/system/nixos/sleep/helpers/posix.h} \
       ${../config/system/nixos/sleep/helpers/pam.h} \
       ${../config/system/nixos/sleep/helpers/drm.h} \

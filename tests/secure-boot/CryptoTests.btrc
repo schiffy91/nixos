@@ -19,7 +19,9 @@ int main(int argc, char** argv) {
             return 99;
         }
         if (args.count() != 2) { throw "Usage: crypto-tests <private-key> <certificate>"; }
-        print(KeyCrypto.verifyPair(FileSystem.readBytes(args.get(0)), FileSystem.readBytes(args.get(1))));
+        var fingerprint = KeyCrypto.verifyPair(FileSystem.readBytes(args.get(0)), FileSystem.readBytes(args.get(1)));
+        Check.that(AlarmState.remainingSeconds() == 0, "verification disarmed alarm");
+        print(fingerprint);
         return 0;
     } catch (string error) { Console.error(error); return 1; }
 }

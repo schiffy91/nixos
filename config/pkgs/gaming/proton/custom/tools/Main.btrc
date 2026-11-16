@@ -61,7 +61,7 @@ class ProtonTools {
         if (mode.equals("dev")) { wine.use(); }
         else if (mode.equals("restore")) { wine.restore(); }
         else if (mode.equals("status")) { wine.status(); }
-        else if (mode.equals("production") || mode.equals("system")) { self.context.execute("nixos", ["update"]); }
+        else if (mode.equals("production") || mode.equals("system")) { self.context.execute("nixosctl", ["update"]); }
         else if (mode.equals("store")) {
             if (arguments.len != 2 || !FileSystem.isDir(arguments.get(1) + "/files")) { throw "store mode needs a built proton-custom store path"; }
             var target = PathTools.absolute(arguments.get(1)); self.context.link(target); FileSystem.mkdirp(self.context.devRoot); Path.writeAll(self.context.saved(), target + "\n");
@@ -103,7 +103,6 @@ class ProtonTools {
 }
 
 int main(int argc, char** argv) {
-    setvbuf((FILE*)stdout, null, (int)_IOLBF, (size_t)0);
     try {
         var args = CLIArgs(argc, argv); var mode = args.command(); Vector<string> arguments = [];
         for (int i = 1; i < args.count(); i++) { arguments.push(args.get(i)); }

@@ -85,6 +85,11 @@ class E2eCli {
         if (action.equals("configure-vm-host")) { vm.configureVmHost(); return 0; }
         if (action.equals("install-nixos")) { vm.installNixosGuest(); return 0; }
         if (action.equals("reboot-disk")) { vm.rebootDisk(); return 0; }
+        if (action.equals("send-keys")) {
+            var text = self.tail(args, 3);
+            if (text.isEmpty()) { NixosLog.fatal("Usage: nixosctl vm <spec.json> send-keys <text>"); }
+            return vm.sendKeys(text) ? 0 : 1;
+        }
         if (action.equals("reboot-recovery")) { vm.rebootRecovery(); return 0; }
         if (action.equals("snapshot")) { vm.snapshot(line.option("--name", "manual")); return 0; }
         if (action.equals("restore")) { vm.restore(line.option("--name", "manual")); return 0; }

@@ -17,7 +17,7 @@ let
     name = "wow-lock-contract-tests";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/gaming/wow ../../../ci/Main.btrc ../../../ci/lib ../../../ci/native.h ../../../ci/btrc.toml ../../../ci/btrc.lock ../../lib ./LockTests.btrc ./RefreshTests.btrc ./RefreshFixture.btrc ./InstallTests.btrc ./SettingsTests.btrc ./btrc.toml ./btrc.lock ];
+      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/gaming/wow ../../lib ./LockTests.btrc ./RefreshTests.btrc ./RefreshFixture.btrc ./InstallTests.btrc ./SettingsTests.btrc ./btrc.toml ./btrc.lock ];
     };
     programs = {
       wow-addons-lock = "config/pkgs/gaming/wow/Main.btrc";

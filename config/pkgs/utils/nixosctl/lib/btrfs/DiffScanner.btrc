@@ -2,6 +2,7 @@ import Library.Console;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Pattern;
+import Library.Platform;
 import Library.Process;
 import Library.Strings;
 import Library.Vector;
@@ -252,8 +253,8 @@ class DiffScanner {
         for path in paths {
             data.set(path, JSONValue.makeBool(true));
         }
-        FileSystem.mkdirp(PathTools.dirname(cachePath));
-        Path.writeAll(cachePath, data.document());
+        FileSystem.mkdirp(PathTools.dirname(cachePath), 0o700);
+        FileSystem.writeAtomic(cachePath, data.document(), 0o600);
     }
 
     public void print(DiffOptions options) {
@@ -293,7 +294,7 @@ class DiffScanner {
 
     public Vector<string> selectEphemeral(Vector<string> ephemeral, Vector<string> keepList, Vector<string> mounts, DiffOptions options) {
         var top = self.collapse(ephemeral, keepList, mounts);
-        var cachePath = "/tmp/nixosctl/diff/cache.json";
+        var cachePath = Environment.get("NIXOSCTL_DIFF_CACHE", "/run/nixosctl/diff/cache.json");
         var previous = self.previousCache(cachePath);
         self.writeCache(cachePath, top);
         if (options.recent) {

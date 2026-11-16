@@ -7,15 +7,16 @@ in pkgs.stdenv.mkDerivation {
     fileset = lib.fileset.unions [ ./Main.btrc ./lib ./completions ./btrc.toml ./btrc.lock ];
   };
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
+  buildInputs = [ pkgs.libxcrypt ];
   dontConfigure = true;
   buildPhase = ''
     export BTRC_CACHE_DIR="$TMPDIR/btrc-cache"
     export BTRC_STATE_DIR="$TMPDIR/btrc-state"
     export BTRC_PKG_CACHE="$TMPDIR/btrc-pkgs"
     btrcpy --strict-imports config/pkgs/utils/nixosctl/Main.btrc -o nixosctl.c
-    $CC -std=c11 -O2 nixosctl.c -lm -lpthread -lutil -o nixosctl
+    $CC -std=c11 -O2 nixosctl.c -lm -lpthread -lutil -lcrypt -o nixosctl
     btrcpy --strict-imports config/pkgs/utils/nixosctl/lib/PasswordHashFileMain.btrc -o password-file.c
-    $CC -std=c11 -O2 password-file.c -lm -lpthread -lutil -o nixosctl-password-file
+    $CC -std=c11 -O2 password-file.c -lm -lpthread -lutil -lcrypt -o nixosctl-password-file
   '';
   installPhase = ''
     mkdir -p $out/bin

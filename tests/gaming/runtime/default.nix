@@ -12,7 +12,6 @@ let
         ../../../config/pkgs/gaming/sunshine/credentials/src
         ../../../config/pkgs/gaming/sunshine/virtual-display
         ../../../config/pkgs/gaming/slopsmith/src
-        ../../../config/lib/BackgroundProcess.btrc
         ./. ../../lib
       ];
     };

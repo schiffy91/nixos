@@ -1,5 +1,6 @@
-import ../../ci/lib/PipeProcess.btrc;
+import Library.Bytes;
 import Library.FileSystem;
+import Library.Process;
 
 class Channel {
     private PipeProcess process;

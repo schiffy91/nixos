@@ -23,8 +23,7 @@ let
     src = lib.fileset.toSource {
       root = ../..;
       fileset = lib.fileset.unions ([
-        ./. ../lib ../../config/lib/BackgroundProcess.btrc
-        ../../ci/Main.btrc ../../ci/lib ../../ci/native.h ../../ci/btrc.toml ../../ci/btrc.lock
+        ./. ../lib
         scenario
       ] ++ extraFiles);
     };

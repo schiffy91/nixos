@@ -3,7 +3,9 @@ let
   locked = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.nixpkgs.locked;
   pkgs = import (builtins.fetchTree { inherit (locked) type owner repo rev narHash; }) { inherit system; };
   inputs.btrc = let node = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes.btrc.locked;
-    in builtins.getFlake "github:${node.owner}/${node.repo}/${node.rev}";
+    in builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs node [
+      "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+    ]));
   worker = import ../../../config/system/nixos/opportunistic-unlock/package.nix { inherit pkgs inputs; };
 in (import ../../vm/test.nix { inherit pkgs inputs; }) {
   name = "opportunistic-unlock";

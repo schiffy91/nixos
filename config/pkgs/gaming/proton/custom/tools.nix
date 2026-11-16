@@ -5,7 +5,9 @@
 }:
 let
   compiler = (builtins.fromJSON (builtins.readFile ../../../../../flake.lock)).nodes.btrc.locked;
-  inputs.btrc = builtins.getFlake "github:${compiler.owner}/${compiler.repo}/${compiler.rev}";
+  inputs.btrc = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs compiler [
+    "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
+  ]));
 in (import ../../../../lib/btrc.nix { inherit pkgs inputs; }) {
   name = "proton-custom-tools";
   src = ./tools;

@@ -16,7 +16,6 @@ let
         ../../../config/system/nixos/sleep/Main.btrc
         ../../../config/system/nixos/sleep/Controller.btrc
         ../../../config/system/nixos/sleep/State.btrc
-        ../../../config/lib/BackgroundProcess.btrc
         ../../../config/pkgs/utils/nixosctl/lib
         ../../../config/pkgs/utils/nixosctl/btrc.toml
         ../../../config/pkgs/utils/nixosctl/btrc.lock

@@ -11,12 +11,13 @@ let
       fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/utils/nixosctl/lib ../../../config/pkgs/utils/nixosctl/btrc.toml ../../../config/pkgs/utils/nixosctl/btrc.lock ./Driver.btrc ./btrc.toml ./btrc.lock ];
     };
     nativeBuildInputs = [ inputs.btrc.packages.${system}.btrcpy ];
+    buildInputs = [ pkgs.libxcrypt ];
     buildPhase = ''
       export HOME="$TMPDIR"
       btrcpy --strict-imports tests/nixosctl/installer-secret/Driver.btrc -o driver.c
-      $CC -std=c11 -O2 driver.c -lm -lpthread -lutil -o driver
+      $CC -std=c11 -O2 driver.c -lm -lpthread -lutil -lcrypt -o driver
       btrcpy --strict-imports config/pkgs/utils/nixosctl/lib/PasswordHashFileMain.btrc -o password-file.c
-      $CC -std=c11 -O2 password-file.c -lm -lpthread -o nixosctl-password-file
+      $CC -std=c11 -O2 password-file.c -lm -lpthread -lcrypt -o nixosctl-password-file
     '';
     installPhase = ''
       install -Dm755 driver $out/bin/installer-secret-test

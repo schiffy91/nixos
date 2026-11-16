@@ -16,7 +16,7 @@ let
   });
   controller = (import ../lib/build-tools.nix { inherit pkgs inputs; }) {
     name = "sunshine-virtual-display";
-    sources = [ ./virtual-display ../../../lib/BackgroundProcess.btrc ];
+    sources = [ ./virtual-display ];
     programs.sunshine-virtual-display = "sunshine/virtual-display/Main.btrc";
     runtimeInputs = [ pkgs.coreutils pkgs.kdePackages.krfb pkgs.kdePackages.libkscreen ];
   };
