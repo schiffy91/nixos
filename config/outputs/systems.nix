@@ -2,16 +2,16 @@
 let
   bootableTargets = [ "Standard-Boot" "Secure-Boot" ];
   systemModuleFiles = [ ../system/nixos ../pkgs ../pkgs/de/kde ];
-  mkSystem = hostFile: target: modules:
+  # A system from any host module, registered or not: the VM tests write theirs at run time.
+  systemWith = { system, target, module, modules ? systemModuleFiles }:
     let
-      system = hosts.hostSystem hostFile;
       pkgs-unstable = import inputs.nixpkgs-unstable { inherit system; config.allowUnfree = true; };
     in lib.nixosSystem {
       inherit system;
       specialArgs = { inherit self inputs pkgs-unstable; };
       modules = [
         ../settings.nix
-        hostFile
+        module
         {
           settings.boot.method = lib.mkForce target;
           nix = {
@@ -23,8 +23,10 @@ let
         }
       ] ++ modules;
     };
+  mkSystem = hostFile: target: modules:
+    systemWith { system = hosts.hostSystem hostFile; module = hostFile; inherit target modules; };
 in {
-  inherit bootableTargets systemModuleFiles mkSystem;
+  inherit bootableTargets systemModuleFiles mkSystem systemWith;
   nixosConfigurations = lib.listToAttrs (lib.concatMap (host:
     map (target: {
       name = "${hosts.hostOutputName host.module}-${target}";

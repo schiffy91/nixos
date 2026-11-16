@@ -138,6 +138,7 @@
    "parentState" : "installer-ssh",
    "sshPort" : 2243,
    "state" : "recovery-secure-boot",
-   "stateMaterial" : "recovery-secure-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:secure={{secureBoot}}:tpm2={{tpm2}}:encryption={{encryption}}:recovery={{recovery}}:size={{recoverySize}}:source={{sourceHash}}",
+   "stateMaterial" : "recovery-secure-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:secure={{secureBoot}}:tpm2={{tpm2}}:encryption={{encryption}}:recovery={{recovery}}:size={{recoverySize}}:closure={{closure}}",
+   "closure" : "vm-test",
    "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
 }

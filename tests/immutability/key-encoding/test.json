@@ -2,7 +2,8 @@
   "name": "immutability-key-encoding",
   "state": "immutability-key-encoding",
   "parentState": "installed-reset",
-  "stateMaterial": "immutability-key-encoding:canonical:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "immutability-key-encoding:canonical:{{immutabilityVersion}}:{{immutabilityImplementation}}:ram={{memory}}:cpus={{cpus}}:inputs={{inputs}}",
+  "inputs": "config/system/storage/immutability",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",

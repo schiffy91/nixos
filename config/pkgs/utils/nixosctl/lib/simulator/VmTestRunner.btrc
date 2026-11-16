@@ -101,7 +101,7 @@ class VmTestRunner {
         var workDir = ShellWords.quote(self.spec.workDir);
         var log = ShellWords.quote(PathTools.join(self.spec.workDir, "test.log"));
         if (!derivation.startsWith("/nix/store/")) {  // it did not evaluate: say why
-            return f"mkdir -p {workDir} && nix-instantiate {self.spec.derivation} > {log} 2>&1; tail -80 {log}; exit 1";
+            return f"mkdir -p {workDir} && {VmSpecArgs.derivationQuestion(self.spec.derivation)} > {log} 2>&1; tail -80 {log}; exit 1";
         }
         return f"mkdir -p {workDir} && nix-store --realise {ShellWords.quote(derivation)} {options} > {log} 2>&1 || {{ tail -80 {log}; exit 1; }}";
     }

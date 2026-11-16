@@ -2,7 +2,7 @@
   "name": "qmp-probe",
   "state": "qmp-probe",
   "parentState": "base-iso",
-  "stateMaterial": "qmp-probe:{{arch}}:{{isoUrl}}:{{diskSize}}:source={{sourceHash}}",
+  "stateMaterial": "qmp-probe:{{arch}}:{{isoUrl}}:{{diskSize}}",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "diskSize": "10G",
   "memory": "2G",

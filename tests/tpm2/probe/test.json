@@ -2,7 +2,7 @@
   "name": "tpm2-probe",
   "state": "tpm2-probe",
   "parentState": "base-iso",
-  "stateMaterial": "tpm2-probe:{{arch}}:{{isoUrl}}:{{diskSize}}:source={{sourceHash}}",
+  "stateMaterial": "tpm2-probe:{{arch}}:{{isoUrl}}:{{diskSize}}",
   "args": {
     "tpm2": "true"
   },

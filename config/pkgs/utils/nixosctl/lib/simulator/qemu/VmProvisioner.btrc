@@ -69,27 +69,13 @@ class VmProvisioner {
         return f"printf %s {ShellWords.quote(text)} > {ShellWords.quote(path)}";
     }
 
-    public void configureVmHost() {
-        var mode = self.spec.args.getOrDefault("immutabilityMode", "reset");
-        var enabled = self.spec.args.getOrDefault("immutabilityEnabled", "true");
-        var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
-        var desktop = self.spec.args.getOrDefault("desktop", "none");
-        var encryption = self.spec.args.getOrDefault("encryption", "false");
-        var recovery = self.spec.args.getOrDefault("recovery", "false");
-        var recoverySize = self.spec.args.getOrDefault("recoverySize", "4G");
-        var luksPass = "testpass123";
-        var secureBootTarget = bootTargetName.equals("Secure-Boot");
-        var recoveryTimeout = VmSpecArgs.hostArch().equals(self.spec.arch) ? "5s" : "90s";  // an emulated machine sees its disks late
-        var serialConsole = self.spec.arch.equals("aarch64") ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
-        var initrdModules = self.spec.arch.equals("aarch64")
-            ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
-            : "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"tpm_tis\" ]";
-        var hostDir = "/etc/nixos/config/hosts/" + self.spec.arch + "/VM-TEST";
-        var hostPath = hostDir + "/default.nix";
-        var pubkey = self.pubKey();
-        var passwordHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";  /* testpass123 */
-        var secureBootModulePath = "/etc/nixos/config/system/nixos/vm-test-secure-boot.nix";
-        var secureBootModule = self.textLines([
+    class string lines(Vector<string> lines) {
+        return lines.join("\n") + "\n";
+    }
+
+    // What the VM-TEST host adds when it boots with Secure Boot.
+    class string secureBootModule() {
+        return VmProvisioner.lines([
             "{ config, lib, pkgs, ... }: {",
             "  config = lib.mkIf (config.networking.hostName == \"VM-TEST\" && config.settings.boot.method == \"Secure-Boot\") {",
             "    boot.loader.timeout = lib.mkForce 0;",
@@ -100,11 +86,27 @@ class VmProvisioner {
             "  };",
             "}"
         ]);
+    }
+
+    // The VM-TEST host a spec's arguments describe. In a guest it imports the Secure Boot module from
+    // the checkout; the runner evaluates the same text outside one, with that module beside it.
+    class string hostModule(VmTestSpec spec, string publicKey, string secureBootImport) {
+        var mode = spec.args.getOrDefault("immutabilityMode", "reset");
+        var enabled = spec.args.getOrDefault("immutabilityEnabled", "true");
+        var desktop = spec.args.getOrDefault("desktop", "none");
+        var encryption = spec.args.getOrDefault("encryption", "false");
+        var recovery = spec.args.getOrDefault("recovery", "false");
+        var recoverySize = spec.args.getOrDefault("recoverySize", "4G");
+        var recoveryTimeout = VmSpecArgs.hostArch() == spec.arch ? "5s" : "90s";  // an emulated machine sees its disks late
+        var serialConsole = spec.arch == "aarch64" ? "ttyAMA0,115200n8" : "ttyS0,115200n8";
+        var initrdModules = spec.arch == "aarch64"
+            ? "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"virtio_mmio\" \"virtio_rng\" \"tpm_tis\" \"tpm_tis_core\" ]"
+            : "[ \"virtio_pci\" \"virtio_blk\" \"virtio_net\" \"tpm_tis\" ]";
         Vector<string> hostLines = [
             "{ lib, ... }: {",
             "  networking.hostName = \"VM-TEST\";",
             "  networking.firewall.enable = lib.mkForce false;",
-            f"  users.users.root.openssh.authorizedKeys.keys = [ \"{pubkey}\" ];",
+            f"  users.users.root.openssh.authorizedKeys.keys = [ \"{publicKey}\" ];",
             f"  boot.kernelParams = [ \"console={serialConsole}\" ];",
             f"  boot.initrd.availableKernelModules = {initrdModules};",
             "  boot.plymouth.enable = lib.mkForce false;",
@@ -113,7 +115,7 @@ class VmProvisioner {
             "  services.openssh.settings.PermitRootLogin = lib.mkForce \"yes\";",
             "  services.openssh.settings.UseDns = lib.mkForce false;",
             "  security.sudo.wheelNeedsPassword = lib.mkForce false;",  // as on the QEMU hosts: no terminal or agent to answer sudo
-            f"  settings.users.admin.authorizedKeys = lib.mkForce [ \"{pubkey}\" ];",
+            f"  settings.users.admin.authorizedKeys = lib.mkForce [ \"{publicKey}\" ];",
             "  settings.users.admin.autoUnlockWallet.enabled = false;",
             "  settings.users.admin.homeManager.enable = false;",
             "  settings.users.agent.enable = lib.mkForce false;",
@@ -135,15 +137,28 @@ class VmProvisioner {
             f"  settings.disk.immutability.enable = {enabled};",
             f"  settings.disk.immutability.mode = \"{mode}\";",
             "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];",
-            "  settings.desktop.enable = " + (desktop.equals("none") ? "false" : "true") + ";",
+            "  settings.desktop.enable = " + (desktop == "none" ? "false" : "true") + ";",
             "  settings.disk.swap.size = \"2G\";",
             "}"
         ];
-        if (secureBootTarget) {
-            hostLines.insert(hostLines.len - 1, "  imports = [ ../../../system/nixos/vm-test-secure-boot.nix ];");
-            hostLines.insert(hostLines.len - 1, "  settings.boot.pkiBundle = \"/var/lib/sbctl\";");
+        if (spec.args.getOrDefault("bootTarget", "Standard-Boot") == "Secure-Boot") {
+            hostLines.insert(hostLines.length - 1, f"  imports = [ {secureBootImport} ];");
+            hostLines.insert(hostLines.length - 1, "  settings.boot.pkiBundle = \"/var/lib/sbctl\";");
         }
-        var hostNix = self.textLines(hostLines);
+        return VmProvisioner.lines(hostLines);
+    }
+
+    public void configureVmHost() {
+        var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        var encryption = self.spec.args.getOrDefault("encryption", "false");
+        var luksPass = "testpass123";
+        var secureBootTarget = bootTargetName.equals("Secure-Boot");
+        var hostDir = "/etc/nixos/config/hosts/" + self.spec.arch + "/VM-TEST";
+        var hostPath = hostDir + "/default.nix";
+        var passwordHash = "$6$vmtest$R1jdYquxXuZE.kHaZb1YrcvsTVODhhOlZdmxLRBJaAcVvhF79ZCGL4vnxluk.OLQFZW.xXgHj.1HDRFmm5cdB.";  /* testpass123 */
+        var secureBootModulePath = "/etc/nixos/config/system/nixos/vm-test-secure-boot.nix";
+        var secureBootModule = VmProvisioner.secureBootModule();
+        var hostNix = VmProvisioner.hostModule(self.spec, self.pubKey(), "../../../system/nixos/vm-test-secure-boot.nix");
         var local = JSONValue.makeObject();
         local.set("host_path", JSONValue.makeString("config/hosts/" + self.spec.arch + "/VM-TEST/default.nix"));
         local.set("target", JSONValue.makeString(bootTargetName));

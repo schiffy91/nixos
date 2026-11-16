@@ -1,12 +1,13 @@
 {
   "name": "installer-prebuilt-{{arch}}",
   "state": "installer-prebuilt-{{arch}}-{{prebuiltHost}}",
-  "stateMaterial": "installer-prebuilt:{{arch}}:{{prebuiltHost}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "installer-prebuilt:{{arch}}:{{prebuiltHost}}:ram={{memory}}:cpus={{cpus}}:drv={{derivation}}",
+  "derivation": ".#packages.{{arch}}-linux.installer-{{prebuiltHost}}",
   "args": {
     "arch": "x86_64",
     "prebuiltHost": "STEAM-DECK-OLED"
   },
-  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
+  "iso": "{{derivationOutput}}/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
   "isoUrl": "",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "diskSize": "8G",
@@ -15,8 +16,7 @@
   "sshPort": 2254,
   "operations": [
     {
-      "op": "host",
-      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{prebuiltHost}}",
+      "op": "build-derivation",
       "timeout": 21600
     },
     {

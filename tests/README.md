@@ -20,6 +20,15 @@ argument, so the node's state is keyed on exactly what it builds: an edit that d
 derivation leaves the node ready. The paths are kept in `.vm/inputs.json` for the tree as it stands (every
 file's path, size and time of change), so an unchanged tree is not evaluated again.
 
+`derivation` may also be a flake attribute (`.#packages.x86_64-linux.installer`); `{{derivationOutput}}`
+is where its result will be, which is how the installer nodes boot their image straight from the store.
+A spec with `"closure": "vm-test"` is keyed on the system its VM-TEST host installs: the runner evaluates
+the same host module the guest is given (`{{closure}}`). `inputs` names files and directories a node's
+host-side steps read, hashed by content (`{{inputs}}`). A node built on another takes in its parent's
+state, so a changed install reruns everything that boots it. The installer images carry this repository,
+so any tracked edit rebuilds them and reruns their nodes. Nothing here covers the runner itself: after
+changing how nodes are run, use `--arg force=true`.
+
 The graph runner holds `.vm/graph.lock` for a run, so a second run or a collection in the same
 workspace is refused. `graph status` ends each line with how long the node's last pass took.
 `make graph-gc` deletes the work directories under `.vm/e2e` that no node's current state names,

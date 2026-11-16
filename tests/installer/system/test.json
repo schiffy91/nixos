@@ -2,7 +2,8 @@
   "name": "install-system",
   "state": "installed-system",
   "parentState": "installer-ssh",
-  "stateMaterial": "live-install:nixos:immutability={{immutabilityVersion}}:implementation={{immutabilityImplementation}}:mode={{immutabilityMode}}:boot={{bootloader}}:layout={{diskLayout}}:swap={{swapSize}}:desktop={{desktop}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "live-install:nixos:immutability={{immutabilityVersion}}:implementation={{immutabilityImplementation}}:mode={{immutabilityMode}}:boot={{bootloader}}:layout={{diskLayout}}:swap={{swapSize}}:desktop={{desktop}}:ram={{memory}}:cpus={{cpus}}:closure={{closure}}",
+  "closure": "vm-test",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",

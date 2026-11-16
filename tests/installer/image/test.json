@@ -1,11 +1,12 @@
 {
   "name": "installer-image-{{arch}}",
   "state": "installer-image-{{arch}}",
-  "stateMaterial": "installer-image:{{arch}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "installer-image:{{arch}}:ram={{memory}}:cpus={{cpus}}:drv={{derivation}}",
+  "derivation": ".#packages.{{arch}}-linux.installer",
   "args": {
     "arch": "x86_64"
   },
-  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux.iso",
+  "iso": "{{derivationOutput}}/iso/nixos-installer-{{arch}}-linux.iso",
   "isoUrl": "",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "diskSize": "8G",
@@ -14,8 +15,7 @@
   "sshPort": 2253,
   "operations": [
     {
-      "op": "host",
-      "command": "make iso ISO_SYSTEM={{arch}}-linux",
+      "op": "build-derivation",
       "timeout": 7200
     },
     {

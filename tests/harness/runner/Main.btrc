@@ -274,6 +274,29 @@ class GraphRunnerTests {
         Check.that(failed.stdout().contains("0 passed, 1 skipped, 1 failed") && self.said(failed).contains("syntax error"), f"an expression that does not evaluate fails its node with nix's reason: {self.said(failed)}");
     }
 
+    // A node keyed on the files its host-side steps read.
+    public void declaredInputs() {
+        var runs = self.fixture.path("reader-runs");
+        var spec = JSONValue.parse("{\"name\":\"reader\",\"state\":\"reader\",\"stateMaterial\":\"reader:{{inputs}}\",\"inputs\":\"tools helper.sh\",\"operations\":[]}");
+        spec.set("stateRoot", JSONValue.makeString(self.fixture.path(".vm/chain")));
+        spec.set("workDir", JSONValue.makeString(self.fixture.path(".vm/reader-{{stateHashShort}}")));
+        var host = JSONValue.parse("{\"op\":\"host\"}");
+        host.set("command", JSONValue.makeString(f"printf 'run\\n' >> {ShellWords.quote(runs)}"));
+        spec.get("operations").push(host); spec.get("operations").push(JSONValue.parse("{\"op\":\"record-state\"}"));
+        self.fixture.json("reader.json", spec);
+        self.fixture.write("tools/probe.sh", "echo one\n"); self.fixture.write("helper.sh", "echo one\n"); self.fixture.write("elsewhere.sh", "echo one\n");
+        self.graph(self.entry("reader"));
+        Check.exited(self.run(["run", "reader"]));
+        self.fixture.write("elsewhere.sh", "echo two\n");
+        Check.exited(self.run(["run", "reader"]));
+        Check.equal(Path.readAll(runs), "run\n", "a file the node does not name reruns nothing");
+        self.fixture.write("tools/probe.sh", "echo two\n");
+        Check.exited(self.run(["run", "reader"]));
+        self.fixture.write("helper.sh", "echo two\n");
+        Check.exited(self.run(["run", "reader"]));
+        Check.equal(Path.readAll(runs), "run\nrun\nrun\n", "a change in a named directory or file reruns the node");
+    }
+
     // With durations known, the node the longest chain waits behind goes first.
     public void longestChainFirst() {
         var sequence = self.fixture.path("sequence");
@@ -301,6 +324,7 @@ int main() {
         tests.inheritedKey();
         tests.occupiedPort();
         tests.derivations();
+        tests.declaredInputs();
         tests.longestChainFirst();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;

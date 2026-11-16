@@ -1,13 +1,14 @@
 {
   "name": "install-offline",
   "state": "installed-offline-{{prebuiltHost}}",
-  "stateMaterial": "offline-install:{{arch}}:{{prebuiltHost}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "offline-install:{{arch}}:{{prebuiltHost}}:ram={{memory}}:cpus={{cpus}}:drv={{derivation}}",
+  "derivation": ".#packages.{{arch}}-linux.installer-{{prebuiltHost}}",
   "args": {
     "arch": "x86_64",
     "prebuiltHost": "QEMU-x86_64",
     "hostFile": "/etc/nixos/config/hosts/x86_64/QEMU/default.nix"
   },
-  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
+  "iso": "{{derivationOutput}}/iso/nixos-installer-{{arch}}-linux-{{prebuiltHost}}.iso",
   "isoUrl": "",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "diskSize": "30G",
@@ -16,8 +17,7 @@
   "sshPort": 2255,
   "operations": [
     {
-      "op": "host",
-      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{prebuiltHost}}",
+      "op": "build-derivation",
       "timeout": 21600
     },
     {

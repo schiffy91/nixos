@@ -2,7 +2,8 @@
   "name": "secure-boot-install",
   "state": "installed-secure-boot",
   "parentState": "installer-ssh",
-  "stateMaterial": "secure-boot-install:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:secure={{secureBoot}}:tpm2={{tpm2}}:source={{sourceHash}}",
+  "stateMaterial": "secure-boot-install:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:secure={{secureBoot}}:tpm2={{tpm2}}:closure={{closure}}",
+  "closure": "vm-test",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",

@@ -2,7 +2,8 @@
   "name": "password-change-encrypted",
   "state": "password-change-encrypted",
   "parentState": "installed-encrypted",
-  "stateMaterial": "password-change-encrypted:encryption=true:tpm2=true:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "password-change-encrypted:encryption=true:tpm2=true:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:inputs={{inputs}}",
+  "inputs": "config/pkgs/utils/nixosctl config/system/nixos/users",
   "args": {
     "encryption": "true",
     "tpm2": "true",

@@ -81,6 +81,7 @@
    "parentState" : "installer-ssh",
    "sshPort" : 2241,
    "state" : "recovery-boot",
-   "stateMaterial" : "recovery-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:recovery={{recovery}}:size={{recoverySize}}:source={{sourceHash}}",
+   "stateMaterial" : "recovery-boot:{{arch}}:{{isoUrl}}:{{diskSize}}:boot={{bootTarget}}:recovery={{recovery}}:size={{recoverySize}}:closure={{closure}}",
+   "closure" : "vm-test",
    "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
 }

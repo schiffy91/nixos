@@ -2,7 +2,8 @@
   "name": "password-change",
   "state": "password-change",
   "parentState": "installed-system",
-  "stateMaterial": "password-change:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "password-change:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:inputs={{inputs}}",
+  "inputs": "config/pkgs/utils/nixosctl config/system/nixos/users",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",

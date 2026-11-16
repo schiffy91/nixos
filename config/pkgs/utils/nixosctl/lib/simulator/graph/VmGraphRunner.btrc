@@ -1,4 +1,5 @@
 import Library.Console;
+import Library.Digest;
 import Library.FileSystem;
 import Library.Graph;
 import Library.JSON;
@@ -40,16 +41,16 @@ class VmGraphRunner {
     public Map<string, string> args;
     public string sourceHashValue;
     public string treeStateValue;
-    public Map<string, string> derivations;  // what a spec asks nix to instantiate -> the .drv path that gives
-    private bool derivationsLoaded;
+    public Map<string, string> answers;  // a question for nix -> the store path it answered with
+    private bool answersLoaded;
 
     public VmGraphRunner(ExecutionGraph graph, Map<string, string> args) {
         self.graph = graph;
         self.args = args;
         self.sourceHashValue = "";
         self.treeStateValue = "";
-        self.derivations = {};
-        self.derivationsLoaded = false;
+        self.answers = {};
+        self.answersLoaded = false;
     }
 
     private string sha256InputCommand() {
@@ -119,18 +120,56 @@ class VmGraphRunner {
         return spec;
     }
 
+    // What nix is asked so that a node can be keyed on what it builds or installs: the question for its
+    // `derivation`, and the one for its `closure`. Each answer is a .drv path.
+    private Map<string, string> questions(VmTestSpec spec) {
+        Map<string, string> asked = {};
+        if (!spec.derivation.isEmpty()) {
+            asked.put("derivation", VmSpecArgs.derivationQuestion(VmSpecArgs.expand(spec.derivation, spec.args).trim()));
+        }
+        if (spec.closure == "vm-test") { asked.put("closure", self.vmTestQuestion(spec)); }
+        return asked;
+    }
+
+    // The system a VM-TEST install puts on its disk. The host module is the text the guest is given,
+    // with a fixed key in place of the state's own: which key it is comes with the parent's state.
+    private string vmTestQuestion(VmTestSpec spec) {
+        var target = spec.args.getOrDefault("bootTarget", "Standard-Boot");
+        var module = VmProvisioner.hostModule(spec, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGraphRunnerKeyStandsInForTheStatesOwnKey0000 vm-test", "./secure-boot.nix");
+        var root = FileSystem.realPath(self.graph.resolvedWorkspaceRoot());
+        var directory = PathTools.join(PathTools.join(PathTools.join(root, ".vm"), "closures"), SHA256.digest(f"{spec.arch}\n{target}\n{module}").substring(0, 16));
+        if (!FileSystem.exists(PathTools.join(directory, "host.nix"))) {
+            FileSystem.mkdirp(directory);
+            FileSystem.writeAtomic(PathTools.join(directory, "secure-boot.nix"), VmProvisioner.secureBootModule());
+            FileSystem.writeAtomic(PathTools.join(directory, "host.nix"), module);
+        }
+        var expression = f"((builtins.getFlake \"git+file://{root}\").lib.systemWith {{ system = \"{spec.arch}-linux\"; target = \"{target}\"; module = {directory}/host.nix; }}).config.system.build.toplevel.drvPath";
+        return f"nix eval --raw --impure --expr {ShellWords.quote(expression)}";
+    }
+
+    // The content of the files a node's host-side steps read, as one hash.
+    private string inputsHash(string paths) {
+        var listing = f"cd {ShellWords.quote(self.graph.resolvedWorkspaceRoot())} && find {paths}"
+            + " \\( -name '.btrc-cache' -o -name '__pycache__' \\) -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1";
+        var result = UnixShell().run(f"bash -o pipefail -c {ShellWords.quote(listing)}");
+        if (!result.ok() || result.trimmed().isEmpty()) { NixosLog.fatal(f"Cannot read a node's inputs: {paths}"); }
+        return result.trimmed();
+    }
+
     public VmTestSpec specFor(GraphNode node) {
         var spec = self.declared(node);
+        for name, question in self.questions(spec) { spec.setArg(name, self.answer(question)); }
         if (!spec.derivation.isEmpty()) {
             spec.derivation = VmSpecArgs.expand(spec.derivation, spec.args).trim();
-            spec.setArg("derivation", self.derivationPath(spec.derivation));
+            spec.setArg("derivationOutput", self.outputOf(spec.args.get("derivation")));
         }
+        if (!spec.inputs.isEmpty()) { spec.setArg("inputs", self.inputsHash(VmSpecArgs.expand(spec.inputs, spec.args))); }
         spec.expandArgs();
         return spec;
     }
 
     // Every file under the workspace by path, size and time of change, whatever its kind: a derivation
-    // may read any of them, so this decides whether the .drv paths found earlier still hold. A changed
+    // may read any of them, so this decides whether the answers found earlier still hold. A changed
     // time with unchanged content only costs an evaluation; the derivation itself is exact.
     public string treeState() {
         if (!self.treeStateValue.isEmpty()) { return self.treeStateValue; }
@@ -147,75 +186,81 @@ class VmGraphRunner {
         return PathTools.join(PathTools.join(self.graph.resolvedWorkspaceRoot(), ".vm"), "inputs.json");
     }
 
-    // The .drv paths found for this exact tree, so an unchanged tree asks nix nothing.
-    private void loadDerivations() {
-        if (self.derivationsLoaded) { return; }
-        self.derivationsLoaded = true;
+    // The answers found for this exact tree, so an unchanged tree asks nix nothing.
+    private void loadAnswers() {
+        if (self.answersLoaded) { return; }
+        self.answersLoaded = true;
         if (!FileSystem.exists(self.inputsFile())) { return; }
         var saved = JSONValue.readFile(self.inputsFile());
-        if (!saved.isObject() || !saved.has("tree") || saved.get("tree").asString() != self.treeState() || !saved.has("derivations")) { return; }
-        var found = saved.get("derivations");
-        for request in found.keys() {
-            var path = found.get(request).asString();
-            if (FileSystem.exists(path)) { self.derivations.put(request, path); }  // a collected store leaves the path behind
+        if (!saved.isObject() || !saved.has("tree") || saved.get("tree").asString() != self.treeState() || !saved.has("answers")) { return; }
+        var found = saved.get("answers");
+        for question in found.keys() {
+            var path = found.get(question).asString();
+            if (FileSystem.exists(path)) { self.answers.put(question, path); }  // a collected store leaves the path behind
         }
     }
 
-    private void saveDerivations() {
+    private void saveAnswers() {
         var found = JSONValue.makeObject();
-        for request, path in self.derivations {
-            if (path.startsWith("/nix/store/")) { found.set(request, JSONValue.makeString(path)); }
+        for question, path in self.answers {
+            if (path.startsWith("/nix/store/")) { found.set(question, JSONValue.makeString(path)); }
         }
         var saved = JSONValue.makeObject();
         saved.set("tree", JSONValue.makeString(self.treeState()));
-        saved.set("derivations", found);
+        saved.set("answers", found);
         FileSystem.mkdirp(PathTools.dirname(self.inputsFile()));
         FileSystem.writeAtomic(self.inputsFile(), saved.stringify() + "\n");
     }
 
-    private string instantiation(string request) {
-        return f"cd {ShellWords.quote(self.graph.resolvedWorkspaceRoot())} && nix-instantiate {request}";
+    private string asking(string question) {
+        return f"cd {ShellWords.quote(self.graph.resolvedWorkspaceRoot())} && {question}";
     }
 
-    // Asks nix for every derivation these nodes are keyed on that is not known yet, several at a time.
-    public void resolveDerivations(Vector<GraphNode> nodes) {
-        self.loadDerivations();
+    // Asks nix everything these nodes are keyed on that is not known yet, several questions at a time.
+    public void evaluateKeys(Vector<GraphNode> nodes) {
+        self.loadAnswers();
         Vector<string> wanted = [];
         for node in nodes {
-            var spec = self.declared(node);
-            if (spec.derivation.isEmpty()) { continue; }
-            var request = VmSpecArgs.expand(spec.derivation, spec.args).trim();
-            if (!self.derivations.has(request) && !wanted.contains(request)) { wanted.push(request); }
+            for name, question in self.questions(self.declared(node)) {
+                if (!self.answers.has(question) && !wanted.contains(question)) { wanted.push(question); }
+            }
         }
         if (wanted.isEmpty()) { return; }
-        NixosLog.info(f"graph {self.graph.name}: evaluating {wanted.length} derivations");
-        var scratch = TemporaryDirectory.create("nixos-graph-derivations").value();
+        NixosLog.info(f"graph {self.graph.name}: evaluating what {wanted.length} keys name");
+        var scratch = TemporaryDirectory.create("nixos-graph-keys").value();
         int jobs = self.jobLimit();
         for (int start = 0; start < wanted.length; start += jobs) {
             Vector<BackgroundProcess> evaluations = [];
             for (int index = start; index < wanted.length && index < start + jobs; index++) {
                 var output = ShellWords.quote(PathTools.join(scratch.path(), f"{index}.out"));
                 var problem = ShellWords.quote(PathTools.join(scratch.path(), f"{index}.err"));
-                evaluations.push(BackgroundProcess.start("sh", ["-c", f"{self.instantiation(wanted.get(index))} > {output} 2> {problem}"], killOnDrop=true));
+                evaluations.push(BackgroundProcess.start("sh", ["-c", f"{self.asking(wanted.get(index))} > {output} 2> {problem}"], killOnDrop=true));
             }
             for (int offset = 0; offset < evaluations.length; offset++) {
                 int index = start + offset;
                 var path = evaluations.get(offset).wait() == 0 ? Path.readAll(PathTools.join(scratch.path(), f"{index}.out")).trim() : "";
-                self.derivations.put(wanted.get(index), path.startsWith("/nix/store/") ? path : "unevaluated");
+                if (!path.startsWith("/nix/store/")) { NixosLog.error(f"no answer to `{wanted.get(index)}`:\n" + Path.readAll(PathTools.join(scratch.path(), f"{index}.err")).trim()); }
+                self.answers.put(wanted.get(index), path.startsWith("/nix/store/") ? path : "unevaluated");
             }
         }
         scratch.close();
-        self.saveDerivations();
+        self.saveAnswers();
     }
 
-    public string derivationPath(string request) {
-        self.loadDerivations();
-        if (self.derivations.has(request)) { return self.derivations.get(request); }
-        var evaluated = UnixShell().run(self.instantiation(request), logFailure=false);
+    public string answer(string question) {
+        self.loadAnswers();
+        if (self.answers.has(question)) { return self.answers.get(question); }
+        var evaluated = UnixShell().run(self.asking(question), logFailure=false);
         var path = evaluated.ok() ? evaluated.trimmed() : "";
-        self.derivations.put(request, path.startsWith("/nix/store/") ? path : "unevaluated");
-        self.saveDerivations();
-        return self.derivations.get(request);
+        self.answers.put(question, path.startsWith("/nix/store/") ? path : "unevaluated");
+        self.saveAnswers();
+        return self.answers.get(question);
+    }
+
+    // Where a derivation's result will be, known without building it.
+    public string outputOf(string derivation) {
+        if (!derivation.startsWith("/nix/store/")) { return ""; }
+        return self.answer(f"nix-store --query --outputs {ShellWords.quote(derivation)}");
     }
 
     public void list() {
@@ -223,7 +268,7 @@ class VmGraphRunner {
     }
 
     public void status() {
-        self.resolveDerivations(self.graph.nodes);
+        self.evaluateKeys(self.graph.nodes);
         for node in self.graph.nodes {
             var spec = self.specFor(node);
             var recorded = "missing";
@@ -435,7 +480,7 @@ class VmGraphRunner {
         var boundary = FileSystem.realPath(PathTools.join(self.graph.resolvedWorkspaceRoot(), ".vm"));
         Set<string> kept = {};
         Vector<string> roots = [];
-        self.resolveDerivations(self.graph.nodes);
+        self.evaluateKeys(self.graph.nodes);
         for node in self.graph.nodes {
             var spec = self.specFor(node);
             self.retain(kept, spec.workDir);
@@ -607,7 +652,7 @@ class VmGraphRunner {
 
         Vector<GraphNode> ordered = [];
         for id in order { ordered.push(self.graph.node(id)); }
-        self.resolveDerivations(ordered);
+        self.evaluateKeys(ordered);
 
         int jobs = self.jobLimit();
         int budget = self.memoryBudget();

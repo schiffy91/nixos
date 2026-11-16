@@ -1,7 +1,8 @@
 {
   "name": "host-install-{{hostName}}-{{target}}",
   "state": "host-installed-{{hostName}}-{{target}}",
-  "stateMaterial": "host-install:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "host-install:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}:drv={{derivation}}",
+  "derivation": ".#packages.{{arch}}-linux.installer-{{hostName}}",
   "args": {
     "arch": "x86_64",
     "hostName": "STEAM-DECK-OLED-VM",
@@ -11,7 +12,7 @@
     "requireEnforced": "false",
     "assertPanel": "true"
   },
-  "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
+  "iso": "{{derivationOutput}}/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
   "isoUrl": "",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "diskSize": "64G",
@@ -22,8 +23,7 @@
   "sshPort": 2256,
   "operations": [
     {
-      "op": "host",
-      "command": "make iso ISO_SYSTEM={{arch}}-linux HOST={{hostName}}",
+      "op": "build-derivation",
       "timeout": 28800
     },
     {

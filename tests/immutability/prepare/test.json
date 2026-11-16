@@ -2,7 +2,8 @@
   "name": "immutability-prepare",
   "state": "immutability-prepare",
   "parentState": "installed-reset",
-  "stateMaterial": "immutability-prepare:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "immutability-prepare:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:inputs={{inputs}}",
+  "inputs": "config/system/storage/immutability",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",

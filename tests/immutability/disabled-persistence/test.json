@@ -2,7 +2,8 @@
   "name": "immutability-disabled-persistence",
   "state": "immutability-disabled-persistence",
   "parentState": "installed-disabled",
-  "stateMaterial": "immutability-disabled-persistence:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "immutability-disabled-persistence:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:closure={{closure}}",
+  "closure": "vm-test",
   "args": {
     "immutabilityVersion": "v2",
     "immutabilityImplementation": "immutability",

@@ -13,6 +13,7 @@ let
   }) hosts.physical;
 in {
   lib.hosts = publicHosts;
+  lib.systemWith = systems.systemWith;
   inherit (systems) nixosConfigurations darwinConfigurations;
   inherit (diskOperations) diskoConfigurations;
   packages = import ./packages.nix { inherit inputs; installerPackages = installers.packages; };

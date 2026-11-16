@@ -24,6 +24,12 @@ class VmSpecArgs {
         return ".vm/e2e/iso/nixos-minimal-" + arch + ".iso";
     }
 
+    // What nix is asked for a spec's `derivation`: a flake attribute's .drv path, or the one a file instantiates to.
+    class string derivationQuestion(string request) {
+        if (request.startsWith(".#")) { return f"nix eval --raw {ShellWords.quote(request + ".drvPath")}"; }
+        return f"nix-instantiate {request}";
+    }
+
     class string expand(string text, Map<string, string> args) {
         string result = Strings.copy(text);
         for key, value in args {

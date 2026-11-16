@@ -122,6 +122,7 @@
    "parentState" : "installer-ssh-aarch64",
    "sshPort" : 2238,
    "state" : "secure-boot-aarch64",
-   "stateMaterial" : "secure-boot-aarch64:lanzaboote:secboot-fw:hvf:tpm2=true:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+   "stateMaterial" : "secure-boot-aarch64:lanzaboote:secboot-fw:hvf:tpm2=true:ram={{memory}}:cpus={{cpus}}:closure={{closure}}",
+   "closure" : "vm-test",
    "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
 }

@@ -648,7 +648,7 @@
         "name": "installer-image-x86_64",
         "state": "installer-image-x86_64",
         "sshPort": "2253",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux.iso",
         "isoUrl": ""
       }
     },
@@ -660,7 +660,7 @@
         "name": "installer-image-aarch64",
         "state": "installer-image-aarch64",
         "sshPort": "2254",
-        "iso": "build/iso/iso/nixos-installer-aarch64-linux.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-aarch64-linux.iso",
         "isoUrl": ""
       }
     },
@@ -673,7 +673,7 @@
         "name": "installer-prebuilt-x86_64",
         "state": "installer-prebuilt-x86_64-STEAM-DECK-OLED",
         "sshPort": "2254",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED.iso",
         "isoUrl": ""
       }
     },
@@ -688,7 +688,7 @@
         "hostFile": "/etc/nixos/config/hosts/x86_64/QEMU/default.nix",
         "state": "installed-offline-QEMU-x86_64",
         "sshPort": "2255",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-QEMU-x86_64.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux-QEMU-x86_64.iso",
         "isoUrl": ""
       }
     },
@@ -705,7 +705,7 @@
         "uefi": "true",
         "requireEnforced": "false",
         "diskSize": "64G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
         "isoUrl": "",
         "name": "host-install-STEAM-DECK-OLED-VM-standard",
         "state": "host-installed-STEAM-DECK-OLED-VM-standard",
@@ -781,7 +781,7 @@
         "uefi": "true",
         "requireEnforced": "true",
         "diskSize": "64G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
         "isoUrl": "",
         "name": "host-install-STEAM-DECK-OLED-VM-secure",
         "state": "host-installed-STEAM-DECK-OLED-VM-secure",
@@ -857,7 +857,7 @@
         "uefi": "true",
         "requireEnforced": "false",
         "diskSize": "110G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
         "isoUrl": "",
         "name": "host-install-FRACTAL-NORTH-VM-standard",
         "state": "host-installed-FRACTAL-NORTH-VM-standard",
@@ -933,7 +933,7 @@
         "uefi": "true",
         "requireEnforced": "false",
         "diskSize": "110G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
+        "iso": "{{derivationOutput}}/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
         "isoUrl": "",
         "name": "host-install-FRACTAL-NORTH-VM-secure",
         "state": "host-installed-FRACTAL-NORTH-VM-secure",

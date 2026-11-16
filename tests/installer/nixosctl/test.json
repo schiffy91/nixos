@@ -2,7 +2,9 @@
   "name": "install-nixosctl",
   "state": "installed-nixosctl",
   "parentState": "installer-ssh",
-  "stateMaterial": "nixosctl-install:encryption=true:immutability={{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:source={{sourceHash}}",
+  "stateMaterial": "nixosctl-install:encryption=true:immutability={{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}:closure={{closure}}:inputs={{inputs}}",
+  "closure": "vm-test",
+  "inputs": "config/pkgs/utils/nixosctl tests/installer/nixosctl",
   "args": {
     "encryption": "true",
     "tpm2": "false",

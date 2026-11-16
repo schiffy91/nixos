@@ -1,7 +1,8 @@
 {
   "name": "host-boot-{{hostName}}-{{target}}",
   "state": "host-booted-{{hostName}}-{{target}}",
-  "stateMaterial": "host-boot:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}",
+  "stateMaterial": "host-boot:{{hostName}}:{{target}}:ram={{memory}}:cpus={{cpus}}:inputs={{inputs}}",
+  "inputs": "tests/hosts-boot",
   "args": {
     "arch": "x86_64",
     "hostName": "STEAM-DECK-OLED-VM",

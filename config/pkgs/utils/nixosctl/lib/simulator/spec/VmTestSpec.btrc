@@ -22,7 +22,9 @@ class VmTestSpec {
     public string parentState;
     public string stateRoot;
     public string stateMaterial;
-    public string derivation;  /* what `nix-instantiate` is given; the runner makes its .drv path the {{derivation}} argument */
+    public string derivation;  /* what the node builds: `nix-instantiate` arguments or a `.#flake.attribute`; its .drv path is {{derivation}} */
+    public string closure;  /* "vm-test": the system the VM-TEST host installs; its .drv path is {{closure}} */
+    public string inputs;  /* files and directories the node's host-side steps read, by content: {{inputs}} */
     public string parentHash;
     public string stateHash;
     public string stateHashShort;
@@ -46,6 +48,8 @@ class VmTestSpec {
         self.stateRoot = ".vm/e2e/chain";
         self.stateMaterial = "";
         self.derivation = "";
+        self.closure = "";
+        self.inputs = "";
         self.parentHash = "root";
         self.stateHash = "";
         self.stateHashShort = "";

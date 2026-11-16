@@ -66,6 +66,8 @@ class VmSpecParser {
         spec.stateRoot = VmSpecParser.stringField(object, "stateRoot", spec.stateRoot);
         spec.stateMaterial = VmSpecParser.stringField(object, "stateMaterial", spec.stateMaterial);
         spec.derivation = VmSpecParser.stringField(object, "derivation", spec.derivation);
+        spec.closure = VmSpecParser.stringField(object, "closure", spec.closure);
+        spec.inputs = VmSpecParser.stringField(object, "inputs", spec.inputs);
         spec.workDir = VmSpecParser.stringField(object, "workDir", spec.workDir);
         spec.iso = VmSpecParser.stringField(object, "iso", spec.iso);
         spec.isoUrl = VmSpecParser.stringField(object, "isoUrl", spec.isoUrl);
@@ -96,6 +98,8 @@ class VmSpecParser {
         if (key.equals("stateRoot")) { spec.stateRoot = value; return; }
         if (key.equals("stateMaterial")) { spec.stateMaterial = value; return; }
         if (key == "derivation") { spec.derivation = value; return; }
+        if (key == "closure") { spec.closure = value; return; }
+        if (key == "inputs") { spec.inputs = value; return; }
         if (key.equals("workDir")) { spec.workDir = value; return; }
         if (key.equals("arch")) { spec.arch = value; return; }
         if (key.equals("iso")) { spec.iso = value; return; }

@@ -69,6 +69,6 @@
    "parentState" : "installed-secure-boot",
    "sshPort" : 2228,
    "state" : "secure-boot-lanzaboote",
-   "stateMaterial" : "secure-boot-lanzaboote:{{arch}}:secureBoot={{secureBoot}}:tpm2={{tpm2}}:source={{sourceHash}}",
+   "stateMaterial" : "secure-boot-lanzaboote:{{arch}}:secureBoot={{secureBoot}}:tpm2={{tpm2}}",
    "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
 }
