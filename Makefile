@@ -1,7 +1,14 @@
-# Use the compiler pinned in flake.lock by default. Override BTRC=... when
-# intentionally testing a local btrcpy checkout.
-BTRC ?= nix run --no-warn-dirty --inputs-from . btrc\#btrcpy --
-TRAY_BTRC ?= $(BUILD_DIR)/tray-compiler/bin/btrcpy
+# Use the compiler pinned in flake.lock by default, found once for the whole run. Override BTRC=...
+# when intentionally testing a local btrcpy checkout.
+ifndef BTRC
+BTRC := $(shell nix build --no-warn-dirty --no-link --print-out-paths --inputs-from . btrc\#btrcpy 2>/dev/null)/bin/btrcpy
+endif
+# Everything not named below can be built at once. A graph run holds its workspace, so the targets
+# that start one after another keep their order.
+ifeq (,$(filter -j%,$(MAKEFLAGS)))
+MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4) --output-sync=target
+endif
+.NOTPARALLEL: check test quick smoke host-smoke
 CC ?= cc
 CFLAGS ?= -std=c11 -pedantic
 # Programs are transpiled program-only with strict imports and reference the
@@ -55,6 +62,18 @@ UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
 BIN := $(NIXOSCTL_BIN)
 BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN) $(BUILD_DIR)/boot-evidence
 SOURCES := $(shell rg --files config tests ci -g '*.btrc' -g '*.h' -g btrc.toml -g btrc.lock | sort)
+UNIT_NAMES := $(foreach t,$(UNIT_TESTS),$(call unit_name,$(t)))
+# <program>=<entry point> for everything built here: ci/btrc-deps.py lists what each is made from, so an
+# edit rebuilds the programs that include the edited file and no others. Without python3 (the installer
+# has none) a program depends on every source, as before.
+PROGRAMS := nixosctl=$(NIXOSCTL_ENTRY) immutability=$(IMMUTABILITY_ENTRY) nixosctl-tray=$(TRAY_ENTRY) \
+	host-picker-test=tests/host-picker/Main.btrc source-hash-test=tests/harness/source-hash/Main.btrc \
+	disabled-node-test=tests/harness/disabled/Main.btrc graph-runner-test=tests/harness/runner/Main.btrc \
+	host-timeout-test=tests/harness/timeout/Main.btrc boot-evidence=tests/hosts-boot/Main.btrc \
+	boot-evidence-test=tests/hosts-boot/EvidenceTests.btrc \
+	$(foreach t,$(UNIT_TESTS),$(call unit_name,$(t))_test=$(call unit_entry,$(t)))
+PROGRAM_DEPS := $(BUILD_DIR)/deps.mk
+made_from = $(or $(DEPS_$(1)),$(SOURCES))
 
 # Every one of these just forwards to tests/Makefile under the same name
 TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
@@ -63,7 +82,7 @@ TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
 	tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote \
 	graph-list graph-status graph-coverage graph-gc graph-installer-ssh chain clean-vms
 
-.PHONY: all help dirs transpile build-stdlib build unit quick smoke host-smoke \
+.PHONY: all help dirs transpile build-stdlib build unit run-boot-evidence-test run-shell-tests quick smoke host-smoke \
 	check test gaming hdr-screencast install iso iso-write graph-required \
 	graph-default graph-full graph-early run-required installer-ssh-smoke cache cache-all \
 	cache-serve clean $(TESTS_TARGETS)
@@ -109,7 +128,11 @@ export LIBRARY_PATH := $(LIBXCRYPT_ROOT)/lib$(if $(LIBRARY_PATH),:$(LIBRARY_PATH
 dirs:
 	mkdir -p $(BUILD_DIR)
 
-$(BTRC_STAMP): | dirs
+# Rewritten only when the compiler is another one, so a new compiler rebuilds everything and the same one nothing.
+.PHONY: FORCE
+FORCE:
+
+$(BTRC_STAMP): FORCE | dirs
 	@tmp="$@.tmp"; \
 	printf '%s\n' "$(BTRC)" > "$$tmp"; \
 	if test -f "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
@@ -118,8 +141,14 @@ $(BTRC_STAMP): | dirs
 # then a static library for local linking.
 build-stdlib: $(STDLIB_LIB)
 
-$(STDLIB_MANIFEST): $(SOURCES) flake.lock $(BTRC_STAMP) | dirs
+$(PROGRAM_DEPS): $(SOURCES) ci/btrc-deps.py Makefile | dirs
+	@if command -v python3 >/dev/null 2>&1; then python3 ci/btrc-deps.py $(PROGRAMS) > "$@.tmp" && mv "$@.tmp" "$@"; else : > "$@"; fi
+
+-include $(PROGRAM_DEPS)
+
+$(STDLIB_MANIFEST): flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --build-stdlib "$(CURDIR)/$(STDLIB_DIR)"
+	@touch "$@"
 
 $(STDLIB_LIB): $(STDLIB_MANIFEST)
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -c "$(CURDIR)/$(STDLIB_IMPL)" -o "$(CURDIR)/$(BUILD_DIR)/btrc_stdlib.o"
@@ -127,47 +156,47 @@ $(STDLIB_LIB): $(STDLIB_MANIFEST)
 
 transpile: $(NIXOSCTL_C_OUT) $(IMMUTABILITY_C_OUT) $(TRAY_C_OUT)
 
-$(NIXOSCTL_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+$(NIXOSCTL_C_OUT): $(call made_from,nixosctl) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(NIXOSCTL_ENTRY)" -o "$(CURDIR)/$(NIXOSCTL_C_OUT)"
+	@touch "$@"  # the compiler keeps an unchanged output's time, which would leave it stale for good
 
-$(IMMUTABILITY_C_OUT): $(SOURCES) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+$(IMMUTABILITY_C_OUT): $(call made_from,immutability) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_C_OUT)"
+	@touch "$@"
 
 # Library.Tray's Linux provider binds libdbus, so its typed header import
 # needs pkg-config at transpile time and dbus-1 at link time.
-$(BUILD_DIR)/tray-compiler: flake.lock | dirs
-	nix build --no-warn-dirty --inputs-from . btrc\#btrcpy --out-link "$@"
-
-$(TRAY_C_OUT): $(SOURCES) $(BUILD_DIR)/tray-compiler | dirs
-	$(TRAY_BTRC) --strict-imports "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
+$(TRAY_C_OUT): $(call made_from,nixosctl-tray) flake.lock $(BTRC_STAMP) | dirs
+	$(BTRC) --strict-imports "$(CURDIR)/$(TRAY_ENTRY)" -o "$(CURDIR)/$(TRAY_C_OUT)"
+	@touch "$@"
 
 build: $(BINS)
 
-$(BUILD_DIR)/host-picker-test: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/host-picker-test: $(call made_from,host-picker-test) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/host-picker/Main.btrc -o "$(BUILD_DIR)/host-picker-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/host-picker-test.c" -lm -lpthread -lutil -o "$@"
 
-$(BUILD_DIR)/source-hash-test: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/source-hash-test: $(call made_from,source-hash-test) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/harness/source-hash/Main.btrc -o "$(BUILD_DIR)/source-hash-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/source-hash-test.c" -lm -lpthread -o "$@"
 
-$(BUILD_DIR)/disabled-node-test: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/disabled-node-test: $(call made_from,disabled-node-test) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/harness/disabled/Main.btrc -o "$(BUILD_DIR)/disabled-node-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/disabled-node-test.c" -lm -lpthread -o "$@"
 
-$(BUILD_DIR)/graph-runner-test: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/graph-runner-test: $(call made_from,graph-runner-test) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/harness/runner/Main.btrc -o "$(BUILD_DIR)/graph-runner-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/graph-runner-test.c" -lm -lpthread -o "$@"
 
-$(BUILD_DIR)/host-timeout-test: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/host-timeout-test: $(call made_from,host-timeout-test) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/harness/timeout/Main.btrc -o "$(BUILD_DIR)/host-timeout-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/host-timeout-test.c" -lm -lpthread -o "$@"
 
-$(BUILD_DIR)/boot-evidence: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/boot-evidence: $(call made_from,boot-evidence) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/hosts-boot/Main.btrc -o "$(BUILD_DIR)/boot-evidence.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/boot-evidence.c" -lm -lpthread -o "$@"
 
-$(BUILD_DIR)/boot-evidence-test: $(SOURCES) flake.lock | dirs
+$(BUILD_DIR)/boot-evidence-test: $(call made_from,boot-evidence-test) flake.lock $(BTRC_STAMP) | dirs
 	$(BTRC) --strict-imports tests/hosts-boot/EvidenceTests.btrc -o "$(BUILD_DIR)/boot-evidence-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/boot-evidence-test.c" -lm -lpthread -o "$@"
 
@@ -181,19 +210,28 @@ $(TRAY_BIN): $(TRAY_C_OUT)
 	$(CC) $(CFLAGS) "$(CURDIR)/$(TRAY_C_OUT)" -o "$(CURDIR)/$(TRAY_BIN)" $(TRAY_LIBS)
 
 define UNIT_TEST_RULES
-$$(BUILD_DIR)/$(1)_test.c: $$(SOURCES) $$(STDLIB_MANIFEST) $$(BTRC_STAMP) | dirs
+$$(BUILD_DIR)/$(1)_test.c: $$(call made_from,$(1)_test) $$(STDLIB_MANIFEST) $$(BTRC_STAMP) | dirs
 	$$(BTRC) $$(TRANSPILER_FLAGS) "$$(CURDIR)/$(2)" -o "$$@"
+	@touch "$$@"
 
 $$(BUILD_DIR)/$(1)_test: $$(BUILD_DIR)/$(1)_test.c $$(STDLIB_LIB)
 	$$(CC) $$(CFLAGS) -I"$$(CURDIR)/$$(STDLIB_DIR)" "$$<" "$$(CURDIR)/$$(STDLIB_LIB)" -o "$$@" $$(NIXOSCTL_LIBS)
 endef
 $(foreach t,$(UNIT_TESTS),$(eval $(call UNIT_TEST_RULES,$(call unit_name,$(t)),$(call unit_entry,$(t)))))
 
-unit: $(UNIT_BINS) $(BUILD_DIR)/boot-evidence-test
-	@for test in $(UNIT_BINS); do ./$$test < /dev/null || exit 1; done  # closed stdin: prompts must not spin
-	./$(BUILD_DIR)/boot-evidence-test
+# Each suite is its own target, so they run together. Closed stdin: prompts must not spin.
+run-unit-%: $(BUILD_DIR)/%_test
+	./$< < /dev/null
+
+run-boot-evidence-test: $(BUILD_DIR)/boot-evidence-test
+	./$<
+
+run-shell-tests:
 	bash tests/core/shell_tools.sh
 	bash tests/ci/checks_script.sh
+	bash tests/ci/program_deps.sh
+
+unit: $(addprefix run-unit-,$(UNIT_NAMES)) run-boot-evidence-test run-shell-tests
 
 quick: $(BIN) unit
 	@set +e; output="$$(NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) 2>&1)"; status=$$?; \
