@@ -891,7 +891,9 @@ Encrypted boots use the `unlock-luks` op: it waits for the LUKS prompt on the
 serial console, types the passphrase, then waits for SSH. Where a scenario
 answers the console itself, `wait-serial` waits for text the guest prints after
 the last thing typed there (a prompt that is back after a wrong answer, the boot
-menu) and `serial-send` types. Write negative guest
+menu), `serial-send` types, and `expect-no-ssh` fails if the guest answers SSH
+at any point in its timeout (a disk still locked, a generation that did not
+boot). Write negative guest
 checks as `if cmd; then exit 1; fi`, because a bare `! pipeline` never trips
 `set -e`.
 

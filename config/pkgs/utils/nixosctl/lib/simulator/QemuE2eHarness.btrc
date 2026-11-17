@@ -330,6 +330,21 @@ class QemuE2eHarness {
         return false;
     }
 
+    // Whether the guest answers no SSH for the whole time: a machine that is still locked, or one that did not boot.
+    public bool staysWithoutSsh(int seconds) {
+        var timer = Timer();
+        timer.start();
+        while (timer.elapsed() < seconds) {
+            if (!self.state.isRunning()) {
+                NixosLog.error(f"QEMU exited while the guest was expected to stay without SSH; {self.state.runningDetail()}; serial log: {self.serialLogPath()}");
+                return false;
+            }
+            if (self.ssh("true", false).ok()) { return false; }
+            self.sleepSeconds(2);
+        }
+        return true;
+    }
+
     public string currentBootId() {
         var result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 10);
         if (!result.ok()) { return ""; }

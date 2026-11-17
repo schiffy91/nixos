@@ -25,6 +25,7 @@ class VmOperationCatalog {
         kinds.push("up-iso");
         kinds.push("bootstrap-ssh");
         kinds.push("wait-ssh");
+        kinds.push("expect-no-ssh");
         kinds.push("unlock-luks");
         kinds.push("send-keys");
         kinds.push("serial-send");
@@ -171,6 +172,12 @@ class VmTestRunner {
         if (op.kind.equals("wait-ssh")) {
             if (!self.vm.waitForSsh(op.timeout)) {
                 self.fail("SSH was not ready after " + Strings.fromInt(op.timeout) + " seconds; serial log: " + self.vm.serialLogPath());
+            }
+            return;
+        }
+        if (op.kind == "expect-no-ssh") {
+            if (!self.vm.staysWithoutSsh(op.timeout)) {
+                self.fail(f"The guest answered SSH, or QEMU exited, within {op.timeout} seconds; serial log: {self.vm.serialLogPath()}");
             }
             return;
         }

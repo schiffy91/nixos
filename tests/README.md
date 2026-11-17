@@ -134,6 +134,8 @@ nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph t
 A scenario that answers the guest's console itself waits with `wait-serial`: it looks only at what the
 guest printed after the last text typed there, by `serial-send` or `unlock-luks`, so a prompt that is
 back after a wrong answer is told from the one the answer went to. A VM started again begins a new log.
+`expect-no-ssh` fails if the guest answers SSH at any point in its timeout: a disk that is still locked,
+a generation that did not boot.
 
 ## Ledger
 
