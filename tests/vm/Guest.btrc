@@ -84,7 +84,9 @@ class Guest {
             arguments.push("none");
         }
         self.process = OwnedProcess(self.executable, arguments, self.path("console.log"), self.directory, environment);
-        deadline = MonotonicClock.deadlineAfter(30000);
+        // The start script makes the guest's disk and its Nix store image before QEMU opens the monitor, and on
+        // a busy machine that alone has taken more than half a minute. A guest that dies is seen at once.
+        deadline = MonotonicClock.deadlineAfter(300000);
         while (!FileSystem.exists(self.path("qmp.sock"))) {
             Check.that(self.runningProcess().running() && MonotonicClock.before(deadline), f"start {self.name}: {self.console()}"); Timer.sleepMillis(20);
         }
