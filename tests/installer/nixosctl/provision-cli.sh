@@ -18,6 +18,7 @@ package=$(nix-build --no-out-link --cores 4 --max-jobs 2 \
     in import (flake.outPath + "/config/pkgs/utils/nixosctl/package.nix") {
       inherit pkgs;
       inherit (pkgs) lib;
+      inherit (flake) inputs;
       btrcpy = flake.inputs.btrc.packages.${system}.btrcpy;
     }')
 
