@@ -11,7 +11,7 @@ let
     printf old > "$out/Details/version"
   '';
   options = import ./options.nix { inherit pkgs inputs; };
-  consolePort = (import ../../../config/pkgs/gaming/wow/addons.nix { inherit pkgs; }).consolePort;
+  consolePort = (import ../../../config/pkgs/gaming/wow/addons.nix { inherit pkgs; overrides = import ../../../config/pkgs/gaming/wow/overrides.nix; }).consolePort;
   tools = import ../../../config/pkgs/gaming/wow/package.nix { inherit pkgs inputs; };
   programs = (inputs.btrc.lib.buildPackage pkgs) {
     name = "wow-lock-contract-tests";

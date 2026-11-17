@@ -9,6 +9,7 @@ let
     excluded = config.settings.apps.gaming.wow.settingsExcluded;
   });
 in lib.mkIf config.settings.apps.gaming.wow.enable {
+  settings.apps.gaming.wow.addonOverrides = import ./overrides.nix;
   environment.systemPackages = [ tools ];
   environment.etc."${config.settings.apps.utils.nixosctl.upgradeHooksDir}/wow-addons" = lib.mkIf config.settings.apps.gaming.wow.upgradeAddons {
     source = "${tools}/bin/wow-addons-lock";

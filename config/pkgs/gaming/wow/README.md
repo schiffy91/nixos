@@ -24,6 +24,15 @@ For example, a host can select a subset without changing the shared release lock
 directories and rejects duplicate names. Extra packages can be appended through
 `addons`; use `lib.mkForce []` to remove all managed addons while leaving manual
 addons in place. The packages keep their release-archive hashes in one shared lock.
+What this repository changes in an addon is data, in `addonOverrides.<name>`: `patches`
+(applied in order), `files` (a path inside the archive and the file put there) and
+`tocAppend` (lines added to a `.toc`). `overrides.nix` holds the three in use, for
+ForeverFadeChat, ConsolePort and FlareUI; a host adds its own the same way:
+
+```nix
+settings.apps.gaming.wow.addonOverrides.questie.patches = [ ./questie-tracker.patch ];
+```
+
 `wow-addons-lock` refreshes that lock during `nixosctl upgrade`. Failed requests and
 ambiguous assets abort without publishing a replacement lock. A successfully fetched
 release page with no matching asset can still fall back to an earlier release.

@@ -13,8 +13,31 @@
     addonPackages = lib.mkOption {
       type = lib.types.attrsOf lib.types.package;
       readOnly = true;
-      default = import ./addons.nix { inherit pkgs; };
-      description = "Named addon packages from the shared release lock.";
+      default = import ./addons.nix { inherit pkgs; overrides = config.settings.apps.gaming.wow.addonOverrides; };
+      description = "Named addon packages from the shared release lock, each with its `addonOverrides` applied.";
+    };
+    addonOverrides = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          patches = lib.mkOption {
+            type = lib.types.listOf lib.types.path;
+            default = [];
+            description = "Patches applied in order from the archive's root (`patch -p1`).";
+          };
+          files = lib.mkOption {
+            type = lib.types.attrsOf lib.types.path;
+            default = {};
+            description = "Files placed in the addon after the patches: a path inside the archive, and the file put there.";
+          };
+          tocAppend = lib.mkOption {
+            type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+            default = {};
+            description = "Lines added to the end of a `.toc` file, so the client loads the placed files.";
+          };
+        };
+      });
+      default = {};
+      description = "Changes made to an addon of the release lock, under its name there. Modules and hosts add to it.";
     };
     addons = lib.mkOption {
       type = lib.types.listOf lib.types.package;
