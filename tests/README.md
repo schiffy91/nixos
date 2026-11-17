@@ -138,11 +138,11 @@ back after a wrong answer is told from the one the answer went to. A VM started 
 a generation that did not boot.
 
 What an installed system does when its owner uses it has nodes of its own. `nixosctl-update` runs
-`nixosctl update` as the admin user after a change to the host, where every other spec calls `nixos-
-rebuild`. `recovery-bad-generation` makes the newest generation fail in its initrd and comes back by the
-boot menu and `nixosctl update`. `tpm2-unlock` boots an encrypted install by its TPM2 keyslot, with
-nothing typed, and by passphrase again once the slot is wiped. `boot-wrong-passphrase` answers the boot
-prompt wrongly twice before the right passphrase and compares the LUKS header with what it was.
+`nixosctl update` as the admin user after a change to the host, where every other spec calls
+`nixos-rebuild`. `recovery-bad-generation` makes the newest generation fail in its initrd and comes back
+by the boot menu and `nixosctl update`. `tpm2-unlock` boots an encrypted install by its TPM2 keyslot,
+with nothing typed, and by passphrase again once the slot is wiped. `boot-wrong-passphrase` answers the
+boot prompt wrongly twice before the right passphrase and compares the LUKS header with what it was.
 `immutability-home` resets `@home` around persisted paths in the admin user's home.
 
 ## Ledger
