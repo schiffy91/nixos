@@ -29,13 +29,9 @@ let
     "config/pkgs/gaming/proton/custom/tools/native.h"
     "config/pkgs/gaming/slopsmith/src/signals.h"
     "config/pkgs/gaming/assettocorsa/src/compression.h"
-    "config/pkgs/gaming/deckpad/Awake.h"
-    "config/pkgs/gaming/deckpad/Posix.h"
-    "config/pkgs/gaming/deckpad/Screen.h"
     "config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c"
     "config/pkgs/gaming/sunshine/hdr-screencast-test/probe.c"
     "tests/plymouth-keyboard/input.c"
-    "tests/gaming/deckpad/SdlHost.c"
     "tests/ci/native-fixture/native.h"
     "tests/ci/process-probe.h"
     "tests/gaming/affinity/cpu-set.h"
@@ -57,7 +53,6 @@ let
     $CC -O2 -Wall -Werror ${../config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c} \
       $(pkg-config --cflags --libs gio-2.0 gio-unix-2.0 glib-2.0) -o "$out/bin/battlenet-capture-window"
     $CC -Wall -Wextra -Werror ${../tests/plymouth-keyboard/input.c} -o "$out/bin/plymouth-test-input"
-    $CC -Wall -Wextra -Werror ${../tests/gaming/deckpad/SdlHost.c} -lSDL3 -lm -o "$out/bin/deckpad-sdl-host"
     for source in ${./native.h} \
       ${../config/system/nixos/opportunistic-unlock/native.h} \
       ${../config/system/nixos/networking/native.h} \
@@ -77,9 +72,6 @@ let
       ${../config/pkgs/gaming/proton/custom/tools/native.h} \
       ${../config/pkgs/gaming/slopsmith/src/signals.h} \
       ${../config/pkgs/gaming/assettocorsa/src/compression.h} \
-      ${../config/pkgs/gaming/deckpad/Awake.h} \
-      ${../config/pkgs/gaming/deckpad/Posix.h} \
-      ${../config/pkgs/gaming/deckpad/Screen.h} \
       ${../tests/ci/process-probe.h} \
       ${../tests/gaming/affinity/cpu-set.h} \
       ${../tests/gaming/runtime/tls.h} \

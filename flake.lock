@@ -315,6 +315,29 @@
         "type": "github"
       }
     },
+    "deckpad": {
+      "inputs": {
+        "btrc": [
+          "btrc"
+        ],
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794939197,
+        "narHash": "sha256-ZevzVDKYjFkm4IYZD7KJXWP2u1I0T1K99TBxbfpxfoY=",
+        "owner": "schiffy91",
+        "repo": "deckpad",
+        "rev": "109d35a63f0b9472a322b5eb4d51da3de7fd3261",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "deckpad",
+        "type": "github"
+      }
+    },
     "disko": {
       "inputs": {
         "nixpkgs": [
@@ -888,6 +911,7 @@
       "inputs": {
         "btrc": "btrc",
         "ci-local": "ci-local",
+        "deckpad": "deckpad",
         "disko": "disko",
         "drive": "drive",
         "home-manager": "home-manager",

@@ -14,6 +14,6 @@ in pkgs.lib.mapAttrs (name: assets: {
     cp ${pkgs.writeText "${name}-legacy-artwork.json" (builtins.toJSON legacy.${name})} "$out/legacy.json"
   '';
 }) sources // {
-  # Nobody has drawn the Deck as a Steam Controller, so deckpad/compose.py made this set from Valve's pictures.
-  deckpad = { icon = "${./deckpad/icon.png}"; artwork = ./deckpad; };
+  # Deck Pad brings its own pictures: nobody has drawn the Deck as a Steam Controller, so that repository made a set.
+  deckpad = let pictures = inputs.deckpad.packages.${pkgs.stdenv.hostPlatform.system}.artwork; in { icon = "${pictures}/icon.png"; artwork = pictures; };
 }

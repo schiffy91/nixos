@@ -159,6 +159,8 @@ only for a place that still runs it.
 | `spec-toml`, `spec-yaml` | `formats` case of the runner test (`make harness`) | The same two specs, run over a fixture graph |
 | `quick` | removed | It printed a word through the runner; every case of the runner test does more |
 | `stateful-host` | removed | It proved that a state is recorded and reused; the runner test's duration and collection cases prove the same over fixtures |
+| `deckpad` in the gaming check farm (`tests/gaming/deckpad`) | check `unit-deckpad` of `schiffy91/deckpad`, which the farm here still builds from the input | Deck Pad moved to its own repository; the same suite, keyed on its own derivation |
+| `tests/gaming/deckpad/kernel.nix` (run by hand) | check `vm-links` of `schiffy91/deckpad` | Every link against a real kernel; it was never wired in here, and is a check there |
 | `initrd-touch-unlock-displays` (required) | graph set `alone`, run by `make graph-required` after the required set | It still runs for every commit that changes it, but with nothing beside it: under load a display it plugs in comes up late and Plymouth draws on the firmware framebuffer, and each fix moved the failure to another step |
 | `storage` (required) | graph set `alone` | Its card is an emulated SD card. Beside other nodes it failed in two runs out of two after passing in seven: once waiting ninety seconds for the card to mount, once with `mkfs` outlasting a command's ninety seconds |
 | `drive-planner`, `drive-remote` | checks `unit-planner`, `unit-remote` of `schiffy91/drive` | The client moved to its own repository; its tests are that flake's checks, keyed on their own derivations |
