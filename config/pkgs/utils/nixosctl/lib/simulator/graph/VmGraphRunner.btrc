@@ -23,11 +23,13 @@ class GraphJob {
     public int memory;
     public int port;
     public string log;
+    public long long due;  // when it is expected to end: its start and how long its last pass took
 
-    public GraphJob(string id, BackgroundProcess process, int memory, int port, string log) {
+    public GraphJob(string id, BackgroundProcess process, int memory, int port, string log, long long expected) {
         self.id = id;
         self.process = process;
         self.started = MonotonicClock.milliseconds();
+        self.due = self.started + expected;
         self.memory = memory;
         self.port = port;
         self.log = log;
@@ -533,7 +535,8 @@ class VmGraphRunner {
     }
 
     // The memory the running nodes may be given together, in megabytes: `--arg memoryBudget=48G`,
-    // or three quarters of what the machine has.
+    // or nine tenths of what the machine has. A node's memory is its VM's ceiling; measured over whole runs
+    // the VMs hold about seven tenths of what they are given, so this leaves a tenth and more to the host.
     public int memoryBudget() {
         if (self.args.has("memoryBudget")) {
             var asked = VmTestSpec();
@@ -544,7 +547,7 @@ class VmGraphRunner {
         for line in Strings.split(Path.readAll("/proc/meminfo"), "\n") {
             if (!line.startsWith("MemTotal:")) { continue; }
             var fields = Strings.split(line.replace("MemTotal:", "").trim(), " ");
-            return Strings.toInt(fields.get(0)) / 1024 / 4 * 3;
+            return Strings.toInt(fields.get(0)) / 1024 / 10 * 9;
         }
         return 8192;
     }
@@ -622,13 +625,13 @@ class VmGraphRunner {
         command.push("--arg"); command.push(f"sshPort={port}");
         var log = streamed ? "" : self.logPath(spec, node.id);
         if (streamed) {
-            return GraphJob(node.id, BackgroundProcess.start(command.get(0), command.slice(1, command.length), killOnDrop=true), spec.memoryMegabytes(), port, log);
+            return GraphJob(node.id, BackgroundProcess.start(command.get(0), command.slice(1, command.length), killOnDrop=true), spec.memoryMegabytes(), port, log, self.expected(spec));
         }
         FileSystem.mkdirp(PathTools.dirname(log));
         Vector<string> words = ["exec"];
         for word in command { words.push(ShellWords.quote(word)); }
         var script = f"{words.join(" ")} > {ShellWords.quote(log)} 2>&1 < /dev/null";
-        return GraphJob(node.id, BackgroundProcess.start("sh", ["-c", script], killOnDrop=true), spec.memoryMegabytes(), port, log);
+        return GraphJob(node.id, BackgroundProcess.start("sh", ["-c", script], killOnDrop=true), spec.memoryMegabytes(), port, log, self.expected(spec));
     }
 
     // The node itself, in the child: its operations, then how long they took.
@@ -644,10 +647,28 @@ class VmGraphRunner {
 
     // How long the rest of the run needs once this node starts: its own last duration and the longest
     // chain of nodes that wait on it. A node that has never passed counts for a minute.
+    // How long a node is expected to run, in milliseconds: its last pass, or a minute when it has none.
+    private long long expected(VmTestSpec spec) {
+        var recorded = self.lastDuration(spec);
+        return (recorded == "-" ? 60LL : (long long)Strings.toInt(recorded.substring(0, recorded.length - 1))) * 1000LL;
+    }
+
+    // When the running nodes are expected to have freed enough memory for a node that needs this much.
+    private long long roomAt(Vector<GraphJob> running, int used, int needs, int budget) {
+        var now = MonotonicClock.milliseconds();
+        var ending = running.sortedBy((GraphJob first, GraphJob second) => first.due < second.due);
+        long long at = now;
+        for job in ending {
+            if (used + needs <= budget) { break; }
+            used -= job.memory;
+            at = job.due > now ? job.due : now + 30000LL;  // overdue: it may end at any moment, or not for a while
+        }
+        return at;
+    }
+
     private long long remaining(string id, Vector<string> order, Map<string, long long> known) {
         if (known.has(id)) { return known.get(id); }
-        var recorded = self.lastDuration(self.specFor(self.graph.node(id)));
-        long long own = recorded == "-" ? 60LL : (long long)Strings.toInt(recorded.substring(0, recorded.length - 1));
+        long long own = self.expected(self.specFor(self.graph.node(id))) / 1000LL;
         long long longest = 0LL;
         for other in order {
             if (!self.graph.node(other).after.contains(id)) { continue; }
@@ -725,7 +746,8 @@ class VmGraphRunner {
             running = still;
 
             Vector<string> waiting = [];
-            var crowded = false;  // a node ahead in the order is waiting for memory
+            int promised = -1;  // the memory of the node ahead in the order that is waiting for room
+            long long promisedAt = 0LL;  // when that room is expected to free
             for id in pending {
                 var node = self.graph.node(id);
                 var blocker = "";
@@ -749,12 +771,17 @@ class VmGraphRunner {
                 }
                 int used = 0;
                 for job in running { used += job.memory; }
-                if (crowded || running.length >= jobs) { waiting.push(id); continue; }
-                if (!running.isEmpty() && used + spec.memoryMegabytes() > budget) {
-                    crowded = true;  // it keeps its turn: a smaller node behind it would take the memory it waits for, again and again
+                if (running.length >= jobs) { waiting.push(id); continue; }
+                int needs = spec.memoryMegabytes();
+                if (!running.isEmpty() && used + needs > budget) {
+                    // The first node that does not fit is promised the room that frees next. Without the
+                    // promise a smaller node behind it takes that room, again and again, and it runs last.
+                    if (promised < 0) { promised = needs; promisedAt = self.roomAt(running, used, needs, budget); }
                     waiting.push(id);
                     continue;
                 }
+                // A node behind the promise runs if it leaves the promised room alone, or ends before it frees.
+                if (promised >= 0 && used + needs + promised > budget && MonotonicClock.milliseconds() + self.expected(spec) > promisedAt) { waiting.push(id); continue; }
                 NixosLog.info(f"graph {name}: run {id} -> {spec.state}@{spec.stateHashShort}");
                 running.push(self.start(node, spec, self.freePort(running), jobs == 1));
             }

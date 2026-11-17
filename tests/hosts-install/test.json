@@ -19,7 +19,7 @@
   "diskInterface": "nvme",
   "graphics": "virtio",
   "memory": "8G",
-  "cpus": 4,
+  "cpus": 8,
   "sshPort": 2256,
   "operations": [
     {

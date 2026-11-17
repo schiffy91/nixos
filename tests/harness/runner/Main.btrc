@@ -328,21 +328,30 @@ class GraphRunnerTests {
         Check.equal(Path.readAll(sequence), "head\nbrief\nshort\nfollower\nhead\nfollower\nbrief\nshort\n", "once durations are known, the three-second follower outranks the one-second nodes");
     }
 
-    // A node that needs much memory becomes ready while small ones run. It must get the next room that
-    // frees, not watch small nodes behind it take that room one after another until none are left.
+    // A node that needs much memory becomes ready while small ones run. It must get the room that frees
+    // next, not watch small nodes behind it take that room one after another until none are left. A node
+    // known to be brief may still run in the meantime, because it is gone before the room frees.
     public void largeNodeKeepsItsTurn() {
         var sequence = self.fixture.path("large-sequence");
         self.node("gate", f"printf 'gate\\n' >> {ShellWords.quote(sequence)}", "", "1G");
-        self.node("large", f"printf 'large\\n' >> {ShellWords.quote(sequence)}; sleep 1", "gate", "3G");
+        self.node("large", f"printf 'large\\n' >> {ShellWords.quote(sequence)}; sleep 4", "gate", "3G");
         Vector<string> entries = [self.entry("gate"), self.entry("large", "gate")];
         for name in ["s1", "s2", "s3", "s4", "s5", "s6"] {
             self.node(name, f"printf '{name}\\n' >> {ShellWords.quote(sequence)}; sleep 3", "", "1G");
             entries.push(self.entry(name));
         }
+        self.node("brief", f"printf 'brief\\n' >> {ShellWords.quote(sequence)}", "", "1G");
+        entries.push(self.entry("brief"));
         self.graph(entries.join(","));
-        Check.exited(self.run(["run", "large", "s1", "s2", "s3", "s4", "s5", "s6", "--arg", "jobs=4", "--arg", "memoryBudget=4G"]));
+        Vector<string> command = ["run", "large", "s1", "s2", "s3", "s4", "s5", "s6", "brief", "--arg", "jobs=5", "--arg", "memoryBudget=4G"];
+        Check.exited(self.run(command));
         var started = Strings.split(Path.readAll(sequence).trim(), "\n");
         Check.that(started.indexOf("large") >= 0 && started.indexOf("large") < started.indexOf("s4"), f"the large node starts before the small ones that were behind it: {started.join(" ")}");
+        FileSystem.removeIfExists(sequence);
+        command.push("--arg"); command.push("force=true");
+        Check.exited(self.run(command));  // every duration is known now: the small nodes take three seconds, the brief one none
+        started = Strings.split(Path.readAll(sequence).trim(), "\n");
+        Check.that(started.indexOf("brief") < started.indexOf("large") && started.indexOf("large") < started.indexOf("s4"), f"a brief node runs in the room the large one is waiting for, and a three-second one does not: {started.join(" ")}");
     }
 
     public void namedSets() {
