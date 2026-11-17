@@ -44,6 +44,20 @@ let
       at = "And on the Drive, however few changes it reports at a time";
       sees = "timed out waiting for drive status --runtime /run/drive-test | grep -q 'deletions held'";
     }
+    {
+      rule = "deletions held here are written down for the engine that starts next";
+      scenario = ../held;
+      mutation = cut "engine/Uploader.btrc" ''for id in self.removals { lines.push(f"removed {id}"); }'' "";
+      at = "The engine is killed and started again, and both batches still wait";
+      sees = "timed out waiting for drive held --runtime /run/drive-test | grep -q '  here$'";
+    }
+    {
+      rule = "a batch the Drive deletes is counted on across a restart";
+      scenario = ../held;
+      mutation = cut "engine/Mirror.btrc" "self.streak = store.streak();" "self.streak = 0;";
+      at = "The engine is killed and started again, and both batches still wait";
+      sees = "timed out waiting for drive held --runtime /run/drive-test | grep -q 'on the Drive$'";
+    }
   ];
   failed = mutant: pkgs.testers.testBuildFailure (import mutant.scenario { inherit inputs system; inherit (mutant) mutation; });
 in pkgs.runCommand "drive-mutations" { passthru.runs = map failed mutants; } (''

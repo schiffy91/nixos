@@ -29,6 +29,12 @@ class DriveFixture {
 
     public bool onDrive(string name, string sha) { return self.remote(name).contains(f" {sha} False"); }
 
+    // The names of everything in the Drive's trash, sorted, on one line.
+    public string trashed() { return self.machine.succeed(f"curl -sS -X POST '{self.fake}/__control/dump' | python3 -c 'import json, sys; print(\" \".join(sorted(e[\"name\"] for e in json.load(sys.stdin) if e[\"trashed\"])))'").trim(); }
+
+    // Hold the engine still, or let it go on: what happens meanwhile reaches it as one batch.
+    public void freeze(bool still) { self.machine.succeed(f"systemctl kill --signal={still ? "STOP" : "CONT"} {self.unit}-engine.service"); }
+
     public string sha(string path) { return self.machine.succeed(f"sha256sum < {path} | cut -d' ' -f1").trim(); }
 
     public string id(string path) { return self.machine.succeed(f"getfattr --absolute-names -n user.drive.id --only-values {self.store}/tree/{path} 2>/dev/null || true").trim(); }

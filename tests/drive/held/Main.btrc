@@ -1,0 +1,157 @@
+import Library.CLI;
+import ../../vm/Lab.btrc;
+import ../Fixture.btrc;
+
+// The delete brake across a restart. Deletions that wait for a yes or a no still wait after the engine is killed
+// and started again, and after the machine restarts: the same entries are listed, nothing has been trashed on the
+// Drive and nothing more removed here, and both answers still do what they say. The Drive is a second machine,
+// as it is in life, so it keeps what it holds while this one restarts.
+class HeldScenario {
+    private DriveFixture drive;
+    private Guest machine;
+    private Guest cloud;
+    private string mount;
+    private string engine = "--quiet 1 --machine TEST --delete-limit 3 --budget-files 0";
+
+    public HeldScenario(Guest machine, Guest cloud) {
+        self.machine = machine;
+        self.cloud = cloud;
+        self.drive = DriveFixture(machine);
+        self.drive.fake = "http://cloud:18475";
+        self.mount = self.drive.mount;
+    }
+
+    private string held() { return self.drive.drive("held"); }
+
+    private string changed(string before, string after) {  // the rows that only one of two lists has; nothing when they list the same
+        Vector<string> was = Strings.split(before, "\n");
+        Vector<string> now = Strings.split(after, "\n");
+        Vector<string> rows = [];
+        for row in was {
+            if (!now.contains(row)) { rows.push(f"no longer listed: {row.trim()}"); }
+        }
+        for row in now {
+            if (!was.contains(row)) { rows.push(f"newly listed: {row.trim()}"); }
+        }
+        return Strings.join(rows, "\n");
+    }
+
+    private void waits(string where) { self.machine.waitUntil(f"drive held --runtime {self.drive.runtime} | grep -q '{where}$'"); }  // a row that ends with where it was deleted
+
+    private string count(string folder) { return self.machine.succeed(f"ls {self.mount}/{folder} | wc -l").trim(); }
+
+    private void prepare() {
+        self.cloud.waitForUnit("drive-fake.service");
+        self.drive.prepare();
+        self.machine.succeed(f"printf 'a save\\n' > {self.drive.source}/save");
+        self.machine.waitUntil(f"curl -sS -X POST '{self.drive.fake}/__control/log' >/dev/null");
+        for folder in ["Saves", "Theirs", "Old", "Whole", "Untouched"] {
+            string id = self.drive.folder("root", folder);
+            for (int number = 1; number <= 5; number++) { self.drive.put(id, f"{folder}-{number}.sav", "save"); }
+        }
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor();
+    }
+
+    private void acrossRestart() {
+        print("A batch made here and a batch made on the Drive are both held");
+        Vector<string> theirs = [];
+        for (int number = 1; number <= 5; number++) { theirs.push(self.drive.id(f"Theirs/Theirs-{number}.sav")); }
+        self.drive.control("page?size=2");  // the real feed comes in small pages, and the count has to carry from one to the next
+        self.drive.freeze(true);
+        self.machine.succeed(f"rm -r {self.mount}/Saves");
+        for id in theirs { self.drive.control(f"delete?id={id}"); }
+        self.drive.freeze(false);
+        self.waits("  here");
+        self.waits("on the Drive");
+        string before = self.held();
+        Check.that(before.contains("Saves/Saves-3.sav") && before.contains("Saves/ ") && before.contains("Theirs/Theirs-5.sav") && before.contains("9 waiting"), f"the folder deleted here with its five files, and the three the Drive deleted that are still here:\n{before}");
+        Check.equal(self.count("Theirs"), "3", "the brake stopped the Drive's batch part-way");
+        Check.equal(self.drive.trashed(), "", "nothing is trashed on the Drive");
+
+        print("The engine is killed and started again, and both batches still wait");
+        self.drive.stop("drive-engine");
+        self.drive.startEngine(self.engine);
+        self.drive.connected();
+        self.waits("  here");
+        self.waits("on the Drive");
+        self.machine.succeed("sleep 3");  // long enough for a brake that had let go to show it
+        Check.equal(self.changed(before, self.held()), "", "`drive held` lists the same entries as before");
+        Check.equal(self.drive.trashed(), "", "nothing was trashed on the Drive meanwhile");
+        Check.equal(self.count("Theirs"), "3", "and nothing more was removed here");
+
+        print("A no after the restart brings back what was deleted here");
+        string answer = self.drive.drive("keep");
+        Check.that(answer.contains("6 entries are coming back"), f"`drive keep` says what it did: {answer}");
+        self.machine.waitUntil(f"test \"$(ls {self.mount}/Saves | wc -l)\" = 5 && cmp {self.mount}/Saves/Saves-3.sav {self.drive.source}/save", 60);
+        Check.equal(self.drive.trashed(), "", "nothing was trashed on the Drive");
+        string left = self.held();
+        Check.that(left.contains("3 waiting") && left.contains("Theirs/Theirs-4.sav") && !left.contains("  here\n"), f"what the Drive deleted still waits, and only that:\n{left}");
+        Check.equal(self.count("Theirs"), "3", "a no to the deletions made here is not a yes to the Drive's");
+
+        print("A yes after the restart lets the Drive's deletions through");
+        self.drive.drive("resume");
+        self.machine.waitUntil(f"test -z \"$(ls {self.mount}/Theirs)\"");
+        Check.that(self.held().contains("No deletions are waiting") && !self.drive.drive("status").contains("deletions held"), "and nothing is held any more");
+        Check.equal(f"{self.count("Saves")} {self.count("Untouched")}", "5 5", "what was brought back, and what nobody deleted, is all here");
+        self.drive.control("page?size=1000");
+    }
+
+    private void acrossReboot() {
+        print("That yes covered the batch it was given for: the next batch made here waits again");
+        self.drive.freeze(true);
+        self.machine.succeed(f"rm {self.mount}/Old/*.sav");
+        self.drive.freeze(false);
+        self.waits("  here");
+        Check.equal(self.drive.trashed(), "", "nothing of it is trashed on the Drive");
+
+        print("The Drive deletes a folder as well, and the machine restarts");
+        self.drive.control(f"delete?id={self.drive.id("Whole")}");
+        self.waits("on the Drive");
+        string before = self.held();
+        Check.that(before.contains("Old/Old-2.sav") && before.contains("Whole/") && before.contains("6 entries") && before.contains("6 waiting"), f"five files deleted here, and the folder the Drive deleted with what is in it:\n{before}");
+        self.machine.reboot();
+        self.machine.waitForShutdown();
+        self.machine.start();
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.succeed(f"mkdir -p {self.drive.runtime}");
+        self.drive.startEngine(self.engine);
+        self.drive.startDoor();
+        self.waits("  here");
+        self.waits("on the Drive");
+        self.machine.succeed("sleep 3");
+        Check.equal(self.changed(before, self.held()), "", "`drive held` lists the same entries as before the restart");
+        Check.equal(self.drive.trashed(), "", "nothing was trashed on the Drive meanwhile");
+        Check.equal(self.count("Whole"), "5", "and nothing was removed here");
+
+        print("A yes after the machine restarted lets both batches through, and nothing else");
+        self.drive.drive("resume");
+        self.machine.waitUntil(f"! test -e {self.mount}/Whole && test \"$(curl -sS -X POST '{self.drive.fake}/__control/dump' | grep -o '\"trashed\":true' | wc -l)\" = 5");
+        Check.equal(self.drive.trashed(), "Old-1.sav Old-2.sav Old-3.sav Old-4.sav Old-5.sav", "the Drive's trash holds the five files deleted here and nothing more");
+        Check.equal(self.machine.succeed(f"ls {self.mount} | LC_ALL=C sort | tr '\\n' ' '").trim(), "Old Saves Theirs Untouched", "the folder the Drive deleted is gone here, and no other");
+        Check.equal(f"{self.count("Saves")} {self.count("Untouched")} {self.count("Old")}", "5 5 0", "nothing outside the two batches was touched");
+        self.machine.succeed(f"cmp {self.mount}/Untouched/Untouched-4.sav {self.drive.source}/save");
+        Check.that(self.held().contains("No deletions are waiting"), "and nothing is held any more");
+    }
+
+    public void check() {
+        self.prepare();
+        self.acrossRestart();
+        self.acrossReboot();
+    }
+}
+
+int main(Vector<string> args) {
+    try {
+        var lab = Lab(CLIArgs.from(args).require(0, "Supply VM descriptor"));
+        lab.startAll();
+        HeldScenario(lab.guest("machine"), lab.guest("cloud")).check();
+        lab.close();
+        print("PASS: held deletions are still held after the engine and the machine restart, and both answers still work");
+        return 0;
+    } catch (string error) {
+        print(error);
+        return 1;
+    }
+    return 1;
+}

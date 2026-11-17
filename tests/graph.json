@@ -942,8 +942,16 @@
     },
     {
       "after": [
+        "drive-writes"
+      ],
+      "id": "drive-held",
+      "spec": "drive/held/test.json"
+    },
+    {
+      "after": [
         "drive-readers",
-        "drive-crashes"
+        "drive-crashes",
+        "drive-held"
       ],
       "id": "drive-mutations",
       "spec": "drive/mutations/test.json"
@@ -1034,6 +1042,7 @@
     "drive-dialog",
     "drive-tray",
     "drive-crashes",
+    "drive-held",
     "drive-mutations",
     "storage",
     "gaming-runtime",
