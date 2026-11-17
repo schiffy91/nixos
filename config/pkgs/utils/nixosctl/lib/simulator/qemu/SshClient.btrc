@@ -20,6 +20,7 @@ class SshClient {
 
     public Vector<string> sshOptionList() {
         Vector<string> opts = [];
+        opts.push("-F"); opts.push("/dev/null");  /* nothing from the host's ssh configuration: a VM is reached the same way everywhere */
         opts.push("-o"); opts.push("StrictHostKeyChecking=no");
         opts.push("-o"); opts.push("UserKnownHostsFile=/dev/null");
         opts.push("-o"); opts.push("LogLevel=ERROR");

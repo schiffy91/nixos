@@ -21,7 +21,7 @@ package=$(nix-build --no-out-link --cores 4 --max-jobs 2 \
       btrcpy = flake.inputs.btrc.packages.${system}.btrcpy;
     }')
 
-ssh_options=(-i "$work_dir/id_ed25519" -p "$port" -o BatchMode=yes
+ssh_options=(-F /dev/null -i "$work_dir/id_ed25519" -p "$port" -o BatchMode=yes -o IdentityAgent=none
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
 printf -v NIX_SSHOPTS '%q ' "${ssh_options[@]}"
 export NIX_SSHOPTS
