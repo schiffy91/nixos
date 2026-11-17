@@ -335,6 +335,29 @@
         "type": "github"
       }
     },
+    "drive": {
+      "inputs": {
+        "btrc": [
+          "btrc"
+        ],
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794936479,
+        "narHash": "sha256-ObiNQgwkJr4FUMuumpyTuu7pwppDqC2Lhqmez8aSFw8=",
+        "owner": "schiffy91",
+        "repo": "drive",
+        "rev": "3c93560dc67ac513357ceec48640bc55d286f839",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "drive",
+        "type": "github"
+      }
+    },
     "emulator-azahar": {
       "inputs": {
         "nixpkgs": [
@@ -866,6 +889,7 @@
         "btrc": "btrc",
         "ci-local": "ci-local",
         "disko": "disko",
+        "drive": "drive",
         "home-manager": "home-manager",
         "home-manager-darwin": "home-manager-darwin",
         "jovian": "jovian",

@@ -3,7 +3,7 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  programs = import ../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
+  programs = inputs.drive.packages.${system};
   cli = import ../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs inputs; inherit (inputs.btrc.packages.${system}) btrcpy; lib = pkgs.lib; };
 in (import ../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "storage";
@@ -37,5 +37,5 @@ in (import ../lib/vm-test.nix { inherit pkgs inputs; }) {
     virtualisation.cores = 2;
   };
   scenario = ./Main.btrc;
-  extraFiles = [ ../drive/Fixture.btrc ];
+  extraFiles = [ ./DriveFixture.btrc ];  # the helpers of schiffy91/drive's own tests, as they were when the client moved: this scenario runs the client beside a card
 }

@@ -919,137 +919,11 @@
     },
     {
       "after": [],
-      "id": "drive-remote",
-      "spec": "drive/remote/test.json"
-    },
-    {
-      "after": [
-        "drive-remote"
-      ],
-      "id": "drive-store",
-      "spec": "drive/store/test.json"
-    },
-    {
-      "after": [],
-      "id": "drive-planner",
-      "spec": "drive/planner/test.json"
-    },
-    {
-      "after": [
-        "drive-store"
-      ],
-      "id": "drive-door",
-      "spec": "drive/door/test.json"
-    },
-    {
-      "after": [
-        "drive-door"
-      ],
-      "id": "drive-readers",
-      "spec": "drive/readers/test.json"
-    },
-    {
-      "after": [
-        "drive-door"
-      ],
-      "id": "drive-writes",
-      "spec": "drive/writes/test.json"
-    },
-    {
-      "after": [
-        "drive-writes"
-      ],
-      "id": "drive-convergence",
-      "spec": "drive/convergence/test.json"
-    },
-    {
-      "after": [
-        "drive-writes"
-      ],
-      "args": {
-        "name": "drive-convergence-seeds",
-        "seedArguments": " --arg seeds '[ \"20261113\" \"7\" \"424242\" ]'",
-        "state": "drive-convergence-seeds"
-      },
-      "id": "drive-convergence-seeds",
-      "spec": "drive/convergence/test.json"
-    },
-    {
-      "after": [
-        "drive-writes"
-      ],
-      "id": "drive-pinning",
-      "spec": "drive/pinning/test.json"
-    },
-    {
-      "after": [
-        "drive-pinning"
-      ],
-      "id": "drive-placement",
-      "spec": "drive/placement/test.json"
-    },
-    {
-      "after": [
-        "drive-door"
-      ],
       "id": "drive-module",
       "spec": "drive/module/test.json"
     },
     {
-      "after": [
-        "drive-readers"
-      ],
-      "id": "drive-dialog",
-      "spec": "drive/dialog/test.json"
-    },
-    {
-      "after": [
-        "drive-pinning"
-      ],
-      "id": "drive-tray",
-      "spec": "drive/tray/test.json"
-    },
-    {
-      "after": [
-        "drive-writes"
-      ],
-      "id": "drive-crashes",
-      "spec": "drive/crashes/test.json"
-    },
-    {
-      "after": [
-        "drive-writes"
-      ],
-      "id": "drive-held",
-      "spec": "drive/held/test.json"
-    },
-    {
-      "after": [
-        "drive-placement"
-      ],
-      "id": "drive-held-placed",
-      "spec": "drive/held-placed/test.json"
-    },
-    {
-      "after": [
-        "drive-pinning"
-      ],
-      "id": "drive-refusals",
-      "spec": "drive/refusals/test.json"
-    },
-    {
-      "after": [
-        "drive-readers",
-        "drive-crashes",
-        "drive-held"
-      ],
-      "id": "drive-mutations",
-      "spec": "drive/mutations/test.json"
-    },
-    {
-      "after": [
-        "drive-placement"
-      ],
+      "after": [],
       "id": "storage",
       "spec": "storage/test.json"
     },
@@ -1216,23 +1090,7 @@
     "networking-roaming",
     "networking-wifi-scan",
     "immutability-feature-disable",
-    "drive-remote",
-    "drive-store",
-    "drive-planner",
-    "drive-door",
-    "drive-readers",
-    "drive-writes",
-    "drive-convergence",
-    "drive-pinning",
-    "drive-placement",
     "drive-module",
-    "drive-dialog",
-    "drive-tray",
-    "drive-crashes",
-    "drive-held",
-    "drive-held-placed",
-    "drive-refusals",
-    "drive-mutations",
     "storage",
     "gaming-runtime",
     "recovery-touch-keyboard"
@@ -1251,9 +1109,6 @@
       "sleep-gamescope-native-lock-without-sunshine",
       "sleep-gamescope-native-suspend-control",
       "sleep-gamescope-native-resume-lock"
-    ],
-    "nightly": [
-      "drive-convergence-seeds"
     ]
   },
   "workspaceRoot": ".."

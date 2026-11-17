@@ -32,8 +32,6 @@ let
     "config/pkgs/gaming/deckpad/Awake.h"
     "config/pkgs/gaming/deckpad/Posix.h"
     "config/pkgs/gaming/deckpad/Screen.h"
-    "config/pkgs/utils/drive/door/Channel.h"
-    "config/pkgs/utils/drive/store/Native.h"
     "config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c"
     "config/pkgs/gaming/sunshine/hdr-screencast-test/probe.c"
     "tests/plymouth-keyboard/input.c"
@@ -82,8 +80,6 @@ let
       ${../config/pkgs/gaming/deckpad/Awake.h} \
       ${../config/pkgs/gaming/deckpad/Posix.h} \
       ${../config/pkgs/gaming/deckpad/Screen.h} \
-      ${../config/pkgs/utils/drive/door/Channel.h} \
-      ${../config/pkgs/utils/drive/store/Native.h} \
       ${../tests/ci/process-probe.h} \
       ${../tests/gaming/affinity/cpu-set.h} \
       ${../tests/gaming/runtime/tls.h} \

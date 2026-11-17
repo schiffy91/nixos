@@ -1,1 +1,0 @@
-{"manifest-hash":"1606138417b554ee9ea135d8a4b459cb62c42bafdb6d672c7d7b0c721bb44890","packages":[{"dependencies":{},"manifest-hash":"570ad15321416dc0147b5a70f635297fc07aaa4afd5517e3d153df7efd11ec86","name":"nixos_drive","source":{"path":"."}}],"root":"nixos_drive","schema":3}

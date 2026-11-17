@@ -3,7 +3,7 @@ import Library.Process;
 import Library.Timer;
 import Library.JSON;
 import testkit.Lab;
-import ../drive/Fixture.btrc;
+import ./DriveFixture.btrc;
 
 // Declared, encrypted external storage, a card and a USB drive: each opened with its key file whenever it is
 // attached, at boot or later, and mounted; never in the way of a boot without it; gone cleanly when pulled, and

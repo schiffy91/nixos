@@ -764,7 +764,7 @@ profiles turn off whole groups:
 | `utils/1password.nix` | Installs 1Password GUI/CLI and writes SSH agent config |
 | `utils/nixosctl/default.nix` | Builds + packages the BTRC `nixosctl` CLI into `environment.systemPackages` |
 | `utils/nixosctl/ui/default.nix` | Packages the BTRC tray GUI for `nixosctl` |
-| `utils/drive/default.nix` | The BTRC Google Drive client: `~/Drive` served from a real tree behind a FUSE door, an engine that syncs it both ways, pinned folders kept downloaded, folders placed on another volume, the push listener, and on a desktop a tray icon that shows how far a sync is with a window behind it (`tray`); its plan and measurements are in `utils/drive/PLAN.md` |
+| `utils/drive/default.nix` | The adapter for the Google Drive client, which is [`schiffy91/drive`](https://github.com/schiffy91/drive), a flake input: `settings.apps.utils.drive` becomes that module's `services.drive` for the admin user, and its `statePaths` are added to what an erased root keeps. The client, its units, its tests and its design are in that repository. |
 
 The custom Proton tree under `config/pkgs/gaming/proton/custom` is a
 large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that
@@ -870,7 +870,7 @@ tested by `make harness`.
 Beside `required`, the graph file names sets, run with `nixosctl graph tests/graph.json run-set <name>`:
 `aarch64` (`make -C tests graph-aarch64`) is the install, recovery and Secure Boot chain on an aarch64
 guest, native on an aarch64 host and emulated on this desktop, so it is not part of every run here;
-`nightly` (`make -C tests graph-nightly`) holds longer forms of required nodes. `deck` (`make -C tests graph-deck`)
+`deck` (`make -C tests graph-deck`)
 is the five Gaming Mode sleep and lock nodes, which need a host with exactly one AMD GPU: the Steam Deck has
 one and this desktop, with its integrated GPU off in firmware, has none. A node without an
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
