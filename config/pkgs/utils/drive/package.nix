@@ -1,10 +1,9 @@
 { pkgs, inputs }:
 let
   build = import ../../../lib/btrc.nix { inherit pkgs inputs; };
-  src = pkgs.lib.fileset.toSource {
-    root = ./.;
-    fileset = pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.hasExt "h" || file.name == "btrc.toml" || file.name == "btrc.lock") ./.;
-  };
+  # Each program is built from the files it imports, so an edit to the tray does not rebuild the engine.
+  sources = import ../../../lib/btrc-sources.nix { inherit (pkgs) lib; };
+  src = entry: pkgs.lib.fileset.toSource { root = ./.; fileset = sources ./. entry; };
   window = {  # what a program with a window of its own links and runs with
     linkPlan = true;
     buildInputs = [ pkgs.sdl3 pkgs.fontconfig pkgs.freetype inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.wgpu-native ];
@@ -12,7 +11,7 @@ let
   };
   ask = build ({  # the window that asks whether a program may download
     name = "drive-ask";
-    inherit src;
+    src = src "ask/Ask.btrc";
     programs.drive-ask = "ask/Ask.btrc";
   } // window);
   # The tray's pictures: the Drive's mark from an icon theme, and the same with how far along it is.
@@ -21,20 +20,20 @@ let
   '';
   drive = build {
     name = "drive";
-    inherit src;
+    src = src "Main.btrc";
     programs.drive = "Main.btrc";
     runtimeInputs = [ pkgs.curl pkgs.coreutils ];  # every request is one curl process; adoption sums files with sha256sum
     postInstall = "install -Dm644 ${./readers.deny} $out/share/drive/readers.deny";  # the default list of programs that never download
   };
   tray = build {  # the icon in the system tray
     name = "drive-tray";
-    inherit src;
+    src = src "status/Tray.btrc";
     programs.drive-tray = "status/Tray.btrc";
     buildInputs = [ pkgs.dbus ];  # Library.Tray binds libdbus-1
   };
   status = build ({  # the window a click on that icon opens
     name = "drive-status";
-    inherit src;
+    src = src "status/Window.btrc";
     programs.drive-status = "status/Window.btrc";
   } // window // {
     wrapperArgs = window.wrapperArgs ++ [
@@ -74,7 +73,7 @@ in {
   '';
   fake = build {  # the Drive API from memory, for tests
     name = "drive-fake";
-    inherit src;
+    src = src "testing/FakeDrive.btrc";
     programs.drive-fake = "testing/FakeDrive.btrc";
   };
 }
