@@ -756,6 +756,7 @@ class VmGraphRunner {
             if (!running.isEmpty()) { Timer.sleepMillis(200); }
         }
 
+        if (store != null) { store.stop(); }  // by hand: the runtime refuses to drop a child that is still running, and the run would exit 1
         var seconds = (MonotonicClock.milliseconds() - began + 500LL) / 1000LL;
         Console.log(f"graph {name}: {passed} passed, {skipped} skipped, {failed.length} failed, {blocked.length} blocked in {seconds}s");
         for entry in failed { Console.log(f"  failed: {entry}"); }
