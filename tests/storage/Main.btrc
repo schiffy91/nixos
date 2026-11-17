@@ -30,7 +30,7 @@ class StorageScenario {
     private void mounted() {
         try { self.machine.waitUntil("mountpoint -q /sd && test -b /dev/mapper/sdcard", 60); }
         catch (string error) {
-            print(self.machine.execute("lsblk; systemctl --no-pager --failed; systemctl --no-pager status sd.mount 2>&1 | tail -15; journalctl -b --no-pager | grep -i -E 'storage|sdcard|mmc|cryptsetup|sd\\.mount|nixosctl' | tail -60", 60).output);
+            print(self.machine.execute("lsblk; blkid /dev/mmcblk0; dmsetup info -c; systemctl --no-pager --failed; systemctl --no-pager status sd.mount systemd-cryptsetup@sdcard.service 2>&1 | tail -30; journalctl -b --no-pager --since -90s | tail -120", 60).output);
             throw error;
         }
     }
@@ -217,7 +217,11 @@ class StorageScenario {
         self.mounted();
         self.machine.succeed("umount /sd && cryptsetup close sdcard");
         self.machine.succeed(f"dd if=/dev/zero of={self.card} bs=1M count=1 conv=fsync status=none && ! cryptsetup isLuks {self.card}");
-        self.machine.succeed(f"cryptsetup luksHeaderRestore --batch-mode {self.card} --header-backup-file /var/lib/nixos/storage/sdcard/header && udevadm trigger --action=change {self.card}");
+        // The machine reacts to each change of the card on its own time. Damage and repair back to back let
+        // those reactions overtake each other, and one run in four ended with the card closed again.
+        self.machine.succeed(f"udevadm trigger --action=change {self.card} && udevadm settle", 60);
+        self.machine.waitUntil("! systemctl is-active --quiet systemd-cryptsetup@sdcard.service && ! systemctl is-active --quiet sd.mount", 60);
+        self.machine.succeed(f"cryptsetup luksHeaderRestore --batch-mode {self.card} --header-backup-file /var/lib/nixos/storage/sdcard/header && udevadm trigger --action=change {self.card} && udevadm settle", 60);
         self.mounted();
         Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "and the card's contents are intact");
     }
