@@ -1,7 +1,7 @@
 # Tests
 
 Scenario specs live under their domain: `installer/`, `immutability/`,
-`nixosctl/`, `recovery/`, `secure-boot/`, `tpm2/`, and `qemu/`.
+`nixosctl/`, `recovery/`, `secure-boot/`, `tpm2/`, `boot/`, and `qemu/`.
 `harness/` tests the runner; its BTRC implementation lives with the CLI under
 `config/pkgs/utils/nixosctl/lib/simulator/`.
 `core/`, `gaming/` and the `*Tests.btrc` files hold the native unit suites.
@@ -141,7 +141,8 @@ What an installed system does when its owner uses it has nodes of its own. `nixo
 `nixosctl update` as the admin user after a change to the host, where every other spec calls `nixos-
 rebuild`. `recovery-bad-generation` makes the newest generation fail in its initrd and comes back by the
 boot menu and `nixosctl update`. `tpm2-unlock` boots an encrypted install by its TPM2 keyslot, with
-nothing typed, and by passphrase again once the slot is wiped.
+nothing typed, and by passphrase again once the slot is wiped. `boot-wrong-passphrase` answers the boot
+prompt wrongly twice before the right passphrase and compares the LUKS header with what it was.
 
 ## Ledger
 

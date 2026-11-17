@@ -427,6 +427,18 @@
     },
     {
       "after": [
+        "install-encrypted"
+      ],
+      "args": {
+        "encryption": "true",
+        "immutabilityMode": "reset",
+        "tpm2": "true"
+      },
+      "id": "boot-wrong-passphrase",
+      "spec": "boot/wrong-passphrase/test.json"
+    },
+    {
+      "after": [
         "installer-ssh"
       ],
       "id": "install-nixosctl",
@@ -1103,6 +1115,7 @@
     "install-nixosctl",
     "tpm2-enroll",
     "tpm2-unlock",
+    "boot-wrong-passphrase",
     "immutability-hibernate",
     "password-change",
     "password-change-encrypted",

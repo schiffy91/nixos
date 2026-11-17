@@ -1,0 +1,33 @@
+{
+  "name": "boot-wrong-passphrase",
+  "state": "boot-wrong-passphrase",
+  "parentState": "installed-encrypted",
+  "stateMaterial": "boot-wrong-passphrase:encryption=true:tpm2=true:ram={{memory}}:cpus={{cpus}}",
+  "args": { "encryption": "true", "tpm2": "true", "immutabilityMode": "reset" },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2263,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "unlock-luks", "command": "testpass123", "timeout": 300 },
+    { "op": "guest", "command": "set -ex\nP=$(blkid -t TYPE=crypto_LUKS -o device | head -1)\ntest -n \"$P\"\nprintf %s \"$P\" > /var/tmp/e2e-luks\nrm -f /var/tmp/e2e-header-before.img\ncryptsetup luksHeaderBackup \"$P\" --header-backup-file /var/tmp/e2e-header-before.img\ncryptsetup luksDump \"$P\" | sed -n '/^Keyslots:/,/^Tokens:/p' > /var/tmp/e2e-keyslots-before\ngrep -F luks2 /var/tmp/e2e-keyslots-before\nfor wrong in wrong-passphrase another-wrong-one; do if printf %s \"$wrong\" | cryptsetup open --test-passphrase \"$P\"; then exit 1; fi; done\ncat /proc/sys/kernel/random/boot_id > /var/tmp/e2e-wrong-boot\nsync\nprintf header-recorded\n", "expect": "header-recorded", "timeout": 120 },
+    { "op": "guest", "command": "(sync; systemctl reboot) >/dev/null 2>&1 &", "expect": "", "timeout": 15 },
+    { "op": "wait-serial", "command": "Please enter passphrase", "timeout": 300 },
+    { "op": "serial-send", "command": "wrong-passphrase" },
+    { "op": "wait-serial", "command": "Please enter passphrase", "timeout": 120 },
+    { "op": "expect-no-ssh", "timeout": 15 },
+    { "op": "serial-send", "command": "another-wrong-one" },
+    { "op": "wait-serial", "command": "Please enter passphrase", "timeout": 120 },
+    { "op": "serial-send", "command": "testpass123" },
+    { "op": "wait-ssh", "timeout": 300 },
+    { "op": "guest", "command": "set -ex\nP=$(cat /var/tmp/e2e-luks)\ntest \"$(cat /proc/sys/kernel/random/boot_id)\" != \"$(cat /var/tmp/e2e-wrong-boot)\"\ncryptsetup status root | grep -F 'is active'\nrm -f /var/tmp/e2e-header-after.img\ncryptsetup luksHeaderBackup \"$P\" --header-backup-file /var/tmp/e2e-header-after.img\ncmp /var/tmp/e2e-header-before.img /var/tmp/e2e-header-after.img\ncryptsetup luksDump \"$P\" | sed -n '/^Keyslots:/,/^Tokens:/p' | cmp - /var/tmp/e2e-keyslots-before\nprintf %s testpass123 | cryptsetup open --test-passphrase \"$P\"\nfor wrong in wrong-passphrase another-wrong-one; do if printf %s \"$wrong\" | cryptsetup open --test-passphrase \"$P\"; then exit 1; fi; done\nrm -f /var/tmp/e2e-header-before.img /var/tmp/e2e-header-after.img\nprintf wrong-passphrases-changed-nothing\n", "expect": "wrong-passphrases-changed-nothing", "timeout": 120 },
+    { "op": "snapshot", "name": "wrong-passphrase-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

@@ -847,7 +847,7 @@ the list here. A node is switched off, not removed, by giving it a `disabled`
 field that says why: it stays in the graph and in `required`, a run skips it and
 prints the reason, and no node that still runs may come `after` it. No node is off
 at present. The families are `installer-*`, `install-*`, `immutability-*`,
-`recovery-*`, `secure-boot-*`, `tpm2-*`, `nixosctl-*`, `password-change*`,
+`recovery-*`, `secure-boot-*`, `tpm2-*`, `boot-*`, `nixosctl-*`, `password-change*`,
 and `qmp-probe`. What only evaluates the configuration (`app-settings`, `qemu-hosts`) and the unit
 suites that are one derivation each are flake checks, built by `ci/checks.sh`; the graph runner itself is
 tested by `make harness`.
@@ -882,6 +882,9 @@ The nodes with constraints worth knowing before you run them:
   anything and checks that the console never asked for a passphrase; after
   `nixosctl tpm2 disable` the next boot waits at the prompt and takes the
   passphrase.
+- `boot-wrong-passphrase` types two wrong passphrases at the boot prompt: the
+  prompt comes back each time and the guest stays unreachable, the right
+  passphrase then boots it, and the LUKS header is byte for byte what it was.
 - `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
   auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
   enforcing firmware, so `tests/shell.nix` builds Debian's
