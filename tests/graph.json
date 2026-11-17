@@ -949,6 +949,13 @@
     },
     {
       "after": [
+        "drive-placement"
+      ],
+      "id": "drive-held-placed",
+      "spec": "drive/held-placed/test.json"
+    },
+    {
+      "after": [
         "drive-readers",
         "drive-crashes",
         "drive-held"
@@ -1043,6 +1050,7 @@
     "drive-tray",
     "drive-crashes",
     "drive-held",
+    "drive-held-placed",
     "drive-mutations",
     "storage",
     "gaming-runtime",
