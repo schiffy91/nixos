@@ -315,6 +315,21 @@ class QemuE2eHarness {
         return false;
     }
 
+    // Waits for text the guest prints on its serial console after the last thing typed there.
+    public bool waitForSerial(string text, int timeout) {
+        var timer = Timer();
+        timer.start();
+        while (timer.elapsed() < timeout) {
+            if (!self.state.isRunning()) {
+                NixosLog.error(f"QEMU exited while waiting for `{text}` on the serial console; {self.state.runningDetail()}; serial log: {self.serialLogPath()}");
+                return false;
+            }
+            if (self.serial.shownSinceTyped(text)) { return true; }
+            Timer.sleepMillis(250);
+        }
+        return false;
+    }
+
     public string currentBootId() {
         var result = self.sshWithTimeout("cat /proc/sys/kernel/random/boot_id", false, 10);
         if (!result.ok()) { return ""; }

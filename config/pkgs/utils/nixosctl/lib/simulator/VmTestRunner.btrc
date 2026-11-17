@@ -28,6 +28,7 @@ class VmOperationCatalog {
         kinds.push("unlock-luks");
         kinds.push("send-keys");
         kinds.push("serial-send");
+        kinds.push("wait-serial");
         kinds.push("sleep");
         kinds.push("guest");
         kinds.push("reboot-disk");
@@ -185,6 +186,12 @@ class VmTestRunner {
         }
         if (op.kind.equals("serial-send")) {
             self.vm.serialSend(op.command);
+            return;
+        }
+        if (op.kind == "wait-serial") {
+            if (!self.vm.waitForSerial(op.command, op.timeout)) {
+                self.fail(f"The serial console did not show `{op.command}` within {op.timeout} seconds of the last text typed there; serial log: {self.vm.serialLogPath()}");
+            }
             return;
         }
         if (op.kind.equals("sleep")) {

@@ -8,10 +8,12 @@ import ../Spec.btrc;
 class QemuSerial {
     public VmTestSpec spec;
     public UnixShell shell;
+    public int typedAt;  // where the serial log ended when something was last typed on the console
 
     public QemuSerial(VmTestSpec spec) {
         self.spec = spec;
         self.shell = UnixShell();
+        self.typedAt = 0;
     }
 
     public string serialBasePath() { return PathTools.join(self.spec.workDir, "serial"); }
@@ -88,6 +90,7 @@ class QemuSerial {
     public void startSerialReader() {
         VmFiles.remove(self.serialReaderPidPath());
         VmFiles.remove(self.serialLogPath());
+        self.typedAt = 0;  // the log starts again
         var outPath = ShellWords.quote(self.serialOutPath());
         var logPath = ShellWords.quote(self.serialLogPath());
         var pidPath = ShellWords.quote(self.serialReaderPidPath());
@@ -119,8 +122,9 @@ class QemuSerial {
         var payload = f"{command}\n";
         for (int attempt = 0; attempt < 60; attempt++) {
             self.ensureSerialReader();
+            int before = self.serialLogSize();
             var result = Process.run("sh", ["-c", "cat > \"$1\"", "sh", self.serialInPath()], stdinData=payload, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, timeoutMilliseconds=2000);
-            if (result.ok()) { return; }
+            if (result.ok()) { self.typedAt = before; return; }
             Timer.sleepMillis(2000);
         }
         NixosLog.fatal(f"Failed to send command to VM serial console: {self.serialInPath()}");
@@ -134,5 +138,11 @@ class QemuSerial {
     public bool serialLogShows(string text, int offset) {
         var command = f"tail -c +{offset + 1} {ShellWords.quote(self.serialLogPath())} | grep -a -F -q {ShellWords.quote(text)}";
         return self.shell.run(command, logFailure=false).ok();
+    }
+
+    // Whether the guest has printed `text` since something was last typed on its console: a prompt that
+    // is there again after an answer, not the one the answer was given to.
+    public bool shownSinceTyped(string text) {
+        return self.serialLogShows(text, self.typedAt);
     }
 }

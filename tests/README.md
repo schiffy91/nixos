@@ -131,6 +131,10 @@ it does not emulate the Steam Deck's I2C digitizer or AMD GPU. Run it with:
 nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run initrd-touch-unlock'
 ```
 
+A scenario that answers the guest's console itself waits with `wait-serial`: it looks only at what the
+guest printed after the last text typed there, by `serial-send` or `unlock-luks`, so a prompt that is
+back after a wrong answer is told from the one the answer went to. A VM started again begins a new log.
+
 ## Ledger
 
 Every node and check that was required on 2026-11-16, and where it is now. A test leaves the VM graph
