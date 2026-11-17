@@ -872,7 +872,8 @@ Beside `required`, the graph file names sets, run with `nixosctl graph tests/gra
 guest, native on an aarch64 host and emulated on this desktop, so it is not part of every run here;
 `alone` is run by `make graph-required` after the required set, one node at a time with nothing beside
 it: `initrd-touch-unlock-displays` plugs displays in and out under Plymouth and judges what is drawn, and
-beside other nodes it failed at a different step in six runs out of eleven. `deck` (`make -C tests graph-deck`)
+beside other nodes it failed at a different step in six runs out of eleven. `storage` is there too: its card is an emulated SD
+card, slow enough on a busy host that a `mkfs` outlasted the ninety seconds a command is given. `deck` (`make -C tests graph-deck`)
 is the five Gaming Mode sleep and lock nodes, which need a host with exactly one AMD GPU: the Steam Deck has
 one and this desktop, with its integrated GPU off in firmware, has none. A node without an
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process

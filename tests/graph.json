@@ -1090,13 +1090,13 @@
     "networking-wifi-scan",
     "immutability-feature-disable",
     "drive-module",
-    "storage",
     "gaming-runtime",
     "recovery-touch-keyboard"
   ],
   "sets": {
     "alone": [
-      "initrd-touch-unlock-displays"
+      "initrd-touch-unlock-displays",
+      "storage"
     ],
     "aarch64": [
       "installer-ssh-aarch64",
