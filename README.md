@@ -878,6 +878,10 @@ The nodes with constraints worth knowing before you run them:
   power-cycles the guest, picks the previous generation in the boot menu, and
   repairs with `nixosctl update`; the next boot takes the default entry and the
   persisted data is what it was.
+- `tpm2-unlock` enrolls with `nixosctl tpm2 enable`, reboots without typing
+  anything and checks that the console never asked for a passphrase; after
+  `nixosctl tpm2 disable` the next boot waits at the prompt and takes the
+  passphrase.
 - `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
   auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
   enforcing firmware, so `tests/shell.nix` builds Debian's

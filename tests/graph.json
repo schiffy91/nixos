@@ -415,6 +415,18 @@
     },
     {
       "after": [
+        "install-encrypted"
+      ],
+      "args": {
+        "encryption": "true",
+        "immutabilityMode": "reset",
+        "tpm2": "true"
+      },
+      "id": "tpm2-unlock",
+      "spec": "tpm2/unlock/test.json"
+    },
+    {
+      "after": [
         "installer-ssh"
       ],
       "id": "install-nixosctl",
@@ -1090,6 +1102,7 @@
     "install-encrypted",
     "install-nixosctl",
     "tpm2-enroll",
+    "tpm2-unlock",
     "immutability-hibernate",
     "password-change",
     "password-change-encrypted",
