@@ -459,7 +459,10 @@ Measured on this desktop, on the final commits:
 
 Filled in as the work runs. Known from the start:
 
-- Running the Gaming Mode sleep-lock nodes on the Deck (T3.3).
+- Running the Gaming Mode sleep-lock nodes on the Deck (T3.3): `make -C tests graph-deck` in `/etc/nixos`
+  there. Three are expected to pass. The two real-suspend nodes (`sleep-gamescope-native-suspend-control`,
+  `-resume-lock`) fail at game input after wake, a limit of the VM's GPU pass-through recorded in
+  `tests/sleep-lock/gamescope-native/README.md`; fixing them needs runs on the Deck, so that is waiting too.
 - A schedule for the `nightly` sets, once the CI machine exists.
 - mbp21: `git pull` and `nix-update`, if it asks for a password; and the `aarch64` set there, if it needs one.
 - A controller session on the Deck after M4.

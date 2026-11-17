@@ -6,7 +6,7 @@ NIXOSCTL := build/nixosctl
 # can reach the session that started it, and nothing of it is left when it ends. Used where bwrap exists.
 ISOLATE ?= $(if $(shell command -v bwrap 2>/dev/null),bwrap --unshare-pid --dev-bind / / --proc /proc --,)
 
-.PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-nightly graph-early graph-installer-ssh graph-full chain clean-vms
+.PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-deck graph-nightly graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
 	@printf '%s\n' 'Run these from the repo root as `make <target>`; `make -C tests` also works.'
@@ -17,6 +17,7 @@ help:
 	@printf '%s\n' '  graph-full        the graph REQUIRED set, not every node'
 	@printf '%s\n' '  graph-aarch64     the graph set `aarch64` (emulated unless the host is aarch64)'
 	@printf '%s\n' '  graph-nightly     the graph set `nightly`: longer forms of required nodes'
+	@printf '%s\n' '  graph-deck        the graph set `deck`: Gaming Mode sleep and lock, on a host with one AMD GPU'
 	@printf '%s\n' '  graph-list        list nodes        graph-status   per-node state freshness'
 	@printf '%s\n' '  graph-coverage    which spec operations the graph exercises'
 	@printf '%s\n' '  graph-gc          delete VM state no current node references (GC_ARGS=--dry-run lists it)'
@@ -91,6 +92,9 @@ graph-installer-ssh: build
 
 graph-aarch64: build
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-set aarch64'
+
+graph-deck: build
+	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-set deck'
 
 graph-nightly: build
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-set nightly'

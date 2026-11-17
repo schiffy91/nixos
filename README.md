@@ -855,7 +855,9 @@ tested by `make harness`.
 Beside `required`, the graph file names sets, run with `nixosctl graph tests/graph.json run-set <name>`:
 `aarch64` (`make -C tests graph-aarch64`) is the install, recovery and Secure Boot chain on an aarch64
 guest, native on an aarch64 host and emulated on this desktop, so it is not part of every run here;
-`nightly` (`make -C tests graph-nightly`) holds longer forms of required nodes. A node without an
+`nightly` (`make -C tests graph-nightly`) holds longer forms of required nodes. `deck` (`make -C tests graph-deck`)
+is the five Gaming Mode sleep and lock nodes, which need a host with exactly one AMD GPU: the Steam Deck has
+one and this desktop, with its integrated GPU off in firmware, has none. A node without an
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
 namespace where `bwrap` is installed, so nothing a test signals reaches the session that started it.
 

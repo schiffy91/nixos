@@ -1120,6 +1120,13 @@
       "recovery-secure-boot-aarch64",
       "secure-boot-aarch64"
     ],
+    "deck": [
+      "sleep-gamescope-native-control",
+      "sleep-gamescope-native-lock",
+      "sleep-gamescope-native-lock-without-sunshine",
+      "sleep-gamescope-native-suspend-control",
+      "sleep-gamescope-native-resume-lock"
+    ],
     "nightly": [
       "drive-convergence-seeds"
     ]

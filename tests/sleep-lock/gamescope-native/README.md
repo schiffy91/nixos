@@ -14,6 +14,11 @@ env -u SSH_AUTH_SOCK nix-shell tests/shell.nix --run \
   'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run sleep-gamescope-native-control'
 ```
 
+The five nodes are the graph set `deck`: `make -C tests graph-deck` runs them all on a host with one AMD GPU,
+which among this configuration's machines is the Steam Deck. They are not in the required set, because the
+desktop that runs it has no such GPU. The two real-suspend nodes still fail at game input after wake, as
+recorded below; that can only be worked on where they run.
+
 Choose the explicit graph node for the property being tested:
 
 | Node | Contract |
