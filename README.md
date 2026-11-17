@@ -885,6 +885,9 @@ The nodes with constraints worth knowing before you run them:
 - `boot-wrong-passphrase` types two wrong passphrases at the boot prompt: the
   prompt comes back each time and the guest stays unreachable, the right
   passphrase then boots it, and the LUKS header is byte for byte what it was.
+- `immutability-home` adds paths in the admin user's home to the persisted set:
+  their content, owner and mode survive two resets, everything else written in
+  that home is gone, and `@home` keeps its read-only `CLEAN` snapshot.
 - `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
   auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
   enforcing firmware, so `tests/shell.nix` builds Debian's

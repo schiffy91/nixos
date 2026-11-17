@@ -143,6 +143,7 @@ rebuild`. `recovery-bad-generation` makes the newest generation fail in its init
 boot menu and `nixosctl update`. `tpm2-unlock` boots an encrypted install by its TPM2 keyslot, with
 nothing typed, and by passphrase again once the slot is wiped. `boot-wrong-passphrase` answers the boot
 prompt wrongly twice before the right passphrase and compares the LUKS header with what it was.
+`immutability-home` resets `@home` around persisted paths in the admin user's home.
 
 ## Ledger
 

@@ -355,6 +355,19 @@
         "immutabilityVersion": "v2",
         "parentState": "installed-reset"
       },
+      "id": "immutability-home",
+      "spec": "immutability/home/test.json"
+    },
+    {
+      "after": [
+        "install-reset"
+      ],
+      "args": {
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "immutabilityVersion": "v2",
+        "parentState": "installed-reset"
+      },
       "id": "nixosctl-cli",
       "spec": "nixosctl/cli/test.json"
     },
@@ -1107,6 +1120,7 @@
     "secure-boot-install",
     "secure-boot-lanzaboote",
     "immutability-files",
+    "immutability-home",
     "immutability-disabled-persistence",
     "nixosctl-cli",
     "nixosctl-diff",

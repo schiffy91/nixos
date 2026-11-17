@@ -1,0 +1,32 @@
+{
+  "name": "immutability-home",
+  "state": "immutability-home",
+  "parentState": "installed-reset",
+  "stateMaterial": "immutability-home:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": { "immutabilityVersion": "v2", "immutabilityImplementation": "immutability", "immutabilityMode": "reset" },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2264,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -ex\nu=$(nixosctl eval config.settings.users.admin.username | tr -d '\"')\nhome=$(nixosctl eval config.settings.users.admin.homeDirectory | tr -d '\"')\nid \"$u\" >/dev/null\nprintf %s \"$u\" > /var/tmp/e2e-home-user\nprintf %s \"$home\" > /var/tmp/e2e-home-dir\ntest \"$(stat -c %U:%G \"$home\")\" = \"$u:$u\"\nfindmnt -rn -o SOURCE --target \"$home\" | grep -F '[/@home]'\nbtrfs subvolume list / | grep -F 'path @snapshots/@home/CLEAN'\ntest \"$(btrfs property get -ts /.snapshots/@home/CLEAN ro)\" = ro=true\nif touch /.snapshots/@home/CLEAN/e2e-write-probe; then exit 1; fi\nprintf home-is-a-reset-volume\n", "expect": "home-is-a-reset-volume", "timeout": 600 },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-home-user)\nhome=$(cat /var/tmp/e2e-home-dir)\nsu -l \"$u\" -c 'set -e; mkdir -p ~/Downloads ~/.local/share/applications; chmod 750 ~/Downloads; echo early > ~/Downloads/early.txt; chmod 640 ~/Downloads/early.txt; echo first-command > ~/.bash_history; chmod 600 ~/.bash_history'\nhost=/etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix\nkeep=\"\\\"/etc/nixos\\\" \\\"$home/Downloads\\\" \\\"$home/.bash_history\\\" \\\"$home/.local/share/applications\\\"\"\nsed -i \"s|\\\"/etc/nixos\\\"|$keep|\" \"$host\"\ngrep -F \"\\\"$home/Downloads\\\" \\\"$home/.bash_history\\\" \\\"$home/.local/share/applications\\\"\" \"$host\"\nnixos-rebuild boot --flake /etc/nixos#VM-TEST-Standard-Boot\nsync\nprintf home-paths-persisted\n", "expect": "home-paths-persisted", "timeout": 1800 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-home-user)\nhome=$(cat /var/tmp/e2e-home-dir)\nkey=$(printf %s \"$home\" | sed 's|^/||; s|/|!|g')\nbtrfs subvolume list / | grep -F \"path @persist/dirs/$key\"'!Downloads'\nbtrfs subvolume list / | grep -F \"path @persist/dirs/$key\"'!.local!share!applications'\nfindmnt -rn -o SOURCE --target \"$home/Downloads\" | grep -F \"@persist/dirs/$key\"'!Downloads'\ntest \"$(cat \"$home/Downloads/early.txt\")\" = early\ntest \"$(stat -c '%U:%G %a' \"$home/Downloads\")\" = \"$u:$u 750\"\ntest \"$(stat -c '%U:%G %a' \"$home/Downloads/early.txt\")\" = \"$u:$u 640\"\ntest \"$(cat \"$home/.bash_history\")\" = first-command\ntest \"$(stat -c '%U:%G %a' \"$home/.bash_history\")\" = \"$u:$u 600\"\nfor owned in \"$home\" \"$home/.local\" \"$home/.local/share\" \"$home/.local/share/applications\"; do test \"$(stat -c %U:%G \"$owned\")\" = \"$u:$u\"; done\nprintf home-stores-made-from-live-data\n", "expect": "home-stores-made-from-live-data", "timeout": 120 },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-home-user)\nhome=$(cat /var/tmp/e2e-home-dir)\nsu -l \"$u\" -c 'set -e; echo kept > ~/Downloads/kept.txt; echo second-command >> ~/.bash_history; echo app > ~/.local/share/applications/e2e.desktop; echo gone > ~/e2e-scratch.txt; mkdir -p ~/Documents ~/.local/share/e2e-scratch; echo gone > ~/Documents/e2e-note.txt; echo gone > ~/.local/share/e2e-scratch/file'\ntest \"$(cat \"$home/e2e-scratch.txt\")\" = gone\ntest \"$(stat -c %U:%G \"$home/e2e-scratch.txt\")\" = \"$u:$u\"\nsync\nprintf home-written\n", "expect": "home-written", "timeout": 120 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-home-user)\nhome=$(cat /var/tmp/e2e-home-dir)\ntest ! -e \"$home/e2e-scratch.txt\"\ntest ! -e \"$home/Documents\"\ntest ! -e \"$home/.local/share/e2e-scratch\"\nprintf home-scratch-gone\n", "expect": "home-scratch-gone", "timeout": 120 },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-home-user)\nhome=$(cat /var/tmp/e2e-home-dir)\ntest \"$(cat \"$home/Downloads/kept.txt\")\" = kept\ntest \"$(cat \"$home/Downloads/early.txt\")\" = early\ntest \"$(stat -c '%U:%G %a' \"$home/Downloads\")\" = \"$u:$u 750\"\ntest \"$(stat -c %U:%G \"$home/Downloads/kept.txt\")\" = \"$u:$u\"\ntest \"$(stat -c '%U:%G %a' \"$home/Downloads/early.txt\")\" = \"$u:$u 640\"\ntest \"$(tail -n 1 \"$home/.bash_history\")\" = second-command\ntest \"$(stat -c '%U:%G %a' \"$home/.bash_history\")\" = \"$u:$u 600\"\ntest \"$(cat \"$home/.local/share/applications/e2e.desktop\")\" = app\nfor owned in \"$home\" \"$home/.local\" \"$home/.local/share\" \"$home/.local/share/applications\"; do test \"$(stat -c %U:%G \"$owned\")\" = \"$u:$u\"; done\nsu -l \"$u\" -c 'set -e; touch ~/.local/share/e2e-writable ~/Downloads/e2e-writable'\nprintf home-persisted-kept\n", "expect": "home-persisted-kept", "timeout": 120 },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-home-user)\nhome=$(cat /var/tmp/e2e-home-dir)\nname=$(basename \"$home\")\ntest \"$(btrfs property get -ts /.snapshots/@home/CLEAN ro)\" = ro=true\ntest ! -e \"/.snapshots/@home/CLEAN/$name/e2e-scratch.txt\"\ntest \"$(cat \"/.snapshots/@home/generation-1/$name/e2e-scratch.txt\")\" = gone\nprintf home-clean-snapshot-intact\n", "expect": "home-clean-snapshot-intact", "timeout": 120 },
+    { "op": "snapshot", "name": "home-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}
