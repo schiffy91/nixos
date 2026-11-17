@@ -5,10 +5,6 @@ NIXOSCTL := build/nixosctl
 # A graph run starts many processes and signals them. Inside its own process namespace nothing it signals
 # can reach the session that started it, and nothing of it is left when it ends. Used where bwrap exists.
 ISOLATE ?= $(if $(shell command -v bwrap 2>/dev/null),bwrap --unshare-pid --dev-bind / / --proc /proc --,)
-# The other architecture's nodes: native on a host of that architecture, emulated and slow anywhere else.
-AARCH64_NODES := installer-ssh-aarch64 install-reset-aarch64 recovery-boot-aarch64 recovery-secure-boot-aarch64 secure-boot-aarch64 installer-image-aarch64
-# Longer forms of required nodes, for a run that is not waited on.
-NIGHTLY_NODES := drive-convergence-seeds
 
 .PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-nightly graph-early graph-installer-ssh graph-full chain clean-vms
 
@@ -19,8 +15,8 @@ help:
 	@printf '%s\n' '  gaming            nix build of tests/gaming (proton, assetto)'
 	@printf '%s\n' '  graph-early       the graph default set'
 	@printf '%s\n' '  graph-full        the graph REQUIRED set, not every node'
-	@printf '%s\n' '  graph-aarch64     the aarch64 nodes (emulated unless the host is aarch64)'
-	@printf '%s\n' '  graph-nightly     longer forms of required nodes'
+	@printf '%s\n' '  graph-aarch64     the graph set `aarch64` (emulated unless the host is aarch64)'
+	@printf '%s\n' '  graph-nightly     the graph set `nightly`: longer forms of required nodes'
 	@printf '%s\n' '  graph-list        list nodes        graph-status   per-node state freshness'
 	@printf '%s\n' '  graph-coverage    which spec operations the graph exercises'
 	@printf '%s\n' '  graph-gc          delete VM state no current node references (GC_ARGS=--dry-run lists it)'
@@ -94,10 +90,10 @@ graph-installer-ssh: build
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run installer-ssh'
 
 graph-aarch64: build
-	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run $(AARCH64_NODES)'
+	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-set aarch64'
 
 graph-nightly: build
-	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run $(NIGHTLY_NODES)'
+	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-set nightly'
 
 graph-full: build
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-required'

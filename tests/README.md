@@ -91,7 +91,7 @@ Run scenarios through the graph so parents and source hashes are checked:
 
 ```sh
 make build unit
-nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run secure-boot-cli recovery-secure-boot-x86_64 secure-boot-lanzaboote'
+nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run secure-boot-cli recovery-secure-boot secure-boot-lanzaboote'
 make -C tests graph-full
 make -C tests gaming
 ```
@@ -142,6 +142,9 @@ only for a place that still runs it.
 | `quick` | removed | It printed a word through the runner; every case of the runner test does more |
 | `stateful-host` | removed | It proved that a state is recorded and reused; the runner test's duration and collection cases prove the same over fixtures |
 | `install-reset-x86_64` | `install-reset`, now in the required set | On this architecture the two were the same install; the twin's disk was never booted |
+| `installer-download-x86_64`, `installer-ssh-x86_64` | `installer-download`, `installer-ssh` | A node with no architecture in its name runs on the host's own, so on this desktop each pair was one download and one boot done twice |
+| `recovery-boot-x86_64`, `recovery-secure-boot-x86_64` | `recovery-boot`, `recovery-secure-boot`, after `installer-ssh` | The same scenarios on the host's architecture; their parent was the removed twin |
+| `installer-ssh-aarch64`, `install-reset-aarch64`, `recovery-boot-aarch64`, `recovery-secure-boot-aarch64`, `secure-boot-aarch64` | graph set `aarch64` (`make -C tests graph-aarch64`) | A run on x86_64 skipped them while listing them as required; the set says where they run |
 | `installer-setup`, `installer-up-iso` | removed | Every install node makes the same key and disk and boots the same image through `installer-ssh` |
 | `tpm2-probe` | removed | It looked for a TPM device in a booted installer; `tpm2-enroll` enrols with one and unlocks by it |
 | `initrd-touch-unlock-rotated` | removed | `initrd-touch-unlock-german` runs with the same rotation, plus a layout and the light theme |

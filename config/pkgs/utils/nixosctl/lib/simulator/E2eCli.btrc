@@ -112,7 +112,7 @@ class E2eCli {
 
     public int runGraph(CLIArgs args) {
         if (args.count() < 3) {
-            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required|gc> [node ...] [--arg key=value] [--dry-run]");
+            NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required|run-set|gc> [node or set ...] [--arg key=value] [--dry-run]");
         }
         var graph = GraphParser.readFile(args.get(1));
         var action = args.get(2);
@@ -142,6 +142,10 @@ class E2eCli {
             var code = runner.runRequired();
             return code;
         }
+        if (action == "run-set") {  // a named set from the graph file
+            var code = runner.runSet(args.get(3));
+            return code;
+        }
         if (action == "run-node") {  // one node, in a child the runner started
             var code = runner.runNode(args.get(3));
             return code;
@@ -150,7 +154,7 @@ class E2eCli {
             var code = runner.collect(CLICommandLine.parse(args).has("--dry-run"));
             return code;
         }
-        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required|gc> [node ...] [--arg key=value] [--dry-run]");
+        NixosLog.fatal("Usage: nixosctl graph <graph.json> <list|status|resolve|coverage|run|run-required|run-set|gc> [node or set ...] [--arg key=value] [--dry-run]");
         return 1;
     }
 

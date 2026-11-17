@@ -852,6 +852,13 @@ and `qmp-probe`. What only evaluates the configuration (`app-settings`, `qemu-ho
 suites that are one derivation each are flake checks, built by `ci/checks.sh`; the graph runner itself is
 tested by `make harness`.
 
+Beside `required`, the graph file names sets, run with `nixosctl graph tests/graph.json run-set <name>`:
+`aarch64` (`make -C tests graph-aarch64`) is the install, recovery and Secure Boot chain on an aarch64
+guest, native on an aarch64 host and emulated on this desktop, so it is not part of every run here;
+`nightly` (`make -C tests graph-nightly`) holds longer forms of required nodes. A node without an
+architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
+namespace where `bwrap` is installed, so nothing a test signals reaches the session that started it.
+
 The nodes with constraints worth knowing before you run them:
 
 - `tpm2-enroll` enrolls and wipes a TPM2 LUKS keyslot on an encrypted install.

@@ -299,6 +299,13 @@ class VmGraphRunner {
     }
 
     public int operationCoverage() {
+        var sets = self.sets();
+        for name in sets.keys() {
+            for member in sets.get(name) {
+                if (!self.hasNode(member)) { Console.error(f"Set {name} names a node the graph does not have: {member}"); return 1; }
+            }
+        }
+
         Vector<string> covered = [];
         for node in self.graph.nodes {
             if (!node.enabled()) { continue; }  // a node that never runs covers nothing
@@ -718,6 +725,28 @@ class VmGraphRunner {
         for entry in failed { Console.log(f"  failed: {entry}"); }
         for entry in blocked { Console.log(f"  blocked: {entry}"); }
         return failed.isEmpty() && blocked.isEmpty() ? 0 : 1;
+    }
+
+    // A named set is a list of nodes kept in the graph file beside `required`: what a nightly run covers,
+    // or the nodes of an architecture this host only emulates.
+    public Map<string, Vector<string>> sets() {
+        Map<string, Vector<string>> result = {};
+        var declared = JSONValue.readFile(self.graph.path).get("sets");
+        if (declared.isNull()) { return result; }
+        for name in declared.keys() {
+            Vector<string> members = [];
+            for member in declared.get(name).elements() { members.push(member.asString()); }
+            result.put(name, members);
+        }
+        return result;
+    }
+
+    public int runSet(string name) {
+        var sets = self.sets();
+        var names = sets.keys().join(", ");
+        if (!sets.contains(name)) { NixosLog.fatal(f"Graph {self.graph.name} has no set named {name}; its sets: {names}"); }
+        if (sets.get(name).isEmpty()) { NixosLog.fatal(f"Set {name} of graph {self.graph.name} is empty"); }
+        return self.run(sets.get(name));
     }
 
     public int runRequired() {

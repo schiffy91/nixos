@@ -18,16 +18,6 @@
     {
       "after": [],
       "args": {
-        "arch": "x86_64",
-        "name": "installer-download-x86_64",
-        "state": "base-iso-x86_64"
-      },
-      "id": "installer-download-x86_64",
-      "spec": "installer/download/test.json"
-    },
-    {
-      "after": [],
-      "args": {
         "arch": "aarch64",
         "name": "installer-download-aarch64",
         "state": "base-iso-aarch64"
@@ -40,20 +30,6 @@
         "installer-download"
       ],
       "id": "installer-ssh",
-      "spec": "installer/ssh/test.json"
-    },
-    {
-      "after": [
-        "installer-download-x86_64"
-      ],
-      "args": {
-        "arch": "x86_64",
-        "name": "installer-ssh-x86_64",
-        "parentState": "base-iso-x86_64",
-        "sshPort": "2230",
-        "state": "installer-ssh-x86_64"
-      },
-      "id": "installer-ssh-x86_64",
       "spec": "installer/ssh/test.json"
     },
     {
@@ -117,16 +93,9 @@
     },
     {
       "after": [
-        "installer-ssh-x86_64"
+        "installer-ssh"
       ],
-      "args": {
-        "arch": "x86_64",
-        "name": "recovery-boot-x86_64",
-        "parentState": "installer-ssh-x86_64",
-        "sshPort": "2241",
-        "state": "recovery-boot-x86_64"
-      },
-      "id": "recovery-boot-x86_64",
+      "id": "recovery-boot",
       "spec": "recovery/boot/test.json"
     },
     {
@@ -145,16 +114,9 @@
     },
     {
       "after": [
-        "installer-ssh-x86_64"
+        "installer-ssh"
       ],
-      "args": {
-        "arch": "x86_64",
-        "name": "recovery-secure-boot-x86_64",
-        "parentState": "installer-ssh-x86_64",
-        "sshPort": "2243",
-        "state": "recovery-secure-boot-x86_64"
-      },
-      "id": "recovery-secure-boot-x86_64",
+      "id": "recovery-secure-boot",
       "spec": "recovery/secure-boot/test.json"
     },
     {
@@ -1007,13 +969,8 @@
     "cli-parity",
     "qmp-probe",
     "secure-boot-capabilities",
-    "installer-ssh-x86_64",
-    "installer-ssh-aarch64",
-    "install-reset-aarch64",
-    "recovery-boot-x86_64",
-    "recovery-boot-aarch64",
-    "recovery-secure-boot-x86_64",
-    "recovery-secure-boot-aarch64",
+    "recovery-boot",
+    "recovery-secure-boot",
     "install-disabled",
     "immutability-reset",
     "immutability-disabled",
@@ -1036,7 +993,6 @@
     "install-nixosctl",
     "tpm2-enroll",
     "immutability-hibernate",
-    "secure-boot-aarch64",
     "password-change",
     "password-change-encrypted",
     "secure-boot-cli",
@@ -1083,5 +1039,17 @@
     "gaming-runtime",
     "recovery-touch-keyboard"
   ],
+  "sets": {
+    "aarch64": [
+      "installer-ssh-aarch64",
+      "install-reset-aarch64",
+      "recovery-boot-aarch64",
+      "recovery-secure-boot-aarch64",
+      "secure-boot-aarch64"
+    ],
+    "nightly": [
+      "drive-convergence-seeds"
+    ]
+  },
   "workspaceRoot": ".."
 }

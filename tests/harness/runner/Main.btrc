@@ -328,6 +328,21 @@ class GraphRunnerTests {
         Check.equal(Path.readAll(sequence), "head\nbrief\nshort\nfollower\nhead\nfollower\nbrief\nshort\n", "once durations are known, the three-second follower outranks the one-second nodes");
     }
 
+    public void namedSets() {
+        var ran = self.fixture.path("set-ran");
+        self.node("inside", f"printf 'inside\\n' >> {ShellWords.quote(ran)}");
+        self.node("outside", f"printf 'outside\\n' >> {ShellWords.quote(ran)}");
+        var nodes = self.entry("inside") + "," + self.entry("outside");
+        self.fixture.write("graph.json", "{\"name\":\"graph-runner\",\"workspaceRoot\":\".\",\"sets\":{\"slow\":[\"inside\"]},\"nodes\":[" + nodes + "]}");
+        Check.exited(self.run(["run-set", "slow"]));
+        Check.equal(Path.readAll(ran).trim(), "inside", "a set runs its own nodes and no others");
+        var unknown = Check.exited(self.run(["run-set", "fast"]), 1);
+        Check.that(self.said(unknown).contains("no set named fast; its sets: slow"), f"an unknown set is refused by name: {self.said(unknown)}");
+        self.fixture.write("graph.json", "{\"name\":\"graph-runner\",\"workspaceRoot\":\".\",\"sets\":{\"slow\":[\"gone\"]},\"nodes\":[" + nodes + "]}");
+        var stale = Check.exited(self.run(["coverage"]), 1);
+        Check.that(self.said(stale).contains("Set slow names a node the graph does not have: gone"), f"a set naming a missing node fails coverage: {self.said(stale)}");
+    }
+
     public void close() { self.fixture.close(); }
 }
 
@@ -344,6 +359,7 @@ int main() {
         tests.formats();
         tests.declaredInputs();
         tests.longestChainFirst();
+        tests.namedSets();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }
