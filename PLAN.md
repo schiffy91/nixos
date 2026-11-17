@@ -87,7 +87,17 @@ them again before anything changes.
     everything else and put it in "Waiting for the owner" below. A waiting item is not a failure and is not
     worked around.
 15. **Failures are reported as failures**, with the output.
-16. **The work is linear, and subagents have four uses only.** Read-only searches. The btrc track (T2,
+16. **Test jobs run inside an isolated process namespace** (`bwrap --unshare-pid`; `make -C tests` does it
+    where bwrap exists), so nothing a test signals can reach the desktop session, and nothing of a run is
+    left when it ends. On 16 November a btrc test that kills its parent to play a crashed worker ran after
+    that parent had gone; its parent was then the session's own manager, and every process of the desktop
+    session was killed. A test that signals its parent first checks that the parent is what it started.
+17. **Parallel jobs are sized to the machine on purpose** (32 threads, 62 GB): say how many VMs and how many
+    test workers before starting two jobs together, and never stack a third heavy job on two.
+18. **About every 30 minutes of work the owner gets an executive summary:** bottom line first, a scorecard
+    of before, now and target for each measure, what moved, risks, what is next, and what needs the owner;
+    plain words, no step names from this plan.
+19. **The work is linear, and subagents have four uses only.** Read-only searches. The btrc track (T2,
     T3.4) running beside the NixOS track (T1). Writing T3's independent scenarios, each in its own worktree
     that is removed afterwards. An independent review of each stage's diff before it is pushed. The main
     session does everything else: every graph run, every timing (measured with nothing else running), every
@@ -142,8 +152,10 @@ Done when the six steps are committed with their proofs, the baseline is on disk
    (`make cache-serve`) instead of about 1.7 GiB each from cache.nixos.org.
 4. **`install-reset`'s 14 children merge into about 6**, with no assertion lost (the ledger lists each).
 5. **`hosts-boot` polls instead of sleeping** (166 s of each 215 to 296 s run is sleep) and drops the third
-   boot that does nothing. One install chain per host: install standard, boot, enable Secure Boot, boot
-   enforced. This drops the test of installing the Secure Boot target directly on the two real hosts' twins.
+   boot that does nothing. Not done, on purpose: one install chain per host, and step 4's merge. Both were
+   written for a runner that ran one node at a time; with nodes running together a chain is slower than
+   its parts side by side, and the chain would drop the test of installing the Secure Boot target
+   directly. The ledger records it.
 6. **`drive-mutations` fails fast** instead of waiting out three 90 s timeouts; `drive-convergence` runs one
    seed in the required set and three in `nightly`.
 7. **The 16 eval and unit nodes leave the graph** for flake checks and `make unit`.
@@ -196,8 +208,10 @@ Each with its reason in the ledger:
 - `stateful-host`, `installer-setup`, `installer-up-iso`, `tpm2-probe`, `initrd-touch-unlock-rotated`.
 - The `persistence-ownership` graph node; the flake check of the same name stays.
 - The four disabled host-hibernate nodes. `immutability-hibernate` is not one of them and stays.
-- Stale `__pycache__` directories, `tests/nixd`, and `tests/gaming/deckpad/kernel.nix` unless it is wired
-  into a check (M4 then moves it).
+- `tests/gaming/deckpad/kernel.nix` stays until M4: Deck Pad's README documents it as the by-hand test of the
+  kernel's side of each link, so M4 either makes it a check of the new repository or removes it there.
+- Stale `__pycache__` directories and `tests/nixd` are not in git. They are files in the owner's checkout,
+  which rule 1 keeps this plan from deleting; they are on the waiting list.
 
 Done when the ledger accounts for every node and check that was required at T0, and the required graph
 passes in one run.
@@ -451,6 +465,8 @@ Filled in as the work runs. Known from the start:
 - A controller session on the Deck after M4.
 - The decision to move FRACTAL-NORTH and STEAM-DECK-OLED to the empty base, after the M8 reports.
 - The first reboot of each machine after M9.
+- Deleting the stale `__pycache__` directories and `tests/nixd` in the checkout at `/etc/nixos` (T4): they
+  are not in git, so removing them is the owner's call.
 
 # Not in this plan
 
