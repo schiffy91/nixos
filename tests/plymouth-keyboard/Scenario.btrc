@@ -60,19 +60,21 @@ class PlymouthScenario {
         else { var rule = "SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS{name}==\"" + name + "\", ENV{WL_OUTPUT}=\"" + output + "\""; self.machine.succeed("printf '%s\\n' " + ShellWords.quote(rule) + " > " + path); }
         self.machine.succeed("udevadm control --reload"); self.command(device + "-on");
     }
-    // The external monitor is a second GPU plugged in while Plymouth runs. On a busy host its DRM device can come
-    // up after Plymouth stopped waiting for it and took the firmware framebuffer, which has no connector to map
-    // a touchscreen to. This scenario is about the mapping, not about that race: the monitor is plugged in again.
+    // A GPU plugged in while Plymouth runs. On a busy host its DRM device can come up after Plymouth stopped
+    // waiting for it and took the firmware framebuffer, which has no connector to map a touchscreen to. False
+    // when that happened: this scenario is about the mapping, not about that race, so the caller unplugs the
+    // GPU and plugs it in again. The guest is an initrd and has no grep.
+    private bool plugged(string device, string ready) {
+        var logged = self.machine.succeed("stat -c %s /run/plymouth-test.log").trim();
+        self.machine.succeed("echo " + ShellWords.quote(device) + " > /sys/bus/pci/drivers/virtio-pci/bind"); self.machine.waitUntil(ready, 20);
+        var since = f"\"$(tail -c +{logged} /run/plymouth-test.log)\"";
+        self.machine.waitUntil(f"[[ {since} == *on_each_inp* ]]", 60);
+        if (self.machine.execute(f"[[ {since} == *\"output device '/dev/fb\"* ]]").code != 0) { return true; }
+        print("Plymouth took the firmware framebuffer for the display; plugging it in again");
+        return false;
+    }
     private string attachMonitor(string connector) {
-        for (int attempt = 0; attempt < 5; attempt++) {
-            var logged = self.machine.succeed("stat -c %s /run/plymouth-test.log").trim();
-            self.machine.succeed("echo 0000:01:00.0 > /sys/bus/pci/drivers/virtio-pci/bind"); self.machine.waitUntil("set -- /sys/class/drm/card*-Virtual-*; test $# -eq 2", 20);
-            var since = f"\"$(tail -c +{logged} /run/plymouth-test.log)\"";  // the guest is an initrd: it has no grep
-            self.machine.waitUntil(f"[[ {since} == *on_each_inp* ]]", 60);
-            if (self.machine.execute(f"[[ {since} == *\"output device '/dev/fb\"* ]]").code != 0) { break; }
-            print("Plymouth took the firmware framebuffer for the external monitor; plugging it in again");
-            self.detachMonitor();
-        }
+        for (int attempt = 0; attempt < 5 && !self.plugged("0000:01:00.0", "set -- /sys/class/drm/card*-Virtual-*; test $# -eq 2"); attempt++) { self.detachMonitor(); }
         var outputs = Strings.split(self.machine.succeed("for output in /sys/class/drm/card*-Virtual-*; do basename \"$output\"; done").trim(), "\n");
         Check.that(outputs.len == 2 && outputs.contains(connector), "original and secondary connectors");
         for output in outputs { if (!output.equals(connector)) { return output; } } throw "No secondary display";
@@ -96,7 +98,9 @@ class PlymouthScenario {
         Screen.changed(externalEmpty, returned, false, "removed touchscreen cancels selection"); self.detachMonitor(); self.geometry = KeyboardGeometry(empty.width, empty.height); self.mapTouchscreen(connector); returned = self.waitKeyboard(true, "primary-restored-after-monitor-removal"); Screen.changed(empty, returned, false, "stale external touch cannot type on primary"); machine.succeed("plymouth --ping");
         var card = Strings.split(connector, "-").get(0); var device = machine.succeed("basename $(readlink -f /sys/class/drm/" + card + "/device)").trim(); self.key("AC01"); var partial = self.screenshot("partial-entry-before-headless-interval");
         self.command("down " + self.keyPoint("AC02").input(self.rotated)); machine.succeed("echo " + ShellWords.quote(device) + " > /sys/bus/pci/drivers/virtio-pci/unbind"); machine.waitUntil("test ! -e /sys/class/drm/" + connector, 20); self.command("up"); machine.succeed("plymouth --ping");
-        machine.succeed("echo " + ShellWords.quote(device) + " > /sys/bus/pci/drivers/virtio-pci/bind"); machine.waitUntil("set -- /sys/class/drm/card*-Virtual-*; test -e \"$1\"", 20);
+        for (int attempt = 0; attempt < 5 && !self.plugged(device, "set -- /sys/class/drm/card*-Virtual-*; test -e \"$1\""); attempt++) {
+            machine.succeed("echo " + ShellWords.quote(device) + " > /sys/bus/pci/drivers/virtio-pci/unbind"); machine.waitUntil("set -- /sys/class/drm/card*-Virtual-*; test ! -e \"$1\"", 20);
+        }
         connector = machine.succeed("for output in /sys/class/drm/card*-Virtual-*; do basename \"$output\"; done").trim(); Check.that(!connector.contains("\n"), "single restored connector"); self.mapTouchscreen(connector); returned = self.waitKeyboard(true, "display-returned-after-headless-interval"); Screen.changed(partial, returned, false, "headless interval preserves entry and cancels held touch"); self.key("BKSP"); self.settles(empty, "headless-entry-correction", false, "UTF-8 entry correction after headless interval");
     }
     public void run() {
