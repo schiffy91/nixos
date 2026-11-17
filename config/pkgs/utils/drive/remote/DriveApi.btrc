@@ -17,7 +17,8 @@ enum DriveFailure {
     DRIVE_RATE_LIMITED = 4,
     DRIVE_SERVER = 5,
     DRIVE_INVALID = 6,
-    DRIVE_EXPIRED = 7
+    DRIVE_EXPIRED = 7,
+    DRIVE_FULL = 8  // the account has no room for what was sent
 };
 
 class DriveError {
@@ -84,6 +85,7 @@ class DriveApi {
     public string tokenUrl = "https://oauth2.googleapis.com/token";
     public int attempts = 6;
     public int backoffMilliseconds = 500;  // doubles per attempt
+    public string signInFile = "";  // the sign-in, when it is a file of this client's own: read again before each new token, so signing in again needs no restart
     public DriveError? failure = null;  // why the last call returned nothing
 
     public DriveApi(Transport transport, DriveCredentials credentials) {
@@ -98,6 +100,8 @@ class DriveApi {
 
     private bool authorize() {
         if (!self.accessToken.isEmpty() && MonotonicClock.milliseconds() < self.accessExpires) { return true; }
+        DriveCredentials? stored = self.signInFile.isEmpty() ? null : DriveCredentials.load(self.signInFile);
+        if (stored != null) { self.credentials = stored; }
         string form = f"client_id={HTTPUrl.encode(self.credentials.clientId)}&client_secret={HTTPUrl.encode(self.credentials.clientSecret)}&refresh_token={HTTPUrl.encode(self.credentials.refreshToken)}&grant_type=refresh_token";
         TransportResponse response = self.transport.send("POST", self.tokenUrl, ["Content-Type: application/x-www-form-urlencoded"], form);
         if (!response.answered()) { return self.fail(DRIVE_NETWORK, 0, response.error); }
@@ -120,6 +124,7 @@ class DriveApi {
         if (response.status == 404) { return DriveError(DRIVE_NOT_FOUND, 404, message); }
         if (response.status == 410) { return DriveError(DRIVE_EXPIRED, 410, message); }
         if (response.status == 429 || (response.status == 403 && reason.contains("ateLimitExceeded"))) { return DriveError(DRIVE_RATE_LIMITED, response.status, message); }
+        if (response.status == 403 && reason == "storageQuotaExceeded") { return DriveError(DRIVE_FULL, 403, message); }
         if (response.status == 403) { return DriveError(DRIVE_FORBIDDEN, 403, message); }
         if (response.status >= 500) { return DriveError(DRIVE_SERVER, response.status, message); }
         return DriveError(DRIVE_INVALID, response.status, message);

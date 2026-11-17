@@ -51,6 +51,16 @@ class Store {
         return Path.writeAll(staged, position + "\n") && StorePaths.rename(staged, self.root + "/position");
     }
 
+    // How many deletions of the batch now being read the change feed has given so far. It is kept beside the
+    // position: an engine that starts again in the middle of a batch goes on counting, it does not start over.
+    public int streak() { return FileSystem.readText(self.root + "/streak").trim().toInt(); }
+
+    public void setStreak(int count) {
+        string staged = self.temporary("streak");
+        if (count <= 0) { StorePaths.remove(self.root + "/streak"); }
+        else if (Path.writeAll(staged, f"{count}\n")) { StorePaths.rename(staged, self.root + "/streak"); }
+    }
+
     private string linkIn(string home, string id) {
         string bucket = id.len() >= 2 ? id.substring(id.len() - 2, 2) : "__";
         return f"{home}/ids/{bucket}/{id}";

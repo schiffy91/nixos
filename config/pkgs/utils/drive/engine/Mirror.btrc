@@ -25,6 +25,7 @@ class Mirror {
     public Mirror(DriveApi api, Store store) {
         self.api = api;
         self.store = store;
+        self.streak = store.streak();  // a batch that was being read when the last engine stopped
     }
 
     private string why() {
@@ -105,6 +106,7 @@ class Mirror {
             self.braked = true;
             return -2;  // the position stays, so nothing is skipped
         }
+        if (deletions > 0) { self.store.setStreak(self.streak + deletions); }  // written before they are taken: a restart must not count the batch from nothing
         Vector<DriveChange> waiting = [];  // a new folder's contents can be listed before the folder
         for change in page.changes {
             if (!self.apply(change)) { waiting.push(change); }
@@ -124,6 +126,7 @@ class Mirror {
         self.braked = false;
         self.streak += deletions;
         if (!page.next.isEmpty()) { return 1; }
+        if (self.streak > 0) { self.store.setStreak(0); }
         self.streak = 0;
         self.allowDeletions = false;  // a yes covers the batch it was given for
         return 0;

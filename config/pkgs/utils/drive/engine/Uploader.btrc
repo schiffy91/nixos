@@ -33,6 +33,8 @@ class Uploader {
     public int deletePercent = 10;
     public bool overwriteConflicts = false;  // the conflict rule switched off: the last writer wins
     public bool braked = false;
+    public int fullSeconds = 300;  // how long nothing is uploaded after the Drive says it is full
+    private long long fullUntil = 0LL;
     public int uploaded = 0;
     public int conflicts = 0;
     public int trashed = 0;
@@ -64,10 +66,9 @@ class Uploader {
             string kept = self.store.trashed(id);
             StoreFile? there = StoreFile.open(kept);
             if (there == null) { continue; }
-            string folder = self.store.folderPath(there.attribute("parent"));
             HeldEntry entry = HeldEntry();
             entry.source = "here";
-            entry.path = (folder.isEmpty() ? "" : self.store.logical(folder) + "/") + there.attribute("local");
+            entry.path = self.within(there.attribute("parent")) + there.attribute("local");
             if (FileSystem.isDir(kept)) {
                 entry.path = entry.path + "/";
                 entry.entries = 1 + FileSystem.listDir(kept).len;
@@ -80,8 +81,20 @@ class Uploader {
         return entries;
     }
 
+    // The folder a held entry was in, with the slash after it; nothing for the top. A folder that was deleted
+    // along with it is in the trash too and is found there, so the list reads the same after a restart.
+    private string within(string parent) {
+        string folder = self.store.folderPath(parent);
+        if (!folder.isEmpty() && FileSystem.isDir(folder)) {
+            string path = self.store.logical(folder);
+            return path.isEmpty() ? "" : path + "/";
+        }
+        StoreFile? gone = parent.isEmpty() ? null : StoreFile.open(self.store.trashed(parent));
+        return gone == null ? "" : f"{self.within(gone.attribute("parent"))}{gone.attribute("local")}/";
+    }
+
     public void resume() {
-        self.allowed = true;
+        self.allowed = self.braked;  // a yes covers the batch that is waiting, never one that has yet to be made
         self.braked = false;
     }
 
@@ -200,8 +213,13 @@ class Uploader {
         DriveError? failure = self.api.failure;
         if (failure != null && !failure.transient()) { Console.error(f"drive: {what}: {failure.describe()}"); }
         else { self.offline = true; }
+        if (failure != null && failure.kind == DRIVE_FULL) { self.fullUntil = MonotonicClock.milliseconds() + (long long)self.fullSeconds * 1000LL; }
         return false;
     }
+
+    // The Drive said it has no room. What is waiting stays here and no file is sent until the wait is over; asking
+    // again at once would send the same bytes to the same refusal. Moves, new folders and deletions still go.
+    public bool driveFull() { return MonotonicClock.milliseconds() < self.fullUntil; }
 
     private bool missing() {
         DriveError? failure = self.api.failure;
@@ -312,6 +330,7 @@ class Uploader {
         }
         if (!folder && StorePaths.nowSeconds() * 1000LL - held.modified() < (long long)self.quietSeconds * 1000LL) { return false; }  // still being written
         if (id.isEmpty()) {
+            if (self.driveFull()) { return false; }
             string before = held.shape();
             DriveFile? sent = self.arrived(path, parent, name, held, false);
             if (sent == null) { sent = self.api.upload("", parent, name, full, held.modified()); }
@@ -351,6 +370,7 @@ class Uploader {
             }
         }
         if (folder || !held.attribute("state").equals("local") || held.attribute("synced").equals(held.shape())) { return true; }
+        if (self.driveFull()) { return false; }
         DriveFile? remote = self.api.file(id);
         if (remote == null && !self.missing()) { return self.fails(f"looking at {path} on the Drive"); }
         PlanSide theirs = remote == null || remote.trashed ? SIDE_DELETED : remote.revision.equals(held.attribute("revision")) ? SIDE_SAME : SIDE_CHANGED;

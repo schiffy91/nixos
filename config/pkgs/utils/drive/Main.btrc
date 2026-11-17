@@ -37,6 +37,7 @@ class Drive {
         else { credentials = DriveCredentials.load(options.option("--credentials", f"{home}/.config/drive/credentials.json")); }
         if (credentials == null) { throw "No Drive sign-in found (see --credentials and --rclone)"; }
         DriveApi api = DriveApi(Transport(Drive.scratch(options)), credentials);
+        if (!options.has("--rclone")) { api.signInFile = options.option("--credentials", f"{home}/.config/drive/credentials.json"); }
         if (options.has("--api")) {
             api.apiBase = options.option("--api", "");
             api.tokenUrl = api.apiBase + "/token";
@@ -170,6 +171,7 @@ class Drive {
         for pattern in options.values("--ignore") { engine.uploader.ignored.push(pattern); }
         engine.uploader.quietSeconds = options.option("--quiet", "5").toInt();
         engine.uploader.deleteLimit = options.option("--delete-limit", "50").toInt();
+        engine.uploader.fullSeconds = options.option("--full-wait", "300").toInt();
         engine.uploader.overwriteConflicts = options.has("--overwrite-conflicts");
         engine.following().deleteLimit = engine.uploader.deleteLimit;
         Console.log("READY");

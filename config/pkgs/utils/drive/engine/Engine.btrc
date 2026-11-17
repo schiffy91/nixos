@@ -65,6 +65,9 @@ class Engine {
     private long long evictDue = 0LL;
     private string waitingFor = "";  // what was last said about volumes that are not here
     private bool behind = false;  // more of the change feed is waiting to be read
+    private string crowded = "";  // the file last said to have no room on its disk, so that it is said once
+    private bool cramped = false;  // the pinned folders are waiting for room on their disk
+    private long long roomDue = 0LL;  // when a full disk is looked at again
 
     public Engine(DriveApi api, Store store, string socket) {
         self.api = api;
@@ -83,6 +86,13 @@ class Engine {
         return failure != null && failure.transient() ? "offline" : "error";
     }
 
+    // The Drive answers, and what it says is that this machine's sign-in is no longer accepted. Waiting does not
+    // cure that, and it is not the same as being offline: `drive auth` is what brings it back.
+    private bool refused() {
+        DriveError? failure = self.api.failure;
+        return !self.online && failure != null && failure.kind == DRIVE_UNAUTHORIZED;
+    }
+
     private string broken(string id, string what) {
         Console.error(f"drive: fetching {id}: {what}");
         return "error";
@@ -95,6 +105,22 @@ class Engine {
         long long size = file.size();
         for (long long at = 0LL; at < size; at += 1048576LL) { digest.appendBytes(file.read(at, 1048576)); }
         return digest.finish().equals(expected);
+    }
+
+    // Whether a piece of this size can be stored. It is written twice, once where it arrives and once into the
+    // file, so twice its size has to be free where each of them is; asked before anything is fetched.
+    private bool room(string id, long long bytes) {
+        long long arriving = StorePaths.freeBytes(self.store.temporary(""));
+        string path = self.store.filePath(id);
+        long long staying = path.isEmpty() ? arriving : StorePaths.freeBytes(path);
+        return (arriving < 0LL || arriving >= 2LL * bytes) && (staying < 0LL || staying >= 2LL * bytes);
+    }
+
+    private string full(string id) {  // said once for a file, however often it is tried
+        string path = self.store.filePath(id);
+        if (id != self.crowded) { Console.error(f"drive: fetching {path.isEmpty() ? id : self.store.logical(path)}: there is no room for it on the disk; it waits until there is"); }
+        self.crowded = id;
+        return "full";
     }
 
     // Download what is missing of the chunks around a read. "ok", or why not.
@@ -112,6 +138,7 @@ class Engine {
             if (missing < 0LL || missing >= last) { break; }
             long long end = file.firstPresent(missing);
             if (end > last) { end = last; }
+            if (!self.room(id, end - missing)) { return self.full(id); }
             if (!self.api.download(id, missing, end - 1LL, part)) { return self.failed(id); }
             StoreFile? fetched = StoreFile.open(part);
             long long modified = file.modified();
@@ -121,6 +148,7 @@ class Engine {
             self.received += end - missing;
             at = end;
         }
+        StorePaths.remove(part);  // what arrived is in the file now; a second copy would take the room of the next piece
         return self.finished(id, file);
     }
 
@@ -157,6 +185,11 @@ class Engine {
             sizes.push(size);
         }
         if (ids.len < 2) { return 0; }
+        long long total = 0LL;
+        for size in sizes { total += size; }
+        for id in ids {
+            if (!self.room(id, total)) { return 0; }  // too little room for all of them at once: one at a time, as far as it goes
+        }
         Vector<bool> arrived = self.api.downloadWhole(ids, parts);
         int came = 0;
         for (int index = 0; index < ids.len; index++) {
@@ -279,6 +312,9 @@ class Engine {
             long long before = self.received;
             string outcome = self.fetch(id, missing < 0LL ? 0LL : missing, missing < 0LL ? 1LL : self.piece);
             self.arrivedBytes += self.received - before;
+            self.cramped = outcome == "full";  // it stays first in the queue, and the disk is looked at again when the feed is next read
+            if (self.cramped) { self.roomDue = MonotonicClock.milliseconds() + (long long)self.followSeconds * 1000LL; }
+            else { self.crowded = ""; }
             if (outcome.equals("error") || self.whole(id)) { self.taken(); }  // a failure is said in the log; tried again when it next changes or the engine starts
             return outcome.equals("ok");
         }
@@ -479,7 +515,7 @@ class Engine {
         if (words.len == 1 && words.get(0).equals("progress")) { return self.progress(door != null && door.isOpen()); }
         if (words.len == 1 && words.get(0).equals("status")) {
             Vector<string> missing = self.store.missing();
-            return f"{self.online ? "online" : "offline"}, door {door != null && door.isOpen() ? "connected" : "absent"}, {self.store.folderCount()} folders, {self.held.len} waiting, {self.uploader.waiting()} changes to send{self.behind ? " (catching up with the Drive)" : ""}, {self.wanted.len} to download{self.paused ? " (paused)" : ""}{self.uploader.braked || self.mirror.braked ? ", deletions held" : ""}{missing.len > 0 ? ", waiting for the volume of " + Strings.join(missing, ", ") : ""}\n";
+            return f"{self.online ? "online" : self.refused() ? "sign-in refused" : "offline"}, door {door != null && door.isOpen() ? "connected" : "absent"}, {self.store.folderCount()} folders, {self.held.len} waiting, {self.uploader.waiting()} changes to send{self.uploader.driveFull() ? " (the Drive is full)" : ""}{self.behind ? " (catching up with the Drive)" : ""}, {self.wanted.len} to download{self.paused ? " (paused)" : ""}{self.cramped && self.wanted.len > 0 ? " (no room on the disk)" : ""}{self.uploader.braked || self.mirror.braked ? ", deletions held" : ""}{missing.len > 0 ? ", waiting for the volume of " + Strings.join(missing, ", ") : ""}\n";
         }
         return "unknown command\n";
     }
@@ -572,7 +608,7 @@ class Engine {
                 self.due = self.behind ? 0LL : MonotonicClock.milliseconds() + (long long)self.followSeconds * 1000LL;
             }
             long long wait = self.due - MonotonicClock.milliseconds();
-            bool busy = self.online && !self.paused && self.wanted.len > 0;  // pinned files to fetch: only look, do not wait
+            bool busy = self.online && !self.paused && self.wanted.len > 0 && MonotonicClock.milliseconds() >= self.roomDue;  // pinned files to fetch: only look, do not wait
             int ready = Channel.wait(door == null ? -1 : door.handle(), listener.handle(), -1, busy ? 0 : door == null ? 500 : wait < 0LL ? 0 : wait > 1000LL ? 1000 : (int)wait);
             if ((ready & 1) != 0 && door != null) {
                 while (door.isOpen()) {

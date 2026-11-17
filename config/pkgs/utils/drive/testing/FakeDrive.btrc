@@ -26,7 +26,6 @@ class FakeUpload {
 // The parts of the Drive API the client uses, served from memory, with faults on request.
 class FakeDrive {
     private HTTPServer server;
-    private string base;
     private Map<string, FakeEntry> entries = {};
     private Vector<string> order = [];  // ids, oldest first
     private Vector<string> feed = [];  // changed ids, oldest change first, each id once
@@ -46,13 +45,15 @@ class FakeDrive {
     private int failureStatus = 503;
     private int shortBytes = -1;  // next download returns only this many
     private int retryAfter = 0;
+    private long long quota = -1LL;  // how many bytes the account holds in all; -1: as many as are sent
+    private string refresh = "refresh-ok";  // the one sign-in the token endpoint takes; empty: none
 
-    public FakeDrive(int port) {
+    public FakeDrive(int port, bool reachable = false) {
         self.server = HTTPServer(port);
+        self.server.bindAny = reachable;  // for a client on another machine
         self.server.timeoutSecs = 10;
         self.server.maxBodyBytes = 67108864;
         self.server.maxRequestBytes = 67174400;
-        self.base = f"http://127.0.0.1:{port}";
         FakeEntry root = FakeEntry();
         root.file.id = "root";
         root.file.name = "My Drive";
@@ -144,7 +145,7 @@ class FakeDrive {
     }
 
     private HTTPResponse token(HTTPRequest request) {
-        if (!request.body.contains("refresh_token=refresh-ok")) { return HTTPResponse(400, "application/json", "{\"error\":\"invalid_grant\"}"); }
+        if (self.refresh.isEmpty() || !request.body.contains(f"refresh_token={self.refresh}")) { return HTTPResponse(400, "application/json", "{\"error\":\"invalid_grant\"}"); }
         string token = f"access-{self.nextToken}";
         self.nextToken++;
         self.tokens.push(token);
@@ -267,13 +268,16 @@ class FakeDrive {
         string session = f"s{self.nextId}";
         self.nextId++;
         self.uploads.put(session, upload);
-        return HTTPResponse.json("{}").addHeader(f"Location: {self.base}/upload/session/{session}");
+        return HTTPResponse.json("{}").addHeader(f"Location: http://{request.header("host")}/upload/session/{session}");  // under the name the client reached it by
     }
 
     private HTTPResponse finishUpload(HTTPRequest request, string session) {
         if (!self.uploads.has(session)) { return self.missing(); }
         FakeUpload upload = self.uploads.get(session);
         self.uploads.remove(session);
+        FakeEntry? replaced = upload.id.isEmpty() ? null : self.entry(upload.id);
+        long long freed = replaced == null ? 0LL : (long long)replaced.content.length;
+        if (self.quota >= 0LL && self.used() - freed + (long long)request.bodyBytes.length > self.quota) { return self.refuse(403, "storageQuotaExceeded", "The user's Drive storage quota has been exceeded."); }
         FakeEntry? target = null;
         if (upload.id.isEmpty()) {
             string parent = upload.metadata.get("parents").at(0).asString();
@@ -297,6 +301,15 @@ class FakeDrive {
         return HTTPResponse.json(self.describe(target).stringify());
     }
 
+    private long long used() {  // what the account holds, the trash included
+        long long total = 0LL;
+        for id in self.order {
+            FakeEntry entry = self.entries.get(id);
+            if (!entry.gone) { total += (long long)entry.content.length; }
+        }
+        return total;
+    }
+
     // What a test asks of the fake itself; a real Drive has none of this.
     private HTTPResponse control(HTTPRequest request, string action) {
         Map<string, string> query = request.queryParams();
@@ -306,6 +319,11 @@ class FakeDrive {
             self.retryAfter = query.getOrDefault("retry-after", "0").toInt();
         } else if (action.equals("expire")) {
             self.tokens.clear();
+        } else if (action == "revoke") {  // the sign-in is withdrawn; `accept` names the one taken from now on, if any
+            self.refresh = query.getOrDefault("accept", "");
+            self.tokens.clear();
+        } else if (action == "quota") {
+            self.quota = query.getOrDefault("bytes", "-1").toLong();
         } else if (action.equals("short")) {
             self.shortBytes = query.getOrDefault("bytes", "0").toInt();
         } else if (action.equals("stall")) {
@@ -391,7 +409,8 @@ class FakeDrive {
 
 int main(int argc, char** argv) {
     try {
-        FakeDrive(CLIArgs(argc, argv).require(0, "usage: drive-fake PORT").toInt()).serve();
+        CLIArgs args = CLIArgs(argc, argv);
+        FakeDrive(args.require(0, "usage: drive-fake PORT [--reachable]").toInt(), args.length > 1 && args.get(1) == "--reachable").serve();
     } catch (string error) {
         Console.error(f"drive-fake: {error}");
         return 1;
