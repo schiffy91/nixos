@@ -1080,7 +1080,6 @@
     "initrd-touch-unlock",
     "initrd-touch-unlock-german",
     "initrd-touch-unlock-french",
-    "initrd-touch-unlock-displays",
     "boot-fallback",
     "sunshine-credentials",
     "sunshine-ssh-login",
@@ -1096,6 +1095,9 @@
     "recovery-touch-keyboard"
   ],
   "sets": {
+    "alone": [
+      "initrd-touch-unlock-displays"
+    ],
     "aarch64": [
       "installer-ssh-aarch64",
       "install-reset-aarch64",

@@ -15,7 +15,7 @@ help:
 	@printf '%s\n' 'Whole suites:'
 	@printf '%s\n' '  gaming            nix build of tests/gaming (proton, assetto)'
 	@printf '%s\n' '  graph-early       the graph default set'
-	@printf '%s\n' '  graph-full        the graph REQUIRED set, not every node'
+	@printf '%s\n' '  graph-full        the graph REQUIRED set, then the set `alone` with nothing beside it'
 	@printf '%s\n' '  graph-aarch64     the graph set `aarch64` (emulated unless the host is aarch64)'
 	@printf '%s\n' '  graph-deck        the graph set `deck`: Gaming Mode sleep and lock, on a host with one AMD GPU'
 	@printf '%s\n' '  graph-list        list nodes        graph-status   per-node state freshness'
@@ -98,6 +98,7 @@ graph-deck: build
 
 graph-full: build
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-required'
+	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run-set alone --arg jobs=1'
 
 chain: installer-download installer-ssh install-system immutability-reset
 

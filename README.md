@@ -870,7 +870,9 @@ tested by `make harness`.
 Beside `required`, the graph file names sets, run with `nixosctl graph tests/graph.json run-set <name>`:
 `aarch64` (`make -C tests graph-aarch64`) is the install, recovery and Secure Boot chain on an aarch64
 guest, native on an aarch64 host and emulated on this desktop, so it is not part of every run here;
-`deck` (`make -C tests graph-deck`)
+`alone` is run by `make graph-required` after the required set, one node at a time with nothing beside
+it: `initrd-touch-unlock-displays` plugs displays in and out under Plymouth and judges what is drawn, and
+beside other nodes it failed at a different step in six runs out of eleven. `deck` (`make -C tests graph-deck`)
 is the five Gaming Mode sleep and lock nodes, which need a host with exactly one AMD GPU: the Steam Deck has
 one and this desktop, with its integrated GPU off in firmware, has none. A node without an
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
