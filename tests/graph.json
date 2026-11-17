@@ -360,6 +360,19 @@
     },
     {
       "after": [
+        "install-reset"
+      ],
+      "args": {
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "immutabilityVersion": "v2",
+        "parentState": "installed-reset"
+      },
+      "id": "nixosctl-update",
+      "spec": "nixosctl/update/test.json"
+    },
+    {
+      "after": [
         "installer-ssh"
       ],
       "args": {
@@ -1059,6 +1072,7 @@
     "immutability-disabled-persistence",
     "nixosctl-cli",
     "nixosctl-diff",
+    "nixosctl-update",
     "install-encrypted",
     "install-nixosctl",
     "tpm2-enroll",

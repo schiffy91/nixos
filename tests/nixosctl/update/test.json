@@ -1,0 +1,30 @@
+{
+  "name": "nixosctl-update",
+  "state": "nixosctl-update",
+  "parentState": "installed-reset",
+  "stateMaterial": "nixosctl-update:{{immutabilityVersion}}:{{immutabilityImplementation}}:{{immutabilityMode}}:ram={{memory}}:cpus={{cpus}}",
+  "args": { "immutabilityVersion": "v2", "immutabilityImplementation": "immutability", "immutabilityMode": "reset" },
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "8G",
+  "cpus": 4,
+  "sshPort": 2260,
+  "operations": [
+    { "op": "require-state" },
+    { "op": "reset-state" },
+    { "op": "inherit-state" },
+    { "op": "validate-immutability-v2" },
+    { "op": "restore", "name": "installed" },
+    { "op": "boot-disk" },
+    { "op": "wait-ssh", "timeout": 180 },
+    { "op": "guest", "command": "set -ex\nu=$(nixosctl eval config.settings.users.admin.username | tr -d '\"')\nid \"$u\" >/dev/null\nprintf %s \"$u\" > /var/tmp/e2e-update-user\nreadlink -f /run/current-system > /var/tmp/e2e-update-system-before\nreadlink /nix/var/nix/profiles/system > /var/tmp/e2e-update-link-before\ntest \"$(readlink -f /nix/var/nix/profiles/system)\" = \"$(cat /var/tmp/e2e-update-system-before)\"\ncat /proc/sys/kernel/random/boot_id > /var/tmp/e2e-update-boot\nbtrfs subvolume show /.snapshots/@root/CLEAN | grep -E 'UUID:|Creation time:' > /var/tmp/e2e-update-clean\ntest -s /var/tmp/e2e-update-clean\ntest ! -e /etc/e2e-update\nprintf first-generation-recorded\n", "expect": "first-generation-recorded", "timeout": 600 },
+    { "op": "guest", "command": "set -ex\nhost=/etc/nixos/config/hosts/{{arch}}/VM-TEST/default.nix\nsed -i '/settings.disk.immutability.mode =/a\\  environment.etc.\"e2e-update\".text = \"second-generation\";' \"$host\"\ngrep -F 'environment.etc.\"e2e-update\".text = ' \"$host\"\nprintf change-written\n", "expect": "change-written", "timeout": 120 },
+    { "op": "guest", "command": "set -ex\nu=$(cat /var/tmp/e2e-update-user)\nif ! su -l \"$u\" -c \"printf 'n\\n' | nixosctl update\" > /var/tmp/e2e-update.log 2>&1; then tail -n 80 /var/tmp/e2e-update.log; exit 1; fi\ngrep -F 'Restart now?' /var/tmp/e2e-update.log\nif grep -F 'Invalid input' /var/tmp/e2e-update.log; then exit 1; fi\nprintf update-succeeded\n", "expect": "update-succeeded", "timeout": 1800 },
+    { "op": "guest", "command": "set -ex\nbefore=$(cat /var/tmp/e2e-update-system-before)\nnew=$(readlink -f /nix/var/nix/profiles/system)\ntest \"$new\" != \"$before\"\ntest \"$(readlink -f /run/current-system)\" = \"$new\"\ntest \"$(readlink /nix/var/nix/profiles/system)\" != \"$(cat /var/tmp/e2e-update-link-before)\"\ndefault=$(sed -n 's/^default //p' /boot/loader/loader.conf)\ngrep -F \"init=$new/init\" \"/boot/loader/entries/$default\"\ntest \"$(cat /etc/e2e-update)\" = second-generation\ntest \"$(cat /proc/sys/kernel/random/boot_id)\" = \"$(cat /var/tmp/e2e-update-boot)\"\ntest \"$(stat -c %U /etc/nixos/flake.nix)\" = \"$(cat /var/tmp/e2e-update-user)\"\nbtrfs subvolume show /.snapshots/@root/CLEAN | grep -E 'UUID:|Creation time:' | cmp - /var/tmp/e2e-update-clean\nprintf %s \"$new\" > /var/tmp/e2e-update-system-after\necho ephemeral > /root/e2e-update-ephemeral\nsync\nprintf new-generation-running\n", "expect": "new-generation-running", "timeout": 120 },
+    { "op": "reboot-disk" },
+    { "op": "guest", "command": "set -ex\nnew=$(cat /var/tmp/e2e-update-system-after)\ntest \"$(cat /proc/sys/kernel/random/boot_id)\" != \"$(cat /var/tmp/e2e-update-boot)\"\ntest \"$(readlink -f /run/booted-system)\" = \"$new\"\ntest \"$(readlink -f /run/current-system)\" = \"$new\"\ngrep -F \"init=$new/init\" /proc/cmdline\ndefault=$(sed -n 's/^default //p' /boot/loader/loader.conf)\nselected=$(tr -cd 'a-z0-9.-' < /sys/firmware/efi/efivars/LoaderEntrySelected-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f)\ntest \"$selected\" = \"$default\"\ngrep -F \"init=$new/init\" \"/boot/loader/entries/$selected\"\ntest \"$(cat /etc/e2e-update)\" = second-generation\nprintf update-survived-reboot\n", "expect": "update-survived-reboot", "timeout": 120 },
+    { "op": "guest", "command": "set -ex\ntest ! -e /root/e2e-update-ephemeral\ntest \"$(cat /.snapshots/@root/generation-1/root/e2e-update-ephemeral)\" = ephemeral\njournalctl -b -q --no-pager -o cat | grep -F 'Immutability complete'\nbtrfs subvolume show /.snapshots/@root/CLEAN | grep -E 'UUID:|Creation time:' | cmp - /var/tmp/e2e-update-clean\nprintf reset-ran-after-update\n", "expect": "reset-ran-after-update", "timeout": 120 },
+    { "op": "snapshot", "name": "update-tested" },
+    { "op": "record-state" },
+    { "op": "stop" }
+  ]
+}

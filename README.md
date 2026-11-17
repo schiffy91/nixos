@@ -870,6 +870,10 @@ guest installed. `.vm/e2e/store.log` is the server's log.
 The nodes with constraints worth knowing before you run them:
 
 - `tpm2-enroll` enrolls and wipes a TPM2 LUKS keyslot on an encrypted install.
+- `nixosctl-update` changes the host's configuration and runs `nixosctl update`
+  as the admin user, answering "Restart now?" with no. The new generation is the
+  running one and the loader's default, it is still both after a reboot, and
+  that reboot ran the immutability reset without rewriting `CLEAN`.
 - `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
   auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
   enforcing firmware, so `tests/shell.nix` builds Debian's

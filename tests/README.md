@@ -137,6 +137,10 @@ back after a wrong answer is told from the one the answer went to. A VM started 
 `expect-no-ssh` fails if the guest answers SSH at any point in its timeout: a disk that is still locked,
 a generation that did not boot.
 
+What an installed system does when its owner uses it has nodes of its own. `nixosctl-update` runs
+`nixosctl update` as the admin user after a change to the host, where every other spec calls `nixos-
+rebuild`.
+
 ## Ledger
 
 Every node and check that was required on 2026-11-16, and where it is now. A test leaves the VM graph
