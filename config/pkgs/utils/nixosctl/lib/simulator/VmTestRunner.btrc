@@ -20,7 +20,6 @@ class VmOperationCatalog {
         kinds.push("reset-state");
         kinds.push("create-key");
         kinds.push("create-disk");
-        kinds.push("setup");
         kinds.push("boot-iso");
         kinds.push("boot-disk");
         kinds.push("up-iso");
@@ -150,10 +149,6 @@ class VmTestRunner {
         }
         if (op.kind.equals("create-disk")) {
             self.vm.createDisk();
-            return;
-        }
-        if (op.kind.equals("setup")) {
-            self.vm.setup();
             return;
         }
         if (op.kind.equals("boot-iso")) {

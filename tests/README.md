@@ -141,3 +141,15 @@ only for a place that still runs it.
 | `spec-toml`, `spec-yaml` | `formats` case of the runner test (`make harness`) | The same two specs, run over a fixture graph |
 | `quick` | removed | It printed a word through the runner; every case of the runner test does more |
 | `stateful-host` | removed | It proved that a state is recorded and reused; the runner test's duration and collection cases prove the same over fixtures |
+| `install-reset-x86_64` | `install-reset`, now in the required set | On this architecture the two were the same install; the twin's disk was never booted |
+| `installer-setup`, `installer-up-iso` | removed | Every install node makes the same key and disk and boots the same image through `installer-ssh` |
+| `tpm2-probe` | removed | It looked for a TPM device in a booted installer; `tpm2-enroll` enrols with one and unlocks by it |
+| `initrd-touch-unlock-rotated` | removed | `initrd-touch-unlock-german` runs with the same rotation, plus a layout and the light theme |
+| `persistence-ownership` (graph) | flake check `persistence-ownership` | The node built that check; the check is built with the others |
+| four `host-hibernate-*` nodes | removed | Neither host hibernates and the nodes were switched off; `immutability-hibernate` still proves a reset never runs before a resume |
+| third boot of `host-boot-*` | removed | It ran only for a node that set `reenrollsKeys`, and none did |
+| `drive-convergence` over three seeds | one seed required; `drive-convergence-seeds` (`make -C tests graph-nightly`) runs three | Each seed is 120 random operations by two clients; one proves convergence per commit |
+
+Not merged, though the review proposed it: the installs into one chain per host, and `install-reset`'s
+children into fewer nodes. With nodes running together a chain is slower than its parts side by side, and
+one chain per host would drop the test that installs the Secure Boot target directly.

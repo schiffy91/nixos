@@ -10,7 +10,7 @@ AARCH64_NODES := installer-ssh-aarch64 install-reset-aarch64 recovery-boot-aarch
 # Longer forms of required nodes, for a run that is not waited on.
 NIGHTLY_NODES := drive-convergence-seeds
 
-.PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-nightly graph-early graph-installer-ssh graph-full chain clean-vms
+.PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-nightly graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
 	@printf '%s\n' 'Run these from the repo root as `make <target>`; `make -C tests` also works.'
@@ -27,7 +27,7 @@ help:
 	@printf '%s\n' ''
 	@printf '%s\n' 'One scenario at a time:'
 	@printf '%s\n' '  installer-download download installer-ssh graph-installer-ssh install-system'
-	@printf '%s\n' '  immutability-reset immutability-key-encoding password-change tpm2-probe'
+	@printf '%s\n' '  immutability-reset immutability-key-encoding password-change'
 	@printf '%s\n' '  secure-boot-capabilities secure-boot-install secure-boot-lanzaboote chain'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Any other node: build/nixosctl graph tests/graph.json run <node>'
@@ -64,9 +64,6 @@ installer-ssh: installer-download
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run installer-ssh'
 
 installer-ssh-smoke: installer-ssh
-
-tpm2-probe: installer-download
-	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run tpm2-probe'
 
 secure-boot-capabilities: build
 	cd .. && $(ISOLATE) $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run secure-boot-capabilities'

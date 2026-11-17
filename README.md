@@ -845,8 +845,8 @@ every node that guards a contract, and `make -C tests graph-status` prints each
 one with its state (`ready`, `stale`, `missing`, `disabled`) rather than repeating
 the list here. A node is switched off, not removed, by giving it a `disabled`
 field that says why: it stays in the graph and in `required`, a run skips it and
-prints the reason, and no node that still runs may come `after` it. The four
-`host-hibernate-*` nodes are off this way, because neither host hibernates. The families are `installer-*`, `install-*`, `immutability-*`,
+prints the reason, and no node that still runs may come `after` it. No node is off
+at present. The families are `installer-*`, `install-*`, `immutability-*`,
 `recovery-*`, `secure-boot-*`, `tpm2-*`, `nixosctl-*`, `password-change*`,
 and `qmp-probe`. What only evaluates the configuration (`app-settings`, `qemu-hosts`) and the unit
 suites that are one derivation each are flake checks, built by `ci/checks.sh`; the graph runner itself is

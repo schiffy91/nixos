@@ -44,20 +44,6 @@
     },
     {
       "after": [
-        "installer-download"
-      ],
-      "id": "installer-setup",
-      "spec": "installer/setup/test.json"
-    },
-    {
-      "after": [
-        "installer-download"
-      ],
-      "id": "installer-up-iso",
-      "spec": "installer/up-iso/test.json"
-    },
-    {
-      "after": [
         "installer-download-x86_64"
       ],
       "args": {
@@ -92,13 +78,6 @@
       "spec": "qemu/qmp/test.json"
     },
     {
-      "after": [
-        "installer-download"
-      ],
-      "id": "tpm2-probe",
-      "spec": "tpm2/probe/test.json"
-    },
-    {
       "after": [],
       "id": "secure-boot-capabilities",
       "spec": "secure-boot/capabilities/test.json"
@@ -116,24 +95,6 @@
         "state": "installed-reset"
       },
       "id": "install-reset",
-      "spec": "installer/system/test.json"
-    },
-    {
-      "after": [
-        "installer-ssh-x86_64"
-      ],
-      "args": {
-        "arch": "x86_64",
-        "immutabilityEnabled": "true",
-        "immutabilityImplementation": "immutability",
-        "immutabilityMode": "reset",
-        "immutabilityVersion": "v2",
-        "name": "install-reset-x86_64",
-        "parentState": "installer-ssh-x86_64",
-        "sshPort": "2239",
-        "state": "installed-reset-x86_64"
-      },
-      "id": "install-reset-x86_64",
       "spec": "installer/system/test.json"
     },
     {
@@ -642,33 +603,6 @@
       }
     },
     {
-      "id": "host-hibernate-STEAM-DECK-OLED-VM-standard",
-      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
-      "spec": "hosts-hibernate/test.json",
-      "after": [
-        "host-install-STEAM-DECK-OLED-VM-standard"
-      ],
-      "args": {
-        "arch": "x86_64",
-        "hostName": "STEAM-DECK-OLED-VM",
-        "target": "Standard-Boot",
-        "password": "testpass123",
-        "secureBoot": "false",
-        "uefi": "true",
-        "requireEnforced": "false",
-        "diskSize": "64G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
-        "isoUrl": "",
-        "name": "host-hibernate-STEAM-DECK-OLED-VM-standard",
-        "state": "host-hibernateed-STEAM-DECK-OLED-VM-standard",
-        "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
-        "sshPort": "2266",
-        "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "false"
-      }
-    },
-    {
       "id": "host-install-STEAM-DECK-OLED-VM-secure",
       "spec": "hosts-install/test.json",
       "after": [],
@@ -714,33 +648,6 @@
         "sshPort": "2258",
         "unlockAgent": "plymouth",
         "enablesSecureBoot": "true"
-      }
-    },
-    {
-      "id": "host-hibernate-STEAM-DECK-OLED-VM-secure",
-      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
-      "spec": "hosts-hibernate/test.json",
-      "after": [
-        "host-install-STEAM-DECK-OLED-VM-secure"
-      ],
-      "args": {
-        "arch": "x86_64",
-        "hostName": "STEAM-DECK-OLED-VM",
-        "target": "Secure-Boot",
-        "password": "testpass123",
-        "secureBoot": "true",
-        "uefi": "true",
-        "requireEnforced": "true",
-        "diskSize": "64G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-STEAM-DECK-OLED-VM.iso",
-        "isoUrl": "",
-        "name": "host-hibernate-STEAM-DECK-OLED-VM-secure",
-        "state": "host-hibernateed-STEAM-DECK-OLED-VM-secure",
-        "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
-        "sshPort": "2268",
-        "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "false"
       }
     },
     {
@@ -792,33 +699,6 @@
       }
     },
     {
-      "id": "host-hibernate-FRACTAL-NORTH-VM-standard",
-      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
-      "spec": "hosts-hibernate/test.json",
-      "after": [
-        "host-install-FRACTAL-NORTH-VM-standard"
-      ],
-      "args": {
-        "arch": "x86_64",
-        "hostName": "FRACTAL-NORTH-VM",
-        "target": "Standard-Boot",
-        "password": "testpass123",
-        "secureBoot": "false",
-        "uefi": "true",
-        "requireEnforced": "false",
-        "diskSize": "110G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
-        "isoUrl": "",
-        "name": "host-hibernate-FRACTAL-NORTH-VM-standard",
-        "state": "host-hibernateed-FRACTAL-NORTH-VM-standard",
-        "parentState": "host-installed-FRACTAL-NORTH-VM-standard",
-        "sshPort": "2267",
-        "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "false"
-      }
-    },
-    {
       "id": "host-install-FRACTAL-NORTH-VM-secure",
       "spec": "hosts-install/test.json",
       "after": [],
@@ -867,33 +747,6 @@
       }
     },
     {
-      "id": "host-hibernate-FRACTAL-NORTH-VM-secure",
-      "disabled": "Neither host hibernates. settings.sleep.allowHibernation is off by default, since a hibernation image puts all of memory on disk and a failed attempt hands back an unlocked session; the Deck stopped hibernating on suspend on 2026-11-08, after Valve disabled Deck hibernation for driver bugs and its own attempts failed. immutability-hibernate still covers hibernation on an install. Remove this line if a host turns hibernation back on.",
-      "spec": "hosts-hibernate/test.json",
-      "after": [
-        "host-install-FRACTAL-NORTH-VM-secure"
-      ],
-      "args": {
-        "arch": "x86_64",
-        "hostName": "FRACTAL-NORTH-VM",
-        "target": "Secure-Boot",
-        "password": "testpass123",
-        "secureBoot": "true",
-        "uefi": "true",
-        "requireEnforced": "false",
-        "diskSize": "110G",
-        "iso": "build/iso/iso/nixos-installer-x86_64-linux-FRACTAL-NORTH-VM.iso",
-        "isoUrl": "",
-        "name": "host-hibernate-FRACTAL-NORTH-VM-secure",
-        "state": "host-hibernateed-FRACTAL-NORTH-VM-secure",
-        "parentState": "host-installed-FRACTAL-NORTH-VM-secure",
-        "sshPort": "2269",
-        "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "false"
-      }
-    },
-    {
       "id": "recovery-touch-keyboard",
       "spec": "recovery/keyboard/test.json",
       "after": []
@@ -902,15 +755,6 @@
       "id": "initrd-touch-unlock",
       "spec": "boot-touch/test.json",
       "after": []
-    },
-    {
-      "id": "initrd-touch-unlock-rotated",
-      "spec": "boot-touch/test.json",
-      "after": [],
-      "args": {
-        "rotate": "true",
-        "state": "initrd-touch-unlock-rotated"
-      }
     },
     {
       "id": "initrd-touch-unlock-german",
@@ -1032,13 +876,6 @@
     },
     {
       "after": [],
-      "id": "persistence-ownership",
-      "spec": "persistence/ownership/test.json"
-    },
-    {
-      "after": [
-        "persistence-ownership"
-      ],
       "id": "immutability-feature-disable",
       "spec": "immutability/feature-disable/test.json"
     },
@@ -1163,16 +1000,15 @@
     }
   ],
   "required": [
+    "install-reset",
     "opportunistic-unlock",
     "secure-boot-backup",
     "sleep-gaming-plasma",
     "cli-parity",
     "qmp-probe",
-    "tpm2-probe",
     "secure-boot-capabilities",
     "installer-ssh-x86_64",
     "installer-ssh-aarch64",
-    "install-reset-x86_64",
     "install-reset-aarch64",
     "recovery-boot-x86_64",
     "recovery-boot-aarch64",
@@ -1209,19 +1045,14 @@
     "install-offline",
     "installer-prebuilt-x86_64",
     "host-boot-STEAM-DECK-OLED-VM-standard",
-    "host-hibernate-STEAM-DECK-OLED-VM-standard",
     "host-install-STEAM-DECK-OLED-VM-standard",
     "host-boot-STEAM-DECK-OLED-VM-secure",
-    "host-hibernate-STEAM-DECK-OLED-VM-secure",
     "host-install-STEAM-DECK-OLED-VM-secure",
     "host-boot-FRACTAL-NORTH-VM-standard",
-    "host-hibernate-FRACTAL-NORTH-VM-standard",
     "host-install-FRACTAL-NORTH-VM-standard",
     "host-boot-FRACTAL-NORTH-VM-secure",
-    "host-hibernate-FRACTAL-NORTH-VM-secure",
     "host-install-FRACTAL-NORTH-VM-secure",
     "initrd-touch-unlock",
-    "initrd-touch-unlock-rotated",
     "initrd-touch-unlock-german",
     "initrd-touch-unlock-french",
     "initrd-touch-unlock-displays",
