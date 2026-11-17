@@ -78,7 +78,10 @@ in lib.genAttrs hosts.systems (system:
       touchHost = if touchHost == null then null else touchHost.module;
     };
   in lib.listToAttrs (diskChecks ++ hostChecks ++ [ installerCheck (mkHostLayoutCheck { inherit pkgs; }) (mkSshTrustCheck { inherit pkgs; })
-    { name = "ci-local"; value = import ../../tests/checks/ci_local.nix { inherit pkgs; }; }
+    {  # the tool is tested in its own repository; here its test holds this repository's job table against its workflow
+      name = "ci-local";
+      value = import "${inputs.ci-local}/tests/ci_local.nix" { inherit pkgs; table = ../../ci/local.json; workflow = ../../.github/workflows/checks.yml; jobs = [ "lint" "checks" ]; };
+    }
     (mkEvaluationCheck { inherit pkgs; name = "app-settings"; expectations = expectations ../../tests/checks/app_settings.json; assertions = deckAssertions; })
     (mkEvaluationCheck { inherit pkgs; name = "qemu-hosts"; expectations = qemuHostExpectations; }) ]) // unitChecks system)
 // lib.genAttrs (lib.unique (map (host: host.system) hosts.darwin)) (system:

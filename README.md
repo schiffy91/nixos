@@ -990,10 +990,10 @@ large settings blocks solely for style.
 
 ### Local passes stand in for CI
 
-A job this machine has already passed for a commit is not run again by GitHub.
-`ci-local` (installed with the dev tools on every host, the Mac included) runs
-the jobs `ci/local.json` names for this platform, with the same commands the
-workflow uses, and records each pass for the exact commit:
+A job this machine has already passed for a commit is not run again by GitHub. The tool is
+[`schiffy91/ci-local`](https://github.com/schiffy91/ci-local), a flake input here, installed with the dev
+tools on every host, the Mac included; its README says what counts as a pass and how the workflow reads
+them. What belongs to this repository:
 
 ```bash
 ci-local run            # every job of this platform; or: ci-local run lint checks
@@ -1001,15 +1001,13 @@ ci-local status         # what is recorded for HEAD
 ci-local push           # put the commit on GitHub, post its passes, then git push
 ```
 
-A pass is recorded only when the tree is clean before and after and `HEAD` has
-not moved. `ci-local push` posts each pass as a commit status
-`local/<platform>/<job>` before the branch moves, so the workflow sees it when
-it starts. The `local` job of `checks.yml` reads those statuses, trusts only the
-ones the repository's owner posted, and skips each step whose status is there.
-A pass on one platform never stands in for another, a later local failure of
-the same job posts a failure in its place, and a job with no pass runs as
-before. `graph` is in the table for the record only: the VM graph is too long
-for a hosted runner, so its status is the only place a commit shows it.
+- `ci/local.json` names the jobs: `lint` (`make lint`), `checks` (`ci/checks.sh`) and `graph`
+  (`make graph-required`). `graph` is in the table for the record only: the VM graph is too long for a
+  hosted runner, so its status is the only place a commit shows it.
+- `checks.yml` calls the tool's reusable workflow, pinned by commit, and skips each job whose status the
+  repository's owner posted.
+- The flake check `ci-local` is the tool's own test, given this repository's table and workflow: every job
+  the table names must be run by the workflow with the same command and skipped on its status.
 
 ## Binary Cache And Releases
 

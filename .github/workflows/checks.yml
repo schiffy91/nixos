@@ -14,18 +14,9 @@ jobs:
   # What the owner's machines already passed for this exact commit (`ci-local`, ci/local.json): a status
   # `local/<platform>/<job>` posted by the repository's owner stands in for the same job here.
   local:
-    runs-on: ubuntu-24.04
+    uses: schiffy91/ci-local/.github/workflows/local-passes.yml@46bebec22a3affc1be02f115640488afdbbcf31a
     permissions:
       statuses: read
-    outputs:
-      passed: ${{ steps.statuses.outputs.passed }}
-    steps:
-      - id: statuses
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          passed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/statuses?per_page=100" | jq -c --arg owner "$GITHUB_REPOSITORY_OWNER" '[.[] | select(.creator.login == $owner and (.context | startswith("local/")))] | group_by(.context) | map(max_by(.created_at) | select(.state == "success") | .context)')
-          printf 'passed=%s\n' "$passed" | tee -a "$GITHUB_OUTPUT"
 
   checks:
     needs: local

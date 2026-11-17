@@ -20,6 +20,26 @@
         "type": "github"
       }
     },
+    "ci-local": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794928483,
+        "narHash": "sha256-hXkBwPj01t2A2bTmWQ87mWBYFWbq/9pR4N9AhSVftKc=",
+        "owner": "schiffy91",
+        "repo": "ci-local",
+        "rev": "46bebec22a3affc1be02f115640488afdbbcf31a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "ci-local",
+        "type": "github"
+      }
+    },
     "core-azahar": {
       "inputs": {
         "nixpkgs": [
@@ -844,6 +864,7 @@
     "root": {
       "inputs": {
         "btrc": "btrc",
+        "ci-local": "ci-local",
         "disko": "disko",
         "home-manager": "home-manager",
         "home-manager-darwin": "home-manager-darwin",

@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, inputs, pkgs, lib, ... }:
 let
   repoPath = "~/Drive/dev/nixos";
   hostName = "mbp21";
@@ -21,7 +21,7 @@ in {
   };
   settings.apps = {
     gaming.enable = false;
-    dev.packages = with pkgs; [ direnv gh git-lfs glfw nodejs podman python313 qemu wgpu-native ] ++ [ (import ../../../pkgs/dev/ci-local/package.nix { inherit pkgs; }) ];
+    dev.packages = with pkgs; [ direnv gh git-lfs glfw nodejs podman python313 qemu wgpu-native ] ++ [ inputs.ci-local.packages.${pkgs.stdenv.hostPlatform.system}.default ];
     utils.packages = with pkgs; [ _1password-cli coreutils imagemagick qpdf ];
     dev.zsh.enable = true;
     dev.shell.aliases = {

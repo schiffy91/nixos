@@ -11,6 +11,7 @@
     lanzaboote = { url = "github:nix-community/lanzaboote"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     jovian = { url = "github:Jovian-Experiments/Jovian-NixOS"; inputs.nixpkgs.follows = "nixpkgs"; };
     btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
+    ci-local = { url = "github:schiffy91/ci-local"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver"; inputs.nixpkgs.follows = "nixpkgs"; };
   };
