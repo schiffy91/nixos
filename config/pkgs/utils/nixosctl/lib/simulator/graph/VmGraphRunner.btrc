@@ -572,6 +572,41 @@ class VmGraphRunner {
         return 0;
     }
 
+    // An install copies what it installs from this host's store, not from the internet: one signing
+    // server for the run, which every guest reaches as 10.0.2.2. The key is made once and kept in .vm.
+    // If the server cannot start, the run says so and its installs fetch as they did before.
+    private BackgroundProcess? localStore(Vector<GraphNode> nodes) {
+        var installs = false;
+        for node in nodes { if (!self.specFor(node).closure.isEmpty()) { installs = true; } }
+        if (!installs || self.args.has("substituter")) { return null; }
+        var directory = PathTools.join(PathTools.join(FileSystem.realPath(self.graph.resolvedWorkspaceRoot()), ".vm"), "store-key");
+        var secret = PathTools.join(directory, "secret");
+        var published = PathTools.join(directory, "public");
+        if (!FileSystem.exists(secret) || !FileSystem.exists(published)) {
+            FileSystem.mkdirp(directory);
+            if (!ChildProcess.run("nix-store", ["--generate-binary-cache-key", "nixos-vm-tests-1", secret, published]).ok()) {
+                NixosLog.error(f"graph {self.graph.name}: no signing key for the local store; installs fetch from the internet");
+                return null;
+            }
+        }
+        int port = 0;
+        for (int candidate = 22600; candidate < 22700 && port == 0; candidate++) { if (!self.occupied(candidate)) { port = candidate; } }
+        var log = PathTools.join(PathTools.join(PathTools.join(FileSystem.realPath(self.graph.resolvedWorkspaceRoot()), ".vm"), "e2e"), "store.log");
+        FileSystem.mkdirp(PathTools.dirname(log));
+        var server = BackgroundProcess.start("sh", ["-c", f"exec nix-serve --listen 127.0.0.1:{port} > {ShellWords.quote(log)} 2>&1 < /dev/null"],
+            environment=[f"NIX_SECRET_KEY_FILE={secret}"], killOnDrop=true);
+        var deadline = MonotonicClock.deadlineAfter(20000);
+        while (server.running() && !self.occupied(port) && MonotonicClock.before(deadline)) { Timer.sleepMillis(100); }
+        if (port == 0 || !server.running() || !self.occupied(port)) {
+            NixosLog.error(f"graph {self.graph.name}: the local store did not start (see {log}); installs fetch from the internet");
+            return null;
+        }
+        self.args.put("substituter", f"http://10.0.2.2:{port}");
+        self.args.put("substituterKey", Path.readAll(published).trim());
+        NixosLog.info(f"graph {self.graph.name}: installs copy from this host's store, served on port {port}");
+        return server;
+    }
+
     public string logPath(VmTestSpec spec, string id) {
         return PathTools.join(PathTools.join(PathTools.dirname(spec.stateRoot), "logs"), f"{id}.log");
     }
@@ -660,6 +695,7 @@ class VmGraphRunner {
         Vector<GraphNode> ordered = [];
         for id in order { ordered.push(self.graph.node(id)); }
         self.evaluateKeys(ordered);
+        var store = self.localStore(ordered);  // lives as long as the run
 
         int jobs = self.jobLimit();
         int budget = self.memoryBudget();

@@ -59,6 +59,7 @@ pkgs.mkShell {
     gnused
     jq
     libarchive
+    nix-serve-ng  # a graph run serves this host's store to its guests
     openssh
     qemuPackage
     ripgrep

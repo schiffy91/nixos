@@ -859,6 +859,12 @@ guest, native on an aarch64 host and emulated on this desktop, so it is not part
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
 namespace where `bwrap` is installed, so nothing a test signals reaches the session that started it.
 
+A node that installs the `VM-TEST` system does not fetch it from the internet. The run starts one
+`nix-serve` on a port from 22600, signing with a key it keeps in `.vm/store-key`; the node builds its
+closure on this host and the guest's `nixos-install` copies it from `http://10.0.2.2:<port>`. The node
+fails if the install copied nothing from there, because that means what was built here is not what the
+guest installed. `.vm/e2e/store.log` is the server's log.
+
 The nodes with constraints worth knowing before you run them:
 
 - `tpm2-enroll` enrolls and wipes a TPM2 LUKS keyslot on an encrypted install.

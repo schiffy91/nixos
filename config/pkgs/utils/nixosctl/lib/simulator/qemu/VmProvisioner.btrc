@@ -3,6 +3,7 @@ import Library.Timer;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Process;
+import Library.Strings;
 import ../../core/NixosLog.btrc;
 import ../Spec.btrc;
 import ./SshClient.btrc;
@@ -231,11 +232,38 @@ class VmProvisioner {
         return true;
     }
 
+    // What the guest is about to install, built here first, so the guest copies it from this host's
+    // store. A node that names no closure leaves the guest to fetch as before.
+    private bool closureOnHost() {
+        var closure = self.spec.args.getOrDefault("closure", "");
+        if (!closure.startsWith("/nix/store/")) { return true; }
+        NixosLog.info(f"e2e {self.spec.name}: building what the guest installs, on this host");
+        var built = ChildProcess.run("nix-store", ["--realise", closure]);
+        if (!built.ok()) { Console.error(f"The closure {closure} does not build on this host:\n{built.stderr()}"); }
+        return built.ok();
+    }
+
+    // An install given a local store must have used it: if it copied nothing from there, what was built
+    // on this host is not what the guest installed, and every run would fetch it all again unnoticed.
+    private bool copiedFrom(string substituter) {
+        var counted = self.remote.sshWithTimeout(f"grep -c -F {ShellWords.quote(f\"from '{substituter}'\")} /tmp/nixos-install.log || true", false, 30);
+        int copied = counted.ok() ? Strings.toInt(counted.stdout().trim()) : 0;
+        NixosLog.info(f"e2e {self.spec.name}: the install copied {copied} store paths from this host");
+        if (copied == 0) { Console.error(f"The install copied nothing from the local store at {substituter}"); self.printInstallLog(); }
+        return copied > 0;
+    }
+
     public bool installNixosGuest() {
         var diskTarget = "VM-TEST-Disk-Operation";
         var bootTargetName = self.spec.args.getOrDefault("bootTarget", "Standard-Boot");
         var secureBootTarget = bootTargetName.equals("Secure-Boot");
         var bootTarget = "VM-TEST-" + bootTargetName;
+        var substituter = self.spec.args.getOrDefault("substituter", "");
+        var localStore = "";  // the options that add this host's store to where nix fetches from
+        if (!substituter.isEmpty() && self.spec.args.getOrDefault("closure", "").startsWith("/nix/store/")) {
+            if (!self.closureOnHost()) { return false; }
+            localStore = f" --option extra-substituters {ShellWords.quote(substituter)} --option extra-trusted-public-keys {ShellWords.quote(self.spec.args.getOrDefault(\"substituterKey\", \"\"))}";
+        }
         var nix = "nix --extra-experimental-features nix-command --extra-experimental-features flakes";
         var disko = f"{nix} run --inputs-from /etc/nixos github:nix-community/disko -- --show-trace --flake /etc/nixos#{diskTarget} --mode destroy,format,mount --root-mountpoint /mnt --yes-wipe-all-disks";
         var install = self.shellCommands([
@@ -245,7 +273,7 @@ class VmProvisioner {
             "install -d -o root -g root -m 700 /mnt/var/lib/nixos/credentials",
             "install -o root -g root -m 600 /var/lib/nixos/credentials/password-hash /mnt/var/lib/nixos/credentials/password-hash",
             "mkdir -p /mnt/nix/tmp",
-            f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0"
+            f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0{localStore}"
         ]);
         var snapshots = "nixos-enter --root /mnt --command "
             + ShellWords.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN");
@@ -293,7 +321,8 @@ class VmProvisioner {
         if (!self.launchInstall(launch)) {
             return false;
         }
-        return self.waitForInstallStatus(timeoutSeconds);
+        if (!self.waitForInstallStatus(timeoutSeconds)) { return false; }
+        return localStore.isEmpty() || self.copiedFrom(substituter);
     }
 
     public ExecResult sshWithRetries(string command, int timeoutSeconds, int attempts) {
