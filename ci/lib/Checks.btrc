@@ -6,7 +6,15 @@ import ./Lsp.btrc;
 class Checks {
     public Repository repository;
     private Vector<string> failures = [];
-    public Checks(Repository repository) { self.repository = repository; }
+    private Vector<string> timings = [];
+    private string phaseName = "";
+    private long long phaseStarted = 0LL;
+    private string program;
+    public Checks(Repository repository) {
+        self.repository = repository;
+        var invoked = Platform.programName();  // children of lint are this same program
+        self.program = invoked.contains("/") ? FileSystem.realPath(invoked) : invoked;
+    }
 
     class bool isIdentChar(char ch) {
         return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
@@ -267,30 +275,76 @@ class Checks {
         }
         return result.ok();
     }
+    // Ends the phase that was running and starts the next; lint closes with how long each took.
+    private void phase(string name) {
+        var now = MonotonicClock.milliseconds();
+        if (!self.phaseName.isEmpty()) { self.timings.push(f"{(now - self.phaseStarted + 500LL) / 1000LL}s {self.phaseName}"); }
+        self.phaseName = name;
+        self.phaseStarted = now;
+    }
+    // How many children run at once: half the processors, as each is one busy thread and lint runs beside other work.
+    private int workers() {
+        int processors = 0;
+        if (FileSystem.exists("/proc/cpuinfo")) {
+            for line in Strings.split(Path.readAll("/proc/cpuinfo"), "\n") {
+                if (line.startsWith("processor")) { processors++; }
+            }
+        }
+        return processors < 8 ? 4 : processors / 2;
+    }
+    class string words(Vector<string> command) {
+        Vector<string> quoted = [];
+        for word in command { quoted.push(ShellWords.quote(word)); }
+        return quoted.join(" ");
+    }
+    // Runs every shell line, `limit` at a time, and returns the indexes of those that did not exit 0. A line
+    // says where its own output goes.
+    private Vector<int> together(Vector<string> lines, int limit) {
+        Vector<int> failed = [];
+        Vector<BackgroundProcess> running = [];
+        Vector<int> owners = [];
+        int next = 0;
+        while (next < lines.length || !running.isEmpty()) {
+            while (next < lines.length && running.length < limit) {
+                running.push(BackgroundProcess.start("sh", ["-c", lines.get(next)], cwd=self.repository.root, killOnDrop=true));
+                owners.push(next);
+                next++;
+            }
+            Vector<BackgroundProcess> still = [];
+            Vector<int> stillOwners = [];
+            for (int index = 0; index < running.length; index++) {
+                if (running.get(index).running()) { still.push(running.get(index)); stillOwners.push(owners.get(index)); continue; }
+                if (running.get(index).code() != 0) { failed.push(owners.get(index)); }
+            }
+            if (still.length == running.length) { Timer.sleepMillis(20); }
+            running = still;
+            owners = stillOwners;
+        }
+        return failed;
+    }
+    private string head(string log) {
+        var said = FileSystem.exists(log) ? Path.readAll(log) : "";
+        return said.length > 65536 ? said.substring(0, 65536) : said;
+    }
+    // One child for each file. What a child prints is dropped (the compiler prints its whole IR); what it
+    // says on stderr is shown when it fails.
     public void files(string name, string executable, Vector<string> arguments, Vector<string> paths) {
-        print(f"\n{name}: {paths.len} files");
-        var logs = PathTools.join(self.repository.root, "build/lint"); FileSystem.mkdirp(logs);
-        // Four independent compiler processes retain the previous audit's
-        // bounded concurrency. Drain output as bytes rather than buffering IR.
-        for (int start = 0; start < paths.len; start += 4) {
-            Vector<PipeProcess> children = []; Vector<string> errors = [];
-            for (int index = start; index < start + 4 && index < paths.len; index++) {
-                var command = arguments.copy(); command.push(PathTools.join(self.repository.root, paths.get(index)));
-                var log = PathTools.join(logs, name.replace(" ", "-") + f"-{index}.log");
-                var child = PipeProcess(executable, command, log); child.closeInput(); children.push(child); errors.push(log);
-            }
-            for (int index = 0; index < children.len; index++) {
-                var child = children.get(index); var output = Bytes(); var deadline = MonotonicClock.deadlineAfter(300000);
-                while (true) {
-                    var bytes = child.read(deadline); if (bytes == null) { break; }
-                    int remaining = 65536 - output.length();
-                    if (remaining > 0) { output.appendBytes(bytes.slice(0, bytes.length() < remaining ? bytes.length() : remaining)); }
-                }
-                if (child.wait(deadline) != 0) {
-                    var path = paths.get(start + index); self.failures.push(path);
-                    print(path + ":\n" + output.toStringLossy() + Path.readAll(errors.get(index)));
-                } else { FileSystem.removeIfExists(errors.get(index)); }
-            }
+        print(f"\n{name}: {paths.length} files");
+        var directory = PathTools.join(self.repository.root, "build/lint"); FileSystem.mkdirp(directory);
+        Vector<string> lines = [];
+        Vector<string> logs = [];
+        for (int index = 0; index < paths.length; index++) {
+            Vector<string> command = ["timeout", "300", executable];
+            for argument in arguments { command.push(argument); }
+            command.push(PathTools.join(self.repository.root, paths.get(index)));
+            var log = PathTools.join(directory, name.replace(" ", "-") + f"-{index}.log");
+            lines.push(f"exec {Checks.words(command)} > /dev/null 2> {ShellWords.quote(log)} < /dev/null");
+            logs.push(log);
+        }
+        var failed = self.together(lines, self.workers());
+        for (int index = 0; index < paths.length; index++) {
+            if (failed.contains(index)) { self.failures.push(paths.get(index)); print(paths.get(index) + ":\n" + self.head(logs.get(index))); }
+            else { FileSystem.removeIfExists(logs.get(index)); }
         }
     }
     public void record(JSONValue diagnostics, string path, JSONValue errors, JSONValue warnings) {
@@ -300,11 +354,15 @@ class Checks {
             else { warnings.push(diagnostic); }
         }
     }
-    public bool lsp(string server, string language, Vector<string> paths) {
+    // `label` names the server log and the report; `known` are the files some run opens, so a diagnostic
+    // the server volunteers for one of them is left to the run that opens it.
+    public bool lsp(string server, string language, Vector<string> paths, string label = "", Vector<string>? known = null) {
+        if (label.isEmpty()) { label = language; }
         FileSystem.mkdirp(PathTools.join(self.repository.root, "build/lint"));
-        var session = LspSession(server, language, self.repository.root, PathTools.join(self.repository.root, f"build/lint/{language}-server.log"));
+        var session = LspSession(server, language, self.repository.root, PathTools.join(self.repository.root, f"build/lint/{label}-server.log"));
         var errors = JSONValue.makeArray(); var warnings = JSONValue.makeArray();
         Vector<string> uris = [];
+        if (known != null) { for path in known { uris.push(LspSession.uri(PathTools.join(self.repository.root, path))); } }
         int count = 0;
         for path in paths {
             var absolute = PathTools.join(self.repository.root, path);
@@ -316,11 +374,39 @@ class Checks {
         session.finish();
         for uri in session.workspace.keys() { if (!uris.contains(uri)) { self.record(session.workspace.get(uri), uri, errors, warnings); } }
         var report = JSONValue.makeObject(); report.set("errors", errors); report.set("warnings", warnings);
-        Path.writeAll(PathTools.join(self.repository.root, f"build/lint/{language}-diagnostics.json"), report.document());
+        Path.writeAll(PathTools.join(self.repository.root, f"build/lint/{label}-diagnostics.json"), report.document());
         print(f"{language}: {paths.len} files, {errors.size()} errors, {warnings.size()} other diagnostics");
         for error in errors.elements() { print(error.get("path").asString() + ": " + error.get("message").asString()); }
         if (errors.size() > 0) { self.failures.push(f"{language} workspace diagnostics"); }
         return errors.size() == 0;
+    }
+    // Every `count`th file, starting at `shard`: one server's share when the files are dealt out.
+    public bool lspShard(string server, string language, int shard, int count) {
+        self.repository.discover();
+        var all = self.repository.suffix("." + language);
+        Vector<string> mine = [];
+        for (int index = shard; index < all.length; index += count) { mine.push(all.get(index)); }
+        return self.lsp(server, language, mine, f"{language}-{shard}", all);
+    }
+    // A language server answers one file at a time, so the files are dealt out to several servers, each
+    // driven by a child of this program. Each child's report is build/lint/<language>-<shard>-diagnostics.json.
+    public bool lspTogether(string server, string language, int shards) {
+        print(f"\n{language} workspace diagnostics, {shards} servers");
+        var directory = PathTools.join(self.repository.root, "build/lint"); FileSystem.mkdirp(directory);
+        Vector<string> lines = [];
+        Vector<string> logs = [];
+        for (int shard = 0; shard < shards; shard++) {
+            var log = PathTools.join(directory, f"{language}-shard-{shard}.log");
+            lines.push(f"exec {Checks.words([self.program, \"lsp-shard\", server, language, f\"{shard}\", f\"{shards}\"])} > {ShellWords.quote(log)} 2>&1 < /dev/null");
+            logs.push(log);
+        }
+        var failed = self.together(lines, shards);
+        for (int shard = 0; shard < shards; shard++) {
+            var said = Strings.split(Path.readAll(logs.get(shard)).trim(), "\n");
+            if (failed.contains(shard)) { print(said.join("\n")); } else { print(said.get(said.length - 1)); }  // a passing server's last line is its count
+        }
+        if (!failed.isEmpty()) { self.failures.push(f"{language} workspace diagnostics"); }
+        return failed.isEmpty();
     }
     public bool builtinRegression(string server) {
         FileSystem.mkdirp(PathTools.join(self.repository.root, "build/lint"));
@@ -338,9 +424,12 @@ class Checks {
         self.repository.discover();
         var nix = self.repository.suffix(".nix"); var btrc = self.repository.suffix(".btrc");
         var shell = self.repository.shellScripts();
+        self.phase("source boundaries and Nix parser");
         self.btrcBoundaries(btrc);
         self.files("Nix parser", "nix-instantiate", ["--parse"], nix);
+        self.phase("BTRC compiler, one file at a time");
         self.files("BTRC compiler", "btrcpy", ["--strict-imports", "--emit-ir"], btrc);
+        self.phase("other parsers and linters");
         self.files("JavaScript parser", "node", ["--check"], self.repository.suffix(".js"));
         self.files("Lua compiler", "luac", ["-p"], self.repository.suffix(".lua"));
         var shellLint = ["--severity=error", "--shell=bash"]; for path in shell { shellLint.push(path); }
@@ -352,18 +441,16 @@ class Checks {
         self.files("TOML parser", "taplo", ["check"], self.repository.suffix(".toml"));
         self.files("YAML parser", "yq", ["eval", "."], self.repository.suffix(".yaml"));
         self.files("YAML parser", "yq", ["eval", "."], self.repository.suffix(".yml"));
-        self.lsp("nixd", "nix", nix); self.builtinRegression("nixd"); self.lsp("btrc-lsp", "btrc", btrc);
+        self.phase("Nix language server");
+        self.lsp("nixd", "nix", nix); self.builtinRegression("nixd");
+        self.phase("BTRC language server");
+        self.lspTogether("btrc-lsp", "btrc", self.workers() / 2);
         if (full) {
-            self.run("Native programs and unit suites", "make", ["-j4", "build", "unit"]);
-            self.run("CI protocol and publisher contracts", "nix-build", ["tests/ci", "--no-out-link"]);
-            self.run("Key archive and recovery contracts", "nix-build", ["tests/secure-boot/unit.nix", "tests/recovery/unit.nix", "--no-out-link"]);
-            self.run("Recovery artifact installation", "nix-build", ["tests/recovery/artifacts", "--no-out-link"]);
-            self.run("Sleep controller contracts", "nix-build", ["tests/sleep-lock/unit", "--no-out-link"]);
-            self.run("Sleep authentication and display helpers", "nix-build", ["tests/sleep-lock/helpers", "--no-out-link"]);
-            self.run("Unlock header and memory contracts", "nix-build", ["tests/opportunistic-unlock/unit", "--no-out-link"]);
-            self.run("Trusted connection rules", "nix-build", ["tests/networking/policy", "--no-out-link"]);
-            self.run("Gaming programs and unit suites", "nix-build", ["tests/gaming", "--no-out-link"]);
-            self.run("Native compilation", "nix-build", ["ci/native.nix", "--no-out-link"]);
+            self.phase("native programs and unit suites (make)");
+            self.run("Native programs and unit suites", "make", ["build", "unit"]);
+            self.phase("contract and native derivations (nix-build)");
+            // The unit suites that are flake checks are built by ci/checks.sh, not here.
+            self.run("CI contracts, sleep helpers, gaming suites and native compilation", "nix-build", ["tests/ci", "tests/sleep-lock/helpers", "tests/gaming", "ci/native.nix", "--no-out-link"]);
             var coverage = ChildProcess.run("nix", ["eval", "--json", "--impure", "--expr", "(import ./ci/native.nix {}).coveredSources"], cwd=self.repository.root);
             var covered = JSONValue.parse(coverage.stdout());
             Vector<string> actual = self.repository.suffix(".c"); for path in self.repository.suffix(".h") { actual.push(path); }
@@ -372,8 +459,29 @@ class Checks {
             var outputs = ChildProcess.run("nix", ["eval", "--json", "--impure", "--expr", "import ./ci/outputs.nix (builtins.getFlake (\"git+file://\" + toString ./. + \"?shallow=1\"))"], cwd=self.repository.root);  // the git fetcher: a path copy trips on a socket under .git
             var attributes = JSONValue.parse(outputs.stdout());
             if (!outputs.ok() || !attributes.isArray()) { self.failures.push("Flake outputs"); print("Cannot list flake outputs:\n" + outputs.stderr()); }
-            else { for attribute in attributes.elements() { self.run("Flake output " + attribute.asString(), "nix", ["eval", ".#" + attribute.asString()]); } }  // one evaluator each bounds memory
+            else {  // one evaluator each bounds memory, four at a time
+                self.phase("flake outputs");
+                var directory = PathTools.join(self.repository.root, "build/lint");
+                Vector<string> names = [];
+                Vector<string> lines = [];
+                Vector<string> logs = [];
+                for attribute in attributes.elements() {
+                    var log = PathTools.join(directory, f"flake-output-{names.length}.log");
+                    names.push(attribute.asString());
+                    lines.push(f"exec {Checks.words(["nix", "eval", ".#" + attribute.asString()])} > /dev/null 2> {ShellWords.quote(log)} < /dev/null");
+                    logs.push(log);
+                }
+                print(f"\nFlake outputs: {names.length} evaluations");
+                var failed = self.together(lines, 4);
+                for (int index = 0; index < names.length; index++) {
+                    if (failed.contains(index)) { self.failures.push("Flake output " + names.get(index)); print(names.get(index) + ":\n" + self.head(logs.get(index))); }
+                    else { FileSystem.removeIfExists(logs.get(index)); }
+                }
+            }
         }
+        self.phase("");
+        print("\nTime in each phase:");
+        for timing in self.timings { print("  " + timing); }
         if (!self.failures.isEmpty()) { print("Failed checks: " + self.failures.join(", ")); return 1; }
         print("All compiler and workspace error checks passed."); return 0;
     }

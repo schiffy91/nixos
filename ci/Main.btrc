@@ -19,6 +19,10 @@ int main(int argc, char** argv) {
             if (paths.isEmpty()) { repository.discover(); paths = repository.suffix(language.equals("nix") ? ".nix" : ".btrc"); }
             return checks.lsp(server, language, paths) ? 0 : 1;
         }
+        if (args.command() == "lsp-shard") {  // one server's share of a language's files; lint starts these
+            var usage = "lsp-shard requires SERVER LANGUAGE SHARD COUNT";
+            return checks.lspShard(args.require(1, usage), args.require(2, usage), Strings.toInt(args.require(3, usage)), Strings.toInt(args.require(4, usage))) ? 0 : 1;
+        }
         if (args.command().equals("nix-builtins")) { return checks.builtinRegression(args.count() > 1 ? args.get(1) : "nixd") ? 0 : 1; }
         print("Usage: repo-tools lint [--sources-only] | lsp SERVER LANGUAGE [FILE...] | nix-builtins [SERVER] | publish [OPTIONS]");
         return args.command().equals("--help") ? 0 : 1;

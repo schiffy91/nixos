@@ -48,7 +48,11 @@ make gaming
 `make lint` uses the pinned tools in `ci/tools.nix`. It checks every owned Nix
 and BTRC source with the language parser/compiler and the actual language servers,
 then runs ShellCheck, JavaScript/Lua parsing, workflow
-and manifest checks, native builds/unit suites, and flake evaluation. The native
+and manifest checks, native builds/unit suites, and flake evaluation. Each file's
+compiler runs as its own child, half the processors at a time; the BTRC language
+server's files are dealt out to several servers; and the flake outputs are
+evaluated four at a time, all but this system's checks, which `ci/checks.sh`
+builds. It ends with the time each phase took. The native
 C check includes Linux helpers, kernel modules and Windows fixtures; its source
 inventory must match the repository. Vendored Proton sources and generated build
 outputs are outside this inventory. Error diagnostics fail the command; advisory
