@@ -28,6 +28,7 @@ class Guest {
     private Channel? monitor = null;
     private bool connected = false;
     private int sequence = 0;
+    public int patience = 90;  // how long waitUntil waits, in seconds, when a call does not say
 
     public Guest(string name, string executable, string directory, string shared, Vector<string> environment, bool headless = true) {
         self._name = name;
@@ -178,8 +179,8 @@ class Guest {
         return result.output;
     }
 
-    public string waitUntil(string command, int timeoutSeconds = 90) {
-        var deadline = MonotonicClock.deadlineAfter(timeoutSeconds * 1000);
+    public string waitUntil(string command, int timeoutSeconds = 0) {
+        var deadline = MonotonicClock.deadlineAfter((timeoutSeconds > 0 ? timeoutSeconds : self.patience) * 1000);
         var output = "";
         while (MonotonicClock.before(deadline)) {
             var result = self.execute(command, 10);

@@ -1091,6 +1091,18 @@
       "after": [
         "drive-writes"
       ],
+      "args": {
+        "name": "drive-convergence-seeds",
+        "seedArguments": " --arg seeds '[ \"20261113\" \"7\" \"424242\" ]'",
+        "state": "drive-convergence-seeds"
+      },
+      "id": "drive-convergence-seeds",
+      "spec": "drive/convergence/test.json"
+    },
+    {
+      "after": [
+        "drive-writes"
+      ],
       "id": "drive-pinning",
       "spec": "drive/pinning/test.json"
     },

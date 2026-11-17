@@ -8,9 +8,11 @@ class ConvergenceScenario {
     private Guest machine;
     private DriveFixture one;
     private DriveFixture two;
+    private Vector<string> seeds;
 
-    public ConvergenceScenario(Guest machine) {
+    public ConvergenceScenario(Guest machine, Vector<string> seeds) {
         self.machine = machine;
+        self.seeds = seeds;
         self.one = DriveFixture(machine);
         self.two = DriveFixture(machine);
         self.two.store = "/var/lib/drive-test/second/store";
@@ -33,7 +35,7 @@ class ConvergenceScenario {
         self.two.startEngine(options.replace("ONE", "TWO"));
         self.two.startDoor();
 
-        for seed in ["20261113", "7", "424242"] {
+        for seed in self.seeds {
             print(f"Two clients change the same Drive at random, seed {seed}");
             self.machine.succeed(f"python3 /etc/drive-test/operations.py {seed} 120 {self.one.mount} {self.two.mount} /tmp/expected", 600);
             self.agree();
@@ -72,7 +74,9 @@ class ConvergenceScenario {
 int main(int argc, char** argv) {
     try {
         var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
-        ConvergenceScenario(lab.guest("machine")).check();
+        Vector<string> seeds = [];
+        for seed in lab.settings().get("seeds").elements() { seeds.push(seed.asString()); }
+        ConvergenceScenario(lab.guest("machine"), seeds).check();
         lab.close();
         print("PASS: two clients converge and lose nothing");
         return 0;

@@ -15,5 +15,6 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
     virtualisation.memorySize = 2048;
   };
   scenario = ./Main.btrc;
+  settings = pkgs.lib.optionalAttrs (mutation != "") { patienceSeconds = 30; };  # a rule cut out shows as a wait that never ends
   extraFiles = [ ../Fixture.btrc ];
 }

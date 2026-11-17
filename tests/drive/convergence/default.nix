@@ -1,5 +1,6 @@
 { inputs ? (builtins.getFlake "git+file://${toString ../../..}").inputs
 , system ? builtins.currentSystem
+, seeds ? [ "20261113" ]  # each is one random run of 120 operations; the nightly node gives three
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
@@ -14,5 +15,6 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
     virtualisation.memorySize = 2048;
   };
   scenario = ./Main.btrc;
+  settings = { inherit seeds; };
   extraFiles = [ ../Fixture.btrc ];
 }

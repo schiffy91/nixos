@@ -2,7 +2,10 @@
   "name": "drive-convergence",
   "state": "drive-convergence",
   "stateMaterial": "drive-convergence:{{arch}}:drv={{derivation}}",
-  "derivation": "tests/drive/convergence",
+  "derivation": "tests/drive/convergence{{seedArguments}}",
+  "args": {
+    "seedArguments": ""
+  },
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
     {

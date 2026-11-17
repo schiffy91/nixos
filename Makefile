@@ -6,7 +6,7 @@ endif
 # Everything not named below can be built at once. A graph run holds its workspace, so the targets
 # that start one after another keep their order.
 ifeq (,$(filter -j%,$(MAKEFLAGS)))
-MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4) --output-sync=target
+MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4)
 endif
 .NOTPARALLEL: check test quick smoke host-smoke harness
 CC ?= cc
@@ -79,7 +79,7 @@ made_from = $(or $(DEPS_$(1)),$(SOURCES))
 TESTS_TARGETS := installer-download download install-system \
 	immutability-reset immutability-key-encoding installer-ssh password-change \
 	tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote \
-	graph-list graph-status graph-coverage graph-gc graph-installer-ssh chain clean-vms
+	graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-nightly graph-installer-ssh chain clean-vms
 
 .PHONY: all help dirs transpile build-stdlib build unit run-boot-evidence-test run-shell-tests quick smoke host-smoke \
 	check test gaming hdr-screencast install iso iso-write graph-required \

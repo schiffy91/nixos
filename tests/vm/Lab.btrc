@@ -35,9 +35,12 @@ class Lab {
         }
     }
 
+    // A test that is expected to fail by waiting in vain says how long that wait is worth.
     public Guest guest(string name) {
         if (!self.guests.contains(name)) { throw f"Unknown guest: {name}"; }
-        return self.guests.get(name);
+        var guest = self.guests.get(name);
+        if (self.settings().has("patienceSeconds")) { guest.patience = self.settings().get("patienceSeconds").asInt(); }
+        return guest;
     }
     public void startAll() { for name in self.guests.keys() { self.guests.get(name).start(); } }
     public string artifact(string name) { return PathTools.join(self.artifacts, name); }
