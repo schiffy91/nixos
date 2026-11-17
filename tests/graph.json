@@ -981,9 +981,57 @@
       "id": "gaming-runtime",
       "spec": "gaming/runtime/test.json",
       "after": []
+    },
+    {
+      "after": [],
+      "args": {
+        "bootTarget": "Standard-Boot",
+        "host": "FRACTAL-NORTH",
+        "name": "host-build-FRACTAL-NORTH-Standard-Boot",
+        "state": "host-build-FRACTAL-NORTH-Standard-Boot"
+      },
+      "id": "host-build-FRACTAL-NORTH-Standard-Boot",
+      "spec": "hosts-build/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "bootTarget": "Secure-Boot",
+        "host": "FRACTAL-NORTH",
+        "name": "host-build-FRACTAL-NORTH-Secure-Boot",
+        "state": "host-build-FRACTAL-NORTH-Secure-Boot"
+      },
+      "id": "host-build-FRACTAL-NORTH-Secure-Boot",
+      "spec": "hosts-build/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "bootTarget": "Standard-Boot",
+        "host": "STEAM-DECK-OLED",
+        "name": "host-build-STEAM-DECK-OLED-Standard-Boot",
+        "state": "host-build-STEAM-DECK-OLED-Standard-Boot"
+      },
+      "id": "host-build-STEAM-DECK-OLED-Standard-Boot",
+      "spec": "hosts-build/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "bootTarget": "Secure-Boot",
+        "host": "STEAM-DECK-OLED",
+        "name": "host-build-STEAM-DECK-OLED-Secure-Boot",
+        "state": "host-build-STEAM-DECK-OLED-Secure-Boot"
+      },
+      "id": "host-build-STEAM-DECK-OLED-Secure-Boot",
+      "spec": "hosts-build/test.json"
     }
   ],
   "required": [
+    "host-build-FRACTAL-NORTH-Standard-Boot",
+    "host-build-FRACTAL-NORTH-Secure-Boot",
+    "host-build-STEAM-DECK-OLED-Standard-Boot",
+    "host-build-STEAM-DECK-OLED-Secure-Boot",
     "install-reset",
     "opportunistic-unlock",
     "secure-boot-backup",

@@ -1,0 +1,21 @@
+{
+  "name": "host-build",
+  "state": "host-build",
+  "stateMaterial": "host-build:{{host}}:{{bootTarget}}:drv={{derivation}}",
+  "derivation": ".#nixosConfigurations.{{host}}-{{bootTarget}}.config.system.build.toplevel",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "args": {
+    "host": "",
+    "bootTarget": "Secure-Boot"
+  },
+  "operations": [
+    {
+      "op": "build-derivation",
+      "command": "--cores 8 --max-jobs 2",
+      "timeout": 7200
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}
