@@ -72,10 +72,15 @@ class Screen {
             var pixel = image.pixel(x, y); if (pixel.blue > 120 && pixel.blue > 2 * pixel.red && pixel.green > 60) { border++; }
         } } return border > 50;
     }
-    class void changed(Image before, Image after, bool expected, string description, int bottomPercent = 30) {
+    // Whether the entry area of two screenshots of one size differs.
+    class bool differs(Image before, Image after, int bottomPercent = 30) {
         Check.that(before.width == after.width && before.height == after.height, "comparable screenshot dimensions");
         var left = before.width / 4; var top = before.height / 10; var right = before.width * 3 / 4; var bottom = before.height * bottomPercent / 100;
         var difference = before.crop(left, top, right - left, bottom - top).diff(after.crop(left, top, right - left, bottom - top));
-        Check.that(difference.comparable && (difference.changedPixels > 0) == expected, description);
+        Check.that(difference.comparable, "comparable screenshots");
+        return difference.changedPixels > 0;
+    }
+    class void changed(Image before, Image after, bool expected, string description, int bottomPercent = 30) {
+        Check.that(Screen.differs(before, after, bottomPercent) == expected, description);
     }
 }

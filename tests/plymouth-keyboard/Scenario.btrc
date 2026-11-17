@@ -27,6 +27,17 @@ class PlymouthScenario {
         if (self.rotated || self.scale != 1) { Check.that(ImageIO.savePpm(logical, self.lab.artifact(name + "-logical.ppm")), "save logical frame"); }
         return logical;
     }
+    // What a touch or a key draws arrives a moment after it, and later on a busy machine: look until the
+    // entry area is as expected, for up to twenty seconds, and only then judge it.
+    private Image settles(Image before, string name, bool changed, string description, bool secondary = false, int bottomPercent = 30) {
+        var image = self.screenshot(name, secondary);
+        for (int attempt = 0; attempt < 80 && Screen.differs(before, image, bottomPercent) != changed; attempt++) {
+            Timer.sleepMillis(250);
+            image = self.screenshot(name, secondary);
+        }
+        Screen.changed(before, image, changed, description, bottomPercent);
+        return image;
+    }
     private Image waitKeyboard(bool visible, string name, bool secondary = false) {
         print(f"Observe keyboard: {name}");
         var attempts = secondary ? 240 : 120;  // a minute: on a busy machine the keyboard has taken longer than ten seconds to be drawn
@@ -66,7 +77,7 @@ class PlymouthScenario {
         self.mapTouchscreen(secondary); self.waitKeyboard(false, "primary-without-touch"); var externalEmpty = self.waitKeyboard(true, "external-with-touch", true); self.geometry = KeyboardGeometry(externalEmpty.width, externalEmpty.height);
         self.mapTouchscreen(connector, second=true); self.waitKeyboard(true, "two-touchscreens-primary"); self.waitKeyboard(true, "two-touchscreens-external", true);
         self.command("down " + self.keyPoint("AC01").input(self.rotated)); self.command("down2 " + TouchPoint(.25, .7).input(self.rotated)); self.command("up2");
-        Screen.changed(externalEmpty, self.screenshot("other-device-release-ignored", true), false, "second device cannot release first touch"); self.command("up"); Screen.changed(externalEmpty, self.screenshot("correct-device-release-types", true), true, "owning device releases selection"); self.key("BKSP");
+        self.settles(externalEmpty, "other-device-release-ignored", false, "second device cannot release first touch", true); self.command("up"); self.settles(externalEmpty, "correct-device-release-types", true, "owning device releases selection", true); self.key("BKSP");
         self.command("touch2-off"); self.waitKeyboard(false, "primary-touchscreen-detached"); self.waitKeyboard(true, "external-touchscreen-still-active", true);
         self.command("down " + self.keyPoint("AC01").input(self.rotated)); self.detachMonitor(); self.command("up"); self.waitKeyboard(false, "mapped-monitor-removed"); machine.succeed("plymouth --ping");
         secondary = self.attachMonitor(connector); self.mapTouchscreen(secondary); self.waitKeyboard(true, "mapped-monitor-returned", true);
@@ -75,7 +86,7 @@ class PlymouthScenario {
         var card = Strings.split(connector, "-").get(0); var device = machine.succeed("basename $(readlink -f /sys/class/drm/" + card + "/device)").trim(); self.key("AC01"); var partial = self.screenshot("partial-entry-before-headless-interval");
         self.command("down " + self.keyPoint("AC02").input(self.rotated)); machine.succeed("echo " + ShellWords.quote(device) + " > /sys/bus/pci/drivers/virtio-pci/unbind"); machine.waitUntil("test ! -e /sys/class/drm/" + connector, 20); self.command("up"); machine.succeed("plymouth --ping");
         machine.succeed("echo " + ShellWords.quote(device) + " > /sys/bus/pci/drivers/virtio-pci/bind"); machine.waitUntil("set -- /sys/class/drm/card*-Virtual-*; test -e \"$1\"", 20);
-        connector = machine.succeed("for output in /sys/class/drm/card*-Virtual-*; do basename \"$output\"; done").trim(); Check.that(!connector.contains("\n"), "single restored connector"); self.mapTouchscreen(connector); returned = self.waitKeyboard(true, "display-returned-after-headless-interval"); Screen.changed(partial, returned, false, "headless interval preserves entry and cancels held touch"); self.key("BKSP"); Screen.changed(empty, self.screenshot("headless-entry-correction"), false, "UTF-8 entry correction after headless interval");
+        connector = machine.succeed("for output in /sys/class/drm/card*-Virtual-*; do basename \"$output\"; done").trim(); Check.that(!connector.contains("\n"), "single restored connector"); self.mapTouchscreen(connector); returned = self.waitKeyboard(true, "display-returned-after-headless-interval"); Screen.changed(partial, returned, false, "headless interval preserves entry and cancels held touch"); self.key("BKSP"); self.settles(empty, "headless-entry-correction", false, "UTF-8 entry correction after headless interval");
     }
     public void run() {
         var machine = self.machine; var passphrase = self.layout.equals("us") ? "aB3! z" : (self.layout.equals("de") ? "äÖz@ €" : "éAê €");
@@ -86,11 +97,11 @@ class PlymouthScenario {
         if (!self.rotated) { self.waitKeyboard(true, "touchscreen-present-at-boot"); self.command("touch-off"); }
         self.waitKeyboard(false, "no-touchscreen"); self.command("touch-on"); if (self.rotated) { self.waitKeyboard(false, "physical-keyboard-attached"); self.command("keyboard-off"); }
         var empty = self.waitKeyboard(true, "automatic-keyboard"); self.geometry = KeyboardGeometry(empty.width, empty.height);
-        self.command("keyboard-on"); var hidden = self.waitKeyboard(false, "keyboard-hotplug-hidden"); self.command("key 30"); Screen.changed(hidden, self.screenshot("physical-keyboard-typed"), true, "physical keyboard typed", 46); self.command("key 14"); Screen.changed(hidden, self.screenshot("physical-keyboard-cleared"), false, "physical backspace clears", 46);
+        self.command("keyboard-on"); var hidden = self.waitKeyboard(false, "keyboard-hotplug-hidden"); self.command("key 30"); self.settles(hidden, "physical-keyboard-typed", true, "physical keyboard typed", false, 46); self.command("key 14"); self.settles(hidden, "physical-keyboard-cleared", false, "physical backspace clears", false, 46);
         var physicalTraces = machine.succeed("cat /run/plymouth-test.log").count("Processing input"); Check.that(physicalTraces > 0, "key-event debug is active");
-        self.key("AC01"); self.waitKeyboard(true, "tap-reveals-keyboard"); self.touch(TouchPoint(.5, .3)); self.command("down " + TouchPoint(.18, .73).input(self.rotated)); self.command("move " + TouchPoint(.5, .3).input(self.rotated)); self.command("up"); Screen.changed(empty, self.screenshot("reveal-does-not-type"), false, "reveal and cancelled drag do not type");
+        self.key("AC01"); self.waitKeyboard(true, "tap-reveals-keyboard"); self.touch(TouchPoint(.5, .3)); self.command("down " + TouchPoint(.18, .73).input(self.rotated)); self.command("move " + TouchPoint(.5, .3).input(self.rotated)); self.command("up"); self.settles(empty, "reveal-does-not-type", false, "reveal and cancelled drag do not type");
         self.command("touch-off"); self.waitKeyboard(false, "touchscreen-removed"); self.command("touch-on"); self.waitKeyboard(true, "touchscreen-returned");
-        self.command("down " + self.keyPoint("AC01").input(self.rotated)); self.command("down " + self.keyPoint("AC02").input(self.rotated) + " 1"); self.command("up 0 0 1"); Screen.changed(empty, self.screenshot("other-finger-release-ignored"), false, "second finger cannot release selection"); self.command("up"); Screen.changed(empty, self.screenshot("first-finger-release-types"), true, "first finger releases selection"); self.key("BKSP"); Screen.changed(empty, self.screenshot("touch-correction-clears"), false, "touch correction clears");
+        self.command("down " + self.keyPoint("AC01").input(self.rotated)); self.command("down " + self.keyPoint("AC02").input(self.rotated) + " 1"); self.command("up 0 0 1"); self.settles(empty, "other-finger-release-ignored", false, "second finger cannot release selection"); self.command("up"); self.settles(empty, "first-finger-release-types", true, "first finger releases selection"); self.key("BKSP"); self.settles(empty, "touch-correction-clears", false, "touch correction clears");
         self.mapTouchscreen("not-a-connected-output"); self.waitKeyboard(false, "unmatched-touch-output"); self.mapTouchscreen("Virtual-1"); self.waitKeyboard(true, "connector-touch-output");
         var connector = machine.succeed("for output in /sys/class/drm/card*-Virtual-1; do basename \"$output\"; done").trim(); Check.that(!connector.contains("\n") && connector.endsWith("-Virtual-1"), "single qualified connector"); self.mapTouchscreen(connector); self.waitKeyboard(true, "card-qualified-touch-output");
         if (self.lab.settings().get("multi").asBool()) { self.displays(connector, empty); }
