@@ -135,6 +135,19 @@
     },
     {
       "after": [
+        "install-reset"
+      ],
+      "args": {
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "immutabilityVersion": "v2",
+        "parentState": "installed-reset"
+      },
+      "id": "recovery-bad-generation",
+      "spec": "recovery/bad-generation/test.json"
+    },
+    {
+      "after": [
         "installer-ssh"
       ],
       "args": {
@@ -1054,6 +1067,7 @@
     "secure-boot-capabilities",
     "recovery-boot",
     "recovery-secure-boot",
+    "recovery-bad-generation",
     "install-disabled",
     "immutability-reset",
     "immutability-disabled",

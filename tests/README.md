@@ -139,7 +139,8 @@ a generation that did not boot.
 
 What an installed system does when its owner uses it has nodes of its own. `nixosctl-update` runs
 `nixosctl update` as the admin user after a change to the host, where every other spec calls `nixos-
-rebuild`.
+rebuild`. `recovery-bad-generation` makes the newest generation fail in its initrd and comes back by the
+boot menu and `nixosctl update`.
 
 ## Ledger
 

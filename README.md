@@ -874,6 +874,10 @@ The nodes with constraints worth knowing before you run them:
   as the admin user, answering "Restart now?" with no. The new generation is the
   running one and the loader's default, it is still both after a reboot, and
   that reboot ran the immutability reset without rewriting `CLEAN`.
+- `recovery-bad-generation` makes the default generation fail in its initrd,
+  power-cycles the guest, picks the previous generation in the boot menu, and
+  repairs with `nixosctl update`; the next boot takes the default entry and the
+  persisted data is what it was.
 - `secure-boot-aarch64` runs the full Lanzaboote flow — install, sign,
   auto-enroll keys, then `bootctl status` → `Secure Boot: enabled`. It needs
   enforcing firmware, so `tests/shell.nix` builds Debian's
