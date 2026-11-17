@@ -856,6 +856,29 @@
         "type": "github"
       }
     },
+    "proton-sge": {
+      "inputs": {
+        "btrc": [
+          "btrc"
+        ],
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794950595,
+        "narHash": "sha256-GUZagih03zdVwMbgpUEqWZb5H2DwXuxpKhQ9w3BG4ys=",
+        "owner": "schiffy91",
+        "repo": "proton-sge",
+        "rev": "6b11721df90a2316faba103e599ce41c92ea0707",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "proton-sge",
+        "type": "github"
+      }
+    },
     "renderer": {
       "inputs": {
         "btrc": [
@@ -924,6 +947,7 @@
         "nixpkgs-darwin": "nixpkgs-darwin",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "plasma-manager": "plasma-manager",
+        "proton-sge": "proton-sge",
         "semu": "semu"
       }
     },

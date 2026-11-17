@@ -3,12 +3,12 @@
     config.allowUnfree = true;
   }
 , battlenetRoot ? "/etc/nixos/config/pkgs/gaming/battlenet/tests"
-, protonRoot ? "/etc/nixos/config/pkgs/gaming/proton/custom"
+, protonRoot ? "${builtins.getEnv "HOME"}/Projects/proton-sge"  # a checkout of schiffy91/proton-sge
 }:
 
 pkgs.mkShell {
   packages = with pkgs; [
-    (import ../../proton/custom/tools.nix { inherit pkgs; })
+    (builtins.getFlake "git+file:///etc/nixos").inputs.proton-sge.packages.x86_64-linux.tools
     coreutils
     dotool
     elfutils  # eu-stack for battlenet-debug stacks
@@ -32,11 +32,11 @@ pkgs.mkShell {
 
   shellHook = ''
     export BATTLENET_IN_DEV_SHELL=1
-    export PROTON_CUSTOM_ROOT="${protonRoot}"
+    export PROTON_SGE_ROOT="${protonRoot}"
     export PATH="${battlenetRoot}/bin:$PATH"
 
     alias battlenet-make='make -C ${battlenetRoot}'
-    alias proton-custom-make='make -C ${protonRoot}'
+    alias proton-sge-make='make -C ${protonRoot}'
 
     if [ "''${BATTLENET_QUIET_SHELL:-}" = 1 ]; then
       return

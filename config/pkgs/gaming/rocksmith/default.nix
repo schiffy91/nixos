@@ -1,4 +1,4 @@
-{ config, pkgs, lib, inputs, protonCustom, ... }:
+{ config, pkgs, lib, inputs, protonSge, ... }:
 let
   enabled = config.settings.apps.gaming.rocksmith.enable;
   user = config.settings.users.admin.username;
@@ -64,7 +64,7 @@ let
   steamAppsPath = "${steamPath}/steamapps";
   gamePath = "${steamAppsPath}/common/Rocksmith2014";
   dlcPath = "${gamePath}/dlc";
-  protonPath = "${protonCustom.path}/files";
+  protonPath = "${protonSge.path}/files";
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
   slopsmith = pkgs.callPackage ../slopsmith/package.nix {
     inherit inputs;
@@ -73,10 +73,11 @@ let
     port = config.settings.apps.gaming.rocksmith.slopsmith.port;
   };
 in lib.mkIf enabled {
+  settings.apps.gaming.steam.protonSge.extraFiles = ./assets;  # wineasio32.dll and wineasio32.dll.so
   virtualisation.podman.enable = true;
   environment.systemPackages = [ slopsmith ];
 
-  system.activationScripts.rocksmith = lib.stringAfter [ "users" "protonCustomCompatTool" ] ''
+  system.activationScripts.rocksmith = lib.stringAfter [ "users" "protonSgeCompatTool" ] ''
     export PATH="${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnused}/bin:${pkgs.gnugrep}/bin:${pkgs.util-linux}/bin:$PATH"
     owned_dir() {  # install -d only owns the leaf; walk parents below $HOME
       case "$1" in "${home}"/*/*) owned_dir "$(dirname "$1")";; esac

@@ -20,7 +20,7 @@ let
   errors =
     check (valid []) "Default app settings must have a consistent hierarchy."
     ++ check (failures rootOff == [] && !rootOff.settings.apps.dev.vscode.enable
-      && !rootOff.settings.apps.gaming.steam.protonCustom.enable
+      && !rootOff.settings.apps.gaming.steam.protonSge.enable
       && !rootOff.settings.apps.utils.nixosctl.caffeine.enable)
       "Defaults must follow a disabled root through every level."
     ++ check (failures groupsOff == [] && !groupsOff.settings.apps.dev.git.enable
@@ -56,7 +56,7 @@ let
     }]) "Apps declared as submodules must participate in the same hierarchy."
     ++ check (valid [{ settings.apps.utils.nixosctl.settings.plugin = { enable = false; nested.enable = true; }; }])
       "Application payloads must not be mistaken for feature declarations."
-    ++ check (rejects "settings.apps.gaming.rocksmith.enable" "settings.apps.gaming.steam.protonCustom.enable" [{
+    ++ check (rejects "settings.apps.gaming.rocksmith.enable" "settings.apps.gaming.steam.protonSge.enable" [{
       settings.apps.gaming = { steam.enable = false; rocksmith.enable = true; };
     }]) "Sibling dependencies must reject unsupported combinations."
     ++ check (valid [{ settings.apps.gaming.steam.enable = false; }])

@@ -3,7 +3,7 @@ let
   mkSetting = type: defaultValue: lib.mkOption { inherit type; default = defaultValue; };
 in {
   options = with lib.types; {
-    settings.apps.gaming.assettocorsa.enable = mkSetting bool config.settings.apps.gaming.steam.protonCustom.enable;
+    settings.apps.gaming.assettocorsa.enable = mkSetting bool config.settings.apps.gaming.steam.protonSge.enable;
     settings.apps.gaming.assettocorsa.mods = mkSetting (listOf package) [];
     settings.apps.gaming.assettocorsa.contentDirectory = mkSetting (nullOr str) "~/Games/Assetto Corsa";
     settings.apps.gaming.assettocorsa.presetName = mkSetting (nullOr str) null; # Link matching video, audio and control presets from contentDirectory.

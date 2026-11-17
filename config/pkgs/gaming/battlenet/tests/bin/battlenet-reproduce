@@ -134,7 +134,7 @@ run_once() {
   if [ "$keep_agent" = 1 ]; then
     "$app_dir/bin/battlenet-debug" stop-launcher
   else
-    proton-custom-dev cleanup
+    proton-sge-dev cleanup
   fi
   if [ "$reset_cache" = 1 ]; then
     "$app_dir/bin/battlenet-debug" reset-browser-cache >"$run_dir/cache-reset.txt" 2>&1 || true

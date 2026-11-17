@@ -55,7 +55,7 @@ class GamingTests {
         var declaration = f"{self.root}/declared.json";
         var desired = JSONValue.makeObject();
         var app = JSONValue.makeObject();
-        app.set("compatTool", JSONValue.makeString("proton-custom"));
+        app.set("compatTool", JSONValue.makeString("proton-sge"));
         app.set("launchOptions", JSONValue.makeString("dpi exec -- assetto launch -- %command%"));
         desired.set("244210", app);
         for mode in ["disabled", "enabled", "default"] {
@@ -67,7 +67,7 @@ class GamingTests {
             var mapping = SteamVdf.at(SteamVdf.read(globalPath), ["InstallConfigStore", "Software", "Valve", "Steam", "CompatToolMapping"]);
             Expect.isTrue(mapping.get("0").get("name").asString().equals("keep-default"));
             Expect.isTrue(mapping.get("805550").get("name").asString().equals("keep-acc"));
-            Expect.isTrue(mapping.get("244210").get("name").asString().equals("proton-custom"));
+            Expect.isTrue(mapping.get("244210").get("name").asString().equals("proton-sge"));
             for user in ["1", "2"] {
                 var path = f"{steam}/userdata/{user}/config/localconfig.vdf";
                 var document = SteamVdf.read(path).get("UserLocalConfigStore");

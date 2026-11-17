@@ -9,7 +9,7 @@ let
   };
 in {
   assertions = hierarchy [ "settings" "apps" ] options.settings.apps apps null
-    ++ map (app: requires [ "gaming" app ] [ "gaming" "steam" "protonCustom" ])
+    ++ map (app: requires [ "gaming" app ] [ "gaming" "steam" "protonSge" ])
       [ "assettocorsa" "battlenet" "rocksmith" ]
     ++ [ (requires [ "gaming" "wow" ] [ "gaming" "battlenet" ]) ]
     ++ map (app: {

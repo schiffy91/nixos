@@ -1,9 +1,9 @@
-{ config, pkgs, lib, inputs, protonCustom, winePrefixDpi, gameLaunch, ... }:
+{ config, pkgs, lib, inputs, protonSge, winePrefixDpi, gameLaunch, ... }:
 let
   enabled = config.settings.apps.gaming.battlenet.enable;
   user = config.settings.users.admin.username;
   prefix = config.settings.apps.gaming.battlenet.prefix;
-  proton = protonCustom.path;
+  proton = protonSge.path;
   exe = "${prefix}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe";
   icons = import ../artwork/icons.nix { inherit pkgs inputs; };
   iconPackage = pkgs.runCommand "battlenet-icon" {} ''

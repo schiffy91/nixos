@@ -14,6 +14,7 @@
     ci-local = { url = "github:schiffy91/ci-local"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     deckpad = { url = "github:schiffy91/deckpad"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     drive = { url = "github:schiffy91/drive"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
+    proton-sge = { url = "github:schiffy91/proton-sge"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     semu = { url = "github:schiffy91/semu"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     logitech-trueforce = { url = "github:mescon/logitech-trueforce-linux-driver"; inputs.nixpkgs.follows = "nixpkgs"; };
   };

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, inputs, steam, protonCustom, winePrefixDpi, gameLaunch, ... }:
+{ config, lib, pkgs, inputs, steam, protonSge, winePrefixDpi, gameLaunch, ... }:
 let
   enabled = config.settings.apps.gaming.assettocorsa.enable;
   wheelLauncher = lib.optionalString config.settings.apps.gaming.simracing.enable
@@ -18,7 +18,7 @@ let
       else config.settings.apps.gaming.assettocorsa.uiScale;
   };
   steamConfig = {
-    compatTool = protonCustom.name;
+    compatTool = protonSge.name;
     launchOptions = "${winePrefixDpi.launchPrefix} ${package}/bin/assetto launch -- %command%";
     steamInput = config.settings.apps.gaming.assettocorsa.steamInput;
   };
@@ -43,7 +43,7 @@ let
       ${steam.configureSteamApps}/bin/configure-steam-apps \
         --steam-path "$HOME/.local/share/Steam" --app-id 244210 \
         --launch-wrapper ${lib.escapeShellArg gameLaunch.prefix} \
-        --default-tool ${protonCustom.name} --app-config ${appConfig}
+        --default-tool ${protonSge.name} --app-config ${appConfig}
       echo "Ready. Open Steam and press Play on Assetto Corsa to launch Content Manager."
     '';
   };

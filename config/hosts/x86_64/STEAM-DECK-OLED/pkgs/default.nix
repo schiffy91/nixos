@@ -9,7 +9,7 @@ in {
     gaming.deckpad = { enable = true; role = "controller"; usb = true; };  # this Deck's controls as a Steam Controller for FRACTAL-NORTH; usb needs the BIOS port in DRD mode
     utils.desktop.enable = true;
     utils.nixosctl.caffeine.enable = false;
-    gaming.steam.protonCustom.enable = true;
+    gaming.steam.protonSge.enable = true;
     gaming.sunshine = {
       capture = "auto";  # KWin virtual display in Plasma; KMS in Gaming Mode
     };

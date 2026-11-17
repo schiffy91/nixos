@@ -1,12 +1,12 @@
-{ config, pkgs, lib, inputs, protonCustom, winePrefixDpi, gameLaunch, assetto, ... }:
+{ config, pkgs, lib, inputs, protonSge, winePrefixDpi, gameLaunch, assetto, ... }:
 let
   user = config.settings.users.admin.username;
   home = config.settings.users.admin.homeDirectory;
   steamPath = "${home}/.local/share/Steam";
-  protonCustomName = protonCustom.name;  # patched Wayland+SNI build
+  protonSgeName = protonSge.name;  # patched Wayland+SNI build
   defaultLaunchPrefix = "${winePrefixDpi.launchPrefix} PROTON_ENABLE_HDR=1 DXVK_HDR=1";  # DPI into the prefix registry; no hdr_wsi layer (driver does HDR natively)
   games = import ./games.nix {
-    inherit protonCustomName;
+    inherit protonSgeName;
     inherit assetto;
     rsSampleSize = config.settings.apps.gaming.rocksmith.sampleSize;
     rsSampleRate = config.settings.apps.gaming.rocksmith.sampleRate;
@@ -48,7 +48,7 @@ in {
     {
       _module.args.steam = { inherit configureSteamApps; };
     }
-    (lib.mkIf (config.settings.apps.gaming.steam.protonCustom.enable) {
+    (lib.mkIf (config.settings.apps.gaming.steam.protonSge.enable) {
       system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
         if ${pkgs.procps}/bin/pgrep -u ${user} -x steam >/dev/null; then
           echo "Steam is running; close it and rebuild to apply Steam settings."
@@ -56,7 +56,7 @@ in {
           runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"
           $runuser ${configureSteamApps}/bin/configure-steam-apps \
             --steam-path "${steamPath}" \
-            --default-tool "${protonCustomName}" \
+            --default-tool "${protonSgeName}" \
             --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
             --launch-wrapper ${lib.escapeShellArg gameLaunch.protonPrefix} \
             --app-config ${appConfig}

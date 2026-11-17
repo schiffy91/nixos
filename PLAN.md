@@ -471,6 +471,14 @@ Filled in as the work runs. Known from the start:
 - The first reboot of each machine after M9.
 - Deleting the stale `__pycache__` directories and `tests/nixd` in the checkout at `/etc/nixos` (T4): they
   are not in git, so removing them is the owner's call.
+- After M5, on each machine: close Steam and run `nixosctl update` once more. Steam's tool mapping is only
+  rewritten while Steam is closed; until then it names `proton-custom-GE-Proton11-12`, whose links stay
+  valid. Then the check of M5: app `0` maps to `proton-sge-GE-Proton11-12` at priority 75, no entry names
+  the old tool, and the Battle.net launcher opens under it.
+- After M5: the Wine working tree at `/etc/nixos/config/pkgs/gaming/proton/custom/src` (4 GB, not in git)
+  stays where it is. The development loop now expects it at `~/Projects/proton-sge/src`; moving it is the
+  owner's call, and so is removing the old links `~/Games/proton/proton-custom-*` and
+  `~/.local/share/Steam/compatibilitytools.d/proton-custom-*`.
 
 # Not in this plan
 

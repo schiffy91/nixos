@@ -7,7 +7,7 @@ in pkgs.linkFarm "gaming-tests" [
   { name = "capture-evidence"; path = import ./capture.nix { inherit pkgs inputs; }; }
   { name = "artwork"; path = import ./artwork.nix { inherit pkgs inputs; }; }
   { name = "wow-lock"; path = import ./wow { inherit pkgs inputs; }; }
-  { name = "proton-tools"; path = import ./proton/tools { inherit pkgs inputs; }; }
+  { name = "proton-tools"; path = inputs.proton-sge.checks.${pkgs.stdenv.hostPlatform.system}.unit-tools; }  # the tools' own suite
   { name = "runtime"; path = import ./runtime { inherit pkgs inputs; }; }
   { name = "package-boundaries"; path = import ./package-boundaries.nix { inherit pkgs inputs; }; }
   { name = "semu-contracts"; path = inputs.semu.checks.${system}.contracts; }

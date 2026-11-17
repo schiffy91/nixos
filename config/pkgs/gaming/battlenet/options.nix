@@ -3,7 +3,7 @@
   options.settings.apps.gaming.battlenet = {
     enable = lib.mkOption {
       type = lib.types.bool;
-      default = config.settings.apps.gaming.steam.protonCustom.enable;
+      default = config.settings.apps.gaming.steam.protonSge.enable;
     };
     prefix = lib.mkOption {
       type = lib.types.str;

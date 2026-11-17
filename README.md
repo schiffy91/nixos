@@ -178,7 +178,7 @@ settings.apps.dev.vscode.enable = true;
 ```
 
 Sibling dependencies are checked during evaluation too. Assetto Corsa,
-Battle.net, and Rocksmith require `settings.apps.gaming.steam.protonCustom.enable`
+Battle.net, and Rocksmith require `settings.apps.gaming.steam.protonSge.enable`
 and x86_64 Linux; WoW requires Battle.net. Their defaults follow those dependencies.
 Sunshine's CUDA
 build is opt-in through `settings.apps.gaming.sunshine.cuda.enable`; other hosts keep
@@ -751,7 +751,7 @@ profiles turn off whole groups:
 | `dev/git.nix` | Enables system Git and GitHub's `gh`, and persists `gh`'s sign-in (`~/.config/gh`); per-user identities live in Home Manager |
 | `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-locked BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
-| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.gaming.steam.protonCustom.enable` is set |
+| `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.gaming.steam.protonSge.enable` is set |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
 | `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.gaming.steam.shortcuts` as non-Steam shortcuts when Steam is enabled |
 | `gaming/sunshine/default.nix` | Sunshine service and ports; the CUDA overlay, and the KWin HDR screencast patch when capture is `kwin` |
@@ -766,10 +766,10 @@ profiles turn off whole groups:
 | `utils/nixosctl/ui/default.nix` | Packages the BTRC tray GUI for `nixosctl` |
 | `utils/drive/default.nix` | The adapter for the Google Drive client, which is [`schiffy91/drive`](https://github.com/schiffy91/drive), a flake input: `settings.apps.utils.drive` becomes that module's `services.drive` for the admin user, and its `statePaths` are added to what an erased root keeps. The client, its units, its tests and its design are in that repository. |
 
-The custom Proton tree under `config/pkgs/gaming/proton/custom` is a
-large patch-carrying workflow for Battle.net/Wayland/HDR behavior. Keep that
-area focused and avoid broad formatting churn; its local README has the
-development loop.
+The Proton build is [`schiffy91/proton-sge`](https://github.com/schiffy91/proton-sge), a flake input:
+`gaming/proton/default.nix` installs its package, and Rocksmith gives it the 32-bit WineASIO files
+(`settings.apps.gaming.steam.protonSge.extraFiles`). Its patches, tools, tests and development loop
+are in that repository.
 
 VFIO has been removed from this repo for now because the path was broken and
 explicitly out of scope for the BTRC rewrite.
@@ -1074,7 +1074,7 @@ Ignored local paths:
 | `config.json` | Local selected host/target for helper tooling |
 | `.vm/` | QEMU disks, ISO downloads, state graph data |
 | `.direnv/`, `.btrc-cache/`, `build/` | Development caches and build outputs |
-| `config/pkgs/gaming/proton/custom/src/` | Working Wine tree for the proton-custom dev loop (`make shell` / `make setup`) |
+| `config/pkgs/gaming/proton/custom/src/` | A Wine working tree from before the Proton build moved to `schiffy91/proton-sge`, where the dev loop keeps it in `src/` |
 | `config/pkgs/gaming/battlenet/tests/.build/` | Battle.net test scratch output |
 | `result` | Nix build symlink |
 

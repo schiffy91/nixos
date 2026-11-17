@@ -6,7 +6,8 @@ in {
     settings.apps.gaming.steam.extraEnv = mkSetting (attrsOf str) {};
     settings.apps.gaming.steam.extraLibraries = mkSetting (listOf package) [];
     settings.apps.gaming.steam.enable = mkSetting bool (config.settings.apps.gaming.enable && pkgs.stdenv.hostPlatform.isx86_64);
-    settings.apps.gaming.steam.protonCustom.enable = mkSetting bool config.settings.apps.gaming.steam.enable;
+    settings.apps.gaming.steam.protonSge.enable = mkSetting bool config.settings.apps.gaming.steam.enable;
+    settings.apps.gaming.steam.protonSge.extraFiles = mkSetting (nullOr path) null;  # 32-bit WineASIO files; Rocksmith sets it
     settings.apps.gaming.steam.shortcuts = mkSetting (attrsOf (either str (submodule {
       options = {
         exe = lib.mkOption { type = str; }; # Keep stable: Steam derives the app ID from this and the name.

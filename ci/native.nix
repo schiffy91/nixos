@@ -26,7 +26,6 @@ let
     "config/pkgs/utils/nixosctl/lib/password-hash.h"
     "config/pkgs/gaming/sunshine/credentials/src/native.h"
     "config/pkgs/gaming/sunshine/ssh-login/native.h"
-    "config/pkgs/gaming/proton/custom/tools/native.h"
     "config/pkgs/gaming/slopsmith/src/signals.h"
     "config/pkgs/gaming/assettocorsa/src/compression.h"
     "config/pkgs/gaming/battlenet/tests/battlenet-capture-window.c"
@@ -41,9 +40,6 @@ let
     "tests/secure-boot/alarm-state.h"
     "tests/sleep-lock/helpers/test-native.h"
     "tests/sleep-lock/unit/process-probe.h"
-    "tests/gaming/proton/pdb/Folded.c"
-    "tests/gaming/proton/pdb/Public.c"
-    "tests/gaming/proton/pdb/PdbSymbols.c"
   ];
   helpers = pkgs.runCommandCC "native-source-helpers" {
     nativeBuildInputs = [ pkgs.pkg-config ];
@@ -69,7 +65,6 @@ let
       ${../config/system/nixos/recovery/signals.h} \
       ${../config/pkgs/gaming/sunshine/credentials/src/native.h} \
       ${../config/pkgs/gaming/sunshine/ssh-login/native.h} \
-      ${../config/pkgs/gaming/proton/custom/tools/native.h} \
       ${../config/pkgs/gaming/slopsmith/src/signals.h} \
       ${../config/pkgs/gaming/assettocorsa/src/compression.h} \
       ${../tests/ci/process-probe.h} \
@@ -95,7 +90,6 @@ let
     sleep.blank sleep.native helpers
     (import ../config/system/nixos/opportunistic-unlock/package.nix { inherit pkgs inputs; })
     (import ../config/pkgs/gaming/sunshine/hdr-screencast-test/package.nix { inherit pkgs; })
-    (import ../tests/gaming/proton/pdb { inherit pkgs; })
   ];
 in pkgs.runCommand "native-source-check" {
   passthru = { inherit coveredSources; };

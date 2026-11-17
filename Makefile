@@ -52,7 +52,6 @@ UNIT_TESTS := \
 	ci_pipe:tests/ci/PipeTests.btrc \
 	recovery_mount:tests/recovery/MountTests.btrc \
 	secure_boot_archive:tests/secure-boot/ArchiveTests.btrc \
-	proton_tools:tests/gaming/proton/tools/ToolsTests.btrc \
 	wow_lock:tests/gaming/wow/LockTests.btrc \
 	networking_rules:tests/networking/RulesTests.btrc \
 	ownership:tests/immutability/OwnershipTests.btrc

@@ -6,7 +6,7 @@ MAKEFLAGS += --no-builtin-rules
 
 NIXOS ?= /etc/nixos
 BATTLENET_DIR ?= $(NIXOS)/config/pkgs/gaming/battlenet/tests
-PROTON_DIR ?= $(NIXOS)/config/pkgs/gaming/proton/custom
+PROTON_DIR ?= $(HOME)/Projects/proton-sge
 
 BUILD_MODE ?= changed
 REPEAT ?= 3
@@ -50,14 +50,14 @@ help:
 		'Battle.net test and repro loop' \
 		'' \
 		'Primary loop:' \
-		'  make cycle BUILD_MODE=changed      build proton-custom, install dev tool, configure, run, diagnose' \
+		'  make cycle BUILD_MODE=changed      build proton-sge, install dev tool, configure, run, diagnose' \
 		'  make cycle-no-run                 build/install/configure without launching Battle.net' \
 		'  make run                          run the same battlenet command KDE uses' \
 		'' \
 		'Single steps:' \
-		'  make build                        build changed proton-custom targets' \
-		'  make install                      point Steam compat tool at the dev proton-custom tree' \
-		'  make configure                    prepare Battle.net prefix for current proton-custom' \
+		'  make build                        build changed proton-sge targets' \
+		'  make install                      point Steam compat tool at the dev proton-sge tree' \
+		'  make configure                    prepare Battle.net prefix for current proton-sge' \
 		'  make cleanup                      stop this Battle.net/Wine prefix' \
 		'  make check                        syntax-check the Battle.net scripts' \
 		'  make build-capture-helper         build the KWin by-window capture helper' \
@@ -105,10 +105,10 @@ shell:
 	nix-shell "$(BATTLENET_DIR)/dev-shell.nix"
 
 build:
-	$(call battlenet_run,proton-custom-build "$(BUILD_MODE)")
+	$(call battlenet_run,proton-sge-build "$(BUILD_MODE)")
 
 install:
-	$(call battlenet_run,proton-custom-install dev)
+	$(call battlenet_run,proton-sge-install dev)
 
 configure:
 	$(BATTLENET_DIR)/bin/battlenet-configure
@@ -187,13 +187,13 @@ classify-artifacts:
 	$(call battlenet_run,BATTLENET_CAPTURE_SIZE="$(CAPTURE_SIZE)" $(BATTLENET_DIR)/bin/battlenet-debug classify-artifacts "$(ARTIFACT_DIR)")
 
 focus:
-	$(call battlenet_run,proton-custom-dev focus)
+	$(call battlenet_run,proton-sge-dev focus)
 
 cleanup:
-	$(call battlenet_run,proton-custom-dev cleanup)
+	$(call battlenet_run,proton-sge-dev cleanup)
 
 proton-status:
-	$(call battlenet_run,proton-custom-install status)
+	$(call battlenet_run,proton-sge-install status)
 
 proton-restore:
-	$(call battlenet_run,proton-custom-install restore)
+	$(call battlenet_run,proton-sge-install restore)

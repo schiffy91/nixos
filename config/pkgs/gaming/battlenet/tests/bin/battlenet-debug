@@ -2,7 +2,7 @@
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if ! command -v proton-custom-dev >/dev/null; then
+if ! command -v proton-sge-dev >/dev/null; then
   exec nix-shell "$app_dir/dev-shell.nix" --run "$(printf '%q ' "$0" "$@")"
 fi
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/battlenet-proton"
@@ -78,7 +78,7 @@ print_error_tail() {
 
 status() {
   echo "compat:"
-  proton-custom-dev status
+  proton-sge-dev status
   echo
   echo "desktop entry:"
   if [ -e "$desktop_entry" ]; then
@@ -272,7 +272,7 @@ cache_state() {
 reset_browser_cache() {
   local backup path name
 
-  proton-custom-dev cleanup
+  proton-sge-dev cleanup
   backup="$prefix/drive_c/users/steamuser/AppData/Local/Battle.net/CacheBackups/$(date +%Y%m%dT%H%M%S)"
   mkdir -p "$backup"
 
@@ -327,7 +327,7 @@ window_handle() {
 
 capture_foreground_window() {
   local output="$1"
-  proton-custom-dev focus >/dev/null
+  proton-sge-dev focus >/dev/null
   spectacle -b -n -a -o "$output" >/dev/null
   if [ ! -s "$output" ]; then
     echo "capture-method=none reason=spectacle-active-empty-output output=$output" >&2
@@ -557,7 +557,7 @@ capture_window() {
 frames_window() {
   run_in_devshell frames-window "$@"
   local output_dir="${1:-/tmp/battlenet-window-frames}"
-  proton-custom-dev grab-frames --focus --count "${COUNT:-24}" \
+  proton-sge-dev grab-frames --focus --count "${COUNT:-24}" \
     --interval "${INTERVAL:-0.12}" --mode active --format jpg --output-dir "$output_dir"
 }
 

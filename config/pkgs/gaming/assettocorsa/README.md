@@ -18,7 +18,7 @@ AC's debug symbols, so CSP reports that it cannot find game functions.
 Wine's existing compatible reader resolves them. This is scoped to AC/CM;
 the shared Proton version and other games remain unchanged. See
 [Wine's reader selection](https://github.com/ValveSoftware/wine/blob/46b29104e3741fe23bf5e2547196a253aab88c89/dlls/dbghelp/msc.c#L4010)
-and the regression fixture in `tests/gaming/proton/pdb`.
+and the regression fixture in `schiffy91/proton-sge` (`tests/pdb`).
 
 ## First use
 
@@ -29,7 +29,7 @@ sudo nixosctl update
 assetto-setup
 ```
 
-Open Steam again. AC uses the same `proton-custom` compatibility tool as the other games.
+Open Steam again. AC uses the same `proton-sge` compatibility tool as the other games.
 Steam Input is disabled for AC by default. Press **Play**.
 Content Manager opens instead of the stock launcher; the stock executable
 is preserved. Steam's runtime command and arguments are retained. Both the

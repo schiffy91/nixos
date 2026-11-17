@@ -11,8 +11,8 @@ usage() {
 usage: battlenet-cycle [BUILD_MODE] [--no-run]
 
 Runs the repeatable Battle.net test loop:
-  1. proton-custom-build BUILD_MODE
-  2. proton-custom-install dev
+  1. proton-sge-build BUILD_MODE
+  2. proton-sge-install dev
   3. battlenet-configure
   4. battlenet-run
   5. battlenet-debug diagnose
@@ -40,8 +40,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-proton-custom-build "$build_mode"
-proton-custom-install dev
+proton-sge-build "$build_mode"
+proton-sge-install dev
 "$app_dir/bin/battlenet-configure"
 
 if [ "$run_launcher" = 0 ]; then

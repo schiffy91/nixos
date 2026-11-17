@@ -4,7 +4,7 @@ let
   adminHome = "/home/${config.settings.users.admin.username}";
 in {
   options = with lib.types; {
-    settings.apps.gaming.rocksmith.enable = mkSetting bool config.settings.apps.gaming.steam.protonCustom.enable;
+    settings.apps.gaming.rocksmith.enable = mkSetting bool config.settings.apps.gaming.steam.protonSge.enable;
     settings.apps.gaming.rocksmith.sampleSize = mkSetting int 64;
     settings.apps.gaming.rocksmith.sampleRate = mkSetting int 48000;
     settings.apps.gaming.rocksmith.cdlcPath = mkSetting str "${adminHome}/Games/Rocksmith/cdlc";
