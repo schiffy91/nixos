@@ -1,0 +1,22 @@
+{
+  "name": "installer-build",
+  "state": "installer-build",
+  "stateMaterial": "installer-build:{{arch}}:{{package}}:drv={{derivation}}",
+  "derivation": ".#packages.{{arch}}-linux.{{package}}",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "memory": "2G",
+  "args": {
+    "arch": "x86_64",
+    "package": "installer"
+  },
+  "operations": [
+    {
+      "op": "build-derivation",
+      "command": "--cores 8",
+      "timeout": 28800
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}

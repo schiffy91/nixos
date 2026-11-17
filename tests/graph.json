@@ -552,6 +552,9 @@
       }
     },
     {
+      "after": [
+        "installer-build-STEAM-DECK-OLED"
+      ],
       "id": "installer-prebuilt-x86_64",
       "spec": "installer/prebuilt/test.json",
       "args": {
@@ -567,7 +570,9 @@
     {
       "id": "install-offline",
       "spec": "installer/offline/test.json",
-      "after": [],
+      "after": [
+        "installer-build-QEMU-x86_64"
+      ],
       "args": {
         "name": "install-offline",
         "arch": "x86_64",
@@ -582,7 +587,9 @@
     {
       "id": "host-install-STEAM-DECK-OLED-VM-standard",
       "spec": "hosts-install/test.json",
-      "after": [],
+      "after": [
+        "installer-build-STEAM-DECK-OLED-VM"
+      ],
       "args": {
         "arch": "x86_64",
         "hostName": "STEAM-DECK-OLED-VM",
@@ -630,7 +637,9 @@
     {
       "id": "host-install-STEAM-DECK-OLED-VM-secure",
       "spec": "hosts-install/test.json",
-      "after": [],
+      "after": [
+        "installer-build-STEAM-DECK-OLED-VM"
+      ],
       "args": {
         "arch": "x86_64",
         "hostName": "STEAM-DECK-OLED-VM",
@@ -678,7 +687,9 @@
     {
       "id": "host-install-FRACTAL-NORTH-VM-standard",
       "spec": "hosts-install/test.json",
-      "after": [],
+      "after": [
+        "installer-build-FRACTAL-NORTH-VM"
+      ],
       "args": {
         "arch": "x86_64",
         "hostName": "FRACTAL-NORTH-VM",
@@ -726,7 +737,9 @@
     {
       "id": "host-install-FRACTAL-NORTH-VM-secure",
       "spec": "hosts-install/test.json",
-      "after": [],
+      "after": [
+        "installer-build-FRACTAL-NORTH-VM"
+      ],
       "args": {
         "arch": "x86_64",
         "hostName": "FRACTAL-NORTH-VM",
@@ -1088,9 +1101,53 @@
       },
       "id": "host-build-STEAM-DECK-OLED-Secure-Boot",
       "spec": "hosts-build/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "name": "installer-build-FRACTAL-NORTH-VM",
+        "package": "installer-FRACTAL-NORTH-VM",
+        "state": "installer-build-FRACTAL-NORTH-VM"
+      },
+      "id": "installer-build-FRACTAL-NORTH-VM",
+      "spec": "installer/images/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "name": "installer-build-STEAM-DECK-OLED-VM",
+        "package": "installer-STEAM-DECK-OLED-VM",
+        "state": "installer-build-STEAM-DECK-OLED-VM"
+      },
+      "id": "installer-build-STEAM-DECK-OLED-VM",
+      "spec": "installer/images/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "name": "installer-build-STEAM-DECK-OLED",
+        "package": "installer-STEAM-DECK-OLED",
+        "state": "installer-build-STEAM-DECK-OLED"
+      },
+      "id": "installer-build-STEAM-DECK-OLED",
+      "spec": "installer/images/test.json"
+    },
+    {
+      "after": [],
+      "args": {
+        "name": "installer-build-QEMU-x86_64",
+        "package": "installer-QEMU-x86_64",
+        "state": "installer-build-QEMU-x86_64"
+      },
+      "id": "installer-build-QEMU-x86_64",
+      "spec": "installer/images/test.json"
     }
   ],
   "required": [
+    "installer-build-FRACTAL-NORTH-VM",
+    "installer-build-STEAM-DECK-OLED-VM",
+    "installer-build-STEAM-DECK-OLED",
+    "installer-build-QEMU-x86_64",
     "host-build-FRACTAL-NORTH-Standard-Boot",
     "host-build-FRACTAL-NORTH-Secure-Boot",
     "host-build-STEAM-DECK-OLED-Standard-Boot",

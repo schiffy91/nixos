@@ -87,9 +87,10 @@ them again before anything changes.
     everything else and put it in "Waiting for the owner" below. A waiting item is not a failure and is not
     worked around.
 15. **Failures are reported as failures**, with the output.
-16. **Test jobs run inside an isolated process namespace** (`bwrap --unshare-pid`; `make -C tests` does it
-    where bwrap exists), so nothing a test signals can reach the desktop session, and nothing of a run is
-    left when it ends. On 16 November a btrc test that kills its parent to play a crashed worker ran after
+16. **Test jobs run inside an isolated process namespace** (`bwrap --unshare-pid --die-with-parent`;
+    `make -C tests` does it where bwrap exists), so nothing a test signals can reach the desktop session,
+    and nothing of a run is left when it ends. Without `--die-with-parent` that last part is false: a VM
+    whose runner died stayed behind for thirteen minutes. On 16 November a btrc test that kills its parent to play a crashed worker ran after
     that parent had gone; its parent was then the session's own manager, and every process of the desktop
     session was killed. A test that signals its parent first checks that the parent is what it started.
 17. **Parallel jobs are sized to the machine on purpose** (32 threads, 62 GB): say how many VMs and how many

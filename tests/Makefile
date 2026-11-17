@@ -3,8 +3,9 @@ NIX_BUILD ?= nix-build
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
 # A graph run starts many processes and signals them. Inside its own process namespace nothing it signals
-# can reach the session that started it, and nothing of it is left when it ends. Used where bwrap exists.
-ISOLATE ?= $(if $(shell command -v bwrap 2>/dev/null),bwrap --unshare-pid --dev-bind / / --proc /proc --,)
+# can reach the session that started it. --die-with-parent ends the namespace with the command: without it a
+# VM whose runner died stays behind, holding its memory. Used where bwrap exists.
+ISOLATE ?= $(if $(shell command -v bwrap 2>/dev/null),bwrap --unshare-pid --die-with-parent --dev-bind / / --proc /proc --,)
 
 .PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-aarch64 graph-deck graph-nightly graph-early graph-installer-ssh graph-full chain clean-vms
 

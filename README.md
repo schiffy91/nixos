@@ -874,7 +874,9 @@ guest, native on an aarch64 host and emulated on this desktop, so it is not part
 is the five Gaming Mode sleep and lock nodes, which need a host with exactly one AMD GPU: the Steam Deck has
 one and this desktop, with its integrated GPU off in firmware, has none. A node without an
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
-namespace where `bwrap` is installed, so nothing a test signals reaches the session that started it.
+namespace where `bwrap` is installed, so nothing a test signals reaches the session that started it, and a
+VM whose runner died does not stay behind. The `installer-build-*` nodes build the installer images the
+install nodes boot, so a node that boots one holds a VM's memory only while it has a VM.
 
 A node that installs the `VM-TEST` system does not fetch it from the internet. The run starts one
 `nix-serve` on a port from 22600, signing with a key it keeps in `.vm/store-key`; the node builds its
