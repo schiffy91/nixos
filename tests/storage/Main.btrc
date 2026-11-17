@@ -26,7 +26,14 @@ class StorageScenario {
 
     private void insert() { self.machine.succeed("cat /run/sd-controller > /sys/bus/pci/drivers/sdhci-pci/bind"); }
 
-    private void mounted() { self.machine.waitUntil("mountpoint -q /sd && test -b /dev/mapper/sdcard", 60); }
+    // A card that did not come up says why: what the machine logged about it, and what is there.
+    private void mounted() {
+        try { self.machine.waitUntil("mountpoint -q /sd && test -b /dev/mapper/sdcard", 60); }
+        catch (string error) {
+            print(self.machine.execute("lsblk; systemctl --no-pager --failed; systemctl --no-pager status sd.mount 2>&1 | tail -15; journalctl -b --no-pager | grep -i -E 'storage|sdcard|mmc|cryptsetup|sd\\.mount|nixosctl' | tail -60", 60).output);
+            throw error;
+        }
+    }
 
     private void gone() { self.machine.waitUntil("! mountpoint -q /sd && ! test -e /dev/mapper/sdcard", 60); }
 
@@ -39,7 +46,9 @@ class StorageScenario {
     private string place = "--place Games/Library=/sd/drive --place-device /sd/drive=/dev/disk/by-label/SD-crypt";
 
     private void plainCard(string extra) {  // the card as it is before any of this: one plain filesystem, automounted
-        self.machine.succeed(f"mkfs.ext4 -q -F -L OLD {self.card} && mkdir -p /run/media/carduser/OLD && mount {self.card} /run/media/carduser/OLD && mkdir /run/media/carduser/OLD/Library && cp {self.drive.source}/a /run/media/carduser/OLD/Library/a.bin {extra}");
+        self.machine.succeed(f"mkfs.ext4 -q -F -L OLD {self.card}", 300);
+        self.machine.succeed(f"mkdir -p /run/media/carduser/OLD && mount {self.card} /run/media/carduser/OLD");
+        self.machine.succeed(f"mkdir /run/media/carduser/OLD/Library && cp {self.drive.source}/a /run/media/carduser/OLD/Library/a.bin {extra}");
     }
 
     private void prepared() {
@@ -162,7 +171,9 @@ class StorageScenario {
         while (true) {
             Timer.sleepMillis(5000);
             self.machine.qmp("system_powerdown", JSONValue.makeObject());
-            if (self.machine.execute(f"test \"$(journalctl -b -k --no-pager | grep -c 'PM: suspend exit')\" -gt {exits}", 10).code == 0) { return; }
+            try {
+                if (self.machine.execute(f"test \"$(journalctl -b -k --no-pager | grep -c 'PM: suspend exit')\" -gt {exits}", 5).code == 0) { return; }
+            } catch (string asleep) {}  // a sleeping guest answers nothing: the press came too early, or has not taken yet
             Check.that(MonotonicClock.before(deadline), "the machine slept and woke within three minutes");
         }
     }
