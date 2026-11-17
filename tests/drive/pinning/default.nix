@@ -5,7 +5,7 @@ let
   pkgs = import inputs.nixpkgs { inherit system; };
   programs = import ../../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
   ask = pkgs.writeShellScriptBin "drive-test-ask" "true";
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "drive-pinning";
   nodes.machine = { ... }: {
     boot.kernelModules = [ "fuse" ];

@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Process;
-import ../../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 
 class SettingsTests {
     private TestDirectory fixture;

@@ -147,7 +147,7 @@ Why this works:
 
 ## 3. Pattern B: Copying binary buffers into `Bytes`
 
-Modelled on `tests/vm/btrc.toml` (`Framebuffer`). When a C handle owns a byte buffer of known length, return `Bytes?` directly via `copied-results` (`kind = "bytes"`):
+Modelled on the testkit package in btrc, `nix/lib/testkit/btrc.toml` (`Framebuffer`). When a C handle owns a byte buffer of known length, return `Bytes?` directly via `copied-results` (`kind = "bytes"`):
 
 ```toml
 [[native.libraries]]
@@ -180,7 +180,7 @@ Note: `length-function` must return a signed `int` byte count (`static inline in
 
 ## 4. Nix and CI registration
 
-1. Build the binary through `config/lib/btrc.nix` with `linkPlan = true` so `btrc-native-plan` reads `[[native.pkg-config]]` and `[[native.libraries]]` directly from `btrc.toml`.
+1. Build the binary through `inputs.btrc.lib.buildPackage pkgs` with `linkPlan = true` so `btrc-native-plan` reads `[[native.pkg-config]]` and `[[native.libraries]]` directly from `btrc.toml`.
 2. Add the `.h` (and any `.c`) file to `ci/native.nix` with its `buildInputs` so CI compiles it standalone with `-Wall -Wextra -Werror`.
 
 ## 5. Anti-patterns to reject in review

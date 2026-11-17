@@ -3,11 +3,11 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  contract = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  contract = (inputs.btrc.lib.buildPackage pkgs) {
     name = "drive-planner-contract";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ./Main.btrc ../../lib/Check.btrc ../../../config/pkgs/utils/drive/engine/Planner.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ./Main.btrc ../../../config/pkgs/utils/drive/engine/Planner.btrc ];
     };
     programs.drive-planner-contract = "tests/drive/planner/Main.btrc";
   };

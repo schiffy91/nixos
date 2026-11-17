@@ -2,7 +2,7 @@
 let tools = import ../../config/pkgs/gaming/package.nix { inherit pkgs inputs; };
 in pkgs.stdenv.mkDerivation {
   name = "gaming-tools-tests";
-  src = pkgs.lib.fileset.toSource {
+  src = (import ../lib/test-source.nix { inherit pkgs inputs; }) {
     root = ../..;
     fileset = pkgs.lib.fileset.unions [
       ../../config/pkgs/gaming/assettocorsa/src

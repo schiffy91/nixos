@@ -6,7 +6,7 @@ let
   compiler = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs compilerLock [
     "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
   ]));
-  package = (import ../config/lib/btrc.nix {
+  package = (compiler.lib.buildPackageWith {
     inherit pkgs;
     inherit (compiler.packages.${system}) btrcpy btrc-native-plan;
   }) {

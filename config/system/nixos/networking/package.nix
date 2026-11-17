@@ -1,5 +1,5 @@
 { pkgs, inputs }:
-import ../../../lib/btrc.nix { inherit pkgs inputs; } {
+inputs.btrc.lib.buildPackage pkgs {
   name = "trusted-connections";
   src = ./.;
   programs.trusted-connections = "Main.btrc";

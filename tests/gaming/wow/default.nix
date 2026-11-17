@@ -13,11 +13,11 @@ let
   options = import ./options.nix { inherit pkgs inputs; };
   consolePort = (import ../../../config/pkgs/gaming/wow/addons.nix { inherit pkgs; }).consolePort;
   tools = import ../../../config/pkgs/gaming/wow/package.nix { inherit pkgs inputs; };
-  programs = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  programs = (inputs.btrc.lib.buildPackage pkgs) {
     name = "wow-lock-contract-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/gaming/wow ../../lib ./LockTests.btrc ./RefreshTests.btrc ./RefreshFixture.btrc ./InstallTests.btrc ./SettingsTests.btrc ./btrc.toml ./btrc.lock ];
+      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/gaming/wow ./LockTests.btrc ./RefreshTests.btrc ./RefreshFixture.btrc ./InstallTests.btrc ./SettingsTests.btrc ./btrc.toml ./btrc.lock ];
     };
     programs = {
       wow-addons-lock = "config/pkgs/gaming/wow/Main.btrc";

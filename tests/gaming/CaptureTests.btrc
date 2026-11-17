@@ -1,5 +1,5 @@
 import ../../config/pkgs/gaming/sunshine/hdr-screencast-test/Capture.btrc;
-import ../lib/Check.btrc;
+import testkit.Check;
 
 class CaptureTests {
     class string log(string format, string primaries, string transfer, string dmabuf, string frames, string white) {

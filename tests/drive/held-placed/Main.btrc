@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // The delete brake inside a folder kept on another volume. A batch deleted there waits in that volume's own trash;

@@ -13,7 +13,7 @@ let
     setpriv = "${pkgs.util-linux}/bin/setpriv";
     env = "${pkgs.coreutils}/bin/env";
   });
-  controllerPackage = (import ../../lib/btrc.nix { inherit pkgs inputs; }) {
+  controllerPackage = (inputs.btrc.lib.buildPackage pkgs) {
     name = "sleep-lock";
     src = lib.fileset.toSource {
       root = ../..;

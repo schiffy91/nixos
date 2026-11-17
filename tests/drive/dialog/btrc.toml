@@ -2,4 +2,4 @@ manifest-version = 1
 [package]
 name = "nixos_drive_dialog_tests"
 [dependencies]
-vm = { path = "../../vm" }
+testkit = { path = "../../testkit" }

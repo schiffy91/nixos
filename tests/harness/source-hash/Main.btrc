@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Platform;
-import ../../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 
 class SourceHashTests {
     private TestDirectory fixture;

@@ -7,7 +7,7 @@ let
       "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
     ]));
   worker = import ../../../config/system/nixos/opportunistic-unlock/package.nix { inherit pkgs inputs; };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "opportunistic-unlock";
   nodes.machine = { config, ... }: {
     _module.args.inputs = inputs;

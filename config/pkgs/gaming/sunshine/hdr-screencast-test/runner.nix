@@ -3,7 +3,7 @@
 , pkgs ? import inputs.nixpkgs { inherit system; }
 }:
 let probe = import ./package.nix { inherit pkgs; };
-in (import ../../../../lib/btrc.nix { inherit pkgs inputs; }) {
+in (inputs.btrc.lib.buildPackage pkgs) {
   name = "hdr-screencast-test";
   src = pkgs.lib.fileset.toSource { root = ./.; fileset = pkgs.lib.fileset.unions [ ./Main.btrc ./Capture.btrc ]; };
   programs.hdr-screencast-test = "Main.btrc";

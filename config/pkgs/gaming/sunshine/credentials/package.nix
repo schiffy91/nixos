@@ -3,7 +3,7 @@ let
   configuration = pkgs.writeText "sunshine-credential-references.json" (builtins.toJSON {
     inherit user home usernameReference passwordReference publicKeys;
   });
-in (import ../../../../lib/btrc.nix { inherit pkgs inputs; }) {
+in (inputs.btrc.lib.buildPackage pkgs) {
   name = "sunshine-credentials";
   src = ./src;
   programs.nixosctl-sunshine = "Main.btrc";

@@ -1,5 +1,5 @@
-{ pkgs, lib, btrcpy, configPath ? "" }:
-let secureBootKeys = import ./secure-boot-keys/package.nix { inherit pkgs btrcpy; };
+{ pkgs, lib, inputs, btrcpy, configPath ? "" }:
+let secureBootKeys = import ./secure-boot-keys/package.nix { inherit pkgs inputs btrcpy; };
 in pkgs.stdenv.mkDerivation {
   name = "nixosctl";
   src = lib.fileset.toSource {

@@ -1,6 +1,6 @@
 import Library.Platform;
-import ../../lib/TestDirectory.btrc;
-import ../../lib/TerminalSession.btrc;
+import testkit.TestDirectory;
+import testkit.TerminalSession;
 
 class InstallerSecretTests {
     private string root = "/run/installer-test";

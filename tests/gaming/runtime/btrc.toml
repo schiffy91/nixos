@@ -4,6 +4,7 @@ name = "nixos_gaming_runtime_tests"
 exports = ["Signals", "TLS"]
 
 [dependencies]
+testkit = { path = "../../testkit" }
 slopsmith = { path = "../../../config/pkgs/gaming/slopsmith/src" }
 sunshine_credentials = { path = "../../../config/pkgs/gaming/sunshine/credentials/src" }
 

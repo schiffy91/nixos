@@ -4,4 +4,5 @@ manifest-version = 1
 name = "nixos_installer_secret_tests"
 
 [dependencies]
+testkit = { path = "../../testkit" }
 nixosctl = { path = "../../../config/pkgs/utils/nixosctl" }

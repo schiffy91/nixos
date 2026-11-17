@@ -4,7 +4,7 @@ let
   pkgs = import (builtins.fetchTree {
     inherit (locked) type owner repo rev narHash;
   }) { inherit system; };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   node.pkgsReadOnly = false;
   name = "sleep-gaming-plasma";
   nodes.machine = { pkgs, lib, ... }: {

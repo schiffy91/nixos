@@ -2,7 +2,7 @@
 let
   inherit (flake) inputs;
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; overlays = [ inputs.jovian.overlays.default ]; };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   imports = extraModules;
   name = "sleep-gamescope-native-control";
   graphical = true;

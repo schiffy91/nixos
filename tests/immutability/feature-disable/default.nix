@@ -48,7 +48,7 @@ let
   runtime = lib.findFirst (package: lib.getName package == "immutability")
     (throw "persistence-only profile did not expose the immutability runtime")
     profiles.enabled.environment.systemPackages;
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "persistence-feature-disable";
   nodes.machine = { ... }: {
     virtualisation.emptyDiskImages = [ 512 ];

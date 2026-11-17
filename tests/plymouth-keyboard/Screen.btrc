@@ -1,5 +1,5 @@
 import Library.Image.Pixels;
-import ../lib/Check.btrc;
+import testkit.Check;
 
 class TouchPoint {
     private double _x;

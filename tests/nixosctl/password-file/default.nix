@@ -5,23 +5,22 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; };
   nixosctl = import ../../../config/pkgs/utils/nixosctl/package.nix {
-    inherit pkgs;
+    inherit pkgs inputs;
     inherit (pkgs) lib;
     btrcpy = inputs.btrc.packages.${system}.btrcpy;
   };
-  contracts = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  contracts = (inputs.btrc.lib.buildPackage pkgs) {
     name = "password-file-contracts";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib
-        ../../../config/pkgs/utils/nixosctl ./GuestTests.btrc ./btrc.toml ./btrc.lock ];
+      fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/utils/nixosctl ./GuestTests.btrc ./btrc.toml ./btrc.lock ];
     };
     programs.password-file-contracts = "tests/nixosctl/password-file/GuestTests.btrc";
     buildInputs = [ pkgs.libxcrypt ];
     linkFlags = [ "-lutil" "-lcrypt" ];
   };
 in assert import ./storage.nix { inherit inputs system; };
-(import ../../vm/test.nix { inherit pkgs inputs; }) {
+(import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "password-file";
   nodes.machine = { lib, ... }: {
     _module.args.inputs = inputs;

@@ -1,6 +1,6 @@
 import Library.CLI;
-import ../../vm/Framebuffer.btrc;
-import ../../vm/Lab.btrc;
+import testkit.Framebuffer;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // The Drive in the system tray: its picture and words follow what the engine is doing, a click opens the

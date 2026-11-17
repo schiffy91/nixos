@@ -1,10 +1,10 @@
 { pkgs, inputs }:
 let
-  tests = (import ../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  tests = (inputs.btrc.lib.buildPackage pkgs) {
     name = "chrome-launcher-contracts";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../..;
-      fileset = pkgs.lib.fileset.unions [ ./ChromeLaunchers.btrc ../lib ];
+      fileset = pkgs.lib.fileset.unions [ ./ChromeLaunchers.btrc ];
     };
     programs.chrome-launcher-tests = "tests/checks/ChromeLaunchers.btrc";
   };

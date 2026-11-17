@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // The engine is killed in the middle of things. A read that was waiting fails and never returns zeros, an upload

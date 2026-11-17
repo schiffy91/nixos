@@ -3,11 +3,11 @@ let
   lock = (builtins.fromJSON (builtins.readFile ../../flake.lock)).nodes;
   pkgs = import (builtins.fetchTree { inherit (lock.nixpkgs.locked) type owner repo rev narHash; }) { inherit system; };
   compiler = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs lock.btrc.locked [ "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev" ]));
-  programs = (import ../../config/lib/btrc.nix { inherit pkgs; inherit (compiler.packages.${system}) btrcpy btrc-native-plan; }) {
+  programs = (compiler.lib.buildPackageWith { inherit pkgs; inherit (compiler.packages.${system}) btrcpy btrc-native-plan; }) {
     name = "ci-contract-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../lib/test-source.nix { inherit pkgs; inputs.btrc = compiler; }) {
       root = ../..;
-      fileset = pkgs.lib.fileset.unions [ ../../ci/Main.btrc ../../ci/lib ../../ci/native.h ../../ci/btrc.toml ../../ci/btrc.lock ../lib ./ToolsTests.btrc ./PipeTests.btrc ./NativeTests.btrc ./PublishTests.btrc ./PublishFixture.btrc ./ShutdownTests.btrc ./ShutdownServer.btrc ./ProcessProbe.btrc ./process-probe.h ./btrc.toml ./btrc.lock ];
+      fileset = pkgs.lib.fileset.unions [ ../../ci/Main.btrc ../../ci/lib ../../ci/native.h ../../ci/btrc.toml ../../ci/btrc.lock ./ToolsTests.btrc ./PipeTests.btrc ./NativeTests.btrc ./PublishTests.btrc ./PublishFixture.btrc ./ShutdownTests.btrc ./ShutdownServer.btrc ./ProcessProbe.btrc ./process-probe.h ./btrc.toml ./btrc.lock ];
     };
     programs = {
       repo-tools = "ci/Main.btrc";

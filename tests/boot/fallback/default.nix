@@ -4,7 +4,7 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "boot-fallback";
   nodes.machine = { lib, ... }: {
     boot.loader.grub.enable = lib.mkForce false;

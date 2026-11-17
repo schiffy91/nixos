@@ -3,9 +3,9 @@ let
   lock = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes;
   pkgs = import (builtins.fetchTree { inherit (lock.nixpkgs.locked) type owner repo rev narHash; }) { inherit system; };
   inputs.btrc = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs lock.btrc.locked [ "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev" ]));
-  tests = import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
+  tests = inputs.btrc.lib.buildPackage pkgs {
     name = "trusted-network-policy-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [ ../RulesTests.btrc ../btrc.toml ../../../config/system/nixos/networking ];
     };

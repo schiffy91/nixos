@@ -1,8 +1,8 @@
 { pkgs, inputs }:
 let
-  build = import ../../../lib/btrc.nix { inherit pkgs inputs; };
+  build = inputs.btrc.lib.buildPackage pkgs;
   # Each program is built from the files it imports, so an edit to the tray does not rebuild the engine.
-  sources = import ../../../lib/btrc-sources.nix { inherit (pkgs) lib; };
+  sources = inputs.btrc.lib.sources { inherit (pkgs) lib; };
   src = entry: pkgs.lib.fileset.toSource { root = ./.; fileset = sources ./. entry; };
   window = {  # what a program with a window of its own links and runs with
     linkPlan = true;

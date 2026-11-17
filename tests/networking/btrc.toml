@@ -4,4 +4,5 @@ manifest-version = 1
 name = "networking_tests"
 
 [dependencies]
+testkit = { path = "../testkit" }
 networking = { path = "../../config/system/nixos/networking" }

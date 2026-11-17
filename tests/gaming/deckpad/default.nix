@@ -1,13 +1,12 @@
 { pkgs, inputs }:
 let
   programs = import ../../../config/pkgs/gaming/deckpad/package.nix { inherit pkgs inputs; };
-  tests = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  tests = (inputs.btrc.lib.buildPackage pkgs) {
     name = "deckpad-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [
-        ./UnitTests.btrc ./ServerTests.btrc ./btrc.toml ./btrc.lock ../../lib/Check.btrc
-        (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.hasExt "h" || file.name == "btrc.toml" || file.name == "btrc.lock") ../../../config/pkgs/gaming/deckpad)
+        ./UnitTests.btrc ./ServerTests.btrc ./btrc.toml ./btrc.lock (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.hasExt "h" || file.name == "btrc.toml" || file.name == "btrc.lock") ../../../config/pkgs/gaming/deckpad)
       ];
     };
     programs = {

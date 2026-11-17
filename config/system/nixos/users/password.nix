@@ -7,7 +7,7 @@ let
     (lib.filter (volume: containsPassword volume.mountPoint) config.settings.disk.subvolumes.volumes);
   resetPassword = passwordVolumes != [] && (builtins.head passwordVolumes).resetOnBoot;
   helper = import ../../../pkgs/utils/nixosctl/package.nix {
-    inherit pkgs lib;
+    inherit pkgs lib inputs;
     btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
   };
 in {

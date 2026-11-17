@@ -2,7 +2,7 @@
 let
   btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
   nixosctlBin = import ./package.nix {
-    inherit pkgs lib btrcpy;
+    inherit pkgs lib inputs btrcpy;
     inherit (config.settings.apps.utils.nixosctl) configPath;
   };
 in {

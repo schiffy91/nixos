@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 int main(int argc, char** argv) {
     try {
         var lab = Lab(CLIArgs(argc, argv).require(0, "VM descriptor")); var machine = lab.guest("machine");

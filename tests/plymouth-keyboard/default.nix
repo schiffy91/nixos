@@ -10,7 +10,7 @@ let
     mkdir -p $out/bin
     $CC -Wall -Wextra -Werror ${./input.c} -o $out/bin/test-input
   '';
-in (import ../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "plymouth-touch-unlock-${layout}" + pkgs.lib.optionalString rotate "-rotated";
   nodes.machine = { config, lib, pkgs, ... }: {
     imports = [ ../../config/settings.nix ../../config/system/nixos/boot/touch-keyboard.nix ];

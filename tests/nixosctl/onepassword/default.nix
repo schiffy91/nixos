@@ -8,16 +8,16 @@ let
     config.allowUnfree = true;
     inherit ((import ../../../config/system/nixos/users/ssh-agent-auth.nix {}).nixpkgs) overlays;
   };
-  passwordFallback = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  passwordFallback = (inputs.btrc.lib.buildPackage pkgs) {
     name = "sudo-password-fallback";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ./PasswordFallback.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ./PasswordFallback.btrc ];
     };
     programs.sudo-password-fallback = "tests/nixosctl/onepassword/PasswordFallback.btrc";
     linkFlags = [ "-lutil" ];
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "onepassword-integration";
   nodes.machine = { ... }: {
     imports = [

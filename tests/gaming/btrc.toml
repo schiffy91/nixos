@@ -4,4 +4,5 @@ manifest-version = 1
 name = "nixos_unit_tests"
 
 [dependencies]
+testkit = { path = "../testkit" }
 assetto = { path = "../../config/pkgs/gaming/assettocorsa/src" }

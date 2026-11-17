@@ -1,4 +1,4 @@
-import ../vm/Lab.btrc;
+import testkit.Lab;
 import ./Screen.btrc;
 
 class PlymouthScenario {

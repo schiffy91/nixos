@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // Two machines on one Drive, both changing files at once: they must end with the same tree, the Drive with it too,

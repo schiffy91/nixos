@@ -47,7 +47,6 @@ let
     "tests/secure-boot/alarm-state.h"
     "tests/sleep-lock/helpers/test-native.h"
     "tests/sleep-lock/unit/process-probe.h"
-    "tests/vm/vnc.h"
     "tests/gaming/proton/pdb/Folded.c"
     "tests/gaming/proton/pdb/Public.c"
     "tests/gaming/proton/pdb/PdbSymbols.c"
@@ -99,7 +98,6 @@ let
         ];
       })}/tests/sleep-lock/helpers/test-native.h \
       ${../tests/sleep-lock/unit/process-probe.h} \
-      ${../tests/vm/vnc.h} \
       ${../tests/ci/native-fixture/native.h}; do
       $CC -D_GNU_SOURCE=1 -Wall -Wextra -Werror -x c -fsyntax-only -I${../config/system/nixos/opportunistic-unlock} \
         $(pkg-config --cflags libcryptsetup openssl libcurl libdrm glib-2.0) -include "$source" /dev/null

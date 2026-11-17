@@ -1,7 +1,7 @@
 import Library.CLI;
 import Library.Process;
 import Library.Timer;
-import ../../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 
 class InstallTests {
     private TestDirectory fixture;

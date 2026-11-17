@@ -4,4 +4,5 @@ manifest-version = 1
 name = "nixos_proton_tools_tests"
 
 [dependencies]
+testkit = { path = "../../../testkit" }
 proton = { path = "../../../../config/pkgs/gaming/proton/custom/tools" }

@@ -13,3 +13,6 @@ symbols = ["testFork", "testIgnoreTermination", "testKillProcess"]
 name = "_POSIX_C_SOURCE"
 value = "200809L"
 modules = ["ProcessTree"]
+
+[dependencies]
+testkit = { path = "../../testkit" }

@@ -1,7 +1,7 @@
 import Library.Bytes;
 import Library.HTTP.HTTPServer;
 import Library.HTTP.HTTPFraming;
-import ../../lib/Check.btrc;
+import testkit.Check;
 
 class TLSConnection {
     private TestTLSConnection connection;

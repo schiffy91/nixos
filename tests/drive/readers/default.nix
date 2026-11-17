@@ -7,7 +7,7 @@ let
   programs = import ../../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
   drive = if mutation == "" then programs.drive else programs.drive.overrideAttrs (_: { postPatch = mutation; });
   ask = pkgs.writeShellScriptBin "drive-test-ask" ''echo "$1|$2" >> /tmp/asked'';  # stands in for the dialog: records the question
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "drive-readers";
   nodes.machine = { ... }: {
     boot.kernelModules = [ "fuse" ];

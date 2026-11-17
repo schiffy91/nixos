@@ -1,8 +1,8 @@
 import Library.CLI;
 import Library.Platform;
-import ../../lib/HTTPProbe.btrc;
-import ../../lib/CredentialDigest.btrc;
-import ../../lib/ParallelCommands.btrc;
+import testkit.HTTPProbe;
+import testkit.CredentialDigest;
+import testkit.ParallelCommands;
 
 class SunshineFixture {
     class Vector<string> arguments(Vector<string> arguments) {

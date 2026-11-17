@@ -1,8 +1,8 @@
 import Library.CLI;
 import nixosctl.lib.PasswordManager;
-import ../../lib/TerminalSession.btrc;
-import ../../lib/TestDirectory.btrc;
-import ../../lib/ParallelCommands.btrc;
+import testkit.TerminalSession;
+import testkit.TestDirectory;
+import testkit.ParallelCommands;
 
 class PasswordFileTests {
     private string target = "/var/lib/nixos/credentials/password-hash";

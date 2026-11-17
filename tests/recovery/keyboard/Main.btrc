@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Image.Pixels;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 
 void tap(Guest machine, int x, int y) {
     machine.succeed(f"echo 'down {x * 32767 / 1280} {y * 32767 / 800}' > /run/test-input");

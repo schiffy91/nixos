@@ -3,7 +3,7 @@ let
   lock = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes;
   pkgs = import (builtins.fetchTree { inherit (lock.nixpkgs.locked) type owner repo rev narHash; }) { inherit system; };
   inputs.btrc = builtins.getFlake (builtins.flakeRefToString (builtins.removeAttrs lock.btrc.locked [ "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev" ]));
-in import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
+in inputs.btrc.lib.buildPackage pkgs {
   name = "recovery-artifact-contracts";
   src = pkgs.lib.fileset.toSource {
     root = ../../..;

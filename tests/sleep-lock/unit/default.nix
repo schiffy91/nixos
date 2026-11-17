@@ -3,7 +3,7 @@
 , pkgs ? import inputs.nixpkgs { inherit system; }
 }:
 let
-  programs = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  programs = (inputs.btrc.lib.buildPackage pkgs) {
     name = "sleep-lock-contracts";
     src = pkgs.lib.fileset.toSource {
       root = ../../..;

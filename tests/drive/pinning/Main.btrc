@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // Pinned folders stay downloaded, content outside them is given back when there is too much of it, and an

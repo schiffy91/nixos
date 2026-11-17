@@ -2,7 +2,7 @@ import Library.CLI;
 import Library.FileSystem;
 import Library.Console;
 import keys.Crypto;
-import ../lib/Check.btrc;
+import testkit.Check;
 import ./AlarmState.btrc;
 
 int main(int argc, char** argv) {

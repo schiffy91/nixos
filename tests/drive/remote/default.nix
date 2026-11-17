@@ -4,13 +4,12 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; };
   programs = import ../../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
-  contract = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  contract = (inputs.btrc.lib.buildPackage pkgs) {
     name = "drive-remote-contract";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [
-        ./Main.btrc ../../lib/Check.btrc
-        (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc") ../../../config/pkgs/utils/drive/remote)
+        ./Main.btrc (pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc") ../../../config/pkgs/utils/drive/remote)
       ];
     };
     programs.drive-remote-contract = "tests/drive/remote/Main.btrc";

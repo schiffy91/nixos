@@ -4,4 +4,5 @@ manifest-version = 1
 name = "nixos_recovery_tests"
 
 [dependencies]
+testkit = { path = "../testkit" }
 recovery = { path = "../../config/system/nixos/recovery" }

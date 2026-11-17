@@ -1,5 +1,5 @@
-import ../../vm/Lab.btrc;
-import ../../vm/Framebuffer.btrc;
+import testkit.Lab;
+import testkit.Framebuffer;
 
 class GamescopeScenario {
     private Lab lab;

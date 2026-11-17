@@ -4,15 +4,15 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  contracts = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  contracts = (inputs.btrc.lib.buildPackage pkgs) {
     name = "sunshine-credentials-contracts";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ./GuestTests.btrc ./Fixture.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ./GuestTests.btrc ./Fixture.btrc ];
     };
     programs.sunshine-credentials-contracts = "tests/nixosctl/sunshine/GuestTests.btrc";
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "sunshine-credentials";
   node.pkgsReadOnly = false;
   nodes.machine = { config, lib, pkgs, ... }: {
@@ -38,7 +38,7 @@ in (import ../../vm/test.nix { inherit pkgs inputs; }) {
     environment.systemPackages = [
       contracts pkgs.curl pkgs.openssl pkgs.netcat-openbsd pkgs.moonlight-qt
       (import ../../../config/pkgs/utils/nixosctl/package.nix {
-        inherit pkgs lib;
+        inherit pkgs lib inputs;
         btrcpy = inputs.btrc.packages.${system}.btrcpy;
       })
     ];

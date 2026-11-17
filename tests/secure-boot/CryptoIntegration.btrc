@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 import ./AlarmState.btrc;
 
 class CryptoIntegration {

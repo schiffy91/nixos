@@ -5,7 +5,7 @@ let
     mkdir -p $out/bin
     $CC -Wall -Wextra -Werror ${../../plymouth-keyboard/input.c} -o $out/bin/test-input
   '';
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "recovery-touch-keyboard";
   nodes.machine = { pkgs, ... }: {
     imports = [ ../../../config/system/nixos/images/touch-console.nix ];

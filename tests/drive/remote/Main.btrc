@@ -6,7 +6,7 @@ import Library.IO;
 import Library.Strings;
 import Library.Vector;
 
-import ../../lib/Check.btrc;
+import testkit.Check;
 import ../../../config/pkgs/utils/drive/remote/DriveApi.btrc;
 import ../../../config/pkgs/utils/drive/remote/DriveFile.btrc;
 import ../../../config/pkgs/utils/drive/remote/Timestamp.btrc;

@@ -1,9 +1,9 @@
 { pkgs, inputs }:
-let program = (import ../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+let program = (inputs.btrc.lib.buildPackage pkgs) {
   name = "capture-evidence-tests";
-  src = pkgs.lib.fileset.toSource {
+  src = (import ../lib/test-source.nix { inherit pkgs inputs; }) {
     root = ../..;
-    fileset = pkgs.lib.fileset.unions [ ./CaptureTests.btrc ../lib/Check.btrc ../../config/pkgs/gaming/sunshine/hdr-screencast-test/Capture.btrc ];
+    fileset = pkgs.lib.fileset.unions [ ./CaptureTests.btrc ../../config/pkgs/gaming/sunshine/hdr-screencast-test/Capture.btrc ];
   };
   programs.capture-tests = "tests/gaming/CaptureTests.btrc";
 };

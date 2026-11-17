@@ -1,4 +1,4 @@
-import ../vm/Lab.btrc;
+import testkit.Lab;
 
 // A guest running the fake Drive, the engine and the door, for the scenarios to act on.
 class DriveFixture {

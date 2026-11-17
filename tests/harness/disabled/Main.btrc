@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Platform;
-import ../../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 
 // A node switched off with a reason is never run, stays in the required list, and is said to be off.
 class DisabledNodeTests {

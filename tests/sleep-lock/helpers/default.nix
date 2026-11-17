@@ -2,7 +2,7 @@
 , system ? builtins.currentSystem
 , pkgs ? import inputs.nixpkgs { inherit system; }
 }:
-import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
+inputs.btrc.lib.buildPackage pkgs {
   name = "sleep-helper-contracts";
   src = pkgs.lib.fileset.toSource {
     root = ../../..;

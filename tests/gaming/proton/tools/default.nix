@@ -1,10 +1,10 @@
 { pkgs, inputs }:
 let
-  programs = (import ../../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  programs = (inputs.btrc.lib.buildPackage pkgs) {
     name = "proton-tools-contract-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../../../config/pkgs/gaming/proton/custom/tools ../../../lib ./ToolsTests.btrc ./Integration.btrc ./CommandFixture.btrc ./btrc.toml ./btrc.lock ];
+      fileset = pkgs.lib.fileset.unions [ ../../../../config/pkgs/gaming/proton/custom/tools ./ToolsTests.btrc ./Integration.btrc ./CommandFixture.btrc ./btrc.toml ./btrc.lock ];
     };
     programs = {
       proton-custom-tools = "config/pkgs/gaming/proton/custom/tools/Main.btrc";

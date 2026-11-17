@@ -1,9 +1,9 @@
 import Library.CLI;
 import Library.Platform;
-import ../../lib/TestDirectory.btrc;
-import ../../lib/CredentialDigest.btrc;
-import ../../lib/CommandLog.btrc;
-import ../../lib/ParallelCommands.btrc;
+import testkit.TestDirectory;
+import testkit.CredentialDigest;
+import testkit.CommandLog;
+import testkit.ParallelCommands;
 import ./Signals.btrc;
 
 class RuntimeTests {

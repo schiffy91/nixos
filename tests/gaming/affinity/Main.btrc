@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Platform;
-import ../../lib/CommandLog.btrc;
+import testkit.CommandLog;
 import ./Affinity.btrc;
 
 class AffinityTests {

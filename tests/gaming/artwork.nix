@@ -5,14 +5,15 @@ let
     inherit name;
     path = assets.artwork;
   }) artwork);
-  tests = (import ../../config/lib/btrc.nix {
+  tests = (inputs.btrc.lib.buildPackageWith {
     inherit pkgs;
     btrcpy = import ../lib/image-compiler.nix { inherit pkgs inputs; };
+    btrc-native-plan = null;
   }) {
     name = "gaming-artwork-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../.;
-      fileset = pkgs.lib.fileset.unions [ ./ArtworkTests.btrc ../lib ];
+      fileset = pkgs.lib.fileset.unions [ ./ArtworkTests.btrc ];
     };
     programs.artwork-tests = "gaming/ArtworkTests.btrc";
     buildInputs = [ pkgs.libpng pkgs.libjpeg_turbo ];

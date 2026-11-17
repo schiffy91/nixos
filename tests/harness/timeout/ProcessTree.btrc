@@ -2,7 +2,7 @@ import Library.FileSystem;
 import Library.JSON;
 import Library.Platform;
 import Library.Timer;
-import ../../lib/Check.btrc;
+import testkit.Check;
 
 class ProcessIdentity {
     private int pid;

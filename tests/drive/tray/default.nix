@@ -13,7 +13,7 @@ let
   host = pkgs.writeShellScriptBin "tray-host" ''
     exec ${pkgs.python3.withPackages (python: [ python.dbus-python python.pygobject3 ])}/bin/python3 ${./watcher.py}
   '';
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "drive-tray";
   graphical = true;
   nodes.machine = { lib, ... }: {

@@ -10,7 +10,7 @@ let
     ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY
     exec ${pkgs.coreutils}/bin/sleep infinity
   '';
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "drive-dialog";
   graphical = true;
   nodes.machine = { lib, ... }: {

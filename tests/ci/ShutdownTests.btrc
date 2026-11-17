@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Timer;
-import ../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 import ./ProcessProbe.btrc;
 
 int main(int argc, char** argv) {

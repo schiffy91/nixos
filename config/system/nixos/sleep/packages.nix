@@ -1,6 +1,6 @@
 { pkgs, inputs, plymouth ? pkgs.plymouth }:
 let
-  build = import ../../../lib/btrc.nix { inherit pkgs inputs; };
+  build = inputs.btrc.lib.buildPackage pkgs;
   src = ./helpers;
   blank = build {
     name = "sleep-lock-blank";

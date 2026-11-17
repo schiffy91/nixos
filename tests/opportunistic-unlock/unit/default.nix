@@ -27,7 +27,7 @@ assert enabled.systemd.services.nixos-opportunistic-unlock.serviceConfig.Type ==
 assert enabled.systemd.services.nixos-opportunistic-unlock.serviceConfig.MemorySwapMax == 0;
 assert builtins.elem "x-nixos.opportunistic-passphrase" enabled.boot.initrd.luks.devices.testroot.crypttabExtraOpts;
 assert !(disabled.systemd.services ? nixos-opportunistic-unlock);
-import ../../../config/lib/btrc.nix { inherit pkgs inputs; } {
+inputs.btrc.lib.buildPackage pkgs {
   name = "opportunistic-unlock-policy-tests";
   src = pkgs.lib.fileset.toSource {
     root = ../../..;

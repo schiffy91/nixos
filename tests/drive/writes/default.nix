@@ -7,7 +7,7 @@ let
   programs = import ../../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
   drive = if mutation == "" then programs.drive else programs.drive.overrideAttrs (_: { postPatch = mutation; });
   ask = pkgs.writeShellScriptBin "drive-test-ask" "true";
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "drive-writes";
   nodes.machine = { ... }: {
     boot.kernelModules = [ "fuse" ];

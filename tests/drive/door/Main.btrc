@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 
 // The read-only client on a real kernel: a mount whose files arrive as they are read, and what happens when its parts stop.
 class DoorScenario {

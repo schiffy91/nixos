@@ -159,6 +159,7 @@ only for a place that still runs it.
 | `spec-toml`, `spec-yaml` | `formats` case of the runner test (`make harness`) | The same two specs, run over a fixture graph |
 | `quick` | removed | It printed a word through the runner; every case of the runner test does more |
 | `stateful-host` | removed | It proved that a state is recorded and reused; the runner test's duration and collection cases prove the same over fixtures |
+| `config/lib/btrc.nix`, `tests/vm`, eight files of `tests/lib` | `btrc.lib.buildPackage`, `btrc.lib.vmTest` and the `testkit` package in btrc | One copy, used by every repository that builds or tests BTRC programs; `tests/lib/vm-test.nix` and `test-source.nix` lay a build out as the checkout is |
 | `install-reset-x86_64` | `install-reset`, now in the required set | On this architecture the two were the same install; the twin's disk was never booted |
 | `installer-download-x86_64`, `installer-ssh-x86_64` | `installer-download`, `installer-ssh` | A node with no architecture in its name runs on the host's own, so on this desktop each pair was one download and one boot done twice |
 | `recovery-boot-x86_64`, `recovery-secure-boot-x86_64` | `recovery-boot`, `recovery-secure-boot`, after `installer-ssh` | The same scenarios on the host's architecture; their parent was the removed twin |

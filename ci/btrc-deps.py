@@ -84,7 +84,8 @@ def main():
     here = Path.cwd()
     for argument in sys.argv[1:]:
         name, _, entry = argument.partition("=")
-        files = " ".join(str(path.relative_to(here)).replace(" ", "\\ ") for path in Program.sources(Path(entry)))
+        # A package outside the repository (btrc's testkit, linked from the store) changes only with flake.lock.
+        files = " ".join(str(path.relative_to(here)).replace(" ", "\\ ") for path in Program.sources(Path(entry)) if path.is_relative_to(here))
         print(f"DEPS_{name} := {files}")
 
 

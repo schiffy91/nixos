@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // Changes made through the mount reach the Drive, and the reverse; a file changed on both sides is kept twice;

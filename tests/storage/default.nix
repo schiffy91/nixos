@@ -4,8 +4,8 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; };
   programs = import ../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
-  cli = import ../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs; inherit (inputs.btrc.packages.${system}) btrcpy; lib = pkgs.lib; };
-in (import ../vm/test.nix { inherit pkgs inputs; }) {
+  cli = import ../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs inputs; inherit (inputs.btrc.packages.${system}) btrcpy; lib = pkgs.lib; };
+in (import ../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "storage";
   nodes.machine = { ... }: {
     _module.args.inputs = inputs;

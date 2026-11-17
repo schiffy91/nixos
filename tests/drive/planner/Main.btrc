@@ -1,4 +1,4 @@
-import ../../lib/Check.btrc;
+import testkit.Check;
 import ../../../config/pkgs/utils/drive/engine/Planner.btrc;
 
 // Every sync rule as a table: what each side did since they last agreed, and what must happen.

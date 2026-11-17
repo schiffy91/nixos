@@ -6,7 +6,7 @@ let
   pkgs = import inputs.nixpkgs { inherit system; };
   programs = import ../../../config/pkgs/utils/drive/package.nix { inherit pkgs inputs; };
   drive = if mutation == "" then programs.drive else programs.drive.overrideAttrs (_: { postPatch = mutation; });
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "drive-held-placed";
   nodes.machine = { ... }: {
     boot.kernelModules = [ "fuse" ];

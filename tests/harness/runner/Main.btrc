@@ -1,8 +1,8 @@
 import Library.CLI;
 import Library.Network;
 import Library.Platform;
-import ../../lib/OwnedProcess.btrc;
-import ../../lib/TestDirectory.btrc;
+import testkit.OwnedProcess;
+import testkit.TestDirectory;
 
 // What the graph runner keeps, reports and clears beyond pass or fail.
 class GraphRunnerTests {

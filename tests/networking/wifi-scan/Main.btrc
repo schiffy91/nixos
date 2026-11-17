@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 
 // Joins each access point by address, so that NetworkManager has seen the
 // network has more than one, then joins the network as a device does.

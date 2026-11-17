@@ -19,3 +19,6 @@ release = "testCpuSetDestroy"
 name = "_GNU_SOURCE"
 value = "1"
 modules = ["Affinity"]
+
+[dependencies]
+testkit = { path = "../../testkit" }

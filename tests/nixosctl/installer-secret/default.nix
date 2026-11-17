@@ -6,7 +6,7 @@ let
   pkgs = import inputs.nixpkgs { inherit system; };
   driver = pkgs.stdenv.mkDerivation {
     name = "installer-secret-test";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
       fileset = pkgs.lib.fileset.unions [ ../../../config/pkgs/utils/nixosctl/lib ../../../config/pkgs/utils/nixosctl/btrc.toml ../../../config/pkgs/utils/nixosctl/btrc.lock ./Driver.btrc ./btrc.toml ./btrc.lock ];
     };
@@ -24,16 +24,16 @@ let
       install -Dm755 nixosctl-password-file $out/bin/nixosctl-password-file
     '';
   };
-  contracts = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  contracts = (inputs.btrc.lib.buildPackage pkgs) {
     name = "installer-secret-contracts";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ./GuestTests.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ./GuestTests.btrc ];
     };
     programs.installer-secret-contracts = "nixosctl/installer-secret/GuestTests.btrc";
     linkFlags = [ "-lutil" ];
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "installer-secret";
   nodes.machine = { ... }: {
     users.users.observer.isNormalUser = true;

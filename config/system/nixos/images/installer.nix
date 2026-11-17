@@ -6,7 +6,7 @@ let
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; };
   lib = inputs.nixpkgs.lib;
   btrcpy = inputs.btrc.packages.${system}.btrcpy;
-  nixosctl = import ../../../pkgs/utils/nixosctl/package.nix { inherit pkgs lib btrcpy; };
+  nixosctl = import ../../../pkgs/utils/nixosctl/package.nix { inherit pkgs lib inputs btrcpy; };
 
   installerSystem = lib.nixosSystem {
     inherit system;

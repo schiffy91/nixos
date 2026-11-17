@@ -1,5 +1,5 @@
-{ pkgs, btrcpy }:
-(import ../../../../lib/btrc.nix { inherit pkgs btrcpy; }) {
+{ pkgs, inputs, btrcpy }:
+(inputs.btrc.lib.buildPackageWith { inherit pkgs btrcpy; btrc-native-plan = null; }) {
   name = "nixosctl-secure-boot-keys";
   src = pkgs.lib.fileset.toSource {
     root = ./.;

@@ -1,1 +1,0 @@
-{"manifest-hash":"0d6ed2aeede6c5b7bb8f2d6a961539f42994866989acf6dab24dbc9e22e29d11","packages":[{"dependencies":{},"manifest-hash":"63c6f934953fc5b5ac0684c52d43b8969526ea9e746cc101afdf9c83f204e209","name":"nixos_vm_tests","source":{"path":"."}}],"root":"nixos_vm_tests","schema":3}

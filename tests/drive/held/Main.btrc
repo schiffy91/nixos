@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // The delete brake across a restart. Deletions that wait for a yes or a no still wait after the engine is killed

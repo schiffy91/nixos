@@ -4,15 +4,15 @@
 }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  contracts = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  contracts = (inputs.btrc.lib.buildPackage pkgs) {
     name = "sunshine-ssh-contracts";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../../..;
-      fileset = pkgs.lib.fileset.unions [ ../../lib ../sunshine/Fixture.btrc ./GuestTests.btrc ];
+      fileset = pkgs.lib.fileset.unions [ ../sunshine/Fixture.btrc ./GuestTests.btrc ];
     };
     programs.sunshine-ssh-contracts = "tests/nixosctl/sunshine-ssh/GuestTests.btrc";
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "sunshine-ssh-login";
   node.pkgsReadOnly = false;
   nodes.machine = { config, lib, pkgs, ... }: {

@@ -4,6 +4,7 @@ manifest-version = 1
 name = "nixos_secure_boot_tests"
 
 [dependencies]
+testkit = { path = "../testkit" }
 keys = { path = "../../config/pkgs/utils/nixosctl/secure-boot-keys" }
 
 [[native.bindings]]

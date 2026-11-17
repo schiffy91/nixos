@@ -1,8 +1,8 @@
 import Library.CLI;
 import Library.Platform;
 import Library.Timer;
-import ../../../lib/CommandLog.btrc;
-import ../../../lib/TestDirectory.btrc;
+import testkit.CommandLog;
+import testkit.TestDirectory;
 
 class ProtonIntegration {
     private TestDirectory fixture;

@@ -1,6 +1,6 @@
 import Library.Platform;
 import ../../ci/lib/Lsp.btrc;
-import ../lib/Check.btrc;
+import testkit.Check;
 import ./ProcessProbe.btrc;
 
 class ShutdownServer {

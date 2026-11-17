@@ -5,7 +5,7 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; };
   inherit (inputs.btrc.packages.${system}) btrcpy;
-  cli = import ../../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs btrcpy; lib = pkgs.lib; };
+  cli = import ../../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs inputs btrcpy; lib = pkgs.lib; };
   common = { ... }: {
     # Exercise the newly built CLI by store path on an older host profile.
     # Calling /run/current-system's helper would deliberately fail this test.
@@ -41,7 +41,7 @@ let
       '';
     };
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "secure-boot-backup";
   nodes = { deck = common; fractal = common; };
   scenario = ./Main.btrc;

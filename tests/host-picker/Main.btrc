@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Platform;
-import ../lib/TestDirectory.btrc;
+import testkit.TestDirectory;
 import ../../config/pkgs/utils/nixosctl/lib/core/Interactive.btrc;
 
 class HostPickerTests {

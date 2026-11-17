@@ -42,7 +42,7 @@ let
     networking.networkmanager.unmanaged = [ "interface-name:wlan0" "interface-name:wlan0-1" ];
     environment.systemPackages = [ policy ];
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "wifi-background-scan";
   nodes.stock = machine { };
   nodes.tuned = machine { signalThreshold = -76; recurringInterval = null; };

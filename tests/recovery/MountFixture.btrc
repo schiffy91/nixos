@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Platform;
-import ../lib/CommandLog.btrc;
+import testkit.CommandLog;
 
 int main(int argc, char** argv) {
     try {

@@ -2,8 +2,8 @@ import Library.CLI;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Process;
-import ../lib/Check.btrc;
-import ../lib/TestDirectory.btrc;
+import testkit.Check;
+import testkit.TestDirectory;
 
 class ChromeLaunchers {
     private TestDirectory fixture;

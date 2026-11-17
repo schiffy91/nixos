@@ -7,12 +7,12 @@ let
     "narHash" "lastModified" "lastModifiedDate" "revCount" "dirtyRev" "dirtyShortRev"
   ]));
   inputs.btrc = btrcFlake;
-  listener = (import ../../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  listener = (inputs.btrc.lib.buildPackage pkgs) {
     name = "network-test-listener";
     src = pkgs.lib.fileset.toSource { root = ./.; fileset = ./Listener.btrc; };
     programs.network-test-listener = "Listener.btrc";
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "trusted-network-connections";
   nodes.machine = { lib, pkgs, inputs, ... }: {
     imports = [ ../../../config/settings.nix ../../../config/system/nixos/networking.nix ];

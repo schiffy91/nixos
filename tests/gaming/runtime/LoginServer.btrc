@@ -2,7 +2,7 @@ import Library.CLI;
 import Library.JSON;
 import Library.FileSystem;
 import ./TLS.btrc;
-import ../../lib/CommandLog.btrc;
+import testkit.CommandLog;
 
 int main(int argc, char** argv) {
     var root = CLIArgs(argc, argv).require(0, "fixture directory");

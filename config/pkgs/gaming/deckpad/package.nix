@@ -1,6 +1,6 @@
 { pkgs, inputs }:
 let
-  build = import ../../../lib/btrc.nix { inherit pkgs inputs; };
+  build = inputs.btrc.lib.buildPackage pkgs;
   src = pkgs.lib.fileset.toSource {
     root = ./.;
     fileset = pkgs.lib.fileset.fileFilter (file: file.hasExt "btrc" || file.hasExt "h" || file.name == "btrc.toml" || file.name == "btrc.lock") ./.;

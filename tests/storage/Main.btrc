@@ -2,7 +2,7 @@ import Library.CLI;
 import Library.Process;
 import Library.Timer;
 import Library.JSON;
-import ../vm/Lab.btrc;
+import testkit.Lab;
 import ../drive/Fixture.btrc;
 
 // Declared, encrypted external storage, a card and a USB drive: each opened with its key file whenever it is

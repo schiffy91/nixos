@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // Who may cause downloads: a program gets a small allowance of not-downloaded files, and past it someone has to say yes.

@@ -89,7 +89,7 @@ TESTS_TARGETS := installer-download download install-system \
 all: build
 
 .PHONY: lint
-lint:
+lint: tests/testkit
 	nix-shell ci/tools.nix -A shell --run 'repo-tools lint'
 
 help:
@@ -125,8 +125,13 @@ LIBXCRYPT_ROOT := $(shell nix build --no-link --print-out-paths --inputs-from . 
 export CPATH := $(LIBXCRYPT_ROOT)/include$(if $(CPATH),:$(CPATH))
 export LIBRARY_PATH := $(LIBXCRYPT_ROOT)/lib$(if $(LIBRARY_PATH),:$(LIBRARY_PATH))
 
-dirs:
+dirs: | tests/testkit
 	mkdir -p $(BUILD_DIR)
+
+# The tests import btrc's testkit (Check, Lab, ...) as a package. It lives in btrc: a Nix build places it at
+# tests/testkit, and here it is linked there from the btrc this repository's lock names.
+tests/testkit: flake.lock
+	ln -sfn "$$(nix eval --raw --no-warn-dirty --inputs-from . 'btrc#lib.testkit')" $@
 
 # Rewritten only when the compiler is another one, so a new compiler rebuilds everything and the same one nothing.
 .PHONY: FORCE
@@ -283,7 +288,7 @@ iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
 CACHE_DIR ?= $(HOME)/.cache/nix-cache  # shared with the other repositories on this host
 CACHE_PORT ?= 8080
 
-$(BUILD_DIR)/repo-tools: $(shell rg --files ci -g '*.btrc') ci/tools.nix config/lib/btrc.nix flake.lock | dirs
+$(BUILD_DIR)/repo-tools: $(shell rg --files ci -g '*.btrc') ci/tools.nix flake.lock | dirs
 	nix-build ci/tools.nix -A package --out-link "$@"
 
 cache: $(BUILD_DIR)/repo-tools ## Build this host's ci/targets.nix attrs, sign them, and add them to build/cache

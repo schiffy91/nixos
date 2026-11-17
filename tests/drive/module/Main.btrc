@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // The units the NixOS module generates: the Drive is mounted for the user at boot, the two services recover from

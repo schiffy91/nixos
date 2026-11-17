@@ -1,0 +1,9 @@
+manifest-version = 1
+
+# The tests import btrc's testkit (Check, Lab, ...) as a package. It is not in this repository: `make`
+# links it at tests/testkit from the btrc input, and a Nix build places it there.
+[package]
+name = "testkit_consumer"
+
+[dependencies]
+testkit = { path = "tests/testkit" }

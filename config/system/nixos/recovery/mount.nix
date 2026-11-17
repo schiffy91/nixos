@@ -55,7 +55,7 @@ let
     persist = persistMounts;
   });
 in
-(import ../../../lib/btrc.nix { inherit pkgs inputs; }) {
+(inputs.btrc.lib.buildPackage pkgs) {
   name = "nixos-mount";
   src = lib.fileset.toSource {
     root = ./.;

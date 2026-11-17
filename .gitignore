@@ -19,3 +19,4 @@ build/
 generated/
 bin/
 !config/pkgs/gaming/battlenet/tests/bin/
+tests/testkit

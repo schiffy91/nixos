@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 
 // The store keeps its facts in extended attributes and sparse files, which a build sandbox refuses, so a VM runs its contract.
 int main(int argc, char** argv) {

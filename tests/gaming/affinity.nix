@@ -1,11 +1,11 @@
 { pkgs, inputs }:
 let
   launcher = import ../../config/pkgs/gaming/game-run/package.nix { inherit pkgs; };
-  tests = (import ../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  tests = (inputs.btrc.lib.buildPackage pkgs) {
     name = "gaming-affinity-probe";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../.;
-      fileset = pkgs.lib.fileset.unions [ ./affinity ../lib ];
+      fileset = pkgs.lib.fileset.unions [ ./affinity ];
     };
     programs.affinity-tests = "gaming/affinity/Main.btrc";
   };

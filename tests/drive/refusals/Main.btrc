@@ -1,5 +1,5 @@
 import Library.CLI;
-import ../../vm/Lab.btrc;
+import testkit.Lab;
 import ../Fixture.btrc;
 
 // What the client does when it is told no. The disk fills while a pinned folder downloads, the Drive has no room

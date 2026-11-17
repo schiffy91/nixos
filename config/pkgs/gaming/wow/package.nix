@@ -1,5 +1,5 @@
 { pkgs, inputs, settings ? null }:
-(import ../../../lib/btrc.nix { inherit pkgs inputs; }) {
+(inputs.btrc.lib.buildPackage pkgs) {
   name = "wow-tools";
   src = pkgs.lib.fileset.toSource { root = ./.; fileset = pkgs.lib.fileset.unions [ ./Main.btrc ./Lock.btrc ./Install.btrc ./InstallMain.btrc ./Settings.btrc ./SettingsMain.btrc ./Files.btrc ./files.h ./btrc.toml ./btrc.lock ]; };
   programs = {

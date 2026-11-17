@@ -37,7 +37,7 @@ Read `references/native-bindings.md` whenever creating or editing `btrc.toml` or
 
 - Every BTRC package directory owns one `btrc.toml` with `manifest-version = 1`, `[package] name = "..."`, and an explicit `exports = [...]` list naming only its public modules.
 - Cross-package imports declare `[dependencies]` in `btrc.toml` (`foo = { path = "../foo" }`). Never climb out of a package root with `../../../` relative imports.
-- Build Nix packages through `config/lib/btrc.nix` with `linkPlan = true` so `[[native.pkg-config]]` and `[[native.libraries]]` in `btrc.toml` drive compiler and linker flags from one source of truth. Register every `.c` and `.h` file in `ci/native.nix` so `-Wall -Wextra -Werror` covers it.
+- Build Nix packages through `inputs.btrc.lib.buildPackage pkgs` with `linkPlan = true` so `[[native.pkg-config]]` and `[[native.libraries]]` in `btrc.toml` drive compiler and linker flags from one source of truth. Register every `.c` and `.h` file in `ci/native.nix` so `-Wall -Wextra -Werror` covers it.
 - Bind one focused C11 `.h` header to one BTRC wrapper module (`module = "..."`, `header = "..."`, `language = "c"`, `standard = "c11"`).
 - Keep C ceremony in `.h` and domain policy in `.btrc`. The `.h` file translates C structs, bitmasks, `errno`, callbacks, and out-parameters into opaque handle typedefs, scalar inputs/outputs, and owned/copied results declared in `btrc.toml` (`[native.bindings.resources.<Handle>]`, `owned-results`, `borrowed-parameters`, `read-only-borrows`, `[native.bindings.copied-results.<fn>]`).
 - Never write symbol-dump manifests that export raw C structs or 30+ unbound C functions into `.btrc`, and never create 1-line stub modules (`Native.btrc`, `Posix.btrc`) whose sole job is re-exporting C headers.

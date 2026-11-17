@@ -1,6 +1,6 @@
 import Library.CLI;
 import Library.Image.SystemImageDecoder;
-import ../lib/Check.btrc;
+import testkit.Check;
 import Library.FileSystem;
 
 class ArtworkTests {

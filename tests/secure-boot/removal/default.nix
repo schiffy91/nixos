@@ -5,7 +5,7 @@
 let
   pkgs = import inputs.nixpkgs { inherit system; };
   inherit (inputs.btrc.packages.${system}) btrcpy;
-  cli = import ../../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs btrcpy; lib = pkgs.lib; };
+  cli = import ../../../config/pkgs/utils/nixosctl/package.nix { inherit pkgs inputs btrcpy; lib = pkgs.lib; };
   pki = "/var/lib/secure-boot-test";
   secure = { lib, ... }: {
     boot.loader.systemd-boot.enable = lib.mkForce false;
@@ -29,7 +29,7 @@ let
     boot.lanzaboote.configurationLimit = lib.mkForce 3;
     boot.lanzaboote.settings.secure-boot-enroll = "off";
   };
-in (import ../../vm/test.nix { inherit pkgs inputs; }) {
+in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   name = "secure-boot-removal";
   nodes.machine = { lib, ... }: {
     imports = [ inputs.lanzaboote.nixosModules.lanzaboote ];

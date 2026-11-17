@@ -1,14 +1,14 @@
 { flake ? builtins.getFlake "git+file://${toString ../..}", inputs ? flake.inputs, system ? builtins.currentSystem }:
 let
   pkgs = import inputs.nixpkgs { inherit system; };
-  tests = (import ../../config/lib/btrc.nix { inherit pkgs inputs; }) {
+  tests = (inputs.btrc.lib.buildPackage pkgs) {
     name = "secure-boot-key-tests";
-    src = pkgs.lib.fileset.toSource {
+    src = (import ../lib/test-source.nix { inherit pkgs inputs; }) {
       root = ../..;
       fileset = pkgs.lib.fileset.unions [
         ../../config/pkgs/utils/nixosctl/secure-boot-keys
         ../../config/pkgs/utils/nixosctl/lib/hardware/SecureBootVerification.btrc
-        ../lib ./ArchiveTests.btrc ./CryptoTests.btrc ./CryptoIntegration.btrc ./AlarmState.btrc ./alarm-state.h ./VerificationTests.btrc ./btrc.toml ./btrc.lock
+        ./ArchiveTests.btrc ./CryptoTests.btrc ./CryptoIntegration.btrc ./AlarmState.btrc ./alarm-state.h ./VerificationTests.btrc ./btrc.toml ./btrc.lock
       ];
     };
     programs = {
