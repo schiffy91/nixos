@@ -20,6 +20,34 @@ let
     ../../tests/checks/app_hierarchy.nix
     ../../tests/checks/persistence_ownership.nix
   ];
+  mkEvaluationCheck = import ../../tests/checks/evaluations.nix {
+    inherit lib;
+    outputs = { inherit (systems) nixosConfigurations; inherit (diskOperations) diskoConfigurations; };
+  };
+  expectations = file: builtins.fromJSON (builtins.readFile file);
+  # Both architectures' QEMU hosts are evaluated wherever the check is built: evaluation needs no builder.
+  qemuHostExpectations = lib.concatMap (architecture: map (expectation:
+    lib.mapAttrs (_: lib.replaceStrings [ "{{arch}}" ] [ architecture ]) expectation)
+    (expectations ../../tests/checks/qemu_host.json)) [ "x86_64" "aarch64" ];
+  deckAssertions = lib.concatMap (target:
+    let
+      deck = systems.nixosConfigurations."STEAM-DECK-OLED-${target}".config;
+      wanted = [ "amdgpu.lockup_timeout=5000,10000,10000,5000" "ttm.pages_min=2097152" "log_buf_len=4M" "audit=0" "spi_amd.speed_dev=1" "mem_sleep_default=deep" ];
+    in [
+      { holds = !(builtins.elem "amd_iommu=off" deck.boot.kernelParams); message = "STEAM-DECK-OLED-${target}: amd_iommu=off is set"; }
+      { holds = builtins.all (parameter: builtins.elem parameter deck.boot.kernelParams) wanted; message = "STEAM-DECK-OLED-${target}: a Deck kernel parameter is missing"; }
+      { holds = !(deck.systemd.services.systemd-suspend.serviceConfig ? ExecStart); message = "STEAM-DECK-OLED-${target}: systemd-suspend's ExecStart is replaced"; }
+    ]) systems.bootableTargets;
+  # Unit and contract suites that are one derivation each. They were graph nodes and lint built them
+  # as well; as checks they are built once, with every other check.
+  unitChecks = system: {
+    opportunistic-unlock-policy = import ../../tests/opportunistic-unlock/unit { inherit system; };
+    secure-boot-key-contracts = import ../../tests/secure-boot/unit.nix { inherit inputs system; };
+    sleep-lock-state = import ../../tests/sleep-lock/unit { inherit inputs system; };
+    networking-policy = import ../../tests/networking/policy { inherit system; };
+    recovery-mount-contracts = import ../../tests/recovery/unit.nix { inherit inputs system; };
+    recovery-artifacts = import ../../tests/recovery/artifacts { inherit system; };
+  };
   mkInstallerCheck = import ../../tests/checks/installer_contract.nix {
     inherit lib;
     inherit (installers) mkInstaller;
@@ -50,7 +78,9 @@ in lib.genAttrs hosts.systems (system:
       touchHost = if touchHost == null then null else touchHost.module;
     };
   in lib.listToAttrs (diskChecks ++ hostChecks ++ [ installerCheck (mkHostLayoutCheck { inherit pkgs; }) (mkSshTrustCheck { inherit pkgs; })
-    { name = "ci-local"; value = import ../../tests/checks/ci_local.nix { inherit pkgs; }; } ]))
+    { name = "ci-local"; value = import ../../tests/checks/ci_local.nix { inherit pkgs; }; }
+    (mkEvaluationCheck { inherit pkgs; name = "app-settings"; expectations = expectations ../../tests/checks/app_settings.json; assertions = deckAssertions; })
+    (mkEvaluationCheck { inherit pkgs; name = "qemu-hosts"; expectations = qemuHostExpectations; }) ]) // unitChecks system)
 // lib.genAttrs (lib.unique (map (host: host.system) hosts.darwin)) (system:
   lib.listToAttrs (map (host:
     let username = systems.darwinConfigurations.${host.name}.config.settings.users.admin.username;

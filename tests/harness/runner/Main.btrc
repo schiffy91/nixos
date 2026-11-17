@@ -228,7 +228,7 @@ class GraphRunnerTests {
         self.node("porter", f"printf '%s' {{{{sshPort}}}} > {ShellWords.quote(given)}");
         self.graph(self.entry("porter"));
         Check.exited(self.run(["run", "porter", "--arg", "jobs=2"]));
-        Check.that(Strings.toInt(Path.readAll(given)) > held.port(), f"the node is given a port past the one in use: {Path.readAll(given)} after {held.port()}");
+        Check.that(Strings.toInt(Path.readAll(given)) != held.port() && Strings.toInt(Path.readAll(given)) >= 22300, f"the node is given another port than the one in use: {Path.readAll(given)}, held {held.port()}");
         Check.that(held.accept(300) == null, "nothing connected to the port in use");
         held.close();
     }
@@ -301,6 +301,19 @@ class GraphRunnerTests {
         Check.equal(Path.readAll(runs), "run\nrun\nrun\n", "a change in a named directory or file reruns the node");
     }
 
+    // A spec may be TOML or YAML as well as JSON: the same scenario in each reads the same.
+    public void formats() {
+        self.fixture.write("quick.json", "{\"name\":\"quick\",\"state\":\"quick\",\"stateMaterial\":\"quick\",\"operations\":[{\"op\":\"host\",\"command\":\"true\"},{\"op\":\"record-state\"}]}");
+        for format in ["toml", "yaml"] {
+            self.fixture.write(f"spec.{format}", Path.readAll(PathTools.join(self.root, f"tests/harness/runner/formats/{format}.{format}")));
+        }
+        self.graph("{\"id\":\"quick\",\"spec\":\"quick.json\"},{\"id\":\"spec-toml\",\"spec\":\"spec.toml\",\"after\":[\"quick\"]},{\"id\":\"spec-yaml\",\"spec\":\"spec.yaml\",\"after\":[\"spec-toml\"]}");
+        var read = self.run(["run", "spec-yaml", "--arg", "jobs=1"]);
+        Check.that(read.code == 0 && read.stdout().contains("3 passed"), f"a TOML and a YAML spec run like a JSON one: {self.said(read)}");
+        Check.equal(Path.readAll(self.fixture.path(".vm/e2e/spec-toml/format.txt")), "toml-ok", "the TOML spec's arguments reach its commands");
+        Check.equal(Path.readAll(self.fixture.path(".vm/e2e/spec-yaml/format.txt")), "yaml-ok", "the YAML spec's arguments reach its commands");
+    }
+
     // With durations known, the node the longest chain waits behind goes first.
     public void longestChainFirst() {
         var sequence = self.fixture.path("sequence");
@@ -328,6 +341,7 @@ int main() {
         tests.inheritedKey();
         tests.occupiedPort();
         tests.derivations();
+        tests.formats();
         tests.declaredInputs();
         tests.longestChainFirst();
         tests.close();

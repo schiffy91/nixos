@@ -126,3 +126,18 @@ it does not emulate the Steam Deck's I2C digitizer or AMD GPU. Run it with:
 ```sh
 nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run initrd-touch-unlock'
 ```
+
+## Ledger
+
+Every node and check that was required on 2026-11-16, and where it is now. A test leaves the VM graph
+only for a place that still runs it.
+
+| Was | Is now | Why |
+|---|---|---|
+| `app-settings` (graph, 44 `nix eval` steps and one shell loop) | flake check `app-settings` | It only evaluates the configuration; one evaluation answers every expectation |
+| `qemu-host-x86_64`, `qemu-host-aarch64` | flake check `qemu-hosts`, both architectures | Evaluation needs no builder of the other architecture |
+| `opportunistic-unlock-policy`, `secure-boot-key-contracts`, `sleep-lock-state`, `networking-policy`, `recovery-mount-contracts`, `recovery-artifacts` | flake checks of the same names | Each is one derivation; lint built them a second time |
+| `host-timeout`, `source-hash`, `graph-disabled`, `graph-runner`, `host-picker` | `make harness` | They test the runner and the picker through their own binaries; a runner is not well tested by a run of itself |
+| `spec-toml`, `spec-yaml` | `formats` case of the runner test (`make harness`) | The same two specs, run over a fixture graph |
+| `quick` | removed | It printed a word through the runner; every case of the runner test does more |
+| `stateful-host` | removed | It proved that a state is recorded and reused; the runner test's duration and collection cases prove the same over fixtures |

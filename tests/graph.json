@@ -1,105 +1,14 @@
 {
   "default": [
     "cli-parity",
-    "spec-yaml",
-    "app-settings",
-    "stateful-host",
-    "qemu-host-x86_64",
-    "qemu-host-aarch64",
     "installer-download"
   ],
   "name": "nixos-btrc-e2e",
   "nodes": [
     {
       "after": [],
-      "id": "quick",
-      "spec": "harness/quick/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "host-timeout",
-      "spec": "harness/timeout/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "source-hash",
-      "spec": "harness/source-hash/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "graph-disabled",
-      "spec": "harness/disabled/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "graph-runner",
-      "spec": "harness/runner/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "args": {
-        "marker": "graph-default"
-      },
-      "id": "stateful-host",
-      "spec": "harness/stateful/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "app-settings",
-      "spec": "nixosctl/app-settings/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "args": {
-        "arch": "x86_64"
-      },
-      "id": "qemu-host-x86_64",
-      "spec": "qemu/host/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "args": {
-        "arch": "aarch64"
-      },
-      "id": "qemu-host-aarch64",
-      "spec": "qemu/host/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
       "id": "cli-parity",
       "spec": "nixosctl/cli-parity/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "spec-toml",
-      "spec": "harness/formats/toml.toml"
-    },
-    {
-      "after": [
-        "spec-toml"
-      ],
-      "id": "spec-yaml",
-      "spec": "harness/formats/yaml.yaml"
     },
     {
       "after": [],
@@ -190,9 +99,7 @@
       "spec": "tpm2/probe/test.json"
     },
     {
-      "after": [
-        "quick"
-      ],
+      "after": [],
       "id": "secure-boot-capabilities",
       "spec": "secure-boot/capabilities/test.json"
     },
@@ -249,8 +156,7 @@
     },
     {
       "after": [
-        "installer-ssh-x86_64",
-        "recovery-artifacts"
+        "installer-ssh-x86_64"
       ],
       "args": {
         "arch": "x86_64",
@@ -264,8 +170,7 @@
     },
     {
       "after": [
-        "installer-ssh-aarch64",
-        "recovery-artifacts"
+        "installer-ssh-aarch64"
       ],
       "args": {
         "arch": "aarch64",
@@ -279,8 +184,7 @@
     },
     {
       "after": [
-        "installer-ssh-x86_64",
-        "recovery-artifacts"
+        "installer-ssh-x86_64"
       ],
       "args": {
         "arch": "x86_64",
@@ -294,8 +198,7 @@
     },
     {
       "after": [
-        "installer-ssh-aarch64",
-        "recovery-artifacts"
+        "installer-ssh-aarch64"
       ],
       "args": {
         "arch": "aarch64",
@@ -634,9 +537,7 @@
       "spec": "nixosctl/password-change/encrypted.json"
     },
     {
-      "after": [
-        "quick"
-      ],
+      "after": [],
       "id": "secure-boot-cli",
       "spec": "secure-boot/cli/test.json"
     },
@@ -1079,31 +980,20 @@
       "after": []
     },
     {
+      "after": [
+        "secure-boot-cli"
+      ],
       "id": "secure-boot-removal",
-      "after": [ "secure-boot-cli", "secure-boot-key-contracts" ],
       "spec": "secure-boot/removal/test.json"
     },
     {
-      "id": "opportunistic-unlock-policy",
       "after": [],
-      "spec": "opportunistic-unlock/unit/test.json"
-    },
-    {
       "id": "opportunistic-unlock",
-      "after": [
-        "opportunistic-unlock-policy"
-      ],
       "spec": "opportunistic-unlock/boot/test.json"
     },
     {
-      "id": "secure-boot-key-contracts",
-      "spec": "secure-boot/unit/test.json"
-    },
-    {
+      "after": [],
       "id": "secure-boot-backup",
-      "after": [
-        "secure-boot-key-contracts"
-      ],
       "spec": "secure-boot/backup/test.json"
     },
     {
@@ -1111,69 +1001,41 @@
       "spec": "sleep-lock/gamescope-native/test.json"
     },
     {
+      "after": [],
       "id": "sleep-gamescope-native-lock",
-      "spec": "sleep-lock/gamescope-native-lock/test.json",
-      "after": [
-        "sleep-lock-state"
-      ]
+      "spec": "sleep-lock/gamescope-native-lock/test.json"
     },
     {
+      "after": [],
       "id": "sleep-gamescope-native-lock-without-sunshine",
-      "spec": "sleep-lock/gamescope-native-lock/without-sunshine.json",
-      "after": [
-        "sleep-lock-state"
-      ]
+      "spec": "sleep-lock/gamescope-native-lock/without-sunshine.json"
     },
     {
+      "after": [],
       "id": "sleep-gaming-plasma",
-      "spec": "sleep-lock/gaming-plasma/test.json",
-      "after": [
-        "sleep-lock-state"
-      ]
+      "spec": "sleep-lock/gaming-plasma/test.json"
     },
     {
+      "after": [],
       "id": "sleep-gamescope-native-resume-lock",
-      "spec": "sleep-lock/gamescope-native-lock/resume.json",
-      "after": [
-        "sleep-lock-state"
-      ]
+      "spec": "sleep-lock/gamescope-native-lock/resume.json"
     },
     {
       "id": "sleep-gamescope-native-suspend-control",
       "spec": "sleep-lock/gamescope-native-suspend-control/test.json"
     },
     {
-      "after": [
-        "networking-policy"
-      ],
+      "after": [],
       "id": "networking-roaming",
       "spec": "networking/roaming/test.json"
     },
     {
-      "after": [
-        "networking-policy"
-      ],
+      "after": [],
       "id": "networking-wifi-scan",
       "spec": "networking/wifi-scan/test.json"
     },
     {
-      "after": [
-        "quick"
-      ],
-      "id": "networking-policy",
-      "spec": "networking/policy/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
-      "id": "host-picker",
-      "spec": "host-picker/test.json"
-    },
-    {
-      "after": [
-        "quick"
-      ],
+      "after": [],
       "id": "persistence-ownership",
       "spec": "persistence/ownership/test.json"
     },
@@ -1290,36 +1152,13 @@
       "id": "gaming-runtime",
       "spec": "gaming/runtime/test.json",
       "after": []
-    },
-    {
-      "id": "sleep-lock-state",
-      "spec": "sleep-lock/unit/test.json",
-      "after": []
-    },
-    {
-      "id": "recovery-artifacts",
-      "after": ["recovery-mount-contracts"],
-      "spec": "recovery/artifacts/test.json"
-    },
-    {
-      "id": "recovery-mount-contracts",
-      "after": [],
-      "spec": "recovery/unit/test.json"
     }
   ],
   "required": [
-    "host-timeout",
-    "source-hash",
-    "graph-disabled",
-    "graph-runner",
     "opportunistic-unlock",
     "secure-boot-backup",
     "sleep-gaming-plasma",
     "cli-parity",
-    "spec-toml",
-    "spec-yaml",
-    "qemu-host-x86_64",
-    "qemu-host-aarch64",
     "qmp-probe",
     "tpm2-probe",
     "secure-boot-capabilities",
@@ -1386,7 +1225,6 @@
     "installer-secret",
     "networking-roaming",
     "networking-wifi-scan",
-    "host-picker",
     "immutability-feature-disable",
     "drive-remote",
     "drive-store",
@@ -1404,8 +1242,6 @@
     "drive-mutations",
     "storage",
     "gaming-runtime",
-    "sleep-lock-state",
-    "recovery-artifacts",
     "recovery-touch-keyboard"
   ],
   "workspaceRoot": ".."

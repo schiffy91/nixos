@@ -8,7 +8,7 @@ endif
 ifeq (,$(filter -j%,$(MAKEFLAGS)))
 MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4) --output-sync=target
 endif
-.NOTPARALLEL: check test quick smoke host-smoke
+.NOTPARALLEL: check test quick smoke host-smoke harness
 CC ?= cc
 CFLAGS ?= -std=c11 -pedantic
 # Programs are transpiled program-only with strict imports and reference the
@@ -76,8 +76,7 @@ PROGRAM_DEPS := $(BUILD_DIR)/deps.mk
 made_from = $(or $(DEPS_$(1)),$(SOURCES))
 
 # Every one of these just forwards to tests/Makefile under the same name
-TESTS_TARGETS := app-settings stateful-host qemu-host x86_64-qemu-host \
-	aarch64-qemu-host installer-download download install-system \
+TESTS_TARGETS := installer-download download install-system \
 	immutability-reset immutability-key-encoding installer-ssh password-change \
 	tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote \
 	graph-list graph-status graph-coverage graph-gc graph-installer-ssh chain clean-vms
@@ -101,8 +100,9 @@ help:
 	@printf '%s\n' 'Tests, fastest first:'
 	@printf '%s\n' '  lint              repository compilers, linters and workspace diagnostics'
 	@printf '%s\n' '  unit              in-process suites, no VM (seconds)'
-	@printf '%s\n' '  quick             unit + a CLI smoke + the graph node named "quick"'
-	@printf '%s\n' '  check             quick + stateful-host + gaming; what to run before committing'
+	@printf '%s\n' '  quick             unit + a CLI smoke'
+	@printf '%s\n' '  harness           the graph runner and the host picker, through their own binaries'
+	@printf '%s\n' '  check             quick + harness + gaming; what to run before committing'
 	@printf '%s\n' '  graph-default     the graph default set (alias: graph-early)'
 	@printf '%s\n' '  graph-required    the graph required set, i.e. every guarded contract (aliases: graph-full, run-required)'
 	@printf '%s\n' '  hdr-screencast    KWin HDR capture; needs a real GPU, so not in check'
@@ -238,11 +238,17 @@ quick: $(BIN) unit
 	printf '%s\n' "$$output"; \
 	test $$status -eq 1; \
 	printf '%s\n' "$$output" | grep -q 'Usage: nixosctl'
-	NIXOS_CONFIG_ROOT="$(CURDIR)" ./$(BIN) graph tests/graph.json run quick
 
 smoke: quick
 
-check test: quick stateful-host gaming
+# The graph runner over fixture graphs, and the host picker: each drives the real binary. They were
+# graph nodes; a runner is not well tested by a run of itself.
+HARNESS_TESTS := graph-runner-test disabled-node-test source-hash-test host-timeout-test host-picker-test
+.PHONY: harness
+harness: $(BIN) $(addprefix $(BUILD_DIR)/,$(HARNESS_TESTS))
+	@for test in $(HARNESS_TESTS); do ./$(BUILD_DIR)/$$test || exit 1; done
+
+check test: quick harness gaming
 
 .PHONY: gaming
 gaming:

@@ -3,13 +3,12 @@ NIX_BUILD ?= nix-build
 SHELL_NIX := tests/shell.nix
 NIXOSCTL := build/nixosctl
 
-.PHONY: help build quick host-smoke app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-early graph-installer-ssh graph-full chain clean-vms
+.PHONY: help build download installer-download install-system immutability-reset password-change immutability-key-encoding installer-ssh installer-ssh-smoke tpm2-probe secure-boot-capabilities secure-boot-install secure-boot-lanzaboote graph-list graph-status graph-coverage graph-gc graph-early graph-installer-ssh graph-full chain clean-vms
 
 help:
 	@printf '%s\n' 'Run these from the repo root as `make <target>`; `make -C tests` also works.'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Whole suites:'
-	@printf '%s\n' '  quick             unit suites + a CLI smoke + the graph node named "quick"'
 	@printf '%s\n' '  gaming            nix build of tests/gaming (proton, assetto)'
 	@printf '%s\n' '  graph-early       the graph default set'
 	@printf '%s\n' '  graph-full        the graph REQUIRED set, not every node'
@@ -18,7 +17,6 @@ help:
 	@printf '%s\n' '  graph-gc          delete VM state no current node references (GC_ARGS=--dry-run lists it)'
 	@printf '%s\n' ''
 	@printf '%s\n' 'One scenario at a time:'
-	@printf '%s\n' '  app-settings stateful-host qemu-host x86_64-qemu-host aarch64-qemu-host'
 	@printf '%s\n' '  installer-download download installer-ssh graph-installer-ssh install-system'
 	@printf '%s\n' '  immutability-reset immutability-key-encoding password-change tpm2-probe'
 	@printf '%s\n' '  secure-boot-capabilities secure-boot-install secure-boot-lanzaboote chain'
@@ -35,26 +33,6 @@ build:
 .PHONY: gaming
 gaming:
 	$(NIX_BUILD) gaming --no-out-link
-
-quick: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run quick'
-
-host-smoke: quick
-
-app-settings: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run app-settings'
-
-stateful-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run stateful-host --arg marker=make-target'
-
-qemu-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host'
-
-x86_64-qemu-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host-x86_64'
-
-aarch64-qemu-host: build
-	cd .. && $(NIX_SHELL) $(SHELL_NIX) --run 'NIXOS_CONFIG_ROOT=$$PWD ./$(NIXOSCTL) graph tests/graph.json run qemu-host-aarch64'
 
 download: installer-download
 

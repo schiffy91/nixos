@@ -367,7 +367,7 @@ The initrd reset runs after `systemd-hibernate-resume.service`. A successful
 resume never returns to the initrd, so the reset only runs on a fresh boot and
 never rewrites the filesystem underneath a hibernated kernel. That ordering is
 the whole reason hibernation is safe on an immutable root, so it is asserted in
-`app-settings` for every host that hibernates.
+the `app-settings` check for every host that hibernates.
 
 Resume itself needs no kernel command line, even with the swap file on btrfs:
 `systemd-hibernate` writes the device and offset into the `HibernateLocation`
@@ -831,9 +831,9 @@ Core ideas:
 Useful test targets:
 
 ```bash
-make -C tests quick
-make -C tests app-settings
-make -C tests qemu-host
+make quick
+make harness
+ci/checks.sh
 make -C tests graph-coverage
 make -C tests installer-download
 make -C tests installer-ssh
@@ -848,7 +848,9 @@ field that says why: it stays in the graph and in `required`, a run skips it and
 prints the reason, and no node that still runs may come `after` it. The four
 `host-hibernate-*` nodes are off this way, because neither host hibernates. The families are `installer-*`, `install-*`, `immutability-*`,
 `recovery-*`, `secure-boot-*`, `tpm2-*`, `nixosctl-*`, `password-change*`,
-`qemu-host-*`, `qmp-probe` and the `spec-toml`/`spec-yaml` format checks.
+and `qmp-probe`. What only evaluates the configuration (`app-settings`, `qemu-hosts`) and the unit
+suites that are one derivation each are flake checks, built by `ci/checks.sh`; the graph runner itself is
+tested by `make harness`.
 
 The nodes with constraints worth knowing before you run them:
 
@@ -899,8 +901,8 @@ nix eval '.#homeConfigurations."alexanderschiffhauer@mbp21".activationPackage.dr
 make build unit
 make -C tests gaming
 make -C tests graph-coverage
-make -C tests app-settings
-make -C tests qemu-host
+make harness
+ci/checks.sh
 ```
 
 Evaluating every bootable target matters after an input bump: a removed NixOS

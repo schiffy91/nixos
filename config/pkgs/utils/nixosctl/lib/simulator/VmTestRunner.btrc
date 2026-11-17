@@ -10,9 +10,7 @@ class VmOperationCatalog {
     class Vector<string> all() {
         Vector<string> kinds = [];
         kinds.push("download-iso");
-        kinds.push("require-command");
         kinds.push("require-tpm2");
-        kinds.push("require-uefi");
         kinds.push("require-secure-boot");
         kinds.push("probe-secure-boot");
         kinds.push("require-state");
@@ -36,8 +34,6 @@ class VmOperationCatalog {
         kinds.push("reboot-disk");
         kinds.push("reboot-recovery");
         kinds.push("host");
-        kinds.push("workspace-file");
-        kinds.push("nix-eval");
         kinds.push("build-derivation");
         kinds.push("qmp");
         kinds.push("copy-workspace");
@@ -113,16 +109,8 @@ class VmTestRunner {
             self.vm.downloadIso();
             return;
         }
-        if (op.kind.equals("require-command")) {
-            self.vm.requireCommand(op.command);
-            return;
-        }
         if (op.kind.equals("require-tpm2")) {
             self.vm.requireTpm2Capability();
-            return;
-        }
-        if (op.kind.equals("require-uefi")) {
-            self.vm.requireUefiCapability();
             return;
         }
         if (op.kind.equals("require-secure-boot")) {
@@ -224,16 +212,6 @@ class VmTestRunner {
         if (op.kind.equals("host")) {
             var result = self.vm.host(op.command, false, op.timeout);
             self.assertResult("host command", result, op.expect);
-            return;
-        }
-        if (op.kind.equals("workspace-file")) {
-            var result = self.vm.workspaceFileExists(op.command);
-            self.assertResult("workspace file " + op.command, result, op.expect);
-            return;
-        }
-        if (op.kind.equals("nix-eval")) {
-            var result = self.vm.nixEval(op.command, op.timeout);
-            self.assertResult("nix eval " + op.command, result, op.expect);
             return;
         }
         if (op.kind == "build-derivation") {

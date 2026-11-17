@@ -249,7 +249,6 @@ class QemuE2eHarness {
     public ExecResult ssh(string command, bool checkStatus) { return self.remote.ssh(command, checkStatus); }
     public ExecResult sshWithTimeout(string command, bool checkStatus, int timeoutSeconds) { return self.remote.sshWithTimeout(command, checkStatus, timeoutSeconds); }
     public ExecResult host(string command, bool checkStatus, int timeoutSeconds = 0) { return self.remote.host(command, checkStatus, timeoutSeconds); }
-    public ExecResult nixEval(string attribute, int timeoutSeconds) { return self.remote.nixEval(attribute, timeoutSeconds); }
     public void reapStaleVm() {
         var port = Strings.fromInt(self.spec.sshPort);
         var command = "pid=$(ss -tlnpH 'sport = :" + port + "' 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2); "
@@ -259,7 +258,6 @@ class QemuE2eHarness {
     }
 
     public ExecResult qmp(string command, int timeoutSeconds) { return self.remote.qmp(command, timeoutSeconds); }
-    public ExecResult workspaceFileExists(string relativePath) { return self.remote.workspaceFileExists(relativePath); }
     public void copyWorkspace(string localPath, string remotePath) { self.remote.copyWorkspace(localPath, remotePath); }
     public void copyTo(string localPath, string remotePath) { self.remote.copyTo(localPath, remotePath); }
     public void copyFrom(string remotePath, string localPath) { self.remote.copyFrom(remotePath, localPath); }
@@ -268,9 +266,7 @@ class QemuE2eHarness {
     public void serialSend(string command) { self.serial.serialSend(command); }
     public bool sendKeys(string text) { return self.provisioner.sendKeys(text); }
 
-    public void requireCommand(string name) { self.firmware.requireCommand(name); }
     public void requireTpm2Capability() { self.firmware.requireTpm2Capability(); }
-    public void requireUefiCapability() { self.firmware.requireUefiCapability(); }
     public void requireSecureBootCapability() { self.firmware.requireSecureBootCapability(); }
     public string secureBootCapabilityReport() { return self.firmware.secureBootCapabilityReport(); }
 

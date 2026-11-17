@@ -1,0 +1,7 @@
+[
+  {"attr": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.pkgs.stdenv.hostPlatform.system", "expect": "{{arch}}-linux"},
+  {"attr": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.networking.hostName", "expect": "QEMU"},
+  {"attr": "diskoConfigurations.QEMU-{{arch}}-Disk-Operation.disko.devices.disk.main.device", "expect": "/dev/vda"},
+  {"attr": "diskoConfigurations.QEMU-{{arch}}-Disk-Operation.disko.devices.disk.main.content.partitions.root.content.type", "expect": "btrfs"},
+  {"attr": "nixosConfigurations.QEMU-{{arch}}-Standard-Boot.config.system.build.toplevel.drvPath", "expect": "nixos-system-QEMU"}
+]

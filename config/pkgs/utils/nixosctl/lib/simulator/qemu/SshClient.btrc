@@ -66,23 +66,6 @@ class SshClient {
         return self.shell.run(command, logFailure=checkStatus, timeoutMilliseconds=timeoutSeconds * 1000);
     }
 
-    public ExecResult workspaceFileExists(string relativePath) {
-        var command = "cd " + ShellWords.quote(self.workspaceRoot())
-            + " && test -f " + ShellWords.quote(relativePath)
-            + " && printf exists";
-        return self.shell.run(command, logFailure=false);
-    }
-
-    public ExecResult nixEval(string attribute, int timeoutSeconds) {
-        var command = "cd " + ShellWords.quote(self.workspaceRoot())
-            + " && timeout "
-            + Strings.fromInt(timeoutSeconds)
-            + " nix eval "
-            + ShellWords.quote(".#" + attribute)
-            + " --show-trace";
-        return self.shell.run(command, logFailure=false);
-    }
-
     public ExecResult qmp(string command, int timeoutSeconds) {
         if (!FileSystem.exists(self.qmpPath())) {
             return ExecResult(1, "", "QMP socket does not exist: " + self.qmpPath(), "");
