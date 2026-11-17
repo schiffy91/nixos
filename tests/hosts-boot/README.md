@@ -22,7 +22,12 @@ Nodes: `host-boot-{STEAM-DECK-OLED,FRACTAL-NORTH}-VM-{standard,secure}`.
 | Secure Boot | the fallback loader, systemd-boot and the UKI are signed; no Microsoft key is enrolled; where the host enrols its own keys, the firmware reports `enabled` |
 | Hibernate | the system hibernates once per installation, resumes behind the passphrase, and reports `E2E-RESUMED` |
 | Immutability | a `CLEAN` snapshot survives every boot, and swap is active |
-| Stability | the health fields of the third boot are identical to the first |
+| Stability | the health fields of the second boot are identical to the first |
+
+Each boot waits for the unlock panel by taking screenshots until `boot-evidence` accepts one
+(`wait_evidence.sh`), not by sleeping a fixed time: a run used to spend 166 seconds asleep. A third boot
+that cleared the firmware's variables and enrolled the keys again ran only for a node setting
+`reenrollsKeys`, and no node did; it is gone.
 
 The guest reports over the serial console because the installed hosts authorize
 the admin's own keys, not the harness's, so there is no SSH into them.

@@ -12,8 +12,7 @@
     "requireEnforced": "false",
     "assertPanel": "true",
     "unlockAgent": "plymouth",
-    "enablesSecureBoot": "false",
-    "reenrollsKeys": "false"
+    "enablesSecureBoot": "false"
   },
   "iso": "build/iso/iso/nixos-installer-{{arch}}-linux-{{hostName}}.iso",
   "isoUrl": "",
@@ -42,19 +41,10 @@
       "op": "boot-disk"
     },
     {
-      "op": "sleep",
-      "timeout": 50
-    },
-    {
-      "op": "qmp",
-      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm\"}}",
-      "timeout": 60
-    },
-    {
       "op": "host",
-      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' {{unlockAgent}}",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 180 panel-0 panel @ {{unlockAgent}}",
       "expect": "panel-graphical",
-      "timeout": 120
+      "timeout": 210
     },
     {
       "op": "qmp",
@@ -62,19 +52,10 @@
       "timeout": 60
     },
     {
-      "op": "sleep",
-      "timeout": 5
-    },
-    {
-      "op": "qmp",
-      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-0-typed.ppm\"}}",
-      "timeout": 60
-    },
-    {
       "op": "host",
-      "command": "./build/boot-evidence responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0-typed.ppm' '{{unlockAgent}}'",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 30 panel-0-typed responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' @ '{{unlockAgent}}'",
       "expect": "panel-responds",
-      "timeout": 120
+      "timeout": 60
     },
     {
       "op": "qmp",
@@ -83,7 +64,7 @@
     },
     {
       "op": "sleep",
-      "timeout": 3
+      "timeout": 1
     },
     {
       "op": "host",
@@ -138,19 +119,10 @@
       "op": "boot-disk"
     },
     {
-      "op": "sleep",
-      "timeout": 50
-    },
-    {
-      "op": "qmp",
-      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm\"}}",
-      "timeout": 60
-    },
-    {
       "op": "host",
-      "command": "./build/boot-evidence panel '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' {{unlockAgent}}",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 180 panel-1 panel @ {{unlockAgent}}",
       "expect": "panel-graphical",
-      "timeout": 120
+      "timeout": 210
     },
     {
       "op": "qmp",
@@ -158,19 +130,10 @@
       "timeout": 60
     },
     {
-      "op": "sleep",
-      "timeout": 5
-    },
-    {
-      "op": "qmp",
-      "command": "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\".vm/e2e/{{state}}-{{stateHashShort}}/panel-1-typed.ppm\"}}",
-      "timeout": 60
-    },
-    {
       "op": "host",
-      "command": "./build/boot-evidence responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1-typed.ppm' '{{unlockAgent}}'",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 30 panel-1-typed responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' @ '{{unlockAgent}}'",
       "expect": "panel-responds",
-      "timeout": 120
+      "timeout": 60
     },
     {
       "op": "qmp",
@@ -179,7 +142,7 @@
     },
     {
       "op": "sleep",
-      "timeout": 3
+      "timeout": 1
     },
     {
       "op": "host",
@@ -226,34 +189,6 @@
       "command": "for b in 0 1; do grep -aE '^E2E-(STATE|FAILED|REFUSED|HOMEMANAGER|SNAPSHOTS|SWAP|UNLOCKAGENT)' \".vm/e2e/{{state}}-{{stateHashShort}}/boot-$b.log\" | sed -E 's/^(E2E-UNLOCKAGENT [a-z0-9]+).*/\\\\1/' | sort > \".vm/e2e/{{state}}-{{stateHashShort}}/norm-$b.txt\"; done; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-1.txt\" > /dev/null && printf boots-identical || { echo 'boots differ'; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-1.txt\"; exit 1; }",
       "expect": "boots-identical",
       "timeout": 120
-    },
-    {
-      "op": "stop"
-    },
-    {
-      "op": "host",
-      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf flash-cleared-skipped; else pristine=\"$(readlink -f .vm/e2e/{{state}}-{{stateHashShort}}/firmware-data)/edk2-i386-vars.fd\"; cp \"$pristine\" .vm/e2e/{{state}}-{{stateHashShort}}/edk2-vars.fd && printf flash-cleared; fi",
-      "expect": "flash-cleared",
-      "timeout": 120
-    },
-    {
-      "op": "boot-disk"
-    },
-    {
-      "op": "sleep",
-      "timeout": 50
-    },
-    {
-      "op": "host",
-      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf reenroll-skipped; else bash tests/hosts-boot/unlock_and_wait.sh '.vm/e2e/{{state}}-{{stateHashShort}}' '{{password}}' 900 && cp \".vm/e2e/{{state}}-{{stateHashShort}}/serial.log\" \".vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log\" && printf reenroll-done; fi",
-      "expect": "reenroll",
-      "timeout": 960
-    },
-    {
-      "op": "host",
-      "command": "if [ \"{{reenrollsKeys}}\" != \"true\" ]; then printf enroll-skipped; else ./build/boot-evidence health '.vm/e2e/{{state}}-{{stateHashShort}}/boot-2.log' 2 true true; fi",
-      "expect": "enroll",
-      "timeout": 300
     },
     {
       "op": "stop"

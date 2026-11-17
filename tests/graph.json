@@ -638,8 +638,7 @@
         "parentState": "host-installed-STEAM-DECK-OLED-VM-standard",
         "sshPort": "2256",
         "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "false"
+        "enablesSecureBoot": "false"
       }
     },
     {
@@ -714,8 +713,7 @@
         "parentState": "host-installed-STEAM-DECK-OLED-VM-secure",
         "sshPort": "2258",
         "unlockAgent": "plymouth",
-        "enablesSecureBoot": "true",
-        "reenrollsKeys": "false"
+        "enablesSecureBoot": "true"
       }
     },
     {
@@ -790,8 +788,7 @@
         "parentState": "host-installed-FRACTAL-NORTH-VM-standard",
         "sshPort": "2257",
         "unlockAgent": "plymouth",
-        "enablesSecureBoot": "false",
-        "reenrollsKeys": "false"
+        "enablesSecureBoot": "false"
       }
     },
     {
@@ -866,8 +863,7 @@
         "parentState": "host-installed-FRACTAL-NORTH-VM-secure",
         "sshPort": "2259",
         "unlockAgent": "plymouth",
-        "enablesSecureBoot": "true",
-        "reenrollsKeys": "false"
+        "enablesSecureBoot": "true"
       }
     },
     {
