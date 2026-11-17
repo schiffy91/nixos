@@ -17,6 +17,7 @@
   "operations": [
     {
       "op": "build-derivation",
+      "command": "--cores 8",
       "timeout": 21600
     },
     {
