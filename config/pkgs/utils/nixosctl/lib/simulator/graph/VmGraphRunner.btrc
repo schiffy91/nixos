@@ -725,6 +725,7 @@ class VmGraphRunner {
             running = still;
 
             Vector<string> waiting = [];
+            var crowded = false;  // a node ahead in the order is waiting for memory
             for id in pending {
                 var node = self.graph.node(id);
                 var blocker = "";
@@ -748,7 +749,12 @@ class VmGraphRunner {
                 }
                 int used = 0;
                 for job in running { used += job.memory; }
-                if (running.length >= jobs || (!running.isEmpty() && used + spec.memoryMegabytes() > budget)) { waiting.push(id); continue; }
+                if (crowded || running.length >= jobs) { waiting.push(id); continue; }
+                if (!running.isEmpty() && used + spec.memoryMegabytes() > budget) {
+                    crowded = true;  // it keeps its turn: a smaller node behind it would take the memory it waits for, again and again
+                    waiting.push(id);
+                    continue;
+                }
                 NixosLog.info(f"graph {name}: run {id} -> {spec.state}@{spec.stateHashShort}");
                 running.push(self.start(node, spec, self.freePort(running), jobs == 1));
             }

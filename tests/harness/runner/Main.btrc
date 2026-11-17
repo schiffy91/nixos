@@ -328,6 +328,23 @@ class GraphRunnerTests {
         Check.equal(Path.readAll(sequence), "head\nbrief\nshort\nfollower\nhead\nfollower\nbrief\nshort\n", "once durations are known, the three-second follower outranks the one-second nodes");
     }
 
+    // A node that needs much memory becomes ready while small ones run. It must get the next room that
+    // frees, not watch small nodes behind it take that room one after another until none are left.
+    public void largeNodeKeepsItsTurn() {
+        var sequence = self.fixture.path("large-sequence");
+        self.node("gate", f"printf 'gate\\n' >> {ShellWords.quote(sequence)}", "", "1G");
+        self.node("large", f"printf 'large\\n' >> {ShellWords.quote(sequence)}; sleep 1", "gate", "3G");
+        Vector<string> entries = [self.entry("gate"), self.entry("large", "gate")];
+        for name in ["s1", "s2", "s3", "s4", "s5", "s6"] {
+            self.node(name, f"printf '{name}\\n' >> {ShellWords.quote(sequence)}; sleep 3", "", "1G");
+            entries.push(self.entry(name));
+        }
+        self.graph(entries.join(","));
+        Check.exited(self.run(["run", "large", "s1", "s2", "s3", "s4", "s5", "s6", "--arg", "jobs=4", "--arg", "memoryBudget=4G"]));
+        var started = Strings.split(Path.readAll(sequence).trim(), "\n");
+        Check.that(started.indexOf("large") >= 0 && started.indexOf("large") < started.indexOf("s4"), f"the large node starts before the small ones that were behind it: {started.join(" ")}");
+    }
+
     public void namedSets() {
         var ran = self.fixture.path("set-ran");
         self.node("inside", f"printf 'inside\\n' >> {ShellWords.quote(ran)}");
@@ -360,6 +377,7 @@ int main() {
         tests.declaredInputs();
         tests.longestChainFirst();
         tests.namedSets();
+        tests.largeNodeKeepsItsTurn();
         tests.close();
         print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }
