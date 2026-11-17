@@ -42,7 +42,7 @@
     },
     {
       "op": "host",
-      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 180 panel-0 panel @ {{unlockAgent}}",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 180 panel-0 5 panel @ {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 210
     },
@@ -53,7 +53,7 @@
     },
     {
       "op": "host",
-      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 30 panel-0-typed responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' @ '{{unlockAgent}}'",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 30 panel-0-typed 1 responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-0.ppm' @ '{{unlockAgent}}'",
       "expect": "panel-responds",
       "timeout": 60
     },
@@ -120,7 +120,7 @@
     },
     {
       "op": "host",
-      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 180 panel-1 panel @ {{unlockAgent}}",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 180 panel-1 5 panel @ {{unlockAgent}}",
       "expect": "panel-graphical",
       "timeout": 210
     },
@@ -131,7 +131,7 @@
     },
     {
       "op": "host",
-      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 30 panel-1-typed responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' @ '{{unlockAgent}}'",
+      "command": "bash tests/hosts-boot/wait_evidence.sh '.vm/e2e/{{state}}-{{stateHashShort}}' 30 panel-1-typed 1 responds '.vm/e2e/{{state}}-{{stateHashShort}}/panel-1.ppm' @ '{{unlockAgent}}'",
       "expect": "panel-responds",
       "timeout": 60
     },
@@ -186,7 +186,7 @@
     },
     {
       "op": "host",
-      "command": "for b in 0 1; do grep -aE '^E2E-(STATE|FAILED|REFUSED|HOMEMANAGER|SNAPSHOTS|SWAP|UNLOCKAGENT)' \".vm/e2e/{{state}}-{{stateHashShort}}/boot-$b.log\" | sed -E 's/^(E2E-UNLOCKAGENT [a-z0-9]+).*/\\\\1/' | sort > \".vm/e2e/{{state}}-{{stateHashShort}}/norm-$b.txt\"; done; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-1.txt\" > /dev/null && printf boots-identical || { echo 'boots differ'; diff \".vm/e2e/{{state}}-{{stateHashShort}}/norm-0.txt\" \".vm/e2e/{{state}}-{{stateHashShort}}/norm-1.txt\"; exit 1; }",
+      "command": "bash tests/hosts-boot/compare_boots.sh '.vm/e2e/{{state}}-{{stateHashShort}}'",
       "expect": "boots-identical",
       "timeout": 120
     },

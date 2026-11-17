@@ -25,7 +25,9 @@ Nodes: `host-boot-{STEAM-DECK-OLED,FRACTAL-NORTH}-VM-{standard,secure}`.
 | Stability | the health fields of the second boot are identical to the first |
 
 Each boot waits for the unlock panel by taking screenshots until `boot-evidence` accepts one
-(`wait_evidence.sh`), not by sleeping a fixed time: a run used to spend 166 seconds asleep. A third boot
+(`wait_evidence.sh`), not by sleeping a fixed time: a run used to spend 166 seconds asleep. The unlock agent
+is drawn first on the firmware's framebuffer and again when the GPU driver takes over, at another
+resolution, so a screenshot counts as the panel once five in a row have the same size. A third boot
 that cleared the firmware's variables and enrolled the keys again ran only for a node setting
 `reenrollsKeys`, and no node did; it is gone.
 

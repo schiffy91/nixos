@@ -29,7 +29,7 @@ class PlymouthScenario {
     }
     private Image waitKeyboard(bool visible, string name, bool secondary = false) {
         print(f"Observe keyboard: {name}");
-        var attempts = secondary ? 30 : 20;
+        var attempts = secondary ? 240 : 120;  // a minute: on a busy machine the keyboard has taken longer than ten seconds to be drawn
         for (int attempt = 0; attempt < attempts; attempt++) {
             var image = self.screenshot(name, secondary);
             if (Screen.keyboard(image, self.light) == visible && (secondary || Screen.field(image))) { return image; }
