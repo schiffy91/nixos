@@ -73,7 +73,7 @@ class Program:
             pending.extend(cls.imports(file))
         for root in {Packages.root(file) for file in seen} - {None}:
             seen.add(root / "btrc.toml")  # not btrc.lock: the compiler rewrites it from the manifest on every build
-            seen.update(root.rglob("*.h"))
+            seen.update(header for header in root.rglob("*.h") if Packages.root(header) == root)  # a package nested in this one has its own
         return sorted(seen)
 
 

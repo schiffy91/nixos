@@ -146,7 +146,13 @@ $(BTRC_STAMP): FORCE | dirs
 # then a static library for local linking.
 build-stdlib: $(STDLIB_LIB)
 
-$(PROGRAM_DEPS): $(SOURCES) ci/btrc-deps.py Makefile | dirs
+# The list of sources, rewritten only when a file comes or goes: a deleted file must remake the dependencies,
+# which name it, and it has no time of its own to be newer by.
+SOURCE_LIST := $(BUILD_DIR)/sources.list
+$(SOURCE_LIST): FORCE | dirs
+	@printf '%s\n' $(SOURCES) | cmp -s - "$@" || printf '%s\n' $(SOURCES) > "$@"
+
+$(PROGRAM_DEPS): $(SOURCES) $(SOURCE_LIST) ci/btrc-deps.py Makefile | dirs
 	@if command -v python3 >/dev/null 2>&1; then python3 ci/btrc-deps.py $(PROGRAMS) > "$@.tmp" && mv "$@.tmp" "$@"; else : > "$@"; fi
 
 -include $(PROGRAM_DEPS)
