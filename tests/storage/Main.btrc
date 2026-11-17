@@ -152,6 +152,17 @@ class StorageScenario {
     }
 
     // A program blocked on the Drive's server while the server is already frozen would keep the machine awake.
+    // The power button wakes a sleeping machine and switches off one that is awake, so it is pressed only once
+    // QEMU says the guest is suspended, however long going to sleep took.
+    private void wake() {
+        var deadline = MonotonicClock.deadlineAfter(120000);
+        while (self.machine.qmp("query-status", JSONValue.makeObject()).get("status").asString() != "suspended") {
+            Check.that(MonotonicClock.before(deadline), "the machine went to sleep within two minutes");
+            Timer.sleepMillis(250);
+        }
+        self.machine.qmp("system_powerdown", JSONValue.makeObject());
+    }
+
     private void asleepReading() {
         print("Asleep under a program that keeps opening and reading through the Drive, and awake again with it still reading");
         string exits = self.machine.succeed("journalctl -b -k --no-pager | grep -c 'PM: suspend exit' || true").trim();
@@ -160,8 +171,7 @@ class StorageScenario {
         Timer.sleepMillis(2000);
         Check.equal(self.machine.succeed("systemctl is-active reader").trim(), "active", "the program is reading");
         self.machine.succeed("systemctl reset-failed; systemctl suspend --no-block");
-        Timer.sleepMillis(10000);
-        self.machine.qmp("system_powerdown", JSONValue.makeObject());
+        self.wake();
         self.machine.waitUntil(f"test \"$(journalctl -b -k --no-pager | grep -c 'PM: suspend exit')\" -gt {exits} && test \"$(systemctl show -p Result --value systemd-suspend.service)\" = success", 90);
         Check.that(!self.machine.succeed("journalctl -b -k --no-pager").contains("Freezing of tasks failed"), "the machine went to sleep at the first attempt");
         Check.equal(self.machine.succeed("systemctl is-active reader").trim(), "active", "the program never saw an error, before the sleep or after it");
@@ -200,8 +210,7 @@ class StorageScenario {
     private void asleep() {
         print("Asleep and awake again, the card is still open and mounted");
         self.machine.succeed("systemctl reset-failed; systemctl suspend --no-block");
-        Timer.sleepMillis(10000);
-        self.machine.qmp("system_powerdown", JSONValue.makeObject());  // the power button wakes it
+        self.wake();
         self.machine.waitUntil("journalctl -b -k --no-pager | grep -q 'PM: suspend exit' && test \"$(systemctl show -p Result --value systemd-suspend.service)\" = success", 90);
         Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "a file on it reads after the wake");
         Check.equal(self.machine.succeed("findmnt -no SOURCE /sd; systemctl is-active sd.mount").trim(), "/dev/mapper/sdcard\nactive", "and nothing had to be opened again");
