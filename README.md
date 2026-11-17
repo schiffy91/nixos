@@ -303,6 +303,21 @@ After `/boot` and `/recovery` mount, rebuild or install from the mounted system;
 the recovery service populates the recovery kernel, initrd, fallback bootloader,
 and boot entry.
 
+#### When the newest generation does not boot
+
+Nothing has to be repaired from outside. The boot menu keeps the earlier generations, up to
+`settings.boot.previousGenerationLimit`:
+
+1. Power the machine off and on. In the boot menu, move to the entry below the first (`j` or the down
+   arrow) and press Enter. That is the generation that ran before the update.
+2. Once it is up, undo or fix the change in `/etc/nixos` that broke the boot.
+3. Run `nixosctl update`. The generation it builds becomes the default, and the next plain reboot takes it.
+
+Persisted data and the machine's identity are untouched by the failed boot. The `recovery-bad-generation`
+node does exactly this in a VM: a generation whose initrd fails, the previous entry chosen from the menu,
+the change removed, `nixosctl update`, and a plain reboot. With a generation limit of 1 there is no earlier
+entry to choose, and the node fails. The recovery system above is for a disk that no generation can boot.
+
 ### Disk
 
 `config/system/nixos/disk.nix` owns the `disko` layout. The default model is:
