@@ -99,7 +99,9 @@ The compiler they are written in, [`schiffy91/btrc`](https://github.com/schiffy9
 builds and tests them (`lib.buildPackage`, `lib.vmTest`, `lib.testkit`). Each product repository has its
 own README, its own tests and a `ci/local.json`; its history before the move is merged beneath its first
 commit. A change to a product is made and tested there, pushed with `ci-local push`, and arrives here with
-`nix flake update <name>`.
+`nix flake update <name>`. Working clones live in `~/Projects`, which is persisted with git's own settings
+(`config/pkgs/dev/git.nix`); they are not kept in the Drive, where a pull on one machine arrives on the
+others as hundreds of file changes and deletions.
 
 ## Settings Model
 
@@ -1171,8 +1173,7 @@ What the split of November 2026 left for a person to do or decide. None of it bl
   Afterwards app `0` should map to `proton-sge-GE-Proton11-12` at priority 75 with no entry naming the old
   tool, and the Battle.net launcher should open under it.
 - **The Wine working tree** at `config/pkgs/gaming/proton/custom/src` (4 GB, not in git) stays where it is.
-  The development loop expects it at `~/Projects/proton-sge/src`, which does not outlive a reboot today
-  (see `~/Projects` below). Moving it, and removing the old links
+  The development loop expects it at `~/Projects/proton-sge/src` (`~/Projects` is persisted). Moving it, and removing the old links
   `~/Games/proton/proton-custom-*` and `~/.local/share/Steam/compatibilitytools.d/proton-custom-*`, is the
   owner's call.
 - **Both machines start from an empty root from their next boot** (`settings.disk.immutability.base =
@@ -1180,8 +1181,6 @@ What the split of November 2026 left for a person to do or decide. None of it bl
   is no longer there, is summarised under Immutability: on the desktop two unused caches from May
   (`~/.ccache`, `~/.cargo`), clipboard history and June leftovers in `/tmp`; on the Deck a Semu override
   file of 5 November that names the old card layout. To go back: `base = "clean"` and a reboot.
-- **`~/Projects` is on the home volume that resets**, and is not persisted: the clones of the product
-  repositories there do not outlive a reboot. Persist it, or keep working clones somewhere that is.
 - **On the Deck:** `make -C tests graph-deck` in `/etc/nixos` (the Gaming Mode sleep-lock nodes; three are
   expected to pass, the two real-suspend nodes fail at game input after wake, see
   `tests/sleep-lock/gamescope-native/README.md`), and a controller session with Deck Pad.

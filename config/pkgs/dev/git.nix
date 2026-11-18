@@ -4,6 +4,8 @@
     pkgs.gh  # GitHub's own tool: CI logs and artifacts, pull requests
     inputs.ci-local.packages.${pkgs.stdenv.hostPlatform.system}.default  # records a commit's local test passes for CI
   ];
-  # Its sign-in: the account and host are here, the token is in the desktop's wallet where there is one.
-  settings.disk.immutability.persist.paths = [ "${config.settings.users.admin.homeDirectory}/.config/gh" ];
+  settings.disk.immutability.persist.paths = [
+    "${config.settings.users.admin.homeDirectory}/.config/gh"  # its sign-in: account and host; the token is in the wallet
+    "${config.settings.users.admin.homeDirectory}/Projects"  # working clones, the product repositories among them
+  ];
 }
