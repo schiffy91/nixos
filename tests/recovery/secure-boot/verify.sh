@@ -38,6 +38,7 @@ sha256sum --check /recovery/.nixos-recovery-checksums
 # section offset is read from objdump instead of assuming a file layout.
 offset=$(objdump -h /recovery/EFI/recovery/nixos-recovery.efi | awk '$2 == ".initrd" { print $6 }')
 test -n "$offset"
+sleep 3  # same size, so only its time gives the change away, and FAT keeps a time to two seconds
 printf tampered | dd of=/recovery/EFI/recovery/nixos-recovery.efi bs=1 seek="$((16#$offset))" conv=notrunc status=none
 if sbverify --cert "$certificate" /recovery/EFI/recovery/nixos-recovery.efi; then exit 1; fi
 systemctl restart nixos-recovery-boot-entry

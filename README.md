@@ -289,6 +289,15 @@ image that authenticates the kernel, initrd and command line together. It also
 signs the fallback loader with the configured db key. Installed checksums and
 signatures are checked before skipping an update; files are staged before
 replacement. Missing mounts fail the recovery service.
+
+Reading every installed byte takes about eight seconds, and the service runs at
+each boot and each switch. So a full read leaves a stamp
+(`/recovery/.nixos-recovery-stamp`: its time, the plan, and each file's size
+and time), and while the plan, sizes and times are the same the files are not
+read again, for at most a week. What the stamp cannot see is a change that
+keeps a file's size and time; FAT keeps a time to two seconds. Such a change
+is found by the next weekly read, and a Secure-Boot image changed that way does
+not verify at boot in any case.
 Updating the recovery image is a rebuild. Changing the recovery partition size
 on an already-installed disk is a real partition resize operation, not something
 this config does online.

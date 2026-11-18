@@ -1,4 +1,6 @@
 import Library.Console;
+import Library.DateTime;
+import Library.Digest;
 import Library.FileSystem;
 import Library.JSON;
 import Library.Process;
@@ -99,6 +101,37 @@ class RecoveryArtifacts {
         return UnixShell().run(f"sha256sum --check --status {ShellWords.quote(checksums)}", logFailure=false).ok();
     }
 
+    class long long fullCheckSeconds() { return 604800LL; }  // every byte is read again weekly
+
+    public string stampFile() { return self.recovery() + "/.nixos-recovery-stamp"; }
+
+    public string shape(string manifest) {  // empty when something is missing
+        Vector<string> lines = [SHA256.digest(manifest)];
+        Vector<string> files = [self.recovery() + "/.nixos-recovery-artifacts.manifest", self.recovery() + "/.nixos-recovery-checksums"];
+        for artifact in self.plan.get("artifacts").elements() { files.push(artifact.get("target").asString()); }
+        for file in files {
+            var status = FileSystem.stat(file);
+            if (!status.isFile()) { return ""; }
+            lines.push(f"{status.size} {status.mtimeSeconds} {file}");
+        }
+        return lines.join("\n") + "\n";
+    }
+
+    public bool unchanged(string manifest, long long now) {  // same plan, sizes and times as when last read in full
+        if (!FileSystem.isFile(self.stampFile())) { return false; }
+        var stamp = Path.readAll(self.stampFile());
+        var firstLine = stamp.indexOf("\n");
+        var shape = self.shape(manifest);
+        if (firstLine <= 0 || shape.isEmpty() || !stamp.substring(firstLine + 1, stamp.length - firstLine - 1).equals(shape)) { return false; }
+        var age = now - stamp.substring(0, firstLine).toLong();
+        return age >= 0LL && age < RecoveryArtifacts.fullCheckSeconds();
+    }
+
+    public void remember(string manifest, long long now) {
+        var shape = self.shape(manifest);
+        if (shape.isEmpty() || !FileSystem.writeAtomic(self.stampFile(), f"{now}\n{shape}", 0o600)) { FileSystem.removeIfExists(self.stampFile()); }  // no stamp: the next run reads everything
+    }
+
     public void stage(string source, string target) {
         RecoveryArtifacts.require(f"mkdir -p {ShellWords.quote(PathTools.dirname(target))}");
         var temporary = UnixShell().run(f"mktemp {ShellWords.quote(target + ".XXXXXX")}", throwOnFailure=true).stdout().trim();
@@ -108,11 +141,18 @@ class RecoveryArtifacts {
         RecoveryArtifacts.require(f"sync -f {ShellWords.quote(temporary)}");
     }
 
-    public void install() {
+    public void install(long long at = -1LL) {
         var manifest = self.manifest();
+        var now = at >= 0LL ? at : DateTime.now().toUnix();
+        if (self.unchanged(manifest, now)) { print("Recovery boot artifacts unchanged since they were last read in full."); return; }
         var alreadyCurrent = self.current(manifest);
         RecoveryArtifacts.checkInterrupted();
-        if (alreadyCurrent) { print("Recovery boot artifacts already current."); return; }
+        if (alreadyCurrent) {
+            self.remember(manifest, now);
+            print("Recovery boot artifacts already current.");
+            return;
+        }
+        FileSystem.removeIfExists(self.stampFile());  // nothing vouches for files about to be replaced
         var created = FileSystem.createTemporaryDirectory("nixos-recovery-sign");
         if (!created.ok()) { throw "Cannot create recovery staging directory"; }
         var scratch = created.value();
@@ -144,6 +184,7 @@ class RecoveryArtifacts {
             if (!Path.writeAll(checksumsFile, checksums) || !Path.writeAll(manifestFile, manifest)) { throw "Cannot write recovery artifact metadata"; }
             RecoveryArtifacts.require(f"install -m 0600 {ShellWords.quote(checksumsFile)} {ShellWords.quote(self.recovery() + "/.nixos-recovery-checksums")}");
             RecoveryArtifacts.require(f"install -m 0600 {ShellWords.quote(manifestFile)} {ShellWords.quote(self.recovery() + "/.nixos-recovery-artifacts.manifest")}");
+            self.remember(manifest, now);
         } finally {
             for temporary in self.staged { FileSystem.removeIfExists(temporary); }
             scratch.close();

@@ -76,6 +76,42 @@ int main(int argc, char** argv) {
         Expect.isFalse(installer.current(installer.manifest()));
         installer.install();
         Expect.strEq(Path.readAll(target), "kernel-image");
+        // Files with the plan, sizes and times of the last full read are not read again: no checksum
+        // program is started. Any of the three changing, or a week passing, brings the full read back.
+        var day = 86400LL;
+        var checked = 1800000000LL;
+        var hashing = root + "/hashing";
+        var counted = root + "/hashed";
+        var realSum = UnixShell().run("command -v sha256sum", throwOnFailure=true).stdout().trim();
+        RecoveryArtifacts.require(f"mkdir -p {ShellWords.quote(hashing)}");
+        Expect.isTrue(Path.writeAll(hashing + "/sha256sum", f"#!/bin/sh\necho read >> {ShellWords.quote(counted)}\nexec {ShellWords.quote(realSum)} \"$@\"\n"));
+        RecoveryArtifacts.require(f"chmod 700 {ShellWords.quote(hashing + "/sha256sum")}");
+        var plainPath = Environment.get("PATH", "");
+        Platform.setEnv("PATH", hashing + ":" + plainPath);
+        installer.install(checked);
+        Expect.isTrue(FileSystem.isFile(counted));  // long after the stamp: read in full, and stamped anew
+        FileSystem.removeIfExists(counted);
+        Expect.isTrue(installer.unchanged(installer.manifest(), checked + day));
+        installer.install(checked + day);
+        Expect.isFalse(FileSystem.exists(counted));
+        inode = UnixShell().run(f"stat -c %i {ShellWords.quote(target)}", throwOnFailure=true).stdout();
+        RecoveryArtifacts.require(f"touch -d @1700000000 {ShellWords.quote(target)}");  // another time, the same bytes
+        Expect.isFalse(installer.unchanged(installer.manifest(), checked + day));
+        installer.install(checked + day);
+        Expect.isTrue(FileSystem.isFile(counted) && installer.unchanged(installer.manifest(), checked + 2LL * day));
+        Expect.strEq(UnixShell().run(f"stat -c %i {ShellWords.quote(target)}", throwOnFailure=true).stdout(), inode);  // read, found right, left alone
+        FileSystem.removeIfExists(counted);
+        Expect.isTrue(Path.writeAll(target, "kernel-imagX"));  // other bytes of the same length, and the time put back
+        RecoveryArtifacts.require(f"touch -d @1700000000 {ShellWords.quote(target)}");
+        installer.install(checked + 2LL * day);
+        Expect.isTrue(!FileSystem.exists(counted) && Path.readAll(target) == "kernel-imagX");  // what a stamp cannot see, for at most a week
+        installer.install(checked + 9LL * day);
+        Expect.isTrue(FileSystem.isFile(counted) && Path.readAll(target) == "kernel-image");
+        Expect.isFalse(installer.unchanged(installer.manifest(), checked + 8LL * day));  // before the stamp's time: the clock is not trusted
+        var otherPlan = JSONValue.parse(configuration.stringify());
+        otherPlan.get("obsolete").push(JSONValue.makeString(installer.recovery() + "/older"));
+        Expect.isFalse(RecoveryArtifacts(otherPlan).unchanged(RecoveryArtifacts(otherPlan).manifest(), checked + 9LL * day));
+        Platform.setEnv("PATH", plainPath);
         Expect.isTrue(Path.writeAll(root + "/replacement", "replacement"));
         var broken = JSONValue.parse(configuration.stringify());
         broken.get("artifacts").elements().get(0).set("source", JSONValue.makeString(root + "/replacement"));
