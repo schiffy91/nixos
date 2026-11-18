@@ -207,10 +207,6 @@ class GamingTests {
             var pictures = f"{home}/userdata/1/config/grid";
             ModTree.write(f"{home}/userdata/1/config/localconfig.vdf", "UserLocalConfigStore { }");
             ModTree.writeBytes(file, SteamShortcuts.render([foreign, shared, chosen]));
-            ModTree.write(f"{pictures}/777_hero.png", "ours");  // placed for a number no shortcut has any more
-            ModTree.write(f"{pictures}/.nixos-artwork/777_hero.sha256", SHA256.digestBytes(Bytes.fromString("ours")));
-            ModTree.write(f"{pictures}/778_hero.png", "changed since");
-            ModTree.write(f"{pictures}/.nixos-artwork/778_hero.sha256", SHA256.digestBytes(Bytes.fromString("ours")));
             var own = Command(f"{ShellWords.quote(self.tools)}/install-steam-shortcuts");
             own.flag("--steam-path", home).flag("--shortcuts", declaration).flag("--machine", machine);
             UnixShell().run(own.render(), throwOnFailure=true);
@@ -221,8 +217,6 @@ class GamingTests {
             Expect.isTrue(numbered.get(2).id == 2147483648L);  // Steam's own choice stays
             Expect.isTrue(numbered.get(3).id == SteamShortcuts.appid(numbered.get(3).exe, numbered.get(3).name, machine));  // a new one starts with its own
             Expect.isTrue(Path.readAll(f"{pictures}/{number}_hero.png").equals("_hero"));
-            Expect.isTrue(!FileSystem.exists(f"{pictures}/777_hero.png") && !FileSystem.exists(f"{pictures}/.nixos-artwork/777_hero.sha256"));
-            Expect.isTrue(Path.readAll(f"{pictures}/778_hero.png").equals("changed since"));
             var settled = ModTree.read(file);
             UnixShell().run(own.render(), throwOnFailure=true);
             Expect.isTrue(ModTree.read(file).equals(settled));
@@ -235,7 +229,7 @@ class GamingTests {
         ModTree.writeBytes(path, unknown);
         Expect.isTrue(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
         Expect.isTrue(ModTree.read(path).equals(unknown));
-        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, icon updates preserve playtime, missing icon fields, idempotence, a number of the machine's own, pictures of numbers that are gone, unknown format refusal");
+        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, icon updates preserve playtime, missing icon fields, idempotence, a number of the machine's own, unknown format refusal");
     }
 
     public void presetLinks() {

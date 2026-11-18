@@ -220,32 +220,12 @@ class SteamShortcuts {
         return SteamShortcuts.render(result);
     }
 
-    // Pictures placed here for a number no shortcut has any more are taken away, unless they were changed since.
-    class void forget(string grid, Vector<SteamShortcut> entries) {
-        var records = f"{grid}/.nixos-artwork";
-        if (!FileSystem.isDir(records)) { return; }
-        Vector<string> numbers = [];
-        for entry in entries { numbers.push(f"{entry.id}"); }
-        for record in FileSystem.listDir(records) {
-            if (!record.endsWith(".sha256")) { continue; }
-            var picture = record.substring(0, record.len() - 7);  // "<number><suffix>"
-            var digits = 0;
-            while (digits < picture.len() && Strings.isDigit(picture.charAt(digits))) { digits++; }
-            if (numbers.contains(picture.substring(0, digits))) { continue; }
-            var placed = f"{grid}/{picture}.png";
-            if (FileSystem.exists(placed) && SHA256.digestBytes(ModTree.read(placed)) != Path.readAll(f"{records}/{record}").trim()) { continue; }
-            ModTree.remove(placed);
-            ModTree.remove(f"{records}/{record}");
-        }
-    }
-
     class void install(SteamLibrary library, JSONValue declared, string machine = "") {
         if (library.root.isEmpty() || !declared.isObject()) { throw "Required: --steam-path PATH --shortcuts JSON"; }
         for path in library.userShortcuts() {
             var current = FileSystem.isFile(path) ? ModTree.read(path) : Bytes();
             var desired = SteamShortcuts.declare(current, declared, machine);
-            var entries = SteamShortcuts(desired).entries();
-            for entry in entries {
+            for entry in SteamShortcuts(desired).entries() {
                 if (!declared.has(entry.name) || entry.id == 0) { continue; }
                 var shortcut = declared.get(entry.name);
                 if (!shortcut.isObject()) { continue; }
@@ -276,7 +256,6 @@ class SteamShortcuts {
                     ModTree.write(record, SHA256.digestBytes(ModTree.read(source)));
                 }
             }
-            SteamShortcuts.forget(f"{PathTools.dirname(path)}/grid", entries);
             if (!desired.equals(current)) { ModTree.writeBytes(path, desired); }
         }
     }
