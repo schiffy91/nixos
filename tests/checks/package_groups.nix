@@ -116,14 +116,14 @@ let
     ++ check (handheld.settings.apps.utils.chrome.passwordStore == "basic" && desktop.config.settings.apps.utils.chrome.passwordStore == null)
       "The Deck's Chrome must keep its own key and ask no wallet; FRACTAL-NORTH's keeps the wallet its profile was made with."
     ++ check (let
-        user = desktop.config.systemd.user;
-        songs = "${desktop.config.settings.apps.utils.drive.mountPoint}/media/Games/Rocksmith";
+        songs = "${desktop.config.settings.apps.utils.drive.mountPoint}/media/Games/Rocksmith/dlc";
+        game = "${desktop.config.settings.users.admin.homeDirectory}/.local/share/Steam/steamapps/common/Rocksmith2014/dlc";
       in desktop.config.settings.apps.gaming.rocksmith.songsPath == songs
         && lib.elem "media/Games/Rocksmith" desktop.config.settings.apps.utils.drive.pinned
-        && user.timers ? rocksmith-songs && lib.hasSuffix "/bin/rocksmith-songs ${desktop.config.settings.users.admin.homeDirectory}/.local/share/Steam/steamapps/common/Rocksmith2014/dlc ${songs} ${desktop.config.settings.apps.utils.drive.mountPoint}" user.services.rocksmith-songs.serviceConfig.ExecStart
-        && !(lib.hasInfix "ln -sfn" desktop.config.system.activationScripts.rocksmith.text)  # at boot the Drive is not there yet
-        && !(handheld.systemd.user.services ? rocksmith-songs) && !(lib.elem "media/Games/Rocksmith" handheld.settings.apps.utils.drive.pinned))
-      "Rocksmith's songs are a Drive folder kept downloaded on FRACTAL-NORTH and linked into the game by a job that waits for the Drive; the Deck has neither."
+        && lib.hasInfix "ln -sfn \"${songs}\" \"${game}\"" desktop.config.system.activationScripts.rocksmith.text
+        && !(desktop.config.systemd.user.timers ? rocksmith-songs) && !(desktop.config.settings.apps.gaming.rocksmith ? drive)
+        && !(lib.elem "media/Games/Rocksmith" handheld.settings.apps.utils.drive.pinned))
+      "Rocksmith reads its songs through one link from the game's folder to songsPath; FRACTAL-NORTH points that at a Drive folder it keeps downloaded, and nothing copies or syncs."
     ++ check (lib.hasSuffix " --machine FRACTAL-NORTH" desktop.config.systemd.services.steam-shortcuts.serviceConfig.ExecStart
         && lib.hasSuffix " --machine STEAM-DECK-OLED" handheld.systemd.services.steam-shortcuts.serviceConfig.ExecStart)
       "Each machine numbers its Steam shortcuts for itself: a number two machines share is renumbered by Steam at every start."
@@ -220,7 +220,6 @@ in {
   value = pkgs.runCommand "package-groups" {} (
     if failures == [] then ''
       test -e ${import ./chrome-launchers.nix { inherit pkgs inputs; }}
-      test -e ${import ./rocksmith-songs.nix { inherit pkgs; }}
       touch $out
     ''
     else "echo ${lib.escapeShellArg (lib.concatStringsSep "; " failures)} >&2; exit 1"

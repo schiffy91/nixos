@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
   graphics = config.settings.graphics;
   xdr = builtins.head graphics.connectors.${graphics.display}.DP;
@@ -17,6 +17,8 @@ in {
     ];
     utils.desktop.enable = true;
     utils.drive.push = true;  # ~/Drive is the Drive client's; changes on the Drive are announced, not waited for
+    utils.drive.pinned = lib.optional config.settings.apps.gaming.rocksmith.enable "media/Games/Rocksmith";  # kept downloaded: the game cannot wait for a song
+    gaming.rocksmith.songsPath = "${config.settings.apps.utils.drive.mountPoint}/media/Games/Rocksmith/dlc";  # one copy, in the Drive
     dev.lmstudio.enable = true;
     dev.antigravity.enable = true;  # the Antigravity app and the agy CLI
     utils.chrome.flags = [

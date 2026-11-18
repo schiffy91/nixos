@@ -5,7 +5,6 @@ let
   group = config.users.users.${user}.group;
   home = "/home/${user}";
   sampleSize = config.settings.apps.gaming.rocksmith.sampleSize;
-  drive = config.settings.apps.gaming.rocksmith.drive;
   songsPath = config.settings.apps.gaming.rocksmith.songsPath;
   slopsmithConfigPath = config.settings.apps.gaming.rocksmith.slopsmith.configPath;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
@@ -69,45 +68,28 @@ let
   prefixPath = "${steamAppsPath}/compatdata/221680/pfx";
   slopsmith = pkgs.callPackage ../slopsmith/package.nix {
     inherit inputs;
-    rocksmithDlc = dlcPath;
-    songs = songsPath;
+    rocksmithDlc = songsPath;  # the folder itself: a link leads nowhere inside its container
     configDir = slopsmithConfigPath;
     port = config.settings.apps.gaming.rocksmith.slopsmith.port;
   };
-  linkSongs = "${import ./songs.nix { inherit pkgs; }}/bin/rocksmith-songs ${lib.escapeShellArgs ([ dlcPath songsPath ]
-    ++ lib.optional (drive != null) config.settings.apps.utils.drive.mountPoint)}";  # with a Drive: links stay while it is away
 in lib.mkIf enabled {
-  settings.apps.utils.drive.pinned = lib.mkIf (drive != null) [ drive ];  # kept downloaded: the game cannot wait for a song
-  settings.apps.utils.nixosctl.apps.rocksmith = {
-    description = "Rocksmith songs";
-    commands.link-songs = { description = "Link every song into the game now."; run = linkSongs; };
-  };
-  systemd.user.services.rocksmith-songs = {
-    description = "Link the Rocksmith songs into the game";
-    wantedBy = [ "default.target" ];
-    unitConfig.ConditionUser = user;
-    serviceConfig = { Type = "oneshot"; ExecStart = linkSongs; };
-  };
-  systemd.user.timers.rocksmith-songs = {  # songs arrive from other machines at any time
-    wantedBy = [ "timers.target" ];
-    unitConfig.ConditionUser = user;
-    timerConfig = { OnStartupSec = "30s"; OnUnitInactiveSec = "5min"; };
-  };
   settings.apps.gaming.steam.protonSge.extraFiles = ./assets;  # wineasio32.dll and wineasio32.dll.so
   virtualisation.podman.enable = true;
   environment.systemPackages = [ slopsmith ];
 
-  system.activationScripts.rocksmith = lib.stringAfter [ "users" "protonSgeCompatTool" ] ''
+  system.activationScripts.rocksmith = lib.stringAfter [ "userFolder" "protonSgeCompatTool" ] ''
     export PATH="${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnused}/bin:${pkgs.gnugrep}/bin:${pkgs.util-linux}/bin:$PATH"
-    owned_dir() {  # install -d only owns the leaf; walk parents below $HOME
-      case "$1" in "${home}"/*/*) owned_dir "$(dirname "$1")";; esac
-      install -d -o ${user} -g ${group} "$1"
-    }
-    ${lib.optionalString (drive == null) ''owned_dir "${songsPath}"''}
-    owned_dir "${slopsmithConfigPath}"
+    user_folder "${slopsmithConfigPath}"
+    if [ -d "$(dirname "${songsPath}")" ]; then user_folder "${songsPath}"; fi  # never on a volume that is away
 
     if [ -d "${gamePath}" ]; then
-      install -d -o ${user} -g ${group} "${dlcPath}"
+      rmdir "${dlcPath}" 2>/dev/null || true  # the empty folder the game came with
+      if [ -L "${dlcPath}" ] || [ ! -e "${dlcPath}" ]; then
+        ln -sfn "${songsPath}" "${dlcPath}"
+        chown -h ${user}:${group} "${dlcPath}"
+      else
+        echo "rocksmith: ${dlcPath} holds songs of its own; move them into ${songsPath} and rebuild" >&2
+      fi
       cp -f ${mods}/RS_ASIO.dll "${gamePath}/"
       cp -f ${mods}/avrt.dll "${gamePath}/"
       cp -f ${mods}/RS_ASIO.ini "${gamePath}/"
