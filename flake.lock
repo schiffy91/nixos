@@ -27,11 +27,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794928483,
+        "lastModified": 1794970104,
         "narHash": "sha256-hXkBwPj01t2A2bTmWQ87mWBYFWbq/9pR4N9AhSVftKc=",
         "owner": "schiffy91",
         "repo": "ci-local",
-        "rev": "46bebec22a3affc1be02f115640488afdbbcf31a",
+        "rev": "178eaf4943f81908425c081ac3e8675a0d258009",
         "type": "github"
       },
       "original": {
@@ -325,11 +325,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794939197,
+        "lastModified": 1794970034,
         "narHash": "sha256-ZevzVDKYjFkm4IYZD7KJXWP2u1I0T1K99TBxbfpxfoY=",
         "owner": "schiffy91",
         "repo": "deckpad",
-        "rev": "109d35a63f0b9472a322b5eb4d51da3de7fd3261",
+        "rev": "ada26bec383977ef47c2fd79b76cc35bcb5fa7bb",
         "type": "github"
       },
       "original": {
@@ -368,11 +368,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794936479,
+        "lastModified": 1794969886,
         "narHash": "sha256-ObiNQgwkJr4FUMuumpyTuu7pwppDqC2Lhqmez8aSFw8=",
         "owner": "schiffy91",
         "repo": "drive",
-        "rev": "3c93560dc67ac513357ceec48640bc55d286f839",
+        "rev": "78a098b570cf43f9bcc6a28e38ef41c5f5bb9462",
         "type": "github"
       },
       "original": {
@@ -650,11 +650,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794966097,
+        "lastModified": 1794969828,
         "narHash": "sha256-N92GO1npIE4yv79wJITTQPZcrPFI2MaUKseVBx1ECZs=",
         "owner": "schiffy91",
         "repo": "immutability",
-        "rev": "1c7e3566d3cf9d26cb3b8252e7790ae63450ceae",
+        "rev": "b2d13aa057f4fc2c6dc451adaa005acdd3c938de",
         "type": "github"
       },
       "original": {
@@ -889,11 +889,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794950595,
-        "narHash": "sha256-GUZagih03zdVwMbgpUEqWZb5H2DwXuxpKhQ9w3BG4ys=",
+        "lastModified": 1794970068,
+        "narHash": "sha256-xMTmI7Iydt1jI7sssJe4BwWCH+iPqA0Zne0iWy8k2l0=",
         "owner": "schiffy91",
         "repo": "proton-sge",
-        "rev": "6b11721df90a2316faba103e599ce41c92ea0707",
+        "rev": "f0bf7e21d389652890b979e0f65f97aef67d3f2d",
         "type": "github"
       },
       "original": {

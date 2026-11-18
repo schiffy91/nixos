@@ -82,6 +82,25 @@ under `tests/hosts` still receive system and installer outputs. Duplicate QEMU
 names retain their architecture suffixes. Existing saved host paths are resolved
 to the new entry locations by `nixosctl`.
 
+## Products In Their Own Repositories
+
+Five parts of this configuration are repositories of their own, each a flake input here. A host turns one
+on with the setting it always had; an adapter module here fills the product's own options from it.
+
+| Product | Repository | Here | A host turns it on with |
+|---|---|---|---|
+| Local test passes that stand in for CI | [`schiffy91/ci-local`](https://github.com/schiffy91/ci-local) | `config/pkgs/dev/git.nix` installs the tool; `ci/local.json` is this repository's job table | `settings.apps.dev.enable` (it comes with git) |
+| Google Drive at a mount point | [`schiffy91/drive`](https://github.com/schiffy91/drive) | `config/pkgs/utils/drive/default.nix` (adapter) | `settings.apps.utils.drive.enable` and its `mountPoint`, `store`, `pinned`, `placements` |
+| The Deck as a Steam Controller | [`schiffy91/deckpad`](https://github.com/schiffy91/deckpad) | `config/pkgs/gaming/deckpad/default.nix` (adapter) | `settings.apps.gaming.deckpad.enable`, with `role = "controller"` on the Deck |
+| GE-Proton with a short series of Wine fixes | [`schiffy91/proton-sge`](https://github.com/schiffy91/proton-sge) | `config/pkgs/gaming/proton/default.nix` installs its package | `settings.apps.gaming.steam.protonSge.enable` |
+| Volumes that reset at boot, and what persists | [`schiffy91/immutability`](https://github.com/schiffy91/immutability) | `config/system/storage/immutability/default.nix` (adapter) | `settings.disk.immutability.enable`, `settings.disk.immutability.persist.paths` |
+
+The compiler they are written in, [`schiffy91/btrc`](https://github.com/schiffy91/btrc), exports what
+builds and tests them (`lib.buildPackage`, `lib.vmTest`, `lib.testkit`). Each product repository has its
+own README, its own tests and a `ci/local.json`; its history before the move is merged beneath its first
+commit. A change to a product is made and tested there, pushed with `ci-local push`, and arrives here with
+`nix flake update <name>`.
+
 ## Settings Model
 
 `config/settings.nix` composes `config/system/options.nix` and
@@ -423,6 +442,25 @@ volume's transaction when boot finished, where with `clean` it lists what differ
 QEMU hosts and the VM twins of the real hosts use `empty`; FRACTAL-NORTH and STEAM-DECK-OLED stay on
 `clean` until their owner moves them, which takes effect at a reboot. A path that should outlive a
 reboot is persisted on either base; with `empty`, a file only ever written into `CLEAN` is gone.
+
+What each real machine's `CLEAN` holds outside the persisted paths, read on 17 November 2026: this is what
+every boot starts with on `clean` and what a boot from an empty root would not have.
+
+- FRACTAL-NORTH, `CLEAN` of 7 June: 45,357 files, 4.5 GB. All but 42 are in the home folder: a compiler
+  cache (`~/.ccache`, 39,194 files, 1.7 GB), `~/.cargo` (6,021 files, 1.0 GB), the desktop search index
+  (`~/.local/share/baloo/index`, 1.9 GB) and about 80 small desktop files (clipboard history, `mimeapps.list`,
+  `user-dirs.dirs`, Flatpak and browser stubs). Outside it: 23 debugging leftovers in `/tmp` (TPM and patch
+  files), `/root/.gitconfig`, `/.boot-ready`, and in `/etc` the June `passwd`, `group`, `shadow`, `subuid`,
+  `subgid` and `sudoers`, `fwupd/fwupd.conf` and an empty `wpa_supplicant/imperative.conf`.
+- STEAM-DECK-OLED, `CLEAN` of 5 November: 14 files, 8 kB: `/etc` account files as above plus `resolv.conf`,
+  `logrotate.conf`, `fwupd/fwupd.conf` and `kernel/entry-token`; `/root/.gitconfig`; one file in the home
+  folder.
+
+What the move would change for the owner: the three caches in the desktop's home folder start empty after
+each boot unless they are persisted, and `/etc/fwupd/fwupd.conf` and `/root/.gitconfig` exist only if the
+configuration writes them. The account files are rewritten by activation at every boot on either base.
+
+Verify, on one commit and by the ledger's current names: every node that covers immutability
 
 `enforce.onReboot` wires the initrd reset + mounts service. Updates do not
 rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
@@ -1121,6 +1159,41 @@ The migration to BTRC is complete. Current state:
 | VFIO | Removed for now |
 | Python / Rust | Removed from the management layer |
 
+## Waiting For The Owner
+
+What the split of November 2026 left for a person to do or decide. None of it blocks a rebuild.
+
+- **Reboot each machine once.** The boot-time reset now comes from `schiffy91/immutability`; its first run
+  on real hardware is the next boot. The previous generation stays selectable in the boot menu.
+- **Close Steam and run `nixosctl update` once on each machine.** Steam's tool mapping is only rewritten
+  while Steam is closed. Until then it names `proton-custom-GE-Proton11-12`, whose links stay valid.
+  Afterwards app `0` should map to `proton-sge-GE-Proton11-12` at priority 75 with no entry naming the old
+  tool, and the Battle.net launcher should open under it.
+- **The Wine working tree** at `config/pkgs/gaming/proton/custom/src` (4 GB, not in git) stays where it is.
+  The development loop expects it at `~/Projects/proton-sge/src`. Moving it, and removing the old links
+  `~/Games/proton/proton-custom-*` and `~/.local/share/Steam/compatibilitytools.d/proton-custom-*`, is the
+  owner's call.
+- **Whether FRACTAL-NORTH and STEAM-DECK-OLED move to `settings.disk.immutability.base = "empty"`.** They
+  are on `clean`. What each machine's `CLEAN` holds outside the persisted paths, and so what a boot from an
+  empty root would not have, is summarised under Immutability; the move takes effect at a reboot.
+- **On the Deck:** `make -C tests graph-deck` in `/etc/nixos` (the Gaming Mode sleep-lock nodes; three are
+  expected to pass, the two real-suspend nodes fail at game input after wake, see
+  `tests/sleep-lock/gamescope-native/README.md`), and a controller session with Deck Pad.
+- **mbp21:** `git pull` and `nix-update`; and the graph set `aarch64` there, where it runs natively.
+- **A schedule** for the long test runs (Drive's `nightly` output, btrc's `make test-nightly`), once there
+  is a CI machine. Both need a machine to themselves.
+- **Stale files in this checkout** that are not in git: the `__pycache__` directories and `tests/nixd`.
+
+Known and not yet answered:
+
+- `make cache` publishes this host's generic installer only, and prints a public key that is not the one in
+  `ci/targets.nix`. The Deck was given its build with `nix copy` over SSH on 17 November.
+- The storage scenario's last step (a damaged card header put back) once ended with the card closed when
+  the damage and the repair followed each other within a moment. The scenario now waits in between;
+  whether the product can end that way outside a test is not known.
+- On the Deck the user unit `galileo-mura-setup.service` fails at every switch ("not SDC": a calibration
+  step for another panel). It did so before the split.
+
 ## Maintenance Rules
 
 1. Prefer `settings.*` for host policy.
@@ -1133,6 +1206,13 @@ The migration to BTRC is complete. Current state:
 8. Do not reintroduce VFIO until there is a clean design and expected-behavior test path.
 9. Do not remove desktop packages or host customizations while making cross-platform changes unless they are concretely unsupported on that platform.
 10. Watch the disk during a day of graph runs. Every source change leaves a new set of machine states under `.vm/e2e` and nothing but `nixosctl graph tests/graph.json gc` removes old ones (`gc --dry-run` lists them first); on 17 November 2026 they reached 3.2 TB and filled the disk. A run refuses to start with under 100 GB free there (`NIXOSCTL_GRAPH_MIN_FREE_GB`).
+11. Run test jobs inside an isolated process namespace (`bwrap --unshare-pid --die-with-parent`; `make -C tests` does it where bwrap exists), so nothing a test signals can reach the desktop session and nothing of a run is left when it ends. A test that signals its parent first checks that the parent is what it started.
+12. Size parallel jobs to the machine on purpose and never stack a third heavy job on two. Tests that qualify timing (the `alone` graph set, btrc's `make test-nightly`) get the machine to themselves.
+13. One system switch at a time, never during a graph run, and never two graph invocations at once. The desktop is switched from this checkout, never from a clean worktree.
+14. The Deck never compiles anything large: give it the build first. It is not rebooted for a test, and before a switch there `deckpad.service` must not be serving and no `reaper SteamLaunch` process may exist.
+15. No emulator or game is launched against a real library by a test, tests use the fake Drive, and neither `drive resume` nor `drive keep` is run for the owner.
+16. No test is dropped silently: `tests/README.md` keeps the ledger of every node and check that left the required set, with where it went and why.
+17. Build every flake check before committing configuration, and push with `ci-local push` so the hosted run skips what already passed here.
 
 ## macOS
 
