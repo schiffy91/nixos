@@ -79,7 +79,7 @@ in {
           Type = "oneshot";
           User = user;
           ExecCondition = "${pkgs.bash}/bin/sh -c '! ${pkgs.procps}/bin/pgrep -u ${user} -x steam'";  # Steam rewrites shortcuts.vdf when it exits
-          ExecStart = "${configureSteamApps}/bin/install-steam-shortcuts --steam-path ${steamPath} --shortcuts ${shortcuts}";
+          ExecStart = "${configureSteamApps}/bin/install-steam-shortcuts --steam-path ${steamPath} --shortcuts ${shortcuts} --machine ${config.networking.hostName}";
         };
       };
     })

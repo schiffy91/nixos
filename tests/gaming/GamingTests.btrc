@@ -195,11 +195,47 @@ class GamingTests {
         Expect.isTrue(Path.readAll(f"{grid}/2147483648p.png").equals("custom-cover"));
         Expect.isTrue(Path.readAll(f"{grid}/2147483648.jpeg").equals("custom-landscape"));
         Expect.isTrue(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
+        // Two machines that declare one shortcut must not give it one number: Steam renumbers the local one at every start.
+        var shared = SteamShortcuts.create("Chrome", "/run/current-system/sw/bin/google-chrome-stable");
+        shared.body.set(shared.body.length() - 27, 123);
+        var plain = SteamShortcuts.appid(shared.exe, "Chrome");  // what every machine gives it
+        var chosen = SteamShortcuts.create("Moonlight", "/run/current-system/sw/bin/moonlight");
+        for (int byte = 0; byte < 4; byte++) { chosen.body.set(7 + byte, byte == 3 ? 128 : 0); }  // a number Steam chose
+        for machine in ["DECK", "DESKTOP"] {
+            var home = f"{self.root}/Shortcuts {machine}";
+            var file = f"{home}/userdata/1/config/shortcuts.vdf";
+            var pictures = f"{home}/userdata/1/config/grid";
+            ModTree.write(f"{home}/userdata/1/config/localconfig.vdf", "UserLocalConfigStore { }");
+            ModTree.writeBytes(file, SteamShortcuts.render([foreign, shared, chosen]));
+            ModTree.write(f"{pictures}/777_hero.png", "ours");  // placed for a number no shortcut has any more
+            ModTree.write(f"{pictures}/.nixos-artwork/777_hero.sha256", SHA256.digestBytes(Bytes.fromString("ours")));
+            ModTree.write(f"{pictures}/778_hero.png", "changed since");
+            ModTree.write(f"{pictures}/.nixos-artwork/778_hero.sha256", SHA256.digestBytes(Bytes.fromString("ours")));
+            var own = Command(f"{ShellWords.quote(self.tools)}/install-steam-shortcuts");
+            own.flag("--steam-path", home).flag("--shortcuts", declaration).flag("--machine", machine);
+            UnixShell().run(own.render(), throwOnFailure=true);
+            var numbered = SteamShortcuts(ModTree.read(file)).entries();
+            var number = SteamShortcuts.appid(shared.exe, "Chrome", machine);
+            Expect.isTrue(numbered.len == 5 && numbered.get(0).body.equals(foreign.body));
+            Expect.isTrue(numbered.get(1).id == number && number != plain);
+            Expect.isTrue(numbered.get(2).id == 2147483648L);  // Steam's own choice stays
+            Expect.isTrue(numbered.get(3).id == SteamShortcuts.appid(numbered.get(3).exe, numbered.get(3).name, machine));  // a new one starts with its own
+            Expect.isTrue(Path.readAll(f"{pictures}/{number}_hero.png").equals("_hero"));
+            Expect.isTrue(!FileSystem.exists(f"{pictures}/777_hero.png") && !FileSystem.exists(f"{pictures}/.nixos-artwork/777_hero.sha256"));
+            Expect.isTrue(Path.readAll(f"{pictures}/778_hero.png").equals("changed since"));
+            var settled = ModTree.read(file);
+            UnixShell().run(own.render(), throwOnFailure=true);
+            Expect.isTrue(ModTree.read(file).equals(settled));
+            SteamShortcuts.setId(numbered.get(1), plain);
+            SteamShortcuts.setIcon(numbered.get(1), "");
+            Expect.isTrue(numbered.get(1).body.equals(shared.body));  // only the number and the icon changed: play time survived
+        }
+        Expect.isTrue(SteamShortcuts.appid(shared.exe, "Chrome", "DECK") != SteamShortcuts.appid(shared.exe, "Chrome", "DESKTOP"));
         var unknown = Bytes.fromString("not a shortcuts file");
         ModTree.writeBytes(path, unknown);
         Expect.isTrue(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
         Expect.isTrue(ModTree.read(path).equals(unknown));
-        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, icon updates preserve playtime, missing icon fields, idempotence, unknown format refusal");
+        print("PASS: Steam shortcuts CRC, foreign entries byte for byte, stale replacement, icon updates preserve playtime, missing icon fields, idempotence, a number of the machine's own, pictures of numbers that are gone, unknown format refusal");
     }
 
     public void presetLinks() {

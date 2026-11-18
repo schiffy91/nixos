@@ -813,7 +813,7 @@ profiles turn off whole groups:
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.gaming.steam.protonSge.enable` is set |
 | `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
-| `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.gaming.steam.shortcuts` as non-Steam shortcuts when Steam is enabled |
+| `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.gaming.steam.shortcuts` as non-Steam shortcuts when Steam is enabled, each numbered for this machine (Steam renumbers a shortcut whose number another machine also uses, at every start, away from its pictures) |
 | `gaming/sunshine/default.nix` | Sunshine service and ports; the CUDA overlay, and the KWin HDR screencast patch when capture is `kwin` |
 | `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |
 | `gaming/assettocorsa/default.nix` | Assetto Corsa content import, CM presets, control bindings, UI scale, and the CSP wheel menu |

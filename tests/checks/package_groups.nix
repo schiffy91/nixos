@@ -113,6 +113,9 @@ let
       && desktop.config.settings.apps.utils.chrome.renderNode == null
       && handheld.settings.apps.utils.chrome.renderNode == null)
       "FRACTAL-NORTH's Chrome must run on native Wayland with NVDEC decode and no render-node override."
+    ++ check (lib.hasSuffix " --machine FRACTAL-NORTH" desktop.config.systemd.services.steam-shortcuts.serviceConfig.ExecStart
+        && lib.hasSuffix " --machine STEAM-DECK-OLED" handheld.systemd.services.steam-shortcuts.serviceConfig.ExecStart)
+      "Each machine numbers its Steam shortcuts for itself: a number two machines share is renumbered by Steam at every start."
     ++ check (lib.all (case:
       case.config.settings.desktop.plasma.taskbarLaunchers == lib.subtractLists case.removed expectedLaunchers)
       launcherCases)

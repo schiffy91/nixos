@@ -12,13 +12,14 @@ class SteamShortcut {
     public string exe;
     public string icon;
     public long id;
+    public int idStart;
     public int iconStart;
     public int iconEnd;
     public Bytes body;  // fields through the entry's closing 0x08, kept byte for byte
 
     public SteamShortcut() {
         self.name = ""; self.exe = ""; self.icon = "";
-        self.id = 0;
+        self.id = 0; self.idStart = -1;
         self.iconStart = -1; self.iconEnd = -1; self.body = Bytes();
     }
 }
@@ -59,7 +60,7 @@ class SteamShortcuts {
             else if (type == 2) {
                 if (self.offset + 4 > self.data.length()) { throw "Truncated shortcuts.vdf"; }
                 if (depth == 0 && key.equals("appid")) {
-                    entry.id = 0;
+                    entry.id = 0; entry.idStart = self.offset;
                     for (int byte = 0; byte < 4; byte++) {
                         entry.id |= (long)self.data.get(self.offset + byte) << (8 * byte);
                     }
@@ -81,6 +82,7 @@ class SteamShortcuts {
             self.fields(entry, 0);
             entry.body = self.data.slice(start, self.offset);
             if (entry.iconStart >= 0) { entry.iconStart -= start; entry.iconEnd -= start; }
+            if (entry.idStart >= 0) { entry.idStart -= start; }
             entries.push(entry);
         }
         if (self.next() != 8 || self.offset != self.data.length()) { throw "Trailing bytes in shortcuts.vdf"; }
@@ -96,7 +98,8 @@ class SteamShortcuts {
         return (crc ^ 0xFFFFFFFFL) & 0xFFFFFFFFL;
     }
 
-    class long appid(string quotedExe, string name) { return SteamShortcuts.crc32(quotedExe + name) | 0x80000000L; }
+    // Without a machine, the number every machine gives a shortcut; with one, a number of that machine's own.
+    class long appid(string quotedExe, string name, string machine = "") { return SteamShortcuts.crc32(quotedExe + name + machine) | 0x80000000L; }
 
     class string quote(string value) { return f"\"{value}\""; }
 
@@ -176,7 +179,13 @@ class SteamShortcuts {
         entry.icon = icon;
     }
 
-    class Bytes declare(Bytes current, JSONValue declared) {  // replaces stale entries by name or exe; keeps everything else
+    class void setId(SteamShortcut entry, long id) {  // these four bytes only, like the icon
+        if (entry.idStart < 0) { return; }
+        for (int index = 0; index < 4; index++) { entry.body.set(entry.idStart + index, (int)((id >> (8 * index)) & 255)); }
+        entry.id = id;
+    }
+
+    class Bytes declare(Bytes current, JSONValue declared, string machine = "") {  // replaces stale entries by name or exe; keeps everything else
         var names = declared.keys().sorted();
         Vector<string> present = [];
         Vector<SteamShortcut> result = [];
@@ -199,6 +208,11 @@ class SteamShortcuts {
         for entry in result {
             if (!declared.has(entry.name)) { continue; }
             var shortcut = declared.get(entry.name);
+            // Steam lists another machine's shortcuts here for Remote Play under their numbers, and gives a local
+            // shortcut of the same number a new one at every start, away from its pictures. A number Steam chose stays.
+            if (!machine.isEmpty() && entry.id == SteamShortcuts.appid(entry.exe, entry.name)) {
+                SteamShortcuts.setId(entry, SteamShortcuts.appid(entry.exe, entry.name, machine));
+            }
             if (shortcut.isObject() && !shortcut.get("icon").asString().isEmpty()) {
                 SteamShortcuts.setIcon(entry, shortcut.get("icon").asString());
             }
@@ -206,12 +220,32 @@ class SteamShortcuts {
         return SteamShortcuts.render(result);
     }
 
-    class void install(SteamLibrary library, JSONValue declared) {
+    // Pictures placed here for a number no shortcut has any more are taken away, unless they were changed since.
+    class void forget(string grid, Vector<SteamShortcut> entries) {
+        var records = f"{grid}/.nixos-artwork";
+        if (!FileSystem.isDir(records)) { return; }
+        Vector<string> numbers = [];
+        for entry in entries { numbers.push(f"{entry.id}"); }
+        for record in FileSystem.listDir(records) {
+            if (!record.endsWith(".sha256")) { continue; }
+            var picture = record.substring(0, record.len() - 7);  // "<number><suffix>"
+            var digits = 0;
+            while (digits < picture.len() && Strings.isDigit(picture.charAt(digits))) { digits++; }
+            if (numbers.contains(picture.substring(0, digits))) { continue; }
+            var placed = f"{grid}/{picture}.png";
+            if (FileSystem.exists(placed) && SHA256.digestBytes(ModTree.read(placed)) != Path.readAll(f"{records}/{record}").trim()) { continue; }
+            ModTree.remove(placed);
+            ModTree.remove(f"{records}/{record}");
+        }
+    }
+
+    class void install(SteamLibrary library, JSONValue declared, string machine = "") {
         if (library.root.isEmpty() || !declared.isObject()) { throw "Required: --steam-path PATH --shortcuts JSON"; }
         for path in library.userShortcuts() {
             var current = FileSystem.isFile(path) ? ModTree.read(path) : Bytes();
-            var desired = SteamShortcuts.declare(current, declared);
-            for entry in SteamShortcuts(desired).entries() {
+            var desired = SteamShortcuts.declare(current, declared, machine);
+            var entries = SteamShortcuts(desired).entries();
+            for entry in entries {
                 if (!declared.has(entry.name) || entry.id == 0) { continue; }
                 var shortcut = declared.get(entry.name);
                 if (!shortcut.isObject()) { continue; }
@@ -242,6 +276,7 @@ class SteamShortcuts {
                     ModTree.write(record, SHA256.digestBytes(ModTree.read(source)));
                 }
             }
+            SteamShortcuts.forget(f"{PathTools.dirname(path)}/grid", entries);
             if (!desired.equals(current)) { ModTree.writeBytes(path, desired); }
         }
     }
