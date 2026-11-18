@@ -127,7 +127,7 @@ Important setting groups:
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
 | `settings.apps.gaming.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config; `songsPath` is where the songs are kept, and the game's `dlc` folder is a link to it |
-| `settings.apps.utils.chrome.passwordStore` | Where Chrome keeps its key: `null` asks the desktop's wallet, `"basic"` keeps it in the profile and asks nothing (the Deck, whose Game Mode has no wallet) |
+| `settings.apps.utils.chrome.passwordStore` | Where Chrome keeps its key: `"basic"` (the default) keeps it in the profile and asks nothing, since the disks are encrypted; `null` asks the desktop's wallet |
 | `settings.apps.gaming.cpuAffinity` | Optional Linux CPU list for Steam games and Battle.net; `null` keeps normal scheduling |
 | `settings.apps.utils.nixosctl.*` | Structured display/audio settings, generated TOML config path, default-on idle inhibit |
 | `settings.apps.gaming.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |

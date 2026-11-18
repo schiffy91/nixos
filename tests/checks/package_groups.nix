@@ -113,8 +113,8 @@ let
       && desktop.config.settings.apps.utils.chrome.renderNode == null
       && handheld.settings.apps.utils.chrome.renderNode == null)
       "FRACTAL-NORTH's Chrome must run on native Wayland with NVDEC decode and no render-node override."
-    ++ check (handheld.settings.apps.utils.chrome.passwordStore == "basic" && desktop.config.settings.apps.utils.chrome.passwordStore == null)
-      "The Deck's Chrome must keep its own key and ask no wallet; FRACTAL-NORTH's keeps the wallet its profile was made with."
+    ++ check (lib.all (host: host.settings.apps.utils.chrome.passwordStore == "basic") [ desktop.config handheld ])
+      "Chrome keeps its own key on every machine and asks no wallet: the disks are encrypted."
     ++ check (let
         songs = "${desktop.config.settings.apps.utils.drive.mountPoint}/media/Games/Rocksmith/dlc";
         game = "${desktop.config.settings.users.admin.homeDirectory}/.local/share/Steam/steamapps/common/Rocksmith2014/dlc";

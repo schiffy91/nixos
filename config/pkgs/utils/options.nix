@@ -14,7 +14,7 @@ in {
       "--enable-gpu-rasterization"
     ];
     settings.apps.utils.chrome.renderNode = mkSetting (nullOr str) null;
-    settings.apps.utils.chrome.passwordStore = mkSetting (nullOr (enum [ "basic" "kwallet6" "gnome-libsecret" ])) null;  # where Chrome keeps its key; null lets it ask the desktop's wallet
+    settings.apps.utils.chrome.passwordStore = mkSetting (nullOr (enum [ "basic" "kwallet6" "gnome-libsecret" ])) "basic";  # no wallet prompt: the disk is encrypted; null lets Chrome ask the desktop's wallet
     settings.apps.utils.chrome.profile = lib.mkOption {
       type = strMatching "[^/\n]+";
       default = "Default";
