@@ -20,10 +20,10 @@
     { "op": "restore", "name": "installed" },
     { "op": "boot-disk" },
     { "op": "wait-ssh", "timeout": 180 },
-    { "op": "guest", "command": "set -e; test ! -e /zzz-diff-canary && printf clean", "expect": "clean" },
+    { "op": "guest", "command": "set -e; systemctl start immutability-marker.service 2>/dev/null || true; test ! -e /zzz-diff-canary && printf clean", "expect": "clean" },
     { "op": "guest", "command": "NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true nixosctl diff 2>&1 | grep -q zzz-diff-canary && printf present || printf absent", "expect": "absent", "timeout": 600 },
     { "op": "guest", "command": "set -e; mkdir -p /zzz-diff-canary && dd if=/dev/zero of=/zzz-diff-canary/marker bs=4096 count=16 status=none && sync && printf made", "expect": "made" },
-    { "op": "guest", "command": "NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true nixosctl diff 2>&1 | grep -q zzz-diff-canary && printf detected", "expect": "detected", "timeout": 600 },
+    { "op": "guest", "command": "NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true nixosctl diff 2>&1 | grep -q zzz-diff-canary || exit 1; if [ \"$(nixosctl eval config.settings.disk.immutability.base | tr -d '\\\"')\" = empty ]; then NIXOSCTL_ASSUME_ROOT_FOR_TESTS=true nixosctl persistence materialize --refresh-clean 2>&1 | grep -qF 'no CLEAN snapshot to refresh' || { echo 'refresh-clean was not refused'; exit 1; }; fi; printf detected", "expect": "detected", "timeout": 600 },
     { "op": "snapshot", "name": "diff-tested" },
     { "op": "record-state" },
     { "op": "stop" }

@@ -48,7 +48,7 @@ let
     printf 'E2E-CMDLINE-QUIET %s\n' "$(grep -c -E '(^| )quiet( |$)' /proc/cmdline || echo 0)"
     printf 'E2E-CMDLINE-LOGLEVEL %s\n' "$(tr ' ' '\n' < /proc/cmdline | grep '^loglevel=' | tail -n 1 | grep -c '^loglevel=[0-3]$' || echo 0)"
     printf 'E2E-SECUREBOOT %s\n' "$(${pkgs.systemd}/bin/bootctl status 2>/dev/null | grep -i 'secure boot' | head -1 | tr -s ' ' | tr -d '\n' || true)"
-    printf 'E2E-SNAPSHOTS %s\n' "$(${pkgs.btrfs-progs}/bin/btrfs subvolume list / 2>/dev/null | grep -c CLEAN || true)"
+    printf 'E2E-SNAPSHOTS %s\n' "$(${pkgs.btrfs-progs}/bin/btrfs subvolume list / 2>/dev/null | grep -c -E '/(CLEAN|generation-1)$' || true)"
     printf 'E2E-SWAP %s\n' "$(${pkgs.util-linux}/bin/swapon --noheadings --show=NAME 2>/dev/null | tr '\n' ' ' || true)"
     printf 'E2E-HEALTH-END\n'
     ${pkgs.coreutils}/bin/cat "$report" > /dev/ttyS0
@@ -98,6 +98,7 @@ in
   };
   boot.loader.timeout = lib.mkForce 0;
   settings.boot.plymouth.drmDevice = lib.mkForce "";
+  settings.disk.immutability.base = "empty";  # the real machines stay on clean until their owner moves them
   boot.initrd.systemd.services.probe-virtual-display = {
     description = "Ask the virtual display what is plugged in";  # the Deck's kernel never does; Plymouth only reads
     wantedBy = [ "sysinit.target" ];

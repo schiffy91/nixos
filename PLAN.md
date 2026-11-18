@@ -417,6 +417,24 @@ is new with every generation.
 The real machines stay on `clean` and their `CLEAN` snapshots are not touched. Moving them is the owner's
 decision after reading the reports, and takes effect at a reboot.
 
+The reports (17 November; full lists with the evidence, `m8/desktop-clean-report.txt` and
+`m8/deck-clean-report.txt`): what each machine's `CLEAN` holds outside the persisted paths, which is what
+every boot starts with today and what a boot from an empty root would not have.
+
+- FRACTAL-NORTH, `CLEAN` of 7 June: 45,357 files, 4.5 GB. All but 42 are in the home folder: a compiler
+  cache (`~/.ccache`, 39,194 files, 1.7 GB), `~/.cargo` (6,021 files, 1.0 GB), the desktop search index
+  (`~/.local/share/baloo/index`, 1.9 GB) and about 80 small desktop files (clipboard history, `mimeapps.list`,
+  `user-dirs.dirs`, Flatpak and browser stubs). Outside it: 23 debugging leftovers in `/tmp` (TPM and patch
+  files), `/root/.gitconfig`, `/.boot-ready`, and in `/etc` the June `passwd`, `group`, `shadow`, `subuid`,
+  `subgid` and `sudoers`, `fwupd/fwupd.conf` and an empty `wpa_supplicant/imperative.conf`.
+- STEAM-DECK-OLED, `CLEAN` of 5 November: 14 files, 8 kB: `/etc` account files as above plus `resolv.conf`,
+  `logrotate.conf`, `fwupd/fwupd.conf` and `kernel/entry-token`; `/root/.gitconfig`; one file in the home
+  folder.
+
+What the move would change for the owner: the three caches in the desktop's home folder start empty after
+each boot unless they are persisted, and `/etc/fwupd/fwupd.conf` and `/root/.gitconfig` exist only if the
+configuration writes them. The account files are rewritten by activation at every boot on either base.
+
 Verify, on one commit and by the ledger's current names: every node that covers immutability
 (`immutability-hibernate` included, and the assertions fixed in T0.2), the install and reset chains,
 `nixosctl-diff`, password change, the `@home` reset and bad-generation scenarios from T3.2, and both

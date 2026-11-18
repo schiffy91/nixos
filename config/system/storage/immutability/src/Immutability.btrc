@@ -29,6 +29,7 @@ class Immutability {
     public string device;
     public string snapshotsSubvolume;
     public string cleanName;
+    public string base;
     public string mode;
     public string persistRoot;
     public string specFile;
@@ -49,6 +50,7 @@ class Immutability {
         self.device = "";
         self.snapshotsSubvolume = "";
         self.cleanName = "";
+        self.base = ImmutabilityConstants.clean();
         self.mode = "";
         self.persistRoot = "";
         self.specFile = "";
@@ -72,8 +74,10 @@ class Immutability {
         return result;
     }
 
+    public bool emptyBase() { return self.base.equals(ImmutabilityConstants.empty()); }
+
     public void requireLiveAndClean(string live, string clean) {
-        if (!self.fs.exists(clean) || !self.fs.isSubvolume(clean) || !self.fs.isReadonly(clean)) {
+        if (!clean.isEmpty() && (!self.fs.exists(clean) || !self.fs.isSubvolume(clean) || !self.fs.isReadonly(clean))) {
             self.run.fatal(f"bad CLEAN: {clean}");
         }
         if (!self.fs.exists(live)) { self.run.fatal(f"live missing: {live}"); }
@@ -85,6 +89,7 @@ class Immutability {
     }
 
     public string cleanPath(ImmutabilityVolume volume) {
+        if (self.emptyBase()) { return ""; }  /* a reset from nothing has no snapshot */
         return self.run.path(PathTools.join(self.volumeRoot(volume), self.cleanName));
     }
 
@@ -108,8 +113,13 @@ class Immutability {
         self.restorePersistentFiles(plans, live, clean);
 
         self.slots.rotate(volume.name, live, self.snapshotsSubvolume, self.keepGenerations);
-        self.fs.snapshot(clean, next, false);
-        self.populateNext(plans, next);
+        if (self.emptyBase()) {
+            self.fs.makeSubvolume(next);
+            self.fs.matchOwnerAndMode(live, next);
+        } else {
+            self.fs.snapshot(clean, next, false);
+        }
+        self.populateNext(plans, live, next);
         if (!self.fs.exists(next) || !self.fs.isSubvolume(next)) {
             self.run.fatal(f"prepared NEXT missing: {next}");
         }
@@ -168,15 +178,20 @@ class Immutability {
         }
     }
 
-    public void populateNext(Vector<ImmutabilityPlan> plans, string next) {
+    public void populateNext(Vector<ImmutabilityPlan> plans, string live, string next) {
         for plan in plans {
             var target = PathTools.join(next, plan.spec.relativePath);
             self.run.removePath(target);
             if (plan.kind.equals("dir")) {
-                self.run.mkdirpInheriting(target);
+                if (self.emptyBase()) {
+                    self.run.mkdirpFollowing(next, plan.spec.relativePath, live);  /* nothing to inherit from: take the last root's owners */
+                } else {
+                    self.run.mkdirpInheriting(target);
+                }
             } else {
                 var source = self.run.path(plan.store);
                 if (self.fs.exists(source)) {
+                    if (self.emptyBase()) { self.run.mkdirpFollowing(next, PathTools.dirname(plan.spec.relativePath), live); }
                     self.fs.copyPath(source, target);
                 }
             }
@@ -312,7 +327,7 @@ class Immutability {
                 var nextExists = self.fs.exists(next) ? "true" : "false";
                 Console.log(f"volume {volume.name} {volume.mountPoint}");
                 Console.log(f"  live {live}");
-                Console.log(f"  clean {clean}");
+                Console.log(self.emptyBase() ? "  base empty" : f"  clean {clean}");
                 Console.log(f"  next {next} exists={nextExists}");
                 for plan in plans {
                     Console.log(f"  keep {plan.kind} {plan.spec.absPath} -> {plan.store}");
@@ -362,6 +377,8 @@ class Immutability {
             var restoreGeneration = Strings.toInt(parsed.option("--restore-generation", "1"));
             if (keepGenerations < 0) { NixosLog.fatal("--keep-generations must be >= 0"); }
             if (restoreGeneration < 1) { NixosLog.fatal("--restore-generation must be >= 1"); }
+            var base = parsed.option("--base", ImmutabilityConstants.clean());
+            if (!base.equals(ImmutabilityConstants.clean()) && !base.equals(ImmutabilityConstants.empty())) { NixosLog.fatal("--base must be clean or empty"); }
             if (parsed.operand(0).equals("mount")) {
                 if (parsed.operandCount() < 4) {
                     Console.error("Usage: immutability [--dry-run] mount <device> <persist_root> <spec_file>");
@@ -383,6 +400,7 @@ class Immutability {
                 }
                 var materializer = Immutability(dryRun, assumeMounted);
                 materializer.keepGenerations = keepGenerations;
+                materializer.base = base;
                 materializer.restoreGeneration = restoreGeneration;
                 materializer.configure(
                     parsed.operand(1),
@@ -408,6 +426,7 @@ class Immutability {
                 var immutability = Immutability(dryRun, assumeMounted);
                 immutability.keepGenerations = keepGenerations;
                 immutability.restoreGeneration = restoreGeneration;
+                immutability.base = base;
                 immutability.configure(
                     parsed.operand(1),
                     parsed.operand(2),
@@ -425,7 +444,7 @@ class Immutability {
                 return 0;
             }
             if (parsed.operandCount() < 6) {
-                Console.error("Usage: immutability [--dry-run] [--assume-mounted] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
+                Console.error("Usage: immutability [--dry-run] [--assume-mounted] [--base clean|empty] <device> <snapshots> <clean> <mode> <persist_root> <spec_file> [name=mount ...]");
                 return 1;
             }
             Vector<string> volumeArgs = [];
@@ -435,6 +454,7 @@ class Immutability {
             var immutability = Immutability(dryRun, assumeMounted);
             immutability.keepGenerations = keepGenerations;
             immutability.restoreGeneration = restoreGeneration;
+            immutability.base = base;
             immutability.configure(
                 parsed.operand(0),
                 parsed.operand(1),

@@ -84,7 +84,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; test -f /mnt/etc/nixos/flake.nix; listing=$(btrfs subvolume list -a /mnt); for volume in @root @home; do echo \"$listing\" | grep -qE \"@snapshots/$volume/CLEAN$\" || { echo \"no published CLEAN for $volume\"; exit 1; }; [ \"$(btrfs property get -ts \"/mnt/.snapshots/$volume/CLEAN\" ro 2>/dev/null)\" = 'ro=true' ] || { echo \"CLEAN for $volume is not read-only\"; exit 1; }; done; if echo \"$listing\" | grep -qF 'CLEAN.tmp.'; then echo 'a CLEAN temporary was left behind'; exit 1; fi; printf clean-snapshots",
+      "command": "set -e; test -f /mnt/etc/nixos/flake.nix; listing=$(btrfs subvolume list -a /mnt); echo \"$listing\" | grep -qE '@snapshots$' || { echo 'no @snapshots subvolume'; exit 1; }; if echo \"$listing\" | grep -qF CLEAN; then echo 'this host resets from an empty root: the installer must not publish a CLEAN'; exit 1; fi; printf clean-snapshots",
       "expect": "clean-snapshots"
     },
     {

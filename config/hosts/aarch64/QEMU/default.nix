@@ -12,6 +12,7 @@
       immutability = {
         enable = true;
         mode = "reset";
+        base = "empty";
       };
       swap.size = "4G";
     };

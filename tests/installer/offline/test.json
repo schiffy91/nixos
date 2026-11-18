@@ -51,7 +51,7 @@
     },
     {
       "op": "guest",
-      "command": "set -e; test -f /mnt/etc/nixos/flake.nix; btrfs subvolume list /mnt | grep -F '@snapshots/@root/CLEAN' >/dev/null; printf clean-snapshots",
+      "command": "set -e; test -f /mnt/etc/nixos/flake.nix; if btrfs subvolume list /mnt | grep -F CLEAN; then echo 'this host resets from an empty root: no CLEAN is expected'; exit 1; fi; printf clean-snapshots",
       "expect": "clean-snapshots",
       "timeout": 300
     },

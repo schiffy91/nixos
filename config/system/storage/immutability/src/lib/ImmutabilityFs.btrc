@@ -97,6 +97,7 @@ class ImmutabilityFs {
     public string sourcePath(string live, string clean, string relativePath) {
         var livePath = PathTools.join(live, relativePath);
         if (self.exists(livePath)) { return livePath; }
+        if (clean.isEmpty()) { return ""; }  /* an empty base has no snapshot to fall back to */
         var cleanPath = PathTools.join(clean, relativePath);
         if (self.exists(cleanPath)) { return cleanPath; }
         return "";

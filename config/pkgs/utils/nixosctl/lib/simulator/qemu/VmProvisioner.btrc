@@ -94,6 +94,7 @@ class VmProvisioner {
     class string hostModule(VmTestSpec spec, string publicKey, string secureBootImport) {
         var mode = spec.args.getOrDefault("immutabilityMode", "reset");
         var enabled = spec.args.getOrDefault("immutabilityEnabled", "true");
+        var base = spec.args.getOrDefault("immutabilityBase", "empty");
         var desktop = spec.args.getOrDefault("desktop", "none");
         var encryption = spec.args.getOrDefault("encryption", "false");
         var recovery = spec.args.getOrDefault("recovery", "false");
@@ -137,6 +138,7 @@ class VmProvisioner {
             f"  settings.disk.encryption.enable = {encryption};",
             f"  settings.disk.immutability.enable = {enabled};",
             f"  settings.disk.immutability.mode = \"{mode}\";",
+            f"  settings.disk.immutability.base = \"{base}\";",
             "  settings.disk.immutability.persist.paths = lib.mkForce [ \"/etc/machine-id\" \"/etc/nixos\" \"/var/lib/nixos\" \"/var/lib/sbctl\" \"/var/log\" ];",
             "  settings.desktop.enable = " + (desktop == "none" ? "false" : "true") + ";",
             "  settings.disk.swap.size = \"2G\";",
@@ -275,7 +277,7 @@ class VmProvisioner {
             "mkdir -p /mnt/nix/tmp",
             f"TMPDIR=/mnt/nix/tmp nixos-install --flake /mnt/etc/nixos#{bootTarget} --root /mnt --no-channel-copy --show-trace --no-root-password --max-jobs auto --cores 0{localStore}"
         ]);
-        var snapshots = "nixos-enter --root /mnt --command "
+        var snapshots = self.spec.args.getOrDefault("immutabilityBase", "empty") == "empty" ? "true" : "nixos-enter --root /mnt --command "
             + ShellWords.quote("set -e; mkdir -p /.snapshots/@root /.snapshots/@home; rm -rf /.snapshots/@root/CLEAN /.snapshots/@home/CLEAN; btrfs subvolume snapshot -r / /.snapshots/@root/CLEAN; btrfs subvolume snapshot -r /home /.snapshots/@home/CLEAN");
         var script = self.textLines([
             "set -ex",

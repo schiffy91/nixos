@@ -1,7 +1,8 @@
 { config, inputs, lib, pkgs, utils, ... }:
 let
 	persistKey = path: lib.replaceStrings [ "%2F" ] [ "!" ] (lib.strings.escapeURL (lib.removePrefix "/" path));
-	immutabilityVersion = "2026.08.22";
+	immutabilityVersion = "2026.11.17";
+	immutabilityBase = config.settings.disk.immutability.base;
 	device = if config.settings.disk.encryption.enable then config.settings.disk.by.mapper.root else config.settings.disk.by.partlabel.root;
 	deviceDependency = if config.settings.disk.encryption.enable then "dev-mapper-${config.settings.disk.label.root}.device" else "dev-disk-by\\x2dpartlabel-${config.settings.disk.label.disk}\\x2d${config.settings.disk.label.main}\\x2d${config.settings.disk.label.root}.device";
 	snapshotsSubvolumeName = config.settings.disk.subvolumes.snapshots.name;
@@ -70,7 +71,7 @@ let
 	immutabilityPairArgs = lib.concatMapStringsSep " " (volume:
 		lib.escapeShellArg "${volume.name}=${volume.mountPoint}"
 	) resetVolumes;
-	immutabilityOptions = lib.escapeShellArgs [ "--keep-generations" (toString nonPersistedGenerations) "--restore-generation" (toString restoreGeneration) ];
+	immutabilityOptions = lib.escapeShellArgs [ "--keep-generations" (toString nonPersistedGenerations) "--restore-generation" (toString restoreGeneration) "--base" immutabilityBase ];
 	immutabilityCommandArgs = lib.escapeShellArgs [ device snapshotsSubvolumeName cleanName immutabilityMode immutabilityPersistRoot immutabilitySpecFile ];
 	immutabilityResetMountUnits = map (volume: "${utils.escapeSystemdPath volume.mountPoint}.mount") resetVolumes;
 	immutabilityVersionDir = "${snapshotsSubvolumeName}/.immutability";
@@ -92,7 +93,7 @@ let
 			IFS= read -r immutability_previous_version < "$immutability_version_file" || true
 		fi
 		case "$immutability_previous_version" in
-			""|"0.1"|${lib.escapeShellArg immutabilityVersion})
+			""|"0.1"|"2026.08.22"|${lib.escapeShellArg immutabilityVersion})
 				;;
 			*)
 				echo "Unsupported immutability version transition: $immutability_previous_version -> ${immutabilityVersion}" >&2
@@ -187,6 +188,29 @@ in
 			fileSystems = bootPersistFileSystems;
 			systemd.tmpfiles.rules = homePersistRules;
 			boot.initrd.systemd.services.initrd-nixos-activation.after = bootPersistInitrdMountUnits;
+		})
+		(lib.mkIf (immutabilityEnabled && immutabilityBase == "empty") {
+			systemd.services.immutability-marker = {  # `nixosctl diff` lists what changed after this
+				description = "Record where the reset volumes stood when boot finished";
+				wantedBy = [ "multi-user.target" ];
+				after = [ "multi-user.target" ];
+				serviceConfig = {
+					Type = "oneshot";
+					RemainAfterExit = true;
+					RuntimeDirectory = "immutability";
+					RuntimeDirectoryPreserve = true;
+				};
+				path = with pkgs; [ btrfs-progs coreutils gnused ];
+				script = ''
+					for pair in ${immutabilityPairArgs}; do
+						btrfs filesystem sync "''${pair#*=}"
+						transaction=$(btrfs subvolume find-new "''${pair#*=}" 9999999 | sed -n 's/^transid marker was //p')
+						[ -n "$transaction" ]
+						printf '%s %s\n' "''${pair%%=*}" "$transaction"
+					done > /run/immutability/marker.new
+					mv /run/immutability/marker.new /run/immutability/marker
+				'';
+			};
 		})
 		(lib.mkIf (immutabilityEnabled && config.settings.disk.immutability.enforce.onReboot) {
 			fileSystems = lib.mkMerge (lib.lists.forEach (lib.filter (volume: volume.neededForBoot) config.settings.disk.subvolumes.volumes) (volume: { "${volume.mountPoint}".neededForBoot = lib.mkForce true; }));

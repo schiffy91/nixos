@@ -58,7 +58,7 @@ class BootHealth {
         if (!self.value("UNLOCKUNIT").equals("success")) { failures.push("unlock agent did not succeed"); }
         var agent = Strings.split(self.value("UNLOCKAGENT").replace("\t", " "), " ").filter(bool function(string part) { return !part.isEmpty(); });
         if (agent.len < 2 || Strings.toInt(agent.get(1)) < 1) { failures.push("no graphical unlock agent ran"); }
-        if (Strings.toInt(self.value("SNAPSHOTS", "0")) < 1) { failures.push("no CLEAN snapshot exists"); }
+        if (Strings.toInt(self.value("SNAPSHOTS", "0")) < 1) { failures.push("no reset snapshot exists (CLEAN or generation-1)"); }
         if (self.value("SWAP").isEmpty()) { failures.push("no swap is active"); }
         if (requireEnforced && !self.value("SECUREBOOT").toLower().contains("enabled")) { failures.push("secure boot is not enforcing"); }
         if (requireEnforced && Strings.toInt(self.value("SIGNED", "0")) < 3) { failures.push("expected three signed EFI binaries"); }

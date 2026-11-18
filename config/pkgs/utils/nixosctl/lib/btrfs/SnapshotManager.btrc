@@ -36,6 +36,10 @@ class SnapshotManager {
         return self.config.evalString("config.settings.disk.subvolumes.snapshots.mountPoint");
     }
 
+    public bool emptyBase() {  /* resets start from nothing: there is no CLEAN */
+        return self.config.evalString("config.settings.disk.immutability.base").equals("empty");
+    }
+
     public string cleanName() {
         return self.config.evalString("config.settings.disk.immutability.persist.snapshots.cleanName");
     }
@@ -155,6 +159,7 @@ class SnapshotManager {
     }
 
     public void createInitialSnapshots() {
+        if (self.emptyBase()) { return; }
         var volumes = self.resetSubvolumes();
         for volume in volumes {
             self.createCleanSnapshot(volume);

@@ -5,6 +5,7 @@ in {
   options = with lib.types; {
     settings.disk.immutability.enable = mkSetting bool false;
     settings.disk.immutability.mode = mkSetting (enum [ "converge" "reset" "prepare-only" "publish-prepared" "snapshot-only" "restore-a" "restore-b" "restore-c" "restore-generation" "restore-previous" "restore-penultimate" "disabled" ]) "converge";
+    settings.disk.immutability.base = mkSetting (enum [ "clean" "empty" ]) "clean";  # what a reset starts from
     settings.disk.immutability.dryRun = mkSetting bool false;
     settings.disk.immutability.enforce.onReboot = mkSetting bool true;
     settings.disk.immutability.nonPersistedGenerations = mkSetting ints.unsigned 3;

@@ -11,6 +11,9 @@ class PersistenceManager {
     }
 
     public void materialize(bool dryRun, bool refreshClean) {
+        if (refreshClean && SnapshotManager(self.config).emptyBase()) {
+            NixosLog.fatal("settings.disk.immutability.base is empty: resets start from nothing, so there is no CLEAN snapshot to refresh");
+        }
         var result = BtrfsImmutabilityManager(self.config).run("materialize", dryRun);
         if (!result.ok()) {
             NixosLog.fatal("Persistent data materialization failed");

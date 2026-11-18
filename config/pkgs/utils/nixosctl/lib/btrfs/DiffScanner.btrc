@@ -99,6 +99,17 @@ class DiffScanner {
         return result;
     }
 
+    class string markerPath() { return "/run/immutability/marker"; }
+
+    public string bootMarker(string volume) {  /* lines of "<volume> <transaction>" */
+        if (!FileSystem.exists(DiffScanner.markerPath())) { return ""; }
+        for line in Strings.split(Path.readAll(DiffScanner.markerPath()), "\n") {
+            var parts = Strings.split(line.trim(), " ");
+            if (parts.len == 2 && parts.get(0).equals(volume) && parts.get(1).isDigit()) { return parts.get(1); }
+        }
+        return "";
+    }
+
     public Vector<string> changedFiles() {
         Vector<string> result = [];
         var volumes = self.snapshots.resetSubvolumes();
@@ -108,23 +119,32 @@ class DiffScanner {
             self.snapshots.deleteSubvolume(temporarySnapshot);
             self.snapshots.createReadonlySnapshot(volume.mountPoint, temporarySnapshot);
 
-            var quotedClean = ShellWords.quote(clean);
-            var tx = self.shell.run(f"btrfs subvolume find-new {quotedClean} 9999999", logFailure=false);
-            if (!tx.ok()) {
-                self.snapshots.deleteSubvolume(temporarySnapshot);
-                NixosLog.fatal(f"Failed to read CLEAN transaction marker: {clean}");
-            }
-            var transaction = self.transactionMarker(tx.stdout());
-            if (transaction.isEmpty()) {
-                self.snapshots.deleteSubvolume(temporarySnapshot);
-                NixosLog.fatal(f"Failed to parse CLEAN transaction marker: {clean}");
+            var transaction = "";
+            if (self.snapshots.emptyBase()) {
+                transaction = self.bootMarker(volume.name);
+                if (transaction.isEmpty()) {
+                    self.snapshots.deleteSubvolume(temporarySnapshot);
+                    NixosLog.fatal(f"No boot marker for {volume.name} in {DiffScanner.markerPath()}: immutability-marker.service records it when boot finishes");
+                }
+            } else {
+                var quotedClean = ShellWords.quote(clean);
+                var tx = self.shell.run(f"btrfs subvolume find-new {quotedClean} 9999999", logFailure=false);
+                if (!tx.ok()) {
+                    self.snapshots.deleteSubvolume(temporarySnapshot);
+                    NixosLog.fatal(f"Failed to read CLEAN transaction marker: {clean}");
+                }
+                transaction = self.transactionMarker(tx.stdout());
+                if (transaction.isEmpty()) {
+                    self.snapshots.deleteSubvolume(temporarySnapshot);
+                    NixosLog.fatal(f"Failed to parse CLEAN transaction marker: {clean}");
+                }
             }
             var quotedTemporary = ShellWords.quote(temporarySnapshot);
             var quotedTransaction = ShellWords.quote(transaction);
             var changes = self.shell.run(f"btrfs subvolume find-new {quotedTemporary} {quotedTransaction}", logFailure=false);
             if (!changes.ok()) {
                 self.snapshots.deleteSubvolume(temporarySnapshot);
-                NixosLog.fatal(f"Failed to compare CLEAN snapshot: {clean}");
+                NixosLog.fatal(f"Failed to list changes of {volume.name} since transaction {transaction}");
             }
             for path in self.changedPaths(changes.stdout()) {
                 var full = f"{volume.mountPoint}/{path}";

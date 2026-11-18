@@ -406,6 +406,22 @@ this worse rather than better.
 Any other value is fatal in the initrd (`Unknown mode:`), so the enum in
 `config/system/storage/immutability/options.nix` and `ImmutabilityConstants` must stay in step.
 
+`settings.disk.immutability.base` says what a reset starts from:
+
+| Base | A reset volume after boot holds |
+|---|---|
+| `clean` | **Default.** A copy of its read-only `CLEAN` snapshot, taken by the installer, plus the persisted paths |
+| `empty` | A new, empty subvolume plus the persisted paths; everything else is what this boot's activation and services create |
+
+With `empty` there is no `CLEAN`: the installer takes none, the boot-time tool does not look for one,
+and `nixosctl persistence materialize --refresh-clean` refuses. A directory made on the way to a
+persisted path takes its owner and mode from the same directory in the root before it, so a home folder
+keeps its owner. `nixosctl diff` lists what changed since `immutability-marker.service` recorded each
+volume's transaction when boot finished, where with `clean` it lists what differs from `CLEAN`. The
+QEMU hosts and the VM twins of the real hosts use `empty`; FRACTAL-NORTH and STEAM-DECK-OLED stay on
+`clean` until their owner moves them, which takes effect at a reboot. A path that should outlive a
+reboot is persisted on either base; with `empty`, a file only ever written into `CLEAN` is gone.
+
 `enforce.onReboot` wires the initrd reset + mounts service. Updates do not
 rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
 the only automatic immutability reconciliation path.

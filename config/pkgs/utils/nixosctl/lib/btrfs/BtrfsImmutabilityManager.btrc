@@ -29,6 +29,8 @@ class BtrfsImmutabilityManager {
         parts.push(self.config.evalRaw("config.settings.disk.immutability.nonPersistedGenerations"));
         parts.push("--restore-generation");
         parts.push(self.config.evalRaw("config.settings.disk.immutability.restoreGeneration"));
+        parts.push("--base");
+        parts.push(self.config.evalString("config.settings.disk.immutability.base"));
         parts.push(action);
         parts.push(self.rootDevice());
         parts.push(self.config.evalString("config.settings.disk.subvolumes.snapshots.name"));

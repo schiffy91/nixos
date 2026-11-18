@@ -176,6 +176,22 @@
     },
     {
       "after": [
+        "installer-ssh"
+      ],
+      "args": {
+        "immutabilityBase": "clean",
+        "immutabilityEnabled": "true",
+        "immutabilityImplementation": "immutability",
+        "immutabilityMode": "reset",
+        "immutabilityVersion": "v2",
+        "name": "install-reset-clean",
+        "state": "installed-reset-clean"
+      },
+      "id": "install-reset-clean",
+      "spec": "installer/system/test.json"
+    },
+    {
+      "after": [
         "install-disabled"
       ],
       "args": {
@@ -268,13 +284,14 @@
     },
     {
       "after": [
-        "install-reset"
+        "install-reset-clean"
       ],
       "args": {
+        "immutabilityBase": "clean",
         "immutabilityImplementation": "immutability",
         "immutabilityMode": "reset",
         "immutabilityVersion": "v2",
-        "parentState": "installed-reset"
+        "parentState": "installed-reset-clean"
       },
       "id": "immutability-materialize",
       "spec": "immutability/materialize/test.json"
@@ -1038,6 +1055,7 @@
     "recovery-bad-generation",
     "install-disabled",
     "immutability-reset",
+    "install-reset-clean",
     "immutability-disabled",
     "immutability-snapshot-only",
     "immutability-restore",

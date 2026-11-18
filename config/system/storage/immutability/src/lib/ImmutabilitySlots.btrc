@@ -42,6 +42,7 @@ class ImmutabilitySlots {
         var root = self.run.path(PathTools.join(snapshotsSubvolume, volume));
         self.pruneGenerations(root, generations);
         if (generations <= 0) { return; }
+        self.run.mkdirp(root);  /* without a CLEAN nothing made it yet */
         self.fs.deleteSubvolume(self.generationPath(root, generations));
         var generation = generations - 1;
         while (generation >= 1) {

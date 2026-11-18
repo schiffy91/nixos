@@ -63,7 +63,7 @@
     },
     {
       "op": "guest",
-      "command": "listing=$(btrfs subvolume list -a /mnt); echo '--- subvolumes after install ---'; echo \"$listing\" | grep -F '@snapshots' || echo '(no @snapshots entries)'; missing=0; for volume in @root @home; do echo \"$listing\" | grep -qE \"@snapshots/$volume/CLEAN\\$\" || { echo \"MISSING published CLEAN for $volume\"; missing=1; }; done; echo \"$listing\" | grep -qF 'CLEAN.tmp.' && { echo 'LEFTOVER CLEAN temporary present'; missing=1; }; [ \"$missing\" -eq 0 ] && printf clean-published || printf clean-broken",
+      "command": "listing=$(btrfs subvolume list -a /mnt); echo '--- subvolumes after install ---'; echo \"$listing\" | grep -F '@snapshots' || echo '(no @snapshots entries)'; if echo \"$listing\" | grep -qF CLEAN; then echo 'UNEXPECTED CLEAN: the VM twins reset from an empty root'; printf clean-broken; else printf clean-published; fi",
       "expect": "clean-published",
       "timeout": 300
     },
