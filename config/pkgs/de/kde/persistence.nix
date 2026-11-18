@@ -9,6 +9,7 @@ in lib.mkIf config.settings.desktop.enable {
     "${homeDirectory}/.local/share/icons"
     "${homeDirectory}/.local/share/desktop-directories"
     "${homeDirectory}/.local/share/flatpak/db"
+    "${homeDirectory}/.config/mimeapps.list"  # default applications and link handlers
     ##### Plasma #####
     "${homeDirectory}/.config/gtk-3.0"
     "${homeDirectory}/.config/gtk-4.0"
@@ -20,6 +21,7 @@ in lib.mkIf config.settings.desktop.enable {
     "${homeDirectory}/.config/kdedefaults"
     "${homeDirectory}/.config/kdeglobals"
     "${homeDirectory}/.config/kglobalshortcutsrc"  # apps re-prompt to register shortcuts without it
+    "${homeDirectory}/.config/konsolerc"  # window settings; the profile itself is declared
     "${homeDirectory}/.config/konsolesshconfig"
     "${homeDirectory}/.config/kwalletrc"
     "${homeDirectory}/.config/kwinoutputconfig.json"
@@ -37,6 +39,8 @@ in lib.mkIf config.settings.desktop.enable {
     "${homeDirectory}/.local/share/plasma-manager/last_run_desktop_script_panels"
     "${homeDirectory}/.local/share/plasma-manager/last_run_desktop_script_wallpaper_picture"
     "${homeDirectory}/.local/share/recently-used.xbel"
+    "${homeDirectory}/.local/share/user-places.xbel"  # the file manager's sidebar places
+    "${homeDirectory}/.local/share/baloo"  # the file-search index, gigabytes to rebuild
     "${homeDirectory}/.local/state/konsolestaterc"
     "${homeDirectory}/.local/state/systemsettingsstaterc"
     ##### Kwallet #####
