@@ -9,6 +9,18 @@ import ./SecretsManager.btrc;
 import ./PermissionsManager.btrc;
 import ./hardware/SecureBootVerification.btrc;
 
+enum UpdateStep {
+    UPDATE_VERIFY_STORE,
+    UPDATE_REFRESH_PINS,
+    UPDATE_PREPARE_TREE,
+    UPDATE_BUILD,
+    UPDATE_CHECK,
+    UPDATE_SHOW_CHANGES,
+    UPDATE_SWITCH,
+    UPDATE_TRIM_GENERATIONS,
+    UPDATE_COLLECT_GARBAGE
+};
+
 class RebuildOptions {
     public bool rebuildFileSystem;
     public bool reboot;
@@ -23,6 +35,26 @@ class RebuildOptions {
         self.clean = false;
         self.upgrade = false;
     }
+
+    public Vector<UpdateStep> steps() {  // nothing is deleted before the new system runs
+        Vector<UpdateStep> steps = [];
+        if (self.clean || self.upgrade) { steps.push(UPDATE_VERIFY_STORE); }
+        if (self.upgrade) { steps.push(UPDATE_REFRESH_PINS); }
+        steps.push(UPDATE_PREPARE_TREE);
+        if (self.upgrade) {  // new pins are built and checked first
+            steps.push(UPDATE_BUILD);
+            steps.push(UPDATE_CHECK);
+            steps.push(UPDATE_SHOW_CHANGES);
+        }
+        steps.push(UPDATE_SWITCH);
+        if (self.clean || self.upgrade) {
+            steps.push(UPDATE_TRIM_GENERATIONS);
+            steps.push(UPDATE_COLLECT_GARBAGE);
+        }
+        return steps;
+    }
+
+    class int keptGenerations(int bootEntries) { return bootEntries > 3 ? bootEntries : 3; }  // never fewer than the boot menu lists
 }
 
 class NixosRebuilder {
@@ -36,11 +68,44 @@ class NixosRebuilder {
         self.interactive = Interactive();
     }
 
-    public ExecResult runNixCollectGarbage() {
+    public ExecResult runNixCollectGarbage() {  // what no generation refers to; generations are trimmed apart
         return self.shell.run(
-            "nix-collect-garbage -d",
+            "nix-collect-garbage",
             stdout=COMMAND_OUTPUT_STREAM,
             stderr=COMMAND_OUTPUT_STREAM);
+    }
+
+    public ExecResult trimGenerations() {
+        var kept = RebuildOptions.keptGenerations(self.config.evalRaw("config.settings.boot.previousGenerationLimit").trim().toInt());
+        return self.shell.run(
+            f"nix-env --profile /nix/var/nix/profiles/system --delete-generations +{kept}",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM);
+    }
+
+    public string systemAttribute() { return f"{self.config.paths.root}#nixosConfigurations.{self.config.host()}-{self.config.target()}.config.system.build.toplevel"; }
+
+    public string buildSystem() {  // built, not yet running
+        var result = self.shell.run(
+            f"{self.config.nixCommand()} build --no-link --print-out-paths {ShellWords.quote(self.systemAttribute())}",
+            stderr=COMMAND_OUTPUT_STREAM);
+        if (!result.ok() || result.stdout().trim().isEmpty()) { NixosLog.fatal("the new system does not build; nothing was switched"); }
+        return result.stdout().trim();
+    }
+
+    public void checkBeforeSwitch() {
+        var checks = PathTools.join(self.config.paths.root, "ci/checks.sh");
+        if (!FileSystem.exists(checks)) { return; }
+        var result = self.shell.run(ShellWords.quote(checks), stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+        if (!result.ok()) { NixosLog.fatal("the checks fail with the new pins; nothing was switched"); }
+    }
+
+    public void showChanges(string built) {
+        self.shell.run(
+            f"{self.config.nixCommand()} store diff-closures /run/current-system {ShellWords.quote(built)}",
+            stdout=COMMAND_OUTPUT_STREAM,
+            stderr=COMMAND_OUTPUT_STREAM,
+            logFailure=false);
     }
 
     public ExecResult verifyStore() {
@@ -52,7 +117,7 @@ class NixosRebuilder {
 
     public ExecResult updateFlake() {
         return self.shell.run(
-            f"nix flake update {self.config.linuxInputs().join(" ")} --flake {ShellWords.quote(self.config.paths.root)}",
+            f"nix flake update {self.config.linuxInputs().join(" ")} --refresh --flake {ShellWords.quote(self.config.paths.root)}",
             stdout=COMMAND_OUTPUT_STREAM,
             stderr=COMMAND_OUTPUT_STREAM);
     }
@@ -129,25 +194,26 @@ class NixosRebuilder {
             SecureBootVerification.requireDisabled();
         }
         var username = self.config.username();
-        if (options.clean || options.upgrade) {
-            self.requireOk("nix-collect-garbage", self.runNixCollectGarbage());
-            FileSystem.removeRecursive("/root/.cache");
-            self.requireOk("nix-store verify", self.verifyStore());
+        var built = "";
+        for step in options.steps() {
+            if (step == UPDATE_VERIFY_STORE) { self.requireOk("nix-store verify", self.verifyStore()); }
+            else if (step == UPDATE_REFRESH_PINS) {
+                self.requireOk("nix flake update", self.updateFlake());
+                self.runUpgradeHooks();
+            } else if (step == UPDATE_PREPARE_TREE) {
+                SecretsManager(self.config).createIfMissing("");
+                PermissionsManager(self.config).secureTree(username);
+            } else if (step == UPDATE_BUILD) { built = self.buildSystem(); }
+            else if (step == UPDATE_CHECK) { self.checkBeforeSwitch(); }
+            else if (step == UPDATE_SHOW_CHANGES) { self.showChanges(built); }
+            else if (step == UPDATE_SWITCH) {
+                if (!self.switchSystem(options).ok()) { NixosLog.fatal("nixos-rebuild switch failed"); }
+                PermissionsManager(self.config).secureTree(username);
+                var logs = self.homeManagerLogs();
+                if (!logs.isEmpty()) { Console.log(logs); }
+            } else if (step == UPDATE_TRIM_GENERATIONS) { self.requireOk("trimming old generations", self.trimGenerations()); }
+            else if (step == UPDATE_COLLECT_GARBAGE) { self.requireOk("nix-collect-garbage", self.runNixCollectGarbage()); }
         }
-        if (options.upgrade) {
-            FileSystem.removeRecursive("/root/.cache");
-            self.requireOk("nix flake update", self.updateFlake());
-            self.runUpgradeHooks();
-        }
-        SecretsManager(self.config).createIfMissing("");
-        PermissionsManager(self.config).secureTree(username);
-        var result = self.switchSystem(options);
-        if (!result.ok()) {
-            NixosLog.fatal("nixos-rebuild switch failed");
-        }
-        PermissionsManager(self.config).secureTree(username);
-        var logs = self.homeManagerLogs();
-        if (!logs.isEmpty()) { Console.log(logs); }
         if (options.reboot) {
             self.shell.run(
                 "shutdown -r now",

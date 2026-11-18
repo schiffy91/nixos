@@ -98,6 +98,7 @@ in
   };
   boot.loader.timeout = lib.mkForce 0;
   settings.boot.plymouth.drmDevice = lib.mkForce "";
+  settings.nix.minFreeGiB = lib.mkForce 0;  # the host's floor is larger than a guest's whole disk
   boot.initrd.systemd.services.probe-virtual-display = {
     description = "Ask the virtual display what is plugged in";  # the Deck's kernel never does; Plymouth only reads
     wantedBy = [ "sysinit.target" ];

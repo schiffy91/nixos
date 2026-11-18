@@ -38,6 +38,12 @@ let
       { holds = builtins.all (parameter: builtins.elem parameter deck.boot.kernelParams) wanted; message = "STEAM-DECK-OLED-${target}: a Deck kernel parameter is missing"; }
       { holds = !(deck.systemd.services.systemd-suspend.serviceConfig ? ExecStart); message = "STEAM-DECK-OLED-${target}: systemd-suspend's ExecStart is replaced"; }
     ]) systems.bootableTargets;
+  storeAssertions = lib.concatMap (host: map (target:
+    let
+      name = "${hosts.hostOutputName host.module}-${target}";
+      nix = systems.nixosConfigurations.${name}.config.nix.settings;
+    in { holds = (nix.min-free or 0) > 0 && nix.max-free > nix.min-free; message = "${name}: no free-space floor for the Nix store (settings.nix.minFreeGiB)"; })
+    systems.bootableTargets) (lib.filter (host: host.name != "QEMU") hosts.physical);
   # Unit and contract suites that are one derivation each. They were graph nodes and lint built them
   # as well; as checks they are built once, with every other check.
   unitChecks = system: {
@@ -82,7 +88,7 @@ in lib.genAttrs hosts.systems (system:
       name = "ci-local";
       value = import "${inputs.ci-local}/tests/ci_local.nix" { inherit pkgs; table = ../../ci/local.json; workflow = ../../.github/workflows/checks.yml; jobs = [ "lint" "checks" ]; };
     }
-    (mkEvaluationCheck { inherit pkgs; name = "app-settings"; expectations = expectations ../../tests/checks/app_settings.json; assertions = deckAssertions; })
+    (mkEvaluationCheck { inherit pkgs; name = "app-settings"; expectations = expectations ../../tests/checks/app_settings.json; assertions = deckAssertions ++ storeAssertions; })
     (mkEvaluationCheck { inherit pkgs; name = "qemu-hosts"; expectations = qemuHostExpectations; }) ]) // unitChecks system)
 // lib.genAttrs (lib.unique (map (host: host.system) hosts.darwin)) (system:
   lib.listToAttrs (map (host:

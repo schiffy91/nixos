@@ -1,0 +1,56 @@
+import Library.Testing;
+import Library.Vector;
+
+import ../../config/pkgs/utils/nixosctl/lib/NixosRebuilder.btrc;
+
+Vector<UpdateStep> stepsOf(bool clean, bool upgrade) {
+    var options = RebuildOptions();
+    options.clean = clean;
+    options.upgrade = upgrade;
+    return options.steps();
+}
+
+int position(Vector<UpdateStep> steps, UpdateStep step) {
+    for (int index = 0; index < steps.length; index++) {
+        if (steps.get(index) == step) { return index; }
+    }
+    return -1;
+}
+
+void expectSteps(Vector<UpdateStep> steps, Vector<UpdateStep> expected) {
+    Expect.intEq(steps.length, expected.length);
+    for (int index = 0; index < expected.length && index < steps.length; index++) { Expect.isTrue(steps.get(index) == expected.get(index)); }
+}
+
+int main() {
+    expectSteps(stepsOf(false, false), [UPDATE_PREPARE_TREE, UPDATE_SWITCH]);
+    expectSteps(stepsOf(true, false), [UPDATE_VERIFY_STORE, UPDATE_PREPARE_TREE, UPDATE_SWITCH, UPDATE_TRIM_GENERATIONS, UPDATE_COLLECT_GARBAGE]);
+    var upgrade = [UPDATE_VERIFY_STORE, UPDATE_REFRESH_PINS, UPDATE_PREPARE_TREE, UPDATE_BUILD, UPDATE_CHECK, UPDATE_SHOW_CHANGES, UPDATE_SWITCH, UPDATE_TRIM_GENERATIONS, UPDATE_COLLECT_GARBAGE];
+    expectSteps(stepsOf(true, true), upgrade);
+    expectSteps(stepsOf(false, true), upgrade);
+
+    /* whatever is asked for, nothing is deleted before the new system runs, and new pins are built and checked before it does */
+    for clean in [false, true] {
+        for upgrade in [false, true] {
+            var steps = stepsOf(clean, upgrade);
+            var switched = position(steps, UPDATE_SWITCH);
+            Expect.isTrue(switched >= 0);
+            for deleting in [UPDATE_TRIM_GENERATIONS, UPDATE_COLLECT_GARBAGE] {
+                var at = position(steps, deleting);
+                Expect.isTrue(at < 0 || at > switched);
+            }
+            if (upgrade) {
+                Expect.isTrue(position(steps, UPDATE_REFRESH_PINS) < position(steps, UPDATE_BUILD));
+                Expect.isTrue(position(steps, UPDATE_BUILD) < position(steps, UPDATE_CHECK));
+                Expect.isTrue(position(steps, UPDATE_CHECK) < switched);
+            }
+        }
+    }
+
+    /* a rollback target is always left: the boot menu's count, and never fewer than three */
+    Expect.intEq(RebuildOptions.keptGenerations(0), 3);
+    Expect.intEq(RebuildOptions.keptGenerations(1), 3);
+    Expect.intEq(RebuildOptions.keptGenerations(3), 3);
+    Expect.intEq(RebuildOptions.keptGenerations(10), 10);
+    return 0;
+}

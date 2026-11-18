@@ -5,6 +5,7 @@ name = "nixosctl"
 exports = [
     "lib.Installer",
     "lib.NixosConfig",
+    "lib.NixosRebuilder",
     "lib.PasswordChange",
     "lib.PasswordManager",
     "lib.PasswordPrompts",

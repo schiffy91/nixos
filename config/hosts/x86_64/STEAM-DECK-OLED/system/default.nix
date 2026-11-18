@@ -52,6 +52,8 @@ in {
   users.users.${user}.uid = 1000;  # Jovian's SD card automount mounts as UID 1000
 
   settings = {
+    nix.minFreeGiB = 50;  # of 1.9 TB
+    nix.maxFreeGiB = 150;
     boot = {
       touchKeyboard = true;
       kernelPackages = pkgs.jovianPackages.linuxPackages;

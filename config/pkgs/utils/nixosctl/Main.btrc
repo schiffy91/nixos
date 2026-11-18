@@ -46,8 +46,8 @@ class NixosCtl {
         help.section("System lifecycle");
         help.item("update [--clean] [--upgrade] [--rebuild-filesystem] [--reboot]",
                "Rebuild and switch the current system.");
-        help.continuation("--clean   nix-collect-garbage + verify --repair first.");
-        help.continuation("--upgrade Refresh flake inputs (implies --clean).");
+        help.continuation("--clean   Verify the store first; after the switch keep the newest generations and collect garbage.");
+        help.continuation("--upgrade Refresh flake inputs, then build and check before switching (implies --clean).");
         help.continuation("--rebuild-filesystem  Re-enroll the bootloader.");
         help.continuation("--reboot  Reboot after activation.");
         help.item("upgrade [...]", "Alias for: update --upgrade --clean");

@@ -13,5 +13,7 @@
       swap.size = host.disk.swapSize;
     };
     tpm.device = host.tpm.device;
+    nix.minFreeGiB = 200;  # of 7.3 TB
+    nix.maxFreeGiB = 500;
   };
 }

@@ -335,6 +335,15 @@ Nothing has to be repaired from outside. The boot menu keeps the earlier generat
 2. Once it is up, undo or fix the change in `/etc/nixos` that broke the boot.
 3. Run `nixosctl update`. The generation it builds becomes the default, and the next plain reboot takes it.
 
+`nixosctl update --clean` and `--upgrade` delete nothing until the new system is running. `--upgrade`
+refreshes the pins, builds the system and the flake checks with them, prints what changes in the closure,
+and switches only if all of that worked; a failure leaves the running system and every generation as they
+were. After the switch, both keep the newest generations of the system (the boot menu's count, and never
+fewer than three) and collect what no generation refers to. Root's Nix cache is left alone. Between
+updates, a build collects unreferenced store paths by itself once the disk has less free than
+`settings.nix.minFreeGiB`, until `settings.nix.maxFreeGiB` is free; both real hosts set them, and the VM
+hosts do not.
+
 Persisted data and the machine's identity are untouched by the failed boot. The `recovery-bad-generation`
 node does exactly this in a VM: a generation whose initrd fails, the previous entry chosen from the menu,
 the change removed, `nixosctl update`, and a plain reboot. With a generation limit of 1 there is no earlier
@@ -957,8 +966,9 @@ guest installed. `.vm/e2e/store.log` is the server's log.
 The nodes with constraints worth knowing before you run them:
 
 - `tpm2-enroll` enrolls and wipes a TPM2 LUKS keyslot on an encrypted install.
-- `nixosctl-update` changes the host's configuration and runs `nixosctl update`
-  as the admin user, answering "Restart now?" with no. The new generation is the
+- `nixosctl-update` changes the host's configuration and runs `nixosctl update --clean`
+  as the admin user, answering "Restart now?" with no. The generation that ran before is
+  still there, root's Nix cache is untouched and an unreferenced store path is gone. The new generation is the
   running one and the loader's default, it is still both after a reboot, and
   that reboot ran the immutability reset without rewriting `CLEAN`.
 - `recovery-bad-generation` makes the default generation fail in its initrd,
