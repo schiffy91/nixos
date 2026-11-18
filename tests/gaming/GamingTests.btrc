@@ -6,8 +6,8 @@ import Library.FileSystem;
 import Library.JSON;
 import Library.Platform;
 import Library.Process;
+import Library.Steam.SteamShortcuts;
 import ../../config/pkgs/gaming/steam/src/SteamConfiguration.btrc;
-import ../../config/pkgs/gaming/steam/src/SteamShortcuts.btrc;
 import ../../config/pkgs/gaming/wine/src/ActiveDisplay.btrc;
 import ../../config/pkgs/gaming/wine/src/WinePrefix.btrc;
 import Library.Testing;
@@ -100,34 +100,49 @@ class GamingTests {
         print("PASS: Steam CLI, separate library, account casing, controller modes, ACC isolation, idempotence");
     }
 
+    public Bytes shortcutFile(Vector<Bytes> bodies) {  // entries exactly as given, as Steam lays the file out
+        var out = Bytes();
+        out.append(0);
+        SteamShortcut.appendText(out, "shortcuts");
+        for (int index = 0; index < bodies.len; index++) {
+            out.append(0);
+            SteamShortcut.appendText(out, f"{index}");
+            out.appendBytes(bodies.get(index));
+        }
+        out.append(8);
+        out.append(8);
+        return out;
+    }
+
     public void shortcuts() {
-        Expect.isTrue(SteamShortcuts.crc32("123456789") == 0xCBF43926L);
+        Expect.isTrue(SteamShortcut.crc32("123456789") == 0xCBF43926LL);
         var steam = f"{self.root}/Shortcuts Steam";
         ModTree.write(f"{steam}/userdata/1/config/localconfig.vdf", "UserLocalConfigStore { }");
-        var foreign = SteamShortcut();
-        SteamShortcuts.field(foreign.body, "appname", "Keep");
-        SteamShortcuts.field(foreign.body, "exe", "\"/opt/keep\"");
-        foreign.body.append(0);
-        SteamShortcuts.cstring(foreign.body, "tags");
-        SteamShortcuts.field(foreign.body, "0", "favorite");
-        foreign.body.append(8);
-        foreign.body.append(8);
-        var stale = SteamShortcuts.create("Moonlight", "/usr/bin/flatpak");
-        var played = SteamShortcuts.create("Chrome", "/run/current-system/sw/bin/google-chrome-stable");
-        played.body.set(played.body.length() - 27, 123);
+        var foreign = Bytes();
+        SteamShortcut.appendField(foreign, "appname", "Keep");
+        SteamShortcut.appendField(foreign, "exe", "\"/opt/keep\"");
+        foreign.append(0);
+        SteamShortcut.appendText(foreign, "tags");
+        SteamShortcut.appendField(foreign, "0", "favorite");
+        foreign.append(8);
+        foreign.append(8);
+        var stale = SteamShortcut.create("Moonlight", "/usr/bin/flatpak").body();
+        var chromePath = "/run/current-system/sw/bin/google-chrome-stable";
+        var played = SteamShortcut.create("Chrome", chromePath).body();
+        played.set(played.length() - 27, 123);
         var path = f"{steam}/userdata/1/config/shortcuts.vdf";
-        ModTree.writeBytes(path, SteamShortcuts.render([foreign, stale, played]));
+        ModTree.writeBytes(path, self.shortcutFile([foreign, stale, played]));
         var declaration = f"{self.root}/shortcuts.json";
         ModTree.write(declaration, "{\"Moonlight\":\"/run/current-system/sw/bin/moonlight\",\"Chrome\":\"/run/current-system/sw/bin/google-chrome-stable\",\"Semu\":\"/run/current-system/sw/bin/semu-es-de\"}");
         var command = Command(f"{ShellWords.quote(self.tools)}/install-steam-shortcuts");
         command.flag("--steam-path", steam).flag("--shortcuts", declaration);
         UnixShell().run(command.render(), throwOnFailure=true);
-        var entries = SteamShortcuts(ModTree.read(path)).entries();
+        var entries = SteamShortcuts.read(path).entries;
         Expect.isTrue(entries.len == 4);
-        Expect.isTrue(entries.get(0).body.equals(foreign.body));
-        Expect.isTrue(entries.get(1).body.equals(played.body));
-        Expect.isTrue(entries.get(2).name.equals("Moonlight") && entries.get(2).exe.equals("\"/run/current-system/sw/bin/moonlight\""));
-        Expect.isTrue(entries.get(3).body.equals(SteamShortcuts.create("Semu", "/run/current-system/sw/bin/semu-es-de").body));
+        Expect.isTrue(entries.get(0).body().equals(foreign));
+        Expect.isTrue(entries.get(1).body().equals(played));
+        Expect.isTrue(entries.get(2).name.equals("Moonlight") && entries.get(2).runs("/run/current-system/sw/bin/moonlight"));
+        Expect.isTrue(entries.get(3).body().equals(SteamShortcut.create("Semu", "/run/current-system/sw/bin/semu-es-de").body()));
         var before = ModTree.read(path);
         UnixShell().run(command.render(), throwOnFailure=true);
         Expect.isTrue(ModTree.read(path).equals(before));
@@ -142,19 +157,19 @@ class GamingTests {
         icons.set("New Game", newApp);
         ModTree.write(declaration, icons.stringify());
         UnixShell().run(command.render(), throwOnFailure=true);
-        entries = SteamShortcuts(ModTree.read(path)).entries();
+        entries = SteamShortcuts.read(path).entries;
         Expect.isTrue(entries.len == 5);
-        Expect.isTrue(entries.get(0).body.equals(foreign.body));
+        Expect.isTrue(entries.get(0).body().equals(foreign));
         Expect.isTrue(entries.get(1).icon.equals("/icons/Chrome Icon.png"));
-        SteamShortcuts.setIcon(entries.get(1), "");
-        Expect.isTrue(entries.get(1).body.equals(played.body)); // Every non-icon byte, including playtime, survived.
+        entries.get(1).setIcon("");
+        Expect.isTrue(entries.get(1).body().equals(played)); // Every non-icon byte, including playtime, survived.
         Expect.isTrue(entries.get(4).name.equals("New Game") && entries.get(4).icon.equals("/icons/new-game.png"));
         before = ModTree.read(path);
         UnixShell().run(command.render(), throwOnFailure=true);
         Expect.isTrue(ModTree.read(path).equals(before));
         // Older/manual shortcuts can omit the icon field entirely.
-        SteamShortcuts.setIcon(entries.get(0), "/icons/keep.png");
-        var reparsed = SteamShortcuts(SteamShortcuts.render([entries.get(0)])).entries().get(0);
+        entries.get(0).setIcon("/icons/keep.png");
+        var reparsed = SteamShortcuts.parse(self.shortcutFile([entries.get(0).body()])).entries.get(0);
         Expect.isTrue(reparsed.icon.equals("/icons/keep.png") && reparsed.name.equals("Keep"));
         var artwork = f"{self.root}/Chrome Artwork";
         for filename in ["p", "landscape", "_hero", "_logo"] {
@@ -164,9 +179,9 @@ class GamingTests {
         icons.set("Chrome", chrome);
         ModTree.write(declaration, icons.stringify());
         // Steam may retain an ID that differs from the executable/name CRC.
-        entries = SteamShortcuts(ModTree.read(path)).entries();
-        for (int byte = 0; byte < 4; byte++) { entries.get(1).body.set(7 + byte, byte == 3 ? 128 : 0); }
-        ModTree.writeBytes(path, SteamShortcuts.render(entries));
+        var renumbered = SteamShortcuts.read(path);
+        renumbered.entries.get(1).setId(2147483648LL);
+        ModTree.writeBytes(path, renumbered.render());
         before = ModTree.read(path);
         var grid = f"{steam}/userdata/1/config/grid";
         ModTree.write(f"{grid}/2147483648_hero.jpg", "custom-hero");
@@ -196,35 +211,35 @@ class GamingTests {
         Expect.isTrue(Path.readAll(f"{grid}/2147483648.jpeg").equals("custom-landscape"));
         Expect.isTrue(Path.readAll(f"{grid}/2147483648.png").equals("new-landscape"));
         // Two machines that declare one shortcut must not give it one number: Steam renumbers the local one at every start.
-        var shared = SteamShortcuts.create("Chrome", "/run/current-system/sw/bin/google-chrome-stable");
-        shared.body.set(shared.body.length() - 27, 123);
-        var plain = SteamShortcuts.appid(shared.exe, "Chrome");  // what every machine gives it
-        var chosen = SteamShortcuts.create("Moonlight", "/run/current-system/sw/bin/moonlight");
-        for (int byte = 0; byte < 4; byte++) { chosen.body.set(7 + byte, byte == 3 ? 128 : 0); }  // a number Steam chose
+        var shared = SteamShortcut.create("Chrome", chromePath).body();
+        shared.set(shared.length() - 27, 123);
+        var plain = SteamShortcut.idOf("Chrome", chromePath);  // what every machine gives it
+        var chosen = SteamShortcut.create("Moonlight", "/run/current-system/sw/bin/moonlight");
+        chosen.setId(2147483648LL);  // a number Steam chose
         for machine in ["DECK", "DESKTOP"] {
             var home = f"{self.root}/Shortcuts {machine}";
             var file = f"{home}/userdata/1/config/shortcuts.vdf";
             var pictures = f"{home}/userdata/1/config/grid";
             ModTree.write(f"{home}/userdata/1/config/localconfig.vdf", "UserLocalConfigStore { }");
-            ModTree.writeBytes(file, SteamShortcuts.render([foreign, shared, chosen]));
+            ModTree.writeBytes(file, self.shortcutFile([foreign, shared, chosen.body()]));
             var own = Command(f"{ShellWords.quote(self.tools)}/install-steam-shortcuts");
             own.flag("--steam-path", home).flag("--shortcuts", declaration).flag("--machine", machine);
             UnixShell().run(own.render(), throwOnFailure=true);
-            var numbered = SteamShortcuts(ModTree.read(file)).entries();
-            var number = SteamShortcuts.appid(shared.exe, "Chrome", machine);
-            Expect.isTrue(numbered.len == 5 && numbered.get(0).body.equals(foreign.body));
+            var numbered = SteamShortcuts.read(file).entries;
+            var number = SteamShortcut.idOf("Chrome", chromePath, machine);
+            Expect.isTrue(numbered.len == 5 && numbered.get(0).body().equals(foreign));
             Expect.isTrue(numbered.get(1).id == number && number != plain);
-            Expect.isTrue(numbered.get(2).id == 2147483648L);  // Steam's own choice stays
-            Expect.isTrue(numbered.get(3).id == SteamShortcuts.appid(numbered.get(3).exe, numbered.get(3).name, machine));  // a new one starts with its own
+            Expect.isTrue(numbered.get(2).id == 2147483648LL);  // Steam's own choice stays
+            Expect.isTrue(numbered.get(3).name.equals("New Game") && numbered.get(3).id == SteamShortcut.idOf("New Game", "/opt/new-game", machine));  // a new one starts with its own
             Expect.isTrue(Path.readAll(f"{pictures}/{number}_hero.png").equals("_hero"));
             var settled = ModTree.read(file);
             UnixShell().run(own.render(), throwOnFailure=true);
             Expect.isTrue(ModTree.read(file).equals(settled));
-            SteamShortcuts.setId(numbered.get(1), plain);
-            SteamShortcuts.setIcon(numbered.get(1), "");
-            Expect.isTrue(numbered.get(1).body.equals(shared.body));  // only the number and the icon changed: play time survived
+            numbered.get(1).setId(plain);
+            numbered.get(1).setIcon("");
+            Expect.isTrue(numbered.get(1).body().equals(shared));  // only the number and the icon changed: play time survived
         }
-        Expect.isTrue(SteamShortcuts.appid(shared.exe, "Chrome", "DECK") != SteamShortcuts.appid(shared.exe, "Chrome", "DESKTOP"));
+        Expect.isTrue(SteamShortcut.idOf("Chrome", chromePath, "DECK") != SteamShortcut.idOf("Chrome", chromePath, "DESKTOP"));
         var unknown = Bytes.fromString("not a shortcuts file");
         ModTree.writeBytes(path, unknown);
         Expect.isTrue(!UnixShell().run(command.render(), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false).ok());
