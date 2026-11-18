@@ -37,6 +37,11 @@ int main() {
     Expect.strEq(roundtrip.get("volumes").at(0).get("source").asString(), "/game: dlc");
     Expect.isTrue(roundtrip.get("volumes").at(0).get("read_only").asBool());
     Expect.isFalse(roundtrip.get("volumes").at(1).get("read_only").asBool());
+    Expect.isTrue(roundtrip.get("volumes").size() == 2);
+    var linked = JSONValue.parse(Slopsmith.compose("/source", "/game/dlc", "/config", 8000, "/drive/songs").stringify()).get("services").get("web").get("volumes").at(2);
+    Expect.strEq(linked.get("source").asString(), "/drive/songs");  // the links in /dlc lead here
+    Expect.strEq(linked.get("target").asString(), "/drive/songs");
+    Expect.isTrue(linked.get("read_only").asBool());
     print("Credential digest, display snapshot/restore and Compose argument contracts passed");
     return 0;
 }

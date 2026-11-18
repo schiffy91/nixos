@@ -126,7 +126,7 @@ Important setting groups:
 | `settings.apps.*` | Optional app policy flags |
 | `settings.networking.*` | LAN subnet, firewall port intent, SSH identity agent, primary NIC |
 | `settings.input.*` | Libinput mouse overrides |
-| `settings.apps.gaming.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config |
+| `settings.apps.gaming.rocksmith.*` | Audio buffer/sample rate used by Steam/Rocksmith and low-latency PipeWire config; `drive` is the Drive folder that holds the songs (kept downloaded), `songsPath` the folder whose songs are linked into the game |
 | `settings.apps.gaming.cpuAffinity` | Optional Linux CPU list for Steam games and Battle.net; `null` keeps normal scheduling |
 | `settings.apps.utils.nixosctl.*` | Structured display/audio settings, generated TOML config path, default-on idle inhibit |
 | `settings.apps.gaming.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
@@ -812,7 +812,7 @@ profiles turn off whole groups:
 | `dev/vscode.nix` | Installs VSCode, the BTRC extension, and `btrc-lsp` from the flake-locked BTRC package set |
 | `gaming/battlenet/default.nix` | Installs a Battle.net Proton wrapper, desktop entry, and capture helper on x86_64 when Steam is enabled |
 | `gaming/proton/default.nix` | Installs the patched Proton compatibility tool when `settings.apps.gaming.steam.protonSge.enable` is set |
-| `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled |
+| `gaming/rocksmith/default.nix` | Installs Rocksmith support files and Slopsmith when Steam is enabled; the `rocksmith-songs` user job links every song of `songsPath` into the game, at login and every five minutes, and `nixosctl rocksmith link-songs` does it now |
 | `gaming/steam/default.nix` | Exports Steam tool names, configures installed Steam apps, and installs `settings.apps.gaming.steam.shortcuts` as non-Steam shortcuts when Steam is enabled, each numbered for this machine (Steam renumbers a shortcut whose number another machine also uses, at every start, away from its pictures) |
 | `gaming/sunshine/default.nix` | Sunshine service and ports; the CUDA overlay, and the KWin HDR screencast patch when capture is `kwin` |
 | `gaming/sunshine/virtual-display.nix` | KWin virtual streaming display and its Desktop/Big Picture apps when `virtualDisplay.enable` is set |

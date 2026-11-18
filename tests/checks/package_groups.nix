@@ -113,6 +113,15 @@ let
       && desktop.config.settings.apps.utils.chrome.renderNode == null
       && handheld.settings.apps.utils.chrome.renderNode == null)
       "FRACTAL-NORTH's Chrome must run on native Wayland with NVDEC decode and no render-node override."
+    ++ check (let
+        user = desktop.config.systemd.user;
+        songs = "${desktop.config.settings.apps.utils.drive.mountPoint}/media/Games/Rocksmith";
+      in desktop.config.settings.apps.gaming.rocksmith.songsPath == songs
+        && lib.elem "media/Games/Rocksmith" desktop.config.settings.apps.utils.drive.pinned
+        && user.timers ? rocksmith-songs && lib.hasSuffix "/bin/rocksmith-songs ${desktop.config.settings.users.admin.homeDirectory}/.local/share/Steam/steamapps/common/Rocksmith2014/dlc ${songs} ${desktop.config.settings.apps.utils.drive.mountPoint}" user.services.rocksmith-songs.serviceConfig.ExecStart
+        && !(lib.hasInfix "ln -sfn" desktop.config.system.activationScripts.rocksmith.text)  # at boot the Drive is not there yet
+        && !(handheld.systemd.user.services ? rocksmith-songs) && !(lib.elem "media/Games/Rocksmith" handheld.settings.apps.utils.drive.pinned))
+      "Rocksmith's songs are a Drive folder kept downloaded on FRACTAL-NORTH and linked into the game by a job that waits for the Drive; the Deck has neither."
     ++ check (lib.hasSuffix " --machine FRACTAL-NORTH" desktop.config.systemd.services.steam-shortcuts.serviceConfig.ExecStart
         && lib.hasSuffix " --machine STEAM-DECK-OLED" handheld.systemd.services.steam-shortcuts.serviceConfig.ExecStart)
       "Each machine numbers its Steam shortcuts for itself: a number two machines share is renumbered by Steam at every start."
@@ -170,7 +179,7 @@ let
       "Disabling Chrome or its package groups must remove PWA installation policy and launcher watching."
     ++ check (lib.all (config:
       !(config.environment.sessionVariables ? SEMU_ROOT)
-      && config.settings.apps.utils.drive.enable && config.settings.apps.utils.drive.pinned == [ "media/Games/Emulation" ]
+      && config.settings.apps.utils.drive.enable && lib.elem "media/Games/Emulation" config.settings.apps.utils.drive.pinned
       && config.systemd.services ? drive-door && config.systemd.services ? drive-engine && config.systemd.services ? drive-push
       && lib.hasInfix "--ignore '*.semu-partial'" config.systemd.services.drive-engine.serviceConfig.ExecStart
       && lib.hasInfix "--pin media/Games/Emulation" config.systemd.services.drive-engine.serviceConfig.ExecStart
@@ -209,6 +218,7 @@ in {
   value = pkgs.runCommand "package-groups" {} (
     if failures == [] then ''
       test -e ${import ./chrome-launchers.nix { inherit pkgs inputs; }}
+      test -e ${import ./rocksmith-songs.nix { inherit pkgs; }}
       touch $out
     ''
     else "echo ${lib.escapeShellArg (lib.concatStringsSep "; " failures)} >&2; exit 1"

@@ -1,5 +1,6 @@
 { pkgs, inputs
 , rocksmithDlc ? "$HOME/.local/share/Steam/steamapps/common/Rocksmith2014/dlc"
+, songs ? ""  # where the links in that folder lead, when the songs are kept elsewhere
 , configDir ? "$HOME/Games/Rocksmith/slopsmith/config"
 , port ? 8000
 }:
@@ -25,7 +26,7 @@ let
     hash = "sha256-Rf2aFCxcfqV97JFLQ1A+LNe/rHw+Ypl2c8iV31o2Okc=";
   };
   configuration = pkgs.writeText "slopsmith.json" (builtins.toJSON {
-    inherit rocksmithDlc configDir port;
+    inherit rocksmithDlc songs configDir port;
     source = src;
   });
   controller = (import ../lib/build-tools.nix { inherit pkgs inputs; }) {

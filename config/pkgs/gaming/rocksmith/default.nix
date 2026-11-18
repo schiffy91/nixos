@@ -5,7 +5,8 @@ let
   group = config.users.users.${user}.group;
   home = "/home/${user}";
   sampleSize = config.settings.apps.gaming.rocksmith.sampleSize;
-  cdlcPath = config.settings.apps.gaming.rocksmith.cdlcPath;
+  drive = config.settings.apps.gaming.rocksmith.drive;
+  songsPath = config.settings.apps.gaming.rocksmith.songsPath;
   slopsmithConfigPath = config.settings.apps.gaming.rocksmith.slopsmith.configPath;
   rsAsioIni = pkgs.writeText "RS_ASIO.ini" ''
     [Config]
@@ -69,10 +70,29 @@ let
   slopsmith = pkgs.callPackage ../slopsmith/package.nix {
     inherit inputs;
     rocksmithDlc = dlcPath;
+    songs = songsPath;
     configDir = slopsmithConfigPath;
     port = config.settings.apps.gaming.rocksmith.slopsmith.port;
   };
+  linkSongs = "${import ./songs.nix { inherit pkgs; }}/bin/rocksmith-songs ${lib.escapeShellArgs ([ dlcPath songsPath ]
+    ++ lib.optional (drive != null) config.settings.apps.utils.drive.mountPoint)}";  # with a Drive: links stay while it is away
 in lib.mkIf enabled {
+  settings.apps.utils.drive.pinned = lib.mkIf (drive != null) [ drive ];  # kept downloaded: the game cannot wait for a song
+  settings.apps.utils.nixosctl.apps.rocksmith = {
+    description = "Rocksmith songs";
+    commands.link-songs = { description = "Link every song into the game now."; run = linkSongs; };
+  };
+  systemd.user.services.rocksmith-songs = {
+    description = "Link the Rocksmith songs into the game";
+    wantedBy = [ "default.target" ];
+    unitConfig.ConditionUser = user;
+    serviceConfig = { Type = "oneshot"; ExecStart = linkSongs; };
+  };
+  systemd.user.timers.rocksmith-songs = {  # songs arrive from other machines at any time
+    wantedBy = [ "timers.target" ];
+    unitConfig.ConditionUser = user;
+    timerConfig = { OnStartupSec = "30s"; OnUnitInactiveSec = "5min"; };
+  };
   settings.apps.gaming.steam.protonSge.extraFiles = ./assets;  # wineasio32.dll and wineasio32.dll.so
   virtualisation.podman.enable = true;
   environment.systemPackages = [ slopsmith ];
@@ -83,7 +103,7 @@ in lib.mkIf enabled {
       case "$1" in "${home}"/*/*) owned_dir "$(dirname "$1")";; esac
       install -d -o ${user} -g ${group} "$1"
     }
-    owned_dir "${cdlcPath}"
+    ${lib.optionalString (drive == null) ''owned_dir "${songsPath}"''}
     owned_dir "${slopsmithConfigPath}"
 
     if [ -d "${gamePath}" ]; then
@@ -93,11 +113,6 @@ in lib.mkIf enabled {
       cp -f ${mods}/RS_ASIO.ini "${gamePath}/"
       cp -f ${mods}/xinput1_3.dll "${gamePath}/"
       cp -f ${mods}/RSMods.ini "${gamePath}/"
-
-      find "${dlcPath}" -maxdepth 1 -type l -lname "${cdlcPath}/*" -delete
-      while IFS= read -r -d "" song; do
-        ln -sfn "$song" "${dlcPath}/$(basename "$song")"
-      done < <(find "${cdlcPath}" -maxdepth 1 -type f -iname '*.psarc' -print0)
 
       if [ -d "${protonPath}/lib/wine" ]; then
         cp -f "${protonPath}/lib/wine/i386-windows/wineasio32.dll" "${gamePath}/wineasio32.dll"
