@@ -45,6 +45,18 @@ class GraphRunnerTests {
 
     private string said(ExecResult result) { return result.stdout() + result.stderr(); }
 
+    // A run that would start with too little room for its machines says so and runs nothing.
+    public void room() {
+        self.node("roomy", "true");
+        self.graph("{\"id\":\"roomy\",\"spec\":\"roomy.json\"}");
+        var tool = PathTools.join(self.root, "build/nixosctl");
+        var refused = ChildProcess.run(tool, self.command(["run", "roomy"]), cwd=self.fixture.path(), environment=[f"NIXOS_CONFIG_ROOT={self.root}", "NIXOSCTL_GRAPH_MIN_FREE_GB=99999999"], timeoutMilliseconds=60000);
+        Check.that(refused.code != 0, "a run without room does not start");
+        Check.that(self.said(refused).contains("are free where machine state is kept") && self.said(refused).contains("gc --dry-run"), f"and says what to do: {self.said(refused)}");
+        Check.that(!self.said(refused).contains("pass roomy"), "no node ran");
+        Check.that(self.said(Check.exited(self.run(["run", "roomy"]))).contains("pass roomy"), "with room it runs");
+    }
+
     // The last field of a node's status line: how long its last pass took.
     private string duration(string id) {
         for line in Strings.split(Check.exited(self.run(["status"])).stdout(), "\n") {
@@ -387,7 +399,8 @@ int main() {
         tests.longestChainFirst();
         tests.namedSets();
         tests.largeNodeKeepsItsTurn();
+        tests.room();
         tests.close();
-        print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, and runs nodes together within its budget"); return 0;
+        print("PASS: the graph keeps durations, collects only unreferenced state, holds its workspace, wants room for its machines, and runs nodes together within its budget"); return 0;
     } catch (string error) { print(error); return 1; }
 }

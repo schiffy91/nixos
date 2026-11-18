@@ -5,6 +5,7 @@ import Library.Graph;
 import Library.JSON;
 import Library.Map;
 import Library.Network;
+import Library.Platform;
 import Library.Process;
 import Library.Set;
 import Library.Strings;
@@ -699,7 +700,25 @@ class VmGraphRunner {
         return lines.slice(lines.length > count ? lines.length - count : 0, lines.length).join("\n");
     }
 
+    // A run adds tens of gigabytes of machine disks and only `gc` takes old ones away. On 17 November 2026
+    // 977 state directories no node used any more, 3.2 TB, filled the disk the runs were on.
+    class bool enough(string available, int wanted) {  /* `df --output=avail -BG`: "  123G" */
+        var gigabytes = available.trim().replace("G", "");
+        return !gigabytes.isDigit() || Strings.toInt(gigabytes) >= wanted;
+    }
+
+    private bool room() {
+        var states = PathTools.join(self.graph.resolvedWorkspaceRoot(), ".vm");
+        if (!FileSystem.isDir(states)) { return true; }
+        var wanted = Strings.toInt(Environment.get("NIXOSCTL_GRAPH_MIN_FREE_GB", "100"));
+        var available = UnixShell().run(f"df --output=avail -BG {ShellWords.quote(states)} | tail -n 1", logFailure=false).stdout();
+        if (VmGraphRunner.enough(available, wanted)) { return true; }
+        NixosLog.error(f"graph {self.graph.name}: {available.trim()} are free where machine state is kept ({states}) and a run wants {wanted}G. `nixosctl graph {self.graph.path} gc --dry-run` lists the state no current node uses; `gc` removes it.");
+        return false;
+    }
+
     public int run(Vector<string> targets) {
+        if (!self.room()) { return 1; }
         var lock = self.hold("run");
         var traversal = GraphTraversal(self.graph);
         var asked = targets.isEmpty() ? self.hostDefaultTargets() : self.resolveHostTargets(targets);

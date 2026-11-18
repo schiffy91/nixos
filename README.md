@@ -1132,6 +1132,7 @@ The migration to BTRC is complete. Current state:
 7. Run at least the BTRC build and relevant graph node after touching BTRC or VM test code.
 8. Do not reintroduce VFIO until there is a clean design and expected-behavior test path.
 9. Do not remove desktop packages or host customizations while making cross-platform changes unless they are concretely unsupported on that platform.
+10. Watch the disk during a day of graph runs. Every source change leaves a new set of machine states under `.vm/e2e` and nothing but `nixosctl graph tests/graph.json gc` removes old ones (`gc --dry-run` lists them first); on 17 November 2026 they reached 3.2 TB and filled the disk. A run refuses to start with under 100 GB free there (`NIXOSCTL_GRAPH_MIN_FREE_GB`).
 
 ## macOS
 
