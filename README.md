@@ -849,7 +849,8 @@ status lines, shown above the entries as the label and the first line `run` prin
 opens; while `attention` exits 0 the icon asks for attention. Two modules provide lines: each
 `settings.disk.storage` volume has one (`open`, `locked` or `absent`, from `nixosctl storage state <volume>`,
 which needs no root; the icon asks for attention while a volume is attached and locked), and Deck Pad has
-one where it is enabled (the first line of `deckpad status`). Drive keeps its own icon.
+one on the machine that offers the controller, the Deck (the first line of `deckpad status`; the PC's side
+has no status to ask for). Drive keeps its own icon.
 
 ## E2E VM Testing
 
