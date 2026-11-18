@@ -28,7 +28,12 @@ let
         in lib.optionals (home != null)
           (map (ancestor: "${entry.name}: tmpfiles rule for ${path} leaves ${ancestor} to be created as root; declare it with a d rule owned by the user")
             (lib.filter (ancestor: !(lib.elem ancestor directoryRules)) (ancestorsUnder home path)));
-    in lib.concatMap checkRule rules;
+      scripts = config.system.activationScripts;
+      text = name: let script = scripts.${name}; in if builtins.isString script then script else script.text or "";
+      bare = name: lib.filter (line: lib.hasInfix "install -d" line && lib.any (home: lib.hasInfix "${home}/" line) homes) (lib.splitString "\n" (text name));
+      checkScript = name: map (line: "${entry.name}: activation step ${name} makes a folder in a home with install -d, which leaves the folders above it to root; use user_folder")
+        (bare name);
+    in lib.concatMap checkRule rules ++ lib.concatMap checkScript (lib.attrNames scripts);
   failures = lib.unique (lib.concatMap offenders configurations);
 in {
   name = "home-tmpfiles";
