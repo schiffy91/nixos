@@ -290,7 +290,8 @@ iso-write: iso ## Write the ISO to DEVICE, e.g. make iso-write DEVICE=/dev/sdX
 	@printf '%s' 'erase this device? [y/N] ' && read answer && test "$$answer" = y
 	sudo dd if="$$(ls $(ISO_LINK)/iso/*.iso)" of="$(DEVICE)" bs=4M status=progress oflag=sync
 
-CACHE_DIR ?= $(HOME)/.cache/nix-cache  # shared with the other repositories on this host
+# Shared with the other repositories on this host. A comment after the value would add its spaces to it.
+CACHE_DIR ?= $(HOME)/.cache/nix-cache
 CACHE_PORT ?= 8080
 
 $(BUILD_DIR)/repo-tools: $(shell rg --files ci -g '*.btrc') ci/tools.nix flake.lock | dirs
