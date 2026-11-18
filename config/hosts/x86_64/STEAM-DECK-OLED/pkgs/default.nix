@@ -8,6 +8,7 @@ in {
     gaming.chiaki.enable = true;
     gaming.deckpad = { enable = true; role = "controller"; usb = true; };  # this Deck's controls as a Steam Controller for FRACTAL-NORTH; usb needs the BIOS port in DRD mode
     utils.desktop.enable = true;
+    utils.chrome.passwordStore = "basic";  # Game Mode has no wallet to ask; the disk is encrypted
     utils.nixosctl.caffeine.enable = false;
     gaming.steam.protonSge.enable = true;
     gaming.sunshine = {

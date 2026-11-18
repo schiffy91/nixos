@@ -3,7 +3,8 @@ let
   chrome = config.settings.apps.utils.chrome;
   enabled = chrome.enable;
   apps = lib.filterAttrs (_: app: app.enable) chrome.webApps;
-  flags = chrome.flags ++ lib.optional (chrome.renderNode != null) "--render-node-override=${chrome.renderNode}";
+  flags = chrome.flags ++ lib.optional (chrome.renderNode != null) "--render-node-override=${chrome.renderNode}"
+    ++ lib.optional (chrome.passwordStore != null) "--password-store=${chrome.passwordStore}";
   launchers = import ./chrome-launchers/package.nix { inherit pkgs inputs; };
   declaration = pkgs.writeText "chrome-apps.json" (builtins.toJSON {
     inherit (chrome) profile;
