@@ -192,6 +192,7 @@ class SleepController {
             if (state == null || !state.locked() || !state.hasHold(unit)) { throw "Sleep lock lost its pending request"; }
             self.command("native", ["verify"]); bool ready = state.ready; store.close();
             if (ready) { self.verifyStreams(); self.command("plymouth", ["--has-safe-displays"]); self.command("systemctl", ["is-active", "--quiet", "nixos-sleep-lock.service"]); return; }
+            if (attempt % 5 == 4) { self.command("systemctl", ["start", "--no-block", "nixos-sleep-lock.service"], false); }  // it may have been on its way out
             Timer.sleepMillis(100);
         }
         throw "Password display was not acknowledged";
@@ -293,6 +294,11 @@ class SleepController {
         if (state != null) { state.ready = false; store.save(state); }
         store.close();
         self.command("notify", ["--ready", "--pid=parent"]);
-        while (true) { self.cycle(); Timer.sleepMillis(100); }
+        while (self.wanted()) { self.cycle(); Timer.sleepMillis(100); }  // a sleep request starts the service again
+    }
+
+    public bool wanted() {  // something is locked or waiting to be
+        var store = SleepStore(self.accountUid()); var state = store.load(); store.close();
+        return state != null;
     }
 }

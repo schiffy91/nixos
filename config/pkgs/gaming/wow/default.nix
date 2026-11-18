@@ -34,13 +34,13 @@ in lib.mkIf config.settings.apps.gaming.wow.enable {
       UMask = "0022";
     };
   };
-  # Battle.net can install the game after system activation.
+  # Battle.net can install the game, or replace its add-on folder, after system activation.
   systemd.user.timers.wow-addons = {
     wantedBy = [ "timers.target" ];
     unitConfig.ConditionUser = config.settings.users.admin.username;
     timerConfig = {
       OnStartupSec = "30s";
-      OnUnitInactiveSec = "1min";
+      OnUnitInactiveSec = "15min";  # every minute was 1,400 runs a day to find nothing new
     };
   };
 }

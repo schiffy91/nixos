@@ -102,6 +102,11 @@ A correct password releases the console only after every pending sleep operation
 has finished. Failed preparation, cancelled sleep and controller failure retain
 the console lock. An interrupted release requires fresh authentication.
 
+`nixos-sleep-lock.service` runs only while something is locked or waiting to
+be. A sleep request records its hold and starts it; once the password has
+released the console and no state is left, it exits. A request that arrives
+while it is on its way out starts it again within half a second.
+
 KDE uses its standard locking behavior. This module does not patch KWin or
 KScreenLocker, add a root desktop-bus interface, or drive a second Plasma lock.
 The logind query only identifies whether the configured user has a Gamescope

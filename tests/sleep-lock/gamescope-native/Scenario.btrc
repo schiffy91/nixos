@@ -90,6 +90,7 @@ class GamescopeScenario {
     }
     private void restored(string marker) {
         self.machine.waitUntil("test ! -e /run/nixos-sleep-lock/state.json; test ! -e /run/nixos-gaming-locked", 30);
+        self.machine.waitUntil("test \"$(systemctl show -p ActiveState --value nixos-sleep-lock.service)\" = inactive", 10);  // with nothing locked it does not stay up and tick
         Check.equal(self.machine.succeed("cat /sys/class/tty/tty0/active").trim(), "tty" + self.originalVT, "original VT restored");
         Check.equal(self.sessionProperty("MainPID"), self.originalPID, "original compositor retained"); Check.equal(self.sessionProperty("NRestarts"), "0", "compositor never restarted");
         self.frames().save(self.lab.artifact(f"gamescope-before-input-{marker}.ppm")); print(self.machine.execute("cat /sys/kernel/debug/dri/0/state").output); print(self.machine.execute("timeout 3 " + self.focusQuery).output);

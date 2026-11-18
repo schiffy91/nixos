@@ -35,7 +35,7 @@ assert overridden.settings.apps.gaming.wow.directory == "/external/games/Battle.
 assert overridden.settings.apps.gaming.wow.addons == [];
 assert !(defaults.settings.apps.gaming.wow ? detailsProfile);
 assert defaults.systemd.user.services.wow-addons.unitConfig.ConditionUser == defaults.settings.users.admin.username;
-assert defaults.systemd.user.timers.wow-addons.timerConfig.OnUnitInactiveSec == "1min";
+assert defaults.systemd.user.timers.wow-addons.timerConfig.OnUnitInactiveSec == "15min";
 assert !(defaults.system.activationScripts ? wowAddons);
 assert otherClient.settings.apps.gaming.wow.directory == "/external/WoW/_retail_";
 assert !(otherClient.systemd.user.services ? wow-addons);

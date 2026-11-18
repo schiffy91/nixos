@@ -39,7 +39,7 @@ release page with no matching asset can still fall back to an earlier release.
 
 `wow-addons-install` is a BTRC program using the stdlib filesystem helpers and
 an advisory file lock. It runs as the administrator's user, at user-session startup
-and once per minute. This also handles a game installed after a system rebuild.
+and every 15 minutes. This also handles a game installed after a system rebuild.
 It does nothing until the configured client directory exists. Run the command
 manually to reconcile immediately. WoW loads changed addon code on its next login
 or UI reload.
