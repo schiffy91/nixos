@@ -129,6 +129,7 @@ class StorageScenario {
         self.insert();
         self.mounted();
         Check.equal(self.machine.succeed("cat /sd/file").trim(), "kept", "the same card opens again by itself");
+        Check.equal(self.machine.succeed("su - carduser -c 'nixosctl storage state sdcard'").trim(), "open", "its state in a word, asked as the user");
     }
 
     private void placement() {
@@ -198,10 +199,12 @@ class StorageScenario {
         print("With the key file lost the password still opens it, and a new key file can be added");
         self.pull();
         self.gone();
+        Check.equal(self.machine.succeed("su - carduser -c 'nixosctl storage state sdcard; nixosctl storage is sdcard locked || echo not-locked'").trim(), "absent\nnot-locked", "pulled");
         self.machine.succeed(f"mv {self.key} /run/old-key");
         self.insert();
         self.machine.waitUntil(f"test -b {self.card}");
         self.machine.succeed("sleep 5; ! mountpoint -q /sd");
+        Check.equal(self.machine.succeed("su - carduser -c 'nixosctl storage state sdcard && nixosctl storage is sdcard locked'").trim(), "locked", "attached and not opened");
         self.machine.succeed(f"systemctl reset-failed; printf 'boot password\\n' | nixosctl storage open sdcard {self.card}");
         self.mounted();
         self.machine.succeed(f"printf 'boot password\\n' | nixosctl storage key sdcard {self.card} && test -s {self.key}");

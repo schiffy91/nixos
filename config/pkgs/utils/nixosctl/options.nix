@@ -18,6 +18,12 @@ in {
     # attrset with `run` is an entry (kind = "item" | "check" | "radio"; `status` exits 0
     # when checked), any other attrset is a submenu. Modules and hosts merge into it.
     settings.apps.utils.nixosctl.tray.menu = mkSetting (pkgs.formats.json {}).type {};
+    # Lines above the entries that say how something stands: the label and the first line `run` prints,
+    # read each time the menu opens. While `attention` exits 0 the icon asks for attention. Merged like `menu`.
+    settings.apps.utils.nixosctl.tray.status = mkSetting (attrsOf (submodule {
+      options.run = lib.mkOption { type = str; };
+      options.attention = mkSetting (nullOr str) null;
+    })) {};
     settings.apps.utils.nixosctl.caffeine.enable = mkSetting bool config.settings.apps.utils.nixosctl.enable;
   };
 }

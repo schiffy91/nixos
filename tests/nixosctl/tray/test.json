@@ -1,0 +1,17 @@
+{
+  "name": "nixosctl-tray",
+  "state": "nixosctl-tray",
+  "stateMaterial": "nixosctl-tray:{{arch}}:drv={{derivation}}",
+  "derivation": "tests/nixosctl/tray",
+  "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
+  "operations": [
+    {
+      "op": "build-derivation",
+      "command": "--cores 2 --max-jobs 1",
+      "timeout": 1800
+    },
+    {
+      "op": "record-state"
+    }
+  ]
+}

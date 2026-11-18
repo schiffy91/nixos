@@ -84,6 +84,11 @@ class StorageManager {
         return unmounted == 0 ? 0 : 1;
     }
 
+    public string state() {  /* open, locked or absent; asked without root */
+        if (self.quiet(f"mountpoint -q {ShellWords.quote(self.mountPoint)}")) { return "open"; }
+        return FileSystem.exists(self.container()) ? "locked" : "absent";
+    }
+
     public int status() {
         bool attached = FileSystem.exists(self.container());
         bool mounted = self.quiet(f"mountpoint -q {ShellWords.quote(self.mountPoint)}");

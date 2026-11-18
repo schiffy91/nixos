@@ -63,5 +63,9 @@ in {
       }) withSteam)
     ];
     systemd.tmpfiles.rules = each (_: volume: "d ${volume.mountPoint} 0755 root root -");
+    settings.apps.utils.nixosctl.tray.status = lib.mapAttrs' (name: _: lib.nameValuePair "Storage ${name}" {
+      run = "nixosctl storage state ${name}";
+      attention = "nixosctl storage is ${name} locked";  # attached and not opened: it waits for its password
+    }) volumes;
   };
 }

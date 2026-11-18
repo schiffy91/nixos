@@ -62,6 +62,7 @@ lib.mkIf (config.settings.apps.utils.nixosctl.enable
     after = [ "graphical-session.target" ];
     unitConfig.ConditionUser = config.settings.users.admin.username;
     environment.NIXOSCTL_TRAY_MENU = toString ((pkgs.formats.json {}).generate "nixosctl-tray-menu.json" config.settings.apps.utils.nixosctl.tray.menu);
+    environment.NIXOSCTL_TRAY_STATUS = toString ((pkgs.formats.json {}).generate "nixosctl-tray-status.json" config.settings.apps.utils.nixosctl.tray.status);
     serviceConfig = {
       ExecStart = "${nixosctlTrayBin}/bin/nixosctl-tray";
       Restart = "on-failure";

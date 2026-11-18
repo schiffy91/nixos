@@ -844,6 +844,14 @@ and is on `PATH`. The native system tray (macOS menu bar / Linux Wayland
 StatusNotifierItem) is implemented in the BTRC stdlib and packaged by
 `config/pkgs/utils/nixosctl/ui/default.nix`.
 
+Modules and hosts add to the tray through two settings. `settings.apps.utils.nixosctl.tray.menu` holds
+entries and submenus. `settings.apps.utils.nixosctl.tray.status.<label> = { run; attention ? null; }` holds
+status lines, shown above the entries as the label and the first line `run` prints, read each time the menu
+opens; while `attention` exits 0 the icon asks for attention. Two modules provide lines: each
+`settings.disk.storage` volume has one (`open`, `locked` or `absent`, from `nixosctl storage state <volume>`,
+which needs no root; the icon asks for attention while a volume is attached and locked), and Deck Pad has
+one where it is enabled (the first line of `deckpad status`). Drive keeps its own icon.
+
 ## E2E VM Testing
 
 The BTRC test framework is declarative. Specs live under `tests/*` and the graph

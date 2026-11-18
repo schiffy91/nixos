@@ -23,6 +23,17 @@ class TrayMenu {
         menu.item(label, run);
     }
 
+    class void addStatus(SystemTray tray, string path) {  // label -> { run, attention }
+        if (path.isEmpty() || !FileSystem.isFile(path)) { return; }
+        var root = JSONValue.readFile(path);
+        if (!root.isObject()) { return; }
+        for label in root.keys().sorted() {
+            var line = root.get(label);
+            var attention = line.has("attention") && line.get("attention").isString() ? line.get("attention").asString() : "";
+            tray.status(label, line.get("run").asString(), attention);
+        }
+    }
+
     class void addFile(Tray menu, string path) {
         if (path.isEmpty() || !FileSystem.isFile(path)) { return; }
         var root = JSONValue.readFile(path);
@@ -37,8 +48,9 @@ int main() {
     if (!iconPath.isEmpty()) {
         tray.icon(iconPath);
     }
-    tray.tip("NixOS management")
-        .item("Rebuild (switch)", "konsole -e sudo nixosctl update")
+    tray.tip("NixOS management");
+    TrayMenu.addStatus(tray, Environment.get("NIXOSCTL_TRAY_STATUS", ""));  // host and module status lines
+    tray.item("Rebuild (switch)", "konsole -e sudo nixosctl update")
         .item("Upgrade & rebuild", "konsole -e sudo nixosctl update --upgrade")
         .item("Show changed files", "konsole -e nixosctl diff")
         .checkItem("Caffeine", "nixosctl caffeine toggle", "nixosctl caffeine status");

@@ -1,0 +1,80 @@
+import Library.CLI;
+import Library.Process;
+import testkit.Lab;
+
+// The tray in a Plasma session, read the way the desktop reads it: over the session bus, with nothing clicked.
+// Its status lines come from settings, show what their commands print now, and the icon asks for attention
+// while a line's attention command succeeds.
+class TrayScenario {
+    private Guest machine;
+    private string bus;
+    private string name;
+
+    public TrayScenario(Guest machine) {
+        self.machine = machine;
+        self.bus = "runuser -u observer -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus";
+        self.name = "";
+    }
+
+    private string layout() {  // the menu after it was told it is about to show
+        self.machine.succeed(f"{self.bus} busctl --user call {self.name} /MenuBar com.canonical.dbusmenu AboutToShow i 0");
+        return self.machine.succeed(f"{self.bus} busctl --user call {self.name} /MenuBar com.canonical.dbusmenu GetLayout iias 0 10 0");
+    }
+
+    private void shows(string line, string why) {
+        var menu = f"{self.bus} busctl --user call {self.name} /MenuBar com.canonical.dbusmenu";
+        try { self.machine.waitUntil(f"{menu} AboutToShow i 0 >/dev/null; {menu} GetLayout iias 0 10 0 | grep -qF {ShellWords.quote(line)}", 30); }
+        catch (string error) { throw f"{why}: the menu does not show '{line}': {self.layout()}"; }
+    }
+
+    private void status(string wanted, string why) {
+        self.machine.waitUntil(f"{self.bus} busctl --user get-property {self.name} /StatusNotifierItem org.kde.StatusNotifierItem Status | grep -qF {ShellWords.quote(wanted)}", 30);
+        print(why);
+    }
+
+    public void check() {
+        self.machine.waitForUnit("multi-user.target");
+        self.machine.waitUntil("pgrep -u observer plasmashell", 120);
+        self.machine.waitUntil(f"{self.bus} systemctl --user is-active nixosctl-tray.service", 120);
+        var pid = self.machine.succeed(f"{self.bus} systemctl --user show -p MainPID --value nixosctl-tray.service").trim();
+        self.machine.waitUntil(f"{self.bus} busctl --user list --no-legend | grep -q '^org.kde.StatusNotifierItem-{pid}-'", 60);
+        self.name = self.machine.succeed(f"{self.bus} busctl --user list --no-legend | grep -o '^org.kde.StatusNotifierItem-{pid}-[0-9]*' | head -1").trim();
+        // The desktop lists an icon by its bus name or by its connection (":1.42"), as the icon registered.
+        var connection = self.machine.succeed(f"{self.bus} busctl --user list --no-legend | grep '^{self.name} ' | grep -o ':[0-9][0-9.]*' | head -1").trim();
+        var registered = f"{self.bus} busctl --user get-property org.kde.StatusNotifierWatcher /StatusNotifierWatcher org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems";
+        var byName = ShellWords.quote(self.name);
+        var byConnection = ShellWords.quote(connection + "/");
+        try { self.machine.waitUntil(f"{registered} | grep -q -e {byName} -e {byConnection}", 30); }
+        catch (string error) { throw f"the desktop's tray does not hold the icon {self.name} ({connection}): {self.machine.execute(registered, 20).output}"; }
+
+        print("A status line is its label and what its command prints when the menu opens");
+        self.shows("Fixture: first", "the line from the settings, with the command's first line");
+        self.shows("Storage card: absent", "a declared volume has a line of its own");
+        Check.that(self.layout().contains("Rebuild (switch)"), "the entries are still there");
+
+        print("What the command prints next is what the menu shows next");
+        self.machine.succeed("echo second > /run/tray-fixture/line");
+        self.shows("Fixture: second", "the line follows the state behind it");
+
+        print("The icon asks for attention while the line's attention command succeeds");
+        self.status("Active", "quiet to begin with");
+        self.machine.succeed("touch /run/tray-fixture/attention");
+        self.status("NeedsAttention", "asking once the command succeeds");
+        self.machine.succeed("rm /run/tray-fixture/attention");
+        self.status("Active", "and quiet again when it no longer does");
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        var lab = Lab(CLIArgs(argc, argv).require(0, "Supply VM descriptor"));
+        lab.startAll();
+        TrayScenario(lab.guest("machine")).check();
+        lab.close();
+        print("PASS: the tray's status lines come from settings, follow their commands, and raise the icon's attention");
+        return 0;
+    } catch (string error) {
+        print(f"FAIL: {error}");
+        return 1;
+    }
+}

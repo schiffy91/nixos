@@ -90,6 +90,7 @@ class NixosCtl {
         help.item("audio <list|current|set> [sink]", "");
         help.item("caffeine <status|enable|disable|toggle>", "");
         help.item("storage <status|prepare|password|open|key> [volume] [device]", "Encrypt an external volume (SD card, USB drive) for this machine, or open one by hand.");
+        help.item("storage <state [volume] | is <volume> <state>>", "A volume in a word: open, locked or absent. Needs no root.");
         help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
 
         help.section("Testing");
@@ -118,6 +119,10 @@ class NixosCtl {
             || command.equals("secure-boot")
             || command.equals("storage")
             || command.equals("tpm2");
+    }
+
+    public bool onlyReads(CLIArgs args) {  /* the tray asks these as the user */
+        return args.count() >= 2 && args.get(0).equals("storage") && (args.get(1).equals("state") || args.get(1).equals("is"));
     }
 
     public bool asksForHelp(CLIArgs args) {
@@ -229,7 +234,7 @@ class NixosCtl {
         if (command.equals("secure-boot") && args.count() >= 2 && args.get(1).equals("keys") && !Platform.isRoot()) {
             NixosLog.fatal("Secure Boot key transfer requires root; use an existing root session or sudo -n explicitly.");
         }
-        if (self.needsRoot(command) && !Platform.isRoot()) {
+        if (self.needsRoot(command) && !self.onlyReads(args) && !Platform.isRoot()) {
             return self.sudoSelf(args);
         }
 
@@ -442,7 +447,15 @@ class NixosCtl {
         }
 
         if (command.equals("storage")) {
-            var action = self.requireAction(args, "Usage: nixosctl storage <status|prepare|password|open|key> [volume] [device]");
+            var action = self.requireAction(args, "Usage: nixosctl storage <status|state|is|prepare|password|open|key> [volume] [device]");
+            if (action.equals("state")) {
+                Console.log((args.count() > 2 ? StorageManager(args.get(2)) : StorageManager()).state());
+                return 0;
+            }
+            if (action.equals("is")) {
+                if (args.count() != 4) { throw "Usage: nixosctl storage is <volume> <open|locked|absent>"; }
+                return StorageManager(args.get(2)).state().equals(args.get(3)) ? 0 : 1;
+            }
             if (action.equals("status")) { return args.count() > 2 ? StorageManager(args.get(2)).status() : StorageManager.overview(); }
             // The volume's name may be left out on a machine that declares one volume: a device is a path.
             bool named = args.count() > 2 && !args.get(2).startsWith("/");

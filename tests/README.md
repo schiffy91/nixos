@@ -180,6 +180,7 @@ only for a place that still runs it.
 | third boot of `host-boot-*` | removed | It ran only for a node that set `reenrollsKeys`, and none did |
 | `drive-convergence` over three seeds | one seed required; `drive-convergence-seeds` (`make -C tests graph-nightly`) runs three | Each seed is 120 random operations by two clients; one proves convergence per commit |
 | `immutability-materialize` on `install-reset` | `immutability-materialize` on `install-reset-clean` (new, required) | Hosts reset from an empty root now; materialize with `--refresh-clean` is what a `CLEAN` base alone can do, so it is the node that keeps proving `clean`. The refusal on `empty` is asserted in `nixosctl-diff` |
+| (new) | `nixosctl-tray`, required | A Plasma session with the tray: its status lines and the icon's attention state are read over the session bus; nothing is clicked |
 
 Not merged, though the review proposed it: the installs into one chain per host, and `install-reset`'s
 children into fewer nodes. With nodes running together a chain is slower than its parts side by side, and

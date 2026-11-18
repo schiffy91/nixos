@@ -402,6 +402,11 @@
       "spec": "nixosctl/diff/test.json"
     },
     {
+      "after": [],
+      "id": "nixosctl-tray",
+      "spec": "nixosctl/tray/test.json"
+    },
+    {
       "after": [
         "install-reset"
       ],
@@ -1073,6 +1078,7 @@
     "immutability-disabled-persistence",
     "nixosctl-cli",
     "nixosctl-diff",
+    "nixosctl-tray",
     "nixosctl-update",
     "install-encrypted",
     "install-nixosctl",
