@@ -9,6 +9,7 @@
       encryption.opportunisticUnlock.enable = true;
       recovery.enable = true;
       immutability.enable = true;
+      immutability.base = "empty";  # every boot starts from a new root; CLEAN is no longer read
       swap.size = host.disk.swapSize;
     };
     tpm.device = host.tpm.device;

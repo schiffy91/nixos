@@ -439,9 +439,10 @@ and `nixosctl persistence materialize --refresh-clean` refuses. A directory made
 persisted path takes its owner and mode from the same directory in the root before it, so a home folder
 keeps its owner. `nixosctl diff` lists what changed since `immutability-marker.service` recorded each
 volume's transaction when boot finished, where with `clean` it lists what differs from `CLEAN`. The
-QEMU hosts and the VM twins of the real hosts use `empty`; FRACTAL-NORTH and STEAM-DECK-OLED stay on
-`clean` until their owner moves them, which takes effect at a reboot. A path that should outlive a
-reboot is persisted on either base; with `empty`, a file only ever written into `CLEAN` is gone.
+Every host uses `empty` since 17 November 2026: the QEMU hosts, FRACTAL-NORTH and STEAM-DECK-OLED, and so
+the VM twins of the two. The real machines' `CLEAN` snapshots stay on disk, unread; `base = "clean"` and a
+reboot go back to them. A path that should outlive a reboot is persisted on either base; with `empty`, a
+file only ever written into `CLEAN` is gone.
 
 What each real machine's `CLEAN` holds outside the persisted paths, read on 17 November 2026: this is what
 every boot starts with on `clean` and what a boot from an empty root would not have.
@@ -1170,12 +1171,17 @@ What the split of November 2026 left for a person to do or decide. None of it bl
   Afterwards app `0` should map to `proton-sge-GE-Proton11-12` at priority 75 with no entry naming the old
   tool, and the Battle.net launcher should open under it.
 - **The Wine working tree** at `config/pkgs/gaming/proton/custom/src` (4 GB, not in git) stays where it is.
-  The development loop expects it at `~/Projects/proton-sge/src`. Moving it, and removing the old links
+  The development loop expects it at `~/Projects/proton-sge/src`, which does not outlive a reboot today
+  (see `~/Projects` below). Moving it, and removing the old links
   `~/Games/proton/proton-custom-*` and `~/.local/share/Steam/compatibilitytools.d/proton-custom-*`, is the
   owner's call.
-- **Whether FRACTAL-NORTH and STEAM-DECK-OLED move to `settings.disk.immutability.base = "empty"`.** They
-  are on `clean`. What each machine's `CLEAN` holds outside the persisted paths, and so what a boot from an
-  empty root would not have, is summarised under Immutability; the move takes effect at a reboot.
+- **Both machines start from an empty root from their next boot** (`settings.disk.immutability.base =
+  "empty"`, set on 17 November). What each machine's `CLEAN` held outside the persisted paths, and so what
+  is no longer there, is summarised under Immutability: on the desktop two unused caches from May
+  (`~/.ccache`, `~/.cargo`), clipboard history and June leftovers in `/tmp`; on the Deck a Semu override
+  file of 5 November that names the old card layout. To go back: `base = "clean"` and a reboot.
+- **`~/Projects` is on the home volume that resets**, and is not persisted: the clones of the product
+  repositories there do not outlive a reboot. Persist it, or keep working clones somewhere that is.
 - **On the Deck:** `make -C tests graph-deck` in `/etc/nixos` (the Gaming Mode sleep-lock nodes; three are
   expected to pass, the two real-suspend nodes fail at game input after wake, see
   `tests/sleep-lock/gamescope-native/README.md`), and a controller session with Deck Pad.

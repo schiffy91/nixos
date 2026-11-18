@@ -98,7 +98,6 @@ in
   };
   boot.loader.timeout = lib.mkForce 0;
   settings.boot.plymouth.drmDevice = lib.mkForce "";
-  settings.disk.immutability.base = "empty";  # the real machines stay on clean until their owner moves them
   boot.initrd.systemd.services.probe-virtual-display = {
     description = "Ask the virtual display what is plugged in";  # the Deck's kernel never does; Plymouth only reads
     wantedBy = [ "sysinit.target" ];

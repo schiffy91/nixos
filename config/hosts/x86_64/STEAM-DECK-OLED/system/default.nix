@@ -71,6 +71,7 @@ in {
       encryption.opportunisticUnlock.enable = true;
       recovery.enable = true;
       immutability.enable = true;
+      immutability.base = "empty";  # every boot starts from a new root; CLEAN is no longer read
       immutability.persist.paths = lib.optionals config.jovian.decky-loader.enable [ "/var/lib/decky-loader" ];
       swap.size = host.disk.swapSize;
     };
