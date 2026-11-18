@@ -23,6 +23,7 @@ in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
     imports = [
       ../../../config/settings.nix
       ../../../config/pkgs/utils/1password.nix
+      ../../../config/system/nixos/home-folders.nix  # user_folder, which 1Password's activation step calls
     ];
     security.polkit.enable = true;
     security.pam.sshAgentAuth.enable = true;
