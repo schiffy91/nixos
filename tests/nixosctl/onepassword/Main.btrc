@@ -6,6 +6,7 @@ int main(int argc, char** argv) {
         machine.waitForUnit("multi-user.target"); machine.succeed("runuser -u operator -- op --version");
         machine.succeed("test $(stat -c %U:%G:%a /run/wrappers/bin/op) = root:onepassword-cli:2511; test $(stat -c %U:%G:%a /run/wrappers/bin/1Password-BrowserSupport) = root:onepassword:2511; test $(stat -c %U:%a /srv/operator/.config/1Password/ssh/agent.toml) = operator:600");
         machine.succeed("runuser -u operator -- grep -F 'vault = \"Private\"' /srv/operator/.config/1Password/ssh/agent.toml"); machine.fail("test -e /home/operator/.config/1Password");
+        machine.succeed("runuser -u operator -- sh -c 'touch /srv/operator/.config/1Password/settings.json /srv/operator/.config/probe'; test $(stat -c %U /srv/operator/.config/1Password) = operator");  // the app writes its own folder
         machine.succeed("grep -F unix-user:operator /run/current-system/sw/share/polkit-1/actions/com.1password.1Password.policy");
         // A real agent exercises PAM's signature exchange without a vault in CI.
         machine.succeed("runuser -u operator -- mkdir -p /srv/operator/.1password; runuser -u operator -- ssh-keygen -q -t ed25519 -N '' -f /srv/operator/key; mkdir -p /etc/ssh/authorized_keys.d; cp /srv/operator/key.pub /etc/ssh/authorized_keys.d/operator");
