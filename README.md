@@ -482,8 +482,9 @@ Persisted directories live under `@persist/dirs`; persisted files live under
 The reset path records the active immutability state version in
 `@snapshots/.immutability/version`, mounted at
 `/.snapshots/.immutability/version` after boot. The current version is
-`2026.08.22`; any future version-specific transition belongs in
-`config/system/storage/immutability/default.nix`.
+`2026.11.17`, and a volume last reset by `2026.08.22` is accepted as it is: the step added
+`settings.disk.immutability.base` and changed nothing a volume holds. Any future version-specific
+transition belongs in `config/system/storage/immutability/default.nix`.
 
 `settings.disk.immutability.nonPersistedGenerations` controls how many reset
 generations are retained. The default `3` preserves the old effective behavior;
