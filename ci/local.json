@@ -2,11 +2,13 @@
   "jobs": {
     "lint": {
       "platform": "linux-x86_64",
-      "run": "make lint"
+      "run": "make lint",
+      "light": true
     },
     "checks": {
       "platform": "linux-x86_64",
-      "run": "ci/checks.sh"
+      "run": "ci/checks.sh",
+      "light": true
     },
     "graph": {
       "platform": "linux-x86_64",

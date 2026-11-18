@@ -14,7 +14,7 @@ jobs:
   # What the owner's machines already passed for this exact commit (`ci-local`, ci/local.json): a status
   # `local/<platform>/<job>` posted by the repository's owner stands in for the same job here.
   local:
-    uses: schiffy91/ci-local/.github/workflows/local-passes.yml@46bebec22a3affc1be02f115640488afdbbcf31a
+    uses: schiffy91/ci-local/.github/workflows/local-passes.yml@3f0173bf1b437c7cc18c58269e0d933dc4055059
     permissions:
       statuses: read
 

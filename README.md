@@ -1092,7 +1092,9 @@ ci-local push           # put the commit on GitHub, post its passes, then git pu
 
 - `ci/local.json` names the jobs: `lint` (`make lint`), `checks` (`ci/checks.sh`) and `graph`
   (`make graph-required`). `graph` is in the table for the record only: the VM graph is too long for a
-  hosted runner, so its status is the only place a commit shows it.
+  hosted runner, so its status is the only place a commit shows it. `lint` and `checks` are marked light
+  and run at the same time; `graph` runs after them, by itself.
+- A pass belongs to the commit's files, so a commit that is only reworded keeps it.
 - `checks.yml` calls the tool's reusable workflow, pinned by commit, and skips each job whose status the
   repository's owner posted.
 - The flake check `ci-local` is the tool's own test, given this repository's table and workflow: every job
