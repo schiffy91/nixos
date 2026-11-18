@@ -100,8 +100,7 @@ make -C tests graph-full
 make -C tests gaming
 ```
 
-`make unit` builds and runs native suites including immutability persist-key
-encoding (`immutability/PathsTests.btrc`), install-root path joining
+`make unit` builds and runs native suites including install-root path joining
 (`core/NixosPathsTests.btrc`), strict `sbctl`/`bootctl` parsing
 (`secure-boot/VerificationTests.btrc`), and the scenario parser
 (`harness/SpecTests.btrc`).
@@ -181,6 +180,7 @@ only for a place that still runs it.
 | `drive-convergence` over three seeds | one seed required; `drive-convergence-seeds` (`make -C tests graph-nightly`) runs three | Each seed is 120 random operations by two clients; one proves convergence per commit |
 | `immutability-materialize` on `install-reset` | `immutability-materialize` on `install-reset-clean` (new, required) | Hosts reset from an empty root now; materialize with `--refresh-clean` is what a `CLEAN` base alone can do, so it is the node that keeps proving `clean`. The refusal on `empty` is asserted in `nixosctl-diff` |
 | (new) | `nixosctl-tray`, required | A Plasma session with the tray: its status lines and the icon's attention state are read over the session bus; nothing is clicked |
+| unit suites `immutability_paths` and `ownership` (`make unit`) | `schiffy91/immutability`, check `unit-tool` | They test the tool's path encoding and ownership rules and moved with it; its `vm-reset-clean` and `vm-reset-empty` checks reset a btrfs root for both bases. The install, host, recovery and hibernate nodes stay here as tests of the adapter |
 
 Not merged, though the review proposed it: the installs into one chain per host, and `install-reset`'s
 children into fewer nodes. With nodes running together a chain is slower than its parts side by side, and

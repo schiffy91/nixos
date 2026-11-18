@@ -640,6 +640,29 @@
         "type": "github"
       }
     },
+    "immutability": {
+      "inputs": {
+        "btrc": [
+          "btrc"
+        ],
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794966097,
+        "narHash": "sha256-N92GO1npIE4yv79wJITTQPZcrPFI2MaUKseVBx1ECZs=",
+        "owner": "schiffy91",
+        "repo": "immutability",
+        "rev": "1c7e3566d3cf9d26cb3b8252e7790ae63450ceae",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "immutability",
+        "type": "github"
+      }
+    },
     "jovian": {
       "inputs": {
         "nix-github-actions": "nix-github-actions",
@@ -939,6 +962,7 @@
         "drive": "drive",
         "home-manager": "home-manager",
         "home-manager-darwin": "home-manager-darwin",
+        "immutability": "immutability",
         "jovian": "jovian",
         "lanzaboote": "lanzaboote",
         "logitech-trueforce": "logitech-trueforce",

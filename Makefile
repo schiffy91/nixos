@@ -16,7 +16,6 @@ CFLAGS ?= -std=c11 -pedantic
 # btrc_stdlib.h and link libbtrc.a.
 TRANSPILER_FLAGS ?= --no-stdlib --strict-imports --stdlib "$(CURDIR)/$(STDLIB_DIR)"
 NIXOSCTL_LIBS ?= -lm -lpthread -lutil -lcrypt
-IMMUTABILITY_LIBS ?= -lm -lpthread
 TRAY_LIBS ?= $(shell pkg-config --cflags --libs dbus-1) -lm -lpthread
 
 BUILD_DIR := build
@@ -27,17 +26,13 @@ STDLIB_MANIFEST := $(STDLIB_DIR)/btrc_stdlib.manifest
 STDLIB_LIB := $(BUILD_DIR)/libbtrc.a
 BTRC_STAMP := $(BUILD_DIR)/.btrc-tool
 NIXOSCTL_ENTRY := config/pkgs/utils/nixosctl/Main.btrc
-IMMUTABILITY_ENTRY := config/system/storage/immutability/src/Immutability.btrc
 NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
-IMMUTABILITY_C_OUT := $(BUILD_DIR)/immutability.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
-IMMUTABILITY_BIN := $(BUILD_DIR)/immutability
 TRAY_ENTRY := config/pkgs/utils/nixosctl/ui/Main.btrc
 TRAY_C_OUT := $(BUILD_DIR)/nixosctl-tray.c
 TRAY_BIN := $(BUILD_DIR)/nixosctl-tray
 # <binary name>:<entry point>, one per unit suite
 UNIT_TESTS := \
-	immutability_paths:tests/immutability/PathsTests.btrc \
 	nixos_paths:tests/core/NixosPathsTests.btrc \
 	nixos_config:tests/core/NixosConfigTests.btrc \
 	password_change:tests/core/PasswordChangeTests.btrc \
@@ -53,19 +48,18 @@ UNIT_TESTS := \
 	recovery_mount:tests/recovery/MountTests.btrc \
 	secure_boot_archive:tests/secure-boot/ArchiveTests.btrc \
 	wow_lock:tests/gaming/wow/LockTests.btrc \
-	networking_rules:tests/networking/RulesTests.btrc \
-	ownership:tests/immutability/OwnershipTests.btrc
+	networking_rules:tests/networking/RulesTests.btrc
 unit_name = $(firstword $(subst :, ,$(1)))
 unit_entry = $(lastword $(subst :, ,$(1)))
 UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
 BIN := $(NIXOSCTL_BIN)
-BINS := $(NIXOSCTL_BIN) $(IMMUTABILITY_BIN) $(TRAY_BIN) $(BUILD_DIR)/boot-evidence
+BINS := $(NIXOSCTL_BIN) $(TRAY_BIN) $(BUILD_DIR)/boot-evidence
 SOURCES := $(shell rg --files config tests ci -g '*.btrc' -g '*.h' -g btrc.toml -g btrc.lock | sort)
 UNIT_NAMES := $(foreach t,$(UNIT_TESTS),$(call unit_name,$(t)))
 # <program>=<entry point> for everything built here: ci/btrc-deps.py lists what each is made from, so an
 # edit rebuilds the programs that include the edited file and no others. Without python3 (the installer
 # has none) a program depends on every source, as before.
-PROGRAMS := nixosctl=$(NIXOSCTL_ENTRY) immutability=$(IMMUTABILITY_ENTRY) nixosctl-tray=$(TRAY_ENTRY) \
+PROGRAMS := nixosctl=$(NIXOSCTL_ENTRY) nixosctl-tray=$(TRAY_ENTRY) \
 	host-picker-test=tests/host-picker/Main.btrc source-hash-test=tests/harness/source-hash/Main.btrc \
 	disabled-node-test=tests/harness/disabled/Main.btrc graph-runner-test=tests/harness/runner/Main.btrc \
 	host-timeout-test=tests/harness/timeout/Main.btrc boot-evidence=tests/hosts-boot/Main.btrc \
@@ -93,7 +87,7 @@ lint: tests/testkit
 
 help:
 	@printf '%s\n' 'Build:'
-	@printf '%s\n' '  build             nixosctl, immutability and the tray binary'
+	@printf '%s\n' '  build             nixosctl and the tray binary'
 	@printf '%s\n' '  clean             remove build/'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Tests, fastest first:'
@@ -164,14 +158,12 @@ $(STDLIB_LIB): $(STDLIB_MANIFEST)
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -c "$(CURDIR)/$(STDLIB_IMPL)" -o "$(CURDIR)/$(BUILD_DIR)/btrc_stdlib.o"
 	ar rcs "$(CURDIR)/$(STDLIB_LIB)" "$(CURDIR)/$(BUILD_DIR)/btrc_stdlib.o"
 
-transpile: $(NIXOSCTL_C_OUT) $(IMMUTABILITY_C_OUT) $(TRAY_C_OUT)
+transpile: $(NIXOSCTL_C_OUT) $(TRAY_C_OUT)
 
 $(NIXOSCTL_C_OUT): $(call made_from,nixosctl) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
 	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(NIXOSCTL_ENTRY)" -o "$(CURDIR)/$(NIXOSCTL_C_OUT)"
 	@touch "$@"  # the compiler keeps an unchanged output's time, which would leave it stale for good
 
-$(IMMUTABILITY_C_OUT): $(call made_from,immutability) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
-	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(IMMUTABILITY_ENTRY)" -o "$(CURDIR)/$(IMMUTABILITY_C_OUT)"
 	@touch "$@"
 
 # Library.Tray's Linux provider binds libdbus, so its typed header import
@@ -213,8 +205,6 @@ $(BUILD_DIR)/boot-evidence-test: $(call made_from,boot-evidence-test) flake.lock
 $(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(NIXOSCTL_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(NIXOSCTL_BIN)" $(NIXOSCTL_LIBS)
 
-$(IMMUTABILITY_BIN): $(IMMUTABILITY_C_OUT) $(STDLIB_LIB)
-	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(IMMUTABILITY_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(IMMUTABILITY_BIN)" $(IMMUTABILITY_LIBS)
 
 $(TRAY_BIN): $(TRAY_C_OUT)
 	$(CC) $(CFLAGS) "$(CURDIR)/$(TRAY_C_OUT)" -o "$(CURDIR)/$(TRAY_BIN)" $(TRAY_LIBS)

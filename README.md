@@ -62,7 +62,7 @@ appear under `nixosConfigurations`.
 | `config/hosts/aarch64/QEMU/` | ARM QEMU guest host modules |
 | `config/hosts/x86_64/QEMU/` | x86 QEMU guest host modules |
 | `config/pkgs/utils/nixosctl/` | Management CLI, `lib/` runtime implementation, and `ui/` tray application |
-| `config/system/storage/immutability/src/` | BTRC immutability entrypoint and engine modules |
+| `config/system/storage/immutability/` | The adapter for [`schiffy91/immutability`](https://github.com/schiffy91/immutability), a flake input: `settings.disk.*` become that module's options; the default persisted paths and the patterns `nixosctl diff` skips stay here |
 | `config/pkgs/utils/nixosctl/lib/core/` | Shared BTRC helpers used by `nixosctl`, tests, and immutability |
 | `build/` | Gitignored local compiler intermediates and binaries |
 | `tests/` | Declarative VM e2e graph, per-scenario specs, and flake checks |
@@ -373,10 +373,12 @@ beside it). The `storage` VM scenario runs a card and a USB drive side by side.
 
 ### Immutability
 
-`config/system/storage/immutability/default.nix` drives the BTRC **immutability**, the
-sole immutability implementation. Its source entrypoint is
-`config/system/storage/immutability/src/Immutability.btrc`; Nix builds it with the flake-locked
-BTRC compiler and a generated stdlib archive.
+The reset at boot and what persists are [`schiffy91/immutability`](https://github.com/schiffy91/immutability):
+the boot-time tool, its NixOS module, and the `diff`, `plan`, `prepare`, `materialize` and `snapshots`
+commands, which `nixosctl diff`, `nixosctl immutability` and `nixosctl persistence` run and an install
+uses to take `CLEAN`. `config/system/storage/immutability/default.nix` is the adapter: hosts and modules
+set `settings.disk.immutability.*`, `settings.disk.subvolumes.*` and `persist.paths` as before, and the
+adapter fills the module's `immutability.*` options from them.
 
 The initrd reset runs after `systemd-hibernate-resume.service`. A successful
 resume never returns to the initrd, so the reset only runs on a fresh boot and
@@ -484,7 +486,7 @@ The reset path records the active immutability state version in
 `/.snapshots/.immutability/version` after boot. The current version is
 `2026.11.17`, and a volume last reset by `2026.08.22` is accepted as it is: the step added
 `settings.disk.immutability.base` and changed nothing a volume holds. Any future version-specific
-transition belongs in `config/system/storage/immutability/default.nix`.
+transition belongs in that repository's `nix/module.nix`.
 
 `settings.disk.immutability.nonPersistedGenerations` controls how many reset
 generations are retained. The default `3` preserves the old effective behavior;
@@ -806,11 +808,8 @@ in use and `nix flake update btrc` moves it.
 |---|---|
 | `config/pkgs/utils/nixosctl/Main.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
 | `config/pkgs/utils/nixosctl/ui/Main.btrc` | Tray launcher for `nixosctl` |
-| `config/pkgs/utils/nixosctl/lib/btrfs` | Snapshot and diff helpers for `nixosctl` |
 | `config/pkgs/utils/nixosctl/lib/desktop` | Audio, display, caffeine, and hardware config commands |
 | `config/pkgs/utils/nixosctl/lib/hardware` | Secure Boot (`SecureBootManager` + the `SecureBootVerification` parsers) and TPM2 commands |
-| `config/system/storage/immutability/src/Immutability.btrc` | BTRC entrypoint for the immutability runtime |
-| `config/system/storage/immutability/src/lib` | Immutability runtime library modules |
 | `config/pkgs/utils/nixosctl/lib/core` | Shared logging, path, and interactive helpers |
 | `config/pkgs/gaming` | Independently packaged Steam, Wine prefix, and Assetto Corsa runtime tools |
 | `config/pkgs/utils/nixosctl/lib/simulator` | Declarative VM graph and test runner |

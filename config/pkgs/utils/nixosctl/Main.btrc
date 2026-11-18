@@ -12,9 +12,6 @@ import ./lib/SecretsManager.btrc;
 import ./lib/PermissionsManager.btrc;
 import ./lib/NixosRebuilder.btrc;
 import ./lib/PasswordManager.btrc;
-import ./lib/btrfs/DiffScanner.btrc;
-import ./lib/btrfs/BtrfsImmutabilityManager.btrc;
-import ./lib/btrfs/PersistenceManager.btrc;
 import ./lib/hardware/SecureBootManager.btrc;
 import ./lib/hardware/Tpm2Manager.btrc;
 import ./lib/core/NixosPaths.btrc;
@@ -123,6 +120,12 @@ class NixosCtl {
 
     public bool onlyReads(CLIArgs args) {  /* the tray asks these as the user */
         return args.count() >= 2 && args.get(0).equals("storage") && (args.get(1).equals("state") || args.get(1).equals("is"));
+    }
+
+    public int immutability(Vector<string> words) {  /* schiffy91/immutability's tool, which reads its own settings */
+        var command = "immutability";
+        for word in words { command = f"{command} {ShellWords.quote(word)}"; }
+        return UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false).code;
     }
 
     public bool asksForHelp(CLIArgs args) {
@@ -294,24 +297,18 @@ class NixosCtl {
         }
 
         if (command.equals("diff")) {
-            var options = DiffOptions();
-            options.recent = line.has("--recent");
-            options.showSymlinks = line.has("--show-symlinks");
-            options.showPersistPaths = line.has("--show-persist-paths");
-            options.showChildren = line.option("--show-children", "");
-            var depth = line.option("--depth", "");
-            if (!depth.isEmpty()) { options.depth = Strings.toInt(depth); }
-            options.pattern = line.option("--pattern", "");
-            options.diffignore = line.option("--diffignore", "");
-            DiffScanner(self.config).print(options);
-            return 0;
+            Vector<string> words = ["diff"];
+            for (int index = 1; index < args.count(); index++) { words.push(args.get(index)); }
+            return self.immutability(words);
         }
 
         if (command.equals("persistence")) {
             var action = self.requireAction(args, "Usage: nixosctl persistence <materialize>");
             if (action.equals("materialize")) {
-                PersistenceManager(self.config).materialize(line.has("--dry-run"), line.has("--refresh-clean"));
-                return 0;
+                Vector<string> words = ["materialize"];
+                if (line.has("--dry-run")) { words.push("--dry-run"); }
+                if (line.has("--refresh-clean")) { words.push("--refresh-clean"); }
+                return self.immutability(words);
             }
             NixosLog.fatal("Usage: nixosctl persistence <materialize>");
         }
@@ -319,8 +316,9 @@ class NixosCtl {
         if (command.equals("immutability")) {
             var action = self.requireAction(args, "Usage: nixosctl immutability <plan|prepare>");
             if (action.equals("plan") || action.equals("prepare")) {
-                BtrfsImmutabilityManager(self.config).require(action, line.has("--dry-run"));
-                return 0;
+                Vector<string> words = [action];
+                if (line.has("--dry-run")) { words.push("--dry-run"); }
+                return self.immutability(words);
             }
             NixosLog.fatal("Usage: nixosctl immutability <plan|prepare>");
         }

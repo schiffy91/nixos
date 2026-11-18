@@ -30,6 +30,7 @@ in pkgs.stdenv.mkDerivation {
       ${lib.optionalString (configPath != "") "--set NIXOS_CONFIG ${lib.escapeShellArg configPath}"} \
       --prefix PATH : ${lib.makeBinPath (with pkgs; [
         secureBootKeys
+        inputs.immutability.packages.${pkgs.stdenv.hostPlatform.system}.immutability  # diff, persistence and an install's CLEAN are its commands
         kdePackages.libkscreen
         kdePackages.konsole
         systemd

@@ -3,7 +3,6 @@ import Library.JSON;
 import Library.Process;
 import Library.Strings;
 import Library.Vector;
-import ./btrfs/SnapshotManager.btrc;
 import ./core/Interactive.btrc;
 import ./core/NixosLog.btrc;
 import ./core/NixosPaths.btrc;
@@ -197,9 +196,15 @@ class Installer {
         permissions.enterRoot = self.mountPoint;
         permissions.secureTree(self.config.username());
 
-        var snapshots = SnapshotManager(self.config);
-        snapshots.rootPrefix = self.mountPoint;
-        snapshots.createInitialSnapshots();
+        // Each reset volume's CLEAN, taken by the tool that resets from it; with an empty base it takes none.
+        var snapshots = f"immutability snapshots create --root {ShellWords.quote(self.mountPoint)}"
+            + f" --base {ShellWords.quote(self.config.evalString("config.settings.disk.immutability.base"))}"
+            + f" --snapshots-mount {ShellWords.quote(self.config.evalString("config.settings.disk.subvolumes.snapshots.mountPoint"))}"
+            + f" --clean-name {ShellWords.quote(self.config.evalString("config.settings.disk.immutability.persist.snapshots.cleanName"))}";
+        for pair in Strings.split(self.config.evalString("config.settings.disk.subvolumes.nameMountPointPairs.resetOnBoot"), " ") {
+            if (!pair.isEmpty()) { snapshots = f"{snapshots} {ShellWords.quote(pair)}"; }
+        }
+        if (!self.shell.run(snapshots, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM).ok()) { NixosLog.fatal("Could not take the CLEAN snapshots"); }
         self.syncDisk();
     }
 
