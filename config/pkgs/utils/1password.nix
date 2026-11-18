@@ -23,10 +23,9 @@ in lib.mkIf (config.settings.apps.utils.onePassword.enable) {
   };
   environment.extraInit = lib.mkBefore localAgent;
   environment.interactiveShellInit = localAgent;
-  system.activationScripts.onePasswordAgent = lib.stringAfter [ "users" ] ''
-    for folder in ${lib.escapeShellArgs [ "${home}/.config" store "${store}/ssh" ]}; do  # each one: install -d leaves the folders above to root
-      [ "$(${pkgs.coreutils}/bin/stat -c %U "$folder" 2>/dev/null)" = ${user} ] || ${pkgs.coreutils}/bin/install -d -o ${user} -g ${group} -m 0700 "$folder"
-    done
+  system.activationScripts.onePasswordAgent = lib.stringAfter [ "userFolder" ] ''
+    user_folder ${lib.escapeShellArg "${store}/ssh"}
+    ${pkgs.coreutils}/bin/chmod 0700 ${lib.escapeShellArgs [ store "${store}/ssh" ]}
     ${pkgs.coreutils}/bin/install -o ${user} -g ${group} -m 0600 ${agentToml} ${lib.escapeShellArg "${store}/ssh/agent.toml"}
   '';
 }

@@ -12,6 +12,7 @@
     ./storage.nix
     ./sleep.nix
     ./sound.nix
+    ./home-folders.nix
     ./users.nix
     ../storage/immutability
   ];

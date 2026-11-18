@@ -24,7 +24,7 @@ in lib.mkMerge [
     # Steam still needs it discoverable under its own tools directory.
     programs.steam.extraCompatPackages = [ protonSge ];
 
-    system.activationScripts.protonSgeCompatTool = lib.stringAfter [ "users" ] ''
+    system.activationScripts.protonSgeCompatTool = lib.stringAfter [ "userFolder" ] ''
       export PATH="${pkgs.coreutils}/bin:$PATH"
       link_tool() {  # replace our symlink, preserve anything installed by hand
         target="$1"
@@ -39,7 +39,8 @@ in lib.mkMerge [
         chown -h ${user}:${group} "$target"
       }
 
-      install -d -o ${user} -g ${group} "${protonDir}" "${compatDir}"
+      user_folder "${protonDir}"
+      user_folder "${compatDir}"
       link_tool "${path}"
       link_tool "${steamPath}"
     '';
