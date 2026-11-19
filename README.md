@@ -1211,7 +1211,12 @@ What the split of November 2026 left for a person to do or decide. None of it bl
   file of 5 November that names the old card layout. To go back: `base = "clean"` and a reboot.
 - **On the Deck:** `make -C tests graph-deck` in `/etc/nixos` (the Gaming Mode sleep-lock nodes; three are
   expected to pass, the two real-suspend nodes fail at game input after wake, see
-  `tests/sleep-lock/gamescope-native/README.md`), and a controller session with Deck Pad.
+  `tests/sleep-lock/gamescope-native/README.md`), and a controller session with Deck Pad. Since
+  18 November `nixos-sleep-lock.service` stops when nothing is locked (commit 6a276450), and the
+  scenario's new step for that has not run anywhere: the nodes need an AMD GPU, so they are not in the
+  required set, although that commit's message says they are. What was seen on the Deck itself: after
+  the switch the service started, found nothing locked and stopped cleanly. What still needs someone
+  there: one sleep and wake in Gaming Mode, with the password prompt appearing and unlocking as before.
 - **mbp21:** `git pull` and `nix-update`; and the graph set `aarch64` there, where it runs natively.
 - **A schedule** for the long test runs (Drive's `nightly` output, btrc's `make test-nightly`), once there
   is a CI machine. Both need a machine to themselves.

@@ -325,11 +325,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794970034,
-        "narHash": "sha256-ZevzVDKYjFkm4IYZD7KJXWP2u1I0T1K99TBxbfpxfoY=",
+        "lastModified": 1795055348,
+        "narHash": "sha256-898ZUfyPrGXcqSGREC/2p+DabsNZkYRuUdoBTv6mFMw=",
         "owner": "schiffy91",
         "repo": "deckpad",
-        "rev": "ada26bec383977ef47c2fd79b76cc35bcb5fa7bb",
+        "rev": "7a80155ac515681286680eb41e624d994032dc1d",
         "type": "github"
       },
       "original": {
@@ -368,11 +368,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794994922,
-        "narHash": "sha256-BtZbmXfpcKg9ICslc69UkFFMfA3Zt2Abgc/LjVvTaGY=",
+        "lastModified": 1795051516,
+        "narHash": "sha256-yXLRnXjrE/xpazM2CYdle9aG5ZmPdqNWQQSt6xhJa18=",
         "owner": "schiffy91",
         "repo": "drive",
-        "rev": "145caa1c4ee2550117f9c57eeb4f20447017c944",
+        "rev": "04a5fcc8652c1734b666e3a94878e9957d5e98ba",
         "type": "github"
       },
       "original": {
