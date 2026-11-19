@@ -1,0 +1,92 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+
+// What a switch put in place that is not in effect yet. An update ends by saying it, so that nothing waits
+// for a reboot or for a closed program without a word.
+class PendingChanges {
+    class string storeDirectory(string path) {  // /nix/store/<hash>-<name> of a path inside it
+        if (!path.startsWith("/nix/store/")) { return ""; }
+        var rest = path.substring(11, path.length - 11);
+        var slash = rest.indexOf("/");
+        return "/nix/store/" + (slash < 0 ? rest : rest.substring(0, slash));
+    }
+
+    class string field(string shown, string name) {  // one value of `systemctl show`
+        for line in Strings.split(shown, "\n") {
+            if (line.startsWith(name + "=")) { return line.substring(name.length + 1, line.length - name.length - 1); }
+        }
+        return "";
+    }
+
+    class string declaredProgram(string execStart) {  // the path in "{ path=/nix/store/... ; argv[]=... }"
+        var at = execStart.indexOf("path=");
+        if (at < 0) { return ""; }
+        var rest = execStart.substring(at + 5, execStart.length - at - 5);
+        var end = rest.indexOf(" ");
+        return end < 0 ? rest : rest.substring(0, end);
+    }
+
+    // A unit a switch leaves running on purpose runs an earlier build when its program is from another
+    // store path than the one its unit now names.
+    class bool earlierBuild(string declared, string running) {
+        var wanted = PendingChanges.storeDirectory(declared);
+        var has = PendingChanges.storeDirectory(running);
+        return !wanted.isEmpty() && !has.isEmpty() && wanted != has;
+    }
+
+    // The parts of the system in place that only a boot brings into use.
+    class Vector<string> boot(string booted, string current) {
+        Vector<string> waiting = [];
+        for part in ["kernel", "initrd", "kernel-modules"] {
+            var was = FileSystem.readLink(f"{booted}/{part}");
+            var now = FileSystem.readLink(f"{current}/{part}");
+            if (!was.isEmpty() && !now.isEmpty() && was != now) { waiting.push(f"the {part} changed: the new one is used from the next reboot"); }
+        }
+        return waiting;
+    }
+
+    class Vector<string> services(string unitDirectory) {
+        Vector<string> waiting = [];
+        for name in FileSystem.listDir(unitDirectory).sorted() {
+            var unit = PathTools.join(unitDirectory, name);
+            if (!name.endsWith(".service") || !Path.readAll(unit).contains("X-RestartIfChanged=false")) { continue; }
+            var shown = ChildProcess.run("systemctl", ["show", name, "-p", "MainPID", "-p", "ExecStart"], timeoutMilliseconds=5000).stdout();
+            var process = PendingChanges.field(shown, "MainPID");
+            if (process.isEmpty() || process == "0") { continue; }
+            if (PendingChanges.earlierBuild(PendingChanges.declaredProgram(PendingChanges.field(shown, "ExecStart")), FileSystem.readLink(f"/proc/{process}/exe"))) {
+                waiting.push(f"{name} was left running and is still its earlier build: `systemctl restart {name}` when nothing depends on it, or the next reboot");
+            }
+        }
+        return waiting;
+    }
+
+    // What modules know to be waiting: each executable in the directory prints a line for each thing.
+    class Vector<string> hooks(string directory) {
+        Vector<string> waiting = [];
+        if (!FileSystem.isDir(directory)) { return waiting; }
+        for name in FileSystem.listDir(directory).sorted() {
+            var said = ChildProcess.run(PathTools.join(directory, name), [], timeoutMilliseconds=10000);
+            for line in Strings.split(said.stdout(), "\n") {
+                if (!line.trim().isEmpty()) { waiting.push(line.trim()); }
+            }
+        }
+        return waiting;
+    }
+
+    class Vector<string> all(string hooksDirectory) {
+        var waiting = PendingChanges.boot("/run/booted-system", "/run/current-system");
+        waiting.extend(PendingChanges.services("/etc/systemd/system"));
+        waiting.extend(PendingChanges.hooks(hooksDirectory));
+        return waiting;
+    }
+
+    class void report(string hooksDirectory) {
+        var waiting = PendingChanges.all(hooksDirectory);
+        if (waiting.isEmpty()) { return; }
+        Console.log("In place, and not in effect yet:");
+        for line in waiting { Console.log(f"  - {line}"); }
+    }
+}

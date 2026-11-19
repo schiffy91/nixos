@@ -1,0 +1,49 @@
+import Library.FileSystem;
+import Library.Process;
+import Library.Testing;
+import Library.Vector;
+
+import ../../config/pkgs/utils/nixosctl/lib/PendingChanges.btrc;
+
+int main() {
+    Expect.strEq(PendingChanges.storeDirectory("/nix/store/abc-drive/bin/drive"), "/nix/store/abc-drive");
+    Expect.strEq(PendingChanges.storeDirectory("/nix/store/abc-drive"), "/nix/store/abc-drive");
+    Expect.strEq(PendingChanges.storeDirectory("/usr/bin/env"), "");
+
+    var shown = "MainPID=4242\nExecStart={ path=/nix/store/new-drive/bin/drive ; argv[]=/nix/store/new-drive/bin/drive door --store /var/lib/drive ; ignore_errors=no }\n";
+    Expect.strEq(PendingChanges.field(shown, "MainPID"), "4242");
+    Expect.strEq(PendingChanges.declaredProgram(PendingChanges.field(shown, "ExecStart")), "/nix/store/new-drive/bin/drive");
+    Expect.strEq(PendingChanges.field(shown, "Absent"), "");
+
+    /* a unit left running is an earlier build only when both programs are known and differ */
+    Expect.isTrue(PendingChanges.earlierBuild("/nix/store/new-drive/bin/drive", "/nix/store/old-drive/bin/.drive-wrapped"));
+    Expect.isFalse(PendingChanges.earlierBuild("/nix/store/new-drive/bin/drive", "/nix/store/new-drive/bin/.drive-wrapped"));
+    Expect.isFalse(PendingChanges.earlierBuild("/nix/store/new-drive/bin/drive", ""));
+    Expect.isFalse(PendingChanges.earlierBuild("", "/nix/store/old-drive/bin/drive"));
+
+    /* the kernel, the initrd and the modules of the system in place against the booted one */
+    var systems = TestDir("pending-systems-");
+    for system in ["booted", "current"] { Expect.intEq(FileSystem.mkdirp(systems.join(system)), 0); }
+    var links = ["booted/kernel=/nix/store/k1-linux/bzImage", "current/kernel=/nix/store/k2-linux/bzImage", "booted/initrd=/nix/store/i1-initrd/initrd", "current/initrd=/nix/store/i1-initrd/initrd", "booted/kernel-modules=/nix/store/m1-modules", "current/kernel-modules=/nix/store/m1-modules"];
+    for link in links {
+        var parts = Strings.split(link, "=");
+        Expect.isTrue(ChildProcess.run("ln", ["-s", parts.get(1), systems.join(parts.get(0))]).ok());
+    }
+    var waiting = PendingChanges.boot(systems.join("booted"), systems.join("current"));
+    Expect.intEq(waiting.length, 1);
+    Expect.isTrue(waiting.get(0).contains("kernel") && waiting.get(0).contains("next reboot"));
+    Expect.intEq(PendingChanges.boot(systems.join("booted"), systems.join("booted")).length, 0);
+    Expect.intEq(PendingChanges.boot(systems.join("absent"), systems.join("current")).length, 0);
+
+    /* modules say what they know to be waiting, a line each; a silent hook says nothing */
+    var hooks = TestDir("pending-hooks-");
+    hooks.writeFile("b-quiet", "#!/bin/sh\nexit 0\n");
+    hooks.writeFile("a-steam", "#!/bin/sh\necho 'Steam is open'\necho\necho 'and a second thing'\n");
+    Expect.isTrue(ChildProcess.run("chmod", ["755", hooks.join("a-steam"), hooks.join("b-quiet")]).ok());
+    var said = PendingChanges.hooks(hooks.path);
+    Expect.intEq(said.length, 2);
+    Expect.strEq(said.get(0), "Steam is open");
+    Expect.strEq(said.get(1), "and a second thing");
+    Expect.intEq(PendingChanges.hooks(hooks.join("absent")).length, 0);
+    return 0;
+}

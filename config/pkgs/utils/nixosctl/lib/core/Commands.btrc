@@ -21,6 +21,8 @@ class CommandCatalog {
         Vector<CommandEntry> result = [];
         result.push(CommandEntry("update", "Rebuild and switch the current system.", rebuild));
         result.push(CommandEntry("upgrade", "Refresh flake inputs, then rebuild and switch.", rebuild));
+        result.push(CommandEntry("deploy", "Build another machine's system here and switch it to this commit.", ["--address", "--anyway"]));
+        result.push(CommandEntry("pending", "List what a switch put in place that is not in effect yet.", []));
         result.push(CommandEntry("install", "Format/mount disk and run nixos-install.", ["--format", "--yes", "--collect-garbage", "--debug", "--force-upgrade"]));
         result.push(CommandEntry("fix-permissions", "Re-apply secure-tree ownership/modes.", []));
         result.push(CommandEntry("eval", "Evaluate a NixOS config attribute as raw text.", []));

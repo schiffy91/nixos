@@ -11,6 +11,8 @@ import ./lib/NixosConfig.btrc;
 import ./lib/SecretsManager.btrc;
 import ./lib/PermissionsManager.btrc;
 import ./lib/NixosRebuilder.btrc;
+import ./lib/PendingChanges.btrc;
+import ./lib/RemoteUpdate.btrc;
 import ./lib/PasswordManager.btrc;
 import ./lib/hardware/SecureBootManager.btrc;
 import ./lib/hardware/Tpm2Manager.btrc;
@@ -46,6 +48,9 @@ class NixosCtl {
         help.continuation("--rebuild-filesystem  Re-enroll the bootloader.");
         help.continuation("--reboot  Reboot after activation.");
         help.item("upgrade [...]", "Alias for: update --upgrade --clean");
+        help.item("deploy <host> [--address <name>] [--anyway]",
+               "Build another machine's system here, copy it there and switch it to this commit.");
+        help.item("pending", "List what a switch put in place that is not in effect yet.");
         help.item("install [--format] [--yes] [--collect-garbage] [--debug] [--force-upgrade]",
                "Format/mount disk and run nixos-install. --force-upgrade updates the flake lock first, ignoring any closure baked into the installer.");
         help.item("fix-permissions", "Re-apply secure-tree ownership/modes.");
@@ -248,6 +253,16 @@ class NixosCtl {
             options.upgrade = line.has("--upgrade") || command.equals("upgrade");
             NixosRebuilder(self.config).update(options);
             return 0;
+        }
+
+        if (command.equals("pending")) {
+            PendingChanges.report(PathTools.join("/etc", self.config.evalString("config.settings.apps.utils.nixosctl.pendingHooksDir")));
+            return 0;
+        }
+
+        if (command.equals("deploy")) {
+            var host = self.requireArg(args, 1, "Usage: nixosctl deploy <host> [--address <name>] [--anyway]");
+            return RemoteUpdate(self.config, host, line.option("--address", "")).run(line.has("--anyway"));
         }
 
         if (command.equals("install")) {

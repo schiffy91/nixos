@@ -359,6 +359,19 @@ updates, a build collects unreferenced store paths by itself once the disk has l
 `settings.nix.minFreeGiB`, until `settings.nix.maxFreeGiB` is free; both real hosts set them, and the VM
 hosts do not.
 
+An update ends by saying what it put in place that is not in effect yet, and `nixosctl pending` says it
+at any time: a kernel, initrd or modules that only the next reboot brings into use; a service that a
+switch leaves running on purpose (`X-RestartIfChanged=false`, the Drive's mount for one) and that is
+still its earlier build; and whatever a module knows to be waiting, which it says through an executable
+in `/etc/nixosctl/pending.d` (Steam's shortcuts, which are only rewritten while Steam is closed).
+
+`nixosctl deploy <host>` brings another machine of this configuration to the commit checked out here:
+it builds that machine's system on this one, copies it over, and runs `git pull` and `nixosctl update`
+there, which then has nothing to build. It refuses a checkout with uncommitted changes or a commit that
+is not pushed (the other machine takes the commit from GitHub), and a machine on which a game or a
+Deck Pad session is running, unless told `--anyway`. The other machine is reached as `<host>.local`
+with the SSH agent forwarded, so that `sudo` there asks the same agent; `--address` names it otherwise.
+
 Persisted data and the machine's identity are untouched by the failed boot. The `recovery-bad-generation`
 node does exactly this in a VM: a generation whose initrd fails, the previous entry chosen from the menu,
 the change removed, `nixosctl update`, and a plain reboot. With a generation limit of 1 there is no earlier

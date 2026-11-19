@@ -70,6 +70,11 @@ in {
       home-manager.users.${user}.programs.plasma.configFile.kwinrc.Xwayland.XwaylandEisNoPromptApps = "steam";
     })
     (lib.mkIf (config.settings.apps.gaming.steam.enable && config.settings.apps.gaming.steam.shortcuts != {}) {
+      environment.etc."${config.settings.apps.utils.nixosctl.pendingHooksDir}/steam-shortcuts".source = pkgs.writeShellScript "steam-shortcuts-pending" ''
+        if ${pkgs.procps}/bin/pgrep -u ${user} -x steam > /dev/null; then
+          echo "Steam is open, so its declared shortcuts were not rewritten: they are at the next boot, or with Steam closed by \`systemctl start steam-shortcuts\`"
+        fi
+      '';
       systemd.services.steam-shortcuts = {
         description = "Declared non-Steam shortcuts";
         wantedBy = [ "multi-user.target" ];

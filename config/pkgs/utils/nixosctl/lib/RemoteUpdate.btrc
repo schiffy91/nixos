@@ -1,0 +1,69 @@
+import Library.Console;
+import Library.FileSystem;
+import Library.JSON;
+import Library.Process;
+import Library.Strings;
+import Library.Vector;
+import ./core/NixosLog.btrc;
+import ./NixosConfig.btrc;
+
+// Brings another machine of this configuration to the commit that is checked out here: its system is
+// built on this machine, copied over, and switched to there by its own `nixosctl update`, which then has
+// nothing left to build. What used to be five commands typed in the right order.
+class RemoteUpdate {
+    private NixosConfig config;
+    private string host;
+    private string address;
+
+    public RemoteUpdate(NixosConfig config, string host, string address) {
+        self.config = config;
+        self.host = host;
+        self.address = address.isEmpty() ? f"{host}.local" : address;
+    }
+
+    private ExecResult here(string program, Vector<string> arguments, bool shown = false) {
+        return ChildProcess.run(program, arguments, cwd=self.config.paths.root, stdout=shown ? COMMAND_OUTPUT_STREAM : COMMAND_OUTPUT_COLLECT, stderr=shown ? COMMAND_OUTPUT_STREAM : COMMAND_OUTPUT_COLLECT);
+    }
+
+    private ExecResult there(string command, bool shown = false) {  // the agent is forwarded: sudo there asks it
+        return ChildProcess.run("ssh", ["-A", "-o", "ConnectTimeout=10", self.address, command], stdout=shown ? COMMAND_OUTPUT_STREAM : COMMAND_OUTPUT_COLLECT, stderr=shown ? COMMAND_OUTPUT_STREAM : COMMAND_OUTPUT_COLLECT);
+    }
+
+    // What the other machine boots by, from the file its own install wrote.
+    class string targetIn(string settings) {
+        var parsed = JSONValue.parse(settings);
+        return parsed.isObject() && parsed.get("target").isString() ? parsed.get("target").asString() : "";
+    }
+
+    // Why this commit cannot be taken from GitHub by the other machine; empty when it can.
+    class string unpublished(string status, string head, string upstream) {
+        if (!status.trim().isEmpty()) { return "this checkout has changes that are not committed"; }
+        if (head.trim().isEmpty() || head.trim() != upstream.trim()) { return "this commit is not on the branch's upstream: push it first"; }
+        return "";
+    }
+
+    public int run(bool anyway) {
+        var why = RemoteUpdate.unpublished(self.here("git", ["status", "--porcelain"]).stdout(), self.here("git", ["rev-parse", "HEAD"]).stdout(), self.here("git", ["rev-parse", "@{upstream}"]).stdout());
+        if (!why.isEmpty()) { NixosLog.fatal(f"{self.host} takes the commit from GitHub, and {why}"); }
+        var settings = self.there("cat /etc/nixos/config.json");
+        var target = RemoteUpdate.targetIn(settings.stdout());
+        if (!settings.ok() || target.isEmpty()) { NixosLog.fatal(f"cannot read {self.address}:/etc/nixos/config.json: {settings.stderr().trim()}"); }
+        var busy = self.there("systemctl is-active --quiet deckpad.service && echo 'a Deck Pad session'; pgrep -af '[r]eaper SteamLaunch' > /dev/null && echo 'a game'; true").stdout().trim();
+        if (!busy.isEmpty() && !anyway) { NixosLog.fatal(f"{self.host} is in use ({Strings.split(busy, "\n").join(", ")}); a switch may interrupt it. Later, or with --anyway"); }
+        var attribute = f"{self.config.paths.root}#nixosConfigurations.{self.host}-{target}.config.system.build.toplevel";
+        NixosLog.info(f"deploy {self.host}: building {self.host}-{target} here");
+        var built = self.here("nix", ["build", "--no-link", "--print-out-paths", attribute]);
+        var system = built.stdout().trim();
+        if (!built.ok() || system.isEmpty()) { NixosLog.fatal(f"{self.host}-{target} does not build: {built.stderr().trim()}"); }
+        NixosLog.info(f"deploy {self.host}: copying {system}");
+        var copied = ChildProcess.run("nix", ["copy", "--no-check-sigs", "--to", f"ssh-ng://{self.address}?remote-program=sudo%20nix-daemon", system], environment=["NIX_SSHOPTS=-A"], stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM);
+        if (!copied.ok()) { NixosLog.fatal(f"cannot copy the system to {self.address}"); }
+        NixosLog.info(f"deploy {self.host}: switching");
+        var switched = self.there("cd /etc/nixos && git pull --ff-only && sudo nixosctl update < /dev/null", true);
+        var running = self.there("readlink /run/current-system").stdout().trim();
+        if (!switched.ok() || running != system) { NixosLog.fatal(f"{self.host} runs {running}, not {system}"); }
+        var failed = self.there("systemctl --failed --no-legend --plain | grep -vc drkonqi-coredump-processor; true").stdout().trim();
+        Console.log(f"{self.host} runs {system}; {failed} failed units");
+        return 0;
+    }
+}

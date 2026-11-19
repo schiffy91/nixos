@@ -40,6 +40,7 @@ UNIT_TESTS := \
 	nixos_config:tests/core/NixosConfigTests.btrc \
 	password_change:tests/core/PasswordChangeTests.btrc \
 	rebuild_plan:tests/core/RebuildPlanTests.btrc \
+	pending_changes:tests/core/PendingChangesTests.btrc \
 	secure_boot:tests/secure-boot/VerificationTests.btrc \
 	spec:tests/harness/SpecTests.btrc \
 	state_hash:tests/harness/StateHashTests.btrc \
