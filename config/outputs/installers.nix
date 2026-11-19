@@ -1,9 +1,12 @@
 { inputs, self, lib, hosts, systems }:
 let
+  # The sources of the inputs, for a machine that is installed without a network and evaluates afterwards.
+  # This repository is not one of them: the installer carries it as the checkout it installs (without
+  # the files that change nothing in a system), and naming it here made a README edit a new image.
   flakeSources = depth: attrs: lib.unique (lib.concatMap (input:
     lib.optional (input ? outPath) "${input.outPath}"
     ++ lib.optionals (depth > 0 && input ? inputs) (flakeSources (depth - 1) input.inputs))
-    (lib.attrValues attrs));
+    (lib.attrValues (removeAttrs attrs [ "self" ])));
   mkInstaller = system: prebuiltHostFiles:
     let
       keyHost = lib.findFirst (candidate: candidate.system == system) (lib.head hosts.physical) hosts.physical;
