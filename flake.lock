@@ -368,11 +368,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795051516,
-        "narHash": "sha256-yXLRnXjrE/xpazM2CYdle9aG5ZmPdqNWQQSt6xhJa18=",
+        "lastModified": 1795058714,
+        "narHash": "sha256-89VI5jMTyHhHbu2x4hv8v7VHoDJTML+odvY//fsyIoU=",
         "owner": "schiffy91",
         "repo": "drive",
-        "rev": "04a5fcc8652c1734b666e3a94878e9957d5e98ba",
+        "rev": "060d8fd7a1a3affca14db0978f17d577ce1a29ef",
         "type": "github"
       },
       "original": {
@@ -650,11 +650,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794987521,
-        "narHash": "sha256-hWMiRi2XoML5rk5CK+5VHEkUI+q1CCw7GgmmzKaJ3jE=",
+        "lastModified": 1795057505,
+        "narHash": "sha256-cLZKYnbyihxp1nmKjqDxHtNHf+ycdU6XCoa+zNJubaI=",
         "owner": "schiffy91",
         "repo": "immutability",
-        "rev": "192e43a9daa927aebbd11c67bf4a85c348118503",
+        "rev": "04726bf876890cafc8c68b861a8fa05fb6368df0",
         "type": "github"
       },
       "original": {
