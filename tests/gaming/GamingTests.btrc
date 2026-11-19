@@ -97,7 +97,19 @@ class GamingTests {
                 Expect.isTrue(apps.get("805550").get("LaunchOptions").asString().equals("keep-acc"));
             }
         }
-        print("PASS: Steam CLI, separate library, account casing, controller modes, ACC isolation, idempotence");
+        // --check says whether what is declared is what Steam has, and writes nothing either way.
+        app.set("launchOptions", JSONValue.makeString("CHECKED=1 %command%"));
+        ModTree.write(declaration, desired.stringify());
+        var asked = Command(f"{ShellWords.quote(self.tools)}/configure-steam-apps");
+        asked.flag("--steam-path", steam).flag("--default-tool", "unused").flag("--app-config", declaration).flag("--app-id", "244210");
+        var local = f"{steam}/userdata/1/config/localconfig.vdf";
+        var untouched = Path.readAll(local);
+        Expect.isTrue(UnixShell().run(asked.render() + " --check").code == 2);
+        Expect.isTrue(Path.readAll(local).equals(untouched));
+        UnixShell().run(asked.render(), throwOnFailure=true);
+        Expect.isTrue(!Path.readAll(local).equals(untouched));
+        Expect.isTrue(UnixShell().run(asked.render() + " --check").code == 0);
+        print("PASS: Steam CLI, separate library, account casing, controller modes, ACC isolation, idempotence, check without writing");
     }
 
     public Bytes shortcutFile(Vector<Bytes> bodies) {  // entries exactly as given, as Steam lays the file out

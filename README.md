@@ -365,6 +365,14 @@ switch leaves running on purpose (`X-RestartIfChanged=false`, the Drive's mount 
 still its earlier build; and whatever a module knows to be waiting, which it says through an executable
 in `/etc/nixosctl/pending.d` (Steam's shortcuts, which are only rewritten while Steam is closed).
 
+Steam saves its configuration as it exits, over anything written meanwhile, so each game's compatibility
+tool and launch options are written only while Steam is closed. `steam-apps.service` does it: before the
+session at boot, at every update, and when Steam has just exited (`steam-apps.path` sees it save). With
+Steam open at an update the service waits for it to close, `nixosctl pending` says so for as long as what
+is declared is not what Steam has, and closing Steam once is all it takes. The same update removes the
+tool links whose build the store no longer has (`config/pkgs/gaming/proton/dead-links.nix`); a link that
+still works, or one made by hand, is never touched.
+
 `nixosctl deploy <host>` brings another machine of this configuration to the commit checked out here:
 it builds that machine's system on this one, copies it over, and runs `git pull` and `nixosctl update`
 there, which then has nothing to build. It refuses a checkout with uncommitted changes or a commit that
@@ -1215,14 +1223,14 @@ What the split of November 2026 left for a person to do or decide. None of it bl
 
 - **Reboot each machine once.** The boot-time reset now comes from `schiffy91/immutability`; its first run
   on real hardware is the next boot. The previous generation stays selectable in the boot menu.
-- **Close Steam and run `nixosctl update` once on each machine.** Steam's tool mapping is only rewritten
-  while Steam is closed. Until then it names `proton-custom-GE-Proton11-12`, whose links stay valid.
+- **Close Steam once on each machine.** Steam's tool mapping is only rewritten while Steam is closed, which
+  `steam-apps.service` now waits for by itself. Until then it names `proton-custom-GE-Proton11-12`, whose links stay valid.
   Afterwards app `0` should map to `proton-sge-GE-Proton11-12` at priority 75 with no entry naming the old
   tool, and the Battle.net launcher should open under it.
 - **The Wine working tree** at `config/pkgs/gaming/proton/custom/src` (4 GB, not in git) stays where it is.
   The development loop expects it at `~/Projects/proton-sge/src` (`~/Projects` is persisted). Moving it, and removing the old links
-  `~/Games/proton/proton-custom-*` and `~/.local/share/Steam/compatibilitytools.d/proton-custom-*`, is the
-  owner's call.
+  `~/Games/proton/proton-custom-*` and `~/.local/share/Steam/compatibilitytools.d/proton-custom-*` that still
+  work, is the owner's call; the ones that point at a build the store no longer has are removed by an update.
 - **Both machines start from an empty root from their next boot** (`settings.disk.immutability.base =
   "empty"`, set on 17 November). What each machine's `CLEAN` held outside the persisted paths, and so what
   is no longer there, is summarised under Immutability: on the desktop two unused caches from May

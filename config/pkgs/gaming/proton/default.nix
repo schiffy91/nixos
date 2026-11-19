@@ -43,6 +43,7 @@ in lib.mkMerge [
       user_folder "${compatDir}"
       link_tool "${path}"
       link_tool "${steamPath}"
+      ${import ./dead-links.nix { inherit pkgs; }} "${protonDir}" "${compatDir}"
     '';
   })
 ]

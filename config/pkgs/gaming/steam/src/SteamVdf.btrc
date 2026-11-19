@@ -111,7 +111,5 @@ class SteamVdf {
         return current;
     }
 
-    class void saveChanged(string path, JSONValue document, string before) {
-        if (!document.stringify().equals(before)) { ModTree.write(path, SteamVdf.render(document)); }
-    }
+    class void save(string path, JSONValue document) { ModTree.write(path, SteamVdf.render(document)); }
 }

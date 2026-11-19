@@ -12,6 +12,8 @@ class SteamConfiguration {
     public string suffix;
     public string wrapper;
     public Vector<string> selected;
+    public bool check;  // --check: write nothing, only find out whether anything would be
+    public bool differs;
 
     public SteamConfiguration(CLICommandLine args) {
         self.library = SteamLibrary(args.option("--steam-path"));
@@ -20,9 +22,11 @@ class SteamConfiguration {
         self.suffix = args.option("--default-launch-suffix");
         self.wrapper = args.option("--launch-wrapper").trim();
         self.selected = args.values("--app-id");
+        self.check = args.flag("--check");
+        self.differs = false;
         self.declared = JSONValue.parse(Path.readAll(args.option("--app-config")));
         if (self.library.root.isEmpty() || self.defaultTool.isEmpty() || !self.declared.isObject()) {
-            throw "Required: --steam-path PATH --default-tool NAME --app-config JSON [--app-id ID]";
+            throw "Required: --steam-path PATH --default-tool NAME --app-config JSON [--app-id ID] [--check]";
         }
         for id in self.declared.keys() {
             var entry = self.declared.get(id);
@@ -70,6 +74,12 @@ class SteamConfiguration {
         return ids;
     }
 
+    private void save(string path, JSONValue document, string before) {
+        if (document.stringify() == before) { return; }
+        self.differs = true;
+        if (!self.check) { SteamVdf.save(path, document); }
+    }
+
     public void apply() {
         var ids = self.appIds();
         var path = f"{self.library.root}/config/config.vdf";
@@ -85,7 +95,7 @@ class SteamConfiguration {
                 var tool = app.has("compatTool") ? app.get("compatTool").asString() : self.defaultTool;
                 mapping.set(id, SteamConfiguration.compatibility(tool, "250"));
             }
-            SteamVdf.saveChanged(path, document, before);
+            self.save(path, document, before);
         }
         for path in self.library.userConfigs() {
             var document = SteamVdf.read(path);
@@ -101,7 +111,7 @@ class SteamConfiguration {
                     controller.set("UseSteamControllerConfig", JSONValue.makeString(SteamConfiguration.inputValue(app.get("steamInput").asString())));
                 }
             }
-            SteamVdf.saveChanged(path, document, before);
+            self.save(path, document, before);
         }
     }
 }

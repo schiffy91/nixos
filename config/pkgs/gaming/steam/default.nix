@@ -16,6 +16,11 @@ let
   apps = config.settings.apps;
   shortcuts = pkgs.writeText "steam-shortcuts.json" (builtins.toJSON apps.gaming.steam.shortcuts);
   inherit (import ./lib.nix { inherit pkgs inputs; }) configureSteamApps;
+  whenSteamIsClosed = import ./when-closed.nix { inherit pkgs user; ready = "${config.systemd.package}/bin/systemd-notify --ready"; };
+  configureApps = lib.concatStringsSep " " [
+    "${configureSteamApps}/bin/configure-steam-apps" "--steam-path" (lib.escapeShellArg steamPath) "--default-tool" (lib.escapeShellArg protonSgeName)
+    "--default-launch-prefix" (lib.escapeShellArg defaultLaunchPrefix) "--launch-wrapper" (lib.escapeShellArg gameLaunch.protonPrefix) "--app-config" "${appConfig}"
+  ];
 in {
   config = lib.mkMerge [
     (lib.mkIf (config.settings.apps.gaming.steam.enable) {
@@ -49,17 +54,36 @@ in {
       _module.args.steam = { inherit configureSteamApps; };
     }
     (lib.mkIf (config.settings.apps.gaming.steam.protonSge.enable) {
-      system.activationScripts.steamApps = lib.stringAfter [ "users" ] ''
-        if ${pkgs.procps}/bin/pgrep -u ${user} -x steam >/dev/null; then
-          echo "Steam is running; close it and rebuild to apply Steam settings."
-        elif [ -d "${steamPath}/config" ]; then
-          runuser="${pkgs.util-linux}/bin/runuser -u ${user} --"
-          $runuser ${configureSteamApps}/bin/configure-steam-apps \
-            --steam-path "${steamPath}" \
-            --default-tool "${protonSgeName}" \
-            --default-launch-prefix ${lib.escapeShellArg defaultLaunchPrefix} \
-            --launch-wrapper ${lib.escapeShellArg gameLaunch.protonPrefix} \
-            --app-config ${appConfig}
+      # The compatibility tool of each game and its launch options, written while Steam is closed: before
+      # the session at boot, at every update, and when Steam has just exited (it saves config.vdf as it
+      # goes, which starts this again). With Steam open nothing is lost: it waits, and `nixosctl pending` says so.
+      systemd.services.steam-apps = {
+        description = "Declared Steam compatibility tools and launch options";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "display-manager.service" ];
+        unitConfig.RequiresMountsFor = steamPath;
+        unitConfig.ConditionPathIsDirectory = "${steamPath}/config";
+        serviceConfig = {
+          Type = "notify";
+          NotifyAccess = "all";  # the readiness word comes from systemd-notify, a child of the script
+          User = user;
+          ExecStart = whenSteamIsClosed "steam-apps" configureApps;
+        };
+      };
+      systemd.paths.steam-apps = {
+        description = "Steam saved its configuration";
+        wantedBy = [ "multi-user.target" ];
+        pathConfig.PathChanged = "${steamPath}/config/config.vdf";
+      };
+      system.activationScripts.steamApps = ''
+        if [ "''${NIXOS_ACTION-}" = dry-activate ]; then list=/run/nixos/dry-activation-restart-list; else list=/run/nixos/activation-restart-list; fi
+        echo steam-apps.service >> "$list"  # an update starts it though the unit itself may not have changed
+      '';
+      environment.etc."${config.settings.apps.utils.nixosctl.pendingHooksDir}/steam-apps".source = pkgs.writeShellScript "steam-apps-pending" ''
+        if ${pkgs.procps}/bin/pgrep -u ${user} -x steam > /dev/null && [ -d ${lib.escapeShellArg "${steamPath}/config"} ]; then
+          if [ "$(${pkgs.coreutils}/bin/id -u)" = 0 ]; then asUser="${pkgs.util-linux}/bin/runuser -u ${user} --"; else asUser=; fi
+          $asUser ${configureApps} --check > /dev/null 2>&1
+          [ $? != 2 ] || echo "Steam is open, so the declared compatibility tools and launch options are not written yet: they are when Steam closes"
         fi
       '';
     })

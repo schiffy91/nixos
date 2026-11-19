@@ -3,7 +3,10 @@ import Library.Console;
 import ./SteamConfiguration.btrc;
 
 int main(int argc, char** argv) {
-    try { SteamConfiguration(CLICommandLine.parse(CLIArgs(argc, argv))).apply(); }
-    catch (string error) { Console.error(f"configure-steam-apps: {error}"); return 1; }
+    try {
+        var configuration = SteamConfiguration(CLICommandLine.parse(CLIArgs(argc, argv)));
+        configuration.apply();
+        if (configuration.check && configuration.differs) { return 2; }  // what is declared is not what Steam has
+    } catch (string error) { Console.error(f"configure-steam-apps: {error}"); return 1; }
     return 0;
 }

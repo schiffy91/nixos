@@ -13,6 +13,8 @@ in pkgs.linkFarm "gaming-tests" [
   { name = "semu-contracts"; path = inputs.semu.checks.${system}.contracts; }
   { name = "sunshine-session"; path = import ./sunshine-session.nix { inherit pkgs; }; }
   { name = "proton-session"; path = import ./proton-session.nix { inherit pkgs; }; }
+  { name = "proton-dead-links"; path = import ./proton-dead-links.nix { inherit pkgs; }; }
+  { name = "steam-when-closed"; path = import ./steam-when-closed.nix { inherit pkgs; }; }
   { name = "affinity"; path = import ./affinity.nix { inherit pkgs inputs; }; }
   { name = "deckpad"; path = inputs.deckpad.checks.${system}.unit-deckpad; }  # the program's own suite, from its repository
   { name = "tools"; path = import ./tools.nix { inherit pkgs inputs; }; }
