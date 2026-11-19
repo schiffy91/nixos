@@ -104,7 +104,7 @@ class GamingTests {
         asked.flag("--steam-path", steam).flag("--default-tool", "unused").flag("--app-config", declaration).flag("--app-id", "244210");
         var local = f"{steam}/userdata/1/config/localconfig.vdf";
         var untouched = Path.readAll(local);
-        Expect.isTrue(UnixShell().run(asked.render() + " --check").code == 2);
+        Expect.isTrue(UnixShell().run(asked.render() + " --check", logFailure=false).code == 2);  // the answer, not a failure
         Expect.isTrue(Path.readAll(local).equals(untouched));
         UnixShell().run(asked.render(), throwOnFailure=true);
         Expect.isTrue(!Path.readAll(local).equals(untouched));
