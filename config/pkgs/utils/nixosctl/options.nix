@@ -8,7 +8,7 @@ in {
     settings.apps.utils.nixosctl.lab.enable = mkSetting bool false;  # the VM lab, for a machine that runs the graph
     settings.apps.utils.nixosctl.settings = mkSetting (pkgs.formats.toml {}).type {};
     settings.apps.utils.nixosctl.upgradeHooksDir = mkSetting str "nixosctl/upgrade.d";  # under /etc; modules drop pin refreshers here
-    settings.apps.utils.nixosctl.pendingHooksDir = mkSetting str "nixosctl/pending.d";  # under /etc; each prints a line for what a switch left waiting
+    settings.apps.utils.nixosctl.pendingHooksDir = mkSetting str "nixosctl/pending.d";  # under /etc; the tool reads this very place
     settings.apps.utils.nixosctl.apps = mkSetting (attrsOf (submodule {
       options.description = mkSetting str "";
       options.commands = mkSetting (attrsOf (submodule {

@@ -256,7 +256,7 @@ class NixosCtl {
         }
 
         if (command.equals("pending")) {
-            PendingChanges.report(PathTools.join("/etc", self.config.evalString("config.settings.apps.utils.nixosctl.pendingHooksDir")));
+            PendingChanges.report();
             return 0;
         }
 

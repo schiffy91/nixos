@@ -9,6 +9,10 @@ in {
   imports = [ ./ui ];
   config = lib.mkMerge [
     {
+      assertions = [ {
+        assertion = config.settings.apps.utils.nixosctl.pendingHooksDir == "nixosctl/pending.d";
+        message = "nixosctl reads /etc/nixosctl/pending.d and nowhere else (PendingChanges.hooksDirectory): settings.apps.utils.nixosctl.pendingHooksDir cannot be changed";
+      } ];
       settings.apps.utils.nixosctl.configPath = lib.mkIf (config.settings.apps.utils.nixosctl.settings != {})
         (lib.mkDefault (toString ((pkgs.formats.toml {}).generate "nixosctl.toml" config.settings.apps.utils.nixosctl.settings)));
     }

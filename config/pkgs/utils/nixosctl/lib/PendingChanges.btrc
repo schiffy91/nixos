@@ -7,6 +7,10 @@ import Library.Vector;
 // What a switch put in place that is not in effect yet. An update ends by saying it, so that nothing waits
 // for a reboot or for a closed program without a word.
 class PendingChanges {
+    // Where modules put what they know to be waiting. It is a fixed place: finding it by evaluating the
+    // configuration cost every update an evaluation, and failed on a machine that is not one of its hosts.
+    class string hooksDirectory() { return "/etc/nixosctl/pending.d"; }
+
     class string storeDirectory(string path) {  // /nix/store/<hash>-<name> of a path inside it
         if (!path.startsWith("/nix/store/")) { return ""; }
         var rest = path.substring(11, path.length - 11);
@@ -76,14 +80,14 @@ class PendingChanges {
         return waiting;
     }
 
-    class Vector<string> all(string hooksDirectory) {
+    class Vector<string> all(string hooksDirectory = PendingChanges.hooksDirectory()) {
         var waiting = PendingChanges.boot("/run/booted-system", "/run/current-system");
         waiting.extend(PendingChanges.services("/etc/systemd/system"));
         waiting.extend(PendingChanges.hooks(hooksDirectory));
         return waiting;
     }
 
-    class void report(string hooksDirectory) {
+    class void report(string hooksDirectory = PendingChanges.hooksDirectory()) {
         var waiting = PendingChanges.all(hooksDirectory);
         if (waiting.isEmpty()) { return; }
         Console.log("In place, and not in effect yet:");

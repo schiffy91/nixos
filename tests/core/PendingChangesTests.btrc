@@ -45,5 +45,7 @@ int main() {
     Expect.strEq(said.get(0), "Steam is open");
     Expect.strEq(said.get(1), "and a second thing");
     Expect.intEq(PendingChanges.hooks(hooks.join("absent")).length, 0);
+    // The folder is a fixed one: no evaluation of the configuration stands between an update and its report.
+    Expect.strEq(PendingChanges.hooksDirectory(), "/etc/nixosctl/pending.d");
     return 0;
 }

@@ -212,7 +212,7 @@ class NixosRebuilder {
                 PermissionsManager(self.config).secureTree(username);
                 var logs = self.homeManagerLogs();
                 if (!logs.isEmpty()) { Console.log(logs); }
-                PendingChanges.report(PathTools.join("/etc", self.config.evalString("config.settings.apps.utils.nixosctl.pendingHooksDir")));
+                PendingChanges.report();
             } else if (step == UPDATE_TRIM_GENERATIONS) { self.requireOk("trimming old generations", self.trimGenerations()); }
             else if (step == UPDATE_COLLECT_GARBAGE) { self.requireOk("nix-collect-garbage", self.runNixCollectGarbage()); }
         }
