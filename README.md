@@ -368,7 +368,8 @@ that left the volumes as they were instead of resetting them, with its reason).
 
 Steam saves its configuration as it exits, over anything written meanwhile, so each game's compatibility
 tool and launch options are written only while Steam is closed. `steam-apps.service` does it: before the
-session at boot, at every update, and when Steam has just exited (`steam-apps.path` sees it save). With
+session at boot, at an update that changes what is declared, and when Steam has just exited
+(`steam-apps.path` sees it save). With
 Steam open at an update the service waits for it to close, `nixosctl pending` says so for as long as what
 is declared is not what Steam has, and closing Steam once is all it takes. The same update removes the
 tool links whose build the store no longer has (`config/pkgs/gaming/proton/dead-links.nix`); a link that

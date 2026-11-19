@@ -55,8 +55,10 @@ in {
     }
     (lib.mkIf (config.settings.apps.gaming.steam.protonSge.enable) {
       # The compatibility tool of each game and its launch options, written while Steam is closed: before
-      # the session at boot, at every update, and when Steam has just exited (it saves config.vdf as it
-      # goes, which starts this again). With Steam open nothing is lost: it waits, and `nixosctl pending` says so.
+      # the session at boot, at an update that changes what is declared (the unit changes, and a changed
+      # unit that is active is started anew), and when Steam has just exited (it saves config.vdf as it
+      # goes, and the path unit below then starts this again). With Steam open nothing is lost: it waits,
+      # and `nixosctl pending` says so.
       systemd.services.steam-apps = {
         description = "Declared Steam compatibility tools and launch options";
         wantedBy = [ "multi-user.target" ];
@@ -66,19 +68,26 @@ in {
         serviceConfig = {
           Type = "notify";
           NotifyAccess = "all";  # the readiness word comes from systemd-notify, a child of the script
+          RemainAfterExit = true;  # done is still active, so that an update which changes it runs it again
           User = user;
           ExecStart = whenSteamIsClosed "steam-apps" configureApps;
+        };
+      };
+      systemd.services.steam-apps-again = {
+        description = "Steam saved its configuration: its declared tools and options are looked at again";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${config.systemd.package}/bin/systemctl restart --no-block steam-apps.service";
         };
       };
       systemd.paths.steam-apps = {
         description = "Steam saved its configuration";
         wantedBy = [ "multi-user.target" ];
-        pathConfig.PathChanged = "${steamPath}/config/config.vdf";
+        pathConfig = {
+          PathChanged = "${steamPath}/config/config.vdf";
+          Unit = "steam-apps-again.service";
+        };
       };
-      system.activationScripts.steamApps = ''
-        if [ "''${NIXOS_ACTION-}" = dry-activate ]; then list=/run/nixos/dry-activation-restart-list; else list=/run/nixos/activation-restart-list; fi
-        echo steam-apps.service >> "$list"  # an update starts it though the unit itself may not have changed
-      '';
       environment.etc."${config.settings.apps.utils.nixosctl.pendingHooksDir}/steam-apps".source = pkgs.writeShellScript "steam-apps-pending" ''
         if ${pkgs.procps}/bin/pgrep -u ${user} -x steam > /dev/null && [ -d ${lib.escapeShellArg "${steamPath}/config"} ]; then
           if [ "$(${pkgs.coreutils}/bin/id -u)" = 0 ]; then asUser="${pkgs.util-linux}/bin/runuser -u ${user} --"; else asUser=; fi
