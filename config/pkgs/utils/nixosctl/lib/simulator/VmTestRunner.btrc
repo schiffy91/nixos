@@ -1,6 +1,7 @@
 import Library.Console;
 import Library.Process;
 import Library.Strings;
+import Library.Timer;
 import Library.Vector;
 import ../core/NixosLog.btrc;
 import ./Spec.btrc;
@@ -281,9 +282,13 @@ class VmTestRunner {
         if (self.spec.operations.len == 0) {
             NixosLog.fatal("VM spec has no operations");
         }
-        for op in self.spec.operations {
+        for (int index = 0; index < self.spec.operations.len; index++) {
             if (self.failures > 0) { break; }
+            var op = self.spec.operations.get(index);
+            var started = MonotonicClock.milliseconds();
             self.runOperation(op);
+            var seconds = (MonotonicClock.milliseconds() - started) / 1000;
+            if (seconds >= 5) { NixosLog.info(f"e2e {self.spec.name}: step {index} ({op.kind}) took {seconds} s"); }  // where a long node's time goes
         }
         if (self.failures > 0) {
             self.vm.stop();

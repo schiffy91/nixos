@@ -983,7 +983,9 @@ at present. The families are `installer-*`, `install-*`, `immutability-*`,
 `recovery-*`, `secure-boot-*`, `tpm2-*`, `boot-*`, `nixosctl-*`, `password-change*`,
 and `qmp-probe`. What only evaluates the configuration (`app-settings`, `qemu-hosts`) and the unit
 suites that are one derivation each are flake checks, built by `ci/checks.sh`; the graph runner itself is
-tested by `make harness`.
+tested by `make harness`. A node's log (`.vm/e2e/logs/<node>.log`) says how long each of its steps took
+when that was five seconds or more (`step 11 (install-nixos) took 213 s`), which is where to look before
+making a long node shorter.
 
 Beside `required`, the graph file names sets, run with `nixosctl graph tests/graph.json run-set <name>`:
 `aarch64` (`make -C tests graph-aarch64`) is the install, recovery and Secure Boot chain on an aarch64
