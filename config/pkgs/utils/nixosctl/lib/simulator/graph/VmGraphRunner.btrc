@@ -746,6 +746,7 @@ class VmGraphRunner {
         Vector<string> blocked = [];
         Vector<GraphJob> running = [];
         Vector<string> pending = self.longestFirst(order);
+        Map<string, VmTestSpec> prepared = {};  // nodes found to need a run: read and hashed once, however long they wait
         int passed = 0;
         int skipped = 0;
         while (!pending.isEmpty() || !running.isEmpty()) {
@@ -782,11 +783,14 @@ class VmGraphRunner {
                     continue;
                 }
                 if (!parentsDone) { waiting.push(id); continue; }
-                var spec = self.specFor(node);  // only now: a state's hash takes in its parent's recorded hash
-                if (!self.force() && self.ready(spec)) {
-                    outcome.put(id, "skipped"); skipped++;
-                    NixosLog.info(f"graph {name}: skip {id} -> {spec.state}@{spec.stateHashShort}");
-                    continue;
+                var spec = prepared.has(id) ? prepared.get(id) : self.specFor(node);  // only now: a state's hash takes in its parent's recorded hash
+                if (!prepared.has(id)) {
+                    if (!self.force() && self.ready(spec)) {
+                        outcome.put(id, "skipped"); skipped++;
+                        NixosLog.info(f"graph {name}: skip {id} -> {spec.state}@{spec.stateHashShort}");
+                        continue;
+                    }
+                    prepared.put(id, spec);
                 }
                 int used = 0;
                 for job in running { used += job.memory; }
