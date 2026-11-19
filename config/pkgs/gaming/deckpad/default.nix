@@ -13,6 +13,10 @@ in {
     user = config.settings.users.admin.username;
     tray = config.settings.desktop.enable;
   };
+  # A boot must not wait for the network on this unit's account (NetworkManager-wait-online, 7.6 s on the
+  # desktop): it dials until the Deck answers anyway. Deck Pad's own module says so from its next
+  # release, which this configuration takes with the compiler it needs; then this line goes.
+  systemd.services.deckpad-attach = lib.mkIf (settings.enable && settings.role != "controller") { after = lib.mkForce [ ]; wants = lib.mkForce [ ]; };
   settings.disk.immutability.persist.paths = lib.mkIf settings.enable config.services.deckpad.statePaths;
   settings.networking.ports.tcp = lib.mkIf controller [ settings.port ];
   settings.apps.utils.nixosctl.tray.status = lib.mkIf controller { "Deck Pad".run = "deckpad status 2>&1"; };  # the Deck runs the service that answers
