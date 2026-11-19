@@ -1,6 +1,6 @@
 # The reset at boot and what persists are schiffy91/immutability. This fills that module's options from this
 # configuration's settings, which hosts and modules keep setting, and keeps the default persisted paths.
-{ config, inputs, lib, ... }:
+{ config, inputs, lib, pkgs, ... }:
 let
 	settings = config.settings.disk;
 in {
@@ -22,5 +22,11 @@ in {
 			inherit (settings.immutability.persist) subvolumeRoot paths neededForBoot;
 			required = lib.filter (path: lib.hasPrefix "${path}/" config.settings.users.admin.hashedPasswordFile) settings.immutability.persist.neededForBoot;  # boot stops without the password file
 		};
+	};
+	# A boot that did not reset its volumes leaves its reason here; `nixosctl pending` and an update repeat it.
+	environment.etc."${config.settings.apps.utils.nixosctl.pendingHooksDir}/immutability" = lib.mkIf settings.immutability.enable {
+		source = pkgs.writeShellScript "immutability-pending" ''
+			[ ! -f /run/immutability-refused ] || echo "this boot did not reset the volumes: $(${pkgs.coreutils}/bin/cat /run/immutability-refused)"
+		'';
 	};
 }

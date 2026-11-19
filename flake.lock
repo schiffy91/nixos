@@ -650,11 +650,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795057505,
-        "narHash": "sha256-cLZKYnbyihxp1nmKjqDxHtNHf+ycdU6XCoa+zNJubaI=",
+        "lastModified": 1795067191,
+        "narHash": "sha256-/190hJSyftiiVOJKu0/5HiCSjLxLsbhYrVxlwp17v1U=",
         "owner": "schiffy91",
         "repo": "immutability",
-        "rev": "04726bf876890cafc8c68b861a8fa05fb6368df0",
+        "rev": "ee0623aac995118e9520b44a141cb3ca9b064f23",
         "type": "github"
       },
       "original": {
@@ -820,11 +820,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1794890597,
-        "narHash": "sha256-lME2lHoDHAaSHP3/okgiVoJ0icVEvsQH8LeU3We7tcc=",
+        "lastModified": 1794537146,
+        "narHash": "sha256-Wpz/7x/YWnDIBu7yj6ixe8j6fIMsidd9Y+o1PqPF3iM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+        "rev": "d5cc6833999746cffdfe0598f7bc801a57b887a9",
         "type": "github"
       },
       "original": {
@@ -903,11 +903,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1794970068,
-        "narHash": "sha256-xMTmI7Iydt1jI7sssJe4BwWCH+iPqA0Zne0iWy8k2l0=",
+        "lastModified": 1795063070,
+        "narHash": "sha256-AOyB0/sDebszr61qOxTA37c+M5H3SlVDTKZ4x10fdgU=",
         "owner": "schiffy91",
         "repo": "proton-sge",
-        "rev": "f0bf7e21d389652890b979e0f65f97aef67d3f2d",
+        "rev": "12a37103c0d185766bc1dc4b3fedcdf3d394a4e0",
         "type": "github"
       },
       "original": {

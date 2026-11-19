@@ -363,7 +363,8 @@ An update ends by saying what it put in place that is not in effect yet, and `ni
 at any time: a kernel, initrd or modules that only the next reboot brings into use; a service that a
 switch leaves running on purpose (`X-RestartIfChanged=false`, the Drive's mount for one) and that is
 still its earlier build; and whatever a module knows to be waiting, which it says through an executable
-in `/etc/nixosctl/pending.d` (Steam's shortcuts, which are only rewritten while Steam is closed).
+in `/etc/nixosctl/pending.d` (Steam's shortcuts, which are only rewritten while Steam is closed; a boot
+that left the volumes as they were instead of resetting them, with its reason).
 
 Steam saves its configuration as it exits, over anything written meanwhile, so each game's compatibility
 tool and launch options are written only while Steam is closed. `steam-apps.service` does it: before the
