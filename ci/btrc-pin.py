@@ -40,9 +40,11 @@ class Pins:
     @classmethod
     def verdicts(cls, revision):
         runs = json.loads(cls.run("gh", "run", "list", "--repo", cls.repository, "--commit", revision, "--limit", "100", "--json", "name,status,conclusion,createdAt"))
-        latest = {}
-        for run in sorted(runs, key=lambda run: run["createdAt"]): latest[run["name"]] = run["conclusion"] or run["status"]
-        return latest
+        latest, settled = {}, {}
+        for run in sorted(runs, key=lambda run: run["createdAt"]):
+            latest[run["name"]] = run["conclusion"] or run["status"]
+            if run["conclusion"] not in (None, "", "cancelled", "skipped"): settled[run["name"]] = run["conclusion"]  # a queued or cancelled repeat does not undo a run that finished
+        return {**latest, **settled}
 
     @classmethod
     def passed(cls, revision):
