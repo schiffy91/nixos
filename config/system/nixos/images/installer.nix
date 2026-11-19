@@ -7,6 +7,13 @@ let
   lib = inputs.nixpkgs.lib;
   btrcpy = inputs.btrc.packages.${system}.btrcpy;
   nixosctl = import ../../../pkgs/utils/nixosctl/package.nix { inherit pkgs lib inputs btrcpy; };
+  # What goes to /etc/nixos: everything an install evaluates or builds, and not the prose. The image
+  # is rebuilt when this changes, and every test that boots it runs again; a README is no reason to.
+  repository = builtins.path {
+    path = self;
+    name = "nixos-repository";
+    filter = path: type: baseNameOf path != "README.md" && baseNameOf path != ".github";
+  };
 
   installerSystem = lib.nixosSystem {
     inherit system;
@@ -53,7 +60,7 @@ let
           };
           script = ''
             ${pkgs.coreutils}/bin/mkdir -p /etc/nixos
-            ${pkgs.rsync}/bin/rsync -a --chmod=u+w ${self}/ /etc/nixos/
+            ${pkgs.rsync}/bin/rsync -a --chmod=u+w ${repository}/ /etc/nixos/
           '';
         };
       }
