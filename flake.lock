@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795029022,
-        "narHash": "sha256-tB3mCdnUD2b7hgbMujURFR2QvgpxSgQCDF9w4ugKqIs=",
+        "lastModified": 1795096503,
+        "narHash": "sha256-RbosZFph8KOKcshnuHbOKyfjp3cmGgHXRfAKA2pi1q4=",
         "owner": "schiffy91",
         "repo": "btrc",
-        "rev": "eda57d52313a70e86dbd0b5dc8efec298fa7fd14",
+        "rev": "e84667b2ea39619814d930097d676a16ad63e1da",
         "type": "github"
       },
       "original": {
@@ -325,11 +325,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795055348,
-        "narHash": "sha256-898ZUfyPrGXcqSGREC/2p+DabsNZkYRuUdoBTv6mFMw=",
+        "lastModified": 1795104932,
+        "narHash": "sha256-H/zud0DZx5LZTbWFI2islu0F1kuUpilnjGD9qsy48Jc=",
         "owner": "schiffy91",
         "repo": "deckpad",
-        "rev": "7a80155ac515681286680eb41e624d994032dc1d",
+        "rev": "45ffcf4b45db278316428bcdfc7d58346373d1af",
         "type": "github"
       },
       "original": {
@@ -368,11 +368,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795094358,
-        "narHash": "sha256-uW+tlFujo9mzwnZ80kKLYrQwCg+i05WJEjRbo8kqCj0=",
+        "lastModified": 1795104698,
+        "narHash": "sha256-pMa9O8tcmRqPe8BYKEVuoqca7YOlaWGb0L5Wo2bzUGs=",
         "owner": "schiffy91",
         "repo": "drive",
-        "rev": "e3ee959046fb57cee73e71fbd00fcf0d84913561",
+        "rev": "5e5162931b1e80b72d63378fa95c92ec9ffebd28",
         "type": "github"
       },
       "original": {
@@ -650,11 +650,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795067191,
-        "narHash": "sha256-/190hJSyftiiVOJKu0/5HiCSjLxLsbhYrVxlwp17v1U=",
+        "lastModified": 1795103958,
+        "narHash": "sha256-W38MLfClWGivAQQIht7yIpAWNFmKF/RFjKE0kO9yYpk=",
         "owner": "schiffy91",
         "repo": "immutability",
-        "rev": "ee0623aac995118e9520b44a141cb3ca9b064f23",
+        "rev": "01f99b19aa0ef7b4d11dee9c966558b4679341bd",
         "type": "github"
       },
       "original": {
@@ -903,11 +903,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1795063070,
-        "narHash": "sha256-AOyB0/sDebszr61qOxTA37c+M5H3SlVDTKZ4x10fdgU=",
+        "lastModified": 1795104142,
+        "narHash": "sha256-ysOMCwcQEthnugsj1QiWmUP+S6vpf8d4BQR07S4nRYc=",
         "owner": "schiffy91",
         "repo": "proton-sge",
-        "rev": "12a37103c0d185766bc1dc4b3fedcdf3d394a4e0",
+        "rev": "9db53e6f6be98d6e8b2efd4f412b5f3f00cc79c6",
         "type": "github"
       },
       "original": {
@@ -1044,11 +1044,11 @@
         "retroarch": "retroarch"
       },
       "locked": {
-        "lastModified": 1795082956,
-        "narHash": "sha256-a+EQTANgdzyfgS2U8G6ImtOnG+DR10DYGcgIXSIKBlA=",
+        "lastModified": 1795105132,
+        "narHash": "sha256-BKMp0HiEsmma8k0JaGnrWQL6k/SdEqr14C5htWs4p3Q=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "e26f1f3cc6744049e1b2d1fbdc571065baf2818d",
+        "rev": "615c30bc91ce73e90b940511f875d3ca2dc95a50",
         "type": "github"
       },
       "original": {
