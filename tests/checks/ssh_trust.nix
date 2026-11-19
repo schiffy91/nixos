@@ -3,7 +3,7 @@
 let
   linux = map (host: {
     name = hosts.hostOutputName host.module;
-    inherit (systems.mkSystem host.module (lib.head systems.bootableTargets) systems.systemModuleFiles) config;
+    inherit (systems.systemOf host.module (lib.head systems.bootableTargets)) config;
   }) hosts.physical;
   darwin = map (host: { inherit (host) name; inherit (systems.darwinConfigurations.${host.name}) config; }) hosts.darwin;
   trusted = host: host.config.settings.users.admin.authorizedKeys;

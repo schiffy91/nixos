@@ -25,13 +25,16 @@ let
     };
   mkSystem = hostFile: target: modules:
     systemWith { system = hosts.hostSystem hostFile; module = hostFile; inherit target modules; };
-in {
-  inherit bootableTargets systemModuleFiles mkSystem systemWith;
   nixosConfigurations = lib.listToAttrs (lib.concatMap (host:
     map (target: {
       name = "${hosts.hostOutputName host.module}-${target}";
       value = mkSystem host.module target systemModuleFiles;
     }) bootableTargets) hosts.linux);
+  # A registered host's system, as nixosConfigurations holds it. Every output that reads a host asks here,
+  # so one evaluator evaluates a host once however many checks, installers and disk plans read it.
+  systemOf = hostFile: target: nixosConfigurations."${hosts.hostOutputName hostFile}-${target}";
+in {
+  inherit bootableTargets systemModuleFiles mkSystem systemWith systemOf nixosConfigurations;
   darwinConfigurations = lib.listToAttrs (map (host: {
     name = host.name;
     value = inputs.nix-darwin.lib.darwinSystem {

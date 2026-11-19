@@ -7,14 +7,14 @@ let
   mkInstaller = system: prebuiltHostFiles:
     let
       keyHost = lib.findFirst (candidate: candidate.system == system) (lib.head hosts.physical) hosts.physical;
-      host = systems.mkSystem keyHost.module (lib.head systems.bootableTargets) systems.systemModuleFiles;
+      host = systems.systemOf keyHost.module (lib.head systems.bootableTargets);
     in import ../system/nixos/images/installer.nix {
       inherit inputs self system;
       authorizedKeys = host.config.settings.users.admin.authorizedKeys;
       stateVersion = host.config.system.stateVersion;
       prebuiltSystems = lib.listToAttrs (lib.concatMap (prebuilt:
         map (target:
-          let built = (systems.mkSystem prebuilt target systems.systemModuleFiles).config.system.build;
+          let built = (systems.systemOf prebuilt target).config.system.build;
           in {
             name = "${hosts.hostOutputName prebuilt}-${target}";
             value = { system = built.toplevel; disko = built.diskoScript; mount = built.mountScript; };
@@ -22,7 +22,7 @@ let
       prebuiltSources = lib.optionals (prebuiltHostFiles != [ ]) (flakeSources 3 inputs);
       prebuiltName = lib.concatMapStringsSep "-" hosts.hostOutputName prebuiltHostFiles;
       touchKeyboard = lib.any (prebuilt:
-        (systems.mkSystem prebuilt (lib.head systems.bootableTargets) systems.systemModuleFiles).config.settings.boot.touchKeyboard)
+        (systems.systemOf prebuilt (lib.head systems.bootableTargets)).config.settings.boot.touchKeyboard)
         prebuiltHostFiles;
     };
   installerPackages = system:

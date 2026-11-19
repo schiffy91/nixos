@@ -81,7 +81,7 @@ in lib.genAttrs hosts.systems (system:
     systemHosts = lib.filter (host: host.system == system) hosts.physical;
     configurations = lib.concatMap (host: map (target: {
       name = "${hosts.hostOutputName host.module}-${target}";
-      configuration = systems.mkSystem host.module target systems.systemModuleFiles;
+      configuration = systems.systemOf host.module target;
     }) systems.bootableTargets) systemHosts;
     diskChecks = lib.concatMap (host: map (target: mkDiskoCheck {
       inherit pkgs target;
@@ -90,7 +90,7 @@ in lib.genAttrs hosts.systems (system:
     }) diskOperations.targets) systemHosts;
     hostChecks = map (mkCheck: mkCheck { inherit pkgs system configurations; }) mkHostChecks;
     touchHost = lib.findFirst (host:
-      (systems.mkSystem host.module (lib.head systems.bootableTargets) systems.systemModuleFiles).config.settings.boot.touchKeyboard)
+      (systems.systemOf host.module (lib.head systems.bootableTargets)).config.settings.boot.touchKeyboard)
       null systemHosts;
     installerCheck = mkInstallerCheck {
       inherit pkgs system;

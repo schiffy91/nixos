@@ -3,7 +3,7 @@ let
   targets = [ "Disk-Operation" ];
   mkDiskoSystem = hostFile: target:
     let
-      host = systems.mkSystem hostFile (lib.head systems.bootableTargets) systems.systemModuleFiles;
+      host = systems.systemOf hostFile (lib.head systems.bootableTargets);
     in lib.nixosSystem {
       system = hosts.hostSystem hostFile;
       specialArgs = { inherit inputs; };
