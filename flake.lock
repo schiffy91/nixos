@@ -1044,11 +1044,11 @@
         "retroarch": "retroarch"
       },
       "locked": {
-        "lastModified": 1795031668,
-        "narHash": "sha256-Iae+E/Lxh0dQ7rTlMF7zQAH5VXvYexL1so9QU96SDOU=",
+        "lastModified": 1795082956,
+        "narHash": "sha256-a+EQTANgdzyfgS2U8G6ImtOnG+DR10DYGcgIXSIKBlA=",
         "owner": "schiffy91",
         "repo": "semu",
-        "rev": "b60fb2ec2662380ba2a923676bef246d7e26301f",
+        "rev": "e26f1f3cc6744049e1b2d1fbdc571065baf2818d",
         "type": "github"
       },
       "original": {
