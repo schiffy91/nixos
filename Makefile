@@ -28,6 +28,9 @@ BTRC_STAMP := $(BUILD_DIR)/.btrc-tool
 NIXOSCTL_ENTRY := config/pkgs/utils/nixosctl/Main.btrc
 NIXOSCTL_C_OUT := $(BUILD_DIR)/nixosctl.c
 NIXOSCTL_BIN := $(BUILD_DIR)/nixosctl
+LAB_ENTRY := config/pkgs/utils/nixosctl/lib/simulator/Main.btrc
+LAB_C_OUT := $(BUILD_DIR)/nixosctl-lab.c
+LAB_BIN := $(BUILD_DIR)/nixosctl-lab
 TRAY_ENTRY := config/pkgs/utils/nixosctl/ui/Main.btrc
 TRAY_C_OUT := $(BUILD_DIR)/nixosctl-tray.c
 TRAY_BIN := $(BUILD_DIR)/nixosctl-tray
@@ -54,13 +57,13 @@ unit_name = $(firstword $(subst :, ,$(1)))
 unit_entry = $(lastword $(subst :, ,$(1)))
 UNIT_BINS := $(foreach t,$(UNIT_TESTS),$(BUILD_DIR)/$(call unit_name,$(t))_test)
 BIN := $(NIXOSCTL_BIN)
-BINS := $(NIXOSCTL_BIN) $(TRAY_BIN) $(BUILD_DIR)/boot-evidence
+BINS := $(NIXOSCTL_BIN) $(LAB_BIN) $(TRAY_BIN) $(BUILD_DIR)/boot-evidence
 SOURCES := $(shell rg --files config tests ci -g '*.btrc' -g '*.h' -g btrc.toml -g btrc.lock | sort)
 UNIT_NAMES := $(foreach t,$(UNIT_TESTS),$(call unit_name,$(t)))
 # <program>=<entry point> for everything built here: ci/btrc-deps.py lists what each is made from, so an
 # edit rebuilds the programs that include the edited file and no others. Without python3 (the installer
 # has none) a program depends on every source, as before.
-PROGRAMS := nixosctl=$(NIXOSCTL_ENTRY) nixosctl-tray=$(TRAY_ENTRY) \
+PROGRAMS := nixosctl=$(NIXOSCTL_ENTRY) nixosctl-lab=$(LAB_ENTRY) nixosctl-tray=$(TRAY_ENTRY) \
 	host-picker-test=tests/host-picker/Main.btrc source-hash-test=tests/harness/source-hash/Main.btrc \
 	disabled-node-test=tests/harness/disabled/Main.btrc graph-runner-test=tests/harness/runner/Main.btrc \
 	host-timeout-test=tests/harness/timeout/Main.btrc boot-evidence=tests/hosts-boot/Main.btrc \
@@ -203,8 +206,16 @@ $(BUILD_DIR)/boot-evidence-test: $(call made_from,boot-evidence-test) flake.lock
 	$(BTRC) --strict-imports tests/hosts-boot/EvidenceTests.btrc -o "$(BUILD_DIR)/boot-evidence-test.c"
 	$(CC) $(CFLAGS) -O2 "$(BUILD_DIR)/boot-evidence-test.c" -lm -lpthread -o "$@"
 
-$(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB)
+$(NIXOSCTL_BIN): $(NIXOSCTL_C_OUT) $(STDLIB_LIB) $(LAB_BIN)
 	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(NIXOSCTL_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(NIXOSCTL_BIN)" $(NIXOSCTL_LIBS)
+
+# The VM lab (vm, e2e, graph): nixosctl hands those commands to the lab beside it, so one is never built without the other, or older than it.
+$(LAB_C_OUT): $(call made_from,nixosctl-lab) $(STDLIB_MANIFEST) $(BTRC_STAMP) | dirs
+	$(BTRC) $(TRANSPILER_FLAGS) "$(CURDIR)/$(LAB_ENTRY)" -o "$(CURDIR)/$(LAB_C_OUT)"
+	@touch "$@"
+
+$(LAB_BIN): $(LAB_C_OUT) $(STDLIB_LIB)
+	$(CC) $(CFLAGS) -I"$(CURDIR)/$(STDLIB_DIR)" "$(CURDIR)/$(LAB_C_OUT)" "$(CURDIR)/$(STDLIB_LIB)" -o "$(CURDIR)/$(LAB_BIN)" $(NIXOSCTL_LIBS)
 
 
 $(TRAY_BIN): $(TRAY_C_OUT)

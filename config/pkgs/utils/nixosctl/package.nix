@@ -4,7 +4,7 @@ in pkgs.stdenv.mkDerivation {
   name = "nixosctl";
   src = lib.fileset.toSource {
     root = ../../../..;
-    fileset = lib.fileset.unions [ ./Main.btrc ./lib ./completions ./btrc.toml ./btrc.lock ];
+    fileset = lib.fileset.unions [ ./Main.btrc (import ./library.nix { inherit lib; }) ./completions ./btrc.toml ./btrc.lock ];
   };
   nativeBuildInputs = [ btrcpy pkgs.makeWrapper ];
   buildInputs = [ pkgs.libxcrypt ];

@@ -44,6 +44,18 @@ let
       nix = systems.nixosConfigurations.${name}.config.nix.settings;
     in { holds = (nix.min-free or 0) > 0 && nix.max-free > nix.min-free; message = "${name}: no free-space floor for the Nix store (settings.nix.minFreeGiB)"; })
     systems.bootableTargets) (lib.filter (host: host.name != "QEMU") hosts.physical);
+  # The VM lab stays out of what a system carries: an edit to the test harness must change no guest, or
+  # every scenario keyed on a guest's system runs again for nothing.
+  labAssertions = pkgs:
+    let
+      btrcpy = inputs.btrc.packages.${pkgs.stdenv.hostPlatform.system}.btrcpy;
+      tool = import ../pkgs/utils/nixosctl/package.nix { inherit pkgs lib inputs btrcpy; };
+      guests = lib.filterAttrs (name: _: lib.hasInfix "-VM-" name || lib.hasPrefix "QEMU-" name) systems.nixosConfigurations;
+    in [ { holds = !(builtins.pathExists "${tool.src}/config/pkgs/utils/nixosctl/lib/simulator"); message = "nixosctl's source carries the VM lab (config/pkgs/utils/nixosctl/library.nix)"; } ]
+    ++ lib.mapAttrsToList (name: guest: {
+      holds = !(builtins.any (package: (package.name or "") == "nixosctl-lab") guest.config.environment.systemPackages);
+      message = "${name}: a test guest carries the VM lab (settings.apps.utils.nixosctl.lab.enable)";
+    }) guests;
   # Unit and contract suites that are one derivation each. They were graph nodes and lint built them
   # as well; as checks they are built once, with every other check.
   unitChecks = system: {
@@ -53,6 +65,8 @@ let
     networking-policy = import ../../tests/networking/policy { inherit system; };
     recovery-mount-contracts = import ../../tests/recovery/unit.nix { inherit inputs system; };
     recovery-artifacts = import ../../tests/recovery/artifacts { inherit system; };
+    nixosctl-lab = let pkgs = inputs.nixpkgs.legacyPackages.${system}; in  # no other check builds the lab
+      import ../pkgs/utils/nixosctl/lab.nix { inherit pkgs lib; btrcpy = inputs.btrc.packages.${system}.btrcpy; };
   };
   mkInstallerCheck = import ../../tests/checks/installer_contract.nix {
     inherit lib;
@@ -88,7 +102,7 @@ in lib.genAttrs hosts.systems (system:
       name = "ci-local";
       value = import "${inputs.ci-local}/tests/ci_local.nix" { inherit pkgs; table = ../../ci/local.json; workflow = ../../.github/workflows/checks.yml; jobs = [ "lint" "checks" ]; };
     }
-    (mkEvaluationCheck { inherit pkgs; name = "app-settings"; expectations = expectations ../../tests/checks/app_settings.json; assertions = deckAssertions ++ storeAssertions; })
+    (mkEvaluationCheck { inherit pkgs; name = "app-settings"; expectations = expectations ../../tests/checks/app_settings.json; assertions = deckAssertions ++ storeAssertions ++ labAssertions pkgs; })
     (mkEvaluationCheck { inherit pkgs; name = "qemu-hosts"; expectations = qemuHostExpectations; }) ]) // unitChecks system)
 // lib.genAttrs (lib.unique (map (host: host.system) hosts.darwin)) (system:
   lib.listToAttrs (map (host:

@@ -872,15 +872,21 @@ in use and `nix flake update btrc` moves it.
 
 | Path | Purpose |
 |---|---|
-| `config/pkgs/utils/nixosctl/Main.btrc` | Main CLI (also hosts the VM e2e harness: `nixosctl graph` / `e2e`) |
+| `config/pkgs/utils/nixosctl/Main.btrc` | Main CLI; hands `vm`, `e2e` and `graph` to the VM lab |
 | `config/pkgs/utils/nixosctl/ui/Main.btrc` | Tray launcher for `nixosctl` |
 | `config/pkgs/utils/nixosctl/lib/desktop` | Audio, display, caffeine, and hardware config commands |
 | `config/pkgs/utils/nixosctl/lib/hardware` | Secure Boot (`SecureBootManager` + the `SecureBootVerification` parsers) and TPM2 commands |
 | `config/pkgs/utils/nixosctl/lib/core` | Shared logging, path, and interactive helpers |
 | `config/pkgs/gaming` | Independently packaged Steam, Wine prefix, and Assetto Corsa runtime tools |
-| `config/pkgs/utils/nixosctl/lib/simulator` | Declarative VM graph and test runner |
+| `config/pkgs/utils/nixosctl/lib/simulator` | The VM lab: declarative VM graph and test runner, the program `nixosctl-lab` |
 
 BTRC class modules use PascalCase filenames; executable entry points use `Main.btrc`.
+The VM lab is a package and a program of its own (`lib/simulator/btrc.toml`, `lab.nix`), and no installed
+tool takes it as source (`library.nix`): an edit to the harness changes no machine's system and no test
+guest's, so scenarios keyed on a system keep their results. A checkout's `make build` puts it beside
+`build/nixosctl`; a machine that runs the graph installs it with `settings.apps.utils.nixosctl.lab.enable`
+(the desktop does; a guest never does, which the `app-settings` check holds).
+
 The Makefile scans BTRC sources under `config/` and `tests/`. The VM graph hashes
 workspace source files and the runner binary; source-derived states and their
 descendants become stale when those inputs change.

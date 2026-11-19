@@ -10,7 +10,7 @@ let
     name = "nixosctl-tray";
     src = lib.fileset.toSource {
       root = ../../../../..;
-      fileset = lib.fileset.unions [ ./Main.btrc ../lib ];
+      fileset = lib.fileset.unions [ ./Main.btrc (import ../library.nix { inherit lib; }) ];
     };
     nativeBuildInputs = [ btrcpy pkgs.pkg-config pkgs.makeWrapper ];
     buildInputs = [ pkgs.dbus ];  # Library.Tray binds libdbus-1 for its Linux provider

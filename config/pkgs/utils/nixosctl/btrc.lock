@@ -1,1 +1,1 @@
-{"manifest-hash":"e1641b9228a6ee4fefe4213167279cf538a8348391aa8725bd72f6b2662054d6","packages":[{"dependencies":{},"manifest-hash":"15fa9085ca404036762e5286ee736e847b06105d0ef9ac1a1152a82ae8d11d47","name":"nixosctl","source":{"path":"."}}],"root":"nixosctl","schema":3}
+{"manifest-hash":"666dc6d119e1538f307776efcb33c8005b1b13a25ad2eb752ed4675d0e40f6ed","packages":[{"dependencies":{},"manifest-hash":"b1b1877d830ede836290557b3e30d4c1c96b43d33bfb387a57e9793e7b71e843","name":"nixosctl","source":{"path":"."}}],"root":"nixosctl","schema":3}

@@ -19,7 +19,7 @@ let
       root = ../..;
       fileset = lib.fileset.unions [
         ./sleep/Main.btrc ./sleep/Controller.btrc ./sleep/State.btrc ./sleep/btrc.toml ./sleep/btrc.lock
-        ../../pkgs/utils/nixosctl/lib ../../pkgs/utils/nixosctl/btrc.toml ../../pkgs/utils/nixosctl/btrc.lock
+        (import ../../pkgs/utils/nixosctl/library.nix { inherit lib; }) ../../pkgs/utils/nixosctl/btrc.toml ../../pkgs/utils/nixosctl/btrc.lock
       ];
     };
     programs.sleep-lock = "system/nixos/sleep/Main.btrc";

@@ -16,10 +16,7 @@ exports = [
     "lib.core.NixosLog",
     "lib.core.NixosPaths",
     "lib.desktop.PowerManager",
-    "lib.hardware.SecureBootVerification",
-    "lib.simulator.qemu.VmProvisioner",
-    "lib.simulator.spec.ShellStatements",
-    "lib.simulator.spec.VmSpecParser"
+    "lib.hardware.SecureBootVerification"
 ]
 
 [[native.bindings]]

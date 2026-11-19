@@ -13,7 +13,8 @@ in {
         (lib.mkDefault (toString ((pkgs.formats.toml {}).generate "nixosctl.toml" config.settings.apps.utils.nixosctl.settings)));
     }
     (lib.mkIf (config.settings.apps.utils.nixosctl.enable) {
-      environment.systemPackages = [ nixosctlBin ];
+      environment.systemPackages = [ nixosctlBin ]
+        ++ lib.optional config.settings.apps.utils.nixosctl.lab.enable (import ./lab.nix { inherit pkgs lib btrcpy; });
       environment.etc."nixosctl/apps.json".text = builtins.toJSON config.settings.apps.utils.nixosctl.apps;
       # Rebuilds run as root, but fix-permissions gives this repository to the admin.
       # Root's mutable Git config disappears when the immutable root is reset.

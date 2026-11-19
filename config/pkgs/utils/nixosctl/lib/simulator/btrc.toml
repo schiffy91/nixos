@@ -1,0 +1,12 @@
+manifest-version = 1
+
+[package]
+name = "nixosctl_lab"
+exports = [
+    "qemu.VmProvisioner",
+    "spec.ShellStatements",
+    "spec.VmSpecParser"
+]
+
+[dependencies]
+nixosctl = { path = "../.." }

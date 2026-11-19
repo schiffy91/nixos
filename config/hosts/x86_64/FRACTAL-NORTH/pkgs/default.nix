@@ -72,6 +72,7 @@ in {
       brakeGamma = 1.0; # Linear response for the pressure-sensing PRO brake.
       wheelMenu.enable = true;
     };
+    utils.nixosctl.lab.enable = true;  # the scenario graph runs on this machine
     utils.nixosctl.settings = {
       displays = { ${xdr} = "ProXDR"; ${tv} = "S89C"; };
       layout = [{ display = tv; position = "left-of"; relative_to = xdr; }];

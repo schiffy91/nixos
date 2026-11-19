@@ -22,11 +22,6 @@ import ./lib/hardware/StorageManager.btrc;
 import ./lib/desktop/DisplayManager.btrc;
 import ./lib/desktop/PowerManager.btrc;
 import ./lib/Installer.btrc;
-import ./lib/simulator/Spec.btrc;
-import ./lib/simulator/QemuE2eHarness.btrc;
-import ./lib/simulator/VmTestRunner.btrc;
-import ./lib/simulator/Graph.btrc;
-import ./lib/simulator/E2eCli.btrc;
 
 class NixosCtl {
     public NixosConfig config;
@@ -90,7 +85,7 @@ class NixosCtl {
         help.item("storage <state [volume] | is <volume> <state>>", "A volume in a word: open, locked or absent. Needs no root.");
         help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
 
-        help.section("Testing");
+        help.section("Testing (the VM lab: a checkout's build, or settings.apps.utils.nixosctl.lab.enable)");
         help.item("vm <args>", "Boot the host config in a QEMU VM.");
         help.item("e2e <args>", "Run end-to-end test scenarios.");
         help.item("graph <args>", "Inspect / render the test-scenario graph.");
@@ -153,17 +148,6 @@ class NixosCtl {
         return result.code;
     }
 
-    public bool needsTestShell(CLIArgs args) {
-        if (NixosCtl.env("NIXOS_BTRC_TEST_SHELL", "").equals("1")) {
-            return false;
-        }
-        var command = args.command();
-        if (command.equals("vm")) { return args.count() >= 3; }
-        if (command.equals("e2e")) { return args.count() >= 2; }
-        if (command.equals("graph")) { return args.count() >= 3; }
-        return false;
-    }
-
     public string requireArg(CLIArgs args, int index, string usage) {
         try {
             return args.require(index, usage);
@@ -178,16 +162,18 @@ class NixosCtl {
         return self.requireArg(args, 1, usage);
     }
 
-    public int nixShellSelf(CLIArgs args) {
-        var shellPath = PathTools.join(self.config.paths.root, "tests/shell.nix");
-        var runCmd = f"export NIXOS_BTRC_TEST_SHELL=1 && exec {ShellWords.quote(args.program)}";
-        for value in args.values {
-            runCmd = f"{runCmd} {ShellWords.quote(value)}";
+    // `vm`, `e2e` and `graph` are the VM lab's, a program of its own: beside this one in a checkout's
+    // build, or installed where the lab is turned on. This tool hands the command over as it is.
+    public int lab(CLIArgs args) {
+        var beside = PathTools.join(PathTools.dirname(args.program), "nixosctl-lab");
+        var built = args.program.contains("/") && FileSystem.isFile(beside);  // a bare name was found on PATH, and so is the lab
+        Vector<string> command = [built ? beside : "nixosctl-lab"];
+        for value in args.values { command.push(value); }
+        if (!built && !UnixShell().run("command -v nixosctl-lab", logFailure=false).ok()) {
+            NixosLog.fatal(f"`nixosctl {args.command()}` is the VM lab's, which is not installed here: build it in the checkout (`make build`, then build/nixosctl) or turn on settings.apps.utils.nixosctl.lab.enable");
         }
-        NixosLog.info(f"nixosctl {args.command()}: entering tests/shell.nix (qemu/swtpm/socat). First entry can take a minute.");
-        var command = f"nix-shell {ShellWords.quote(shellPath)} --run {ShellWords.quote(runCmd)}";
-        var result = UnixShell().run(command, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, foreground=true);  /* inner nixosctl prompts on the tty */
-        return result.code;
+        Process.exec(command);
+        return 1;
     }
 
     public int runApp(CLIArgs args) {
@@ -231,9 +217,7 @@ class NixosCtl {
         if (command.equals("update") || command.equals("upgrade")) {
             self.requireRebuildArguments(args);
         }
-        if (self.needsTestShell(args)) {
-            return self.nixShellSelf(args);
-        }
+        if (command.equals("vm") || command.equals("e2e") || command.equals("graph")) { return self.lab(args); }
         if (command.equals("secure-boot") && args.count() >= 2 && args.get(1).equals("keys") && !Platform.isRoot()) {
             NixosLog.fatal("Secure Boot key transfer requires root; use an existing root session or sudo -n explicitly.");
         }
@@ -472,18 +456,6 @@ class NixosCtl {
             if (action.equals("enable")) { caffeine.enable(); return 0; }
             if (action.equals("disable")) { caffeine.disable(); return 0; }
             if (action.equals("toggle")) { caffeine.toggle(); return 0; }
-        }
-
-        if (command.equals("vm")) {
-            return E2eCli().runVm(args);
-        }
-
-        if (command.equals("e2e")) {
-            return E2eCli().runE2e(args);
-        }
-
-        if (command.equals("graph")) {
-            return E2eCli().runGraph(args);
         }
 
         self.usage();
