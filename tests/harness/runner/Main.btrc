@@ -290,6 +290,21 @@ class GraphRunnerTests {
         Check.that(failed.stdout().contains("0 passed, 1 skipped, 1 failed") && self.said(failed).contains("syntax error"), f"an expression that does not evaluate fails its node with nix's reason: {self.said(failed)}");
     }
 
+    // A file that changes in the workspace while a run is under way costs the nodes after it an
+    // evaluation and nothing else: nix's warnings beside its answer are not taken for a failure.
+    public void changedUnderway() {
+        self.fixture.write("early.txt", "one\n"); self.fixture.write("late.txt", "one\n");
+        self.derived("early", self.reading("early.txt")); self.derived("late", self.reading("late.txt"));
+        var spec = JSONValue.parse(Path.readAll(self.fixture.path("early.json")));
+        var arrives = JSONValue.parse("{\"op\":\"host\"}");
+        arrives.set("command", JSONValue.makeString(f"printf 'arrived\\n' > {ShellWords.quote(self.fixture.path("arrived-while-running.txt"))}"));
+        spec.get("operations").push(arrives);
+        self.fixture.json("early.json", spec);
+        self.graph(self.entry("early") + "," + self.entry("late", "early"));
+        var ran = self.run(["run", "early", "late", "--arg", "jobs=2"]);
+        Check.that(ran.code == 0 && ran.stdout().contains("2 passed"), f"the node after a file arrived in the workspace still builds its derivation: {self.said(ran)}");
+    }
+
     // A node keyed on the files its host-side steps read.
     public void declaredInputs() {
         var runs = self.fixture.path("reader-runs");
@@ -429,6 +444,7 @@ int main() {
         tests.inheritedKey();
         tests.occupiedPort();
         tests.derivations();
+        tests.changedUnderway();
         tests.formats();
         tests.declaredInputs();
         tests.longestChainFirst();

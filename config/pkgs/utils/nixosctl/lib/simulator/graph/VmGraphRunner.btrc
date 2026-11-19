@@ -77,7 +77,7 @@ class VmGraphRunner {
         var root = self.graph.resolvedWorkspaceRoot();
         var hashPipeline = "cd " + ShellWords.quote(root)
             + " && find ."
-            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './secrets' -o -path './.agents' -o -path './.claude' -o -path './.codex' -o -path './.gemini' -o -path './result' -o -name '.btrc-cache' -o -name '__pycache__' \\) -prune"
+            + " \\( -path './.git' -o -path './.vm' -o -path './build' -o -path './secrets' -o -path './.agents' -o -path './.claude' -o -path './.codex' -o -path './.gemini' -o -path './result' -o -name '.btrc-cache' -o -name '__pycache__' -o -name '.direnv' \\) -prune"
             + " -o -type f"
             + " ! -name '.DS_Store'"
             + " ! -name '._*'"
@@ -253,8 +253,11 @@ class VmGraphRunner {
     public string answer(string question) {
         self.loadAnswers();
         if (self.answers.has(question)) { return self.answers.get(question); }
-        var evaluated = UnixShell().run(self.asking(question), logFailure=false);
-        var path = evaluated.ok() ? evaluated.trimmed() : "";
+        // The answer is what nix prints, and not what it warns of beside it: a node's own process asks here
+        // whenever a file in the workspace changed after the run began, and nix warns often.
+        var evaluated = UnixShell().run(self.asking(question), stderr=COMMAND_OUTPUT_COLLECT, logFailure=false);
+        var path = evaluated.ok() ? evaluated.stdout().trim() : "";
+        if (!path.startsWith("/nix/store/")) { NixosLog.error(f"no answer to `{question}`:\n{evaluated.stderr().trim()}"); }
         self.answers.put(question, path.startsWith("/nix/store/") ? path : "unevaluated");
         self.saveAnswers();
         return self.answers.get(question);
