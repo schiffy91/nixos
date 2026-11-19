@@ -103,6 +103,12 @@ commit. A change to a product is made and tested there, pushed with `ci-local pu
 (`config/pkgs/dev/git.nix`); they are not kept in the Drive, where a pull on one machine arrives on the
 others as hundreds of file changes and deletions.
 
+The compiler is pinned in ten lock files across those clones (this configuration, each product, and
+Semu's renderer and emulator flakes). `ci/btrc-pin.py status` lists each lock's revision, how far behind
+btrc's main it is and what hosted CI said of it; `ci/btrc-pin.py bump` sets them all to one revision, the
+newest on main whose required workflows passed unless another is named, and refuses one that did not
+pass. It commits nothing: each project is then tested and pushed as usual.
+
 ## Settings Model
 
 `config/settings.nix` composes `config/system/options.nix` and
