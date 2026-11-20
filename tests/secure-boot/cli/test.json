@@ -1,11 +1,10 @@
 {
   "name": "secure-boot-cli",
   "state": "secure-boot-cli",
-  "parentState": "quick",
+  "parentState": "root",
   "stateMaterial": "secure-boot-cli:source={{sourceHash}}",
   "workDir": ".vm/e2e/{{state}}-{{stateHashShort}}",
   "operations": [
-    { "op": "require-state" },
     { "op": "reset-state" },
     { "op": "host", "command": "bash tests/secure-boot/cli/verify.sh", "expect": "secure-boot-cli-ok" },
     { "op": "record-state" }

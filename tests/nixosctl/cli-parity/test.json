@@ -2,9 +2,6 @@
    "name" : "cli-parity",
    "operations" : [
       {
-         "op" : "require-state"
-      },
-      {
          "op" : "reset-state"
       },
       {
@@ -35,7 +32,7 @@
          "op" : "record-state"
       }
    ],
-   "parentState" : "quick",
+   "parentState" : "root",
    "state" : "cli-parity",
    "stateMaterial" : "cli-parity:audio:permissions:source={{sourceHash}}",
    "workDir" : ".vm/e2e/{{state}}-{{stateHashShort}}"
