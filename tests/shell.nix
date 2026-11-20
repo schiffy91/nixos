@@ -68,6 +68,7 @@ pkgs.mkShell {
     util-linux
   ]) ++ [ aavmfSecboot ] ++ lib.optionals stdenv.hostPlatform.isLinux [
     pkgs.OVMF
+    pkgs.procps  # the VM harness verifies the process named by each QEMU pid file
   ];
 
   shellHook = ''
