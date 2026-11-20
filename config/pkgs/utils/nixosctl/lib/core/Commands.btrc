@@ -34,7 +34,7 @@ class CommandCatalog {
         result.push(CommandEntry("secure-boot", "Prepare signed images; enroll or remove our platform key.", ["prepare", "enable", "disable", "status", "keys", "--no-reboot"]));
         result.push(CommandEntry("tpm2", "Manage the TPM2 LUKS keyslot.", ["enable", "disable", "status"]));
         result.push(CommandEntry("change-password", "Converge LUKS, account and hashed file to one new password.", ["--update-tpm2", "--full-disk-encryption-only", "--user-account-only"]));
-        result.push(CommandEntry("displays", "List and arrange displays.", ["list", "layout", "enable", "disable", "primary", "dpms"]));
+        result.push(CommandEntry("displays", "List and arrange displays.", ["list", "layout", "enable", "disable", "primary", "dpms", "brightness"]));
         result.push(CommandEntry("audio", "List and select audio sinks.", ["list", "current", "set"]));
         result.push(CommandEntry("caffeine", "Keep the system awake.", ["status", "enable", "disable", "toggle"]));
         result.push(CommandEntry("storage", "Encrypt an external volume for this machine, or open one by hand.", ["status", "state", "is", "prepare", "password", "open", "key"]));

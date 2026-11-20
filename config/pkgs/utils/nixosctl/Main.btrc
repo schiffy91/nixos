@@ -21,6 +21,7 @@ import ./lib/desktop/HardwareConfig.btrc;
 import ./lib/desktop/AudioManager.btrc;
 import ./lib/desktop/CaffeineManager.btrc;
 import ./lib/hardware/StorageManager.btrc;
+import ./lib/desktop/DisplayBrightness.btrc;
 import ./lib/desktop/DisplayManager.btrc;
 import ./lib/desktop/PowerManager.btrc;
 import ./lib/Installer.btrc;
@@ -84,6 +85,7 @@ class NixosCtl {
 
         help.section("Hardware");
         help.item("displays <list|layout|enable|disable|primary|dpms> [output]", "");
+        help.item("displays brightness <up|down> [step-percent] [repeat-ms]", "");
         help.item("audio <list|current|set> [sink]", "");
         help.item("caffeine <status|enable|disable|toggle>", "");
         help.item("storage <status|prepare|password|open|key> [volume] [device]", "Encrypt an external volume (SD card, USB drive) for this machine, or open one by hand.");
@@ -399,10 +401,17 @@ class NixosCtl {
         }
 
         if (command.equals("displays")) {
-            var action = self.requireAction(args, "Usage: nixosctl displays <list|layout|enable|disable|primary|dpms> [args]");
+            var action = self.requireAction(args, "Usage: nixosctl displays <list|layout|enable|disable|primary|dpms|brightness> [args]");
             var displays = DisplayManager();
             if (action.equals("list")) { displays.list(); return 0; }
             if (action.equals("layout")) { displays.layout(); return 0; }
+            if (action.equals("brightness")) {
+                var direction = self.requireArg(args, 2, "Usage: nixosctl displays brightness <up|down> [step-percent] [repeat-ms]");
+                var step = args.length > 3 ? Strings.toInt(args.get(3)) : 5;
+                var repeat = args.length > 4 ? Strings.toInt(args.get(4)) : 150;
+                DisplayBrightness(step, repeat).press(direction);
+                return 0;
+            }
             var display = self.requireArg(args, 2, "Missing display argument");
             if (action.equals("enable")) { displays.enable(display); return 0; }
             if (action.equals("disable")) { displays.disable(display); return 0; }

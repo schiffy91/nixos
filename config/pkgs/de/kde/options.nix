@@ -10,6 +10,7 @@ in {
       "applications:org.kde.konsole.desktop"
     ];
     settings.desktop.plasma.virtualKeyboard.enable = mkSetting bool false;
+    settings.desktop.plasma.shortcuts = mkSetting (attrsOf (attrsOf str)) {};  # name → { key, command }, KWin runs the command
     settings.desktop.plasma.colorScheme = mkSetting str "BreezeDark";
     settings.desktop.plasma.iconTheme = mkSetting str "Papirus-Dark";
     settings.desktop.plasma.iconThemePackage = mkSetting package pkgs.papirus-icon-theme;

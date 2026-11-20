@@ -42,6 +42,8 @@ in {
       lockOnResume = settings.users.admin.autoLock.enable;
       timeout = if settings.users.admin.autoLock.enable then 10 else null;
     };
+    ##### Shortcuts #####
+    hotkeys.commands = settings.desktop.plasma.shortcuts;
     ##### Config Files #####
      configFile = {
       kdeglobals = {

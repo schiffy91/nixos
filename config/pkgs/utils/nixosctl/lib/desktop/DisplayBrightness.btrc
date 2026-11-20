@@ -1,0 +1,74 @@
+import Library.FileSystem;
+import Library.IO;
+import Library.JSON;
+import Library.Math;
+import Library.Platform;
+import Library.Process;
+import Library.Strings;
+import Library.Timer;
+import ../core/NixosLog.btrc;
+
+class DisplayBrightness {
+    public UnixShell shell;
+    public int step;
+    public int intervalMs;
+    public string statePath;
+
+    public DisplayBrightness(int step, int intervalMs) {
+        self.shell = UnixShell();
+        self.step = step;
+        self.intervalMs = intervalMs;
+        var runtime = Environment.get("XDG_RUNTIME_DIR", "");
+        if (runtime.isEmpty()) { NixosLog.fatal("displays brightness needs a desktop session (XDG_RUNTIME_DIR is unset)"); }
+        self.statePath = PathTools.join(runtime, "nixosctl-brightness");
+    }
+
+    class long long holdGapMs() { return 800LL; }  /* above the keyboard's 600 ms repeat delay */
+
+    public string activeOutput() {
+        var reply = self.shell.run("busctl --user --json=short call org.kde.KWin /KWin org.kde.KWin activeOutputName", logFailure=false);
+        if (!reply.ok()) { NixosLog.fatal("KWin did not name its active output"); }
+        return JSONValue.parse(reply.stdout()).get("data").at(0).asString();
+    }
+
+    public int percent(string output) {
+        var config = JSONValue.parse(self.shell.run("kscreen-doctor --json", logFailure=false).stdout());
+        for entry in config.get("outputs").elements() {
+            if (entry.get("name").asString() == output) { return (int)(entry.get("brightness").asFloat() * 100.0 + 0.5); }
+        }
+        NixosLog.fatal(f"kscreen-doctor does not list {output}");
+        return 0;
+    }
+
+    public void apply(string output, int target) {
+        var setting = ShellWords.quote(f"output.{output}.brightness.{target}");
+        if (!self.shell.run(f"kscreen-doctor {setting}", logFailure=false).ok()) { NixosLog.fatal(f"kscreen-doctor could not set {output} to {target}%"); }
+        self.shell.run(f"busctl --user call org.kde.plasmashell /org/kde/osdService org.kde.osdService brightnessChanged i {target}", logFailure=false);
+    }
+
+    public void remember(long long press, long long step) {
+        FileSystem.writeAtomic(self.statePath, f"{press} {step}", 0o600);
+    }
+
+    public void press(string direction) {
+        if (direction != "up" && direction != "down") { NixosLog.fatal("Usage: nixosctl displays brightness <up|down> [step-percent] [repeat-ms]"); }
+        var now = MonotonicClock.milliseconds();
+        var previous = Strings.split(Path.exists(self.statePath) ? Path.readAll(self.statePath) : "", " ");
+        var lastPress = previous.length == 2 ? previous.get(0).toLong() : 0LL;
+        var lastStep = previous.length == 2 ? previous.get(1).toLong() : 0LL;
+        var held = now - lastPress < DisplayBrightness.holdGapMs();
+        if (held && now - lastStep < self.intervalMs) {
+            self.remember(now, lastStep);
+            return;
+        }
+        self.remember(now, now);
+        var output = self.activeOutput();
+        var current = self.percent(output);
+        if (direction == "down" && current == 0) {
+            if (!held) { self.shell.run("kscreen-doctor --dpms off", logFailure=false); }  /* a held key stops at the floor */
+            return;
+        }
+        var target = Math.clamp(direction == "up" ? current + self.step : current - self.step, 0, 100);
+        if (target != current) { self.apply(output, target); }
+    }
+}

@@ -4,6 +4,10 @@ let
   chromeApps = apps.utils.chrome.webApps;
 in {
   settings.apps.utils.chrome.webApps = import ../../../../pkgs/utils/chrome-apps.nix;
+  settings.desktop.plasma.shortcuts = {  # the keyboard's Fn never reaches Linux, so Meta stands in
+    brightness-down = { key = "Meta+F9"; command = "nixosctl displays brightness down 5 150"; };  # percent a step, ms between steps while held
+    brightness-up = { key = "Meta+F10"; command = "nixosctl displays brightness up 5 150"; };
+  };
   settings.desktop.plasma.taskbarLaunchers = [
     "applications:org.kde.dolphin.desktop"
   ] ++ lib.optional apps.utils.chrome.enable "applications:google-chrome.desktop"
