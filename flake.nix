@@ -13,6 +13,7 @@
     btrc = { url = "github:schiffy91/btrc"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     ci-local = { url = "github:schiffy91/ci-local"; inputs.nixpkgs.follows = "nixpkgs-unstable"; };
     deckpad = { url = "github:schiffy91/deckpad"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
+    vpn = { url = "github:schiffy91/vpn"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     drive = { url = "github:schiffy91/drive"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     immutability = { url = "github:schiffy91/immutability"; inputs.nixpkgs.follows = "nixpkgs-unstable"; inputs.btrc.follows = "btrc"; };
     proton-sge = { url = "github:schiffy91/proton-sge"; inputs.btrc.follows = "btrc"; };  # its own nixpkgs: a package-set update here must not rebuild Wine

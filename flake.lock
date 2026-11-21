@@ -986,7 +986,8 @@
         "nixpkgs-unstable": "nixpkgs-unstable",
         "plasma-manager": "plasma-manager",
         "proton-sge": "proton-sge",
-        "semu": "semu"
+        "semu": "semu",
+        "vpn": "vpn"
       }
     },
     "rust-overlay": {
@@ -1476,6 +1477,29 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "vpn": {
+      "inputs": {
+        "btrc": [
+          "btrc"
+        ],
+        "nixpkgs": [
+          "nixpkgs-unstable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1795278650,
+        "narHash": "sha256-e5sE7lm3qqV8OmgpsAobtXd367TS4E82sG+30Ppi48k=",
+        "owner": "schiffy91",
+        "repo": "vpn",
+        "rev": "c99b2efe1b376badcc96712d4157b8c73370d940",
+        "type": "github"
+      },
+      "original": {
+        "owner": "schiffy91",
+        "repo": "vpn",
         "type": "github"
       }
     }

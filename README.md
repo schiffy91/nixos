@@ -92,6 +92,7 @@ on with the setting it always had; an adapter module here fills the product's ow
 | Local test passes that stand in for CI | [`schiffy91/ci-local`](https://github.com/schiffy91/ci-local) | `config/pkgs/dev/git.nix` installs the tool; `ci/local.json` is this repository's job table | `settings.apps.dev.enable` (it comes with git) |
 | Google Drive at a mount point | [`schiffy91/drive`](https://github.com/schiffy91/drive) | `config/pkgs/utils/drive/default.nix` (adapter) | `settings.apps.utils.drive.enable` and its `mountPoint`, `store`, `pinned`, `placements` |
 | The Deck as a Steam Controller | [`schiffy91/deckpad`](https://github.com/schiffy91/deckpad) | `config/pkgs/gaming/deckpad/default.nix` (adapter) | `settings.apps.gaming.deckpad.enable`, with `role = "controller"` on the Deck |
+| A switch for one WireGuard tunnel | [`schiffy91/vpn`](https://github.com/schiffy91/vpn) | `config/pkgs/utils/vpn.nix` (adapter) | `settings.apps.utils.vpn.enable`; on a Steam machine it also gets a **VPN** shortcut |
 | GE-Proton with a short series of Wine fixes | [`schiffy91/proton-sge`](https://github.com/schiffy91/proton-sge) | `config/pkgs/gaming/proton/default.nix` installs its package | `settings.apps.gaming.steam.protonSge.enable` |
 | Volumes that reset at boot, and what persists | [`schiffy91/immutability`](https://github.com/schiffy91/immutability) | `config/system/storage/immutability/default.nix` (adapter) | `settings.disk.immutability.enable`, `settings.disk.immutability.persist.paths` |
 

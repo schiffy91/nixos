@@ -43,6 +43,7 @@ in {
     };
     settings.apps.utils.cider.enable = mkSetting bool config.settings.apps.utils.desktop.enable;
     settings.apps.utils.mullvad.enable = mkSetting bool config.settings.apps.utils.desktop.enable;
+    settings.apps.utils.vpn.enable = mkSetting bool false;  # a switch for one WireGuard tunnel, from a file its owner chooses
     settings.apps.utils.enable = mkSetting bool config.settings.apps.enable;
     settings.apps.utils.packages = mkSetting (listOf package) [];
     settings.apps.utils.onePassword.enable = mkSetting bool config.settings.apps.utils.enable;
