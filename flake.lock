@@ -368,11 +368,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795229564,
-        "narHash": "sha256-4VdxaOI7oh/g2DfVbidj6B+FhfsoKM2MqcsnRuND5M0=",
+        "lastModified": 1795285135,
+        "narHash": "sha256-9U8cAwQqWZiBEeiNrpuy9Vk2u2o3WjSW1djcPwf75gs=",
         "owner": "schiffy91",
         "repo": "drive",
-        "rev": "0f4a0a7d2bcecad3025f48059be88c226a5d51ad",
+        "rev": "f9838cdab4319c3ac0c6f3b0ec58754dbacc1d70",
         "type": "github"
       },
       "original": {
