@@ -8,40 +8,40 @@
     "url": "https://edge.forgecdn.net/files/9572/997/Auctionator-346.zip"
   },
   "betterBags": {
-    "hash": "sha256-xukuiPNxr/BPSJI+3M4Us+9YctVpQFfvmGrClsJ0/DA=",
-    "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.3/BetterBags-v0.9.3.zip"
+    "hash": "sha256-ocyK2SEO+Y8BdgAG+J35z1R+q0Zz6JjbyOn/Y0L0ibE=",
+    "url": "https://github.com/Cidan/BetterBags/releases/download/v0.9.5/BetterBags-v0.9.5.zip"
   },
   "bigWigs": {
-    "hash": "sha256-ifK6Yju21pGUhD6iarfq/6w2jcUfhd32FMiBwrYI8bE=",
-    "url": "https://github.com/BigWigsMods/BigWigs/releases/download/v427.9/BigWigs-v427.9.zip"
+    "hash": "sha256-YHcKN0/6h9kLSKaQzkGqRHrxKkxVb7yfLaosupB7HL4=",
+    "url": "https://github.com/BigWigsMods/BigWigs/releases/download/v428.1/BigWigs-v428.1.zip"
   },
   "consolePort": {
-    "hash": "sha256-YEFMxK5K/QDgzBt+NPt0nSSxokZI1i+YgVARoEcJYjQ=",
-    "url": "https://github.com/seblindfors/ConsolePort/releases/download/3.3.14/ConsolePort-3.3.14.zip"
+    "hash": "sha256-Vz0rsyblb6omvqC/CJy3p8xMnbhEkfGX/bMJIx+WHmA=",
+    "url": "https://github.com/seblindfors/ConsolePort/releases/download/3.3.15/ConsolePort-3.3.15.zip"
   },
   "details": {
     "hash": "sha256-FD43/nyTeFVELwuB3oTYFz5ByNjCRCGj8MStBLs8s24=",
     "url": "https://edge.forgecdn.net/files/9447/255/Details-Details.20261104.15400.172.zip"
   },
   "dialogueUI": {
-    "hash": "sha256-XY9AcpgedqEJr6KUi/RfafCcj45Zx29ll/LrgpxSKf0=",
-    "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-c/DialogueUI-1.0.7-c.zip"
+    "hash": "sha256-5juRaAmTiHlA2sDayNBPy3ZtoKFoPtNarUsnZFEWYNc=",
+    "url": "https://github.com/Peterodox/YUI-Dialogue/releases/download/v1.0.7-d/DialogueUI-1.0.7-d.zip"
   },
   "flareUI": {
-    "hash": "sha256-MSkvI/sU+rijdr7uUCGe+jhgc7eql/QVR2ZjvF2P0EQ=",
-    "url": "https://github.com/malkkav/FlareUI/releases/download/6.9/FlareUI-6.9-forever.zip"
+    "hash": "sha256-1fyeKgY2y18KtyS7mw7IG1C9qsVzkkhmJ7FCYyyYgwc=",
+    "url": "https://github.com/malkkav/FlareUI/releases/download/7.0/FlareUI-7.0-forever.zip"
   },
   "foreverFadeChat": {
     "hash": "sha256-t9+IWZzCHAjkY1RKMinshGAiHKgybGO6qZqri03SSMg=",
     "url": "https://edge.forgecdn.net/files/8994/554/ForeverFadeChat.zip"
   },
   "questie": {
-    "hash": "sha256-nGElNHE7dcBkicwtmzhCS0v/M1ARkQEd0zqgDus/tsc=",
-    "url": "https://github.com/Questie/Questie/releases/download/bundle%2Fv12.9.0%2Bv1.1.1/Questie-v12.9.0+v1.1.1.zip"
+    "hash": "sha256-iEDy3fNwvYc3Qj2ZrlX15mMA1oaslsNHwkhIHrZgG5Q=",
+    "url": "https://github.com/Questie/Questie/releases/download/bundle%2Fv12.11.1%2Bv1.1.3/Questie-v12.11.1+v1.1.3.zip"
   },
   "spoken": {
-    "hash": "sha256-85A7MFeBtECZmQOT2B7Xf224CRtEBJlDqgF5waTIP0E=",
-    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken%2Fv3.9.0/Spoken-3.9.0.zip"
+    "hash": "sha256-S5nirE95u/1FFcCnwJp4wFxspWDMVYAOxxB/U8mv4AE=",
+    "url": "https://github.com/rusty-key/spoken-wow/releases/download/spoken%2Fv3.10.1/Spoken-3.10.1.zip"
   },
   "spokenBossesAudio": {
     "hash": "sha256-nQI9kju/eJTQ+S/sAl/5m7+2TLpCuG0WWYdPQi4ecdY=",

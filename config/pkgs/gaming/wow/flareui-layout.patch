@@ -1,10 +1,10 @@
 --- a/FlareUI/Modules/Auras.lua
 +++ b/FlareUI/Modules/Auras.lua
-@@ -717,7 +717,15 @@
+@@ -798,7 +798,15 @@
+     local container = holder.container
      local step = (kdb.size or 30) + (kdb.spacing or 6)
-     holder.enchantShift = n
      container:ClearAllPoints()
--    container:SetPoint(corner, holder, corner, n * step * ((kdb.grow == "RIGHT") and 1 or -1), 0)
+-    container:SetPoint(corner, holder, corner, 0, 0)
 +    if kdb.center and holder.kind == "debuffs" then
 +        -- The secure flow layout sizes the container to its visible icons.
 +        -- Anchoring that container by its middle keeps the group centered,
@@ -12,12 +12,12 @@
 +        local edge = kdb.wrap == "UP" and "BOTTOM" or "TOP"
 +        container:SetPoint(edge, holder, edge, 0, 0)
 +    else
-+        container:SetPoint(corner, holder, corner, n * step * ((kdb.grow == "RIGHT") and 1 or -1), 0)
++        container:SetPoint(corner, holder, corner, 0, 0)
 +    end
-     pcall(container.SetFlowLayoutMaximumLineSize, container, math_max(step, width - n * step))
+     pcall(container.SetFlowLayoutMaximumLineSize, container, math_max(step, width))
  end
  
-@@ -843,7 +851,15 @@
+@@ -987,7 +995,15 @@
      local store = GetLayoutStore(layoutName)
      local pos = store and store[kind] or KINDS[kind].default
      holder:ClearAllPoints()
@@ -34,7 +34,7 @@
  end
  
  local function OnFrameMoved(holder, layoutName, point, x, y)
-@@ -908,6 +924,9 @@
+@@ -1031,6 +1047,9 @@
            get = get("max"), set = set("max") },
          { name = L["Spacing"], kind = LEM.SettingType.Slider, default = defaults.spacing or 6, minValue = 0, maxValue = 20, valueStep = 1,
            get = get("spacing"), set = set("spacing") },
@@ -44,7 +44,7 @@
          { name = L["Growth"], kind = LEM.SettingType.Dropdown, default = defaults.grow or "LEFT", values = GROW_VALUES,
            get = get("grow"), set = set("grow") },
          { name = L["Wrap"], kind = LEM.SettingType.Dropdown, default = defaults.wrap or "DOWN", values = WRAP_VALUES,
-@@ -1236,6 +1255,9 @@
+@@ -1208,6 +1227,9 @@
          LayoutKind(kind)
      end
  
@@ -56,7 +56,7 @@
      end)
 --- a/FlareUI/Modules/UnitFrames.lua
 +++ b/FlareUI/Modules/UnitFrames.lua
-@@ -4197,7 +4197,9 @@
+@@ -5240,7 +5240,9 @@
          pos.y = math_floor(pos.y - UIParent:GetHeight() / scale + 0.5)
      end
      f:ClearAllPoints()
@@ -69,7 +69,7 @@
  local function OnFrameMoved(f, layoutName, point, x, y)
 --- a/FlareUI/Modules/UnitFramesRing.lua
 +++ b/FlareUI/Modules/UnitFramesRing.lua
-@@ -162,7 +162,7 @@
+@@ -175,7 +175,7 @@
                        auraStyle = true, auraTimer = true, font = true, fontPower = true, fontCast = true, auraFont = true,
                        auraCountFont = true, auraCountFontSeeded = true, styleSavesThin = true,
                        -- (frameFonts, each frame's fonts, is NOT shared: every style keeps its own)
@@ -78,39 +78,38 @@
  -- a stored setup may lack these
  local TILE_KEYS = { party = true, boss = true }
  
-@@ -989,12 +989,14 @@
-     if not ring then return end
-     g = g or Geometry(f)
-     local e = BLIZZ[Kind(f)].level
-+    local settings = GetDb() or {}
-+    local levelScale = settings.levelScale or LEVEL_SCALE
-     local placed = PlaceRegion(f, g, ring.Disc, e)
+@@ -1103,11 +1103,13 @@
+     -- Level Disc Size (11-20: each frame's Edit Mode Text section; unset, the old shared size)
+     local db, own = GetDb(), Db(f)
+     local size = math.min(1, math.max(0.5, tonumber(own and own.levelSize) or tonumber(db and db.levelSize) or 1))
++    local settings = db or {}
++    local levelScale = (settings.levelScale or LEVEL_SCALE) * size
      -- a little under its atlas size, round the same centre
      local w, h = ring.Disc:GetSize()
--    ring.Disc:SetSize(w * LEVEL_SCALE, h * LEVEL_SCALE)
+-    ring.Disc:SetSize(w * LEVEL_SCALE * size, h * LEVEL_SCALE * size)
 +    ring.Disc:SetSize(w * levelScale, h * levelScale)
      -- the skull and the number at the disc's own scale
--    local k = g.D / BLIZZ[e.frame or Kind(f)].D * LEVEL_SCALE
+-    local k = g.D / BLIZZ[e.frame or Kind(f)].D * LEVEL_SCALE * size
 +    local k = g.D / BLIZZ[e.frame or Kind(f)].D * levelScale
      if SetAtlasSafe(ring.Skull, SKULL) then
          local info = C_Texture.GetAtlasInfo(SKULL)
          ring.Skull:SetSize(info.width * k, info.height * k)
-@@ -1002,10 +1004,10 @@
+@@ -1115,10 +1117,10 @@
      -- Show Level: the disc goes with the number
      local udb = Db(f)
      ring.Disc:SetShown(udb and udb.showLevel and true or false)
--    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * LEVEL_SCALE)
+-    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * LEVEL_SCALE * size)
 +    SetDiscHole(f, ring, placed and ring.Disc:IsShown(), w * levelScale)
      local dx, dy, dw, dh = Place(f, g, e)
      if ring.DiscHit then
--        if dx then SetHit(ring.DiscHit, ring.Disc:IsShown(), f, g, dx, dy, dw, dh)
-+        if dx then SetHit(ring.DiscHit, ring.Disc:IsShown(), f, g, dx, dy, dw * levelScale, dh * levelScale)
+-        if dx then SetHit(ring.DiscHit, ring.Disc:IsShown(), f, g, dx, dy, dw * size, dh * size)
++        if dx then SetHit(ring.DiscHit, ring.Disc:IsShown(), f, g, dx, dy, dw * size * (settings.levelScale or 1), dh * size * (settings.levelScale or 1))
          else SetHit(ring.DiscHit, false) end
      end
      f.Level:SetParent(ring.Disc)
-@@ -1014,9 +1016,16 @@
+@@ -1127,9 +1129,16 @@
      f.Level:SetPoint("CENTER", ring.Disc, "CENTER", 0, 0)
-     -- (11-14) through FlareUI's font setter: a file not loaded yet falls back to the client's font and
+     -- through FlareUI's font setter: a file not loaded yet falls back to the client's font and
      -- retries; a raw SetFont left the party tiles' level (no font of its own) blank
 -    ns.SetFontUnscaled(f.Level, LEVEL_FONT, math.max(8, math.floor(LEVEL_FONT_SIZE * k + 0.5)), "")
 -    f.Level:SetShadowOffset(1, -1)
@@ -127,4 +126,4 @@
 +    end
  end
  
- --------------------------------------------------
+ -- Forever Faces ("Forever 3D Portraits", folder ForeverFaces) draws its model under our frame: with it
