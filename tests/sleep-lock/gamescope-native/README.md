@@ -36,6 +36,19 @@ Deck hardware behavior or concealment of Gamescope's PipeWire capture stream.
 The Gaming policy stops the configured Sunshine services; arbitrary capture
 clients are outside that service boundary.
 
+The public fixture password is `aB3! z`. Touch input exercises Shift, digits,
+punctuation, space, and backspace; wrong passwords and cancellation leave the
+console locked. A failed backend and controller restart require fresh password
+input before restoring the same compositor and interactive client. Overlapping
+requests invalidate an earlier authentication attempt. A new logind Plasma
+session appearing during the lock does not depend on custom KDE methods.
+
+Real systemd user units run harmless fixture processes for the two configured
+Sunshine names. Both are stopped before readiness, ordinary starts are skipped
+while locked, and only previously active units are restored after authentication.
+The variant without Sunshine has no such units at all. No paired-stream behavior
+is claimed by these service tests.
+
 The runner requires exactly one accessible AMD `amdgpu` render node and KVM.
 It refuses ambiguous AMD selection and does not change host permissions or
 open host DRM primary nodes. QEMU uses the experimental AMD native context
@@ -59,9 +72,9 @@ Relevant pinned sources:
 - [Gamescope Steam focus selection and X11 properties](https://github.com/ValveSoftware/gamescope/blob/3.17.0/src/steamcompmgr.cpp)
 - [Linux virtio GPU freeze/restore](https://github.com/torvalds/linux/blob/v7.3/drivers/gpu/drm/virtio/virtgpu_drv.c)
 
-## Mesa 26.3.0 and the first Steam Deck run (2026-11-20)
+## Mesa 26.3.0 in the guest
 
-The Deck ran the five nodes for the first time and all five failed at the first
+With Mesa 26.3.0 in the guest, all five nodes failed on the Deck at the first
 frame check, `Missing framebuffer text GAMESCOPE_CONTROL_READY`. The captured
 frame was the same in every run: the terminal's white background covered with
 small black squares and no text. Gamescope's own screenshot inside the guest
@@ -77,142 +90,31 @@ compositor through AMD native context.
 
 The fixture therefore pins the guest's `hardware.graphics.package` to Mesa
 26.2.6 from the nixpkgs revision that last passed. Remove the pin when a later
-Mesa passes the control node without it. No upstream report has been filed.
+Mesa passes the control node without it. No upstream report has been filed:
+[issue 2](https://github.com/schiffy91/nixos/issues/2).
 
-## Python driver removal (2026-11-08)
+## Real suspend in the guest
 
-The scenarios now run directly as compiled BTRC, with a typed libvncclient
-boundary copying actual EGL/VNC frames into `Library.Image`. No Python driver
-or vncdotool runs. The native control passed (`0b1f9e7c21d2`), as did the full
-lock (`816b14e1f7eb`) and absent-Sunshine variant (`e7ce3f338a9f`).
+`sleep-gamescope-native-suspend-control` and
+`sleep-gamescope-native-resume-lock` enter and leave kernel s2idle and then
+fail waiting for the game input marker. Before it fails, the locked scenario
+displays the password keyboard, rejects a wrong password and restores the
+original VT and Gamescope PID after correct authentication. The unlocked
+control reproduces the same missing input marker with the Gaming lock
+disabled, and QEMU's captured frame has read "Display output is not active."
 
-The real-suspend scenarios retain the existing failure: unlocked control
-`7a5b72f805f8` and authenticated resume `9816c549e34e` both wake from s2idle
-but fail the subsequent game input marker. The same virtio-GPU invalid-resource
-errors remain in their console artifacts. The locked scenario rejects the wrong
-password and restores its original VT/PID before failing input recovery.
-These results preserve the distinction between lock behavior and the VM GPU's
-power-management limitation.
+Both log virtio GPU `SET_SCANOUT`/`RESOURCE_UNREF` and blob-resource failures
+with `ERR_INVALID_RESOURCE_ID` after wake: commands `0x10c` and `0x208` fail
+with responses `0x1200` and `0x1203`. Linux's virtio GPU freeze path resets
+the device; QEMU's virgl reset discards renderer resources. The unlocked
+reproduction identifies a native-context VM power-management failure
+independent of the root lock. It does not establish real Steam Deck suspend
+behavior. No kernel, QEMU, Mesa, or Gamescope patch was added to hide it, and
+neither assertions nor production GPU handling were changed to conceal the
+failures. This is [issue 1](https://github.com/schiffy91/nixos/issues/1).
 
-## BTRC controller migration results (2026-11-07)
-
-The BTRC controller, raw PAM authentication and DRM helpers passed the focused
-state, secret-buffer, descriptor-isolation and helper checks before these graph
-runs. The three lock regressions passed:
-
-| Node and run | Result |
-| --- | --- |
-| `sleep-gamescope-native-lock` / `c02ef12d0ad9` | PASS, 95.33 seconds. Touch and keyboard authentication, rejection and escape checks, failed sleep, controller restart, overlapping holds, stream restoration and original game input/rendering. |
-| `sleep-gamescope-native-lock-without-sunshine` / `0111e01a814a` | PASS, 104.40 seconds. The same lock lifecycle with both Sunshine units absent. |
-| `sleep-gaming-plasma` / `70ea99ce2452` | PASS, 54.24 seconds. Stock Plasma password locking remains independent of the Gaming controller. |
-
-The optional real-suspend runs retain their complete assertions and still fail
-at game input recovery. `sleep-gamescope-native-resume-lock` / `fd5b9ffe394f`
-entered and exited kernel s2idle, displayed the password keyboard, rejected a
-wrong password and restored the original VT and Gamescope PID after correct
-authentication. It then failed waiting for the game input marker at 118.55
-seconds. The unchanged unlocked `sleep-gamescope-native-suspend-control` /
-`061413e20d66` reproduced the same missing input marker at 40.79 seconds, with
-the Gaming lock disabled. Both logged virtio GPU commands `0x10c` and `0x208`
-failing with responses `0x1200` and `0x1203` after wake.
-
-This reproduces the existing native-context VM GPU recovery limitation below;
-it does not establish physical Steam Deck suspend behavior. Neither assertions
-nor production GPU handling were changed to conceal the failures. All graph
-drivers and guests exited. Logs and captured frames remain under the respective
-`.vm/e2e/<node>-<run>/` directories.
-
-## Initial Gaming-only policy results (2026-11-07)
-
-The production Gaming-only controller passed `sleep-gamescope-native-lock`
-run `872d6db09483` (93.49 seconds) and the absent-Sunshine variant
-`da7b79e1a6ab` (93.73 seconds). Both drivers completed cleanup. These runs used
-Git tree `bcaf0b3f7bf8b809c510a4a72469f1d9b6681b9a`. These historical results
-predate removal of the separate full-session Plasma integration. The current
-controller keeps only the Gaming behavior and queries logind directly.
-
-The public fixture password is `aB3! z`. Touch input exercises Shift, digits,
-punctuation, space, and backspace; wrong passwords and cancellation leave the
-console locked. A failed backend and controller restart require fresh password
-input before restoring the same compositor and interactive client. Overlapping
-requests invalidate an earlier authentication attempt. A new logind Plasma
-session appearing during the lock does not depend on custom KDE methods.
-
-Real systemd user units run harmless fixture processes for the two configured
-Sunshine names. Both are stopped before readiness, ordinary starts are skipped
-while locked, and only previously active units are restored after authentication.
-The second variant has no Sunshine units at all. No paired-stream behavior is
-claimed by these service tests.
-
-The portable `sleep-gaming-plasma` regression also passed (`fdd8ee85937f`):
-using tree `7e7727456628a6c1f1d3dc2cc94d153444c16318`. Ordinary Plasma
-sleep stays on its original console, the stock KDE greeter
-rejects a wrong password and accepts the complex account password, and no root
-Gaming lock or Sunshine marker is created. It is part of the required graph;
-the AMD-native Gamescope nodes remain explicit opt-in tests.
-
-No new Gamescope real-suspend test passed. The earlier GPU power-management limitation
-below remains. Physical OLED touch rotation, Steam controls, suspend/resume,
-and game preservation need acceptance on the actual Deck.
-
-## Initial Gamescope fixture results (2026-11-07)
-
-| Run | Result and evidence |
-| --- | --- |
-| Native control `8824ae4f807b` | PASS, 26.98 seconds. Actual 1280×800 scanout, selected app 769, visible terminal markers and QMP keyboard input. |
-| Native lock `202882716a41` | PASS, 49.22 seconds. Wrong password and VT escapes denied; touchscreen password accepted; failed suspend still locked; keyboard password accepted. Both releases restored the same Gamescope PID and fresh OCR/input markers. |
-| Initial combined lock/resume `b79271e1bd00` | FAIL, 74.71 seconds. Non-PM checks passed; real s2idle resumed to the password keyboard and rejected a wrong password. The correct password restored the original VT/PID, but the game stopped accepting input. |
-| Unlocked real-suspend control `43491271eb68` | FAIL, 43.89 seconds. Without the lock enabled or called, s2idle/wake lost game input and QEMU's actual captured frame read “Display output is not active.” |
-
-The two real-suspend failures contain virtio GPU `SET_SCANOUT`/`RESOURCE_UNREF`
-and blob-resource failures with `ERR_INVALID_RESOURCE_ID`. Linux's virtio GPU
-freeze path resets the device; QEMU's virgl reset discards renderer resources.
-The unlocked reproduction identifies a native-context VM power-management
-failure independent of the root lock. It does not establish real Steam Deck
-suspend behavior. No kernel, QEMU, Mesa, or Gamescope patch was added to hide it.
-The separate `sleep-gamescope-native-resume-lock` gate retains the complete
-real-suspend assertion; its BTRC migration rerun is recorded above.
-
-These runs used the repository's `f2798b0` base plus this fixture. The non-PM
-pass and unlocked suspend failure used frozen fixture diff SHA-256
-`fd9d2888515ef9d1e69d3edc3cbe9c7c32d7c9052244c72b513f59c0c9215089`;
-this results section was updated afterward. Logs and PNGs remain in each
-named `.vm/e2e/<node>-<id>/` directory of the test checkout.
-
-Every run's QEMU, driver, timeout, and virtual network child exited, and its
-private scratch was removed. The passing control and non-PM lock completed
-cleanup at 35.08 and 57.25 seconds respectively. No test or build is left
-running by this fixture work.
-
-## Deck color-state handoff (2026-11-08)
-
-The physical Deck exposed a gap not covered by virtio's color properties:
-Gamescope's AMD plane degamma survives scanout disable, while Plymouth's legacy
-CRTC gamma enables another degamma stage. AMDGPU rejected the new modeset with
-`EINVAL` and `doesn't support plane and CRTC degamma at the same time`.
-Resetting rotation alone reproduced the failure; clearing plane degamma and
-CRTC regamma made readiness pass, and the owner verified touch-password unlock
-back to Gaming Mode without rebooting.
-
-The helper now resets supported color/HDR and rotation properties atomically
-only after confirming all scanout is blank, then verifies their readback. The
-helper/state graph node passed (`f1ceb9cb0cd7`), as did the complete native lock
-regressions with Sunshine (`bdec80faf846`) and without it (`c6e197b3de33`).
-Both retained password rejection, touch input, controller-recovery and original
-compositor/client restoration checks. These VM runs validate the shared lock
-lifecycle; virtio does not reproduce the Deck's AMD-specific color properties.
-The new helper was then deployed to the physical Deck and automatically
-recovered another held lock with safe-display readiness, preserving the
-Gamescope process. Two physical deep-suspend cycles subsequently passed:
-Power-button wake followed by the owner's touchscreen password unlock, and
-a 60-second RTC wake with the boot ID and Gamescope PID unchanged, Wi-Fi
-restored, and the password display ready. Kernel suspend counters reported
-two successes and zero failures; no system units were failed.
-
-The initial RTC harness cancelled its alarm prematurely because
-`systemctl suspend` returns after queueing the operation. The corrected test
-waited for the kernel success counter to advance and the service to finish
-before cancelling the alarm. Persistent evidence is under
-`/var/log/nixos-deck-sleep-fix/`. Audible playback, extended gameplay and the
-new IOMMU boot configuration were not exercised. The earlier real-s2idle VM
-limitations remain unchanged.
+virtio does not reproduce the Deck's AMD-specific color properties either, so
+these runs validate the shared lock lifecycle and not the display-state reset
+the physical Deck needs before Plymouth can light the panel. The
+[sleep module's README](../../../config/system/nixos/sleep/README.md)
+describes that reset.

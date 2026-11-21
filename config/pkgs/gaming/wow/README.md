@@ -146,10 +146,8 @@ profiles, set the modifiers in ConsolePort or run:
 /console GamePadEmulateAlt none
 ```
 
-On 2026-11-10, applying an older captured `bindings-cache.wtf` removed the
-locally configured controller bindings. The pre-apply backup retained partial
-bindings; the four-bar mapping above was reconstructed from the requested
-layout. Capture again after future in-game binding changes and before rebuilding.
+Applying an older captured `bindings-cache.wtf` replaces controller bindings
+made in game since. Capture again after in-game binding changes and before rebuilding.
 The installed ConsolePort already provides `ConsolePortGamepadBar` buttons.
 
 ForeverFadeChat hides chat controls and decoration while leaving messages on
@@ -168,7 +166,7 @@ nix build --impure --no-link --expr 'let inputs = (builtins.getFlake "git+file:/
 
 ## Display and input profiles
 
-FlareUI 6.7 supplies the unit frames, chat, native damage-meter skin, minimap
+FlareUI 7.0 supplies the unit frames, chat, native damage-meter skin, minimap
 skin and quest tracker. Questie retains its map database and pins with its tracker
 disabled. BetterBags, AdvancedInterfaceOptions, ForeverFadeChat and Details are
 installed but disabled in each character's AddOns.txt; MoveAny is no longer installed.
@@ -250,14 +248,17 @@ setup otherwise clears supplied unit-frame positions on first login.
 Temporary warnings and tooltips may use central or side space. Main tanks are
 represented in the raid grid rather than a duplicate tank stack.
 
-Before the migration, a full WTF and repository-settings snapshot was saved to
-`~/Backups/World of Warcraft/20261111-091209-flareui-layouts/before.tar.gz`.
 The geometry envelopes and profile-switch logic have automated checks; final
-font/art sizing and secure-frame behavior still require an in-game review.
+font/art sizing and secure-frame behavior still require an in-game review, which
+the frames have not had since FlareUI 7.0
+([issue 7](https://github.com/schiffy91/nixos/issues/7)).
 
 The display profiles share Friz Quadrata: body text 13, headings 15, and
 secondary values 11–12. Minimap fonts compensate for its native 90% scale.
-Player and target frames are 180 × 54 with 70-unit portrait rings. The level
+Player and target frames are 180 × 54 with 70-unit portrait rings. FlareUI 7.0
+sizes a FlareUI Style ring from its frame's height and ignores the saved
+`ringSize`, so the captured controller profiles set its Portrait Scale to the
+values that give those diameters. The level
 badge uses `unitframes.levelScale = 0.78` and `unitframes.levelFont` at 12,
 independent of portrait artwork scaling. The packaged ring patch preserves the
 original behavior for profiles without these settings. Desk, TV and handheld

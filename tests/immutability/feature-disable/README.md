@@ -6,8 +6,8 @@ Run through the graph:
 nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run immutability-feature-disable'
 ```
 
-The parent `persistence-ownership` node checks module merging and enable gates
-before this VM runs. The VM evaluates a feature module and the real immutability module
+The `persistence-ownership` flake check covers module merging and enable gates.
+The VM evaluates a feature module and the real immutability module
 for enabled, disabled and explicitly retained configurations, then exercises
 their generated specifications with the production runtime on a Btrfs disk.
 

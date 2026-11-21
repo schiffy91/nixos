@@ -48,7 +48,7 @@ make build
 nix-shell tests/shell.nix --run 'NIXOS_CONFIG_ROOT=$PWD ./build/nixosctl graph tests/graph.json run opportunistic-unlock'
 ```
 
-The small predecessor checks handoff ownership, device identity/ranges, locked
+The `opportunistic-unlock-policy` flake check covers handoff ownership, device identity/ranges, locked
 memory, exception erasure, child relocking and managed metadata after fork. It
 also verifies actual keys from sparse LUKS1/LUKS2 PBKDF2 and Argon2 files,
 including an alternate cipher, plus malformed and erased-keyslot failures.

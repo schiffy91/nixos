@@ -20,11 +20,12 @@ composition and resolution; no generic icon-to-banner generator remains.
 | chiaki-ng | [chiaki-ng](https://www.steamgriddb.com/game/5441527) | Coordinated LXVI lime/controller-symbol set and white title |
 
 Deck Pad (deckpad) is the exception: SteamGridDB has no art of a Deck
-acting as a Steam Controller. `deckpad/compose.py` builds its set from the
+acting as a Steam Controller. Its set is the `artwork` package of
+[`schiffy91/deckpad`](https://github.com/schiffy91/deckpad), where `assets/compose.py` builds it from the
 pictures on [Valve's Steam Controller page](https://store.steampowered.com/hardware/steamcontroller):
 the controller on kraft paper for the hero, the product photograph placed on
 the same paper for both covers, and Valve's controller glyph for the logo and
-the icon. The five PNGs it writes are committed in `deckpad/`, because Valve
+the icon. The five PNGs it writes are committed there, because Valve
 replaces the files behind that page; run the script to redo them.
 
 Steam games such as Assetto Corsa and Rocksmith already receive their library

@@ -23,7 +23,7 @@ The **Deck Pad** shortcut (and a tray checkbox in Plasma) offers the
 Deck's controls to another machine as a Steam Controller, over the network
 and, when enabled, the USB-C cable and Bluetooth; hold **⋯** for two seconds
 to take them back. Started on a Deck that trusts no host yet, it lets a new
-one in for two minutes. See [Deck Pad](../../../pkgs/gaming/deckpad/README.md).
+one in for two minutes. See [Deck Pad](https://github.com/schiffy91/deckpad).
 
 Both physical hosts enable `settings.apps.utils.desktop.enable` for the shared desktop
 packages and services under `config/pkgs`: Cider, mpv, the development CLIs, zsh,
@@ -42,8 +42,9 @@ display follows the streaming client's resolution and restores the local display
 when streaming stops. KRFB is installed with that feature.
 
 The SD card holds the entire emulation library, including emulator settings and
-mod links; the emulator programs live in the Nix store on the internal SSD. Its
-mount path is derived from `settings.users.admin.username` and the SD label.
+mod links; the emulator programs live in the Nix store on the internal SSD. The
+card is the encrypted volume `sdcard` of `settings.disk.storage` (`card.nix`),
+mounted at `/sd`, and the Drive client keeps the library on it.
 Semu creates relative mod links and ownership records so moving the card to a
 different mount point keeps them usable. After importing older state with broken
 links, close affected emulators and run `semu mods repair --target steam-deck`.
@@ -107,32 +108,19 @@ supported; `--microsoft` and publicly shared private keys are excluded.
 uses root-only `nixosctl secure-boot keys` transfers and verifies restoration on
 Fractal North's separate encrypted disk without enrolling or rotating keys.
 
-On 2026-11-08 the Deck was updated to `26.11.20261107.f4a03c0` and booted its
-signed configuration into Gaming Mode. Its source tree now uses `config/hosts/`
-and the current repository layout. Steam, Gamescope and Sunshine were running;
-the live-switch Plymouth failure cleared on reboot, and `mem_sleep` selected
-`deep`. The non-SDC panel skips Valve's SDC-only mura calibration; its helper
-reports that deliberate skip as a failed user service.
+Secure Boot is enrolled on this Deck with its own db, KEK and PK. Firmware
+reports `SecureBoot=1` and `SetupMode=0`, the kernel logs `Secure boot enabled`,
+and `nixosctl secure-boot status` confirms ownership of all three firmware
+databases and valid system and recovery signatures. The keys in `/var/lib/sbctl`
+match the independently verified backup and restoration copy on Fractal North
+under `/var/lib/nixos/secureboot-backups/STEAM-DECK-OLED`. A USB drive prepared
+as `DECKRESCUE`, with the signed recovery UKI at `EFI/BOOT/BOOTX64.EFI`, has
+booted the Deck, unlocked the disk and mounted the installed system under
+`/mnt`. Physical firmware key removal has not been exercised
+([issue 16](https://github.com/schiffy91/nixos/issues/16)).
 
-The unique keys in `/var/lib/sbctl` still match the independently verified backup
-and restoration copy on Fractal North under
-`/var/lib/nixos/secureboot-backups/STEAM-DECK-OLED`. Required system and recovery
-images passed signature verification after reboot. The updated signed recovery
-UKI on Fractal is
-`/var/lib/nixos/recovery/STEAM-DECK-OLED/nixos-recovery-2026-11-08-keyboard.efi`.
-The Samsung Flash Drive FIT (serial ending `6577`) was prepared as `DECKRESCUE`
-with that image at `EFI/BOOT/BOOTX64.EFI`. Its readback checksum, signature and
-FAT filesystem check passed. After repairing the console keyboard, the Deck
-booted that USB on 2026-11-08. SSH inspection confirmed the USB's partition and
-image checksum, successful LUKS unlock, and all recovery mounts under `/mnt`.
-The installed certificates still match the independent backup. External recovery
-is verified. On 2026-11-08, `nixosctl secure-boot enable --no-reboot` installed
-the updated signed generation and successfully enrolled this Deck's own db,
-KEK and PK. After reboot, firmware reported `SecureBoot=1` and `SetupMode=0`,
-the kernel logged `Secure boot enabled`, and `nixosctl secure-boot status`
-confirmed ownership of all three firmware databases and valid system/recovery
-signatures. The updated generation reached Gaming Mode with no failed system
-services. Physical firmware key removal has not been exercised.
+The non-SDC panel skips Valve's SDC-only mura calibration; its helper reports
+that deliberate skip as a failed user service ([issue 13](https://github.com/schiffy91/nixos/issues/13)).
 
 The recovery console and installer use Buffyboard; the installed LUKS prompt
 uses Plymouth's keyboard. Their shared touch-console module loads `uinput`,
@@ -140,7 +128,8 @@ waits for the framebuffer, and redraws the console keyboard when the login shell
 is ready. Without that handoff, login can clear the keyboard's first drawing.
 The `recovery-touch-keyboard` graph test checks the boot screenshot and enters
 mixed-case text, spaces and Enter through a virtual touchscreen into the real
-console. The physical Deck's display and touch alignment still need verification.
+console. The physical Deck's display and touch alignment still need verification
+([issue 16](https://github.com/schiffy91/nixos/issues/16)).
 
 `nixosctl secure-boot disable` now uses the current private platform key to
 authenticate PK-only removal, retaining KEK/db and signed boot/recovery images.
@@ -198,58 +187,41 @@ preserving its requested height so the bottom row stays visible.
 Steam and Plasma ask logind to suspend. The Deck now sets
 `settings.sleep.hibernateOnSuspend = false` for ordinary suspend-to-RAM.
 Valve [disabled Deck hibernation in the SteamOS 3.9.4 beta](https://steamcommunity.com/ogg/1675200/announcements/detail/694275728822242440)
-(October 2026), citing driver bugs. A working session password lock is required
-before this policy can be accepted on the physical device.
+(October 2026), citing driver bugs. The session password lock this policy
+needs is `settings.sleep.lockGamingSession`, described in the
+[sleep module's README](../../../system/nixos/sleep/README.md).
 
-The 2026-11-08 failed Power-button attempt never entered a sleep backend:
-Plymouth's display-readiness check failed, the controller restarted repeatedly,
-and suspend preparation timed out. Kernel DRM tracing identified the cause:
-Gamescope's AMD plane degamma survived blanking and conflicted with Plymouth's
-legacy CRTC gamma setup. The driver rejected the modeset with `EINVAL` and
-`doesn't support plane and CRTC degamma at the same time`. Resetting rotation
-alone did not fix it. Clearing the plane degamma and CRTC regamma settings let
-Plymouth light the display; the owner then unlocked with the touchscreen
-keyboard and returned to Gaming Mode without rebooting.
+Gamescope's AMD plane degamma survives blanking and conflicts with Plymouth's
+legacy CRTC gamma setup: the driver rejects the modeset with `EINVAL` and
+`doesn't support plane and CRTC degamma at the same time`, Plymouth's
+display-readiness check fails, and no sleep backend is entered. Resetting
+rotation alone does not fix it. The blank helper therefore resets the supported
+color/HDR and rotation transforms in one atomic commit after concealing all
+scanout, then verifies the properties by readback. It preserves the console
+lock if a reset fails. Readiness diagnostics use syslog because Plymouth
+redirects standard error to `/dev/null`; general keyboard tracing remains
+disabled.
 
-The blank helper now resets the supported color/HDR and rotation transforms in
-one atomic commit after concealing all scanout, then verifies the properties by
-readback. It preserves the console lock if a reset fails. Readiness diagnostics
-use syslog because Plymouth redirects standard error to `/dev/null`; general
-keyboard tracing remains disabled. The helper tests and direct Gamescope lock
-tests with and without Sunshine passed. The final system was installed on
-2026-11-08. Its new controller recovered another held lock automatically:
-`ready=true`, safe-display verification passed, and the original Gamescope
-process remained alive. Secure Boot ownership and system/recovery signatures
-were verified again after activation.
-
-Two physical deep-suspend cycles then completed. In the first, a short Power
-press woke the Deck and the owner unlocked back to the original Gaming Mode
-session. The initial test script mistakenly cancelled its RTC alarm immediately
-after `systemctl suspend` returned: that command queues sleep asynchronously.
-The missing automatic wake was a test error, not evidence of a firmware or
-Wi-Fi failure.
-
-The corrected test waited for the kernel suspend-success counter to advance
-and the suspend service to finish before cancelling the alarm. The Deck entered
-deep sleep at 23:58:57 on 2026-11-08 and resumed automatically at 23:59:57.
-Wi-Fi returned, the password display became ready, and the boot ID and Gamescope
-PID were unchanged. The kernel reported two successful suspends and zero
-failures; no system units were failed. The second cycle left the session locked
-for the owner. Both ALSA sound cards remained present; audible playback and
-extended gameplay after resume were not tested. Persistent logs are under
-`/var/log/nixos-deck-sleep-fix/`.
+On the device this has been seen through deep suspend with a short Power press
+to wake and a touch-password unlock back to the original Gaming Mode session,
+and through an RTC wake after 60 seconds with the boot ID and Gamescope PID
+unchanged and Wi-Fi back. `systemctl suspend` queues sleep asynchronously, so a
+test that sets an RTC alarm waits for the kernel suspend-success counter to
+advance and the suspend service to finish before cancelling it. Both ALSA sound
+cards remained present; audible playback and extended gameplay after resume
+were not tested ([issue 16](https://github.com/schiffy91/nixos/issues/16)).
 
 The Deck selects `settings.sleep.suspendMode = "deep"`. The pinned Valve
 kernel [explicitly rejects s2idle on Jupiter/Galileo](https://github.com/Jovian-Experiments/linux/blob/7.2.10-valve1/kernel/power/suspend.c),
 even when a forced `mem_sleep_default=s2idle` makes it appear selected in sysfs.
 Other hosts retain their s2idle default. The physical checks above establish
-Power-button wake, touch-password unlock and automatic wake on this boot;
+Power-button wake, touch-password unlock and automatic wake;
 they do not establish long-term reliability or every peripheral's behavior.
-The running kernel still has the old IOMMU command line. Repeat hardware
-acceptance after enabling IOMMU in firmware and booting the new command line.
+The IOMMU is on: the host module filters Jovian's `amd_iommu=off`, the firmware
+provides the `IVRS` table and the kernel uses translated DMA domains.
 
-Read-only journal inspection on 2026-11-07 confirmed both successful physical
-hibernation/resume and prior failures: a freezer abort, and image writes aborted
+The Deck's journal has recorded both successful physical
+hibernation/resume and failures: a freezer abort, and image writes aborted
 by a pending wakeup (`-11`) with AMDGPU thaw errors (`-16`). Hibernation is
 possible but not a reliable authentication boundary by itself. A failed sleep
 request still needs password locking; do not treat an unlocked return as safe.
@@ -317,10 +289,10 @@ Deck's portrait panel mounted sideways. Initrd module loading precedes Plymouth
 startup so the graphics driver is available when the encrypted disk asks for its
 passphrase. There is no separate unl0kr agent competing for the display.
 
-`initrd-touch-unlock` and `initrd-touch-unlock-rotated` in `tests/graph.json` boot
+`initrd-touch-unlock` and `initrd-touch-unlock-german` in `tests/graph.json` boot
 real encrypted volumes with delayed graphics-driver loading. Kernel uinput
 fixtures provide touchscreen and keyboard devices, and tests inspect screenshots
-and enter a passphrase through libinput and Plymouth. The rotated test uses an
+and enter a passphrase through libinput and Plymouth. The German test uses an
 800×1280 virtual panel with a DRM orientation property. Small C tests cover the
 visibility policy, all printable US characters, hit regions and coordinate rotation.
 The full host boot tests cover the installer, Jovian kernel and other host modules.
@@ -356,10 +328,5 @@ still require testing on the physical panel.
 
 The VM tests cover the LUKS, swapfile, hibernate and immutability path, but on
 the architecture of whichever machine ran the graph — `immutability-hibernate`
-declares no `arch` — not on Deck hardware. These still need the device:
-
-- Plymouth graphics and touch alignment with the DRM backend on the Valve kernel
-- hibernate and resume on the Deck's drivers
-- Sunshine KMS capture in Gaming Mode
-- the SD card label in `default.nix` and the Semu paths in `pkgs/default.nix`
-- `jupiter-biosupdate` with Secure Boot enabled
+declares no `arch` — not on Deck hardware. What still needs the device is in
+[issue 16](https://github.com/schiffy91/nixos/issues/16).

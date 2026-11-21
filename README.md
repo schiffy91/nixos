@@ -63,7 +63,7 @@ appear under `nixosConfigurations`.
 | `config/hosts/x86_64/QEMU/` | x86 QEMU guest host modules |
 | `config/pkgs/utils/nixosctl/` | Management CLI, `lib/` runtime implementation, and `ui/` tray application |
 | `config/system/storage/immutability/` | The adapter for [`schiffy91/immutability`](https://github.com/schiffy91/immutability), a flake input: `settings.disk.*` become that module's options; the default persisted paths and the patterns `nixosctl diff` skips stay here |
-| `config/pkgs/utils/nixosctl/lib/core/` | Shared BTRC helpers used by `nixosctl`, tests, and immutability |
+| `config/pkgs/utils/nixosctl/lib/core/` | Shared BTRC helpers used by `nixosctl` and the tests |
 | `build/` | Gitignored local compiler intermediates and binaries |
 | `tests/` | Declarative VM e2e graph, per-scenario specs, and flake checks |
 | `Makefile` | Root build/test contract (`make build`, `make check`, `make -C tests graph-*`) |
@@ -84,7 +84,7 @@ to the new entry locations by `nixosctl`.
 
 ## Products In Their Own Repositories
 
-Five parts of this configuration are repositories of their own, each a flake input here. A host turns one
+Six parts of this configuration are repositories of their own, each a flake input here. A host turns one
 on with the setting it always had; an adapter module here fills the product's own options from it.
 
 | Product | Repository | Here | A host turns it on with |
@@ -104,7 +104,7 @@ commit. A change to a product is made and tested there, pushed with `ci-local pu
 (`config/pkgs/dev/git.nix`); they are not kept in the Drive, where a pull on one machine arrives on the
 others as hundreds of file changes and deletions.
 
-The compiler is pinned in ten lock files across those clones (this configuration, each product, and
+The compiler is pinned in a lock file in each of those clones (this configuration, each product, and
 Semu's renderer and emulator flakes). `ci/btrc-pin.py status` lists each lock's revision, how far behind
 btrc's main it is and what hosted CI said of it; `ci/btrc-pin.py bump` sets them all to one revision, the
 newest on main whose required workflows passed unless another is named, and refuses one that did not
@@ -137,7 +137,7 @@ Important setting groups:
 | `settings.apps.utils.chrome.passwordStore` | Where Chrome keeps its key: `"basic"` (the default) keeps it in the profile and asks nothing, since the disks are encrypted; `null` asks the desktop's wallet |
 | `settings.apps.gaming.cpuAffinity` | Optional Linux CPU list for Steam games and Battle.net; `null` keeps normal scheduling |
 | `settings.apps.utils.nixosctl.*` | Structured display/audio settings, generated TOML config path, default-on idle inhibit |
-| `settings.apps.gaming.sunshine.*` | Capture backend (`kms` or `kwin`), CUDA build, KWin virtual display |
+| `settings.apps.gaming.sunshine.*` | Capture backend (`kms`, `kwin` or `auto`), CUDA build, KWin virtual display |
 | `settings.networking.forwardAgentHosts` | Explicitly trusted SSH agent-forwarding destinations |
 | `settings.networking.wifi.backgroundScan.*` | When a connected Wi-Fi device looks for a stronger access point: signal threshold, intervals, or never |
 
@@ -489,30 +489,12 @@ With `empty` there is no `CLEAN`: the installer takes none, the boot-time tool d
 and `nixosctl persistence materialize --refresh-clean` refuses. A directory made on the way to a
 persisted path takes its owner and mode from the same directory in the root before it, so a home folder
 keeps its owner. `nixosctl diff` lists what changed since `immutability-marker.service` recorded each
-volume's transaction when boot finished, where with `clean` it lists what differs from `CLEAN`. The
-Every host uses `empty` since 17 November 2026: the QEMU hosts, FRACTAL-NORTH and STEAM-DECK-OLED, and so
+volume's transaction when boot finished, where with `clean` it lists what differs from `CLEAN`.
+Every host uses `empty`: the QEMU hosts, FRACTAL-NORTH and STEAM-DECK-OLED, and so
 the VM twins of the two. The real machines' `CLEAN` snapshots stay on disk, unread; `base = "clean"` and a
 reboot go back to them. A path that should outlive a reboot is persisted on either base; with `empty`, a
-file only ever written into `CLEAN` is gone.
-
-What each real machine's `CLEAN` holds outside the persisted paths, read on 17 November 2026: this is what
-every boot starts with on `clean` and what a boot from an empty root would not have.
-
-- FRACTAL-NORTH, `CLEAN` of 7 June: 45,357 files, 4.5 GB. All but 42 are in the home folder: a compiler
-  cache (`~/.ccache`, 39,194 files, 1.7 GB), `~/.cargo` (6,021 files, 1.0 GB), the desktop search index
-  (`~/.local/share/baloo/index`, 1.9 GB) and about 80 small desktop files (clipboard history, `mimeapps.list`,
-  `user-dirs.dirs`, Flatpak and browser stubs). Outside it: 23 debugging leftovers in `/tmp` (TPM and patch
-  files), `/root/.gitconfig`, `/.boot-ready`, and in `/etc` the June `passwd`, `group`, `shadow`, `subuid`,
-  `subgid` and `sudoers`, `fwupd/fwupd.conf` and an empty `wpa_supplicant/imperative.conf`.
-- STEAM-DECK-OLED, `CLEAN` of 5 November: 14 files, 8 kB: `/etc` account files as above plus `resolv.conf`,
-  `logrotate.conf`, `fwupd/fwupd.conf` and `kernel/entry-token`; `/root/.gitconfig`; one file in the home
-  folder.
-
-What the move would change for the owner: the three caches in the desktop's home folder start empty after
-each boot unless they are persisted, and `/etc/fwupd/fwupd.conf` and `/root/.gitconfig` exist only if the
-configuration writes them. The account files are rewritten by activation at every boot on either base.
-
-Verify, on one commit and by the ledger's current names: every node that covers immutability
+file only ever written into `CLEAN` is gone. The account files in `/etc` are rewritten by activation at
+every boot on either base.
 
 `enforce.onReboot` wires the initrd reset + mounts service. Updates do not
 rewrite the `CLEAN` baseline from the running root; the boot-time reset path is
@@ -633,7 +615,7 @@ their modules. The smaller Mac and QEMU hosts use one `default.nix` each.
 
 | File | Role |
 |---|---|
-| `config/hosts/x86_64/FRACTAL-NORTH/system/gpu.nix` | NVIDIA/AMD graphics setup, device symlinks, KWin DRM devices |
+| `config/hosts/x86_64/FRACTAL-NORTH/system/gpu.nix` | The host's GPUs as `settings.graphics`, the NVIDIA driver and its two DSC patches; `config/system/nixos/graphics.nix` makes the device links and KWin's device list from them |
 | `config/hosts/x86_64/FRACTAL-NORTH/system/audio.nix` | Low-latency PipeWire and device-specific audio rules |
 | `config/hosts/x86_64/FRACTAL-NORTH/system/input.nix` | Controller and mouse receiver support |
 
@@ -880,13 +862,10 @@ The Proton build is [`schiffy91/proton-sge`](https://github.com/schiffy91/proton
 (`settings.apps.gaming.steam.protonSge.extraFiles`). Its patches, tools, tests and development loop
 are in that repository.
 
-VFIO has been removed from this repo for now because the path was broken and
-explicitly out of scope for the BTRC rewrite.
-
 ## BTRC Management Layer
 
-Management runtime source lives alongside its Nix modules under `config/pkgs/utils/nixosctl/`
-and `config/system/storage/immutability/`. The compiler, language
+Management runtime source lives alongside its Nix modules under `config/pkgs/utils/nixosctl/`;
+the immutability tool's is in its own repository. The compiler, language
 server, and VSCode extension are consumed through the flake input `inputs.btrc`.
 The dev shell provides `btrcpy` and `btrc-lsp`; local and Nix builds compile
 with `--strict-imports`.
@@ -918,7 +897,7 @@ descendants become stale when those inputs change.
 Build from the repo root:
 
 ```bash
-make build              # transpile + compile nixosctl and immutability
+make build              # transpile + compile nixosctl, the VM lab and the tray
 make clean              # remove gitignored compiler outputs
 ```
 
@@ -951,8 +930,8 @@ has no status to ask for). Drive keeps its own icon.
 ## E2E VM Testing
 
 The BTRC test framework is declarative. Specs live under `tests/*` and the graph
-lives at `tests/graph.json`. The runner is the `nixosctl` binary itself
-(`nixosctl graph tests/graph.json run <node>`).
+lives at `tests/graph.json`. The runner is the VM lab, which `nixosctl graph`
+hands to (`nixosctl graph tests/graph.json run <node>`).
 
 Core ideas:
 
@@ -982,9 +961,11 @@ one with its state (`ready`, `stale`, `missing`, `disabled`) rather than repeati
 the list here. A node is switched off, not removed, by giving it a `disabled`
 field that says why: it stays in the graph and in `required`, a run skips it and
 prints the reason, and no node that still runs may come `after` it. No node is off
-at present. The families are `installer-*`, `install-*`, `immutability-*`,
-`recovery-*`, `secure-boot-*`, `tpm2-*`, `boot-*`, `nixosctl-*`, `password-change*`,
-and `qmp-probe`. What only evaluates the configuration (`app-settings`, `qemu-hosts`) and the unit
+at present. The families are `installer-*`, `install-*`, `host-build-*`, `host-install-*`,
+`host-boot-*`, `immutability-*`, `recovery-*`, `secure-boot-*`, `tpm2-*`, `boot-*`,
+`initrd-touch-unlock*`, `nixosctl-*`, `password-*`, `networking-*`, `sunshine-*` and `sleep-*`,
+beside single nodes such as `qmp-probe`, `storage` and `drive-module`. What only evaluates the
+configuration (`app-settings`, `qemu-hosts`) and the unit
 suites that are one derivation each are flake checks, built by `ci/checks.sh`; the graph runner itself is
 tested by `make harness`. A node's log (`.vm/e2e/logs/<node>.log`) says how long each of its steps took
 when that was five seconds or more (`step 11 (install-nixos) took 213 s`), which is where to look before
@@ -998,7 +979,8 @@ it: `initrd-touch-unlock-displays` plugs displays in and out under Plymouth and 
 beside other nodes it failed at a different step in six runs out of eleven. `storage` is there too: its card is an emulated SD
 card, slow enough on a busy host that a `mkfs` outlasted the ninety seconds a command is given. `deck` (`make -C tests graph-deck`)
 is the five Gaming Mode sleep and lock nodes, which need a host with exactly one AMD GPU: the Steam Deck has
-one and this desktop, with its integrated GPU off in firmware, has none. A node without an
+one and this desktop, with its integrated GPU off in firmware, has none. The two that suspend the guest fail
+there ([issue 1](https://github.com/schiffy91/nixos/issues/1)). A node without an
 architecture in its name runs on the host's own. `make -C tests` starts every run inside its own process
 namespace where `bwrap` is installed, so nothing a test signals reaches the session that started it, and a
 VM whose runner died does not stay behind. The `installer-build-*` nodes build the installer images the
@@ -1163,8 +1145,10 @@ settings.nix.trustedPublicKeys = [ "nixos-cache-1:..." "semu-cache-1:..." ];
 
 `config/system/nixos/nix.nix` applies them, with `connect-timeout = 5` and `fallback` so a
 publisher that is switched off costs a build five seconds instead of failing it.
-STEAM-DECK-OLED is wired this way already: the desktop builds its system and its
-emulators, and the handheld activates instead of compiling them.
+STEAM-DECK-OLED has both options set, so that the desktop builds its system and its
+emulators and the handheld activates instead of compiling them. Today its builds reach
+it through `nixosctl deploy`, and the signing key does not survive a reboot of the
+desktop ([issue 11](https://github.com/schiffy91/nixos/issues/11)).
 
 `.github/workflows/cache.yml` builds one job per system and attribute every Monday and
 on every push to `main`, on x86_64 and aarch64 runners. With a `CACHIX_AUTH_TOKEN`
@@ -1207,62 +1191,10 @@ Ignored local paths:
 Do not commit secret material, VM disk images, installer ISOs, or local build
 caches.
 
-## Migration Notes
+## Open Items
 
-The migration to BTRC is complete. Current state:
-
-| Area | State |
-|---|---|
-| CLI dispatch | BTRC (`nixosctl`) |
-| Nix eval/update/install/diff/permissions | BTRC |
-| Audio/display/caffeine/system helper backends | BTRC |
-| TPM2 and Secure Boot helpers | BTRC with VM capability coverage |
-| Immutability | BTRC source compiled by the flake-pinned compiler |
-| Native system tray | Implemented through the BTRC stdlib tray backend and packaged as `nixosctl-tray` |
-| VFIO | Removed for now |
-| Python / Rust | Removed from the management layer |
-
-## Waiting For The Owner
-
-What the split of November 2026 left for a person to do or decide. None of it blocks a rebuild.
-
-- **Reboot each machine once.** The boot-time reset now comes from `schiffy91/immutability`; its first run
-  on real hardware is the next boot. The previous generation stays selectable in the boot menu.
-- **Close Steam once on each machine.** Steam's tool mapping is only rewritten while Steam is closed, which
-  `steam-apps.service` now waits for by itself. Until then it names `proton-custom-GE-Proton11-12`, whose links stay valid.
-  Afterwards app `0` should map to `proton-sge-GE-Proton11-12` at priority 75 with no entry naming the old
-  tool, and the Battle.net launcher should open under it.
-- **The Wine working tree** at `config/pkgs/gaming/proton/custom/src` (4 GB, not in git) stays where it is.
-  The development loop expects it at `~/Projects/proton-sge/src` (`~/Projects` is persisted). Moving it, and removing the old links
-  `~/Games/proton/proton-custom-*` and `~/.local/share/Steam/compatibilitytools.d/proton-custom-*` that still
-  work, is the owner's call; the ones that point at a build the store no longer has are removed by an update.
-- **Both machines start from an empty root from their next boot** (`settings.disk.immutability.base =
-  "empty"`, set on 17 November). What each machine's `CLEAN` held outside the persisted paths, and so what
-  is no longer there, is summarised under Immutability: on the desktop two unused caches from May
-  (`~/.ccache`, `~/.cargo`), clipboard history and June leftovers in `/tmp`; on the Deck a Semu override
-  file of 5 November that names the old card layout. To go back: `base = "clean"` and a reboot.
-- **On the Deck:** `make -C tests graph-deck` in `/etc/nixos` (the Gaming Mode sleep-lock nodes; three are
-  expected to pass, the two real-suspend nodes fail at game input after wake, see
-  `tests/sleep-lock/gamescope-native/README.md`), and a controller session with Deck Pad. Since
-  18 November `nixos-sleep-lock.service` stops when nothing is locked (commit 6a276450), and the
-  scenario's new step for that has not run anywhere: the nodes need an AMD GPU, so they are not in the
-  required set, although that commit's message says they are. What was seen on the Deck itself: after
-  the switch the service started, found nothing locked and stopped cleanly. What still needs someone
-  there: one sleep and wake in Gaming Mode, with the password prompt appearing and unlocking as before.
-- **mbp21:** `git pull` and `nix-update`; and the graph set `aarch64` there, where it runs natively.
-- **A schedule** for the long test runs (Drive's `nightly` output, btrc's `make test-nightly`), once there
-  is a CI machine. Both need a machine to themselves.
-- **Stale files in this checkout** that are not in git: the `__pycache__` directories and `tests/nixd`.
-
-Known and not yet answered:
-
-- `make cache` publishes this host's generic installer only, and prints a public key that is not the one in
-  `ci/targets.nix`. The Deck was given its build with `nix copy` over SSH on 17 November.
-- The storage scenario's last step (a damaged card header put back) once ended with the card closed when
-  the damage and the repair followed each other within a moment. The scenario now waits in between;
-  whether the product can end that way outside a test is not known.
-- On the Deck the user unit `galileo-mura-setup.service` fails at every switch ("not SDC": a calibration
-  step for another panel). It did so before the split.
+What is open, including what waits for the owner to do by hand, is in the
+[issues](https://github.com/schiffy91/nixos/issues).
 
 ## Maintenance Rules
 

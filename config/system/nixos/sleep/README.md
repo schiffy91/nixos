@@ -34,11 +34,9 @@ capture programs or manually launched binaries.
 These hooks cover suspend, hibernate, hybrid sleep and suspend-then-hibernate.
 They do not add a Steam menu/manual or Gaming Mode idle-lock action. Steam's own
 PIN lock is separate. The Deck selects ordinary deep suspend rather than
-redirecting suspend to hibernation. Its 2026-11-08 display-readiness failure was
-traced to AMD plane degamma conflicting with Plymouth's legacy CRTC gamma.
-The display-state reset below fixes that handoff. It is deployed and recovered
-the physical Deck's held lock. Two physical deep-suspend cycles passed, including
-Power-button wake with touch-password unlock and a separate RTC wake.
+redirecting suspend to hibernation. On the Deck, Gamescope's AMD plane degamma
+conflicts with Plymouth's legacy CRTC gamma; the display-state reset below
+handles that handoff.
 
 Direct Gamescope VM tests use the real compositor, DRM, Xwayland and kernel input,
 with an interactive terminal standing in for the signed-in Steam application.
@@ -46,23 +44,18 @@ They verify `aB3! z` entered through touchscreen Shift, number/symbol keys, spac
 and backspace, plus physical-keyboard authentication and return to the same
 running compositor/client. Service tests exercise actual systemd user-unit
 stop/start conditions with harmless fixture processes, not a paired stream.
-Real Steam controller/UI behavior, OLED touch rotation and real hardware suspend
-still need physical validation. The existing native-context VM GPU loses state
-on real suspend even in its unlocked control; no new passing suspend claim is made.
+A VM has none of the Deck's panel, digitizer or firmware suspend, and its
+native-context GPU loses state on real suspend even in the unlocked control
+([issue 1](https://github.com/schiffy91/nixos/issues/1)).
 
-The Gaming policy is deployed on the physical Deck. The owner verified touch
-password authentication and return to Gaming Mode after the conflicting AMD
-color settings were manually reset. The automatic reset has passed the native
-Gamescope VM regressions and recovered a held lock on the physical Deck after
-activation. Physical testing then verified deep suspend, Power-button wake and
-touch-password return to the original Gaming Mode session. A second cycle woke
-automatically after 60 seconds with the same boot ID and Gamescope PID, Wi-Fi
-restored and the password display ready. The initial RTC harness cancelled its
-alarm too soon because `systemctl suspend` queues work asynchronously; the
-corrected harness waited for the kernel success counter and service completion.
-Both cycles succeeded with no failed system units. Audible playback and extended
-gameplay were not tested. Readiness failures are logged through syslog without
-tracing password input. Native Plasma automatic locking is also enabled.
+The Gaming policy is deployed on the physical Deck. There it has been seen
+through deep suspend, a Power-button wake and a touch-password return to the
+original Gaming Mode session, and through an RTC wake after 60 seconds with
+the same boot ID and Gamescope PID, Wi-Fi restored and the password display
+ready. Audible playback and extended gameplay after a resume were not tested
+([issue 16](https://github.com/schiffy91/nixos/issues/16)). Readiness failures
+are logged through syslog without tracing password input. Native Plasma
+automatic locking is also enabled.
 
 ## Controller boundary
 

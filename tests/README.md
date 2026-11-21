@@ -26,7 +26,8 @@ A spec with `"closure": "vm-test"` is keyed on the system its VM-TEST host insta
 the same host module the guest is given (`{{closure}}`). `inputs` names files and directories a node's
 host-side steps read, hashed by content (`{{inputs}}`). A node built on another takes in its parent's
 state, so a changed install reruns everything that boots it. The installer images carry this repository,
-so any tracked edit rebuilds them and reruns their nodes. Nothing here covers the runner itself: after
+so a tracked edit rebuilds them and reruns their nodes, unless it is to a file named `README.md` or under
+`.github`, which the images leave out. Nothing here covers the runner itself: after
 changing how nodes are run, use `--arg force=true`.
 
 The graph runner holds `.vm/graph.lock` for a run, so a second run or a collection in the same
@@ -66,7 +67,8 @@ The language server uses the patch in `config/pkgs/dev/btrc/compat.nix` to
 authenticate stdlib origins for copied native bytes. Editor protocol tests
 accept the real `Library.Bytes` and reject a user-defined substitute.
 
-`vm/` builds NixOS nodes with the pinned Nixpkgs test modules, then runs compiled
+`lib/vm-test.nix` hands a VM check to `btrc.lib.vmTest`, which builds NixOS nodes
+with the pinned Nixpkgs test modules, then runs compiled
 BTRC scenarios. `Lab` owns guests and virtual networks; `Guest` drives the serial
 shell and QMP with bounded commands and framed output. There is no generated
 Python test script or Python VM driver. Initrd, reboot and multi-machine tests
@@ -74,7 +76,8 @@ use the same implementation. Native Gamescope tests capture QEMU's actual EGL
 framebuffer through a typed libvncclient resource, then use BTRC image operations
 and Tesseract for observations. Artifacts retain raw PPM images and guest logs.
 
-`lib/` contains checked process results, temporary fixtures, owned children,
+`testkit/` is btrc's `testkit` package, linked there by `make` from the locked
+compiler and not in git. It contains checked process results, temporary fixtures, owned children,
 PTY sessions, HTTPS observations and independent credential digest checks.
 Executable command fixtures are compiled BTRC programs. Native headers expose
 bounded TLS transport, CPU affinity, process/signal primitives and framebuffer
@@ -177,7 +180,7 @@ only for a place that still runs it.
 | `persistence-ownership` (graph) | flake check `persistence-ownership` | The node built that check; the check is built with the others |
 | four `host-hibernate-*` nodes | removed | Neither host hibernates and the nodes were switched off; `immutability-hibernate` still proves a reset never runs before a resume |
 | third boot of `host-boot-*` | removed | It ran only for a node that set `reenrollsKeys`, and none did |
-| `drive-convergence` over three seeds | one seed required; `drive-convergence-seeds` (`make -C tests graph-nightly`) runs three | Each seed is 120 random operations by two clients; one proves convergence per commit |
+| `drive-convergence` over three seeds | one seed per commit, now `vm-convergence` of `schiffy91/drive`; that repository's `nightly` output runs three | Each seed is 120 random operations by two clients; one proves convergence per commit |
 | `immutability-materialize` on `install-reset` | `immutability-materialize` on `install-reset-clean` (new, required) | Hosts reset from an empty root now; materialize with `--refresh-clean` is what a `CLEAN` base alone can do, so it is the node that keeps proving `clean`. The refusal on `empty` is asserted in `nixosctl-diff` |
 | (new) | `nixosctl-tray`, required | A Plasma session with the tray: its status lines and the icon's attention state are read over the session bus; nothing is clicked |
 | unit suites `immutability_paths` and `ownership` (`make unit`) | `schiffy91/immutability`, check `unit-tool` | They test the tool's path encoding and ownership rules and moved with it; its `vm-reset-clean` and `vm-reset-empty` checks reset a btrfs root for both bases. The install, host, recovery and hibernate nodes stay here as tests of the adapter |

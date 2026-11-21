@@ -15,21 +15,19 @@ Nodes: `host-boot-{STEAM-DECK-OLED,FRACTAL-NORTH}-VM-{standard,secure}`.
 | Goal | Assertion |
 | --- | --- |
 | Offline install | outbound TCP and DNS are rejected before `nixosctl install`; the log must show the baked closure was used, and must not show a disko fetch, a build, or a download |
-| Install leaves a resettable system | every reset volume has a published read-only `CLEAN`, with no leftover `CLEAN.tmp.*` |
+| Install leaves a resettable system | the twins reset from an empty root, so the install publishes no `CLEAN` |
 | Unlock | the unlock agent the host declares actually ran (`unl0kr` or `plymouth`), and the passphrase is typed as USB key events, never over the serial line |
 | Clean boot | `is-system-running` = `running`, zero failed units, zero units systemd refused, `home-manager-<user>.service` active |
 | Quiet boot | `quiet` and an effective `loglevel` of 3 or lower are in effect on `/proc/cmdline`, and the panel capture is not a text console |
 | Secure Boot | the fallback loader, systemd-boot and the UKI are signed; no Microsoft key is enrolled; where the host enrols its own keys, the firmware reports `enabled` |
 | Hibernate | the system hibernates once per installation, resumes behind the passphrase, and reports `E2E-RESUMED` |
-| Immutability | a `CLEAN` snapshot survives every boot, and swap is active |
+| Immutability | a reset snapshot (`CLEAN` or `generation-1`) exists after every boot, and swap is active |
 | Stability | the health fields of the second boot are identical to the first |
 
 Each boot waits for the unlock panel by taking screenshots until `boot-evidence` accepts one
 (`wait_evidence.sh`), not by sleeping a fixed time: a run used to spend 166 seconds asleep. The unlock agent
 is drawn first on the firmware's framebuffer and again when the GPU driver takes over, at another
-resolution, so a screenshot counts as the panel once five in a row have the same size. A third boot
-that cleared the firmware's variables and enrolled the keys again ran only for a node setting
-`reenrollsKeys`, and no node did; it is gone.
+resolution, so a screenshot counts as the panel once five in a row have the same size.
 
 The guest reports over the serial console because the installed hosts authorize
 the admin's own keys, not the harness's, so there is no SSH into them.

@@ -60,7 +60,8 @@ nix eval .#darwinConfigurations.mbp21.config.settings.macos.permissions --json
 This does not grant or verify macOS consent. Claude Desktop and Codex retain
 full access, and Chrome Remote Desktop is retained. Their screen/control grants
 were verified in System Settings on October 18, 2026. Standalone Claude Code
-Full Disk Access was approved but still needs macOS authentication and verification.
+Full Disk Access was approved but still needs macOS authentication and verification
+([issue 15](https://github.com/schiffy91/nixos/issues/15)).
 
 ## Recovery
 

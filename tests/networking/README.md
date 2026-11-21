@@ -6,8 +6,8 @@ and pre-down removal. `nix-instantiate --eval --strict
 --json --expr 'import ./tests/networking/eval.nix {}'` checks static, roaming
 and unconfigured Nix policy independently.
 
-The `networking-policy` graph node runs both small checks. `networking-roaming`
-depends on that node, so the small checks run first. Its two VMs use real
+The `networking-policy` flake check runs both small checks. The two VMs of the
+`networking-roaming` graph node use real
 NetworkManager profiles and the production dispatcher: trusted access, profile
 switches on the same interface/subnet, subnet changes, firewall restart and
 connection teardown. Undeclared ports remain closed.
