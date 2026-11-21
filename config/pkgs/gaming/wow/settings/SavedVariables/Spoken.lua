@@ -18,6 +18,7 @@ SpokenSettings = {
 ["Holy Schiff"] = "Holy Schiff",
 },
 ["global"] = {
+["NewCharacterProfile"] = "Holy Schiff",
 ["ModulesLegacy"] = {
 ["Places"] = {
 },
@@ -38,7 +39,6 @@ SpokenSettings = {
 ["autoplay"] = true,
 },
 },
-["NewCharacterProfile"] = "Holy Schiff",
 ["Welcomed"] = true,
 ["Layout"] = {
 ["DialogueUI"] = {
@@ -151,9 +151,12 @@ SpokenSettings = {
 ["debug"] = false,
 ["discoveredOnlyDefaultOn"] = true,
 ["autoplayExploredTurnedOn"] = true,
+["languagePreview"] = false,
 ["loreDiscoveredOnly"] = true,
 ["voiceEnabled"] = true,
-["languagePreview"] = false,
+["autoplayEveryVisit"] = false,
+["autoplayStopInCombat"] = false,
+["autoplayEveryVisitGap"] = 86400,
 ["autoplayExplored"] = true,
 ["mapPanelCollapsed"] = false,
 ["panelWidth"] = 360,

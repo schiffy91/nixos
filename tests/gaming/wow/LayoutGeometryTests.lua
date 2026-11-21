@@ -44,9 +44,9 @@ for name,p in pairs(FlareUI2_DB.profiles) do
         for _,kind in ipairs({'buffs','debuffs'}) do
             local cfg=p.auras[kind];local a=p.auras.layouts.Desktop[kind]
             -- AceDB removes values matching FlareUI's defaults on logout.
-            local spacing=cfg.spacing or 4
-            local w=cfg.perRow*cfg.size+(cfg.perRow-1)*spacing
-            local rows=math.ceil(cfg.max/cfg.perRow);local h=rows*cfg.size+(rows-1)*spacing
+            local spacing=cfg.spacing or 4;local perRow=cfg.perRow or 8;local max=cfg.max or 16
+            local size=cfg.size or 30;local w=perRow*size+(perRow-1)*spacing
+            local rows=math.ceil(max/perRow);local h=rows*size+(rows-1)*spacing
             if kind=='buffs' then
                 assert(a.anchor=='playerHealth' and cfg.grow=='RIGHT' and cfg.wrap=='UP' and rows==2)
                 r[kind]=rect(r.player.x+4,r.player.y+r.player.h+4,w,h)
@@ -60,8 +60,11 @@ for name,p in pairs(FlareUI2_DB.profiles) do
             local boxes={};for k,v in pairs(r) do boxes[k]=v end
             if group~='solo' then
                 local cfg=uf[group];local tile=group=='party' and cfg.raid or cfg
-                local w=group=='party' and (tile.width or 200) or tile.width*8+(tile.groupSpacing or 2)*7
-                local h=group=='party' and (tile.height or 70)*5+(tile.spacing or 4)*4 or tile.height*5+(tile.spacing or 2)*4
+                -- Once FlareUI marks a setup barSpacing, its saved spacings hold the tiles' two margins (8) as well.
+                local margins=tile.barSpacing and 8 or 0
+                local function gap(key,unset) return (tile[key] or unset+margins)-margins end
+                local w=group=='party' and (tile.width or 200) or tile.width*8+gap('groupSpacing',2)*7
+                local h=group=='party' and (tile.height or 70)*5+gap('spacing',4)*4 or tile.height*5+gap('spacing',2)*4
                 boxes[group]=rect(24,H-80-h,w,h)
                 local b=uf.boss;local h=b.height*5+(b.spacing or 14)*4+b.castHeight+4
                 boxes.boss=rect(W-310-b.width,H-24-h,b.width,h)
