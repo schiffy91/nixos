@@ -2,6 +2,7 @@
 let
   inherit (flake) inputs;
   pkgs = import inputs.nixpkgs { inherit system; config.allowUnfree = true; overlays = [ inputs.jovian.overlays.default ]; };
+  lastGoodMesa = (import (builtins.fetchTarball { url = "https://github.com/NixOS/nixpkgs/archive/f4a03c008967841f2a0b3cb7c436fc6fc31671f6.tar.gz"; sha256 = "sha256-ziZn2PvCJE5JEEpqTdxXwJpPB+L3YqoCpTAMCzyaP3U="; }) { inherit system; }).mesa; # Mesa 26.2.6
 in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
   imports = extraModules;
   name = "sleep-gamescope-native-control";
@@ -43,6 +44,7 @@ in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
       desktopSession = "gamescope-wayland";
     };
     hardware.graphics.enable = true;
+    hardware.graphics.package = lib.mkForce lastGoodMesa; # Mesa 26.3.0 draws garbage through AMD native context
     networking.networkmanager.enable = true;
     systemd.services.scx.enable = lib.mkForce false;
     # Native context is served by RADV in the guest; Venus remains disabled.

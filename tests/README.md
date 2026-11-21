@@ -61,9 +61,9 @@ warnings remain visible in `build/lint/`.
 Editor settings live in `.vscode/` and use the pinned BTRC and Nix language
 servers. The Nix server has a narrow upstream fix for flake builtins, with a
 regression test that still rejects misspelled builtins.
-The BTRC compiler and language server share the pinned compatibility fixes in
-`config/pkgs/dev/btrc/compat.nix`: libjpeg-turbo's versioned initialization macro
-and authenticated stdlib origins for copied native bytes. Editor protocol tests
+The pinned BTRC compiler includes the libjpeg-turbo initialization fix.
+The language server uses the patch in `config/pkgs/dev/btrc/compat.nix` to
+authenticate stdlib origins for copied native bytes. Editor protocol tests
 accept the real `Library.Bytes` and reject a user-defined substitute.
 
 `vm/` builds NixOS nodes with the pinned Nixpkgs test modules, then runs compiled

@@ -59,6 +59,26 @@ Relevant pinned sources:
 - [Gamescope Steam focus selection and X11 properties](https://github.com/ValveSoftware/gamescope/blob/3.17.0/src/steamcompmgr.cpp)
 - [Linux virtio GPU freeze/restore](https://github.com/torvalds/linux/blob/v7.3/drivers/gpu/drm/virtio/virtgpu_drv.c)
 
+## Mesa 26.3.0 and the first Steam Deck run (2026-11-20)
+
+The Deck ran the five nodes for the first time and all five failed at the first
+frame check, `Missing framebuffer text GAMESCOPE_CONTROL_READY`. The captured
+frame was the same in every run: the terminal's white background covered with
+small black squares and no text. Gamescope's own screenshot inside the guest
+had that content too, so the guest drew it; QEMU's readback was correct.
+
+The guest's Mesa had moved from 26.2.6 to 26.3.0 with the nixpkgs pin since the
+last pass. QEMU, virglrenderer and Gamescope had not changed. With the guest's
+Mesa set back to 26.2.6 and nothing else changed, the control node passed on
+the Deck. On 26.3.0, `RADV_DEBUG=nodcc` with `AMD_DEBUG=nodcc` did not help.
+With `XWAYLAND_NO_GLAMOR=1` the first frame was readable and a later one was
+not, which places the fault in the buffers the 26.3.0 OpenGL driver hands the
+compositor through AMD native context.
+
+The fixture therefore pins the guest's `hardware.graphics.package` to Mesa
+26.2.6 from the nixpkgs revision that last passed. Remove the pin when a later
+Mesa passes the control node without it. No upstream report has been filed.
+
 ## Python driver removal (2026-11-08)
 
 The scenarios now run directly as compiled BTRC, with a typed libvncclient
