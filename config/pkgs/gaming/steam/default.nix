@@ -102,15 +102,6 @@ in {
     (lib.mkIf (config.settings.apps.gaming.steam.enable && config.settings.desktop.enable && config.settings.users.admin.homeManager.enable) {
       home-manager.users.${user}.programs.plasma.configFile.kwinrc.Xwayland.XwaylandEisNoPromptApps = "steam";
     })
-    (lib.mkIf (config.settings.apps.gaming.steam.enable && config.settings.apps.gaming.steam.startWithSession) {
-      environment.etc."xdg/autostart/steam.desktop".text = ''
-        [Desktop Entry]
-        Type=Application
-        Name=Steam
-        Icon=steam
-        Exec=steam -silent
-      '';  # -silent: no window, only the tray icon
-    })
     (lib.mkIf (config.settings.apps.gaming.steam.enable && config.settings.apps.gaming.steam.shortcuts != {}) {
       environment.etc."${config.settings.apps.utils.nixosctl.pendingHooksDir}/steam-shortcuts".source = pkgs.writeShellScript "steam-shortcuts-pending" ''
         if ${pkgs.procps}/bin/pgrep -u ${user} -x steam > /dev/null; then
