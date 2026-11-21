@@ -87,8 +87,7 @@ in {
 
   boot.extraModprobeConfig = ''
     options nvidia-modeset debug=1
-    options nvidia-drm vblank=1
-  '';  # debug logs the DP link while the XDR's resets are unexplained; vblank gives KWin real flip times for its cursor commits
+  '';  # debug logs the DP link while the XDR's resets are unexplained
 
   # The XDR's internal control device exposes a serial interface; keep ModemManager from probing it.
   services.udev.extraRules = ''
