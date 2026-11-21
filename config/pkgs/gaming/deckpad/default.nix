@@ -16,6 +16,7 @@ in {
   settings.disk.immutability.persist.paths = lib.mkIf settings.enable config.services.deckpad.statePaths;
   settings.networking.ports.tcp = lib.mkIf controller [ settings.port ];
   settings.apps.utils.nixosctl.tray.status = lib.mkIf controller { "Deck Pad".run = "deckpad status 2>&1"; };  # the Deck runs the service that answers
+  settings.apps.gaming.steam.startWithSession = lib.mkIf (settings.enable && settings.role == "host") (lib.mkDefault true);  # Steam here is what turns the Deck's pad into a pointer and keys
   settings.apps.gaming.steam.shortcuts = lib.mkIf (controller && config.settings.apps.gaming.steam.enable) {
     # A stable path: Steam derives the app ID from it.
     "Deck Pad" = lib.mkDefault ({ exe = "/run/current-system/sw/bin/deckpad-toggle"; } // artwork.deckpad);
