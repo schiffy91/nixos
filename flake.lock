@@ -325,11 +325,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795479048,
-        "narHash": "sha256-4nHcd57wuW5OtqQ40a3K4Ts2s8c8UBxJAA3EIyMbkkM=",
+        "lastModified": 1795479321,
+        "narHash": "sha256-yKNPJK11z2MrmmJjwsNuVsFBYFWVDZV6H/2ZHTgNmKw=",
         "owner": "schiffy91",
         "repo": "deckpad",
-        "rev": "f865292766bbbe3f3601236258a9bf8ce277cf5d",
+        "rev": "2fc6172e1f64d2eb44488ce03ce8d43c15b9683e",
         "type": "github"
       },
       "original": {
