@@ -88,6 +88,7 @@ class NixosCtl {
         help.item("displays brightness <up|down> [step-percent] [repeat-ms]", "");
         help.item("audio <list|current|set> [sink]", "");
         help.item("caffeine <status|enable|disable|toggle>", "");
+        help.item("network <status|is-trusted|trust|untrust|toggle> [connection]", "Inspect or toggle trusted network access on roaming hosts.");
         help.item("storage <status|prepare|password|open|key> [volume] [device]", "Encrypt an external volume (SD card, USB drive) for this machine, or open one by hand.");
         help.item("storage <state [volume] | is <volume> <state>>", "A volume in a word: open, locked or absent. Needs no root.");
         help.item("power <list|current|set|is> [profile]", "Select an available system power profile.");
@@ -117,11 +118,15 @@ class NixosCtl {
             || command.equals("fix-permissions")
             || command.equals("secure-boot")
             || command.equals("storage")
+            || command.equals("network")
             || command.equals("tpm2");
     }
 
     public bool onlyReads(CLIArgs args) {  /* the tray asks these as the user */
-        return args.count() >= 2 && args.get(0).equals("storage") && (args.get(1).equals("state") || args.get(1).equals("is"));
+        if (args.count() < 2) { return false; }
+        if (args.get(0).equals("storage") && (args.get(1).equals("state") || args.get(1).equals("is"))) { return true; }
+        if (args.get(0).equals("network") && (args.get(1).equals("status") || args.get(1).equals("is-trusted"))) { return true; }
+        return false;
     }
 
     public int immutability(Vector<string> words) {  /* schiffy91/immutability's tool, which reads its own settings */
@@ -480,6 +485,25 @@ class NixosCtl {
             if (action.equals("enable")) { caffeine.enable(); return 0; }
             if (action.equals("disable")) { caffeine.disable(); return 0; }
             if (action.equals("toggle")) { caffeine.toggle(); return 0; }
+        }
+
+        if (command.equals("network")) {
+            var action = self.requireAction(args, "Usage: nixosctl network <status|is-trusted|trust|untrust|toggle> [connection]");
+            if (!action.equals("status") && !action.equals("is-trusted") && !action.equals("trust") && !action.equals("untrust") && !action.equals("toggle")) {
+                NixosLog.fatal("Usage: nixosctl network <status|is-trusted|trust|untrust|toggle> [connection]");
+            }
+            if (args.count() > 3) {
+                NixosLog.fatal("Usage: nixosctl network <status|is-trusted|trust|untrust|toggle> [connection]");
+            }
+            var configPath = NixosCtl.env("NIXOS_TRUSTED_CONNECTIONS_CONFIG", "/etc/trusted-connections.json");
+            if (!FileSystem.isFile(configPath)) {
+                NixosLog.fatal("Trusted roaming networks are not enabled on this host (set settings.networking.roaming = true).");
+            }
+            var binary = NixosCtl.env("NIXOS_TRUSTED_CONNECTIONS_BIN", "/run/current-system/sw/bin/trusted-connections");
+            if (!FileSystem.isFile(binary)) { binary = "trusted-connections"; }
+            var invocation = f"{ShellWords.quote(binary)} {ShellWords.quote(configPath)} --{action}";
+            if (args.count() == 3) { invocation = f"{invocation} {ShellWords.quote(args.get(2))}"; }
+            return UnixShell().run(invocation, stdout=COMMAND_OUTPUT_STREAM, stderr=COMMAND_OUTPUT_STREAM, logFailure=false, foreground=true).code;
         }
 
         self.usage();

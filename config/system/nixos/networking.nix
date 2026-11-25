@@ -5,13 +5,16 @@ let
       ++ lib.optional config.services.avahi.enable 5353 ++ config.settings.networking.ports.tcp);
     udp = lib.unique (lib.optional config.services.avahi.enable 5353 ++ config.settings.networking.ports.udp);
   };
-  roaming = config.settings.networking.trustedConnections != [];
+  roaming = config.settings.networking.roaming || config.settings.networking.trustedConnections != [];
   trustedConfiguration = pkgs.writeText "trusted-connections.json" (builtins.toJSON {
     connections = config.settings.networking.trustedConnections;
+    wifi = config.settings.networking.trustedWiFi;
     ports = servicePorts;
   });
   trustedConnections = import ./networking/package.nix { inherit pkgs inputs; };
   reconcile = "${trustedConnections}/bin/trusted-connections ${trustedConfiguration}";
+  trustedConfigPath = "/etc/trusted-connections.json";
+  admin = config.settings.users.admin.username;
   dispatcher = pkgs.writeShellScript "trusted-connections-dispatcher" ''
     case "$2" in
       pre-up|pre-down|down|vpn-pre-down|vpn-down)
@@ -64,6 +67,28 @@ in {
     "/etc/NetworkManager/"
     "${config.settings.users.admin.homeDirectory}/.cert/nm-openvpn"
   ];
+  environment.systemPackages = lib.optionals roaming [ trustedConnections ];
+  environment.etc = lib.optionalAttrs roaming {
+    "trusted-connections.json".source = trustedConfiguration;
+  };
+  settings.apps.utils.nixosctl.tray = lib.mkIf roaming {
+    status.Network.run = "${trustedConnections}/bin/trusted-connections ${trustedConfigPath} --status";
+    menu."Trust current network" = {
+      kind = "check";
+      run = "systemctl start nixos-network-trust@toggle.service";
+      status = "${trustedConnections}/bin/trusted-connections ${trustedConfigPath} --is-trusted";
+    };
+  };
+  # The tray toggles trust on the active connection as the admin without a password prompt, only through these units.
+  security.polkit.extraConfig = lib.mkIf roaming ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.freedesktop.systemd1.manage-units" && subject.user == "${admin}"
+          && /^nixos-network-trust@(trust|untrust|toggle)\.service$/.test(action.lookup("unit") || "")
+          && action.lookup("verb") == "start") {
+        return polkit.Result.YES;
+      }
+    });
+  '';
   ##### Firewall Settings #####
   networking = {
     networkmanager = {
@@ -99,6 +124,7 @@ in {
       openFirewall = false;
       settings = {
         PasswordAuthentication = false;
+        KbdInteractiveAuthentication = false;
         UseDns = true;
         PermitRootLogin = "prohibit-password";
         AllowAgentForwarding = "yes";
@@ -112,7 +138,16 @@ in {
     extraConfig = import ../ssh-client.nix { inherit lib; inherit (config.settings.networking) identityAgent forwardAgentHosts; };
   };
   security.pam.sshAgentAuth.enable = true;
-  systemd.services = lib.optionalAttrs backgroundScanChanged {
+  systemd.services = lib.optionalAttrs roaming {
+    "nixos-network-trust@" = {
+      description = "Update trusted network access (%i)";
+      after = [ "NetworkManager.service" "firewall.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${trustedConnections}/bin/trusted-connections ${trustedConfigPath} --%i";
+      };
+    };
+  } // lib.optionalAttrs backgroundScanChanged {
     wifi-background-scan = {  # the connection that is already up; later ones get it from the dispatcher
       wantedBy = [ "multi-user.target" ];
       after = [ "NetworkManager.service" ];

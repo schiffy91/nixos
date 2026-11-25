@@ -8,7 +8,7 @@ class TrustedConnectionsCommand {
     public TrustedFirewall firewall = TrustedFirewall();
 
     public void execute(CLIArgs args) {
-        var configuration = args.require(0, "Usage: trusted-connections CONFIG [--stop] [--exclude-interface DEVICE]");
+        var configuration = args.require(0, "Usage: trusted-connections CONFIG [--stop | --exclude-interface DEVICE | --status [CON] | --is-trusted [CON] | --trust [CON] | --untrust [CON] | --toggle [CON]]");
         Vector<string> excluded = [];
         var stop = false;
         for (int index = 1; index < args.count(); index++) {
@@ -23,10 +23,72 @@ class TrustedConnectionsCommand {
         else { self.firewall.replace(TrustedConnections(configuration).current(excluded)); }
     }
 
+    public int runReadOnly(CLIArgs args) {
+        var configuration = args.get(0);
+        var option = args.get(1);
+        var target = args.count() >= 3 ? args.get(2) : "";
+        if (args.count() > 3) {
+            Console.error("trusted-connections: too many arguments");
+            return 1;
+        }
+        try {
+            var connections = TrustedConnections(configuration);
+            if (option.equals("--status")) {
+                Console.log(connections.statusText(target));
+                return 0;
+            }
+            return connections.isTrustedTarget(target) ? 0 : 1;
+        } catch (string error) {
+            Console.error(f"trusted-connections: {error}");
+            return 1;
+        }
+    }
+
+    public int runTrustMutation(CLIArgs args, string mode) {
+        var configuration = args.get(0);
+        var target = args.count() >= 3 ? args.get(2) : "";
+        if (args.count() > 3) {
+            Console.error("trusted-connections: too many arguments");
+            return 1;
+        }
+        var acquired = AdvisoryFileLock.acquire("/run/nixos-trusted-connections.lock", wait=true);
+        if (!acquired.ok()) { Console.error("Cannot lock trusted network rules"); return 1; }
+        var lock = acquired.value();
+        var status = 0;
+        try {
+            var connections = TrustedConnections(configuration);
+            var label = "";
+            try { label = connections.setTrust(mode, target); }
+            catch (string error) {
+                Console.error(f"trusted-connections: {error}");
+                return 1;
+            }
+            try {
+                self.firewall.replace(connections.current([]));
+                Console.log(label);
+            } catch (string error) {
+                // Failed reconciliation must fail closed while still serialized.
+                self.firewall.replace(TrustedRules());
+                Console.error(f"trusted-connections: {error}");
+                status = 1;
+            }
+        } finally { lock.close(); }
+        return status;
+    }
+
     public int run(CLIArgs args) {
         if (args.count() == 0) {
-            Console.error("Usage: trusted-connections CONFIG [--stop] [--exclude-interface DEVICE]");
+            Console.error("Usage: trusted-connections CONFIG [--stop | --exclude-interface DEVICE | --status [CON] | --is-trusted [CON] | --trust [CON] | --untrust [CON] | --toggle [CON]]");
             return 1;
+        }
+        if (args.count() >= 2) {
+            var option = args.get(1);
+            if (option.equals("--status") || option.equals("--is-trusted")) {
+                return self.runReadOnly(args);
+            }
+            if (option.equals("--trust")) { return self.runTrustMutation(args, "trust"); }
+            if (option.equals("--untrust")) { return self.runTrustMutation(args, "untrust"); }
+            if (option.equals("--toggle")) { return self.runTrustMutation(args, "toggle"); }
         }
         var acquired = AdvisoryFileLock.acquire("/run/nixos-trusted-connections.lock", wait=true);
         if (!acquired.ok()) { Console.error("Cannot lock trusted network rules"); return 1; }

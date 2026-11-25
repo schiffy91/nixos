@@ -6,6 +6,71 @@ import Library.Vector;
 
 import ./NetworkPrefix.btrc;
 
+class ConnectionInfo {
+    public string uuid;
+    public string name;
+    public string type;
+    public string zone;
+    public string ssid;
+    public string keyMgmt;
+    public string device;
+
+    public ConnectionInfo(string uuid, string name, string type, string zone, string ssid = "", string keyMgmt = "", string device = "") {
+        self.uuid = uuid;
+        self.name = name;
+        self.type = type;
+        self.zone = zone;
+        self.ssid = ssid;
+        self.keyMgmt = keyMgmt;
+        self.device = device;
+    }
+
+    public bool isPhysical() {
+        return self.type.equals("802-11-wireless")
+            || self.type.equals("802-3-ethernet")
+            || self.type.equals("gsm")
+            || self.type.equals("cdma");
+    }
+
+    public bool isDefaultTrusted(Vector<string> uuids, Vector<string> wifiSsids) {
+        if (!self.uuid.isEmpty() && uuids.contains(self.uuid)) { return true; }
+        // SSID matching requires WPA2/WPA3 personal auth so open or enterprise evil twins cannot trigger trust.
+        return self.type.equals("802-11-wireless")
+            && !self.ssid.isEmpty()
+            && wifiSsids.contains(self.ssid)
+            && (self.keyMgmt.equals("wpa-psk") || self.keyMgmt.equals("sae"));
+    }
+
+    public bool isTrusted(Vector<string> uuids, Vector<string> wifiSsids) {
+        if (self.zone.equals("untrusted")) { return false; }
+        if (self.zone.equals("trusted")) { return true; }
+        return self.isDefaultTrusted(uuids, wifiSsids);
+    }
+
+    public string displayName() {
+        return self.name.isEmpty() ? self.uuid : self.name;
+    }
+
+    public string statusLabel(Vector<string> uuids, Vector<string> wifiSsids) {
+        var label = self.displayName();
+        var byDefault = self.isDefaultTrusted(uuids, wifiSsids);
+        if (self.zone.equals("untrusted")) {
+            return byDefault ? f"{label} (untrusted, override)" : f"{label} (untrusted)";
+        }
+        if (self.zone.equals("trusted")) {
+            return byDefault ? f"{label} (trusted, default)" : f"{label} (trusted)";
+        }
+        if (byDefault) { return f"{label} (trusted, default)"; }
+        return f"{label} (untrusted)";
+    }
+
+    public string targetZone(bool wantTrusted, Vector<string> uuids, Vector<string> wifiSsids) {
+        var byDefault = self.isDefaultTrusted(uuids, wifiSsids);
+        if (wantTrusted) { return byDefault ? "" : "trusted"; }
+        return byDefault ? "untrusted" : "";
+    }
+}
+
 class TrustedRules {
     public Vector<string> ipv4;
     public Vector<string> ipv6;
@@ -71,18 +136,182 @@ class TrustedConnections {
         if (!self.configuration.isObject()) { throw "Invalid trusted-connections configuration"; }
     }
 
+    public Vector<string> configuredUuids() {
+        Vector<string> profiles = [];
+        if (!self.configuration.has("connections")) { return profiles; }
+        var list = self.configuration.get("connections");
+        if (!list.isArray()) { return profiles; }
+        for profile in list.elements() { profiles.push(profile.asString()); }
+        return profiles;
+    }
+
+    public Vector<string> configuredWiFi() {
+        Vector<string> ssids = [];
+        if (!self.configuration.has("wifi")) { return ssids; }
+        var list = self.configuration.get("wifi");
+        if (!list.isArray()) { return ssids; }
+        for ssid in list.elements() { ssids.push(ssid.asString()); }
+        return ssids;
+    }
+
+    public ConnectionInfo? inspectProfile(UnixShell shell, string uuid, string device = "") {
+        if (uuid.isEmpty()) { return null; }
+        var quoted = ShellWords.quote(uuid);
+        var basic = shell.run(f"nmcli --get-values connection.id,connection.uuid,connection.type,connection.zone connection show uuid {quoted}", logFailure=false);
+        if (!basic.ok()) { return null; }
+        var lines = Strings.split(basic.stdout(), "\n");
+        if (lines.len < 3) { return null; }
+        var name = lines.get(0).trim();
+        var resolvedUuid = lines.get(1).trim();
+        var type = lines.get(2).trim();
+        var zone = lines.len >= 4 ? lines.get(3).trim() : "";
+        var ssid = "";
+        var keyMgmt = "";
+        if (type.equals("802-11-wireless")) {
+            var ssidResult = shell.run(f"nmcli --get-values 802-11-wireless.ssid connection show uuid {quoted}", logFailure=false);
+            if (ssidResult.ok()) { ssid = ssidResult.stdout().trim(); }
+            var keyResult = shell.run(f"nmcli --get-values 802-11-wireless-security.key-mgmt connection show uuid {quoted}", logFailure=false);
+            if (keyResult.ok()) { keyMgmt = keyResult.stdout().trim(); }
+        }
+        return ConnectionInfo(resolvedUuid.isEmpty() ? uuid : resolvedUuid, name, type, zone, ssid, keyMgmt, device);
+    }
+
+    public string defaultRouteDevice(UnixShell shell) {
+        var routes = shell.run("ip -4 -json route show default", logFailure=false);
+        if (!routes.ok() || routes.stdout().trim().isEmpty()) { return ""; }
+        var parsed = JSONValue.parse(routes.stdout());
+        if (!parsed.isArray()) { return ""; }
+        for route in parsed.elements() {
+            if (route.isObject() && route.has("dev")) {
+                var dev = route.get("dev").asString();
+                if (!dev.isEmpty()) { return dev; }
+            }
+        }
+        return "";
+    }
+
+    public Vector<ConnectionInfo> activeConnections(UnixShell shell) {
+        Vector<ConnectionInfo> result = [];
+        if (!shell.run("systemctl is-active --quiet NetworkManager.service", logFailure=false).ok()) { return result; }
+        var addresses = JSONValue.parse(shell.run("ip -json address show up", throwOnFailure=true).stdout());
+        var preferred = self.defaultRouteDevice(shell);
+        Vector<string> devices = [];
+        if (!preferred.isEmpty()) { devices.push(preferred); }
+        for entry in addresses.elements() {
+            var device = entry.get("ifname").asString();
+            if (!device.isEmpty() && !devices.contains(device)) { devices.push(device); }
+        }
+        for device in devices {
+            var profile = shell.run(f"nmcli --get-values GENERAL.CON-UUID device show {ShellWords.quote(device)}", logFailure=false);
+            if (!profile.ok()) { continue; }
+            var uuid = profile.stdout().trim();
+            if (uuid.isEmpty()) { continue; }
+            var info = self.inspectProfile(shell, uuid, device);
+            if (info == null || info.type.equals("loopback")) { continue; }
+            result.push(info);
+        }
+        return result;
+    }
+
+    public ConnectionInfo? primaryConnection(UnixShell shell) {
+        var active = self.activeConnections(shell);
+        for info in active {
+            if (info.isPhysical()) { return info; }
+        }
+        if (active.len > 0) { return active.get(0); }
+        return null;
+    }
+
+    public ConnectionInfo resolveTarget(UnixShell shell, string target) {
+        if (target.isEmpty()) {
+            var primary = self.primaryConnection(shell);
+            if (primary == null) { throw "No active network connection"; }
+            return primary;
+        }
+        for info in self.activeConnections(shell) {
+            if (info.uuid.equals(target) || info.name.equals(target)) { return info; }
+        }
+        var quoted = ShellWords.quote(target);
+        var byUuid = shell.run(f"nmcli --get-values connection.uuid connection show uuid {quoted}", logFailure=false);
+        if (byUuid.ok() && !byUuid.stdout().trim().isEmpty()) {
+            var info = self.inspectProfile(shell, byUuid.stdout().trim());
+            if (info != null) { return info; }
+        }
+        var byId = shell.run(f"nmcli --get-values connection.uuid connection show id {quoted}", logFailure=false);
+        if (byId.ok()) {
+            Vector<string> matches = [];
+            for line in Strings.split(byId.stdout(), "\n") {
+                var trimmed = line.trim();
+                if (!trimmed.isEmpty()) { matches.push(trimmed); }
+            }
+            if (matches.len > 1) { throw f"Multiple NetworkManager connections match '{target}'; specify a UUID"; }
+            if (matches.len == 1) {
+                var info = self.inspectProfile(shell, matches.get(0));
+                if (info != null) { return info; }
+            }
+        }
+        throw f"Unknown NetworkManager connection '{target}'";
+    }
+
+    public string statusText(string target = "") {
+        var shell = UnixShell();
+        var uuids = self.configuredUuids();
+        var wifi = self.configuredWiFi();
+        if (!target.isEmpty()) {
+            return self.resolveTarget(shell, target).statusLabel(uuids, wifi);
+        }
+        var active = self.activeConnections(shell);
+        Vector<ConnectionInfo> selected = [];
+        for info in active {
+            if (info.isPhysical()) { selected.push(info); }
+        }
+        if (selected.isEmpty()) { selected = active; }
+        if (selected.isEmpty()) { return "disconnected"; }
+        Vector<string> labels = [];
+        for info in selected { labels.push(info.statusLabel(uuids, wifi)); }
+        return labels.join(", ");
+    }
+
+    public bool isTrustedTarget(string target = "") {
+        var shell = UnixShell();
+        var uuids = self.configuredUuids();
+        var wifi = self.configuredWiFi();
+        if (!target.isEmpty()) {
+            return self.resolveTarget(shell, target).isTrusted(uuids, wifi);
+        }
+        var primary = self.primaryConnection(shell);
+        if (primary == null) { return false; }
+        return primary.isTrusted(uuids, wifi);
+    }
+
+    public string setTrust(string mode, string target = "") {
+        var shell = UnixShell();
+        var uuids = self.configuredUuids();
+        var wifi = self.configuredWiFi();
+        var info = self.resolveTarget(shell, target);
+        bool wantTrusted = !info.isTrusted(uuids, wifi);
+        if (mode.equals("trust")) { wantTrusted = true; }
+        else if (mode.equals("untrust")) { wantTrusted = false; }
+        var nextZone = info.targetZone(wantTrusted, uuids, wifi);
+        shell.run(f"nmcli connection modify uuid {ShellWords.quote(info.uuid)} connection.zone {ShellWords.quote(nextZone)}", throwOnFailure=true);
+        info.zone = nextZone;
+        return info.statusLabel(uuids, wifi);
+    }
+
     public TrustedRules current(Vector<string> excluded) {
         var shell = UnixShell();
         // Avoid D-Bus activation of NM while it waits for network-pre.target.
         if (!shell.run("systemctl is-active --quiet NetworkManager.service", logFailure=false).ok()) { return TrustedRules(); }
         var addresses = JSONValue.parse(shell.run("ip -json address show up", throwOnFailure=true).stdout());
-        Vector<string> profiles = [];
-        for profile in self.configuration.get("connections").elements() { profiles.push(profile.asString()); }
+        var uuids = self.configuredUuids();
+        var wifi = self.configuredWiFi();
         Vector<string> trusted = [];
         for entry in addresses.elements() {
             var device = entry.get("ifname").asString();
             var profile = shell.run(f"nmcli --get-values GENERAL.CON-UUID device show {ShellWords.quote(device)}", logFailure=false);
-            if (profile.ok() && profiles.contains(profile.stdout().trim())) { trusted.push(device); }
+            if (!profile.ok()) { continue; }
+            var info = self.inspectProfile(shell, profile.stdout().trim(), device);
+            if (info != null && info.isTrusted(uuids, wifi)) { trusted.push(device); }
         }
         return TrustedRules.forAddresses(addresses, trusted, self.configuration.get("ports"), excluded);
     }

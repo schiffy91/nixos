@@ -47,6 +47,45 @@ int main() {
     rejected = false;
     try { TrustedRules.forAddresses(address(), ["wlan0"], JSONValue.parse("{\"tcp\":[0]}"), []); } catch (string error) { rejected = true; }
     Expect.isTrue(rejected);
-    print("PASS: trusted profile, subnet, IPv6, exclusion, malformed inventory and atomic firewall rules");
+
+    // Trust policy: UUID defaults, WPA2/WPA3 SSID defaults, evil-twin rejection, and runtime zone overrides.
+    Vector<string> uuids = ["11111111-1111-4111-8111-111111111111"];
+    Vector<string> wifi = ["schi-fi", "🐻"];
+    var uuidDefault = ConnectionInfo("11111111-1111-4111-8111-111111111111", "home-eth", "802-3-ethernet", "");
+    Expect.isTrue(uuidDefault.isTrusted(uuids, wifi));
+    Expect.strEq(uuidDefault.statusLabel(uuids, wifi), "home-eth (trusted, default)");
+    Expect.strEq(uuidDefault.targetZone(false, uuids, wifi), "untrusted");
+    Expect.strEq(uuidDefault.targetZone(true, uuids, wifi), "");
+
+    var wpa3Wifi = ConnectionInfo("aaaa", "🐻", "802-11-wireless", "", "🐻", "sae");
+    Expect.isTrue(wpa3Wifi.isTrusted(uuids, wifi));
+    Expect.strEq(wpa3Wifi.statusLabel(uuids, wifi), "🐻 (trusted, default)");
+    var wpa2Wifi = ConnectionInfo("bbbb", "schi-fi", "802-11-wireless", "", "schi-fi", "wpa-psk");
+    Expect.isTrue(wpa2Wifi.isTrusted(uuids, wifi));
+
+    // Open, WEP, and WPA-EAP networks sharing an SSID must not trigger SSID-based auto-trust.
+    var openSpoof = ConnectionInfo("cccc", "🐻", "802-11-wireless", "", "🐻", "");
+    Expect.isFalse(openSpoof.isTrusted(uuids, wifi));
+    var eapSpoof = ConnectionInfo("dddd", "schi-fi", "802-11-wireless", "", "schi-fi", "wpa-eap");
+    Expect.isFalse(eapSpoof.isTrusted(uuids, wifi));
+    var ethSameName = ConnectionInfo("eeee", "🐻", "802-3-ethernet", "", "🐻", "sae");
+    Expect.isFalse(ethSameName.isTrusted(uuids, wifi));
+
+    // Runtime zone trust and untrust override.
+    var hotel = ConnectionInfo("ffff", "HotelWiFi", "802-11-wireless", "", "HotelWiFi", "wpa-psk");
+    Expect.isFalse(hotel.isTrusted(uuids, wifi));
+    Expect.strEq(hotel.statusLabel(uuids, wifi), "HotelWiFi (untrusted)");
+    Expect.strEq(hotel.targetZone(true, uuids, wifi), "trusted");
+    hotel.zone = "trusted";
+    Expect.isTrue(hotel.isTrusted(uuids, wifi));
+    Expect.strEq(hotel.statusLabel(uuids, wifi), "HotelWiFi (trusted)");
+    Expect.strEq(hotel.targetZone(false, uuids, wifi), "");
+
+    wpa3Wifi.zone = "untrusted";
+    Expect.isFalse(wpa3Wifi.isTrusted(uuids, wifi));
+    Expect.strEq(wpa3Wifi.statusLabel(uuids, wifi), "🐻 (untrusted, override)");
+    Expect.strEq(wpa3Wifi.targetZone(true, uuids, wifi), "");
+
+    print("PASS: trusted profile, Wi-Fi auth, runtime overrides, subnet, IPv6, exclusion, malformed inventory and atomic firewall rules");
     return 0;
 }

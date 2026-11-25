@@ -27,7 +27,7 @@ in (import ../../lib/vm-test.nix { inherit pkgs inputs; }) {
         useDHCP = lib.mkForce false;
         ipv4.addresses = lib.mkForce [];
       };
-      networkmanager.unmanaged = lib.mkForce [];
+      networkmanager.unmanaged = lib.mkForce [ "interface-name:eth0" ];
     };
     systemd.services = builtins.listToAttrs (map (port: {
       name = "http-${toString port}";

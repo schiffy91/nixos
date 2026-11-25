@@ -94,8 +94,8 @@ in {
           ++ lib.optional steamEnabled "applications:return-to-gaming-mode.desktop";
       };
     };
-    # Existing home Wi-Fi profile; trusted source subnets follow its DHCP routes.
-    networking.trustedConnections = [ "8a75b161-7efd-40a7-9b4c-05f8a57232ff" ];
+    # Roaming host: trusts shared WPA2/WPA3 trustedWiFi defaults plus runtime-trusted connections.
+    networking.roaming = true;
     networking.forwardAgentHosts = [ "FRACTAL-NORTH" "FRACTAL-NORTH.local" "192.168.50.67" ];
     networking.wifi.backgroundScan = { signalThreshold = -76; recurringInterval = null; };  # a scan stalls streams and Deck Pad for seconds
     nix = {  # the desktop builds the emulators; a handheld should never compile them
