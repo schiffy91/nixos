@@ -1,7 +1,7 @@
 { lib, hosts, publicHosts, systems, diskOperations, homes }:
 { pkgs }:
 let
-  expectedHosts = [ "FRACTAL-NORTH" "STEAM-DECK-OLED" "QEMU-x86_64" "QEMU-aarch64" ];
+  expectedHosts = [ "FRACTAL-NORTH" "STEAM-DECK-OLED" "QEMU-x86_64" "QEMU-aarch64" "VM-DEVELOPER" ];
   expectedLinux = lib.concatMap (name: map (target: "${name}-${target}") systems.bootableTargets)
     (expectedHosts ++ [ "FRACTAL-NORTH-VM" "STEAM-DECK-OLED-VM" ]);
   publicNames = map (host: host.outputName) publicHosts;

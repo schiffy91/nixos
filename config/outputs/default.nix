@@ -16,7 +16,7 @@ in {
   lib.systemWith = systems.systemWith;
   inherit (systems) nixosConfigurations darwinConfigurations;
   inherit (diskOperations) diskoConfigurations;
-  packages = import ./packages.nix { inherit inputs; installerPackages = installers.packages; };
+  packages = import ./packages.nix { inherit inputs systems; installerPackages = installers.packages; };
   homeConfigurations = homes;
   checks = import ./checks.nix { inherit inputs lib hosts publicHosts systems diskOperations installers homes; };
 }
